@@ -1,0 +1,13 @@
+## ==================== [ Broad cluster configuration -- DO NOT TOUCH ] =========================
+
+cluster: "broad-uger/broad-submit.py {dependencies}"
+cluster-status: "broad-uger/broad-status.py"
+jobscript: "broad-uger/broad-jobscript.sh"
+jobs: 5000
+keep-going: true
+immediate-submit: False
+notemp: true
+local-cores: 1
+latency-wait: 60
+rerun-incomplete: True
+restart-times: 3

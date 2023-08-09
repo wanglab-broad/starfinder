@@ -1,0 +1,78 @@
+""" 
+    This framework includes rules for stitch tasks before FIJI stitching.
+    These rules, unlike the previous modules, are run once per sample.
+"""
+
+from snakemake.utils import makedirs 
+import os 
+from os.path import join
+
+configfile: "../../config/config.yaml"
+
+## Define specific list of positions to run the pipeline for testing/re-runs
+# for all tiles: 
+TILES = [f"Position{str(x).zfill(3)}" for x in range(1,config['n_tiles']+1)] 
+
+# Helper function to output filepath string 
+def getOutpath(subdir):
+    path = join(config['user_dir'], config['sample'], config['subdirs'][subdir])
+    return path
+
+rule prestitch: 
+    """
+        Collects all pre-FIJI stitch outputs and runs all following rules
+    """
+    input:
+        # orderlist
+        f"{getOutpath('stitch')}/orderlist",
+        # blank tile
+        f"{getOutpath('stitch')}/blank.tif",
+        # stitchlink directory
+        directory(f"{getOutpath('stitch')}/stitchlinks")
+
+
+rule generate_orderlist:
+    """
+        Script will see if there is a maf file used for orderlist generation.
+        Otherwise, it will assume there are no blank tiles (i.e. regular grid).
+    """
+    output: 
+        path = f"{getOutpath('stitch')}/orderlist"
+    params:
+        start = 1,
+        end = config['n_tiles']
+    shell:
+        "seq {params.start} {params.end} > {output.path}"
+
+rule generate_blanktile:
+    """
+        Creates a blank tile in the size of your other tiles for irregular grid-shape stitching
+    """
+    output: 
+        # blank tile
+        blankpath = f"{getOutpath('stitch')}/blank.tif"
+    script:
+        "scripts/create_blank.py"
+        
+rule generate_softlinks:
+    """
+        Generates stitchlinks to reference when stitching with FIJI.
+    """
+    input: 
+        # max_rotated_dapis
+        expand(
+            "{outpath}/{seg_method}/{pos}/max_rotated_dapi.tif",
+            outpath = getOutpath('segmentation'),
+            seg_method = config['seg_method'],
+            pos = TILES
+        ),
+        # orderlist 
+        orderlist = f"{getOutpath('stitch')}/orderlist",
+        # blank tile
+        blank = f"{getOutpath('stitch')}/blank.tif"
+    output: 
+        directory(f"{getOutpath('stitch')}/stitchlinks")
+    params:
+        segoutpath=f"{getOutpath('segmentation')}/{config['seg_method']}"
+    shell:
+        "scripts/create_stitchlinks.sh {config[sample]} {input.orderlist} {config[seg_method]} {output} {params.segoutpath}"

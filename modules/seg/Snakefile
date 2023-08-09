@@ -1,0 +1,134 @@
+""" 
+    This framework includes rules for running tissue segmentation (clustermap or watershed).
+"""
+## TO-DO: once debugged, implement this fn to scale up resources in resubmissions of failed attempts
+# def getMemoryMbs(rule, wildcards, attempt):
+
+### NOTES:
+# Unconventional configuration of this Snakefile is due to the dependency of which rules to run based on
+# what is needed (ex. extra dapi-pre-processing, clustermap vs watershed)
+# Each of these rules (except setup) are written to process just one file in order to run them in parallel for multiple
+# file fitting the wildcard specification. 
+# To run them all in order, run target rule "watershed" or "clustermap" 
+
+from snakemake.utils import min_version
+min_version("6.0")
+import os 
+from os.path import join
+
+configfile: "../../config/config.yaml"
+
+# [============================ Define I/O based on configured workflow ============================]
+
+## Define specific list of positions to run the pipeline for testing/re-runs
+# for all tiles: 
+TILES = [f"Position{str(x).zfill(3)}" for x in range(1,config['n_tiles']+1)] 
+# for subset of tiles:
+# TILES = [f"Position{str(x).zfill(3)}" for x in [1]] 
+
+# Helper function to output filepath string 
+def getOutpath(subdir):
+    path = join(config['user_dir'], config['sample'], config['subdirs'][subdir])
+    return path
+
+## Define expected output file list for each segmentation method
+watershed_output_files = [
+    # labeled images and centroids
+    "cellLabels.npy", "dapiLabels.npy", "dapi_centroids.csv", 
+    # read assignment and cell center csv results 
+    "remain_reads.csv", "cell_center.csv",
+    # plots of segmentation/assignment results
+    "dapi_segmentation.png", "segmentation_assignment_results.png",
+    # max rotated dapi for FIJI stitching
+    "max_rotated_dapi.tif"
+]   
+clustermap_output_files = [
+    # pre-processing images
+    "filtered_dapi.png", "cellseg_noisecheck.png",
+    # clustermap output images
+    "clustermap_segmentation.png", "cellseg_result.png", "final_segmentation_results.png",
+    # segmentation results csvs
+    "remain_reads.csv", "cell_center.csv", "remain_reads_raw.csv",
+    # max rotated dapi for FIJI stitching
+    "max_rotated_dapi.tif", "max_rotated_overlay.tif"
+]
+
+## Define which rule set to run with "rule seg" by the segmentation method specified in config file
+if config['seg_method'] == 'clustermap':
+    target = expand(
+        "{outpath}/clustermap/{pos}/{files}",
+        outpath = getOutpath('segmentation'),
+        pos = TILES, 
+        files = clustermap_output_files
+    )
+elif config['seg_method'] == 'watershed':
+    target = expand(
+        "{outpath}/watershed/{pos}/{files}",
+        outpath = getOutpath('segmentation'),
+        pos = TILES, 
+        files = watershed_output_files
+    )
+else:
+    print("Invalid segmentation method chosen. Please make sure config file has either 'clustermap' or 'watershed' listed.")
+    target = None
+
+# Define input function for use with wildcards
+def get_all_input(wildcards):
+    return [
+        # reference round (to which rounds are registered, and which contains DAPI)
+        join(config['user_dir'], f'{getOutpath("source_data")}/round1/{wildcards.pos}/'),
+        join(config['user_dir'], f'{getOutpath("registration")}/{wildcards.pos}/goodPoints_{config["spotfinding_method"]}.csv')
+    ]
+
+# Configure input on whether DAPI needs additional pre-processing (i.e. high background noise, protein stain mask)
+if config['extra_preprocess']:
+    watershed_input = [] # TODO: DEFINE
+    clustermap_input = [] # TODO: DEFINE
+else: 
+    watershed_input = get_all_input
+    clustermap_input = get_all_input
+
+# [============================ RULES ============================]
+
+rule seg: # rule "all" requires final output as input and therefore runs every rule
+    input:
+        target,
+        # stitch pre-FIJI outputs 
+
+
+# rule dapi_preprocess:
+#     input: 
+#         get_all_input
+#     output:
+
+#     resources:
+#     script:
+#         "scripts/dapi_preprocess.py"
+
+rule watershed:
+    input:
+        watershed_input
+    output:
+        expand(
+            "{outpath}/watershed/{{pos}}/{files}",
+            outpath = getOutpath('segmentation'),
+            files = watershed_output_files
+        )
+    resources:
+        mem_mb=config['resources']['watershed']
+    script:
+        "scripts/segAssign3D.py"
+        
+rule clustermap:
+    input:
+        clustermap_input
+    output:
+        expand(
+            "{outpath}/clustermap/{{pos}}/{files}",
+            outpath = getOutpath('segmentation'),
+            files = clustermap_output_files 
+        )
+    resources:
+        mem_mb=config['resources']['clustermap']
+    script:
+        "scripts/clustermap.py"     

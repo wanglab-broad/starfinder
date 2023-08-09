@@ -1,0 +1,159 @@
+#  This configuration file should be customized on a per-project basis. 
+#  Follow the comments and ensure each variable is set properly before running Starfinder.
+
+
+### ==================== [ General sample parameters ] =========================
+
+# Name of sample as it appears in the data directory
+sample: "2023-04-11-Workshop-Lung"
+
+# Position (individual tile) size in pixels/number of stacks
+xy: 2048 
+z: 59
+
+# Number of tiles
+n_tiles: 6
+
+# Number of sequencing channels (excluding DAPI, protein, etc)
+n_chs: 4
+
+# Reference round with DAPI staining channel
+ref_round: 1
+
+# Number of sequencing rounds (excluding rounds with only protein fluorescence)
+n_rounds: 4
+
+# Protein fluorescence round name (if STARMap PLUS sample)
+protein_round: "IF"
+
+# Protein fluorescence names (in channel order, if STARMap PLUS sample). 
+protein_stains: 
+  - "dapi"
+  - "np"
+  - "cd45"
+
+# Sub-samples (i.e. multiple samples per dataset) and their position ranges (separated by '-')
+# subsamples: 
+#   WT_Ileum: "1-6"
+#   GF_Ileum: "7-12"
+
+## [----------------------- File I/O -----------------------]
+
+# The parent directory to store all processed data output
+# This may be in your personal user folder under /stanley/WangLab/username 
+user_dir: "/stanley/WangLab/morgan"
+
+# Sub-directories within data_dir to store input and output files for 
+# various stages of the pipeline. 
+subdirs:
+  source_data:  "01_data"           # contains soft links to data
+  registration: "02_registration"   # registration output
+  segmentation: "03_segmentation"   # segmentation output
+  stitch:       "04_stitch"         # stitch output
+  final:        "05_results"        # processed adata and results
+
+# Directory for storage of job-specific log files
+log_dir: "log"
+
+# Directory for storage of pipeline execution reports
+reports_dir: "reports"
+
+# Directory of virtual environment in which the pipeline should run
+conda_env_dir: "/stanley/WangLab/envs/starfinder"
+
+
+## ==================== [ Cluster submission resource specs ] =========================
+
+# all h_vmem requests are in megabytes
+resources:
+  global_registration: 25000 # 25 GB
+  local_registration: 10000
+  stitch: 5000
+  plot_spot_finding: 5000
+  nuclei_protein_registration: 20000
+  watershed: 36000
+  clustermap: 50000
+
+
+### ==================== [ Registration / Spot-Finding parameters ] =========================
+
+# Codebook information
+end_bases: ["C", "C"] # end bases of barcodes
+barcode_mode: "regular" # regular if no split-barcode, otherwise change to "duo"
+# split_loc: # position where the barcode is split, if mode is "duo"
+
+# Voxel size 
+voxel_size: [1,1,1]
+
+## NOTE: The following parameters usually work as defaultly specified, but if you are encountering
+#       poor spot-finding results, try adjusting these values as needed
+
+## If you are here to adjust parameters because of excessive background noise, try tuning these 
+# parameters one at a time, in this order. Earlier parameter fixes should fix the problem,
+# but if not, try the next:
+#   1. spotfinding_method: change to "ex_max3d"
+#   2. intensity_threshold: increase 0.2 value
+#   3. q_score_thers: decrease 0.5 value
+
+### Local registration split:
+# sqrt_pieces^2 is the total number of tiles a single position will be split into for 
+# increased parallelization and efficiency of local registration.
+# For large samples (>50 tiles) with 2048x2048 tile size, it is recommended to set sqrt_pieces = 4
+# For noisy samples with tile artifacts, reduce the number of tiles 
+sqrt_pieces: 4
+
+### Spot-finding method
+# If poor results, try switching method to "ex_max3d" (especially for samples with high background noise)
+# ex_max3d method will more selectively identify regional maxima. Regional maxima must have a value
+# 100 greater than its neighbors to be identified as a spot. 
+# See documentation of method differences here:
+#   max3d: https://www.mathworks.com/help/images/ref/imregionalmax.html
+#   ex_max3d: https://www.mathworks.com/help/images/ref/imextendedmax.html
+spotfinding_method: "max3d"
+
+### Spot-finding quality threshold (based on fluorescence intensity)
+# Voxels identified as regional maxima using the spot-finding method will be kept as long as 
+# their fluorescence intensity is larger than intensity_threshold*maximum_intensity,
+# in which the maximum_intensity is 255 after normalization
+# Higher intensity thresholds will perform more selective spot identification 
+intensity_threshold: 0.2
+
+### Reads extraction base color quality threshold 
+# Each spot is assigned a score equal to -log(currMax) of max color score across channels for each point)
+# Spots with scores under q_score_thers are kept. Therefore, lower q_score_thers will perform more stringent filtering
+# This should be a last-resort parameter tune.
+# q_score_thers: 0.5
+
+
+### ========================= [ Segmentation parameters ] =========================
+
+# Specify which segmentation method you would like to use ("clustermap" or "watershed")
+seg_method: "watershed"
+extra_preprocess: False
+
+## [----------------------- Clustermap -----------------------]
+# Threshold for estimating number of cells. Larger value -> less cells 
+cell_num_threshold: 0.1
+
+# Sampling interval for DAPI image. A large value will reduce computation resources but be less accurate.
+# Recommended to use low value (2-3) for tiles with densely packed nuclei. 
+dapi_grid_interval: 3
+
+# Roughly expected cell size in pixels [xy, z]
+cell_radius: [35,10]
+
+# Percent filter (percent of least dense reads filtered out -- larger number will filter out more reads) 
+# Adjust higher if spot-finding identified more noise than usual
+pct_filter: 0.01
+
+## [----------------------- Watershed -----------------------]
+# Disk (2d) and Ball (3d) for morphological operations (closing, dilation)
+disk_radius: 7
+ball_radius: 7
+
+## [----------------------- Extra DAPI Preprocessing -----------------------]
+
+
+
+
+### ========================= [ END OF CONFIG FILE ] =========================
