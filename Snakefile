@@ -14,10 +14,14 @@ configfile: "config/config.yaml"
 # [======================== Set tiles to run ========================]
 
 ## Define specific list of positions to run the pipeline for testing/re-runs
+
 # for all tiles: 
-TILES = [f"Position{str(x).zfill(3)}" for x in range(1,config['n_tiles']+1)]
+TILES = [f"Position{str(x).zfill(3)}" for x in range(1, config['n_tiles']+1)]
+
 # for subset of tiles:
-# TILES = [f"Position{str(x).zfill(3)}" for x in [1]] 
+# TILE_List = [1, 3]
+# TILES = [f"Position{str(x).zfill(3)}" for x in TILE_List] 
+
 
 # [======================== Import modules ========================]
 
@@ -51,6 +55,7 @@ def getOutpath(subdir):
 
 # Define a new default target that collects targets from the imported module as well as
 # the final stitching rules 
+
 rule starfinder:
     input:
         rules.rsf.input, # "all" rule for rsf
@@ -89,7 +94,6 @@ rule stitch_reads:
     script:
         "modules/stitch/scripts/stitch.py"
         
-
 rule parse_to_h5ad:
     input: 
         # final remain reads csv
@@ -97,7 +101,7 @@ rule parse_to_h5ad:
         # final cell center csv
         cell_center = f"{getOutpath('stitch')}/cell_center.csv"
     output:
-        # cellxgene matrix
+        # cell x gene matrix
         gene_by_cell = f"{getOutpath('final')}/gene_by_cell.csv",
         cell_by_gene = f"{getOutpath('final')}/cell_by_gene.csv",
         # obs
