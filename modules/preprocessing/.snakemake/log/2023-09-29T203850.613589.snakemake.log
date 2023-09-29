@@ -1,0 +1,25 @@
+Building DAG of jobs...
+Using shell: /bin/bash
+Provided cluster nodes: 5000
+Job stats:
+job       count    min threads    max threads
+------  -------  -------------  -------------
+step_1        1              1              1
+total         1              1              1
+
+Select jobs to execute...
+
+[Fri Sep 29 20:38:54 2023]
+rule step_1:
+    input: /stanley/WangLab/Data/Analyzed/2023-10-01-Jiahao-Test/CNS_Well07
+    output: /stanley/WangLab/Data/Analyzed/2023-10-01-Jiahao-Test/CNS_Well07/orig.txt
+    jobid: 0
+    reason: Missing output files: /stanley/WangLab/Data/Analyzed/2023-10-01-Jiahao-Test/CNS_Well07/orig.txt
+    resources: mem_mb=1000, mem_mib=954, disk_mb=1000, disk_mib=954, tmpdir=<TBD>
+
+Submitted job 0 with external jobid '40457476'.
+Waiting at most 60 seconds for missing files.
+[Fri Sep 29 20:39:53 2023]
+Finished job 0.
+1 of 1 steps (100%) done
+Complete log: .snakemake/log/2023-09-29T203850.613589.snakemake.log

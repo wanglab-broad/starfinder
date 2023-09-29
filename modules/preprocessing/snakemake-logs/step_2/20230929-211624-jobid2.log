@@ -1,0 +1,20 @@
+JOB ID	40457615
+==============================
+Building DAG of jobs...
+Using shell: /bin/bash
+Provided cores: 1 (use --cores to define parallelism)
+Rules claiming more threads will be scaled down.
+Provided resources: mem_mb=1000, mem_mib=954, disk_mb=1000, disk_mib=954
+Select jobs to execute...
+
+[Fri Sep 29 21:16:31 2023]
+rule step_2:
+    input: /stanley/WangLab/Data/Analyzed/2023-10-01-Jiahao-Test/CNS_Well07/orig.txt
+    output: /stanley/WangLab/Data/Analyzed/2023-10-01-Jiahao-Test/CNS_Well07/orig_2.txt
+    jobid: 0
+    reason: Missing output files: /stanley/WangLab/Data/Analyzed/2023-10-01-Jiahao-Test/CNS_Well07/orig_2.txt
+    resources: mem_mb=1000, mem_mib=954, disk_mb=1000, disk_mib=954, tmpdir=/local/scratch/40457615.1.broad
+
+[Fri Sep 29 21:16:31 2023]
+Finished job 0.
+1 of 1 steps (100%) done

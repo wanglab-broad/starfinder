@@ -1,8 +1,8 @@
 ## ==================== [ Broad cluster configuration -- DO NOT TOUCH ] =========================
-
-cluster: "broad-uger/broad-submit.py {dependencies}"
-cluster-status: "broad-uger/broad-status.py"
-jobscript: "broad-uger/broad-jobscript.sh"
+## to use it, place it under your unix home directory, i.e. ~/.config/snakemake/broad-uger
+cluster: "broad-submit.py {dependencies}"
+cluster-status: "broad-status.py"
+jobscript: "broad-jobscript.sh"
 jobs: 5000
 keep-going: true
 immediate-submit: False

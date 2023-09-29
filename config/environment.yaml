@@ -248,5 +248,5 @@ dependencies:
       - umap-learn==0.5.3
       - werkzeug==2.2.3
       - zipp==3.15.0
-      
-# prefix: /home/unix//.conda/envs/starfinder
+
+# prefix: /home/unix/user-name/.conda/envs/starfinder # broad unix home location
