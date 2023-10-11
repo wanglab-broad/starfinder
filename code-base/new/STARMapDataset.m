@@ -49,6 +49,7 @@
         % IO
         inputPath;
         outputPath;
+        fovID;
         
         % GPU
         useGPU;
@@ -57,7 +58,7 @@
         rawImages;
         registeredImages;
         gpuImages;
-        proteinImages;
+        additionalImages;
         projectionImages;
         dims;
         dimX;
@@ -65,6 +66,8 @@
         dimZ;
         Nchannel;
         Nround;
+        seqChannelOrderDict;
+        addChannelOrderDict;
         
         % Spots
         allSpots;
@@ -140,13 +143,20 @@
             addOptional(p, 'sub_dir', defaultsubdir);
 
             defaultDict(1).wavelength = 488;
-            defaultDict(1).id = "ch00";
+            defaultDict(1).channel = "ch00";
+            defaultDict(1).name = "seq";
+
             defaultDict(2).wavelength = 594;
-            defaultDict(2).id = "ch01";
+            defaultDict(2).channel = "ch01";
+            defaultDict(2).name = "seq";
+
             defaultDict(3).wavelength = 546;
-            defaultDict(3).id = "ch02";
+            defaultDict(3).channel = "ch02";
+            defaultDict(3).name = "seq";
+
             defaultDict(4).wavelength = 647;
-            defaultDict(4).id = "ch03";
+            defaultDict(4).channel = "ch03";
+            defaultDict(4).name = "seq";
 
             addOptional(p, 'channel_order_dict', defaultDict);
 
@@ -173,6 +183,8 @@
             obj.dimZ = obj.dims(3);
             obj.Nchannel = obj.dims(4);
             obj.Nround = obj.dims(5);
+            obj.fovID = p.Results.sub_dir;
+            obj.seqChannelOrderDict = p.Results.channel_order_dict;
 
             % change metadata
             obj.jobFinished.LoadRawImages = true;
@@ -203,6 +215,7 @@
             
         end
         
+
     % ====Preprocessing====
 
         % 3.Enhance Contrast
@@ -373,11 +386,12 @@
                     obj.projectionImages("raw") = MakeProjections(obj.rawImages, p.Results.method);
                 case "registered"
                     obj.projectionImages("registered") = MakeProjections(obj.registeredImages, p.Results.method);
-                case "protein"
-                    obj.projectionImages("protein") = MakeProjections(obj.proteinImages, p.Results.method);
+                case "additional"
+                    obj.projectionImages("additional") = MakeProjections(obj.additionalImages, p.Results.method);
             end
             
         end
+
 
         % View Projections
         function obj = ViewProjection( obj, varargin )
@@ -389,6 +403,9 @@
             defaultSlot = "raw";
             addOptional(p, 'image_slot', defaultSlot);
 
+            defaultEnhance = false;
+            addOptional(p, 'enhance_contrast', defaultEnhance);
+
             defaultSave = false;
             addOptional(p, 'save', defaultSave);
 
@@ -399,23 +416,90 @@
 
             switch p.Results.image_slot
                 case "raw"
-                    montage_img = MakeMontage(obj.projectionImages("raw"));
+                    montage_img = MakeMontage(obj.projectionImages("raw"), obj.Nround, obj.Nchannel, p.Results.enhance_contrast);
                 case "registered"
-                    montage_img = MakeMontage(obj.projectionImages("registered"));
-                case "protein"
-                    montage_img = MakeMontage(obj.projectionImages("protein"));
+                    montage_img = MakeMontage(obj.projectionImages("registered"), obj.Nround, obj.Nchannel, p.Results.enhance_contrast);
+                case "additional"
+                    montage_img = MakeMontage(obj.projectionImages("additional"), obj.Nround, obj.Nchannel, p.Results.enhance_contrast);
             end
             
             if p.Results.save
-                imwrite(montage_img, p.Results.output_path);
+                exportgraphics(montage_img, p.Results.output_path, 'Resolution', 300);
             end
+
+        end
+
+        
+        % Save Stack Images
+        function obj = SaveImages( obj, varargin )
+            
+            % Input parser
+            p = inputParser;
+            
+            % Defaults
+            defaultSlot = "raw";
+            addOptional(p, 'image_slot', defaultSlot);
+
+            defaultFormat = "nested";
+            addOptional(p, 'folder_format', defaultFormat);
+
+            defaultGroupChannel = true;
+            addOptional(p, 'group_channel', defaultGroupChannel);
+
+            defaultOutputPath = obj.outputPath;
+            addOptional(p, 'output_path', defaultOutputPath);
+
+            parse(p, varargin{:});
+
+            switch p.Results.image_slot
+                case "raw"
+                    current_output_folder = fullfile(p.Results.output_path, "raw_images/");
+                    if ~exist(current_output_folder, 'dir')
+                        mkdir(current_output_folder)
+                    end
+                    current_output_folder_msg = strrep(current_output_folder, '\', '\\');
+                    fprintf(sprintf('Saving %s images to %s\n', p.Results.image_slot, current_output_folder_msg));
+                    switch p.Results.folder_format
+                        case "nested"
+                            SaveImageNestedFolder(obj.rawImages, current_output_folder, obj.fovID);
+                        case "single"
+                            SaveImageSingleFolder(obj.rawImages, current_output_folder, obj.fovID, p.Results.group_channel, obj.seqChannelOrderDict);
+                    end
+                case "registered"
+                    current_output_folder = fullfile(p.Results.output_path, "registered_images/");
+                    if ~exist(current_output_folder, 'dir')
+                        mkdir(current_output_folder)
+                    end
+                    current_output_folder_msg = strrep(current_output_folder, '\', '\\');
+                    fprintf(sprintf('Saving %s images to %s\n', p.Results.image_slot, current_output_folder_msg));
+                    switch p.Results.folder_format
+                        case "nested"
+                            SaveImageNestedFolder(obj.registeredImages, current_output_folder, obj.fovID);
+                        case "single"
+                            SaveImageSingleFolder(obj.registeredImages, current_output_folder, obj.fovID, p.Results.group_channel, obj.seqChannelOrderDict);
+                    end
+                case "additional"
+                    current_output_folder = fullfile(p.Results.output_path, "additional_images/");
+                    if ~exist(current_output_folder, 'dir')
+                        mkdir(current_output_folder)
+                    end
+                    current_output_folder_msg = strrep(current_output_folder, '\', '\\');
+                    fprintf(sprintf('Saving %s images to %s\n', p.Results.image_slot, current_output_folder_msg));
+                    switch p.Results.folder_format
+                        case "nested"
+                            SaveImageNestedFolder(obj.additionalImages, current_output_folder, obj.fovID);
+                        case "single"
+                            SaveImageSingleFolder(obj.additionalImages, current_output_folder, obj.fovID, p.Results.group_channel, obj.addChannelOrderDict);
+                    end
+            end
+            
 
         end
 
 
     % ====Image Registration====
-
-        % 5.Global registration
+              
+        % 6.Global registration
         function obj = GlobalRegistration( obj, varargin )
             
             % Input parser
@@ -423,114 +507,26 @@
             
             % Defaults
             defaultRef = 1;
-            defaultnblocks = [1 1];
-            defaultuseOverlay = false;
+            addOptional(p, 'ref_round', defaultRef);
 
-            addOptional(p,'ref_round',defaultRef);
-            addOptional(p,'nblocks',defaultnblocks);
-            addOptional(p,'useOverlay',defaultuseOverlay);
             parse(p, varargin{:});
-            
-            
-            fprintf('====Global Registration====\n');
-            fprintf(sprintf('Reference round: %d\n', p.Results.ref_round));
-            fprintf(sprintf('Use overlay: %d\n', p.Results.useOverlay));
-            
-            obj.registeredImages = will_JointRegister3D(obj.rawImages, p.Results.ref_round, p.Results.nblocks, p.Results.useOverlay, obj.log);
-
-
-            % change metadata
-            obj.jobFinished.GlobalRegistration = [1 p.Results.ref_round, p.Results.nblocks p.Results.useOverlay];
-            
-        end
         
-        
-        % 5.5.Global registration
-        function obj = test_GlobalRegistration( obj, varargin )
-            % Input parser
-            p = inputParser;
-            
-            % Defaults
-            defaultRef = 1;
-            defaultuseGPU = obj.useGPU;
-
-            addOptional(p,'ref_round',defaultRef);
-            addOptional(p, 'useGPU', defaultuseGPU);
-            parse(p, varargin{:});
-            
-            
             fprintf('====Global Registration====\n');
-            output_reg = zeros(size(obj.rawImages), 'uint8');
-            output_reg(:,:,:,:,p.Results.ref_round) = obj.rawImages(:,:,:,:,p.Results.ref_round);
-            
+            obj.registeredImages = cell(obj.Nround, 1);
+
+            fprintf(sprintf('Create reference image with round%d\n', p.Results.ref_round));
+            ref_img = MakeMergedImages(obj.rawImages{p.Results.ref_round});
+
             rounds = 1:obj.Nround;
             rounds = rounds(rounds ~= p.Results.ref_round);
-            
-            if p.Results.useGPU
-                
-                for r=rounds
-                    tic;
-%                     ref_round = gpuArray(obj.rawImages(:,:,:,:,p.Results.ref_round));
-%                     fix = max(ref_round, [], 4);
 
-                    ref_round = obj.rawImages(:,:,:,:,p.Results.ref_round);
-                    fix = gpuArray(max(ref_round, [], 4));
-                    
-%                     curr_round = gpuArray(obj.rawImages(:,:,:,:,r));
-%                     curr_mov = max(curr_round, [], 4);
-                    
-                    curr_round = obj.rawImages(:,:,:,:,r);
-                    curr_mov = gpuArray(max(curr_round, [], 4));
-
-                    params = DFTRegister3D(fix, curr_mov, false);
-                    % disp("DFTRegister success!");
-                    for c=1:4
-                        curr_reg = DFTApply3D(gpuArray(curr_round(:,:,:,c)), params, false);
-                        curr_round(:,:,:,c) = curr_reg;
-                    end
-
-                    output_reg(:,:,:,:,r) = gather(curr_round);
-                    fprintf(sprintf('Round %d vs. Round %d finished [time=%02f]\n', r, p.Results.ref_round, toc));
-                    fprintf(obj.log, sprintf('Round %d vs. Round %d finished [time=%02f]\n', r, p.Results.ref_round, toc));
-                    fprintf(sprintf('Shifted by %s\n', num2str(params.shifts)));
-                    fprintf(obj.log, sprintf('Shifted by %s\n', num2str(params.shifts)));
-                    reset(gpuDevice);
-                end
-               
-            else
-                for r=rounds
-                    starting = tic;
-                    ref_round = obj.rawImages(:,:,:,:,p.Results.ref_round);
-                    fix = max(ref_round, [], 4);
-
-                    curr_round = obj.rawImages(:,:,:,:,r);
-                    curr_mov = max(curr_round, [], 4);
-
-                    params = DFTRegister3D(fix, curr_mov, false);
-                    % disp("DFTRegister success!");
-                    fprintf(sprintf('DFT register finished [time=%02f]\n', toc(starting)));
-                    
-                    starting_apply = tic;
-                    for c=1:4
-                        curr_reg = DFTApply3D(curr_round(:,:,:,c), params, false);
-                        curr_round(:,:,:,c) = curr_reg;
-                    end
-                    fprintf(sprintf('DFT apply finished [time=%02f]\n', toc(starting_apply)));
-                    
-                    output_reg(:,:,:,:,r) = curr_round;
-                    fprintf(sprintf('Round %d vs. Round %d finished [time=%02f]\n', r, p.Results.ref_round, toc(starting)));
-                    fprintf(obj.log, sprintf('Round %d vs. Round %d finished [time=%02f]\n', r, p.Results.ref_round, toc(starting)));
-                    fprintf(sprintf('Shifted by %s\n', num2str(params.shifts)));
-                    fprintf(obj.log, sprintf('Shifted by %s\n', num2str(params.shifts)));
-                end
-                
+            for r=rounds
+                mov_img = MakeMergedImages(obj.rawImages{r});
+                obj.registeredImages{r} = RegisterImagesGlobal(obj.rawImages{r}, ref_img, mov_img);
             end
-            
-            obj.registeredImages = output_reg;
-
 
             % change metadata
-            obj.jobFinished.test_GlobalRegistration = 1;
+            obj.jobFinished.GlobalRegistration = 1;
             
         end
         
@@ -650,8 +646,8 @@
         end
         
         
-        % 6.5 use DAPI register protein images  
-        function obj = NucleiRegistrationProtein( obj, protein_folder, sub_dir, dapi_channel )
+        % 6.5 use DAPI register additional images  
+        function obj = NucleiRegistrationadditional( obj, additional_folder, sub_dir, dapi_channel )
             
             fprintf('====Nuclei-based Registration====\n');
             
@@ -664,16 +660,16 @@
             
             ref_dapi = ref_dapi(:,:,1:30); %%%
             
-            protein_path = fullfile(obj.inputPath, protein_folder, sub_dir);
-            protein_files = dir(fullfile(protein_path, '*.tif'));
-            nfiles = numel(protein_files);
-            protein_imgs = cell(nfiles, 1);
+            additional_path = fullfile(obj.inputPath, additional_folder, sub_dir);
+            additional_files = dir(fullfile(additional_path, '*.tif'));
+            nfiles = numel(additional_files);
+            additional_imgs = cell(nfiles, 1);
 
             % Load all channels
             for c=1:nfiles 
-                curr_path = strcat(protein_files(c).folder, '/', protein_files(c).name);
+                curr_path = strcat(additional_files(c).folder, '/', additional_files(c).name);
                 curr_img = new_LoadMultipageTiff(curr_path, 'uint8', 'uint8', false);
-                protein_imgs{c} = curr_img(:,:,1:30);
+                additional_imgs{c} = curr_img(:,:,1:30);
             end
 
 
@@ -682,16 +678,16 @@
                 tic;
                 
                 fix = gpuArray(ref_dapi);
-                mov = gpuArray(protein_imgs{dapi_channel});
+                mov = gpuArray(additional_imgs{dapi_channel});
 
                 params = DFTRegister3D(fix, mov, false);
 
                 for c=1:nfiles
-                    curr_reg = DFTApply3D(gpuArray(protein_imgs{c}), params, false);
-                    protein_imgs{c} = uint8(gather(curr_reg));
+                    curr_reg = DFTApply3D(gpuArray(additional_imgs{c}), params, false);
+                    additional_imgs{c} = uint8(gather(curr_reg));
                 end
 
-                obj.proteinImages = protein_imgs;
+                obj.additionalImages = additional_imgs;
                 fprintf(sprintf('Move nuclei vs. Ref nuclei finished [time=%02f]\n', toc));
                 fprintf(obj.log, sprintf('Move nuclei vs. Ref nuclei finished [time=%02f]\n', toc));
                 fprintf(sprintf('Shifted by %s\n', num2str(params.shifts)));
@@ -703,11 +699,11 @@
                 params = DFTRegister3D(ref_dapi, move_dapi, false);
 
                 for c=1:4
-                    curr_reg = DFTApply3D(protein_imgs{c}, params, false);
-                    protein_imgs{c} = uint8(curr_reg);
+                    curr_reg = DFTApply3D(additional_imgs{c}, params, false);
+                    additional_imgs{c} = uint8(curr_reg);
                 end
 
-                obj.proteinImages = protein_imgs;
+                obj.additionalImages = additional_imgs;
                 fprintf(sprintf('Move nuclei vs. Ref nuclei finished [time=%02f]\n', toc));
                 fprintf(obj.log, sprintf('Move nuclei vs. Ref nuclei finished [time=%02f]\n', toc));
                 fprintf(sprintf('Shifted by %s\n', num2str(params.shifts)));
@@ -715,25 +711,25 @@
             end
 
             % change metadata
-            obj.jobFinished.NucleiRegistrationProtein = 1;
+            obj.jobFinished.NucleiRegistrationadditional = 1;
             
         end
         
-        % 6.5 use DAPI register protein images  
-        function obj = DotsRegistrationProtein( obj, protein_folder, sub_dir, move_channel )
+        % 6.5 use DAPI register additional images  
+        function obj = DotsRegistrationadditional( obj, additional_folder, sub_dir, move_channel )
             
             fprintf('====Dots-based Registration====\n');
             
-            protein_path = fullfile(obj.inputPath, protein_folder, sub_dir);
-            protein_files = dir(fullfile(protein_path, '*.tif'));
-            nfiles = numel(protein_files);
-            protein_imgs = cell(nfiles, 1);
+            additional_path = fullfile(obj.inputPath, additional_folder, sub_dir);
+            additional_files = dir(fullfile(additional_path, '*.tif'));
+            nfiles = numel(additional_files);
+            additional_imgs = cell(nfiles, 1);
 
             % Load all channels
             for c=1:nfiles 
-                curr_path = strcat(protein_files(c).folder, '/', protein_files(c).name);
+                curr_path = strcat(additional_files(c).folder, '/', additional_files(c).name);
                 curr_img = new_LoadMultipageTiff(curr_path, 'uint8', 'uint8', false);
-                protein_imgs{c} = curr_img;
+                additional_imgs{c} = curr_img;
             end
 
             ref_img = max(obj.rawImages(:,:,:,:,1), [], 4);
@@ -743,15 +739,15 @@
                 tic;
                 
                 fix = gpuArray(ref_img);
-                mov = gpuArray(protein_imgs{move_channel});
+                mov = gpuArray(additional_imgs{move_channel});
                 params = DFTRegister3D(fix, mov, false);
 
                 for c=1:4
-                    curr_reg = DFTApply3D(gpuArray(protein_imgs{c}), params, false);
-                    protein_imgs{c} = uint8(gather(curr_reg));
+                    curr_reg = DFTApply3D(gpuArray(additional_imgs{c}), params, false);
+                    additional_imgs{c} = uint8(gather(curr_reg));
                 end
 
-                obj.proteinImages = protein_imgs;
+                obj.additionalImages = additional_imgs;
                 fprintf(sprintf('Move image vs. Ref image finished [time=%02f]\n', toc));
                 fprintf(obj.log, sprintf('Move image vs. Ref image finished [time=%02f]\n', toc));
                 fprintf(sprintf('Shifted by %s\n', num2str(params.shifts)));
@@ -760,15 +756,15 @@
                
             else
                 tic;
-                mov = protein_imgs{move_channel};
+                mov = additional_imgs{move_channel};
                 params = DFTRegister3D(ref_img, mov, false);
 
                 for c=1:4
-                    curr_reg = DFTApply3D(protein_imgs{c}, params, false);
-                    protein_imgs{c} = uint8(curr_reg);
+                    curr_reg = DFTApply3D(additional_imgs{c}, params, false);
+                    additional_imgs{c} = uint8(curr_reg);
                 end
 
-                obj.proteinImages = protein_imgs;
+                obj.additionalImages = additional_imgs;
                 fprintf(sprintf('Move image vs. Ref image finished [time=%02f]\n', toc));
                 fprintf(obj.log, sprintf('Move image vs. Ref image finished [time=%02f]\n', toc));
                 fprintf(sprintf('Shifted by %s\n', num2str(params.shifts)));
@@ -776,7 +772,7 @@
             end
 
             % change metadata
-            obj.jobFinished.DotsRegistrationProtein = 1;
+            obj.jobFinished.DotsRegistrationadditional = 1;
             
         end
         
