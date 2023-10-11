@@ -8,7 +8,7 @@ function input_img = MorphologicalReconstruction( input_img, radius )
     Nslice = size(input_img{1}, 3);
 
     % Setup structure element
-    se = strel('disk', p.Results.radius);
+    se = strel('disk', radius);
     
     for r=1:Nround
         

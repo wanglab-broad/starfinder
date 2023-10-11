@@ -1,4 +1,4 @@
-function [output_imgs, dims] = LoadImageStacks( inputPath, sub_dir, zrange, convert_uint8 )
+function [output_imgs, dims] = LoadImageStacks( inputPath, sub_dir, channel_order_dict, zrange, convert_uint8 )
 %LOADIMAGESTACKS Load image stacks for each round
         
     % Suppress all warnings 
@@ -41,7 +41,9 @@ function [output_imgs, dims] = LoadImageStacks( inputPath, sub_dir, zrange, conv
 
         % Load all channels
         for c=1:Nchannel 
-            current_path = fullfile(current_files(c).folder, current_files(c).name);
+            current_ch_id = channel_order_dict(c).id;
+            current_file_index = find(contains({current_files(:).name}, current_ch_id) == 1);
+            current_path = fullfile(current_files(current_file_index).folder, current_files(current_file_index).name);
             current_img = LoadMultipageTiff(current_path, convert_uint8);
             round_img(:,:,:,c) = current_img;
         end

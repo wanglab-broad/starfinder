@@ -58,6 +58,7 @@
         registeredImages;
         gpuImages;
         proteinImages;
+        projectionImages;
         dims;
         dimX;
         dimY;
@@ -138,6 +139,17 @@
             defaultsubdir = '';
             addOptional(p, 'sub_dir', defaultsubdir);
 
+            defaultDict(1).wavelength = 488;
+            defaultDict(1).id = "ch00";
+            defaultDict(2).wavelength = 594;
+            defaultDict(2).id = "ch01";
+            defaultDict(3).wavelength = 546;
+            defaultDict(3).id = "ch02";
+            defaultDict(4).wavelength = 647;
+            defaultDict(4).id = "ch03";
+
+            addOptional(p, 'channel_order_dict', defaultDict);
+
             defaultzrange = [];
             addOptional(p, 'zrange', defaultzrange);
 
@@ -152,6 +164,7 @@
             fprintf('====Loading raw images====\n');
             [obj.rawImages, obj.dims] = LoadImageStacks(obj.inputPath, ...
                                                             p.Results.sub_dir, ...
+                                                            p.Results.channel_order_dict, ...
                                                             p.Results.zrange, ...
                                                             p.Results.convert_uint8);
 
@@ -287,7 +300,7 @@
             
             % Defaults
             defaultRadius = 3;
-            addOptional(p,'radius',defaultRadius);
+            addOptional(p, 'radius', defaultRadius);
 
             parse(p, varargin{:});
             
@@ -309,7 +322,7 @@
             
             % Defaults
             defaultRadius = 3;
-            addOptional(p,'radius',defaultRadius);
+            addOptional(p, 'radius', defaultRadius);
 
             parse(p, varargin{:});
             
@@ -335,7 +348,71 @@
             obj.jobFinished.Tophat = 1;
             
         end
+
         
+        % Make Projections
+        function obj = Projection( obj, varargin )
+            
+            % Input parser
+            p = inputParser;
+            
+            % Defaults
+            defaultMethod = "max";
+            addOptional(p, 'method', defaultMethod);
+
+            defaultSlot = "raw";
+            addOptional(p, 'image_slot', defaultSlot);
+
+            parse(p, varargin{:});
+            
+            fprintf("====Generate Projection Images====\n");
+            obj.projectionImages = containers.Map();
+
+            switch p.Results.image_slot
+                case "raw"
+                    obj.projectionImages("raw") = MakeProjections(obj.rawImages, p.Results.method);
+                case "registered"
+                    obj.projectionImages("registered") = MakeProjections(obj.registeredImages, p.Results.method);
+                case "protein"
+                    obj.projectionImages("protein") = MakeProjections(obj.proteinImages, p.Results.method);
+            end
+            
+        end
+
+        % View Projections
+        function obj = ViewProjection( obj, varargin )
+            
+            % Input parser
+            p = inputParser;
+            
+            % Defaults
+            defaultSlot = "raw";
+            addOptional(p, 'image_slot', defaultSlot);
+
+            defaultSave = false;
+            addOptional(p, 'save', defaultSave);
+
+            defaultOutputPath = './projection_montage.tif';
+            addOptional(p, 'output_path', defaultOutputPath);
+
+            parse(p, varargin{:});
+
+            switch p.Results.image_slot
+                case "raw"
+                    montage_img = MakeMontage(obj.projectionImages("raw"));
+                case "registered"
+                    montage_img = MakeMontage(obj.projectionImages("registered"));
+                case "protein"
+                    montage_img = MakeMontage(obj.projectionImages("protein"));
+            end
+            
+            if p.Results.save
+                imwrite(montage_img, p.Results.output_path);
+            end
+
+        end
+
+
     % ====Image Registration====
 
         % 5.Global registration
@@ -366,6 +443,7 @@
             obj.jobFinished.GlobalRegistration = [1 p.Results.ref_round, p.Results.nblocks p.Results.useOverlay];
             
         end
+        
         
         % 5.5.Global registration
         function obj = test_GlobalRegistration( obj, varargin )
