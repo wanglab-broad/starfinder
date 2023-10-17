@@ -1,45 +1,7 @@
     classdef STARMapDataset
     % STARMapDataset, the primary class for the STARMap imaging analysis pipeline
     % ====Properties====
-    % *IO*
-    % inputPath: primary path of the input folder
-    % outputPath: primary path of the input folder, usually inputPath/output
-    
-    % *GPU*
-    % useGPU: state of GPU utilization
-    
-    % *Images*
-    % rawImages: 5-D array raw cDNA amplicon images of multiple rounds 
-    % registeredImages: 5-D array registered images
-    % gpuImages: 5-D array registered images on GPU
-    % dims: dimension of the rawImages
-    % dimX
-    % dimY
-    % dimZ
-    % Nchannel: number of channel of image
-    % Nround: number of imaging round
-    
-    % *Spots*
-    % allSpots: all spots/points found in the image
-    % goodSpots: spots/points left after filtration
-    
-    % *Reads*
-    % allReads: all reads extracted from all spots/points
-    % goodReads: reads left after filtration 
-    % goodReadsLoc: locations of good reads
-    % allScores: scores of all reads
-    % goodScores: scores of good reads
-
-    % Codebook
-    % seqToGene: map(dictionary) color sequence --> gene
-    % geneToSeq: map(dictionary) gene --> color sequence
-    % barcodeMat:
-    % barcodeNames:
-    % barcodeSeqs:
-    % basecsMat:
-
-    % Metadata
-    % jobFinished:
+    % ...
     
     % ====Methods====
     % ...
@@ -55,11 +17,16 @@
         useGPU;
         
         % Images 
+        images;
+
         rawImages;
         registeredImages;
-        gpuImages;
         additionalImages;
+
+        projections;
         projectionImages;
+
+        metadata;
         dims;
         dimX;
         dimY;
@@ -69,7 +36,16 @@
         seqChannelOrderDict;
         addChannelOrderDict;
         
+        % Registration
+        registration;
+        referenceImageSeq;
+        globalParamsSeq;
+        referenceImageAdd;
+        globalParamsAdd;        
+        
         % Spots
+        signal;
+
         allSpots;
         goodSpots;
         
@@ -81,6 +57,7 @@
         goodScores;
         
         % Codebook
+        codebook;
         seqToGene;
         geneToSeq;
         barcodeMat;
@@ -90,11 +67,12 @@
         CodebookSplitIndex;
         
         % Metadata
+        jobToDo;
         jobFinished;
-        log;
         
     end
     
+
     methods
         
         % 1.Construction method of Pipeline object
@@ -125,9 +103,11 @@
             % setup GPU usage
             obj.useGPU = p.Results.useGPU;
             
-            % setup metadata
-            obj.jobFinished = struct('LoadRawImages', false);
-            
+            % initiate core properties 
+            obj.images = containers.Map();
+            obj.projections = containers.Map();
+            obj.metadata = containers.Map();
+
             % show message
             fprintf('Pipeline Obj is generated...\n');
             
@@ -138,9 +118,15 @@
 
             % Input parser
             p = inputParser;
+
+            defaultLayer = "seq"; % or others such as "protein", "round2"
+            addOptional(p, 'layer', defaultLayer);
             
-            defaultsubdir = '';
-            addOptional(p, 'sub_dir', defaultsubdir);
+            defaultsubDir = '';
+            addOptional(p, 'sub_dir', defaultsubDir);
+
+            defaultotherDir = ["protein"];
+            addOptional(p, 'additional_dir', defaultotherDir);
 
             defaultDict(1).wavelength = 488;
             defaultDict(1).channel = "ch00";
@@ -170,25 +156,53 @@
             addOptional(p, 'useGPU', defaultuseGPU);
             parse(p, varargin{:});
             
-            % Load tiff stacks from inputPath
-            fprintf('====Loading raw images====\n');
-            [obj.rawImages, obj.dims] = LoadImageStacks(obj.inputPath, ...
-                                                            p.Results.sub_dir, ...
-                                                            p.Results.channel_order_dict, ...
-                                                            p.Results.zrange, ...
-                                                            p.Results.convert_uint8);
+            % Load tiff stacks
+            if p.Results.layer == "seq"
+                fprintf('====Loading sequencing raw images====\n');
+                round_dir = dir(strcat(obj.inputPath, 'round*'));
+                [obj.images("seq"), dims_seq] = LoadImageStacks(round_dir, ...
+                                                                p.Results.sub_dir, ...
+                                                                p.Results.channel_order_dict, ...
+                                                                p.Results.zrange, ...
+                                                                p.Results.convert_uint8);
+                obj.metadata("seq") = struct();
+                obj.metadata("seq").dims = dims_seq;
+                obj.metadata("seq").dimX = dims_seq(1);
+                obj.metadata("seq").dimY = dims_seq(2);
+                obj.metadata("seq").dimZ = dims_seq(3);
+                obj.metadata("seq").Nchannel = dims_seq(4);
+                obj.metadata("seq").Nround = dims_seq(5);
+                obj.metadata("seq").BitDepth = dims_seq(6);
+                obj.metadata("seq").fovID = p.Results.sub_dir;
+                obj.metadata("seq").ChannelInfo = p.Results.channel_order_dict;
+            else
+                all_dir = dir(obj.inputPath);
+                folder_names = {all_dir(:).name};
+                round_dir = all_dir(ismember(folder_names, p.Results.additional_dir));
+                for r=1:numel(round_dir)
+                    current_round_dir = round_dir(r);
+                    current_layer = current_round_dir.name;
+                    fprintf(sprintf('====Loading %s images into layer %s====\n', current_layer, current_layer));
+                    [obj.images(current_layer), dims_other] = LoadImageStacks(current_round_dir, ...
+                        p.Results.sub_dir, ...
+                        p.Results.channel_order_dict, ...
+                        p.Results.zrange, ...
+                        p.Results.convert_uint8);
 
-            obj.dimX = obj.dims(1);
-            obj.dimY = obj.dims(2);
-            obj.dimZ = obj.dims(3);
-            obj.Nchannel = obj.dims(4);
-            obj.Nround = obj.dims(5);
-            obj.fovID = p.Results.sub_dir;
-            obj.seqChannelOrderDict = p.Results.channel_order_dict;
-
-            % change metadata
-            obj.jobFinished.LoadRawImages = true;
-            obj.jobFinished.ImageFormat = class(obj.rawImages{1});
+                    current_metadata = struct();
+                    current_metadata.dims = dims_other;
+                    current_metadata.dimX = dims_other(1);
+                    current_metadata.dimY = dims_other(2);
+                    current_metadata.dimZ = dims_other(3);
+                    current_metadata.Nchannel = dims_other(4);
+                    current_metadata.Nround = dims_other(5);
+                    current_metadata.BitDepth = dims_other(6);
+                    current_metadata.fovID = p.Results.sub_dir;
+                    current_metadata.ChannelInfo = p.Results.channel_order_dict;
+                    obj.metadata(current_layer) = current_metadata;
+                end
+               
+            end
             
         end
         
@@ -199,6 +213,9 @@
             % Input parser
             p = inputParser;
             
+            defaultLayer = "seq"; 
+            addOptional(p, 'layer', defaultLayer);
+            
             defaultChannel_1 = 2;
             defaultChannel_2 = 3;
             addOptional(p, 'channel_1', defaultChannel_1);
@@ -208,10 +225,10 @@
             % swap channels
             fprintf('====Swap Channels====\n');
             fprintf(sprintf('Channel %d <==> Channel %d\n', p.Results.channel_1, p.Results.channel_2));
-            obj.rawImages = SwapTwoChannels(obj.rawImages, p.Results.channel_1, p.Results.channel_2);
+            obj.images(p.Results.layer) = SwapTwoChannels(obj.images(p.Results.layer), p.Results.channel_1, p.Results.channel_2);
             
             % change metadata
-            obj.jobFinished.SwapChannels = [1 p.Results.channel_1 p.Results.channel_2];
+            obj.jobFinished.SwapChannels = true;
             
         end
         
@@ -224,7 +241,11 @@
             % Input parser
             p = inputParser;
             
+            
             addRequired(p, 'method');
+
+            defaultLayer = "seq"; 
+            addOptional(p, 'layer', defaultLayer);
 
             defaultLow_in= 0.05;
             addParameter(p, 'low_in', defaultLow_in);
@@ -245,10 +266,10 @@
 
             switch p.Results.method
                 case "min-max"
-                    obj.rawImages = MinMaxNorm(obj.rawImages);
+                    obj.images(p.Results.layer) = MinMaxNorm(obj.images(p.Results.layer));
                 case "regular"
                     fprintf("====Running imadjustn====\n");
-                    for r=1:obj.Nround
+                    for r=1:obj.metadata(p.Results.layer).Nround
                         tic
                         fprintf(sprintf("Processing Round %d...", r))
                         
@@ -386,7 +407,7 @@
                     obj.projectionImages("raw") = MakeProjections(obj.rawImages, p.Results.method);
                 case "registered"
                     obj.projectionImages("registered") = MakeProjections(obj.registeredImages, p.Results.method);
-                case "additional"
+                case "add"
                     obj.projectionImages("additional") = MakeProjections(obj.additionalImages, p.Results.method);
             end
             
@@ -409,7 +430,7 @@
             defaultSave = false;
             addOptional(p, 'save', defaultSave);
 
-            defaultOutputPath = './projection_montage.tif';
+            defaultOutputPath = fullfile(obj.outputPath, 'projection_montage.tif');
             addOptional(p, 'output_path', defaultOutputPath);
 
             parse(p, varargin{:});
@@ -419,11 +440,13 @@
                     montage_img = MakeMontage(obj.projectionImages("raw"), obj.Nround, obj.Nchannel, p.Results.enhance_contrast);
                 case "registered"
                     montage_img = MakeMontage(obj.projectionImages("registered"), obj.Nround, obj.Nchannel, p.Results.enhance_contrast);
-                case "additional"
+                case "add"
                     montage_img = MakeMontage(obj.projectionImages("additional"), obj.Nround, obj.Nchannel, p.Results.enhance_contrast);
             end
             
             if p.Results.save
+                current_output_folder_msg = strrep(p.Results.output_path, '\', '\\');
+                fprintf(sprintf('Saving %s projections to %s\n', p.Results.image_slot, current_output_folder_msg));
                 exportgraphics(montage_img, p.Results.output_path, 'Resolution', 300);
             end
 
@@ -478,7 +501,7 @@
                         case "single"
                             SaveImageSingleFolder(obj.registeredImages, current_output_folder, obj.fovID, p.Results.group_channel, obj.seqChannelOrderDict);
                     end
-                case "additional"
+                case "add"
                     current_output_folder = fullfile(p.Results.output_path, "additional_images/");
                     if ~exist(current_output_folder, 'dir')
                         mkdir(current_output_folder)
@@ -498,7 +521,7 @@
 
 
     % ====Image Registration====
-              
+            
         % 6.Global registration
         function obj = GlobalRegistration( obj, varargin )
             
@@ -513,16 +536,22 @@
         
             fprintf('====Global Registration====\n');
             obj.registeredImages = cell(obj.Nround, 1);
+            obj.registeredImages{p.Results.ref_round} = obj.rawImages{p.Results.ref_round};
 
             fprintf(sprintf('Create reference image with round%d\n', p.Results.ref_round));
-            ref_img = MakeMergedImages(obj.rawImages{p.Results.ref_round});
+            if isempty(obj.referenceImageSeq)
+                obj.referenceImageSeq = max(obj.rawImages{p.Results.ref_round}, [], 4);
+            end
 
             rounds = 1:obj.Nround;
             rounds = rounds(rounds ~= p.Results.ref_round);
 
             for r=rounds
-                mov_img = MakeMergedImages(obj.rawImages{r});
-                obj.registeredImages{r} = RegisterImagesGlobal(obj.rawImages{r}, ref_img, mov_img);
+                mov_img = max(obj.rawImages{r}, [], 4);
+                starting = tic;
+                [obj.registeredImages{r}, obj.globalParamsSeq] = RegisterImagesGlobal(obj.rawImages{r}, obj.referenceImageSeq, mov_img);
+                fprintf(sprintf('Round %d vs. Round %d finished [time=%02f]\n', r, p.Results.ref_round, toc(starting)));
+                fprintf(sprintf('Shifted by %s\n', num2str(obj.globalParamsSeq.shifts)));
             end
 
             % change metadata
@@ -530,251 +559,89 @@
             
         end
         
-        % 6.Local (Non-rigid) registration
+
+        % 7.Local (Non-rigid) registration test
         function obj = LocalRegistration( obj, varargin )
 
             % Input parser
             p = inputParser;
+
             % Defaults
             defaultRef = 1;
-            defaultMethod = "max";
-            defaultIter = 60;
-            defaultAFS = 1;
+            addOptional(p, 'ref_round', defaultRef);
 
-            %addRequired(p,'object');
-            addOptional(p,'ref_round',defaultRef);
-            addOptional(p,'Method',defaultMethod);
-            addParameter(p,'Iterations',defaultIter);
-            addParameter(p,'AccumulatedFieldSmoothing',defaultAFS);
+            defaultIter = 10;
+            addParameter(p, 'Iterations', defaultIter);
+
+            defaultAFS = 1;
+            addParameter(p, 'AccumulatedFieldSmoothing', defaultAFS);
 
             parse(p, varargin{:});
             
-            % WARNING
-            if obj.useGPU
-                obj.gpuImages = obj.registeredImages;
-                obj.registeredImages = gather(obj.registeredImages);
-            else
-                obj.gpuImages = obj.registeredImages;
-            end
-            
             fprintf('====Local (Non-rigid) Registration====\n');
-            obj = new_LocalRegistration(obj, p.Results.ref_round, 'Method', p.Results.Method, 'Iterations', p.Results.Iterations, 'AccumulatedFieldSmoothing', p.Results.AccumulatedFieldSmoothing);
 
-            
+            fprintf(sprintf('Create reference image with round%d\n', p.Results.ref_round));
+            if isempty(obj.referenceImageSeq)
+                obj.referenceImageSeq = max(obj.rawImages{p.Results.ref_round}, [], 4);
+            end
+
+            rounds = 1:obj.Nround;
+            rounds = rounds(rounds ~= p.Results.ref_round);
+
+            for r=rounds
+                mov_img = max(obj.registeredImages{r}, [], 4);
+                starting = tic;
+                [obj.registeredImages{r}, ~] = RegisterImagesLocal(obj.registeredImages{r}, obj.referenceImageSeq, mov_img, ...
+                                                                        p.Results.Iterations, p.Results.AccumulatedFieldSmoothing);
+
+                fprintf(sprintf('Round %d vs. Round %d finished [time=%02f]\n', r, p.Results.ref_round, toc(starting)));
+            end
+
             % change metadata
-            obj.jobFinished.LocalRegistration = [1 p.Results.Method floor(log2(obj.dimZ)) p.Results.AccumulatedFieldSmoothing];
+            obj.jobFinished.LocalRegistration = [1 floor(log2(obj.dimZ)) p.Results.AccumulatedFieldSmoothing];
             
         end
-        
-        % 6.1.Local (Non-rigid) registration test
-        function obj = xxx_LocalRegistration( obj, varargin )
 
+
+         % 6.Global registration with additional reference 
+         function obj = GlobalRegistrationAdd( obj, varargin )
+            
             % Input parser
             p = inputParser;
+            
             % Defaults
-            defaultRef = 1;
-            defaultMethod = "max";
-            defaultIter = 60;
-            defaultAFS = 1;
-
-            %addRequired(p,'object');
-            addOptional(p,'ref_round',defaultRef);
-            addOptional(p,'Method',defaultMethod);
-            addParameter(p,'Iterations',defaultIter);
-            addParameter(p,'AccumulatedFieldSmoothing',defaultAFS);
+            if ~isempty(obj.addChannelOrderDict)
+                channel_names = {obj.addChannelOrderDict(:).name};
+                defaultRef = find([channel_names{:}] == "DAPI");
+            else
+                defaultRef = 1;
+            end
+            addOptional(p, 'ref_channel', defaultRef);
 
             parse(p, varargin{:});
-            
-            fprintf('====Local (Non-rigid) Registration====\n');
-            obj = test_LocalRegistration(obj, p.Results.ref_round, 'Method', p.Results.Method, 'Iterations', p.Results.Iterations, 'AccumulatedFieldSmoothing', p.Results.AccumulatedFieldSmoothing);
-
-            % change metadata
-            obj.jobFinished.LocalRegistration = [1 p.Results.Method floor(log2(obj.dimZ)) p.Results.AccumulatedFieldSmoothing];
-            
-        end
         
-        
-        % 6.5 DAPI registration  
-        function obj = NucleiRegistration( obj, ref_dapi, move_dapi )
+            fprintf('====Global Registration with Additional Reference====\n');
+            Nround_add = numel(obj.additionalImages);
+
+            fprintf(sprintf('Using ch%d as reference...\n', p.Results.ref_channel));
             
-            fprintf('====Nuclei-based Registration====\n');
-            
+            if isempty(obj.referenceImageAdd)
+                fprintf("Need a reference image stored in sdata.referenceImageAdd slot!")
+            end
 
-            round1_img = obj.rawImages(:,:,:,:,1);
-            
-            if obj.useGPU
-                
-                tic;
-                
-                fix = gpuArray(ref_dapi);
-                mov = gpuArray(move_dapi);
-
-                params = DFTRegister3D(fix, mov, false);
-
-                for c=1:4
-                    curr_reg = DFTApply3D(gpuArray(round1_img(:,:,:,c)), params, false);
-                    round1_img(:,:,:,c) = curr_reg;
-                end
-
-                obj.rawImages(:,:,:,:,1) = gather(round1_img);
-                fprintf(sprintf('Move nuclei vs. Ref nuclei finished [time=%02f]\n', toc));
-                fprintf(obj.log, sprintf('Move nuclei vs. Ref nuclei finished [time=%02f]\n', toc));
-                fprintf(sprintf('Shifted by %s\n', num2str(params.shifts)));
-                fprintf(obj.log, sprintf('Shifted by %s\n', num2str(params.shifts)));
-                reset(gpuDevice);
-               
-            else
-                tic;
-                params = DFTRegister3D(ref_dapi, move_dapi, false);
-
-                for c=1:4
-                    curr_reg = DFTApply3D(round1_img(:,:,:,c), params, false);
-                    round1_img(:,:,:,c) = curr_reg;
-                end
-
-                obj.rawImages(:,:,:,:,2) = round1_img;
-                fprintf(sprintf('Move nuclei vs. Ref nuclei finished [time=%02f]\n', toc));
-                fprintf(obj.log, sprintf('Move nuclei vs. Ref nuclei finished [time=%02f]\n', toc));
-                fprintf(sprintf('Shifted by %s\n', num2str(params.shifts)));
-                fprintf(obj.log, sprintf('Shifted by %s\n', num2str(params.shifts)));
-                reset(gpuDevice);
+            for r=1:Nround_add
+                mov_img = obj.additionalImages{r}(:,:,:,p.Results.ref_channel);
+                starting = tic;
+                [obj.additionalImages{r}, obj.globalParamsAdd] = RegisterImagesGlobal(obj.additionalImages{r}, obj.referenceImageAdd, mov_img);
+                fprintf(sprintf('Round %d finished [time=%02f]\n', r, toc(starting)));
+                fprintf(sprintf('Shifted by %s\n', num2str(obj.globalParamsAdd.shifts)));
             end
 
             % change metadata
-            obj.jobFinished.NucleiRegistration = 1;
+            obj.jobFinished.GlobalRegistrationAdd = 1;
             
         end
         
-        
-        % 6.5 use DAPI register additional images  
-        function obj = NucleiRegistrationadditional( obj, additional_folder, sub_dir, dapi_channel )
-            
-            fprintf('====Nuclei-based Registration====\n');
-            
-
-            ref_dapi_path = dir(fullfile(obj.inputPath, "round1", sub_dir, "*.tif"));
-            ref_dapi = new_LoadMultipageTiff(fullfile(ref_dapi_path(5).folder, ref_dapi_path(5).name), 'uint8', 'uint8', false);
-            
-%             ref_dapi_path = dir(fullfile(obj.inputPath, "ref_dapi", sub_dir, "*.tif"));
-%             ref_dapi = new_LoadMultipageTiff(fullfile(ref_dapi_path(1).folder, ref_dapi_path(1).name), 'uint8', 'uint8', false);
-            
-            ref_dapi = ref_dapi(:,:,1:30); %%%
-            
-            additional_path = fullfile(obj.inputPath, additional_folder, sub_dir);
-            additional_files = dir(fullfile(additional_path, '*.tif'));
-            nfiles = numel(additional_files);
-            additional_imgs = cell(nfiles, 1);
-
-            % Load all channels
-            for c=1:nfiles 
-                curr_path = strcat(additional_files(c).folder, '/', additional_files(c).name);
-                curr_img = new_LoadMultipageTiff(curr_path, 'uint8', 'uint8', false);
-                additional_imgs{c} = curr_img(:,:,1:30);
-            end
-
-
-            if obj.useGPU
-                
-                tic;
-                
-                fix = gpuArray(ref_dapi);
-                mov = gpuArray(additional_imgs{dapi_channel});
-
-                params = DFTRegister3D(fix, mov, false);
-
-                for c=1:nfiles
-                    curr_reg = DFTApply3D(gpuArray(additional_imgs{c}), params, false);
-                    additional_imgs{c} = uint8(gather(curr_reg));
-                end
-
-                obj.additionalImages = additional_imgs;
-                fprintf(sprintf('Move nuclei vs. Ref nuclei finished [time=%02f]\n', toc));
-                fprintf(obj.log, sprintf('Move nuclei vs. Ref nuclei finished [time=%02f]\n', toc));
-                fprintf(sprintf('Shifted by %s\n', num2str(params.shifts)));
-                fprintf(obj.log, sprintf('Shifted by %s\n', num2str(params.shifts)));
-                reset(gpuDevice);
-               
-            else
-                tic;
-                params = DFTRegister3D(ref_dapi, move_dapi, false);
-
-                for c=1:4
-                    curr_reg = DFTApply3D(additional_imgs{c}, params, false);
-                    additional_imgs{c} = uint8(curr_reg);
-                end
-
-                obj.additionalImages = additional_imgs;
-                fprintf(sprintf('Move nuclei vs. Ref nuclei finished [time=%02f]\n', toc));
-                fprintf(obj.log, sprintf('Move nuclei vs. Ref nuclei finished [time=%02f]\n', toc));
-                fprintf(sprintf('Shifted by %s\n', num2str(params.shifts)));
-                fprintf(obj.log, sprintf('Shifted by %s\n', num2str(params.shifts)));
-            end
-
-            % change metadata
-            obj.jobFinished.NucleiRegistrationadditional = 1;
-            
-        end
-        
-        % 6.5 use DAPI register additional images  
-        function obj = DotsRegistrationadditional( obj, additional_folder, sub_dir, move_channel )
-            
-            fprintf('====Dots-based Registration====\n');
-            
-            additional_path = fullfile(obj.inputPath, additional_folder, sub_dir);
-            additional_files = dir(fullfile(additional_path, '*.tif'));
-            nfiles = numel(additional_files);
-            additional_imgs = cell(nfiles, 1);
-
-            % Load all channels
-            for c=1:nfiles 
-                curr_path = strcat(additional_files(c).folder, '/', additional_files(c).name);
-                curr_img = new_LoadMultipageTiff(curr_path, 'uint8', 'uint8', false);
-                additional_imgs{c} = curr_img;
-            end
-
-            ref_img = max(obj.rawImages(:,:,:,:,1), [], 4);
-            
-            if obj.useGPU
-                
-                tic;
-                
-                fix = gpuArray(ref_img);
-                mov = gpuArray(additional_imgs{move_channel});
-                params = DFTRegister3D(fix, mov, false);
-
-                for c=1:4
-                    curr_reg = DFTApply3D(gpuArray(additional_imgs{c}), params, false);
-                    additional_imgs{c} = uint8(gather(curr_reg));
-                end
-
-                obj.additionalImages = additional_imgs;
-                fprintf(sprintf('Move image vs. Ref image finished [time=%02f]\n', toc));
-                fprintf(obj.log, sprintf('Move image vs. Ref image finished [time=%02f]\n', toc));
-                fprintf(sprintf('Shifted by %s\n', num2str(params.shifts)));
-                fprintf(obj.log, sprintf('Shifted by %s\n', num2str(params.shifts)));
-                reset(gpuDevice);
-               
-            else
-                tic;
-                mov = additional_imgs{move_channel};
-                params = DFTRegister3D(ref_img, mov, false);
-
-                for c=1:4
-                    curr_reg = DFTApply3D(additional_imgs{c}, params, false);
-                    additional_imgs{c} = uint8(curr_reg);
-                end
-
-                obj.additionalImages = additional_imgs;
-                fprintf(sprintf('Move image vs. Ref image finished [time=%02f]\n', toc));
-                fprintf(obj.log, sprintf('Move image vs. Ref image finished [time=%02f]\n', toc));
-                fprintf(sprintf('Shifted by %s\n', num2str(params.shifts)));
-                fprintf(obj.log, sprintf('Shifted by %s\n', num2str(params.shifts)));
-            end
-
-            % change metadata
-            obj.jobFinished.DotsRegistrationadditional = 1;
-            
-        end
         
     % ====Reads Calling====
 
@@ -873,22 +740,15 @@
             
             % Defaults
             defaultvoxelSize = [3 3 1];
-%             defaultthreshold = 0.5;
-%             defaultshowPlots = true;
 
             addParameter(p, 'voxelSize', defaultvoxelSize);
-%             addParameter(p, 'q_score_thers', defaultthreshold);
-%             addParameter(p, 'showPlots', defaultshowPlots);
+
 
             parse(p, varargin{:});
             
             fprintf('====Reads Extraction====\n');
             fprintf(sprintf('voxel size: %d x %d x %d\n', p.Results.voxelSize));
             
-%             [obj.allReads, obj.allSpots, obj.allScores, obj.basecsMat] = ExtractFromLocation( obj.registeredImages, obj.allSpots, ...
-%                                                                                     p.Results.voxelSize, p.Results.q_score_thers, ...
-%                                                                                     p.Results.showPlots, obj.log ); 
-
             obj = ExtractFromLocation( obj, p.Results.voxelSize ); 
                                                                                 
             obj.jobFinished.ReadsExtraction = [1 p.Results.voxelSize];
@@ -1008,7 +868,7 @@
     methods
         
         % 1.Load registered images
-        function obj = LoadRegisteredImages( obj, inputPath, varargin )
+        function obj = LoadImages( obj, inputPath, varargin )
 
             % Input parser
             p = inputParser;

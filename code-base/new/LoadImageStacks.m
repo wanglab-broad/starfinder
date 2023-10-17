@@ -1,26 +1,22 @@
-function [output_imgs, dims] = LoadImageStacks( inputPath, sub_dir, channel_order_dict, zrange, convert_uint8 )
+function [output_imgs, dims] = LoadImageStacks( round_dir, sub_dir, channel_order_dict, zrange, convert_uint8 )
 %LOADIMAGESTACKS Load image stacks for each round
         
     % Suppress all warnings 
     warning('off','all');
-    
-    % Get directories containing all images 
-    dirs = dir(strcat(inputPath, 'round*'));
-    Nround = numel(dirs);
+
+    Nround = numel(round_dir);
 
     % Set output_imgs
     output_imgs = cell(Nround, 1);
     channel_names = {channel_order_dict(:).name};
-    Nchannel = numel(find([channel_names{:}] == "seq"));
-    
+    Nchannel = numel(channel_names);
 
     for r=1:Nround
         tic
-        fprintf('Loading round %d...\n', r);
 
-        current_dir = dirs(r).name;
+        current_dir = round_dir(r).name;
 
-        current_files = dir(fullfile(inputPath, current_dir, sub_dir, '*.tif'));
+        current_files = dir(fullfile(round_dir(1).folder, current_dir, sub_dir, '*.tif'));
         
         InfoImage=imfinfo(fullfile(current_files(1).folder, current_files(1).name));
         dimZ=length(InfoImage);
@@ -45,7 +41,7 @@ function [output_imgs, dims] = LoadImageStacks( inputPath, sub_dir, channel_orde
             end
         end
 
-        fprintf('Collapsed to size %d by %d by %d\n', maxX_ch, maxY_ch);
+        fprintf('Collapsed to size %d by %d by %d ', maxX_ch, maxY_ch, dimZ);
 
         for c=1:Nchannel
             current_channel = temp_round_imgs{c};
@@ -91,8 +87,13 @@ function [output_imgs, dims] = LoadImageStacks( inputPath, sub_dir, channel_orde
         output_imgs{r} = curr_round(1:maxX, 1:maxY, zrange, :);
     end
     
-
-    dims = [maxX maxY numel(zrange) Nchannel Nround];
+    if convert_uint8
+        finalBitDepth = 8;
+    else
+        finalBitDepth = InfoImage(1).BitDepth;
+    end
+    
+    dims = [maxX maxY numel(zrange) Nchannel Nround finalBitDepth];
   
 end
 
