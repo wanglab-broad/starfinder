@@ -1,17 +1,18 @@
 % IO test
-% base_path = fullfile('Z:/Data/Processed/2023-10-01-Jiahao-Test/');
-% data_path = fullfile(base_path, 'MR_BA/');
-% output_path = fullfile('Z:/Data/Analyzed/2023-10-01-Jiahao-Test/MR_BA/02_pp');
-addpath('~/wanglab/jiahao/Github/starfinder/code-base/new/')
+if ispc
+    base_path = fullfile('Z:/Data/Processed/2023-10-01-Jiahao-Test/');
+    output_path = fullfile('Z:/Data/Analyzed/2023-10-01-Jiahao-Test/MR_BA/02_pp');
+elseif isunix
+    base_path = fullfile('/home/unix/jiahao/wanglab/Data/Processed/2023-10-01-Jiahao-Test/');
+    output_path = fullfile('/home/unix/jiahao/wanglab/Data/Analyzed/2023-10-01-Jiahao-Test/MR_BA/02_pp');
+    addpath('/home/unix/jiahao/wanglab/jiahao/Github/starfinder/code-base/new/')
+end 
 
-base_path = fullfile('~/wanglab/Data/Processed/2023-10-01-Jiahao-Test/');
 data_path = fullfile(base_path, 'MR_BA/');
-output_path = fullfile('~/wanglab/Data/Analyzed/2023-10-01-Jiahao-Test/MR_BA/02_pp');
 
 
 current_fov = 'tile_0';
 useGPU = false;
-sdata = STARMapDataset(data_path, output_path, 'useGPU', useGPU);
 
 channel_order_dict(1).wavelength = 488;
 channel_order_dict(1).channel = "Ch1";
@@ -29,4 +30,29 @@ channel_order_dict(4).wavelength = 647;
 channel_order_dict(4).channel = "Ch5";
 channel_order_dict(4).name = "seq";
 
-sdata = sdata.LoadRawImages('sub_dir', current_fov, 'channel_order_dict', channel_order_dict);
+
+% tic;
+
+sdata = STARMapDataset(data_path, output_path, 'useGPU', useGPU);
+
+% diary_file = fullfile(output_path, 'log.txt');
+% if exist(diary_file, 'file'); delete(diary_file); end
+% diary(diary_file);
+
+sdata = sdata.LoadRawImages('fovID', current_fov, 'channel_order_dict', channel_order_dict);
+sdata = sdata.EnhanceContrast("min-max");
+sdata = sdata.EnhanceContrast("imadjustn");
+
+% sdata = sdata.HistEqualize;
+% sdata = sdata.MorphRecon;
+% sdata = sdata.Tophat;
+% sdata = sdata.Projection('image_slot', "raw");
+% sdata = sdata.GlobalRegistration;
+% sdata = sdata.LocalRegistration;
+
+
+% projection_preview_path = fullfile(output_path, 'projection_montage.tif');
+% sdata = sdata.ViewProjection('save', true, 'output_path', projection_preview_path);
+% sdata = sdata.SaveImages('image_slot', "raw", 'output_path', output_path);
+% toc;
+% diary off;

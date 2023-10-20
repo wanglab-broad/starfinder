@@ -13,7 +13,6 @@ function input_img = MorphologicalReconstruction( input_img, radius )
     for r=1:Nround
         
         tic
-        fprintf(sprintf("Processing Round %d...", r));
 
         for c=1:Nchannel
             

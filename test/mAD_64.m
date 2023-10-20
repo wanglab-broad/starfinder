@@ -21,7 +21,8 @@ diary(diary_file);
 
 tic;
 
-sdata = sdata.LoadRawImages('sub_dir', current_fov, 'image_slot', "seq");
+sdata = sdata.LoadRawImages('fovID', current_fov);
+sdata.layers.ref = ["round1"];
 
 add_channel_order_dict(1).wavelength = 488;
 add_channel_order_dict(1).channel = "ch00";
@@ -38,23 +39,37 @@ add_channel_order_dict(3).name = "DAPI";
 add_channel_order_dict(4).wavelength = 647;
 add_channel_order_dict(4).channel = "ch03";
 add_channel_order_dict(4).name = "Gfap";
-sdata = sdata.LoadRawImages('sub_dir', current_fov, 'image_slot', "add", 'channel_order_dict', add_channel_order_dict);
+sdata = sdata.LoadRawImages('fovID', current_fov, 'folder_list', ["protein"], ...
+                            'channel_order_dict', add_channel_order_dict, 'update_layer_slot', "other");
 
-% sdata = sdata.EnhanceContrast("min-max");
-% sdata = sdata.HistEqualize;
-% sdata = sdata.MorphRecon;
-% sdata = sdata.Tophat;
+% % Preprocessing
+sdata = sdata.EnhanceContrast("min-max");
+sdata = sdata.EnhanceContrast("imadjustn");
+sdata = sdata.EnhanceContrast("imadjustn", 'layer', sdata.layers.other);
+sdata = sdata.HistEqualize;
+sdata = sdata.MorphRecon;
+sdata = sdata.Tophat;
 
-% sdata = sdata.GlobalRegistration;
+% Registration
+
+sdata = sdata.GlobalRegistration;
+round1_merged_fname = fullfile(output_path, 'round1_merged.tif');
+SaveSingleStack(sdata.registration{sdata.layers.ref}, round1_merged_fname);
+
 refernce_dapi_fname = dir(fullfile(data_path, 'round1', current_fov, '*ch04.tif'));
-sdata.referenceImageAdd = LoadMultipageTiff(fullfile(refernce_dapi_fname.folder, refernce_dapi_fname.name), false);
-sdata = sdata.GlobalRegistrationAdd;
+sdata.registration{sdata.layers.ref} = LoadMultipageTiff(fullfile(refernce_dapi_fname.folder, refernce_dapi_fname.name), false);
+sdata = sdata.GlobalRegistration('layer', ["protein"], 'mov_img', 'single-image');
+sdata = sdata.LocalRegistration;
 
-% sdata = sdata.LocalRegistration;
+% Spot finding 
 
-sdata = sdata.Projection('image_slot', "add");
+
+% % Output 
+sdata = sdata.MakeProjection;
 projection_preview_path = fullfile(output_path, 'projection_montage.tif');
-sdata = sdata.ViewProjection('image_slot', "add", 'save', true, 'output_path', projection_preview_path);
-sdata = sdata.SaveImages('image_slot', "add", 'output_path', output_path, 'folder_format', "single");
+sdata = sdata.ViewProjection('save', true, 'output_path', projection_preview_path);
+sdata = sdata.SaveImages('layer', sdata.layers.seq, 'output_path', output_path, 'folder_format', "nested");
+sdata = sdata.SaveImages('layer', sdata.layers.other, 'output_path', output_path, 'folder_format', "single");
+
 toc;
 diary off;

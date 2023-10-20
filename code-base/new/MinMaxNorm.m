@@ -8,12 +8,8 @@ function input_img = MinMaxNorm( input_img )
     Nround = numel(input_img);
     Nchannel = size(input_img{1}, 4);
     
-    fprintf("====Min-Max intensity normalization====\n");
-    
     for r=1:Nround
         tic
-        fprintf(sprintf("Normalizing Round %d...", r))
-        
         for c=1:Nchannel 
             current_channel = input_img{r}(:, :, :, c);
             current_limits = stretchlim(current_channel, 0);

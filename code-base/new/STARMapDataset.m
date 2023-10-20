@@ -1,71 +1,36 @@
-    classdef STARMapDataset
-    % STARMapDataset, the primary class for the STARMap imaging analysis pipeline
-    % ====Properties====
-    % ...
-    
-    % ====Methods====
-    % ...
+classdef STARMapDataset
+% STARMapDataset, the primary class for the STARMap imaging analysis pipeline
+% ====Properties====
+% ...
+
+% ====Methods====
+% ...
     
     properties
         
-        % IO
+        % Basic parameters
         inputPath;
         outputPath;
         fovID;
-        
-        % GPU
         useGPU;
         
         % Images 
         images;
-
-        rawImages;
-        registeredImages;
-        additionalImages;
-
         projections;
-        projectionImages;
+        layers;
 
+        % Metadata
         metadata;
-        dims;
-        dimX;
-        dimY;
-        dimZ;
-        Nchannel;
-        Nround;
-        seqChannelOrderDict;
-        addChannelOrderDict;
         
         % Registration
         registration;
-        referenceImageSeq;
-        globalParamsSeq;
-        referenceImageAdd;
-        globalParamsAdd;        
-        
+     
         % Spots
         signal;
 
-        allSpots;
-        goodSpots;
-        
-        % Reads
-        allReads;
-        goodReads;
-        goodReadsLoc;
-        allScores;
-        goodScores;
-        
         % Codebook
         codebook;
-        seqToGene;
-        geneToSeq;
-        barcodeMat;
-        barcodeNames;
-        barcodeSeqs;
-        basecsMat;
-        CodebookSplitIndex;
-        
+
         % Metadata
         jobToDo;
         jobFinished;
@@ -104,40 +69,46 @@
             obj.useGPU = p.Results.useGPU;
             
             % initiate core properties 
-            obj.images = containers.Map();
-            obj.projections = containers.Map();
-            obj.metadata = containers.Map();
-
+            obj.images = dictionary();
+            obj.projections = dictionary();
+            obj.metadata = dictionary();
+            obj.layers = struct();
+            obj.registration = dictionary();
+            obj.signal = struct();
+            obj.codebook = struct();
+            
             % show message
             fprintf('Pipeline Obj is generated...\n');
             
         end
+
 
         % 2.Load raw images 
         function obj = LoadRawImages( obj, varargin )
 
             % Input parser
             p = inputParser;
-
-            defaultLayer = "seq"; % or others such as "protein", "round2"
-            addOptional(p, 'layer', defaultLayer);
             
-            defaultsubDir = '';
-            addOptional(p, 'sub_dir', defaultsubDir);
+            defaultfovID = '';
+            addOptional(p, 'fovID', defaultfovID);
 
-            defaultotherDir = ["protein"];
-            addOptional(p, 'additional_dir', defaultotherDir);
+            defaultupdateLayer = "seq";
+            addOptional(p, 'update_layer_slot', defaultupdateLayer);
+
+            default_dirs = dir(strcat(obj.inputPath, 'round*'));
+            defaultfolderList = string({default_dirs(:).name});
+            addOptional(p, 'folder_list', defaultfolderList);
 
             defaultDict(1).wavelength = 488;
             defaultDict(1).channel = "ch00";
             defaultDict(1).name = "seq";
 
-            defaultDict(2).wavelength = 594;
-            defaultDict(2).channel = "ch01";
+            defaultDict(2).wavelength = 546;
+            defaultDict(2).channel = "ch02";
             defaultDict(2).name = "seq";
 
-            defaultDict(3).wavelength = 546;
-            defaultDict(3).channel = "ch02";
+            defaultDict(3).wavelength = 594;
+            defaultDict(3).channel = "ch01";
             defaultDict(3).name = "seq";
 
             defaultDict(4).wavelength = 647;
@@ -152,84 +123,52 @@
             defaultconvert = false;
             addOptional(p, 'convert_uint8', defaultconvert);
 
+            defaultAngle = 0;
+            addOptional(p, 'rotate_angle', defaultAngle);
+
             defaultuseGPU = false;
             addOptional(p, 'useGPU', defaultuseGPU);
             parse(p, varargin{:});
             
             % Load tiff stacks
-            if p.Results.layer == "seq"
-                fprintf('====Loading sequencing raw images====\n');
-                round_dir = dir(strcat(obj.inputPath, 'round*'));
-                [obj.images("seq"), dims_seq] = LoadImageStacks(round_dir, ...
-                                                                p.Results.sub_dir, ...
-                                                                p.Results.channel_order_dict, ...
-                                                                p.Results.zrange, ...
-                                                                p.Results.convert_uint8);
-                obj.metadata("seq") = struct();
-                obj.metadata("seq").dims = dims_seq;
-                obj.metadata("seq").dimX = dims_seq(1);
-                obj.metadata("seq").dimY = dims_seq(2);
-                obj.metadata("seq").dimZ = dims_seq(3);
-                obj.metadata("seq").Nchannel = dims_seq(4);
-                obj.metadata("seq").Nround = dims_seq(5);
-                obj.metadata("seq").BitDepth = dims_seq(6);
-                obj.metadata("seq").fovID = p.Results.sub_dir;
-                obj.metadata("seq").ChannelInfo = p.Results.channel_order_dict;
-            else
-                all_dir = dir(obj.inputPath);
-                folder_names = {all_dir(:).name};
-                round_dir = all_dir(ismember(folder_names, p.Results.additional_dir));
-                for r=1:numel(round_dir)
-                    current_round_dir = round_dir(r);
-                    current_layer = current_round_dir.name;
-                    fprintf(sprintf('====Loading %s images into layer %s====\n', current_layer, current_layer));
-                    [obj.images(current_layer), dims_other] = LoadImageStacks(current_round_dir, ...
-                        p.Results.sub_dir, ...
-                        p.Results.channel_order_dict, ...
-                        p.Results.zrange, ...
-                        p.Results.convert_uint8);
+            all_dir = dir(obj.inputPath);
+            folder_names = {all_dir(:).name};
+            round_dir = all_dir(ismember(folder_names, p.Results.folder_list));
+            for r=1:numel(round_dir)
+                current_round_dir = round_dir(r);
+                current_layer = current_round_dir.name;
+                fprintf(sprintf('====Loading %s images====\n', current_layer));
+                [obj.images{current_layer}, current_dims] = LoadImageStacks(current_round_dir, ...
+                    p.Results.fovID, ...
+                    p.Results.channel_order_dict, ...
+                    p.Results.convert_uint8);
 
-                    current_metadata = struct();
-                    current_metadata.dims = dims_other;
-                    current_metadata.dimX = dims_other(1);
-                    current_metadata.dimY = dims_other(2);
-                    current_metadata.dimZ = dims_other(3);
-                    current_metadata.Nchannel = dims_other(4);
-                    current_metadata.Nround = dims_other(5);
-                    current_metadata.BitDepth = dims_other(6);
-                    current_metadata.fovID = p.Results.sub_dir;
-                    current_metadata.ChannelInfo = p.Results.channel_order_dict;
-                    obj.metadata(current_layer) = current_metadata;
-                end
+                current_metadata = struct();
+                current_metadata.dims = current_dims;
+                current_metadata.dimX = current_dims(1);
+                current_metadata.dimY = current_dims(2);
+                current_metadata.dimZ = current_dims(3);
+                current_metadata.Nchannel = current_dims(4);
+                current_metadata.BitDepth = current_dims(5);
+                obj.fovID = p.Results.fovID;
+                current_metadata.ChannelInfo = p.Results.channel_order_dict;
+                obj.metadata{current_layer} = current_metadata;
                
+                if p.Results.rotate_angle ~= 0
+                    obj.images{current_layer} = imrotate(obj.images{current_layer}, p.Results.rotate_angl);
+                end
             end
             
-        end
-        
-        
-        % 2.5.Swap channels (2 & 3, optional)
-        function obj = SwapChannels( obj, varargin )
-            
-            % Input parser
-            p = inputParser;
-            
-            defaultLayer = "seq"; 
-            addOptional(p, 'layer', defaultLayer);
-            
-            defaultChannel_1 = 2;
-            defaultChannel_2 = 3;
-            addOptional(p, 'channel_1', defaultChannel_1);
-            addOptional(p, 'channel_2', defaultChannel_2);
-            parse(p, varargin{:});
-            
-            % swap channels
-            fprintf('====Swap Channels====\n');
-            fprintf(sprintf('Channel %d <==> Channel %d\n', p.Results.channel_1, p.Results.channel_2));
-            obj.images(p.Results.layer) = SwapTwoChannels(obj.images(p.Results.layer), p.Results.channel_1, p.Results.channel_2);
-            
-            % change metadata
-            obj.jobFinished.SwapChannels = true;
-            
+            switch p.Results.update_layer_slot
+                case "seq"
+                    obj.layers.seq = p.Results.folder_list; 
+                case "other"
+                    obj.layers.other = p.Results.folder_list; 
+            end
+
+            obj.layers.all = transpose(obj.images.keys);
+            [obj.images, obj.metadata] = AdjustSizeAcrossRound(obj.images, obj.metadata, obj.layers.all, p.Results.zrange);
+
         end
         
 
@@ -241,10 +180,9 @@
             % Input parser
             p = inputParser;
             
-            
             addRequired(p, 'method');
 
-            defaultLayer = "seq"; 
+            defaultLayer = obj.layers.seq; 
             addOptional(p, 'layer', defaultLayer);
 
             defaultLow_in= 0.05;
@@ -266,20 +204,24 @@
 
             switch p.Results.method
                 case "min-max"
-                    obj.images(p.Results.layer) = MinMaxNorm(obj.images(p.Results.layer));
-                case "regular"
+                    fprintf("====Min-Max intensity normalization====\n");
+                    for current_layer=p.Results.layer
+                        fprintf(sprintf("Normalizing %s...", current_layer))
+                        obj.images(current_layer) = MinMaxNorm(obj.images(current_layer));
+                    end
+                case "imadjustn"
                     fprintf("====Running imadjustn====\n");
-                    for r=1:obj.metadata(p.Results.layer).Nround
+                    for current_layer=p.Results.layer
                         tic
-                        fprintf(sprintf("Processing Round %d...", r))
+                        fprintf(sprintf("Processing %s...", current_layer))
                         
-                        for c=1:obj.Nchannel 
-                            current_channel = obj.rawImages{r}(:, :, :, c);
+                        for c=1:obj.metadata{current_layer}.Nchannel 
+                            current_channel = obj.images{current_layer}(:, :, :, c);
                             current_channel_adjusted = imadjustn(current_channel,...
                                 [p.Results.low_in p.Results.high_in],...
                                 [p.Results.low_out p.Results.high_out],...
                                 p.Results.gamma);
-                            obj.rawImages{r}(:, :, :, c) = current_channel_adjusted;
+                            obj.images{current_layer}(:, :, :, c) = current_channel_adjusted;
                         end
                 
                         fprintf(sprintf('[time = %.2f s]\n', toc));
@@ -287,9 +229,9 @@
             end
 
 
-            % change metadata
-            obj.jobFinished.EnhanceContrast = 1;
-            obj.jobFinished.EnhanceContrastMethod = p.Results.method;
+            % change job log
+            obj.jobFinished.EnhanceContrast = true;
+
         end 
         
 
@@ -299,11 +241,14 @@
             % Input parser
             p = inputParser;
 
+            defaultLayer = obj.layers.seq; 
+            addOptional(p, 'layer', defaultLayer);
+
             defaultReferenceChannel = 1;
             addParameter(p, 'reference_channel', defaultReferenceChannel);
 
-            defaultReferenceRound = 1;
-            addParameter(p, 'reference_round', defaultReferenceRound);
+            defaultReferenceLayer = "round1";
+            addParameter(p, 'reference_layer', defaultReferenceLayer);
 
             defaultNbins = 64;
             addParameter(p, 'nbins', defaultNbins);
@@ -311,17 +256,17 @@
             parse(p, varargin{:});
             
             fprintf("====Histogram Equalization====\n");
-            fprintf(sprintf('Reference: Round %d - Channel %d\n', p.Results.reference_round, p.Results.reference_channel));
-            reference_image = obj.rawImages{p.Results.reference_round}(:,:,:,p.Results.reference_channel);
+            fprintf(sprintf('Reference: %s - channel%d\n', p.Results.reference_layer, p.Results.reference_channel));
+            reference_image = obj.images{p.Results.reference_layer}(:,:,:,p.Results.reference_channel);
 
-            for r=1:obj.Nround 
-                for c=1:obj.Nchannel      
-                    fprintf('Equalizing Round %d - Channel %d\n', r, c);
-                    obj.rawImages{r}(:,:,:,c) = imhistmatchn(obj.rawImages{r}(:,:,:,c), reference_image, p.Results.nbins);
-                end    
-            end     
+            for current_layer=p.Results.layer
+                for c=1:obj.metadata{current_layer}.Nchannel 
+                    fprintf('Equalizing %s - channel%d\n', current_layer, c);
+                    obj.images{current_layer}(:, :, :, c) = imhistmatchn(obj.images{current_layer}(:, :, :, c), reference_image, p.Results.nbins);
+                end
+            end
 
-            obj.jobFinished.HistogramEqualization = 1;
+            obj.jobFinished.HistogramEqualization = true;
 
         end
 
@@ -333,6 +278,9 @@
             p = inputParser;
             
             % Defaults
+            defaultLayer = obj.layers.seq; 
+            addOptional(p, 'layer', defaultLayer);
+
             defaultRadius = 3;
             addOptional(p, 'radius', defaultRadius);
 
@@ -340,10 +288,13 @@
             
             fprintf("====Morphological Reconstruction====\n");
             
-            obj.rawImages = MorphologicalReconstruction(obj.rawImages, p.Results.radius);
+            for current_layer=p.Results.layer
+                fprintf(sprintf("Processing %s...", current_layer));
+                obj.images(current_layer)= MorphologicalReconstruction(obj.images(current_layer), p.Results.radius);
+            end
             
             % change metadata
-            obj.jobFinished.MorphologicalReconstruction = 1;
+            obj.jobFinished.MorphologicalReconstruction = true;
             
         end
         
@@ -355,6 +306,9 @@
             p = inputParser;
             
             % Defaults
+            defaultLayer = obj.layers.seq; 
+            addOptional(p, 'layer', defaultLayer);
+
             defaultRadius = 3;
             addOptional(p, 'radius', defaultRadius);
 
@@ -364,51 +318,45 @@
             % setup structure element
             se = strel('disk', p.Results.radius);
 
-            for r=1:obj.Nround
+            for current_layer=p.Results.layer
                 tic
-                fprintf(sprintf("Processing Round %d...", r));
-
-                for c=1:obj.Nchannel
-                    current_channel = obj.rawImages{r}(:,:,:,c);
-                    for z=1:obj.dimZ
+                fprintf(sprintf("Processing %s...", current_layer))
+                
+                for c=1:obj.metadata{current_layer}.Nchannel 
+                    current_channel = obj.images{current_layer}(:, :, :, c);
+                    for z=1:obj.metadata{current_layer}.dimZ
                         current_channel(:,:,z) = imtophat(current_channel(:,:,z), se);
                     end
-                    obj.rawImages{r}(:,:,:,c) = uint8(current_channel);
+                    obj.images{current_layer}(:, :, :, c) = uint8(current_channel);
                 end
+        
                 fprintf(sprintf('[time = %.2f s]\n', toc));
-            end 
+            end
 
             % change metadata
-            obj.jobFinished.Tophat = 1;
+            obj.jobFinished.Tophat = true;
             
         end
 
         
         % Make Projections
-        function obj = Projection( obj, varargin )
+        function obj = MakeProjection( obj, varargin )
             
             % Input parser
             p = inputParser;
             
             % Defaults
+            defaultLayer = obj.layers.all; 
+            addOptional(p, 'layer', defaultLayer);
+
             defaultMethod = "max";
             addOptional(p, 'method', defaultMethod);
-
-            defaultSlot = "raw";
-            addOptional(p, 'image_slot', defaultSlot);
 
             parse(p, varargin{:});
             
             fprintf("====Generate Projection Images====\n");
-            obj.projectionImages = containers.Map();
-
-            switch p.Results.image_slot
-                case "raw"
-                    obj.projectionImages("raw") = MakeProjections(obj.rawImages, p.Results.method);
-                case "registered"
-                    obj.projectionImages("registered") = MakeProjections(obj.registeredImages, p.Results.method);
-                case "add"
-                    obj.projectionImages("additional") = MakeProjections(obj.additionalImages, p.Results.method);
+            for current_layer=p.Results.layer
+                obj.projections{current_layer} = MakeProjections(obj.images(current_layer), p.Results.method);
             end
             
         end
@@ -421,8 +369,8 @@
             p = inputParser;
             
             % Defaults
-            defaultSlot = "raw";
-            addOptional(p, 'image_slot', defaultSlot);
+            defaultLayer = obj.layers.all; 
+            addOptional(p, 'layer', defaultLayer);
 
             defaultEnhance = false;
             addOptional(p, 'enhance_contrast', defaultEnhance);
@@ -435,18 +383,11 @@
 
             parse(p, varargin{:});
 
-            switch p.Results.image_slot
-                case "raw"
-                    montage_img = MakeMontage(obj.projectionImages("raw"), obj.Nround, obj.Nchannel, p.Results.enhance_contrast);
-                case "registered"
-                    montage_img = MakeMontage(obj.projectionImages("registered"), obj.Nround, obj.Nchannel, p.Results.enhance_contrast);
-                case "add"
-                    montage_img = MakeMontage(obj.projectionImages("additional"), obj.Nround, obj.Nchannel, p.Results.enhance_contrast);
-            end
+            montage_img = MakeMontage(obj.projections, p.Results.layer, p.Results.enhance_contrast);
             
             if p.Results.save
                 current_output_folder_msg = strrep(p.Results.output_path, '\', '\\');
-                fprintf(sprintf('Saving %s projections to %s\n', p.Results.image_slot, current_output_folder_msg));
+                fprintf(sprintf('Saving projection montage to %s\n', current_output_folder_msg));
                 exportgraphics(montage_img, p.Results.output_path, 'Resolution', 300);
             end
 
@@ -460,8 +401,8 @@
             p = inputParser;
             
             % Defaults
-            defaultSlot = "raw";
-            addOptional(p, 'image_slot', defaultSlot);
+            defaultLayer = obj.layers.all; 
+            addOptional(p, 'layer', defaultLayer);
 
             defaultFormat = "nested";
             addOptional(p, 'folder_format', defaultFormat);
@@ -474,48 +415,20 @@
 
             parse(p, varargin{:});
 
-            switch p.Results.image_slot
-                case "raw"
-                    current_output_folder = fullfile(p.Results.output_path, "raw_images/");
-                    if ~exist(current_output_folder, 'dir')
-                        mkdir(current_output_folder)
-                    end
-                    current_output_folder_msg = strrep(current_output_folder, '\', '\\');
-                    fprintf(sprintf('Saving %s images to %s\n', p.Results.image_slot, current_output_folder_msg));
-                    switch p.Results.folder_format
-                        case "nested"
-                            SaveImageNestedFolder(obj.rawImages, current_output_folder, obj.fovID);
-                        case "single"
-                            SaveImageSingleFolder(obj.rawImages, current_output_folder, obj.fovID, p.Results.group_channel, obj.seqChannelOrderDict);
-                    end
-                case "registered"
-                    current_output_folder = fullfile(p.Results.output_path, "registered_images/");
-                    if ~exist(current_output_folder, 'dir')
-                        mkdir(current_output_folder)
-                    end
-                    current_output_folder_msg = strrep(current_output_folder, '\', '\\');
-                    fprintf(sprintf('Saving %s images to %s\n', p.Results.image_slot, current_output_folder_msg));
-                    switch p.Results.folder_format
-                        case "nested"
-                            SaveImageNestedFolder(obj.registeredImages, current_output_folder, obj.fovID);
-                        case "single"
-                            SaveImageSingleFolder(obj.registeredImages, current_output_folder, obj.fovID, p.Results.group_channel, obj.seqChannelOrderDict);
-                    end
-                case "add"
-                    current_output_folder = fullfile(p.Results.output_path, "additional_images/");
-                    if ~exist(current_output_folder, 'dir')
-                        mkdir(current_output_folder)
-                    end
-                    current_output_folder_msg = strrep(current_output_folder, '\', '\\');
-                    fprintf(sprintf('Saving %s images to %s\n', p.Results.image_slot, current_output_folder_msg));
-                    switch p.Results.folder_format
-                        case "nested"
-                            SaveImageNestedFolder(obj.additionalImages, current_output_folder, obj.fovID);
-                        case "single"
-                            SaveImageSingleFolder(obj.additionalImages, current_output_folder, obj.fovID, p.Results.group_channel, obj.addChannelOrderDict);
-                    end
+            for current_layer=p.Results.layer
+                current_output_folder = fullfile(p.Results.output_path, "images/");
+                if ~exist(current_output_folder, 'dir')
+                    mkdir(current_output_folder)
+                end
+                current_output_folder_msg = strrep(current_output_folder, '\', '\\');
+                fprintf(sprintf('Saving %s images to %s\n', current_layer, current_output_folder_msg));
+                switch p.Results.folder_format
+                    case "nested"
+                        SaveImageNestedFolder(obj.images(current_layer), current_layer, current_output_folder, obj.fovID);
+                    case "single"
+                        SaveImageSingleFolder(obj.images(current_layer), current_layer, current_output_folder, obj.fovID, p.Results.group_channel, obj.metadata{current_layer}.ChannelInfo);
+                end
             end
-            
 
         end
 
@@ -524,38 +437,63 @@
             
         % 6.Global registration
         function obj = GlobalRegistration( obj, varargin )
-            
+
             % Input parser
             p = inputParser;
-            
+
             % Defaults
-            defaultRef = 1;
-            addOptional(p, 'ref_round', defaultRef);
+            defaultLayer = obj.layers.seq; 
+            addOptional(p, 'layer', defaultLayer);
+
+            defaultRefLayer = obj.layers.ref; % round1
+            addOptional(p, 'ref_layer', defaultRefLayer);
+
+            defaultRefChannel = "DAPI"; 
+            addOptional(p, 'ref_channel', defaultRefChannel);
+
+            defaultRefImg= "merged-image"; % single-channel input_image
+            addOptional(p, 'ref_img', defaultRefImg);
+
+            defaultMovImg= "merged-image"; % single-channel input_image
+            addOptional(p, 'mov_img', defaultMovImg);
+
+            defaultInputImage= ""; % 
+            addOptional(p, 'input_image', defaultInputImage);
 
             parse(p, varargin{:});
-        
-            fprintf('====Global Registration====\n');
-            obj.registeredImages = cell(obj.Nround, 1);
-            obj.registeredImages{p.Results.ref_round} = obj.rawImages{p.Results.ref_round};
 
-            fprintf(sprintf('Create reference image with round%d\n', p.Results.ref_round));
-            if isempty(obj.referenceImageSeq)
-                obj.referenceImageSeq = max(obj.rawImages{p.Results.ref_round}, [], 4);
+            fprintf('====Global Registration====\n');
+            switch p.Results.ref_img
+                case "merged-image"
+                    obj.registration{p.Results.ref_layer} = max(obj.images{p.Results.ref_layer}, [], 4);
+                case "single-channel"
+                    obj.registration{p.Results.ref_layer} = obj.images{p.Results.ref_layer}(:,:,:,p.Results.ref_channel);
+                case "input_image"
+                    obj.registration{p.Results.ref_layer} = p.Results.input_image;
             end
 
-            rounds = 1:obj.Nround;
-            rounds = rounds(rounds ~= p.Results.ref_round);
+            layers_to_register = p.Results.layer(p.Results.layer ~= p.Results.ref_layer);
+            for current_layer=layers_to_register
+                switch p.Results.mov_img
+                    case "merged-image"
+                        mov_img = max(obj.images{current_layer}, [], 4);
+                    case "single-channel"
+                        current_metadata = obj.metadata{current_layer}.ChannelInfo;
+                        ref_channel_index = find(contains([current_metadata(:).name], p.Results.ref_channel) == 1);
+                        mov_img = obj.images{current_layer}(:,:,:,ref_channel_index);
+                end
 
-            for r=rounds
-                mov_img = max(obj.rawImages{r}, [], 4);
                 starting = tic;
-                [obj.registeredImages{r}, obj.globalParamsSeq] = RegisterImagesGlobal(obj.rawImages{r}, obj.referenceImageSeq, mov_img);
-                fprintf(sprintf('Round %d vs. Round %d finished [time=%02f]\n', r, p.Results.ref_round, toc(starting)));
-                fprintf(sprintf('Shifted by %s\n', num2str(obj.globalParamsSeq.shifts)));
+                [obj.images{current_layer}, obj.registration{current_layer}] = RegisterImagesGlobal(obj.images{current_layer},...
+                                                                                    obj.registration{p.Results.ref_layer},...
+                                                                                    mov_img);
+    
+                fprintf(sprintf('%s vs. %s finished [time=%02f]\n', current_layer, p.Results.ref_layer, toc(starting)));
+                fprintf(sprintf('Shifted by %s\n', num2str(obj.registration{current_layer}.shifts)));
             end
 
             % change metadata
-            obj.jobFinished.GlobalRegistration = 1;
+            obj.jobFinished.GlobalRegistration = true;
             
         end
         
@@ -567,8 +505,23 @@
             p = inputParser;
 
             % Defaults
-            defaultRef = 1;
-            addOptional(p, 'ref_round', defaultRef);
+            defaultLayer = obj.layers.seq; 
+            addOptional(p, 'layer', defaultLayer);
+
+            defaultRefLayer = obj.layers.ref; % round1
+            addOptional(p, 'ref_layer', defaultRefLayer);
+            
+            defaultRefChannel = "DAPI"; 
+            addOptional(p, 'ref_channel', defaultRefChannel);
+
+            defaultRefImg= "merged-image"; % single-image
+            addOptional(p, 'ref_img', defaultRefImg);
+
+            defaultMovImg= "merged-image"; % single-image
+            addOptional(p, 'mov_img', defaultMovImg);
+
+            defaultInputImage= ""; 
+            addOptional(p, 'input_image', defaultInputImage);
 
             defaultIter = 10;
             addParameter(p, 'Iterations', defaultIter);
@@ -579,66 +532,38 @@
             parse(p, varargin{:});
             
             fprintf('====Local (Non-rigid) Registration====\n');
-
-            fprintf(sprintf('Create reference image with round%d\n', p.Results.ref_round));
-            if isempty(obj.referenceImageSeq)
-                obj.referenceImageSeq = max(obj.rawImages{p.Results.ref_round}, [], 4);
+            switch p.Results.ref_img
+                case "merged-image"
+                    obj.registration{p.Results.ref_layer} = max(obj.images{p.Results.ref_layer}, [], 4);
+                case "single-channel"
+                    obj.registration{p.Results.ref_layer} = obj.images{p.Results.ref_layer}(:,:,:,p.Results.ref_channel);
+                case "input_image"
+                    obj.registration{p.Results.ref_layer} = p.Results.input_image;
             end
 
-            rounds = 1:obj.Nround;
-            rounds = rounds(rounds ~= p.Results.ref_round);
+            layers_to_register = p.Results.layer(p.Results.layer ~= p.Results.ref_layer);
+            for current_layer=layers_to_register
+                switch p.Results.mov_img
+                    case "merged-image"
+                        mov_img = max(obj.images{current_layer}, [], 4);
+                    case "single-channel"
+                        current_metadata = obj.metadata{current_layer}.ChannelInfo;
+                        ref_channel_index = find(contains([current_metadata(:).name], p.Results.ref_channel) == 1);
+                        mov_img = obj.images{current_layer}(:,:,:,ref_channel_index);
+                end
 
-            for r=rounds
-                mov_img = max(obj.registeredImages{r}, [], 4);
                 starting = tic;
-                [obj.registeredImages{r}, ~] = RegisterImagesLocal(obj.registeredImages{r}, obj.referenceImageSeq, mov_img, ...
-                                                                        p.Results.Iterations, p.Results.AccumulatedFieldSmoothing);
-
-                fprintf(sprintf('Round %d vs. Round %d finished [time=%02f]\n', r, p.Results.ref_round, toc(starting)));
+                [obj.images{current_layer}, ~] = RegisterImagesLocal(obj.images{current_layer}, ...
+                                                                                    obj.registration{p.Results.ref_layer}, ...
+                                                                                    mov_img, ...
+                                                                                    p.Results.Iterations, ...
+                                                                                    p.Results.AccumulatedFieldSmoothing);
+    
+                fprintf(sprintf('%s vs. %s finished [time=%02f]\n', current_layer, p.Results.ref_layer, toc(starting)));
             end
 
             % change metadata
-            obj.jobFinished.LocalRegistration = [1 floor(log2(obj.dimZ)) p.Results.AccumulatedFieldSmoothing];
-            
-        end
-
-
-         % 6.Global registration with additional reference 
-         function obj = GlobalRegistrationAdd( obj, varargin )
-            
-            % Input parser
-            p = inputParser;
-            
-            % Defaults
-            if ~isempty(obj.addChannelOrderDict)
-                channel_names = {obj.addChannelOrderDict(:).name};
-                defaultRef = find([channel_names{:}] == "DAPI");
-            else
-                defaultRef = 1;
-            end
-            addOptional(p, 'ref_channel', defaultRef);
-
-            parse(p, varargin{:});
-        
-            fprintf('====Global Registration with Additional Reference====\n');
-            Nround_add = numel(obj.additionalImages);
-
-            fprintf(sprintf('Using ch%d as reference...\n', p.Results.ref_channel));
-            
-            if isempty(obj.referenceImageAdd)
-                fprintf("Need a reference image stored in sdata.referenceImageAdd slot!")
-            end
-
-            for r=1:Nround_add
-                mov_img = obj.additionalImages{r}(:,:,:,p.Results.ref_channel);
-                starting = tic;
-                [obj.additionalImages{r}, obj.globalParamsAdd] = RegisterImagesGlobal(obj.additionalImages{r}, obj.referenceImageAdd, mov_img);
-                fprintf(sprintf('Round %d finished [time=%02f]\n', r, toc(starting)));
-                fprintf(sprintf('Shifted by %s\n', num2str(obj.globalParamsAdd.shifts)));
-            end
-
-            % change metadata
-            obj.jobFinished.GlobalRegistrationAdd = 1;
+            obj.jobFinished.LocalRegistration = true;
             
         end
         
@@ -652,83 +577,30 @@
             p = inputParser;
             
             % Defaults
-            defaultMethod = "max3d";
-            defaultrefIndex = 1;
-            defaultfsize = [5 5 3];
-            defaultfsigma = 1;
-            defaultqualityThreshold = 0.7;
-            defaultvolumeThreshold = 10;
-            defaultbarcodeMethod = "image";
-            defaultshowPlots = true;
+            defaultRefLayer = obj.layers.ref; % round1
+            addOptional(p, 'ref_layer', defaultRefLayer);
 
-            addOptional(p,'Method',defaultMethod);
-            addParameter(p, 'ref_index', defaultrefIndex);
-            addParameter(p, 'fsize', defaultfsize);
-            addParameter(p, 'fsigma', defaultfsigma);
-            addParameter(p, 'qualityThreshold', defaultqualityThreshold);
-            addParameter(p, 'volumeThreshold', defaultvolumeThreshold);
-            addParameter(p, 'barcodeMethod', defaultbarcodeMethod);
-            addParameter(p, 'showPlots', defaultshowPlots);
+            defaultMethod = "max3d";
+            addOptional(p, 'method', defaultMethod);
+
+            defaultIntensityThreshold = 0.2;
+            addOptional(p, 'intensity_threshold', defaultIntensityThreshold);
             
             parse(p, varargin{:});
             
-            
             fprintf('====Spot Finding====\n');
-            fprintf(sprintf('Method: %s\n', p.Results.Method));
-            fprintf(sprintf('Reference round: %d\n', p.Results.ref_index));
+            fprintf(sprintf('Method: %s\n', p.Results.method));
+            fprintf(sprintf('Reference: %s\n', p.Results.ref_layer));
             
-            tic
-            switch p.Results.Method
+            tic;
+            switch p.Results.method
                 case "max3d"
-                    obj.allSpots = SpotFindingMax3D(obj.registeredImages, p.Results.ref_index);
-                    obj.jobFinished.SpotFinding = [1 p.Results.Method];
-                case "ex_max3d"
-                    obj.allSpots = SpotFindingExtendedMax3D(obj.registeredImages);
-                    obj.jobFinished.SpotFinding = [1 p.Results.Method];
-                case "log3d"
-                    obj.allSpots = SpotFindingLog3D(obj.registeredImages, p.Results.fsize, p.Results.fsigma);
-                    obj.jobFinished.SpotFinding = [1 p.Results.Method p.Results.fsize p.Results.fsigma];
-                case "barcode"
-                    obj.allSpots = SpotFindingBarcode(obj.registeredImages, ...
-                        obj.seqToGene, ...
-                        p.Results.qualityThreshold, ...
-                        p.Results.volumeThreshold, ...
-                        p.Results.barcodeMethod, ...
-                        p.Results.showPlots, ...
-                        obj.useGPU);
-                    obj.jobFinished.SpotFinding = [1 p.Results.Method ...
-                        p.Results.qualityThreshold ...
-                        p.Results.volumeThreshold ...
-                        p.Results.barcodeMethod, ...
-                        p.Results.showPlots ...
-                        ];
-                case "barcode_test"
-                    [obj.allReads, obj.allSpots, obj.allScores, obj.basecsMat] = test_SpotFindingBarcode(obj.registeredImages, ...
-                        obj.seqToGene, ...
-                        p.Results.qualityThreshold, ...
-                        p.Results.volumeThreshold, ...
-                        p.Results.showPlots, ...
-                        obj.useGPU);
-                    obj.jobFinished.SpotFinding = [1 p.Results.Method ...
-                        p.Results.qualityThreshold ...
-                        p.Results.volumeThreshold ...
-                        p.Results.barcodeMethod, ...
-                        p.Results.showPlots ...
-                        ];
-                case "will"
-                    obj.allSpots = SpotFindingWill(obj.registeredImages);
-                    obj.jobFinished.SpotFinding = [1 p.Results.Method];
+                    obj.signal.allSpots = SpotFindingMax3D(obj.images{p.Results.ref_layer}, p.Results.intensity_threshold);
             end
-            fprintf(sprintf('Number of spots found by %s: %d\n', p.Results.Method, size(obj.allSpots, 1)));
+            fprintf(sprintf('Number of spots found: %d\n', size(obj.signal.allSpots, 1)));
             fprintf(sprintf('[time = %.2f s]\n', toc));
-            
-            if ~isempty(obj.log)
-                fprintf(obj.log, '====Spot Finding====\n');
-                fprintf(obj.log, sprintf('Method: %s\n', p.Results.Method));
-                fprintf(obj.log, sprintf('Reference round: %d\n', p.Results.ref_index));
-                fprintf(obj.log, sprintf('Number of spots found by %s: %d\n', p.Results.Method, size(obj.allSpots, 1)));
-            end
-            
+
+            obj.jobFinished.SpotFinding = true;
         end
         
         
@@ -739,19 +611,39 @@
             p = inputParser;
             
             % Defaults
-            defaultvoxelSize = [3 3 1];
+            defaultLayer = obj.layers.seq; 
+            addOptional(p, 'layer', defaultLayer);
 
-            addParameter(p, 'voxelSize', defaultvoxelSize);
-
+            defaultvoxelSize = [2 2 1];
+            addParameter(p, 'voxel_size', defaultvoxelSize);
 
             parse(p, varargin{:});
             
             fprintf('====Reads Extraction====\n');
-            fprintf(sprintf('voxel size: %d x %d x %d\n', p.Results.voxelSize));
+            fprintf(sprintf('voxel size: %d x %d x %d\n', p.Results.voxel_size));
+        
+            complete_color_seq = [];
+            for current_layer=p.Results.layer
+                tic;
+                fprintf(sprintf("Processing %s...", current_layer))
+                [current_color_seq, current_color_score] = ExtractFromLocation( obj.images{current_layer}, obj.signal.allSpots, p.Results.voxel_size ); 
+                obj.signal.allSpots{:, sprintf("%s_color", current_layer)} = current_color_seq; 
+                obj.signal.allSpots{:, sprintf("%s_score", current_layer)} = current_color_score; 
+                if isempty(complete_color_seq)
+                    complete_color_seq = current_color_seq;
+                else
+                    % complete_color_seq = strcat(complete_color_seq, current_color_seq);
+                    complete_color_seq = complete_color_seq + current_color_seq;
+                end
+                fprintf(sprintf('[time = %.2f s]\n', toc));
+            end                                          
             
-            obj = ExtractFromLocation( obj, p.Results.voxelSize ); 
-                                                                                
-            obj.jobFinished.ReadsExtraction = [1 p.Results.voxelSize];
+            obj.signal.allSpots{:, "color_seq"} = complete_color_seq;
+            obj.signal.allSpots = splitvars(obj.signal.allSpots, "Centroid", 'NewVariableNames', ["x", "y", "z"]);
+
+
+            obj.jobFinished.ReadsExtraction = true;
+
         
         end
         
@@ -763,33 +655,25 @@
             p = inputParser;
             
             % Defaults
-            defaultdoReverse = true;
-            defaultremoveIndex = [];
+            defaultdInputPath = obj.inputPath;
+            addParameter(p, 'input_path', defaultdInputPath);
 
-            addParameter(p, 'remove_index', defaultremoveIndex);
-            addParameter(p, 'doReverse', defaultdoReverse);
+            defaultReverse = true;
+            addParameter(p, 'do_reverse', defaultReverse);
 
+            defaultSplitIndex = [];
+            addParameter(p, 'split_index', defaultSplitIndex);
+            
             parse(p, varargin{:});
             
             fprintf('====Load Codebook====\n');
-            fprintf(sprintf('doReverse: %d\n', p.Results.doReverse));
+            fprintf(sprintf('reverse: %d\n', p.Results.do_reverse));
             % load hash tables of gene name -> seq and seq -> gene name
             % where 'seq' is the string representation of the barcode in colorspace
-            [obj.geneToSeq, obj.seqToGene] = new_LoadCodebook(obj.inputPath, p.Results.remove_index, p.Results.doReverse);  
-            obj.CodebookSplitIndex = p.Results.remove_index;
-            
-            seqStrs = obj.seqToGene.keys;
-            seqCS = []; % color sequences in matrix form for computing hamming distances ie: Nbarcode x Nround double
-            for i=1:numel(seqStrs)
-                % seqStrs{i}
-                seqCS(end+1, :) = Str2Colorseq(seqStrs{i});
-            end
-            obj.barcodeMat = seqCS;
-            obj.barcodeNames = obj.seqToGene.values; % cell array of seq names
-            obj.barcodeSeqs = obj.seqToGene.keys; % str color seqs
-            
+            [obj.codebook.geneToSeq, obj.codebook.seqToGene] = LoadCodebook(p.Results.input_path, p.Results.split_index, p.Results.do_reverse);  
+
             % change metadata
-            obj.jobFinished.LoadCodebook = 1;
+            obj.jobFinished.LoadCodebook = true;
         
         end
         
@@ -802,108 +686,92 @@
             
             % Defaults
             defaultthreshold = 0.5;
-            defaultmode = "regular";
-            defaultendBases = ['C', 'C'];
-            defaultsplitLoc = 4;
-            defaultshowPlots = true;
-            defaultendBasesMix = ['C', 'A'];
+            addParameter(p, 'q_score_thershold', defaultthreshold);
 
-            addParameter(p, 'q_score_thers', defaultthreshold);
-            addParameter(p, 'mode', defaultmode);
-            addParameter(p, 'endBases', defaultendBases);
-            addParameter(p, 'split_loc', defaultsplitLoc);
-            addParameter(p, 'showPlots', defaultshowPlots);
-            addParameter(p, 'endBases_mix', defaultendBasesMix);
+            defaultNBarcodeSegments = 1;
+            addParameter(p, 'n_barcode_segments', defaultNBarcodeSegments);
+
+            defaultendBases = ['C', 'C'];
+            addParameter(p, 'end_base', defaultendBases);
+
+            defaultSplitIndex = 4;
+            addParameter(p, 'split_index', defaultSplitIndex);
 
             parse(p, varargin{:});
             
             fprintf('====Reads Filtration====\n');
-            fprintf(sprintf('mode: %s\n', p.Results.mode));
-            fprintf(sprintf('Base in both ends: %s --- %s\n', p.Results.endBases(1), p.Results.endBases(2)));
 
-            switch p.Results.mode
-                case "regular"
-                    obj = new_FilterReads(obj, p.Results.endBases, p.Results.q_score_thers, p.Results.showPlots);  
-                case "duo"
-                    obj = new_FilterReads_Duo(obj, p.Results.endBases, p.Results.split_loc, p.Results.q_score_thers, p.Results.showPlots);
-                case "mix"
-                    obj = new_FilterReads_Mix(obj, p.Results.endBases, p.Results.endBases_mix, p.Results.showPlots);
-                    
+            % remove reads with incorrect colors
+            no_color_spots = contains(obj.signal.allSpots.color_seq, "N");
+            multi_color_spots = contains(obj.signal.allSpots.color_seq, "M");
+            to_keep = ~or(no_color_spots, multi_color_spots);
+            obj.signal.allSpots = obj.signal.allSpots(to_keep, :); 
+            fprintf(sprintf('Number of spots were dropped because of no color: %d\n', sum(no_color_spots)));
+            fprintf(sprintf('Number of spots were dropped because of multi-max color: %d\n', sum(multi_color_spots)));
+            fprintf('Comparing with codebook...\n');
+            fprintf(sprintf('Number of barcode segments: %s\n', p.Results.n_barcode_segments));
+            fprintf(sprintf('Barcode ends with: %s --- %s\n', p.Results.end_base(1), p.Results.end_base(2)));
+
+            switch p.Results.n_barcode_segments
+                case 1
+                    obj = FilterReads(obj, p.Results.end_base);  
+                case 2
+                    obj = FilterReads_Duo(obj, p.Results.end_base, p.Results.split_index);
             end
             
             % change metadata
-            obj.jobFinished.ReadsFiltration = [1 p.Results.mode];
+            obj.jobFinished.ReadsFiltration = true;
             
         end
         
         
         % 11.Save reads
-        function obj = SaveReads( obj, varargin )
+        function obj = SaveSignal( obj, varargin )
             
             % Input parser
             p = inputParser;
             
             % Defaults
-            defaultinputId = '';
+            defaultSlot = "goodSpots";
+            addOptional(p, 'signal_slot', defaultSlot);
 
-            addOptional(p, 'inputId', defaultinputId);
+            defaultOutputFolder = fullfile(obj.outputPath, "signal");
+            addOptional(p, 'output_path', defaultOutputFolder);
+
+            defaultFieldToKeep = ["x", "y", "z", "gene"];
+            addOptional(p, 'field_to_keep', defaultFieldToKeep);
 
             parse(p, varargin{:});
             
-            fprintf('====Save Reads====\n');
+            if ~exist(p.Results.output_path, 'dir')
+                mkdir(p.Results.output_path)
+            end
 
-%             obj.allCounts = SaveGoodReads( obj, p.Results.inputId );  
-            
+            switch p.Results.signal_slot
+                case "goodSpots"
+                    current_fname = fullfile(p.Results.output_path, sprintf("%s_goodSpots.csv", obj.fovID));
+                    current_output_folder_msg = strrep(current_fname, '\', '\\');
+                    fprintf(sprintf('Saving goodSpots to %s\n', current_output_folder_msg));
+                    output_table = obj.signal.goodSpots(:, p.Results.field_to_keep);
+                    writetable(output_table, current_fname);
+                case "allSpots"
+                    current_fname = fullfile(p.Results.output_path, sprintf("%s_allSpots.csv", obj.fovID));
+                    current_output_folder_msg = strrep(current_fname, '\', '\\');
+                    fprintf(sprintf('Saving allSpots to %s\n', current_output_folder_msg));
+                    output_table = obj.signal.allSpots(:, p.Results.field_to_keep);
+                    writetable(output_table, current_fname);
+            end
+
             % change metadata
-            obj.jobFinished.SaveReads = 1;   
-            
+            obj.jobFinished.SaveSignal = true;   
+        
             
         end
        
     
     end
-
-
-    % ====Other Methods====
-    methods
-        
-        % 1.Load registered images
-        function obj = LoadImages( obj, inputPath, varargin )
-
-            % Input parser
-            p = inputParser;
-            
-            defaultsubdir = '';
-            defaultinputDim = [];
-            defaultinputFormat = 'uint8';
-            defaultzrange = '';
-            defaultclass = "mat";
-            defaultuseGPU = false;
-            addOptional(p, 'sub_dir', defaultsubdir);
-            addOptional(p, 'input_dim', defaultinputDim);
-            addOptional(p, 'input_format', defaultinputFormat);
-            addOptional(p, 'zrange', defaultzrange);
-            addOptional(p, 'output_class', defaultclass);
-            addOptional(p, 'useGPU', defaultuseGPU);
-            parse(p, varargin{:});
-            
-            % Load tiff stacks from inputPath
-            fprintf('====Loading raw images====\n');
-            [obj.registeredImages, ~] = test_LoadImageStacks(inputPath, ...
-                                                            p.Results.sub_dir, ...
-                                                            p.Results.input_dim, ...
-                                                            p.Results.input_format, ...
-                                                            p.Results.zrange, ...
-                                                            p.Results.output_class, ...
-                                                            false);
-            % change metadata
-            obj.jobFinished.LoadRegisteredImages = 1;
-            
-        end
-        
-        
-            
-    end
     
     
-    end
+end
+
+
