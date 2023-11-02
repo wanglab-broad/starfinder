@@ -77,6 +77,9 @@ classdef STARMapDataset
             obj.signal = struct();
             obj.codebook = struct();
             
+            obj.layers.seq = [];
+            obj.layers.other = [];
+
             % show message
             fprintf('Pipeline Obj is generated...\n');
             
@@ -163,7 +166,7 @@ classdef STARMapDataset
                 case "seq"
                     obj.layers.seq = p.Results.folder_list; 
                 case "other"
-                    obj.layers.other = p.Results.folder_list; 
+                    obj.layers.other = [obj.layers.other p.Results.folder_list]; 
             end
 
             obj.layers.all = transpose(obj.images.keys);
@@ -185,7 +188,7 @@ classdef STARMapDataset
             defaultLayer = obj.layers.seq; 
             addOptional(p, 'layer', defaultLayer);
 
-            defaultLow_in= 0.05;
+            defaultLow_in= 0.01;
             addParameter(p, 'low_in', defaultLow_in);
 
             defaultHigh_in = 0.95;
@@ -691,10 +694,10 @@ classdef STARMapDataset
             defaultNBarcodeSegments = 1;
             addParameter(p, 'n_barcode_segments', defaultNBarcodeSegments);
 
-            defaultendBases = ['C', 'C'];
+            defaultendBases = ["CC"]; % multiple endbase pairs ["CC", "CT"]
             addParameter(p, 'end_base', defaultendBases);
 
-            defaultSplitIndex = 4;
+            defaultSplitIndex = [4];
             addParameter(p, 'split_index', defaultSplitIndex);
 
             parse(p, varargin{:});
@@ -710,13 +713,18 @@ classdef STARMapDataset
             fprintf(sprintf('Number of spots were dropped because of multi-max color: %d\n', sum(multi_color_spots)));
             fprintf('Comparing with codebook...\n');
             fprintf(sprintf('Number of barcode segments: %s\n', p.Results.n_barcode_segments));
-            fprintf(sprintf('Barcode ends with: %s --- %s\n', p.Results.end_base(1), p.Results.end_base(2)));
 
-            switch p.Results.n_barcode_segments
-                case 1
-                    obj = FilterReads(obj, p.Results.end_base);  
-                case 2
-                    obj = FilterReads_Duo(obj, p.Results.end_base, p.Results.split_index);
+            if numel(p.Results.end_base) > 1
+                end_base_msg = strjoin(p.Results.end_base, " or ");
+            else
+                end_base_msg = p.Results.end_base;
+            end
+            fprintf(sprintf('Barcode ends with: %s\n', end_base_msg));
+
+            if p.Results.n_barcode_segments == 1
+                obj = FilterReads(obj, p.Results.end_base);  
+            else
+                obj = FilterReadsMultiSegment(obj, p.Results.end_base, p.Results.split_index);
             end
             
             % change metadata

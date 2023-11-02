@@ -6,7 +6,9 @@ import os
 from snakemake.utils import makedirs 
 
 ## Path to config file
-configfile: "../../config/config.yaml"
+# configfile: "../../config/config.yaml"
+# configfile: "/stanley/WangLab/jiahao/Github/starfinder/test/wendy_test.yaml"
+configfile: "/home/unix/jiahao/wanglab/jiahao/Github/starfinder/test/wendy_test.yaml"
 
 ## Define specific list of positions to run the pipeline for testing/re-runs
 if config['mode'] == "seq":
@@ -73,27 +75,57 @@ def get_output_path(subdir, sub_sample_index=0):
 #     script: 
 #         "scripts/pp.py"
 
-rule pp:
+rule all:
     input:
-        step_out=f"/stanley/WangLab/Data/Analyzed/{config['sample']}/{config['sub_sample'][0]}/orig_end.txt"
+        expand("{output_dir}/{sample}/images/DAPI/{fov}.tif",
+                output_dir=config['output_dir'],
+                sample=config['sample'],
+                fov=FOVS),
+        expand("{output_dir}/{sample}/images/ref_merged/{fov}.tif",
+                output_dir=config['output_dir'],
+                sample=config['sample'],
+                fov=FOVS)
 
-
-rule step_1:
+rule registration_test:
     input:
-        tile_dir=f"/stanley/WangLab/Data/Analyzed/{config['sample']}/{config['sub_sample'][0]}"
+        input_folder=f"{config['input_dir']}/{config['sample']}/round1/{{fovID}}"
     output:
-        step_1_out=f"/stanley/WangLab/Data/Analyzed/{config['sample']}/{config['sub_sample'][0]}/orig.txt"
-    shell:
-        "echo step1 > {output.step_1_out}"
+        expand("{output_dir}/{sample}/images/DAPI/{{fovID}}.tif",
+                output_dir=config['output_dir'],
+                sample=config['sample']),
+        expand("{output_dir}/{sample}/images/ref_merged/{{fovID}}.tif",
+                output_dir=config['output_dir'],
+                sample=config['sample'])
+    resources:
+        mem_mb=config['resources']['preprocessing']
+    wildcard_constraints:
+        fovID = '\w+'
+    script:
+        "scripts/registration_test.py"
 
-rule step_2:
-    input:
-        tile_dir=f"/stanley/WangLab/Data/Analyzed/{config['sample']}/{config['sub_sample'][0]}/orig.txt"
-    output:
-        step_2_out=f"/stanley/WangLab/Data/Analyzed/{config['sample']}/{config['sub_sample'][0]}/orig_2.txt"
-    shell:
-        # "cat {input.tile_dir} | echo step2 is done > {output.step_2_out}"   
-        "echo step2 is done >> {input.tile_dir} & echo step2 > {output.step_2_out}"
+
+
+# rule pp:
+#     input:
+#         step_out=f"/stanley/WangLab/Data/Analyzed/{config['sample']}/{config['sub_sample'][0]}/orig_end.txt"
+
+
+# rule step_1:
+#     input:
+#         tile_dir=f"/stanley/WangLab/Data/Analyzed/{config['sample']}/{config['sub_sample'][0]}"
+#     output:
+#         step_1_out=f"/stanley/WangLab/Data/Analyzed/{config['sample']}/{config['sub_sample'][0]}/orig.txt"
+#     shell:
+#         "echo step1 > {output.step_1_out}"
+
+# rule step_2:
+#     input:
+#         tile_dir=f"/stanley/WangLab/Data/Analyzed/{config['sample']}/{config['sub_sample'][0]}/orig.txt"
+#     output:
+#         step_2_out=f"/stanley/WangLab/Data/Analyzed/{config['sample']}/{config['sub_sample'][0]}/orig_2.txt"
+#     shell:
+#         # "cat {input.tile_dir} | echo step2 is done > {output.step_2_out}"   
+#         "echo step2 is done >> {input.tile_dir} & echo step2 > {output.step_2_out}"
 
 # rule step_3:
 #     input:
@@ -103,14 +135,14 @@ rule step_2:
 #     shell:
 #         "cat {input.tile_dir} | echo step3 is done > {output.step_3_out}"   
 
-rule step_4:
-    input:
-        tile_dir=f"/stanley/WangLab/Data/Analyzed/{config['sample']}/{config['sub_sample'][0]}/orig_2.txt",
-        orig_dir=f"/stanley/WangLab/Data/Analyzed/{config['sample']}/{config['sub_sample'][0]}/orig.txt"
-    output:
-        step_4_out=f"/stanley/WangLab/Data/Analyzed/{config['sample']}/{config['sub_sample'][0]}/orig_end.txt"
-    shell:
-        "echo step3 is done >> {input.orig_dir} & echo step_3 > {output.step_4_out}"
+# rule step_4:
+#     input:
+#         tile_dir=f"/stanley/WangLab/Data/Analyzed/{config['sample']}/{config['sub_sample'][0]}/orig_2.txt",
+#         orig_dir=f"/stanley/WangLab/Data/Analyzed/{config['sample']}/{config['sub_sample'][0]}/orig.txt"
+#     output:
+#         step_4_out=f"/stanley/WangLab/Data/Analyzed/{config['sample']}/{config['sub_sample'][0]}/orig_end.txt"
+#     shell:
+#         "echo step3 is done >> {input.orig_dir} & echo step_3 > {output.step_4_out}"
 
 
 

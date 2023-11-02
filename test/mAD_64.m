@@ -42,34 +42,34 @@ add_channel_order_dict(4).name = "Gfap";
 sdata = sdata.LoadRawImages('fovID', current_fov, 'folder_list', ["protein"], ...
                             'channel_order_dict', add_channel_order_dict, 'update_layer_slot', "other");
 
-% % Preprocessing
+% Preprocessing
 sdata = sdata.EnhanceContrast("min-max");
-sdata = sdata.EnhanceContrast("imadjustn");
-sdata = sdata.EnhanceContrast("imadjustn", 'layer', sdata.layers.other);
+sdata = sdata.EnhanceContrast("min-max", 'layer', sdata.layers.other);
 sdata = sdata.HistEqualize;
-sdata = sdata.MorphRecon;
-sdata = sdata.Tophat;
 
 % Registration
-
 sdata = sdata.GlobalRegistration;
 round1_merged_fname = fullfile(output_path, 'round1_merged.tif');
 SaveSingleStack(sdata.registration{sdata.layers.ref}, round1_merged_fname);
 
 refernce_dapi_fname = dir(fullfile(data_path, 'round1', current_fov, '*ch04.tif'));
 sdata.registration{sdata.layers.ref} = LoadMultipageTiff(fullfile(refernce_dapi_fname.folder, refernce_dapi_fname.name), false);
-sdata = sdata.GlobalRegistration('layer', ["protein"], 'mov_img', 'single-image');
+sdata = sdata.GlobalRegistration('layer', ["protein"], 'mov_img', 'single-channel');
 sdata = sdata.LocalRegistration;
 
 % Spot finding 
+sdata = sdata.SpotFinding;
+sdata = sdata.ReadsExtraction;
+sdata = sdata.LoadCodebook;
+sdata = sdata.ReadsFiltration;
 
-
-% % Output 
+% Output 
 sdata = sdata.MakeProjection;
 projection_preview_path = fullfile(output_path, 'projection_montage.tif');
 sdata = sdata.ViewProjection('save', true, 'output_path', projection_preview_path);
 sdata = sdata.SaveImages('layer', sdata.layers.seq, 'output_path', output_path, 'folder_format', "nested");
 sdata = sdata.SaveImages('layer', sdata.layers.other, 'output_path', output_path, 'folder_format', "single");
+sdata = sdata.SaveSignal;
 
 toc;
 diary off;
