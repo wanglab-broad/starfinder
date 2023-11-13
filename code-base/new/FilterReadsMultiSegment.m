@@ -50,7 +50,7 @@ function obj = FilterReadsMultiSegment( obj, end_base, split_index )
         obj.signal.scores = [score_1]; 
         
         obj.signal.goodSpots = obj.signal.allSpots(barcodes_in_codebook, :);
-        obj.signal.goodSpots{:, "barcode"} = barcodes(barcodes_in_codebook);
+        % obj.signal.goodSpots{:, "barcode"} = barcodes(barcodes_in_codebook);
         obj.signal.goodSpots{:, "gene"} = obj.codebook.seqToGene(color_seq(barcodes_in_codebook));
     
     end

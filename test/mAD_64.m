@@ -9,7 +9,7 @@ elseif isunix
 end 
 
 % define subsample folder
-data_path = fullfile(base_path, 'mAD_64/');
+data_path = fullfile(base_path, 'mA D_64/');
 
 current_fov = 'tile_1';
 useGPU = false;

@@ -52,7 +52,7 @@ function obj = FilterReads( obj, end_base )
     end
     
     obj.signal.goodSpots = obj.signal.allSpots(barcodes_in_codebook, :);
-    obj.signal.goodSpots{:, "barcode"} = barcodes(barcodes_in_codebook);
+    % obj.signal.goodSpots{:, "barcode"} = barcodes(barcodes_in_codebook);
     obj.signal.goodSpots{:, "gene"} = obj.codebook.seqToGene(color_seq(barcodes_in_codebook));
 
 end

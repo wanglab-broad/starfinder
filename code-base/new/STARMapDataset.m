@@ -413,6 +413,9 @@ classdef STARMapDataset
             defaultGroupChannel = true;
             addOptional(p, 'group_channel', defaultGroupChannel);
 
+            defaultMaxProjection = true;
+            addOptional(p, 'maximum_projection', defaultMaxProjection);
+
             defaultOutputPath = obj.outputPath;
             addOptional(p, 'output_path', defaultOutputPath);
 
@@ -427,9 +430,9 @@ classdef STARMapDataset
                 fprintf(sprintf('Saving %s images to %s\n', current_layer, current_output_folder_msg));
                 switch p.Results.folder_format
                     case "nested"
-                        SaveImageNestedFolder(obj.images(current_layer), current_layer, current_output_folder, obj.fovID);
+                        SaveImageNestedFolder(obj.images(current_layer), current_layer, current_output_folder, obj.fovID, p.Results.maximum_projection);
                     case "single"
-                        SaveImageSingleFolder(obj.images(current_layer), current_layer, current_output_folder, obj.fovID, p.Results.group_channel, obj.metadata{current_layer}.ChannelInfo);
+                        SaveImageSingleFolder(obj.images(current_layer), current_layer, current_output_folder, obj.fovID, p.Results.group_channel, obj.metadata{current_layer}.ChannelInfo, p.Results.maximum_projection);
                 end
             end
 
@@ -726,7 +729,7 @@ classdef STARMapDataset
             else
                 obj = FilterReadsMultiSegment(obj, p.Results.end_base, p.Results.split_index);
             end
-            
+
             % change metadata
             obj.jobFinished.ReadsFiltration = true;
             

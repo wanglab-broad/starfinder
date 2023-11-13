@@ -1,4 +1,4 @@
-function SaveImageNestedFolder(input_img, layer, output_folder, fovID)
+function SaveImageNestedFolder(input_img, layer, output_folder, fovID, maximum_projection)
 
 
     Nchannel = size(input_img{1}, 4);
@@ -15,7 +15,11 @@ function SaveImageNestedFolder(input_img, layer, output_folder, fovID)
 
     for c=1:Nchannel
         fname = fullfile(current_fov_folder, sprintf('ch%02d.tif', c));
-        SaveSingleStack(input_img{1}(:,:,:,c), fname);
+        if maximum_projection
+            SaveSingleStack(max(input_img{1}(:,:,:,c), [], 3), fname);
+        else
+            SaveSingleStack(input_img{1}(:,:,:,c), fname);
+        end
     end
 
 

@@ -1,4 +1,4 @@
-function SaveImageSingleFolder(input_img, layer, output_folder, fovID, group_channel, channel_order_dict)
+function SaveImageSingleFolder(input_img, layer, output_folder, fovID, group_channel, channel_order_dict, maximum_projection)
    
     Nchannel = size(input_img{1}, 4);
         
@@ -15,12 +15,20 @@ function SaveImageSingleFolder(input_img, layer, output_folder, fovID, group_cha
             end
 
             fname = fullfile(current_output_folder, sprintf('%s.tif', fovID));
-            SaveSingleStack(input_img{1}(:,:,:,c), fname);
+            if maximum_projection
+                SaveSingleStack(max(input_img{1}(:,:,:,c), [], 3), fname);
+            else
+                SaveSingleStack(input_img{1}(:,:,:,c), fname);
+            end
         end
     else
         for c=1:Nchannel
             fname = fullfile(output_folder, sprintf('round%d_ch%02d_%s.tif', r, c, fovID));
-            SaveSingleStack(input_img{1}(:,:,:,c), fname);
+            if maximum_projection
+                SaveSingleStack(max(input_img{1}(:,:,:,c), [], 3), fname);
+            else
+                SaveSingleStack(input_img{1}(:,:,:,c), fname);
+            end
         end
     end
 
