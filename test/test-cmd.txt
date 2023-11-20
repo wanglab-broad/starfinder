@@ -1,0 +1,4 @@
+nohup matlab -nodisplay -nosplash -nodesktop -r "run('./example/sequential_workflow/rsf_workflow_2d_example.m')" > /dev/null &
+
+# UGER
+qsub -l h_vmem=70G -l h_rt=24:00:00 -t 1-2 /stanley/WangLab/jiahao/Github/starfinder/test/mAD_64/cluster/run_mscript.sh

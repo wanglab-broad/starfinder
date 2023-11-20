@@ -1,5 +1,5 @@
 function colorSeq = EncodeBases( seq )
-% new_EncodeSOLID
+% EncodeBases
 
     % construct hash table for encoding
     k = {'AT','CT','GT','TT',...

@@ -21,6 +21,7 @@ classdef STARMapDataset
 
         % Metadata
         metadata;
+        subtile;
         
         % Registration
         registration;
@@ -31,7 +32,7 @@ classdef STARMapDataset
         % Codebook
         codebook;
 
-        % Metadata
+        % Workflow
         jobToDo;
         jobFinished;
         
@@ -158,7 +159,7 @@ classdef STARMapDataset
                 obj.metadata{current_layer} = current_metadata;
                
                 if p.Results.rotate_angle ~= 0
-                    obj.images{current_layer} = imrotate(obj.images{current_layer}, p.Results.rotate_angl);
+                    obj.images{current_layer} = imrotate(obj.images{current_layer}, p.Results.rotate_angle);
                 end
             end
             
@@ -391,7 +392,7 @@ classdef STARMapDataset
             if p.Results.save
                 current_output_folder_msg = strrep(p.Results.output_path, '\', '\\');
                 fprintf(sprintf('Saving projection montage to %s\n', current_output_folder_msg));
-                exportgraphics(montage_img, p.Results.output_path, 'Resolution', 300);
+                exportgraphics(montage_img, p.Results.output_path, 'Resolution', 300, 'ContentType', 'image');
             end
 
         end
@@ -778,7 +779,46 @@ classdef STARMapDataset
         
             
         end
-       
+        
+        % 12.Create subtiles
+        function obj = CreateSubtiles( obj, varargin )
+            
+            % Input parser
+            p = inputParser;
+            
+            % Defaults
+            defaultSqrtPieces = 4;
+            addOptional(p, 'sqrt_pieces', defaultSqrtPieces);
+
+            defaultSave = false;
+            addOptional(p, 'save', defaultSave);
+
+            defaultOutputFolder = fullfile(obj.outputPath, "temp");
+            addOptional(p, 'output_path', defaultOutputFolder);
+
+            defaultRefLayer = obj.layers.ref;
+            addOptional(p, 'ref_layer', defaultRefLayer);
+
+            parse(p, varargin{:});
+            
+            if ~exist(p.Results.output_path, 'dir')
+                mkdir(p.Results.output_path)
+            end
+
+            current_metadata = obj.metadata{p.Results.ref_layer};
+            current_metadata = current_metadata{1};
+            obj.subtile = MakeSubtileTable(current_metadata.dims, p.Results.sqrt_pieces);     
+
+            if p.Results.save
+                writetable(obj.subtile, fullfile(p.Results.output_path, sprintf("%s_subtile.csv", obj.fovID)), 'Delimiter',',', 'QuoteStrings',false);
+            end
+
+            % change metadata
+            obj.jobFinished.CreateSubtiles = true;   
+        
+            
+        end
+
     
     end
     

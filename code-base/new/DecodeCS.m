@@ -1,5 +1,5 @@
 function barcodes = DecodeCS( color_seq, start_base )
-%new_DecodeCS
+%DecodeCS
 
     % get dims
     Npoint = numel(color_seq);

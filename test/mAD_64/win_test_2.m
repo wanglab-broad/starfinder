@@ -7,16 +7,16 @@
 % number_of_fovs
 
 % test block
-input_path = fullfile('/home/unix/jiahao/wanglab/Data/Processed/2023-10-01-Jiahao-Test/mAD_64/');
-output_path = fullfile('/home/unix/jiahao/wanglab/Data/Analyzed/2023-10-01-Jiahao-Test/mAD_64/');
+input_path = fullfile('Z:/Data/Processed/2023-10-01-Jiahao-Test/mAD_64/');
+output_path = fullfile('Z:/Data/Analyzed/2023-10-01-Jiahao-Test/mAD_64/');
 ref_round = ["round1"];
 fov_id_pattern = "tile_%d";
-number_of_fovs = 1;
+number_of_fovs = 56;
 
 % add path for .m files
-addpath(fullfile(pwd, '../code-base/new/')) % pwd is the location of the starfinder folder
+addpath(fullfile(pwd, '/code-base/new/')) % pwd is the location of the starfinder folder
 
-for n=1:number_of_fovs
+for n=29:number_of_fovs
 
     current_fov = sprintf(fov_id_pattern, n);
 
@@ -45,7 +45,7 @@ for n=1:number_of_fovs
 
     add_channel_order_dict(3).wavelength = 546;
     add_channel_order_dict(3).channel = "ch02";
-    add_channel_order_dict(3).name = "PI";
+    add_channel_order_dict(3).name = "DAPI";
 
     add_channel_order_dict(4).wavelength = 647;
     add_channel_order_dict(4).channel = "ch03";
