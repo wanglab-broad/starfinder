@@ -1,4 +1,8 @@
 nohup matlab -nodisplay -nosplash -nodesktop -r "run('./example/sequential_workflow/rsf_workflow_2d_example.m')" > /dev/null &
 
-# UGER
+# 3072 x 3072 x 30 
 qsub -l h_vmem=70G -l h_rt=24:00:00 -t 1-2 /stanley/WangLab/jiahao/Github/starfinder/test/mAD_64/cluster/run_mscript.sh
+qsub -l h_vmem=30G -l h_rt=4:00:00 -t 1-56 /stanley/WangLab/jiahao/Github/starfinder/test/mAD_64/run_py.sh
+
+# 1496 x 1496 x 30 
+qsub -l h_vmem=30G -l h_rt=4:00:00 -t 1-70 /stanley/WangLab/jiahao/Github/starfinder/test/TEMPOmap_Hela/run_mscript.sh

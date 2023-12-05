@@ -1,617 +1,316 @@
+# stitch ClusterMap result of each fov for 2D mouse tissue section 
+# user will define:
+# base_path
+# img_col
+# img_row
+
 import sys
-import os, copy
+base_path = sys.argv[1]
+img_col = sys.argv[2]
+img_row = sys.argv[2]
+
+# test block 
+base_path = '/home/unix/jiahao/wanglab/Data/Analyzed/2023-10-01-Jiahao-Test/mAD_64/'
+img_col, img_row = [3072, 3072]
+
+# Import packages 
+import os
 import numpy as np
 import pandas as pd
+import anndata as ad
 import tifffile as tif
 import matplotlib.pyplot as plt
+
+from tqdm import tqdm
 from scipy.spatial import distance
-from tqdm.notebook import tqdm, trange
-import anndata as ad
-from starmap.sequencing import *
-from skimage.measure import regionprops
-from skimage.color import label2rgb
-from skimage.filters import median, gaussian, threshold_otsu
-from skimage.morphology import disk, binary_dilation
-import tifffile
+from matplotlib.collections import PatchCollection, LineCollection
+from matplotlib.patches import Rectangle
 
-# Load genes.csv
-def load_genes(base_path):
-    genes2seqs = {}
-    seqs2genes = {}
-    with open(os.path.join(base_path, "genes.csv"), encoding='utf-8-sig') as f:
-        for l in f:
-            fields = l.rstrip().split(",")
-            curr_seg = "".join([str(s+1) for s in encode_SOLID(fields[1][::-1])])
-            curr_seg = curr_seg[5:] + curr_seg[:4]
-            # print(curr_seg)
-            genes2seqs[fields[0]] = curr_seg
-            seqs2genes[genes2seqs[fields[0]]] = fields[0]
-            
-    return genes2seqs, seqs2genes
-
+# Functions  
 def closest_node(node, nodes):
     closest_index = distance.cdist([node], nodes).argmin()
     return nodes[closest_index], closest_index
 
-############################## SET FILE I/O ##############################
+def parse_tile_configuration(input_file):
+    import re
 
-### extract the coords information
-subdir = 'RIBOmap'
-img_c, img_r = [2048, 2048]
-
-data_dir = f'Z:/Data/Processed/2021-11-23-Hu-MouseBrain{subdir}'
-stitch_dir = 'Z:/jiahao/Github/RIBOmap/segmentation-stitching/'
-clustermap_dir = os.path.join(data_dir, 'output/clustermap/')
-
-orderlist = os.path.join(stitch_dir, subdir, 'orderlist.csv') # list of integers denoting tiles and their positions sequentially
-inputpath = os.path.join(stitch_dir, subdir, 'round1_merged') # directory containing tile pointers and TileConfiguration outputs
-dapipath = os.path.join(stitch_dir, subdir, 'dapi') # directory dapi
-readspath = os.path.join(stitch_dir, 'output', 'segmentation') # segmentation folder containing tile subdirectories and clustermap results within each subdir
-outputpath = os.path.join(stitch_dir, subdir, 'results')
-
-if not os.path.exists(outputpath):
-    os.mkdir(outputpath)
-
-
-    ############################## READ IN TILE COORDINATES ##############################
-
-coords_file = os.path.join(inputpath, 'TileConfiguration.registered.txt')
-coords_file2 = os.path.join(inputpath, 'TileConfiguration.txt')
-print("Reading in coordinates...")
-
-## precise coords
-f = open(coords_file)
-line = f.readline()
-list = []
-while line:
-    if line.startswith('Position'):
-        a = np.array(line.replace('Position','').replace('.tif; ; (',',').replace(', ',',').replace(')\n','').split(','))
-        a = (a.astype(float)+0.5).astype(int).tolist()
-        list.append(a)
+    f = open(input_file)
     line = f.readline()
-coords_df = np.array(list)
-f.close
+    records = []
+    a = 0
+    while line:
+        if a > 3:
+            match = re.match(r"^(?P<fov>.*).tif; ; \((?P<col>.*), (?P<row>.*)\)", line)
+            current_record = [match.group('fov'), match.group('col'), match.group('row')]
+            records.append(current_record)
+        a += 1
+        line = f.readline()
+    records = np.array(records)
+    f.close()
+    tile_config = pd.DataFrame(records, columns=['fov','col','row'])
+    tile_config['col'] = (tile_config['col'].astype(float) + 0.5).astype(int)
+    tile_config['row'] = (tile_config['row'].astype(float) + 0.5).astype(int)
+    return tile_config
 
-## relative coords
-f = open(coords_file2)
-line = f.readline()
-list = []
-while line:
-    if line.startswith('Position'):
-        a = np.array(line.replace('Position','').replace('.tif; ; (',',').replace(', ',',').replace(')\n','').split(','))
-        a = (a.astype(float)+0.5).astype(int).tolist()
-        a[1:3] = (np.divide(a[1:3],int(img_c*0.9+0.5)) + 0.5).astype(int).tolist()
-        list.append(a)
-    line = f.readline()
-coords_df_v2 = np.array(list)
-f.close
+# IO path
+image_path = os.path.join(base_path, 'images')
+expr_path = os.path.join(base_path, 'expr')
+clustermap_path = os.path.join(expr_path, 'clustermap')
+clustermap_fused_path = os.path.join(clustermap_path, 'fused')
+if not os.path.exists(clustermap_fused_path):
+    os.mkdir(clustermap_fused_path)
 
-## order list
-order_df = pd.read_csv(orderlist, header = None)
-order_df.index = range(1,order_df.shape[0]+1)
-order_df.columns = ['tile']
+# Load tile_config from fiji
+tile_config_original = parse_tile_configuration(os.path.join(image_path, 'protein/PI/TileConfiguration.txt'))
+tile_config_registered = parse_tile_configuration(os.path.join(image_path, 'protein/PI/TileConfiguration.registered.txt'))
 
-print("Combining read configurations...")
-### combine two datasets
-coords_df2 = pd.DataFrame(coords_df, columns=['index','column','row'], index = coords_df[:,0])
-coords_df2.drop(columns=coords_df2.columns[0], axis=1, inplace=True)
-coords_df2_v2 = pd.DataFrame(coords_df_v2, columns=['index','column_count','row_count'], index = coords_df_v2[:,0])
-coords_df2_v2.drop(columns=coords_df2_v2.columns[0], axis=1, inplace=True)
-coords_df2['column_count'] = coords_df2_v2.loc[coords_df2.index,'column_count']
-coords_df2['row_count'] = coords_df2_v2.loc[coords_df2.index,'row_count']
+tile_config_combined = pd.concat([tile_config_original, tile_config_registered], axis=1)
+tile_config_combined = tile_config_original.join(tile_config_registered, lsuffix='_org', rsuffix='_reg')
+tile_config_combined = tile_config_combined.drop('fov_reg', axis=1)
+tile_config_combined.columns = ['fov', 'col', 'row', 'col_registered', 'row_registered']
+tile_config_combined['id'] = tile_config_combined['fov'].str.extract(r'(?P<digit>\d+)').astype(int)
 
-## rearrange the index and add tile information
-coords_df3 = coords_df2.loc[range(1,coords_df2.shape[0] + 1),:]
-coords_df3['tile'] = order_df['tile']
+# Load grid file 
+grid_df = pd.read_csv(os.path.join(base_path, 'grid.csv'), index_col=0)
+grid_df.columns = ['col_count', 'row_count', 'id', 'grid']
 
-## save
-coords_df3.to_csv(os.path.join(outputpath,'coords.csv'))
+tile_config_without_blank = tile_config_combined.loc[tile_config_combined['id'] > 0, :]
 
-print("Tuning coordinates...")
-## find origin and tuning the coords
-coords_df3_without_blank = coords_df3.loc[coords_df3['tile'] > 0,:]
+min_column, min_row = [tile_config_without_blank['col_registered'].min(), tile_config_without_blank['row_registered'].min()]
+max_column, max_row = [tile_config_without_blank['col_registered'].max(), tile_config_without_blank['row_registered'].max()]
+shape_column, shape_row = [max_column - min_column + img_col, max_row - min_row + img_row]
 
-min_column, min_row = [np.min(coords_df3_without_blank['column']), np.min(coords_df3_without_blank['row'])]
-max_column, max_row = [np.max(coords_df3_without_blank['column']), np.max(coords_df3_without_blank['row'])]
-shape_column, shape_row = [max_column - min_column + img_c, max_row - min_row + img_r]
+tile_config_final = tile_config_combined.copy()
+tile_config_final['col_registered'] = tile_config_final['col_registered'] - min_column
+tile_config_final['row_registered'] = tile_config_final['row_registered'] - min_row
+tile_config_final = pd.merge(tile_config_final, grid_df, on='id', how='outer')
+tile_config_final.to_csv(os.path.join(clustermap_fused_path, 'tile_config.csv'))
 
-coords_df4 = copy.deepcopy(coords_df3)
-coords_df4['column'] = coords_df4['column'] - min_column
-coords_df4['row'] = coords_df4['row'] - min_row
+# Stitch clustermap
+# spot_location_1 - col - x
+# spot_location_2 - row - y
 
-# save
-# coords_df4.to_csv(os.path.join(outputpath,'tuned_coords.csv'))
+fused_pi = tif.imread(os.path.join(image_path, 'fused/PI.tif'))
 
-order = 575
-tilenum = 394
+assigned_spots = pd.DataFrame({'spot_location_1':[], 'spot_location_2':[], 'spot_location_3':[],
+                             'gene':[], 'cell_barcode':[]})
+background_spots = pd.DataFrame({'spot_location_1':[], 'spot_location_2':[], 'spot_location_3':[],
+                             'gene':[], 'cell_barcode':[]})
+cell_centers = pd.DataFrame({'cell_barcode':[], 'column':[], 'row':[], 'z_axis':[]})
 
-# Get remain_reads.csv for each tile
-dfpath = os.path.join(clustermap_dir, f"Position{tilenum:03}")
+rectangle_list = []
+middle_edge_list = []
 
-remain_reads_t = pd.read_csv(os.path.join(clustermap_dir, f"Position{tilenum:03}", 'spots.csv'))
-remain_reads_t['gene'] = remain_reads_t['gene'] - 1
-remain_reads_t['spot_location_1'] = remain_reads_t['spot_location_1'] - 1
-remain_reads_t['spot_location_2'] = remain_reads_t['spot_location_2'] - 1
-remain_reads_t['spot_location_3'] = remain_reads_t['spot_location_3'] - 1
-
-# rotate
-temp1 = remain_reads_t['spot_location_1'].values.copy()
-temp2 = remain_reads_t['spot_location_2'].values.copy()
-
-remain_reads_t['spot_location_1'] = 2048 - temp2
-remain_reads_t['spot_location_2'] = temp1
-
-### read genes.csv
-genes2seqs, seqs2genes = load_genes(data_dir)
-
-### read genelist from clustermap
-gene_list = pd.read_csv(os.path.join(clustermap_dir, f"Position{tilenum:03}", 'genelist.csv'), header=None)
-gene_list.columns = ['barcode']
-gene_list['barcode'] = gene_list['barcode'].astype(str)
-gene_list['gene'] = gene_list['barcode'].map(seqs2genes)
-
-### map genes 
-nums2genes = dict(zip(gene_list.index.to_list(), gene_list.gene.to_list()))
-remain_reads_t['gene'] = remain_reads_t['gene'].map(nums2genes)
-
-### remove noise spots
-remain_reads_t = remain_reads_t.loc[remain_reads_t['clustermap'] != -1, :]
-
-# Label with coordinates/tilenum and barcode
-# remain_reads_t['gridc_gridr_tilenum'] = str(t_grid_c)+","+str(t_grid_r)+","+str(tilenum)
-
-## add cell barcode
-remain_reads_t['cell_barcode'] =  remain_reads_t['clustermap'].values
-remain_reads_t = remain_reads_t.drop(columns=['clustermap'])
-
-# get cell center info
-label_img = np.zeros([img_c, img_r, 35], dtype=np.uint16)
-label_img[remain_reads_t['spot_location_2'].values, remain_reads_t['spot_location_1'].values, remain_reads_t['spot_location_3'].values] = remain_reads_t['cell_barcode'].values + 1
-
-cell_barcode = []
-region_centroid = []
-for i, region in enumerate(tqdm(regionprops(label_img))):
-    cell_barcode.append(region.label - 1)
-    region_centroid.append(region.centroid)
-
-region_centroid = np.array(region_centroid)
-cell_center_t = pd.DataFrame({'cell_barcode': cell_barcode, 'column': region_centroid[:, 1], 'row': region_centroid[:, 0], 'z': region_centroid[:, 2]})
-cell_center_t = cell_center_t.astype(int)
-print(cell_center_t['cell_barcode'].nunique())
-
-## filter cell center based on the dapi mask
-current_dapi_path = os.path.join(dapipath, f"Position{order:03}.tif")
-current_dapi = tif.imread(current_dapi_path)
-# current_dapi = median(current_dapi, disk(5))
-current_dapi = gaussian(current_dapi, sigma=5)
-current_threshold = threshold_otsu(current_dapi)
-current_dapi_mask = current_dapi > current_threshold
-current_dapi_mask = binary_dilation(current_dapi_mask, disk(30))
-
-fig, ax = plt.subplots(figsize=(10,10))
-plt.imshow(current_dapi_mask)
-plt.scatter(cell_center_t.loc[:,'column'], cell_center_t.loc[:,'row'], s=3, c='red', alpha = 0.7)
-plt.show()
-
-current_good_cells = current_dapi_mask[cell_center_t.loc[:,'row'], cell_center_t.loc[:,'column']]
-cell_center_t = cell_center_t.loc[current_good_cells, :]
-remain_reads_t = remain_reads_t.loc[remain_reads_t['cell_barcode'].isin(cell_center_t['cell_barcode']), :]
-
-# remap cell barcode
-cell_barcode_dict = {}
-for i, k in enumerate(cell_center_t['cell_barcode'].unique()):
-    cell_barcode_dict[k] = i
-cell_center_t['cell_barcode'] = cell_center_t['cell_barcode'].map(cell_barcode_dict)
-remain_reads_t['cell_barcode'] = remain_reads_t['cell_barcode'].map(cell_barcode_dict)
-
-print(cell_center_t['cell_barcode'].nunique())
-
-fig, ax = plt.subplots(figsize=(10,10))
-plt.imshow(current_dapi_mask)
-plt.scatter(cell_center_t.loc[:,'column'], cell_center_t.loc[:,'row'], s=3, c='red', alpha = 0.7)
-plt.show()
-
-############################## STITCH TOGETHER TILE COORDINATES ##############################
-
-print("Adjusting cell center and read coordinates by tile position...")
-alignment_thresh = 0.1
 cell_barcode_min = 0
-middle_edge = 0
+for i in tqdm(range(tile_config_final.shape[0])):
+    current_record = tile_config_final.iloc[i, :]
+    current_fov = current_record['fov']
+    current_id = current_record['id']
+    current_col_registered = current_record['col_registered']
+    current_row_registered = current_record['row_registered']
+    current_col_count = current_record['col_count']
+    current_row_count = current_record['row_count']
 
-# generate empty dataframe
-remain_reads = pd.DataFrame({'spot_location_1':[],'spot_location_2':[],'spot_location_3':[],'gene':[],'cell_barcode':[],'gridc_gridr_tilenum':[]})
-cell_center = pd.DataFrame({'cell_barcode':[], 'column':[], 'row':[], 'gridc_gridr_tilenum':[]})
-
-# get grid 
-grid_c, grid_r = (np.max(coords_df4.loc[:,['column_count','row_count']]) + 1).tolist()
-print(grid_c, grid_r)
-
-for t_grid_c in trange(0, grid_c):
-# for t_grid_c in trange(0, 2): # test
-
-    median_col_coord = np.median(coords_df4[(coords_df4.column_count == t_grid_c) & (coords_df4.tile != 0)]['column'])
+    current_rectangle = Rectangle((current_col_registered, current_row_registered), img_col, img_row)
+    rectangle_list.append(current_rectangle)
     
-    for t_grid_r in trange(0, grid_r):
-    # for t_grid_r in trange(23, 25): # test
+    if current_id > 0:
+
+        # Load clustermap spots
+        current_spots = pd.read_csv(os.path.join(clustermap_path, f'{current_fov}_spots.csv'))
+        current_spots['gene'] = current_spots['gene'] - 1
+        current_spots['spot_location_1'] = current_spots['spot_location_1'] - 1
+        current_spots['spot_location_2'] = current_spots['spot_location_2'] - 1
+        current_spots['spot_location_3'] = current_spots['spot_location_3'] - 1
+
+        # Load clustermap cell_centers
+        current_cell_centers = pd.read_csv(os.path.join(clustermap_path, f'{current_fov}_cell_center.csv'), index_col=0)
+
+        # Add offsets
+        current_spots['spot_location_1'] = current_spots['spot_location_1'] + current_col_registered
+        current_cell_centers['column'] = current_cell_centers['column'] + current_col_registered
+
+        current_spots['spot_location_2'] = current_spots['spot_location_2'] + current_row_registered
+        current_cell_centers['row'] = current_cell_centers['row'] + current_row_registered
     
-        median_row_coord = np.median(coords_df4[(coords_df4.row_count == t_grid_r) & (coords_df4.tile != 0)]['row'])
-        print('\t[t_grid_c, t_grid_r]: ',str(t_grid_c),' ',str(t_grid_r))
-        order = t_grid_c * grid_r + t_grid_r + 1
+        if current_col_count == 0:
+            pass
+        else:
+            # Left tile exists
+            left_col_count = current_col_count - 1
+            left_record = tile_config_final.loc[(tile_config_final['col_count'] == left_col_count) & (tile_config_final['row_count'] == current_row_count), :]
+            middle_edge = int((left_record['col_registered'] + img_col - current_col_registered)/2 + 0.5)
 
-        tilenum = coords_df4['tile'][order]
+            if middle_edge >= 0: 
+                    current_col_registered = middle_edge + current_col_registered
+                    middle_edge_list.append([(current_col_registered, current_row_registered), (current_col_registered, current_row_registered + img_row)])
+            
+        if current_row_count == 0:
+            pass
+        else:
+            # Upper tile exists
+            up_row_count = current_row_count - 1
+            up_record = tile_config_final.loc[(tile_config_final['row_count'] == up_row_count) & (tile_config_final['col_count'] == current_col_count), :]
+            middle_edge = int((up_record['row_registered'] + img_row - current_row_registered)/2 + 0.5)
 
-        # skip the tile if the tilenum == 0, blank tile
-        if tilenum == 0:
-            print("\tBlank tile")
-            continue
+            if middle_edge >= 0: 
+                    current_row_registered = middle_edge + current_row_registered
+                    middle_edge_list.append([(current_col_registered, current_row_registered), (current_col_registered + img_col, current_row_registered)])
 
-        # get upper left coordinates
-        upper_left = coords_df4.loc[order, ['column', 'row']]
-        upper_left_new = copy.deepcopy(upper_left)
+        # Modify cell barcode
+        current_spots['cell_barcode'] =  current_spots['clustermap'].values
+        current_spots = current_spots.drop(columns=['clustermap'])
+        current_assigned_spots = current_spots.loc[current_spots['cell_barcode'] != -1, :].copy()
+        current_background_spots = current_spots.loc[current_spots['cell_barcode'] == -1, :].copy()
 
-        # check that tile is appproximately aligned where expected -- otherwise throw out
-        if upper_left[0] >= (1+alignment_thresh)*median_col_coord and upper_left[0] <= (1-alignment_thresh)*median_col_coord:
-            if upper_left[1] >= (1+alignment_thresh)*median_row_coord and upper_left[1] <= (1-alignment_thresh)*median_col_coord:
-                print("f\tTile is aligned too far away from its expected position.")
-                print("f\tTile coord: [{upper_left[0]}, {upper_left[1]}]. Median coord: [{median_col_coord}, {median_row_coord}]")
-                continue
-
-        # judgment
-        t_grid_c_previous = t_grid_c - 1
-        t_grid_r_previous = t_grid_r - 1
-
-        # condition1: if left one is not blank, then calculate middle overlap
-        if t_grid_c_previous >= 0: # if a left tile exists
-            order_t = t_grid_c_previous * grid_r + t_grid_r + 1 # order of left tile
-            if coords_df4.loc[order_t,'tile'] != 0: # if it's not blank, calculate new middle edge. Otherwise, use old middle edge
-                middle_edge = np.int((coords_df4.loc[order_t,'column'] + img_c - upper_left[0])/2 + 0.5) # calculate middle overlap
-
-                if middle_edge >= 0: 
-                    upper_left_new[0] = middle_edge + upper_left[0]
-
-        # condition2: if upper one is empty or blank
-        if t_grid_r_previous >= 0:
-            order_t = t_grid_c * grid_r + t_grid_r_previous + 1
-            if coords_df4.loc[order_t,'tile'] != 0:
-                middle_edge = np.int((coords_df4.loc[order_t,'row'] + img_c - upper_left[1])/2 + 0.5)
-
-                if middle_edge >= 0: 
-                    upper_left_new[1] = middle_edge + upper_left[1]
-
-        ### stitch
-        # Get remain_reads.csv for each tile
-        dfpath = os.path.join(clustermap_dir, f"Position{tilenum:03}")
-        if not os.path.exists(os.path.join(dfpath, 'spots.csv')):
-            print('\tNo reads file for this tile')
-            continue
-
-        remain_reads_t = pd.read_csv(os.path.join(clustermap_dir, f"Position{tilenum:03}", 'spots.csv'))
-        remain_reads_t['gene'] = remain_reads_t['gene'] - 1
-        remain_reads_t['spot_location_1'] = remain_reads_t['spot_location_1'] - 1
-        remain_reads_t['spot_location_2'] = remain_reads_t['spot_location_2'] - 1
-        remain_reads_t['spot_location_3'] = remain_reads_t['spot_location_3'] - 1
-
-        # rotate
-        temp1 = remain_reads_t['spot_location_1'].values.copy()
-        temp2 = remain_reads_t['spot_location_2'].values.copy()
-
-        remain_reads_t['spot_location_1'] = 2048 - temp2
-        remain_reads_t['spot_location_2'] = temp1
-
-        ### read genes.csv
-        genes2seqs, seqs2genes = load_genes(data_dir)
-
-        ### read genelist from clustermap
-        gene_list = pd.read_csv(os.path.join(clustermap_dir, f"Position{tilenum:03}", 'genelist.csv'), header=None)
-        gene_list.columns = ['barcode']
-        gene_list['barcode'] = gene_list['barcode'].astype(str)
-        gene_list['gene'] = gene_list['barcode'].map(seqs2genes)
-
-        ### map genes 
-        nums2genes = dict(zip(gene_list.index.to_list(), gene_list.gene.to_list()))
-        remain_reads_t['gene'] = remain_reads_t['gene'].map(nums2genes)
-
-        ### remove noise spots
-        remain_reads_t = remain_reads_t.loc[remain_reads_t['clustermap'] != -1, :]
-
-        # skip current tile if no reads left
-        if remain_reads_t.shape[0] == 0:
-            print("\tNo reads found in remain_reads.csv for this tile")
-            continue
-
-        # Label with coordinates/tilenum and barcode
-        remain_reads_t['gridc_gridr_tilenum'] = str(t_grid_c)+","+str(t_grid_r)+","+str(tilenum)
-
-        # remap cell barcode
-        remain_reads_t['cell_barcode'] =  remain_reads_t['clustermap'].values
-        remain_reads_t = remain_reads_t.drop(columns=['clustermap'])
-
-        # get cell center info
-        label_img = np.zeros([img_c, img_r, 35], dtype=np.uint16)
-        label_img[remain_reads_t['spot_location_2'].values, remain_reads_t['spot_location_1'].values, remain_reads_t['spot_location_3'].values] = remain_reads_t['cell_barcode'].values + 1
-
-        cell_barcode = []
-        region_centroid = []
-        for i, region in enumerate(tqdm(regionprops(label_img))):
-            cell_barcode.append(region.label - 1)
-            region_centroid.append(region.centroid)
-
-        region_centroid = np.array(region_centroid)
-        cell_center_t = pd.DataFrame({'cell_barcode': cell_barcode, 'column': region_centroid[:, 1], 'row': region_centroid[:, 0], 'z': region_centroid[:, 2]})
-        cell_center_t = cell_center_t.astype(int)
-
-        ## filter cell center based on the dapi mask
-        current_dapi_path = os.path.join(dapipath, f"Position{order:03}.tif")
-        current_dapi = tif.imread(current_dapi_path)
-        # current_dapi = median(current_dapi, disk(5))
-        current_dapi = gaussian(current_dapi, sigma=5)
-        current_threshold = threshold_otsu(current_dapi)
-        current_dapi_mask = current_dapi > current_threshold
-        current_dapi_mask = binary_dilation(current_dapi_mask, disk(30))
-
-        current_good_cells = current_dapi_mask[cell_center_t.loc[:,'row'], cell_center_t.loc[:,'column']]
-        cell_center_t = cell_center_t.loc[current_good_cells, :]
-        remain_reads_t = remain_reads_t.loc[remain_reads_t['cell_barcode'].isin(cell_center_t['cell_barcode']), :]
-
-        # remap cell barcode
+        # Remap cell barcode
         cell_barcode_dict = {}
-        for i, k in enumerate(cell_center_t['cell_barcode'].unique()):
-            cell_barcode_dict[k] = i
-        cell_center_t['cell_barcode'] = cell_center_t['cell_barcode'].map(cell_barcode_dict)
-        remain_reads_t['cell_barcode'] = remain_reads_t['cell_barcode'].map(cell_barcode_dict)
+        for j, k in enumerate(current_cell_centers['cell_barcode'].unique()):
+            cell_barcode_dict[k] = j
+        current_cell_centers['cell_barcode'] = current_cell_centers['cell_barcode'].map(cell_barcode_dict)
+        current_assigned_spots['cell_barcode'] = current_assigned_spots['cell_barcode'].map(cell_barcode_dict)
 
-        # change cell barcode
-        remain_reads_t['cell_barcode'] = remain_reads_t['cell_barcode'] + cell_barcode_min
-        cell_center_t['cell_barcode'] = cell_center_t['cell_barcode'] + cell_barcode_min
+        # Change cell barcode
+        current_cell_centers['cell_barcode'] = current_cell_centers['cell_barcode'] + cell_barcode_min
+        current_assigned_spots['cell_barcode'] = current_assigned_spots['cell_barcode'] + cell_barcode_min
 
-        # modify cell center
-        cell_center_t['gridc_gridr_tilenum'] = str(t_grid_c)+","+str(t_grid_r)+","+str(tilenum)
+        # Keep the cells on the left/top of the middle edges 
+        cell_centers = cell_centers.loc[(cell_centers['column'] <= current_col_registered) | (cell_centers['row'] <= current_row_registered) | (cell_centers['row'] >= current_row_registered + img_row), :] 
+        assigned_spots = assigned_spots.loc[assigned_spots['cell_barcode'].isin(cell_centers['cell_barcode']), :]
+        background_spots = background_spots.loc[(background_spots['spot_location_1'] <= current_col_registered) | (background_spots['spot_location_2'] <= current_row_registered) | (background_spots['spot_location_2'] >= current_row_registered + img_row), :] 
+        # print(f"\tcells in cell_centers: {cell_centers['cell_barcode'].nunique()} | cells in spots: {assigned_spots['cell_barcode'].nunique()}")
 
-        ### stitch
-        # Adjust spot_location_1 (column)
-        remain_reads_t['spot_location_1'] = remain_reads_t['spot_location_1'] + upper_left[0]
-        cell_center_t['column'] = cell_center_t['column']  + upper_left[0]
-
-        # Adjust spot_location_2 (row)
-        remain_reads_t['spot_location_2'] = remain_reads_t['spot_location_2'] + upper_left[1]
-        cell_center_t['row'] = cell_center_t['row']  + upper_left[1]
-
-        # print(f"\ttile: Position{tilenum:03}")
-        # print(f"\tInitial remain_reads: {len(remain_reads_t)}")
-        # print(f"\tInitial cell centers: {len(cell_center_t)}")
-
-        ## keep the cells within upper_left_new for `remain_reads`, `cell_center`
-        cell_center = cell_center.loc[(cell_center['column'] <= upper_left_new[0])|(cell_center['row'] <= upper_left_new[1]) | (cell_center['row'] >= upper_left_new[1]+img_r),:] 
-        remain_reads = remain_reads.loc[remain_reads['cell_barcode'].isin(cell_center['cell_barcode']),:]
-
-        ## keep the cells beyond upper_left_new for `remain_reads_t`, `cell_center_t`
-        cell_center_t = cell_center_t.loc[(cell_center_t['column'] > upper_left_new[0])&(cell_center_t['row'] > upper_left_new[1]),:]
-        remain_reads_t = remain_reads_t.loc[remain_reads_t['cell_barcode'].isin(cell_center_t['cell_barcode']),:]
-        # print(f"\tReads beyond upper_left_new: {len(remain_reads_t)}")
-        # print(f"\tCell centers beyond upper_left_new: {len(cell_center_t)}")
-
-        ## append
-        cell_center = pd.concat((cell_center, cell_center_t), axis=0)
-        print(f"\tNew total number of cell centers: {len(cell_center)}")
-        remain_reads = pd.concat((remain_reads, remain_reads_t), axis=0)
-        print(f"\tNew total number of reads: {len(remain_reads)}")
-
+        # Keep the cells beyond the middle edges 
+        current_cell_centers = current_cell_centers.loc[(current_cell_centers['column'] > current_col_registered) & (current_cell_centers['row'] > current_row_registered), :]
+        current_assigned_spots = current_assigned_spots.loc[current_assigned_spots['cell_barcode'].isin(current_cell_centers['cell_barcode']), :]
+        current_background_spots = current_background_spots.loc[(current_background_spots['spot_location_1'] > current_col_registered) & (current_background_spots['spot_location_2'] > current_row_registered), :]
+        
+        # Append
+        cell_centers = pd.concat((cell_centers, current_cell_centers), axis=0)
+        print(f"\tNew total number of cell centers: {len(cell_centers)}")
+        assigned_spots = pd.concat((assigned_spots, current_assigned_spots), axis=0)
+        print(f"\tNew total number of assigned reads: {len(assigned_spots)}")
+        background_spots = pd.concat((background_spots, current_background_spots), axis=0)
+        print(f"\tNew total number of background reads: {len(background_spots)}")
+        
         # Update minimum cell barcode
-        if cell_center_t.shape[0] > 0:
-            cell_barcode_min = np.max(cell_center_t['cell_barcode']) + 1
+        if current_cell_centers.shape[0] > 0:
+            cell_barcode_min = cell_centers['cell_barcode'].max() + 1
 
-remain_reads.to_csv(f'Z:/Data/Analyzed/2021-11-23-Hu-MouseBrain/{subdir}/remain_reads.csv')
-cell_center.to_csv(f'Z:/Data/Analyzed/2021-11-23-Hu-MouseBrain/{subdir}/cell_center.csv')
+    else:
+        continue
 
-### polish after stitch
-print("Polishing stitch...")
+# fig, ax = plt.subplots(figsize=(7,8))
+# ax.imshow(fused_pi)
+# ax.scatter(cell_centers.loc[:,'column'], cell_centers.loc[:,'row'], c='r', s=1)
+# plt.axis('off')
+# plt.show()
 
-# filter the repeated reads
-remain_reads = remain_reads.drop(columns=['is_noise'])
-remain_reads = remain_reads.drop_duplicates(subset = None, keep = 'first')
+# Visualize 
+cell_ids = assigned_spots['cell_barcode']
+cells_unique = np.unique(cell_ids)
+spots_repr = np.array(assigned_spots[['spot_location_1', 'spot_location_2']])[cell_ids >= 0]
+cell_ids = cell_ids[cell_ids >= 0]                
+cmap = np.random.rand(int(max(cell_ids)+1), 3)
 
-# reset index
-cell_center.reset_index(inplace = True, drop = True)
-remain_reads.reset_index(inplace = True, drop = True)
+fig, ax = plt.subplots(figsize=[35, 40])
+ax.imshow(fused_pi)
+ax.scatter(spots_repr[:, 0], spots_repr[:, 1], s=1, c=cmap[[int(x) for x in cell_ids]], alpha=0.2)
+ax.scatter(background_spots.loc[:, 'spot_location_1'], background_spots.loc[:, 'spot_location_2'], s=1, c='green', alpha=0.2)
+ax.scatter(cell_centers.loc[:, 'column'], cell_centers.loc[:, 'row'], s=3, c='red', alpha = 0.7)
 
-# transfer float to integer
-remain_reads['spot_location_1'] = remain_reads['spot_location_1'].astype(int)
-remain_reads['spot_location_2'] = remain_reads['spot_location_2'].astype(int)
-remain_reads['spot_location_3'] = remain_reads['spot_location_3'].astype(int)
-remain_reads['cell_barcode'] = remain_reads['cell_barcode'].astype(int)
+p = PatchCollection(rectangle_list, ec="yellow", facecolor='none')
+l = LineCollection(middle_edge_list, colors='yellow', linestyle='dashed')
+plt.gca().add_collection(p)
+plt.gca().add_collection(l)
+ax.set_aspect('equal')
+ax.axis('off')
+fig.tight_layout()
+clustermap_figure_name = os.path.join(clustermap_fused_path, "clustermap_fused.tif")
+plt.savefig(clustermap_figure_name)
+plt.clf()
+plt.close()
+# plt.show()
 
-cell_center['column'] = cell_center['column'].astype(int)
-cell_center['row'] = cell_center['row'].astype(int)
-cell_center['z'] = cell_center['z'].astype(int)
-cell_center['cell_barcode'] = cell_center['cell_barcode'].astype(int)
+# Filter the repeated reads
+assigned_spots = assigned_spots.drop(columns=['is_noise'])
+assigned_spots = assigned_spots.drop_duplicates(subset = None, keep = 'first')
 
-### deal with multi-assigned reads
-print("Removing reads assigned to multiple cell centers:")
-# find duplicated reads
-remain_reads_check = remain_reads.loc[:, ['spot_location_1', 'spot_location_2', 'spot_location_3']]
-remain_reads_check.columns = ['col','row','z']
-remain_reads_check['coors'] = remain_reads_check['col'].apply(str).str.cat(remain_reads_check['row'].apply(str),sep='-').str.cat(remain_reads_check['z'].apply(str),sep='-')
-remain_reads_check_counts = remain_reads_check['coors'].value_counts()
-repeat_reads = remain_reads_check_counts[remain_reads_check_counts>1]
+background_spots = background_spots.drop(columns=['is_noise'])
+background_spots = background_spots.drop(columns=['cell_barcode'])
+background_spots = background_spots.drop_duplicates(subset = None, keep = 'first')
 
-# assign the duplicated reads to the closest cell
+# Reset index
+cell_centers.reset_index(inplace = True, drop = True)
+assigned_spots.reset_index(inplace = True, drop = True)
+background_spots.reset_index(inplace = True, drop = True)
+
+# Transfer float to integer
+assigned_spots['spot_location_1'] = assigned_spots['spot_location_1'].astype(int)
+assigned_spots['spot_location_2'] = assigned_spots['spot_location_2'].astype(int)
+assigned_spots['spot_location_3'] = assigned_spots['spot_location_3'].astype(int)
+assigned_spots['cell_barcode'] = assigned_spots['cell_barcode'].astype(int)
+
+background_spots['spot_location_1'] = background_spots['spot_location_1'].astype(int)
+background_spots['spot_location_2'] = background_spots['spot_location_2'].astype(int)
+background_spots['spot_location_3'] = background_spots['spot_location_3'].astype(int)
+
+cell_centers['column'] = cell_centers['column'].astype(int)
+cell_centers['row'] = cell_centers['row'].astype(int)
+cell_centers['z_axis'] = cell_centers['z_axis'].astype(int)
+cell_centers['cell_barcode'] = cell_centers['cell_barcode'].astype(int)
+
+# Find duplicated reads
+assigned_spots_check = assigned_spots.loc[:, ['spot_location_1', 'spot_location_2', 'spot_location_3']]
+assigned_spots_check.columns = ['col','row','z']
+assigned_spots_check['coors'] = assigned_spots_check['col'].apply(str).str.cat(assigned_spots_check['row'].apply(str),sep='-').str.cat(assigned_spots_check['z'].apply(str),sep='-')
+assigned_spots_check_counts = assigned_spots_check['coors'].value_counts()
+repeat_spots = assigned_spots_check_counts[assigned_spots_check_counts > 1]
+
+# Assign the duplicated reads to the closest cell
 filter_index = []
-for i in trange(len(repeat_reads)):
+for i in trange(len(repeat_spots)):
 
-    repeat_reads_index = remain_reads_check.index[remain_reads_check['coors'] == repeat_reads.index[i]]
-    vec1 = remain_reads.loc[repeat_reads_index[0], ['spot_location_1', 'spot_location_2', 'spot_location_3']].tolist()
-    repeat_reads_cell_index = cell_center['cell_barcode'].isin(remain_reads.loc[repeat_reads_index, 'cell_barcode'])
-    repeat_reads_cell = cell_center.loc[repeat_reads_cell_index, :]
-    closest_index = closest_node(vec1,np.array(repeat_reads_cell.loc[:, ['column','row','z']]).tolist())[1]
-    selected_cell = repeat_reads_cell.iloc[closest_index, 0]
-    filter_index.extend(repeat_reads_index[np.logical_not(remain_reads.loc[repeat_reads_index, 'cell_barcode'] == selected_cell)].tolist())
+    repeat_spots_index = assigned_spots_check.index[assigned_spots_check['coors'] == repeat_spots.index[i]]
+    vec1 = assigned_spots.loc[repeat_spots_index[0], ['spot_location_1', 'spot_location_2', 'spot_location_3']].tolist()
+    repeat_spots_cell_index = cell_centers['cell_barcode'].isin(assigned_spots.loc[repeat_spots_index, 'cell_barcode'])
+    repeat_spots_cell = cell_centers.loc[repeat_spots_cell_index, :]
+    closest_index = closest_node(vec1, np.array(repeat_spots_cell.loc[:, ['column','row','z_axis']]).tolist())[1]
+    selected_cell = repeat_spots_cell.iloc[closest_index, 0]
+    filter_index.extend(repeat_spots_index[np.logical_not(assigned_spots.loc[repeat_spots_index, 'cell_barcode'] == selected_cell)].tolist())
 
-print("read counts before filtering multi-assigned reads: " + str(remain_reads.shape[0]))
-remain_reads.drop(index = filter_index, inplace = True)
-remain_reads.reset_index(inplace = True, drop = True)
-print("read counts after filtering multi-assigned reads: " + str(remain_reads.shape[0]))
+print("read counts before filtering multi-assigned reads: " + str(assigned_spots.shape[0]))
+assigned_spots.drop(index = filter_index, inplace = True)
+assigned_spots.reset_index(inplace = True, drop = True)
+print("read counts after filtering multi-assigned reads: " + str(assigned_spots.shape[0]))
 
-# print("Saving cell_center.csv and remain_reads.csv")
-# cell_center.to_csv(os.path.join(outputpath, 'cell_center.csv'))
-# remain_reads.to_csv(os.path.join(outputpath, 'remain_reads.csv'))
+# Remove cells without reads 
+cell_centers = cell_centers.loc[cell_centers['cell_barcode'].isin(assigned_spots['cell_barcode']), :]
 
-remain_reads.to_csv(f'Z:/Data/Analyzed/2021-11-23-Hu-MouseBrain/{subdir}/remain_reads_polished.csv')
-cell_center.to_csv(f'Z:/Data/Analyzed/2021-11-23-Hu-MouseBrain/{subdir}/cell_center_polished.csv')
+# Remap cell barcodes 
+cell_barcode_dict = {}
+for j, k in enumerate(cell_centers['cell_barcode'].unique()):
+    cell_barcode_dict[k] = j
+cell_centers['cell_barcode'] = cell_centers['cell_barcode'].map(cell_barcode_dict)
+assigned_spots['cell_barcode'] = assigned_spots['cell_barcode'].map(cell_barcode_dict)
 
-############################## STITCH TOGETHER TILE COORDINATES ##############################
+# Save output
+cell_centers.to_csv(os.path.join(clustermap_fused_path, 'cell_centers.csv'))
+assigned_spots.to_csv(os.path.join(clustermap_fused_path, 'assigned_spots.csv'))
+background_spots.to_csv(os.path.join(clustermap_fused_path, 'background_spots.csv'))
 
-print("Adjusting cell center and read coordinates by tile position...")
-alignment_thresh = 0.1
-cell_barcode_min = 0
-middle_edge = 0
+# Read in reads assignment results
+cell_center_index = cell_centers.copy()
+cell_center_index.set_index('cell_barcode', inplace=True, drop=True) 
+assigned_spots_t = assigned_spots.loc[:, ['cell_barcode', 'gene_name']]
+assigned_spots_t['value'] = 1
 
-# generate empty dataframe
-remain_reads = pd.DataFrame({'spot_location_1':[],'spot_location_2':[],'spot_location_3':[],'gene':[],'cell_barcode':[],'gridc_gridr_tilenum':[]})
-cell_center = pd.DataFrame({'cell_barcode':[], 'column':[], 'row':[], 'gridc_gridr_tilenum':[]})
-
-# get grid 
-grid_c, grid_r = (np.max(coords_df4.loc[:,['column_count','row_count']]) + 1).tolist()
-print(grid_c, grid_r)
-
-for t_grid_c in trange(0, grid_c):
-# for t_grid_c in trange(0, 2): # test
-
-    median_col_coord = np.median(coords_df4[(coords_df4.column_count == t_grid_c) & (coords_df4.tile != 0)]['column'])
-    
-    for t_grid_r in trange(0, grid_r):
-    # for t_grid_r in trange(23, 25): # test
-    
-        median_row_coord = np.median(coords_df4[(coords_df4.row_count == t_grid_r) & (coords_df4.tile != 0)]['row'])
-        print('\t[t_grid_c, t_grid_r]: ',str(t_grid_c),' ',str(t_grid_r))
-        order = t_grid_c * grid_r + t_grid_r + 1
-
-        tilenum = coords_df4['tile'][order]
-
-        # skip the tile if the tilenum == 0, blank tile
-        if tilenum == 0:
-            print("\tBlank tile")
-            continue
-
-        # get upper left coordinates
-        upper_left = coords_df4.loc[order, ['column', 'row']]
-        upper_left_new = copy.deepcopy(upper_left)
-
-        # check that tile is appproximately aligned where expected -- otherwise throw out
-        if upper_left[0] >= (1+alignment_thresh)*median_col_coord and upper_left[0] <= (1-alignment_thresh)*median_col_coord:
-            if upper_left[1] >= (1+alignment_thresh)*median_row_coord and upper_left[1] <= (1-alignment_thresh)*median_col_coord:
-                print("f\tTile is aligned too far away from its expected position.")
-                print("f\tTile coord: [{upper_left[0]}, {upper_left[1]}]. Median coord: [{median_col_coord}, {median_row_coord}]")
-                continue
-
-        # judgment
-        t_grid_c_previous = t_grid_c - 1
-        t_grid_r_previous = t_grid_r - 1
-
-        # condition1: if left one is not blank, then calculate middle overlap
-        if t_grid_c_previous >= 0: # if a left tile exists
-            order_t = t_grid_c_previous * grid_r + t_grid_r + 1 # order of left tile
-            if coords_df4.loc[order_t,'tile'] != 0: # if it's not blank, calculate new middle edge. Otherwise, use old middle edge
-                middle_edge = np.int((coords_df4.loc[order_t,'column'] + img_c - upper_left[0])/2 + 0.5) # calculate middle overlap
-
-                if middle_edge >= 0: 
-                    upper_left_new[0] = middle_edge + upper_left[0]
-
-        # condition2: if upper one is empty or blank
-        if t_grid_r_previous >= 0:
-            order_t = t_grid_c * grid_r + t_grid_r_previous + 1
-            if coords_df4.loc[order_t,'tile'] != 0:
-                middle_edge = np.int((coords_df4.loc[order_t,'row'] + img_c - upper_left[1])/2 + 0.5)
-
-                if middle_edge >= 0: 
-                    upper_left_new[1] = middle_edge + upper_left[1]
-
-        ### stitch
-        # Get remain_reads.csv for each tile
-        dfpath = os.path.join(clustermap_dir, f"Position{tilenum:03}")
-        if not os.path.exists(os.path.join(dfpath, 'spots.csv')):
-            print('\tNo reads file for this tile')
-            continue
-
-        remain_reads_t = pd.read_csv(os.path.join(clustermap_dir, f"Position{tilenum:03}", 'spots.csv'))
-        remain_reads_t['gene'] = remain_reads_t['gene'] - 1
-        remain_reads_t['spot_location_1'] = remain_reads_t['spot_location_1'] - 1
-        remain_reads_t['spot_location_2'] = remain_reads_t['spot_location_2'] - 1
-        remain_reads_t['spot_location_3'] = remain_reads_t['spot_location_3'] - 1
-
-        # rotate
-        temp1 = remain_reads_t['spot_location_1'].values.copy()
-        temp2 = remain_reads_t['spot_location_2'].values.copy()
-
-        remain_reads_t['spot_location_1'] = 2048 - temp2
-        remain_reads_t['spot_location_2'] = temp1
-
-        ### read genes.csv
-        genes2seqs, seqs2genes = load_genes(data_dir)
-
-        ### read genelist from clustermap
-        gene_list = pd.read_csv(os.path.join(clustermap_dir, f"Position{tilenum:03}", 'genelist.csv'), header=None)
-        gene_list.columns = ['barcode']
-        gene_list['barcode'] = gene_list['barcode'].astype(str)
-        gene_list['gene'] = gene_list['barcode'].map(seqs2genes)
-
-        ### map genes 
-        nums2genes = dict(zip(gene_list.index.to_list(), gene_list.gene.to_list()))
-        remain_reads_t['gene'] = remain_reads_t['gene'].map(nums2genes)
-
-        ### get background spots
-        remain_reads_t = remain_reads_t.loc[remain_reads_t['clustermap'] == -1, :]
-
-        # skip current tile if no reads left
-        if remain_reads_t.shape[0] == 0:
-            print("\tNo reads found in remain_reads.csv for this tile")
-            continue
-
-        # Label with coordinates/tilenum and barcode
-        remain_reads_t['gridc_gridr_tilenum'] = str(t_grid_c)+","+str(t_grid_r)+","+str(tilenum)
-
-        ### stitch
-        # Adjust spot_location_1 (column)
-        remain_reads_t['spot_location_1'] = remain_reads_t['spot_location_1'] + upper_left[0]
-
-        # Adjust spot_location_2 (row)
-        remain_reads_t['spot_location_2'] = remain_reads_t['spot_location_2'] + upper_left[1]
-
-        ## append
-        remain_reads = pd.concat((remain_reads, remain_reads_t), axis=0)
-        print(f"\tNew total number of reads: {len(remain_reads)}")
-
-remain_reads.to_csv(f'Z:/Data/Analyzed/2021-11-23-Hu-MouseBrain/{subdir}/background_reads.csv')
-### polish after stitch
-
-# filter the repeated reads
-remain_reads['cell_barcode'] = -1
-remain_reads = remain_reads.drop(columns=['is_noise', 'clustermap'])
-remain_reads = remain_reads.drop_duplicates(subset=['spot_location_1', 'spot_location_2', 'spot_location_3'], keep='first')
-
-# reset index
-remain_reads.reset_index(inplace = True, drop = True)
-
-remain_reads
-remain_reads.to_csv(f'Z:/Data/Analyzed/2021-11-23-Hu-MouseBrain/{subdir}/background_reads_polished.csv')
-
-
-# # Read in reads assignment results
-gene_path = os.path.join('Z:/Data/Analyzed/2021-11-23-Hu-MouseBrain/genes.csv')
-gene_names = pd.read_csv(gene_path, header=None, names=["Gene Name", "Barcode"])["Gene Name"]
-
-# cell_center = pd.read_csv(os.path.join(inputpath, 'results/cell_center.csv'),index_col=0)
-# remain_reads = pd.read_csv(os.path.join(inputpath,'results/remain_reads.csv'),index_col=0, na_filter=False)
-cell_center_index = copy.deepcopy(cell_center)
-cell_center_index.set_index('cell_barcode', inplace = True, drop = True) 
-remain_reads_t = remain_reads.loc[:,['cell_barcode','gene']]
-remain_reads_t['value'] = 1
-
-# ## Create cell-by-gene expression matrix
-exp_matrix = pd.pivot_table(remain_reads_t, index='cell_barcode', columns='gene', aggfunc='count', fill_value = 0)
+# Create cell-by-gene expression matrix
+exp_matrix = pd.pivot_table(assigned_spots_t, index='cell_barcode', columns='gene_name', aggfunc='count', fill_value = 0)
 var_raw = [str(s2) for (s1,s2) in exp_matrix.columns.tolist()]
-exp_matrix.set_axis(var_raw,axis = 1,inplace=True)
-obs = cell_center_index.loc[exp_matrix.index.values,['column','row','z']]
-obs.reset_index(inplace = True,drop = True) ### obs as cell location
+exp_matrix = exp_matrix.set_axis(var_raw, axis = 1, copy=False)
+obs = cell_center_index.loc[exp_matrix.index.values, ['column','row','z_axis']]
+obs.reset_index(inplace=True, drop=True) ### obs as cell location
 var = pd.DataFrame(index=var_raw)  ## index as gene name
 
 # Store in anndata object
@@ -621,35 +320,4 @@ adata = ad.AnnData(X=np.array(exp_matrix),
 
 from datetime import datetime
 date = datetime.today().strftime('%Y-%m-%d')
-adata.write_h5ad(f'Z:/Data/Analyzed/2021-11-23-Hu-MouseBrain/{subdir}/{date}-{subdir}-raw.h5ad')
-
-
-# plot spots
-cell_ids = remain_reads['cell_barcode']
-cells_unique = np.unique(cell_ids)
-spots_repr = np.array(remain_reads[['spot_location_2', 'spot_location_1']])[cell_ids>=0]
-cell_ids = cell_ids[cell_ids>=0]                
-cmap = np.random.rand(int(max(cell_ids)+1), 3)
-fig, ax = plt.subplots(figsize=(40,40))
-ax.scatter(spots_repr[:,1], spots_repr[:,0], c=cmap[[int(x) for x in cell_ids]], s=1, alpha=.5)
-ax.scatter(cell_center.loc[:,'column'], cell_center.loc[:,'row'], c='r', s=3)
-plt.axis('off')
-plt.show()
-
-fig, ax = plt.subplots(figsize=[40,40])
-plt.scatter(remain_reads.loc[:,'spot_location_1'], remain_reads.loc[:,'spot_location_2'], s=1, alpha=0.2)
-plt.scatter(cell_center.loc[:,'column'], cell_center.loc[:,'row'], s=3, c='red', alpha = 0.7)
-
-# plt.scatter(remain_reads.loc[:,'spot_location_1'], shape_row - remain_reads.loc[:,'spot_location_2'], s=1, alpha=0.2)
-# plt.scatter(cell_center.loc[:,'column'], shape_row - cell_center.loc[:,'row'], s=3, c='red', alpha = 0.7)
-
-ax.set_aspect('equal')
-ax.axis('off')
-plt.show()
-
-fig, ax = plt.subplots(figsize=[40,40])
-plt.scatter(remain_reads.loc[:,'spot_location_1'], remain_reads.loc[:,'spot_location_2'], s=1, alpha=0.2)
-
-ax.set_aspect('equal')
-ax.axis('off')
-plt.show()
+adata.write_h5ad(os.path.join(expr_path, f"{date}-mAD_64_clustermap.h5ad"))

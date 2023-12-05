@@ -1,28 +1,23 @@
 % run reads (signal) stitching workflow with 2D mouse tissue section 
 % user will define:
-% image_path  
-% signal_path
-% input_dim
-
-% image_path = '/home/unix/jiahao/wanglab/Data/Analyzed/2023-09-19-wendyw-WW_SC_005/images/stitching/';
-% signal_path = '/home/unix/jiahao/wanglab/wendyw/WW_SC_005/02.processed_data/2023-09-19-wendyw-WW_SC_005/';
-% input_dim = [2048 2048 58 4];
+% base_path
 
 % test block
-image_path = fullfile('/home/unix/jiahao/wanglab/Data/Processed/2023-10-01-Jiahao-Test/mAD_64/images/stitching/');
-signal_path = fullfile('/home/unix/jiahao/wanglab/Data/Processed/2023-10-01-Jiahao-Test/mAD_64/signal/');
+base_path = fullfile('/home/unix/jiahao/wanglab/Data/Analyzed/2023-10-01-Jiahao-Test/mAD_64/');
 
 % add path for .m files
 addpath(genpath(fullfile(pwd, '../code-base/new/'))) % pwd is the location of the starfinder folder
 
-signal_files = dir(fullfile(signal_path, "tile_*"));
+image_path = fullfile(base_path, 'images');
+signal_path = fullfile(base_path, 'signal');
+signal_files = dir(fullfile(signal_path, "*.csv"));
 signal_files = struct2table(signal_files);
 signal_files = natsort(signal_files.name);
 number_of_fovs = numel(signal_files);
 
 % load TileConfiguration from Fiji
 % merge dots 
-stitch_file = fullfile(image_path, "PI/TileConfiguration.registered.txt");
+stitch_file = fullfile(image_path, "protein/PI/TileConfiguration.registered.txt");
 opts = delimitedTextImportOptions("NumVariables", 6);
 
 % specify range and delimiter
@@ -47,7 +42,7 @@ opts = setvaropts(opts, "Definetheimagecoordinates", "ThousandsSeparator", ",");
 
 % import the data
 TileConfiguration = readtable(stitch_file, opts);
-TileConfiguration.Properties.VariableNames = {'tile' 'x' 'y'};
+TileConfiguration.Properties.VariableNames = {'fov' 'x' 'y'};
 
 % Clear temporary variables
 clear opts
@@ -55,19 +50,19 @@ clear opts
 % Global offsets 
 offset_x = abs(min(TileConfiguration.x));
 offset_y = abs(min(TileConfiguration.y));
-TileConfiguration.x = TileConfiguration.x + offset_x + 1;
-TileConfiguration.y = TileConfiguration.y + offset_y + 1;
+TileConfiguration.x = int32(TileConfiguration.x + offset_x);
+TileConfiguration.y = int32(TileConfiguration.y + offset_y);
 
 % Merge dots 
 % load stitched dapi image
-dapi_file = fullfile(image_path, "PI_fused.tif");
-dapi_max = imread_big(dapi_file);
+dapi_file = fullfile(image_path, "fused/PI.tif");
+amplicon_file = fullfile(image_path, "fused/ref_merged.tif");
+dapi_img = imread(dapi_file);
+amplicon_img = imread(amplicon_file);
 
 % create empty holders 
-merged_points = table();
+fused_spots = table();
 merged_region = [];
-
-upd = textprogressbar(size(TileConfiguration,1), 'updatestep', 2);
 
 for r=1:size(TileConfiguration,1)
 
@@ -76,34 +71,36 @@ for r=1:size(TileConfiguration,1)
     [fov, x, y] = current_row{:};
     
     % load dots of each tile
-    current_dot_file = fullfile(signal_path, sprintf("%s_goodSpots.csv", fov));
-    current_dot = readtable(current_dot_file);
-    current_dot.Gene = string(current_dot.Gene);
+    current_spots_file = fullfile(signal_path, sprintf("tile_%d_goodSpots.csv", fov));
+    current_spots = readtable(current_spots_file);
+    current_spots.gene = string(current_spots.gene);
+    current_spots.x = int32(current_spots.x);
+    current_spots.y = int32(current_spots.y);
     
-    if ~isempty(current_dot)
+    if ~isempty(current_spots)
         
-        current_dot.x = current_dot.x + x;
-        current_dot.y = current_dot.y + y;
+        current_spots.x = current_spots.x + x;
+        current_spots.y = current_spots.y + y;
 
         % construct dots region
-        current_min = min(current_dot(:, ["x", "y"]), [], 1);
-        current_max = max(current_dot(:, ["x", "y"]), [], 1);
-        if current_max.x > size(dapi_max, 2)
+        current_min = min(current_spots(:, ["x", "y"]), [], 1);
+        current_max = max(current_spots(:, ["x", "y"]), [], 1);
+        if current_max.x > size(dapi_img, 2)
 
-            current_max.x = size(dapi_max, 2);
-            toKeep = current_dot.x <= current_max.x;
-            current_dot = current_dot(toKeep, :);
+            current_max.x = size(dapi_img, 2);
+            toKeep = current_spots.x <= current_max.x;
+            current_spots = current_spots(toKeep, :);
         end
 
-        if current_max.y > size(dapi_max, 1)
+        if current_max.y > size(dapi_img, 1)
 
-            current_max.y = size(dapi_max, 1);   
-            toKeep = current_dot.y <= current_max.y;
-            current_dot = current_dot(toKeep, :);
+            current_max.y = size(dapi_img, 1);   
+            toKeep = current_spots.y <= current_max.y;
+            current_spots = current_spots(toKeep, :);
             
         end
         
-        current_region = zeros(size(dapi_max));
+        current_region = zeros(size(dapi_img));
         current_region(current_min.y:current_max.y, current_min.x:current_max.x) = 1;
         
         % merge dots 
@@ -114,26 +111,23 @@ for r=1:size(TileConfiguration,1)
             merged_region = merged_region | current_region;
             current_region = current_region - current_overlap; 
             
-            current_dot_locs = table2array(current_dot(:, ["x", "y"]));
-            temp_cell = num2cell(current_dot_locs, 2); 
-            current_lindex = cellfun(@(x) sub2ind([size(dapi_max)], x(2), x(1)), temp_cell);
+            current_spots_locs = table2array(current_spots(:, ["x", "y"]));
+            temp_cell = num2cell(current_spots_locs, 2); 
+            current_lindex = cellfun(@(x) sub2ind([size(dapi_img)], x(2), x(1)), temp_cell);
             current_logical = logical(current_region(current_lindex));
-            current_dot = current_dot(current_logical, :);
+            current_spots = current_spots(current_logical, :);
         end
         
         % save current 
-        if isempty(merged_points)
-            merged_points = current_dot;
+        if isempty(fused_spots)
+            fused_spots = current_spots;
         else
-            merged_points = vertcat(merged_points, current_dot);
+            fused_spots = vertcat(fused_spots, current_spots);
         end
     end
 
-    upd(r);
 end
 
-writetable(merged_points, fullfile(signal_path, 'merged_goodPoints_max3d.csv'));
-PlotCentroids(table2array(merged_points(:, ["x", "y"])), dapi_max, 1);
-saveas(gcf, fullfile(image_path, 'merged_goodSpots_max3d.tif'));
-
-
+writetable(fused_spots, fullfile(signal_path, 'fused_goodSpots.csv'));
+PlotCentroids(table2array(fused_spots(:, ["x", "y"])), amplicon_img, 1);
+saveas(gcf, fullfile(image_path, 'fused/goodSpots.tif'));

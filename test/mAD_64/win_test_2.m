@@ -1,100 +1,140 @@
-% run registration and spot finding workflow with 2D mouse tissue section 
+% run reads (signal) stitching workflow with 2D mouse tissue section 
 % user will define:
-% input_path 
-% output_path
-% ref_round
-% fov_id_pattern
-% number_of_fovs
+% image_path  
+% signal_path
+% input_dim
+
+% image_path = '/home/unix/jiahao/wanglab/Data/Analyzed/2023-09-19-wendyw-WW_SC_005/images/stitching/';
+% signal_path = '/home/unix/jiahao/wanglab/wendyw/WW_SC_005/02.processed_data/2023-09-19-wendyw-WW_SC_005/';
+% input_dim = [2048 2048 58 4];
 
 % test block
-input_path = fullfile('Z:/Data/Processed/2023-10-01-Jiahao-Test/mAD_64/');
-output_path = fullfile('Z:/Data/Analyzed/2023-10-01-Jiahao-Test/mAD_64/');
-ref_round = ["round1"];
-fov_id_pattern = "tile_%d";
-number_of_fovs = 56;
+image_path = fullfile('Z:/Data/Analyzed/2023-10-01-Jiahao-Test/mAD_64/images/');
+signal_path = fullfile('Z:/Data/Analyzed/2023-10-01-Jiahao-Test/mAD_64/signal/');
 
 % add path for .m files
-addpath(fullfile(pwd, '/code-base/new/')) % pwd is the location of the starfinder folder
+addpath(genpath(fullfile(pwd, '../code-base/new/'))) % pwd is the location of the starfinder folder
 
-for n=29:number_of_fovs
+signal_files = dir(fullfile(signal_path, "*.csv"));
+signal_files = struct2table(signal_files);
+signal_files = natsort(signal_files.name);
+number_of_fovs = numel(signal_files);
 
-    current_fov = sprintf(fov_id_pattern, n);
+% load TileConfiguration from Fiji
+% merge dots 
+stitch_file = fullfile(image_path, "protein/PI/TileConfiguration.registered.txt");
+opts = delimitedTextImportOptions("NumVariables", 6);
 
-    sdata = STARMapDataset(input_path, output_path, 'useGPU', false);
+% specify range and delimiter
+opts.DataLines = [5, Inf];
+opts.Delimiter = ["(", ")", ",", ";"];
 
-    log_folder = fullfile(output_path, "log");
-    if ~exist(log_folder, 'dir')
-        mkdir(log_folder);
+% specify column names and types
+opts.VariableNames = ["Definetheimagecoordinates", "Var2", "Var3", "VarName4", "VarName5"];
+opts.SelectedVariableNames = ["Definetheimagecoordinates", "VarName4", "VarName5"];
+opts.VariableTypes = ["double", "string", "string", "double", "double"];
+
+% specify file level properties
+opts.ExtraColumnsRule = "ignore";
+opts.EmptyLineRule = "read";
+opts.ConsecutiveDelimitersRule = "join";
+
+% specify variable properties
+opts = setvaropts(opts, ["Var2", "Var3"], "WhitespaceRule", "preserve");
+opts = setvaropts(opts, ["Var2", "Var3"], "EmptyFieldRule", "auto");
+opts = setvaropts(opts, "Definetheimagecoordinates", "TrimNonNumeric", true);
+opts = setvaropts(opts, "Definetheimagecoordinates", "ThousandsSeparator", ",");
+
+% import the data
+TileConfiguration = readtable(stitch_file, opts);
+TileConfiguration.Properties.VariableNames = {'fov' 'x' 'y'};
+
+% Clear temporary variables
+clear opts
+
+% Global offsets 
+offset_x = abs(min(TileConfiguration.x));
+offset_y = abs(min(TileConfiguration.y));
+TileConfiguration.x = int32(TileConfiguration.x + offset_x);
+TileConfiguration.y = int32(TileConfiguration.y + offset_y);
+
+% Merge dots 
+% load stitched dapi image
+dapi_file = fullfile(image_path, "fused/PI.tif");
+amplicon_file = fullfile(image_path, "fused/ref_merged.tif");
+dapi_img = imread(dapi_file);
+amplicon_img = imread(amplicon_file);
+
+% create empty holders 
+fused_spots = table();
+merged_region = [];
+
+for r=1:size(TileConfiguration,1)
+
+    % get each row of tileconfig
+    current_row = table2cell(TileConfiguration(r, ["fov", "x", "y"]));
+    [fov, x, y] = current_row{:};
+    
+    % load dots of each tile
+    current_spots_file = fullfile(signal_path, sprintf("tile_%d_goodSpots.csv", fov));
+    current_spots = readtable(current_spots_file);
+    current_spots.gene = string(current_spots.gene);
+    current_spots.x = int32(current_spots.x);
+    current_spots.y = int32(current_spots.y);
+    
+    if ~isempty(current_spots)
+        
+        current_spots.x = current_spots.x + x;
+        current_spots.y = current_spots.y + y;
+
+        % construct dots region
+        current_min = min(current_spots(:, ["x", "y"]), [], 1);
+        current_max = max(current_spots(:, ["x", "y"]), [], 1);
+        if current_max.x > size(dapi_img, 2)
+
+            current_max.x = size(dapi_img, 2);
+            toKeep = current_spots.x <= current_max.x;
+            current_spots = current_spots(toKeep, :);
+        end
+
+        if current_max.y > size(dapi_img, 1)
+
+            current_max.y = size(dapi_img, 1);   
+            toKeep = current_spots.y <= current_max.y;
+            current_spots = current_spots(toKeep, :);
+            
+        end
+        
+        current_region = zeros(size(dapi_img));
+        current_region(current_min.y:current_max.y, current_min.x:current_max.x) = 1;
+        
+        % merge dots 
+        if isempty(merged_region)
+            merged_region = current_region;
+        else
+            current_overlap = merged_region & current_region;
+            merged_region = merged_region | current_region;
+            current_region = current_region - current_overlap; 
+            
+            current_spots_locs = table2array(current_spots(:, ["x", "y"]));
+            temp_cell = num2cell(current_spots_locs, 2); 
+            current_lindex = cellfun(@(x) sub2ind([size(dapi_img)], x(2), x(1)), temp_cell);
+            current_logical = logical(current_region(current_lindex));
+            current_spots = current_spots(current_logical, :);
+        end
+        
+        % save current 
+        if isempty(fused_spots)
+            fused_spots = current_spots;
+        else
+            fused_spots = vertcat(fused_spots, current_spots);
+        end
     end
-    diary_file = fullfile(log_folder, sprintf("%s.txt", current_fov));
-    if exist(diary_file, 'file'); delete(diary_file); end
-    diary(diary_file);
-
-    tic;
-
-    sdata = sdata.LoadRawImages('fovID', current_fov, 'rotate_angle', -90);
-    sdata.layers.ref = ref_round;
-
-    add_channel_order_dict(1).wavelength = 488;
-    add_channel_order_dict(1).channel = "ch00";
-    add_channel_order_dict(1).name = "plaque";
-
-    add_channel_order_dict(2).wavelength = 594;
-    add_channel_order_dict(2).channel = "ch01";
-    add_channel_order_dict(2).name = "tau";
-
-    add_channel_order_dict(3).wavelength = 546;
-    add_channel_order_dict(3).channel = "ch02";
-    add_channel_order_dict(3).name = "DAPI";
-
-    add_channel_order_dict(4).wavelength = 647;
-    add_channel_order_dict(4).channel = "ch03";
-    add_channel_order_dict(4).name = "Gfap";
-    sdata = sdata.LoadRawImages('fovID', current_fov, ... 
-                                'rotate_angle', -90, ...
-                                'folder_list', ["protein"], ...
-                                'channel_order_dict', add_channel_order_dict, ...
-                                'update_layer_slot', "other");
-
-    % Preprocessing
-    sdata = sdata.EnhanceContrast("min-max");
-    sdata = sdata.EnhanceContrast("min-max", 'layer', sdata.layers.other);
-    sdata = sdata.HistEqualize;
-
-    % Registration
-    sdata = sdata.GlobalRegistration;
-
-    ref_merged_folder = fullfile(output_path, "images", "ref_merged");
-    if ~exist(ref_merged_folder, 'dir')
-        mkdir(ref_merged_folder);
-    end
-    ref_merged_fname = fullfile(ref_merged_folder, sprintf('%s.tif', current_fov));
-    SaveSingleStack(max(sdata.registration{sdata.layers.ref}, [], 3), ref_merged_fname);
-
-    refernce_dapi_fname = dir(fullfile(input_path, 'round1', current_fov, '*ch04.tif'));
-    sdata.registration{sdata.layers.ref} = LoadMultipageTiff(fullfile(refernce_dapi_fname.folder, refernce_dapi_fname.name), false);
-    sdata = sdata.GlobalRegistration('layer', ["protein"], 'mov_img', 'single-channel');
-    sdata = sdata.LocalRegistration;
-
-    % Spot finding 
-    sdata = sdata.SpotFinding;
-    sdata = sdata.ReadsExtraction;
-    sdata = sdata.LoadCodebook;
-    sdata = sdata.ReadsFiltration;
-
-    % Output 
-    sdata = sdata.MakeProjection;
-    preview_folder = fullfile(output_path, "images", "montage_preview");
-    if ~exist(preview_folder, 'dir')
-        mkdir(preview_folder);
-    end
-    projection_preview_path = fullfile(preview_folder, sprintf("%s.tif", current_fov));
-    sdata = sdata.ViewProjection('save', true, 'output_path', projection_preview_path);
-
-    sdata = sdata.SaveImages('layer', sdata.layers.other, 'output_path', output_path, 'folder_format', "single");
-    sdata = sdata.SaveSignal;
-
-    toc;
-    diary off;
 
 end
+
+writetable(fused_spots, fullfile(signal_path, 'fused_goodSpots.csv'));
+PlotCentroids(table2array(fused_spots(:, ["x", "y"])), amplicon_img, 1);
+saveas(gcf, fullfile(image_path, 'fused/goodSpots.tif'));
+
+

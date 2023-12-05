@@ -1,0 +1,23 @@
+{
+
+    "input_path": "/home/unix/jiahao/wanglab/Data/Processed/2023-10-01-Jiahao-Test/TEMPOmap_Hela/", 
+    "output_path": "/home/unix/jiahao/wanglab/Data/Analyzed/2023-10-01-Jiahao-Test/TEMPOmap_Hela_config/", 
+    "ref_round": "round1",
+    "additional_round": ["organelle"],
+    "ref_channel": "DAPI",
+    "fov_id_pattern": "Position%03d",
+    "starting_fov_id": 351,
+    "number_of_fovs": 1,
+    "rotate_angle": -90,
+    "maximum_projection": false,
+
+    "channel_order": [{"wavelength": 488, "channel": "ch00", "name": "DAPI"},
+                    {"wavelength": 594, "channel": "ch01", "name": "ER"},
+                    {"wavelength": 546, "channel": "ch02", "name": "Flamingo"}]
+
+
+
+
+
+    
+}

@@ -16,7 +16,7 @@ number_of_fovs = 28;
 % add path for .m files
 addpath(fullfile(pwd, '/code-base/new/')) % pwd is the location of the starfinder folder
 
-for n=1:number_of_fovs
+for n=26:number_of_fovs
 
     current_fov = sprintf(fov_id_pattern, n);
 

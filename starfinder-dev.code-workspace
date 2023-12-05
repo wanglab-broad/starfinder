@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../../../Data/Analyzed/2023-10-01-Jiahao-Test"
+		},
+		{
+			"path": "../../../Data/Processed/2023-10-01-Jiahao-Test"
+		}
+	],
+	"settings": {}
+}
