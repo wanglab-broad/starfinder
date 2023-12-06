@@ -1,0 +1,2 @@
+run("Grid/Collection stitching", "type=[Positions from file] order=[Defined by TileConfiguration] directory=Z:/Data/Analyzed/2023-10-01-Jiahao-Test/mAD_64/images/protein/PI layout_file=TileConfiguration.registered.txt fusion_method=[Linear Blending] regression_threshold=0.30 max/avg_displacement_threshold=2.50 absolute_displacement_threshold=3.50 computation_parameters=[Save computation time (but use more RAM)] image_output=[Fuse and display]");
+close();

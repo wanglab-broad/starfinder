@@ -30,8 +30,11 @@ function sdata = rsf_workflow_example(config_path)
 
         tic;
 
+        % load sequencing images 
         sdata = sdata.LoadRawImages('fovID', current_fov, 'rotate_angle', config.rotate_angle);
         sdata.layers.ref = config.ref_round;
+
+        % load additional images
         sdata = sdata.LoadRawImages('fovID', current_fov, ... 
                                     'rotate_angle', config.rotate_angle, ...
                                     'folder_list', string(config.additional_round), ...
@@ -58,8 +61,13 @@ function sdata = rsf_workflow_example(config_path)
         end
 
         refernce_dapi_fname = dir(fullfile(config.input_path, 'round1', current_fov, '*ch04.tif'));
-        sdata.registration{sdata.layers.ref} = LoadMultipageTiff(fullfile(refernce_dapi_fname.folder, refernce_dapi_fname.name), false);
-        sdata = sdata.GlobalRegistration('layer', sdata.layers.other, 'mov_img', 'single-channel', 'ref_channel', config.ref_channel);
+        current_ref_img = LoadMultipageTiff(fullfile(refernce_dapi_fname.folder, refernce_dapi_fname.name), false);
+        current_ref_img = imrotate(current_ref_img, config.rotate_angle);
+        sdata = sdata.GlobalRegistration('layer', sdata.layers.other, ...
+                                        'ref_img', 'input_image', ...
+                                        'input_image', current_ref_img, ...
+                                        'mov_img', 'single-channel', ...
+                                        'ref_channel', config.ref_channel);
         sdata = sdata.LocalRegistration;
 
         % Spot finding 
