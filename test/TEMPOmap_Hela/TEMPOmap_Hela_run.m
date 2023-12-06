@@ -8,7 +8,7 @@
 
 % test block
 input_path = fullfile('/stanley/WangLab/Data/Processed/2023-10-01-Jiahao-Test/TEMPOmap_Hela/');
-output_path = fullfile('/stanley/WangLab/Data/Analyzed/2023-10-01-Jiahao-Test/TEMPOmap_Hela/');
+output_path = fullfile('/stanley/WangLab/Data/Analyzed/2023-10-01-Jiahao-Test/TEMPOmap_Hela_config/');
 ref_round = ["round1"];
 
 % add path for .m files
@@ -60,29 +60,30 @@ if ~exist(ref_merged_folder, 'dir')
     mkdir(ref_merged_folder);
 end
 ref_merged_fname = fullfile(ref_merged_folder, sprintf('%s.tif', current_fov));
-SaveSingleStack(max(sdata.registration{sdata.layers.ref}, [], 3), ref_merged_fname);
+SaveSingleStack(sdata.registration{sdata.layers.ref}, ref_merged_fname);
+% SaveSingleStack(max(sdata.registration{sdata.layers.ref}, [], 3), ref_merged_fname);
 
-refernce_dapi_fname = dir(fullfile(input_path, 'round1', current_fov, '*ch04.tif'));
-sdata.registration{sdata.layers.ref} = LoadMultipageTiff(fullfile(refernce_dapi_fname.folder, refernce_dapi_fname.name), false);
-sdata = sdata.GlobalRegistration('layer', ["organelle"], 'mov_img', 'single-channel');
-sdata = sdata.LocalRegistration;
+% refernce_dapi_fname = dir(fullfile(input_path, 'round1', current_fov, '*ch04.tif'));
+% sdata.registration{sdata.layers.ref} = LoadMultipageTiff(fullfile(refernce_dapi_fname.folder, refernce_dapi_fname.name), false);
+% sdata = sdata.GlobalRegistration('layer', ["organelle"], 'mov_img', 'single-channel');
+% sdata = sdata.LocalRegistration;
 
-% Spot finding 
-sdata = sdata.SpotFinding;
-sdata = sdata.ReadsExtraction;
-sdata = sdata.LoadCodebook;
-sdata = sdata.ReadsFiltration;
+% % Spot finding 
+% sdata = sdata.SpotFinding;
+% sdata = sdata.ReadsExtraction;
+% sdata = sdata.LoadCodebook;
+% sdata = sdata.ReadsFiltration;
 
-% Output 
-sdata = sdata.MakeProjection;
-preview_folder = fullfile(output_path, "images", "montage_preview");
-if ~exist(preview_folder, 'dir')
-    mkdir(preview_folder);
-end
-projection_preview_path = fullfile(preview_folder, sprintf("%s.tif", current_fov));
-sdata = sdata.ViewProjection('save', true, 'output_path', projection_preview_path);
-sdata = sdata.SaveImages('layer', sdata.layers.other, 'output_path', output_path, 'folder_format', "single", 'maximum_projection', false);
-sdata = sdata.SaveSignal;
+% % Output 
+% sdata = sdata.MakeProjection;
+% preview_folder = fullfile(output_path, "images", "montage_preview");
+% if ~exist(preview_folder, 'dir')
+%     mkdir(preview_folder);
+% end
+% projection_preview_path = fullfile(preview_folder, sprintf("%s.tif", current_fov));
+% sdata = sdata.ViewProjection('save', true, 'output_path', projection_preview_path);
+% sdata = sdata.SaveImages('layer', sdata.layers.other, 'output_path', output_path, 'folder_format', "single", 'maximum_projection', false);
+% sdata = sdata.SaveSignal;
 
 toc(starting);
 diary off;

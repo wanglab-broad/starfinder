@@ -51,7 +51,11 @@ function sdata = rsf_workflow_example(config_path)
             mkdir(ref_merged_folder);
         end
         ref_merged_fname = fullfile(ref_merged_folder, sprintf('%s.tif', current_fov));
-        SaveSingleStack(max(sdata.registration{sdata.layers.ref}, [], 3), ref_merged_fname);
+        if config.maximum_projection
+            SaveSingleStack(max(sdata.registration{sdata.layers.ref}, [], 3), ref_merged_fname);
+        else
+            SaveSingleStack(sdata.registration{sdata.layers.ref}, ref_merged_fname);
+        end
 
         refernce_dapi_fname = dir(fullfile(config.input_path, 'round1', current_fov, '*ch04.tif'));
         sdata.registration{sdata.layers.ref} = LoadMultipageTiff(fullfile(refernce_dapi_fname.folder, refernce_dapi_fname.name), false);

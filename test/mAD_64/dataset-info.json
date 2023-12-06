@@ -1,7 +1,7 @@
 {
 
     "input_path": "/home/unix/jiahao/wanglab/Data/Processed/2023-10-01-Jiahao-Test/mAD_64/", 
-    "output_path": "/home/unix/jiahao/wanglab/Data/Analyzed/2023-10-01-Jiahao-Test/mAD_64_config/", 
+    "output_path": "/home/unix/jiahao/wanglab/Data/Analyzed/2023-10-01-Jiahao-Test/mAD_64/", 
     "ref_round": ["round1"],
     "additional_round": ["protein"],
     "ref_channel": "PI",
