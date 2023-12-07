@@ -1,5 +1,5 @@
-% run registration and spot finding workflow with 2D mouse tissue section 
-% use need to define the location of the configuration file
+% run registration and spot finding workflow 
+% user need to define the location of the dataet configuration file
 % config_path 
 
 function sdata = rsf_workflow_example(config_path)
@@ -14,12 +14,15 @@ function sdata = rsf_workflow_example(config_path)
     % test block
     addpath(fullfile('/home/unix/jiahao/wanglab/jiahao/Github/starfinder/code-base/new/'))
 
+    % iterate through each fov
     for n=config.starting_fov_id:config.starting_fov_id + config.number_of_fovs - 1
 
         current_fov = sprintf(config.fov_id_pattern, n);
 
+        % create object instance
         sdata = STARMapDataset(config.input_path, config.output_path, 'useGPU', false);
 
+        % create log folder and file path
         log_folder = fullfile(config.output_path, "log");
         if ~exist(log_folder, 'dir')
             mkdir(log_folder);
@@ -41,14 +44,15 @@ function sdata = rsf_workflow_example(config_path)
                                     'channel_order_dict', config.channel_order, ...
                                     'update_layer_slot', "other");
 
-        % Preprocessing
+        % preprocessing
         sdata = sdata.EnhanceContrast("min-max");
         sdata = sdata.EnhanceContrast("min-max", 'layer', sdata.layers.other);
         sdata = sdata.HistEqualize;
 
-        % Registration
+        % registration
         sdata = sdata.GlobalRegistration;
 
+        % save reference images 
         ref_merged_folder = fullfile(config.output_path, "images", "ref_merged");
         if ~exist(ref_merged_folder, 'dir')
             mkdir(ref_merged_folder);
@@ -60,6 +64,7 @@ function sdata = rsf_workflow_example(config_path)
             SaveSingleStack(sdata.registration{sdata.layers.ref}, ref_merged_fname);
         end
 
+        % load reference nuclei image for additional registration 
         refernce_dapi_fname = dir(fullfile(config.input_path, 'round1', current_fov, '*ch04.tif'));
         current_ref_img = LoadMultipageTiff(fullfile(refernce_dapi_fname.folder, refernce_dapi_fname.name), false);
         current_ref_img = imrotate(current_ref_img, config.rotate_angle);
@@ -70,13 +75,13 @@ function sdata = rsf_workflow_example(config_path)
                                         'ref_channel', config.ref_channel);
         sdata = sdata.LocalRegistration;
 
-        % Spot finding 
+        % spot finding 
         sdata = sdata.SpotFinding;
         sdata = sdata.ReadsExtraction;
         sdata = sdata.LoadCodebook;
         sdata = sdata.ReadsFiltration;
 
-        % Output 
+        % output 
         sdata = sdata.MakeProjection;
         preview_folder = fullfile(config.output_path, "images", "montage_preview");
         if ~exist(preview_folder, 'dir')

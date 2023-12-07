@@ -1,17 +1,20 @@
 # stitch ClusterMap result of each fov for 2D mouse tissue section 
 # user will define:
-# base_path
-# img_col
-# img_row
+# config_path
 
-import sys
-base_path = sys.argv[1]
-img_col = sys.argv[2]
-img_row = sys.argv[2]
+import sys, json
+config_path = sys.argv[1]
+
+# test block
+config_file = open(config_path)
+config = json.load(config_file)
+base_path = config['output_path']
+img_col = config['img_col']
+img_row = config['img_row']
 
 # test block 
-base_path = '/home/unix/jiahao/wanglab/Data/Analyzed/2023-10-01-Jiahao-Test/mAD_64/'
-img_col, img_row = [3072, 3072]
+# base_path = '/home/unix/jiahao/wanglab/Data/Analyzed/2023-10-01-Jiahao-Test/mAD_64/'
+# img_col, img_row = [3072, 3072]
 
 # Import packages 
 import os

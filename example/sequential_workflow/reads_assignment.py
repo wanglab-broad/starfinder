@@ -1,11 +1,14 @@
 # run reads assignment & segmentation workflow with 2D mouse tissue section 
 # user will define:
-# base_
-import sys
-base_path = sys.argv[1]
+# config_path
+
+import sys, json
+config_path = sys.argv[1]
 
 # test block
-base_path = '/home/unix/jiahao/wanglab/Data/Analyzed/2023-10-01-Jiahao-Test/mAD_64/'
+config_file = open(config_path)
+config = json.load(config_file)
+base_path = config['output_path']
 
 # import packages 
 import os

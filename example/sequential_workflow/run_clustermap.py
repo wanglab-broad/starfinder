@@ -1,18 +1,21 @@
 # run ClusterMp with 2D mouse tissue section 
 # user will define:
-# base_path
-# pi_path
-# number_of_fovs
+# config_path
 
-import sys
-base_path = sys.argv[1]
-pi_path = sys.argv[2]
-number_of_fovs = sys.argv[3]
+import sys, json
+config_path = sys.argv[1]
 
 # test block
-base_path = '/home/unix/jiahao/wanglab/Data/Analyzed/2023-10-01-Jiahao-Test/mAD_64/'
-pi_path = '/home/unix/jiahao/wanglab/Data/Processed/2023-10-01-Jiahao-Test/mAD_64/round1'
-number_of_fovs = 56
+config_file = open(config_path)
+config = json.load(config_file)
+base_path = config['output_path']
+base_path = os.path.join(config['input_path'], config['ref_round'])
+number_of_fovs = config['number_of_fovs']
+
+# test block
+# base_path = '/home/unix/jiahao/wanglab/Data/Analyzed/2023-10-01-Jiahao-Test/mAD_64/'
+# pi_path = '/home/unix/jiahao/wanglab/Data/Processed/2023-10-01-Jiahao-Test/mAD_64/round1'
+# number_of_fovs = 56
 
 # Import packages 
 import os

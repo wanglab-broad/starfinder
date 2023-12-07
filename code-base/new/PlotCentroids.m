@@ -8,7 +8,7 @@ if nargin < 5
     input_title = '';
 end
 
-    figure
+    figure('Position', [0 0 size(input_img, 1) size(input_img, 2)])
     imshow(input_img, [])
     hold on
     plot(input_centroid(:,1), input_centroid(:,2), '.', "Color", color, "MarkerSize", msize)

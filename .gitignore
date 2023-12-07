@@ -1,3 +1,4 @@
 *.asv
 .DS_Store
 test/TEMPOmap_Hela/mscript
+starfinder-dev.code-workspace
