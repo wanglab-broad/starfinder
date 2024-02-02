@@ -130,6 +130,9 @@ classdef STARMapDataset
             defaultAngle = 0;
             addOptional(p, 'rotate_angle', defaultAngle);
 
+            defaultFlip = "";
+            addOptional(p, 'flip', defaultFlip);
+
             defaultuseGPU = false;
             addOptional(p, 'useGPU', defaultuseGPU);
             parse(p, varargin{:});
@@ -160,6 +163,18 @@ classdef STARMapDataset
                
                 if p.Results.rotate_angle ~= 0
                     obj.images{current_layer} = imrotate(obj.images{current_layer}, p.Results.rotate_angle);
+                end
+
+                if ~isempty(p.Results.flip)
+                    switch p.Results.flip
+                        case "vertical"
+                            obj.images{current_layer} = flip(obj.images{current_layer}, 1);
+                        case "horizontal"
+                            obj.images{current_layer} = flip(obj.images{current_layer}, 2);
+                        case "both"
+                            obj.images{current_layer} = flip(obj.images{current_layer}, 1);
+                            obj.images{current_layer} = flip(obj.images{current_layer}, 2);
+                    end
                 end
             end
             
@@ -716,7 +731,7 @@ classdef STARMapDataset
             fprintf(sprintf('Number of spots were dropped because of no color: %d\n', sum(no_color_spots)));
             fprintf(sprintf('Number of spots were dropped because of multi-max color: %d\n', sum(multi_color_spots)));
             fprintf('Comparing with codebook...\n');
-            fprintf(sprintf('Number of barcode segments: %s\n', p.Results.n_barcode_segments));
+            fprintf(sprintf('Number of barcode segments: %d\n', p.Results.n_barcode_segments));
 
             if numel(p.Results.end_base) > 1
                 end_base_msg = strjoin(p.Results.end_base, " or ");
@@ -735,9 +750,68 @@ classdef STARMapDataset
             obj.jobFinished.ReadsFiltration = true;
             
         end
+
+
+        % 11.Preview reads
+        function obj = ViewSignal( obj, varargin )
+    
+            % Input parser
+            p = inputParser;
+            
+            % Defaults
+            defaultSlot = "goodSpots";
+            addOptional(p, 'signal_slot', defaultSlot);
+
+            defaultBgImg = max(obj.registration{obj.layers.ref}, [], 3);
+            addOptional(p, 'bg_img', defaultBgImg);
+
+            defaultSpotsColor = "red";
+            addOptional(p, 'spots_color', defaultSpotsColor);
+
+            defaultSpotsZize = 1;
+            addOptional(p, 'spots_size', defaultSpotsZize);
+
+            defaultSave = false;
+            addOptional(p, 'save', defaultSave);
+
+            defaultOutputFolder = fullfile(obj.outputPath, "signal");
+            addOptional(p, 'output_path', defaultOutputFolder);
+
+            parse(p, varargin{:});
+            
+            if ~exist(p.Results.output_path, 'dir')
+                mkdir(p.Results.output_path)
+            end
+
+            switch p.Results.signal_slot
+                case "goodSpots"
+                    signal_preview_img = PlotCentroids(obj.signal.goodSpots, p.Results.bg_img, p.Results.spots_color, p.Results.spots_size);
+            
+                    if p.Results.save
+                        current_fname = fullfile(p.Results.output_path, sprintf("%s_goodSpots.tif", obj.fovID));
+                        current_output_folder_msg = strrep(current_fname, '\', '\\');
+                        fprintf(sprintf('Saving goodSpots preview image to %s\n', current_output_folder_msg));
+                        exportgraphics(signal_preview_img, current_fname, 'Resolution', 300, 'ContentType', 'image');
+                    end
+                case "allSpots"
+                    signal_preview_img = PlotCentroids(obj.signal.allSpots, p.Results.bg_img, p.Results.spots_color, p.Results.spots_size);
+            
+                    if p.Results.save
+                        current_fname = fullfile(p.Results.output_path, sprintf("%s_allSpots.tif", obj.fovID));
+                        current_output_folder_msg = strrep(current_fname, '\', '\\');
+                        fprintf(sprintf('Saving allSpots preview image to %s\n', current_output_folder_msg));
+                        exportgraphics(signal_preview_img, current_fname, 'Resolution', 300, 'ContentType', 'image');
+                    end
+            end
+
+            % change metadata
+            obj.jobFinished.ViewSignal = true;   
         
+            
+        end
+
         
-        % 11.Save reads
+        % 12.Save reads
         function obj = SaveSignal( obj, varargin )
             
             % Input parser
@@ -780,7 +854,7 @@ classdef STARMapDataset
             
         end
         
-        % 12.Create subtiles
+        % 13.Create subtiles
         function obj = CreateSubtiles( obj, varargin )
             
             % Input parser

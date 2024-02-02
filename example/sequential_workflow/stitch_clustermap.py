@@ -272,7 +272,7 @@ repeat_spots = assigned_spots_check_counts[assigned_spots_check_counts > 1]
 
 # Assign the duplicated reads to the closest cell
 filter_index = []
-for i in trange(len(repeat_spots)):
+for i in range(len(repeat_spots)):
 
     repeat_spots_index = assigned_spots_check.index[assigned_spots_check['coors'] == repeat_spots.index[i]]
     vec1 = assigned_spots.loc[repeat_spots_index[0], ['spot_location_1', 'spot_location_2', 'spot_location_3']].tolist()

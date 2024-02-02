@@ -10,7 +10,7 @@ function tile_config = ParseFijiTileConfiguration(tile_config_file)
     % specify column names and types
     opts.VariableNames = ["Definetheimagecoordinates", "Var2", "Var3", "VarName4", "VarName5", "VarName6"];
     opts.SelectedVariableNames = ["Definetheimagecoordinates", "VarName4", "VarName5", "VarName6"];
-    opts.VariableTypes = ["double", "string", "string", "double", "double", "double"];
+    opts.VariableTypes = ["string", "string", "string", "double", "double", "double"];
 
     % specify file level properties
     opts.ExtraColumnsRule = "ignore";
@@ -20,12 +20,13 @@ function tile_config = ParseFijiTileConfiguration(tile_config_file)
     % specify variable properties
     opts = setvaropts(opts, ["Var2", "Var3"], "WhitespaceRule", "preserve");
     opts = setvaropts(opts, ["Var2", "Var3"], "EmptyFieldRule", "auto");
-    opts = setvaropts(opts, "Definetheimagecoordinates", "TrimNonNumeric", true);
-    opts = setvaropts(opts, "Definetheimagecoordinates", "ThousandsSeparator", ",");
+    % opts = setvaropts(opts, "Definetheimagecoordinates", "TrimNonNumeric", true);
+    % opts = setvaropts(opts, "Definetheimagecoordinates", "ThousandsSeparator", ",");
 
     % import the data
     tile_config = readtable(tile_config_file, opts);
-    tile_config.Properties.VariableNames = {'fov' 'x' 'y' 'z'};
+    tile_config.Properties.VariableNames = {'grid' 'x' 'y' 'z'};
+    tile_config.grid = extractBefore(tile_config.grid, '.');
 
     % Clear temporary variables
     clear opts

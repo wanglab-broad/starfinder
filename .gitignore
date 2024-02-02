@@ -1,4 +1,9 @@
 *.asv
+*.tif
+*checkpoint.ipynb
 .DS_Store
+Thumbs.db
 test/TEMPOmap_Hela/mscript
+test/Jiakun/mscript
+test/Jiakun/stardist/models
 starfinder-dev.code-workspace
