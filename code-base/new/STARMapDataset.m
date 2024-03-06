@@ -80,6 +80,7 @@ classdef STARMapDataset
             
             obj.layers.seq = [];
             obj.layers.other = [];
+            obj.layers.ref = [];
 
             % show message
             fprintf('Pipeline Obj is generated...\n');
@@ -121,7 +122,7 @@ classdef STARMapDataset
 
             addOptional(p, 'channel_order_dict', defaultDict);
 
-            defaultzrange = [];
+            defaultzrange = []; 
             addOptional(p, 'zrange', defaultzrange);
 
             defaultconvert = false;
@@ -621,7 +622,8 @@ classdef STARMapDataset
             end
             fprintf(sprintf('Number of spots found: %d\n', size(obj.signal.allSpots, 1)));
             fprintf(sprintf('[time = %.2f s]\n', toc));
-
+            obj.signal.allSpots = splitvars(obj.signal.allSpots, "Centroid", 'NewVariableNames', ["x", "y", "z"]);
+            
             obj.jobFinished.SpotFinding = true;
         end
         
@@ -661,7 +663,6 @@ classdef STARMapDataset
             end                                          
             
             obj.signal.allSpots{:, "color_seq"} = complete_color_seq;
-            obj.signal.allSpots = splitvars(obj.signal.allSpots, "Centroid", 'NewVariableNames', ["x", "y", "z"]);
 
 
             obj.jobFinished.ReadsExtraction = true;
@@ -762,7 +763,15 @@ classdef STARMapDataset
             defaultSlot = "goodSpots";
             addOptional(p, 'signal_slot', defaultSlot);
 
-            defaultBgImg = max(obj.registration{obj.layers.ref}, [], 3);
+            if isConfigured(obj.registration)
+                if isKey(obj.registration, obj.layers.ref)
+                    defaultBgImg = max(obj.registration{obj.layers.ref}, [], 3);
+                else
+                    defaultBgImg = [];
+                end
+            else
+                defaultBgImg = [];
+            end
             addOptional(p, 'bg_img', defaultBgImg);
 
             defaultSpotsColor = "red";

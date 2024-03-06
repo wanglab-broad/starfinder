@@ -9,3 +9,28 @@ qsub -l h_vmem=30G -l h_rt=4:00:00 -t 1-70 /stanley/WangLab/jiahao/Github/starfi
 
 # 1496 x 1496 x 35 x 4
 qsub -l h_vmem=35G -l h_rt=4:00:00 -t 1-1524 /stanley/WangLab/jiahao/Github/starfinder/test/Jiakun/run_mscript.sh
+
+# 2048 x 2048 x 13 x 4
+qsub -l h_vmem=10G -l h_rt=0:20:00 -t 956-1123 /stanley/WangLab/jiahao/Github/starfinder/test/Mingrui/run_mscript.sh
+
+
+# 1496 x 1496 x 35 x 4 no LR (1.5h, 15min each )
+qsub -l h_vmem=20G -l h_rt=0:45:00 -t 1-1096 /stanley/WangLab/jiahao/Github/starfinder/test/Hongyu/rsf_cluster_run/run_mscript.sh
+qsub -l h_vmem=20G -l h_rt=0:45:00 -t 735-736 /stanley/WangLab/jiahao/Github/starfinder/test/Hongyu/rsf_cluster_run/run_mscript.sh
+
+# 1496 x 1496 x 59 x 4 no LR (1.5h, 15min each )
+qsub -l h_vmem=40G -l h_rt=0:45:00 -t 2-1078 /stanley/WangLab/jiahao/Github/starfinder/test/Hongyu/rsf_cluster_run/run_mscript.sh
+
+# Hongyu projection
+qsub -l h_vmem=10G -l h_rt=0:5:00 -t 1-1078 /stanley/WangLab/jiahao/Github/starfinder/test/Hongyu/rsf_cluster_run/run_py.sh
+
+# stardist prediction 
+qsub -l h_vmem=15G -l h_rt=5:00:00 -t 1-1096 /stanley/WangLab/jiahao/Github/starfinder/test/Hongyu/stardist_cluster_run/run_py.sh
+qsub -l h_vmem=25G -l h_rt=6:00:00 -t 1-1078 /stanley/WangLab/jiahao/Github/starfinder/test/Hongyu/stardist_cluster_run/run_py.sh
+
+
+# Jiakun reads assignment 
+qsub -l h_vmem=10G -l h_rt=0:30:00 -t 1-2 /stanley/WangLab/jiahao/Github/starfinder/test/Jiakun/run_py.sh
+
+# Hongyu spleen reads assignment 
+qsub -l h_vmem=15G -l h_rt=0:30:00 -t 2-1078 /stanley/WangLab/jiahao/Github/starfinder/test/Hongyu/rsf_cluster_run/run_py.sh

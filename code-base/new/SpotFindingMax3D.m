@@ -13,6 +13,7 @@ function props = SpotFindingMax3D( input_img, intensity_threshold )
 
         current_props = regionprops3(current_output, current_channel, ["Centroid", "MaxIntensity"]);
         current_props.Centroid = int16(current_props.Centroid);
+        current_props.Channel = repmat(c, size(current_props, 1), 1);
         props = vertcat(props, current_props);
     end
 

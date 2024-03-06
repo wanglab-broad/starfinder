@@ -12,8 +12,9 @@ function fused_spots = reads_stitching(config_path)
     addpath(genpath(fullfile(pwd, '../code-base/new/'))) % pwd is the location of the starfinder folder
 
     % test block
-    % addpath(fullfile('/home/unix/jiahao/wanglab/jiahao/Github/starfinder/code-base/new/'))
-    addpath(fullfile('Z:/jiahao/Github/starfinder/code-base/new/'))
+    addpath(fullfile('/home/unix/jiahao/wanglab/jiahao/Github/starfinder/code-base/new/'))
+    addpath(genpath(fullfile('/home/unix/jiahao/wanglab/jiahao/Github/starfinder/code-base/matlab-addon/')))
+    % addpath(fullfile('Z:/jiahao/Github/starfinder/code-base/new/'))
 
     image_path = fullfile(config.output_path, 'images');
     signal_path = fullfile(config.output_path, 'signal');

@@ -7,7 +7,8 @@
 % number_of_fovs
 
 % fovs = [151, 275, 488, 510, 630, 802, 922, 1124, 1271, 1388, 1450];
-fovs = [17];
+% fovs = [2, 50, 150, 200, 350, 400];
+fovs = [12, 50, 100, 120, 170, 190, 220, 260, 300, 345, 400, 450];
 
 for i=fovs
 
@@ -18,16 +19,20 @@ for i=fovs
     % input_path = fullfile('/stanley/WangLab/Data/Processed/2024-01-08-Jiakun-MouseSpleen64Gene/');
     % output_path = fullfile('/stanley/WangLab/Data/Analyzed/2024-01-08-Jiakun-MouseSpleen64Gene/');
     
-    input_path = fullfile('Z:/Data/Processed/2024-01-08-Jiakun-MouseSpleen64Gene/');
-    output_path = fullfile('Z:/Data/Analyzed/2024-01-08-Jiakun-MouseSpleen64Gene/test/rsf_test_3/');
+    % input_path = fullfile('Z:/Data/Processed/2024-01-08-Jiakun-MouseSpleen64Gene/');
+    % output_path = fullfile('Z:/Data/Analyzed/2024-01-08-Jiakun-MouseSpleen64Gene/test/rsf_test_nohist_noLR_cluster/');
+
+    input_path = fullfile('Z:/Data/Processed/2024-02-14-Hongyu-Covid_LN_and_pilot_Muscle/');
+    output_path = fullfile('Z:/Data/Analyzed/2024-02-14-Hongyu-Covid_LN_and_pilot_Muscle/test/rsf_test_nohist_cluster/');
     ref_round = ["round4"];
     
     % add path for .m files
     % addpath('/stanley/WangLab/jiahao/Github/starfinder/code-base/new/') % pwd is the location of the starfinder folder
     addpath('Z:/jiahao/Github/starfinder/code-base/new/') % pwd is the location of the starfinder folder
     
+
     sdata = STARMapDataset(input_path, output_path, 'useGPU', false);
-    
+
     log_folder = fullfile(output_path, "log");
     if ~exist(log_folder, 'dir')
         mkdir(log_folder);
@@ -38,70 +43,86 @@ for i=fovs
     
     starting = tic;
     
-    sdata = sdata.LoadRawImages('fovID', current_fov, 'flip', "horizontal", 'zrange', 1:35);
+    % sdata = sdata.LoadRawImages('fovID', current_fov, 'flip', "horizontal", 'zrange', 1:35);
+    sdata = sdata.LoadRawImages('fovID', current_fov, 'flip', "horizontal");
     sdata.layers.ref = ref_round;
     
-    add_channel_order_dict(1).wavelength = 488;
-    add_channel_order_dict(1).channel = "ch00";
-    add_channel_order_dict(1).name = "DAPI";
+    % add_channel_order_dict(1).wavelength = 488;
+    % add_channel_order_dict(1).channel = "ch00";
+    % add_channel_order_dict(1).name = "DAPI";
     
-    add_channel_order_dict(2).wavelength = 546;
-    add_channel_order_dict(2).channel = "ch01";
-    add_channel_order_dict(2).name = "Flamingo";
+    % add_channel_order_dict(2).wavelength = 546;
+    % add_channel_order_dict(2).channel = "ch01";
+    % add_channel_order_dict(2).name = "Flamingo";
     
-    sdata = sdata.LoadRawImages('fovID', current_fov, ... 
-                                'flip', "horizontal", ...
-                                'zrange', 1:35, ...
-                                'folder_list', ["flamingo"], ...
-                                'channel_order_dict', add_channel_order_dict, ...
-                                'update_layer_slot', "other");
+    % sdata = sdata.LoadRawImages('fovID', current_fov, ... 
+    %                             'flip', "horizontal", ...
+    %                             'zrange', 1:35, ...
+    %                             'folder_list', ["flamingo"], ...
+    %                             'channel_order_dict', add_channel_order_dict, ...
+    %                             'update_layer_slot', "other");
     
     % Preprocessing
     sdata = sdata.EnhanceContrast("min-max");
-    sdata = sdata.EnhanceContrast("min-max", 'layer', sdata.layers.other);
-    sdata = sdata.HistEqualize;
-    sdata = sdata.MorphRecon;
-
+    % sdata = sdata.EnhanceContrast("min-max", 'layer', sdata.layers.other);
+    % sdata = sdata.HistEqualize;
+    % sdata = sdata.MorphRecon;
+    
     % Registration
     sdata = sdata.GlobalRegistration;
-    
-    ref_merged_folder = fullfile(output_path, "images", "ref_merged");
+    sdata = sdata.LocalRegistration;
+
+    % Save round 1 ref image
+    ref_merged_folder = fullfile(output_path, "images", "ref_merged_round1");
     if ~exist(ref_merged_folder, 'dir')
         mkdir(ref_merged_folder);
     end
     ref_merged_fname = fullfile(ref_merged_folder, sprintf('%s.tif', current_fov));
-    SaveSingleStack(sdata.registration{sdata.layers.ref}, ref_merged_fname);
+    round1_ref_merge = max(sdata.images{"round1"}, [], 4);
+    SaveSingleStack(round1_ref_merge, ref_merged_fname);
+
+
+    % Save round 4 ref image
+    ref_merged_folder = fullfile(output_path, "images", "ref_merged_round4");
+    if ~exist(ref_merged_folder, 'dir')
+        mkdir(ref_merged_folder);
+    end
+    ref_merged_fname = fullfile(ref_merged_folder, sprintf('%s.tif', current_fov));
+    round4_ref_merge = max(sdata.images{"round4"}, [], 4);
+    SaveSingleStack(round4_ref_merge, ref_merged_fname);
     
-    refernce_dapi_fname = dir(fullfile(input_path, ref_round, current_fov, '*ch04.tif'));
-    current_ref_img = LoadMultipageTiff(fullfile(refernce_dapi_fname.folder, refernce_dapi_fname.name), false);
-    current_ref_img = current_ref_img(:,:,1:35);
-    current_ref_img = flip(current_ref_img, 2);
-    sdata = sdata.GlobalRegistration('layer', ["flamingo"], ...
-                                    'ref_img', 'input_image', ...
-                                    'input_image', current_ref_img, ...
-                                    'mov_img', 'single-channel');
-    sdata = sdata.LocalRegistration;
+    % refernce_dapi_fname = dir(fullfile(input_path, ref_round, current_fov, '*ch04.tif'));
+    % current_ref_img = LoadMultipageTiff(fullfile(refernce_dapi_fname.folder, refernce_dapi_fname.name), false);
+    % current_ref_img = current_ref_img(:,:,1:35);
+    % current_ref_img = flip(current_ref_img, 2);
+    % sdata = sdata.GlobalRegistration('layer', ["flamingo"], ...
+    %                                 'ref_img', 'input_image', ...
+    %                                 'input_image', current_ref_img, ...
+    %                                 'mov_img', 'single-channel');
     
     % Spot finding 
-    sdata = sdata.SpotFinding;
+    sdata = sdata.SpotFinding('ref_layer', "round1");
     sdata = sdata.ReadsExtraction('voxel_size', [1 1 1]);
     sdata = sdata.LoadCodebook;
     sdata = sdata.ReadsFiltration('end_base', ["AC"]);
     
     % Output 
-    sdata = sdata.MakeProjection;
-    preview_folder = fullfile(output_path, "images", "montage_preview");
-    if ~exist(preview_folder, 'dir')
-        mkdir(preview_folder);
-    end
-    projection_preview_path = fullfile(preview_folder, sprintf("%s.tif", current_fov));
-    sdata = sdata.ViewProjection('save', true, 'output_path', projection_preview_path);
-    sdata = sdata.SaveImages('layer', sdata.layers.other, 'output_path', output_path, 'folder_format', "single", 'maximum_projection', false);
-    sdata = sdata.ViewSignal('save', true);
+    % sdata = sdata.MakeProjection;
+    % preview_folder = fullfile(output_path, "images", "montage_preview");
+    % if ~exist(preview_folder, 'dir')
+    %     mkdir(preview_folder);
+    % end
+    % projection_preview_path = fullfile(preview_folder, sprintf("%s.tif", current_fov));
+    % sdata = sdata.ViewProjection('save', true, 'output_path', projection_preview_path);
+    % sdata = sdata.SaveImages('layer', sdata.layers.other, 'output_path', output_path, 'folder_format', "single", 'maximum_projection', false);
+    
+    round1_ref_merge_max = max(round1_ref_merge, [], 3);
+    sdata = sdata.ViewSignal('bg_img', round1_ref_merge_max, 'save', true);
     sdata = sdata.SaveSignal;
     
     toc(starting);
     diary off;
+    
 
 end
 
