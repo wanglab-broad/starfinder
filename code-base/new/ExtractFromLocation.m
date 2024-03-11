@@ -11,7 +11,8 @@ function [color_seq, color_score] = ExtractFromLocation( input_img, allSpots, vo
     for i=1:Npoint
         
         % Get voxel for each dot
-        current_point = allSpots.Centroid(i,:);
+        % current_point = allSpots.Centroid(i,:);
+        current_point = table2array(allSpots(i, ["x", "y", "z"])); 
         extentsX = GetExtents(current_point(2), voxel_size(1), dimX);
         extentsY = GetExtents(current_point(1), voxel_size(2), dimY);                    
         extentsZ = GetExtents(current_point(3), voxel_size(3), dimZ);    

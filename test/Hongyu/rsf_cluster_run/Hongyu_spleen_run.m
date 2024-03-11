@@ -7,8 +7,8 @@
 % number_of_fovs
 
 % test block
-input_path = fullfile('/stanley/WangLab/Data/Processed/2024-02-23-Hongyu-Covid_Spleen_replicate_2/');
-output_path = fullfile('/stanley/WangLab/Data/Analyzed/2024-02-23-Hongyu-Covid_Spleen_replicate_2/');
+input_path = fullfile('/stanley/WangLab/Data/Processed/2024-03-08-Hongyu-Covid_LN/');
+output_path = fullfile('/stanley/WangLab/Data/Analyzed/2024-03-08-Hongyu-Covid_LN/');
 ref_round = ["round4"];
 
 % add path for .m files
@@ -71,7 +71,7 @@ sdata = sdata.GlobalRegistration('layer', ["flamingo"], ...
                                 'mov_img', 'single-channel');
 
 % Spot finding 
-sdata = sdata.SpotFinding('ref_layer', "round1");
+sdata = sdata.SpotFinding('ref_layer', "round1", 'intensity_threshold', 0.4);
 sdata = sdata.ReadsExtraction('voxel_size', [1 1 1]);
 sdata = sdata.LoadCodebook;
 sdata = sdata.ReadsFiltration('end_base', ["AC"]);

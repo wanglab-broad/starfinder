@@ -15,7 +15,7 @@ current_fov_id = f"Position{current_id:03}"
 print(current_fov_id)
 
 # define the path to the images
-base_path = '/stanley/WangLab/Data/Analyzed/2024-02-23-Hongyu-Covid_Spleen_replicate_2/'
+base_path = '/stanley/WangLab/Data/Analyzed/2024-03-08-Hongyu-Covid_LN/'
 dapi_path = os.path.join(base_path, 'images/flamingo/DAPI')
 flamingo_path = os.path.join(base_path, 'images/flamingo/Flamingo')
 output_path = os.path.join(base_path, 'images/flamingo/output')

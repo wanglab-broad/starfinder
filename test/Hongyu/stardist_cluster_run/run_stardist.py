@@ -13,7 +13,7 @@ from skimage.morphology import disk, dilation
 current_id = int(sys.argv[1])
 current_fov_id = f"Position{current_id:03}"
 
-base_path = '/stanley/WangLab/Data/Analyzed/2024-02-23-Hongyu-Covid_Spleen_replicate_2/images/flamingo/'
+base_path = '/stanley/WangLab/Data/Analyzed/2024-03-08-Hongyu-Covid_LN/images/flamingo/'
 data_path = os.path.join(base_path, 'output')
 output_path = os.path.join(base_path, 'stardist_segmentation')
 if not os.path.exists(output_path):

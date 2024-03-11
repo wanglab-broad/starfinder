@@ -10,7 +10,7 @@ now=$(date +"%T")
 echo "Current time : $now"
 fov=$(sed "${SGE_TASK_ID}q;d" /stanley/WangLab/jiahao/Github/starfinder/test/Hongyu/rsf_cluster_run/fov.txt)
 fov=$(echo $fov | tr -d '\r')
-python $ppath/run_reads_assignment.py $fov
+python $ppath/create_stardist_input.py $fov
 
 echo "Finished"
 now=$(date +"%T")

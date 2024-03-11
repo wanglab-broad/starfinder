@@ -4,7 +4,7 @@ outpath="$ppath/mscript"
 main_mscript="$ppath/Hongyu_spleen_run.m"
 
 j=1
-for i in $(seq -f "%03g" 1 1078)
+for i in $(seq -f "%03g" 1 550)
 # cat $listpath|while read file
 do
 	echo "current_fov='Position$i'" > $outpath/task_$j".m"

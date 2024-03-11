@@ -58,6 +58,15 @@ sdata = sdata.SpotFinding('ref_layer', ref_round, 'intensity_threshold', 0.3);
 % Output 
 ref_merge = max(sdata.images{ref_round}, [], 4);
 ref_merge_max = max(ref_merge, [], 3);
+
+% % Save ref image
+% ref_merged_folder = fullfile(output_path, "images", "ref_merged");
+% if ~exist(ref_merged_folder, 'dir')
+%     mkdir(ref_merged_folder);
+% end
+% ref_merged_fname = fullfile(ref_merged_folder, sprintf('%s.tif', current_fov));
+% SaveSingleStack(ref_merge_max, ref_merged_fname);
+
 sdata = sdata.ViewSignal('signal_slot', "allSpots", 'bg_img', ref_merge_max, 'save', true);
 
 sdata = sdata.SaveSignal('signal_slot', "allSpots", 'field_to_keep', ["x", "y", "z", "MaxIntensity", "Channel"]);
