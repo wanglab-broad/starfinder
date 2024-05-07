@@ -717,7 +717,7 @@ classdef STARMapDataset
             defaultendBases = ["CC"]; % multiple endbase pairs ["CC", "CT"]
             addParameter(p, 'end_base', defaultendBases);
 
-            defaultSplitIndex = [4];
+            defaultSplitIndex = [5];
             addParameter(p, 'split_index', defaultSplitIndex);
 
             parse(p, varargin{:});

@@ -1,0 +1,27 @@
+{
+
+    "input_path": "/home/unix/jiahao/wanglab/Data/Processed/2024-03-22-Mingrui-PFC-test/", 
+    "output_path": "/home/unix/jiahao/wanglab/Data/Analyzed/2024-03-22-Mingrui-PFC-test/", 
+    "ref_round": "round4",
+    "additional_round": ["flamingo"],
+    "ref_channel": "DAPI",
+    "fov_id_pattern": "Position%03d",
+    "starting_fov_id": 1,
+    "number_of_fovs": 1,
+    "rotate_angle": 0,
+    "maximum_projection": false,
+    "img_col": 2048,
+    "img_row": 2048,
+    "img_z": 45,
+    "flip": "horizontal",
+    "current_sample": "sample1",
+
+    "channel_order": [{"wavelength": 488, "channel": "ch00", "name": "DAPI"},
+                    {"wavelength": 546, "channel": "ch01", "name": "Flamingo"}]
+
+
+
+
+
+    
+}

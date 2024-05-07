@@ -7,8 +7,11 @@
 % number_of_fovs
 
 % fovs = [151, 275, 488, 510, 630, 802, 922, 1124, 1271, 1388, 1450];
-% fovs = [2, 50, 150, 200, 350, 400];
-fovs = [12, 50, 100, 120, 170, 190, 220, 260, 300, 345, 400, 450];
+% fovs = [74, 172, 313, 517, 777, 917, 1150];
+% fovs = [517, 777, 917, 1150];
+fovs = [172, 313];
+% fovs = [74, 172];
+% fovs = [12, 50, 100, 120, 170, 190, 220, 260, 300, 345, 400, 450];
 
 for i=fovs
 
@@ -22,9 +25,9 @@ for i=fovs
     % input_path = fullfile('Z:/Data/Processed/2024-01-08-Jiakun-MouseSpleen64Gene/');
     % output_path = fullfile('Z:/Data/Analyzed/2024-01-08-Jiakun-MouseSpleen64Gene/test/rsf_test_nohist_noLR_cluster/');
 
-    input_path = fullfile('Z:/Data/Processed/2024-02-14-Hongyu-Covid_LN_and_pilot_Muscle/');
-    output_path = fullfile('Z:/Data/Analyzed/2024-02-14-Hongyu-Covid_LN_and_pilot_Muscle/test/rsf_test_nohist_cluster/');
-    ref_round = ["round4"];
+    input_path = fullfile('Z:/Data/Processed/2024-03-12-Mingrui-PFC/');
+    output_path = fullfile('Z:/Data/Analyzed/2024-03-12-Mingrui-PFC/test/rsf_test_pp_GR_LR_ref1');
+    ref_round = ["round1"];
     
     % add path for .m files
     % addpath('/stanley/WangLab/jiahao/Github/starfinder/code-base/new/') % pwd is the location of the starfinder folder
@@ -44,7 +47,9 @@ for i=fovs
     starting = tic;
     
     % sdata = sdata.LoadRawImages('fovID', current_fov, 'flip', "horizontal", 'zrange', 1:35);
-    sdata = sdata.LoadRawImages('fovID', current_fov, 'flip', "horizontal");
+    sdata = sdata.LoadRawImages('fovID', current_fov, 'rotate_angle', -90);
+
+    sdata.images{"round4"} = imrotate(sdata.images{"round4"}, 0.75, 'bilinear', 'crop');
     sdata.layers.ref = ref_round;
     
     % add_channel_order_dict(1).wavelength = 488;
@@ -65,8 +70,8 @@ for i=fovs
     % Preprocessing
     sdata = sdata.EnhanceContrast("min-max");
     % sdata = sdata.EnhanceContrast("min-max", 'layer', sdata.layers.other);
-    % sdata = sdata.HistEqualize;
-    % sdata = sdata.MorphRecon;
+    sdata = sdata.HistEqualize;
+    sdata = sdata.MorphRecon;
     
     % Registration
     sdata = sdata.GlobalRegistration;
@@ -80,7 +85,6 @@ for i=fovs
     ref_merged_fname = fullfile(ref_merged_folder, sprintf('%s.tif', current_fov));
     round1_ref_merge = max(sdata.images{"round1"}, [], 4);
     SaveSingleStack(round1_ref_merge, ref_merged_fname);
-
 
     % Save round 4 ref image
     ref_merged_folder = fullfile(output_path, "images", "ref_merged_round4");
@@ -103,8 +107,8 @@ for i=fovs
     % Spot finding 
     sdata = sdata.SpotFinding('ref_layer', "round1");
     sdata = sdata.ReadsExtraction('voxel_size', [1 1 1]);
-    sdata = sdata.LoadCodebook;
-    sdata = sdata.ReadsFiltration('end_base', ["AC"]);
+    sdata = sdata.LoadCodebook('split_index', 5);
+    sdata = sdata.ReadsFiltration('end_base', ["CC", "TT"], 'n_barcode_segments', 2, 'split_index', 5);
     
     % Output 
     % sdata = sdata.MakeProjection;

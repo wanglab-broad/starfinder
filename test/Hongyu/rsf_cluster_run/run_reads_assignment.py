@@ -19,20 +19,47 @@ current_fov_id = f"Position{current_id:03}"
 print(current_fov_id)
 
 sample_dict = {}
-for i in range(1, 401 + 1):
+for i in range(1, 64 + 1):
+    sample_dict[f"Position{i:03}"] = "sample1"
+
+for i in range(65, 132 + 1):
+    sample_dict[f"Position{i:03}"] = "sample2"
+
+for i in range(133, 189 + 1):
+    sample_dict[f"Position{i:03}"] = "sample3"
+
+for i in range(190, 245 + 1):
     sample_dict[f"Position{i:03}"] = "sample4"
 
-for i in range(402, 706 + 1):
+for i in range(246, 289 + 1):
     sample_dict[f"Position{i:03}"] = "sample5"
 
-for i in range(707, 1078 + 1):
+for i in range(290, 331 + 1):
     sample_dict[f"Position{i:03}"] = "sample6"
+
+for i in range(332, 353 + 1):
+    sample_dict[f"Position{i:03}"] = "sample7"
+
+for i in range(354, 388 + 1):
+    sample_dict[f"Position{i:03}"] = "sample8"
+
+for i in range(389, 415 + 1):
+    sample_dict[f"Position{i:03}"] = "sample9"
+
+for i in range(416, 471 + 1):
+    sample_dict[f"Position{i:03}"] = "sample10"
+
+for i in range(472, 521 + 1):
+    sample_dict[f"Position{i:03}"] = "sample11"
+
+for i in range(522, 550 + 1):
+    sample_dict[f"Position{i:03}"] = "sample12"
 
 # get sample id
 current_sample = sample_dict[current_fov_id]
 
 # set path
-base_path = '/stanley/WangLab/Data/Analyzed/2024-02-23-Hongyu-Covid_Spleen_replicate_2/'
+base_path = '/stanley/WangLab/Data/Analyzed/2024-03-08-Hongyu-Covid_LN/'
 image_path = os.path.join(base_path, 'images')
 signal_path = os.path.join(base_path, 'signal')
 output_path = os.path.join(base_path, 'output')
