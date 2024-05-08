@@ -1,50 +1,41 @@
-function [ output_img ] = MorphologicalReconstruction( input_img, varargin )
-%MorphologicalReconstruction
-
-    % Input parser
-    p = inputParser;
-    % Defaults
-    defaultRadius = 6;
-    defaultHeight = 3;
-
-
-    addRequired(p,'input_img');
-    addOptional(p,'radius',defaultRadius);
-    addOptional(p,'height',defaultHeight);
-
-
-    parse(p, input_img, varargin{:});
-
-    p.Results
+function input_img = MorphologicalReconstruction( input_img, radius )
+% MorphologicalReconstruction
+% Morphological opening is useful for removing small objects from an image while preserving the shape and size of larger objects in the image
     
+    % Get dims 
     Nround = numel(input_img);
-    output_img = cell(Nround, 1);
-    ms = offsetstrel('ball', p.Results.radius, p.Results.height);
-    se = strel('sphere',2);
+    Nchannel = size(input_img{1}, 4);
+    Nslice = size(input_img{1}, 3);
+
+    % Setup structure element
+    se = strel('disk', radius);
     
-    for r=1:Nround 
-        fprintf(sprintf("Morphological Reconstruction in Round %d...\n", r));
-        curr_round = input_img{r};
-        output_stack = zeros(size(curr_round));
-        Nchannel = size(curr_round, 4);
+    for r=1:Nround
+        
+        tic
+
         for c=1:Nchannel
-            curr_channel = curr_round(:,:,:,c);
-            marker = imerode(curr_channel, ms);
-            obr = imreconstruct(marker, curr_channel);
-            curr_out = curr_channel - obr;
-            mask = imbinarize(curr_out,0.06);
-            %curr_out(~mask) = 0;
             
-            bw = imopen(mask, se);
-            curr_out(~bw) = 0;
+            current_channel = input_img{r}(:,:,:,c);
             
-            curr_out = imsubtract(imadd(curr_out, imtophat(curr_out, ms)),imbothat(curr_out, ms));
-            
-            output_stack(:,:,:,c) = curr_out;
+            for z=1:Nslice
+                
+                current_slice = current_channel(:,:,z);
+                marker = imerode(current_slice, se); 
+                obr = imreconstruct(marker, current_slice);
+                current_out = current_slice - obr;
+                current_out = imsubtract(imadd(current_out, imtophat(current_out, se)), imbothat(current_out, se));
+                current_channel(:,:,z) = current_out;
+
+            end
+
+            input_img{r}(:,:,:,c) = uint8(current_channel);
         end
-        output_img{r} = uint8(output_stack);
-    end
-    
-    
+
+        fprintf(sprintf('[time = %.2f s]\n', toc));
+    end 
+
+
 end
+    
 

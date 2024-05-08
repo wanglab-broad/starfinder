@@ -1,25 +1,21 @@
-function locations = SpotFindingMax3D( input_img, ref_index )
+function props = SpotFindingMax3D( input_img, intensity_threshold )
 %SpotFindingMax3D 
 
-    locations = [];
-
-    ref_round = input_img(:,:,:,:,ref_index);
-    Nchannel = size(ref_round, 4);
+    props = [];
+    Nchannel = size(input_img, 4);
     
     for c=1:Nchannel
-        curr_channel = ref_round(:,:,:,c);
-        curr_max = imregionalmax(curr_channel);
+        current_channel = input_img(:,:,:,c);
+        current_max = imregionalmax(current_channel);
 
-        max_intensity = max(curr_channel, [], 'all');
-        curr_out = curr_max & curr_channel > 0.2 * max_intensity;
+        max_intensity = max(current_channel, [], 'all');
+        current_output = current_max & current_channel > intensity_threshold * max_intensity;
 
-        curr_centroid = regionprops3(curr_out, "Centroid");
-        curr_centroid = int16(curr_centroid.Centroid);
-        locations = [locations; curr_centroid]; %% WARNING
+        current_props = regionprops3(current_output, current_channel, ["Centroid", "MaxIntensity"]);
+        current_props.Centroid = int16(current_props.Centroid);
+        current_props.Channel = repmat(c, size(current_props, 1), 1);
+        props = vertcat(props, current_props);
     end
-
-
-
 
 end
 
