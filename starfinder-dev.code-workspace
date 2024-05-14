@@ -1,19 +1,27 @@
 {
 	"folders": [
 		{
+			"name": "starfinder",
 			"path": "."
 		},
 		{
+			"name": "jiahaoh",
+			"path": "../jiahaoh"
+		},
+		{
+			"name": "2023-10-01-Jiahao-Test",
 			"path": "../../../Data/Analyzed/2023-10-01-Jiahao-Test"
 		},
 		{
+			"name": "2023-10-01-Jiahao-Test",
 			"path": "../../../Data/Processed/2023-10-01-Jiahao-Test"
 		},
 		{
+			"name": "2024-02-06-Hongyu-Hongyu_multicap_covid_spleen_replicates1",
 			"path": "../../../Data/Analyzed/2024-02-06-Hongyu-Hongyu_multicap_covid_spleen_replicates1"
 		},
 		{
-			"path": "../jiahaoh"
+			"path": "../../../Data/Processed/sample-dataset"
 		}
 	],
 	"settings": {}

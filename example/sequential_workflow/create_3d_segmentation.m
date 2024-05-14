@@ -9,12 +9,12 @@ function create_3d_segmentation(config_path)
     config = jsondecode(config_raw);
 
     % add path for .m files
-    addpath(genpath(fullfile(pwd, '../code-base/new/'))) % pwd is the location of the starfinder folder
-    addpath(genpath(fullfile(pwd, '../code-base/matlab-addon/')))
+    addpath(genpath(fullfile(pwd, './code-base/src/'))) % pwd is the location of the starfinder folder
+    addpath(genpath(fullfile(pwd, './code-base/matlab-addon/')))
 
     % test block
-    addpath(fullfile('/stanley/WangLab/jiahao/Github/starfinder/code-base/new/'))
-    addpath(genpath(fullfile('/stanley/WangLab/jiahao/Github/starfinder/code-base/matlab-addon/')))
+    % addpath(fullfile('/stanley/WangLab/jiahao/Github/starfinder/code-base/new/'))
+    % addpath(genpath(fullfile('/stanley/WangLab/jiahao/Github/starfinder/code-base/matlab-addon/')))
 
     % load images
     image_path = fullfile(config.output_path, 'images/fused');

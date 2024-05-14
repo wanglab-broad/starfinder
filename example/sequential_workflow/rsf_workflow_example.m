@@ -9,10 +9,10 @@ function sdata = rsf_workflow_example(config_path)
     config = jsondecode(config_raw);
 
     % add path for .m files
-    addpath(fullfile(pwd, '../code-base/new/')) % pwd is the location of the starfinder folder
+    addpath(fullfile(pwd, './code-base/src/')) % pwd is the location of the starfinder folder
 
     % test block
-    addpath(fullfile('/home/unix/jiahao/wanglab/jiahao/Github/starfinder/code-base/new/'))
+    % addpath(fullfile('/home/unix/jiahao/wanglab/jiahao/Github/starfinder/code-base/src/'))
 
     % iterate through each fov
     for n=config.starting_fov_id:config.starting_fov_id + config.number_of_fovs - 1
@@ -31,7 +31,7 @@ function sdata = rsf_workflow_example(config_path)
         if exist(diary_file, 'file'); delete(diary_file); end
         diary(diary_file);
 
-        tic;
+        starting = tic;
 
         % load sequencing images 
         sdata = sdata.LoadRawImages('fovID', current_fov, 'rotate_angle', config.rotate_angle);
@@ -73,6 +73,7 @@ function sdata = rsf_workflow_example(config_path)
                                         'input_image', current_ref_img, ...
                                         'mov_img', 'single-channel', ...
                                         'ref_channel', config.ref_channel);
+        % local registration (optional)                                    
         sdata = sdata.LocalRegistration;
 
         % spot finding 
@@ -91,9 +92,11 @@ function sdata = rsf_workflow_example(config_path)
         sdata = sdata.ViewProjection('save', true, 'output_path', projection_preview_path);
 
         sdata = sdata.SaveImages('layer', sdata.layers.other, 'output_path', config.output_path, 'folder_format', "single", 'maximum_projection', config.maximum_projection);
+        ref_merge_max = max(sdata.registration{sdata.layers.ref}, [], 3);
+        sdata = sdata.ViewSignal('bg_img', ref_merge_max, 'save', true);
         sdata = sdata.SaveSignal;
 
-        toc;
+        toc(starting);
         diary off;
 
     end

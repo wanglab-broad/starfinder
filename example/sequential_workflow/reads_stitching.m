@@ -9,10 +9,10 @@ function reads_stitching(config_path)
     config = jsondecode(config_raw);
 
     % add path for .m files
-    addpath(genpath(fullfile(pwd, '../code-base/new/'))) % pwd is the location of the starfinder folder
+    addpath(fullfile(pwd, './code-base/src/')) % pwd is the location of the starfinder folder
 
     % test block
-    addpath(fullfile('/home/unix/jiahao/wanglab/jiahao/Github/starfinder/code-base/new/'))
+    % addpath(fullfile('/home/unix/jiahao/wanglab/jiahao/Github/starfinder/code-base/src/'))
 
     image_path = fullfile(config.output_path, 'images');
     signal_path = fullfile(config.output_path, 'signal');
