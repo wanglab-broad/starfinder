@@ -1,15 +1,21 @@
 #  This configuration file should be customized on a per-project basis. 
 #  Follow the comments and ensure each variable is set properly before running Starfinder.
 
+### Testing parameters
+mode: "subset"
+subset_list: [1]
+fov_naming_pattern: "tile_{i}" # with additional zero padding: "tile_{i:03}"
+sub_sample: ['CNS_Well07']
 
+run_step2: True
 ### ==================== [ General sample parameters ] =========================
 
 # Name of sample as it appears in the data directory
-sample: "2023-04-11-Workshop-Lung"
+sample: "2023-10-01-Jiahao-Test"
 
 # Position (individual tile) size in pixels/number of stacks
-xy: 2048 
-z: 59
+xy: 1496
+z: 30
 
 # Number of tiles
 n_tiles: 6
@@ -21,7 +27,7 @@ n_chs: 4
 ref_round: 1
 
 # Number of sequencing rounds (excluding rounds with only protein fluorescence)
-n_rounds: 4
+n_rounds: 6
 
 # Protein fluorescence round name (if STARMap PLUS sample)
 protein_round: "IF"
@@ -41,7 +47,8 @@ protein_stains:
 
 # The parent directory to store all processed data output
 # This may be in your personal user folder under /stanley/WangLab/username 
-user_dir: "/stanley/WangLab/morgan"
+user_dir: "/stanley/WangLab/jiahao/starfinder/"
+output_dir: "/stanley/WangLab/Data/Analyzed/"
 
 # Sub-directories within data_dir to store input and output files for 
 # various stages of the pipeline. 
@@ -66,6 +73,7 @@ conda_env_dir: "/stanley/WangLab/envs/starfinder"
 
 # all h_vmem requests are in megabytes
 resources:
+  preprocessing: 10000
   global_registration: 25000 # 25 GB
   local_registration: 10000
   stitch: 5000

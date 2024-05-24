@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<addOn>
+  <identifier>a714a033-2144-463b-9dea-16594e316854</identifier>
+  <displayType>Collection</displayType>
+  <translatedDisplayType>
+    <en_US>Collection</en_US>
+    <ja_JP>コレクション</ja_JP>
+    <ko_KR>컬렉션</ko_KR>
+    <zh_CN>集合</zh_CN>
+  </translatedDisplayType>
+  <name>megasthenis/textprogressbar</name>
+  <author>megas</author>
+  <version>1.0.0.0</version>
+  <downloadUrl>https://www.mathworks.com/matlabcentral/mlc-downloads/downloads/submissions/55285/versions/2/download/zip?src=addons_ml_desktop_install&amp;profile_id=16127160&amp;license=40825907&amp;release_family=R2020b</downloadUrl>
+  <licenseUrl>https://addons.mathworks.com/registry/v1/a714a033-2144-463b-9dea-16594e316854/1.0.0.0/-/license</licenseUrl>
+  <previewImageUrl>https://www.mathworks.com/responsive_image/160/120/0/0/0/cache/matlabcentral/images/default_screenshot.jpg</previewImageUrl>
+  <releaseNotesUrl>https://www.mathworks.com/add-ons/a714a033-2144-463b-9dea-16594e316854/6bb9b198-8302-afae-939a-f147c690ef4d/releaseNotes</releaseNotesUrl>
+  <installationFolder>Collections</installationFolder>
+</addOn>

@@ -1,4 +1,4 @@
-# name: starfinder # comment out if creating env with prefix
+name: starfinder # comment out if creating env with prefix
 channels:
   - bioconda
   - anaconda
@@ -248,4 +248,7 @@ dependencies:
       - umap-learn==0.5.3
       - werkzeug==2.2.3
       - zipp==3.15.0
-prefix: /home/unix/mowu/.conda/envs/starfinder
+
+# prefix: /home/unix/user-name/.conda/envs/starfinder # broad unix home location
+# prefix: /home/unix/jiahao/.conda/envs/starfinder # broad unix home location
+# example: conda env create --file config/environment.yaml --prefix /stanley/WangLab/envs/starfinder-dev

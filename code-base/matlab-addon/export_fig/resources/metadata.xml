@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<addOn>
+  <identifier>e562b2d1-4a80-11e4-9553-005056977bd0</identifier>
+  <displayType>Collection</displayType>
+  <translatedDisplayType>
+    <en_US>Collection</en_US>
+    <ja_JP>コレクション</ja_JP>
+    <ko_KR>컬렉션</ko_KR>
+    <zh_CN>集合</zh_CN>
+  </translatedDisplayType>
+  <name>export_fig</name>
+  <author>Yair Altman</author>
+  <version>3.14</version>
+  <downloadUrl>https://www.mathworks.com/matlabcentral/mlc-downloads/downloads/e562b2d1-4a80-11e4-9553-005056977bd0/b4b5595f-95a5-44da-b8a1-11f862814b13/packages/zip?src=addons_ml_desktop_install&amp;profile_id=16127160&amp;license=40825907&amp;release_family=R2020b</downloadUrl>
+  <licenseUrl>https://addons.mathworks.com/registry/v1/e562b2d1-4a80-11e4-9553-005056977bd0/3.14.0.0/-/license</licenseUrl>
+  <previewImageUrl>https://www.mathworks.com/responsive_image/160/120/0/0/0/cache/matlabcentral/mlc-downloads/downloads/e562b2d1-4a80-11e4-9553-005056977bd0/b4b5595f-95a5-44da-b8a1-11f862814b13/images/screenshot.jpg</previewImageUrl>
+  <releaseNotesUrl>https://www.mathworks.com/add-ons/e562b2d1-4a80-11e4-9553-005056977bd0/b4b5595f-95a5-44da-b8a1-11f862814b13/releaseNotes</releaseNotesUrl>
+  <installationFolder>Collections</installationFolder>
+</addOn>

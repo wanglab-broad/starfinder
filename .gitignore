@@ -1,2 +1,15 @@
-
+*.asv
+*.tif
+*checkpoint.ipynb
 .DS_Store
+Thumbs.db
+test/TEMPOmap_Hela/mscript
+test/Jiakun/mscript
+test/Mingrui/mscript
+test/Hongyu/rsf_cluster_run/mscript
+test/Hongyu/cell_type_classification
+test/Mingrui/rsf_cluster_run/mscript
+test/Jiakun/stardist/models
+test/Mingrui/stardist/models
+starfinder-dev.code-workspace
+starfinder-dev.code-workspace

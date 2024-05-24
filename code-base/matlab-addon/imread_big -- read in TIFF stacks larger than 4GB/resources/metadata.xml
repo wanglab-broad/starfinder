@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<addOn>
+  <identifier>20cfa681-4e37-4392-98e2-27b428100484</identifier>
+  <displayType>Function</displayType>
+  <translatedDisplayType>
+    <en_US>Function</en_US>
+    <ja_JP>関数</ja_JP>
+    <ko_KR>함수</ko_KR>
+    <zh_CN>函数</zh_CN>
+  </translatedDisplayType>
+  <name>imread_big -- read in TIFF stacks larger than 4GB</name>
+  <author>Tristan Ursell</author>
+  <version>1.2.1</version>
+  <downloadUrl>https://www.mathworks.com/matlabcentral/mlc-downloads/downloads/20cfa681-4e37-4392-98e2-27b428100484/7596fc03-4f91-4c8b-a8ae-fc5b3cc01adb/packages/zip?src=addons_ml_desktop_install&amp;profile_id=16127160&amp;license=40825907&amp;release_family=R2020b</downloadUrl>
+  <licenseUrl>https://addons.mathworks.com/registry/v1/20cfa681-4e37-4392-98e2-27b428100484/1.2.1.0/-/license</licenseUrl>
+  <previewImageUrl>https://www.mathworks.com/responsive_image/160/120/0/0/0/cache/matlabcentral/images/default_screenshot.jpg</previewImageUrl>
+  <releaseNotesUrl>https://www.mathworks.com/add-ons/20cfa681-4e37-4392-98e2-27b428100484/7596fc03-4f91-4c8b-a8ae-fc5b3cc01adb/releaseNotes</releaseNotesUrl>
+  <installationFolder>Functions</installationFolder>
+</addOn>

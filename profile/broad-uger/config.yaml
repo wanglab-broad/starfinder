@@ -1,0 +1,13 @@
+## ==================== [ Broad cluster configuration -- DO NOT TOUCH ] =========================
+## to use it, place it under your unix home directory, i.e. ~/.config/snakemake/broad-uger
+cluster: "broad-submit.py {dependencies}"
+cluster-status: "broad-status.py"
+jobscript: "broad-jobscript.sh"
+jobs: 5000
+keep-going: true
+immediate-submit: False
+notemp: true
+local-cores: 1
+latency-wait: 60
+rerun-incomplete: True
+restart-times: 3

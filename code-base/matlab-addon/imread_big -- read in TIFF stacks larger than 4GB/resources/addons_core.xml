@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<addonCore>
+  <label>imread_big -- read in TIFF stacks larger than 4GB</label>
+  <version>1.2.1</version>
+  <type>zip</type>
+  <identifier>20cfa681-4e37-4392-98e2-27b428100484</identifier>
+  <createdBy name="Tristan Ursell"/>
+  <image>resources/screenshot.png</image>
+</addonCore>
