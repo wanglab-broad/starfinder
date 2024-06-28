@@ -1,0 +1,81 @@
+""" 
+    This snakemake file includes preprocessing workflows
+"""
+
+### ==================== [ Basic setting ] =========================
+
+import os 
+import random
+from snakemake.utils import makedirs 
+
+## Path to config file
+configfile: "/home/unix/jiahao/wanglab/jiahao/Github/jiahaoh/starfinder-dev/test/mAD_64/workflow_params.yaml"
+
+## Define specific list of positions to run the pipeline for testing/re-runs
+if config['test'] == True:
+    FOVS = [config['fov_naming_pattern'].format(i=j) for j in range(1, config['n_fovs']+1)]
+    FOVS = random.sample(FOVS, config['n_tests'])
+elif config['subset_list']:
+    FOVS = [config['fov_naming_pattern'].format(i=j) for j in config['subset_list']] 
+else:
+    FOVS = [config['fov_naming_pattern'].format(i=j) for j in range(1, config['n_fovs']+1)]
+
+print(FOVS)
+
+### ==================== [ Helper functions ] =========================
+
+def yaml_to_json(yaml_file):
+    import yaml
+    with open(yaml_file, 'r') as f:
+        data = yaml.safe_load(f)
+    
+    import json
+    json_file = yaml_file.replace('.yaml', '.json')
+    with open(json_file, 'w') as f:
+        f.write(json.dumps(data, indent=4))
+    
+    return json_file
+
+
+def run_matlab_scripts(param_string, matlab_script_name):
+
+    matlab_script_path = f"{config['starfinder_path']}/workflow/scripts"
+    matlab_run_string = f"addpath('{matlab_script_path}'); {matlab_script_name}({param_string});exit;"
+    print(matlab_run_string)
+    import subprocess
+    subprocess.run(["matlab", "-nodisplay -nosplash -nodesktop", "-r", matlab_run_string])
+
+
+### ==================== [ Rules ] =========================
+
+rule all:
+    input:
+        expand("{output_dir}/{dataset_id}/{output_id}/log/{fovID}.txt",
+                output_dir=config['root_output_path'],
+                dataset_id=config['dataset_id'],
+                output_id=config['output_id'],
+                fovID=FOVS),
+        expand("{output_dir}/{dataset_id}/{output_id}/images/ref_merged/{fovID}.tif",
+                output_dir=config['root_output_path'],
+                dataset_id=config['dataset_id'],
+                output_id=config['output_id'],
+                fovID=FOVS)
+
+rule rsf_test:
+    output:
+        expand("{output_dir}/{dataset_id}/{output_id}/log/{{fovID}}.txt",
+                output_dir=config['root_output_path'],
+                dataset_id=config['dataset_id'],
+                output_id=config['output_id']),
+        expand("{output_dir}/{dataset_id}/{output_id}/images/ref_merged/{{fovID}}.tif",
+                output_dir=config['root_output_path'],
+                dataset_id=config['dataset_id'],
+                output_id=config['output_id'])
+    run:
+        json_path = yaml_to_json(config['config_path'])
+        param_string = (f"'{json_path}', "
+                        f"'{wildcards.fovID}'"
+                        )
+        matlab_script_name = 'rsf_single_fov'
+        run_matlab_scripts(param_string, matlab_script_name)
+

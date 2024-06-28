@@ -100,7 +100,7 @@ classdef STARMapDataset
             defaultupdateLayer = "seq";
             addOptional(p, 'update_layer_slot', defaultupdateLayer);
 
-            default_dirs = dir(strcat(obj.inputPath, 'round*'));
+            default_dirs = dir(strcat(obj.inputPath, '/round*'));
             defaultfolderList = string({default_dirs(:).name});
             addOptional(p, 'folder_list', defaultfolderList);
 
