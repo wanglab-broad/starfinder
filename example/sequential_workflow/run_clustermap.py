@@ -2,23 +2,17 @@
 # user will define:
 # config_path
 
-import sys, json
+import os, sys, json
 config_path = sys.argv[1]
 
 # test block
 config_file = open(config_path)
 config = json.load(config_file)
 base_path = config['output_path']
-base_path = os.path.join(config['input_path'], config['ref_round'])
+pi_path = os.path.join(config['input_path'], config['ref_round'])
 number_of_fovs = config['number_of_fovs']
 
-# test block
-# base_path = '/home/unix/jiahao/wanglab/Data/Analyzed/2023-10-01-Jiahao-Test/mAD_64/'
-# pi_path = '/home/unix/jiahao/wanglab/Data/Processed/2023-10-01-Jiahao-Test/mAD_64/round1'
-# number_of_fovs = 56
-
 # Import packages 
-import os
 import timeit
 import math
 import tifffile
@@ -59,7 +53,7 @@ for current_fov in fovs:
     spots.columns = ['spot_location_1', 'spot_location_2', 'spot_location_3', 'gene']
 
     # Add gene code
-    genes_df = pd.read_csv(os.path.join(base_path, 'genes.csv'), header=None)
+    genes_df = pd.read_csv(os.path.join(base_path, "documents", 'genes.csv'), header=None)
     genes_df.columns = ['gene', 'barcode']
     genes_df.gene = genes_df.gene.astype('category')
     gene_order = genes_df.gene.cat.categories

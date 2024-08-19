@@ -11,9 +11,6 @@ function sdata = rsf_workflow_example(config_path)
     % add path for .m files
     addpath(fullfile(pwd, './code-base/src/')) % pwd is the location of the starfinder folder
 
-    % test block
-    % addpath(fullfile('/home/unix/jiahao/wanglab/jiahao/Github/starfinder/code-base/src/'))
-
     % iterate through each fov
     for n=config.starting_fov_id:config.starting_fov_id + config.number_of_fovs - 1
 

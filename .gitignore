@@ -6,4 +6,6 @@ Thumbs.db
 starfinder-dev.code-workspace
 .starfinder-dev.code-workspace
 workflow/.snakemake
+workflow/snakemake-logs
+.snakemake
 

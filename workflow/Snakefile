@@ -5,22 +5,19 @@
 ### ==================== [ Basic setting ] =========================
 
 import os 
+import glob
 import random
-from snakemake.utils import makedirs 
+import pandas as pd
+from pathlib import Path
 
 ## Path to config file
-configfile: "/home/unix/jiahao/wanglab/jiahao/Github/jiahaoh/starfinder-dev/test/mAD_64/workflow_params.yaml"
+# configfile: "/home/unix/jiahao/wanglab/jiahao/Github/jiahaoh/starfinder-dev/test/Hongyu/workflow_params.yaml"
+# configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/test/Hongyu/workflow_params_uger.yaml"
+# configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/test/Jiakun/workflow_params_uger.yaml"
+configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/test/Yiming/workflow_params_uger.yaml"
+# configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/test/tissue-2D/workflow_params_uger.yaml"
+# configfile: "/home/unix/jiahao/wanglab/jiahao/Github/jiahaoh/starfinder-dev/test/tissue-2D/workflow_params_uger.yaml"
 
-## Define specific list of positions to run the pipeline for testing/re-runs
-if config['test'] == True:
-    FOVS = [config['fov_naming_pattern'].format(i=j) for j in range(1, config['n_fovs']+1)]
-    FOVS = random.sample(FOVS, config['n_tests'])
-elif config['subset_list']:
-    FOVS = [config['fov_naming_pattern'].format(i=j) for j in config['subset_list']] 
-else:
-    FOVS = [config['fov_naming_pattern'].format(i=j) for j in range(1, config['n_fovs']+1)]
-
-print(FOVS)
 
 ### ==================== [ Helper functions ] =========================
 
@@ -36,46 +33,311 @@ def yaml_to_json(yaml_file):
     
     return json_file
 
-
 def run_matlab_scripts(param_string, matlab_script_name):
-
     matlab_script_path = f"{config['starfinder_path']}/workflow/scripts"
     matlab_run_string = f"addpath('{matlab_script_path}'); {matlab_script_name}({param_string});exit;"
     print(matlab_run_string)
     import subprocess
     subprocess.run(["matlab", "-nodisplay -nosplash -nodesktop", "-r", matlab_run_string])
 
+def run_fiji_macros(fiji_path, macro_path):
+    import subprocess
+    process = subprocess.Popen([fiji_path, "--ij2 --headless --run -macro", macro_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE) 
+    stdout, stderr = process.communicate()
+    print(stdout, stderr)
+
+def get_additional_round_names():
+    return [current_round['round_name'] for current_round in config['additional_round']]
+
+# def get_nuclei_registration_input(wildcards):
+#     input_list = []
+#     for current_round in config['additional_round']:
+#         current_round_name = current_round['round_name']
+#         input_list += [f"{INPUT_DIR}/{current_round_name}/{fovID}" for fovID in FOVS]
+#     return input_list
+
+# def get_nuclei_registration_output(OUTPUT_DIR, FOVS):
+#     output_list = []
+#     benchmark_list = []
+#     if config['rules']['nuclei_registration']['run']:
+#         for current_round in config['additional_round']:
+#             current_round_name = current_round['round_name']
+#             current_round_channels = [channel_dict['name'] for channel_dict in current_round['channel_order']]
+#             # for current_channel in current_round_channels:
+#             #     output_list += [f"{OUTPUT_DIR}/images/{current_round_name}/{current_channel}/{fovID}.tif" for fovID in FOVS]
+
+#             output_list += [f"{OUTPUT_DIR}/log/{fovID}_{current_round_name}_reg.txt" for fovID in FOVS]
+#             benchmark_list += [f"{OUTPUT_DIR}/log/benchmark/nuclei_registration/{fovID}_{current_round_name}_reg.txt" for fovID in FOVS]
+#     return output_list, benchmark_list
+
+### ==================== [ Parameters ] =========================
+INPUT_DIR = Path(config['root_input_path'], config['dataset_id'], config['sample_id'])
+OUTPUT_DIR = Path(config['root_output_path'], config['dataset_id'], config['output_id'])
+DAPI_DIR = Path(OUTPUT_DIR, 'images', 'DAPI')
+ROUND = [f"round{i}" for i in range(1, config['n_rounds']+1)]
+SAMPLE_ANNOT = pd.read_csv(f"{OUTPUT_DIR}/documents/sample-annotation.csv")
+SAMPLE_DICT = {}
+for current_sample in SAMPLE_ANNOT['sample_id'].unique():
+    fov_list = []
+
+    current_start = SAMPLE_ANNOT.loc[SAMPLE_ANNOT['sample_id'] == current_sample, 'fov_start'].values[0]
+    current_end = SAMPLE_ANNOT.loc[SAMPLE_ANNOT['sample_id'] == current_sample, 'fov_end'].values[0]
+
+    for i in range(current_start, current_end+1):
+        current_fov = config['fov_id_pattern'].format(i=i)
+        fov_list.append(current_fov)
+    
+    SAMPLE_DICT[current_sample] = fov_list
+
+SAMPLE = list(SAMPLE_DICT.keys())
+FOVS = sorted([config['fov_id_pattern'].format(i=j) for j in range(1, config['n_fovs']+1)])
+
+## Define specific list of positions to run the pipeline for testing/re-runs
+if config['subset_list']:
+    FOVS = [config['fov_id_pattern'].format(i=j) for j in config['subset_list']] 
+elif config['subset_range']:   
+    FOVS = [config['fov_id_pattern'].format(i=j) for j in range(config['subset_start'], config['subset_end']+1)]
+elif config['subset_random']:
+    FOVS = random.sample(FOVS, config['n_random_tests'])
+
+## TEST  
+SAMPLE_TEST = ['sample2']
+# print(FOVS)
 
 ### ==================== [ Rules ] =========================
 
+### Create dynamic output list for all rules
+def get_overall_output(wildcards):
+    output_list = []
+    for current_rule in config['rules']:
+        if config['rules'][current_rule]['run']:
+            if current_rule == 'rsf_single_fov':
+                output_list += [f"{OUTPUT_DIR}/log/{fovID}_rsf.txt" for fovID in FOVS]
+                output_list += [f"{OUTPUT_DIR}/images/ref_merged/{fovID}.tif" for fovID in FOVS]
+                output_list += [f"{OUTPUT_DIR}/signal/{fovID}_goodSpots.csv" for fovID in FOVS]
+            elif current_rule == 'nuclei_registration':
+                output_list += [f"{OUTPUT_DIR}/log/{fovID}_nr.txt" for fovID in FOVS]
+            elif current_rule == 'rotate_nuclei':
+                output_list += [f"{DAPI_DIR}/{fovID}.tif" for fovID in FOVS]
+            elif current_rule == 'enhance_dapi_with_flamingo':
+                output_list += [f"{OUTPUT_DIR}/images/flamingo/enhanced_DAPI/{fovID}.tif" for fovID in FOVS]
+            elif current_rule == 'stardist_segmentation':
+                output_list += [f"{OUTPUT_DIR}/images/stardist_segmentation/{fovID}.tif" for fovID in FOVS]
+            elif current_rule == 'stitching_preparation':
+                output_list += [f"{OUTPUT_DIR}/images/fused/{sample}/blank.tif" for sample in SAMPLE]
+                output_list += [f"{OUTPUT_DIR}/images/fused/{sample}/grid.csv" for sample in SAMPLE]
+                output_list += [f"{OUTPUT_DIR}/images/fused/{sample}/grid.png" for sample in SAMPLE]
+            elif current_rule == 'create_BigStitcher_macro':
+                output_list += [f"{OUTPUT_DIR}/images/fused/{sample}/BigStitcher_macro.ijm" for sample in SAMPLE]
+            elif current_rule == 'run_BigStitcher_macro':
+                output_list += [f"{OUTPUT_DIR}/images/fused/{sample}/DAPI/dataset.xml" for sample in SAMPLE]
+            elif current_rule == 'create_tile_config':
+                output_list += [f"{OUTPUT_DIR}/output/tile_config_{sample}.csv" for sample in SAMPLE]
+                output_list += [f"{OUTPUT_DIR}/output/tile_config_{sample}.html" for sample in SAMPLE]
+            elif current_rule == 'reads_assignment':
+                output_list += [f"{OUTPUT_DIR}/expr/{fovID}/raw.h5ad" for fovID in FOVS]
+                output_list += [f"{OUTPUT_DIR}/expr/{fovID}/reads_assignment.csv" for fovID in FOVS]
+            elif current_rule == 'create_sample_h5ad':
+                output_list += [f"{OUTPUT_DIR}/expr/{sample}_raw.h5ad" for sample in SAMPLE]
+            elif current_rule == 'create_sample_reads_assignment':
+                output_list += [f"{OUTPUT_DIR}/expr/{sample}_reads_assignment.csv" for sample in SAMPLE]
+
+    return output_list
+
 rule all:
     input:
-        expand("{output_dir}/{dataset_id}/{output_id}/log/{fovID}.txt",
-                output_dir=config['root_output_path'],
-                dataset_id=config['dataset_id'],
-                output_id=config['output_id'],
-                fovID=FOVS),
-        expand("{output_dir}/{dataset_id}/{output_id}/images/ref_merged/{fovID}.tif",
-                output_dir=config['root_output_path'],
-                dataset_id=config['dataset_id'],
-                output_id=config['output_id'],
-                fovID=FOVS)
+        get_overall_output
 
-rule rsf_test:
+### Registration and Spot Finding (RSF) pipeline
+rule rsf_preparation:
+    input:
+        yaml_config = config['config_path']
     output:
-        expand("{output_dir}/{dataset_id}/{output_id}/log/{{fovID}}.txt",
-                output_dir=config['root_output_path'],
-                dataset_id=config['dataset_id'],
-                output_id=config['output_id']),
-        expand("{output_dir}/{dataset_id}/{output_id}/images/ref_merged/{{fovID}}.tif",
-                output_dir=config['root_output_path'],
-                dataset_id=config['dataset_id'],
-                output_id=config['output_id'])
+        json_config = config['config_path'].replace('.yaml', '.json')
     run:
         json_path = yaml_to_json(config['config_path'])
-        param_string = (f"'{json_path}', "
+
+rule rsf_single_fov:
+    input:
+        config['config_path'].replace('.yaml', '.json'),
+        expand("{input_dir}/genes.csv", input_dir=INPUT_DIR),
+        expand("{input_dir}/{rounds}/{{fovID}}", input_dir=INPUT_DIR, rounds=ROUND),
+    output:
+        expand("{output_dir}/log/{{fovID}}_rsf.txt", output_dir=OUTPUT_DIR),
+        expand("{output_dir}/images/ref_merged/{{fovID}}.tif", output_dir=OUTPUT_DIR),
+        expand("{output_dir}/signal/{{fovID}}_goodSpots.csv", output_dir=OUTPUT_DIR),
+    resources:
+        mem_mb=config['rules']['rsf_single_fov']['resources']['mem_mb'],
+        runtime=config['rules']['rsf_single_fov']['resources']['runtime']
+    benchmark:
+        f"{OUTPUT_DIR}/log/benchmark/rsf_single_fov/{{fovID}}.txt"
+    run:
+        param_string = (f"'{input[0]}', "
                         f"'{wildcards.fovID}'"
                         )
         matlab_script_name = 'rsf_single_fov'
         run_matlab_scripts(param_string, matlab_script_name)
 
+additional_round_names = get_additional_round_names()
+rule nuclei_registration:
+    input:
+        config['config_path'].replace('.yaml', '.json'),
+        expand("{input_dir}/{rounds}/{{fovID}}", input_dir=INPUT_DIR, rounds=additional_round_names),
+    output:
+        expand("{output_dir}/log/{{fovID}}_nr.txt", output_dir=OUTPUT_DIR),
+    resources:
+        mem_mb=config['rules']['nuclei_registration']['resources']['mem_mb']
+    run:
+        param_string = (f"'{input[0]}', "
+                        f"'{wildcards.fovID}'"
+                        )
+        matlab_script_name = 'nuclei_registration'
+        run_matlab_scripts(param_string, matlab_script_name)
+
+def get_dapi_input(wildcards):
+    ff = glob.glob(f"{INPUT_DIR}/{config['dapi_round']}/{wildcards.fovID}/*ch04.tif")   
+    return ff
+
+rule rotate_nuclei:
+    input:
+       get_dapi_input
+    output:
+        expand("{dapi_dir}/{{fovID}}.tif", dapi_dir=DAPI_DIR, fovID=FOVS),
+    resources:
+        mem_mb=config['rules']['rotate_nuclei']['resources']['mem_mb']
+    run:
+        from scipy.ndimage import rotate
+        from skimage.io import imread, imsave 
+        current_img = imread(input[0])
+        current_img = rotate(current_img, config['rotate_angle'], axes=(1, 2))
+
+        if config['maximum_projection']:
+            current_img = current_img.max(axis=0)
+
+        imsave(output[0], current_img)
+
+### Segmentation 
+rule enhance_dapi_with_flamingo:
+    input:
+        dapi_img=expand("{output_dir}/images/flamingo/DAPI/{{fovID}}.tif", output_dir=OUTPUT_DIR),
+        flamingo_img=expand("{output_dir}/images/flamingo/Flamingo/{{fovID}}.tif", output_dir=OUTPUT_DIR)
+    output:
+        eh_dapi_img=expand("{output_dir}/images/flamingo/enhanced_DAPI/{{fovID}}.tif", output_dir=OUTPUT_DIR)
+    resources:
+        mem_mb=config['rules']['enhance_dapi_with_flamingo']['resources']['mem_mb']
+    script:
+        "scripts/enhance_dapi_with_flamingo.py"
+
+rule stardist_segmentation:
+    input:
+        expand("{dapi_dir}/{{fovID}}.tif", dapi_dir=DAPI_DIR)
+    output:
+        expand("{output_dir}/images/stardist_segmentation/{{fovID}}.tif", output_dir=OUTPUT_DIR)
+    conda:
+        # f"envs/stardist.yml"
+        f"{config['envs_path']}/stardist"
+    resources:
+        mem_mb=config['rules']['stardist_segmentation']['resources']['mem_mb'],
+        runtime=config['rules']['stardist_segmentation']['resources']['runtime']
+    benchmark:
+        f"{OUTPUT_DIR}/log/benchmark/stardist_segmentation/{{fovID}}.txt"
+    script:
+        "scripts/stardist_segmentation.py"
+
+### Stitching 
+def get_stitching_input(wildcards):
+    return expand("{dapi_dir}/{fovID}.tif", dapi_dir=DAPI_DIR, fovID=SAMPLE_DICT[wildcards.sample])
+
+rule stitching_preparation:
+    input:
+        expand("{output_dir}/documents/sample-annotation.csv", output_dir=OUTPUT_DIR),
+        expand("{output_dir}/documents/maf/{{sample}}.maf", output_dir=OUTPUT_DIR),
+        get_stitching_input
+        # expand("{dapi_dir}/{fovID}.tif", dapi_dir=DAPI_DIR, fovID=FOVS)
+    output:
+        expand("{output_dir}/images/fused/{{sample}}/blank.tif", output_dir=OUTPUT_DIR),
+        expand("{output_dir}/images/fused/{{sample}}/grid.csv", output_dir=OUTPUT_DIR),
+        expand("{output_dir}/images/fused/{{sample}}/grid.png", output_dir=OUTPUT_DIR)
+    resources:
+        mem_mb=config['rules']['stitching_preparation']['resources']['mem_mb']
+    script:
+        "scripts/stitching_preparation.py"
+
+rule create_BigStitcher_macro:
+    input:
+        expand("{output_dir}/images/fused/{{sample}}/grid.csv", output_dir=OUTPUT_DIR)
+    output:
+        expand("{output_dir}/images/fused/{{sample}}/BigStitcher_macro.ijm", output_dir=OUTPUT_DIR)
+    resources:
+        mem_mb=config['rules']['create_BigStitcher_macro']['resources']['mem_mb']
+    script:
+        "scripts/create_BigStitcher_macro.py"
+
+rule run_BigStitcher_macro:
+    input:
+        expand("{output_dir}/images/fused/{{sample}}/BigStitcher_macro.ijm", output_dir=OUTPUT_DIR)
+    output:
+        expand("{output_dir}/images/fused/{{sample}}/DAPI/dataset.xml", output_dir=OUTPUT_DIR)
+    resources:
+        mem_mb=config['rules']['run_BigStitcher_macro']['resources']['mem_mb'],
+        runtime=config['rules']['run_BigStitcher_macro']['resources']['runtime']
+    shell:
+        f"{config['fiji_path']} --ij2 --headless --run {{input}}"
+        
+rule create_tile_config:
+    input:
+        expand("{output_dir}/images/fused/{{sample}}/DAPI/dataset.xml", output_dir=OUTPUT_DIR, sample=SAMPLE_TEST),
+        expand("{output_dir}/images/fused/{{sample}}/grid.csv", output_dir=OUTPUT_DIR, sample=SAMPLE_TEST)
+    output:
+        expand("{output_dir}/output/tile_config_{{sample}}.csv", output_dir=OUTPUT_DIR, sample=SAMPLE_TEST),
+        expand("{output_dir}/output/tile_config_{{sample}}.html", output_dir=OUTPUT_DIR, sample=SAMPLE_TEST)
+    resources:
+        mem_mb=config['rules']['create_tile_config']['resources']['mem_mb']
+    script:
+        "scripts/create_tile_config.py"
+
+### Reads assignment 
+rule reads_assignment:
+    input:
+        expand("{output_dir}/documents/sample-annotation.csv", output_dir=OUTPUT_DIR),
+        expand("{output_dir}/output/tile_config_{sample}.csv", output_dir=OUTPUT_DIR, sample=SAMPLE_TEST),
+        expand("{dapi_dir}/{{fovID}}.tif", dapi_dir=DAPI_DIR, fovID=FOVS),
+        expand("{output_dir}/images/stardist_segmentation/{{fovID}}.tif", output_dir=OUTPUT_DIR, fovID=FOVS),
+        expand("{output_dir}/signal/{{fovID}}_goodSpots.csv", output_dir=OUTPUT_DIR, fovID=FOVS),
+        expand("{output_dir}/documents/genes.csv", output_dir=OUTPUT_DIR),
+    output:
+        expand("{output_dir}/expr/{{fovID}}/raw.h5ad", output_dir=OUTPUT_DIR, fovID=FOVS),
+        expand("{output_dir}/expr/{{fovID}}/reads_assignment.csv", output_dir=OUTPUT_DIR, fovID=FOVS),
+    resources:
+        mem_mb=config['rules']['reads_assignment']['resources']['mem_mb']
+    script:
+        "scripts/reads_assignment.py"
+
+### Create sample-wise output 
+def get_h5ad_input(wildcards):
+    return expand("{output_dir}/expr/{fovID}/raw.h5ad", output_dir=OUTPUT_DIR, fovID=SAMPLE_DICT[wildcards.sample])
+
+rule create_sample_h5ad:
+    input:
+        expand("{output_dir}/documents/sample-annotation.csv", output_dir=OUTPUT_DIR),
+        get_h5ad_input
+    output:
+        expand("{output_dir}/expr/{{sample}}_raw.h5ad", output_dir=OUTPUT_DIR, sample=SAMPLE_TEST)
+    resources:
+        mem_mb=config['rules']['create_sample_h5ad']['resources']['mem_mb']
+    script:
+        "scripts/create_sample_h5ad.py"
+
+def get_reads_input(wildcards):
+    return expand("{output_dir}/expr/{fovID}/reads_assignment.csv", output_dir=OUTPUT_DIR, fovID=SAMPLE_DICT[wildcards.sample])
+
+rule create_sample_reads_assignment:
+    input:
+        expand("{output_dir}/documents/sample-annotation.csv", output_dir=OUTPUT_DIR),
+        get_reads_input
+    output:
+        expand("{output_dir}/expr/{{sample}}_reads_assignment.csv", output_dir=OUTPUT_DIR, sample=SAMPLE_TEST)
+    resources:
+        mem_mb=config['rules']['create_sample_reads_assignment']['resources']['mem_mb']
+    script:
+        "scripts/create_sample_reads_assignment.py"

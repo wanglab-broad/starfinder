@@ -1,4 +1,4 @@
-function output_img = PlotCentroids(input_centroid, input_img, color, msize, input_title)
+function output_img = PlotCentroids(input_centroid, input_img, msize, color, input_title)
 % Plot centroids on image
 
     if nargin < 4

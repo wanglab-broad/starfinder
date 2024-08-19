@@ -25,8 +25,8 @@ function tile_config = ParseFijiTileConfiguration(tile_config_file)
 
     % import the data
     tile_config = readtable(tile_config_file, opts);
-    tile_config.Properties.VariableNames = {'grid' 'x' 'y' 'z'};
-    tile_config.grid = extractBefore(tile_config.grid, '.');
+    tile_config.Properties.VariableNames = {'fov' 'x' 'y' 'z'};
+    tile_config.fov = extractBefore(tile_config.fov, '.');
 
     % Clear temporary variables
     clear opts

@@ -23,6 +23,7 @@ jobscript = sys.argv[-1]
 job = read_job_properties(jobscript)
 cluster_conf = job.get('cluster', {})
 job_resources = job.get('resources', {})
+# print(job_resources)
 
 matches = re.match(r'(\S+)/snakejob\.\S+\.(\d+)\.sh', jobscript)
 if not matches:
@@ -39,7 +40,7 @@ mem_mb = cluster_conf.get('mem_mb', job_resources.get('mem_mb', None))
 threads = job.get('threads', 1)
 project = cluster_conf.get('project', 'broad')
 queue = cluster_conf.get('queue', '')
-runtime = cluster_conf.get('runtime', "")
+runtime = cluster_conf.get('runtime', job_resources.get('runtime', None))
 
 # -terse flag makes sure qsub only outputs job ID to stdout
 # -r signals that jobs may be restarted in cases of *cluster* crashes
@@ -77,7 +78,9 @@ if mem_mb:
     command.extend(['-l', 'h_vmem={}M'.format(mem_mb)])
 
 if runtime:
-    command.extend(['-l', 'h_rt={}'.format(runtime)])
+    import datetime
+    runtime_uger = datetime.timedelta(minutes=runtime)
+    command.extend(['-l', 'h_rt={}'.format(str(runtime_uger))])
 
 if dependencies:
     command.extend(['-hold_jid', ",".join(dependencies)])
