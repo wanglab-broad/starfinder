@@ -12,10 +12,6 @@ function create_3d_segmentation(config_path)
     addpath(genpath(fullfile(pwd, './code-base/src/'))) % pwd is the location of the starfinder folder
     addpath(genpath(fullfile(pwd, './code-base/matlab-addon/')))
 
-    % test block
-    % addpath(fullfile('/stanley/WangLab/jiahao/Github/starfinder/code-base/new/'))
-    % addpath(genpath(fullfile('/stanley/WangLab/jiahao/Github/starfinder/code-base/matlab-addon/')))
-
     % load images
     image_path = fullfile(config.output_path, 'images/fused');
     reference_cell_label = imread(fullfile(image_path, 'Cell_label.tif'));

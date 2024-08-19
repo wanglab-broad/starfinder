@@ -1,0 +1,7 @@
+run("Define dataset ...", "define_dataset=[Automatic Loader (Bioformats based)] project_filename=dataset.xml 
+path=/home/unix/jiahao/wanglab/Data/Analyzed/2024-03-08-Hongyu-Covid_LN/starfinder-uger/images/fused/sample1/DAPI/*.tif 
+exclude=10 pattern_0=Tiles modify_voxel_size? voxel_size_x=0.19 voxel_size_y=0.19 voxel_size_z=0.35 voxel_size_unit=µm 
+move_tiles_to_grid_(per_angle)?=[Move Tile to Grid (Macro-scriptable)] grid_type=[Down & Right             ] tiles_x=8 tiles_y=9 tiles_z=1 overlap_x_(%)=10 overlap_y_(%)=10 overlap_z_(%)=10 
+keep_metadata_rotation how_to_load_images=[Re-save as multiresolution HDF5] load_raw_data_virtually 
+dataset_save_path=/home/unix/jiahao/wanglab/Data/Analyzed/2024-03-08-Hongyu-Covid_LN/starfinder-uger/images/fused/sample1/DAPI manual_mipmap_setup 
+subsampling_factors=[{ {1,1,1}, {4,4,4} }] hdf5_chunk_sizes=[{ {16,16,16}, {16,16,16} }] timepoints_per_partition=1 setups_per_partition=0 use_deflate_compression");

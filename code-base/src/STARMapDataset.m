@@ -100,7 +100,7 @@ classdef STARMapDataset
             defaultupdateLayer = "seq";
             addOptional(p, 'update_layer_slot', defaultupdateLayer);
 
-            default_dirs = dir(strcat(obj.inputPath, 'round*'));
+            default_dirs = dir(strcat(obj.inputPath, '/round*'));
             defaultfolderList = string({default_dirs(:).name});
             addOptional(p, 'folder_list', defaultfolderList);
 
@@ -502,7 +502,7 @@ classdef STARMapDataset
                         mov_img = max(obj.images{current_layer}, [], 4);
                     case "single-channel"
                         current_metadata = obj.metadata{current_layer}.ChannelInfo;
-                        ref_channel_index = find(contains([current_metadata(:).name], p.Results.ref_channel) == 1);
+                        ref_channel_index = find(contains({current_metadata(:).name}, p.Results.ref_channel) == 1);
                         mov_img = obj.images{current_layer}(:,:,:,ref_channel_index);
                 end
 
@@ -723,6 +723,7 @@ classdef STARMapDataset
             parse(p, varargin{:});
             
             fprintf('====Reads Filtration====\n');
+            end_base = string(p.Results.end_base);
 
             % remove reads with incorrect colors
             no_color_spots = contains(obj.signal.allSpots.color_seq, "N");
@@ -734,17 +735,17 @@ classdef STARMapDataset
             fprintf('Comparing with codebook...\n');
             fprintf(sprintf('Number of barcode segments: %d\n', p.Results.n_barcode_segments));
 
-            if numel(p.Results.end_base) > 1
-                end_base_msg = strjoin(p.Results.end_base, " or ");
+            if numel(end_base) > 1
+                end_base_msg = strjoin(end_base, " or ");
             else
-                end_base_msg = p.Results.end_base;
+                end_base_msg = end_base;
             end
             fprintf(sprintf('Barcode ends with: %s\n', end_base_msg));
 
             if p.Results.n_barcode_segments == 1
-                obj = FilterReads(obj, p.Results.end_base);  
+                obj = FilterReads(obj, end_base);  
             else
-                obj = FilterReadsMultiSegment(obj, p.Results.end_base, p.Results.split_index);
+                obj = FilterReadsMultiSegment(obj, end_base, p.Results.split_index);
             end
 
             % change metadata
@@ -797,18 +798,20 @@ classdef STARMapDataset
                     signal_preview_img = PlotCentroids(obj.signal.goodSpots, p.Results.bg_img, p.Results.spots_color, p.Results.spots_size);
             
                     if p.Results.save
-                        current_fname = fullfile(p.Results.output_path, sprintf("%s_goodSpots.tif", obj.fovID));
+                        current_fname = fullfile(p.Results.output_path, sprintf("%s_goodSpots.png", obj.fovID));
                         current_output_folder_msg = strrep(current_fname, '\', '\\');
                         fprintf(sprintf('Saving goodSpots preview image to %s\n', current_output_folder_msg));
+                        % fileattrib(p.Results.output_path, '+w');
                         exportgraphics(signal_preview_img, current_fname, 'Resolution', 300, 'ContentType', 'image');
                     end
                 case "allSpots"
                     signal_preview_img = PlotCentroids(obj.signal.allSpots, p.Results.bg_img, p.Results.spots_color, p.Results.spots_size);
             
                     if p.Results.save
-                        current_fname = fullfile(p.Results.output_path, sprintf("%s_allSpots.tif", obj.fovID));
+                        current_fname = fullfile(p.Results.output_path, sprintf("%s_allSpots.png", obj.fovID));
                         current_output_folder_msg = strrep(current_fname, '\', '\\');
                         fprintf(sprintf('Saving allSpots preview image to %s\n', current_output_folder_msg));
+                        % fileattrib(p.Results.output_path, '+w');
                         exportgraphics(signal_preview_img, current_fname, 'Resolution', 300, 'ContentType', 'image');
                     end
             end

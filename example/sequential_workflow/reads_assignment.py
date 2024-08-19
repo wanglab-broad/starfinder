@@ -112,7 +112,7 @@ plt.clf()
 plt.close()
 
 # Load genes.csv
-genes_df = pd.read_csv(os.path.join(base_path, "genes.csv"), header=None)
+genes_df = pd.read_csv(os.path.join(base_path, "documents", "genes.csv"), header=None)
 genes_df.columns = ['gene', 'barcode']
 
 # Reads assignment to cell

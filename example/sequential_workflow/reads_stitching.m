@@ -11,9 +11,6 @@ function reads_stitching(config_path)
     % add path for .m files
     addpath(fullfile(pwd, './code-base/src/')) % pwd is the location of the starfinder folder
 
-    % test block
-    % addpath(fullfile('/home/unix/jiahao/wanglab/jiahao/Github/starfinder/code-base/src/'))
-
     image_path = fullfile(config.output_path, 'images');
     signal_path = fullfile(config.output_path, 'signal');
 
@@ -45,8 +42,8 @@ function reads_stitching(config_path)
         [fov, x, y, z] = current_row{:};
         
         % load dots of each tile
-        fname_pattern = strcat(config.fov_id_pattern, "_goodSpots.csv");
-        current_spots_file = fullfile(signal_path, sprintf(fname_pattern, fov));
+        % fname_pattern = strcat(config.fov_id_pattern, "_goodSpots.csv");
+        current_spots_file = fullfile(signal_path, sprintf("%s_goodSpots.csv", fov));
         current_spots = readtable(current_spots_file);
         current_spots.gene = string(current_spots.gene);
         current_spots.x = int32(current_spots.x);
@@ -125,6 +122,6 @@ function reads_stitching(config_path)
     end
 
     writetable(fused_spots, fullfile(signal_path, 'fused_goodSpots.csv'));
-    PlotCentroids(table2array(fused_spots(:, ["x", "y"])), amplicon_img, .1);
+    PlotCentroids(fused_spots(:, ["x", "y"]), amplicon_img, .1);
     exportgraphics(gcf, fullfile(image_path, 'fused/goodSpots.tif'), 'Resolution', 1000, 'ContentType', 'image')
 end

@@ -7,7 +7,7 @@ use UGER
 use Anaconda3
 use Matlab
 
-source activate /stanley/WangLab/envs/starfinder
+source activate /stanley/WangLab/envs/starfinder-uger
 
 echo -e "JOB ID\t$JOB_ID"
 echo "=============================="

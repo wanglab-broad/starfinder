@@ -54,7 +54,7 @@ for current_structure in structure_dict.keys():
     print(current_seg.shape)
 
     # Load genes.csv
-    genes_df = pd.read_csv(os.path.join(base_path, "genes.csv"), header=None)
+    genes_df = pd.read_csv(os.path.join(base_path, "documents", "genes.csv"), header=None)
     genes_df.columns = ['gene', 'barcode']
 
     # Reads assignment to cell

@@ -12,10 +12,6 @@ base_path = config['output_path']
 img_col = config['img_col']
 img_row = config['img_row']
 
-# test block 
-# base_path = '/home/unix/jiahao/wanglab/Data/Analyzed/2023-10-01-Jiahao-Test/mAD_64/'
-# img_col, img_row = [3072, 3072]
-
 # Import packages 
 import os
 import numpy as np
@@ -74,7 +70,7 @@ tile_config_combined.columns = ['fov', 'col', 'row', 'col_registered', 'row_regi
 tile_config_combined['id'] = tile_config_combined['fov'].str.extract(r'(?P<digit>\d+)').astype(int)
 
 # Load grid file 
-grid_df = pd.read_csv(os.path.join(base_path, 'grid.csv'), index_col=0)
+grid_df = pd.read_csv(os.path.join(base_path, "documents", 'grid.csv'), index_col=0)
 grid_df.columns = ['col_count', 'row_count', 'id', 'grid']
 
 tile_config_without_blank = tile_config_combined.loc[tile_config_combined['id'] > 0, :]
