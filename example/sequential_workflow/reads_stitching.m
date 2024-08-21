@@ -122,6 +122,6 @@ function reads_stitching(config_path)
     end
 
     writetable(fused_spots, fullfile(signal_path, 'fused_goodSpots.csv'));
-    PlotCentroids(fused_spots(:, ["x", "y"]), amplicon_img, .1);
+    PlotCentroids(fused_spots(:, ["x", "y"]), amplicon_img, "red", .1);
     exportgraphics(gcf, fullfile(image_path, 'fused/goodSpots.tif'), 'Resolution', 1000, 'ContentType', 'image')
 end
