@@ -14,7 +14,6 @@ base_path = config['output_path']
 import os
 import numpy as np
 import pandas as pd
-import seaborn as sns
 import scipy.ndimage as ndi
 import matplotlib.pyplot as plt
 
