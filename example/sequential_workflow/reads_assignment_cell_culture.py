@@ -14,7 +14,6 @@ base_path = config['output_path']
 import os
 import numpy as np
 import pandas as pd
-import seaborn as sns
 import matplotlib.pyplot as plt
 
 from skimage.measure import regionprops
@@ -178,7 +177,7 @@ obs_path = os.path.join(output_path, primary_dataset, 'meta.csv')
 # Add expression data to the AnnData object 
 expr_x = np.loadtxt(expr_path, delimiter=',')
 var = pd.read_csv(var_path, header=None)
-var = pd.DataFrame(index=var.iloc[:,0].to_list())
+var = pd.DataFrame(index=var.iloc[:,1].to_list())
 obs = pd.read_csv(obs_path, index_col=0)
 
 adata = AnnData(X=expr_x, var=var, obs=obs)

@@ -1,0 +1,72 @@
+---
+title: "AD_Plaque_Quantification_Demo"
+date: "2024-08-22"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(R.utils)
+library(tidyverse)
+library(hdf5r)
+library(Matrix)
+source("sq_related_functions/AD_SpatialFunction2.R")
+source("sq_related_functions/AD_Stat_Function.R")
+source("sq_related_functions/AD_Utilities.R")
+ad_ini()
+```
+
+## Load AD Data
+
+```{r}
+# load anndata with cell type label
+file_path = "/path/to/2023-11-27-mAD_64_cp.h5ad"
+starmap_64 <- h5ad_to_seurat(file_path, "layers/scaled", 
+                             c("x","y","cell_type","leiden","seg_label","area"),
+                             obs_index = "obs/_index",var_index = "var/gene")
+# Load protein img
+file.h5 <- H5File$new(file_path, mode="r")
+starmap_64@meta.data$x <- round(starmap_64@meta.data$x * 0.5)
+starmap_64@meta.data$y <- round(starmap_64@meta.data$y * 0.5)
+
+starmap_64@misc[["gfap"]] <- file.h5[["uns/AD_morph/gfap"]][,]
+starmap_64@misc[["label_img"]] <- file.h5[["uns/AD_morph/label_img"]][,]
+starmap_64@misc[["plaque"]] <- file.h5[["uns/AD_morph/plaque"]][,]
+starmap_64@misc[["tau"]] <- file.h5[["uns/AD_morph/tau"]][,]
+ 
+```
+
+## Plaque Quantification
+
+
+```{r }
+starmap_64 <- ad_plaque_quant(starmap_64, 
+                              img_list = starmap_64@misc, 
+                              min_area = 400, 
+                              region = "all", 
+                              resolution_ = 0.18) # micron per pixel
+
+```
+### Filtered Plaque Meta Data 
+
+```{r}
+head(starmap_64@misc[["plaque_quant_all"]][["plaque_meta"]])
+```
+
+### Stacked Barplot for Cell Type Distribution Stats.
+
+```{r}
+cell_meta <- starmap_64@misc[["plaque_quant_all"]]$cell_meta
+
+cell_pal <- file.h5[["uns/cell_type_colors"]][] %>% `names<-`(unique(cell_meta$cell_type))
+
+ad_plot_stacked_bar(cell_meta$interval,
+                    cell_meta$cell_type,
+                    cell_pal,
+                    "Demo",
+                    starmap_64@misc[["plaque_quant_all"]][["plaque_dilate_area"]], 
+                    img_size = nrow(starmap_64@misc[["plaque"]]) * ncol(starmap_64@misc[["plaque"]]))
+```
+
