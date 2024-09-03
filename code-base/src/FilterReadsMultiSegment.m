@@ -37,6 +37,19 @@ function obj = FilterReadsMultiSegment( obj, end_base, split_index )
 
     fprintf('Filtration Statistics:\n');
 
+    % filter reads based on codebook
+    codebook_barcodes = obj.codebook.seqToGene.keys;
+    barcodes_in_codebook = contains(color_seq, codebook_barcodes);
+    
+    score_1 = sum(barcodes_in_codebook)/numel(color_seq);
+    s = sprintf('%f [%d / %d] percent of good reads are in codebook\n',...
+        sum(barcodes_in_codebook)/numel(color_seq),...
+        sum(barcodes_in_codebook),...
+        numel(color_seq));
+    fprintf(s);
+
+    obj.signal.scores = [obj.signal.scores score_1]; 
+
     for i=1:numel(end_base)
 
         current_end_base_char = end_base_char(i, :);
@@ -50,20 +63,9 @@ function obj = FilterReadsMultiSegment( obj, end_base, split_index )
             current_end_base_char(1),...
             current_end_base_char(2));
         fprintf(s);
+
+        obj.signal.scores = [obj.signal.scores current_score]; 
     end
-
-    % filter reads based on codebook
-    codebook_barcodes = obj.codebook.seqToGene.keys;
-    barcodes_in_codebook = contains(color_seq, codebook_barcodes);
-    
-    score_1 = sum(barcodes_in_codebook)/numel(color_seq);
-    s = sprintf('%f [%d / %d] percent of good reads are in codebook\n',...
-        sum(barcodes_in_codebook)/numel(color_seq),...
-        sum(barcodes_in_codebook),...
-        numel(color_seq));
-    fprintf(s);
-
-    obj.signal.scores = [score_1]; 
     
     obj.signal.goodSpots = obj.signal.allSpots(barcodes_in_codebook, :);
     % obj.signal.goodSpots{:, "barcode"} = barcodes(barcodes_in_codebook);

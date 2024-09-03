@@ -7,6 +7,7 @@ function output_table = MakeSubtileTable( dims, sqrt_pieces )
 
     output_table = table([],[],[],[],[],[],[],[],[],[],[],...
                         'VariableNames', column_headers);
+
     sub_order = [];
     for i = 0:(sqrt_pieces-1)
         for j = 0:(sqrt_pieces-1)
@@ -25,7 +26,7 @@ function output_table = MakeSubtileTable( dims, sqrt_pieces )
         start_coords_y = tile_idx(2) * tile_size - overlap_half + 1;
         end_coords_y = (tile_idx(2) + 1) * tile_size + overlap_half;
         
-        %% compensate in edge
+        % compensate in edge
         if tile_idx(1) == 0
             start_coords_x = start_coords_x + overlap_half;
         end
@@ -33,7 +34,7 @@ function output_table = MakeSubtileTable( dims, sqrt_pieces )
             start_coords_y = start_coords_y + overlap_half;
         
         end
-        %% compensate in edge
+        % compensate in edge
         if tile_idx(1) == sqrt_pieces - 1
             end_coords_x = dims(1);
         end
@@ -46,7 +47,7 @@ function output_table = MakeSubtileTable( dims, sqrt_pieces )
 
         dims_t = dims;
         dims_t(1:2) = [end_coords_x - start_coords_x + 1,end_coords_y - start_coords_y + 1];
-        disp([tile_idx,start_coords_x,end_coords_x,start_coords_y,end_coords_y,upper_left(1:2),dims_t(1:2)]);
+        % disp([tile_idx,start_coords_x,end_coords_x,start_coords_y,end_coords_y,upper_left(1:2),dims_t(1:2)]);
         output_table_t = table(t, tile_idx(1), tile_idx(2),...
                                 start_coords_x, start_coords_y, end_coords_x, end_coords_y,...
                                 upper_left(1), upper_left(2), dims_t(1), dims_t(2),...
