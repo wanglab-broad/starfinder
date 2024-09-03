@@ -23,7 +23,7 @@ function obj = FilterReads( obj, end_base )
         numel(barcodes));
     fprintf(s);
 
-    obj.signal.scores = [score_1]; 
+    obj.signal.scores = [obj.signal.scores score_1]; 
 
     for i=1:numel(end_base)
 

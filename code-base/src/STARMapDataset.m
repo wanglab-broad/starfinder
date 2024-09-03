@@ -73,11 +73,13 @@ classdef STARMapDataset
             obj.images = dictionary();
             obj.projections = dictionary();
             obj.metadata = dictionary();
+            obj.subtile = struct();
             obj.layers = struct();
             obj.registration = dictionary();
             obj.signal = struct();
             obj.codebook = struct();
             
+            obj.subtile.index = 0;
             obj.layers.seq = [];
             obj.layers.other = [];
             obj.layers.ref = [];
@@ -720,12 +722,16 @@ classdef STARMapDataset
             defaultSplitIndex = [5];
             addParameter(p, 'split_index', defaultSplitIndex);
 
+            defaultSaveScores = false;
+            addParameter(p, 'save_scores', defaultSaveScores);
+
             parse(p, varargin{:});
             
             fprintf('====Reads Filtration====\n');
             end_base = string(p.Results.end_base);
 
             % remove reads with incorrect colors
+            n_spots = size(obj.signal.allSpots, 1);
             no_color_spots = contains(obj.signal.allSpots.color_seq, "N");
             multi_color_spots = contains(obj.signal.allSpots.color_seq, "M");
             to_keep = ~or(no_color_spots, multi_color_spots);
@@ -734,6 +740,7 @@ classdef STARMapDataset
             fprintf(sprintf('Number of spots were dropped because of multi-max color: %d\n', sum(multi_color_spots)));
             fprintf('Comparing with codebook...\n');
             fprintf(sprintf('Number of barcode segments: %d\n', p.Results.n_barcode_segments));
+            obj.signal.scores = [n_spots sum(no_color_spots) sum(multi_color_spots)]; 
 
             if numel(end_base) > 1
                 end_base_msg = strjoin(end_base, " or ");
@@ -746,6 +753,23 @@ classdef STARMapDataset
                 obj = FilterReads(obj, end_base);  
             else
                 obj = FilterReadsMultiSegment(obj, end_base, p.Results.split_index);
+            end
+
+            if p.Results.save_scores
+                current_fname = fullfile(obj.outputPath, "log", "rsf_scores.csv");
+                current_output_folder_msg = strrep(current_fname, '\', '\\');
+                fprintf(sprintf('Saving scores to %s\n', current_output_folder_msg));
+                if obj.subtile.index > 0
+                    scores_to_save = [string(obj.fovID) string(obj.subtile.index) string(obj.signal.scores)];
+                else
+                    scores_to_save = [string(obj.fovID) string(obj.signal.scores)];
+                end
+
+                if ~exist(current_fname, 'file')
+                    writematrix(scores_to_save, current_fname, 'Delimiter', ',');
+                else
+                    writematrix(scores_to_save, current_fname, 'Delimiter', ',', 'WriteMode', 'append');
+                end
             end
 
             % change metadata
@@ -847,13 +871,21 @@ classdef STARMapDataset
 
             switch p.Results.signal_slot
                 case "goodSpots"
-                    current_fname = fullfile(p.Results.output_path, sprintf("%s_goodSpots.csv", obj.fovID));
+                    if obj.subtile.index > 0
+                        current_fname = fullfile(obj.outputPath, "output", "subtile", obj.fovID, sprintf("subtile_goodSpots_%d.csv", obj.subtile.index));
+                    else
+                        current_fname = fullfile(p.Results.output_path, sprintf("%s_goodSpots.csv", obj.fovID));
+                    end
                     current_output_folder_msg = strrep(current_fname, '\', '\\');
                     fprintf(sprintf('Saving goodSpots to %s\n', current_output_folder_msg));
                     output_table = obj.signal.goodSpots(:, p.Results.field_to_keep);
                     writetable(output_table, current_fname);
                 case "allSpots"
-                    current_fname = fullfile(p.Results.output_path, sprintf("%s_allSpots.csv", obj.fovID));
+                    if obj.subtile.index > 0
+                        current_fname = fullfile(obj.outputPath, "output", "subtile", obj.fovID, sprintf("subtile_allSpots_%d.csv", obj.subtile.index));
+                    else
+                        current_fname = fullfile(p.Results.output_path, sprintf("%s_allSpots.csv", obj.fovID));
+                    end
                     current_output_folder_msg = strrep(current_fname, '\', '\\');
                     fprintf(sprintf('Saving allSpots to %s\n', current_output_folder_msg));
                     output_table = obj.signal.allSpots(:, p.Results.field_to_keep);
@@ -879,7 +911,7 @@ classdef STARMapDataset
             defaultSave = false;
             addOptional(p, 'save', defaultSave);
 
-            defaultOutputFolder = fullfile(obj.outputPath, "temp");
+            defaultOutputFolder = fullfile(obj.outputPath, "output");
             addOptional(p, 'output_path', defaultOutputFolder);
 
             defaultRefLayer = obj.layers.ref;
@@ -891,12 +923,41 @@ classdef STARMapDataset
                 mkdir(p.Results.output_path)
             end
 
+            current_subtile_folder = fullfile(p.Results.output_path, "subtile");
+            if ~exist(current_subtile_folder, 'dir')
+                mkdir(current_subtile_folder)
+            end
+
             current_metadata = obj.metadata{p.Results.ref_layer};
-            current_metadata = current_metadata{1};
-            obj.subtile = MakeSubtileTable(current_metadata.dims, p.Results.sqrt_pieces);     
+            obj.subtile.coords = MakeSubtileTable(current_metadata.dims, p.Results.sqrt_pieces);     
 
             if p.Results.save
-                writetable(obj.subtile, fullfile(p.Results.output_path, sprintf("%s_subtile.csv", obj.fovID)), 'Delimiter',',', 'QuoteStrings',false);
+                current_output_folder = fullfile(current_subtile_folder, obj.fovID);
+                if ~exist(current_output_folder, 'dir')
+                    mkdir(current_output_folder)
+                end
+                % save the coords of subtiles
+                writetable(obj.subtile.coords, fullfile(current_output_folder, "subtile_coords.csv"), 'Delimiter',',', 'QuoteStrings',false);
+
+                % save the object of subtiles
+                for i=1:size(obj.subtile.coords)
+                    tile_idx = obj.subtile.coords.t(i);
+                    start_coords_x = obj.subtile.coords.scoords_x(i);
+                    start_coords_y = obj.subtile.coords.scoords_y(i);
+
+                    end_coords_x = obj.subtile.coords.ecoords_x(i);
+                    end_coords_y = obj.subtile.coords.ecoords_y(i);
+
+                    subtile_data = obj;
+                    for l=1:length(obj.layers.seq)
+                        current_layer = obj.layers.seq{l};
+                        subtile_data.images{current_layer} = subtile_data.images{current_layer}(start_coords_y:end_coords_y, start_coords_x:end_coords_x, :, :);
+                    end
+                    subtile_data.subtile.index = tile_idx;
+
+                    save(fullfile(current_output_folder, sprintf('subtile_data_%d.mat', tile_idx)), "subtile_data");
+                end
+
             end
 
             % change metadata

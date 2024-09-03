@@ -14,9 +14,9 @@ from pathlib import Path
 # configfile: "/home/unix/jiahao/wanglab/jiahao/Github/jiahaoh/starfinder-dev/test/Hongyu/workflow_params.yaml"
 # configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/test/Hongyu/workflow_params_uger.yaml"
 # configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/test/Jiakun/workflow_params_uger.yaml"
-configfile: "/home/unix/jiahao/wanglab/jiahao/Github/jiahaoh/starfinder-dev/test/Yiming/workflow_params_uger.yaml"
+# configfile: "/home/unix/jiahao/wanglab/jiahao/Github/jiahaoh/starfinder-dev/test/Yiming/workflow_params_uger.yaml"
 # configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/test/tissue-2D/workflow_params_uger.yaml"
-# configfile: "/home/unix/jiahao/wanglab/jiahao/Github/jiahaoh/starfinder-dev/test/tissue-2D/workflow_params_uger.yaml"
+configfile: "/home/unix/jiahao/wanglab/jiahao/Github/jiahaoh/starfinder-dev/test/tissue-2D/workflow_params_uger.yaml"
 
 
 ### ==================== [ Helper functions ] =========================
