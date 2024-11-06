@@ -76,10 +76,16 @@ function sdata = rsf_single_fov(config_path, current_fov)
         sdata = sdata.ReadsExtraction('voxel_size', config.rules.rsf_single_fov.parameters.reads_extraction.voxel_size);
     end
   
-    % load codebook and filter reads
+    % load codebook
+    if config.rules.rsf_single_fov.parameters.load_codebook.run
+        sdata = sdata.LoadCodebook('split_index', config.rules.rsf_single_fov.parameters.load_codebook.split_index);
+    end
+
+    % filter reads
     if config.rules.rsf_single_fov.parameters.reads_filtration.run
-        sdata = sdata.LoadCodebook;
-        sdata = sdata.ReadsFiltration('end_base', config.rules.rsf_single_fov.parameters.reads_filtration.end_base);
+        sdata = sdata.ReadsFiltration('end_base', config.rules.rsf_single_fov.parameters.reads_filtration.end_base, ...
+                                  'n_barcode_segments', config.rules.rsf_single_fov.parameters.reads_filtration.n_barcode_segments, ...
+                                  'split_index', config.rules.rsf_single_fov.parameters.reads_filtration.split_index);  
     end
 
     % output 

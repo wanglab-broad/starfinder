@@ -485,6 +485,12 @@ classdef STARMapDataset
             defaultInputImage= ""; % 
             addOptional(p, 'input_image', defaultInputImage);
 
+            defaultSaveShifts = true;
+            addParameter(p, 'save_shifts', defaultSaveShifts);
+
+            defaultLogSuffix = "";
+            addParameter(p, 'log_suffix', defaultLogSuffix);
+
             parse(p, varargin{:});
 
             fprintf('====Global Registration====\n');
@@ -515,6 +521,34 @@ classdef STARMapDataset
     
                 fprintf(sprintf('%s vs. %s finished [time=%02f]\n', current_layer, p.Results.ref_layer, toc(starting)));
                 fprintf(sprintf('Shifted by %s\n', num2str(obj.registration{current_layer}.shifts)));
+            end
+
+            if p.Results.save_shifts
+                shift_log_folder = fullfile(obj.outputPath, "log", "gr_shifts");
+                if ~exist(shift_log_folder, 'dir')
+                    mkdir(shift_log_folder);
+                end
+                
+                if p.Results.log_suffix ~= ""
+                    current_fname = fullfile(shift_log_folder, sprintf("%s_%s.txt", obj.fovID, p.Results.log_suffix));
+                else
+                    current_fname = fullfile(shift_log_folder, sprintf("%s.txt", obj.fovID));
+                end
+                if exist(current_fname, 'file'); delete(current_fname); end
+
+                current_output_folder_msg = strrep(current_fname, '\', '\\');
+                fprintf(sprintf('Saving shifts to %s\n', current_output_folder_msg));
+
+                headers = ["fov_id" "round" "row" "col" "z"];
+                shifts_to_save = [];
+                for current_layer=layers_to_register
+                    current_shifts = obj.registration{current_layer}.shifts;
+                    current_shifts = [repmat(string(obj.fovID), size(current_shifts, 1), 1) repmat(string(current_layer), size(current_shifts, 1), 1) string(current_shifts)];
+                    shifts_to_save = [shifts_to_save; current_shifts];
+                end
+
+                writematrix(headers, current_fname, 'Delimiter', ',');
+                writematrix(shifts_to_save, current_fname, 'Delimiter', ',', 'WriteMode', 'append');
             end
 
             % change metadata
@@ -624,8 +658,12 @@ classdef STARMapDataset
             end
             fprintf(sprintf('Number of spots found: %d\n', size(obj.signal.allSpots, 1)));
             fprintf(sprintf('[time = %.2f s]\n', toc));
-            obj.signal.allSpots = splitvars(obj.signal.allSpots, "Centroid", 'NewVariableNames', ["x", "y", "z"]);
-            
+
+            if size(obj.signal.allSpots, 1) == 0
+                obj.signal.allSpots = cell2table(cell(0,4), 'VariableNames', ["x", "y", "z", "gene"]);
+            else
+                obj.signal.allSpots = splitvars(obj.signal.allSpots, "Centroid", 'NewVariableNames', ["x", "y", "z"]);
+            end
             obj.jobFinished.SpotFinding = true;
         end
         
@@ -647,25 +685,26 @@ classdef STARMapDataset
             
             fprintf('====Reads Extraction====\n');
             fprintf(sprintf('voxel size: %d x %d x %d\n', p.Results.voxel_size));
-        
-            complete_color_seq = [];
-            for current_layer=p.Results.layer
-                tic;
-                fprintf(sprintf("Processing %s...", current_layer))
-                [current_color_seq, current_color_score] = ExtractFromLocation( obj.images{current_layer}, obj.signal.allSpots, p.Results.voxel_size ); 
-                obj.signal.allSpots{:, sprintf("%s_color", current_layer)} = current_color_seq; 
-                obj.signal.allSpots{:, sprintf("%s_score", current_layer)} = current_color_score; 
-                if isempty(complete_color_seq)
-                    complete_color_seq = current_color_seq;
-                else
-                    % complete_color_seq = strcat(complete_color_seq, current_color_seq);
-                    complete_color_seq = complete_color_seq + current_color_seq;
-                end
-                fprintf(sprintf('[time = %.2f s]\n', toc));
-            end                                          
-            
-            obj.signal.allSpots{:, "color_seq"} = complete_color_seq;
 
+            if ~isempty(obj.signal.allSpots)
+                complete_color_seq = [];
+                for current_layer=p.Results.layer
+                    tic;
+                    fprintf(sprintf("Processing %s...", current_layer))
+                    [current_color_seq, current_color_score] = ExtractFromLocation( obj.images{current_layer}, obj.signal.allSpots, p.Results.voxel_size ); 
+                    obj.signal.allSpots{:, sprintf("%s_color", current_layer)} = current_color_seq; 
+                    obj.signal.allSpots{:, sprintf("%s_score", current_layer)} = current_color_score; 
+                    if isempty(complete_color_seq)
+                        complete_color_seq = current_color_seq;
+                    else
+                        % complete_color_seq = strcat(complete_color_seq, current_color_seq);
+                        complete_color_seq = complete_color_seq + current_color_seq;
+                    end
+                    fprintf(sprintf('[time = %.2f s]\n', toc));
+                end                                          
+                
+                obj.signal.allSpots{:, "color_seq"} = complete_color_seq;
+            end
 
             obj.jobFinished.ReadsExtraction = true;
 
@@ -722,7 +761,7 @@ classdef STARMapDataset
             defaultSplitIndex = [5];
             addParameter(p, 'split_index', defaultSplitIndex);
 
-            defaultSaveScores = false;
+            defaultSaveScores = true;
             addParameter(p, 'save_scores', defaultSaveScores);
 
             parse(p, varargin{:});
@@ -742,34 +781,62 @@ classdef STARMapDataset
             fprintf(sprintf('Number of barcode segments: %d\n', p.Results.n_barcode_segments));
             obj.signal.scores = [n_spots sum(no_color_spots) sum(multi_color_spots)]; 
 
-            if numel(end_base) > 1
-                end_base_msg = strjoin(end_base, " or ");
-            else
-                end_base_msg = end_base;
-            end
-            fprintf(sprintf('Barcode ends with: %s\n', end_base_msg));
+            if ~isempty(obj.signal.allSpots)
+                if numel(end_base) > 1
+                    end_base_msg = strjoin(end_base, " or ");
+                else
+                    end_base_msg = end_base;
+                end
+                fprintf(sprintf('Barcode ends with: %s\n', end_base_msg));
 
-            if p.Results.n_barcode_segments == 1
-                obj = FilterReads(obj, end_base);  
+                if p.Results.n_barcode_segments == 1
+                    obj = FilterReads(obj, end_base);  
+                else
+                    obj = FilterReadsMultiSegment(obj, end_base, p.Results.split_index);
+                end
+
+                n_good_spots = size(obj.signal.goodSpots, 1);
+                obj.signal.scores = [obj.signal.scores n_good_spots];
             else
-                obj = FilterReadsMultiSegment(obj, end_base, p.Results.split_index);
+                obj.signal.goodSpots = cell2table(cell(0,4), 'VariableNames', ["x", "y", "z", "gene"]);
+                obj.signal.scores = [obj.signal.scores 0 0 0 0];
             end
 
             if p.Results.save_scores
-                current_fname = fullfile(obj.outputPath, "log", "rsf_scores.csv");
-                current_output_folder_msg = strrep(current_fname, '\', '\\');
-                fprintf(sprintf('Saving scores to %s\n', current_output_folder_msg));
+                score_log_folder = fullfile(obj.outputPath, "log", "sf_scores");
+                if ~exist(score_log_folder, 'dir')
+                    mkdir(score_log_folder);
+                end
+
                 if obj.subtile.index > 0
+                    current_fname = fullfile(score_log_folder, sprintf("%s_%s.txt", obj.fovID, string(obj.subtile.index)));
+                    if exist(current_fname, 'file'); delete(current_fname); end
+                    current_output_folder_msg = strrep(current_fname, '\', '\\');
+                    fprintf(sprintf('Saving scores to %s\n', current_output_folder_msg));
+
+                    if numel(end_base) > 1
+                        headers = ["fov_id" "subtile_id" "total_spots" "no_color" "multi_color" "spots_in_codebook" "correctform_1" "correctform_2" "good_spots"];
+                    else
+                        headers = ["fov_id" "subtile_id" "total_spots" "no_color" "multi_color" "spots_in_codebook" "spots_in_correctform" "correctform_in_codebook" "good_spots"];
+                    end
                     scores_to_save = [string(obj.fovID) string(obj.subtile.index) string(obj.signal.scores)];
                 else
+                    current_fname = fullfile(score_log_folder, sprintf("%s.txt", obj.fovID));
+                    if exist(current_fname, 'file'); delete(current_fname); end
+                    current_output_folder_msg = strrep(current_fname, '\', '\\');
+                    fprintf(sprintf('Saving scores to %s\n', current_output_folder_msg));
+
+                    if numel(end_base) > 1
+                        headers = ["fov_id" "total_spots" "no_color" "multi_color" "spots_in_codebook" "correctform_1" "correctform_2" "good_spots"];
+                    else
+                        headers = ["fov_id" "total_spots" "no_color" "multi_color" "spots_in_codebook" "spots_in_correctform" "correctform_in_codebook" "good_spots"];
+                    end
                     scores_to_save = [string(obj.fovID) string(obj.signal.scores)];
                 end
 
-                if ~exist(current_fname, 'file')
-                    writematrix(scores_to_save, current_fname, 'Delimiter', ',');
-                else
-                    writematrix(scores_to_save, current_fname, 'Delimiter', ',', 'WriteMode', 'append');
-                end
+                writematrix(headers, current_fname, 'Delimiter', ',');
+                writematrix(scores_to_save, current_fname, 'Delimiter', ',', 'WriteMode', 'append');
+
             end
 
             % change metadata

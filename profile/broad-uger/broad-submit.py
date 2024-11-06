@@ -6,6 +6,7 @@ Script to submit a snakemake task to the Broad UGER cluster
 import os
 import re
 import sys
+import getpass
 import subprocess
 from datetime import datetime
 
@@ -55,11 +56,22 @@ elif CLUSTER_TYPE == "UGES":
 if "log" in job and len(job['log']) > 0:
     logfile = os.path.splitext(job['log'][0])[0] + "-qsub.log"
 else:
-    path = f"snakemake-logs/{job['rule']}/"
-    os.makedirs(path, exist_ok=True)
+    # username = getpass.getuser()
+    # path = f"/home/unix/{username}/snakemake-logs/{job['rule']}/"
 
-    logfile = (path + datetime.now().strftime('%Y%m%d-%H%M%S') +
-               f"-jobid{sm_jobid}.log")
+    if 'uger_log' in job['params']:
+        path = os.path.dirname(job['params']['uger_log'])
+        os.makedirs(path, exist_ok=True)
+
+        log_fname = os.path.basename(job['params']['uger_log'])
+        log_date = datetime.now().strftime('%Y-%m-%d-%H%M%S')
+        logfile = f"{path}/{log_date}-jobid{sm_jobid}-{log_fname}"
+    else:
+        username = getpass.getuser()
+        path = f"/home/unix/{username}/snakemake-logs/{job['rule']}/"
+        os.makedirs(path, exist_ok=True)
+        log_date = datetime.now().strftime('%Y-%m-%d-%H%M%S')
+        logfile = (path + log_date + f"-jobid{sm_jobid}.txt")
 
 command.extend(['-o', logfile, '-j', 'y'])
 

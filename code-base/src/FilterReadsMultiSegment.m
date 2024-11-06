@@ -26,7 +26,7 @@ function obj = FilterReadsMultiSegment( obj, end_base, split_index )
     end
     % segments_length = cellfun("length", segments)
     % color_seq_char_segments = mat2cell(color_seq_char, 1, segments_length, 2)
-    
+
     barcodes = strings(numel(color_seq), numel(segments));
     for i=1:numel(segments)
         current_segment_char = segments{i};
@@ -50,6 +50,7 @@ function obj = FilterReadsMultiSegment( obj, end_base, split_index )
 
     obj.signal.scores = [obj.signal.scores score_1]; 
 
+
     for i=1:numel(end_base)
 
         current_end_base_char = end_base_char(i, :);
@@ -67,8 +68,13 @@ function obj = FilterReadsMultiSegment( obj, end_base, split_index )
         obj.signal.scores = [obj.signal.scores current_score]; 
     end
     
-    obj.signal.goodSpots = obj.signal.allSpots(barcodes_in_codebook, :);
-    % obj.signal.goodSpots{:, "barcode"} = barcodes(barcodes_in_codebook);
-    obj.signal.goodSpots{:, "gene"} = obj.codebook.seqToGene(color_seq(barcodes_in_codebook));
+    if sum(barcodes_in_codebook) == 0
+        obj.signal.goodSpots = cell2table(cell(0,4), 'VariableNames', ["x", "y", "z", "gene"]);
+        obj.signal.scores = [obj.signal.scores 0 0 0 0];
+    else
+        obj.signal.goodSpots = obj.signal.allSpots(barcodes_in_codebook, :);
+        % obj.signal.goodSpots{:, "barcode"} = barcodes(barcodes_in_codebook);
+        obj.signal.goodSpots{:, "gene"} = obj.codebook.seqToGene(color_seq(barcodes_in_codebook));
+    end
 
 end

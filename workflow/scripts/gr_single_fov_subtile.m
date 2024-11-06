@@ -21,7 +21,7 @@ function sdata = gr_single_fov_subtile(config_path, current_fov)
     if ~exist(log_folder, 'dir')
         mkdir(log_folder);
     end
-    diary_file = fullfile(log_folder, sprintf("%s_rsf.txt", current_fov));
+    diary_file = fullfile(log_folder, sprintf("%s_gr.txt", current_fov));
     if exist(diary_file, 'file'); delete(diary_file); end
     diary(diary_file);
 
@@ -32,21 +32,21 @@ function sdata = gr_single_fov_subtile(config_path, current_fov)
     sdata.layers.ref = config.ref_round;
 
     % preprocessing
-    if config.rules.rsf_single_fov.parameters.enhance_contrast.run
+    if config.rules.gr_single_fov_subtile.parameters.enhance_contrast.run
         sdata = sdata.EnhanceContrast("min-max");
     end
 
-    if config.rules.rsf_single_fov.parameters.hist_equalize.run
+    if config.rules.gr_single_fov_subtile.parameters.hist_equalize.run
         sdata = sdata.HistEqualize;
     end
 
-    if config.rules.rsf_single_fov.parameters.morph_recon.run
-        sdata = sdata.MorphRecon('radius', config.rules.rsf_single_fov.parameters.morph_recon.radius);
+    if config.rules.gr_single_fov_subtile.parameters.morph_recon.run
+        sdata = sdata.MorphRecon('radius', config.rules.gr_single_fov_subtile.parameters.morph_recon.radius);
     end
 
     % global registration
-    if config.rules.rsf_single_fov.parameters.global_registration.run
-        sdata = sdata.GlobalRegistration('ref_layer', config.rules.rsf_single_fov.parameters.global_registration.ref_round);
+    if config.rules.gr_single_fov_subtile.parameters.global_registration.run
+        sdata = sdata.GlobalRegistration('ref_layer', config.rules.gr_single_fov_subtile.parameters.global_registration.ref_round);
     end
 
     % save reference images 
@@ -71,7 +71,9 @@ function sdata = gr_single_fov_subtile(config_path, current_fov)
     sdata = sdata.ViewProjection('save', true, 'output_path', projection_preview_path);
 
     % save subtile 
-    sdata = sdata.CreateSubtiles('save', true);
+    if config.rules.gr_single_fov_subtile.parameters.create_subtiles.run
+        sdata = sdata.CreateSubtiles('sqrt_pieces', config.rules.gr_single_fov_subtile.parameters.create_subtiles.sqrt_pieces, 'save', true);
+    end
 
     toc(starting);
     diary off;

@@ -3,7 +3,7 @@
 cluster: "broad-submit.py {dependencies}"
 cluster-status: "broad-status.py"
 jobscript: "broad-jobscript.sh"
-jobs: 5000
+jobs: 1000
 keep-going: true
 immediate-submit: False
 notemp: true
