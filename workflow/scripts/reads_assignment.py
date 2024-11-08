@@ -78,24 +78,28 @@ reads_df['global_x'] = reads_df['x'] + current_record['x']
 reads_df['global_y'] = reads_df['y'] + current_record['y']
 reads_df['global_z'] = reads_df['z'] + current_record['z']
 
-# Load genes.csv
-genes_df = pd.read_csv(snakemake.input[4], header=None)
-genes_df.columns = ['gene', 'barcode']
+if reads_df.shape[0] != 0:
+    # Reads assignment to cell
+    points = reads_df.loc[:, ["x", "y", "z"]].values
+    bases = reads_df['gene'].values
+    if len(current_label_img.shape) == 3:
+        reads_assignment = current_label_img[points[:, 2], points[:, 1], points[:, 0]]
+    else:
+        reads_assignment = current_label_img[points[:, 1], points[:, 0]]
 
-# Reads assignment to cell
-points = reads_df.loc[:, ["x", "y", "z"]].values
-bases = reads_df['gene'].values
-if len(current_label_img.shape) == 3:
-    reads_assignment = current_label_img[points[:, 2], points[:, 1], points[:, 0]]
+    reads_df['seg_label'] = reads_assignment
 else:
-    reads_assignment = current_label_img[points[:, 1], points[:, 0]]
+    reads_assignment = np.array([0])
 
-reads_df['seg_label'] = reads_assignment
-
+# Create empty cell list
 cell_locs = []
 total_cells = len(np.unique(current_label_img)) - 1
 areas = []
 seg_labels = []
+
+# Load genes.csv
+genes_df = pd.read_csv(snakemake.input[4], header=None)
+genes_df.columns = ['gene', 'barcode']
 
 genes = genes_df['gene'].values
 gene_seq_to_index = {}  # map from sequence to index into matrix

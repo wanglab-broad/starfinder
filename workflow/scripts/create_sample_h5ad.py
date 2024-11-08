@@ -23,13 +23,11 @@ for i in range(current_start, current_end+1):
 
     if os.path.exists(adata_file):  
         adata = sc.read_h5ad(adata_file)
-
-        # # combine Ms4a1 and Ms4a1-1
-        adata.var_names_make_unique()
-        # adata[:, 'Ms4a1'].X = adata[:, 'Ms4a1'].X + adata[:, 'Ms4a1-1'].X
-        # adata = adata[:, adata.var_names != 'Ms4a1-1']
-
-        adata_list.append(adata)
+        if adata.X.shape[0] == 0:
+            print(f"Empty file: {adata_file}")
+        else:
+            adata.var_names_make_unique()
+            adata_list.append(adata)
     else:
         print(f"File not found: {adata_file}")
 
