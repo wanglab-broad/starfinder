@@ -1,4 +1,4 @@
-function output_table = MakeSubtileTable( dims, sqrt_pieces )
+function output_table = MakeSubtileTable( dims, sqrt_pieces, overlap_ratio )
 % MakeSubtileTable
 
     column_headers = {'t', 'ind_x', 'ind_y',...
@@ -16,7 +16,7 @@ function output_table = MakeSubtileTable( dims, sqrt_pieces )
     end
 
     tile_size = floor(dims(1) / sqrt_pieces);
-    overlap_half = floor(tile_size * 0.1);
+    overlap_half = floor(tile_size * overlap_ratio);
     upper_left = [0, 0];
 
     for t=1:size(sub_order, 1)

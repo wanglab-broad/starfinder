@@ -28,7 +28,12 @@ function sdata = rsf_single_fov(config_path, current_fov)
     starting = tic;
 
     % load sequencing images 
-    sdata = sdata.LoadRawImages('fovID', current_fov, 'rotate_angle', config.rotate_angle);
+    if isempty(config.seq_channel_order)
+        sdata = sdata.LoadRawImages('fovID', current_fov, 'rotate_angle', config.rotate_angle);
+    else
+        sdata = sdata.LoadRawImages('fovID', current_fov, 'rotate_angle', config.rotate_angle, ...
+                                    'channel_order_dict', config.seq_channel_order);
+    end
     sdata.layers.ref = config.ref_round;
 
     % preprocessing

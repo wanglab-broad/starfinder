@@ -975,6 +975,9 @@ classdef STARMapDataset
             defaultSqrtPieces = 4;
             addOptional(p, 'sqrt_pieces', defaultSqrtPieces);
 
+            defaultOverlapRatio = 0.1;
+            addOptional(p, 'overlap_ratio', defaultOverlapRatio);
+
             defaultSave = false;
             addOptional(p, 'save', defaultSave);
 
@@ -996,7 +999,7 @@ classdef STARMapDataset
             end
 
             current_metadata = obj.metadata{p.Results.ref_layer};
-            obj.subtile.coords = MakeSubtileTable(current_metadata.dims, p.Results.sqrt_pieces);     
+            obj.subtile.coords = MakeSubtileTable(current_metadata.dims, p.Results.sqrt_pieces, p.Results.overlap_ratio);     
 
             if p.Results.save
                 current_output_folder = fullfile(current_subtile_folder, obj.fovID);
@@ -1021,8 +1024,8 @@ classdef STARMapDataset
                         subtile_data.images{current_layer} = subtile_data.images{current_layer}(start_coords_y:end_coords_y, start_coords_x:end_coords_x, :, :);
                     end
                     subtile_data.subtile.index = tile_idx;
-
-                    save(fullfile(current_output_folder, sprintf('subtile_data_%d.mat', tile_idx)), "subtile_data");
+                    
+                    save(fullfile(current_output_folder, sprintf('subtile_data_%d.mat', tile_idx)), "subtile_data", "-v7.3");
                 end
 
             end
