@@ -642,6 +642,9 @@ classdef STARMapDataset
             defaultMethod = "max3d";
             addOptional(p, 'method', defaultMethod);
 
+            defaultIntensityEstimation = "adaptive";
+            addOptional(p, 'intensity_estimation', defaultIntensityEstimation);
+
             defaultIntensityThreshold = 0.2;
             addOptional(p, 'intensity_threshold', defaultIntensityThreshold);
             
@@ -654,7 +657,7 @@ classdef STARMapDataset
             tic;
             switch p.Results.method
                 case "max3d"
-                    obj.signal.allSpots = SpotFindingMax3D(obj.images{p.Results.ref_layer}, p.Results.intensity_threshold);
+                    obj.signal.allSpots = SpotFindingMax3D(obj.images{p.Results.ref_layer}, p.Results.intensity_estimation, p.Results.intensity_threshold);
             end
             fprintf(sprintf('Number of spots found: %d\n', size(obj.signal.allSpots, 1)));
             fprintf(sprintf('[time = %.2f s]\n', toc));

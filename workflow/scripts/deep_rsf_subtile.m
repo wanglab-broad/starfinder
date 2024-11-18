@@ -33,7 +33,8 @@ function subtile_data = deep_rsf_subtile(config_path, subtile_path)
     % spot finding 
     if config.rules.deep_rsf_subtile.parameters.spot_finding.run
         subtile_data = subtile_data.SpotFinding('ref_layer', config.rules.deep_rsf_subtile.parameters.spot_finding.ref_round, ...
-                                  'intensity_threshold', config.rules.deep_rsf_subtile.parameters.spot_finding.intensity_threshold);
+                                                'intensity_estimation', config.rules.deep_rsf_subtile.parameters.spot_finding.intensity_estimation, ...
+                                                'intensity_threshold', config.rules.deep_rsf_subtile.parameters.spot_finding.intensity_threshold);
     end
 
     % reads extraction
