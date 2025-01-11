@@ -17,10 +17,15 @@ function subtile_data = deep_rsf_subtile(config_path, subtile_path)
     % subtile_data = load(fullfile(output_path, sprintf('subtile_data_%d.mat', subtile_index)));
     load(subtile_path);
 
-    % registration
-    if config.rules.deep_rsf_subtile.parameters.global_registration.run
-        subtile_data = subtile_data.GlobalRegistration('ref_layer', config.rules.deep_rsf_subtile.parameters.global_registration.ref_round);
-    end
+    input_path = fullfile(config.root_input_path, config.dataset_id, config.sample_id);
+    output_path = fullfile(config.root_output_path, config.dataset_id, config.output_id);
+    subtile_data.inputPath = input_path;
+    subtile_data.outputPath = output_path;
+
+    % % registration
+    % if config.rules.deep_rsf_subtile.parameters.global_registration.run
+    %     subtile_data = subtile_data.GlobalRegistration('ref_layer', config.rules.deep_rsf_subtile.parameters.global_registration.ref_round);
+    % end
 
     % if config.rules.deep_rsf_subtile.parameters.local_registration.run
     %     subtile_data = subtile_data.LocalRegistration('ref_layer', config.rules.deep_rsf_subtile.parameters.local_registration.ref_round);

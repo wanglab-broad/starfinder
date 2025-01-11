@@ -484,6 +484,9 @@ classdef STARMapDataset
 
             defaultInputImage= ""; % 
             addOptional(p, 'input_image', defaultInputImage);
+            
+            defaultScale= 1; % 
+            addOptional(p, 'scale', defaultScale);
 
             defaultSaveShifts = true;
             addParameter(p, 'save_shifts', defaultSaveShifts);
@@ -503,6 +506,10 @@ classdef STARMapDataset
                     obj.registration{p.Results.ref_layer} = p.Results.input_image;
             end
 
+            if p.Results.scale ~= 1
+                obj.registration{p.Results.ref_layer} = imresize3(obj.registration{p.Results.ref_layer}, p.Results.scale);
+            end
+
             layers_to_register = p.Results.layer(p.Results.layer ~= p.Results.ref_layer);
             for current_layer=layers_to_register
                 switch p.Results.mov_img
@@ -514,10 +521,15 @@ classdef STARMapDataset
                         mov_img = obj.images{current_layer}(:,:,:,ref_channel_index);
                 end
 
+                if p.Results.scale ~= 1
+                    mov_img = imresize3(mov_img, p.Results.scale);
+                end
+
                 starting = tic;
                 [obj.images{current_layer}, obj.registration{current_layer}] = RegisterImagesGlobal(obj.images{current_layer},...
                                                                                     obj.registration{p.Results.ref_layer},...
-                                                                                    mov_img);
+                                                                                    mov_img,...
+                                                                                    p.Results.scale);
     
                 fprintf(sprintf('%s vs. %s finished [time=%02f]\n', current_layer, p.Results.ref_layer, toc(starting)));
                 fprintf(sprintf('Shifted by %s\n', num2str(obj.registration{current_layer}.shifts)));

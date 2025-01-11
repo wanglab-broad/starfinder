@@ -35,10 +35,9 @@ function sdata = deep_create_subtile(config_path, current_fov)
                                     'channel_order_dict', config.seq_channel_order);
     end
     sdata.layers.ref = config.ref_round;
-    sdata.registration{sdata.layers.ref} = max(sdata.images{sdata.layers.ref}, [], 4);
-
-    % output 
+    
     % save reference images 
+    sdata.registration{sdata.layers.ref} = max(sdata.images{sdata.layers.ref}, [], 4);
     ref_merged_folder = fullfile(output_path, "images", "ref_merged");
     if ~exist(ref_merged_folder, 'dir')
         mkdir(ref_merged_folder);
@@ -50,6 +49,12 @@ function sdata = deep_create_subtile(config_path, current_fov)
         SaveSingleStack(sdata.registration{sdata.layers.ref}, ref_merged_fname);
     end
 
+    % global registration
+    if config.rules.deep_create_subtile.parameters.global_registration.run
+        sdata = sdata.GlobalRegistration('ref_layer', config.rules.deep_create_subtile.parameters.global_registration.ref_round, 'scale', 0.25);
+    end
+
+    % output 
     sdata = sdata.MakeProjection;
     preview_folder = fullfile(output_path, "images", "montage_preview");
     if ~exist(preview_folder, 'dir')
