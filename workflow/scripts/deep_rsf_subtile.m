@@ -60,7 +60,7 @@ function subtile_data = deep_rsf_subtile(config_path, subtile_path)
     end
 
     % output 
-    subtile_data = subtile_data.SaveSignal;
+    subtile_data = subtile_data.SaveSignal('field_to_keep', "all");
 
     toc(starting);
 

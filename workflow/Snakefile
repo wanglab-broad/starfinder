@@ -24,7 +24,8 @@ from pathlib import Path
 # configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/config/2024-10-24-Yiming-plexa-thick.yaml"
 # configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/config/2024-11-03-Mingrui-ST-rep2.yaml"
 # configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/config/2024-11-18-Mingrui-PFC-rep2.yaml"
-configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/config/2025-01-07-Yiming-plexa-thick.yaml"
+# configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/config/2025-01-07-Yiming-plexa-thick.yaml"
+configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/config/2024-12-23-Jiakun-mSpleen.yaml"
 
 include: "rules/utils.smk"
 
@@ -139,7 +140,7 @@ def get_overall_output(wildcards):
     for current_rule in config['rules']:
         if config['rules'][current_rule]['run']:
             if current_rule == 'rsf_single_fov':
-                ruleorder: rsf_single_fov > gr_single_fov_subtile > stitch_subtile
+                ruleorder: rsf_single_fov > gr_single_fov_subtile > deep_create_subtile > stitch_subtile
                 output_list += [f"{OUTPUT_DIR}/log/{fovID}_rsf.txt" for fovID in FOVS]
                 output_list += [f"{OUTPUT_DIR}/log/gr_shifts/{fovID}.txt" for fovID in FOVS]
                 output_list += [f"{OUTPUT_DIR}/log/sf_scores/{fovID}.txt" for fovID in FOVS]

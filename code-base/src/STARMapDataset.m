@@ -960,7 +960,11 @@ classdef STARMapDataset
                     end
                     current_output_folder_msg = strrep(current_fname, '\', '\\');
                     fprintf(sprintf('Saving goodSpots to %s\n', current_output_folder_msg));
-                    output_table = obj.signal.goodSpots(:, p.Results.field_to_keep);
+                    if p.Results.field_to_keep == "all"
+                        output_table = obj.signal.goodSpots;
+                    else
+                        output_table = obj.signal.goodSpots(:, p.Results.field_to_keep);
+                    end
                     writetable(output_table, current_fname);
                 case "allSpots"
                     if obj.subtile.index > 0
@@ -970,7 +974,11 @@ classdef STARMapDataset
                     end
                     current_output_folder_msg = strrep(current_fname, '\', '\\');
                     fprintf(sprintf('Saving allSpots to %s\n', current_output_folder_msg));
-                    output_table = obj.signal.allSpots(:, p.Results.field_to_keep);
+                    if p.Results.field_to_keep == "all"
+                        output_table = obj.signal.allSpots;
+                    else
+                        output_table = obj.signal.allSpots(:, p.Results.field_to_keep);
+                    end
                     writetable(output_table, current_fname);
             end
 
