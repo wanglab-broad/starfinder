@@ -64,6 +64,14 @@ function subtile_data = deep_rsf_subtile(config_path, subtile_path)
         subtile_data = subtile_data.SaveSignal('field_to_keep', "all");
     else
         % output 
+        score_log_folder = fullfile(subtile_data.outputPath, "log", "sf_scores");
+        current_fname = fullfile(score_log_folder, sprintf("%s_%s.txt", subtile_data.fovID, string(subtile_data.subtile.index)));
+        subtile_data.signal.scores = [0 0 0 0 0 0 0];
+        headers = ["fov_id" "subtile_id" "total_spots" "no_color" "multi_color" "spots_in_codebook" "spots_in_correctform" "correctform_in_codebook" "good_spots"];
+        scores_to_save = [string(subtile_data.fovID) string(subtile_data.subtile.index) string(subtile_data.signal.scores)];
+        writematrix(headers, current_fname, 'Delimiter', ',');
+        writematrix(scores_to_save, current_fname, 'Delimiter', ',', 'WriteMode', 'append');
+
         subtile_data.signal.goodSpots = subtile_data.signal.allSpots;
         subtile_data = subtile_data.SaveSignal('field_to_keep', "all");
     end
