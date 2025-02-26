@@ -42,21 +42,23 @@ function subtile_data = deep_rsf_subtile(config_path, subtile_path)
                                                 'intensity_threshold', config.rules.deep_rsf_subtile.parameters.spot_finding.intensity_threshold);
     end
 
-    % reads extraction
-    if config.rules.deep_rsf_subtile.parameters.reads_extraction.run
-        subtile_data = subtile_data.ReadsExtraction('voxel_size', config.rules.deep_rsf_subtile.parameters.reads_extraction.voxel_size);
-    end
+    if ~isempty(subtile_data.signal.allSpots)
+        % reads extraction
+        if config.rules.deep_rsf_subtile.parameters.reads_extraction.run
+            subtile_data = subtile_data.ReadsExtraction('voxel_size', config.rules.deep_rsf_subtile.parameters.reads_extraction.voxel_size);
+        end
 
-    % load codebook
-    if config.rules.deep_rsf_subtile.parameters.load_codebook.run
-        subtile_data = subtile_data.LoadCodebook('split_index', config.rules.deep_rsf_subtile.parameters.load_codebook.split_index);
-    end
+        % load codebook
+        if config.rules.deep_rsf_subtile.parameters.load_codebook.run
+            subtile_data = subtile_data.LoadCodebook('split_index', config.rules.deep_rsf_subtile.parameters.load_codebook.split_index);
+        end
 
-    % filter reads
-    if config.rules.deep_rsf_subtile.parameters.reads_filtration.run
-        subtile_data = subtile_data.ReadsFiltration('end_base', config.rules.deep_rsf_subtile.parameters.reads_filtration.end_base, ...
-                                  'n_barcode_segments', config.rules.deep_rsf_subtile.parameters.reads_filtration.n_barcode_segments, ...
-                                  'split_index', config.rules.deep_rsf_subtile.parameters.reads_filtration.split_index);  
+        % filter reads
+        if config.rules.deep_rsf_subtile.parameters.reads_filtration.run
+            subtile_data = subtile_data.ReadsFiltration('end_base', config.rules.deep_rsf_subtile.parameters.reads_filtration.end_base, ...
+                                    'n_barcode_segments', config.rules.deep_rsf_subtile.parameters.reads_filtration.n_barcode_segments, ...
+                                    'split_index', config.rules.deep_rsf_subtile.parameters.reads_filtration.split_index);  
+        end
     end
 
     % output 

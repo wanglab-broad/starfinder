@@ -24,8 +24,8 @@ from pathlib import Path
 # configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/config/2024-10-24-Yiming-plexa-thick.yaml"
 # configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/config/2024-11-03-Mingrui-ST-rep2.yaml"
 # configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/config/2024-11-18-Mingrui-PFC-rep2.yaml"
-# configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/config/2025-01-07-Yiming-plexa-thick.yaml"
-configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/config/2024-12-23-Jiakun-mSpleen.yaml"
+configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/config/2025-01-07-Yiming-plexa-thick.yaml"
+# configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/config/2024-12-23-Jiakun-mSpleen.yaml"
 
 include: "rules/utils.smk"
 
