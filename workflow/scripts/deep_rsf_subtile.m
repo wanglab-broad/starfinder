@@ -59,10 +59,14 @@ function subtile_data = deep_rsf_subtile(config_path, subtile_path)
                                     'n_barcode_segments', config.rules.deep_rsf_subtile.parameters.reads_filtration.n_barcode_segments, ...
                                     'split_index', config.rules.deep_rsf_subtile.parameters.reads_filtration.split_index);  
         end
-    end
 
-    % output 
-    subtile_data = subtile_data.SaveSignal('field_to_keep', "all");
+        % output 
+        subtile_data = subtile_data.SaveSignal('field_to_keep', "all");
+    else
+        % output 
+        subtile_data.signal.goodSpots = subtile_data.signal.allSpots;
+        subtile_data = subtile_data.SaveSignal('field_to_keep', "all");
+    end
 
     toc(starting);
 
