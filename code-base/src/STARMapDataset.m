@@ -473,6 +473,9 @@ classdef STARMapDataset
             defaultRefLayer = obj.layers.ref; % round1
             addOptional(p, 'ref_layer', defaultRefLayer);
 
+            defaultRegLayer = "";
+            addOptional(p, 'layers_to_register', defaultRegLayer);
+
             defaultRefChannel = "DAPI"; 
             addOptional(p, 'ref_channel', defaultRefChannel);
 
@@ -482,9 +485,12 @@ classdef STARMapDataset
             defaultMovImg= "merged-image"; % single-channel input_image
             addOptional(p, 'mov_img', defaultMovImg);
 
-            defaultInputImage= ""; % 
-            addOptional(p, 'input_image', defaultInputImage);
+            defaultInputImageRef= ""; % 
+            addOptional(p, 'input_image_ref', defaultInputImageRef);
             
+            defaultInputImageMov= ""; % 
+            addOptional(p, 'input_image_mov', defaultInputImageMov);
+
             defaultScale= 1; % 
             addOptional(p, 'scale', defaultScale);
 
@@ -503,14 +509,19 @@ classdef STARMapDataset
                 case "single-channel"
                     obj.registration{p.Results.ref_layer} = obj.images{p.Results.ref_layer}(:,:,:,p.Results.ref_channel);
                 case "input_image"
-                    obj.registration{p.Results.ref_layer} = p.Results.input_image;
+                    obj.registration{p.Results.ref_layer} = p.Results.input_image_ref;
             end
 
             if p.Results.scale ~= 1
                 obj.registration{p.Results.ref_layer} = imresize3(obj.registration{p.Results.ref_layer}, p.Results.scale);
             end
+            
+            if isempty(p.Results.layers_to_register)
+                layers_to_register = p.Results.layer(p.Results.layer ~= p.Results.ref_layer);
+            else
+                layers_to_register = p.Results.layers_to_register;
+            end
 
-            layers_to_register = p.Results.layer(p.Results.layer ~= p.Results.ref_layer);
             for current_layer=layers_to_register
                 switch p.Results.mov_img
                     case "merged-image"
@@ -519,6 +530,8 @@ classdef STARMapDataset
                         current_metadata = obj.metadata{current_layer}.ChannelInfo;
                         ref_channel_index = find(contains({current_metadata(:).name}, p.Results.ref_channel) == 1);
                         mov_img = obj.images{current_layer}(:,:,:,ref_channel_index);
+                    case "input_image"
+                        mov_img = p.Results.input_image_mov;
                 end
 
                 if p.Results.scale ~= 1
@@ -531,6 +544,9 @@ classdef STARMapDataset
                                                                                     mov_img,...
                                                                                     p.Results.scale);
     
+                if iscell(current_layer)
+                    current_layer = current_layer{1};
+                end
                 fprintf(sprintf('%s vs. %s finished [time=%02f]\n', current_layer, p.Results.ref_layer, toc(starting)));
                 fprintf(sprintf('Shifted by %s\n', num2str(obj.registration{current_layer}.shifts)));
             end

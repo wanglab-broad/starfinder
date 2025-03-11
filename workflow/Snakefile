@@ -24,8 +24,9 @@ from pathlib import Path
 # configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/config/2024-10-24-Yiming-plexa-thick.yaml"
 # configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/config/2024-11-03-Mingrui-ST-rep2.yaml"
 # configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/config/2024-11-18-Mingrui-PFC-rep2.yaml"
-configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/config/2025-01-07-Yiming-plexa-thick.yaml"
+# configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/config/2025-01-07-Yiming-plexa-thick.yaml"
 # configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/config/2024-12-23-Jiakun-mSpleen.yaml"
+configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/config/2025-02-26-Franklin-HepG2-4gene.yaml"
 
 include: "rules/utils.smk"
 
@@ -146,6 +147,9 @@ def get_overall_output(wildcards):
                 output_list += [f"{OUTPUT_DIR}/log/sf_scores/{fovID}.txt" for fovID in FOVS]
                 output_list += [f"{OUTPUT_DIR}/images/ref_merged/{fovID}.tif" for fovID in FOVS]
                 output_list += [f"{OUTPUT_DIR}/signal/{fovID}_goodSpots.csv" for fovID in FOVS]
+            elif current_rule == 'rsf_single_fov_seq':
+                ruleorder: rsf_single_fov_seq > rsf_single_fov > gr_single_fov_subtile > deep_create_subtile > stitch_subtile
+                output_list += [f"{OUTPUT_DIR}/signal/{fovID}_allSpots.csv" for fovID in FOVS]
             elif current_rule == 'gr_single_fov_subtile':
                 ruleorder: gr_single_fov_subtile > stitch_subtile > rsf_single_fov
                 output_list += [f"{OUTPUT_DIR}/log/{fovID}_gr.txt" for fovID in FOVS]
@@ -534,4 +538,23 @@ rule deep_rsf_subtile:
                         f"'{input[2]}'"
                         )
         matlab_script_name = 'deep_rsf_subtile'
+        run_matlab_scripts(param_string, matlab_script_name)
+
+
+
+rule rsf_single_fov_seq:
+    input:
+        config['config_path'].replace('.yaml', '.json'),
+        expand("{input_dir}/{rounds}/{{fovID}}", input_dir=INPUT_DIR, rounds=ROUND),
+    output:
+        expand("{output_dir}/signal/{{fovID}}_allSpots.csv", output_dir=OUTPUT_DIR),
+    threads: 2
+    resources:
+        mem_mb=config['rules']['rsf_single_fov_seq']['resources']['mem_mb'],
+        runtime=config['rules']['rsf_single_fov_seq']['resources']['runtime']
+    run:
+        param_string = (f"'{input[0]}', "
+                        f"'{wildcards.fovID}'"
+                        )
+        matlab_script_name = 'rsf_single_fov_seq'
         run_matlab_scripts(param_string, matlab_script_name)
