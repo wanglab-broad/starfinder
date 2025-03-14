@@ -473,7 +473,7 @@ classdef STARMapDataset
             defaultRefLayer = obj.layers.ref; % round1
             addOptional(p, 'ref_layer', defaultRefLayer);
 
-            defaultRegLayer = "";
+            defaultRegLayer = [];
             addOptional(p, 'layers_to_register', defaultRegLayer);
 
             defaultRefChannel = "DAPI"; 
@@ -521,7 +521,7 @@ classdef STARMapDataset
             else
                 layers_to_register = p.Results.layers_to_register;
             end
-
+            
             for current_layer=layers_to_register
                 switch p.Results.mov_img
                     case "merged-image"
