@@ -148,7 +148,7 @@ def get_overall_output(wildcards):
                 output_list += [f"{OUTPUT_DIR}/images/ref_merged/{fovID}.tif" for fovID in FOVS]
                 output_list += [f"{OUTPUT_DIR}/signal/{fovID}_goodSpots.csv" for fovID in FOVS]
             elif current_rule == 'rsf_single_fov_seq':
-                ruleorder: rsf_single_fov_seq > rsf_single_fov > gr_single_fov_subtile > deep_create_subtile > stitch_subtile
+                ruleorder: rsf_single_fov_seq > rsf_single_fov > stitch_subtile
                 output_list += [f"{OUTPUT_DIR}/signal/{fovID}_allSpots.csv" for fovID in FOVS]
             elif current_rule == 'gr_single_fov_subtile':
                 ruleorder: gr_single_fov_subtile > stitch_subtile > rsf_single_fov

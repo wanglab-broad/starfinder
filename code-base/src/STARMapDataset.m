@@ -507,7 +507,9 @@ classdef STARMapDataset
                 case "merged-image"
                     obj.registration{p.Results.ref_layer} = max(obj.images{p.Results.ref_layer}, [], 4);
                 case "single-channel"
-                    obj.registration{p.Results.ref_layer} = obj.images{p.Results.ref_layer}(:,:,:,p.Results.ref_channel);
+                    current_metadata = obj.metadata{p.Results.ref_layer}.ChannelInfo;
+                    ref_channel_index = find(contains({current_metadata(:).name}, p.Results.ref_channel) == 1);
+                    obj.registration{p.Results.ref_layer} = obj.images{p.Results.ref_layer}(:,:,:,ref_channel_index);
                 case "input_image"
                     obj.registration{p.Results.ref_layer} = p.Results.input_image_ref;
             end
@@ -528,8 +530,8 @@ classdef STARMapDataset
                         mov_img = max(obj.images{current_layer}, [], 4);
                     case "single-channel"
                         current_metadata = obj.metadata{current_layer}.ChannelInfo;
-                        ref_channel_index = find(contains({current_metadata(:).name}, p.Results.ref_channel) == 1);
-                        mov_img = obj.images{current_layer}(:,:,:,ref_channel_index);
+                        current_channel_index = find(contains({current_metadata(:).name}, p.Results.ref_channel) == 1);
+                        mov_img = obj.images{current_layer}(:,:,:,current_channel_index);
                     case "input_image"
                         mov_img = p.Results.input_image_mov;
                 end
@@ -683,9 +685,14 @@ classdef STARMapDataset
             fprintf(sprintf('Reference: %s\n', p.Results.ref_layer));
             
             tic;
+            ref_metadata = obj.metadata{p.Results.ref_layer}.ChannelInfo;
+            input_channel_index = find(contains({ref_metadata(:).name}, "seq") == 1);
+            input_img = obj.images{p.Results.ref_layer}(:,:,:,input_channel_index);
+
             switch p.Results.method
                 case "max3d"
-                    obj.signal.allSpots = SpotFindingMax3D(obj.images{p.Results.ref_layer}, p.Results.intensity_estimation, p.Results.intensity_threshold);
+                    % obj.signal.allSpots = SpotFindingMax3D(obj.images{p.Results.ref_layer}, p.Results.intensity_estimation, p.Results.intensity_threshold);
+                    obj.signal.allSpots = SpotFindingMax3D(input_img, p.Results.intensity_estimation, p.Results.intensity_threshold);
             end
             fprintf(sprintf('Number of spots found: %d\n', size(obj.signal.allSpots, 1)));
             fprintf(sprintf('[time = %.2f s]\n', toc));

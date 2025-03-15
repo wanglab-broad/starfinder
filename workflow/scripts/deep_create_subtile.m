@@ -51,7 +51,10 @@ function sdata = deep_create_subtile(config_path, current_fov)
 
     % global registration
     if config.rules.deep_create_subtile.parameters.global_registration.run
-        sdata = sdata.GlobalRegistration('ref_layer', config.rules.deep_create_subtile.parameters.global_registration.ref_round, 'scale', 0.25);
+        sdata = sdata.GlobalRegistration('ref_layer', config.rules.deep_create_subtile.parameters.global_registration.ref_round, ...
+                                        'ref_img', config.rules.deep_create_subtile.parameters.global_registration.ref_img, ...
+                                        'mov_img', config.rules.deep_create_subtile.parameters.global_registration.mov_img, ...
+                                        'scale', 0.25);
     end
 
     % output 
