@@ -36,6 +36,11 @@ function sdata = deep_create_subtile(config_path, current_fov)
     end
     sdata.layers.ref = config.ref_round;
     
+    % pre-processing
+    if config.rules.deep_create_subtile.parameters.hist_equalize.run
+        sdata = sdata.HistEqualize('reference_channel', config.rules.deep_create_subtile.parameters.hist_equalize.reference_channel);
+    end
+
     % save reference images 
     sdata.registration{sdata.layers.ref} = max(sdata.images{sdata.layers.ref}, [], 4);
     ref_merged_folder = fullfile(output_path, "images", "ref_merged");
