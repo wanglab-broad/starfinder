@@ -17,20 +17,20 @@ end
 reg = abs(ifftn(reg*exp(1i*params.diffphase)));
 
 % set wrapped to 0
-if params.shifts(1) > 0
+if params.shifts(1) >= 0
     reg(1:ceil(params.shifts(1)),:,:) = 0;
 else
-    reg(nr+floor(params.shifts(1)):nr,:,:) = 0;
+    reg(nr+floor(params.shifts(1))+1:nr,:,:) = 0;
 end
-if params.shifts(2) > 0
+if params.shifts(2) >= 0
     reg(:,1:ceil(params.shifts(2)),:) = 0;
 else
-    reg(:,nc+floor(params.shifts(2)):nc,:) = 0;
+    reg(:,nc+floor(params.shifts(2))+1:nc,:) = 0;
 end
-if params.shifts(3) > 0
+if params.shifts(3) >= 0
     reg(:,:,1:ceil(params.shifts(3))) = 0;
 else
-    reg(:,:,nz+floor(params.shifts(3)):nz) = 0;
+    reg(:,:,nz+floor(params.shifts(3))+1:nz) = 0;
 end
 end
 
