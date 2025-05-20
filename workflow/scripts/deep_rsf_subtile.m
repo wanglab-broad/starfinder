@@ -10,6 +10,7 @@ function subtile_data = deep_rsf_subtile(config_path, subtile_path)
 
     % add path for .m files
     addpath(fullfile(config.starfinder_path, 'code-base/src/'))
+    addpath(genpath(fullfile(starfinder_path, 'code-base/matlab-addon/')))
     starting = tic;
 
     % create object instance

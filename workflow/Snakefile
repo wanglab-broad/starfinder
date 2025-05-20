@@ -26,7 +26,9 @@ from pathlib import Path
 # configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/config/2024-11-18-Mingrui-PFC-rep2.yaml"
 # configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/config/2025-01-07-Yiming-plexa-thick.yaml"
 # configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/config/2024-12-23-Jiakun-mSpleen.yaml"
-configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/config/2025-02-26-Franklin-HepG2-4gene.yaml"
+# configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/config/2025-02-26-Franklin-HepG2-4gene.yaml"
+# configfile: "/home/unix/jiahao/wanglab/jiahao/Github/jiahaoh/starfinder-dev/config/2025-04-11-Jiahao-local-test.yaml"
+# configfile: "/home/unix/jiahao/wanglab/jiahao/Github/jiahaoh/starfinder-dev/config/2025-03-14-Shuchen-test.yaml"
 
 include: "rules/utils.smk"
 
