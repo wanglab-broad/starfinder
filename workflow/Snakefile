@@ -207,6 +207,7 @@ def get_overall_output(wildcards):
 
 localrules: rsf_preparation, create_sample_maf
 
+
 rule all:
     input:
         get_overall_output

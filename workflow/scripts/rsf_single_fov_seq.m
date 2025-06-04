@@ -10,7 +10,7 @@ function sdata = rsf_single_fov_seq(config_path, current_fov)
 
     % add path for .m files
     addpath(fullfile(config.starfinder_path, 'code-base/src/'))
-    addpath(genpath(fullfile(starfinder_path, 'code-base/matlab-addon/')))
+    addpath(genpath(fullfile(config.starfinder_path, 'code-base/matlab-addon/')))
 
     % create object instance
     input_path = fullfile(config.root_input_path, config.dataset_id, config.sample_id);
