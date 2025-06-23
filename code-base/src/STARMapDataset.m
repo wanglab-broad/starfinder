@@ -508,7 +508,7 @@ classdef STARMapDataset
                     obj.registration{p.Results.ref_layer} = max(obj.images{p.Results.ref_layer}, [], 4);
                 case "single-channel"
                     current_metadata = obj.metadata{p.Results.ref_layer}.ChannelInfo;
-                    ref_channel_index = find(contains({current_metadata(:).name}, p.Results.ref_channel) == 1);
+                    ref_channel_index = find(contains([current_metadata(:).name], p.Results.ref_channel) == 1);
                     obj.registration{p.Results.ref_layer} = obj.images{p.Results.ref_layer}(:,:,:,ref_channel_index);
                 case "input_image"
                     obj.registration{p.Results.ref_layer} = p.Results.input_image_ref;
@@ -530,7 +530,7 @@ classdef STARMapDataset
                         mov_img = max(obj.images{current_layer}, [], 4);
                     case "single-channel"
                         current_metadata = obj.metadata{current_layer}.ChannelInfo;
-                        current_channel_index = find(contains({current_metadata(:).name}, p.Results.ref_channel) == 1);
+                        current_channel_index = find(contains([current_metadata(:).name], p.Results.ref_channel) == 1);
                         mov_img = obj.images{current_layer}(:,:,:,current_channel_index);
                     case "input_image"
                         mov_img = p.Results.input_image_mov;
@@ -686,7 +686,7 @@ classdef STARMapDataset
             
             tic;
             ref_metadata = obj.metadata{p.Results.ref_layer}.ChannelInfo;
-            input_channel_index = find(contains({ref_metadata(:).name}, "seq") == 1);
+            input_channel_index = find(contains([ref_metadata(:).name], "seq") == 1);
             input_img = obj.images{p.Results.ref_layer}(:,:,:,input_channel_index);
 
             switch p.Results.method
@@ -730,7 +730,7 @@ classdef STARMapDataset
                     tic;
                     fprintf(sprintf("Processing %s...", current_layer))
                     current_metadata = obj.metadata{current_layer}.ChannelInfo;
-                    input_channel_index = find(contains({current_metadata(:).name}, "seq") == 1);
+                    input_channel_index = find(contains([current_metadata(:).name], "seq") == 1);
                     input_img = obj.images{current_layer}(:,:,:,input_channel_index);
                     
                     [current_color_seq, current_color_score] = ExtractFromLocation( input_img, obj.signal.allSpots, p.Results.voxel_size ); 
