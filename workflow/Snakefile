@@ -145,7 +145,7 @@ def get_overall_output(wildcards):
             if current_rule == 'rsf_single_fov':
                 ruleorder: rsf_single_fov > gr_single_fov_subtile > deep_create_subtile > stitch_subtile
                 output_list += [f"{OUTPUT_DIR}/log/{fovID}_rsf.txt" for fovID in FOVS]
-                output_list += [f"{OUTPUT_DIR}/log/gr_shifts/{fovID}.txt" for fovID in FOVS]
+                # output_list += [f"{OUTPUT_DIR}/log/gr_shifts/{fovID}.txt" for fovID in FOVS]
                 output_list += [f"{OUTPUT_DIR}/log/sf_scores/{fovID}.txt" for fovID in FOVS]
                 output_list += [f"{OUTPUT_DIR}/images/ref_merged/{fovID}.tif" for fovID in FOVS]
                 output_list += [f"{OUTPUT_DIR}/signal/{fovID}_goodSpots.csv" for fovID in FOVS]
@@ -155,7 +155,7 @@ def get_overall_output(wildcards):
             elif current_rule == 'gr_single_fov_subtile':
                 ruleorder: gr_single_fov_subtile > stitch_subtile > rsf_single_fov
                 output_list += [f"{OUTPUT_DIR}/log/{fovID}_gr.txt" for fovID in FOVS]
-                output_list += [f"{OUTPUT_DIR}/log/gr_shifts/{fovID}.txt" for fovID in FOVS]
+                # output_list += [f"{OUTPUT_DIR}/log/gr_shifts/{fovID}.txt" for fovID in FOVS]
                 output_list += [f"{OUTPUT_DIR}/images/ref_merged/{fovID}.tif" for fovID in FOVS]
                 output_list += [f"{OUTPUT_DIR}/output/subtile/{fovID}/subtile_coords.csv" for fovID in FOVS]
                 output_list += [f"{OUTPUT_DIR}/output/subtile/{fovID}/subtile_data_{i}.mat" for fovID in FOVS for i in N_SUBTILE]
@@ -228,7 +228,7 @@ rule rsf_single_fov:
         expand("{input_dir}/{rounds}/{{fovID}}", input_dir=INPUT_DIR, rounds=ROUND),
     output:
         expand("{output_dir}/log/{{fovID}}_rsf.txt", output_dir=OUTPUT_DIR),
-        expand("{output_dir}/log/gr_shifts/{{fovID}}.txt", output_dir=OUTPUT_DIR),
+        # expand("{output_dir}/log/gr_shifts/{{fovID}}.txt", output_dir=OUTPUT_DIR),
         expand("{output_dir}/log/sf_scores/{{fovID}}.txt", output_dir=OUTPUT_DIR),
         expand("{output_dir}/images/ref_merged/{{fovID}}.tif", output_dir=OUTPUT_DIR),
         expand("{output_dir}/signal/{{fovID}}_goodSpots.csv", output_dir=OUTPUT_DIR),
@@ -437,7 +437,7 @@ rule gr_single_fov_subtile:
         expand("{input_dir}/{rounds}/{{fovID}}", input_dir=INPUT_DIR, rounds=ROUND),
     output:
         expand("{output_dir}/log/{{fovID}}_gr.txt", output_dir=OUTPUT_DIR),
-        expand("{output_dir}/log/gr_shifts/{{fovID}}.txt", output_dir=OUTPUT_DIR),
+        # expand("{output_dir}/log/gr_shifts/{{fovID}}.txt", output_dir=OUTPUT_DIR),
         expand("{output_dir}/images/ref_merged/{{fovID}}.tif", output_dir=OUTPUT_DIR),
         temp(expand("{output_dir}/output/subtile/{{fovID}}/subtile_coords.csv", output_dir=OUTPUT_DIR)),
         temp(expand("{output_dir}/output/subtile/{{fovID}}/subtile_data_{n_subtile}.mat", output_dir=OUTPUT_DIR, n_subtile=N_SUBTILE)),
