@@ -732,7 +732,7 @@ classdef STARMapDataset
                     current_metadata = obj.metadata{current_layer}.ChannelInfo;
                     input_channel_index = find(contains([current_metadata(:).name], "seq"));
                     input_img = obj.images{current_layer}(:,:,:,input_channel_index);
-                    size(input_img)
+                    % size(input_img)
                     
                     [current_color_seq, current_color_score] = ExtractFromLocation( input_img, obj.signal.allSpots, p.Results.voxel_size ); 
                     obj.signal.allSpots{:, sprintf("%s_color", current_layer)} = current_color_seq; 

@@ -52,7 +52,9 @@ function sdata = rsf_single_fov(config_path, current_fov)
 
     % registration
     if config.rules.rsf_single_fov.parameters.global_registration.run
-        sdata = sdata.GlobalRegistration('ref_layer', config.rules.rsf_single_fov.parameters.global_registration.ref_round);
+        sdata = sdata.GlobalRegistration('ref_layer', config.rules.rsf_single_fov.parameters.global_registration.ref_round, ...
+                                        'ref_img', config.rules.rsf_single_fov.parameters.global_registration.ref_img, ...
+                                        'mov_img', config.rules.rsf_single_fov.parameters.global_registration.mov_img);
     else
         sdata.registration{sdata.layers.ref} = max(sdata.images{config.ref_round}, [], 4);
     end
