@@ -47,10 +47,10 @@ if not os.path.exists(current_expr_path):
 
 # Load images
 current_gray_img = imread(snakemake.input[1])
-current_gray_max = np.max((current_gray_img), axis=0)
 current_label_img = imread(snakemake.input[2])
 
 if len(current_label_img.shape) == 3:
+    current_gray_max = np.max((current_gray_img), axis=0)
     # Segmentation dialation
     if snakemake.config['rules']['reads_assignment']['parameters']['expand_labels']:
         for z in range(current_label_img.shape[0]):
@@ -61,6 +61,7 @@ if len(current_label_img.shape) == 3:
     current_label_max = np.max((current_label_img > 0), axis=0)
     current_seg_coverage = (current_label_img > 0).sum() / (current_gray_img > 40).sum() * 100
 else:
+    current_gray_max = current_gray_img
     # Segmentation dialation
     if snakemake.config['rules']['reads_assignment']['parameters']['expand_labels']:
         current_label_img = expand_labels(current_label_img, distance=snakemake.config['rules']['reads_assignment']['parameters']['dilation_distance'])

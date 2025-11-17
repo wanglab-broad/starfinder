@@ -277,7 +277,10 @@ rule rotate_nuclei:
         from scipy.ndimage import rotate
         from skimage.io import imread, imsave 
         current_img = imread(input[0])
-        current_img = rotate(current_img, config['rotate_angle'], axes=(1, 2))
+        if len(current_img.shape) == 3:
+            current_img = rotate(current_img, config['rotate_angle'], axes=(1, 2))
+        else:
+            current_img = rotate(current_img, config['rotate_angle'])
 
         if config['maximum_projection']:
             current_img = current_img.max(axis=0)
