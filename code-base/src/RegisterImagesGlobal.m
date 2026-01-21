@@ -1,4 +1,4 @@
-function [input_img, params] = RegisterImagesGlobal( input_img, ref_img, mov_img )
+function [input_img, params] = RegisterImagesGlobal( input_img, ref_img, mov_img, scale )
 % RegisterImagesGlobal
 
     Nchannel = size(input_img, 4);
@@ -8,6 +8,10 @@ function [input_img, params] = RegisterImagesGlobal( input_img, ref_img, mov_img
     params = DFTRegister3D(ref_img, mov_img, false);
     % fprintf(sprintf('DFT register finished [time=%02f]\n', toc(starting)));
     
+    if scale ~= 1
+        params.shifts = params.shifts / scale;
+    end
+
     % Apply shift to each channel
     % starting_apply = tic;
     for c=1:Nchannel

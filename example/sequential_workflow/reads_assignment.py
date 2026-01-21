@@ -26,8 +26,8 @@ from tifffile import imread, imwrite
 from tqdm import tqdm
 
 # IO path
-image_path = os.path.join(base_path, 'images/fused');
-signal_path = os.path.join(base_path, 'signal');
+image_path = os.path.join(base_path, 'images/fused')
+signal_path = os.path.join(base_path, 'signal')
 output_path = os.path.join(base_path, 'expr')
 if not os.path.exists(output_path):
     os.mkdir(output_path)

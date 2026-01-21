@@ -11,13 +11,26 @@ import pandas as pd
 from pathlib import Path
 
 ## Path to config file
-# configfile: "/home/unix/jiahao/wanglab/jiahao/Github/jiahaoh/starfinder-dev/test/Hongyu/workflow_params.yaml"
+# configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/test/Hongyu/workflow_params.yaml"
 # configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/test/Hongyu/workflow_params_uger.yaml"
 # configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/test/Jiakun/workflow_params_uger.yaml"
-# configfile: "/home/unix/jiahao/wanglab/jiahao/Github/jiahaoh/starfinder-dev/test/Yiming/workflow_params_uger.yaml"
+# configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/test/Yiming/workflow_params_uger.yaml"
 # configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/test/tissue-2D/workflow_params_uger.yaml"
-configfile: "/home/unix/jiahao/wanglab/jiahao/Github/jiahaoh/starfinder-dev/test/tissue-2D/workflow_params_uger.yaml"
+# configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/test/tissue-2D/workflow_params_uger.yaml"
+# configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/config/2024-09-05-Mingrui-PFC-rep1.yaml"
+# configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/config/2024-09-23-Mingrui-ST-rep1.yaml"
+# configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/config/2024-10-05-Mingrui-HP-rep1.yaml"
+# configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/config/2024-10-21-Mingrui-HP-rep2.yaml"
+# configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/config/2024-10-24-Yiming-plexa-thick.yaml"
+# configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/config/2024-11-03-Mingrui-ST-rep2.yaml"
+# configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/config/2024-11-18-Mingrui-PFC-rep2.yaml"
+# configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/config/2025-01-07-Yiming-plexa-thick.yaml"
+# configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/config/2024-12-23-Jiakun-mSpleen.yaml"
+# configfile: "/stanley/WangLab/jiahao/Github/jiahaoh/starfinder-dev/config/2025-02-26-Franklin-HepG2-4gene.yaml"
+# configfile: "/home/unix/jiahao/wanglab/jiahao/Github/jiahaoh/starfinder-dev/config/2025-04-11-Jiahao-local-test.yaml"
+# configfile: "/home/unix/jiahao/wanglab/jiahao/Github/jiahaoh/starfinder-dev/config/2025-03-14-Shuchen-test.yaml"
 
+include: "rules/utils.smk"
 
 ### ==================== [ Helper functions ] =========================
 
@@ -49,6 +62,9 @@ def run_fiji_macros(fiji_path, macro_path):
 def get_additional_round_names():
     return [current_round['round_name'] for current_round in config['additional_round']]
 
+# def get_runtime(wildcards, attempt, base_runtime):
+#     return attempt * base_runtime
+
 # def get_nuclei_registration_input(wildcards):
 #     input_list = []
 #     for current_round in config['additional_round']:
@@ -74,9 +90,12 @@ def get_additional_round_names():
 INPUT_DIR = Path(config['root_input_path'], config['dataset_id'], config['sample_id'])
 OUTPUT_DIR = Path(config['root_output_path'], config['dataset_id'], config['output_id'])
 DAPI_DIR = Path(OUTPUT_DIR, 'images', 'DAPI')
+FUSE_DIR = Path(OUTPUT_DIR, 'images', 'fused')
+SEG_INPUT_DIR = Path(OUTPUT_DIR, 'images', config['rules']['stardist_segmentation']['parameters']['segmentation_input_folder'])
 ROUND = [f"round{i}" for i in range(1, config['n_rounds']+1)]
 SAMPLE_ANNOT = pd.read_csv(f"{OUTPUT_DIR}/documents/sample-annotation.csv")
-SAMPLE_DICT = {}
+SAMPLE_TO_FOV = {}
+FOV_TO_SAMPLE = {}
 for current_sample in SAMPLE_ANNOT['sample_id'].unique():
     fov_list = []
 
@@ -86,25 +105,37 @@ for current_sample in SAMPLE_ANNOT['sample_id'].unique():
     for i in range(current_start, current_end+1):
         current_fov = config['fov_id_pattern'].format(i=i)
         fov_list.append(current_fov)
+        FOV_TO_SAMPLE[current_fov] = current_sample
     
-    SAMPLE_DICT[current_sample] = fov_list
+    SAMPLE_TO_FOV[current_sample] = fov_list
 
-SAMPLE = list(SAMPLE_DICT.keys())
+SAMPLE = list(SAMPLE_TO_FOV.keys())
 FOVS = sorted([config['fov_id_pattern'].format(i=j) for j in range(1, config['n_fovs']+1)])
-
-## Define specific list of positions to run the pipeline for testing/re-runs
+if config['rules']['gr_single_fov_subtile']['run'] | config['rules']['lrsf_single_fov_subtile']['run'] | config['rules']['deep_create_subtile']['run'] | config['rules']['deep_rsf_subtile']['run']:
+    N_SUBTILE = [i for i in range(1, (config['rules']['gr_single_fov_subtile']['parameters']['create_subtiles']['sqrt_pieces'])**2+1)]
+else:
+    N_SUBTILE = [1]
+    
+## Define specific list of positions tos run the pipeline for testing/re-runs
 if config['subset_list']:
     FOVS = [config['fov_id_pattern'].format(i=j) for j in config['subset_list']] 
+    SAMPLE = list(set([FOV_TO_SAMPLE[fov] for fov in FOVS]))
 elif config['subset_range']:   
     FOVS = [config['fov_id_pattern'].format(i=j) for j in range(config['subset_start'], config['subset_end']+1)]
 elif config['subset_random']:
     FOVS = random.sample(FOVS, config['n_random_tests'])
 
 ## TEST  
-SAMPLE_TEST = ['sample2']
+# SAMPLE_TEST = ['sample2']
 # print(FOVS)
 
 ### ==================== [ Rules ] =========================
+
+# Default order of rules
+# ruleorder: rsf_single_fov > stitch_subtile > gr_single_fov_subtile > deep_create_subtile
+# ruleorder: gr_single_fov_subtile > deep_create_subtile
+# ruleorder: lrsf_single_fov_subtile > deep_rsf_subtile
+ruleorder: stitch_subtile > gr_single_fov_subtile > deep_create_subtile > deep_rsf_subtile > lrsf_single_fov_subtile > rsf_single_fov
 
 ### Create dynamic output list for all rules
 def get_overall_output(wildcards):
@@ -112,13 +143,43 @@ def get_overall_output(wildcards):
     for current_rule in config['rules']:
         if config['rules'][current_rule]['run']:
             if current_rule == 'rsf_single_fov':
+                ruleorder: rsf_single_fov > gr_single_fov_subtile > deep_create_subtile > stitch_subtile
                 output_list += [f"{OUTPUT_DIR}/log/{fovID}_rsf.txt" for fovID in FOVS]
+                # output_list += [f"{OUTPUT_DIR}/log/gr_shifts/{fovID}.txt" for fovID in FOVS]
+                output_list += [f"{OUTPUT_DIR}/log/sf_scores/{fovID}.txt" for fovID in FOVS]
                 output_list += [f"{OUTPUT_DIR}/images/ref_merged/{fovID}.tif" for fovID in FOVS]
+                output_list += [f"{OUTPUT_DIR}/signal/{fovID}_goodSpots.csv" for fovID in FOVS]
+            elif current_rule == 'rsf_single_fov_seq':
+                ruleorder: rsf_single_fov_seq > rsf_single_fov > stitch_subtile
+                output_list += [f"{OUTPUT_DIR}/signal/{fovID}_allSpots.csv" for fovID in FOVS]
+            elif current_rule == 'gr_single_fov_subtile':
+                ruleorder: gr_single_fov_subtile > stitch_subtile > rsf_single_fov
+                output_list += [f"{OUTPUT_DIR}/log/{fovID}_gr.txt" for fovID in FOVS]
+                # output_list += [f"{OUTPUT_DIR}/log/gr_shifts/{fovID}.txt" for fovID in FOVS]
+                output_list += [f"{OUTPUT_DIR}/images/ref_merged/{fovID}.tif" for fovID in FOVS]
+                output_list += [f"{OUTPUT_DIR}/output/subtile/{fovID}/subtile_coords.csv" for fovID in FOVS]
+                output_list += [f"{OUTPUT_DIR}/output/subtile/{fovID}/subtile_data_{i}.mat" for fovID in FOVS for i in N_SUBTILE]
+            elif current_rule == 'lrsf_single_fov_subtile':
+                ruleorder: lrsf_single_fov_subtile > deep_rsf_subtile > stitch_subtile > gr_single_fov_subtile > rsf_single_fov
+                output_list += [f"{OUTPUT_DIR}/log/sf_scores/{fovID}_{i}.txt" for fovID in FOVS for i in N_SUBTILE]
+                output_list += [f"{OUTPUT_DIR}/output/subtile/{fovID}/subtile_goodSpots_{i}.csv" for fovID in FOVS for i in N_SUBTILE]
+            elif current_rule == 'deep_create_subtile':
+                ruleorder: deep_create_subtile > gr_single_fov_subtile > stitch_subtile > rsf_single_fov
+                output_list += [f"{OUTPUT_DIR}/output/subtile/{fovID}/subtile_coords.csv" for fovID in FOVS]
+                output_list += [f"{OUTPUT_DIR}/output/subtile/{fovID}/subtile_data_{i}.mat" for fovID in FOVS for i in N_SUBTILE]   
+            elif current_rule == 'deep_rsf_subtile':
+                ruleorder: deep_rsf_subtile > deep_create_subtile > lrsf_single_fov_subtile > gr_single_fov_subtile > stitch_subtile > rsf_single_fov
+                output_list += [f"{OUTPUT_DIR}/log/sf_scores/{fovID}_{i}.txt" for fovID in FOVS for i in N_SUBTILE]
+                output_list += [f"{OUTPUT_DIR}/output/subtile/{fovID}/subtile_goodSpots_{i}.csv" for fovID in FOVS for i in N_SUBTILE]
+            elif current_rule == 'stitch_subtile':
                 output_list += [f"{OUTPUT_DIR}/signal/{fovID}_goodSpots.csv" for fovID in FOVS]
             elif current_rule == 'nuclei_registration':
                 output_list += [f"{OUTPUT_DIR}/log/{fovID}_nr.txt" for fovID in FOVS]
+                output_list += [f"{OUTPUT_DIR}/log/gr_shifts/{fovID}_nr.txt" for fovID in FOVS]
             elif current_rule == 'rotate_nuclei':
                 output_list += [f"{DAPI_DIR}/{fovID}.tif" for fovID in FOVS]
+            elif current_rule == 'create_nuclei_amplicon_overlay':
+                output_list += [f"{OUTPUT_DIR}/images/overlay/{fovID}.tif" for fovID in FOVS]
             elif current_rule == 'enhance_dapi_with_flamingo':
                 output_list += [f"{OUTPUT_DIR}/images/flamingo/enhanced_DAPI/{fovID}.tif" for fovID in FOVS]
             elif current_rule == 'stardist_segmentation':
@@ -144,6 +205,9 @@ def get_overall_output(wildcards):
 
     return output_list
 
+localrules: rsf_preparation, create_sample_maf
+
+
 rule all:
     input:
         get_overall_output
@@ -164,8 +228,11 @@ rule rsf_single_fov:
         expand("{input_dir}/{rounds}/{{fovID}}", input_dir=INPUT_DIR, rounds=ROUND),
     output:
         expand("{output_dir}/log/{{fovID}}_rsf.txt", output_dir=OUTPUT_DIR),
+        # expand("{output_dir}/log/gr_shifts/{{fovID}}.txt", output_dir=OUTPUT_DIR),
+        expand("{output_dir}/log/sf_scores/{{fovID}}.txt", output_dir=OUTPUT_DIR),
         expand("{output_dir}/images/ref_merged/{{fovID}}.tif", output_dir=OUTPUT_DIR),
         expand("{output_dir}/signal/{{fovID}}_goodSpots.csv", output_dir=OUTPUT_DIR),
+    threads: 4
     resources:
         mem_mb=config['rules']['rsf_single_fov']['resources']['mem_mb'],
         runtime=config['rules']['rsf_single_fov']['resources']['runtime']
@@ -185,6 +252,7 @@ rule nuclei_registration:
         expand("{input_dir}/{rounds}/{{fovID}}", input_dir=INPUT_DIR, rounds=additional_round_names),
     output:
         expand("{output_dir}/log/{{fovID}}_nr.txt", output_dir=OUTPUT_DIR),
+        expand("{output_dir}/log/gr_shifts/{{fovID}}_nr.txt", output_dir=OUTPUT_DIR),
     resources:
         mem_mb=config['rules']['nuclei_registration']['resources']['mem_mb']
     run:
@@ -209,12 +277,26 @@ rule rotate_nuclei:
         from scipy.ndimage import rotate
         from skimage.io import imread, imsave 
         current_img = imread(input[0])
-        current_img = rotate(current_img, config['rotate_angle'], axes=(1, 2))
+        if len(current_img.shape) == 3:
+            current_img = rotate(current_img, config['rotate_angle'], axes=(1, 2))
+        else:
+            current_img = rotate(current_img, config['rotate_angle'])
 
         if config['maximum_projection']:
             current_img = current_img.max(axis=0)
 
         imsave(output[0], current_img)
+
+rule create_nuclei_amplicon_overlay:
+    input:
+        dapi_img=expand("{output_dir}/images/DAPI/{{fovID}}.tif", output_dir=OUTPUT_DIR),
+        amplicon_img=expand("{output_dir}/images/ref_merged/{{fovID}}.tif", output_dir=OUTPUT_DIR)
+    output:
+        expand("{output_dir}/images/overlay/{{fovID}}.tif", output_dir=OUTPUT_DIR)
+    resources:
+        mem_mb=config['rules']['create_nuclei_amplicon_overlay']['resources']['mem_mb']
+    script:
+        "scripts/create_nuclei_amplicon_overlay.py"
 
 ### Segmentation 
 rule enhance_dapi_with_flamingo:
@@ -230,12 +312,13 @@ rule enhance_dapi_with_flamingo:
 
 rule stardist_segmentation:
     input:
-        expand("{dapi_dir}/{{fovID}}.tif", dapi_dir=DAPI_DIR)
+        expand("{seg_input_dir}/{{fovID}}.tif", seg_input_dir=SEG_INPUT_DIR)
     output:
         expand("{output_dir}/images/stardist_segmentation/{{fovID}}.tif", output_dir=OUTPUT_DIR)
     conda:
         # f"envs/stardist.yml"
         f"{config['envs_path']}/stardist"
+    threads: 2
     resources:
         mem_mb=config['rules']['stardist_segmentation']['resources']['mem_mb'],
         runtime=config['rules']['stardist_segmentation']['resources']['runtime']
@@ -246,18 +329,17 @@ rule stardist_segmentation:
 
 ### Stitching 
 def get_stitching_input(wildcards):
-    return expand("{dapi_dir}/{fovID}.tif", dapi_dir=DAPI_DIR, fovID=SAMPLE_DICT[wildcards.sample])
+    return expand("{dapi_dir}/{fovID}.tif", dapi_dir=DAPI_DIR, fovID=SAMPLE_TO_FOV[wildcards.sample])
 
 rule stitching_preparation:
     input:
         expand("{output_dir}/documents/sample-annotation.csv", output_dir=OUTPUT_DIR),
         expand("{output_dir}/documents/maf/{{sample}}.maf", output_dir=OUTPUT_DIR),
         get_stitching_input
-        # expand("{dapi_dir}/{fovID}.tif", dapi_dir=DAPI_DIR, fovID=FOVS)
     output:
         expand("{output_dir}/images/fused/{{sample}}/blank.tif", output_dir=OUTPUT_DIR),
         expand("{output_dir}/images/fused/{{sample}}/grid.csv", output_dir=OUTPUT_DIR),
-        expand("{output_dir}/images/fused/{{sample}}/grid.png", output_dir=OUTPUT_DIR)
+        expand("{output_dir}/images/fused/{{sample}}/grid.png", output_dir=OUTPUT_DIR),
     resources:
         mem_mb=config['rules']['stitching_preparation']['resources']['mem_mb']
     script:
@@ -271,26 +353,32 @@ rule create_BigStitcher_macro:
     resources:
         mem_mb=config['rules']['create_BigStitcher_macro']['resources']['mem_mb']
     script:
-        "scripts/create_BigStitcher_macro.py"
+        "scripts/create_BigStitcher_macro_1.py"
 
 rule run_BigStitcher_macro:
     input:
-        expand("{output_dir}/images/fused/{{sample}}/BigStitcher_macro.ijm", output_dir=OUTPUT_DIR)
+        expand("{output_dir}/images/fused/{{sample}}/BigStitcher_macro.ijm", output_dir=OUTPUT_DIR),
+        expand("{output_dir}/images/fused/{{sample}}/grid.csv", output_dir=OUTPUT_DIR)
     output:
         expand("{output_dir}/images/fused/{{sample}}/DAPI/dataset.xml", output_dir=OUTPUT_DIR)
+    params:
+        temp_dir=expand("{output_dir}/images/fused/{{sample}}/DAPI", output_dir=OUTPUT_DIR)
+    threads: 4
     resources:
         mem_mb=config['rules']['run_BigStitcher_macro']['resources']['mem_mb'],
         runtime=config['rules']['run_BigStitcher_macro']['resources']['runtime']
+    benchmark:
+        f"{OUTPUT_DIR}/log/benchmark/run_BigStitcher_macro/{{sample}}.txt"
     shell:
-        f"{config['fiji_path']} --ij2 --headless --run {{input}}"
+        f"{config['fiji_path']} -Djava.io.tmpdir={{params.temp_dir}} --ij2 --headless --run {{input[0]}}"
         
 rule create_tile_config:
     input:
-        expand("{output_dir}/images/fused/{{sample}}/DAPI/dataset.xml", output_dir=OUTPUT_DIR, sample=SAMPLE_TEST),
-        expand("{output_dir}/images/fused/{{sample}}/grid.csv", output_dir=OUTPUT_DIR, sample=SAMPLE_TEST)
+        expand("{output_dir}/images/fused/{{sample}}/DAPI/dataset.xml", output_dir=OUTPUT_DIR, sample=SAMPLE),
+        expand("{output_dir}/images/fused/{{sample}}/grid.csv", output_dir=OUTPUT_DIR, sample=SAMPLE)
     output:
-        expand("{output_dir}/output/tile_config_{{sample}}.csv", output_dir=OUTPUT_DIR, sample=SAMPLE_TEST),
-        expand("{output_dir}/output/tile_config_{{sample}}.html", output_dir=OUTPUT_DIR, sample=SAMPLE_TEST)
+        expand("{output_dir}/output/tile_config_{{sample}}.csv", output_dir=OUTPUT_DIR, sample=SAMPLE),
+        expand("{output_dir}/output/tile_config_{{sample}}.html", output_dir=OUTPUT_DIR, sample=SAMPLE)
     resources:
         mem_mb=config['rules']['create_tile_config']['resources']['mem_mb']
     script:
@@ -300,11 +388,11 @@ rule create_tile_config:
 rule reads_assignment:
     input:
         expand("{output_dir}/documents/sample-annotation.csv", output_dir=OUTPUT_DIR),
-        expand("{output_dir}/output/tile_config_{sample}.csv", output_dir=OUTPUT_DIR, sample=SAMPLE_TEST),
         expand("{dapi_dir}/{{fovID}}.tif", dapi_dir=DAPI_DIR, fovID=FOVS),
         expand("{output_dir}/images/stardist_segmentation/{{fovID}}.tif", output_dir=OUTPUT_DIR, fovID=FOVS),
         expand("{output_dir}/signal/{{fovID}}_goodSpots.csv", output_dir=OUTPUT_DIR, fovID=FOVS),
         expand("{output_dir}/documents/genes.csv", output_dir=OUTPUT_DIR),
+        expand("{output_dir}/output/tile_config_{sample}.csv", output_dir=OUTPUT_DIR, sample=SAMPLE),
     output:
         expand("{output_dir}/expr/{{fovID}}/raw.h5ad", output_dir=OUTPUT_DIR, fovID=FOVS),
         expand("{output_dir}/expr/{{fovID}}/reads_assignment.csv", output_dir=OUTPUT_DIR, fovID=FOVS),
@@ -315,29 +403,164 @@ rule reads_assignment:
 
 ### Create sample-wise output 
 def get_h5ad_input(wildcards):
-    return expand("{output_dir}/expr/{fovID}/raw.h5ad", output_dir=OUTPUT_DIR, fovID=SAMPLE_DICT[wildcards.sample])
+    return expand("{output_dir}/expr/{fovID}/raw.h5ad", output_dir=OUTPUT_DIR, fovID=SAMPLE_TO_FOV[wildcards.sample])
 
 rule create_sample_h5ad:
     input:
         expand("{output_dir}/documents/sample-annotation.csv", output_dir=OUTPUT_DIR),
         get_h5ad_input
     output:
-        expand("{output_dir}/expr/{{sample}}_raw.h5ad", output_dir=OUTPUT_DIR, sample=SAMPLE_TEST)
+        expand("{output_dir}/expr/{{sample}}_raw.h5ad", output_dir=OUTPUT_DIR, sample=SAMPLE)
     resources:
         mem_mb=config['rules']['create_sample_h5ad']['resources']['mem_mb']
     script:
         "scripts/create_sample_h5ad.py"
 
 def get_reads_input(wildcards):
-    return expand("{output_dir}/expr/{fovID}/reads_assignment.csv", output_dir=OUTPUT_DIR, fovID=SAMPLE_DICT[wildcards.sample])
+    return expand("{output_dir}/expr/{fovID}/reads_assignment.csv", output_dir=OUTPUT_DIR, fovID=SAMPLE_TO_FOV[wildcards.sample])
 
 rule create_sample_reads_assignment:
     input:
         expand("{output_dir}/documents/sample-annotation.csv", output_dir=OUTPUT_DIR),
         get_reads_input
     output:
-        expand("{output_dir}/expr/{{sample}}_reads_assignment.csv", output_dir=OUTPUT_DIR, sample=SAMPLE_TEST)
+        expand("{output_dir}/expr/{{sample}}_reads_assignment.csv", output_dir=OUTPUT_DIR, sample=SAMPLE)
     resources:
         mem_mb=config['rules']['create_sample_reads_assignment']['resources']['mem_mb']
     script:
         "scripts/create_sample_reads_assignment.py"
+
+def get_runtime(wildcards, attempt):
+    return attempt * config['rules']['gr_single_fov_subtile']['resources']['runtime']
+
+rule gr_single_fov_subtile:
+    input:
+        config['config_path'].replace('.yaml', '.json'),
+        expand("{input_dir}/genes.csv", input_dir=INPUT_DIR),
+        expand("{input_dir}/{rounds}/{{fovID}}", input_dir=INPUT_DIR, rounds=ROUND),
+    output:
+        expand("{output_dir}/log/{{fovID}}_gr.txt", output_dir=OUTPUT_DIR),
+        # expand("{output_dir}/log/gr_shifts/{{fovID}}.txt", output_dir=OUTPUT_DIR),
+        expand("{output_dir}/images/ref_merged/{{fovID}}.tif", output_dir=OUTPUT_DIR),
+        temp(expand("{output_dir}/output/subtile/{{fovID}}/subtile_coords.csv", output_dir=OUTPUT_DIR)),
+        temp(expand("{output_dir}/output/subtile/{{fovID}}/subtile_data_{n_subtile}.mat", output_dir=OUTPUT_DIR, n_subtile=N_SUBTILE)),
+    params:
+        uger_log=f"{OUTPUT_DIR}/log/gr_single_fov_subtile/{{fovID}}.txt"
+    threads: 4
+    resources:
+        mem_mb=config['rules']['gr_single_fov_subtile']['resources']['mem_mb'],
+        runtime=get_runtime
+    benchmark:
+        f"{OUTPUT_DIR}/log/benchmark/gr_single_fov_subtile/{{fovID}}.txt"
+    run:
+        param_string = (f"'{input[0]}', "
+                        f"'{wildcards.fovID}'"
+                        )
+        matlab_script_name = 'gr_single_fov_subtile'
+        run_matlab_scripts(param_string, matlab_script_name)
+
+def get_runtime(wildcards, attempt):
+    return attempt * config['rules']['lrsf_single_fov_subtile']['resources']['runtime']
+
+rule lrsf_single_fov_subtile:
+    input:
+        config['config_path'].replace('.yaml', '.json'),
+        expand("{input_dir}/genes.csv", input_dir=INPUT_DIR),
+        expand("{output_dir}/output/subtile/{{fovID}}/subtile_data_{{n_subtile}}.mat", output_dir=OUTPUT_DIR),
+    output:
+        expand("{output_dir}/log/sf_scores/{{fovID}}_{{n_subtile}}.txt", output_dir=OUTPUT_DIR),
+        temp(expand("{output_dir}/output/subtile/{{fovID}}/subtile_goodSpots_{{n_subtile}}.csv", output_dir=OUTPUT_DIR)),
+    threads: 4
+    resources:
+        mem_mb=config['rules']['lrsf_single_fov_subtile']['resources']['mem_mb'],
+        runtime=get_runtime
+    benchmark:
+        f"{OUTPUT_DIR}/log/benchmark/lrsf_single_fov_subtile/{{fovID}}_{{n_subtile}}.txt"
+    run:
+        param_string = (f"'{input[0]}', "
+                        f"'{input[2]}'"
+                        )
+        matlab_script_name = 'lrsf_single_fov_subtile'
+        run_matlab_scripts(param_string, matlab_script_name)
+
+### Stitch subtile data 
+rule stitch_subtile:
+    input:
+        expand("{output_dir}/output/subtile/{{fovID}}/subtile_coords.csv", output_dir=OUTPUT_DIR),
+        expand("{output_dir}/output/subtile/{{fovID}}/subtile_goodSpots_{n_subtile}.csv", output_dir=OUTPUT_DIR, n_subtile=N_SUBTILE),
+    output:
+        expand("{output_dir}/signal/{{fovID}}_goodSpots.csv", output_dir=OUTPUT_DIR),
+        expand("{output_dir}/signal/{{fovID}}_goodSpots.png", output_dir=OUTPUT_DIR),
+    resources:
+        mem_mb=config['rules']['stitch_subtile']['resources']['mem_mb'],
+        runtime=config['rules']['stitch_subtile']['resources']['runtime']
+    script:
+        "scripts/stitch_subtile.py"
+
+
+def get_runtime(wildcards, attempt):
+    return attempt * config['rules']['deep_create_subtile']['resources']['runtime']
+
+rule deep_create_subtile:
+    input:
+        config['config_path'].replace('.yaml', '.json'),
+        expand("{input_dir}/{rounds}/{{fovID}}", input_dir=INPUT_DIR, rounds=ROUND),
+    output:
+        expand("{output_dir}/images/ref_merged/{{fovID}}.tif", output_dir=OUTPUT_DIR),
+        temp(expand("{output_dir}/output/subtile/{{fovID}}/subtile_coords.csv", output_dir=OUTPUT_DIR)),
+        temp(expand("{output_dir}/output/subtile/{{fovID}}/subtile_data_{n_subtile}.mat", output_dir=OUTPUT_DIR, n_subtile=N_SUBTILE)),
+    threads: 4
+    resources:
+        mem_mb=config['rules']['deep_create_subtile']['resources']['mem_mb'],
+        runtime=get_runtime
+    benchmark:
+        f"{OUTPUT_DIR}/log/benchmark/deep_create_subtile/{{fovID}}.txt"
+    run:
+        param_string = (f"'{input[0]}', "
+                        f"'{wildcards.fovID}'"
+                        )
+        matlab_script_name = 'deep_create_subtile'
+        run_matlab_scripts(param_string, matlab_script_name)
+
+def get_runtime(wildcards, attempt):
+    return attempt * config['rules']['deep_rsf_subtile']['resources']['runtime']
+
+rule deep_rsf_subtile:
+    input:
+        config['config_path'].replace('.yaml', '.json'),
+        expand("{input_dir}/genes.csv", input_dir=INPUT_DIR),
+        expand("{output_dir}/output/subtile/{{fovID}}/subtile_data_{{n_subtile}}.mat", output_dir=OUTPUT_DIR),
+    output:
+        expand("{output_dir}/log/sf_scores/{{fovID}}_{{n_subtile}}.txt", output_dir=OUTPUT_DIR),
+        temp(expand("{output_dir}/output/subtile/{{fovID}}/subtile_goodSpots_{{n_subtile}}.csv", output_dir=OUTPUT_DIR)),
+    threads: 4
+    resources:
+        mem_mb=config['rules']['deep_rsf_subtile']['resources']['mem_mb'],
+        runtime=get_runtime
+    benchmark:
+        f"{OUTPUT_DIR}/log/benchmark/deep_rsf_subtile/{{fovID}}_{{n_subtile}}.txt"
+    run:
+        param_string = (f"'{input[0]}', "
+                        f"'{input[2]}'"
+                        )
+        matlab_script_name = 'deep_rsf_subtile'
+        run_matlab_scripts(param_string, matlab_script_name)
+
+
+
+rule rsf_single_fov_seq:
+    input:
+        config['config_path'].replace('.yaml', '.json'),
+        expand("{input_dir}/{rounds}/{{fovID}}", input_dir=INPUT_DIR, rounds=ROUND),
+    output:
+        expand("{output_dir}/signal/{{fovID}}_allSpots.csv", output_dir=OUTPUT_DIR),
+    threads: 2
+    resources:
+        mem_mb=config['rules']['rsf_single_fov_seq']['resources']['mem_mb'],
+        runtime=config['rules']['rsf_single_fov_seq']['resources']['runtime']
+    run:
+        param_string = (f"'{input[0]}', "
+                        f"'{wildcards.fovID}'"
+                        )
+        matlab_script_name = 'rsf_single_fov_seq'
+        run_matlab_scripts(param_string, matlab_script_name)

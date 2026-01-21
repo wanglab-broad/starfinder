@@ -473,6 +473,9 @@ classdef STARMapDataset
             defaultRefLayer = obj.layers.ref; % round1
             addOptional(p, 'ref_layer', defaultRefLayer);
 
+            defaultRegLayer = [];
+            addOptional(p, 'layers_to_register', defaultRegLayer);
+
             defaultRefChannel = "DAPI"; 
             addOptional(p, 'ref_channel', defaultRefChannel);
 
@@ -482,8 +485,20 @@ classdef STARMapDataset
             defaultMovImg= "merged-image"; % single-channel input_image
             addOptional(p, 'mov_img', defaultMovImg);
 
-            defaultInputImage= ""; % 
-            addOptional(p, 'input_image', defaultInputImage);
+            defaultInputImageRef= ""; % 
+            addOptional(p, 'input_image_ref', defaultInputImageRef);
+            
+            defaultInputImageMov= ""; % 
+            addOptional(p, 'input_image_mov', defaultInputImageMov);
+
+            defaultScale= 1; % 
+            addOptional(p, 'scale', defaultScale);
+
+            defaultSaveShifts = true;
+            addParameter(p, 'save_shifts', defaultSaveShifts);
+
+            defaultLogSuffix = "";
+            addParameter(p, 'log_suffix', defaultLogSuffix);
 
             parse(p, varargin{:});
 
@@ -492,29 +507,78 @@ classdef STARMapDataset
                 case "merged-image"
                     obj.registration{p.Results.ref_layer} = max(obj.images{p.Results.ref_layer}, [], 4);
                 case "single-channel"
-                    obj.registration{p.Results.ref_layer} = obj.images{p.Results.ref_layer}(:,:,:,p.Results.ref_channel);
+                    current_metadata = obj.metadata{p.Results.ref_layer}.ChannelInfo;
+                    ref_channel_index = find(contains([current_metadata(:).name], p.Results.ref_channel));
+                    obj.registration{p.Results.ref_layer} = obj.images{p.Results.ref_layer}(:,:,:,ref_channel_index);
                 case "input_image"
-                    obj.registration{p.Results.ref_layer} = p.Results.input_image;
+                    obj.registration{p.Results.ref_layer} = p.Results.input_image_ref;
             end
 
-            layers_to_register = p.Results.layer(p.Results.layer ~= p.Results.ref_layer);
+            if p.Results.scale ~= 1
+                obj.registration{p.Results.ref_layer} = imresize3(obj.registration{p.Results.ref_layer}, p.Results.scale);
+            end
+            
+            if isempty(p.Results.layers_to_register)
+                layers_to_register = p.Results.layer(p.Results.layer ~= p.Results.ref_layer);
+            else
+                layers_to_register = p.Results.layers_to_register;
+            end
+            
             for current_layer=layers_to_register
                 switch p.Results.mov_img
                     case "merged-image"
                         mov_img = max(obj.images{current_layer}, [], 4);
                     case "single-channel"
                         current_metadata = obj.metadata{current_layer}.ChannelInfo;
-                        ref_channel_index = find(contains({current_metadata(:).name}, p.Results.ref_channel) == 1);
-                        mov_img = obj.images{current_layer}(:,:,:,ref_channel_index);
+                        current_channel_index = find(contains([current_metadata(:).name], p.Results.ref_channel));
+                        mov_img = obj.images{current_layer}(:,:,:,current_channel_index);
+                    case "input_image"
+                        mov_img = p.Results.input_image_mov;
+                end
+
+                if p.Results.scale ~= 1
+                    mov_img = imresize3(mov_img, p.Results.scale);
                 end
 
                 starting = tic;
                 [obj.images{current_layer}, obj.registration{current_layer}] = RegisterImagesGlobal(obj.images{current_layer},...
                                                                                     obj.registration{p.Results.ref_layer},...
-                                                                                    mov_img);
+                                                                                    mov_img,...
+                                                                                    p.Results.scale);
     
+                if iscell(current_layer)
+                    current_layer = current_layer{1};
+                end
                 fprintf(sprintf('%s vs. %s finished [time=%02f]\n', current_layer, p.Results.ref_layer, toc(starting)));
                 fprintf(sprintf('Shifted by %s\n', num2str(obj.registration{current_layer}.shifts)));
+            end
+
+            if p.Results.save_shifts
+                shift_log_folder = fullfile(obj.outputPath, "log", "gr_shifts");
+                if ~exist(shift_log_folder, 'dir')
+                    mkdir(shift_log_folder);
+                end
+                
+                if p.Results.log_suffix ~= ""
+                    current_fname = fullfile(shift_log_folder, sprintf("%s_%s.txt", obj.fovID, p.Results.log_suffix));
+                else
+                    current_fname = fullfile(shift_log_folder, sprintf("%s.txt", obj.fovID));
+                end
+                if exist(current_fname, 'file'); delete(current_fname); end
+
+                current_output_folder_msg = strrep(current_fname, '\', '\\');
+                fprintf(sprintf('Saving shifts to %s\n', current_output_folder_msg));
+
+                headers = ["fov_id" "round" "row" "col" "z"];
+                shifts_to_save = [];
+                for current_layer=layers_to_register
+                    current_shifts = obj.registration{current_layer}.shifts;
+                    current_shifts = [repmat(string(obj.fovID), size(current_shifts, 1), 1) repmat(string(current_layer), size(current_shifts, 1), 1) string(current_shifts)];
+                    shifts_to_save = [shifts_to_save; current_shifts];
+                end
+
+                writematrix(headers, current_fname, 'Delimiter', ',');
+                writematrix(shifts_to_save, current_fname, 'Delimiter', ',', 'WriteMode', 'append');
             end
 
             % change metadata
@@ -573,7 +637,7 @@ classdef STARMapDataset
                         mov_img = max(obj.images{current_layer}, [], 4);
                     case "single-channel"
                         current_metadata = obj.metadata{current_layer}.ChannelInfo;
-                        ref_channel_index = find(contains([current_metadata(:).name], p.Results.ref_channel) == 1);
+                        ref_channel_index = find(contains([current_metadata(:).name], p.Results.ref_channel));
                         mov_img = obj.images{current_layer}(:,:,:,ref_channel_index);
                 end
 
@@ -608,6 +672,9 @@ classdef STARMapDataset
             defaultMethod = "max3d";
             addOptional(p, 'method', defaultMethod);
 
+            defaultIntensityEstimation = "adaptive";
+            addOptional(p, 'intensity_estimation', defaultIntensityEstimation);
+
             defaultIntensityThreshold = 0.2;
             addOptional(p, 'intensity_threshold', defaultIntensityThreshold);
             
@@ -618,14 +685,23 @@ classdef STARMapDataset
             fprintf(sprintf('Reference: %s\n', p.Results.ref_layer));
             
             tic;
+            ref_metadata = obj.metadata{p.Results.ref_layer}.ChannelInfo;
+            input_channel_index = find(contains([ref_metadata(:).name], "seq"));
+            input_img = obj.images{p.Results.ref_layer}(:,:,:,input_channel_index);
+
             switch p.Results.method
                 case "max3d"
-                    obj.signal.allSpots = SpotFindingMax3D(obj.images{p.Results.ref_layer}, p.Results.intensity_threshold);
+                    % obj.signal.allSpots = SpotFindingMax3D(obj.images{p.Results.ref_layer}, p.Results.intensity_estimation, p.Results.intensity_threshold);
+                    obj.signal.allSpots = SpotFindingMax3D(input_img, p.Results.intensity_estimation, p.Results.intensity_threshold);
             end
             fprintf(sprintf('Number of spots found: %d\n', size(obj.signal.allSpots, 1)));
             fprintf(sprintf('[time = %.2f s]\n', toc));
-            obj.signal.allSpots = splitvars(obj.signal.allSpots, "Centroid", 'NewVariableNames', ["x", "y", "z"]);
-            
+
+            if size(obj.signal.allSpots, 1) == 0
+                obj.signal.allSpots = cell2table(cell(0,4), 'VariableNames', ["x", "y", "z", "gene"]);
+            else
+                obj.signal.allSpots = splitvars(obj.signal.allSpots, "Centroid", 'NewVariableNames', ["x", "y", "z"]);
+            end
             obj.jobFinished.SpotFinding = true;
         end
         
@@ -647,25 +723,31 @@ classdef STARMapDataset
             
             fprintf('====Reads Extraction====\n');
             fprintf(sprintf('voxel size: %d x %d x %d\n', p.Results.voxel_size));
-        
-            complete_color_seq = [];
-            for current_layer=p.Results.layer
-                tic;
-                fprintf(sprintf("Processing %s...", current_layer))
-                [current_color_seq, current_color_score] = ExtractFromLocation( obj.images{current_layer}, obj.signal.allSpots, p.Results.voxel_size ); 
-                obj.signal.allSpots{:, sprintf("%s_color", current_layer)} = current_color_seq; 
-                obj.signal.allSpots{:, sprintf("%s_score", current_layer)} = current_color_score; 
-                if isempty(complete_color_seq)
-                    complete_color_seq = current_color_seq;
-                else
-                    % complete_color_seq = strcat(complete_color_seq, current_color_seq);
-                    complete_color_seq = complete_color_seq + current_color_seq;
-                end
-                fprintf(sprintf('[time = %.2f s]\n', toc));
-            end                                          
-            
-            obj.signal.allSpots{:, "color_seq"} = complete_color_seq;
 
+            if ~isempty(obj.signal.allSpots)
+                complete_color_seq = [];
+                for current_layer=p.Results.layer
+                    tic;
+                    fprintf(sprintf("Processing %s...", current_layer))
+                    current_metadata = obj.metadata{current_layer}.ChannelInfo;
+                    input_channel_index = find(contains([current_metadata(:).name], "seq"));
+                    input_img = obj.images{current_layer}(:,:,:,input_channel_index);
+                    % size(input_img)
+                    
+                    [current_color_seq, current_color_score] = ExtractFromLocation( input_img, obj.signal.allSpots, p.Results.voxel_size ); 
+                    obj.signal.allSpots{:, sprintf("%s_color", current_layer)} = current_color_seq; 
+                    obj.signal.allSpots{:, sprintf("%s_score", current_layer)} = current_color_score; 
+                    if isempty(complete_color_seq)
+                        complete_color_seq = current_color_seq;
+                    else
+                        % complete_color_seq = strcat(complete_color_seq, current_color_seq);
+                        complete_color_seq = complete_color_seq + current_color_seq;
+                    end
+                    fprintf(sprintf('[time = %.2f s]\n', toc));
+                end                                          
+                
+                obj.signal.allSpots{:, "color_seq"} = complete_color_seq;
+            end
 
             obj.jobFinished.ReadsExtraction = true;
 
@@ -722,7 +804,7 @@ classdef STARMapDataset
             defaultSplitIndex = [5];
             addParameter(p, 'split_index', defaultSplitIndex);
 
-            defaultSaveScores = false;
+            defaultSaveScores = true;
             addParameter(p, 'save_scores', defaultSaveScores);
 
             parse(p, varargin{:});
@@ -742,34 +824,62 @@ classdef STARMapDataset
             fprintf(sprintf('Number of barcode segments: %d\n', p.Results.n_barcode_segments));
             obj.signal.scores = [n_spots sum(no_color_spots) sum(multi_color_spots)]; 
 
-            if numel(end_base) > 1
-                end_base_msg = strjoin(end_base, " or ");
-            else
-                end_base_msg = end_base;
-            end
-            fprintf(sprintf('Barcode ends with: %s\n', end_base_msg));
+            if ~isempty(obj.signal.allSpots)
+                if numel(end_base) > 1
+                    end_base_msg = strjoin(end_base, " or ");
+                else
+                    end_base_msg = end_base;
+                end
+                fprintf(sprintf('Barcode ends with: %s\n', end_base_msg));
 
-            if p.Results.n_barcode_segments == 1
-                obj = FilterReads(obj, end_base);  
+                if p.Results.n_barcode_segments == 1
+                    obj = FilterReads(obj, end_base);  
+                else
+                    obj = FilterReadsMultiSegment(obj, end_base, p.Results.split_index);
+                end
+
+                n_good_spots = size(obj.signal.goodSpots, 1);
+                obj.signal.scores = [obj.signal.scores n_good_spots];
             else
-                obj = FilterReadsMultiSegment(obj, end_base, p.Results.split_index);
+                obj.signal.goodSpots = cell2table(cell(0,4), 'VariableNames', ["x", "y", "z", "gene"]);
+                obj.signal.scores = [obj.signal.scores 0 0 0 0];
             end
 
             if p.Results.save_scores
-                current_fname = fullfile(obj.outputPath, "log", "rsf_scores.csv");
-                current_output_folder_msg = strrep(current_fname, '\', '\\');
-                fprintf(sprintf('Saving scores to %s\n', current_output_folder_msg));
+                score_log_folder = fullfile(obj.outputPath, "log", "sf_scores");
+                if ~exist(score_log_folder, 'dir')
+                    mkdir(score_log_folder);
+                end
+
                 if obj.subtile.index > 0
+                    current_fname = fullfile(score_log_folder, sprintf("%s_%s.txt", obj.fovID, string(obj.subtile.index)));
+                    if exist(current_fname, 'file'); delete(current_fname); end
+                    current_output_folder_msg = strrep(current_fname, '\', '\\');
+                    fprintf(sprintf('Saving scores to %s\n', current_output_folder_msg));
+
+                    if numel(end_base) > 1
+                        headers = ["fov_id" "subtile_id" "total_spots" "no_color" "multi_color" "spots_in_codebook" "correctform_1" "correctform_2" "good_spots"];
+                    else
+                        headers = ["fov_id" "subtile_id" "total_spots" "no_color" "multi_color" "spots_in_codebook" "spots_in_correctform" "correctform_in_codebook" "good_spots"];
+                    end
                     scores_to_save = [string(obj.fovID) string(obj.subtile.index) string(obj.signal.scores)];
                 else
+                    current_fname = fullfile(score_log_folder, sprintf("%s.txt", obj.fovID));
+                    if exist(current_fname, 'file'); delete(current_fname); end
+                    current_output_folder_msg = strrep(current_fname, '\', '\\');
+                    fprintf(sprintf('Saving scores to %s\n', current_output_folder_msg));
+
+                    if numel(end_base) > 1
+                        headers = ["fov_id" "total_spots" "no_color" "multi_color" "spots_in_codebook" "correctform_1" "correctform_2" "good_spots"];
+                    else
+                        headers = ["fov_id" "total_spots" "no_color" "multi_color" "spots_in_codebook" "spots_in_correctform" "correctform_in_codebook" "good_spots"];
+                    end
                     scores_to_save = [string(obj.fovID) string(obj.signal.scores)];
                 end
 
-                if ~exist(current_fname, 'file')
-                    writematrix(scores_to_save, current_fname, 'Delimiter', ',');
-                else
-                    writematrix(scores_to_save, current_fname, 'Delimiter', ',', 'WriteMode', 'append');
-                end
+                writematrix(headers, current_fname, 'Delimiter', ',');
+                writematrix(scores_to_save, current_fname, 'Delimiter', ',', 'WriteMode', 'append');
+
             end
 
             % change metadata
@@ -878,7 +988,11 @@ classdef STARMapDataset
                     end
                     current_output_folder_msg = strrep(current_fname, '\', '\\');
                     fprintf(sprintf('Saving goodSpots to %s\n', current_output_folder_msg));
-                    output_table = obj.signal.goodSpots(:, p.Results.field_to_keep);
+                    if p.Results.field_to_keep == "all"
+                        output_table = obj.signal.goodSpots;
+                    else
+                        output_table = obj.signal.goodSpots(:, p.Results.field_to_keep);
+                    end
                     writetable(output_table, current_fname);
                 case "allSpots"
                     if obj.subtile.index > 0
@@ -888,7 +1002,11 @@ classdef STARMapDataset
                     end
                     current_output_folder_msg = strrep(current_fname, '\', '\\');
                     fprintf(sprintf('Saving allSpots to %s\n', current_output_folder_msg));
-                    output_table = obj.signal.allSpots(:, p.Results.field_to_keep);
+                    if p.Results.field_to_keep == "all"
+                        output_table = obj.signal.allSpots;
+                    else
+                        output_table = obj.signal.allSpots(:, p.Results.field_to_keep);
+                    end
                     writetable(output_table, current_fname);
             end
 
@@ -907,6 +1025,9 @@ classdef STARMapDataset
             % Defaults
             defaultSqrtPieces = 4;
             addOptional(p, 'sqrt_pieces', defaultSqrtPieces);
+
+            defaultOverlapRatio = 0.1;
+            addOptional(p, 'overlap_ratio', defaultOverlapRatio);
 
             defaultSave = false;
             addOptional(p, 'save', defaultSave);
@@ -929,7 +1050,7 @@ classdef STARMapDataset
             end
 
             current_metadata = obj.metadata{p.Results.ref_layer};
-            obj.subtile.coords = MakeSubtileTable(current_metadata.dims, p.Results.sqrt_pieces);     
+            obj.subtile.coords = MakeSubtileTable(current_metadata.dims, p.Results.sqrt_pieces, p.Results.overlap_ratio);     
 
             if p.Results.save
                 current_output_folder = fullfile(current_subtile_folder, obj.fovID);
@@ -954,8 +1075,8 @@ classdef STARMapDataset
                         subtile_data.images{current_layer} = subtile_data.images{current_layer}(start_coords_y:end_coords_y, start_coords_x:end_coords_x, :, :);
                     end
                     subtile_data.subtile.index = tile_idx;
-
-                    save(fullfile(current_output_folder, sprintf('subtile_data_%d.mat', tile_idx)), "subtile_data");
+                    
+                    save(fullfile(current_output_folder, sprintf('subtile_data_%d.mat', tile_idx)), "subtile_data", "-v7.3");
                 end
 
             end

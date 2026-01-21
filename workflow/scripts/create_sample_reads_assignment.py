@@ -3,8 +3,6 @@
 
 import os
 import pandas as pd
-import scanpy as sc
-import anndata as ad
 
 base_path = os.path.join(snakemake.config['root_output_path'], snakemake.config['dataset_id'], snakemake.config['output_id'])
 expr_path = os.path.join(base_path, 'expr')
@@ -23,8 +21,12 @@ for i in range(current_start, current_end+1):
 
     if os.path.exists(reads_file):  
         current_reads_df = pd.read_csv(reads_file)
-        current_reads_df['fov_id'] = current_fov
-        current_reads_df['sample'] = current_sample
+
+        if current_reads_df.shape[0] == 0:
+            print(f"Empty file: {reads_file}")
+        else:   
+            current_reads_df['fov_id'] = current_fov
+            current_reads_df['sample'] = current_sample
 
         df_list.append(current_reads_df)
     else:

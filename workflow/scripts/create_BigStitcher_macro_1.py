@@ -15,7 +15,7 @@ run("Define dataset ...",
 "move_tiles_to_grid_(per_angle)?=[Move Tile to Grid (Macro-scriptable)] grid_type=[Down & Right             ] tiles_x={tile_x} tiles_y={tile_y} tiles_z=1 overlap_x_(%)=10 overlap_y_(%)=10 overlap_z_(%)=10 " +
 "keep_metadata_rotation how_to_load_images=[Re-save as multiresolution HDF5] load_raw_data_virtually " +
 "dataset_save_path={snakemake.config['root_output_path']}/{snakemake.config['dataset_id']}/{snakemake.config['output_id']}/images/fused/{snakemake.wildcards['sample']}/DAPI manual_mipmap_setup " +
-"subsampling_factors=[{{1,1,1}}, {{4,4,4}}] hdf5_chunk_sizes=[{{16,16,16}}, {{16,16,16}}] timepoints_per_partition=1 setups_per_partition=0 use_deflate_compression");
+"subsampling_factors=[{{2,2,2}}, {{4,4,4}}] hdf5_chunk_sizes=[{{16,16,16}}, {{16,16,16}}] timepoints_per_partition=1 setups_per_partition=0 use_deflate_compression");
 
 run("Calculate pairwise shifts ...", 
 "select={snakemake.config['root_output_path']}/{snakemake.config['dataset_id']}/{snakemake.config['output_id']}/images/fused/{snakemake.wildcards['sample']}/DAPI/dataset.xml " + 

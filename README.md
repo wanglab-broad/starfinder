@@ -21,7 +21,7 @@ Following datasets are provided for testing:
 Additional sources: [Single Cell Portal](https://singlecell.broadinstitute.org/single_cell/study/SCP2637)
 
 ## Usage
-To create a starfinder python environment:
+Download the [latest release](https://github.com/wanglab-broad/starfinder/releases) and create a starfinder python environment:
 ```bash
 conda env create -f ./config/environment.yaml
 ```

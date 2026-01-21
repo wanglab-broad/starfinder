@@ -51,8 +51,13 @@ function obj = FilterReads( obj, end_base )
         obj.signal.scores = [obj.signal.scores current_score_2 current_score_3]; 
     end
     
-    obj.signal.goodSpots = obj.signal.allSpots(barcodes_in_codebook, :);
-    % obj.signal.goodSpots{:, "barcode"} = barcodes(barcodes_in_codebook);
-    obj.signal.goodSpots{:, "gene"} = obj.codebook.seqToGene(color_seq(barcodes_in_codebook));
+    if sum(barcodes_in_codebook) == 0
+        obj.signal.goodSpots = cell2table(cell(0,4), 'VariableNames', ["x", "y", "z", "gene"]);
+        obj.signal.scores = [obj.signal.scores 0 0 0 0];
+    else
+        obj.signal.goodSpots = obj.signal.allSpots(barcodes_in_codebook, :);
+        % obj.signal.goodSpots{:, "barcode"} = barcodes(barcodes_in_codebook);
+        obj.signal.goodSpots{:, "gene"} = obj.codebook.seqToGene(color_seq(barcodes_in_codebook));
+    end
 
 end

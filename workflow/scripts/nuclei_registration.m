@@ -10,6 +10,7 @@ function sdata = nuclei_registration(config_path, current_fov)
 
     % add path for .m files
     addpath(fullfile(config.starfinder_path, 'code-base/src/'))
+    addpath(genpath(fullfile(config.starfinder_path, 'code-base/matlab-addon/')))
 
     % create object instance
     input_path = fullfile(config.root_input_path, config.dataset_id, config.sample_id);
@@ -46,9 +47,10 @@ function sdata = nuclei_registration(config_path, current_fov)
     sdata.layers.ref = config.ref_round;
     sdata = sdata.GlobalRegistration('layer', sdata.layers.other, ...
                                     'ref_img', 'input_image', ...
-                                    'input_image', current_ref_img, ...
+                                    'input_image_ref', current_ref_img, ...
                                     'mov_img', 'single-channel', ...
-                                    'ref_channel', config.ref_channel);
+                                    'ref_channel', config.ref_channel, ...
+                                    'log_suffix', "nr");
 
     % output 
     sdata = sdata.SaveImages('layer', sdata.layers.other, 'output_path', output_path, 'folder_format', "single", 'maximum_projection', config.maximum_projection);

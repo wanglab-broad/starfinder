@@ -10,6 +10,7 @@ function sdata = rsf_single_fov(config_path, current_fov)
 
     % add path for .m files
     addpath(fullfile(config.starfinder_path, 'code-base/src/'))
+    addpath(genpath(fullfile(config.starfinder_path, 'code-base/matlab-addon/')))
 
     % create object instance
     input_path = fullfile(config.root_input_path, config.dataset_id, config.sample_id);
@@ -28,7 +29,12 @@ function sdata = rsf_single_fov(config_path, current_fov)
     starting = tic;
 
     % load sequencing images 
-    sdata = sdata.LoadRawImages('fovID', current_fov, 'rotate_angle', config.rotate_angle);
+    if isempty(config.seq_channel_order)
+        sdata = sdata.LoadRawImages('fovID', current_fov, 'rotate_angle', config.rotate_angle);
+    else
+        sdata = sdata.LoadRawImages('fovID', current_fov, 'rotate_angle', config.rotate_angle, ...
+                                    'channel_order_dict', config.seq_channel_order);
+    end
     sdata.layers.ref = config.ref_round;
 
     % preprocessing
@@ -46,7 +52,11 @@ function sdata = rsf_single_fov(config_path, current_fov)
 
     % registration
     if config.rules.rsf_single_fov.parameters.global_registration.run
-        sdata = sdata.GlobalRegistration('ref_layer', config.rules.rsf_single_fov.parameters.global_registration.ref_round);
+        sdata = sdata.GlobalRegistration('ref_layer', config.rules.rsf_single_fov.parameters.global_registration.ref_round, ...
+                                        'ref_img', config.rules.rsf_single_fov.parameters.global_registration.ref_img, ...
+                                        'mov_img', config.rules.rsf_single_fov.parameters.global_registration.mov_img);
+    else
+        sdata.registration{sdata.layers.ref} = max(sdata.images{config.ref_round}, [], 4);
     end
 
     if config.rules.rsf_single_fov.parameters.local_registration.run
@@ -76,10 +86,16 @@ function sdata = rsf_single_fov(config_path, current_fov)
         sdata = sdata.ReadsExtraction('voxel_size', config.rules.rsf_single_fov.parameters.reads_extraction.voxel_size);
     end
   
-    % load codebook and filter reads
+    % load codebook
+    if config.rules.rsf_single_fov.parameters.load_codebook.run
+        sdata = sdata.LoadCodebook('split_index', config.rules.rsf_single_fov.parameters.load_codebook.split_index);
+    end
+
+    % filter reads
     if config.rules.rsf_single_fov.parameters.reads_filtration.run
-        sdata = sdata.LoadCodebook;
-        sdata = sdata.ReadsFiltration('end_base', config.rules.rsf_single_fov.parameters.reads_filtration.end_base);
+        sdata = sdata.ReadsFiltration('end_base', config.rules.rsf_single_fov.parameters.reads_filtration.end_base, ...
+                                  'n_barcode_segments', config.rules.rsf_single_fov.parameters.reads_filtration.n_barcode_segments, ...
+                                  'split_index', config.rules.rsf_single_fov.parameters.reads_filtration.split_index);  
     end
 
     % output 
