@@ -20,7 +20,7 @@ rule stitching_preparation:
         expand("{output_dir}/images/fused/{{sample}}/grid.csv", output_dir=OUTPUT_DIR),
         expand("{output_dir}/images/fused/{{sample}}/grid.png", output_dir=OUTPUT_DIR),
     resources:
-        mem_mb=config['rules']['stitching_preparation']['resources']['mem_mb']
+        mem_mb=get_rule_config('stitching_preparation', 'resources.mem_mb', DEFAULT_RESOURCES['mem_mb'])
     script:
         "../scripts/stitching_preparation.py"
 
@@ -32,7 +32,7 @@ rule create_BigStitcher_macro:
     output:
         expand("{output_dir}/images/fused/{{sample}}/BigStitcher_macro.ijm", output_dir=OUTPUT_DIR)
     resources:
-        mem_mb=config['rules']['create_BigStitcher_macro']['resources']['mem_mb']
+        mem_mb=get_rule_config('create_BigStitcher_macro', 'resources.mem_mb', DEFAULT_RESOURCES['mem_mb'])
     script:
         "../scripts/create_BigStitcher_macro_1.py"
 
@@ -48,8 +48,8 @@ rule run_BigStitcher_macro:
         temp_dir=expand("{output_dir}/images/fused/{{sample}}/DAPI", output_dir=OUTPUT_DIR)
     threads: 4
     resources:
-        mem_mb=config['rules']['run_BigStitcher_macro']['resources']['mem_mb'],
-        runtime=config['rules']['run_BigStitcher_macro']['resources']['runtime']
+        mem_mb=get_rule_config('run_BigStitcher_macro', 'resources.mem_mb', DEFAULT_RESOURCES['mem_mb']),
+        runtime=get_rule_config('run_BigStitcher_macro', 'resources.runtime', DEFAULT_RESOURCES['runtime'])
     benchmark:
         f"{OUTPUT_DIR}/log/benchmark/run_BigStitcher_macro/{{sample}}.txt"
     shell:
@@ -65,6 +65,6 @@ rule create_tile_config:
         expand("{output_dir}/output/tile_config_{{sample}}.csv", output_dir=OUTPUT_DIR, sample=SAMPLE),
         expand("{output_dir}/output/tile_config_{{sample}}.html", output_dir=OUTPUT_DIR, sample=SAMPLE)
     resources:
-        mem_mb=config['rules']['create_tile_config']['resources']['mem_mb']
+        mem_mb=get_rule_config('create_tile_config', 'resources.mem_mb', DEFAULT_RESOURCES['mem_mb'])
     script:
         "../scripts/create_tile_config.py"

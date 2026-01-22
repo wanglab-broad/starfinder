@@ -17,7 +17,7 @@ rule reads_assignment:
         expand("{output_dir}/expr/{{fovID}}/raw.h5ad", output_dir=OUTPUT_DIR, fovID=FOVS),
         expand("{output_dir}/expr/{{fovID}}/reads_assignment.csv", output_dir=OUTPUT_DIR, fovID=FOVS),
     resources:
-        mem_mb=config['rules']['reads_assignment']['resources']['mem_mb']
+        mem_mb=get_rule_config('reads_assignment', 'resources.mem_mb', DEFAULT_RESOURCES['mem_mb'])
     script:
         "../scripts/reads_assignment.py"
 
@@ -33,7 +33,7 @@ rule create_sample_h5ad:
     output:
         expand("{output_dir}/expr/{{sample}}_raw.h5ad", output_dir=OUTPUT_DIR, sample=SAMPLE)
     resources:
-        mem_mb=config['rules']['create_sample_h5ad']['resources']['mem_mb']
+        mem_mb=get_rule_config('create_sample_h5ad', 'resources.mem_mb', DEFAULT_RESOURCES['mem_mb'])
     script:
         "../scripts/create_sample_h5ad.py"
 
@@ -49,6 +49,6 @@ rule create_sample_reads_assignment:
     output:
         expand("{output_dir}/expr/{{sample}}_reads_assignment.csv", output_dir=OUTPUT_DIR, sample=SAMPLE)
     resources:
-        mem_mb=config['rules']['create_sample_reads_assignment']['resources']['mem_mb']
+        mem_mb=get_rule_config('create_sample_reads_assignment', 'resources.mem_mb', DEFAULT_RESOURCES['mem_mb'])
     script:
         "../scripts/create_sample_reads_assignment.py"

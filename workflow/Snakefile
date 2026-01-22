@@ -3,6 +3,12 @@
 
     This is the main entry point for the STARfinder spatial transcriptomics pipeline.
     All rules are modularized into separate .smk files in the rules/ directory.
+
+    Workflow modes:
+    - 'free': Mix and match rules using individual run: True/False flags
+    - 'direct': Use rsf_single_fov for direct spot finding
+    - 'subtile': Use subtile-based workflow (gr_single_fov_subtile → lrsf_single_fov_subtile → stitch_subtile)
+    - 'deep': Use workflow optimized for deep-tissue (deep_create_subtile → deep_rsf_subtile → stitch_subtile)
 """
 
 ### ==================== [ Include Rule Files ] =========================
@@ -15,10 +21,23 @@ include: "rules/stitching.smk"
 include: "rules/reads-assignment.smk"
 include: "rules/utils.smk"
 
-### ==================== [ Rule Order ] =========================
+### ==================== [ Dynamic Rule Order ] =========================
 
-# Default order of rules for ambiguous output resolution
-ruleorder: stitch_subtile > gr_single_fov_subtile > deep_create_subtile > deep_rsf_subtile > lrsf_single_fov_subtile > rsf_single_fov
+# Build ruleorder based on workflow_mode to avoid ambiguous rule selection
+# Rules that produce the same output (e.g., _goodSpots.csv) need ordering
+
+if WORKFLOW_MODE == 'subtile' or (WORKFLOW_MODE == 'free' and is_rule_enabled('gr_single_fov_subtile')):
+    # Subtile workflow: subtile rules (gr/lrsf) take priority over deep rules
+    ruleorder: stitch_subtile > gr_single_fov_subtile > lrsf_single_fov_subtile > deep_create_subtile > deep_rsf_subtile > rsf_single_fov
+elif WORKFLOW_MODE == 'deep' or (WORKFLOW_MODE == 'free' and is_rule_enabled('deep_create_subtile')):
+    # Deep workflow: deep rules take priority over subtile rules
+    ruleorder: stitch_subtile > deep_create_subtile > deep_rsf_subtile > gr_single_fov_subtile > lrsf_single_fov_subtile > rsf_single_fov
+elif WORKFLOW_MODE == 'direct' or (WORKFLOW_MODE == 'free' and is_rule_enabled('rsf_single_fov')):
+    # Direct workflow: rsf_single_fov takes priority
+    ruleorder: rsf_single_fov > stitch_subtile > gr_single_fov_subtile > lrsf_single_fov_subtile > deep_create_subtile > deep_rsf_subtile
+else:
+    # Default: rsf_single_fov first (simpler workflow)
+    ruleorder: rsf_single_fov > stitch_subtile > gr_single_fov_subtile > lrsf_single_fov_subtile > deep_create_subtile > deep_rsf_subtile
 
 ### ==================== [ Local Rules ] =========================
 

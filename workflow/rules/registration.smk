@@ -17,8 +17,8 @@ rule rsf_single_fov:
         expand("{output_dir}/signal/{{fovID}}_goodSpots.csv", output_dir=OUTPUT_DIR),
     threads: 4
     resources:
-        mem_mb=config['rules']['rsf_single_fov']['resources']['mem_mb'],
-        runtime=config['rules']['rsf_single_fov']['resources']['runtime']
+        mem_mb=get_rule_config('rsf_single_fov', 'resources.mem_mb', DEFAULT_RESOURCES['mem_mb']),
+        runtime=get_rule_config('rsf_single_fov', 'resources.runtime', DEFAULT_RESOURCES['runtime'])
     benchmark:
         f"{OUTPUT_DIR}/log/benchmark/rsf_single_fov/{{fovID}}.txt"
     run:
@@ -44,7 +44,7 @@ rule gr_single_fov_subtile:
         uger_log=f"{OUTPUT_DIR}/log/gr_single_fov_subtile/{{fovID}}.txt"
     threads: 4
     resources:
-        mem_mb=config['rules']['gr_single_fov_subtile']['resources']['mem_mb'],
+        mem_mb=get_rule_config('gr_single_fov_subtile', 'resources.mem_mb', DEFAULT_RESOURCES['mem_mb']),
         runtime=make_get_runtime('gr_single_fov_subtile')
     benchmark:
         f"{OUTPUT_DIR}/log/benchmark/gr_single_fov_subtile/{{fovID}}.txt"
@@ -67,7 +67,7 @@ rule nuclei_registration:
         expand("{output_dir}/log/{{fovID}}_nr.txt", output_dir=OUTPUT_DIR),
         expand("{output_dir}/log/gr_shifts/{{fovID}}_nr.txt", output_dir=OUTPUT_DIR),
     resources:
-        mem_mb=config['rules']['nuclei_registration']['resources']['mem_mb']
+        mem_mb=get_rule_config('nuclei_registration', 'resources.mem_mb', DEFAULT_RESOURCES['mem_mb'])
     run:
         param_string = (f"'{input[0]}', "
                         f"'{wildcards.fovID}'"
@@ -87,7 +87,7 @@ rule rotate_nuclei:
     output:
         expand("{dapi_dir}/{{fovID}}.tif", dapi_dir=DAPI_DIR, fovID=FOVS),
     resources:
-        mem_mb=config['rules']['rotate_nuclei']['resources']['mem_mb']
+        mem_mb=get_rule_config('rotate_nuclei', 'resources.mem_mb', DEFAULT_RESOURCES['mem_mb'])
     run:
         from scipy.ndimage import rotate
         from skimage.io import imread, imsave

@@ -15,7 +15,7 @@ rule lrsf_single_fov_subtile:
         temp(expand("{output_dir}/output/subtile/{{fovID}}/subtile_goodSpots_{{n_subtile}}.csv", output_dir=OUTPUT_DIR)),
     threads: 4
     resources:
-        mem_mb=config['rules']['lrsf_single_fov_subtile']['resources']['mem_mb'],
+        mem_mb=get_rule_config('lrsf_single_fov_subtile', 'resources.mem_mb', DEFAULT_RESOURCES['mem_mb']),
         runtime=make_get_runtime('lrsf_single_fov_subtile')
     benchmark:
         f"{OUTPUT_DIR}/log/benchmark/lrsf_single_fov_subtile/{{fovID}}_{{n_subtile}}.txt"
@@ -38,7 +38,7 @@ rule deep_create_subtile:
         temp(expand("{output_dir}/output/subtile/{{fovID}}/subtile_data_{n_subtile}.mat", output_dir=OUTPUT_DIR, n_subtile=N_SUBTILE)),
     threads: 4
     resources:
-        mem_mb=config['rules']['deep_create_subtile']['resources']['mem_mb'],
+        mem_mb=get_rule_config('deep_create_subtile', 'resources.mem_mb', DEFAULT_RESOURCES['mem_mb']),
         runtime=make_get_runtime('deep_create_subtile')
     benchmark:
         f"{OUTPUT_DIR}/log/benchmark/deep_create_subtile/{{fovID}}.txt"
@@ -61,7 +61,7 @@ rule deep_rsf_subtile:
         temp(expand("{output_dir}/output/subtile/{{fovID}}/subtile_goodSpots_{{n_subtile}}.csv", output_dir=OUTPUT_DIR)),
     threads: 4
     resources:
-        mem_mb=config['rules']['deep_rsf_subtile']['resources']['mem_mb'],
+        mem_mb=get_rule_config('deep_rsf_subtile', 'resources.mem_mb', DEFAULT_RESOURCES['mem_mb']),
         runtime=make_get_runtime('deep_rsf_subtile')
     benchmark:
         f"{OUTPUT_DIR}/log/benchmark/deep_rsf_subtile/{{fovID}}_{{n_subtile}}.txt"
@@ -82,8 +82,8 @@ rule rsf_single_fov_seq:
         expand("{output_dir}/signal/{{fovID}}_allSpots.csv", output_dir=OUTPUT_DIR),
     threads: 2
     resources:
-        mem_mb=config['rules']['rsf_single_fov_seq']['resources']['mem_mb'],
-        runtime=config['rules']['rsf_single_fov_seq']['resources']['runtime']
+        mem_mb=get_rule_config('rsf_single_fov_seq', 'resources.mem_mb', DEFAULT_RESOURCES['mem_mb']),
+        runtime=get_rule_config('rsf_single_fov_seq', 'resources.runtime', DEFAULT_RESOURCES['runtime'])
     run:
         param_string = (f"'{input[0]}', "
                         f"'{wildcards.fovID}'"
@@ -101,7 +101,7 @@ rule stitch_subtile:
         expand("{output_dir}/signal/{{fovID}}_goodSpots.csv", output_dir=OUTPUT_DIR),
         expand("{output_dir}/signal/{{fovID}}_goodSpots.png", output_dir=OUTPUT_DIR),
     resources:
-        mem_mb=config['rules']['stitch_subtile']['resources']['mem_mb'],
-        runtime=config['rules']['stitch_subtile']['resources']['runtime']
+        mem_mb=get_rule_config('stitch_subtile', 'resources.mem_mb', DEFAULT_RESOURCES['mem_mb']),
+        runtime=get_rule_config('stitch_subtile', 'resources.runtime', DEFAULT_RESOURCES['runtime'])
     script:
         "../scripts/stitch_subtile.py"

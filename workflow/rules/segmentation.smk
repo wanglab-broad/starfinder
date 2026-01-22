@@ -12,7 +12,7 @@ rule enhance_dapi_with_flamingo:
     output:
         eh_dapi_img=expand("{output_dir}/images/flamingo/enhanced_DAPI/{{fovID}}.tif", output_dir=OUTPUT_DIR)
     resources:
-        mem_mb=config['rules']['enhance_dapi_with_flamingo']['resources']['mem_mb']
+        mem_mb=get_rule_config('enhance_dapi_with_flamingo', 'resources.mem_mb', DEFAULT_RESOURCES['mem_mb'])
     script:
         "../scripts/enhance_dapi_with_flamingo.py"
 
@@ -27,8 +27,8 @@ rule stardist_segmentation:
         f"{config['envs_path']}/stardist"
     threads: 2
     resources:
-        mem_mb=config['rules']['stardist_segmentation']['resources']['mem_mb'],
-        runtime=config['rules']['stardist_segmentation']['resources']['runtime']
+        mem_mb=get_rule_config('stardist_segmentation', 'resources.mem_mb', DEFAULT_RESOURCES['mem_mb']),
+        runtime=get_rule_config('stardist_segmentation', 'resources.runtime', DEFAULT_RESOURCES['runtime'])
     benchmark:
         f"{OUTPUT_DIR}/log/benchmark/stardist_segmentation/{{fovID}}.txt"
     script:
@@ -43,6 +43,6 @@ rule create_nuclei_amplicon_overlay:
     output:
         expand("{output_dir}/images/overlay/{{fovID}}.tif", output_dir=OUTPUT_DIR)
     resources:
-        mem_mb=config['rules']['create_nuclei_amplicon_overlay']['resources']['mem_mb']
+        mem_mb=get_rule_config('create_nuclei_amplicon_overlay', 'resources.mem_mb', DEFAULT_RESOURCES['mem_mb'])
     script:
         "../scripts/create_nuclei_amplicon_overlay.py"

@@ -11,6 +11,95 @@ import random
 import pandas as pd
 from pathlib import Path
 
+### ==================== [ Workflow Mode Configuration ] =========================
+
+# Workflow mode: "free" allows mix-and-match, presets enable predefined rule combinations
+WORKFLOW_MODE = config.get('workflow_mode', 'free')
+
+# Preset workflow definitions
+WORKFLOW_PRESETS = {
+    'direct': [
+        'rsf_single_fov',
+    ],
+    'subtile': [
+        'gr_single_fov_subtile',
+        'lrsf_single_fov_subtile',
+        'stitch_subtile',
+    ],
+    'deep': [
+        'deep_create_subtile',
+        'deep_rsf_subtile',
+        'stitch_subtile',
+    ],
+}
+
+# Rules that are always available (utilities, preparation, etc.)
+# These rules check their individual run flags regardless of workflow_mode
+ALWAYS_AVAILABLE_RULES = [
+    'rsf_preparation',
+    'nuclei_registration',
+    'rotate_nuclei',
+    'create_nuclei_amplicon_overlay',
+    'stardist_segmentation',
+    'stitching_preparation',
+    'create_BigStitcher_macro',
+    'run_BigStitcher_macro',
+    'create_tile_config',
+    'reads_assignment',
+    'create_sample_h5ad',
+    'create_sample_reads_assignment',
+]
+
+def is_rule_enabled(rule_name):
+    """Check if a rule should be enabled based on workflow_mode.
+
+    - workflow_mode: 'free' -> use individual run: True/False flags from config
+    - workflow_mode: 'direct'/'subtile'/'deep' -> use preset, ignore individual flags
+    - Rules in ALWAYS_AVAILABLE_RULES check their individual run flags regardless of mode
+    """
+    # Always-available rules use their individual config flags
+    if rule_name in ALWAYS_AVAILABLE_RULES:
+        return config.get('rules', {}).get(rule_name, {}).get('run', False)
+
+    # Free mode: use individual run flags
+    if WORKFLOW_MODE == 'free':
+        return config.get('rules', {}).get(rule_name, {}).get('run', False)
+
+    # Preset mode: check if rule is in the preset list
+    return rule_name in WORKFLOW_PRESETS.get(WORKFLOW_MODE, [])
+
+def get_rule_config(rule_name, key, default=None):
+    """Safely get config value for a rule with default fallback.
+
+    Args:
+        rule_name: Name of the rule
+        key: Config key path (e.g., 'resources.mem_mb' or 'parameters.threshold')
+        default: Default value if key doesn't exist
+
+    Returns:
+        Config value or default
+    """
+    rule_cfg = config.get('rules', {}).get(rule_name, {})
+
+    # Navigate nested keys (e.g., 'resources.mem_mb')
+    keys = key.split('.')
+    value = rule_cfg
+    for k in keys:
+        if isinstance(value, dict):
+            value = value.get(k)
+        else:
+            return default
+        if value is None:
+            return default
+
+    return value if value is not None else default
+
+# Default resource values
+DEFAULT_RESOURCES = {
+    'mem_mb': 8000,
+    'runtime': 30,
+}
+
 ### ==================== [ Helper functions ] =========================
 
 def yaml_to_json(yaml_file):
@@ -48,7 +137,7 @@ def make_get_runtime(rule_name):
     Usage: resources: runtime=make_get_runtime('rule_name')
     """
     def get_runtime(wildcards, attempt):
-        return attempt * config['rules'][rule_name]['resources']['runtime']
+        return attempt * get_rule_config(rule_name, 'resources.runtime', DEFAULT_RESOURCES['runtime'])
     return get_runtime
 
 ### ==================== [ Parameters ] =========================
@@ -57,7 +146,7 @@ INPUT_DIR = Path(config['root_input_path'], config['dataset_id'], config['sample
 OUTPUT_DIR = Path(config['root_output_path'], config['dataset_id'], config['output_id'])
 DAPI_DIR = Path(OUTPUT_DIR, 'images', 'DAPI')
 FUSE_DIR = Path(OUTPUT_DIR, 'images', 'fused')
-SEG_INPUT_DIR = Path(OUTPUT_DIR, 'images', config['rules']['stardist_segmentation']['parameters']['segmentation_input_folder'])
+SEG_INPUT_DIR = Path(OUTPUT_DIR, 'images', get_rule_config('stardist_segmentation', 'parameters.segmentation_input_folder', 'overlay'))
 DOC_DIR = Path(OUTPUT_DIR, 'documents')
 
 ROUND = [f"round{i}" for i in range(1, config['n_rounds']+1)]
@@ -81,8 +170,12 @@ for current_sample in SAMPLE_ANNOT['sample_id'].unique():
 SAMPLE = list(SAMPLE_TO_FOV.keys())
 FOVS = sorted([config['fov_id_pattern'].format(i=j) for j in range(1, config['n_fovs']+1)])
 
-if config['rules']['gr_single_fov_subtile']['run'] | config['rules']['lrsf_single_fov_subtile']['run'] | config['rules']['deep_create_subtile']['run'] | config['rules']['deep_rsf_subtile']['run']:
-    N_SUBTILE = [i for i in range(1, (config['rules']['gr_single_fov_subtile']['parameters']['create_subtiles']['sqrt_pieces'])**2+1)]
+# Determine N_SUBTILE based on enabled rules
+# Only gr_single_fov_subtile and deep_create_subtile have sqrt_pieces parameter
+if is_rule_enabled('gr_single_fov_subtile'):
+    N_SUBTILE = [i for i in range(1, (get_rule_config('gr_single_fov_subtile', 'parameters.create_subtiles.sqrt_pieces', 4))**2+1)]
+elif is_rule_enabled('deep_create_subtile'):
+    N_SUBTILE = [i for i in range(1, (get_rule_config('deep_create_subtile', 'parameters.create_subtiles.sqrt_pieces', 4))**2+1)]
 else:
     N_SUBTILE = [1]
 
@@ -98,10 +191,10 @@ elif config['subset_random']:
 ### ==================== [ Dynamic Output Function ] =========================
 
 def get_overall_output(wildcards):
-    """Create dynamic output list for all rules based on config."""
+    """Create dynamic output list for all rules based on workflow_mode and config."""
     output_list = []
     for current_rule in config['rules']:
-        if config['rules'][current_rule]['run']:
+        if is_rule_enabled(current_rule):
             if current_rule == 'rsf_single_fov':
                 output_list += [f"{OUTPUT_DIR}/log/{fovID}_rsf.txt" for fovID in FOVS]
                 output_list += [f"{OUTPUT_DIR}/log/sf_scores/{fovID}.txt" for fovID in FOVS]
