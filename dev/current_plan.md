@@ -7,7 +7,7 @@
 
 ## Overview
 This plan addresses two main goals and identifies additional improvements:
-1. Modularize Snakemake rules from monolithic Snakefile to separate .smk files
+1. Modularize Snakemake rules from a monolithic Snakefile to separate .smk files
 2. Upgrade Snakemake from v7.32.4 to v9.x and leverage new features
 3. Code quality improvements identified during review
 

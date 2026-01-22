@@ -1,0 +1,79 @@
+# STARfinder Environment for Snakemake 9.x
+# Requires Python >= 3.11
+#
+# To create: conda env create -f environment-v9.yaml
+# To update: conda env update -f environment-v9.yaml --prune
+
+name: starfinder-v9
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+
+dependencies:
+  # Python version (required for Snakemake 9.x)
+  - python>=3.11,<3.13
+
+  # ==================== Snakemake Ecosystem ====================
+  - snakemake>=9.0
+  - snakemake-executor-plugin-cluster-generic  # For UGER/SGE cluster
+  - snakemake-storage-plugin-gcs               # For Google Cloud Storage (optional)
+
+  # ==================== Core Scientific Stack ====================
+  - numpy>=1.24
+  - scipy>=1.10
+  - pandas>=2.0
+  - scikit-image>=0.21
+  - scikit-learn>=1.3
+  - numba>=0.58
+
+  # ==================== Visualization ====================
+  - matplotlib>=3.7
+  - seaborn>=0.13
+  - plotly>=5.15
+
+  # ==================== Single-cell Analysis ====================
+  - scanpy>=1.10
+  - anndata>=0.10
+  - leidenalg
+  - igraph
+  - umap-learn
+
+  # ==================== Image Processing ====================
+  - imageio>=2.31
+  - tifffile>=2024.2
+  - imagecodecs
+  - pillow>=10.0
+
+  # ==================== File I/O ====================
+  - h5py>=3.10
+  - pyyaml>=6.0
+  - openpyxl
+  - lxml
+
+  # ==================== Cloud Storage ====================
+  - google-cloud-storage>=2.14
+  - google-api-python-client
+  - boto3>=1.34
+
+  # ==================== Utilities ====================
+  - tqdm>=4.66
+  - rich>=13.0
+  - natsort>=8.4
+  - tabulate
+  - requests>=2.31
+
+  # ==================== Development ====================
+  - pytest>=8.0
+  - ipython>=8.15
+  - jupyter
+  - ipykernel
+
+  # ==================== Pip packages ====================
+  - pip
+  - pip:
+    # Packages that work better via pip or not available on conda
+    - parse>=1.20
+    - patsy>=0.5
+    - statsmodels>=0.14
+    - session-info>=1.0
