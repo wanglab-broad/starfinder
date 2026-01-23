@@ -28,7 +28,15 @@ Location: `/home/unix/jiahao/wanglab/Data/Processed/sample-dataset/`
 | Channel mapping | plaque (488nm), tau (594nm), PI (546nm), Gfap (647nm) |
 | Grid | 7×8, column-by-column, 10% overlap |
 
-## Current Progress / Milestones
+## Milestones
+1. [] Modularization & Snakemake Upgrade
+2. [] Rewrite the backend with Python & Improve Code Quality
+  - [] Adopt new data structure such as h5 and OME-Zarr
+  - [] Adopt high-performance image registration methods
+  - [] Adopt new 2D/3D image segmentation methods 
+3. [] Systematically benchmark the performance of the MATLAB backend and the new Python version
+
+## Current Progress
 Use this section to track development milestones.
 
 ### 2025-01-21: Snakemake Modularization & Upgrade Project Started
@@ -42,12 +50,15 @@ Use this section to track development milestones.
   - [x] Migrate stitching rules → `stitching.smk`
   - [x] Migrate reads-assignment rules → `reads-assignment.smk`
   - [x] Clean up main Snakefile (reduced from ~566 lines to ~32 lines)
-  - [ ] Test with dry run
-- [ ] **Phase 2: Snakemake 9 Upgrade** (in progress)
+  - [x] Test with dry run (completed successfully on 2026-01-22)
+- [x] **Phase 2: Snakemake 9 Upgrade** (mostly completed on 2026-01-23)
   - [x] Create `environment-v9.yaml` (Python 3.11+, Snakemake 9.x)
-  - [ ] Update `profile/broad-uger/config.yaml` for v9 syntax
-  - [ ] Test environment creation
-  - [ ] Test pipeline with new environment
+  - [x] Update `profile/broad-uger/config.yaml` for v9 syntax
+  - [x] Update `profile/broad-uger/broad-jobscript.sh` for v9 environment
+  - [x] Fix MATLAB PATH inheritance issue in `run_matlab_scripts()`
+  - [x] Test environment creation (completed successfully on 2026-01-22)
+  - [x] Basic workflow execution test (completed successfully on 2026-01-23)
+  - [ ] Full pipeline validation test
 - [ ] **Phase 3: Code Quality Improvements**
 
 ### 2025-01-22: Workflow Mode System & Config Simplification
@@ -75,7 +86,7 @@ Use this section to track development milestones.
   - Added `DEFAULT_RESOURCES` (mem_mb: 8000, runtime: 30)
   - Updated all rule files to use safe config access
   - Users can now omit unused rule sections from config files
-- [ ] **Testing** (in progress)
+- [x] **Testing** (completed successfully on 2026-01-22)
   - Fixing indentation errors in common.smk
   - Need to complete dry run validation
 
@@ -88,11 +99,62 @@ Use this section to track development milestones.
 - `workflow/rules/stitching.smk` - Updated to use get_rule_config()
 - `workflow/rules/reads-assignment.smk` - Updated to use get_rule_config()
 
+### 2026-01-23: Snakemake v9 Upgrade Completed
+
+- [x] **Updated UGER cluster profile for Snakemake v9**
+  - Migrated from `--cluster` to executor plugin system
+  - Added `executor: cluster-generic` configuration
+  - Updated submit/status command syntax: `cluster-generic-submit-cmd`, `cluster-generic-status-cmd`
+  - Fixed script paths to be relative to repository root (`profile/broad-uger/...`)
+  - Added `software-deployment-method: conda` (replaces `--use-conda`)
+  - Changed `restart-times` → `retries` for v9 compatibility
+
+- [x] **Updated job execution environment**
+  - Modified `profile/broad-uger/broad-jobscript.sh` to use `starfinder-v9` conda environment
+  - Reordered environment loading: activate conda first, then load MATLAB
+  - Ensures MATLAB path takes precedence in PATH
+
+- [x] **Fixed MATLAB subprocess execution issue**
+  - Root cause: Python 3.12's stricter subprocess environment isolation
+  - Subprocess spawns fresh bash shell without jobscript's PATH modifications
+  - Solution: Modified `run_matlab_scripts()` in `workflow/rules/common.smk`
+  - Now sources MATLAB environment within each subprocess call
+  - Command: `source /broad/software/scripts/useuse && use Matlab && matlab ...`
+  - More robust than relying on environment inheritance
+
+- [x] **Enabled per-rule conda environments**
+  - Added `software-deployment-method: conda` to profile config
+  - Allows rules with `conda:` directives to use dedicated environments
+  - Example: `stardist_segmentation` rule now activates its own environment
+
+- [x] **Successfully tested basic workflow execution**
+  - Dry run validation passed
+  - Job submission to UGER cluster working
+  - MATLAB execution functional in v9 environment
+  - Conda environment activation working for Python rules
+
+**Technical Insights:**
+- Python 3.12 has stricter subprocess PATH inheritance compared to earlier versions
+- Snakemake v9 requires explicit `software-deployment-method` in profile (not command-line flag)
+- Running from repository root (not `workflow/`) is now the standard practice
+- Executor plugin system provides better separation of concerns than old cluster flags
+
+**Files Modified:**
+- `profile/broad-uger/config.yaml` - v9 executor syntax, conda support
+- `profile/broad-uger/broad-jobscript.sh` - Environment order, v9 conda env
+- `workflow/rules/common.smk` - MATLAB subprocess PATH fix
+- `dev/current_plan.md` - Updated Phase 2 status to "mostly completed"
+
+**Next Steps:**
+- Full pipeline validation test on complete dataset
+- Update README/documentation with v9 usage instructions
+- Consider creating migration guide for users transitioning from v7
+
 ## Future Directions
 
 ### 1. Replace MATLAB with Python
 The ultimate goal is to eliminate all MATLAB implementations and develop equivalent functionality in Python.
-- The most challenging aspect will be re-implementing the 3D image registration algorithms.
+- The most challenging aspect will be re-implementing the 3D image registration algorithms. For example, a more efficient implementation with C++ or DL-based tools such as VoxelMorph. 
 
 ### 2. Adopt Modern Data Format Strategy (Hybrid Approach)
 
@@ -153,3 +215,5 @@ Make the pipeline compatible with cloud platforms (enabled by OME-Zarr/SpatialDa
 
 ### 4. Adopt `uv` for Python Project Management
 Replace conda with uv for faster, more reproducible Python dependency management.
+
+### 5. Create simple test cases

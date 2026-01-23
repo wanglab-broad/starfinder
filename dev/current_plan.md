@@ -1,5 +1,7 @@
 # STARfinder Development Plan
 
+**Last updated:** 2026-01-23
+
 ## User Decisions
 - **Target Snakemake version**: 9.x (latest)
 - **Implementation order**: Modularization first, then upgrade
@@ -142,17 +144,20 @@ rule all:
 
 ### High Priority
 
-1. **Remove commented config paths** (lines 14-31 in Snakefile)
-   - These are stale references to old test configurations
-   - Create a `config/examples/` directory if examples are needed
+1. **✓ Remove commented config paths** (lines 14-31 in Snakefile) - COMPLETED
+   - Completed in commit 51 (13f5294)
+   - Snakefile now cleanly organized with clear section headers
 
-2. **Fix duplicate `get_runtime` function definitions**
-   - Currently defined 4 times with different config keys
-   - Create a factory function or use lambda
+2. **✓ Fix duplicate `get_runtime` function definitions** - COMPLETED
+   - Completed in commit 51 (13f5294)
+   - Implemented `make_get_runtime(rule_name)` factory function in `common.smk`
+   - All rules now use: `resources: runtime=make_get_runtime('rule_name')`
+   - Added `get_rule_config()` helper with safe default fallback
+   - Added `DEFAULT_RESOURCES` (mem_mb: 8000, runtime: 30)
 
-3. **Keep existing rule names** (per user preference)
-   - Maintains backward compatibility with existing configs and scripts
-   - No changes to `rsf_single_fov`, `gr_single_fov_subtile`, etc.
+3. **✓ Keep existing rule names** (per user preference) - COMPLETED
+   - All existing rule names maintained
+   - Backward compatibility preserved with configs and scripts
 
 ### Medium Priority
 
@@ -182,28 +187,42 @@ rule all:
 
 ## Implementation Order (User-selected: Modularization First)
 
-### Phase 1: Modularization
-1. Create `common.smk` with shared code (imports, helpers, parameters)
-2. Migrate registration rules → `registration.smk`
-3. Migrate spot-finding rules → `spot-finding.smk`
-4. Migrate segmentation rules → `segmentation.smk`
-5. Migrate stitching rules → `stitching.smk`
-6. Migrate reads-assignment rules → `reads-assignment.smk`
-7. Clean up main Snakefile (keep only includes + rule all)
-8. Test with dry run: `snakemake -n`
+### Phase 1: Modularization - COMPLETED ✓
+1. ✓ Create `common.smk` with shared code (imports, helpers, parameters)
+2. ✓ Migrate registration rules → `registration.smk`
+3. ✓ Migrate spot-finding rules → `spot-finding.smk`
+4. ✓ Migrate segmentation rules → `segmentation.smk`
+5. ✓ Migrate stitching rules → `stitching.smk`
+6. ✓ Migrate reads-assignment rules → `reads-assignment.smk`
+7. ✓ Clean up main Snakefile (reduced from ~566 lines to ~51 lines)
+8. ✓ Test with dry run: `snakemake -n` (completed successfully)
 
-### Phase 2: Snakemake 9 Upgrade
-1. Create new conda environment with Snakemake 9.x
-2. Install required executor plugins
-3. Update `profile/broad-uger/config.yaml` command flags
-4. Test on single FOV with new syntax
-5. Update documentation/README
-6. Full pipeline test
+**Additional improvements in Phase 1:**
+- ✓ Implemented workflow mode system ('free', 'direct', 'subtile', 'deep')
+- ✓ Added dynamic ruleorder based on workflow mode
+- ✓ Simplified config file management with safe defaults
 
-### Phase 3: Code Quality (Optional)
-1. Remove commented configfile paths (lines 14-31)
-2. Refactor duplicate `get_runtime` functions
-3. Add config schema validation (optional)
+### Phase 2: Snakemake 9 Upgrade - MOSTLY COMPLETED ✓
+1. ✓ Create new conda environment with Snakemake 9.x (`environment-v9.yaml`)
+2. ✓ Test environment creation (successful)
+3. ✓ Update `profile/broad-uger/config.yaml` command flags
+   - Updated to executor plugin system (cluster-generic)
+   - Added software-deployment-method: conda
+   - Fixed script paths to be relative to repository root
+4. ✓ Update `profile/broad-uger/broad-jobscript.sh`
+   - Changed to use starfinder-v9 environment
+   - Reordered environment setup for proper MATLAB PATH
+5. ✓ Fix `run_matlab_scripts()` helper function
+   - Added subprocess MATLAB environment sourcing
+   - Fixed PATH inheritance issue with Python 3.12
+6. [ ] Test on single FOV with new syntax (basic execution successful)
+7. [ ] Update documentation/README
+8. [ ] Full pipeline test
+
+### Phase 3: Code Quality - PARTIALLY COMPLETED
+1. ✓ Remove commented configfile paths (lines 14-31) - Completed in commit 51
+2. ✓ Refactor duplicate `get_runtime` functions - Completed in commit 51
+3. [ ] Add config schema validation (optional)
 
 ---
 
@@ -240,12 +259,14 @@ rule all:
 
 ## Critical Files to Modify
 
-- `workflow/Snakefile` - Major refactor
-- `workflow/rules/common.smk` - New file
-- `workflow/rules/registration.smk` - Rewrite
-- `workflow/rules/spot-finding.smk` - Rewrite
-- `workflow/rules/segmentation.smk` - New file
-- `workflow/rules/stitching.smk` - New file
-- `workflow/rules/reads-assignment.smk` - New file
-- `config/environment.yaml` - Version update
-- `profile/broad-uger/config.yaml` - Flag updates
+- ✓ `workflow/Snakefile` - Major refactor (COMPLETED)
+- ✓ `workflow/rules/common.smk` - New file (COMPLETED)
+- ✓ `workflow/rules/registration.smk` - Rewrite (COMPLETED)
+- ✓ `workflow/rules/spot-finding.smk` - Rewrite (COMPLETED)
+- ✓ `workflow/rules/segmentation.smk` - New file (COMPLETED)
+- ✓ `workflow/rules/stitching.smk` - New file (COMPLETED)
+- ✓ `workflow/rules/reads-assignment.smk` - New file (COMPLETED)
+- ✓ `config/environment-v9.yaml` - Version update (COMPLETED)
+- ✓ `profile/broad-uger/config.yaml` - Flag updates (COMPLETED)
+- ✓ `profile/broad-uger/broad-jobscript.sh` - Environment update (COMPLETED)
+- ✓ `workflow/rules/common.smk` - MATLAB subprocess fix (COMPLETED)

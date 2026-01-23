@@ -1,13 +1,29 @@
 ## ==================== [ Broad cluster configuration -- DO NOT TOUCH ] =========================
 ## to use it, place it under your unix home directory, i.e. ~/.config/snakemake/broad-uger
-cluster: "broad-submit.py {dependencies}"
-cluster-status: "broad-status.py"
-jobscript: "broad-jobscript.sh"
+## Updated for Snakemake v9.x with executor plugin system
+
+# Executor configuration (replaces --cluster and --cluster-status)
+executor: cluster-generic
+cluster-generic-submit-cmd: "profile/broad-uger/broad-submit.py {dependencies}"
+cluster-generic-status-cmd: "profile/broad-uger/broad-status.py"
+
+# Software deployment (replaces --use-conda in v7)
+software-deployment-method: conda
+
+# Job script template
+default-resources:
+  - jobscript="profile/broad-uger/broad-jobscript.sh"
+
+# Job execution settings
 jobs: 1000
 keep-going: true
-immediate-submit: False
 notemp: true
 local-cores: 1
 latency-wait: 60
-rerun-incomplete: True
-restart-times: 3
+rerun-incomplete: true
+
+# Retry settings (renamed from restart-times in v7)
+retries: 3
+
+# Submit settings
+immediate-submit: false

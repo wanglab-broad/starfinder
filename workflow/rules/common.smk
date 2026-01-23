@@ -119,7 +119,13 @@ def run_matlab_scripts(param_string, matlab_script_name):
     matlab_run_string = f"addpath('{matlab_script_path}'); {matlab_script_name}({param_string});exit;"
     print(matlab_run_string)
     import subprocess
-    subprocess.run(["matlab", "-nodisplay -nosplash -nodesktop", "-r", matlab_run_string])
+
+    # Source the Broad useuse script and load MATLAB before running the command
+    # This is needed because subprocess spawns a fresh bash that doesn't have
+    # the environment from the jobscript's 'use Matlab'
+    cmd = f'source /broad/software/scripts/useuse && use Matlab && matlab -nodisplay -nosplash -nodesktop -r "{matlab_run_string}"'
+    subprocess.run(cmd, shell=True, executable='/bin/bash', check=True)
+
 
 def run_fiji_macros(fiji_path, macro_path):
     import subprocess

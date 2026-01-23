@@ -5,9 +5,12 @@
 source /broad/software/scripts/useuse
 use UGER
 use Anaconda3
-use Matlab
 
-source activate /stanley/WangLab/envs/starfinder-uger
+# Activate conda environment first, then load MATLAB
+# This ensures MATLAB path is added last and takes precedence
+source activate /stanley/WangLab/envs/starfinder-v9
+
+use Matlab
 
 echo -e "JOB ID\t$JOB_ID"
 echo "=============================="
@@ -19,7 +22,7 @@ EXIT_STATUS=$?
 echo "------------------------------"
 qstat -j $JOB_ID | grep '^usage'
 
-# if the job succeeds, snakemake 
+# if the job succeeds, snakemake
 # touches jobfinished, thus if it exists cat succeeds. if cat fails, the error
 # code indicates job failure
 # an error code of 100 is needed since UGER only prevents execution of
