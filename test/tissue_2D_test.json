@@ -1,0 +1,93 @@
+{
+    "subset_list": [
+        1
+    ],
+    "subset_range": false,
+    "subset_start": 25,
+    "subset_end": 40,
+    "subset_random": false,
+    "n_random_tests": 1,
+    "config_path": "/stanley/WangLab/jiahao/Github/starfinder/test/tissue_2D_test.yaml",
+    "envs_path": "/stanley/WangLab/envs",
+    "starfinder_path": "/stanley/WangLab/jiahao/Github/starfinder",
+    "fiji_path": "/stanley/WangLab/Tools/Fiji.app/ImageJ-linux64",
+    "root_input_path": "/stanley/WangLab/Data/Processed",
+    "root_output_path": "/stanley/WangLab/Data/Analyzed",
+    "dataset_id": "sample-dataset",
+    "sample_id": "tissue-2D",
+    "output_id": "tissue-2D-test-v9",
+    "fov_id_pattern": "tile_{i}",
+    "n_fovs": 56,
+    "n_rounds": 4,
+    "ref_round": "round1",
+    "ref_channel": "DAPI",
+    "dapi_round": "round1",
+    "rotate_angle": -90,
+    "maximum_projection": true,
+    "img_col": 3072,
+    "img_row": 3072,
+    "img_z": 30,
+    "voxel_size_xy": 0.094,
+    "voxel_size_z": 0.35,
+    "seq_channel_order": [],
+    "additional_round": [],
+    "workflow_mode": "free",
+    "rules": {
+        "rsf_single_fov": {
+            "run": true,
+            "resources": {
+                "mem_mb": 25000,
+                "runtime": 30
+            },
+            "parameters": {
+                "enhance_contrast": {
+                    "run": true
+                },
+                "hist_equalize": {
+                    "run": true
+                },
+                "morph_recon": {
+                    "run": false,
+                    "radius": 3
+                },
+                "global_registration": {
+                    "run": true,
+                    "ref_round": "round1",
+                    "ref_img": "merged-image",
+                    "mov_img": "merged-image"
+                },
+                "create_subtiles": {
+                    "run": false,
+                    "sqrt_pieces": 4
+                },
+                "local_registration": {
+                    "run": false,
+                    "ref_round": "round1"
+                },
+                "spot_finding": {
+                    "run": true,
+                    "ref_round": "round1",
+                    "intensity_threshold": 0.4
+                },
+                "load_codebook": {
+                    "run": true,
+                    "split_index": []
+                },
+                "reads_extraction": {
+                    "run": true,
+                    "voxel_size": [
+                        2,
+                        2,
+                        1
+                    ]
+                },
+                "reads_filtration": {
+                    "run": true,
+                    "end_base": "CC",
+                    "n_barcode_segments": 1,
+                    "split_index": []
+                }
+            }
+        }
+    }
+}

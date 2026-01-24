@@ -1,0 +1,635 @@
+# JSON Schema for STARfinder configuration files
+# Validates config at pipeline startup to catch errors early
+
+$schema: "https://json-schema.org/draft/2020-12/schema"
+description: "STARfinder pipeline configuration schema"
+
+type: object
+required:
+  - config_path
+  - starfinder_path
+  - root_input_path
+  - root_output_path
+  - dataset_id
+  - sample_id
+  - output_id
+  - fov_id_pattern
+  - n_fovs
+  - n_rounds
+  - ref_round
+  - rotate_angle
+  - img_col
+  - img_row
+  - rules
+
+properties:
+  # ==================== Path Configuration ====================
+  config_path:
+    type: string
+    description: "Absolute path to this config file"
+
+  envs_path:
+    type: string
+    description: "Path to conda environments directory"
+
+  starfinder_path:
+    type: string
+    description: "Path to STARfinder repository root"
+
+  fiji_path:
+    type: string
+    description: "Path to Fiji/ImageJ executable"
+
+  root_input_path:
+    type: string
+    description: "Root directory for input data"
+
+  root_output_path:
+    type: string
+    description: "Root directory for output data"
+
+  # ==================== Dataset Metadata ====================
+  dataset_id:
+    type: string
+    description: "Dataset identifier"
+
+  sample_id:
+    type: string
+    description: "Sample identifier within dataset"
+
+  output_id:
+    type: string
+    description: "Output folder identifier"
+
+  fov_id_pattern:
+    type: string
+    description: "Pattern for FOV naming (e.g., 'tile_{i}' or 'Position{i:03}')"
+
+  n_fovs:
+    type: integer
+    minimum: 1
+    description: "Total number of FOVs in the dataset"
+
+  n_rounds:
+    type: integer
+    minimum: 1
+    description: "Number of sequencing rounds"
+
+  ref_round:
+    type: string
+    description: "Reference round for registration (e.g., 'round1')"
+
+  ref_channel:
+    type: string
+    description: "Reference channel for registration"
+
+  dapi_round:
+    type: string
+    description: "Round containing DAPI images"
+
+  rotate_angle:
+    type: number
+    description: "Rotation angle for image alignment (degrees)"
+
+  # ==================== Image Dimensions ====================
+  img_col:
+    type: integer
+    minimum: 1
+    description: "Image width in pixels"
+
+  img_row:
+    type: integer
+    minimum: 1
+    description: "Image height in pixels"
+
+  img_z:
+    type: integer
+    minimum: 1
+    description: "Number of z-slices (for 3D data)"
+
+  voxel_size_xy:
+    type: number
+    exclusiveMinimum: 0
+    description: "XY pixel size in microns"
+
+  voxel_size_z:
+    type: number
+    exclusiveMinimum: 0
+    description: "Z step size in microns"
+
+  maximum_projection:
+    type: boolean
+    default: false
+    description: "Whether to use maximum intensity projection for 2D analysis"
+
+  # ==================== Channel Configuration ====================
+  seq_channel_order:
+    type: array
+    items:
+      type: string
+    description: "Custom sequencing channel order (empty for default)"
+
+  additional_round:
+    type: array
+    items:
+      type: object
+      properties:
+        round_name:
+          type: string
+    description: "Additional imaging rounds beyond sequencing"
+
+  # ==================== Workflow Mode ====================
+  workflow_mode:
+    type: string
+    enum: ["free", "direct", "subtile", "deep"]
+    default: "free"
+    description: |
+      Workflow mode:
+      - 'free': Mix and match rules using individual run flags
+      - 'direct': Single FOV processing via rsf_single_fov
+      - 'subtile': Subtile-based workflow (gr → lrsf → stitch)
+      - 'deep': Deep-tissue optimized workflow
+
+  # ==================== Subsetting Options ====================
+  subset_list:
+    type: array
+    items:
+      type: integer
+      minimum: 1
+    description: "Explicit list of FOV indices to process"
+
+  subset_range:
+    type: boolean
+    default: false
+    description: "Enable range-based subsetting"
+
+  subset_start:
+    type: integer
+    minimum: 1
+    description: "Start FOV index for range subsetting"
+
+  subset_end:
+    type: integer
+    minimum: 1
+    description: "End FOV index for range subsetting"
+
+  subset_random:
+    type: boolean
+    default: false
+    description: "Enable random subsetting"
+
+  n_random_tests:
+    type: integer
+    minimum: 1
+    description: "Number of random FOVs to select"
+
+  # ==================== Rules Configuration ====================
+  rules:
+    type: object
+    description: "Per-rule configuration"
+    additionalProperties: false
+    properties:
+      rsf_single_fov:
+        $ref: "#/$defs/rsf_single_fov_config"
+
+      rsf_single_fov_seq:
+        $ref: "#/$defs/rule_with_resources"
+
+      gr_single_fov_subtile:
+        $ref: "#/$defs/gr_single_fov_subtile_config"
+
+      lrsf_single_fov_subtile:
+        $ref: "#/$defs/lrsf_single_fov_subtile_config"
+
+      deep_create_subtile:
+        $ref: "#/$defs/deep_create_subtile_config"
+
+      deep_rsf_subtile:
+        $ref: "#/$defs/deep_rsf_subtile_config"
+
+      stitch_subtile:
+        $ref: "#/$defs/rule_with_resources"
+
+      nuclei_registration:
+        $ref: "#/$defs/rule_with_resources"
+
+      rotate_nuclei:
+        $ref: "#/$defs/rule_with_resources"
+
+      create_nuclei_amplicon_overlay:
+        $ref: "#/$defs/create_nuclei_amplicon_overlay_config"
+
+      enhance_dapi_with_flamingo:
+        $ref: "#/$defs/rule_with_resources"
+
+      stardist_segmentation:
+        $ref: "#/$defs/stardist_segmentation_config"
+
+      stitching_preparation:
+        $ref: "#/$defs/rule_with_resources"
+
+      create_BigStitcher_macro:
+        $ref: "#/$defs/rule_with_resources"
+
+      run_BigStitcher_macro:
+        $ref: "#/$defs/rule_with_resources"
+
+      create_tile_config:
+        $ref: "#/$defs/rule_with_resources"
+
+      reads_assignment:
+        $ref: "#/$defs/reads_assignment_config"
+
+      create_sample_h5ad:
+        $ref: "#/$defs/rule_with_resources"
+
+      create_sample_reads_assignment:
+        $ref: "#/$defs/rule_with_resources"
+
+# ==================== Conditional Validation ====================
+dependentRequired:
+  subset_range:
+    - subset_start
+    - subset_end
+  subset_random:
+    - n_random_tests
+
+allOf:
+  # If subset_range is true, require subset_start and subset_end
+  - if:
+      properties:
+        subset_range:
+          const: true
+    then:
+      required:
+        - subset_start
+        - subset_end
+
+  # If subset_random is true, require n_random_tests
+  - if:
+      properties:
+        subset_random:
+          const: true
+    then:
+      required:
+        - n_random_tests
+
+# ==================== Reusable Definitions ====================
+$defs:
+  # Base resources schema
+  resources:
+    type: object
+    properties:
+      mem_mb:
+        type: integer
+        minimum: 1000
+        default: 8000
+        description: "Memory in MB"
+      runtime:
+        type: integer
+        minimum: 1
+        default: 30
+        description: "Runtime in minutes"
+    additionalProperties: false
+
+  # Base rule with just run flag and resources
+  rule_with_resources:
+    type: object
+    required:
+      - run
+    properties:
+      run:
+        type: boolean
+        description: "Whether to run this rule"
+      resources:
+        $ref: "#/$defs/resources"
+    additionalProperties: true
+
+  # ==================== Parameter Definitions ====================
+  enhance_contrast_params:
+    type: object
+    properties:
+      run:
+        type: boolean
+    additionalProperties: true
+
+  hist_equalize_params:
+    type: object
+    properties:
+      run:
+        type: boolean
+      reference_channel:
+        type: integer
+    additionalProperties: true
+
+  morph_recon_params:
+    type: object
+    properties:
+      run:
+        type: boolean
+      radius:
+        type: integer
+        minimum: 1
+    additionalProperties: true
+
+  global_registration_params:
+    type: object
+    properties:
+      run:
+        type: boolean
+      ref_round:
+        type: string
+      ref_img:
+        type: string
+        enum: ["merged-image", "single-channel"]
+      mov_img:
+        type: string
+        enum: ["merged-image", "single-channel"]
+    additionalProperties: true
+
+  create_subtiles_params:
+    type: object
+    properties:
+      run:
+        type: boolean
+      sqrt_pieces:
+        type: integer
+        minimum: 1
+    additionalProperties: true
+
+  local_registration_params:
+    type: object
+    properties:
+      run:
+        type: boolean
+      ref_round:
+        type: string
+    additionalProperties: true
+
+  spot_finding_params:
+    type: object
+    properties:
+      run:
+        type: boolean
+      ref_round:
+        type: string
+      intensity_threshold:
+        type: number
+        minimum: 0
+        maximum: 1
+      intensity_estimation:
+        type: string
+        enum: ["local", "global"]
+    additionalProperties: true
+
+  load_codebook_params:
+    type: object
+    properties:
+      run:
+        type: boolean
+      split_index:
+        type: array
+        items:
+          type: integer
+    additionalProperties: true
+
+  reads_extraction_params:
+    type: object
+    properties:
+      run:
+        type: boolean
+      voxel_size:
+        type: array
+        items:
+          type: integer
+          minimum: 1
+        minItems: 3
+        maxItems: 3
+    additionalProperties: true
+
+  reads_filtration_params:
+    type: object
+    properties:
+      run:
+        type: boolean
+      end_base:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+      n_barcode_segments:
+        type: integer
+        minimum: 1
+      split_index:
+        type: array
+        items:
+          type: integer
+    additionalProperties: true
+
+  # ==================== Rule-Specific Configurations ====================
+  rsf_single_fov_config:
+    type: object
+    required:
+      - run
+    properties:
+      run:
+        type: boolean
+      resources:
+        $ref: "#/$defs/resources"
+      parameters:
+        type: object
+        properties:
+          enhance_contrast:
+            $ref: "#/$defs/enhance_contrast_params"
+          hist_equalize:
+            $ref: "#/$defs/hist_equalize_params"
+          morph_recon:
+            $ref: "#/$defs/morph_recon_params"
+          global_registration:
+            $ref: "#/$defs/global_registration_params"
+          create_subtiles:
+            $ref: "#/$defs/create_subtiles_params"
+          local_registration:
+            $ref: "#/$defs/local_registration_params"
+          spot_finding:
+            $ref: "#/$defs/spot_finding_params"
+          load_codebook:
+            $ref: "#/$defs/load_codebook_params"
+          reads_extraction:
+            $ref: "#/$defs/reads_extraction_params"
+          reads_filtration:
+            $ref: "#/$defs/reads_filtration_params"
+        additionalProperties: true
+    additionalProperties: true
+
+  gr_single_fov_subtile_config:
+    type: object
+    required:
+      - run
+    properties:
+      run:
+        type: boolean
+      resources:
+        $ref: "#/$defs/resources"
+      parameters:
+        type: object
+        properties:
+          enhance_contrast:
+            $ref: "#/$defs/enhance_contrast_params"
+          hist_equalize:
+            $ref: "#/$defs/hist_equalize_params"
+          morph_recon:
+            $ref: "#/$defs/morph_recon_params"
+          global_registration:
+            $ref: "#/$defs/global_registration_params"
+          create_subtiles:
+            $ref: "#/$defs/create_subtiles_params"
+        additionalProperties: true
+    additionalProperties: true
+
+  lrsf_single_fov_subtile_config:
+    type: object
+    required:
+      - run
+    properties:
+      run:
+        type: boolean
+      resources:
+        $ref: "#/$defs/resources"
+      parameters:
+        type: object
+        properties:
+          local_registration:
+            $ref: "#/$defs/local_registration_params"
+          morph_recon:
+            $ref: "#/$defs/morph_recon_params"
+          spot_finding:
+            $ref: "#/$defs/spot_finding_params"
+          load_codebook:
+            $ref: "#/$defs/load_codebook_params"
+          reads_extraction:
+            $ref: "#/$defs/reads_extraction_params"
+          reads_filtration:
+            $ref: "#/$defs/reads_filtration_params"
+        additionalProperties: true
+    additionalProperties: true
+
+  deep_create_subtile_config:
+    type: object
+    required:
+      - run
+    properties:
+      run:
+        type: boolean
+      resources:
+        $ref: "#/$defs/resources"
+      parameters:
+        type: object
+        properties:
+          hist_equalize:
+            $ref: "#/$defs/hist_equalize_params"
+          global_registration:
+            $ref: "#/$defs/global_registration_params"
+          create_subtiles:
+            $ref: "#/$defs/create_subtiles_params"
+        additionalProperties: true
+    additionalProperties: true
+
+  deep_rsf_subtile_config:
+    type: object
+    required:
+      - run
+    properties:
+      run:
+        type: boolean
+      resources:
+        $ref: "#/$defs/resources"
+      parameters:
+        type: object
+        properties:
+          morph_recon:
+            $ref: "#/$defs/morph_recon_params"
+          spot_finding:
+            $ref: "#/$defs/spot_finding_params"
+          load_codebook:
+            $ref: "#/$defs/load_codebook_params"
+          reads_extraction:
+            $ref: "#/$defs/reads_extraction_params"
+          reads_filtration:
+            $ref: "#/$defs/reads_filtration_params"
+        additionalProperties: true
+    additionalProperties: true
+
+  create_nuclei_amplicon_overlay_config:
+    type: object
+    required:
+      - run
+    properties:
+      run:
+        type: boolean
+      resources:
+        $ref: "#/$defs/resources"
+      parameters:
+        type: object
+        properties:
+          maximum_projection:
+            type: boolean
+        additionalProperties: true
+    additionalProperties: true
+
+  stardist_segmentation_config:
+    type: object
+    required:
+      - run
+    properties:
+      run:
+        type: boolean
+      resources:
+        $ref: "#/$defs/resources"
+      parameters:
+        type: object
+        properties:
+          stardist_base_path:
+            type: string
+          stardist_model_name:
+            type: string
+          segmentation_input_folder:
+            type: string
+          prob_thresh:
+            type: number
+            minimum: 0
+            maximum: 1
+          nms_thresh:
+            type: number
+            minimum: 0
+            maximum: 1
+          rescale:
+            type: boolean
+          expand_labels:
+            type: boolean
+          distance:
+            type: integer
+            minimum: 0
+        additionalProperties: true
+    additionalProperties: true
+
+  reads_assignment_config:
+    type: object
+    required:
+      - run
+    properties:
+      run:
+        type: boolean
+      resources:
+        $ref: "#/$defs/resources"
+      parameters:
+        type: object
+        properties:
+          expand_labels:
+            type: boolean
+          dilation_distance:
+            type: integer
+            minimum: 0
+        additionalProperties: true
+    additionalProperties: true

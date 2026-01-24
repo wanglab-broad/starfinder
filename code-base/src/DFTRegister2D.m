@@ -15,7 +15,7 @@ end
 CCabs = abs(CC);
 
 [~,ix] = max(CCabs(:));
-[i,j,k] = ind2sub(size(CCabs), ix);%ftr = fftFixed .* fftMoving;
+[i,j] = ind2sub(size(CCabs), ix);%ftr = fftFixed .* fftMoving;
 CCmax = CC(i,j);
 diffphase = angle(CCmax);
 

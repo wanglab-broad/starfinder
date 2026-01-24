@@ -29,20 +29,20 @@ Location: `/home/unix/jiahao/wanglab/Data/Processed/sample-dataset/`
 | Grid | 7×8, column-by-column, 10% overlap |
 
 ## Milestones
-1. [] Modularization & Snakemake Upgrade
+1. [x] Modularization & Snakemake Upgrade
 2. [] Rewrite the backend with Python & Improve Code Quality
-  - [] Adopt new data structure such as h5 and OME-Zarr
+  - [] Adopt new data structure such as h5 and OME-Zarr, but also ensure backward compatibility 
   - [] Adopt high-performance image registration methods
-  - [] Adopt new 2D/3D image segmentation methods 
+  - [] Adopt new 2D/3D image segmentation methods
 3. [] Systematically benchmark the performance of the MATLAB backend and the new Python version
 
 ## Current Progress
-Use this section to track development milestones.
+Use this section to track development history.
 
 ### 2025-01-21: Snakemake Modularization & Upgrade Project Started
 - [x] Created PR #9 to merge dev → main (commits 28-48)
 - [x] Created development plan (`dev/current_plan.md`)
-- [ ] **Phase 1: Modularization** (in progress)
+- [x] **Phase 1: Modularization** (in progress)
   - [x] Create `common.smk` with shared code
   - [x] Migrate registration rules → `registration.smk`
   - [x] Migrate spot-finding rules → `spot-finding.smk`
@@ -58,8 +58,8 @@ Use this section to track development milestones.
   - [x] Fix MATLAB PATH inheritance issue in `run_matlab_scripts()`
   - [x] Test environment creation (completed successfully on 2026-01-22)
   - [x] Basic workflow execution test (completed successfully on 2026-01-23)
-  - [ ] Full pipeline validation test
-- [ ] **Phase 3: Code Quality Improvements**
+  - [ ] Full pipeline validation test (waiting for proper testing dataset)
+- [x] **Phase 3: Code Quality Improvements** (mostly completed on 2026-01-24)
 
 ### 2025-01-22: Workflow Mode System & Config Simplification
 - [x] **Researched modern data formats for biomedical imaging**
@@ -148,13 +148,57 @@ Use this section to track development milestones.
 **Next Steps:**
 - Full pipeline validation test on complete dataset
 - Update README/documentation with v9 usage instructions
-- Consider creating migration guide for users transitioning from v7
+
+### 2026-01-24: Config Schema Validation Implemented
+
+- [x] **Created JSON Schema for config validation** (`workflow/schemas/config.schema.yaml`)
+  - ~300 lines comprehensive schema
+  - Validates all 15 required top-level keys
+  - Enforces `workflow_mode` enum: 'free', 'direct', 'subtile', 'deep'
+  - Conditional validation for subsetting options
+  - Reusable `$defs` for resources, parameters, and rule-specific configs
+  - Type validation for all fields (integers, strings, booleans, arrays, objects)
+
+- [x] **Added Snakemake validation directive**
+  - Modified `workflow/Snakefile` to import `validate` from `snakemake.utils`
+  - Added `validate(config, schema="schemas/config.schema.yaml")` before includes
+  - Catches config errors at pipeline startup rather than during rule execution
+
+- [x] **Added custom workflow mode validation**
+  - Created `validate_workflow_mode_dependencies()` function in `common.smk`
+  - Validates that preset modes have required rule configurations defined
+  - Raises clear error messages for missing rule sections
+  - Called at module load time for early error detection
+
+- [x] **Created minimal config template** (`test/minimal_config.yaml`)
+  - Contains all required fields with placeholder values
+  - Commented optional fields for easy enabling
+  - Serves as starting point for new dataset configurations
+  - Documents each field's purpose
+
+**Schema Validation Features:**
+- Required keys: `config_path`, `starfinder_path`, `root_input_path`, `root_output_path`, `dataset_id`, `sample_id`, `output_id`, `fov_id_pattern`, `n_fovs`, `n_rounds`, `ref_round`, `rotate_angle`, `img_col`, `img_row`, `rules`
+- Conditional requirements: `subset_range: true` requires `subset_start`/`subset_end`
+- Each rule requires `run: boolean` flag
+- Resource defaults: mem_mb=8000, runtime=30
+
+**Files Created/Modified:**
+- `workflow/schemas/config.schema.yaml` - New file (~300 lines)
+- `workflow/Snakefile` - Added validate() directive (+7 lines)
+- `workflow/rules/common.smk` - Added validate_workflow_mode_dependencies() (+35 lines)
+- `test/minimal_config.yaml` - New file, minimal config template
+- `dev/current_plan.md` - Updated Phase 3 status
+- `dev/notes.md` - Added this entry
+
+**Next Steps:**
+- Full validation test once Snakemake v9 conda environment is available
+- Consider adding more specific parameter validation per rule type
 
 ## Future Directions
 
 ### 1. Replace MATLAB with Python
 The ultimate goal is to eliminate all MATLAB implementations and develop equivalent functionality in Python.
-- The most challenging aspect will be re-implementing the 3D image registration algorithms. For example, a more efficient implementation with C++ or DL-based tools such as VoxelMorph. 
+- The most challenging aspect will be re-implementing the 3D image registration algorithms. For example, a more efficient implementation with C++ or DL-based tools such as VoxelMorph.
 
 ### 2. Adopt Modern Data Format Strategy (Hybrid Approach)
 

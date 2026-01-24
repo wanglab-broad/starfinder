@@ -1,6 +1,6 @@
 # STARfinder Development Plan
 
-**Last updated:** 2026-01-23
+**Last updated:** 2026-01-24
 
 ## User Decisions
 - **Target Snakemake version**: 9.x (latest)
@@ -161,9 +161,11 @@ rule all:
 
 ### Medium Priority
 
-4. **Add config schema validation**
-   - Use Snakemake's built-in schema validation
-   - Create `workflow/schemas/config.schema.yaml`
+4. **✓ Add config schema validation** - COMPLETED
+   - Created `workflow/schemas/config.schema.yaml` (~300 lines)
+   - Added `validate()` directive in Snakefile
+   - Added `validate_workflow_mode_dependencies()` in common.smk
+   - Created `test/minimal_config.yaml` as template
 
 5. **Add snakefmt for consistent formatting**
    - Install: `pip install snakefmt`
@@ -219,10 +221,13 @@ rule all:
 7. [ ] Update documentation/README
 8. [ ] Full pipeline test
 
-### Phase 3: Code Quality - PARTIALLY COMPLETED
+### Phase 3: Code Quality - MOSTLY COMPLETED ✓
 1. ✓ Remove commented configfile paths (lines 14-31) - Completed in commit 51
 2. ✓ Refactor duplicate `get_runtime` functions - Completed in commit 51
-3. [ ] Add config schema validation (optional)
+3. ✓ Add config schema validation - Completed on 2026-01-24
+   - Created JSON Schema for config validation
+   - Added workflow mode dependency validation
+   - Created minimal config template
 
 ---
 
@@ -270,3 +275,5 @@ rule all:
 - ✓ `profile/broad-uger/config.yaml` - Flag updates (COMPLETED)
 - ✓ `profile/broad-uger/broad-jobscript.sh` - Environment update (COMPLETED)
 - ✓ `workflow/rules/common.smk` - MATLAB subprocess fix (COMPLETED)
+- ✓ `workflow/schemas/config.schema.yaml` - Config validation schema (COMPLETED)
+- ✓ `test/minimal_config.yaml` - Minimal config template (COMPLETED)

@@ -33,6 +33,43 @@ WORKFLOW_PRESETS = {
     ],
 }
 
+def validate_workflow_mode_dependencies():
+    """Ensure required rules are configured for each workflow mode.
+
+    In preset modes (direct/subtile/deep), this validates that the required
+    rules have their configuration sections defined in the config file.
+    This catches configuration errors early rather than at rule execution time.
+    """
+    mode = WORKFLOW_MODE
+
+    if mode == 'free':
+        # Free mode allows any combination - no validation needed
+        return
+
+    if mode not in WORKFLOW_PRESETS:
+        raise ValueError(
+            f"Unknown workflow_mode '{mode}'. "
+            f"Valid options: 'free', 'direct', 'subtile', 'deep'"
+        )
+
+    # Check that required rules have configuration defined
+    required_rules = WORKFLOW_PRESETS[mode]
+    rules_config = config.get('rules', {})
+
+    missing_rules = []
+    for rule in required_rules:
+        if rule not in rules_config:
+            missing_rules.append(rule)
+
+    if missing_rules:
+        raise ValueError(
+            f"Workflow mode '{mode}' requires configuration for rules: {missing_rules}. "
+            f"Please add these rule sections to your config file under 'rules:'."
+        )
+
+# Run workflow mode validation at module load time
+validate_workflow_mode_dependencies()
+
 # Rules that are always available (utilities, preparation, etc.)
 # These rules check their individual run flags regardless of workflow_mode
 ALWAYS_AVAILABLE_RULES = [

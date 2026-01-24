@@ -1,0 +1,75 @@
+# STARfinder Minimal Configuration Template
+# This file contains only the required fields for the pipeline to run.
+# Copy this file and fill in your values to create a new configuration.
+
+# ==================== Required Paths ====================
+config_path: "/path/to/this/config.yaml"        # Absolute path to this config file
+starfinder_path: "/path/to/starfinder"          # Path to STARfinder repository root
+root_input_path: "/path/to/input/data"          # Root directory for raw input data
+root_output_path: "/path/to/output/data"        # Root directory for processed output
+
+# ==================== Dataset Metadata ====================
+dataset_id: "my-dataset"                        # Dataset identifier (folder name in input/output paths)
+sample_id: "my-sample"                          # Sample identifier within dataset
+output_id: "my-sample-output"                   # Output folder identifier
+fov_id_pattern: "tile_{i}"                      # FOV naming pattern ({i} is replaced with FOV number)
+                                                # Examples: "tile_{i}", "Position{i:03}"
+
+n_fovs: 1                                       # Total number of FOVs in the dataset
+n_rounds: 4                                     # Number of sequencing rounds
+ref_round: "round1"                             # Reference round for registration
+rotate_angle: 0                                 # Rotation angle for image alignment (degrees)
+
+# ==================== Image Dimensions ====================
+img_col: 2048                                   # Image width in pixels
+img_row: 2048                                   # Image height in pixels
+
+# ==================== Optional but Common ====================
+# Uncomment and set these as needed:
+
+# subset_list: []                               # Explicit list of FOV indices to process (empty = all)
+# subset_range: False                           # Enable range-based subsetting
+# subset_start: 1                               # Start FOV index (if subset_range: True)
+# subset_end: 10                                # End FOV index (if subset_range: True)
+# subset_random: False                          # Enable random subsetting
+# n_random_tests: 1                             # Number of random FOVs (if subset_random: True)
+
+# maximum_projection: False                     # Use max projection for 2D analysis
+# img_z: 30                                     # Number of z-slices (for 3D data)
+# voxel_size_xy: 0.094                          # XY pixel size in microns
+# voxel_size_z: 0.35                            # Z step size in microns
+
+# ref_channel: "DAPI"                           # Reference channel for registration
+# dapi_round: "round1"                          # Round containing DAPI images
+# seq_channel_order: []                         # Custom channel order (empty = default)
+# additional_round: []                          # Additional imaging rounds
+
+# ==================== Workflow Mode ====================
+# Options: "free" (default), "direct", "subtile", "deep"
+workflow_mode: "free"
+
+# ==================== Rules Configuration ====================
+# Each rule requires at minimum a 'run' flag.
+# Only uncomment and configure rules you need.
+
+rules:
+  # Direct single-FOV processing (use with workflow_mode: "direct" or "free")
+  rsf_single_fov:
+    run: True
+    resources:
+      mem_mb: 25000
+      runtime: 30
+    parameters:
+      enhance_contrast: {"run": True}
+      hist_equalize: {"run": True}
+      morph_recon: {"run": False, "radius": 3}
+      global_registration: {"run": True, "ref_round": "round1", "ref_img": "merged-image", "mov_img": "merged-image"}
+      create_subtiles: {"run": False, "sqrt_pieces": 4}
+      local_registration: {"run": False, "ref_round": "round1"}
+      spot_finding: {"run": True, "ref_round": "round1", "intensity_threshold": 0.4}
+      load_codebook: {"run": True, "split_index": []}
+      reads_extraction: {"run": True, "voxel_size": [2, 2, 1]}
+      reads_filtration: {"run": True, "end_base": "CC", "n_barcode_segments": 1, "split_index": []}
+
+  # Uncomment additional rules as needed:
+  # See test/tissue_2D_test.yaml for full examples of all available rules

@@ -1,0 +1,202 @@
+# Basic workflow parameters
+# running mode
+subset_list: [1]
+
+subset_range: False
+subset_start: 25
+subset_end: 40
+
+subset_random: False
+n_random_tests: 1
+
+# Path
+config_path: "/stanley/WangLab/jiahao/Github/starfinder/test/tissue_2D_test.yaml"
+envs_path: "/stanley/WangLab/envs"
+starfinder_path: "/stanley/WangLab/jiahao/Github/starfinder"
+fiji_path: "/stanley/WangLab/Tools/Fiji.app/ImageJ-linux64"
+root_input_path: "/stanley/WangLab/Data/Processed"
+root_output_path: "/stanley/WangLab/Data/Analyzed"
+
+# Dataset specific
+dataset_id: "sample-dataset"
+sample_id: "tissue-2D"
+output_id: "tissue-2D-test-v9"
+# fov_id_pattern: "Position{i:03}"
+fov_id_pattern: "tile_{i}"
+n_fovs: 56
+n_rounds: 4
+ref_round: "round1"
+ref_channel: "DAPI"
+dapi_round: "round1"
+rotate_angle: -90
+maximum_projection: True
+img_col: 3072
+img_row: 3072
+img_z: 30
+voxel_size_xy: 0.094
+voxel_size_z: 0.35
+
+seq_channel_order: []
+
+additional_round: []
+
+# Workflow logic
+workflow_mode: "free" 
+
+rules:
+
+  rsf_single_fov:
+    run: True
+    resources: 
+      mem_mb: 25000 # 40GB
+      runtime: 30
+    parameters:
+      enhance_contrast: {"run": True}
+      hist_equalize: {"run": True}
+      morph_recon: {"run": False, "radius": 3}
+      global_registration: {"run": True, "ref_round": "round1", "ref_img": "merged-image", "mov_img": "merged-image"}
+      create_subtiles: {"run": False, "sqrt_pieces": 4}
+      local_registration: {"run": False, "ref_round": "round1"}
+      spot_finding: {"run": True, "ref_round": "round1", "intensity_threshold": 0.4}
+      load_codebook: {"run": True, "split_index": []}
+      reads_extraction: {"run": True, "voxel_size": [2, 2, 1]}
+      reads_filtration: {"run": True, "end_base": "CC", 'n_barcode_segments': 1, 'split_index': []}
+
+  # rsf_single_fov_seq:
+  #   run: False
+  #   resources: 
+  #     mem_mb: 20000 # 20GB
+  #     runtime: 20
+
+  # gr_single_fov_subtile:
+  #   run: False
+  #   resources: 
+  #     mem_mb: 25000 # 20GB
+  #     runtime: 45
+  #   parameters:
+  #     enhance_contrast: {"run": True}
+  #     hist_equalize: {"run": True}
+  #     morph_recon: {"run": False}
+  #     global_registration: {"run": True, "ref_round": "round1"}
+  #     create_subtiles: {"run": True, "sqrt_pieces": 4}
+
+  # lrsf_single_fov_subtile:
+  #   run: False
+  #   resources: 
+  #     mem_mb: 10000 # 15GB
+  #     runtime: 15
+  #   parameters:
+  #     local_registration: {"run": True, "ref_round": "round1"}
+  #     morph_recon: {"run": True, "radius": 3}
+  #     spot_finding: {"run": True, "ref_round": "round1", "intensity_threshold": 0.2}
+  #     load_codebook: {"run": True, "split_index": []}
+  #     reads_extraction: {"run": True, "voxel_size": [2, 2, 1]}
+  #     reads_filtration: {"run": True, "end_base": ["CC"], 'n_barcode_segments': 1, 'split_index': []}
+
+  # deep_create_subtile:
+  #   run: False
+  #   resources: 
+  #     mem_mb: 85000 # 3 rounds, killed at 77GB
+  #     runtime: 130
+  #   parameters:
+  #     hist_equalize: {"run": False, "reference_channel": 2}
+  #     global_registration: {"run": True, "ref_round": "round1", "ref_img": "single-channel", "mov_img": "single-channel"}
+  #     create_subtiles: {"run": True, "sqrt_pieces": 4}
+
+  # deep_rsf_subtile:
+  #   run: False
+  #   resources: 
+  #     mem_mb: 15000 # 15GB
+  #     runtime: 90
+  #   parameters:
+  #     morph_recon: {"run": False, "radius": 3}
+  #     spot_finding: {"run": True, "ref_round": "round1", "intensity_estimation": "global", "intensity_threshold ": 0.06}
+  #     load_codebook: {"run": True, "split_index": []}
+  #     reads_extraction: {"run": True, "voxel_size": [2, 2, 1]}
+  #     reads_filtration: {"run": True, "end_base": "AG", 'n_barcode_segments': 1, 'split_index': []}
+
+  # stitch_subtile:
+  #   run: False
+  #   resources: 
+  #     mem_mb: 8000
+  #     runtime: 5
+
+  # nuclei_registration:
+  #   run: False
+  #   resources: 
+  #     mem_mb: 25000
+  #     runtime: 15
+
+  # rotate_nuclei:
+  #   run: False
+  #   resources: 
+  #     mem_mb: 8000
+  #     runtime: 5
+
+  # create_nuclei_amplicon_overlay:
+  #   run: False
+  #   resources: 
+  #     mem_mb: 8000
+  #     runtime: 5
+  #   parameters:
+  #     maximum_projection: True
+
+  # enhance_dapi_with_flamingo:
+  #   run: False
+  #   resources: 
+  #     mem_mb: 8000
+
+  # stardist_segmentation:
+  #   run: False
+  #   resources: 
+  #     mem_mb: 20000
+  #     runtime: 60
+  #   parameters:
+  #     stardist_base_path: '/stanley/WangLab/Tools/stardist_models/'
+  #     stardist_model_name: '2D_brain_overlay_05'
+  #     segmentation_input_folder: "overlay"
+  #     # stardist_model_name: '3D_brain_overlay_05'
+  #     prob_thresh: 0.8
+  #     nms_thresh: 0.1
+  #     rescale: True
+  #     expand_labels: True
+  #     distance: 15
+
+  # stitching_preparation:
+  #   run: False
+  #   resources: 
+  #     mem_mb: 10000
+
+  # create_BigStitcher_macro:
+  #   run: False
+  #   resources: 
+  #     mem_mb: 8000
+
+  # run_BigStitcher_macro:
+  #   run: False
+  #   resources: 
+  #     mem_mb: 30000
+  #     runtime: 120
+
+  # create_tile_config:
+  #   run: False
+  #   resources: 
+  #     mem_mb: 8000
+
+  # reads_assignment:
+  #   run: False
+  #   resources: 
+  #     mem_mb: 10000
+  #   parameters:
+  #     expand_labels: False
+  #     dilation_distance: 5
+
+  # create_sample_h5ad:
+  #   run: False
+  #   resources: 
+  #     mem_mb: 10000
+
+  # create_sample_reads_assignment:
+  #   run: False
+  #   resources: 
+  #     mem_mb: 10000

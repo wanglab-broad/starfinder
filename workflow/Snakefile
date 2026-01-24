@@ -11,6 +11,13 @@
     - 'deep': Use workflow optimized for deep-tissue (deep_create_subtile → deep_rsf_subtile → stitch_subtile)
 """
 
+from snakemake.utils import validate
+
+### ==================== [ Config Validation ] =========================
+
+# Validate configuration against schema (catches errors early at pipeline startup)
+validate(config, schema="schemas/config.schema.yaml")
+
 ### ==================== [ Include Rule Files ] =========================
 
 include: "rules/common.smk"
