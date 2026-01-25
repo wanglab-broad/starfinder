@@ -1,5 +1,6 @@
 # STARfinder Development Plan
 
+**Milestone 1: Modularization & Snakemake Upgrade**
 **Last updated:** 2026-01-24
 
 ## User Decisions

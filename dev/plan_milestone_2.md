@@ -1,6 +1,7 @@
 # STARfinder Python Backend Migration Plan
 
 **Milestone 2: Rewrite the backend with Python & Improve Code Quality**
+**Last updated:** 2026-01-24
 
 ## Executive Summary
 
@@ -135,6 +136,14 @@ dev-dependencies = ["pytest>=7.0", "pytest-cov>=4.0", "ruff>=0.1"]
 - `workflow/scripts/*.m` - Update `addpath()` calls
 - `CLAUDE.md` - Update directory structure docs
 
+### Cross-Cutting: Backend Dispatch (Boring + Measurable)
+**Goal**: Keep Snakemake logic simple while enabling apples-to-apples MATLAB vs Python comparisons.
+
+**Approach**:
+- Prefer *parallel scripts per step* (e.g., `workflow/scripts/rsf_single_fov.m` and `workflow/scripts/py_rsf_single_fov.py`) instead of branching deeply inside rule bodies.
+- Keep dispatch centralized in `workflow/rules/common.smk` (e.g., `get_backend()` + `get_step_script(step)`), so rule files remain stable as the Python backend grows.
+- Enforce identical output paths/filenames between backends for comparable rules to simplify validation and benchmarking.
+
 ### Phase 1: Package Setup & I/O Module
 **Goal**: Initialize uv project and implement image I/O
 
@@ -264,6 +273,14 @@ uv add --dev pytest pytest-cov ruff
 2. **Performance Benchmarks**: Track speedup vs MATLAB baseline
 3. **End-to-End Tests**: Run on tissue-2D and cell-culture-3D datasets
 4. **Backward Compatibility**: Both backends produce identical outputs
+
+### Snakemake-Native Benchmarking (Cluster-Ready)
+**Goal**: Collect timing/memory per rule on UGER in a consistent, reproducible way.
+
+**Approach**:
+- Add `benchmark:` targets to backend-comparable rules (same rule name, same inputs/outputs; only the invoked script differs).
+- Store benchmark files under a predictable directory (e.g., `benchmarks/{backend}/{rule}/{wildcards}.tsv`) so MATLAB vs Python comparisons are scriptable.
+- Keep resources comparable (`threads`, `mem_mb`, runtime) and record key runtime knobs (e.g., BLAS/FFT thread env vars) in logs for fair comparisons.
 
 ---
 
