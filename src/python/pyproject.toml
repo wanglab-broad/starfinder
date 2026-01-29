@@ -1,0 +1,47 @@
+[project]
+name = "starfinder"
+version = "0.1.0"
+description = "Spatial transcriptomics data processing pipeline for STARmap"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Jiahao Huang"}
+]
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "scikit-image>=0.21",
+    "tifffile>=2023.0",
+    "pandas>=2.0",
+    "h5py>=3.9",
+]
+
+[project.optional-dependencies]
+local-registration = ["SimpleITK>=2.3"]
+spatialdata = ["spatialdata>=0.1", "spatialdata-io>=0.1"]
+dev = ["pytest>=7.0", "pytest-cov>=4.0", "ruff>=0.1"]
+
+[project.scripts]
+starfinder-generate = "starfinder.testing.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["starfinder"]
+
+[dependency-groups]
+dev = ["pytest>=7.0", "pytest-cov>=4.0", "ruff>=0.1"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP"]

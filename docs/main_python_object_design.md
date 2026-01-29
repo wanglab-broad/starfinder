@@ -85,7 +85,7 @@ Python: image[z, y, x, c]
 
 | Data | Type | Notes |
 |------|------|-------|
-| Raw images | `uint16` (preserve) | Convert to `float32` only for computation |
+| Raw images | `uint8` (preserve, if not, convert to `uint8`) | Convert to `float32` only for computation if necessary|
 | Processed images | `uint8` or `uint16` | Explicit conversion with warnings |
 | Spot coordinates | `int32` | Integer voxel positions |
 | Registration shifts | `float64` | Sub-pixel precision |
@@ -128,15 +128,46 @@ class ImageMeta:
 
 @dataclass
 class LayerState:
-    """Tracks which rounds belong to which layer category."""
-    seq: list[str] = field(default_factory=list)      # Sequencing rounds
-    other: list[str] = field(default_factory=list)    # Non-sequencing (protein, organelle)
-    ref: str | None = None                             # Reference round name
+    """
+    Tracks which rounds belong to which layer category.
+
+    Invariants:
+    - `seq` contains sequencing rounds used for barcode decoding
+    - `other` contains non-sequencing rounds (protein markers, organelle stains, etc.)
+    - `ref` is the reference round for registration; all other rounds are aligned to this
+    - `ref` can be any round from `seq` OR `other` (not restricted to sequencing rounds)
+    - A round cannot be in both `seq` and `other`
+
+    Example:
+        layers = LayerState(
+            seq=['round1', 'round2', 'round3', 'round4'],
+            other=['protein', 'organelle'],
+            ref='round1',  # Reference for registration (typically first sequencing round)
+        )
+    """
+    seq: list[str] = field(default_factory=list)      # Sequencing rounds (for barcode decoding)
+    other: list[str] = field(default_factory=list)    # Non-sequencing (protein, organelle, etc.)
+    ref: str | None = None                             # Reference round for registration
 
     @property
     def all(self) -> list[str]:
-        """All registered layers in order."""
+        """All loaded layers in order (seq first, then other)."""
         return self.seq + self.other
+
+    @property
+    def to_register(self) -> list[str]:
+        """Layers that need registration (all except ref)."""
+        return [r for r in self.all if r != self.ref]
+
+    def validate(self) -> None:
+        """Check invariants. Raises ValueError if violated."""
+        # ref must be in seq or other
+        if self.ref is not None and self.ref not in self.all:
+            raise ValueError(f"ref '{self.ref}' not found in seq or other")
+        # No overlap between seq and other
+        overlap = set(self.seq) & set(self.other)
+        if overlap:
+            raise ValueError(f"Rounds in both seq and other: {overlap}")
 
 @dataclass(frozen=True)
 class RegistrationResult:
@@ -196,7 +227,7 @@ class Codebook:
     genes: list[str]             # Ordered gene list
 
     @classmethod
-    def from_csv(cls, path: Path, split_index: list[int] | None = None,
+    def from_csv(cls, path: Path, split_index: tuple[int, ...] | None = None,
                  do_reverse: bool = True) -> Codebook:
         """Load codebook from CSV file."""
         ...
@@ -211,6 +242,8 @@ class Codebook:
 Lightweight, immutable configuration holder that creates FOV instances.
 
 ```python
+from functools import lru_cache
+
 @dataclass(frozen=True)
 class STARMapDataset:
     """
@@ -237,8 +270,10 @@ class STARMapDataset:
     maximum_projection: bool = False
     fov_pattern: str = "Position%03d"  # or "tile_%d"
 
-    # Cached resources (lazy-loaded)
-    _codebook_cache: Codebook | None = field(default=None, repr=False)
+    def __hash__(self) -> int:
+        """Hash based on identity-defining fields for lru_cache compatibility."""
+        return hash((self.input_root, self.output_root, self.dataset_id,
+                     self.sample_id, self.output_id))
 
     @classmethod
     def from_config(cls, config: dict) -> STARMapDataset:
@@ -273,13 +308,16 @@ class STARMapDataset:
         """Generate FOV ID list based on pattern."""
         return [self.fov_pattern % i for i in range(start, start + n_fovs)]
 
-    def load_codebook(self, path: Path, split_index: list[int] | None = None,
+    @lru_cache(maxsize=4)
+    def load_codebook(self, path: Path, split_index: tuple[int, ...] | None = None,
                       do_reverse: bool = True) -> Codebook:
-        """Load and cache codebook (thread-safe singleton pattern)."""
-        if self._codebook_cache is None:
-            object.__setattr__(self, '_codebook_cache',
-                              Codebook.from_csv(path, split_index, do_reverse))
-        return self._codebook_cache
+        """
+        Load and cache codebook.
+
+        Uses lru_cache for automatic memoization. Thread-safe.
+        Note: split_index must be a tuple (not list) for hashability.
+        """
+        return Codebook.from_csv(path, split_index, do_reverse)
 ```
 
 ### `FOV` (per-FOV stateful processor)
@@ -376,7 +414,7 @@ class FOV:
 
     # --- Registration ---
 
-    def global_register(
+    def global_registration(
         self,
         ref_layer: str,
         *,
@@ -396,7 +434,7 @@ class FOV:
         ...
         return self
 
-    def local_register(
+    def local_registration(
         self,
         ref_layer: str,
         *,
@@ -414,7 +452,7 @@ class FOV:
 
     # --- Spot finding ---
 
-    def spot_find(
+    def spot_finding(
         self,
         ref_layer: str,
         *,
@@ -430,7 +468,7 @@ class FOV:
         ...
         return self
 
-    def reads_extract(
+    def reads_extraction(
         self,
         voxel_size: tuple[int, int, int] = (1, 2, 2),
         layers: list[str] | None = None,
@@ -443,13 +481,13 @@ class FOV:
         ...
         return self
 
-    def reads_filter(
+    def reads_filtration(
         self,
         codebook: Codebook,
         *,
         end_base: str = "G",
         n_segments: int = 1,
-        split_index: list[int] | None = None,
+        split_index: tuple[int, ...] | None = None,
         save_scores: bool = True,
     ) -> FOV:
         """
@@ -671,24 +709,55 @@ class FOV:
         return self
 
     @contextmanager
-    def processing_context(self, max_memory_gb: float = 8.0) -> Iterator[FOV]:
+    def processing_context(
+        self,
+        max_memory_gb: float = 8.0,
+        warn_on_exceed: bool = True,
+        clear_on_exit: bool = True,
+    ) -> Iterator[FOV]:
         """
         Context manager for memory-conscious processing.
 
-        Clears intermediate data on exit.
+        Args:
+            max_memory_gb: Memory limit in GB. If exceeded, logs warning or raises.
+            warn_on_exceed: If True, log warning when limit exceeded. If False, raise MemoryError.
+            clear_on_exit: If True, clear images dict on exit to free memory.
+
+        Example:
+            with fov.processing_context(max_memory_gb=16.0) as f:
+                f.load_raw_images(...)
+                f.global_registration(...)
+            # Images automatically cleared here
         """
+        import tracemalloc
+        import warnings
+
+        tracemalloc.start()
+        limit_bytes = max_memory_gb * 1024**3
+
         try:
             yield self
+
+            # Check peak memory on successful completion
+            _, peak = tracemalloc.get_traced_memory()
+            if peak > limit_bytes:
+                msg = f"Peak memory {peak / 1024**3:.1f}GB exceeded limit {max_memory_gb:.0f}GB"
+                if warn_on_exceed:
+                    warnings.warn(msg, ResourceWarning)
+                    logger.warning(f"[{self.fov_id}] {msg}")
+                else:
+                    raise MemoryError(msg)
         finally:
-            # Clear large arrays to free memory
-            self.images.clear()
-            import gc
-            gc.collect()
+            tracemalloc.stop()
+            if clear_on_exit:
+                self.images.clear()
+                import gc
+                gc.collect()
 
     def process_in_chunks(
         self,
         chunk_size: int = 10,
-        operation: Callable[[ImageArray], ImageArray],
+        operation: "Callable[[ImageArray], ImageArray]",
     ) -> None:
         """
         Apply operation to images in Z-chunks to limit memory.
@@ -740,11 +809,11 @@ def log_step(func):
 
 class FOV:
     @log_step
-    def global_register(self, ref_layer: str, **kwargs) -> FOV:
+    def global_registration(self, ref_layer: str, **kwargs) -> FOV:
         ...
 
     @log_step
-    def spot_find(self, ref_layer: str, **kwargs) -> FOV:
+    def spot_finding(self, ref_layer: str, **kwargs) -> FOV:
         ...
 ```
 
@@ -802,7 +871,7 @@ def main():
 
     # Conditional global registration
     if gr_config.get("run", True):
-        fov.global_register(
+        fov.global_registration(
             ref_layer=gr_config["ref_round"],
             ref_img=gr_config.get("ref_img", "merged"),
             mov_img=gr_config.get("mov_img", "merged"),
@@ -813,19 +882,21 @@ def main():
 
     # Spot finding and filtering
     (fov
-        .spot_find(
+        .spot_finding(
             ref_layer=dataset.ref_round,
             intensity_threshold=sf_config.get("intensity_threshold", 0.2),
         )
-        .reads_extract(voxel_size=tuple(sf_config.get("voxel_size", [1, 2, 2])))
+        .reads_extraction(voxel_size=tuple(sf_config.get("voxel_size", [1, 2, 2])))
     )
 
     # Load codebook and filter
+    # Note: split_index must be tuple for hashability
+    split_index = config.get("split_index")
     codebook = dataset.load_codebook(
         path=Path(config["codebook_path"]),
-        split_index=config.get("split_index"),
+        split_index=tuple(split_index) if split_index else None,
     )
-    fov.reads_filter(codebook, end_base=config.get("end_base", "G"))
+    fov.reads_filtration(codebook, end_base=config.get("end_base", "G"))
 
     # Save outputs
     fov.save_signal(slot="goodSpots")
@@ -869,14 +940,14 @@ def get_rule_script(rule_name: str) -> str:
 | `HistEqualize(...)` | `fov.hist_equalize(...)` | Mutate `images` | None |
 | `MorphRecon(...)` | `fov.morph_recon(...)` | Mutate `images` | None |
 | `Tophat(...)` | `fov.tophat(...)` | Mutate `images` | None |
-| `GlobalRegistration(...)` | `fov.global_register(...)` | Mutate `images`, fill `registration` | Optional shift log |
-| `LocalRegistration(...)` | `fov.local_register(...)` | Mutate `images` | None |
+| `GlobalRegistration(...)` | `fov.global_registration(...)` | Mutate `images`, fill `registration` | Optional shift log |
+| `LocalRegistration(...)` | `fov.local_registration(...)` | Mutate `images` | None |
 | `MakeProjection(...)` | `fov.make_projection(...)` | Mutate `images` | None |
 | `SaveImages(...)` | `fov.save_ref_merged()` | None | `images/ref_merged/{fov}.tif` |
-| `SpotFinding(...)` | `fov.spot_find(...)` | Set `signal.all_spots` | None |
-| `ReadsExtraction(...)` | `fov.reads_extract(...)` | Add `color_seq` column | None |
+| `SpotFinding(...)` | `fov.spot_finding(...)` | Set `signal.all_spots` | None |
+| `ReadsExtraction(...)` | `fov.reads_extraction(...)` | Add `color_seq` column | None |
 | `LoadCodebook(...)` | `dataset.load_codebook(...)` | Cache codebook | None |
-| `ReadsFiltration(...)` | `fov.reads_filter(...)` | Set `signal.good_spots` | Score log |
+| `ReadsFiltration(...)` | `fov.reads_filtration(...)` | Set `signal.good_spots` | Score log |
 | `SaveSignal(...)` | `fov.save_signal(...)` | None | `signal/{fov}_{slot}.csv` |
 | `CreateSubtiles(...)` | `fov.create_subtiles(...)` | Set `subtile.coords_df` | coords CSV + data files |
 

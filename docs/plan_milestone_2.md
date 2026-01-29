@@ -1,7 +1,7 @@
 # STARfinder Python Backend Migration Plan
 
 **Milestone 2: Rewrite the backend with Python & Improve Code Quality**
-**Last updated:** 2026-01-24
+**Last updated:** 2026-01-29
 
 ## Executive Summary
 
@@ -13,7 +13,9 @@ Migrate 28 MATLAB files (~2,500 lines) to a Python package managed with `uv`, en
 
 - **Directory structure**: Rename `code-base` → `src`, with `src/matlab` and `src/python` backends
 - **Package management**: Use `uv` (not conda) for Python dependency management
-- **Registration library**: Pure NumPy/SciPy implementation (no extra dependencies)
+- **Registration library**:
+  - Global (phase correlation): Pure NumPy/SciPy (no extra dependencies)
+  - Local (demons): SimpleITK (optional dependency, only needed for `local_registration`)
 - **Priority**: Core algorithms first, then modern data formats
 
 ---
@@ -106,6 +108,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+local-registration = ["SimpleITK>=2.3"]  # Required for demons/local registration
 spatialdata = ["spatialdata>=0.1", "spatialdata-io>=0.1"]
 dev = ["pytest>=7.0", "pytest-cov>=4.0", "ruff>=0.1"]
 
@@ -179,7 +182,8 @@ uv add --dev pytest pytest-cov ruff
    - `apply_shift_2d/3d()` - equivalents to `DFTApply2D/3D.m`
    - `register_global()` - equivalent to `RegisterImagesGlobal.m`
 2. Implement `starfinder.registration.demons`:
-   - `register_local()` using scipy.ndimage - equivalent to `RegisterImagesLocal.m`
+   - `register_local()` using SimpleITK - equivalent to `RegisterImagesLocal.m`
+   - SimpleITK is an optional dependency (only required if local registration is used)
 3. Create numerical equivalence tests
 4. Benchmark suite
 

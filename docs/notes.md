@@ -28,6 +28,18 @@ Location: `/home/unix/jiahao/wanglab/Data/Processed/sample-dataset/`
 | Channel mapping | plaque (488nm), tau (594nm), PI (546nm), Gfap (647nm) |
 | Grid | 7×8, column-by-column, 10% overlap |
 
+### 3. LN (Covid Lymph Node)
+| Property | Value |
+|----------|-------|
+| FOVs | 64 (Position001-Position064) |
+| Rounds | 4 sequencing (round1-4) + 1 flamingo |
+| Image size | 1496 × 1496 × 50 (3D) |
+| Channels | 4 per sequencing FOV (ch00-ch03), ~112MB each |
+| Flamingo channels | 3 (ch00-ch02), ~112MB each |
+| FOV pattern | `Position%03d` |
+| Codebook | 62 genes, 5-char barcodes |
+| Source | `20240302_CovidLN_retake` |
+
 ## Milestones
 1. [x] Modularization & Snakemake Upgrade
 2. [] Rewrite the backend with Python & Improve Code Quality
@@ -194,6 +206,73 @@ Use this section to track development history.
 - Full validation test once Snakemake v9 conda environment is available
 - Consider adding more specific parameter validation per rule type
 
+### 2026-01-29: Python Package Setup & Synthetic Test Dataset
+
+- [x] **Reviewed and fixed design documents**
+  - Fixed typos in `main_python_object_design.md` (registeration→registration, filteration→filtration)
+  - Changed codebook caching from mutable field to `@lru_cache(maxsize=4)`
+  - Updated `split_index` type from `list[int]` to `tuple[int, ...]` for hashability
+  - Added `LayerState` invariants, `to_register` property, and `validate()` method
+  - Clarified SimpleITK as optional dependency for local registration only
+  - Added error handling and benchmark test sections to `test_design.md`
+  - Updated `plan_milestone_2.md` with registration library decisions
+
+- [x] **Initialized Python package with uv**
+  - Created `src/python/` directory structure
+  - Set up `pyproject.toml` with uv-compatible configuration
+  - Dependencies: numpy, scipy, scikit-image, tifffile, pandas, h5py
+  - Optional: SimpleITK (local-registration), spatialdata
+  - Dev: pytest, pytest-cov, ruff
+
+- [x] **Implemented synthetic dataset generator** (`starfinder.testing.synthetic`)
+  - Two-base color-space encoding matching MATLAB implementation
+  - Generates 3D TIFF stacks with known spot positions
+  - Includes inter-round shifts for registration testing
+  - Presets: `mini` (1 FOV, 20 spots) and `standard` (4 FOVs, 400 spots)
+  - CLI: `python -m starfinder.testing --preset mini --output <path>`
+
+- [x] **Created test codebook with 8 genes**
+  - All barcodes start and end with 'C'
+  - Verified encoding: barcode reversed first, then two-base encoded
+  - Example: CACGC → CGCAC → 4422 (ch03, ch03, ch01, ch01)
+
+- [x] **Generated and committed synthetic fixtures**
+  - `tests/fixtures/synthetic/mini/` - 1 FOV, 256×256×5, ~2.5MB
+  - `tests/fixtures/synthetic/standard/` - 4 FOVs, 512×512×10, ~40MB
+  - Each includes: FOV directories, codebook.csv, ground_truth.json
+
+- [x] **Set up pytest infrastructure**
+  - Created `src/python/tests/conftest.py` with session-scoped fixtures
+  - Fixtures: `mini_dataset`, `standard_dataset`, `mini_ground_truth`, `mini_codebook`
+  - 16 tests passing: encoding validation + fixture verification
+
+**Files Created:**
+- `src/python/pyproject.toml` - Package configuration
+- `src/python/README.md` - Package documentation
+- `src/python/starfinder/__init__.py` - Package root
+- `src/python/starfinder/testing/__init__.py` - Testing module exports
+- `src/python/starfinder/testing/synthetic.py` - Generator implementation
+- `src/python/starfinder/testing/__main__.py` - CLI entry point
+- `src/python/tests/conftest.py` - pytest fixtures
+- `src/python/tests/test_synthetic.py` - Fixture verification tests
+- `src/python/tests/test_encoding.py` - Two-base encoding tests
+- `tests/fixtures/synthetic/mini/` - Mini test dataset
+- `tests/fixtures/synthetic/standard/` - Standard test dataset
+- `docs/plans/2026-01-29-synthetic-dataset-design.md` - Design document
+
+**Commands:**
+```bash
+cd src/python
+uv sync                           # Install dependencies
+uv run pytest tests/ -v           # Run tests (16 passed)
+uv run python -m starfinder.testing --preset mini --output ../../tests/fixtures/synthetic/mini
+```
+
+**Next Steps:**
+- Implement Phase 1: I/O module (`starfinder.io.tiff`)
+- Implement Phase 2: Registration module (`starfinder.registration`)
+- Create numerical equivalence tests against MATLAB outputs
+
 ## Future Directions
 
 ### 1. Replace MATLAB with Python
@@ -259,5 +338,9 @@ Make the pipeline compatible with cloud platforms (enabled by OME-Zarr/SpatialDa
 
 ### 4. Adopt `uv` for Python Project Management
 Replace conda with uv for faster, more reproducible Python dependency management.
+- [x] Initialized `src/python/` with uv (2026-01-29)
 
 ### 5. Create simple test cases
+- [x] Synthetic dataset generator implemented (2026-01-29)
+- [x] Mini (1 FOV) and standard (4 FOVs) presets available
+- [ ] Add real dataset subset for integration testing
