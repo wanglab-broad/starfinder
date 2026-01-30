@@ -47,6 +47,44 @@ class TestLoadMultipageTiff:
         with pytest.raises(FileNotFoundError):
             load_multipage_tiff("/nonexistent/path.tif")
 
+    def test_load_ome_tiff_uses_metadata(self, tmp_path: Path):
+        """Loading OME-TIFF uses dimension metadata for correct interpretation."""
+        # Create a 3-slice Z-stack as OME-TIFF
+        # Without metadata, shape (3, 32, 32) could be misinterpreted as RGB
+        test_data = np.random.randint(0, 255, (3, 32, 32), dtype=np.uint8)
+        tiff_path = tmp_path / "test_ome.ome.tif"
+
+        # Write as OME-TIFF with explicit Z dimension metadata
+        tifffile.imwrite(
+            tiff_path,
+            test_data,
+            ome=True,
+            metadata={"axes": "ZYX"},
+        )
+
+        result = load_multipage_tiff(tiff_path, convert_uint8=False)
+
+        # Should be (3, 32, 32) - Z=3, not collapsed to (1, 32, 32) as RGB
+        assert result.shape == (3, 32, 32)
+
+    def test_load_imagej_hyperstack_uses_metadata(self, tmp_path: Path):
+        """Loading ImageJ hyperstack uses dimension metadata."""
+        # Create ImageJ-style hyperstack
+        test_data = np.random.randint(0, 255, (4, 64, 64), dtype=np.uint8)
+        tiff_path = tmp_path / "test_imagej.tif"
+
+        # Write as ImageJ hyperstack
+        tifffile.imwrite(
+            tiff_path,
+            test_data,
+            imagej=True,
+            metadata={"axes": "ZYX"},
+        )
+
+        result = load_multipage_tiff(tiff_path, convert_uint8=False)
+
+        assert result.shape == (4, 64, 64)
+
 
 class TestSaveStack:
     """Tests for save_stack function."""

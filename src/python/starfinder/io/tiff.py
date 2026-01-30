@@ -23,6 +23,10 @@ def load_multipage_tiff(
     """
     Load a multi-page TIFF file.
 
+    Automatically detects OME-TIFF and ImageJ hyperstacks and uses their
+    dimension metadata for correct interpretation. Plain TIFFs are read
+    with raw array shape.
+
     Args:
         path: Path to TIFF file.
         convert_uint8: If True (default), convert to uint8.
@@ -37,8 +41,22 @@ def load_multipage_tiff(
     if not path.exists():
         raise FileNotFoundError(f"TIFF file not found: {path}")
 
-    # Use tifffile directly for robust reading
-    data = tifffile.imread(path)
+    # Check for dimension metadata (OME-TIFF or ImageJ hyperstack)
+    with tifffile.TiffFile(path) as tif:
+        has_metadata = tif.is_ome or tif.is_imagej
+
+        if has_metadata:
+            # Use bioio for metadata-aware loading
+            from bioio import BioImage
+            from bioio_tifffile import Reader as TiffReader
+
+            img = BioImage(path, reader=TiffReader)
+            data = img.get_image_data("ZYX", T=0, C=0)
+            logger.debug(f"Loaded {path} with bioio (OME={tif.is_ome}, ImageJ={tif.is_imagej})")
+        else:
+            # Plain TIFF - read raw array
+            data = tif.asarray()
+            logger.debug(f"Loaded {path} with tifffile (plain TIFF)")
 
     # Ensure 3D array (Z, Y, X)
     if data.ndim == 2:
