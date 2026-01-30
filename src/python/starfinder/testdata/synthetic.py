@@ -360,9 +360,14 @@ def generate_synthetic_dataset(
                 else:
                     image = base_image
 
-                # Save as TIFF
+                # Save as TIFF with explicit Z-axis metadata
                 tiff_path = round_dir / f"ch{ch:02d}.tif"
-                tifffile.imwrite(tiff_path, image, imagej=True)
+                tifffile.imwrite(
+                    tiff_path,
+                    image,
+                    imagej=True,
+                    metadata={"axes": "ZYX"},
+                )
 
         # Store FOV ground truth
         ground_truth["fovs"][fov_id] = {
