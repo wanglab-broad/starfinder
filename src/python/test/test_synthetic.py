@@ -44,7 +44,7 @@ def test_mini_image_loadable(mini_dataset: Path, mini_ground_truth: dict):
     image = tifffile.imread(tiff_path)
 
     assert image.shape == tuple(shape)
-    assert image.dtype == np.uint16
+    assert image.dtype == np.uint8
 
 
 def test_codebook_matches_ground_truth(mini_codebook: dict, mini_ground_truth: dict):

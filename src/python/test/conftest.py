@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-# Pre-generated fixtures path (relative to repo root)
+# Pre-generated fixtures path (at repo root /tests/fixtures/)
 REPO_ROOT = Path(__file__).parent.parent.parent.parent
 FIXTURES_DIR = REPO_ROOT / "tests" / "fixtures" / "synthetic"
 
@@ -17,7 +17,7 @@ def mini_dataset() -> Path:
     if not path.exists():
         pytest.skip(
             "Mini synthetic dataset not found. Run: "
-            "uv run python -m starfinder.testing --preset mini --output tests/fixtures/synthetic/mini"
+            "uv run python -m starfinder.testdata --preset mini --output tests/fixtures/synthetic/mini"
         )
     return path
 
@@ -29,7 +29,7 @@ def standard_dataset() -> Path:
     if not path.exists():
         pytest.skip(
             "Standard synthetic dataset not found. Run: "
-            "uv run python -m starfinder.testing --preset standard --output tests/fixtures/synthetic/standard"
+            "uv run python -m starfinder.testdata --preset standard --output tests/fixtures/synthetic/standard"
         )
     return path
 

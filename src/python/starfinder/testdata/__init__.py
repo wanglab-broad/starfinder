@@ -1,4 +1,4 @@
-"""Testing utilities for STARfinder."""
+"""Synthetic test data generation for STARfinder."""
 
 from .synthetic import (
     SyntheticConfig,

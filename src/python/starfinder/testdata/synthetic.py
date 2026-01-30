@@ -4,13 +4,12 @@ This module generates synthetic spatial transcriptomics datasets with known
 ground truth for testing the STARfinder pipeline components.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 import json
 
 import numpy as np
-from scipy.ndimage import gaussian_filter
 
 
 # Two-base color-space encoding table
@@ -61,6 +60,10 @@ class SyntheticConfig:
     background_mean: int = 20
     background_std: int = 5
     noise_std: int = 10
+    add_noise: bool = True
+
+    # Output dtype
+    dtype: Literal["uint8", "uint16"] = "uint8"
 
     # Registration shifts (for testing registration)
     max_shift_xy: int = 5
@@ -138,6 +141,8 @@ def create_test_image_stack(
     noise_std: int = 10,
     spot_sigma: float = 1.5,
     seed: int | None = None,
+    add_noise: bool = True,
+    dtype: Literal["uint8", "uint16"] = "uint8",
 ) -> np.ndarray:
     """Create a single 3D image stack with spots at specified locations.
 
@@ -155,32 +160,49 @@ def create_test_image_stack(
         Gaussian sigma for spot blur
     seed : int, optional
         Random seed for reproducibility
+    add_noise : bool
+        Whether to add Gaussian noise (default True)
+    dtype : {"uint8", "uint16"}
+        Output data type (default "uint8")
 
     Returns
     -------
     np.ndarray
-        3D uint16 image stack
+        3D image stack with specified dtype
     """
     rng = np.random.default_rng(seed)
 
     # Create background with slight variation
     image = rng.normal(background, background / 4, shape).astype(np.float32)
 
-    # Add spots
+    # Add spots using localized Gaussian kernels for efficiency and correct intensity
+    kernel_radius = int(np.ceil(spot_sigma * 4))  # 4 sigma covers >99% of Gaussian
     for z, y, x, intensity in spots:
         if 0 <= z < shape[0] and 0 <= y < shape[1] and 0 <= x < shape[2]:
-            # Create a small patch around the spot
-            spot_image = np.zeros(shape, dtype=np.float32)
-            spot_image[z, y, x] = intensity
-            # Apply Gaussian blur
-            spot_blurred = gaussian_filter(spot_image, sigma=spot_sigma)
-            image += spot_blurred
+            # Define local patch bounds
+            z0, z1 = max(0, z - kernel_radius), min(shape[0], z + kernel_radius + 1)
+            y0, y1 = max(0, y - kernel_radius), min(shape[1], y + kernel_radius + 1)
+            x0, x1 = max(0, x - kernel_radius), min(shape[2], x + kernel_radius + 1)
 
-    # Add noise
-    image += rng.normal(0, noise_std, shape)
+            # Create coordinate grids relative to spot center
+            zz, yy, xx = np.ogrid[z0 - z : z1 - z, y0 - y : y1 - y, x0 - x : x1 - x]
 
-    # Clip and convert to uint16
-    image = np.clip(image, 0, 65535).astype(np.uint16)
+            # Compute 3D Gaussian with peak = intensity
+            dist_sq = zz**2 + yy**2 + xx**2
+            gaussian_spot = intensity * np.exp(-dist_sq / (2 * spot_sigma**2))
+
+            # Add to image
+            image[z0:z1, y0:y1, x0:x1] += gaussian_spot
+
+    # Add noise (optional)
+    if add_noise and noise_std > 0:
+        image += rng.normal(0, noise_std, shape)
+
+    # Clip and convert to output dtype
+    if dtype == "uint8":
+        image = np.clip(image, 0, 255).astype(np.uint8)
+    else:
+        image = np.clip(image, 0, 65535).astype(np.uint16)
 
     return image
 
@@ -328,6 +350,8 @@ def generate_synthetic_dataset(
                     noise_std=config.noise_std,
                     spot_sigma=config.spot_sigma,
                     seed=config.seed + fov_idx * 1000 + round_idx * 100 + ch,
+                    add_noise=config.add_noise,
+                    dtype=config.dtype,
                 )
 
                 # Apply shift (except for round1)
@@ -358,4 +382,121 @@ def generate_synthetic_dataset(
     with open(gt_path, "w") as f:
         json.dump(ground_truth, f, indent=2)
 
+    # Generate annotated visualization for each FOV
+    for fov_id, fov_data in ground_truth["fovs"].items():
+        fov_dir = output_dir / fov_id
+        _generate_annotated_visualization(
+            output_dir=output_dir,
+            fov_id=fov_id,
+            fov_dir=fov_dir,
+            spots=fov_data["spots"],
+            image_shape=(config.n_z, config.height, config.width),
+            n_channels=config.n_channels,
+        )
+
     return ground_truth
+
+
+def _generate_annotated_visualization(
+    output_dir: Path,
+    fov_id: str,
+    fov_dir: Path,
+    spots: list[dict],
+    image_shape: tuple[int, int, int],
+    n_channels: int,
+) -> None:
+    """Generate annotated max projection visualization with spot bounding boxes.
+
+    Parameters
+    ----------
+    output_dir : Path
+        Root output directory (same level as ground_truth.json)
+    fov_id : str
+        FOV identifier (e.g., "FOV_001")
+    fov_dir : Path
+        FOV directory containing round subdirectories
+    spots : list[dict]
+        List of spot dictionaries with position, gene, color_seq
+    image_shape : tuple[int, int, int]
+        Image shape as (z, height, width)
+    n_channels : int
+        Number of channels
+    """
+    import matplotlib.pyplot as plt
+    import matplotlib.patches as patches
+    import tifffile
+
+    # Load round1 images and create max projection across all channels
+    round1_dir = fov_dir / "round1"
+    max_proj = None
+
+    for ch in range(n_channels):
+        img = tifffile.imread(round1_dir / f"ch{ch:02d}.tif")
+        # Max projection along z-axis
+        ch_max = img.max(axis=0)
+        if max_proj is None:
+            max_proj = ch_max.astype(np.float32)
+        else:
+            max_proj = np.maximum(max_proj, ch_max)
+
+    # Create figure
+    fig, ax = plt.subplots(1, 1, figsize=(12, 12))
+
+    # Display max projection
+    ax.imshow(max_proj, cmap="gray", vmin=0, vmax=max_proj.max())
+    ax.set_title(f"{fov_id} - Round 1 Max Projection (all channels)", fontsize=14)
+
+    # Color map for different genes
+    gene_colors = {
+        "GeneA": "#FF6B6B",  # red
+        "GeneB": "#4ECDC4",  # teal
+        "GeneC": "#45B7D1",  # blue
+        "GeneD": "#96CEB4",  # green
+        "GeneE": "#FFEAA7",  # yellow
+        "GeneF": "#DDA0DD",  # plum
+        "GeneG": "#98D8C8",  # mint
+        "GeneH": "#F7DC6F",  # gold
+    }
+
+    # Draw bounding boxes and annotations for each spot
+    box_size = 12  # pixels
+    for spot in spots:
+        _, y, x = spot["position"]
+        gene = spot["gene"]
+        color_seq = spot["color_seq"]
+        color = gene_colors.get(gene, "#FFFFFF")
+
+        # Draw bounding box
+        rect = patches.Rectangle(
+            (x - box_size // 2, y - box_size // 2),
+            box_size,
+            box_size,
+            linewidth=1.5,
+            edgecolor=color,
+            facecolor="none",
+        )
+        ax.add_patch(rect)
+
+        # Add annotation text (gene name and color sequence)
+        label = f"{gene}\n{color_seq}"
+        ax.annotate(
+            label,
+            (x, y - box_size // 2 - 2),
+            fontsize=6,
+            color=color,
+            ha="center",
+            va="bottom",
+            weight="bold",
+        )
+
+    ax.set_xlabel("X (pixels)")
+    ax.set_ylabel("Y (pixels)")
+    ax.set_xlim(0, image_shape[2])
+    ax.set_ylim(image_shape[1], 0)  # Invert y-axis to match image coordinates
+
+    plt.tight_layout()
+
+    # Save figure to output_dir (same level as ground_truth.json)
+    output_path = output_dir / f"ground_truth_annotation_{fov_id}.png"
+    fig.savefig(output_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)

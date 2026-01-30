@@ -15,6 +15,7 @@ dependencies = [
     "tifffile>=2023.0",
     "pandas>=2.0",
     "h5py>=3.9",
+    "matplotlib>=3.7",
 ]
 
 [project.optional-dependencies]
@@ -23,7 +24,7 @@ spatialdata = ["spatialdata>=0.1", "spatialdata-io>=0.1"]
 dev = ["pytest>=7.0", "pytest-cov>=4.0", "ruff>=0.1"]
 
 [project.scripts]
-starfinder-generate = "starfinder.testing.__main__:main"
+starfinder-generate = "starfinder.testdata.__main__:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -36,7 +37,7 @@ packages = ["starfinder"]
 dev = ["pytest>=7.0", "pytest-cov>=4.0", "ruff>=0.1"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["test"]
 addopts = "-v --tb=short"
 
 [tool.ruff]
