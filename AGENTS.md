@@ -3,7 +3,9 @@
 ## Project Structure & Module Organization
 
 - `workflow/`: Snakemake pipeline (`workflow/Snakefile`) with modular rule files in `workflow/rules/*.smk`, config validation in `workflow/schemas/config.schema.yaml`, and helper scripts in `workflow/scripts/` (Python + MATLAB).
-- `code-base/src/`: core MATLAB functions used by image processing steps.
+- `src/matlab/`: core MATLAB functions used by image processing steps.
+- `src/matlab-addon/`: external MATLAB toolboxes.
+- `src/python/`: Python package (`starfinder`) for I/O and processing.
 - `config/`: Conda environment definitions (primary: `config/environment.yaml`).
 - `example/`: demos and analysis examples (see `example/README.md`).
 - `test/`: config templates/examples for running the pipeline (start from `test/minimal_config.yaml`).

@@ -9,8 +9,8 @@ function subtile_data = lrsf_single_fov_subtile(config_path, subtile_path)
     config = jsondecode(config_raw);
 
     % add path for .m files
-    addpath(fullfile(config.starfinder_path, 'code-base/src/'))
-    addpath(genpath(fullfile(config.starfinder_path, 'code-base/matlab-addon/')))
+    addpath(fullfile(config.starfinder_path, 'src/matlab/'))
+    addpath(genpath(fullfile(config.starfinder_path, 'src/matlab-addon/')))
     starting = tic;
 
     % create object instance

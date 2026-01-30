@@ -36,7 +36,9 @@ snakemake -s workflow/Snakefile --configfile test/tissue_2D_test.yaml --lint
 
 ### Directory Structure
 
-- `code-base/src/` - Core MATLAB image processing scripts (~27 files). Main orchestrator is `STARMapDataset.m`.
+- `src/matlab/` - Core MATLAB image processing scripts (~29 files). Main orchestrator is `STARMapDataset.m`.
+- `src/matlab-addon/` - External MATLAB toolboxes (TIFF handling, natural sort, etc.)
+- `src/python/` - Python package with I/O, registration, and processing modules.
 - `workflow/` - Snakemake orchestration
   - `Snakefile` - Main entry point (~58 lines), includes modular rule files and config validation
   - `rules/` - Modularized rule files (common.smk, registration.smk, spot-finding.smk, segmentation.smk, stitching.smk, reads-assignment.smk, utils.smk)
