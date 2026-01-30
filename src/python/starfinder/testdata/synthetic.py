@@ -505,3 +505,75 @@ def _generate_annotated_visualization(
     output_path = output_dir / f"ground_truth_annotation_{fov_id}.png"
     fig.savefig(output_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
+
+
+def create_test_volume(
+    shape: tuple[int, int, int],
+    n_spots: int = 20,
+    spot_intensity: int = 200,
+    background: int = 20,
+    noise_std: int = 5,
+    seed: int | None = None,
+) -> np.ndarray:
+    """Create a single 3D volume with Gaussian spots for registration testing.
+
+    This is a simplified helper function for creating test volumes with
+    randomly placed spots, useful for registration benchmarking.
+
+    Parameters
+    ----------
+    shape : tuple[int, int, int]
+        Volume shape as (Z, Y, X).
+    n_spots : int, optional
+        Number of spots to place (default 20).
+    spot_intensity : int, optional
+        Peak intensity of spots (default 200).
+    background : int, optional
+        Background intensity level (default 20).
+    noise_std : int, optional
+        Standard deviation of Gaussian noise (default 5).
+    seed : int, optional
+        Random seed for reproducibility.
+
+    Returns
+    -------
+    np.ndarray
+        Volume with shape (Z, Y, X) containing spots, dtype uint16.
+
+    Examples
+    --------
+    >>> vol = create_test_volume((10, 256, 256), n_spots=30, seed=42)
+    >>> vol.shape
+    (10, 256, 256)
+    >>> vol.dtype
+    dtype('uint16')
+    """
+    rng = np.random.default_rng(seed)
+
+    # Generate random spot positions with margin from edges
+    z_size, y_size, x_size = shape
+    margin_z = max(1, z_size // 8)
+    margin_xy = max(5, min(y_size, x_size) // 16)
+
+    spots = []
+    for _ in range(n_spots):
+        z = int(rng.integers(margin_z, max(margin_z + 1, z_size - margin_z)))
+        y = int(rng.integers(margin_xy, max(margin_xy + 1, y_size - margin_xy)))
+        x = int(rng.integers(margin_xy, max(margin_xy + 1, x_size - margin_xy)))
+        # Add some variation to spot intensity
+        intensity = int(spot_intensity + rng.integers(-20, 21))
+        spots.append((z, y, x, intensity))
+
+    # Use existing function to create the image stack
+    volume = create_test_image_stack(
+        shape=shape,
+        spots=spots,
+        background=background,
+        noise_std=noise_std,
+        spot_sigma=1.5,
+        seed=seed,
+        add_noise=True,
+        dtype="uint16",
+    )
+
+    return volume

@@ -6,6 +6,7 @@ from .synthetic import (
     get_preset_config,
     create_test_image_stack,
     create_shifted_stack,
+    create_test_volume,
 )
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
     "get_preset_config",
     "create_test_image_stack",
     "create_shifted_stack",
+    "create_test_volume",
 ]
