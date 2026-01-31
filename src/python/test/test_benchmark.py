@@ -154,3 +154,79 @@ class TestBenchmarkSuite:
         assert stats["mean_time"] == 2.0
         assert stats["min_time"] == 1.0
         assert stats["max_time"] == 3.0
+
+
+import json
+from pathlib import Path
+
+
+class TestReporting:
+    """Tests for benchmark reporting utilities."""
+
+    def test_print_table(self, capsys):
+        """print_table() outputs formatted markdown table."""
+        from starfinder.benchmark import print_table
+
+        results = [
+            BenchmarkResult(
+                method="numpy",
+                operation="fft",
+                size=(10, 256, 256),
+                time_seconds=0.123,
+                memory_mb=45.6,
+            ),
+            BenchmarkResult(
+                method="scipy",
+                operation="fft",
+                size=(10, 256, 256),
+                time_seconds=0.145,
+                memory_mb=48.2,
+            ),
+        ]
+        print_table(results)
+        captured = capsys.readouterr()
+        assert "numpy" in captured.out
+        assert "scipy" in captured.out
+        assert "0.123" in captured.out
+
+    def test_save_csv(self, tmp_path):
+        """save_csv() writes results to CSV file."""
+        from starfinder.benchmark import save_csv
+
+        results = [
+            BenchmarkResult(
+                method="test",
+                operation="op",
+                size=(10,),
+                time_seconds=1.0,
+                memory_mb=10.0,
+            )
+        ]
+        path = tmp_path / "results.csv"
+        save_csv(results, path)
+        assert path.exists()
+        content = path.read_text()
+        assert "method" in content
+        assert "test" in content
+
+    def test_save_json(self, tmp_path):
+        """save_json() writes results to JSON file."""
+        from starfinder.benchmark import save_json
+
+        results = [
+            BenchmarkResult(
+                method="test",
+                operation="op",
+                size=(10, 20),
+                time_seconds=1.5,
+                memory_mb=15.0,
+                metrics={"accuracy": 0.99},
+            )
+        ]
+        path = tmp_path / "results.json"
+        save_json(results, path)
+        assert path.exists()
+        data = json.loads(path.read_text())
+        assert len(data) == 1
+        assert data[0]["method"] == "test"
+        assert data[0]["metrics"]["accuracy"] == 0.99
