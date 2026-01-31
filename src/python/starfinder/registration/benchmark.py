@@ -1,80 +1,33 @@
-"""Benchmark utilities for registration methods."""
+"""Registration-specific benchmark utilities.
+
+This module provides convenience functions for benchmarking registration
+methods using the generic starfinder.benchmark framework.
+"""
 
 from __future__ import annotations
 
-import time
-import tracemalloc
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Callable
-
 import numpy as np
 
+from starfinder.benchmark import (
+    BenchmarkResult,
+    SIZE_PRESETS,
+    measure,
+)
 from starfinder.registration import phase_correlate, phase_correlate_skimage
 
 
-@dataclass
-class BenchmarkResult:
-    """Result of a single benchmark run."""
-
-    method: str
-    size: tuple[int, int, int]
-    time_sec: float
-    memory_peak_mb: float
-    shift_error: float
-
-
-def _measure_registration(
-    func: Callable,
-    fixed: np.ndarray,
-    moving: np.ndarray,
-    expected_shift: tuple[float, float, float],
-    n_runs: int = 5,
-) -> tuple[float, float, float]:
-    """
-    Measure time, memory, and accuracy for a registration function.
-
-    Returns:
-        Tuple of (mean_time_sec, peak_memory_mb, shift_error).
-    """
-    # Warm-up run
-    _ = func(fixed, moving)
-
-    # Timed runs
-    times = []
-    for _ in range(n_runs):
-        tracemalloc.start()
-        start = time.perf_counter()
-
-        detected = func(fixed, moving)
-
-        elapsed = time.perf_counter() - start
-        _, peak = tracemalloc.get_traced_memory()
-        tracemalloc.stop()
-
-        times.append(elapsed)
-
-    mean_time = np.mean(times)
-    peak_mb = peak / (1024 * 1024)
-
-    # Compute shift error (L2 distance)
-    error = np.sqrt(sum((d - e) ** 2 for d, e in zip(detected, expected_shift)))
-
-    return mean_time, peak_mb, error
-
-
-def run_benchmark(
+def benchmark_registration(
     sizes: list[tuple[int, int, int]] | None = None,
     methods: list[str] | None = None,
     n_runs: int = 5,
     seed: int = 42,
 ) -> list[BenchmarkResult]:
     """
-    Run registration benchmark with synthetic images.
+    Benchmark registration methods with synthetic images.
 
     Args:
-        sizes: List of (Z, Y, X) sizes to test. Defaults to standard set.
-        methods: List of methods ("numpy", "skimage"). Defaults to both.
+        sizes: List of (Z, Y, X) sizes. Defaults to tiny, small, medium.
+        methods: List of method names ("numpy", "skimage"). Defaults to both.
         n_runs: Number of runs per measurement.
         seed: Random seed for reproducibility.
 
@@ -85,9 +38,9 @@ def run_benchmark(
 
     if sizes is None:
         sizes = [
-            (5, 128, 128),    # tiny
-            (10, 256, 256),   # small
-            (30, 512, 512),   # medium
+            SIZE_PRESETS["tiny"],
+            SIZE_PRESETS["small"],
+            SIZE_PRESETS["medium"],
         ]
 
     if methods is None:
@@ -102,9 +55,7 @@ def run_benchmark(
     results = []
 
     for size in sizes:
-        nz, ny, nx = size
-
-        # Generate synthetic volume with spots
+        # Generate synthetic volume
         fixed = create_test_volume(
             shape=size,
             n_spots=20,
@@ -121,35 +72,63 @@ def run_benchmark(
         )
         moving = np.roll(fixed, known_shift, axis=(0, 1, 2))
 
-        for method in methods:
-            func = method_funcs[method]
-            mean_time, peak_mb, error = _measure_registration(
-                func, fixed, moving, known_shift, n_runs
+        for method_name in methods:
+            func = method_funcs[method_name]
+
+            # Warm-up
+            _ = func(fixed, moving)
+
+            # Timed runs
+            times = []
+            memories = []
+            detected_shift = None
+
+            for _ in range(n_runs):
+                detected_shift, elapsed, mem = measure(lambda: func(fixed, moving))
+                times.append(elapsed)
+                memories.append(mem)
+
+            # Compute shift error
+            error = np.sqrt(
+                sum((d - e) ** 2 for d, e in zip(detected_shift, known_shift))
             )
 
             results.append(
                 BenchmarkResult(
-                    method=method,
+                    method=method_name,
+                    operation="phase_correlate",
                     size=size,
-                    time_sec=mean_time,
-                    memory_peak_mb=peak_mb,
-                    shift_error=error,
+                    time_seconds=float(np.mean(times)),
+                    memory_mb=float(np.mean(memories)),
+                    metrics={
+                        "shift_error": error,
+                        "known_shift": known_shift,
+                        "detected_shift": detected_shift,
+                    },
                 )
             )
 
     return results
 
 
+# Re-export for backwards compatibility
+def run_benchmark(*args, **kwargs):
+    """Deprecated: Use benchmark_registration() instead."""
+    return benchmark_registration(*args, **kwargs)
+
+
 def print_benchmark_table(results: list[BenchmarkResult]) -> None:
-    """Print benchmark results as formatted table."""
+    """Print registration benchmark results with shift error."""
     print()
     print("| Method  | Size           | Time (s) | Memory (MB) | Shift Error |")
     print("|---------|----------------|----------|-------------|-------------|")
 
     for r in results:
         size_str = f"{r.size[1]}×{r.size[2]}×{r.size[0]}"
+        error = r.metrics.get("shift_error", 0.0)
         print(
-            f"| {r.method:<7} | {size_str:<14} | {r.time_sec:>8.3f} | {r.memory_peak_mb:>11.1f} | {r.shift_error:>11.2f} |"
+            f"| {r.method:<7} | {size_str:<14} | {r.time_seconds:>8.3f} | "
+            f"{r.memory_mb:>11.1f} | {error:>11.2f} |"
         )
 
     print()
