@@ -230,3 +230,28 @@ class TestReporting:
         assert len(data) == 1
         assert data[0]["method"] == "test"
         assert data[0]["metrics"]["accuracy"] == 0.99
+
+
+from starfinder.benchmark import SIZE_PRESETS, get_size_preset
+
+
+class TestPresets:
+    """Tests for benchmark presets."""
+
+    def test_size_presets_exist(self):
+        """SIZE_PRESETS contains expected presets."""
+        assert "tiny" in SIZE_PRESETS
+        assert "small" in SIZE_PRESETS
+        assert "medium" in SIZE_PRESETS
+
+    def test_get_size_preset(self):
+        """get_size_preset() returns correct shape."""
+        shape = get_size_preset("tiny")
+        assert len(shape) == 3
+        assert all(isinstance(s, int) for s in shape)
+
+    def test_get_size_preset_invalid(self):
+        """get_size_preset() raises for unknown preset."""
+        import pytest
+        with pytest.raises(ValueError, match="Unknown size preset"):
+            get_size_preset("nonexistent")
