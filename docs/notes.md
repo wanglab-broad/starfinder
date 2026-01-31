@@ -43,8 +43,14 @@ Location: `/home/unix/jiahao/wanglab/Data/Processed/sample-dataset/`
 ## Milestones
 1. [x] Modularization & Snakemake Upgrade
 2. [] Rewrite the backend with Python & Improve Code Quality
-  - [] Adopt new data structure such as h5 and OME-Zarr, but also ensure backward compatibility 
-  - [] Adopt high-performance image registration methods
+  - [x] Phase 0: Directory restructure (src/matlab, src/python)
+  - [x] Phase 1: I/O module (load/save TIFF with axis-aware handling)
+  - [x] Phase 2: Registration module (DFT-based phase correlation)
+  - [] Phase 3: Spot finding module
+  - [] Phase 4: Decoding module
+  - [] Phase 5: Segmentation integration
+  - [] Phase 6: Dataset/FOV class wrapper
+  - [] Adopt new data structure such as h5 and OME-Zarr, but also ensure backward compatibility
   - [] Adopt new 2D/3D image segmentation methods
 3. [] Systematically benchmark the performance of the MATLAB backend and the new Python version
 
@@ -272,6 +278,118 @@ uv run python -m starfinder.testing --preset mini --output ../../tests/fixtures/
 - Implement Phase 1: I/O module (`starfinder.io.tiff`)
 - Implement Phase 2: Registration module (`starfinder.registration`)
 - Create numerical equivalence tests against MATLAB outputs
+
+### 2026-01-30: Python I/O Module & Directory Restructure
+
+- [x] **Phase 0: Directory Restructure**
+  - Moved MATLAB code from `code-base/src/` to `src/matlab/`
+  - Moved MATLAB addons from `code-base/matlab-addon/` to `src/matlab-addon/`
+  - Updated 7 workflow scripts to use new paths (`workflow/scripts/*.m`)
+  - Consistent `src/` directory structure for all source code
+
+- [x] **Phase 1: I/O Module Implementation** (`starfinder.io`)
+  - Implemented `load_multipage_tiff()` - Load multi-page TIFF with auto-detection
+  - Implemented `load_image_stacks()` - Load multiple channel TIFFs as (Z, Y, X, C) array
+  - Implemented `save_stack()` - Save 3D/4D arrays with optional compression
+  - Auto-detects OME-TIFF and ImageJ hyperstacks for correct dimension handling
+  - Uses bioio for metadata-aware loading, tifffile for plain TIFFs
+  - 15 tests passing
+
+- [x] **Fixed synthetic data Z-axis metadata**
+  - Issue: ImageJ TIFFs saved without explicit axis metadata
+  - Caused bioio to interpret Z=5 as C=5 (channels instead of slices)
+  - Fix: Added `metadata={"axes": "ZYX"}` to `tifffile.imwrite()` call
+  - Regenerated mini and standard synthetic datasets
+
+- [x] **Development environment setup**
+  - Added bioio and bioio-tifffile dependencies to pyproject.toml
+  - Created `.vscode/settings.json` for Cursor/VS Code Python interpreter
+  - Registered Jupyter kernel for interactive notebook testing
+  - Created `tests/test_io_interactive.ipynb` for manual testing
+
+**Files Created:**
+- `src/python/starfinder/io/__init__.py` - Package exports
+- `src/python/starfinder/io/tiff.py` - TIFF I/O implementation
+- `src/python/test/test_io.py` - 15 unit tests
+- `tests/test_io_interactive.ipynb` - Interactive testing notebook
+- `.vscode/settings.json` - VS Code/Cursor settings
+
+**Files Modified:**
+- `src/python/pyproject.toml` - Added bioio dependencies
+- `src/python/starfinder/testdata/synthetic.py` - Fixed Z-axis metadata
+- `workflow/scripts/*.m` (7 files) - Updated MATLAB paths
+
+**Dependencies Added:**
+```toml
+bioio>=1.0
+bioio-tifffile>=1.0
+# Optional: bioio-ome-tiff>=1.0
+```
+
+**Next Steps:**
+- Phase 2: Registration module (`starfinder.registration`)
+- Phase 3: Spot finding module (`starfinder.spots`)
+
+### 2026-01-30: Phase 2 - Registration Module Implementation
+
+- [x] **DFT-based phase correlation** (`starfinder.registration.phase_correlation`)
+  - `phase_correlate(fixed, moving)` → `(dz, dy, dx)` shift tuple
+  - `apply_shift(volume, shift)` → shifted volume with edge zeroing
+  - `register_volume(images, ref, mov)` → multi-channel registration
+  - Uses NumPy/SciPy FFT for cross-correlation in frequency domain
+  - Handles wrap-around for signed shift conversion
+
+- [x] **scikit-image backend for comparison** (`starfinder.registration._skimage_backend`)
+  - `phase_correlate_skimage()` wrapper around `skimage.registration.phase_cross_correlation`
+  - Sign convention normalized to match custom implementation
+
+- [x] **Benchmark utilities** (`starfinder.registration.benchmark`)
+  - `BenchmarkResult` dataclass: method, size, time, memory, shift_error
+  - `run_benchmark()` - Compare methods across size presets
+  - `print_benchmark_table()` - Formatted output
+  - Size presets: tiny (128³), small (256³), medium (512³), large (1024³), xlarge (1496³), tissue (3072³)
+  - Metrics: execution time, peak memory (tracemalloc), L2 shift error
+
+- [x] **Benchmark results (NumPy vs scikit-image)**
+  - NumPy ~25-30% faster across all sizes
+  - NumPy ~20% less memory usage
+  - Both produce identical shift results
+
+- [x] **Test suite** (`test/test_registration.py`) - 5 tests
+  - `test_zero_shift` - Identical images return (0, 0, 0)
+  - `test_known_shift` - Recovers integer shift applied via np.roll
+  - `test_roundtrip` - shift → apply → inverse preserves data
+  - `test_registers_multichannel` - Multi-channel (Z, Y, X, C) registration
+  - `test_backends_match` - NumPy vs scikit-image parity
+
+- [x] **Synthetic test data helper** (`starfinder.testdata.create_test_volume`)
+  - Creates 3D volumes with Gaussian spots for benchmarking
+  - Configurable shape, n_spots, intensity, noise, seed
+
+**Files Created:**
+- `src/python/starfinder/registration/__init__.py` - Module exports
+- `src/python/starfinder/registration/phase_correlation.py` - Core algorithm
+- `src/python/starfinder/registration/_skimage_backend.py` - scikit-image wrapper
+- `src/python/starfinder/registration/benchmark.py` - Benchmark utilities
+- `src/python/test/test_registration.py` - Unit tests
+- `docs/plans/2026-01-30-registration-module-design.md` - Design document
+- `docs/plans/2026-01-30-registration-module-implementation.md` - Implementation plan
+
+**Files Modified:**
+- `src/python/starfinder/__init__.py` - Export registration module
+- `src/python/starfinder/testdata/synthetic.py` - Added create_test_volume()
+- `src/python/starfinder/testdata/__init__.py` - Export create_test_volume
+
+**MATLAB Function Mapping:**
+| MATLAB | Python |
+|--------|--------|
+| `DFTRegister3D(fixed, moving)` | `phase_correlate(fixed, moving)` |
+| `DFTApply3D(volume, params)` | `apply_shift(volume, shift)` |
+| `RegisterImagesGlobal(images, ref, mov)` | `register_volume(images, ref, mov)` |
+
+**Next Steps:**
+- Phase 3: Spot finding module (`starfinder.spots`)
+- Phase 4: Decoding module (`starfinder.decoding`)
 
 ## Future Directions
 
