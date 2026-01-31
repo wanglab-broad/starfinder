@@ -21,6 +21,10 @@ def phase_correlate(
     """
     from scipy.fft import fftn, ifftn
 
+    # Cast to float32 for faster FFT (complex64 vs complex128)
+    fixed = np.asarray(fixed, dtype=np.float32)
+    moving = np.asarray(moving, dtype=np.float32)
+
     nz, ny, nx = moving.shape
 
     # Cross-correlation in frequency domain
@@ -58,8 +62,11 @@ def apply_shift(
     from scipy.fft import fftn, ifftn
     from scipy.ndimage import fourier_shift
 
+    # Cast to float32 for faster FFT (complex64 vs complex128)
+    volume_f32 = np.asarray(volume, dtype=np.float32)
+
     # Apply shift in frequency domain
-    shifted_fft = fourier_shift(fftn(volume), shift)
+    shifted_fft = fourier_shift(fftn(volume_f32), shift)
     result = np.abs(ifftn(shifted_fft))
 
     # Zero out wrapped regions
