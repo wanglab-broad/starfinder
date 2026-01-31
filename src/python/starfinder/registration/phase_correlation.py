@@ -8,6 +8,7 @@ import numpy as np
 def phase_correlate(
     fixed: np.ndarray,
     moving: np.ndarray,
+    workers: int | None = None,
 ) -> tuple[float, float, float]:
     """
     Compute shift to align moving image to fixed using phase correlation.
@@ -15,6 +16,8 @@ def phase_correlate(
     Args:
         fixed: Reference volume with shape (Z, Y, X).
         moving: Volume to align with shape (Z, Y, X).
+        workers: Number of parallel workers for FFT. None for single-threaded,
+            -1 for all available CPUs.
 
     Returns:
         Tuple of (dz, dy, dx) shift values.
@@ -28,9 +31,9 @@ def phase_correlate(
     nz, ny, nx = moving.shape
 
     # Cross-correlation in frequency domain
-    fixed_fft = fftn(fixed)
-    moving_fft = fftn(moving)
-    cc = ifftn(fixed_fft * np.conj(moving_fft))
+    fixed_fft = fftn(fixed, workers=workers)
+    moving_fft = fftn(moving, workers=workers)
+    cc = ifftn(fixed_fft * np.conj(moving_fft), workers=workers)
 
     # Find peak
     peak_idx = np.argmax(np.abs(cc))
@@ -48,6 +51,7 @@ def phase_correlate(
 def apply_shift(
     volume: np.ndarray,
     shift: tuple[float, float, float],
+    workers: int | None = None,
 ) -> np.ndarray:
     """
     Apply shift to volume and zero out wrapped regions.
@@ -55,6 +59,8 @@ def apply_shift(
     Args:
         volume: Input volume with shape (Z, Y, X).
         shift: Tuple of (dz, dy, dx) shift values.
+        workers: Number of parallel workers for FFT. None for single-threaded,
+            -1 for all available CPUs.
 
     Returns:
         Shifted volume with same shape.
@@ -66,8 +72,8 @@ def apply_shift(
     volume_f32 = np.asarray(volume, dtype=np.float32)
 
     # Apply shift in frequency domain
-    shifted_fft = fourier_shift(fftn(volume_f32), shift)
-    result = np.abs(ifftn(shifted_fft))
+    shifted_fft = fourier_shift(fftn(volume_f32, workers=workers), shift)
+    result = np.abs(ifftn(shifted_fft, workers=workers))
 
     # Zero out wrapped regions
     nz, ny, nx = volume.shape
@@ -95,6 +101,7 @@ def register_volume(
     images: np.ndarray,
     ref_image: np.ndarray,
     mov_image: np.ndarray,
+    workers: int | None = None,
 ) -> tuple[np.ndarray, tuple[float, float, float]]:
     """
     Register multi-channel volume using phase correlation.
@@ -103,18 +110,20 @@ def register_volume(
         images: Multi-channel volume with shape (Z, Y, X, C).
         ref_image: Reference image with shape (Z, Y, X) for shift calculation.
         mov_image: Moving image with shape (Z, Y, X) for shift calculation.
+        workers: Number of parallel workers for FFT. None for single-threaded,
+            -1 for all available CPUs.
 
     Returns:
         Tuple of (registered_images, shifts).
     """
     # Calculate shift
-    shifts = phase_correlate(ref_image, mov_image)
+    shifts = phase_correlate(ref_image, mov_image, workers=workers)
 
     # Apply shift to each channel
     n_channels = images.shape[-1]
     registered = np.zeros_like(images)
 
     for c in range(n_channels):
-        registered[:, :, :, c] = apply_shift(images[:, :, :, c], shifts)
+        registered[:, :, :, c] = apply_shift(images[:, :, :, c], shifts, workers=workers)
 
     return registered, shifts
