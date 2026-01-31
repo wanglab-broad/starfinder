@@ -1,10 +1,16 @@
 """Tests for benchmark core utilities."""
 
 import time
-import numpy as np
-import pytest
 
-from starfinder.benchmark import BenchmarkResult, benchmark, measure
+import numpy as np
+
+from starfinder.benchmark import (
+    BenchmarkResult,
+    BenchmarkSuite,
+    benchmark,
+    measure,
+    run_comparison,
+)
 
 
 class TestBenchmarkResult:
@@ -90,3 +96,61 @@ class TestBenchmarkDecorator:
         arr = np.ones((10, 20, 30))
         result = array_sum(arr)
         assert result.size == (10, 20, 30)
+
+
+class TestRunComparison:
+    """Tests for run_comparison() utility."""
+
+    def test_compare_two_methods(self):
+        """run_comparison() returns results for multiple methods."""
+
+        def method_a(x):
+            return x + 1
+
+        def method_b(x):
+            return x + 2
+
+        results = run_comparison(
+            methods={"a": method_a, "b": method_b},
+            inputs=[10, 20],
+            operation="increment",
+        )
+        assert len(results) == 4  # 2 methods × 2 inputs
+        # Order is: input[0]-method_a, input[0]-method_b, input[1]-method_a, input[1]-method_b
+        assert results[0].method == "a"
+        assert results[1].method == "b"
+        assert results[2].method == "a"
+        assert results[3].method == "b"
+
+
+class TestBenchmarkSuite:
+    """Tests for BenchmarkSuite collection."""
+
+    def test_suite_collects_results(self):
+        """BenchmarkSuite aggregates multiple results."""
+        suite = BenchmarkSuite(name="test_suite")
+        suite.add(
+            BenchmarkResult(
+                method="a", operation="op", size=(10,), time_seconds=1.0, memory_mb=10.0
+            )
+        )
+        suite.add(
+            BenchmarkResult(
+                method="a", operation="op", size=(10,), time_seconds=1.2, memory_mb=12.0
+            )
+        )
+        assert len(suite.results) == 2
+
+    def test_suite_summary_stats(self):
+        """BenchmarkSuite computes summary statistics."""
+        suite = BenchmarkSuite(name="test_suite")
+        for t in [1.0, 2.0, 3.0]:
+            suite.add(
+                BenchmarkResult(
+                    method="a", operation="op", size=(10,), time_seconds=t, memory_mb=10.0
+                )
+            )
+        stats = suite.summary()
+        assert stats["mean_time"] == 2.0
+        assert stats["min_time"] == 1.0
+        assert stats["max_time"] == 3.0

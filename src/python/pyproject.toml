@@ -37,7 +37,14 @@ build-backend = "hatchling.build"
 packages = ["starfinder"]
 
 [dependency-groups]
-dev = ["pytest>=7.0", "pytest-cov>=4.0", "ruff>=0.1"]
+dev = [
+    "ipykernel>=7.1.0",
+    "jupyter>=1.1.1",
+    "jupyterlab>=4.5.3",
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.1",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["test"]
