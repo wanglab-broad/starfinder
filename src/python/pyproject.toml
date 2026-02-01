@@ -24,6 +24,7 @@ dependencies = [
 ome = ["bioio-ome-tiff>=1.0"]
 local-registration = ["SimpleITK>=2.3"]
 spatialdata = ["spatialdata>=0.1", "spatialdata-io>=0.1"]
+visualization = ["napari>=0.4"]
 dev = ["pytest>=7.0", "pytest-cov>=4.0", "ruff>=0.1"]
 
 [project.scripts]
