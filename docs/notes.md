@@ -391,6 +391,57 @@ bioio-tifffile>=1.0
 - Phase 3: Spot finding module (`starfinder.spots`)
 - Phase 4: Decoding module (`starfinder.decoding`)
 
+### 2026-01-31: QC Session & Benchmark Module Refactor
+
+- [x] **Refactored benchmark module to standalone package** (`starfinder.benchmark`)
+  - Moved from `starfinder.registration.benchmark` to standalone module
+  - `BenchmarkResult` dataclass: method, operation, size, time_seconds, memory_mb, metrics
+  - `measure(fn)` - Returns (result, time_seconds, memory_mb) using tracemalloc
+  - `@benchmark` decorator - Wraps functions to return BenchmarkResult
+  - `run_comparison()` - Compare multiple methods on same inputs
+  - `BenchmarkSuite` - Collects results with `add()`, `summary()`, `filter()` methods
+  - `print_table()`, `save_csv()`, `save_json()` - Reporting utilities
+  - `SIZE_PRESETS` - Standard volume sizes (tiny, small, medium, large, xlarge, tissue)
+  - 15 tests in `test/test_benchmark.py`
+
+- [x] **Created QC notebooks** (`tests/qc_*.ipynb`)
+  - `qc_benchmark.ipynb` - Benchmark framework validation
+  - `qc_io.ipynb` - I/O module validation (load/save roundtrip, dtype checks)
+  - `qc_synthetic.ipynb` - Synthetic data generator validation (spots overlay, encoding)
+  - `qc_registration.ipynb` - Registration module validation (shift recovery, multi-channel)
+  - Each notebook includes napari examples (wrapped in try/except for ImportError)
+
+- [x] **Added napari as optional visualization dependency**
+  - `pyproject.toml`: `visualization = ["napari>=0.4"]`
+
+- [x] **Removed old interactive notebook**
+  - Deleted `tests/test_io_interactive.ipynb` (replaced by `qc_io.ipynb`)
+
+**Files Created:**
+- `src/python/starfinder/benchmark/__init__.py` - Module exports
+- `src/python/starfinder/benchmark/core.py` - BenchmarkResult, measure, @benchmark
+- `src/python/starfinder/benchmark/runner.py` - run_comparison, BenchmarkSuite
+- `src/python/starfinder/benchmark/report.py` - print_table, save_csv, save_json
+- `src/python/starfinder/benchmark/presets.py` - SIZE_PRESETS, get_size_preset
+- `src/python/test/test_benchmark.py` - 15 unit tests
+- `tests/qc_benchmark.ipynb` - Benchmark QC notebook
+- `tests/qc_io.ipynb` - I/O QC notebook
+- `tests/qc_synthetic.ipynb` - Synthetic data QC notebook
+- `tests/qc_registration.ipynb` - Registration QC notebook
+- `docs/plans/2026-01-31-qc-session-design.md` - QC session design
+- `docs/plans/2026-01-31-qc-session-implementation.md` - Implementation plan
+
+**Files Modified:**
+- `src/python/starfinder/registration/benchmark.py` - Migrated to use new framework
+- `src/python/pyproject.toml` - Added visualization optional dependency
+
+**Test Results:** 51 tests passing (15 benchmark + 11 encoding + 15 I/O + 5 registration + 5 synthetic)
+
+**Next Steps:**
+- Run QC notebooks interactively with napari for visual validation
+- Promote stable QC checks to automated pytest tests
+- Proceed to Phase 3: Spot finding module
+
 ## Future Directions
 
 ### 1. Replace MATLAB with Python

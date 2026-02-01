@@ -3,6 +3,13 @@
 *checkpoint.ipynb
 .DS_Store
 Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
 starfinder-dev.code-workspace
 .starfinder-dev.code-workspace
 workflow/.snakemake
