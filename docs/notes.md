@@ -442,6 +442,56 @@ bioio-tifffile>=1.0
 - Promote stable QC checks to automated pytest tests
 - Proceed to Phase 3: Spot finding module
 
+### 2026-02-02: Registration Bug Fixes & QC Notebook Improvements
+
+- [x] **Fixed benchmark shift range bug** (`starfinder.registration.benchmark`)
+  - Issue: Fixed shift range (-5 to +5 for Z, -10 to +10 for YX) caused failures on small volumes
+  - For tiny volumes (5 Z-slices), a Z-shift of ±5 leaves no overlap for phase correlation
+  - Fix: Shift ranges now proportional to volume size (±25% of each dimension)
+  - `max_z_shift = max(1, size[0] // 4)` ensures realistic test scenarios
+
+- [x] **Fixed critical registration correction bug** (`starfinder.registration.phase_correlation`)
+  - Issue: `register_volume()` applied detected shift instead of correcting it (doubled drift!)
+  - `phase_correlate()` returns detected shift (how much moving differs from fixed)
+  - To align, must apply the **negative** of detected shift
+  - Fix: Added `correction = tuple(-s for s in shifts)` before `apply_shift()`
+  - Verified with correlation test: interior regions now correlate at 0.9994
+
+- [x] **Replaced napari with matplotlib in QC notebooks** (SSH compatibility)
+  - napari requires display server, unusable over SSH
+  - Implemented green/magenta composite visualization:
+    - Green channel = fixed/reference image
+    - Magenta (R+B) = moving/registered image
+    - White/gray regions = good alignment
+  - Added `make_composite()` helper function
+
+- [x] **Changed visualization to maximum intensity projection (MIP)**
+  - Previously used middle Z-slice (could miss misalignments on other slices)
+  - MIP captures all spots across entire Z-stack in single 2D image
+  - Better for sparse fluorescent data like STARmap spots
+
+- [x] **Improved synthetic dataset registration test** (qc_registration.ipynb Section 6)
+  - Changed from single channel (ch00) to max projection across all 4 channels
+  - `ref_mip = np.max(ref_stack, axis=-1)` combines channel signals
+  - More robust shift detection when individual channels have sparse signals
+  - Added before/after visualization grid for rounds 2, 3, 4
+
+**Files Modified:**
+- `src/python/starfinder/registration/benchmark.py` - Size-proportional shift ranges
+- `src/python/starfinder/registration/phase_correlation.py` - Fixed correction sign in `register_volume()`
+- `tests/qc_registration.ipynb` - Matplotlib visualization, MIP, multi-channel reference
+
+**Key Lessons:**
+- Always test the actual outcome (alignment quality), not just intermediate values (detected shifts)
+- Phase correlation returns "displacement detected", not "correction to apply"
+- Shift ranges in benchmarks must be proportional to volume dimensions
+
+**Test Results:** All 51 tests passing
+
+**Next Steps:**
+- Phase 3: Spot finding module (`starfinder.spots`)
+- Add alignment quality assertions to registration tests (not just shift detection)
+
 ## Future Directions
 
 ### 1. Replace MATLAB with Python

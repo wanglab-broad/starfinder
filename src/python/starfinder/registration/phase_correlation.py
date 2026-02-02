@@ -116,14 +116,17 @@ def register_volume(
     Returns:
         Tuple of (registered_images, shifts).
     """
-    # Calculate shift
+    # Calculate shift (how much mov_image is shifted from ref_image)
     shifts = phase_correlate(ref_image, mov_image, workers=workers)
 
-    # Apply shift to each channel
+    # Apply NEGATIVE shift to correct the alignment
+    correction = tuple(-s for s in shifts)
+
+    # Apply correction to each channel
     n_channels = images.shape[-1]
     registered = np.zeros_like(images)
 
     for c in range(n_channels):
-        registered[:, :, :, c] = apply_shift(images[:, :, :, c], shifts, workers=workers)
+        registered[:, :, :, c] = apply_shift(images[:, :, :, c], correction, workers=workers)
 
     return registered, shifts

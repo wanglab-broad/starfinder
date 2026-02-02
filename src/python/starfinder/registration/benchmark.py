@@ -64,11 +64,13 @@ def benchmark_registration(
             seed=seed,
         )
 
-        # Apply known shift
+        # Apply known shift (proportional to volume size to ensure overlap)
+        max_z_shift = max(1, size[0] // 4)
+        max_yx_shift = max(1, min(size[1], size[2]) // 4)
         known_shift = (
-            int(rng.integers(-5, 6)),
-            int(rng.integers(-10, 11)),
-            int(rng.integers(-10, 11)),
+            int(rng.integers(-max_z_shift, max_z_shift + 1)),
+            int(rng.integers(-max_yx_shift, max_yx_shift + 1)),
+            int(rng.integers(-max_yx_shift, max_yx_shift + 1)),
         )
         moving = np.roll(fixed, known_shift, axis=(0, 1, 2))
 

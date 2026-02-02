@@ -62,8 +62,10 @@ starfinder/
 │   ├── matlab-addon/      # External MATLAB toolboxes (TIFF handling, natural sort)
 │   └── python/            # Python package (starfinder)
 │       ├── starfinder/
-│       │   ├── io/        # TIFF I/O (load_multipage_tiff, load_image_stacks, save_stack)
-│       │   └── testing/   # Synthetic dataset generator
+│       │   ├── io/           # TIFF I/O (load_multipage_tiff, load_image_stacks, save_stack)
+│       │   ├── registration/ # Phase correlation registration (phase_correlate, apply_shift)
+│       │   ├── benchmark/    # Performance measurement framework
+│       │   └── testing/      # Synthetic dataset generator
 │       └── test/          # pytest tests
 ├── workflow/
 │   ├── Snakefile          # Main entry point (~58 lines)
@@ -72,6 +74,7 @@ starfinder/
 │   └── scripts/           # Python and MATLAB execution scripts
 ├── tests/
 │   ├── fixtures/synthetic/ # Synthetic test datasets (mini, standard)
+│   ├── qc_*.ipynb         # QC validation notebooks (io, registration, synthetic, benchmark)
 │   ├── tissue_2D_test.yaml
 │   └── minimal_config.yaml
 ├── config/                # Conda environment definitions
@@ -117,6 +120,17 @@ The Python backend is being developed to replace MATLAB components. Uses `(Z, Y,
   - `load_multipage_tiff(path, convert_uint8=True)` → `(Z, Y, X)` array
   - `load_image_stacks(round_dir, channel_order)` → `(Z, Y, X, C)` array
   - `save_stack(image, path, compress=False)`
+
+- **`starfinder.registration`** - DFT-based phase correlation registration
+  - `phase_correlate(fixed, moving)` → `(dz, dy, dx)` detected shift
+  - `apply_shift(volume, shift)` → shifted volume with edge zeroing
+  - `register_volume(images, ref, mov)` → registered multi-channel volume + shifts
+  - Note: `phase_correlate` returns detected displacement; apply **negative** to correct alignment
+
+- **`starfinder.benchmark`** - Performance measurement framework
+  - `BenchmarkResult` dataclass, `measure()`, `@benchmark` decorator
+  - `run_comparison()`, `BenchmarkSuite` for multi-method comparisons
+  - `print_table()`, `save_csv()`, `save_json()` reporting
 
 - **`starfinder.testing`** - Synthetic dataset generation
   - Two-base color-space encoding matching MATLAB
@@ -181,23 +195,26 @@ Detailed design documents are in `docs/`:
 ### Milestone 2 (Python Backend): IN PROGRESS
 - [x] Phase 0: Directory restructure (`code-base/` → `src/matlab/`)
 - [x] Phase 1: I/O module with bioio backend
-- [ ] Phase 2: Registration module (phase correlation, demons)
+- [x] Phase 2: Registration module (phase correlation, apply_shift, register_volume)
 - [ ] Phase 3: Spot finding & extraction
 - [ ] Phase 4: Barcode processing
 - [ ] Phase 5: Preprocessing
 - [ ] Phase 6: Dataset class & Snakemake integration
 
 ## Notes for Claude Code
+Update this file by adding tips whenever you make mistakes to help improve your accuracy.
 
 ### Development Philosophy
 - Don't tend to over-engineer, be efficient and effective.
 - Only write the minimum required tests.
 
-### Tips 
+### Tips
 - The `~/wanglab` directory is a network mount. Use `Write` instead of `Edit` tool to avoid false "file modified" errors.
 - Development notes are in `docs/notes.md`.
 - Array axis convention: `(Z, Y, X, C)` for Python, matches ITK/SimpleITK.
 - CSV coordinates: 1-based for MATLAB compatibility (Python uses 0-based internally).
-- run python with `uv run python`
-- always ask before using `git push`
+- Run Python with `uv run python`
+- Always ask before using `git push`
+- **Registration sign convention**: `phase_correlate()` returns detected displacement (how much `moving` differs from `fixed`). To correct alignment, apply the **negative** shift: `correction = tuple(-s for s in detected_shift)`
+- **Benchmark shift ranges**: When testing registration, ensure shift ranges are proportional to volume size (≤25% of each dimension) to maintain sufficient image overlap for phase correlation.
 
