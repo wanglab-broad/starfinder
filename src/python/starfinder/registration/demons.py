@@ -114,3 +114,54 @@ def demons_register(
     field_array = sitk.GetArrayFromImage(displacement_field)
 
     return field_array
+
+
+def apply_deformation(
+    volume: np.ndarray,
+    displacement_field: np.ndarray,
+) -> np.ndarray:
+    """Apply displacement field to warp a volume.
+
+    Parameters
+    ----------
+    volume : np.ndarray
+        Input volume with shape (Z, Y, X).
+    displacement_field : np.ndarray
+        Displacement field with shape (Z, Y, X, 3) where the last dimension
+        contains (dz, dy, dx) displacement vectors.
+
+    Returns
+    -------
+    np.ndarray
+        Warped volume with same shape as input.
+    """
+    sitk = _import_sitk()
+
+    # Preserve input dtype
+    input_dtype = volume.dtype
+
+    # Convert volume to SimpleITK image
+    volume_sitk = sitk.GetImageFromArray(volume.astype(np.float32))
+
+    # Convert displacement field to SimpleITK (isVector=True for vector image)
+    # DisplacementFieldTransform requires float64 vectors
+    field_sitk = sitk.GetImageFromArray(
+        displacement_field.astype(np.float64), isVector=True
+    )
+
+    # Create displacement field transform
+    transform = sitk.DisplacementFieldTransform(field_sitk)
+
+    # Resample the volume using the displacement field
+    resampler = sitk.ResampleImageFilter()
+    resampler.SetReferenceImage(volume_sitk)
+    resampler.SetInterpolator(sitk.sitkLinear)
+    resampler.SetDefaultPixelValue(0)
+    resampler.SetTransform(transform)
+
+    warped_sitk = resampler.Execute(volume_sitk)
+
+    # Convert back to numpy and preserve input dtype
+    warped = sitk.GetArrayFromImage(warped_sitk)
+
+    return warped.astype(input_dtype)
