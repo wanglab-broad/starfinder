@@ -41,3 +41,28 @@ class TestApplyDeformation:
         assert result.shape == vol.shape
         # Should be nearly identical (interpolation may introduce tiny differences)
         np.testing.assert_allclose(result, vol, rtol=1e-4, atol=1e-4)
+
+
+class TestRegisterVolumeLocal:
+    """Tests for register_volume_local function."""
+
+    def test_multichannel(self, mini_dataset):
+        """Registers all channels using computed field."""
+        from starfinder.io import load_image_stacks
+        from starfinder.registration.demons import register_volume_local
+
+        images, _ = load_image_stacks(
+            mini_dataset / "FOV_001" / "round1",
+            ["ch00", "ch01", "ch02", "ch03"],
+        )
+
+        # Use ch00 as ref/mov (identity case)
+        ref_img = images[:, :, :, 0]
+        mov_img = images[:, :, :, 0]
+
+        registered, field = register_volume_local(images, ref_img, mov_img)
+
+        assert registered.shape == images.shape
+        assert field.shape == (*images.shape[:3], 3)
+        # For identity case, registered should be similar to input
+        np.testing.assert_allclose(registered, images, rtol=0.1, atol=1.0)
