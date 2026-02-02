@@ -492,6 +492,38 @@ bioio-tifffile>=1.0
 - Phase 3: Spot finding module (`starfinder.spots`)
 - Add alignment quality assertions to registration tests (not just shift detection)
 
+### 2026-02-02: Demons Registration Module Implemented
+
+- [x] **Implemented non-rigid registration module** (`starfinder.registration.demons`)
+  - `demons_register(fixed, moving)` → displacement field using symmetric forces demons
+  - `apply_deformation(volume, field)` → apply displacement field to warp volume
+  - `register_volume_local(images, ref, mov)` → multi-channel convenience wrapper
+  - SimpleITK as optional dependency (lazy import with helpful error)
+  - Multi-resolution pyramid matching MATLAB's `imregdemons` behavior
+  - 4 tests in `test/test_demons.py`
+
+- [x] **Added QC notebook section** (Section 7 of `qc_registration.ipynb`)
+  - Synthetic local deformation generator
+  - Demonstration: global registration fails on local deformation
+  - Demonstration: local registration succeeds
+  - Displacement field visualization
+
+**Files Created:**
+- `src/python/starfinder/registration/demons.py` - Core implementation
+- `src/python/test/test_demons.py` - Unit tests
+
+**Files Modified:**
+- `src/python/starfinder/registration/__init__.py` - Added exports
+- `tests/qc_registration.ipynb` - Added Section 7
+- `docs/notes.md` - This entry
+
+**MATLAB Function Mapping:**
+| MATLAB | Python |
+|--------|--------|
+| `RegisterImagesLocal(images, ref, mov, iter, afs)` | `register_volume_local(images, ref, mov, iterations, smoothing_sigma)` |
+| `imregdemons(mov, ref, ...)` | `demons_register(fixed, moving, ...)` |
+| `imwarp(img, field)` | `apply_deformation(volume, field)` |
+
 ## Future Directions
 
 ### 1. Replace MATLAB with Python
