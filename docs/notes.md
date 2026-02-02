@@ -524,6 +524,62 @@ bioio-tifffile>=1.0
 | `imregdemons(mov, ref, ...)` | `demons_register(fixed, moving, ...)` |
 | `imwarp(img, field)` | `apply_deformation(volume, field)` |
 
+### 2026-02-02: Demons Registration Bug Fixes & Quality Metrics Module
+
+- [x] **Fixed critical axis ordering bug** (`starfinder.registration.demons`)
+  - Issue: ~90° angular error between estimated and true displacement fields
+  - Root cause: SimpleITK returns displacement vectors in (dx, dy, dz) order, but NumPy uses (dz, dy, dx)
+  - Fix: Added `field_array = field_array[..., ::-1]` to reverse vector components
+  - Also fixed in `apply_deformation()` when converting back to SimpleITK
+
+- [x] **Discovered multi-resolution pyramid degradation** for sparse images
+  - Multi-level pyramids ([100, 50, 25]) can *degrade* quality for sparse fluorescence data
+  - Upsampling artifacts and intensity interpolation blur sparse spots
+  - Single-level registration ([50]) achieved 36% improvement vs multi-level giving -2%
+  - Changed default `iterations` from `[100, 50, 25]` to `[50]`
+
+- [x] **Optimized demons defaults** for sparse fluorescence images
+  - `method="diffeomorphic"` - more stable, topology-preserving
+  - `smoothing_sigma=0.5` - lower value preserves spot sharpness
+  - `iterations=[50]` - single-level, no pyramid
+  - Added shrink factor limiting to prevent Z=1 NaN issues
+
+- [x] **Implemented spot-based quality metrics module** (`starfinder.registration.metrics`)
+  - `normalized_cross_correlation(img1, img2)` → NCC value [-1, 1]
+  - `structural_similarity(img1, img2)` → SSIM value [-1, 1] (perceptual quality)
+  - `spot_colocalization(ref, img)` → IoU and Dice of bright spots
+  - `spot_matching_accuracy(ref_spots, mov_spots)` → match rate, mean distance
+  - `detect_spots(volume)` → centroid coordinates via connected components
+  - `registration_quality_report(ref, before, after)` → comprehensive metrics dict
+  - `print_quality_report(report)` → formatted output with barcode decoding projection
+
+- [x] **Key insight: MAE is misleading for sparse images**
+  - Background pixels (99% of image) dominate MAE calculation
+  - Spot IoU showed 323% improvement vs MAE showing only 44%
+  - Spot matching accuracy is most critical for barcode decoding
+  - 90% match/round × 4 rounds = 65% decoded; 99% match/round × 4 rounds = 96% decoded
+
+- [x] **Reorganized qc_registration.ipynb**
+  - Section 7.3: Local registration with visualization (removed EPE details)
+  - Section 7.4: Quality metrics (NCC, SSIM, Spot IoU, Match Rate)
+  - Section 7.5: Parameter sensitivity (methods, pyramid, smoothing comparison)
+  - Removed: EPE/angular error sections (misleading for forward/inverse comparison)
+  - Removed: Spatial error analysis, improved registration approaches (redundant)
+
+**Files Created:**
+- `src/python/starfinder/registration/metrics.py` - Quality metrics module
+
+**Files Modified:**
+- `src/python/starfinder/registration/demons.py` - Axis ordering fix, optimized defaults
+- `src/python/starfinder/registration/__init__.py` - Added metrics exports
+- `tests/qc_registration.ipynb` - Reorganized sections, added spot-based metrics
+
+**Key Lessons:**
+- SimpleITK uses (dx, dy, dz) vector ordering, NumPy uses (dz, dy, dx)
+- Multi-resolution pyramids hurt sparse fluorescence images
+- Spot-based metrics (IoU, match rate) are more meaningful than MAE for registration QC
+- SSIM captures perceptual quality that NCC alone may miss
+
 ## Future Directions
 
 ### 1. Replace MATLAB with Python

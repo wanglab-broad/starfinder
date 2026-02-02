@@ -21,11 +21,12 @@ def demons_register(
     fixed: np.ndarray,
     moving: np.ndarray,
     iterations: list[int] | None = None,
-    smoothing_sigma: float = 1.0,
+    smoothing_sigma: float = 0.5,
+    method: str = "diffeomorphic",
 ) -> np.ndarray:
-    """Register moving image to fixed using symmetric forces demons algorithm.
+    """Register moving image to fixed using demons algorithm.
 
-    Performs non-rigid registration using SimpleITK's SymmetricForcesDemonsRegistrationFilter
+    Performs non-rigid registration using SimpleITK's demons filters
     with multi-resolution pyramid for robustness.
 
     Parameters
@@ -36,10 +37,16 @@ def demons_register(
         Moving volume to register, with shape (Z, Y, X).
     iterations : list[int] | None, optional
         Number of iterations at each pyramid level (coarse to fine).
-        Default is [100, 50, 25].
+        Default is [50] (single-level, no pyramid). Single-level works best
+        for sparse fluorescence images; multi-level pyramids can degrade quality.
     smoothing_sigma : float, optional
         Standard deviation for Gaussian smoothing of the displacement field.
-        Default is 1.0.
+        Lower values (0.5) work better for sparse images. Default is 0.5.
+    method : str, optional
+        Demons variant to use. Options:
+        - "diffeomorphic" (default): Topology-preserving, more stable
+        - "symmetric": Standard symmetric forces demons
+        - "fast_symmetric": Faster symmetric forces variant
 
     Returns
     -------
@@ -50,19 +57,36 @@ def demons_register(
     sitk = _import_sitk()
 
     if iterations is None:
-        iterations = [100, 50, 25]
+        # Single-level registration performs best for sparse fluorescence images.
+        # Multi-resolution pyramid can degrade quality due to upsampling artifacts.
+        iterations = [50]
 
     # Convert numpy arrays to SimpleITK images
     fixed_sitk = sitk.GetImageFromArray(fixed.astype(np.float32))
     moving_sitk = sitk.GetImageFromArray(moving.astype(np.float32))
 
-    # Create demons registration filter
-    demons = sitk.SymmetricForcesDemonsRegistrationFilter()
-    demons.SetStandardDeviations(smoothing_sigma)
+    # Create demons registration filter based on method
+    if method == "diffeomorphic":
+        demons = sitk.DiffeomorphicDemonsRegistrationFilter()
+        demons.SetStandardDeviations(smoothing_sigma)
+        demons.SetUpdateFieldStandardDeviations(smoothing_sigma * 0.5)
+    elif method == "fast_symmetric":
+        demons = sitk.FastSymmetricForcesDemonsRegistrationFilter()
+        demons.SetStandardDeviations(smoothing_sigma)
+        demons.SetUpdateFieldStandardDeviations(smoothing_sigma)
+    else:  # symmetric
+        demons = sitk.SymmetricForcesDemonsRegistrationFilter()
+        demons.SetStandardDeviations(smoothing_sigma)
 
     # Multi-resolution registration
+    # Compute shrink factors, ensuring minimum dimension stays >= 2
     num_levels = len(iterations)
-    shrink_factors = [2 ** (num_levels - 1 - i) for i in range(num_levels)]
+    min_dim = min(fixed.shape)
+    max_shrink = max(1, min_dim // 2)  # Ensure coarsest level has at least 2 voxels
+    shrink_factors = []
+    for i in range(num_levels):
+        ideal_shrink = 2 ** (num_levels - 1 - i)
+        shrink_factors.append(min(ideal_shrink, max_shrink))
 
     # Initialize displacement field at coarsest level
     displacement_field = None
@@ -111,7 +135,11 @@ def demons_register(
 
     # Convert back to numpy array
     # SimpleITK displacement field: GetArrayFromImage returns (Z, Y, X, 3)
+    # where vector components are in SimpleITK order: (dx, dy, dz)
     field_array = sitk.GetArrayFromImage(displacement_field)
+
+    # Convert from SimpleITK (dx, dy, dz) to numpy convention (dz, dy, dx)
+    field_array = field_array[..., ::-1]
 
     return field_array
 
@@ -141,12 +169,16 @@ def apply_deformation(
     input_dtype = volume.dtype
 
     # Convert volume to SimpleITK image
-    volume_sitk = sitk.GetImageFromArray(volume.astype(np.float32))
+    volume_sitk = sitk.GetImageFromArray(volume.astype(np.float64))
+
+    # Convert displacement field from numpy convention (dz, dy, dx) to
+    # SimpleITK convention (dx, dy, dz)
+    field_sitk_order = displacement_field[..., ::-1]
 
     # Convert displacement field to SimpleITK (isVector=True for vector image)
     # DisplacementFieldTransform requires float64 vectors
     field_sitk = sitk.GetImageFromArray(
-        displacement_field.astype(np.float64), isVector=True
+        field_sitk_order.astype(np.float64), isVector=True
     )
 
     # Create displacement field transform
@@ -172,7 +204,8 @@ def register_volume_local(
     ref_image: np.ndarray,
     mov_image: np.ndarray,
     iterations: list[int] | None = None,
-    smoothing_sigma: float = 1.0,
+    smoothing_sigma: float = 0.5,
+    method: str = "diffeomorphic",
 ) -> tuple[np.ndarray, np.ndarray]:
     """Register multi-channel volume using demons.
 
@@ -189,10 +222,12 @@ def register_volume_local(
         Moving image with shape (Z, Y, X) for field calculation.
     iterations : list[int] | None, optional
         Number of iterations per pyramid level.
-        Defaults to [100, 50, 25] for 3 levels.
+        Defaults to [50] (single-level, no pyramid - best for sparse images).
     smoothing_sigma : float, optional
         Standard deviation for displacement field smoothing.
-        Default is 1.0.
+        Lower values (0.5) work better for sparse images. Default is 0.5.
+    method : str, optional
+        Demons variant: "diffeomorphic" (default), "symmetric", "fast_symmetric".
 
     Returns
     -------
@@ -203,7 +238,8 @@ def register_volume_local(
     """
     # Compute displacement field from reference and moving images
     displacement_field = demons_register(
-        ref_image, mov_image, iterations=iterations, smoothing_sigma=smoothing_sigma
+        ref_image, mov_image, iterations=iterations,
+        smoothing_sigma=smoothing_sigma, method=method
     )
 
     # Apply the displacement field to each channel

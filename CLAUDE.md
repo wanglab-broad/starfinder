@@ -121,11 +121,22 @@ The Python backend is being developed to replace MATLAB components. Uses `(Z, Y,
   - `load_image_stacks(round_dir, channel_order)` → `(Z, Y, X, C)` array
   - `save_stack(image, path, compress=False)`
 
-- **`starfinder.registration`** - DFT-based phase correlation registration
-  - `phase_correlate(fixed, moving)` → `(dz, dy, dx)` detected shift
-  - `apply_shift(volume, shift)` → shifted volume with edge zeroing
-  - `register_volume(images, ref, mov)` → registered multi-channel volume + shifts
-  - Note: `phase_correlate` returns detected displacement; apply **negative** to correct alignment
+- **`starfinder.registration`** - Image registration (global and local)
+  - Global (rigid):
+    - `phase_correlate(fixed, moving)` → `(dz, dy, dx)` detected shift
+    - `apply_shift(volume, shift)` → shifted volume with edge zeroing
+    - `register_volume(images, ref, mov)` → registered multi-channel volume + shifts
+    - Note: `phase_correlate` returns detected displacement; apply **negative** to correct alignment
+  - Local (non-rigid, requires SimpleITK):
+    - `demons_register(fixed, moving)` → displacement field (Z, Y, X, 3)
+    - `apply_deformation(volume, field)` → warped volume
+    - `register_volume_local(images, ref, mov)` → registered volume + displacement field
+  - Quality metrics:
+    - `normalized_cross_correlation(img1, img2)` → NCC [-1, 1]
+    - `structural_similarity(img1, img2)` → SSIM [-1, 1]
+    - `spot_colocalization(ref, img)` → IoU/Dice of bright spots
+    - `spot_matching_accuracy(ref_spots, mov_spots)` → match rate
+    - `registration_quality_report(ref, before, after)` → comprehensive report
 
 - **`starfinder.benchmark`** - Performance measurement framework
   - `BenchmarkResult` dataclass, `measure()`, `@benchmark` decorator
@@ -217,4 +228,7 @@ Update this file by adding tips whenever you make mistakes to help improve your 
 - Always ask before using `git push`
 - **Registration sign convention**: `phase_correlate()` returns detected displacement (how much `moving` differs from `fixed`). To correct alignment, apply the **negative** shift: `correction = tuple(-s for s in detected_shift)`
 - **Benchmark shift ranges**: When testing registration, ensure shift ranges are proportional to volume size (≤25% of each dimension) to maintain sufficient image overlap for phase correlation.
+- **Demons registration axis ordering**: SimpleITK uses (dx, dy, dz) for displacement vectors, NumPy uses (dz, dy, dx). The `demons.py` module handles this conversion internally.
+- **Demons defaults for sparse images**: Use single-level registration (`iterations=[50]`) instead of multi-resolution pyramids. Pyramids degrade quality for sparse fluorescence data due to upsampling artifacts.
+- **Registration quality metrics**: For sparse fluorescence images, use spot-based metrics (Spot IoU, Match Rate) instead of MAE. MAE is dominated by background pixels (99% of image) and doesn't reflect spot alignment quality.
 

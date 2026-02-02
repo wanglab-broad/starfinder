@@ -9,6 +9,15 @@ from starfinder.registration.demons import (
     demons_register,
     register_volume_local,
 )
+from starfinder.registration.metrics import (
+    detect_spots,
+    normalized_cross_correlation,
+    print_quality_report,
+    registration_quality_report,
+    spot_colocalization,
+    spot_matching_accuracy,
+    structural_similarity,
+)
 from starfinder.registration.phase_correlation import (
     apply_shift,
     phase_correlate,
@@ -25,4 +34,12 @@ __all__ = [
     "demons_register",
     "apply_deformation",
     "register_volume_local",
+    # Quality metrics
+    "normalized_cross_correlation",
+    "structural_similarity",
+    "spot_colocalization",
+    "spot_matching_accuracy",
+    "detect_spots",
+    "registration_quality_report",
+    "print_quality_report",
 ]
