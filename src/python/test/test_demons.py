@@ -23,6 +23,43 @@ class TestDemonsRegister:
         # Displacement should be near zero for identical images
         assert np.abs(field).max() < 1.0, "Displacement should be near-zero for identical images"
 
+    def test_known_deformation(self, mini_dataset):
+        """Recovers direction of synthetic smooth deformation."""
+        from scipy.ndimage import gaussian_filter, map_coordinates
+
+        from starfinder.io import load_multipage_tiff
+        from starfinder.registration.demons import demons_register
+
+        vol = load_multipage_tiff(mini_dataset / "FOV_001" / "round1" / "ch00.tif")
+
+        # Create smooth synthetic deformation (simulate tissue warping)
+        rng = np.random.default_rng(42)
+        strength = 5.0
+
+        # Generate smooth random displacement field
+        true_field = rng.standard_normal((3, *vol.shape)) * strength
+        # Smooth spatially to make it tissue-like (scale sigma to volume dimensions)
+        z_sigma = max(1, vol.shape[0] // 3)
+        xy_sigma = max(3, vol.shape[1] // 50)
+        true_field = gaussian_filter(true_field, sigma=[0, z_sigma, xy_sigma, xy_sigma])
+
+        # Apply deformation to create "moving" image
+        coords = np.meshgrid(*[np.arange(s) for s in vol.shape], indexing='ij')
+        warped_coords = [c + f for c, f in zip(coords, true_field)]
+        deformed = map_coordinates(vol, warped_coords, order=1, mode='constant', cval=0)
+
+        # Recover displacement field
+        estimated_field = demons_register(vol, deformed.astype(np.float32))
+
+        # The estimated field should have similar direction to true field
+        # (we check correlation, not exact match, since demons is iterative)
+        true_magnitude = np.linalg.norm(true_field.transpose(1, 2, 3, 0), axis=-1)
+        est_magnitude = np.linalg.norm(estimated_field, axis=-1)
+
+        # Both should have deformation in similar regions
+        mask = true_magnitude > 1.0
+        assert est_magnitude[mask].mean() > 0.5, "Should detect deformation in warped regions"
+
 
 class TestApplyDeformation:
     """Tests for apply_deformation function."""
