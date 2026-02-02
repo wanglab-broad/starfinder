@@ -165,3 +165,52 @@ def apply_deformation(
     warped = sitk.GetArrayFromImage(warped_sitk)
 
     return warped.astype(input_dtype)
+
+
+def register_volume_local(
+    images: np.ndarray,
+    ref_image: np.ndarray,
+    mov_image: np.ndarray,
+    iterations: list[int] | None = None,
+    smoothing_sigma: float = 1.0,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Register multi-channel volume using demons.
+
+    This function computes the displacement field between ref_image and mov_image,
+    then applies that field to all channels in the images volume.
+
+    Parameters
+    ----------
+    images : np.ndarray
+        Multi-channel volume with shape (Z, Y, X, C).
+    ref_image : np.ndarray
+        Reference image with shape (Z, Y, X) for field calculation.
+    mov_image : np.ndarray
+        Moving image with shape (Z, Y, X) for field calculation.
+    iterations : list[int] | None, optional
+        Number of iterations per pyramid level.
+        Defaults to [100, 50, 25] for 3 levels.
+    smoothing_sigma : float, optional
+        Standard deviation for displacement field smoothing.
+        Default is 1.0.
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray]
+        Tuple of (registered_images, displacement_field).
+        - registered_images: Warped volume with shape (Z, Y, X, C)
+        - displacement_field: Computed field with shape (Z, Y, X, 3)
+    """
+    # Compute displacement field from reference and moving images
+    displacement_field = demons_register(
+        ref_image, mov_image, iterations=iterations, smoothing_sigma=smoothing_sigma
+    )
+
+    # Apply the displacement field to each channel
+    n_channels = images.shape[-1]
+    registered = np.empty_like(images)
+
+    for c in range(n_channels):
+        registered[:, :, :, c] = apply_deformation(images[:, :, :, c], displacement_field)
+
+    return registered, displacement_field
