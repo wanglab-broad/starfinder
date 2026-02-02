@@ -22,3 +22,22 @@ class TestDemonsRegister:
         assert field.shape == (*vol.shape, 3)
         # Displacement should be near zero for identical images
         assert np.abs(field).max() < 1.0, "Displacement should be near-zero for identical images"
+
+
+class TestApplyDeformation:
+    """Tests for apply_deformation function."""
+
+    def test_identity_field(self, mini_dataset):
+        """Zero displacement field returns original volume."""
+        from starfinder.io import load_multipage_tiff
+        from starfinder.registration.demons import apply_deformation
+
+        vol = load_multipage_tiff(mini_dataset / "FOV_001" / "round1" / "ch00.tif")
+
+        # Zero displacement field
+        field = np.zeros((*vol.shape, 3), dtype=np.float32)
+        result = apply_deformation(vol, field)
+
+        assert result.shape == vol.shape
+        # Should be nearly identical (interpolation may introduce tiny differences)
+        np.testing.assert_allclose(result, vol, rtol=1e-4, atol=1e-4)

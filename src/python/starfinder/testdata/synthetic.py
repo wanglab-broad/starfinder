@@ -573,7 +573,7 @@ def create_test_volume(
         spot_sigma=1.5,
         seed=seed,
         add_noise=True,
-        dtype="uint16",
+        dtype="uint8",
     )
 
     return volume
