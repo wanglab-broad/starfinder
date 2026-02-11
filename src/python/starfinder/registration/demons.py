@@ -44,6 +44,7 @@ def demons_register(
         Lower values (0.5) work better for sparse images. Default is 0.5.
     method : str, optional
         Demons variant to use. Options:
+        - "demons": Basic demons (best for sparse fluorescence images)
         - "diffeomorphic" (default): Topology-preserving, more stable
         - "symmetric": Standard symmetric forces demons
         - "fast_symmetric": Faster symmetric forces variant
@@ -66,7 +67,10 @@ def demons_register(
     moving_sitk = sitk.GetImageFromArray(moving.astype(np.float32))
 
     # Create demons registration filter based on method
-    if method == "diffeomorphic":
+    if method == "demons":
+        demons = sitk.DemonsRegistrationFilter()
+        demons.SetStandardDeviations(smoothing_sigma)
+    elif method == "diffeomorphic":
         demons = sitk.DiffeomorphicDemonsRegistrationFilter()
         demons.SetStandardDeviations(smoothing_sigma)
         demons.SetUpdateFieldStandardDeviations(smoothing_sigma * 0.5)
@@ -74,9 +78,14 @@ def demons_register(
         demons = sitk.FastSymmetricForcesDemonsRegistrationFilter()
         demons.SetStandardDeviations(smoothing_sigma)
         demons.SetUpdateFieldStandardDeviations(smoothing_sigma)
-    else:  # symmetric
+    elif method == "symmetric":
         demons = sitk.SymmetricForcesDemonsRegistrationFilter()
         demons.SetStandardDeviations(smoothing_sigma)
+    else:
+        raise ValueError(
+            f"Unknown method: '{method}'. "
+            f"Options: 'demons', 'diffeomorphic', 'symmetric', 'fast_symmetric'"
+        )
 
     # Multi-resolution registration
     # Compute shrink factors, ensuring minimum dimension stays >= 2
@@ -91,7 +100,7 @@ def demons_register(
     # Initialize displacement field at coarsest level
     displacement_field = None
 
-    for level, (shrink, num_iter) in enumerate(zip(shrink_factors, iterations)):
+    for shrink, num_iter in zip(shrink_factors, iterations):
         # Shrink images for this pyramid level
         if shrink > 1:
             fixed_level = sitk.Shrink(fixed_sitk, [shrink] * 3)

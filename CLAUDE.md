@@ -138,10 +138,25 @@ The Python backend is being developed to replace MATLAB components. Uses `(Z, Y,
     - `spot_matching_accuracy(ref_spots, mov_spots)` → match rate
     - `registration_quality_report(ref, before, after)` → comprehensive report
 
-- **`starfinder.benchmark`** - Performance measurement framework
+- **`starfinder.benchmark`** - Performance measurement, data generation, and evaluation
   - `BenchmarkResult` dataclass, `measure()`, `@benchmark` decorator
   - `run_comparison()`, `BenchmarkSuite` for multi-method comparisons
   - `print_table()`, `save_csv()`, `save_json()` reporting
+  - Benchmark data generation (`starfinder.benchmark.data`):
+    - `create_benchmark_volume()` - Synthetic spot generation
+    - `apply_global_shift()` - Zero-padded shifts (no wrap-around)
+    - `create_deformation_field()` - Polynomial, Gaussian, multi-point deformations
+    - `apply_deformation_field()` - Scipy-based warping
+    - `generate_inspection_image()` - Green-magenta before/after overlays
+    - `extract_real_benchmark_data()` - Round1/round2 MIP extraction
+  - Benchmark evaluation (`starfinder.benchmark.evaluate`):
+    - `evaluate_registration(ref, mov, registered)` - Compute all quality metrics
+    - `evaluate_single(registered_path, data_dir)` - Evaluate one registered image from disk
+    - `evaluate_directory(result_dir, data_dir)` - Batch-evaluate a backend tree
+    - `generate_inspection(ref, mov, registered, metadata, path)` - 5-panel inspection PNG
+    - CLI: `uv run python -m starfinder.benchmark.evaluate <result_dir> [--data-dir ...]`
+    - Two-phase design: Phase 1 (run) saves registered images, Phase 2 (evaluate) computes metrics uniformly
+  - Presets: tiny, small, medium, large, xlarge, tissue, thick_medium
 
 - **`starfinder.testing`** - Synthetic dataset generation
   - Two-base color-space encoding matching MATLAB
@@ -231,4 +246,15 @@ Update this file by adding tips whenever you make mistakes to help improve your 
 - **Demons registration axis ordering**: SimpleITK uses (dx, dy, dz) for displacement vectors, NumPy uses (dz, dy, dx). The `demons.py` module handles this conversion internally.
 - **Demons defaults for sparse images**: Use single-level registration (`iterations=[50]`) instead of multi-resolution pyramids. Pyramids degrade quality for sparse fluorescence data due to upsampling artifacts.
 - **Registration quality metrics**: For sparse fluorescence images, use spot-based metrics (Spot IoU, Match Rate) instead of MAE. MAE is dominated by background pixels (99% of image) and doesn't reflect spot alignment quality.
+- **Benchmark data generation**:
+  - Use `apply_global_shift()` with zero-padding, NOT `np.roll()` which wraps around
+  - Use fixed pixel margins (5px) for spot placement, not percentage-based (causes blank bands on large images)
+  - Use preset-specific random seeds to ensure different shifts for each preset
+  - Exclude 0 from Z-shift options to ensure non-zero Z displacements
+  - Cap deformation magnitudes at fixed pixels (15/30px) for large images to avoid excessive warping
+- **Benchmark data location**: `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/` (~50GB total)
+  - Input data: `data/synthetic/` (7 presets) and `data/real/` (3 datasets)
+  - Registration results: `results/registration/` (global_python, global_matlab, local_tuning, local_matlab, local_python, global_comparison, local_comparison, figures, scripts)
+- **Two-phase benchmark workflow**: Phase 1 saves `registered_{backend}.tif` + `run_{backend}.json`; Phase 2 (`evaluate.py`) computes `metrics_{backend}.json` + `inspection_{backend}.png` uniformly for all backends
+- **SSIM on large volumes**: For volumes >100M voxels, SSIM is computed on 2D MIP (maximum intensity projection along Z) instead of full 3D. Output includes `"ssim_method": "mip"` or `"3d"` to indicate which was used.
 

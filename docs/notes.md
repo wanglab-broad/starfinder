@@ -580,6 +580,169 @@ bioio-tifffile>=1.0
 - Spot-based metrics (IoU, match rate) are more meaningful than MAE for registration QC
 - SSIM captures perceptual quality that NCC alone may miss
 
+### 2026-02-04: Registration Benchmark Data Generation (Task 1 Complete)
+
+- [x] **Created benchmark data generation module** (`starfinder.benchmark.data`)
+  - `create_benchmark_volume()` - Synthetic 3D volume with Gaussian spots
+  - `apply_global_shift()` - Zero-padded shifts (no wrap-around)
+  - `create_deformation_field()` - Polynomial, Gaussian bump, multi-point deformations
+  - `apply_deformation_field()` - Scipy map_coordinates-based warping
+  - `generate_inspection_image()` - Green-magenta MIP overlays (G=ref, M=mov)
+  - `generate_synthetic_benchmark()` - Full preset generation pipeline
+  - `extract_real_benchmark_data()` - Round1/round2 MIP extraction from real datasets
+
+- [x] **Extended benchmark presets** (`starfinder.benchmark.presets`)
+  - Added: `thick_medium` (100, 1024, 1024), plus existing tiny through tissue
+  - `SPOT_COUNTS`: Density scaling (~50 spots per 10⁶ voxels)
+  - `SHIFT_RANGES`: Proportional to volume size (≤25% of each dimension)
+  - `DEFORMATION_CONFIGS`: Percentage-based with pixel caps
+
+- [x] **Generated benchmark datasets** (Task 1 of benchmark plan)
+  - **Synthetic:** 7 presets × 6 pairs each = 42 ref/mov pairs (~31GB)
+    - tiny (8×128×128), small (16×256×256), medium (32×512×512)
+    - large (30×1024×1024), xlarge (30×1496×1496), tissue (30×3072×3072)
+    - thick_medium (100×1024×1024)
+  - **Real:** 3 datasets (cell_culture_3D, tissue_2D, LN) (~0.9GB)
+  - **Location:** `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/`
+
+- [x] **Fixed multiple data generation issues**
+  - Z-axis shifts always 0 → Fixed with preset-specific seeds + exclude 0 from options
+  - Wrap-around in shifted images → Fixed with zero-padding instead of np.roll
+  - Large blank margins around spots → Fixed with fixed 5px margin (not percentage)
+  - Excessive deformation on large images → Fixed with percentage scaling + pixel caps (15/30px)
+
+- [x] **Removed thick_large preset**
+  - (200×2722×2722) required ~112GB RAM for deformation fields
+  - OOM killed during generation; decided to skip entirely
+
+- [x] **Updated benchmark plan** (`docs/plans/2026-02-03-registration-benchmark-plan.md`)
+  - Task 1 marked complete
+  - Visual inspection checkpoint passed
+  - Added Section 2.3: Output artifacts per benchmark run (registered images + inspection.png)
+  - Added checkpoint after Task 2 for registration results inspection
+
+**Files Created:**
+- `src/python/starfinder/benchmark/data.py` - Data generation module (~800 lines)
+
+**Files Modified:**
+- `src/python/starfinder/benchmark/presets.py` - Added thick presets, DEFORMATION_CONFIGS
+- `src/python/starfinder/benchmark/__init__.py` - Export new functions
+- `docs/plans/2026-02-03-registration-benchmark-plan.md` - Updated plan
+
+**Key Lessons:**
+- `np.roll()` wraps around; use slicing with zero-fill for realistic shifted images
+- Percentage-based spot margins create visible blank bands on large images
+- Same random seed across presets → same shifts; use preset-specific seeds
+- Deformation field memory: (Z, Y, X, 3) float32 = ~4× volume size × 3
+- thick_large (1.5B voxels) exceeded memory limits; keep presets ≤300M voxels
+
+**Next Steps:**
+- Task 2: Performance benchmarking with registered image output
+- Task 3: Reporting and visualization
+
+### 2026-02-10: Benchmark Folder Reorganization
+
+- [x] **Reorganized benchmark folder structure**
+  - Renamed `registration_benchmark/` → `starfinder_benchmark/` (default output folder for all future benchmarks)
+  - Created `data/` folder, moved `synthetic/` and `real/` into it
+  - Moved all registration results under `results/registration/`
+  - Deleted `overview.png` (panels too small, not readable)
+
+- [x] **Renamed result folders for clarity**
+  - `global/` → `global_python/` (Python-only global registration results)
+  - `matlab_global/` → `global_matlab/` (MATLAB DFTRegister3D results)
+  - `tuning/` → `local_tuning/` (demons parameter grid search)
+  - `matlab/` → `local_matlab/` (MATLAB imregdemons results)
+  - Created `local_python/` (placeholder for future Python local registration benchmarks)
+  - Created `scripts/` folder under `results/registration/` for MATLAB/Python comparison scripts
+
+**New structure:**
+```
+starfinder_benchmark/
+├── data/
+│   ├── synthetic/          # 7 presets (tiny → tissue), 31 GB
+│   └── real/               # 3 datasets (cell_culture_3D, tissue_2D, LN), 886 MB
+└── results/
+    └── registration/
+        ├── global_python/       # Python phase_correlate results (1.9 GB)
+        ├── global_matlab/       # MATLAB DFTRegister3D results (446 MB)
+        ├── global_comparison/   # MATLAB vs Python head-to-head (1.8 GB)
+        ├── local_tuning/        # Demons parameter grid search (107 MB)
+        ├── local_matlab/        # MATLAB imregdemons results (14 GB)
+        ├── local_python/        # (empty, future Python demons results)
+        ├── local_comparison/    # MATLAB vs Python demons comparison (409 MB)
+        ├── combined/            # Aggregated results JSON (8 KB)
+        ├── figures/             # Publication-style figures (8.5 MB)
+        └── scripts/             # MATLAB/Python comparison scripts (136 KB)
+```
+
+### 2026-02-10: Two-Phase Benchmark Workflow & Evaluate Module
+
+- [x] **Designed and implemented two-phase benchmark architecture**
+  - Phase 1 (Run): Backend-specific — run algorithm, record time + memory, save `registered_{backend}.tif` + `run_{backend}.json`
+  - Phase 2 (Evaluate): Unified Python — load saved images, compute all metrics with identical code, save `metrics_{backend}.json` + `inspection_{backend}.png`
+  - Ensures fair comparison: all backends evaluated by same metric computation code
+  - Plan: `docs/plans/2026-02-10-two-phase-benchmark-plan.md`
+
+- [x] **Created `starfinder.benchmark.evaluate` module** (`src/python/starfinder/benchmark/evaluate.py`)
+  - `evaluate_registration(ref, mov_before, registered, skip_ssim=False)` → flat metrics dict
+  - `generate_inspection(ref, mov, registered, metadata, output_path)` → 5-panel PNG
+  - `evaluate_single(registered_path, data_dir)` → evaluate one registered image from disk
+  - `evaluate_directory(result_dir, data_dir)` → batch-evaluate all results in a backend tree
+  - CLI: `uv run python -m starfinder.benchmark.evaluate <result_dir> [--data-dir ...] [--force]`
+  - Handles legacy JSON naming (`result_*.json` → `run_*.json`)
+  - Supports both synthetic and real datasets via `_resolve_data_paths()`
+
+- [x] **Refactored `runner.py` to delegate to evaluate module**
+  - `_compute_quality_metrics()` → delegates to `evaluate.evaluate_registration()`
+  - `generate_registration_inspection()` → delegates to `evaluate.generate_inspection()`
+  - Updated `DEFAULT_BENCHMARK_DATA_DIR` to `starfinder_benchmark/data`
+  - Fixed `results_dir` default: `self.data_dir.parent / "results"` (sibling of data/)
+
+- [x] **Updated MATLAB benchmark scripts** (on network mount)
+  - `benchmark_global_single.m` — output to `global_matlab/` tree, `run_matlab.json`, VmRSS memory measurement
+  - `benchmark_local_single.m` — output to `local_matlab/` tree, VmRSS memory measurement
+  - Both use `/proc/self/status` VmRSS delta for memory tracking (since MATLAB `memory()` is Windows-only)
+
+- [x] **Updated Python benchmark scripts** (on network mount)
+  - `benchmark_global_single.py` — output to `global_python/` tree, `run_python.json`, uses `measure()` for timing+memory
+  - `benchmark_local_single.py` — same pattern for local registration
+
+- [x] **MIP SSIM fallback for large volumes**
+  - For volumes >100M voxels (e.g., tissue_2D at 283M), full 3D SSIM takes 20+ minutes
+  - Instead of skipping SSIM entirely, computes SSIM on 2D MIP (maximum intensity projection along Z)
+  - Output includes `"ssim_method": "mip"` or `"ssim_method": "3d"` to indicate which was used
+  - MIP SSIM runs in seconds while still providing meaningful structural similarity
+
+- [x] **Cross-validated metrics**
+  - LN and cell_culture_3D metrics from new evaluator match old post-hoc `global_evaluation.json` exactly
+  - NCC, match rate, spot IoU all consistent between old and new code paths
+
+**Per-dataset output structure (all backends):**
+```
+{result_dir}/{dataset}/
+  registered_{backend}.tif        # Phase 1: registered volume
+  run_{backend}.json              # Phase 1: timing, memory, shifts, status
+  metrics_{backend}.json          # Phase 2: all quality metrics + ssim_method
+  inspection_{backend}.png        # Phase 2: green-magenta overlay
+```
+
+**Files Created:**
+- `src/python/starfinder/benchmark/evaluate.py` — Phase 2 evaluator (~600 lines)
+- `docs/plans/2026-02-10-two-phase-benchmark-plan.md` — Implementation plan
+
+**Files Modified:**
+- `src/python/starfinder/benchmark/runner.py` — Delegated metrics/inspection to evaluate.py
+- `src/python/starfinder/benchmark/__init__.py` — Added evaluate exports
+- Network mount scripts: `benchmark_{global,local}_single.{m,py}` — Updated output format + memory tracking
+
+**Test Results:** 55 tests passing
+
+**Next Steps:**
+- Run Phase 1 on all missing synthetic presets in global_matlab/
+- Run Phase 2 evaluator on all backend trees to generate unified metrics
+- Task 3 of benchmark plan: Reporting and visualization
+
 ## Future Directions
 
 ### 1. Replace MATLAB with Python
