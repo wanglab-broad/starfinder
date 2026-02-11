@@ -128,9 +128,15 @@ The Python backend is being developed to replace MATLAB components. Uses `(Z, Y,
     - `register_volume(images, ref, mov)` → registered multi-channel volume + shifts
     - Note: `phase_correlate` returns detected displacement; apply **negative** to correct alignment
   - Local (non-rigid, requires SimpleITK):
-    - `demons_register(fixed, moving)` → displacement field (Z, Y, X, 3)
+    - `demons_register(fixed, moving, method, iterations, smoothing_sigma, pyramid_mode)` → displacement field (Z, Y, X, 3)
     - `apply_deformation(volume, field)` → warped volume
     - `register_volume_local(images, ref, mov)` → registered volume + displacement field
+    - `matlab_compatible_config()` → dict matching MATLAB imregdemons defaults
+    - Pyramid modes: `"sitk"` (naive subsampling), `"antialias"` (MATLAB-matching Butterworth)
+  - Pyramid utilities (`starfinder.registration.pyramid`):
+    - `butterworth_3d(shape, cutoff, order)` → 3D Butterworth low-pass filter
+    - `antialias_resize(volume, factor)` → anti-aliased 3D resize
+    - `pad_for_pyramiding(volume, levels)` / `crop_padding(volume, pad_widths)`
   - Quality metrics:
     - `normalized_cross_correlation(img1, img2)` → NCC [-1, 1]
     - `structural_similarity(img1, img2)` → SSIM [-1, 1]
@@ -244,7 +250,9 @@ Update this file by adding tips whenever you make mistakes to help improve your 
 - **Registration sign convention**: `phase_correlate()` returns detected displacement (how much `moving` differs from `fixed`). To correct alignment, apply the **negative** shift: `correction = tuple(-s for s in detected_shift)`
 - **Benchmark shift ranges**: When testing registration, ensure shift ranges are proportional to volume size (≤25% of each dimension) to maintain sufficient image overlap for phase correlation.
 - **Demons registration axis ordering**: SimpleITK uses (dx, dy, dz) for displacement vectors, NumPy uses (dz, dy, dx). The `demons.py` module handles this conversion internally.
-- **Demons defaults for sparse images**: Use single-level registration (`iterations=[50]`) instead of multi-resolution pyramids. Pyramids degrade quality for sparse fluorescence data due to upsampling artifacts.
+- **Demons defaults for sparse images**: Use single-level registration (`iterations=[50]`) instead of multi-resolution pyramids. Pyramids degrade quality for sparse fluorescence data due to upsampling artifacts. However, with `pyramid_mode="antialias"`, multi-level pyramids work well — use `matlab_compatible_config()` for MATLAB-matching quality.
+- **Anti-aliased pyramid mode**: `pyramid_mode="antialias"` uses Butterworth-filtered downsampling matching MATLAB's `imregdemons` internal `antialiasResize`. This prevents the spot-destroying aliasing of SimpleITK's naive `Shrink`. Use with multi-level iterations like `[100,50,25]`.
+- **Python vs MATLAB local registration benchmark (2026-02-11)**: With matched settings ([100,50,25], sigma/AFS=1.0), Python `py_diffeo` beats MATLAB on NCC (+0.115) and Match Rate (+0.022). Python `py_demons` (Thirion) is 1.6x faster. Results at `local_comparison/`.
 - **Registration quality metrics**: For sparse fluorescence images, use spot-based metrics (Spot IoU, Match Rate) instead of MAE. MAE is dominated by background pixels (99% of image) and doesn't reflect spot alignment quality.
 - **Benchmark data generation**:
   - Use `apply_global_shift()` with zero-padding, NOT `np.roll()` which wraps around
@@ -254,7 +262,7 @@ Update this file by adding tips whenever you make mistakes to help improve your 
   - Cap deformation magnitudes at fixed pixels (15/30px) for large images to avoid excessive warping
 - **Benchmark data location**: `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/` (~50GB total)
   - Input data: `data/synthetic/` (7 presets) and `data/real/` (3 datasets)
-  - Registration results: `results/registration/` (global_python, global_matlab, local_tuning, local_matlab, local_python, global_comparison, local_comparison, figures, scripts)
+  - Registration results: `results/registration/` (global_python, global_matlab, local_tuning, local_matlab, local_python, local_antialias, global_comparison, local_comparison, figures, scripts)
 - **Two-phase benchmark workflow**: Phase 1 saves `registered_{backend}.tif` + `run_{backend}.json`; Phase 2 (`evaluate.py`) computes `metrics_{backend}.json` + `inspection_{backend}.png` uniformly for all backends
-- **SSIM on large volumes**: For volumes >100M voxels, SSIM is computed on 2D MIP (maximum intensity projection along Z) instead of full 3D. Output includes `"ssim_method": "mip"` or `"3d"` to indicate which was used.
+- **MIP fast path for large volumes**: For volumes >100M voxels, `evaluate_registration(use_mip=True)` computes SSIM and spot metrics (detect_spots, spot_colocalization, spot_matching_accuracy) on 2D MIP instead of full 3D. Output includes `"ssim_method"` and `"spot_method"` fields ("mip" or "3d") to indicate which path was used. `evaluate_directory(use_mip_above=)` controls the threshold. CLI flag: `--use-mip-above`.
 

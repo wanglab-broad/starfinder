@@ -7,6 +7,7 @@ from starfinder.registration._skimage_backend import phase_correlate_skimage
 from starfinder.registration.demons import (
     apply_deformation,
     demons_register,
+    matlab_compatible_config,
     register_volume_local,
 )
 from starfinder.registration.metrics import (
@@ -34,6 +35,7 @@ __all__ = [
     "demons_register",
     "apply_deformation",
     "register_volume_local",
+    "matlab_compatible_config",
     # Quality metrics
     "normalized_cross_correlation",
     "structural_similarity",

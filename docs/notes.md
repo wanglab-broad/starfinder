@@ -743,6 +743,103 @@ starfinder_benchmark/
 - Run Phase 2 evaluator on all backend trees to generate unified metrics
 - Task 3 of benchmark plan: Reporting and visualization
 
+### 2026-02-10: MIP-based Spot Detection for Large Volumes
+
+Phase 2 evaluation was bottlenecked by 3D spot detection on large datasets like tissue_2D (283M voxels). The existing `skip_ssim` fast path already computed SSIM on 2D MIP, but spot detection (`scipy.ndimage.label` + `center_of_mass`) and colocalization still ran on full 3D — 3 calls on ~283M voxels each.
+
+- [x] **Renamed `skip_ssim` → `use_mip`** throughout the call chain
+  - `evaluate_registration(use_mip=)`, `evaluate_single(use_mip=)`, `evaluate_directory(use_mip_above=)`
+  - CLI: `--skip-ssim-above` → `--use-mip-above`
+- [x] **Extended MIP fast path for spot metrics**: In `use_mip=True` branch, `spot_colocalization()` and `detect_spots()` now run on 2D MIP arrays (already computed for SSIM) instead of full 3D
+- [x] **Added `spot_method` field** to metrics JSON output: `"mip"` or `"3d"` for provenance tracking (analogous to existing `ssim_method`)
+- [x] **Re-evaluated global_python and global_matlab** with `--force` — all 10 datasets each, ~9 min total
+
+**Files Modified:**
+- `src/python/starfinder/benchmark/evaluate.py` — Core MIP fast path extension + rename
+- `src/python/starfinder/benchmark/runner.py` — Updated call site
+
+**Validation:**
+- 55 tests passing
+- tissue_2D correctly uses MIP path (`ssim_method: "mip"`, `spot_method: "mip"`)
+- Small datasets correctly use full 3D path (`ssim_method: "3d"`, `spot_method: "3d"`)
+- Python vs MATLAB metrics consistent (NCC after: 0.594 vs 0.602, match rate: 0.156 vs 0.155)
+
+### 2026-02-11: Anti-Aliased Pyramid for Demons Registration
+
+- [x] **Implemented MATLAB-matching anti-aliased pyramid** (`starfinder.registration.pyramid`)
+  - `butterworth_3d(shape, cutoff, order)` — Separable 3D Butterworth low-pass filter matching MATLAB's `butterwth()`
+  - `antialias_resize(volume, factor)` — Anti-aliased 3D resize matching MATLAB's `antialiasResize()`
+  - `pad_for_pyramiding(volume, levels)` → `(padded, pad_widths)` — Replicate-border padding for clean 2x downsampling
+  - `crop_padding(volume, pad_widths)` — Remove padding after registration
+  - Key insight: MATLAB's `imregdemons` uses Butterworth-filtered downsampling internally, while SimpleITK's `Shrink` does naive subsampling (every Nth voxel). This destroys sparse spots at coarse levels.
+
+- [x] **Added `pyramid_mode="antialias"` to `demons_register()`**
+  - New parameter: `pyramid_mode` (`"sitk"` default, `"antialias"` for MATLAB-style)
+  - When `antialias` + multi-level: pads volumes, downsamples with Butterworth filter, upsamples displacement fields between levels with magnitude scaling
+  - Uses float64 precision matching MATLAB's `double()`
+  - Single-level or `sitk` mode: existing behavior unchanged
+
+- [x] **Added `matlab_compatible_config()` convenience function**
+  - Returns `{iterations=[100,50,25], sigma=1.0, method="demons", pyramid_mode="antialias"}`
+  - Usage: `field = demons_register(fixed, moving, **matlab_compatible_config())`
+
+- [x] **Added tests** (`test/test_demons.py`)
+  - `TestPyramidUtilities`: butterworth shape, resize roundtrip, pad/crop roundtrip, no-op padding
+  - `TestAntialiasedDemonsRegister`: identity test, antialias-outperforms-sitk test
+  - `TestMatlabCompatibleConfig`: config keys validation
+
+- [x] **Plan**: `docs/plans/2026-02-11-optimize-python-demons-plan.md` — all 5 steps complete
+
+**Files Created:**
+- `src/python/starfinder/registration/pyramid.py` — Anti-aliased pyramid utilities (~150 lines)
+
+**Files Modified:**
+- `src/python/starfinder/registration/demons.py` — Added `_run_antialias_pyramid()`, `pyramid_mode` param, `matlab_compatible_config()`
+- `src/python/starfinder/registration/__init__.py` — Added `matlab_compatible_config` export
+- `src/python/test/test_demons.py` — Added pyramid + antialias tests
+
+### 2026-02-11: Python vs MATLAB Local Registration Comparison Benchmark
+
+- [x] **Ran head-to-head comparison** with matched settings across 3 datasets × 3 configs = 21 total runs
+  - **Datasets**: large (31M vox, 5 deformation types), cell_culture_3D (67M vox), LN (112M vox)
+  - **Configs**: `py_demons` (Thirion + antialias), `py_diffeo` (diffeomorphic + antialias), `matlab` (imregdemons)
+  - All used identical iterations `[100,50,25]` and sigma/AFS=1.0 with 3-level pyramids
+
+- [x] **Created benchmark scripts** (at `.../starfinder_benchmark/results/registration/scripts/`)
+  - `benchmark_local_comparison_single.py` — Python worker (117 lines)
+  - `benchmark_local_comparison_matlab.m` — MATLAB worker with matched AFS=1.0 (130 lines)
+  - `run_local_comparison_v2.py` — Orchestrator with `/usr/bin/time -v` wrapping (309 lines)
+  - `generate_local_comparison_v2.py` — Report generator merging quality + timing (203 lines)
+
+- [x] **All 21 runs completed** (0 failures, 39 min total)
+  - Phase 2 evaluation computed metrics + inspection images for all runs
+  - Results at: `.../results/registration/local_comparison/`
+
+- [x] **Key results**:
+
+  | Metric | py_demons vs MATLAB | py_diffeo vs MATLAB |
+  |--------|--------------------|--------------------|
+  | Mean NCC delta | +0.042 | +0.115 |
+  | Mean Match Rate delta | -0.035 | +0.022 |
+  | Mean speedup | 1.60x | 1.12x |
+
+  - **py_diffeo is the quality winner**: beats MATLAB on both NCC and Match Rate
+  - **py_demons is the speed winner**: 1.6x faster with better NCC, slight Match Rate tradeoff
+  - Anti-aliased pyramid closes the Python-MATLAB gap: on `gaussian_small`, Python NCC 0.939 vs MATLAB 0.853
+  - Peak RSS comparable: ~1.0-1.1x MATLAB on synthetic, ~1.04-1.07x on real
+
+- [x] **Plan**: `docs/plans/2026-02-11-local-comparison-benchmark-plan.md`
+
+**Files Created** (on network mount):
+- `benchmark_local_comparison_single.py`, `benchmark_local_comparison_matlab.m`
+- `run_local_comparison_v2.py`, `generate_local_comparison_v2.py`
+
+**Output artifacts:**
+- `local_comparison/summary.csv` — Phase 2 quality metrics (21 rows)
+- `local_comparison/comparison.csv` — Merged quality + timing comparison (7 pivot rows)
+- `local_comparison/{dataset}/timing_*.json` — GNU time measurements
+- `local_comparison/{dataset}/inspection_*.png` — Green-magenta overlays
+
 ## Future Directions
 
 ### 1. Replace MATLAB with Python
