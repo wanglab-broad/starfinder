@@ -48,7 +48,7 @@ Location: `/home/unix/jiahao/wanglab/Data/Processed/sample-dataset/`
   - [x] Phase 2: Registration module (DFT-based phase correlation)
   - [x] Phase 3: Spot finding & extraction (find_spots_3d, extract_from_location)
   - [x] Phase 4: Barcode processing (encode/decode, codebook, filter_reads)
-  - [] Phase 5: Segmentation integration
+  - [x] Phase 5: Preprocessing (min_max_normalize, histogram_match, morphological_reconstruction, tophat_filter, make_projection)
   - [] Phase 6: Dataset/FOV class wrapper
   - [] Adopt new data structure such as h5 and OME-Zarr, but also ensure backward compatibility
   - [] Adopt new 2D/3D image segmentation methods
@@ -956,6 +956,20 @@ The `local_python/` benchmark folder contained 38 runs using the **old config** 
 **Output:**
 - `local_python/summary.csv` — 38 rows with new config metrics
 - `local_python_old_symmetric/` — preserved old results for comparison
+
+### 2026-02-12: Phase 5 — Preprocessing & Utils
+
+Ported MATLAB preprocessing functions to Python. All operate on single `(Z, Y, X)` or `(Z, Y, X, C)` volumes; multi-round coordination deferred to Phase 6 (Dataset class).
+
+**New modules:**
+- `starfinder.preprocessing` — 4 image enhancement functions:
+  - `min_max_normalize(volume)` — per-channel [min, max] → [0, 255] (ports `MinMaxNorm.m`)
+  - `histogram_match(volume, reference)` — CDF-based histogram matching (ports `STARMapDataset.HistEqualize`)
+  - `morphological_reconstruction(volume, radius)` — background removal via opening-by-reconstruction (ports `MorphologicalReconstruction.m`)
+  - `tophat_filter(volume, radius)` — white tophat per Z-slice (ports `STARMapDataset.Tophat`)
+- `starfinder.utils` — `make_projection(volume, method)` (ports `MakeProjections.m`)
+
+**Tests:** 18 new tests (4 utils + 14 preprocessing), full suite 114 passing.
 
 ## Future Directions
 

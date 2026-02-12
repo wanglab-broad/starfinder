@@ -185,6 +185,16 @@ The Python backend is being developed to replace MATLAB components. Uses `(Z, Y,
     - `filter_reads(spots, seq_to_gene, end_bases=None, start_base="C")` → `(good_spots, stats)`
     - Filters by codebook membership only; end-base validation is diagnostic
 
+- **`starfinder.preprocessing`** - Image enhancement (normalization, morphology)
+  - `min_max_normalize(volume)` → per-channel [min, max] → [0, 255] rescaling (uint8)
+  - `histogram_match(volume, reference, nbins=64)` → CDF-based histogram matching per channel
+  - `morphological_reconstruction(volume, radius=3)` → background removal via opening-by-reconstruction
+  - `tophat_filter(volume, radius=3)` → white tophat per Z-slice (removes large structures)
+  - All functions handle (Z, Y, X) and (Z, Y, X, C) inputs
+
+- **`starfinder.utils`** - General-purpose utilities
+  - `make_projection(volume, method="max")` → Z-axis projection (max or sum with uint8 rescaling)
+
 - **`starfinder.testing`** - Synthetic dataset generation
   - Two-base color-space encoding matching MATLAB
   - Presets: `mini` (1 FOV, 256×256×5) and `standard` (4 FOVs, 512×512×10)
@@ -251,7 +261,7 @@ Detailed design documents are in `docs/`:
 - [x] Phase 2: Registration module (phase correlation, apply_shift, register_volume)
 - [x] Phase 3: Spot finding & extraction (find_spots_3d, extract_from_location)
 - [x] Phase 4: Barcode processing (encode/decode, codebook, filter_reads)
-- [ ] Phase 5: Preprocessing
+- [x] Phase 5: Preprocessing (min_max_normalize, histogram_match, morphological_reconstruction, tophat_filter, make_projection)
 - [ ] Phase 6: Dataset class & Snakemake integration
 
 ## Notes for Claude Code
