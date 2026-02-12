@@ -16,7 +16,8 @@ class TestDemonsRegister:
         from starfinder.registration.demons import demons_register
 
         vol = load_multipage_tiff(mini_dataset / "FOV_001" / "round1" / "ch00.tif")
-        field = demons_register(vol, vol)
+        # Use fast single-level config for unit test speed
+        field = demons_register(vol, vol, iterations=[25], pyramid_mode="sitk")
 
         # Shape should be (Z, Y, X, 3) for displacement vectors
         assert field.shape == (*vol.shape, 3)
@@ -48,8 +49,11 @@ class TestDemonsRegister:
         warped_coords = [c + f for c, f in zip(coords, true_field)]
         deformed = map_coordinates(vol, warped_coords, order=1, mode='constant', cval=0)
 
-        # Recover displacement field
-        estimated_field = demons_register(vol, deformed.astype(np.float32))
+        # Recover displacement field (fast single-level for unit test speed)
+        estimated_field = demons_register(
+            vol, deformed.astype(np.float32),
+            iterations=[25], pyramid_mode="sitk",
+        )
 
         # The estimated field should have similar direction to true field
         # (we check correlation, not exact match, since demons is iterative)
@@ -97,7 +101,11 @@ class TestRegisterVolumeLocal:
         ref_img = images[:, :, :, 0]
         mov_img = images[:, :, :, 0]
 
-        registered, field = register_volume_local(images, ref_img, mov_img)
+        # Use fast single-level config for unit test speed
+        registered, field = register_volume_local(
+            images, ref_img, mov_img,
+            iterations=[25], pyramid_mode="sitk",
+        )
 
         assert registered.shape == images.shape
         assert field.shape == (*images.shape[:3], 3)

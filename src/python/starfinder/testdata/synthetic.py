@@ -11,18 +11,7 @@ import json
 
 import numpy as np
 
-
-# Two-base color-space encoding table
-# Consecutive base pairs map to colors 1-4
-BASE_PAIR_TO_COLOR = {
-    "AA": "1", "CC": "1", "GG": "1", "TT": "1",
-    "AC": "2", "CA": "2", "GT": "2", "TG": "2",
-    "AG": "3", "CT": "3", "GA": "3", "TC": "3",
-    "AT": "4", "CG": "4", "GC": "4", "TA": "4",
-}
-
-# Color to channel mapping
-COLOR_TO_CHANNEL = {"1": 0, "2": 1, "3": 2, "4": 3}
+from starfinder.barcode.encoding import BASE_PAIR_TO_COLOR, COLOR_TO_CHANNEL, encode_bases
 
 # Test codebook: 8 genes with barcodes starting/ending with C
 TEST_CODEBOOK = [
@@ -114,7 +103,8 @@ def encode_barcode_to_colors(barcode: str) -> str:
     """Encode a barcode to color sequence using two-base encoding.
 
     The barcode is first reversed, then consecutive base pairs are
-    mapped to colors 1-4.
+    mapped to colors 1-4. This is a convenience wrapper around
+    encode_bases() that handles the STARmap reversal convention.
 
     Parameters
     ----------
@@ -126,12 +116,7 @@ def encode_barcode_to_colors(barcode: str) -> str:
     str
         4-character color sequence (e.g., "4422")
     """
-    reversed_barcode = barcode[::-1]
-    colors = []
-    for i in range(len(reversed_barcode) - 1):
-        pair = reversed_barcode[i : i + 2]
-        colors.append(BASE_PAIR_TO_COLOR[pair])
-    return "".join(colors)
+    return encode_bases(barcode[::-1])
 
 
 def create_test_image_stack(

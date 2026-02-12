@@ -63,7 +63,9 @@ starfinder/
 │   └── python/            # Python package (starfinder)
 │       ├── starfinder/
 │       │   ├── io/           # TIFF I/O (load_multipage_tiff, load_image_stacks, save_stack)
-│       │   ├── registration/ # Phase correlation registration (phase_correlate, apply_shift)
+│       │   ├── registration/ # Phase correlation registration (phase_correlate, apply_shift, demons_register)
+│       │   ├── spotfinding/  # 3D spot detection (find_spots_3d)
+│       │   ├── barcode/      # Encoding, decoding, codebook, extraction, filtering
 │       │   ├── benchmark/    # Performance measurement framework
 │       │   └── testing/      # Synthetic dataset generator
 │       └── test/          # pytest tests
@@ -102,8 +104,9 @@ The pipeline supports 4 workflow modes configured via `workflow_mode` in the con
 ### Data Flow
 
 ```
-Raw Images (TIFF) → Registration → Spot Finding → Decoding →
-Segmentation (StarDist) → Reads Assignment → Cell Expression Matrix (H5AD)
+# To get amplicon/molecular level information
+In Situ Sequencing Raw Images (TIFF) → Registration → Spot Finding → Decoding → Filtering → Spot-level Matrix (row: spot/amplicon, col: gene label, x, y, z, other QC metrics ...)
+Cell Morphology Raw Images (TIFF) → Segmentation (StarDist/Cellpose/others) → Reads Assignment → Cell Expression Matrix (H5AD)
 ```
 
 ### MATLAB Integration
@@ -163,6 +166,24 @@ The Python backend is being developed to replace MATLAB components. Uses `(Z, Y,
     - CLI: `uv run python -m starfinder.benchmark.evaluate <result_dir> [--data-dir ...]`
     - Two-phase design: Phase 1 (run) saves registered images, Phase 2 (evaluate) computes metrics uniformly
   - Presets: tiny, small, medium, large, xlarge, tissue, thick_medium
+
+- **`starfinder.spotfinding`** - 3D spot detection
+  - `find_spots_3d(volume, method, ...)` → DataFrame with (z, y, x) coordinates
+  - LoG filtering with adaptive or global thresholding
+  - Multi-channel support
+
+- **`starfinder.barcode`** - Barcode processing pipeline (encoding → codebook → filtering)
+  - Encoding/decoding (`barcode.encoding`):
+    - `BASE_PAIR_TO_COLOR` / `COLOR_TO_BASE_PAIRS` / `COLOR_TO_CHANNEL` — lookup tables
+    - `encode_bases(sequence)` → color sequence (pure 2-base sliding window, no reversal)
+    - `decode_color_seq(color_seq, start_base)` → DNA barcode (chain-tracking decoder)
+  - Codebook (`barcode.codebook`):
+    - `load_codebook(path, do_reverse=True, split_index=None)` → `(gene_to_seq, seq_to_gene)`
+  - Extraction (`barcode.extraction`):
+    - `extract_from_location(image, spots, voxel_size)` → `(color_seq, color_score)` arrays
+  - Filtering (`barcode.filtering`):
+    - `filter_reads(spots, seq_to_gene, end_bases=None, start_base="C")` → `(good_spots, stats)`
+    - Filters by codebook membership only; end-base validation is diagnostic
 
 - **`starfinder.testing`** - Synthetic dataset generation
   - Two-base color-space encoding matching MATLAB
@@ -228,8 +249,8 @@ Detailed design documents are in `docs/`:
 - [x] Phase 0: Directory restructure (`code-base/` → `src/matlab/`)
 - [x] Phase 1: I/O module with bioio backend
 - [x] Phase 2: Registration module (phase correlation, apply_shift, register_volume)
-- [ ] Phase 3: Spot finding & extraction
-- [ ] Phase 4: Barcode processing
+- [x] Phase 3: Spot finding & extraction (find_spots_3d, extract_from_location)
+- [x] Phase 4: Barcode processing (encode/decode, codebook, filter_reads)
 - [ ] Phase 5: Preprocessing
 - [ ] Phase 6: Dataset class & Snakemake integration
 
@@ -250,8 +271,8 @@ Update this file by adding tips whenever you make mistakes to help improve your 
 - **Registration sign convention**: `phase_correlate()` returns detected displacement (how much `moving` differs from `fixed`). To correct alignment, apply the **negative** shift: `correction = tuple(-s for s in detected_shift)`
 - **Benchmark shift ranges**: When testing registration, ensure shift ranges are proportional to volume size (≤25% of each dimension) to maintain sufficient image overlap for phase correlation.
 - **Demons registration axis ordering**: SimpleITK uses (dx, dy, dz) for displacement vectors, NumPy uses (dz, dy, dx). The `demons.py` module handles this conversion internally.
-- **Demons defaults for sparse images**: Use single-level registration (`iterations=[50]`) instead of multi-resolution pyramids. Pyramids degrade quality for sparse fluorescence data due to upsampling artifacts. However, with `pyramid_mode="antialias"`, multi-level pyramids work well — use `matlab_compatible_config()` for MATLAB-matching quality.
-- **Anti-aliased pyramid mode**: `pyramid_mode="antialias"` uses Butterworth-filtered downsampling matching MATLAB's `imregdemons` internal `antialiasResize`. This prevents the spot-destroying aliasing of SimpleITK's naive `Shrink`. Use with multi-level iterations like `[100,50,25]`.
+- **Demons defaults**: `demons_register()` defaults to Thirion demons with 3-level anti-aliased pyramid (`method="demons"`, `iterations=[100,50,25]`, `sigma=1.0`, `pyramid_mode="antialias"`). This matches MATLAB's `imregdemons` quality while being 1.6x faster with identical memory usage. The old single-level defaults (`iterations=[50]`, `sigma=0.5`, `pyramid_mode="sitk"`) are still available for quick tests.
+- **Anti-aliased pyramid mode**: `pyramid_mode="antialias"` uses Butterworth-filtered downsampling matching MATLAB's `imregdemons` internal `antialiasResize`. The old `"sitk"` mode does naive subsampling that destroys sparse spots at coarse levels — avoid for multi-level pyramids.
 - **Python vs MATLAB local registration benchmark (2026-02-11)**: With matched settings ([100,50,25], sigma/AFS=1.0), Python `py_diffeo` beats MATLAB on NCC (+0.115) and Match Rate (+0.022). Python `py_demons` (Thirion) is 1.6x faster. Results at `local_comparison/`.
 - **Registration quality metrics**: For sparse fluorescence images, use spot-based metrics (Spot IoU, Match Rate) instead of MAE. MAE is dominated by background pixels (99% of image) and doesn't reflect spot alignment quality.
 - **Benchmark data generation**:

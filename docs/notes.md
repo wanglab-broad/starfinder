@@ -46,8 +46,8 @@ Location: `/home/unix/jiahao/wanglab/Data/Processed/sample-dataset/`
   - [x] Phase 0: Directory restructure (src/matlab, src/python)
   - [x] Phase 1: I/O module (load/save TIFF with axis-aware handling)
   - [x] Phase 2: Registration module (DFT-based phase correlation)
-  - [] Phase 3: Spot finding module
-  - [] Phase 4: Decoding module
+  - [x] Phase 3: Spot finding & extraction (find_spots_3d, extract_from_location)
+  - [x] Phase 4: Barcode processing (encode/decode, codebook, filter_reads)
   - [] Phase 5: Segmentation integration
   - [] Phase 6: Dataset/FOV class wrapper
   - [] Adopt new data structure such as h5 and OME-Zarr, but also ensure backward compatibility
@@ -839,6 +839,123 @@ Phase 2 evaluation was bottlenecked by 3D spot detection on large datasets like 
 - `local_comparison/comparison.csv` — Merged quality + timing comparison (7 pivot rows)
 - `local_comparison/{dataset}/timing_*.json` — GNU time measurements
 - `local_comparison/{dataset}/inspection_*.png` — Green-magenta overlays
+
+### 2026-02-11: Phase 3 — Spot Finding & Extraction
+
+- [x] **Implemented spot finding module** (`starfinder.spotfinding`)
+  - `find_spots_3d(volume, method, ...)` — 3D spot detection with LoG filtering
+  - Adaptive and global thresholding modes
+  - Multi-channel support
+
+- [x] **Implemented barcode extraction** (`starfinder.barcode.extraction`)
+  - `extract_from_location(image, spots, voxel_size)` — Per-channel intensity extraction
+  - L2-normalized, winner-take-all channel assignment → "1"-"4", "M", "N"
+  - Voxel neighborhood with boundary clipping
+
+### 2026-02-11: Phase 4 — Barcode Processing
+
+- [x] **Created encoding module** (`starfinder.barcode.encoding`)
+  - Moved `BASE_PAIR_TO_COLOR`, `COLOR_TO_CHANNEL` from `testdata/synthetic.py`
+  - Added `COLOR_TO_BASE_PAIRS` reverse lookup
+  - `encode_bases(sequence)` — Pure 2-base sliding window encoding (no reversal), matches MATLAB `EncodeBases.m`
+  - `decode_color_seq(color_seq, start_base)` — Chain-tracking decoder, matches MATLAB `DecodeCS.m`
+  - `testdata/synthetic.py` now imports from `barcode.encoding`
+
+- [x] **Created codebook module** (`starfinder.barcode.codebook`)
+  - `load_codebook(path, do_reverse=True, split_index=None)` → `(gene_to_seq, seq_to_gene)`
+  - Reads CSV, optionally reverses barcodes, encodes to color-space
+  - Optional split_index for multi-segment barcodes
+  - Matches MATLAB `LoadCodebook.m`
+
+- [x] **Created filtering module** (`starfinder.barcode.filtering`)
+  - `filter_reads(spots, seq_to_gene, end_bases=None, start_base="C")` → `(good_spots, stats)`
+  - Filters by codebook membership only (matching MATLAB behavior)
+  - End-base validation is diagnostic stats, not a filter
+  - Matches MATLAB `FilterReads.m`
+
+- [x] **Updated package wiring**
+  - `barcode/__init__.py` exports all encoding, codebook, extraction, filtering functions
+  - `starfinder/__init__.py` exports `load_codebook`, `filter_reads` at top level
+  - `test/test_encoding.py` updated to import from `barcode.encoding`
+
+- [x] **Tests** — 19 new tests in `test/test_barcode.py`
+  - Encoding: known sequences, output length, same-base pairs
+  - Decoding: known decode, roundtrip, all codebook entries, single color
+  - Codebook: load, gene/seq lookup, bidirectional consistency, no_reverse
+  - Filtering: basic, invalid exclusion, stats keys, end-base diagnostic, empty input, gene column
+  - End-to-end: ground truth pipeline (8 genes + 2 invalid → 8 filtered)
+
+- [x] **Plan**: `docs/plans/2026-02-11-barcode-processing-plan.md`
+
+**Files Created:**
+- `src/python/starfinder/barcode/encoding.py` — Encoding/decoding (~95 lines)
+- `src/python/starfinder/barcode/codebook.py` — Codebook loading (~65 lines)
+- `src/python/starfinder/barcode/filtering.py` — Read filtering (~75 lines)
+- `src/python/test/test_barcode.py` — 19 tests
+
+**Files Modified:**
+- `src/python/starfinder/barcode/__init__.py` — Added all new exports
+- `src/python/starfinder/__init__.py` — Added `load_codebook`, `filter_reads`
+- `src/python/starfinder/testdata/synthetic.py` — Imports encoding from `barcode.encoding`
+- `src/python/test/test_encoding.py` — Updated imports
+
+**MATLAB Function Mapping:**
+| MATLAB | Python |
+|--------|--------|
+| `EncodeBases(seq)` | `encode_bases(sequence)` |
+| `DecodeCS(color_seq, start_base)` | `decode_color_seq(color_seq, start_base)` |
+| `LoadCodebook(path, split_index, do_reverse)` | `load_codebook(path, do_reverse, split_index)` |
+| `FilterReads(obj, end_base)` | `filter_reads(spots, seq_to_gene, end_bases, start_base)` |
+
+**Test Results:** 96 tests passing (19 barcode + 11 encoding + 8 extraction + ...)
+
+**Next Steps:**
+- Phase 5: Preprocessing module
+- Phase 6: Dataset class & Snakemake integration
+
+### 2026-02-11: Rerun local_python/ Benchmark with New Defaults
+
+The `local_python/` benchmark folder contained 38 runs using the **old config** (symmetric, iter=25, sigma=0.5, single-level sitk pyramid). After updating `demons_register()` defaults to match MATLAB's `imregdemons`, these results were stale. Reran all 38 with the new config.
+
+- [x] **Updated worker script** (`scripts/benchmark_local_single.py`)
+  - `method`: `"symmetric"` → `"demons"` (Thirion)
+  - `iterations`: `[25]` → `[100, 50, 25]` (3-level pyramid)
+  - `sigma`: `0.5` → `1.0`
+  - Added `pyramid_mode="antialias"` to `demons_register()` call
+  - Updated metadata: `"config": "demons_iter100-50-25_s1.0_antialias"`
+
+- [x] **Updated orchestrator timeout** (`scripts/run_local_python.py`)
+  - `TIMEOUT`: `600` → `900` (tissue_2D peaked at 526s, would have timed out at 600s)
+
+- [x] **Backed up old results**
+  - `local_python/` → `local_python_old_symmetric/` (preserved for comparison)
+
+- [x] **Ran all 38 benchmarks** — 38 success, 0 timeout, 0 error, 5302s (88 min) total
+  - Timings matched estimates: tiny ~1s, medium ~16s, large ~58s, tissue ~510s, tissue_2D ~505s
+
+- [x] **Phase 2 evaluation** — 38 evaluated, 0 skipped
+  - Generated `metrics_*.json`, `inspection_*.png`, `summary.csv`
+
+- [x] **Comparison results** (new config vs old):
+
+  | Metric | Old (symmetric, iter25, σ=0.5) | New (demons, [100,50,25], σ=1.0, antialias) | Delta |
+  |--------|-------------------------------|----------------------------------------------|-------|
+  | Mean NCC | 0.520 | 0.624 | **+0.103** (35/38 improved) |
+  | Mean Match Rate | 0.590 | 0.642 | **+0.052** (17 up, 17 down, 4 same) |
+  | Mean Runtime | 100.8s | 133.0s | **1.32x** slower |
+
+  - NCC improved on 92% of datasets; largest gains on real data (LN +0.376, cell_culture_3D +0.161)
+  - Match Rate gains concentrated in polynomial deformations (+0.20) and real data (+0.13)
+  - Runtime overhead modest for production-size datasets (1.2-1.3x), higher for tiny volumes (1.6-1.8x)
+  - Only regression: tissue_2D NCC (-0.165) — low-contrast 2D tissue section
+
+**Files Modified** (on network mount):
+- `.../scripts/benchmark_local_single.py` — Config update + antialias pyramid
+- `.../scripts/run_local_python.py` — Timeout 600→900
+
+**Output:**
+- `local_python/summary.csv` — 38 rows with new config metrics
+- `local_python_old_symmetric/` — preserved old results for comparison
 
 ## Future Directions
 

@@ -1,0 +1,98 @@
+"""Tests for starfinder.spotfinding module."""
+
+import numpy as np
+import pandas as pd
+import pytest
+
+from starfinder.spotfinding import find_spots_3d
+from starfinder.spotfinding.local_maxima import SPOT_COLUMNS
+
+
+class TestFindSpots3D:
+    """Tests for find_spots_3d function."""
+
+    def test_finds_known_spots(self, mini_dataset, mini_ground_truth):
+        """Detects spots in mini synthetic dataset, count sanity check."""
+        from starfinder.io import load_image_stacks
+
+        images, _ = load_image_stacks(
+            mini_dataset / "FOV_001" / "round1",
+            channel_order=["ch00", "ch01", "ch02", "ch03"],
+        )
+        spots = find_spots_3d(images)
+
+        # Mini dataset has 20 ground truth spots across 4 channels in round 1
+        # Detection may find more (noise peaks) or fewer (dim spots), but
+        # should be in a reasonable range
+        assert len(spots) > 0
+        assert len(spots) >= 10  # should find at least half
+
+    def test_returns_correct_schema(self):
+        """DataFrame columns = [z, y, x, intensity, channel]."""
+        image = np.zeros((5, 32, 32, 2), dtype=np.uint8)
+        image[2, 16, 16, 0] = 200  # one bright spot
+        spots = find_spots_3d(image)
+        assert list(spots.columns) == SPOT_COLUMNS
+
+    def test_empty_image(self):
+        """Blank image returns empty DataFrame with correct schema."""
+        image = np.zeros((5, 32, 32, 2), dtype=np.uint8)
+        spots = find_spots_3d(image)
+        assert len(spots) == 0
+        assert list(spots.columns) == SPOT_COLUMNS
+
+    def test_adaptive_threshold(self):
+        """Adaptive mode: threshold = max * fraction."""
+        image = np.zeros((5, 32, 32, 1), dtype=np.uint8)
+        image[2, 16, 16, 0] = 100  # bright spot
+        image[2, 10, 10, 0] = 10  # dim spot
+
+        # threshold = 100 * 0.2 = 20 → both spots detected
+        spots_low = find_spots_3d(image, intensity_threshold=0.05)
+        assert len(spots_low) == 2
+
+        # threshold = 100 * 0.5 = 50 → only bright spot
+        spots_high = find_spots_3d(image, intensity_threshold=0.5)
+        assert len(spots_high) == 1
+        assert spots_high.iloc[0]["intensity"] == 100
+
+    def test_global_threshold(self):
+        """Global mode: threshold = dtype_max * fraction."""
+        image = np.zeros((5, 32, 32, 1), dtype=np.uint8)
+        image[2, 16, 16, 0] = 200  # bright spot
+        image[2, 10, 10, 0] = 40  # dim spot
+
+        # global threshold = 255 * 0.1 = 25.5 → both detected
+        spots = find_spots_3d(image, intensity_estimation="global", intensity_threshold=0.1)
+        assert len(spots) == 2
+
+        # global threshold = 255 * 0.5 = 127.5 → only bright spot
+        spots = find_spots_3d(image, intensity_estimation="global", intensity_threshold=0.5)
+        assert len(spots) == 1
+
+    def test_multichannel(self):
+        """Spots in different channels detected with correct channel index."""
+        image = np.zeros((5, 32, 32, 4), dtype=np.uint8)
+        image[1, 10, 10, 0] = 200  # channel 0
+        image[2, 20, 20, 2] = 200  # channel 2
+        image[3, 15, 15, 3] = 200  # channel 3
+
+        spots = find_spots_3d(image)
+        assert len(spots) == 3
+
+        # Check each channel has exactly one spot
+        channels = sorted(spots["channel"].tolist())
+        assert channels == [0, 2, 3]
+
+    def test_coordinate_values(self):
+        """Spot at known (z, y, x) returns correct coordinates."""
+        image = np.zeros((10, 64, 64, 1), dtype=np.uint8)
+        image[3, 25, 40, 0] = 255
+
+        spots = find_spots_3d(image)
+        assert len(spots) == 1
+        assert spots.iloc[0]["z"] == 3
+        assert spots.iloc[0]["y"] == 25
+        assert spots.iloc[0]["x"] == 40
+        assert spots.iloc[0]["intensity"] == 255
+        assert spots.iloc[0]["channel"] == 0

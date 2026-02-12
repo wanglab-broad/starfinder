@@ -2,7 +2,8 @@
 
 import pytest
 
-from starfinder.testdata.synthetic import encode_barcode_to_colors, BASE_PAIR_TO_COLOR
+from starfinder.barcode.encoding import BASE_PAIR_TO_COLOR, encode_bases
+from starfinder.testdata.synthetic import encode_barcode_to_colors
 
 
 class TestTwoBaseEncoding:

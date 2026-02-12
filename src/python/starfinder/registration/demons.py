@@ -220,14 +220,14 @@ def demons_register(
     fixed: np.ndarray,
     moving: np.ndarray,
     iterations: list[int] | None = None,
-    smoothing_sigma: float = 0.5,
-    method: str = "diffeomorphic",
-    pyramid_mode: str = "sitk",
+    smoothing_sigma: float = 1.0,
+    method: str = "demons",
+    pyramid_mode: str = "antialias",
 ) -> np.ndarray:
     """Register moving image to fixed using demons algorithm.
 
     Performs non-rigid registration using SimpleITK's demons filters
-    with multi-resolution pyramid for robustness.
+    with anti-aliased multi-resolution pyramid for robustness.
 
     Parameters
     ----------
@@ -237,23 +237,24 @@ def demons_register(
         Moving volume to register, with shape (Z, Y, X).
     iterations : list[int] | None, optional
         Number of iterations at each pyramid level (coarse to fine).
-        Default is [50] (single-level, no pyramid). Single-level works best
-        for sparse fluorescence images; multi-level pyramids can degrade quality.
+        Default is [100, 50, 25] (3-level anti-aliased pyramid).
     smoothing_sigma : float, optional
         Standard deviation for Gaussian smoothing of the displacement field.
-        Lower values (0.5) work better for sparse images. Default is 0.5.
+        Default is 1.0 (matches MATLAB's AccumulatedFieldSmoothing).
     method : str, optional
         Demons variant to use. Options:
-        - "demons": Basic demons (best for sparse fluorescence images)
-        - "diffeomorphic" (default): Topology-preserving, more stable
-        - "symmetric": Standard symmetric forces demons
-        - "fast_symmetric": Faster symmetric forces variant
+        - "demons" (default): Classic Thirion demons. Best speed/memory,
+          matches MATLAB's imregdemons algorithm.
+        - "diffeomorphic": Topology-preserving. Better quality on large
+          deformations but ~37% more memory.
+        - "symmetric": Standard symmetric forces demons.
+        - "fast_symmetric": Faster symmetric forces variant.
     pyramid_mode : str, optional
         Multi-resolution pyramid strategy:
-        - "sitk" (default): SimpleITK's built-in shrink (naive subsampling).
-          Works for single-level; degrades on sparse images with multi-level.
-        - "antialias": MATLAB-matching Butterworth-filtered downsampling.
-          Use with multi-level pyramids for MATLAB-quality results.
+        - "antialias" (default): MATLAB-matching Butterworth-filtered
+          downsampling. Use with multi-level pyramids.
+        - "sitk": SimpleITK's built-in shrink (naive subsampling).
+          Degrades quality for multi-level pyramids on sparse images.
 
     Returns
     -------
@@ -264,9 +265,7 @@ def demons_register(
     sitk = _import_sitk()
 
     if iterations is None:
-        # Single-level registration performs best for sparse fluorescence images.
-        # Multi-resolution pyramid can degrade quality due to upsampling artifacts.
-        iterations = [50]
+        iterations = [100, 50, 25]
 
     demons = _create_demons_filter(sitk, method, smoothing_sigma)
 
@@ -360,9 +359,9 @@ def register_volume_local(
     ref_image: np.ndarray,
     mov_image: np.ndarray,
     iterations: list[int] | None = None,
-    smoothing_sigma: float = 0.5,
-    method: str = "diffeomorphic",
-    pyramid_mode: str = "sitk",
+    smoothing_sigma: float = 1.0,
+    method: str = "demons",
+    pyramid_mode: str = "antialias",
 ) -> tuple[np.ndarray, np.ndarray]:
     """Register multi-channel volume using demons.
 
@@ -379,14 +378,14 @@ def register_volume_local(
         Moving image with shape (Z, Y, X) for field calculation.
     iterations : list[int] | None, optional
         Number of iterations per pyramid level.
-        Defaults to [50] (single-level, no pyramid - best for sparse images).
+        Default is [100, 50, 25] (3-level anti-aliased pyramid).
     smoothing_sigma : float, optional
         Standard deviation for displacement field smoothing.
-        Lower values (0.5) work better for sparse images. Default is 0.5.
+        Default is 1.0 (matches MATLAB's AccumulatedFieldSmoothing).
     method : str, optional
-        Demons variant: "diffeomorphic" (default), "symmetric", "fast_symmetric".
+        Demons variant: "demons" (default), "diffeomorphic", "symmetric", "fast_symmetric".
     pyramid_mode : str, optional
-        Pyramid strategy: "sitk" (default) or "antialias" (MATLAB-style).
+        Pyramid strategy: "antialias" (default) or "sitk".
 
     Returns
     -------
