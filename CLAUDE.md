@@ -66,6 +66,7 @@ starfinder/
 │       │   ├── registration/ # Phase correlation registration (phase_correlate, apply_shift, demons_register)
 │       │   ├── spotfinding/  # 3D spot detection (find_spots_3d)
 │       │   ├── barcode/      # Encoding, decoding, codebook, extraction, filtering
+│       │   ├── dataset/      # STARMapDataset + FOV orchestration layer
 │       │   ├── benchmark/    # Performance measurement framework
 │       │   └── testing/      # Synthetic dataset generator
 │       └── test/          # pytest tests
@@ -195,6 +196,18 @@ The Python backend is being developed to replace MATLAB components. Uses `(Z, Y,
 - **`starfinder.utils`** - General-purpose utilities
   - `make_projection(volume, method="max")` → Z-axis projection (max or sum with uint8 rescaling)
 
+- **`starfinder.dataset`** - Dataset/FOV orchestration layer (wraps Phases 1-5)
+  - Types: `LayerState`, `Codebook`, `CropWindow`, `SubtileConfig`, `Shift3D`, `ImageArray`, `ChannelOrder`
+  - `STARMapDataset.from_config(config)` → sample-level config + FOV factory
+  - `FOV` — per-FOV stateful processor with fluent API:
+    - Loading: `load_raw_images()` → `io.load_image_stacks()`
+    - Preprocessing: `enhance_contrast()`, `hist_equalize()`, `morph_recon()`, `tophat()`, `make_projection()`
+    - Registration: `global_registration()`, `local_registration()`
+    - Spot finding: `spot_finding()`, `reads_extraction()`, `reads_filtration()`
+    - Output: `save_ref_merged()`, `save_signal()`, `create_subtiles()`, `from_subtile()`
+  - `FOVPaths` — frozen path helper for output locations
+  - `log_step` decorator — timing and error logging per method
+
 - **`starfinder.testing`** - Synthetic dataset generation
   - Two-base color-space encoding matching MATLAB
   - Presets: `mini` (1 FOV, 256×256×5) and `standard` (4 FOVs, 512×512×10)
@@ -262,7 +275,7 @@ Detailed design documents are in `docs/`:
 - [x] Phase 3: Spot finding & extraction (find_spots_3d, extract_from_location)
 - [x] Phase 4: Barcode processing (encode/decode, codebook, filter_reads)
 - [x] Phase 5: Preprocessing (min_max_normalize, histogram_match, morphological_reconstruction, tophat_filter, make_projection)
-- [ ] Phase 6: Dataset class & Snakemake integration
+- [x] Phase 6: Dataset/FOV orchestration layer (STARMapDataset, FOV, fluent pipeline API)
 
 ## Notes for Claude Code
 Update this file by adding tips whenever you make mistakes to help improve your accuracy.
@@ -278,6 +291,7 @@ Update this file by adding tips whenever you make mistakes to help improve your 
 - CSV coordinates: 1-based for MATLAB compatibility (Python uses 0-based internally).
 - Run Python with `uv run python`
 - Always ask before using `git push`
+- When creating a commit message, review the previous git history. Use numbered messages for new modules or major changes; otherwise, use a prefix(addtional info if needed): message. 
 - **Registration sign convention**: `phase_correlate()` returns detected displacement (how much `moving` differs from `fixed`). To correct alignment, apply the **negative** shift: `correction = tuple(-s for s in detected_shift)`
 - **Benchmark shift ranges**: When testing registration, ensure shift ranges are proportional to volume size (≤25% of each dimension) to maintain sufficient image overlap for phase correlation.
 - **Demons registration axis ordering**: SimpleITK uses (dx, dy, dz) for displacement vectors, NumPy uses (dz, dy, dx). The `demons.py` module handles this conversion internally.
@@ -295,5 +309,8 @@ Update this file by adding tips whenever you make mistakes to help improve your 
   - Input data: `data/synthetic/` (7 presets) and `data/real/` (3 datasets)
   - Registration results: `results/registration/` (global_python, global_matlab, local_tuning, local_matlab, local_python, local_antialias, global_comparison, local_comparison, figures, scripts)
 - **Two-phase benchmark workflow**: Phase 1 saves `registered_{backend}.tif` + `run_{backend}.json`; Phase 2 (`evaluate.py`) computes `metrics_{backend}.json` + `inspection_{backend}.png` uniformly for all backends
+- **FOV directory layout**: `FOV.input_dir()` returns `{input_root}/{round}/{fov_id}/`. The synthetic mini dataset uses `{base}/{fov}/{round}/` — tests create symlinks to restructure.
+- **FOV fluent API**: All processing methods return `self` for chaining. State lives in `fov.images`, `fov.global_shifts`, `fov.all_spots`, `fov.good_spots`. Config is delegated to `fov.dataset`.
+- **SubtileConfig.compute_windows()**: Uses `height // sqrt_pieces` for tile size (MATLAB `dims(1)`). Overlap extends inward only — no overlap on outer edges. 0-based internally; `create_subtiles()` converts to 1-based for `subtile_coords.csv`.
 - **MIP fast path for large volumes**: For volumes >100M voxels, `evaluate_registration(use_mip=True)` computes SSIM and spot metrics (detect_spots, spot_colocalization, spot_matching_accuracy) on 2D MIP instead of full 3D. Output includes `"ssim_method"` and `"spot_method"` fields ("mip" or "3d") to indicate which path was used. `evaluate_directory(use_mip_above=)` controls the threshold. CLI flag: `--use-mip-above`.
 

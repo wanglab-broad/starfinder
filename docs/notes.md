@@ -49,7 +49,7 @@ Location: `/home/unix/jiahao/wanglab/Data/Processed/sample-dataset/`
   - [x] Phase 3: Spot finding & extraction (find_spots_3d, extract_from_location)
   - [x] Phase 4: Barcode processing (encode/decode, codebook, filter_reads)
   - [x] Phase 5: Preprocessing (min_max_normalize, histogram_match, morphological_reconstruction, tophat_filter, make_projection)
-  - [] Phase 6: Dataset/FOV class wrapper
+  - [x] Phase 6: Dataset/FOV class wrapper (STARMapDataset, FOV, fluent API)
   - [] Adopt new data structure such as h5 and OME-Zarr, but also ensure backward compatibility
   - [] Adopt new 2D/3D image segmentation methods
 3. [] Systematically benchmark the performance of the MATLAB backend and the new Python version
@@ -970,6 +970,68 @@ Ported MATLAB preprocessing functions to Python. All operate on single `(Z, Y, X
 - `starfinder.utils` — `make_projection(volume, method)` (ports `MakeProjections.m`)
 
 **Tests:** 18 new tests (4 utils + 14 preprocessing), full suite 114 passing.
+
+### 2026-02-12: Phase 6 — Dataset & FOV Orchestration Layer
+
+Implemented the `starfinder.dataset` subpackage — the orchestration layer that wraps all Phase 1-5 modules into a stateful, fluent pipeline API.
+
+**New subpackage: `starfinder.dataset`** (6 files):
+- `types.py` — Type aliases (`Shift3D`, `ImageArray`, `ChannelOrder`) and dataclasses (`LayerState`, `Codebook`, `CropWindow`, `SubtileConfig`)
+- `logging.py` — `log_step` decorator for FOV processing steps (timing + error logging)
+- `paths.py` — `FOVPaths` frozen dataclass for consistent output paths
+- `dataset.py` — `STARMapDataset` class: `from_config()`, `fov()` factory, `fov_ids()`, `load_codebook()`
+- `fov.py` — `FOV` class: 11 `@log_step` pipeline methods + output/subtile operations
+- `__init__.py` — Public API exports
+
+**Key design patterns:**
+- **Fluent chaining**: Every FOV method returns `self` → `fov.load_raw_images().enhance_contrast().global_registration()`
+- **Delegation**: `FOV.layers` and `FOV.codebook` delegate to parent `STARMapDataset` via properties
+- **Lazy imports**: Each method imports from Phase 1-5 at call time (avoids heavyweight deps on import)
+- **Boundary conversion**: 0-based internally, 1-based only at CSV output boundary in `save_signal()`
+
+**FOV pipeline methods:**
+| Method | Delegates to |
+|--------|-------------|
+| `load_raw_images()` | `io.load_image_stacks()` |
+| `enhance_contrast()` | `preprocessing.min_max_normalize()` |
+| `hist_equalize()` | `preprocessing.histogram_match()` |
+| `morph_recon()` | `preprocessing.morphological_reconstruction()` |
+| `tophat()` | `preprocessing.tophat_filter()` |
+| `make_projection()` | `utils.make_projection()` |
+| `global_registration()` | `registration.register_volume()` |
+| `local_registration()` | `registration.register_volume_local()` |
+| `spot_finding()` | `spotfinding.find_spots_3d()` |
+| `reads_extraction()` | `barcode.extract_from_location()` |
+| `reads_filtration()` | `barcode.filter_reads()` |
+| `save_ref_merged()` | `io.save_stack()` |
+| `save_signal()` | `pd.DataFrame.to_csv()` |
+| `create_subtiles()` | `np.savez_compressed()` |
+| `from_subtile()` | `np.load()` (classmethod) |
+
+**Tests:** 29 new tests (12 types + 6 dataset + 11 FOV pipeline/subtile), full suite 143 passing.
+
+**Files Created:**
+- `src/python/starfinder/dataset/` — 6 files (types.py, logging.py, paths.py, dataset.py, fov.py, __init__.py)
+- `src/python/test/test_types.py` — 12 tests
+- `src/python/test/test_dataset.py` — 6 tests
+- `src/python/test/test_fov.py` — 11 tests
+
+**Files Modified:**
+- `src/python/starfinder/__init__.py` — Added `STARMapDataset`, `FOV` exports
+
+**Usage:**
+```python
+from starfinder import STARMapDataset
+
+dataset = STARMapDataset.from_config(config)
+fov = dataset.fov("Position001")
+fov.load_raw_images().enhance_contrast().morph_recon()
+fov.global_registration()
+fov.spot_finding().reads_extraction()
+dataset.load_codebook(path)
+fov.reads_filtration()
+fov.save_signal()
+```
 
 ## Future Directions
 

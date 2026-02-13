@@ -2,6 +2,7 @@
 
 from starfinder import barcode, preprocessing, registration, spotfinding
 from starfinder.barcode import extract_from_location, filter_reads, load_codebook
+from starfinder.dataset import FOV, STARMapDataset
 from starfinder.io import load_image_stacks, load_multipage_tiff, save_stack
 from starfinder.preprocessing import (
     histogram_match,
@@ -21,6 +22,9 @@ from starfinder.utils import make_projection
 __version__ = "0.1.0"
 
 __all__ = [
+    # Dataset/FOV orchestration
+    "STARMapDataset",
+    "FOV",
     # I/O functions
     "load_multipage_tiff",
     "load_image_stacks",
