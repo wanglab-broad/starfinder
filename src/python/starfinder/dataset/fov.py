@@ -105,11 +105,25 @@ class FOV:
                 self.images[name] = func(self.images[name])
 
     @log_step
-    def enhance_contrast(self, layers: list[str] | None = None) -> FOV:
-        """Per-channel min-max normalization."""
+    def enhance_contrast(
+        self,
+        layers: list[str] | None = None,
+        snr_threshold: float | None = None,
+    ) -> FOV:
+        """Per-channel min-max normalization.
+
+        Parameters
+        ----------
+        snr_threshold : float or None
+            If set, channels with max/mean < snr_threshold are not
+            normalized (raw values kept). Prevents noise inflation.
+        """
         from starfinder.preprocessing import min_max_normalize
 
-        self._apply_to_layers(min_max_normalize, layers)
+        self._apply_to_layers(
+            lambda v: min_max_normalize(v, snr_threshold=snr_threshold),
+            layers,
+        )
         return self
 
     @log_step
@@ -287,8 +301,11 @@ class FOV:
     def spot_finding(
         self,
         *,
-        intensity_estimation: Literal["adaptive", "global"] = "adaptive",
-        intensity_threshold: float = 0.2,
+        intensity_estimation: Literal[
+            "noise", "adaptive", "adaptive_round", "global"
+        ] = "noise",
+        intensity_threshold: float = 5.0,
+        min_distance: int = 1,
     ) -> FOV:
         """Detect spots on the reference round."""
         from starfinder.spotfinding import find_spots_3d
@@ -298,6 +315,7 @@ class FOV:
             ref_image,
             intensity_estimation=intensity_estimation,
             intensity_threshold=intensity_threshold,
+            min_distance=min_distance,
         )
         return self
 

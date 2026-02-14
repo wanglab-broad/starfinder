@@ -169,9 +169,13 @@ The Python backend is being developed to replace MATLAB components. Uses `(Z, Y,
   - Presets: tiny, small, medium, large, xlarge, tissue, thick_medium
 
 - **`starfinder.spotfinding`** - 3D spot detection
-  - `find_spots_3d(volume, method, ...)` → DataFrame with (z, y, x) coordinates
-  - LoG filtering with adaptive or global thresholding
-  - Multi-channel support
+  - `find_spots_3d(image, intensity_estimation="noise", intensity_threshold=5.0, min_distance=1)` → DataFrame with (z, y, x, intensity, channel) columns
+  - Thresholding modes:
+    - `"noise"` (default): `median + k × MAD × 1.4826` (noise-floor based, k=intensity_threshold)
+    - `"adaptive"`: `channel_max × fraction` (MATLAB compatible)
+    - `"adaptive_round"`: `round_max × fraction` (cross-channel suppression)
+    - `"global"`: `dtype_max × fraction`
+  - Multi-channel support, 0-based coordinates
 
 - **`starfinder.barcode`** - Barcode processing pipeline (encoding → codebook → filtering)
   - Encoding/decoding (`barcode.encoding`):
@@ -187,7 +191,7 @@ The Python backend is being developed to replace MATLAB components. Uses `(Z, Y,
     - Filters by codebook membership only; end-base validation is diagnostic
 
 - **`starfinder.preprocessing`** - Image enhancement (normalization, morphology)
-  - `min_max_normalize(volume)` → per-channel [min, max] → [0, 255] rescaling (uint8)
+  - `min_max_normalize(volume, snr_threshold=None)` → per-channel [min, max] → [0, 255] rescaling (uint8). With `snr_threshold`, channels with `max/mean < threshold` keep raw values.
   - `histogram_match(volume, reference, nbins=64)` → CDF-based histogram matching per channel
   - `morphological_reconstruction(volume, radius=3)` → background removal via opening-by-reconstruction
   - `tophat_filter(volume, radius=3)` → white tophat per Z-slice (removes large structures)
@@ -208,9 +212,13 @@ The Python backend is being developed to replace MATLAB components. Uses `(Z, Y,
   - `FOVPaths` — frozen path helper for output locations
   - `log_step` decorator — timing and error logging per method
 
-- **`starfinder.testing`** - Synthetic dataset generation
+- **`starfinder.testdata`** - Synthetic dataset generation and validation
   - Two-base color-space encoding matching MATLAB
   - Presets: `mini` (1 FOV, 256×256×5) and `standard` (4 FOVs, 512×512×10)
+  - Validation (`testdata.validation`):
+    - `compare_shifts(shifts, gt, fov_id)` → per-round shift errors
+    - `compare_spots(spots, gt, fov_id)` → recall, precision, mean distance
+    - `compare_genes(spots, gt, fov_id)` → gene accuracy, color_seq accuracy
 
 ### Dependencies
 ```toml
@@ -276,6 +284,7 @@ Detailed design documents are in `docs/`:
 - [x] Phase 4: Barcode processing (encode/decode, codebook, filter_reads)
 - [x] Phase 5: Preprocessing (min_max_normalize, histogram_match, morphological_reconstruction, tophat_filter, make_projection)
 - [x] Phase 6: Dataset/FOV orchestration layer (STARMapDataset, FOV, fluent pipeline API)
+- [x] Phase 7: E2E validation + SNR-gated normalization + noise-floor spot finding threshold
 
 ## Notes for Claude Code
 Update this file by adding tips whenever you make mistakes to help improve your accuracy.
@@ -312,5 +321,8 @@ Update this file by adding tips whenever you make mistakes to help improve your 
 - **FOV directory layout**: `FOV.input_dir()` returns `{input_root}/{round}/{fov_id}/`. The synthetic mini dataset uses `{base}/{fov}/{round}/` — tests create symlinks to restructure.
 - **FOV fluent API**: All processing methods return `self` for chaining. State lives in `fov.images`, `fov.global_shifts`, `fov.all_spots`, `fov.good_spots`. Config is delegated to `fov.dataset`.
 - **SubtileConfig.compute_windows()**: Uses `height // sqrt_pieces` for tile size (MATLAB `dims(1)`). Overlap extends inward only — no overlap on outer edges. 0-based internally; `create_subtiles()` converts to 1-based for `subtile_coords.csv`.
+- **Spot finding defaults**: `find_spots_3d()` and `FOV.spot_finding()` default to `intensity_estimation="noise"` with `intensity_threshold=5.0` (k-sigma). This uses MAD-based noise-floor thresholding (`median + k × MAD × 1.4826`). For MATLAB compatibility, use `intensity_estimation="adaptive"` with `intensity_threshold=0.2`. The `intensity_threshold` parameter means k-sigma in noise mode but fraction-of-max in adaptive/global modes — always pass both parameters together.
+- **SNR-gated normalization**: `min_max_normalize(volume, snr_threshold=5.0)` skips normalization for channels with `max/mean < 5.0`. This prevents noise inflation in empty channels. The e2e pipeline uses `enhance_contrast(snr_threshold=5.0)`.
+- **E2E validation**: `test/test_e2e.py` uses a session-scoped `e2e_result` fixture that runs the full pipeline on the mini synthetic dataset. The fixture is shared across all 8 e2e tests.
 - **MIP fast path for large volumes**: For volumes >100M voxels, `evaluate_registration(use_mip=True)` computes SSIM and spot metrics (detect_spots, spot_colocalization, spot_matching_accuracy) on 2D MIP instead of full 3D. Output includes `"ssim_method"` and `"spot_method"` fields ("mip" or "3d") to indicate which path was used. `evaluate_directory(use_mip_above=)` controls the threshold. CLI flag: `--use-mip-above`.
 

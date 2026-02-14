@@ -54,6 +54,41 @@ class TestMinMaxNormalize:
         assert result.shape == vol.shape
 
 
+class TestSNRGating:
+    """Tests for SNR-gated normalization."""
+
+    def test_snr_gating_skips_low_snr_channel(self):
+        """Low-SNR channel is NOT rescaled; high-SNR channel IS rescaled."""
+        vol = np.zeros((3, 32, 32, 2), dtype=np.uint8)
+        # Channel 0: low SNR (uniform noise, max ~= mean, SNR ≈ 1)
+        vol[:, :, :, 0] = 50
+        # Channel 1: high SNR (background=5, bright spot=200, SNR >> 5)
+        vol[:, :, :, 1] = 5
+        vol[1, 16, 16, 1] = 200
+
+        result = min_max_normalize(vol, snr_threshold=5.0)
+
+        # Channel 0: should NOT be rescaled (SNR=1 < 5.0), keep raw value
+        assert result[:, :, :, 0].max() == 50
+        # Channel 1: should be rescaled to [0, 255]
+        assert result[:, :, :, 1].max() == 255
+
+    def test_snr_gating_none_is_backward_compat(self):
+        """With snr_threshold=None, all channels are normalized (default)."""
+        vol = np.zeros((3, 32, 32, 2), dtype=np.uint8)
+        vol[:, :, :, 0] = 50  # low SNR
+        vol[:, :, :, 1] = 5
+        vol[1, 16, 16, 1] = 200
+
+        result = min_max_normalize(vol, snr_threshold=None)
+
+        # Both channels should be rescaled to [0, 255]
+        # Channel 0: constant → all zeros (lo == hi case)
+        assert result[:, :, :, 0].max() == 0
+        # Channel 1: rescaled to 255
+        assert result[:, :, :, 1].max() == 255
+
+
 class TestHistogramMatch:
     """Tests for histogram_match."""
 

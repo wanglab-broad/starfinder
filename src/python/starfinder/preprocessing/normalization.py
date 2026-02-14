@@ -7,7 +7,10 @@ import numpy as np
 from skimage.exposure import match_histograms
 
 
-def min_max_normalize(volume: np.ndarray) -> np.ndarray:
+def min_max_normalize(
+    volume: np.ndarray,
+    snr_threshold: float | None = None,
+) -> np.ndarray:
     """Per-channel min-max normalization to uint8.
 
     Matches MATLAB ``stretchlim(ch, 0)`` + ``imadjustn(ch, [min, max])``:
@@ -18,6 +21,11 @@ def min_max_normalize(volume: np.ndarray) -> np.ndarray:
     ----------
     volume : np.ndarray
         Input volume with shape (Z, Y, X) or (Z, Y, X, C).
+    snr_threshold : float or None
+        If set, channels with ``max / mean < snr_threshold`` are not
+        normalized (raw values kept, clipped to uint8). This prevents
+        noise inflation in channels with no real signal.
+        Recommended value: 5.0.
 
     Returns
     -------
@@ -33,6 +41,15 @@ def min_max_normalize(volume: np.ndarray) -> np.ndarray:
         ch = volume[:, :, :, c].astype(np.float64)
         lo = ch.min()
         hi = ch.max()
+
+        # SNR gating: skip normalization for low-SNR channels
+        if snr_threshold is not None:
+            ch_mean = ch.mean()
+            snr = hi / ch_mean if ch_mean > 0 else 0.0
+            if snr < snr_threshold:
+                result[:, :, :, c] = np.clip(ch, 0, 255).astype(np.uint8)
+                continue
+
         if lo == hi:
             result[:, :, :, c] = 0
         else:

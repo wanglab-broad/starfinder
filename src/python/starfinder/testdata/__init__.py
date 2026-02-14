@@ -8,6 +8,12 @@ from .synthetic import (
     create_shifted_stack,
     create_test_volume,
 )
+from .validation import (
+    compare_shifts,
+    compare_spots,
+    compare_genes,
+    e2e_summary,
+)
 
 __all__ = [
     "SyntheticConfig",
@@ -16,4 +22,8 @@ __all__ = [
     "create_test_image_stack",
     "create_shifted_stack",
     "create_test_volume",
+    "compare_shifts",
+    "compare_spots",
+    "compare_genes",
+    "e2e_summary",
 ]

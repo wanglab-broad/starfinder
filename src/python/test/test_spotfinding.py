@@ -47,12 +47,16 @@ class TestFindSpots3D:
         image[2, 16, 16, 0] = 100  # bright spot
         image[2, 10, 10, 0] = 10  # dim spot
 
-        # threshold = 100 * 0.2 = 20 → both spots detected
-        spots_low = find_spots_3d(image, intensity_threshold=0.05)
+        # threshold = 100 * 0.05 = 5 → both spots detected
+        spots_low = find_spots_3d(
+            image, intensity_estimation="adaptive", intensity_threshold=0.05
+        )
         assert len(spots_low) == 2
 
         # threshold = 100 * 0.5 = 50 → only bright spot
-        spots_high = find_spots_3d(image, intensity_threshold=0.5)
+        spots_high = find_spots_3d(
+            image, intensity_estimation="adaptive", intensity_threshold=0.5
+        )
         assert len(spots_high) == 1
         assert spots_high.iloc[0]["intensity"] == 100
 
@@ -96,3 +100,48 @@ class TestFindSpots3D:
         assert spots.iloc[0]["x"] == 40
         assert spots.iloc[0]["intensity"] == 255
         assert spots.iloc[0]["channel"] == 0
+
+    def test_noise_threshold(self):
+        """Noise mode: threshold = median + k * MAD * 1.4826.
+
+        With Gaussian-like background (mean=20, std≈5) and bright spots,
+        k=5 should detect only the bright spots above the noise floor.
+        """
+        rng = np.random.RandomState(42)
+        image = rng.normal(20, 5, (5, 32, 32, 1)).clip(0, 255).astype(np.uint8)
+        image[2, 16, 16, 0] = 200  # bright spot well above noise
+
+        # k=5: threshold ≈ 20 + 5*5*1.4826 ≈ 57 → bright spot detected
+        spots = find_spots_3d(image, intensity_estimation="noise", intensity_threshold=5.0)
+        assert len(spots) >= 1
+        # The bright spot should be among the detected
+        bright = spots[spots["intensity"] >= 150]
+        assert len(bright) == 1
+        assert bright.iloc[0]["z"] == 2
+        assert bright.iloc[0]["y"] == 16
+
+    def test_adaptive_round_threshold(self):
+        """adaptive_round uses max across all channels for threshold.
+
+        Channel 0 is dim (max=50), channel 1 is bright (max=255).
+        With adaptive_round, ch0 threshold = 255*0.2 = 51 > 50 → no spots.
+        With adaptive, ch0 threshold = 50*0.2 = 10 → spots detected.
+        """
+        image = np.zeros((5, 32, 32, 2), dtype=np.uint8)
+        image[2, 16, 16, 0] = 50   # dim spot in ch0
+        image[2, 10, 10, 1] = 255  # bright spot in ch1
+
+        # adaptive_round: threshold = 255 * 0.2 = 51 → ch0 spot (50) suppressed
+        spots_round = find_spots_3d(
+            image, intensity_estimation="adaptive_round", intensity_threshold=0.2
+        )
+        ch0_spots = spots_round[spots_round["channel"] == 0]
+        assert len(ch0_spots) == 0
+        assert len(spots_round[spots_round["channel"] == 1]) == 1
+
+        # adaptive: ch0 threshold = 50 * 0.2 = 10 → ch0 spot detected
+        spots_adaptive = find_spots_3d(
+            image, intensity_estimation="adaptive", intensity_threshold=0.2
+        )
+        ch0_spots = spots_adaptive[spots_adaptive["channel"] == 0]
+        assert len(ch0_spots) == 1

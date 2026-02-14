@@ -50,6 +50,7 @@ Location: `/home/unix/jiahao/wanglab/Data/Processed/sample-dataset/`
   - [x] Phase 4: Barcode processing (encode/decode, codebook, filter_reads)
   - [x] Phase 5: Preprocessing (min_max_normalize, histogram_match, morphological_reconstruction, tophat_filter, make_projection)
   - [x] Phase 6: Dataset/FOV class wrapper (STARMapDataset, FOV, fluent API)
+  - [x] Phase 7: E2E validation tests + SNR-gated normalization + noise-floor spot finding threshold
   - [] Adopt new data structure such as h5 and OME-Zarr, but also ensure backward compatibility
   - [] Adopt new 2D/3D image segmentation methods
 3. [] Systematically benchmark the performance of the MATLAB backend and the new Python version
@@ -1032,6 +1033,91 @@ dataset.load_codebook(path)
 fov.reads_filtration()
 fov.save_signal()
 ```
+
+### 2026-02-13: Phase 7 — E2E Validation & Spot Finding Improvements
+
+End-to-end validation against synthetic ground truth revealed a false positive problem: 9,044 spots detected for 20 ground truth spots (precision = 0.002). Iterative investigation led to two complementary improvements: SNR-gated normalization and noise-floor-based thresholding.
+
+**Phase 7a: E2E Validation Tests**
+
+- [x] **Created validation utilities** (`starfinder.testdata.validation`)
+  - `compare_shifts(shifts, gt, fov_id)` — per-round shift error (L1 per axis)
+  - `compare_spots(spots, gt, fov_id)` — greedy nearest-neighbor matching with position tolerance
+  - `compare_genes(spots, gt, fov_id)` — gene label accuracy for matched spots
+
+- [x] **Created e2e test suite** (`test/test_e2e.py`) — 8 tests:
+  - Pipeline smoke test (non-empty output with valid genes)
+  - Shift recovery (per-axis error < 1.5px, CSV matches in-memory)
+  - Spot detection (recall ≥ 0.7, precision ≥ 0.5)
+  - Barcode decoding (color_seq accuracy, gene accuracy ≥ 0.5)
+  - Subtile coordinate round-trip
+
+- [x] **Session-scoped `e2e_result` fixture** (`test/conftest.py`)
+  - Runs full pipeline once: load → enhance_contrast → global_reg → spot_finding → reads_extract → reads_filter → save_signal
+  - Creates symlinks to restructure mini dataset directory layout
+
+**Phase 7b: SNR-Gated Normalization**
+
+- [x] **Added `snr_threshold` parameter to `min_max_normalize()`** (`preprocessing/normalization.py`)
+  - Channels with `max/mean < snr_threshold` keep raw values (cast to uint8)
+  - Prevents noise inflation in channels with no real signal
+  - Default: `None` (backward compatible)
+  - Recommended: `5.0` (noise-only channels have SNR ≈ 3-4, signal channels ≈ 12+)
+
+- [x] **Exposed in FOV layer** (`dataset/fov.py`)
+  - `enhance_contrast(snr_threshold=5.0)` passes through to normalization
+
+**Phase 7c: Noise-Floor-Based Spot Finding Threshold**
+
+- [x] **Root cause analysis**: Per-channel `min_max_normalize` inflates noise to [0, 255]. Per-channel adaptive threshold (`channel_max * 0.2`) can't distinguish inflated noise from real spots. The 0.2 fraction is an arbitrary magic number from MATLAB with no principled justification.
+
+- [x] **Added `"adaptive_round"` mode** to `find_spots_3d()` (`spotfinding/local_maxima.py`)
+  - Uses `max(all_channels) * intensity_threshold` instead of per-channel max
+  - Combined with SNR gating: noise channels keep raw values (low max), signal channels reach 255
+
+- [x] **Added `"noise"` mode** to `find_spots_3d()` — **now the default**
+  - `threshold = median + k × MAD × 1.4826`
+  - MAD (median absolute deviation) is robust to outliers (spots don't bias noise estimate)
+  - `1.4826` converts MAD to σ under Gaussian assumption
+  - Default `k=5` (intensity_threshold=5.0)
+  - Normalization-independent: gives identical results on raw, SNR-gated, or fully normalized images
+  - Principled: threshold adapts to actual noise level, not maximum intensity
+
+- [x] **Changed defaults** in both `find_spots_3d()` and `FOV.spot_finding()`:
+  - `intensity_estimation`: `"adaptive"` → `"noise"`
+  - `intensity_threshold`: `0.2` → `5.0` (now means k-sigma, not fraction-of-max)
+
+- [x] **Empirical comparison** (mini dataset, round 1, 20 GT spots):
+
+  | Config | Total spots | ch0 (noise) | Recall | Precision |
+  |--------|----------:|------------:|-------:|----------:|
+  | adaptive + full norm (old) | 9,044 | 7,846 | 1.000 | 0.002 |
+  | adaptive_round + SNR-gate | 1,616 | 418 | 1.000 | 0.012 |
+  | **noise k=5 (any norm)** | **20** | **0** | **1.000** | **1.000** |
+
+**Tests:** 155 total passing (+4 new: 2 SNR gating, 1 noise threshold, 1 adaptive_round)
+
+**Files Created:**
+- `src/python/starfinder/testdata/validation.py` — GT comparison utilities
+- `src/python/test/test_e2e.py` — 8 e2e validation tests
+- `docs/plans/2026-02-13-snr-gated-spot-finding-plan.md` — Implementation plan
+
+**Files Modified:**
+- `src/python/starfinder/testdata/__init__.py` — Added validation exports
+- `src/python/starfinder/preprocessing/normalization.py` — Added `snr_threshold` parameter
+- `src/python/starfinder/spotfinding/local_maxima.py` — Added `"adaptive_round"` and `"noise"` modes, changed defaults
+- `src/python/starfinder/dataset/fov.py` — Exposed `snr_threshold`, updated `spot_finding()` defaults
+- `src/python/test/conftest.py` — Added `e2e_result` fixture with `snr_threshold=5.0`
+- `src/python/test/test_preprocessing.py` — +2 SNR gating tests
+- `src/python/test/test_spotfinding.py` — +2 tests (noise, adaptive_round), fixed existing tests for new defaults
+
+**Available spot finding modes:**
+| Mode | Threshold | Use case |
+|------|-----------|----------|
+| `noise` (default) | `median + k × MAD × 1.4826` | Principled, noise-adaptive |
+| `adaptive` | `channel_max × fraction` | MATLAB compatibility |
+| `adaptive_round` | `round_max × fraction` | Cross-channel suppression |
+| `global` | `dtype_max × fraction` | Fixed hardware threshold |
 
 ## Future Directions
 
