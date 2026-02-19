@@ -14,6 +14,7 @@ import numpy as np
 import tifffile
 
 from starfinder.benchmark.core import BenchmarkResult, measure
+from starfinder.benchmark.presets import BENCHMARK_TASK, DEFAULT_BENCHMARK_DIR
 
 
 def run_comparison(
@@ -137,10 +138,8 @@ class BenchmarkSuite:
 # Registration Benchmark Runner
 # =============================================================================
 
-# Default benchmark data location
-DEFAULT_BENCHMARK_DATA_DIR = Path(
-    "/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/data"
-)
+# Default benchmark data location (derived from shared constants)
+DEFAULT_BENCHMARK_DATA_DIR = DEFAULT_BENCHMARK_DIR / BENCHMARK_TASK / "data"
 
 # Preset order for early stopping (smallest to largest)
 PRESET_ORDER = ["tiny", "small", "medium", "large", "xlarge", "tissue", "thick_medium"]
@@ -259,7 +258,7 @@ class RegistrationBenchmarkRunner:
             self.results_dir = Path(results_dir)
         else:
             # Default: sibling "results" dir next to data dir
-            # e.g., .../starfinder_benchmark/data -> .../starfinder_benchmark/results
+            # e.g., .../registration/data -> .../registration/results
             self.results_dir = self.data_dir.parent / "results"
         self.timeout_seconds = timeout_seconds
         self.n_warmup = n_warmup

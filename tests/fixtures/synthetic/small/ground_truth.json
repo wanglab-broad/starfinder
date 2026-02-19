@@ -1,0 +1,1267 @@
+{
+  "version": "1.0",
+  "preset": "custom",
+  "seed": 42,
+  "image_shape": [
+    16,
+    256,
+    256
+  ],
+  "n_rounds": 4,
+  "n_channels": 4,
+  "n_genes": 8,
+  "fovs": {
+    "FOV_001": {
+      "shifts": {
+        "round1": [
+          0,
+          0,
+          0
+        ],
+        "round2": [
+          -2,
+          3,
+          2
+        ],
+        "round3": [
+          0,
+          -1,
+          4
+        ],
+        "round4": [
+          -2,
+          2,
+          -3
+        ]
+      },
+      "spots": [
+        {
+          "id": 0,
+          "gene": "GeneA",
+          "barcode": "CACGC",
+          "color_seq": "4422",
+          "position": [
+            8,
+            240,
+            183
+          ],
+          "intensity": 242
+        },
+        {
+          "id": 1,
+          "gene": "GeneF",
+          "barcode": "CTAGC",
+          "color_seq": "4343",
+          "position": [
+            12,
+            131,
+            40
+          ],
+          "intensity": 247
+        },
+        {
+          "id": 2,
+          "gene": "GeneD",
+          "barcode": "CGTAC",
+          "color_seq": "2424",
+          "position": [
+            8,
+            97,
+            53
+          ],
+          "intensity": 251
+        },
+        {
+          "id": 3,
+          "gene": "GeneG",
+          "barcode": "CCATC",
+          "color_seq": "3421",
+          "position": [
+            10,
+            104,
+            204
+          ],
+          "intensity": 230
+        },
+        {
+          "id": 4,
+          "gene": "GeneD",
+          "barcode": "CGTAC",
+          "color_seq": "2424",
+          "position": [
+            7,
+            63,
+            31
+          ],
+          "intensity": 231
+        },
+        {
+          "id": 5,
+          "gene": "GeneH",
+          "barcode": "CGCTC",
+          "color_seq": "3344",
+          "position": [
+            1,
+            212,
+            205
+          ],
+          "intensity": 215
+        },
+        {
+          "id": 6,
+          "gene": "GeneF",
+          "barcode": "CTAGC",
+          "color_seq": "4343",
+          "position": [
+            3,
+            188,
+            175
+          ],
+          "intensity": 219
+        },
+        {
+          "id": 7,
+          "gene": "GeneA",
+          "barcode": "CACGC",
+          "color_seq": "4422",
+          "position": [
+            14,
+            115,
+            220
+          ],
+          "intensity": 237
+        },
+        {
+          "id": 8,
+          "gene": "GeneG",
+          "barcode": "CCATC",
+          "color_seq": "3421",
+          "position": [
+            11,
+            55,
+            95
+          ],
+          "intensity": 226
+        },
+        {
+          "id": 9,
+          "gene": "GeneD",
+          "barcode": "CGTAC",
+          "color_seq": "2424",
+          "position": [
+            1,
+            138,
+            46
+          ],
+          "intensity": 241
+        },
+        {
+          "id": 10,
+          "gene": "GeneF",
+          "barcode": "CTAGC",
+          "color_seq": "4343",
+          "position": [
+            13,
+            185,
+            96
+          ],
+          "intensity": 254
+        },
+        {
+          "id": 11,
+          "gene": "GeneD",
+          "barcode": "CGTAC",
+          "color_seq": "2424",
+          "position": [
+            5,
+            223,
+            97
+          ],
+          "intensity": 204
+        },
+        {
+          "id": 12,
+          "gene": "GeneD",
+          "barcode": "CGTAC",
+          "color_seq": "2424",
+          "position": [
+            12,
+            54,
+            119
+          ],
+          "intensity": 207
+        },
+        {
+          "id": 13,
+          "gene": "GeneF",
+          "barcode": "CTAGC",
+          "color_seq": "4343",
+          "position": [
+            7,
+            87,
+            63
+          ],
+          "intensity": 231
+        },
+        {
+          "id": 14,
+          "gene": "GeneF",
+          "barcode": "CTAGC",
+          "color_seq": "4343",
+          "position": [
+            14,
+            113,
+            47
+          ],
+          "intensity": 246
+        },
+        {
+          "id": 15,
+          "gene": "GeneF",
+          "barcode": "CTAGC",
+          "color_seq": "4343",
+          "position": [
+            10,
+            32,
+            83
+          ],
+          "intensity": 242
+        },
+        {
+          "id": 16,
+          "gene": "GeneG",
+          "barcode": "CCATC",
+          "color_seq": "3421",
+          "position": [
+            7,
+            199,
+            208
+          ],
+          "intensity": 221
+        },
+        {
+          "id": 17,
+          "gene": "GeneH",
+          "barcode": "CGCTC",
+          "color_seq": "3344",
+          "position": [
+            5,
+            66,
+            171
+          ],
+          "intensity": 235
+        },
+        {
+          "id": 18,
+          "gene": "GeneB",
+          "barcode": "CATGC",
+          "color_seq": "4242",
+          "position": [
+            12,
+            57,
+            199
+          ],
+          "intensity": 200
+        },
+        {
+          "id": 19,
+          "gene": "GeneG",
+          "barcode": "CCATC",
+          "color_seq": "3421",
+          "position": [
+            12,
+            194,
+            166
+          ],
+          "intensity": 226
+        },
+        {
+          "id": 20,
+          "gene": "GeneF",
+          "barcode": "CTAGC",
+          "color_seq": "4343",
+          "position": [
+            4,
+            194,
+            141
+          ],
+          "intensity": 225
+        },
+        {
+          "id": 21,
+          "gene": "GeneE",
+          "barcode": "CTGAC",
+          "color_seq": "2323",
+          "position": [
+            8,
+            18,
+            42
+          ],
+          "intensity": 213
+        },
+        {
+          "id": 22,
+          "gene": "GeneA",
+          "barcode": "CACGC",
+          "color_seq": "4422",
+          "position": [
+            7,
+            167,
+            164
+          ],
+          "intensity": 226
+        },
+        {
+          "id": 23,
+          "gene": "GeneG",
+          "barcode": "CCATC",
+          "color_seq": "3421",
+          "position": [
+            8,
+            28,
+            190
+          ],
+          "intensity": 232
+        },
+        {
+          "id": 24,
+          "gene": "GeneF",
+          "barcode": "CTAGC",
+          "color_seq": "4343",
+          "position": [
+            8,
+            140,
+            31
+          ],
+          "intensity": 231
+        },
+        {
+          "id": 25,
+          "gene": "GeneG",
+          "barcode": "CCATC",
+          "color_seq": "3421",
+          "position": [
+            5,
+            152,
+            17
+          ],
+          "intensity": 219
+        },
+        {
+          "id": 26,
+          "gene": "GeneD",
+          "barcode": "CGTAC",
+          "color_seq": "2424",
+          "position": [
+            14,
+            60,
+            75
+          ],
+          "intensity": 222
+        },
+        {
+          "id": 27,
+          "gene": "GeneH",
+          "barcode": "CGCTC",
+          "color_seq": "3344",
+          "position": [
+            12,
+            18,
+            65
+          ],
+          "intensity": 246
+        },
+        {
+          "id": 28,
+          "gene": "GeneA",
+          "barcode": "CACGC",
+          "color_seq": "4422",
+          "position": [
+            12,
+            76,
+            226
+          ],
+          "intensity": 216
+        },
+        {
+          "id": 29,
+          "gene": "GeneD",
+          "barcode": "CGTAC",
+          "color_seq": "2424",
+          "position": [
+            10,
+            39,
+            141
+          ],
+          "intensity": 228
+        },
+        {
+          "id": 30,
+          "gene": "GeneG",
+          "barcode": "CCATC",
+          "color_seq": "3421",
+          "position": [
+            14,
+            166,
+            106
+          ],
+          "intensity": 222
+        },
+        {
+          "id": 31,
+          "gene": "GeneD",
+          "barcode": "CGTAC",
+          "color_seq": "2424",
+          "position": [
+            12,
+            85,
+            49
+          ],
+          "intensity": 218
+        },
+        {
+          "id": 32,
+          "gene": "GeneA",
+          "barcode": "CACGC",
+          "color_seq": "4422",
+          "position": [
+            2,
+            31,
+            192
+          ],
+          "intensity": 240
+        },
+        {
+          "id": 33,
+          "gene": "GeneF",
+          "barcode": "CTAGC",
+          "color_seq": "4343",
+          "position": [
+            7,
+            179,
+            48
+          ],
+          "intensity": 250
+        },
+        {
+          "id": 34,
+          "gene": "GeneE",
+          "barcode": "CTGAC",
+          "color_seq": "2323",
+          "position": [
+            14,
+            45,
+            127
+          ],
+          "intensity": 238
+        },
+        {
+          "id": 35,
+          "gene": "GeneD",
+          "barcode": "CGTAC",
+          "color_seq": "2424",
+          "position": [
+            7,
+            49,
+            99
+          ],
+          "intensity": 213
+        },
+        {
+          "id": 36,
+          "gene": "GeneC",
+          "barcode": "CGAAC",
+          "color_seq": "2134",
+          "position": [
+            10,
+            158,
+            153
+          ],
+          "intensity": 220
+        },
+        {
+          "id": 37,
+          "gene": "GeneH",
+          "barcode": "CGCTC",
+          "color_seq": "3344",
+          "position": [
+            2,
+            90,
+            37
+          ],
+          "intensity": 218
+        },
+        {
+          "id": 38,
+          "gene": "GeneH",
+          "barcode": "CGCTC",
+          "color_seq": "3344",
+          "position": [
+            6,
+            224,
+            126
+          ],
+          "intensity": 239
+        },
+        {
+          "id": 39,
+          "gene": "GeneD",
+          "barcode": "CGTAC",
+          "color_seq": "2424",
+          "position": [
+            4,
+            190,
+            238
+          ],
+          "intensity": 214
+        },
+        {
+          "id": 40,
+          "gene": "GeneG",
+          "barcode": "CCATC",
+          "color_seq": "3421",
+          "position": [
+            4,
+            179,
+            196
+          ],
+          "intensity": 225
+        },
+        {
+          "id": 41,
+          "gene": "GeneF",
+          "barcode": "CTAGC",
+          "color_seq": "4343",
+          "position": [
+            4,
+            28,
+            32
+          ],
+          "intensity": 225
+        },
+        {
+          "id": 42,
+          "gene": "GeneH",
+          "barcode": "CGCTC",
+          "color_seq": "3344",
+          "position": [
+            2,
+            117,
+            176
+          ],
+          "intensity": 211
+        },
+        {
+          "id": 43,
+          "gene": "GeneF",
+          "barcode": "CTAGC",
+          "color_seq": "4343",
+          "position": [
+            5,
+            200,
+            146
+          ],
+          "intensity": 230
+        },
+        {
+          "id": 44,
+          "gene": "GeneB",
+          "barcode": "CATGC",
+          "color_seq": "4242",
+          "position": [
+            7,
+            212,
+            14
+          ],
+          "intensity": 242
+        },
+        {
+          "id": 45,
+          "gene": "GeneD",
+          "barcode": "CGTAC",
+          "color_seq": "2424",
+          "position": [
+            11,
+            166,
+            111
+          ],
+          "intensity": 217
+        },
+        {
+          "id": 46,
+          "gene": "GeneF",
+          "barcode": "CTAGC",
+          "color_seq": "4343",
+          "position": [
+            2,
+            147,
+            32
+          ],
+          "intensity": 236
+        },
+        {
+          "id": 47,
+          "gene": "GeneF",
+          "barcode": "CTAGC",
+          "color_seq": "4343",
+          "position": [
+            2,
+            188,
+            108
+          ],
+          "intensity": 244
+        },
+        {
+          "id": 48,
+          "gene": "GeneA",
+          "barcode": "CACGC",
+          "color_seq": "4422",
+          "position": [
+            3,
+            126,
+            54
+          ],
+          "intensity": 218
+        },
+        {
+          "id": 49,
+          "gene": "GeneF",
+          "barcode": "CTAGC",
+          "color_seq": "4343",
+          "position": [
+            3,
+            169,
+            34
+          ],
+          "intensity": 209
+        }
+      ]
+    },
+    "FOV_002": {
+      "shifts": {
+        "round1": [
+          0,
+          0,
+          0
+        ],
+        "round2": [
+          0,
+          3,
+          -4
+        ],
+        "round3": [
+          -1,
+          5,
+          5
+        ],
+        "round4": [
+          0,
+          -1,
+          -2
+        ]
+      },
+      "spots": [
+        {
+          "id": 0,
+          "gene": "GeneE",
+          "barcode": "CTGAC",
+          "color_seq": "2323",
+          "position": [
+            9,
+            79,
+            15
+          ],
+          "intensity": 208
+        },
+        {
+          "id": 1,
+          "gene": "GeneH",
+          "barcode": "CGCTC",
+          "color_seq": "3344",
+          "position": [
+            6,
+            123,
+            120
+          ],
+          "intensity": 243
+        },
+        {
+          "id": 2,
+          "gene": "GeneA",
+          "barcode": "CACGC",
+          "color_seq": "4422",
+          "position": [
+            2,
+            75,
+            124
+          ],
+          "intensity": 237
+        },
+        {
+          "id": 3,
+          "gene": "GeneD",
+          "barcode": "CGTAC",
+          "color_seq": "2424",
+          "position": [
+            7,
+            231,
+            48
+          ],
+          "intensity": 232
+        },
+        {
+          "id": 4,
+          "gene": "GeneE",
+          "barcode": "CTGAC",
+          "color_seq": "2323",
+          "position": [
+            7,
+            200,
+            73
+          ],
+          "intensity": 253
+        },
+        {
+          "id": 5,
+          "gene": "GeneC",
+          "barcode": "CGAAC",
+          "color_seq": "2134",
+          "position": [
+            8,
+            132,
+            210
+          ],
+          "intensity": 224
+        },
+        {
+          "id": 6,
+          "gene": "GeneC",
+          "barcode": "CGAAC",
+          "color_seq": "2134",
+          "position": [
+            1,
+            95,
+            205
+          ],
+          "intensity": 200
+        },
+        {
+          "id": 7,
+          "gene": "GeneH",
+          "barcode": "CGCTC",
+          "color_seq": "3344",
+          "position": [
+            8,
+            43,
+            81
+          ],
+          "intensity": 231
+        },
+        {
+          "id": 8,
+          "gene": "GeneC",
+          "barcode": "CGAAC",
+          "color_seq": "2134",
+          "position": [
+            2,
+            167,
+            168
+          ],
+          "intensity": 206
+        },
+        {
+          "id": 9,
+          "gene": "GeneC",
+          "barcode": "CGAAC",
+          "color_seq": "2134",
+          "position": [
+            4,
+            165,
+            182
+          ],
+          "intensity": 240
+        },
+        {
+          "id": 10,
+          "gene": "GeneH",
+          "barcode": "CGCTC",
+          "color_seq": "3344",
+          "position": [
+            11,
+            85,
+            35
+          ],
+          "intensity": 234
+        },
+        {
+          "id": 11,
+          "gene": "GeneH",
+          "barcode": "CGCTC",
+          "color_seq": "3344",
+          "position": [
+            14,
+            64,
+            65
+          ],
+          "intensity": 202
+        },
+        {
+          "id": 12,
+          "gene": "GeneB",
+          "barcode": "CATGC",
+          "color_seq": "4242",
+          "position": [
+            8,
+            139,
+            97
+          ],
+          "intensity": 217
+        },
+        {
+          "id": 13,
+          "gene": "GeneG",
+          "barcode": "CCATC",
+          "color_seq": "3421",
+          "position": [
+            7,
+            200,
+            237
+          ],
+          "intensity": 217
+        },
+        {
+          "id": 14,
+          "gene": "GeneB",
+          "barcode": "CATGC",
+          "color_seq": "4242",
+          "position": [
+            14,
+            159,
+            78
+          ],
+          "intensity": 234
+        },
+        {
+          "id": 15,
+          "gene": "GeneE",
+          "barcode": "CTGAC",
+          "color_seq": "2323",
+          "position": [
+            13,
+            70,
+            243
+          ],
+          "intensity": 252
+        },
+        {
+          "id": 16,
+          "gene": "GeneB",
+          "barcode": "CATGC",
+          "color_seq": "4242",
+          "position": [
+            3,
+            135,
+            20
+          ],
+          "intensity": 216
+        },
+        {
+          "id": 17,
+          "gene": "GeneD",
+          "barcode": "CGTAC",
+          "color_seq": "2424",
+          "position": [
+            14,
+            244,
+            45
+          ],
+          "intensity": 249
+        },
+        {
+          "id": 18,
+          "gene": "GeneA",
+          "barcode": "CACGC",
+          "color_seq": "4422",
+          "position": [
+            11,
+            209,
+            220
+          ],
+          "intensity": 212
+        },
+        {
+          "id": 19,
+          "gene": "GeneH",
+          "barcode": "CGCTC",
+          "color_seq": "3344",
+          "position": [
+            2,
+            132,
+            120
+          ],
+          "intensity": 217
+        },
+        {
+          "id": 20,
+          "gene": "GeneA",
+          "barcode": "CACGC",
+          "color_seq": "4422",
+          "position": [
+            11,
+            89,
+            166
+          ],
+          "intensity": 222
+        },
+        {
+          "id": 21,
+          "gene": "GeneC",
+          "barcode": "CGAAC",
+          "color_seq": "2134",
+          "position": [
+            13,
+            32,
+            183
+          ],
+          "intensity": 241
+        },
+        {
+          "id": 22,
+          "gene": "GeneD",
+          "barcode": "CGTAC",
+          "color_seq": "2424",
+          "position": [
+            4,
+            11,
+            231
+          ],
+          "intensity": 253
+        },
+        {
+          "id": 23,
+          "gene": "GeneB",
+          "barcode": "CATGC",
+          "color_seq": "4242",
+          "position": [
+            1,
+            38,
+            25
+          ],
+          "intensity": 246
+        },
+        {
+          "id": 24,
+          "gene": "GeneH",
+          "barcode": "CGCTC",
+          "color_seq": "3344",
+          "position": [
+            3,
+            186,
+            52
+          ],
+          "intensity": 220
+        },
+        {
+          "id": 25,
+          "gene": "GeneE",
+          "barcode": "CTGAC",
+          "color_seq": "2323",
+          "position": [
+            11,
+            216,
+            20
+          ],
+          "intensity": 211
+        },
+        {
+          "id": 26,
+          "gene": "GeneC",
+          "barcode": "CGAAC",
+          "color_seq": "2134",
+          "position": [
+            5,
+            245,
+            193
+          ],
+          "intensity": 217
+        },
+        {
+          "id": 27,
+          "gene": "GeneH",
+          "barcode": "CGCTC",
+          "color_seq": "3344",
+          "position": [
+            7,
+            128,
+            112
+          ],
+          "intensity": 208
+        },
+        {
+          "id": 28,
+          "gene": "GeneH",
+          "barcode": "CGCTC",
+          "color_seq": "3344",
+          "position": [
+            1,
+            51,
+            64
+          ],
+          "intensity": 215
+        },
+        {
+          "id": 29,
+          "gene": "GeneB",
+          "barcode": "CATGC",
+          "color_seq": "4242",
+          "position": [
+            1,
+            169,
+            238
+          ],
+          "intensity": 206
+        },
+        {
+          "id": 30,
+          "gene": "GeneC",
+          "barcode": "CGAAC",
+          "color_seq": "2134",
+          "position": [
+            8,
+            228,
+            173
+          ],
+          "intensity": 242
+        },
+        {
+          "id": 31,
+          "gene": "GeneE",
+          "barcode": "CTGAC",
+          "color_seq": "2323",
+          "position": [
+            6,
+            57,
+            213
+          ],
+          "intensity": 245
+        },
+        {
+          "id": 32,
+          "gene": "GeneA",
+          "barcode": "CACGC",
+          "color_seq": "4422",
+          "position": [
+            11,
+            29,
+            184
+          ],
+          "intensity": 246
+        },
+        {
+          "id": 33,
+          "gene": "GeneB",
+          "barcode": "CATGC",
+          "color_seq": "4242",
+          "position": [
+            7,
+            39,
+            143
+          ],
+          "intensity": 251
+        },
+        {
+          "id": 34,
+          "gene": "GeneA",
+          "barcode": "CACGC",
+          "color_seq": "4422",
+          "position": [
+            6,
+            239,
+            81
+          ],
+          "intensity": 207
+        },
+        {
+          "id": 35,
+          "gene": "GeneD",
+          "barcode": "CGTAC",
+          "color_seq": "2424",
+          "position": [
+            8,
+            166,
+            84
+          ],
+          "intensity": 253
+        },
+        {
+          "id": 36,
+          "gene": "GeneE",
+          "barcode": "CTGAC",
+          "color_seq": "2323",
+          "position": [
+            5,
+            236,
+            228
+          ],
+          "intensity": 227
+        },
+        {
+          "id": 37,
+          "gene": "GeneA",
+          "barcode": "CACGC",
+          "color_seq": "4422",
+          "position": [
+            9,
+            141,
+            44
+          ],
+          "intensity": 235
+        },
+        {
+          "id": 38,
+          "gene": "GeneG",
+          "barcode": "CCATC",
+          "color_seq": "3421",
+          "position": [
+            2,
+            180,
+            43
+          ],
+          "intensity": 241
+        },
+        {
+          "id": 39,
+          "gene": "GeneD",
+          "barcode": "CGTAC",
+          "color_seq": "2424",
+          "position": [
+            1,
+            238,
+            49
+          ],
+          "intensity": 233
+        },
+        {
+          "id": 40,
+          "gene": "GeneB",
+          "barcode": "CATGC",
+          "color_seq": "4242",
+          "position": [
+            14,
+            184,
+            199
+          ],
+          "intensity": 224
+        },
+        {
+          "id": 41,
+          "gene": "GeneD",
+          "barcode": "CGTAC",
+          "color_seq": "2424",
+          "position": [
+            9,
+            195,
+            209
+          ],
+          "intensity": 200
+        },
+        {
+          "id": 42,
+          "gene": "GeneF",
+          "barcode": "CTAGC",
+          "color_seq": "4343",
+          "position": [
+            2,
+            77,
+            205
+          ],
+          "intensity": 214
+        },
+        {
+          "id": 43,
+          "gene": "GeneG",
+          "barcode": "CCATC",
+          "color_seq": "3421",
+          "position": [
+            7,
+            64,
+            88
+          ],
+          "intensity": 229
+        },
+        {
+          "id": 44,
+          "gene": "GeneG",
+          "barcode": "CCATC",
+          "color_seq": "3421",
+          "position": [
+            9,
+            230,
+            214
+          ],
+          "intensity": 242
+        },
+        {
+          "id": 45,
+          "gene": "GeneE",
+          "barcode": "CTGAC",
+          "color_seq": "2323",
+          "position": [
+            5,
+            107,
+            38
+          ],
+          "intensity": 220
+        },
+        {
+          "id": 46,
+          "gene": "GeneH",
+          "barcode": "CGCTC",
+          "color_seq": "3344",
+          "position": [
+            6,
+            36,
+            163
+          ],
+          "intensity": 253
+        },
+        {
+          "id": 47,
+          "gene": "GeneG",
+          "barcode": "CCATC",
+          "color_seq": "3421",
+          "position": [
+            4,
+            117,
+            135
+          ],
+          "intensity": 213
+        },
+        {
+          "id": 48,
+          "gene": "GeneC",
+          "barcode": "CGAAC",
+          "color_seq": "2134",
+          "position": [
+            4,
+            244,
+            186
+          ],
+          "intensity": 247
+        },
+        {
+          "id": 49,
+          "gene": "GeneG",
+          "barcode": "CCATC",
+          "color_seq": "3421",
+          "position": [
+            14,
+            34,
+            218
+          ],
+          "intensity": 203
+        }
+      ]
+    }
+  }
+}

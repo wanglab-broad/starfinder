@@ -20,6 +20,8 @@ from starfinder.benchmark.report import (
     save_json,
 )
 from starfinder.benchmark.presets import (
+    DEFAULT_BENCHMARK_DIR,
+    BENCHMARK_TASK,
     SIZE_PRESETS,
     SPOT_COUNTS,
     SHIFT_RANGES,
@@ -58,6 +60,8 @@ __all__ = [
     "PRESET_ORDER",
     "timeout_handler",
     # Presets
+    "DEFAULT_BENCHMARK_DIR",
+    "BENCHMARK_TASK",
     "SIZE_PRESETS",
     "SPOT_COUNTS",
     "SHIFT_RANGES",

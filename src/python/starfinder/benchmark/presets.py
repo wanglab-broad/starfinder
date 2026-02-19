@@ -2,6 +2,14 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
+# Root benchmark directory and current task
+DEFAULT_BENCHMARK_DIR = Path(
+    "/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark"
+)
+BENCHMARK_TASK = "registration"
+
 # Standard volume size presets (Z, Y, X)
 SIZE_PRESETS: dict[str, tuple[int, int, int]] = {
     "tiny": (8, 128, 128),

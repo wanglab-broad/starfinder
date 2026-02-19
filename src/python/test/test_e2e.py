@@ -2,7 +2,7 @@
 
 Validates that the full pipeline (load → enhance → register → spot_find →
 extract → filter) produces quantitatively correct results by comparing
-against known ground truth from the mini synthetic dataset.
+against known ground truth from the small synthetic dataset.
 
 Uses the session-scoped ``e2e_result`` fixture from conftest.py, which
 runs the pipeline once and shares results across all tests.

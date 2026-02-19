@@ -14,20 +14,20 @@ from starfinder.registration import (
 class TestPhaseCorrelate:
     """Tests for phase_correlate function."""
 
-    def test_zero_shift(self, mini_dataset):
+    def test_zero_shift(self, small_dataset):
         """Identical images return (0, 0, 0)."""
         from starfinder.io import load_multipage_tiff
 
-        vol = load_multipage_tiff(mini_dataset / "FOV_001" / "round1" / "ch00.tif")
+        vol = load_multipage_tiff(small_dataset / "FOV_001" / "round1" / "ch00.tif")
         shift = phase_correlate(vol, vol)
 
         assert np.allclose(shift, (0, 0, 0), atol=0.1)
 
-    def test_known_shift(self, mini_dataset):
+    def test_known_shift(self, small_dataset):
         """Recovers integer shift applied via np.roll."""
         from starfinder.io import load_multipage_tiff
 
-        vol = load_multipage_tiff(mini_dataset / "FOV_001" / "round1" / "ch00.tif")
+        vol = load_multipage_tiff(small_dataset / "FOV_001" / "round1" / "ch00.tif")
         moved = np.roll(vol, (2, -3, 5), axis=(0, 1, 2))
         shift = phase_correlate(vol, moved)
 
@@ -37,11 +37,11 @@ class TestPhaseCorrelate:
 class TestApplyShift:
     """Tests for apply_shift function."""
 
-    def test_roundtrip(self, mini_dataset):
+    def test_roundtrip(self, small_dataset):
         """shift -> apply -> inverse shift preserves non-zero data."""
         from starfinder.io import load_multipage_tiff
 
-        vol = load_multipage_tiff(mini_dataset / "FOV_001" / "round1" / "ch00.tif")
+        vol = load_multipage_tiff(small_dataset / "FOV_001" / "round1" / "ch00.tif")
         original_sum = vol.sum()
 
         shifted = apply_shift(vol, (3, -2, 4))
@@ -56,12 +56,12 @@ class TestApplyShift:
 class TestRegisterVolume:
     """Tests for register_volume function."""
 
-    def test_registers_multichannel(self, mini_dataset):
+    def test_registers_multichannel(self, small_dataset):
         """Registers all channels and returns shifts."""
         from starfinder.io import load_image_stacks
 
         images, _ = load_image_stacks(
-            mini_dataset / "FOV_001" / "round1",
+            small_dataset / "FOV_001" / "round1",
             ["ch00", "ch01", "ch02", "ch03"],
         )
 
@@ -81,11 +81,11 @@ class TestRegisterVolume:
 class TestBackendParity:
     """NumPy vs scikit-image produce same results."""
 
-    def test_backends_match(self, mini_dataset):
+    def test_backends_match(self, small_dataset):
         """Both backends return same shift for same input."""
         from starfinder.io import load_multipage_tiff
 
-        vol = load_multipage_tiff(mini_dataset / "FOV_001" / "round1" / "ch00.tif")
+        vol = load_multipage_tiff(small_dataset / "FOV_001" / "round1" / "ch00.tif")
         moved = np.roll(vol, (2, 3, -1), axis=(0, 1, 2))
 
         shift_np = phase_correlate(vol, moved)

@@ -51,6 +51,7 @@ Location: `/home/unix/jiahao/wanglab/Data/Processed/sample-dataset/`
   - [x] Phase 5: Preprocessing (min_max_normalize, histogram_match, morphological_reconstruction, tophat_filter, make_projection)
   - [x] Phase 6: Dataset/FOV class wrapper (STARMapDataset, FOV, fluent API)
   - [x] Phase 7: E2E validation tests + SNR-gated normalization + noise-floor spot finding threshold
+  - [x] Phase 8: Real data E2E benchmark (tissue-2D, LN, cell-culture-3D — all 3 datasets, 2 FOVs each)
   - [] Adopt new data structure such as h5 and OME-Zarr, but also ensure backward compatibility
   - [] Adopt new 2D/3D image segmentation methods
 3. [] Systematically benchmark the performance of the MATLAB backend and the new Python version
@@ -604,7 +605,7 @@ bioio-tifffile>=1.0
     - large (30×1024×1024), xlarge (30×1496×1496), tissue (30×3072×3072)
     - thick_medium (100×1024×1024)
   - **Real:** 3 datasets (cell_culture_3D, tissue_2D, LN) (~0.9GB)
-  - **Location:** `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/`
+  - **Location:** `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/registration/`
 
 - [x] **Fixed multiple data generation issues**
   - Z-axis shifts always 0 → Fixed with preset-specific seeds + exclude 0 from options
@@ -643,38 +644,29 @@ bioio-tifffile>=1.0
 
 ### 2026-02-10: Benchmark Folder Reorganization
 
-- [x] **Reorganized benchmark folder structure**
-  - Renamed `registration_benchmark/` → `starfinder_benchmark/` (default output folder for all future benchmarks)
-  - Created `data/` folder, moved `synthetic/` and `real/` into it
-  - Moved all registration results under `results/registration/`
-  - Deleted `overview.png` (panels too small, not readable)
+- [x] **Reorganized benchmark folder structure** (updated 2026-02-17)
+  - `starfinder_benchmark/` is now a task-scoped organizer with `registration/`, `e2e/`, `spot_finding/` subdirectories
+  - Registration data and results moved under `registration/data/` and `registration/results/`
 
-- [x] **Renamed result folders for clarity**
-  - `global/` → `global_python/` (Python-only global registration results)
-  - `matlab_global/` → `global_matlab/` (MATLAB DFTRegister3D results)
-  - `tuning/` → `local_tuning/` (demons parameter grid search)
-  - `matlab/` → `local_matlab/` (MATLAB imregdemons results)
-  - Created `local_python/` (placeholder for future Python local registration benchmarks)
-  - Created `scripts/` folder under `results/registration/` for MATLAB/Python comparison scripts
-
-**New structure:**
+**Current structure:**
 ```
 starfinder_benchmark/
-├── data/
-│   ├── synthetic/          # 7 presets (tiny → tissue), 31 GB
-│   └── real/               # 3 datasets (cell_culture_3D, tissue_2D, LN), 886 MB
-└── results/
-    └── registration/
-        ├── global_python/       # Python phase_correlate results (1.9 GB)
-        ├── global_matlab/       # MATLAB DFTRegister3D results (446 MB)
-        ├── global_comparison/   # MATLAB vs Python head-to-head (1.8 GB)
-        ├── local_tuning/        # Demons parameter grid search (107 MB)
-        ├── local_matlab/        # MATLAB imregdemons results (14 GB)
-        ├── local_python/        # (empty, future Python demons results)
-        ├── local_comparison/    # MATLAB vs Python demons comparison (409 MB)
-        ├── combined/            # Aggregated results JSON (8 KB)
-        ├── figures/             # Publication-style figures (8.5 MB)
-        └── scripts/             # MATLAB/Python comparison scripts (136 KB)
+├── registration/
+│   ├── data/
+│   │   ├── synthetic/          # 7 presets (tiny → tissue), 31 GB
+│   │   └── real/               # 3 datasets (cell_culture_3D, tissue_2D, LN), 886 MB
+│   └── results/
+│       ├── global_python/       # Python phase_correlate results
+│       ├── global_matlab/       # MATLAB DFTRegister3D results
+│       ├── global_comparison/   # MATLAB vs Python head-to-head
+│       ├── local_tuning/        # Demons parameter grid search
+│       ├── local_matlab/        # MATLAB imregdemons results
+│       ├── local_python/        # Python demons results
+│       ├── local_comparison/    # MATLAB vs Python demons comparison
+│       ├── figures/             # Publication-style figures
+│       └── scripts/             # MATLAB/Python comparison scripts
+├── e2e/                         # End-to-end validation results
+└── spot_finding/                # Spot finding benchmark results
 ```
 
 ### 2026-02-10: Two-Phase Benchmark Workflow & Evaluate Module
@@ -697,7 +689,7 @@ starfinder_benchmark/
 - [x] **Refactored `runner.py` to delegate to evaluate module**
   - `_compute_quality_metrics()` → delegates to `evaluate.evaluate_registration()`
   - `generate_registration_inspection()` → delegates to `evaluate.generate_inspection()`
-  - Updated `DEFAULT_BENCHMARK_DATA_DIR` to `starfinder_benchmark/data`
+  - Updated `DEFAULT_BENCHMARK_DATA_DIR` to `starfinder_benchmark/registration/data`
   - Fixed `results_dir` default: `self.data_dir.parent / "results"` (sibling of data/)
 
 - [x] **Updated MATLAB benchmark scripts** (on network mount)
@@ -806,7 +798,7 @@ Phase 2 evaluation was bottlenecked by 3D spot detection on large datasets like 
   - **Configs**: `py_demons` (Thirion + antialias), `py_diffeo` (diffeomorphic + antialias), `matlab` (imregdemons)
   - All used identical iterations `[100,50,25]` and sigma/AFS=1.0 with 3-level pyramids
 
-- [x] **Created benchmark scripts** (at `.../starfinder_benchmark/results/registration/scripts/`)
+- [x] **Created benchmark scripts** (at `.../starfinder_benchmark/registration/results/scripts/`)
   - `benchmark_local_comparison_single.py` — Python worker (117 lines)
   - `benchmark_local_comparison_matlab.m` — MATLAB worker with matched AFS=1.0 (130 lines)
   - `run_local_comparison_v2.py` — Orchestrator with `/usr/bin/time -v` wrapping (309 lines)
@@ -1118,6 +1110,292 @@ End-to-end validation against synthetic ground truth revealed a false positive p
 | `adaptive` | `channel_max × fraction` | MATLAB compatibility |
 | `adaptive_round` | `round_max × fraction` | Cross-channel suppression |
 | `global` | `dtype_max × fraction` | Fixed hardware threshold |
+
+### 2026-02-17: E2E Benchmark Dataset & Pipeline Validation
+
+Created a large-scale synthetic benchmark dataset and ran the full Python e2e pipeline with comprehensive QC reporting.
+
+- [x] **Added "large" preset to testdata module** (`starfinder.testdata.synthetic`)
+  - 1024×1024×30 volume, 2 FOVs, 4 rounds, 4 channels
+  - 2000 spots per FOV, 64 genes (all CNNNNC barcodes)
+  - Shift range: XY ±30, Z ±5 (seed=123)
+  - ~967 MB total dataset
+
+- [x] **Added `generate_codebook(n_genes)` function**
+  - Enumerates all CNNNNC barcodes (C + {A,C,G,T}^3 + C = 64 possible)
+  - Verifies unique color sequences (all 64 map uniquely)
+  - Gene names: Gene001-Gene064
+
+- [x] **Added `codebook` field to `SyntheticConfig`**
+  - `None` (default) uses `TEST_CODEBOOK` (8 genes, backward compatible)
+  - Large preset sets `codebook=generate_codebook(64)`
+  - `generate_synthetic_dataset()` now uses resolved codebook throughout (gene assignment, CSV writing)
+
+- [x] **Updated visualization for large codebooks**
+  - `_generate_annotated_visualization()` uses `tab20` colormap instead of hardcoded 8-gene dict
+  - Text annotations skipped when >50 spots (avoids clutter)
+
+- [x] **Generated benchmark dataset** at `starfinder_benchmark/e2e/data/large/`
+  - 32 TIFF images + codebook.csv + ground_truth.json + 2 annotation PNGs
+
+- [x] **Ran full e2e pipeline** with per-step timing and memory tracking
+  - Pipeline: load → enhance_contrast(snr=5.0) → global_registration → spot_finding → reads_extraction → reads_filtration(end_bases="CC")
+  - Per-FOV: ~51s, Peak RSS ~2.4 GB
+  - Registration dominates runtime (~30s, 58%)
+
+- [x] **E2e benchmark results** (FOV_001 / FOV_002):
+
+  | Metric | FOV_001 | FOV_002 |
+  |--------|---------|---------|
+  | Shift max error | 0.000 px | 0.000 px |
+  | Spot recall | 1.000 | 1.000 |
+  | Spot precision | 0.987 | 0.993 |
+  | Gene accuracy | 1.000 | 1.000 |
+  | Codebook match rate | 86.7% | 87.7% |
+  | CNNNNC correct form | 86.7% | 87.7% |
+  | Good spots | 1756 | 1765 |
+  | Total time | 51.9s | 50.9s |
+
+- [x] **Created inspection images**
+  - `signal/{fov}_goodSpots.png` — Red dots on grayscale MIP background
+  - `log/{fov}_inspection_registration.png` — Green/magenta composite overlay per round
+  - `log/{fov}_qc.csv` — Full QC metrics (detection, extraction, filtering, timing, memory)
+
+- [x] **Updated CLI** (`__main__.py`) to accept `--preset large`
+
+**Files Modified:**
+- `src/python/starfinder/testdata/synthetic.py` — Added `generate_codebook()`, `codebook` field, large preset, colormap visualization
+- `src/python/starfinder/testdata/__main__.py` — Added "large" choice
+
+**Benchmark output:**
+```
+starfinder_benchmark/e2e/
+├── data/large/                              # 64-gene, 2000 spot/FOV dataset
+│   ├── FOV_001/, FOV_002/                   # TIFF images (4 rounds × 4 channels)
+│   ├── codebook.csv                         # 64 genes
+│   ├── ground_truth.json                    # Shifts, spots, barcodes
+│   └── ground_truth_annotation_*.png        # Spot overlay visualization
+└── results/large/                           # Pipeline output
+    ├── e2e_results.json                     # Full validation metrics
+    ├── run_e2e_large.py                     # Reproducible script
+    ├── signal/                              # Decoded reads + spot images
+    │   ├── FOV_*_goodSpots.csv
+    │   └── FOV_*_goodSpots.png
+    └── log/                                 # Registration images + QC
+        ├── FOV_*_inspection_registration.png
+        ├── FOV_*_qc.csv
+        └── gr_shifts/FOV_*.txt
+```
+
+### 2026-02-17: Phase 8 — Real Data E2E Benchmark (tissue-2D)
+
+First end-to-end Python pipeline run on real microscopy data. Validated against MATLAB outputs (shifts, spot counts, gene overlap).
+
+**Pipeline fixes for real data:**
+
+- [x] **Fixed `load_codebook()` for headerless CSV + BOM** (`barcode/codebook.py`)
+  - Real `genes.csv` files lack the `gene,barcode` header; `csv.DictReader` silently corrupts the first row
+  - Opens with `encoding="utf-8-sig"` (strips BOM), peeks at first line to detect header
+  - Backward compatible with existing header-bearing files
+  - +2 tests (headerless, BOM)
+
+- [x] **Added `FOV.rotate()` method with fast path** (`dataset/fov.py`)
+  - All real datasets require `rotate_angle: -90` before registration
+  - For exact 90° multiples: `np.rot90` (zero-copy, instant) — 390s → 28s (14x speedup)
+  - General angles: falls back to `scipy.ndimage.rotate` with bilinear interpolation
+  - Pipeline order: `load → rotate → enhance → register → spot_finding → extract → filter`
+  - +1 test
+
+- [x] **Discovered MATLAB channel order is wavelength-sorted** (`STARMapDataset.m`)
+  - MATLAB default `channel_order_dict`: 488→546→594→647nm → `["ch00", "ch02", "ch01", "ch03"]`
+  - ch01 and ch02 are **swapped** compared to filename order
+  - All real datasets use this default (`seq_channel_order: []` in YAML config)
+  - Confirmed correct via 100% gene overlap with MATLAB (wrong order would scramble gene assignments)
+
+- [x] **Real data spot finding requires `"adaptive"` threshold**
+  - `"noise"` mode (k-sigma, default) gave 19.2M spots on 3072×3072×30 — too permissive for autofluorescent tissue
+  - MATLAB tissue-2D config uses `intensity_estimation="adaptive"`, `intensity_threshold=0.4` (40% of channel max)
+  - With matching params: 67K total → 35.8K good (53.4% codebook match rate)
+
+**tissue-2D tile_1 results:**
+
+| Metric | Python | MATLAB | Agreement |
+|--------|--------|--------|-----------|
+| Shifts (round2) | (1, 84, -47) | (-1, 84, -48) | dz=2, dy=0, dx=1 |
+| Shifts (round3) | (-1, 108, -73) | (1, 108, -73) | dz=2, dy=0, dx=0 |
+| Shifts (round4) | (-3, 109, -87) | (2, 108, -92) | dz=5, dy=1, dx=5 |
+| Good spots | 35,831 | 46,745 | 0.77 ratio |
+| Unique genes | 64/64 | 64/64 | 100% overlap |
+| Top-10 genes | — | — | 9/10 match |
+| Total time | 487s | — | — |
+| Peak RSS | ~4.5 GB | — | — |
+
+**Per-step timing (tile_1, 3072×3072×30×4):**
+
+| Step | Time (s) | Notes |
+|------|----------|-------|
+| load | 57 | 16 TIFFs from network mount |
+| rotate | 28 | np.rot90 fast path |
+| enhance | 46 | SNR-gated min-max normalization |
+| registration | 290 | Phase correlation, 3 rounds |
+| spot_finding | 30 | Adaptive threshold @ 0.4 |
+| extraction | 36 | 67K spots × 4 rounds |
+| filtration | 0.1 | Codebook lookup |
+
+**Files Created:**
+- `starfinder_benchmark/e2e/results/tissue_2D/run_e2e_tissue2D.py` — Self-contained benchmark script
+
+**Files Modified:**
+- `src/python/starfinder/barcode/codebook.py` — Header detection + BOM handling
+- `src/python/starfinder/dataset/fov.py` — `rotate()` method with `np.rot90` fast path
+- `src/python/test/test_barcode.py` — +2 tests
+- `src/python/test/test_fov.py` — +1 test
+
+**Test Results:** 158 tests passing (+3 new)
+
+**Next Steps:**
+- Scale tissue-2D to multiple FOVs
+- Create LN and cell-culture-3D benchmark runners
+- Cross-dataset comparison analysis
+
+### 2026-02-18: E2E Benchmark — Tissue & Thick Medium Synthetic Presets
+
+Added two new synthetic presets for e2e benchmarking at production-relevant scales and ran the full pipeline on both.
+
+- [x] **Added `tissue` and `thick_medium` presets to `testdata.synthetic`**
+  - `tissue`: 3072×3072×30, 2 FOVs, 14000 spots/FOV, 64 genes, shifts XY ±300 / Z ±7 (seed=456)
+  - `thick_medium`: 1024×1024×100, 2 FOVs, 5200 spots/FOV, 64 genes, shifts XY ±100 / Z ±25 (seed=789)
+  - Parameters matched `benchmark.presets.SIZE_PRESETS` and `SPOT_COUNTS`
+
+- [x] **Updated CLI** (`__main__.py`) to accept `--preset tissue` and `--preset thick_medium`
+
+- [x] **Generated datasets** at `starfinder_benchmark/e2e/data/{tissue,thick_medium}/`
+
+- [x] **Created and ran e2e benchmark scripts**
+  - `starfinder_benchmark/e2e/results/tissue/run_e2e_tissue.py`
+  - `starfinder_benchmark/e2e/results/thick_medium/run_e2e_thick_medium.py`
+
+- [x] **Reorganized benchmark output directory structure** (applied to all three scripts: large, tissue, thick_medium)
+  - Registration images: `log/` → `log/gr_inspect/`
+  - Signal images: `signal/` → `log/signal_inspect/`
+  - QC CSV: `{fov}_qc.csv` → `{fov}.csv`
+  - Renamed metrics: `spot_recall` → `detection_recall`, `spot_precision` → `detection_precision`, `n_correct_form_CNNNNC` → `n_correct_form`
+  - Removed: `spot_mean_distance_px`
+
+- [x] **Results:**
+
+  | Metric | large (1024²×30) | thick_medium (1024²×100) | tissue (3072²×30) |
+  |--------|-----------------|------------------------|-------------------|
+  | Spots/FOV (GT) | 2,000 | 5,200 | 14,000 |
+  | Shift recovery | 0 px | 0 px | 0 px |
+  | Recall | 1.000 | 1.000 | 1.000 |
+  | Precision | 0.987 | 0.981–0.986 | 0.983–0.986 |
+  | Gene accuracy | 1.000 | 1.000 | 1.000 |
+  | CNNNNC rate | 86.7% | 67.8–81.5% | 64.3–70.4% |
+  | Time/FOV | ~52s | ~179s | ~482s |
+  | Peak RSS | 2.4 GB | 7.5 GB | 20 GB |
+
+**Files Modified:**
+- `src/python/starfinder/testdata/synthetic.py` — Added tissue and thick_medium presets
+- `src/python/starfinder/testdata/__main__.py` — Added preset choices
+
+**Files Created (on network mount):**
+- `starfinder_benchmark/e2e/data/{tissue,thick_medium}/` — Synthetic datasets
+- `starfinder_benchmark/e2e/results/tissue/run_e2e_tissue.py` — Benchmark script
+- `starfinder_benchmark/e2e/results/thick_medium/run_e2e_thick_medium.py` — Benchmark script
+
+**Benchmark output structure (updated for all presets):**
+```
+starfinder_benchmark/e2e/results/{preset}/
+├── e2e_results.json
+├── run_e2e_{preset}.py
+├── signal/
+│   └── FOV_*_goodSpots.csv
+└── log/
+    ├── FOV_*.csv                              # QC metrics (27 cols)
+    ├── gr_inspect/FOV_*_inspection_registration.png
+    ├── signal_inspect/FOV_*_goodSpots.png
+    └── gr_shifts/FOV_*.txt
+```
+
+### 2026-02-18: Phase 8 — Real Data E2E Benchmark (All 3 Datasets)
+
+Standardized the real-data benchmark output format to match synthetic benchmarks, then ran the full Python pipeline on all 3 real datasets (tissue-2D, LN, cell-culture-3D) with 2 FOVs each. Compared against MATLAB outputs for shifts, spot counts, and gene overlap.
+
+**Output format standardization:**
+
+- [x] **Reorganized output directories** to match synthetic benchmark layout:
+  - Registration images: `log/gr_inspect/{fov}_inspection_registration.png`
+  - Signal images: `log/signal_inspect/{fov}_goodSpots.png`
+  - QC CSV: `log/{fov}.csv` (consistent with synthetic format, minus GT fields)
+  - MATLAB comparison: separated to `log/matlab_comparison/{fov}.csv`
+- [x] **QC CSV format** matches synthetic benchmark minus ground truth fields:
+  - Kept: detection metrics (n_all_spots, n_good_spots, codebook_match_rate), per-step timing, memory
+  - Added: `gene_coverage`, `mean_color_score` (real-data specific)
+  - Removed: GT-dependent fields (detection_recall/precision, gene/color_seq accuracy, shift errors)
+- [x] **MATLAB comparison CSV** (`log/matlab_comparison/{fov}.csv`):
+  - Per-round shift comparison (Python vs MATLAB with diff)
+  - Both backends: n_all_spots, n_good_spots, codebook_match_rate
+  - Gene overlap metrics: total overlap, top-10 gene overlap
+
+**Dataset-specific parameters discovered:**
+
+| Parameter | tissue-2D | LN | cell-culture-3D |
+|-----------|-----------|----|--------------------|
+| Rounds | 4 | 4 | 6 |
+| Ref round | round1 | round4 | round1 |
+| FOV pattern | `tile_%d` | `Position%03d` | `Position%03d` |
+| Image size | 3072×3072×30 | 1496×1496×50 | 1496×1496×30 |
+| Genes | 64 | 61 | 998 |
+| Voxel size | (1,1,1) | (1,1,1) | (1,2,2) |
+| Threshold | adaptive @ 0.4 | adaptive @ 0.2 | adaptive @ 0.2 |
+| End bases | CC | AC | CC |
+| Start base | C | A | C |
+
+**Results summary (2 FOVs each):**
+
+- [x] **tissue-2D** (tile_1, tile_2): 1085s total, 20 GB peak RSS
+  - tile_1: 35.8K good spots (MATLAB: 46.7K, ratio=0.77), 100% gene overlap, 9/10 top-10
+  - tile_2: 51.1K good spots (no MATLAB reference for tile_2), 100% gene coverage
+  - Shifts match within 0-5px (dz sign differences expected due to Z-axis convention)
+
+- [x] **LN** (Position001, Position002): 402s total, 8.1 GB peak RSS
+  - Position001: 10.5K good spots (MATLAB: 8.8K, ratio=1.19), 95.1% gene overlap, 10/10 top-10
+  - Position002: 10.1K good spots (MATLAB: 8.4K, ratio=1.21), 95.1% gene overlap, 9/10 top-10
+  - **dz sign flip**: Position001 shows systematic dz negation (Python=-16, MATLAB=+16); Position002 matches when dz=0
+  - Python detects ~20% more spots than MATLAB (likely from different spot finding internals)
+
+- [x] **cell-culture-3D** (Position351, Position352): 519s total, 5.6 GB peak RSS
+  - Position351: 31.6K good spots (MATLAB: 33.5K, ratio=0.95), 100% gene overlap, 10/10 top-10
+  - Position352: 32.8K good spots (MATLAB: 33.5K, ratio=0.98), 99.8% gene overlap, 10/10 top-10
+  - Best MATLAB agreement of all 3 datasets (0.95-0.98 spot ratio)
+  - Most rounds match shifts exactly; dz differs by 0-6px on some rounds
+
+- [x] **MATLAB shift log parsing**: tissue-2D uses structured CSV at `log/gr_shifts/{fov}.txt`; LN and cell-culture-3D embed shifts in text log files at `log/{fov}.txt` — created `parse_matlab_shifts_from_log()` regex parser
+
+**Files Created (on network mount):**
+- `starfinder_benchmark/e2e/results/tissue_2D/run_e2e_tissue2D.py` — Updated with standardized output format
+- `starfinder_benchmark/e2e/results/LN/run_e2e_LN.py` — New benchmark script
+- `starfinder_benchmark/e2e/results/cell_culture_3D/run_e2e_cell_culture_3D.py` — New benchmark script
+
+**Benchmark output structure (real data):**
+```
+starfinder_benchmark/e2e/results/{dataset}/
+├── run_e2e_{dataset}.py                          # Self-contained benchmark script
+├── signal/
+│   └── {fov}_goodSpots.csv                       # Decoded reads
+└── log/
+    ├── {fov}.csv                                  # QC metrics (matching synthetic format)
+    ├── gr_inspect/{fov}_inspection_registration.png
+    ├── signal_inspect/{fov}_goodSpots.png
+    ├── gr_shifts/{fov}.txt                        # Shift log
+    └── matlab_comparison/{fov}.csv                # MATLAB comparison
+```
+
+**Next Steps:**
+- Investigate dz sign flip issue (Python vs MATLAB Z-axis convention)
+- Scale to more FOVs per dataset for statistical significance
+- Cross-dataset comparison analysis
 
 ## Future Directions
 

@@ -4,7 +4,8 @@ This module generates synthetic spatial transcriptomics datasets with known
 ground truth for testing the STARfinder pipeline components.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from itertools import product
 from pathlib import Path
 from typing import Literal
 import json
@@ -24,6 +25,54 @@ TEST_CODEBOOK = [
     ("GeneG", "CCATC"),
     ("GeneH", "CGCTC"),
 ]
+
+
+def generate_codebook(n_genes: int) -> list[tuple[str, str]]:
+    """Generate a codebook with n_genes CNNNNC barcodes and unique color sequences.
+
+    Enumerates all 5-base barcodes of the form C-{A,C,G,T}^3-C,
+    filters to those with unique color sequences, and returns the
+    first n_genes entries.
+
+    Parameters
+    ----------
+    n_genes : int
+        Number of genes (max 64 for 4-round, 4-channel).
+
+    Returns
+    -------
+    list[tuple[str, str]]
+        List of (gene_name, barcode) tuples.
+
+    Raises
+    ------
+    ValueError
+        If n_genes exceeds the number of unique color sequences.
+    """
+    bases = "ACGT"
+    all_barcodes = [f"C{''.join(mid)}C" for mid in product(bases, repeat=3)]
+
+    # Filter to unique color sequences
+    seen_colors: dict[str, str] = {}
+    unique_entries: list[tuple[str, str]] = []
+    for barcode in all_barcodes:
+        color_seq = encode_barcode_to_colors(barcode)
+        if color_seq not in seen_colors:
+            seen_colors[color_seq] = barcode
+            unique_entries.append((barcode, color_seq))
+
+    if n_genes > len(unique_entries):
+        raise ValueError(
+            f"Requested {n_genes} genes but only {len(unique_entries)} "
+            f"unique color sequences available with CNNNNC barcodes."
+        )
+
+    codebook = []
+    for i, (barcode, _) in enumerate(unique_entries[:n_genes]):
+        gene_name = f"Gene{i + 1:03d}"
+        codebook.append((gene_name, barcode))
+
+    return codebook
 
 
 @dataclass
@@ -61,15 +110,21 @@ class SyntheticConfig:
     # Random seed for reproducibility
     seed: int = 42
 
+    # Custom codebook (None = use TEST_CODEBOOK)
+    codebook: list[tuple[str, str]] | None = None
 
-def get_preset_config(preset: Literal["mini", "standard"]) -> SyntheticConfig:
+
+def get_preset_config(preset: Literal["small", "medium", "large", "tissue", "thick_medium"]) -> SyntheticConfig:
     """Get predefined configuration for a preset.
 
     Parameters
     ----------
-    preset : {"mini", "standard"}
-        - "mini": 1 FOV, 256x256x5, 20 spots (fast unit tests)
-        - "standard": 4 FOVs, 512x512x10, 100 spots (integration tests)
+    preset : {"small", "medium", "large", "tissue", "thick_medium"}
+        - "small": 2 FOVs, 256x256x16, 50 spots (unit tests)
+        - "medium": 2 FOVs, 512x512x32, 100 spots (integration tests)
+        - "large": 2 FOVs, 1024x1024x30, 2000 spots (e2e benchmarking)
+        - "tissue": 2 FOVs, 3072x3072x30, 14000 spots (tissue-2D scale)
+        - "thick_medium": 2 FOVs, 1024x1024x100, 5200 spots (thick tissue)
 
     Returns
     -------
@@ -77,21 +132,54 @@ def get_preset_config(preset: Literal["mini", "standard"]) -> SyntheticConfig:
         Configuration for the specified preset
     """
     presets = {
-        "mini": SyntheticConfig(
+        "small": SyntheticConfig(
             height=256,
             width=256,
-            n_z=5,
-            n_fovs=1,
-            n_spots_per_fov=20,
+            n_z=16,
+            n_fovs=2,
+            n_spots_per_fov=50,
             seed=42,
         ),
-        "standard": SyntheticConfig(
+        "medium": SyntheticConfig(
             height=512,
             width=512,
-            n_z=10,
-            n_fovs=4,
+            n_z=32,
+            n_fovs=2,
             n_spots_per_fov=100,
             seed=42,
+        ),
+        "large": SyntheticConfig(
+            height=1024,
+            width=1024,
+            n_z=30,
+            n_fovs=2,
+            n_spots_per_fov=2000,
+            max_shift_xy=30,
+            max_shift_z=5,
+            seed=123,
+            codebook=generate_codebook(64),
+        ),
+        "tissue": SyntheticConfig(
+            height=3072,
+            width=3072,
+            n_z=30,
+            n_fovs=2,
+            n_spots_per_fov=14000,
+            max_shift_xy=300,
+            max_shift_z=7,
+            seed=456,
+            codebook=generate_codebook(64),
+        ),
+        "thick_medium": SyntheticConfig(
+            height=1024,
+            width=1024,
+            n_z=100,
+            n_fovs=2,
+            n_spots_per_fov=5200,
+            max_shift_xy=100,
+            max_shift_z=25,
+            seed=789,
+            codebook=generate_codebook(64),
         ),
     }
     if preset not in presets:
@@ -230,7 +318,7 @@ def create_shifted_stack(
 def generate_synthetic_dataset(
     output_dir: Path,
     config: SyntheticConfig | None = None,
-    preset: Literal["mini", "standard"] = "mini",
+    preset: Literal["small", "medium", "large"] = "small",
 ) -> dict:
     """Generate a complete synthetic dataset with ground truth.
 
@@ -240,7 +328,7 @@ def generate_synthetic_dataset(
         Directory to write generated files
     config : SyntheticConfig, optional
         Custom configuration. If None, uses preset defaults.
-    preset : {"mini", "standard"}
+    preset : {"small", "medium", "large"}
         Preset configuration (ignored if config is provided)
 
     Returns
@@ -258,6 +346,9 @@ def generate_synthetic_dataset(
 
     rng = np.random.default_rng(config.seed)
 
+    # Resolve codebook
+    codebook = config.codebook if config.codebook is not None else TEST_CODEBOOK
+
     # Prepare ground truth structure
     ground_truth = {
         "version": "1.0",
@@ -266,6 +357,7 @@ def generate_synthetic_dataset(
         "image_shape": [config.n_z, config.height, config.width],
         "n_rounds": config.n_rounds,
         "n_channels": config.n_channels,
+        "n_genes": len(codebook),
         "fovs": {},
     }
 
@@ -287,7 +379,7 @@ def generate_synthetic_dataset(
         # Generate random spot positions and gene assignments
         spots_info = []
         for spot_idx in range(config.n_spots_per_fov):
-            gene, barcode = TEST_CODEBOOK[rng.integers(0, len(TEST_CODEBOOK))]
+            gene, barcode = codebook[rng.integers(0, len(codebook))]
             color_seq = encode_barcode_to_colors(barcode)
 
             # Random position (with margin from edges, scaled by dimension)
@@ -364,7 +456,7 @@ def generate_synthetic_dataset(
     codebook_path = output_dir / "codebook.csv"
     with open(codebook_path, "w") as f:
         f.write("gene,barcode\n")
-        for gene, barcode in TEST_CODEBOOK:
+        for gene, barcode in codebook:
             f.write(f"{gene},{barcode}\n")
 
     # Write ground truth
@@ -436,25 +528,20 @@ def _generate_annotated_visualization(
     ax.imshow(max_proj, cmap="gray", vmin=0, vmax=max_proj.max())
     ax.set_title(f"{fov_id} - Round 1 Max Projection (all channels)", fontsize=14)
 
-    # Color map for different genes
-    gene_colors = {
-        "GeneA": "#FF6B6B",  # red
-        "GeneB": "#4ECDC4",  # teal
-        "GeneC": "#45B7D1",  # blue
-        "GeneD": "#96CEB4",  # green
-        "GeneE": "#FFEAA7",  # yellow
-        "GeneF": "#DDA0DD",  # plum
-        "GeneG": "#98D8C8",  # mint
-        "GeneH": "#F7DC6F",  # gold
-    }
+    # Build gene→color mapping using a colormap (scales to any gene count)
+    unique_genes = sorted(set(s["gene"] for s in spots))
+    cmap = plt.cm.get_cmap("tab20", max(len(unique_genes), 8))
+    gene_colors = {g: cmap(i % cmap.N) for i, g in enumerate(unique_genes)}
 
     # Draw bounding boxes and annotations for each spot
     box_size = 12  # pixels
+    # Skip text labels when >50 spots to avoid clutter
+    annotate = len(spots) <= 50
     for spot in spots:
         _, y, x = spot["position"]
         gene = spot["gene"]
         color_seq = spot["color_seq"]
-        color = gene_colors.get(gene, "#FFFFFF")
+        color = gene_colors[gene]
 
         # Draw bounding box
         rect = patches.Rectangle(
@@ -467,17 +554,17 @@ def _generate_annotated_visualization(
         )
         ax.add_patch(rect)
 
-        # Add annotation text (gene name and color sequence)
-        label = f"{gene}\n{color_seq}"
-        ax.annotate(
-            label,
-            (x, y - box_size // 2 - 2),
-            fontsize=6,
-            color=color,
-            ha="center",
-            va="bottom",
-            weight="bold",
-        )
+        if annotate:
+            label = f"{gene}\n{color_seq}"
+            ax.annotate(
+                label,
+                (x, y - box_size // 2 - 2),
+                fontsize=6,
+                color=color,
+                ha="center",
+                va="bottom",
+                weight="bold",
+            )
 
     ax.set_xlabel("X (pixels)")
     ax.set_ylabel("Y (pixels)")

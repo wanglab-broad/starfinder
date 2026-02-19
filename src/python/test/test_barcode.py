@@ -17,7 +17,7 @@ from starfinder.testdata.synthetic import TEST_CODEBOOK
 
 # Resolve path relative to this file → repo root / tests/fixtures/...
 _REPO_ROOT = Path(__file__).resolve().parents[3]
-MINI_CODEBOOK = _REPO_ROOT / "tests" / "fixtures" / "synthetic" / "mini" / "codebook.csv"
+SMALL_CODEBOOK = _REPO_ROOT / "tests" / "fixtures" / "synthetic" / "small" / "codebook.csv"
 
 
 # --- Encoding ---
@@ -54,7 +54,7 @@ class TestDecodeColorSeq:
             assert decoded == barcode, f"Roundtrip failed for {barcode}"
 
     def test_all_codebook_entries_roundtrip(self):
-        """All 8 mini codebook barcodes survive encode->decode roundtrip."""
+        """All 8 codebook barcodes survive encode->decode roundtrip."""
         for gene, barcode in TEST_CODEBOOK:
             # The codebook uses reversed barcodes for encoding
             reversed_bc = barcode[::-1]
@@ -75,32 +75,49 @@ class TestDecodeColorSeq:
 
 
 class TestLoadCodebook:
-    def test_load_mini_codebook(self):
-        gene_to_seq, seq_to_gene = load_codebook(MINI_CODEBOOK)
+    def test_load_small_codebook(self):
+        gene_to_seq, seq_to_gene = load_codebook(SMALL_CODEBOOK)
         assert len(gene_to_seq) == 8
         assert len(seq_to_gene) == 8
 
     def test_gene_lookup(self):
-        gene_to_seq, _ = load_codebook(MINI_CODEBOOK)
+        gene_to_seq, _ = load_codebook(SMALL_CODEBOOK)
         # CACGC reversed = CGCAC, encode -> 4422
         assert gene_to_seq["GeneA"] == "4422"
 
     def test_seq_lookup(self):
-        _, seq_to_gene = load_codebook(MINI_CODEBOOK)
+        _, seq_to_gene = load_codebook(SMALL_CODEBOOK)
         assert seq_to_gene["4422"] == "GeneA"
 
     def test_bidirectional_consistency(self):
         """gene_to_seq and seq_to_gene are inverses."""
-        gene_to_seq, seq_to_gene = load_codebook(MINI_CODEBOOK)
+        gene_to_seq, seq_to_gene = load_codebook(SMALL_CODEBOOK)
         for gene, seq in gene_to_seq.items():
             assert seq_to_gene[seq] == gene
 
     def test_no_reverse(self):
         """With do_reverse=False, encoding uses barcode as-is."""
-        gene_to_seq_rev, _ = load_codebook(MINI_CODEBOOK, do_reverse=True)
-        gene_to_seq_fwd, _ = load_codebook(MINI_CODEBOOK, do_reverse=False)
+        gene_to_seq_rev, _ = load_codebook(SMALL_CODEBOOK, do_reverse=True)
+        gene_to_seq_fwd, _ = load_codebook(SMALL_CODEBOOK, do_reverse=False)
         # Results should differ (unless a barcode is a palindrome)
         assert gene_to_seq_rev != gene_to_seq_fwd
+
+    def test_load_codebook_without_header(self, tmp_path):
+        """load_codebook should handle CSV files without gene,barcode header."""
+        codebook_file = tmp_path / "genes.csv"
+        codebook_file.write_text("GeneA,CACGC\nGeneB,CATGC\n")
+        gene_to_seq, seq_to_gene = load_codebook(codebook_file)
+        assert "GeneA" in gene_to_seq
+        assert "GeneB" in gene_to_seq
+        assert len(gene_to_seq) == 2
+
+    def test_load_codebook_with_bom(self, tmp_path):
+        """load_codebook should handle UTF-8 BOM in codebook files."""
+        codebook_file = tmp_path / "genes.csv"
+        codebook_file.write_bytes(b"\xef\xbb\xbfGeneA,CACGC\r\nGeneB,CATGC\r\n")
+        gene_to_seq, seq_to_gene = load_codebook(codebook_file)
+        assert "GeneA" in gene_to_seq
+        assert len(gene_to_seq) == 2
 
 
 # --- Filtering ---
@@ -109,7 +126,7 @@ class TestLoadCodebook:
 class TestFilterReads:
     @pytest.fixture()
     def codebook(self):
-        _, seq_to_gene = load_codebook(MINI_CODEBOOK)
+        _, seq_to_gene = load_codebook(SMALL_CODEBOOK)
         return seq_to_gene
 
     def test_basic_filtering(self, codebook):
@@ -184,7 +201,7 @@ class TestFilterReads:
 class TestEndToEnd:
     def test_ground_truth_pipeline(self):
         """Codebook + filtering recovers gene names from known color sequences."""
-        gene_to_seq, seq_to_gene = load_codebook(MINI_CODEBOOK)
+        gene_to_seq, seq_to_gene = load_codebook(SMALL_CODEBOOK)
 
         # Simulate extracted spots with known color sequences from all 8 genes
         spots_data = []

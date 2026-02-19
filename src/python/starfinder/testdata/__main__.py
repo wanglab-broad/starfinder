@@ -1,8 +1,8 @@
 """CLI entry point for synthetic dataset generation.
 
 Usage:
-    python -m starfinder.testing.generate --preset mini --output tests/fixtures/synthetic/mini
-    python -m starfinder.testing.generate --preset standard --output tests/fixtures/synthetic/standard
+    python -m starfinder.testdata --preset small --output tests/fixtures/synthetic/small
+    python -m starfinder.testdata --preset medium --output tests/fixtures/synthetic/medium
 """
 
 import argparse
@@ -18,9 +18,9 @@ def main():
     parser.add_argument(
         "--preset",
         type=str,
-        choices=["mini", "standard"],
-        default="mini",
-        help="Preset configuration (default: mini)",
+        choices=["small", "medium", "large", "tissue", "thick_medium"],
+        default="small",
+        help="Preset configuration (default: small)",
     )
     parser.add_argument(
         "--output",

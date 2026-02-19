@@ -105,6 +105,37 @@ class FOV:
                 self.images[name] = func(self.images[name])
 
     @log_step
+    def rotate(self, *, angle: float) -> FOV:
+        """Rotate all loaded volumes by angle degrees in the YX plane.
+
+        Applied after loading, before any other processing.
+        For exact 90-degree multiples, uses np.rot90 (zero-copy, instant).
+        For other angles, uses scipy.ndimage.rotate with bilinear interpolation.
+        """
+        # Fast path for exact 90° multiples
+        k_90 = round(angle / 90)
+        if abs(angle - k_90 * 90) < 1e-6:
+            for round_name in list(self.images.keys()):
+                vol = self.images[round_name]
+                yx_axes = (1, 2) if vol.ndim == 4 else (0, 1)
+                # np.rot90 k=1 is 90° CCW; angle=-90 means CW = k=-1
+                self.images[round_name] = np.ascontiguousarray(
+                    np.rot90(vol, k=-k_90, axes=yx_axes)
+                )
+            return self
+
+        # General case: arbitrary angle
+        from scipy.ndimage import rotate as ndimage_rotate
+
+        for round_name in list(self.images.keys()):
+            vol = self.images[round_name]
+            yx_axes = (1, 2) if vol.ndim == 4 else (0, 1)
+            self.images[round_name] = ndimage_rotate(
+                vol, angle, axes=yx_axes, reshape=False, order=1
+            ).astype(vol.dtype)
+        return self
+
+    @log_step
     def enhance_contrast(
         self,
         layers: list[str] | None = None,

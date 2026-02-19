@@ -11,17 +11,17 @@ from starfinder.spotfinding.local_maxima import SPOT_COLUMNS
 class TestFindSpots3D:
     """Tests for find_spots_3d function."""
 
-    def test_finds_known_spots(self, mini_dataset, mini_ground_truth):
-        """Detects spots in mini synthetic dataset, count sanity check."""
+    def test_finds_known_spots(self, small_dataset, small_ground_truth):
+        """Detects spots in small synthetic dataset, count sanity check."""
         from starfinder.io import load_image_stacks
 
         images, _ = load_image_stacks(
-            mini_dataset / "FOV_001" / "round1",
+            small_dataset / "FOV_001" / "round1",
             channel_order=["ch00", "ch01", "ch02", "ch03"],
         )
         spots = find_spots_3d(images)
 
-        # Mini dataset has 20 ground truth spots across 4 channels in round 1
+        # Small dataset has 50 ground truth spots across 4 channels in round 1
         # Detection may find more (noise peaks) or fewer (dim spots), but
         # should be in a reasonable range
         assert len(spots) > 0

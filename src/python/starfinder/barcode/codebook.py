@@ -44,11 +44,20 @@ def load_codebook(
     gene_to_seq = {}
     seq_to_gene = {}
 
-    with open(path, newline="") as f:
-        reader = csv.DictReader(f)
+    with open(path, newline="", encoding="utf-8-sig") as f:
+        # Peek at first line to detect header vs headerless CSV
+        first_line = f.readline().strip()
+        f.seek(0)
+
+        fields = first_line.split(",")
+        if fields[0].strip().lower() == "gene":
+            reader = csv.DictReader(f)
+        else:
+            reader = csv.DictReader(f, fieldnames=["gene", "barcode"])
+
         for row in reader:
-            gene = row["gene"]
-            barcode = row["barcode"]
+            gene = row["gene"].strip()
+            barcode = row["barcode"].strip()
 
             if do_reverse:
                 barcode = barcode[::-1]

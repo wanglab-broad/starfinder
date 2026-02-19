@@ -48,7 +48,7 @@ uv run pytest test/ -v
 uv run pytest test/ -v --cov=starfinder
 
 # Generate synthetic test dataset
-uv run python -m starfinder.testing --preset mini --output ../../tests/fixtures/synthetic/mini
+uv run python -m starfinder.testdata --preset small --output ../../tests/fixtures/synthetic/small
 ```
 
 ## Architecture
@@ -76,7 +76,7 @@ starfinder/
 │   ├── schemas/           # JSON Schema for config validation
 │   └── scripts/           # Python and MATLAB execution scripts
 ├── tests/
-│   ├── fixtures/synthetic/ # Synthetic test datasets (mini, standard)
+│   ├── fixtures/synthetic/ # Synthetic test datasets (small, medium)
 │   ├── qc_*.ipynb         # QC validation notebooks (io, registration, synthetic, benchmark)
 │   ├── tissue_2D_test.yaml
 │   └── minimal_config.yaml
@@ -205,7 +205,7 @@ The Python backend is being developed to replace MATLAB components. Uses `(Z, Y,
   - `STARMapDataset.from_config(config)` → sample-level config + FOV factory
   - `FOV` — per-FOV stateful processor with fluent API:
     - Loading: `load_raw_images()` → `io.load_image_stacks()`
-    - Preprocessing: `enhance_contrast()`, `hist_equalize()`, `morph_recon()`, `tophat()`, `make_projection()`
+    - Preprocessing: `rotate()`, `enhance_contrast()`, `hist_equalize()`, `morph_recon()`, `tophat()`, `make_projection()`
     - Registration: `global_registration()`, `local_registration()`
     - Spot finding: `spot_finding()`, `reads_extraction()`, `reads_filtration()`
     - Output: `save_ref_merged()`, `save_signal()`, `create_subtiles()`, `from_subtile()`
@@ -214,7 +214,9 @@ The Python backend is being developed to replace MATLAB components. Uses `(Z, Y,
 
 - **`starfinder.testdata`** - Synthetic dataset generation and validation
   - Two-base color-space encoding matching MATLAB
-  - Presets: `mini` (1 FOV, 256×256×5) and `standard` (4 FOVs, 512×512×10)
+  - `generate_codebook(n_genes)` → programmatic CNNNNC codebook (up to 64 genes)
+  - `SyntheticConfig.codebook` field for custom codebooks (default: 8-gene `TEST_CODEBOOK`)
+  - Presets: `small` (2 FOVs, 256×256×16, 8 genes, 50 spots/FOV), `medium` (2 FOVs, 512×512×32, 8 genes, 100 spots/FOV), `large` (2 FOVs, 1024×1024×30, 64 genes, 2000 spots/FOV), `tissue` (2 FOVs, 3072×3072×30, 64 genes, 14000 spots/FOV), `thick_medium` (2 FOVs, 1024×1024×100, 64 genes, 5200 spots/FOV)
   - Validation (`testdata.validation`):
     - `compare_shifts(shifts, gt, fov_id)` → per-round shift errors
     - `compare_spots(spots, gt, fov_id)` → recall, precision, mean distance
@@ -247,12 +249,16 @@ Config files are validated against a JSON Schema at pipeline startup (`workflow/
 ## Test Datasets
 
 ### Real Datasets (Zenodo DOI: 10.5281/zenodo.11176779)
-1. **cell-culture-3D** - 70 FOVs, 6 sequencing rounds, 3D HeLa cell culture (1496×1496×30)
-2. **tissue-2D** - 56 tiles, 4 sequencing rounds, mouse brain tissue section (3072×3072×30)
+1. **cell-culture-3D** - 70 FOVs (Position351-420), 6 rounds, ref=round1, 1496×1496×30, 998 genes, voxel_size=(1,2,2), end_bases="CC", adaptive@0.2
+2. **tissue-2D** - 56 tiles, 4 rounds, ref=round1, 3072×3072×30, 64 genes, voxel_size=(1,1,1), end_bases="CC", adaptive@0.4
+3. **LN** - 64 FOVs (Position001-064), 4 rounds, ref=round4, 1496×1496×50, 61 genes, voxel_size=(1,1,1), end_bases="AC", start_base="A", adaptive@0.2
 
 ### Synthetic Datasets (tests/fixtures/synthetic/)
-- **mini/** - 1 FOV, 256×256×5, 20 spots (unit tests, CI)
-- **standard/** - 4 FOVs, 512×512×10, 100 spots/FOV (integration tests)
+- **small/** - 2 FOVs, 256×256×16, 8 genes, 50 spots/FOV (unit tests, CI)
+- **medium/** - 2 FOVs, 512×512×32, 8 genes, 100 spots/FOV (integration tests)
+- **large** (benchmark) - 2 FOVs, 1024×1024×30, 64 genes, 2000 spots/FOV (at `starfinder_benchmark/e2e/data/large/`)
+- **tissue** (benchmark) - 2 FOVs, 3072×3072×30, 64 genes, 14000 spots/FOV (at `starfinder_benchmark/e2e/data/tissue/`)
+- **thick_medium** (benchmark) - 2 FOVs, 1024×1024×100, 64 genes, 5200 spots/FOV (at `starfinder_benchmark/e2e/data/thick_medium/`)
 
 ## Documentation
 
@@ -285,6 +291,7 @@ Detailed design documents are in `docs/`:
 - [x] Phase 5: Preprocessing (min_max_normalize, histogram_match, morphological_reconstruction, tophat_filter, make_projection)
 - [x] Phase 6: Dataset/FOV orchestration layer (STARMapDataset, FOV, fluent pipeline API)
 - [x] Phase 7: E2E validation + SNR-gated normalization + noise-floor spot finding threshold
+- [x] Phase 8: Real data E2E benchmark (tissue-2D, LN, cell-culture-3D — 2 FOVs each)
 
 ## Notes for Claude Code
 Update this file by adding tips whenever you make mistakes to help improve your accuracy.
@@ -314,15 +321,34 @@ Update this file by adding tips whenever you make mistakes to help improve your 
   - Use preset-specific random seeds to ensure different shifts for each preset
   - Exclude 0 from Z-shift options to ensure non-zero Z displacements
   - Cap deformation magnitudes at fixed pixels (15/30px) for large images to avoid excessive warping
-- **Benchmark data location**: `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/` (~50GB total)
-  - Input data: `data/synthetic/` (7 presets) and `data/real/` (3 datasets)
-  - Registration results: `results/registration/` (global_python, global_matlab, local_tuning, local_matlab, local_python, local_antialias, global_comparison, local_comparison, figures, scripts)
+- **Benchmark data location**: `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/` — task-scoped layout:
+  - `registration/data/` — synthetic (7 presets) and real (3 datasets)
+  - `registration/results/` — global_python, global_matlab, local_tuning, local_matlab, local_python, local_antialias, global_comparison, local_comparison, figures, scripts
+  - `e2e/` — end-to-end validation results
+  - `spot_finding/` — spot finding benchmark results
 - **Two-phase benchmark workflow**: Phase 1 saves `registered_{backend}.tif` + `run_{backend}.json`; Phase 2 (`evaluate.py`) computes `metrics_{backend}.json` + `inspection_{backend}.png` uniformly for all backends
-- **FOV directory layout**: `FOV.input_dir()` returns `{input_root}/{round}/{fov_id}/`. The synthetic mini dataset uses `{base}/{fov}/{round}/` — tests create symlinks to restructure.
+- **FOV directory layout**: `FOV.input_dir()` returns `{input_root}/{round}/{fov_id}/`. The synthetic small dataset uses `{base}/{fov}/{round}/` — tests create symlinks to restructure.
 - **FOV fluent API**: All processing methods return `self` for chaining. State lives in `fov.images`, `fov.global_shifts`, `fov.all_spots`, `fov.good_spots`. Config is delegated to `fov.dataset`.
 - **SubtileConfig.compute_windows()**: Uses `height // sqrt_pieces` for tile size (MATLAB `dims(1)`). Overlap extends inward only — no overlap on outer edges. 0-based internally; `create_subtiles()` converts to 1-based for `subtile_coords.csv`.
 - **Spot finding defaults**: `find_spots_3d()` and `FOV.spot_finding()` default to `intensity_estimation="noise"` with `intensity_threshold=5.0` (k-sigma). This uses MAD-based noise-floor thresholding (`median + k × MAD × 1.4826`). For MATLAB compatibility, use `intensity_estimation="adaptive"` with `intensity_threshold=0.2`. The `intensity_threshold` parameter means k-sigma in noise mode but fraction-of-max in adaptive/global modes — always pass both parameters together.
 - **SNR-gated normalization**: `min_max_normalize(volume, snr_threshold=5.0)` skips normalization for channels with `max/mean < 5.0`. This prevents noise inflation in empty channels. The e2e pipeline uses `enhance_contrast(snr_threshold=5.0)`.
-- **E2E validation**: `test/test_e2e.py` uses a session-scoped `e2e_result` fixture that runs the full pipeline on the mini synthetic dataset. The fixture is shared across all 8 e2e tests.
+- **E2E validation**: `test/test_e2e.py` uses a session-scoped `e2e_result` fixture that runs the full pipeline on the small synthetic dataset. The fixture is shared across all 8 e2e tests.
 - **MIP fast path for large volumes**: For volumes >100M voxels, `evaluate_registration(use_mip=True)` computes SSIM and spot metrics (detect_spots, spot_colocalization, spot_matching_accuracy) on 2D MIP instead of full 3D. Output includes `"ssim_method"` and `"spot_method"` fields ("mip" or "3d") to indicate which path was used. `evaluate_directory(use_mip_above=)` controls the threshold. CLI flag: `--use-mip-above`.
+- **Testdata codebook generation**: `generate_codebook(n_genes)` enumerates all CNNNNC barcodes (C + {A,C,G,T}^3 + C = 64 max) with unique color sequences. Used by the "large" preset. For presets needing >64 genes, would require longer barcodes (more rounds).
+- **E2E benchmark datasets and results**: Located at `starfinder_benchmark/e2e/`. Data in `data/{large,tissue,thick_medium}/`, results in `results/{large,tissue,thick_medium}/`. Each `run_e2e_{preset}.py` script is self-contained and reproducible — it restructures directories, runs the full pipeline, generates inspection images, QC CSVs (with per-step timing and memory), and validates against ground truth.
+- **E2E benchmark output structure**: `log/{fov}.csv` (QC), `log/gr_inspect/{fov}_inspection_registration.png`, `log/signal_inspect/{fov}_goodSpots.png`, `log/gr_shifts/{fov}.txt`, `signal/{fov}_goodSpots.csv`.
+- **E2E benchmark QC CSV columns** (27 cols): `log/{fov}.csv` includes detection metrics (detection_recall, detection_precision), extraction/filtering metrics (codebook_match_rate, n_correct_form, correct_form_rate, validated_rate), decoding accuracy (gene/color_seq accuracy vs GT), registration (shift_max_error_px), per-step timing (load, enhance, registration, spot_finding, extraction, filtration), and memory (RSS after key steps, peak RSS).
+- **E2E benchmark scaling results (synthetic)**: large ~52s/FOV 2.4GB, thick_medium ~179s/FOV 7.5GB, tissue ~482s/FOV 20GB. All achieve perfect recall, >98% precision, 100% gene accuracy. Registration dominates runtime (~60%). Memory scales linearly with voxel count.
+- **MATLAB channel order is wavelength-sorted, not filename-sorted**: The default `channel_order_dict` in `STARMapDataset.m` sorts by wavelength (488→546→594→647nm), mapping to `["ch00", "ch02", "ch01", "ch03"]`. **ch01 and ch02 are swapped.** All three real datasets use this default (`seq_channel_order: []` in YAML). In Python, pass `channel_order=["ch00", "ch02", "ch01", "ch03"]` to match MATLAB.
+- **`load_codebook` handles headerless CSV and BOM**: Real `genes.csv` files lack the `gene,barcode` header row and may have UTF-8 BOM (`\xef\xbb\xbf`). The function opens with `encoding="utf-8-sig"` and peeks at the first line to detect headers. Backward compatible with header-bearing files.
+- **`FOV.rotate()` fast path**: For exact 90° multiples (the common case with `rotate_angle: -90`), uses `np.rot90` (zero-copy view, instant) instead of `scipy.ndimage.rotate` (interpolation, 390s on 3072³×4 volumes). General angles fall back to scipy. Pipeline order: `load → rotate → enhance → registration → spot_finding → extraction → filtration`.
+- **Real data spot finding needs `"adaptive"` mode**: The `"noise"` mode (default) gives 19.2M spots on tissue-2D (3072×3072×30) — too many due to autofluorescence. MATLAB tissue-2D uses `"adaptive"` at 0.4 (`intensity_threshold: 0.4` in YAML). Python with matching params: 67K total → 35.8K good (53.4% match rate, 0.77 ratio vs MATLAB's 46.7K). Always check per-dataset MATLAB config for the threshold.
+- **Real data E2E benchmark results**: Located at `starfinder_benchmark/e2e/results/{tissue_2D,LN,cell_culture_3D}/`. Each dataset has a self-contained `run_e2e_{dataset}.py` script. Output structure matches synthetic benchmarks: `signal/`, `log/{fov}.csv` (QC), `log/gr_inspect/`, `log/signal_inspect/`, `log/gr_shifts/`, `log/matlab_comparison/` (separated from QC). Plan at `docs/plans/2026-02-17-real-data-e2e-benchmark-plan.md`.
+- **Real data E2E benchmark results summary (2 FOVs each)**:
+  - tissue-2D: 0.77 spot ratio vs MATLAB, 100% gene overlap, ~510s/FOV, 20GB peak RSS
+  - LN: 1.19-1.21 spot ratio (Python finds more), 95% gene overlap, ~190s/FOV, 8GB peak RSS. Has dz sign flip issue.
+  - cell-culture-3D: 0.95-0.98 spot ratio (best MATLAB agreement), 100% gene overlap, ~250s/FOV, 5.6GB peak RSS
+- **LN dataset specifics**: `ref_round="round4"` (unusual — most datasets use round1), `start_base="A"` (not "C"), `end_bases="AC"`, `voxel_size=(1,1,1)`, 50 Z-slices (thickest dataset). MATLAB shift log embedded in text log at `log/{fov}.txt` (not CSV).
+- **cell-culture-3D dataset specifics**: 6 sequencing rounds (most rounds), 998 genes (largest codebook), `voxel_size=(1,2,2)` (anisotropic), FOVs start at Position351 (not 001). MATLAB shift log also in text format at `log/{fov}.txt`.
+- **MATLAB shift log formats**: tissue-2D uses structured CSV at `log/gr_shifts/{fov}.txt`; LN and cell-culture-3D embed shifts in text log at `log/{fov}.txt` — use `parse_matlab_shifts_from_log()` regex parser in the benchmark scripts.
 

@@ -25,11 +25,10 @@ from pathlib import Path
 import numpy as np
 import tifffile
 
+from starfinder.benchmark.presets import BENCHMARK_TASK, DEFAULT_BENCHMARK_DIR
 
-# Default benchmark data location
-DEFAULT_BENCHMARK_DIR = Path(
-    "/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark"
-)
+# Default task-specific benchmark directory (derived from shared constants)
+DEFAULT_BENCHMARK_TASK_DIR = DEFAULT_BENCHMARK_DIR / BENCHMARK_TASK
 
 # Known real datasets (to distinguish from synthetic presets)
 REAL_DATASETS = {"cell_culture_3D", "tissue_2D", "LN"}
@@ -463,7 +462,7 @@ def evaluate_single(
 
 def evaluate_directory(
     result_dir: Path,
-    data_dir: Path = DEFAULT_BENCHMARK_DIR / "data",
+    data_dir: Path = DEFAULT_BENCHMARK_TASK_DIR / "data",
     force: bool = False,
     use_mip_above: int = 100_000_000,
     generate_insp: bool = True,
@@ -575,7 +574,7 @@ if __name__ == "__main__":
         help="Backend result directory containing {dataset}/registered_*.tif",
     )
     parser.add_argument(
-        "--data-dir", type=Path, default=DEFAULT_BENCHMARK_DIR / "data",
+        "--data-dir", type=Path, default=DEFAULT_BENCHMARK_TASK_DIR / "data",
         help="Root data directory with synthetic/ and real/ subdirs",
     )
     parser.add_argument(

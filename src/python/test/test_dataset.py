@@ -48,10 +48,10 @@ class TestSTARMapDataset:
         ids = ds.fov_ids(3, start=1)
         assert ids == ["FOV_001", "FOV_002", "FOV_003"]
 
-    def test_load_codebook(self, sample_config, mini_dataset):
+    def test_load_codebook(self, sample_config, small_dataset):
         ds = STARMapDataset.from_config(sample_config)
         assert ds.codebook is None
-        ds.load_codebook(mini_dataset / "codebook.csv")
+        ds.load_codebook(small_dataset / "codebook.csv")
         assert ds.codebook is not None
         assert ds.codebook.n_genes == 8
 
