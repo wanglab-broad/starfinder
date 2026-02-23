@@ -104,6 +104,24 @@ class FOV:
             if name in self.images:
                 self.images[name] = func(self.images[name])
 
+    def _rotate_round(self, round_name: str, angle: float) -> None:
+        """Rotate a single round's image in-place."""
+        vol = self.images[round_name]
+        k_90 = round(angle / 90)
+        if abs(angle - k_90 * 90) < 1e-6:
+            yx_axes = (1, 2) if vol.ndim == 4 else (0, 1)
+            # np.rot90 k=1 is 90° CCW; angle=-90 means CW = k=-1
+            self.images[round_name] = np.ascontiguousarray(
+                np.rot90(vol, k=-k_90, axes=yx_axes)
+            )
+        else:
+            from scipy.ndimage import rotate as ndimage_rotate
+
+            yx_axes = (1, 2) if vol.ndim == 4 else (0, 1)
+            self.images[round_name] = ndimage_rotate(
+                vol, angle, axes=yx_axes, reshape=False, order=1
+            ).astype(vol.dtype)
+
     @log_step
     def rotate(self, *, angle: float) -> FOV:
         """Rotate all loaded volumes by angle degrees in the YX plane.
@@ -112,27 +130,8 @@ class FOV:
         For exact 90-degree multiples, uses np.rot90 (zero-copy, instant).
         For other angles, uses scipy.ndimage.rotate with bilinear interpolation.
         """
-        # Fast path for exact 90° multiples
-        k_90 = round(angle / 90)
-        if abs(angle - k_90 * 90) < 1e-6:
-            for round_name in list(self.images.keys()):
-                vol = self.images[round_name]
-                yx_axes = (1, 2) if vol.ndim == 4 else (0, 1)
-                # np.rot90 k=1 is 90° CCW; angle=-90 means CW = k=-1
-                self.images[round_name] = np.ascontiguousarray(
-                    np.rot90(vol, k=-k_90, axes=yx_axes)
-                )
-            return self
-
-        # General case: arbitrary angle
-        from scipy.ndimage import rotate as ndimage_rotate
-
         for round_name in list(self.images.keys()):
-            vol = self.images[round_name]
-            yx_axes = (1, 2) if vol.ndim == 4 else (0, 1)
-            self.images[round_name] = ndimage_rotate(
-                vol, angle, axes=yx_axes, reshape=False, order=1
-            ).astype(vol.dtype)
+            self._rotate_round(round_name, angle)
         return self
 
     @log_step
@@ -350,6 +349,29 @@ class FOV:
         )
         return self
 
+    def _extract_round(
+        self,
+        round_name: str,
+        voxel_size: tuple[int, int, int] = (1, 2, 2),
+    ) -> None:
+        """Extract colors for a single round, adding columns to all_spots."""
+        from starfinder.barcode import extract_from_location
+
+        color, score = extract_from_location(
+            self.images[round_name], self.all_spots, voxel_size
+        )
+        self.all_spots[f"{round_name}_color"] = color
+        self.all_spots[f"{round_name}_score"] = score
+
+    def _build_color_seq(self, layers: list[str] | None = None) -> None:
+        """Concatenate per-round color columns into color_seq string."""
+        if layers is None:
+            layers = self.layers.seq
+        color_cols = [f"{r}_color" for r in layers]
+        self.all_spots["color_seq"] = self.all_spots[color_cols].astype(str).agg(
+            "".join, axis=1
+        )
+
     @log_step
     def reads_extraction(
         self,
@@ -361,23 +383,12 @@ class FOV:
         Adds ``{round}_color``, ``{round}_score`` columns per round,
         and a concatenated ``color_seq`` column.
         """
-        from starfinder.barcode import extract_from_location
-
         if layers is None:
             layers = self.layers.seq
 
         for round_name in layers:
-            color, score = extract_from_location(
-                self.images[round_name], self.all_spots, voxel_size
-            )
-            self.all_spots[f"{round_name}_color"] = color
-            self.all_spots[f"{round_name}_score"] = score
-
-        # Concatenate per-round colors into single color_seq string
-        color_cols = [f"{r}_color" for r in layers]
-        self.all_spots["color_seq"] = self.all_spots[color_cols].astype(str).agg(
-            "".join, axis=1
-        )
+            self._extract_round(round_name, voxel_size)
+        self._build_color_seq(layers)
         return self
 
     @log_step
@@ -402,6 +413,69 @@ class FOV:
             start_base=start_base,
         )
         self.good_spots = good
+        return self
+
+    # --- Streaming pipeline ---
+
+    @log_step
+    def run_streaming(
+        self,
+        *,
+        rotate_angle: float | None = None,
+        snr_threshold: float | None = None,
+        intensity_estimation: Literal[
+            "noise", "adaptive", "adaptive_round", "global"
+        ] = "noise",
+        intensity_threshold: float = 5.0,
+        voxel_size: tuple[int, int, int] = (1, 2, 2),
+        end_bases: str | None = None,
+        start_base: str = "C",
+    ) -> FOV:
+        """Memory-efficient streaming pipeline. Peak memory = 2 x round_size.
+
+        Processes one round at a time instead of loading all rounds
+        simultaneously. Produces identical results to the batch flow
+        (load_all -> enhance_all -> register_all -> spot_find ->
+        extract_all -> filter).
+
+        The spot DataFrame (all_spots) accumulates per-round color columns
+        throughout. Only image volumes are loaded and discarded per-round.
+        Filtering runs at the end on the complete color_seq column.
+        """
+        ref = self.layers.ref
+
+        # --- Phase 1: Reference round (kept in memory throughout) ---
+        self.load_raw_images(rounds=[ref])
+        if rotate_angle is not None:
+            self._rotate_round(ref, rotate_angle)
+        self.enhance_contrast(layers=[ref], snr_threshold=snr_threshold)
+        self.spot_finding(
+            intensity_estimation=intensity_estimation,
+            intensity_threshold=intensity_threshold,
+        )
+        self._extract_round(ref, voxel_size)
+
+        # --- Phase 2: Non-ref rounds (one at a time) ---
+        for round_name in self.layers.to_register:
+            self.load_raw_images(rounds=[round_name])
+            if rotate_angle is not None:
+                self._rotate_round(round_name, rotate_angle)
+            self.enhance_contrast(
+                layers=[round_name], snr_threshold=snr_threshold
+            )
+            self.global_registration(
+                layers_to_register=[round_name], save_shifts=False
+            )
+            self._extract_round(round_name, voxel_size)
+            del self.images[round_name]
+
+        # Save shift log once (not per-round)
+        if self.global_shifts:
+            self._save_shift_log()
+
+        # --- Phase 3: Finalize (spot DataFrame only, images released) ---
+        self._build_color_seq()
+        self.reads_filtration(end_bases=end_bases, start_base=start_base)
         return self
 
     # --- Output ---

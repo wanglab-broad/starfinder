@@ -155,6 +155,115 @@ class TestE2EBarcodeDecoding:
         )
 
 
+class TestE2EStreamingMode:
+    """Validate that streaming pipeline produces identical results to batch."""
+
+    def test_streaming_matches_batch(self, e2e_result, small_dataset, tmp_path_factory):
+        """Streaming mode output must be identical to batch mode."""
+        from starfinder.dataset import STARMapDataset
+        from starfinder.dataset.types import LayerState
+
+        batch_fov, _, _ = e2e_result
+
+        tmp_path = tmp_path_factory.mktemp("streaming")
+        fov_dir = small_dataset / "FOV_001"
+        for round_dir in fov_dir.iterdir():
+            if round_dir.is_dir():
+                target = tmp_path / round_dir.name / "FOV_001"
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.symlink_to(round_dir)
+
+        ds = STARMapDataset(
+            input_root=tmp_path,
+            output_root=tmp_path / "output",
+            dataset_id="test",
+            sample_id="small",
+            output_id="out",
+            layers=LayerState(
+                seq=["round1", "round2", "round3", "round4"],
+                ref="round1",
+            ),
+            channel_order=["ch00", "ch01", "ch02", "ch03"],
+            fov_pattern="FOV_%03d",
+        )
+        ds.load_codebook(small_dataset / "codebook.csv")
+
+        stream_fov = ds.fov("FOV_001")
+        stream_fov.run_streaming(snr_threshold=5.0)
+
+        # Both must produce good spots
+        assert stream_fov.good_spots is not None
+        assert len(stream_fov.good_spots) > 0
+
+        # Sort by position for consistent comparison
+        batch_spots = (
+            batch_fov.good_spots.sort_values(["z", "y", "x"])
+            .reset_index(drop=True)
+        )
+        stream_spots = (
+            stream_fov.good_spots.sort_values(["z", "y", "x"])
+            .reset_index(drop=True)
+        )
+
+        # Same number of spots
+        assert len(stream_spots) == len(batch_spots), (
+            f"Streaming: {len(stream_spots)} spots, Batch: {len(batch_spots)}"
+        )
+
+        # Same gene assignments at same positions
+        pd.testing.assert_frame_equal(
+            batch_spots[["z", "y", "x", "gene", "color_seq"]],
+            stream_spots[["z", "y", "x", "gene", "color_seq"]],
+        )
+
+        # Same global shifts
+        assert set(stream_fov.global_shifts) == set(batch_fov.global_shifts)
+        for rnd in stream_fov.global_shifts:
+            for i in range(3):
+                assert stream_fov.global_shifts[rnd][i] == pytest.approx(
+                    batch_fov.global_shifts[rnd][i]
+                )
+
+    def test_streaming_releases_memory(self, e2e_result, small_dataset, tmp_path_factory):
+        """After streaming, only ref round remains in images dict."""
+        from starfinder.dataset import STARMapDataset
+        from starfinder.dataset.types import LayerState
+
+        batch_fov, _, _ = e2e_result
+
+        tmp_path = tmp_path_factory.mktemp("streaming_mem")
+        fov_dir = small_dataset / "FOV_001"
+        for round_dir in fov_dir.iterdir():
+            if round_dir.is_dir():
+                target = tmp_path / round_dir.name / "FOV_001"
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.symlink_to(round_dir)
+
+        ds = STARMapDataset(
+            input_root=tmp_path,
+            output_root=tmp_path / "output",
+            dataset_id="test",
+            sample_id="small",
+            output_id="out",
+            layers=LayerState(
+                seq=["round1", "round2", "round3", "round4"],
+                ref="round1",
+            ),
+            channel_order=["ch00", "ch01", "ch02", "ch03"],
+            fov_pattern="FOV_%03d",
+        )
+        ds.load_codebook(small_dataset / "codebook.csv")
+
+        stream_fov = ds.fov("FOV_001")
+        stream_fov.run_streaming(snr_threshold=5.0)
+
+        # Only ref round should remain in memory
+        assert set(stream_fov.images.keys()) == {"round1"}
+
+        # Batch mode keeps all rounds
+        assert len(batch_fov.images) == 4
+
+
 class TestE2ESubtileRoundTrip:
     """Validate subtile coordinate mapping after spot finding."""
 
