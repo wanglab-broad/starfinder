@@ -38,7 +38,7 @@ def min_max_normalize(
 
     result = np.empty_like(volume, dtype=np.uint8)
     for c in range(volume.shape[3]):
-        ch = volume[:, :, :, c].astype(np.float64)
+        ch = volume[:, :, :, c].astype(np.float32)
         lo = ch.min()
         hi = ch.max()
 

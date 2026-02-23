@@ -375,8 +375,8 @@ class FOV:
 
         # Concatenate per-round colors into single color_seq string
         color_cols = [f"{r}_color" for r in layers]
-        self.all_spots["color_seq"] = self.all_spots[color_cols].apply(
-            lambda row: "".join(str(v) for v in row), axis=1
+        self.all_spots["color_seq"] = self.all_spots[color_cols].astype(str).agg(
+            "".join, axis=1
         )
         return self
 
