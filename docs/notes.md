@@ -1446,6 +1446,68 @@ Combined streaming + memory fixes achieve ~50% peak RSS reduction and ~2x runtim
 
 **Benchmark script:** `starfinder_benchmark/e2e/results/run_streaming_benchmark.py` — single parametrized script handling all 6 datasets (3 synthetic, 3 real).
 
+### 2026-02-24: Fix dz Sign Flip — Rotation Direction & Shift Comparison
+
+Root-caused and fixed the systematic dz sign flip between Python and MATLAB registration shifts observed in the LN dataset benchmark (and subtly present in all datasets).
+
+**Root cause analysis:**
+
+Two interacting issues created the observed pattern where Y/X shifts agreed but Z was flipped:
+
+1. **Sign convention difference** (`phase_correlate` vs `DFTRegister3D`):
+   - Python `phase_correlate()` returns **+d** (physical displacement: "moving is shifted by +d from fixed")
+   - MATLAB `DFTRegister3D()` returns **-d** (correction: "apply -d to align moving to fixed")
+   - This difference alone would flip **all** axes, not just Z
+
+2. **Rotation direction mismatch** (`fov.py` vs `STARMapDataset.m`):
+   - MATLAB: `imrotate(img, -90)` → CW 90° rotation
+   - Python (buggy): `np.rot90(vol, k=-k_90)` where `k_90 = angle // 90 = -1`, so `k = -(-1) = 1` → **CCW** 90° rotation
+   - Opposite rotations flip Y/X displacement signs in the rotated coordinate system
+   - This Y/X flip **cancels** with the sign convention difference on Y/X, making them appear to agree
+   - Z is perpendicular to the Y-X rotation plane, so it shows the raw sign convention difference
+
+**The fix (1 character):**
+
+```python
+# fov.py line 115
+# BEFORE (buggy — CCW rotation):
+np.rot90(vol, k=-k_90, axes=yx_axes)
+
+# AFTER (fixed — CW rotation, matches MATLAB):
+np.rot90(vol, k=k_90, axes=yx_axes)
+```
+
+- Updated comment on line 113 to clarify that `np.rot90` and `imrotate` share sign convention
+- All 160 tests pass after the fix
+
+**Benchmark comparison script updates:**
+
+After the rotation fix, Python and MATLAB shifts now have a consistent sign relationship across all axes: `py_val ≈ -ml_val`. Updated all 3 real-data benchmark scripts:
+
+- `run_e2e_tissue2D.py` (line 167-169)
+- `run_e2e_LN.py` (line 205-207)
+- `run_e2e_cell_culture_3D.py` (line 203-205)
+
+```python
+# BEFORE (masked by rotation cancellation on Y/X):
+abs(py_dy - ml_dy)  # happened to work for Y/X, failed for Z
+
+# AFTER (correct sign convention: Python=+d, MATLAB=-d):
+abs(py_dy + ml_dy)  # sum ≈ 0 for perfect agreement on all axes
+```
+
+**Files Modified:**
+- `src/python/starfinder/dataset/fov.py` — Fixed rotation direction (`k=-k_90` → `k=k_90`)
+- `starfinder_benchmark/e2e/results/tissue_2D/run_e2e_tissue2D.py` — Shift comparison formula
+- `starfinder_benchmark/e2e/results/LN/run_e2e_LN.py` — Shift comparison formula
+- `starfinder_benchmark/e2e/results/cell_culture_3D/run_e2e_cell_culture_3D.py` — Shift comparison formula
+
+**Test Results:** 160 tests passing (no changes to test count)
+
+**Next Steps:**
+- Re-run all 3 real-data benchmarks to verify consistent shift agreement across all axes
+- The LN "dz sign flip issue" should be fully resolved
+
 ## Future Directions
 
 ### 1. Replace MATLAB with Python

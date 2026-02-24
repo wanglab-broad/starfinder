@@ -110,9 +110,9 @@ class FOV:
         k_90 = round(angle / 90)
         if abs(angle - k_90 * 90) < 1e-6:
             yx_axes = (1, 2) if vol.ndim == 4 else (0, 1)
-            # np.rot90 k=1 is 90° CCW; angle=-90 means CW = k=-1
+            # np.rot90 and imrotate share sign convention: k=1 is CCW, k=-1 is CW
             self.images[round_name] = np.ascontiguousarray(
-                np.rot90(vol, k=-k_90, axes=yx_axes)
+                np.rot90(vol, k=k_90, axes=yx_axes)
             )
         else:
             from scipy.ndimage import rotate as ndimage_rotate
