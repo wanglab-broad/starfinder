@@ -292,6 +292,7 @@ Detailed design documents are in `docs/`:
 - [x] Phase 6: Dataset/FOV orchestration layer (STARMapDataset, FOV, fluent pipeline API)
 - [x] Phase 7: E2E validation + SNR-gated normalization + noise-floor spot finding threshold
 - [x] Phase 8: Real data E2E benchmark (tissue-2D, LN, cell-culture-3D — 2 FOVs each)
+- [x] Phase 9: Performance optimization (streaming pipeline, memory fixes — 50% RSS reduction, 2x speedup)
 
 ## Notes for Claude Code
 Update this file by adding tips whenever you make mistakes to help improve your accuracy.
@@ -338,7 +339,7 @@ Update this file by adding tips whenever you make mistakes to help improve your 
 - **E2E benchmark datasets and results**: Located at `starfinder_benchmark/e2e/`. Data in `data/{large,tissue,thick_medium}/`, results in `results/{large,tissue,thick_medium}/`. Each `run_e2e_{preset}.py` script is self-contained and reproducible — it restructures directories, runs the full pipeline, generates inspection images, QC CSVs (with per-step timing and memory), and validates against ground truth.
 - **E2E benchmark output structure**: `log/{fov}.csv` (QC), `log/gr_inspect/{fov}_inspection_registration.png`, `log/signal_inspect/{fov}_goodSpots.png`, `log/gr_shifts/{fov}.txt`, `signal/{fov}_goodSpots.csv`.
 - **E2E benchmark QC CSV columns** (27 cols): `log/{fov}.csv` includes detection metrics (detection_recall, detection_precision), extraction/filtering metrics (codebook_match_rate, n_correct_form, correct_form_rate, validated_rate), decoding accuracy (gene/color_seq accuracy vs GT), registration (shift_max_error_px), per-step timing (load, enhance, registration, spot_finding, extraction, filtration), and memory (RSS after key steps, peak RSS).
-- **E2E benchmark scaling results (synthetic)**: large ~52s/FOV 2.4GB, thick_medium ~179s/FOV 7.5GB, tissue ~482s/FOV 20GB. All achieve perfect recall, >98% precision, 100% gene accuracy. Registration dominates runtime (~60%). Memory scales linearly with voxel count.
+- **E2E benchmark scaling results (synthetic, pre-optimization)**: large ~52s/FOV 2.4GB, thick_medium ~179s/FOV 7.5GB, tissue ~482s/FOV 20GB. All achieve perfect recall, >98% precision, 100% gene accuracy. Registration dominates runtime (~60%). Memory scales linearly with voxel count.
 - **MATLAB channel order is wavelength-sorted, not filename-sorted**: The default `channel_order_dict` in `STARMapDataset.m` sorts by wavelength (488→546→594→647nm), mapping to `["ch00", "ch02", "ch01", "ch03"]`. **ch01 and ch02 are swapped.** All three real datasets use this default (`seq_channel_order: []` in YAML). In Python, pass `channel_order=["ch00", "ch02", "ch01", "ch03"]` to match MATLAB.
 - **`load_codebook` handles headerless CSV and BOM**: Real `genes.csv` files lack the `gene,barcode` header row and may have UTF-8 BOM (`\xef\xbb\xbf`). The function opens with `encoding="utf-8-sig"` and peeks at the first line to detect headers. Backward compatible with header-bearing files.
 - **`FOV.rotate()` fast path**: For exact 90° multiples (the common case with `rotate_angle: -90`), uses `np.rot90` (zero-copy view, instant) instead of `scipy.ndimage.rotate` (interpolation, 390s on 3072³×4 volumes). General angles fall back to scipy. Pipeline order: `load → rotate → enhance → registration → spot_finding → extraction → filtration`.
@@ -351,4 +352,10 @@ Update this file by adding tips whenever you make mistakes to help improve your 
 - **LN dataset specifics**: `ref_round="round4"` (unusual — most datasets use round1), `start_base="A"` (not "C"), `end_bases="AC"`, `voxel_size=(1,1,1)`, 50 Z-slices (thickest dataset). MATLAB shift log embedded in text log at `log/{fov}.txt` (not CSV).
 - **cell-culture-3D dataset specifics**: 6 sequencing rounds (most rounds), 998 genes (largest codebook), `voxel_size=(1,2,2)` (anisotropic), FOVs start at Position351 (not 001). MATLAB shift log also in text format at `log/{fov}.txt`.
 - **MATLAB shift log formats**: tissue-2D uses structured CSV at `log/gr_shifts/{fov}.txt`; LN and cell-culture-3D embed shifts in text log at `log/{fov}.txt` — use `parse_matlab_shifts_from_log()` regex parser in the benchmark scripts.
+- **Streaming pipeline** (`FOV.run_streaming()`): Processes one sequencing round at a time, discarding after registration. Only ref round remains in memory after completion. Produces identical results to batch mode. Use for memory-constrained cluster jobs.
+- **Phase correlation uses `rfftn`/`irfftn`** (not `fftn`/`ifftn`): Exploits conjugate symmetry of real input — ~50% less memory for FFT arrays. Mathematically equivalent (same argmax, relative diff ~4×10⁻⁷).
+- **`apply_shift` integer fast path**: Phase correlation always returns integer shifts. Uses `np.roll` + zero-fill (no FFT allocation) instead of `fourier_shift` → FFT round-trip. Sub-pixel shifts fall back to the FFT path.
+- **`_make_ref_3d` uses uint16**: `np.sum(uint8_volume, axis=-1, dtype=np.uint16)` — max sum of 4 uint8 channels = 1020, fits in uint16. Default `np.sum` uses int64 (8 bytes/px), wasting 6 bytes/px.
+- **Performance optimization results (2026-02-23)**: Streaming + memory fixes achieve ~50% peak RSS reduction and ~2x runtime speedup. tissue_2D: 19.9→11.0 GB, cell_culture_3D: 5.5→2.8 GB. Speedup from eliminating FFT round-trips in `apply_shift` for integer shifts.
+- **Streaming benchmark script**: `starfinder_benchmark/e2e/results/run_streaming_benchmark.py` — single parametrized script for all 6 datasets. Usage: `uv run python run_streaming_benchmark.py <dataset>`.
 

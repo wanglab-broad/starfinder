@@ -1397,6 +1397,55 @@ starfinder_benchmark/e2e/results/{dataset}/
 - Scale to more FOVs per dataset for statistical significance
 - Cross-dataset comparison analysis
 
+### Performance Optimization (2026-02-23)
+
+Three-tier optimization targeting memory (peak RSS) and runtime for cluster scheduling.
+
+**Phase A: Quick Wins** (commit 560f3f8)
+- Vectorized barcode extraction: replaced Python loop over spots with NumPy fancy indexing
+- Float32 normalization: `min_max_normalize` uses float32 instead of float64
+- String concatenation: `color_seq` built with `np.add.reduce` instead of per-row string ops
+
+**Phase B: Streaming Pipeline** (commit cb520a7)
+- `FOV.run_streaming()`: processes one sequencing round at a time, discarding after registration
+- Only the reference round remains in memory after completion
+- Validated: streaming produces identical spot counts and gene assignments as batch mode
+- Tests: `TestE2EStreamingMode` in `test_e2e.py` (2 tests: output match + memory release)
+
+**Phase C: Registration Memory Optimization** (uncommitted)
+Three fixes to reduce peak RSS during phase correlation registration:
+
+1. **uint16 merged images** (`fov.py:_make_ref_3d`): `np.sum(uint8, axis=-1)` defaults to int64 (8 bytes/px). Since max sum of 4 uint8 channels = 1020, uint16 (2 bytes/px) suffices. Saves 3.2 GB on tissue-sized volumes.
+
+2. **Real FFT** (`phase_correlation.py:phase_correlate`): Replaced `fftn`/`ifftn` with `rfftn`/`irfftn`. Exploits conjugate symmetry of real-valued input — last axis is half-size. Saves ~2 GB. Verified mathematically equivalent: same argmax, relative cc diff ~4×10⁻⁷.
+
+3. **Integer roll fast path** (`phase_correlation.py:apply_shift`): Phase correlation always returns integer shifts. Old code used FFT round-trip (`fourier_shift` → `fftn` → `ifftn`) even for integer shifts. New code uses `np.roll` + zero-fill — no FFT allocation at all. Saves ~6 GB per channel on tissue-sized volumes.
+
+**Streaming benchmark results (before memory fixes):**
+
+| Dataset | Batch Peak | Stream Peak | Reduction |
+|---------|-----------|-------------|-----------|
+| large | 2.4 GB | 2.1 GB | 11-15% |
+| thick_medium | 7.5 GB | 6.6 GB | 11-13% |
+| tissue | 19.8 GB | 17.5 GB | 11-13% |
+| tissue_2D | 19.9 GB | 17.5 GB | 11-13% |
+| LN | 8.0 GB | 7.0 GB | 11-14% |
+| cell_culture_3D | 5.5 GB | 4.3 GB | 19-23% |
+
+Streaming alone only gave 11-23% because FFT temporaries during registration dominate peak RSS (not round image storage).
+
+**After memory fixes (streaming mode):**
+
+| Dataset | Before (batch) | After (stream+fixes) | Reduction | Speedup |
+|---------|---------------|---------------------|-----------|---------|
+| tissue_2D | 19.9 GB | 11.0 GB | 44-45% | 2.2x |
+| tissue | 19.8 GB | 11.0 GB | 44-45% | 2.1x |
+| cell_culture_3D | 5.5 GB | 2.8 GB | 48-51% | 2.3x |
+
+Combined streaming + memory fixes achieve ~50% peak RSS reduction and ~2x runtime speedup, primarily from eliminating unnecessary FFT round-trips in `apply_shift`.
+
+**Benchmark script:** `starfinder_benchmark/e2e/results/run_streaming_benchmark.py` — single parametrized script handling all 6 datasets (3 synthetic, 3 real).
+
 ## Future Directions
 
 ### 1. Replace MATLAB with Python

@@ -224,7 +224,8 @@ class FOV:
         """Create 3D reference/moving image for registration."""
         img = self.images[round_name]
         if mode == "merged":
-            return np.sum(img, axis=-1)
+            # uint16 is sufficient: max sum of 4 uint8 channels = 1020
+            return np.sum(img, axis=-1, dtype=np.uint16)
         else:
             return img[:, :, :, channel]
 
