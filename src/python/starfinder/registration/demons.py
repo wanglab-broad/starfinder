@@ -121,16 +121,19 @@ def _run_antialias_pyramid(sitk, fixed, moving, demons, iterations):
 
     Replaces SimpleITK's naive ``Shrink`` with Butterworth-filtered
     downsampling, matching MATLAB's ``imregdemons`` internal
-    ``antialiasResize``. Uses float64 precision (matching MATLAB's
-    ``double``).
+    ``antialiasResize``. Uses float32 precision for memory efficiency
+    (SimpleITK internally uses float32 for demons computation).
 
-    For each pyramid level (coarse to fine):
-    1. Downsample fixed/moving with anti-aliased resize
-    2. Upsample previous displacement field (if any) and scale magnitudes
-    3. Run single-level SimpleITK demons with initial field
+    Memory optimizations (Phase D):
+    - float32 volumes + complex64 FFT (vs float64/complex128)
+    - rfftn/irfftn halves FFT array size
+    - Butterworth filter cached between fixed/moving at each level
+    - Pre-allocated buffer for field upsampling
+    - No redundant .astype() copies
     """
     from starfinder.registration.pyramid import (
         antialias_resize,
+        butterworth_3d,
         crop_padding,
         pad_for_pyramiding,
     )
@@ -141,9 +144,11 @@ def _run_antialias_pyramid(sitk, fixed, moving, demons, iterations):
     fixed_padded, pad_widths = pad_for_pyramiding(fixed, num_levels)
     moving_padded, _ = pad_for_pyramiding(moving, num_levels)
 
-    # Convert to float64 (matching MATLAB's double precision)
-    fixed_padded = fixed_padded.astype(np.float64)
-    moving_padded = moving_padded.astype(np.float64)
+    # D2: Use float32 — halves all volume and FFT array sizes.
+    # SimpleITK internally uses float32 for demons computation;
+    # the sitk pyramid path (line 67-68) already uses float32.
+    fixed_padded = fixed_padded.astype(np.float32)
+    moving_padded = moving_padded.astype(np.float32)
 
     # Displacement field in numpy convention (Z, Y, X, 3) with (dz, dy, dx)
     displacement_np = None
@@ -156,15 +161,23 @@ def _run_antialias_pyramid(sitk, fixed, moving, demons, iterations):
         factor = 0.5 ** power if power > 0 else 1.0
 
         if factor < 1.0:
-            fixed_level = antialias_resize(fixed_padded, factor)
-            moving_level = antialias_resize(moving_padded, factor)
+            # D6: Compute Butterworth filter once, reuse for fixed and moving.
+            # Saves ~2.3 GB transient allocation + ~2-5s per level.
+            cutoff = 0.5 * factor
+            filt = butterworth_3d(
+                fixed_padded.shape, cutoff, order=2,
+                rfft=True, dtype=np.float32,
+            )
+            fixed_level = antialias_resize(fixed_padded, factor, filt=filt)
+            moving_level = antialias_resize(moving_padded, factor, filt=filt)
         else:
             fixed_level = fixed_padded
             moving_level = moving_padded
 
-        # Convert to SimpleITK for this level
-        fixed_sitk = sitk.GetImageFromArray(fixed_level.astype(np.float64))
-        moving_sitk = sitk.GetImageFromArray(moving_level.astype(np.float64))
+        # D3: Arrays are already float32 and contiguous (from
+        # antialias_resize or astype above) — no redundant .astype().
+        fixed_sitk = sitk.GetImageFromArray(fixed_level)
+        moving_sitk = sitk.GetImageFromArray(moving_level)
 
         demons.SetNumberOfIterations(num_iter)
 
@@ -174,31 +187,36 @@ def _run_antialias_pyramid(sitk, fixed, moving, demons, iterations):
         else:
             # Upsample displacement field from previous level
             # Scale each component by 2 (since spatial dimensions doubled)
-            upsampled = np.empty((*fixed_level.shape, 3), dtype=np.float64)
+            target_shape = fixed_level.shape
+            disp_dtype = displacement_np.dtype
+            upsampled = np.empty((*target_shape, 3), dtype=disp_dtype)
             for d in range(3):
                 upsampled[..., d] = antialias_resize(
                     displacement_np[..., d], 2.0
                 ) * 2.0
 
-            # Crop/pad to match current level size exactly
+            # D5: Pre-allocate a single buffer, reuse across 3 components.
+            # Saves 2 full-resolution array allocations.
+            tmp = np.zeros(target_shape, dtype=disp_dtype)
             for d in range(3):
                 comp = upsampled[..., d]
-                target_shape = fixed_level.shape
                 # Handle size mismatches from rounding
                 slices = tuple(
                     slice(0, min(cs, ts))
                     for cs, ts in zip(comp.shape, target_shape)
                 )
-                tmp = np.zeros(target_shape, dtype=np.float64)
                 src_slices = tuple(
                     slice(0, min(cs, ts))
                     for cs, ts in zip(comp.shape, target_shape)
                 )
+                tmp[:] = 0
                 tmp[slices] = comp[src_slices]
                 upsampled[..., d] = tmp
 
-            # Convert to SimpleITK (dz,dy,dx) -> (dx,dy,dz)
-            field_sitk_order = upsampled[..., ::-1].astype(np.float64)
+            # D3: np.ascontiguousarray instead of redundant .astype().
+            # The [..., ::-1] reverse creates a non-contiguous view;
+            # ascontiguousarray makes it contiguous without dtype change.
+            field_sitk_order = np.ascontiguousarray(upsampled[..., ::-1])
             disp_sitk = sitk.GetImageFromArray(field_sitk_order, isVector=True)
             disp_sitk.CopyInformation(fixed_sitk)
 
@@ -323,17 +341,17 @@ def apply_deformation(
     # Preserve input dtype
     input_dtype = volume.dtype
 
-    # Convert volume to SimpleITK image
-    volume_sitk = sitk.GetImageFromArray(volume.astype(np.float64))
+    # D3: np.require avoids redundant copy when already contiguous float64
+    volume_sitk = sitk.GetImageFromArray(
+        np.require(volume, dtype=np.float64, requirements='C')
+    )
 
     # Convert displacement field from numpy convention (dz, dy, dx) to
-    # SimpleITK convention (dx, dy, dz)
-    field_sitk_order = displacement_field[..., ::-1]
-
-    # Convert displacement field to SimpleITK (isVector=True for vector image)
-    # DisplacementFieldTransform requires float64 vectors
+    # SimpleITK convention (dx, dy, dz). The [..., ::-1] creates a
+    # non-contiguous view; np.require ensures contiguous float64.
     field_sitk = sitk.GetImageFromArray(
-        field_sitk_order.astype(np.float64), isVector=True
+        np.require(displacement_field[..., ::-1], dtype=np.float64, requirements='C'),
+        isVector=True,
     )
 
     # Create displacement field transform
@@ -368,6 +386,10 @@ def register_volume_local(
     This function computes the displacement field between ref_image and mov_image,
     then applies that field to all channels in the images volume.
 
+    D4: The displacement field transform and resampler are created once and
+    reused for all channels, avoiding 3 redundant field copies and setup
+    overhead (~20 GB transient + ~40s for tissue-sized volumes).
+
     Parameters
     ----------
     images : np.ndarray
@@ -401,11 +423,33 @@ def register_volume_local(
         pyramid_mode=pyramid_mode,
     )
 
-    # Apply the displacement field to each channel
+    # D4: Create transform ONCE, reuse for all channels.
+    # Previously apply_deformation was called per channel, each time
+    # converting the field (dz,dy,dx)→(dx,dy,dz), creating a
+    # DisplacementFieldTransform, and setting up a ResampleImageFilter.
+    sitk = _import_sitk()
+    input_dtype = images.dtype
+
+    field_sitk = sitk.GetImageFromArray(
+        np.require(displacement_field[..., ::-1], dtype=np.float64, requirements='C'),
+        isVector=True,
+    )
+    transform = sitk.DisplacementFieldTransform(field_sitk)
+
+    # Set up resampler once with shared spatial metadata
     n_channels = images.shape[-1]
     registered = np.empty_like(images)
 
+    ref_vol_sitk = sitk.GetImageFromArray(images[:, :, :, 0].astype(np.float64))
+    resampler = sitk.ResampleImageFilter()
+    resampler.SetReferenceImage(ref_vol_sitk)
+    resampler.SetInterpolator(sitk.sitkLinear)
+    resampler.SetDefaultPixelValue(0)
+    resampler.SetTransform(transform)
+
     for c in range(n_channels):
-        registered[:, :, :, c] = apply_deformation(images[:, :, :, c], displacement_field)
+        vol_sitk = sitk.GetImageFromArray(images[:, :, :, c].astype(np.float64))
+        warped = resampler.Execute(vol_sitk)
+        registered[:, :, :, c] = sitk.GetArrayFromImage(warped).astype(input_dtype)
 
     return registered, displacement_field

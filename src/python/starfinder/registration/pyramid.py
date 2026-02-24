@@ -19,6 +19,8 @@ def butterworth_3d(
     shape: tuple[int, ...],
     cutoff: float,
     order: int = 2,
+    rfft: bool = False,
+    dtype: np.dtype = np.float64,
 ) -> np.ndarray:
     """3D Butterworth low-pass filter in frequency domain.
 
@@ -36,34 +38,56 @@ def butterworth_3d(
     order : int, optional
         Butterworth filter order. Higher = sharper rolloff. Default 2
         matches MATLAB.
+    rfft : bool, optional
+        If True, produce half-spectrum filter for use with ``rfftn``.
+        Last axis uses ``rfftfreq`` (length ``X//2+1``). Default False.
+    dtype : np.dtype, optional
+        Output dtype. Default ``np.float64``.
 
     Returns
     -------
     np.ndarray
-        Filter in frequency domain with shape ``shape``, values in [0, 1].
+        Filter in frequency domain, values in [0, 1].
+        Shape is ``shape`` when rfft=False, or
+        ``(*shape[:-1], shape[-1]//2+1)`` when rfft=True.
     """
+    # Determine output shape
+    if rfft:
+        out_shape = (*shape[:-1], shape[-1] // 2 + 1)
+    else:
+        out_shape = shape
+
     if cutoff <= 0:
-        return np.zeros(shape, dtype=np.float64)
+        return np.zeros(out_shape, dtype=dtype)
 
     # Separable Butterworth: product of per-dimension 1D filters.
     # This matches MATLAB's butterwth which filters each axis independently,
     # avoiding the over-attenuation of an isotropic L2-distance filter.
-    result = np.ones(shape, dtype=np.float64)
+    result = np.ones(out_shape, dtype=dtype)
     for dim, s in enumerate(shape):
-        freq = np.fft.fftfreq(s)
+        if rfft and dim == len(shape) - 1:
+            freq = np.fft.rfftfreq(s)
+        else:
+            freq = np.fft.fftfreq(s)
         h_1d = 1.0 / (1.0 + (np.abs(freq) / cutoff) ** (2 * order))
-        # Broadcast to full shape
-        slicing = [np.newaxis] * len(shape)
+        # Broadcast to full output shape
+        slicing = [np.newaxis] * len(out_shape)
         slicing[dim] = slice(None)
-        result *= h_1d[tuple(slicing)]
+        result *= h_1d.astype(dtype)[tuple(slicing)]
     return result
 
 
-def antialias_resize(volume: np.ndarray, factor: float) -> np.ndarray:
+def antialias_resize(
+    volume: np.ndarray,
+    factor: float,
+    filt: np.ndarray | None = None,
+) -> np.ndarray:
     """Anti-aliased 3D resize matching MATLAB's ``antialiasResize``.
 
     For downsampling (factor < 1): applies Butterworth low-pass filter
-    before linear interpolation to prevent aliasing.
+    before linear interpolation to prevent aliasing. Uses ``rfftn``/``irfftn``
+    for memory efficiency (~50% less than ``fftn``/``ifftn`` for real input).
+
     For upsampling (factor >= 1): linear interpolation only.
 
     Parameters
@@ -72,19 +96,34 @@ def antialias_resize(volume: np.ndarray, factor: float) -> np.ndarray:
         3D volume (Z, Y, X). Can be float or integer type.
     factor : float
         Resize factor. 0.5 = halve each dimension, 2.0 = double.
+    filt : np.ndarray or None, optional
+        Pre-computed Butterworth rfft filter. If None, computed
+        automatically. Pass pre-computed filter to avoid recomputing
+        for fixed/moving pairs at the same pyramid level.
 
     Returns
     -------
     np.ndarray
-        Resized volume (float64).
+        Resized volume. Float32 for integer input, preserves floating dtype.
     """
-    vol = volume.astype(np.float64)
+    # Use float32 for integer input (sufficient for image processing);
+    # preserve floating-point dtype (important for displacement fields).
+    if np.issubdtype(volume.dtype, np.floating):
+        vol = np.asarray(volume)
+    else:
+        vol = volume.astype(np.float32)
 
     if factor < 1.0:
-        # Low-pass filter before downsampling to prevent aliasing
-        cutoff = 0.5 * factor  # Nyquist of target resolution
-        filt = butterworth_3d(vol.shape, cutoff, order=2)
-        vol = np.real(np.fft.ifftn(np.fft.fftn(vol) * filt))
+        # Low-pass filter before downsampling to prevent aliasing.
+        # rfftn/irfftn exploits conjugate symmetry of real input:
+        # last axis halved from X to X//2+1, ~50% less memory.
+        if filt is None:
+            cutoff = 0.5 * factor  # Nyquist of target resolution
+            filt = butterworth_3d(
+                vol.shape, cutoff, order=2, rfft=True, dtype=vol.dtype,
+            )
+        axes = tuple(range(vol.ndim))
+        vol = np.fft.irfftn(np.fft.rfftn(vol, axes=axes) * filt, s=vol.shape, axes=axes)
 
     # Resize with linear interpolation
     new_shape = tuple(max(1, int(round(s * factor))) for s in vol.shape)
