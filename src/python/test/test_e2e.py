@@ -11,7 +11,7 @@ runs the pipeline once and shares results across all tests.
 import pandas as pd
 import pytest
 
-from starfinder.testdata.validation import compare_genes, compare_shifts, compare_spots
+from starfinder.benchmark.validation import compare_genes, compare_shifts, compare_spots
 
 
 class TestE2EPipelineSmokeTest:

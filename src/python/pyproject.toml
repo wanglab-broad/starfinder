@@ -28,7 +28,7 @@ visualization = ["napari>=0.4"]
 dev = ["pytest>=7.0", "pytest-cov>=4.0", "ruff>=0.1"]
 
 [project.scripts]
-starfinder-generate = "starfinder.testdata.__main__:main"
+starfinder-generate = "starfinder.benchmark.__main__:main"
 
 [build-system]
 requires = ["hatchling"]

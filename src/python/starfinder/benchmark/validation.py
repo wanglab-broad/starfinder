@@ -168,10 +168,6 @@ def compare_genes(
     (if ``gene`` column present) and color sequences (if ``color_seq``
     column present).
 
-    Color sequence format: GT stores as string ``"4422"``, pipeline
-    ``reads_extraction`` also produces a string ``"4422"`` — compared
-    directly.
-
     Returns
     -------
     dict with ``gene_accuracy``, ``color_seq_accuracy``,

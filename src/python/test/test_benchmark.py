@@ -244,6 +244,11 @@ class TestPresets:
         assert "small" in SIZE_PRESETS
         assert "medium" in SIZE_PRESETS
 
+    def test_removed_presets(self):
+        """xlarge and thick_large are no longer in SIZE_PRESETS."""
+        assert "xlarge" not in SIZE_PRESETS
+        assert "thick_large" not in SIZE_PRESETS
+
     def test_get_size_preset(self):
         """get_size_preset() returns correct shape."""
         shape = get_size_preset("tiny")

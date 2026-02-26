@@ -34,16 +34,32 @@ from starfinder.benchmark.evaluate import (
     generate_inspection,
 )
 from starfinder.benchmark.data import (
-    create_benchmark_volume,
-    apply_global_shift,
-    create_deformation_field,
-    apply_deformation_field,
     generate_inspection_image,
-    generate_synthetic_benchmark,
     generate_overview_grid,
     extract_real_benchmark_data,
-    DEFORMATION_CONFIGS,
     REAL_DATASETS,
+)
+from starfinder.benchmark.synthetic import (
+    SyntheticConfig,
+    TEST_CODEBOOK,
+    DEFORMATION_CONFIGS,
+    generate_codebook,
+    encode_barcode_to_colors,
+    get_preset_config,
+    generate_synthetic_dataset,
+    generate_registration_benchmark,
+    create_test_image_stack,
+    create_test_volume,
+    create_deformation_field,
+    apply_shift_to_spots,
+    apply_deformation_to_spots,
+    scale_deformation_config,
+)
+from starfinder.benchmark.validation import (
+    compare_shifts,
+    compare_spots,
+    compare_genes,
+    e2e_summary,
 )
 
 __all__ = [
@@ -67,13 +83,22 @@ __all__ = [
     "SHIFT_RANGES",
     "DEFORMATION_CONFIGS",
     "get_size_preset",
-    # Data generation
-    "create_benchmark_volume",
-    "apply_global_shift",
+    # Synthetic data generation
+    "SyntheticConfig",
+    "TEST_CODEBOOK",
+    "generate_codebook",
+    "encode_barcode_to_colors",
+    "get_preset_config",
+    "generate_synthetic_dataset",
+    "generate_registration_benchmark",
+    "create_test_image_stack",
+    "create_test_volume",
     "create_deformation_field",
-    "apply_deformation_field",
+    "apply_shift_to_spots",
+    "apply_deformation_to_spots",
+    "scale_deformation_config",
+    # Visualization & real data
     "generate_inspection_image",
-    "generate_synthetic_benchmark",
     "generate_overview_grid",
     "extract_real_benchmark_data",
     "REAL_DATASETS",
@@ -82,6 +107,11 @@ __all__ = [
     "evaluate_directory",
     "evaluate_single",
     "generate_inspection",
+    # Validation (e2e comparison)
+    "compare_shifts",
+    "compare_spots",
+    "compare_genes",
+    "e2e_summary",
     # Reporting
     "print_table",
     "save_csv",

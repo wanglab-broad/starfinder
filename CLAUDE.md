@@ -48,7 +48,7 @@ uv run pytest test/ -v
 uv run pytest test/ -v --cov=starfinder
 
 # Generate synthetic test dataset
-uv run python -m starfinder.testdata --preset small --output ../../tests/fixtures/synthetic/small
+uv run python -m starfinder.benchmark --preset small --output ../../tests/fixtures/synthetic/small
 ```
 
 ## Architecture
@@ -212,12 +212,15 @@ The Python backend is being developed to replace MATLAB components. Uses `(Z, Y,
   - `FOVPaths` — frozen path helper for output locations
   - `log_step` decorator — timing and error logging per method
 
-- **`starfinder.testdata`** - Synthetic dataset generation and validation
-  - Two-base color-space encoding matching MATLAB
+- **`starfinder.benchmark.synthetic`** - Unified synthetic data generation (coordinate-first rendering)
+  - `generate_synthetic_dataset()` → multi-round, multi-channel FOV datasets for E2E testing
+  - `generate_registration_benchmark()` → single-channel ref/mov pairs for registration benchmarking
   - `generate_codebook(n_genes)` → programmatic CNNNNC codebook (up to 64 genes)
-  - `SyntheticConfig.codebook` field for custom codebooks (default: 8-gene `TEST_CODEBOOK`)
-  - Presets: `small` (2 FOVs, 256×256×16, 8 genes, 50 spots/FOV), `medium` (2 FOVs, 512×512×32, 8 genes, 100 spots/FOV), `large` (2 FOVs, 1024×1024×30, 64 genes, 2000 spots/FOV), `tissue` (2 FOVs, 3072×3072×30, 64 genes, 14000 spots/FOV), `thick_medium` (2 FOVs, 1024×1024×100, 64 genes, 5200 spots/FOV)
-  - Validation (`testdata.validation`):
+  - `apply_shift_to_spots()` / `apply_deformation_to_spots()` → coordinate-level transforms before rendering
+  - `SyntheticConfig.deformation` field for optional local deformation on non-ref rounds
+  - Per-round spot variation: ~10% intensity jitter, ~5% sigma jitter (deterministic per spot+round)
+  - Presets: `tiny` (2 FOVs, 128×128×8, 10 spots), `small` (2 FOVs, 256×256×16, 50 spots), `medium` (2 FOVs, 512×512×32, 400 spots), `large` (2 FOVs, 1024×1024×30, 64 genes, 1500 spots), `tissue` (2 FOVs, 3072×3072×30, 64 genes, 14000 spots), `thick_medium` (2 FOVs, 1024×1024×100, 64 genes, 5200 spots)
+  - Validation (`benchmark.validation`):
     - `compare_shifts(shifts, gt, fov_id)` → per-round shift errors
     - `compare_spots(spots, gt, fov_id)` → recall, precision, mean distance
     - `compare_genes(spots, gt, fov_id)` → gene accuracy, color_seq accuracy

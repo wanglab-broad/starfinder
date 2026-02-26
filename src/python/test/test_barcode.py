@@ -13,7 +13,7 @@ from starfinder.barcode.encoding import (
 )
 from starfinder.barcode.codebook import load_codebook
 from starfinder.barcode.filtering import filter_reads
-from starfinder.testdata.synthetic import TEST_CODEBOOK
+from starfinder.benchmark.synthetic import TEST_CODEBOOK
 
 # Resolve path relative to this file → repo root / tests/fixtures/...
 _REPO_ROOT = Path(__file__).resolve().parents[3]

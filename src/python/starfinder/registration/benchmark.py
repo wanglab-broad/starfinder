@@ -34,7 +34,7 @@ def benchmark_registration(
     Returns:
         List of BenchmarkResult objects.
     """
-    from starfinder.testdata import create_test_volume
+    from starfinder.benchmark.synthetic import create_test_volume
 
     if sizes is None:
         sizes = [
