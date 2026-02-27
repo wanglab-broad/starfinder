@@ -1811,6 +1811,42 @@ Merged two independent synthetic data generators (`starfinder.testdata` and `sta
 
 **Tests:** 186 passing (unchanged count — deleted `test_synthetic.py` replaced by 19-test `test_benchmark_synthetic.py`)
 
+### 2026-02-26: CPD Correspondence-Aware Subsampling
+
+Fixed the core subsampling problem in `cpd_register()`: independent FPS on fixed and moving clouds destroyed cross-cloud correspondences. On tissue (14K spots → 1K), only 22% of subsampled points retained their true nearest neighbor.
+
+**Root cause (two issues):**
+1. **Independent FPS drops true matches** — a fixed point's partner may not survive FPS in the other cloud
+2. **Single-point anchors lose local context** — FPS picks one representative per region, but CPD needs neighboring spots to disambiguate which moving spot belongs to which fixed spot
+
+**Solution — correspondence-aware subsampling (no hard pre-matching):**
+1. FPS on fixed cloud for spatial anchors (`max_anchors = max_control_points // (1 + k_neighbors)`)
+2. Expand each anchor with K nearest neighbors from full fixed cloud (preserves local cluster structure)
+3. Gather all moving points within radius of enriched fixed cloud (ensures true correspondences survive)
+4. CPD's EM does soft assignment on the enriched clouds — no explicit matching required
+
+**New functions in `pointset.py`:**
+- `_subsample_with_neighbors(points, max_anchors=250, k_neighbors=3)` — FPS + KDTree neighbor expansion
+- `_gather_candidates(fixed_sub, moving_all, radius=15.0)` — radius-based moving candidate gathering
+
+**New parameters on `cpd_register()`:**
+- `candidate_radius: float = 15.0` — moving candidate search radius
+- `k_neighbors: int = 3` — fixed neighbors per FPS anchor
+
+**Updated `FOV.local_registration()`** to pass `candidate_radius` and `k_neighbors` through to CPD.
+
+**Results with 300 anchors + 3 neighbors, radius=15px (from planning analysis):**
+
+| Preset | |X| fixed | |Y| moving | True NN preserved | Kernel mem |
+|---|---|---|---|---|
+| large | 1105 | 1199 | **100%** (was 82%) | 12 MB |
+| tissue | 1200 | 1342 | **98%** (was 22%) | 14 MB |
+| thick_medium | 1200 | 1405 | **98%** (was 35%) | 16 MB |
+
+**Budget math:** With default `max_control_points=1000`, `k=3`: 250 anchors × 4 ≈ 1000 fixed, ~1200 moving → kernel 12-16 MB (well within budget).
+
+**Tests:** All 186 tests pass (no new tests needed — existing CPD tests exercise the new code path).
+
 ## Future Directions
 
 ### 1. Replace MATLAB with Python

@@ -12,6 +12,7 @@ from __future__ import annotations
 import numpy as np
 from scipy.ndimage import label, center_of_mass
 from scipy.spatial.distance import cdist
+from skimage.feature import peak_local_max
 from skimage.metrics import structural_similarity as _ssim
 
 
@@ -146,30 +147,114 @@ def spot_colocalization(
 def detect_spots(
     volume: np.ndarray,
     threshold_percentile: float = 99.5,
+    threshold_mode: str = "percentile",
+    noise_k: float = 5.0,
+    min_distance: int = 1,
 ) -> np.ndarray:
-    """Detect spot centroids using connected component analysis.
+    """Detect spot centroids in a 3D or 4D volume.
+
+    Supports two workflows:
+
+    - ``threshold_mode="percentile"`` (default): percentile-based threshold
+      with connected-component centroids. Used by quality metrics.
+    - ``threshold_mode="noise"``: per-channel MAD-based noise-floor threshold
+      with ``peak_local_max`` suppression. Matches ``find_spots_3d`` workflow.
+
+    For 4D input ``(Z, Y, X, C)``, noise mode detects spots per channel and
+    deduplicates by spatial proximity. For 3D input, treats as single channel.
 
     Parameters
     ----------
     volume : np.ndarray
-        Input volume (Z, Y, X) or image (Y, X).
+        Input volume ``(Z, Y, X)`` or ``(Z, Y, X, C)``.
     threshold_percentile : float, optional
-        Percentile threshold for spot detection. Default is 99.5.
+        Percentile threshold. Only used when ``threshold_mode="percentile"``.
+    threshold_mode : str, optional
+        ``"percentile"``: top percentile of voxel intensities.
+        ``"noise"``: MAD-based noise floor with ``peak_local_max``.
+    noise_k : float, optional
+        Number of sigma above noise floor (default 5.0).
+        Only used when ``threshold_mode="noise"``.
+    min_distance : int, optional
+        Minimum pixel distance between detected peaks (default 1).
+        Only used when ``threshold_mode="noise"``.
 
     Returns
     -------
     np.ndarray
-        Array of spot centroids with shape (N, ndim) where ndim is 2 or 3.
+        Array of spot centroids with shape ``(N, 3)`` — ``(z, y, x)``.
     """
-    threshold = np.percentile(volume, threshold_percentile)
-    binary = volume > threshold
+    if threshold_mode == "noise":
+        return _detect_spots_noise(volume, noise_k, min_distance)
+
+    # Legacy percentile mode: CCA on the full volume (3D only)
+    vol = volume if volume.ndim == 3 else volume.sum(axis=-1)
+    threshold = np.percentile(vol, threshold_percentile)
+    binary = vol > threshold
     labeled, n_spots = label(binary)
 
     if n_spots == 0:
-        return np.array([]).reshape(0, volume.ndim)
+        return np.array([]).reshape(0, 3)
 
-    centroids = center_of_mass(volume, labeled, range(1, n_spots + 1))
+    centroids = center_of_mass(vol, labeled, range(1, n_spots + 1))
     return np.array(centroids)
+
+
+def _detect_spots_noise(
+    volume: np.ndarray,
+    noise_k: float,
+    min_distance: int,
+) -> np.ndarray:
+    """Noise-floor spot detection: per-channel MAD threshold + peak_local_max.
+
+    Mirrors the ``find_spots_3d`` workflow from ``starfinder.spotfinding``.
+    For 3D input, treats as single channel. For 4D ``(Z, Y, X, C)``, detects
+    per channel and deduplicates spatially.
+    """
+    # Normalize to 4D
+    if volume.ndim == 3:
+        channels = [volume]
+    elif volume.ndim == 4:
+        channels = [volume[:, :, :, c] for c in range(volume.shape[3])]
+    else:
+        raise ValueError(f"Expected 3D or 4D volume, got {volume.ndim}D")
+
+    all_coords = []
+    for ch in channels:
+        if ch.max() == 0:
+            continue
+
+        ch_float = ch.astype(np.float64)
+        med = np.median(ch_float)
+        mad = np.median(np.abs(ch_float - med))
+        threshold = med + noise_k * mad * 1.4826
+
+        coords = peak_local_max(
+            ch, min_distance=min_distance, threshold_abs=threshold,
+        )
+        if len(coords) > 0:
+            all_coords.append(coords)
+
+    if not all_coords:
+        return np.array([]).reshape(0, 3)
+
+    all_coords = np.concatenate(all_coords)
+
+    # Deduplicate: spots from different channels at the same location
+    if len(all_coords) > 1 and volume.ndim == 4:
+        from scipy.spatial import cKDTree
+
+        tree = cKDTree(all_coords)
+        # Group points within min_distance of each other, keep one per group
+        pairs = tree.query_pairs(r=max(min_distance, 1))
+        remove = set()
+        for i, j in pairs:
+            remove.add(max(i, j))  # keep lower index
+        if remove:
+            keep = np.array(sorted(set(range(len(all_coords))) - remove))
+            all_coords = all_coords[keep]
+
+    return all_coords
 
 
 def spot_matching_accuracy(

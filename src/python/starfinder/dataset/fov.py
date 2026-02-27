@@ -291,17 +291,41 @@ class FOV:
         *,
         ref_channel: int = 0,
         layers_to_register: list[str] | None = None,
+        method: str = "demons",
+        fallback: bool = True,
+        # Demons parameters
         iterations: list[int] | None = None,
         smoothing_sigma: float = 1.0,
-        method: str = "demons",
         pyramid_mode: str = "antialias",
+        # TPS parameters
+        detection_threshold: float = 3.0,
+        match_distance: float = 10.0,
+        min_matches: int = 50,
+        max_control_points: int = 1000,
+        tps_smoothing: float = 1.0,
+        grid_spacing: int = 32,
+        # CPD parameters
+        beta: float | None = None,
+        lmbda: float = 2.0,
+        cpd_w: float = 0.15,
+        affine_first: bool = True,
+        candidate_radius: float = 15.0,
+        k_neighbors: int = 3,
     ) -> FOV:
-        """Local (non-rigid) registration using demons algorithm.
+        """Local (non-rigid) registration.
+
+        Supports three methods:
+        - ``"demons"`` (default): Iterative voxel-level optimization via SimpleITK.
+        - ``"tps"``: Spot-based Thin Plate Spline — fits a smooth displacement
+          field from matched spot correspondences. No SimpleITK dependency.
+        - ``"cpd"``: Coherent Point Drift — simultaneous correspondence and
+          transformation via EM on GMM. No SimpleITK dependency.
+
+        When ``method="tps"`` or ``method="cpd"`` and ``fallback=True``,
+        falls back to demons if insufficient spot matches.
 
         Displacement fields are ephemeral (applied then discarded).
         """
-        from starfinder.registration import register_volume_local
-
         if layers_to_register is None:
             layers_to_register = self.layers.to_register
 
@@ -312,15 +336,81 @@ class FOV:
             if round_name not in self.images:
                 continue
             mov_3d = self.images[round_name][:, :, :, ref_channel]
-            registered, _ = register_volume_local(
-                self.images[round_name],
-                ref_3d,
-                mov_3d,
-                iterations=iterations,
-                smoothing_sigma=smoothing_sigma,
-                method=method,
-                pyramid_mode=pyramid_mode,
-            )
+
+            if method == "cpd":
+                try:
+                    from starfinder.registration import register_volume_cpd
+
+                    registered, _ = register_volume_cpd(
+                        self.images[round_name],
+                        ref_3d,
+                        mov_3d,
+                        detection_threshold=detection_threshold,
+                        max_control_points=max_control_points,
+                        beta=beta,
+                        lmbda=lmbda,
+                        w=cpd_w,
+                        affine_first=affine_first,
+                        grid_spacing=grid_spacing,
+                        candidate_radius=candidate_radius,
+                        k_neighbors=k_neighbors,
+                    )
+                except ValueError:
+                    if not fallback:
+                        raise
+                    # Fall back to demons
+                    from starfinder.registration import register_volume_local
+
+                    registered, _ = register_volume_local(
+                        self.images[round_name],
+                        ref_3d,
+                        mov_3d,
+                        iterations=iterations,
+                        smoothing_sigma=smoothing_sigma,
+                        pyramid_mode=pyramid_mode,
+                    )
+            elif method == "tps":
+                try:
+                    from starfinder.registration import register_volume_tps
+
+                    registered, _ = register_volume_tps(
+                        self.images[round_name],
+                        ref_3d,
+                        mov_3d,
+                        detection_threshold=detection_threshold,
+                        match_distance=match_distance,
+                        min_matches=min_matches,
+                        max_control_points=max_control_points,
+                        smoothing=tps_smoothing,
+                        grid_spacing=grid_spacing,
+                    )
+                except ValueError:
+                    if not fallback:
+                        raise
+                    # Fall back to demons
+                    from starfinder.registration import register_volume_local
+
+                    registered, _ = register_volume_local(
+                        self.images[round_name],
+                        ref_3d,
+                        mov_3d,
+                        iterations=iterations,
+                        smoothing_sigma=smoothing_sigma,
+                        pyramid_mode=pyramid_mode,
+                    )
+            else:
+                from starfinder.registration import register_volume_local
+
+                registered, _ = register_volume_local(
+                    self.images[round_name],
+                    ref_3d,
+                    mov_3d,
+                    iterations=iterations,
+                    smoothing_sigma=smoothing_sigma,
+                    method=method,
+                    pyramid_mode=pyramid_mode,
+                )
+
             self.images[round_name] = registered
             self.local_registered.add(round_name)
 
@@ -431,6 +521,8 @@ class FOV:
         voxel_size: tuple[int, int, int] = (1, 2, 2),
         end_bases: str | None = None,
         start_base: str = "C",
+        local_method: str | None = None,
+        local_kwargs: dict | None = None,
     ) -> FOV:
         """Memory-efficient streaming pipeline. Peak memory = 2 x round_size.
 
@@ -438,6 +530,14 @@ class FOV:
         simultaneously. Produces identical results to the batch flow
         (load_all -> enhance_all -> register_all -> spot_find ->
         extract_all -> filter).
+
+        Parameters
+        ----------
+        local_method : str or None
+            If set (e.g. ``"tps"`` or ``"demons"``), applies local
+            registration after global registration for each non-ref round.
+        local_kwargs : dict or None
+            Extra keyword arguments passed to ``local_registration()``.
 
         The spot DataFrame (all_spots) accumulates per-round color columns
         throughout. Only image volumes are loaded and discarded per-round.
@@ -467,6 +567,12 @@ class FOV:
             self.global_registration(
                 layers_to_register=[round_name], save_shifts=False
             )
+            if local_method is not None:
+                self.local_registration(
+                    layers_to_register=[round_name],
+                    method=local_method,
+                    **(local_kwargs or {}),
+                )
             self._extract_round(round_name, voxel_size)
             del self.images[round_name]
 

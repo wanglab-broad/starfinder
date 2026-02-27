@@ -24,6 +24,12 @@ from starfinder.registration.phase_correlation import (
     phase_correlate,
     register_volume,
 )
+from starfinder.registration.pointset import (
+    cpd_register,
+    register_volume_cpd,
+    register_volume_tps,
+    tps_register,
+)
 
 __all__ = [
     # Global (rigid)
@@ -31,11 +37,17 @@ __all__ = [
     "apply_shift",
     "register_volume",
     "phase_correlate_skimage",
-    # Local (non-rigid)
+    # Local (non-rigid) — demons
     "demons_register",
     "apply_deformation",
     "register_volume_local",
     "matlab_compatible_config",
+    # Local (non-rigid) — TPS
+    "tps_register",
+    "register_volume_tps",
+    # Local (non-rigid) — CPD
+    "cpd_register",
+    "register_volume_cpd",
     # Quality metrics
     "normalized_cross_correlation",
     "structural_similarity",
