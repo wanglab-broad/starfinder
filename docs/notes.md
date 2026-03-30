@@ -40,6 +40,23 @@ Location: `/home/unix/jiahao/wanglab/Data/Processed/sample-dataset/`
 | Codebook | 62 genes, 5-char barcodes |
 | Source | `20240302_CovidLN_retake` |
 
+### 4. aging (mPFC brain tissue)
+| Property | Value |
+|----------|-------|
+| FOVs | 848 total (Position400-; 6 in sample: Position400-405) |
+| Rounds | 9 sequencing (round1-9) |
+| Image size | 2048 × 2048 × 36 (3D), uint8 |
+| Channels | 5 in round1 (ch00-ch04, incl. DAPI), 4 in others (ch00-ch03) |
+| FOV pattern | `Position%03d` |
+| Reference | round1 |
+| Voxel size | 0.14 µm XY, 0.35 µm Z |
+| Codebook | 2,044 genes, 14,242 entries (~7 pads/gene), 11-nt barcodes |
+| Barcode structure | 2 segments: 1 randomized + 5 seg1 (CC) + 5 seg2 (AT for STAR / TT for RIBO) |
+| Probe types | ~50/50 STAR (7,123) and RIBO (7,119) |
+| split_index | 5 (MATLAB 1-based) / 4 (Python 0-based) |
+| Rotation | -90° |
+| Source | `2025-04-26-Jiakun-mPFC-aging` |
+
 ## Milestones
 1. [x] Modularization & Snakemake Upgrade
 2. [] Rewrite the backend with Python & Improve Code Quality
@@ -51,7 +68,7 @@ Location: `/home/unix/jiahao/wanglab/Data/Processed/sample-dataset/`
   - [x] Phase 5: Preprocessing (min_max_normalize, histogram_match, morphological_reconstruction, tophat_filter, make_projection)
   - [x] Phase 6: Dataset/FOV class wrapper (STARMapDataset, FOV, fluent API)
   - [x] Phase 7: E2E validation tests + SNR-gated normalization + noise-floor spot finding threshold
-  - [x] Phase 8: Real data E2E benchmark (tissue-2D, LN, cell-culture-3D — all 3 datasets, 2 FOVs each)
+  - [x] Phase 8: Real data E2E benchmark (tissue-2D, LN, cell-culture-3D, aging — all 4 datasets, 2 FOVs each)
   - [x] Phase 9: Performance optimization (streaming pipeline, memory fixes — 50% RSS reduction, 2x speedup)
   - [x] Phase E: Spot-based TPS local registration (6x less memory than demons, competitive quality for small deformations)
   - [] Adopt new data structure such as h5 and OME-Zarr, but also ensure backward compatibility
@@ -1846,6 +1863,67 @@ Fixed the core subsampling problem in `cpd_register()`: independent FPS on fixed
 **Budget math:** With default `max_control_points=1000`, `k=3`: 250 anchors × 4 ≈ 1000 fixed, ~1200 moving → kernel 12-16 MB (well within budget).
 
 **Tests:** All 186 tests pass (no new tests needed — existing CPD tests exercise the new code path).
+
+### 2026-02-26: CPD Trim Unmatched Fixed Points + Raise Outlier Weight
+
+Even with correspondence-aware subsampling, CPD still failed on `polynomial_large` (30px displacement). Root cause: boundary dropout pushes ~31% of moving spots out of bounds, leaving 13/49 fixed spots with no moving candidate within the 15px gather radius. These orphaned fixed points poison the affine EM — `B-I max = 2.24` (should be ~0.01), cascading into divergent non-rigid weights (`W_rms = 169`).
+
+**Fix (two changes):**
+1. **Trim orphaned X points** after `_gather_candidates()`: build KDTree on Y, query nearest distance for each X, keep only those within `candidate_radius`. This removes fixed points that have no plausible correspondence.
+2. **Raise default `w` from 0.1 to 0.15**: higher outlier weight gives the EM more slack for remaining soft mismatches after trimming.
+
+**Results on small/polynomial_large:**
+- Before: NCC 0.017, B-I max 2.24, W_rms 169
+- Trim alone (w=0.1): NCC **0.147**, B-I max 0.40, W_rms 0.76
+- Higher w=0.3 alone: NCC **0.115**
+
+**Files changed:**
+- `src/python/starfinder/registration/pointset.py` — trim logic + `w=0.15` default
+- `src/python/starfinder/dataset/fov.py` — `cpd_w=0.15` default
+
+**Tests:** All 186 tests pass.
+
+### 2026-03-30: Aging Dataset E2E Benchmark
+
+Added new testing dataset **aging** (mPFC brain tissue) and ran full E2E benchmark.
+
+**Dataset characteristics:**
+- 9 sequencing rounds, 2048×2048×36 images, uint8
+- 2,044 genes, 14,242 codebook entries (~7 pads/gene)
+- Multi-segment barcodes: 11-nt = 1 randomized + 5 seg1 + 5 seg2
+- Dual probe types: STAR (7,123 entries) and RIBO (7,119 entries)
+- split_index=4 (Python 0-based) = MATLAB split_index=5
+
+**Barcode structure resolved:**
+- 11 bases → encode → 10 colors → split_index removes boundary color → 9 colors
+- 9 sequencing rounds → 9 extracted colors → matches codebook
+- Each pad variant has its own codebook entry (randomized first base affects position 4 in final color_seq)
+
+**Results (2 FOVs: Position400, Position401):**
+
+| Metric | Position400 | Position401 |
+|--------|-------------|-------------|
+| All spots | 682,811 | 694,511 |
+| Good spots | 182,264 | 185,681 |
+| Codebook match rate | 26.7% | 26.7% |
+| Gene coverage | 99.7% (2037) | 99.8% (2039) |
+| STAR reads / genes | 109,988 / 2,004 | 113,687 / 2,010 |
+| RIBO reads / genes | 72,276 / 1,916 | 71,994 / 1,920 |
+| STAR/RIBO ratio | 1.52 | 1.58 |
+| STAR pad CV | 0.621 | 0.606 |
+| RIBO pad CV | 0.609 | 0.606 |
+| Time | 307s | 307s |
+| Peak RSS | 10.0 GB | 10.6 GB |
+
+**Key findings:**
+- STAR probes capture ~1.5x more reads than RIBO — different chemistry efficiencies
+- Within-chemistry pad balance is moderate (CV ~0.61, min/max ~0.27)
+- Splitting pad balance by probe type reveals the mixed CV (0.76) was inflated by STAR/RIBO efficiency difference
+
+**Files:**
+- Benchmark script: `starfinder_benchmark/e2e/results/aging/run_e2e_aging.py`
+- Plan: `docs/plans/2026-03-30-aging-e2e-benchmark-plan.md` (FINISHED)
+- CLAUDE.md updated with aging dataset entry
 
 ## Future Directions
 

@@ -2,73 +2,36 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project Overview
+## 1. Project Overview
 
 STARfinder is a spatial transcriptomics data processing pipeline for STARmap-related methods. It's a hybrid MATLAB/Python/Snakemake workflow that processes large-scale image datasets from raw microscopy images to cell-by-gene expression matrices.
 
-**Technology Stack:**
-- Orchestration: Snakemake 9.x (recently upgraded from v7.32.4)
-- Image processing: MATLAB 2023b+ (core algorithms in `src/matlab/`)
-- Python backend: Python 3.10+ with uv (I/O, registration, processing modules in `src/python/`)
+### Technology Stack
+
+- Orchestration: Snakemake 9.x
+- Image processing:
+  - MATLAB backend: MATLAB 2023b+ (core algorithms in `src/matlab/`)
+  - Python backend: Python 3.10+ with uv (I/O, registration, processing in `src/python/`)
 - Post-processing: Python 3.9+ (reads assignment, segmentation, analysis)
 - Cluster execution: Broad UGER with cluster-generic executor plugin
 
-## Common Commands
+## 2. Codebase
 
-### Snakemake Workflow
-```bash
-# Create conda environment
-conda env create -f ./config/environment-v9.yaml  # Snakemake 9.x
+### Pipeline Order
 
-# Dry run (validate workflow without executing)
-snakemake -s workflow/Snakefile --configfile tests/tissue_2D_test.yaml -n
-
-# Run with Broad UGER cluster
-snakemake -s workflow/Snakefile --configfile tests/tissue_2D_test.yaml \
-  --profile profile/broad-uger --workflow-profile profile/broad-uger
-
-# Check DAG
-snakemake -s workflow/Snakefile --configfile tests/tissue_2D_test.yaml --dag | dot -Tpng > dag.png
-
-# Lint check
-snakemake -s workflow/Snakefile --configfile tests/tissue_2D_test.yaml --lint
 ```
-
-### Python Package (uv)
-```bash
-cd src/python
-
-# Install dependencies
-uv sync
-
-# Run tests
-uv run pytest test/ -v
-
-# Run tests with coverage
-uv run pytest test/ -v --cov=starfinder
-
-# Generate synthetic test dataset
-uv run python -m starfinder.benchmark --preset small --output ../../tests/fixtures/synthetic/small
+load → rotate → enhance → registration → spot_finding → extraction → filtration
 ```
-
-## Architecture
 
 ### Directory Structure
 
 ```
 starfinder/
 ├── src/
-│   ├── matlab/            # Core MATLAB scripts (~29 files). Main: STARMapDataset.m
+│   ├── matlab/            # MATLAB backend (~28 scripts). Main: STARMapDataset.m
 │   ├── matlab-addon/      # External MATLAB toolboxes (TIFF handling, natural sort)
 │   └── python/            # Python package (starfinder)
-│       ├── starfinder/
-│       │   ├── io/           # TIFF I/O (load_multipage_tiff, load_image_stacks, save_stack)
-│       │   ├── registration/ # Phase correlation registration (phase_correlate, apply_shift, demons_register)
-│       │   ├── spotfinding/  # 3D spot detection (find_spots_3d)
-│       │   ├── barcode/      # Encoding, decoding, codebook, extraction, filtering
-│       │   ├── dataset/      # STARMapDataset + FOV orchestration layer
-│       │   ├── benchmark/    # Performance measurement framework
-│       │   └── testing/      # Synthetic dataset generator
+│       ├── starfinder/    # Source modules (see Python Backend below)
 │       └── test/          # pytest tests
 ├── workflow/
 │   ├── Snakefile          # Main entry point (~58 lines)
@@ -77,167 +40,83 @@ starfinder/
 │   └── scripts/           # Python and MATLAB execution scripts
 ├── tests/
 │   ├── fixtures/synthetic/ # Synthetic test datasets (small, medium)
-│   ├── qc_*.ipynb         # QC validation notebooks (io, registration, synthetic, benchmark)
+│   ├── qc_*.ipynb         # QC validation notebooks
 │   ├── tissue_2D_test.yaml
 │   └── minimal_config.yaml
 ├── config/                # Conda environment definitions
 ├── profile/broad-uger/    # UGER cluster execution profile
-└── docs/                  # Design documents and development notes
+└── docs/                  # Design documents, plans, and development notes
 ```
 
-### Workflow Modes
+### Python Backend
 
-The pipeline supports 4 workflow modes configured via `workflow_mode` in the config YAML:
+Uses `(Z, Y, X, C)` axis ordering (volumetric-first, channel-last). Replaces MATLAB components.
 
-1. **`direct`** - Single FOV direct processing via `rsf_single_fov`
-2. **`subtile`** - Subtile-based workflow: `gr_single_fov_subtile` → `lrsf_single_fov_subtile` → `stitch_subtile`
-3. **`deep`** - Deep-tissue optimized: `deep_create_subtile` → `deep_rsf_subtile` → `stitch_subtile`
-4. **`free`** - Mix-and-match rules using individual `run: True/False` flags per rule
+#### Module Map
 
-### Key Helper Functions (in `workflow/rules/common.smk`)
+| Module | Description |
+|--------|-------------|
+| `io` | TIFF I/O with bioio backend |
+| `registration` | Global (phase correlation, apply_shift) + local (demons, TPS, CPD) |
+| `spotfinding` | 3D spot detection with noise/adaptive/global thresholding |
+| `barcode` | Encode/decode, codebook, extraction, filtering pipeline |
+| `preprocessing` | min_max_normalize, histogram_match, morphological_reconstruction, tophat |
+| `dataset` | STARMapDataset + FOV orchestration (fluent API, streaming mode) |
+| `benchmark` | Measurement framework, synthetic data generation, evaluation |
+| `benchmark.synthetic` | Coordinate-first rendering, presets: tiny/small/medium/large/tissue/thick_medium |
 
-- `is_rule_enabled(rule_name)` - Check if rule should run based on workflow_mode
-- `get_rule_config(rule_name, key, default)` - Safe nested config access
-- `make_get_runtime(rule_name)` - Factory for rule-specific runtime functions
-- `run_matlab_scripts(param_string, script_name)` - Execute MATLAB in subprocess with proper environment
-- `validate_workflow_mode_dependencies()` - Validate preset modes have required rule configs
+Dependencies: numpy, scipy, scikit-image, tifffile, pandas, h5py, bioio, bioio-tifffile. Optional: SimpleITK (local registration), spatialdata (modern output).
 
-### Data Flow
+#### Common Commands
 
-```
-# To get amplicon/molecular level information
-In Situ Sequencing Raw Images (TIFF) → Registration → Spot Finding → Decoding → Filtering → Spot-level Matrix (row: spot/amplicon, col: gene label, x, y, z, other QC metrics ...)
-Cell Morphology Raw Images (TIFF) → Segmentation (StarDist/Cellpose/others) → Reads Assignment → Cell Expression Matrix (H5AD)
-```
+```bash
+cd src/python
 
-### MATLAB Integration
-
-MATLAB scripts are called via Python subprocess in Snakemake rules. The `run_matlab_scripts()` function sources the Broad environment and MATLAB module before execution. MATLAB addons for large TIFF handling are in `src/matlab-addon/`.
-
-## Python Package (starfinder)
-
-The Python backend is being developed to replace MATLAB components. Uses `(Z, Y, X, C)` axis ordering (volumetric-first, channel-last).
-
-### Implemented Modules
-
-- **`starfinder.io`** - TIFF I/O with bioio backend
-  - `load_multipage_tiff(path, convert_uint8=True)` → `(Z, Y, X)` array
-  - `load_image_stacks(round_dir, channel_order)` → `(Z, Y, X, C)` array
-  - `save_stack(image, path, compress=False)`
-
-- **`starfinder.registration`** - Image registration (global and local)
-  - Global (rigid):
-    - `phase_correlate(fixed, moving)` → `(dz, dy, dx)` detected shift
-    - `apply_shift(volume, shift)` → shifted volume with edge zeroing
-    - `register_volume(images, ref, mov)` → registered multi-channel volume + shifts
-    - Note: `phase_correlate` returns detected displacement; apply **negative** to correct alignment
-  - Local (non-rigid, requires SimpleITK):
-    - `demons_register(fixed, moving, method, iterations, smoothing_sigma, pyramid_mode)` → displacement field (Z, Y, X, 3)
-    - `apply_deformation(volume, field)` → warped volume
-    - `register_volume_local(images, ref, mov)` → registered volume + displacement field
-    - `matlab_compatible_config()` → dict matching MATLAB imregdemons defaults
-    - Pyramid modes: `"sitk"` (naive subsampling), `"antialias"` (MATLAB-matching Butterworth)
-  - Pyramid utilities (`starfinder.registration.pyramid`):
-    - `butterworth_3d(shape, cutoff, order)` → 3D Butterworth low-pass filter
-    - `antialias_resize(volume, factor)` → anti-aliased 3D resize
-    - `pad_for_pyramiding(volume, levels)` / `crop_padding(volume, pad_widths)`
-  - Quality metrics:
-    - `normalized_cross_correlation(img1, img2)` → NCC [-1, 1]
-    - `structural_similarity(img1, img2)` → SSIM [-1, 1]
-    - `spot_colocalization(ref, img)` → IoU/Dice of bright spots
-    - `spot_matching_accuracy(ref_spots, mov_spots)` → match rate
-    - `registration_quality_report(ref, before, after)` → comprehensive report
-
-- **`starfinder.benchmark`** - Performance measurement, data generation, and evaluation
-  - `BenchmarkResult` dataclass, `measure()`, `@benchmark` decorator
-  - `run_comparison()`, `BenchmarkSuite` for multi-method comparisons
-  - `print_table()`, `save_csv()`, `save_json()` reporting
-  - Benchmark data generation (`starfinder.benchmark.data`):
-    - `create_benchmark_volume()` - Synthetic spot generation
-    - `apply_global_shift()` - Zero-padded shifts (no wrap-around)
-    - `create_deformation_field()` - Polynomial, Gaussian, multi-point deformations
-    - `apply_deformation_field()` - Scipy-based warping
-    - `generate_inspection_image()` - Green-magenta before/after overlays
-    - `extract_real_benchmark_data()` - Round1/round2 MIP extraction
-  - Benchmark evaluation (`starfinder.benchmark.evaluate`):
-    - `evaluate_registration(ref, mov, registered)` - Compute all quality metrics
-    - `evaluate_single(registered_path, data_dir)` - Evaluate one registered image from disk
-    - `evaluate_directory(result_dir, data_dir)` - Batch-evaluate a backend tree
-    - `generate_inspection(ref, mov, registered, metadata, path)` - 5-panel inspection PNG
-    - CLI: `uv run python -m starfinder.benchmark.evaluate <result_dir> [--data-dir ...]`
-    - Two-phase design: Phase 1 (run) saves registered images, Phase 2 (evaluate) computes metrics uniformly
-  - Presets: tiny, small, medium, large, xlarge, tissue, thick_medium
-
-- **`starfinder.spotfinding`** - 3D spot detection
-  - `find_spots_3d(image, intensity_estimation="noise", intensity_threshold=5.0, min_distance=1)` → DataFrame with (z, y, x, intensity, channel) columns
-  - Thresholding modes:
-    - `"noise"` (default): `median + k × MAD × 1.4826` (noise-floor based, k=intensity_threshold)
-    - `"adaptive"`: `channel_max × fraction` (MATLAB compatible)
-    - `"adaptive_round"`: `round_max × fraction` (cross-channel suppression)
-    - `"global"`: `dtype_max × fraction`
-  - Multi-channel support, 0-based coordinates
-
-- **`starfinder.barcode`** - Barcode processing pipeline (encoding → codebook → filtering)
-  - Encoding/decoding (`barcode.encoding`):
-    - `BASE_PAIR_TO_COLOR` / `COLOR_TO_BASE_PAIRS` / `COLOR_TO_CHANNEL` — lookup tables
-    - `encode_bases(sequence)` → color sequence (pure 2-base sliding window, no reversal)
-    - `decode_color_seq(color_seq, start_base)` → DNA barcode (chain-tracking decoder)
-  - Codebook (`barcode.codebook`):
-    - `load_codebook(path, do_reverse=True, split_index=None)` → `(gene_to_seq, seq_to_gene)`
-  - Extraction (`barcode.extraction`):
-    - `extract_from_location(image, spots, voxel_size)` → `(color_seq, color_score)` arrays
-  - Filtering (`barcode.filtering`):
-    - `filter_reads(spots, seq_to_gene, end_bases=None, start_base="C")` → `(good_spots, stats)`
-    - Filters by codebook membership only; end-base validation is diagnostic
-
-- **`starfinder.preprocessing`** - Image enhancement (normalization, morphology)
-  - `min_max_normalize(volume, snr_threshold=None)` → per-channel [min, max] → [0, 255] rescaling (uint8). With `snr_threshold`, channels with `max/mean < threshold` keep raw values.
-  - `histogram_match(volume, reference, nbins=64)` → CDF-based histogram matching per channel
-  - `morphological_reconstruction(volume, radius=3)` → background removal via opening-by-reconstruction
-  - `tophat_filter(volume, radius=3)` → white tophat per Z-slice (removes large structures)
-  - All functions handle (Z, Y, X) and (Z, Y, X, C) inputs
-
-- **`starfinder.utils`** - General-purpose utilities
-  - `make_projection(volume, method="max")` → Z-axis projection (max or sum with uint8 rescaling)
-
-- **`starfinder.dataset`** - Dataset/FOV orchestration layer (wraps Phases 1-5)
-  - Types: `LayerState`, `Codebook`, `CropWindow`, `SubtileConfig`, `Shift3D`, `ImageArray`, `ChannelOrder`
-  - `STARMapDataset.from_config(config)` → sample-level config + FOV factory
-  - `FOV` — per-FOV stateful processor with fluent API:
-    - Loading: `load_raw_images()` → `io.load_image_stacks()`
-    - Preprocessing: `rotate()`, `enhance_contrast()`, `hist_equalize()`, `morph_recon()`, `tophat()`, `make_projection()`
-    - Registration: `global_registration()`, `local_registration()`
-    - Spot finding: `spot_finding()`, `reads_extraction()`, `reads_filtration()`
-    - Output: `save_ref_merged()`, `save_signal()`, `create_subtiles()`, `from_subtile()`
-  - `FOVPaths` — frozen path helper for output locations
-  - `log_step` decorator — timing and error logging per method
-
-- **`starfinder.benchmark.synthetic`** - Unified synthetic data generation (coordinate-first rendering)
-  - `generate_synthetic_dataset()` → multi-round, multi-channel FOV datasets for E2E testing
-  - `generate_registration_benchmark()` → single-channel ref/mov pairs for registration benchmarking
-  - `generate_codebook(n_genes)` → programmatic CNNNNC codebook (up to 64 genes)
-  - `apply_shift_to_spots()` / `apply_deformation_to_spots()` → coordinate-level transforms before rendering
-  - `SyntheticConfig.deformation` field for optional local deformation on non-ref rounds
-  - Per-round spot variation: ~10% intensity jitter, ~5% sigma jitter (deterministic per spot+round)
-  - Presets: `tiny` (2 FOVs, 128×128×8, 10 spots), `small` (2 FOVs, 256×256×16, 50 spots), `medium` (2 FOVs, 512×512×32, 400 spots), `large` (2 FOVs, 1024×1024×30, 64 genes, 1500 spots), `tissue` (2 FOVs, 3072×3072×30, 64 genes, 14000 spots), `thick_medium` (2 FOVs, 1024×1024×100, 64 genes, 5200 spots)
-  - Validation (`benchmark.validation`):
-    - `compare_shifts(shifts, gt, fov_id)` → per-round shift errors
-    - `compare_spots(spots, gt, fov_id)` → recall, precision, mean distance
-    - `compare_genes(spots, gt, fov_id)` → gene accuracy, color_seq accuracy
-
-### Dependencies
-```toml
-# Core
-numpy, scipy, scikit-image, tifffile, pandas, h5py, bioio, bioio-tifffile
-
-# Optional
-SimpleITK      # local-registration
-spatialdata    # modern output format
+uv sync                                    # Install dependencies
+uv run pytest test/ -v                     # Run tests
+uv run pytest test/ -v --cov=starfinder    # Run tests with coverage
+uv run python -m starfinder.benchmark --preset small --output ../../tests/fixtures/synthetic/small  # Generate synthetic data
 ```
 
-## Configuration System
+### MATLAB Backend
 
-Config files are validated against a JSON Schema at pipeline startup (`workflow/schemas/config.schema.yaml`).
+28 scripts in `src/matlab/`. Main entry point: `STARMapDataset.m`. Addons in `src/matlab-addon/`.
+
+#### Module Map
+
+| Script | Function |
+|--------|----------|
+| `STARMapDataset.m` | Main orchestrator (dataset config, pipeline coordination) |
+| `LoadImageStacks.m` / `LoadMultipageTiff.m` | TIFF I/O |
+| `DFTRegister3D.m` / `DFTApply3D.m` | Global registration (phase correlation) |
+| `RegisterImagesGlobal.m` / `RegisterImagesLocal.m` | Registration orchestration |
+| `SpotFindingMax3D.m` | 3D spot detection |
+| `ExtractFromLocation.m` | Barcode extraction |
+| `EncodeBases.m` / `DecodeCS.m` / `Str2Colorseq.m` | Barcode encoding/decoding |
+| `LoadCodebook.m` / `FilterReads.m` | Codebook loading and read filtering |
+| `MinMaxNorm.m` / `MorphologicalReconstruction.m` | Preprocessing |
+| `MakeProjections.m` / `MakeMontage.m` | Visualization |
+
+#### Common Commands
+
+MATLAB scripts are called via Python subprocess in Snakemake rules. The `run_matlab_scripts()` function in `workflow/rules/common.smk` sources the Broad environment and MATLAB module before execution. No standalone CLI — always invoked through Snakemake.
+
+### Snakemake Orchestration
+
+#### Workflow Commands
+
+```bash
+conda env create -f ./config/environment-v9.yaml                              # Create environment
+snakemake -s workflow/Snakefile --configfile tests/tissue_2D_test.yaml -n      # Dry run
+snakemake -s workflow/Snakefile --configfile tests/tissue_2D_test.yaml \
+  --profile profile/broad-uger --workflow-profile profile/broad-uger          # Run on UGER
+snakemake -s workflow/Snakefile --configfile tests/tissue_2D_test.yaml --dag | dot -Tpng > dag.png  # DAG
+snakemake -s workflow/Snakefile --configfile tests/tissue_2D_test.yaml --lint  # Lint
+```
+
+#### Configuration System
+
+Config validated against JSON Schema at startup (`workflow/schemas/config.schema.yaml`).
 
 **Required top-level keys:**
 - Paths: `config_path`, `starfinder_path`, `root_input_path`, `root_output_path`
@@ -245,121 +124,84 @@ Config files are validated against a JSON Schema at pipeline startup (`workflow/
 - `workflow_mode`: 'free', 'direct', 'subtile', or 'deep'
 - `rules`: Per-rule configuration with `run`, `resources`, and `parameters` sections
 
-**Config templates:**
-- Full example: `tests/tissue_2D_test.yaml`
-- Minimal template: `tests/minimal_config.yaml`
+**Config templates:** `tests/tissue_2D_test.yaml` (full), `tests/minimal_config.yaml` (minimal)
 
-## Test Datasets
+## 3. Dataset
 
-### Real Datasets (Zenodo DOI: 10.5281/zenodo.11176779)
-1. **cell-culture-3D** - 70 FOVs (Position351-420), 6 rounds, ref=round1, 1496×1496×30, 998 genes, voxel_size=(1,2,2), end_bases="CC", adaptive@0.2
-2. **tissue-2D** - 56 tiles, 4 rounds, ref=round1, 3072×3072×30, 64 genes, voxel_size=(1,1,1), end_bases="CC", adaptive@0.4
-3. **LN** - 64 FOVs (Position001-064), 4 rounds, ref=round4, 1496×1496×50, 61 genes, voxel_size=(1,1,1), end_bases="AC", start_base="A", adaptive@0.2
+### Data Flow
 
-### Synthetic Datasets (tests/fixtures/synthetic/)
-- **small/** - 2 FOVs, 256×256×16, 8 genes, 50 spots/FOV (unit tests, CI)
-- **medium/** - 2 FOVs, 512×512×32, 8 genes, 100 spots/FOV (integration tests)
-- **large** (benchmark) - 2 FOVs, 1024×1024×30, 64 genes, 2000 spots/FOV (at `starfinder_benchmark/e2e/data/large/`)
-- **tissue** (benchmark) - 2 FOVs, 3072×3072×30, 64 genes, 14000 spots/FOV (at `starfinder_benchmark/e2e/data/tissue/`)
-- **thick_medium** (benchmark) - 2 FOVs, 1024×1024×100, 64 genes, 5200 spots/FOV (at `starfinder_benchmark/e2e/data/thick_medium/`)
+```
+Raw Images (TIFF) → Registration → Spot Finding → Decoding → Filtering → Spot-level Matrix
+Cell Morphology (TIFF) → Segmentation → Reads Assignment → Cell Expression Matrix (H5AD)
+```
 
-## Documentation
+### Sequencing Benchmark Datasets
 
-Detailed design documents are in `docs/`:
+#### Real Datasets (Zenodo DOI: 10.5281/zenodo.11176779)
 
-| Document | Description |
-|----------|-------------|
-| `notes.md` | Development notes, progress tracking, future directions |
-| `test_design.md` | Test strategy for Python backend (unit, contract, integration, golden tests) |
-| `main_python_object_design.md` | Python STARMapDataset/FOV class design |
-| `plan_milestone_1.md` | Snakemake modularization & upgrade plan (COMPLETED) |
-| `plan_milestone_2.md` | Python backend migration plan |
-| `DFT_REGISTRATION_REVIEW.md` | DFT registration algorithm review with Python examples |
-| `plans/` | Implementation plans with step-by-step tasks |
+| Dataset | FOVs | Rounds | Ref | Dimensions | Genes | Voxel Size | Params |
+|---------|------|--------|-----|------------|-------|------------|--------|
+| cell-culture-3D | 70 (Pos351-420) | 6 | round1 | 1496×1496×30 | 998 | (1,2,2) | end="CC", adaptive@0.2 |
+| tissue-2D | 56 tiles | 4 | round1 | 3072×3072×30 | 64 | (1,1,1) | end="CC", adaptive@0.4 |
+| LN | 64 (Pos001-064) | 4 | round4 | 1496×1496×50 | 61 | (1,1,1) | end="AC", start="A", adaptive@0.2 |
+| aging | 848 (Pos400-; 6 in sample) | 9 | round1 | 2048×2048×36 | 2044 | (0.35,0.14,0.14) | 2-seg barcodes, split_index=5, seg1 end="CC", seg2 end="AT"(STAR)/"TT"(RIBO), adaptive@0.2 |
 
-## Current Development Status
+#### Synthetic Datasets (`tests/fixtures/synthetic/`)
 
-### Milestone 1 (Modularization & Snakemake 9): COMPLETED ✓
-- Modularized Snakefile from ~566 lines to ~58 lines
-- Upgraded to Snakemake 9.x with executor plugin system
-- Implemented config schema validation
-- Implemented workflow mode system
+| Preset | Dimensions | Genes | Spots/FOV | Purpose |
+|--------|-----------|-------|-----------|---------|
+| small | 256×256×16 | 8 | 50 | Unit tests, CI |
+| medium | 512×512×32 | 8 | 100 | Integration tests |
+| large | 1024×1024×30 | 64 | 2000 | E2E benchmark |
+| tissue | 3072×3072×30 | 64 | 14000 | E2E benchmark |
+| thick_medium | 1024×1024×100 | 64 | 5200 | E2E benchmark |
 
-### Milestone 2 (Python Backend): IN PROGRESS
-- [x] Phase 0: Directory restructure (`code-base/` → `src/matlab/`)
-- [x] Phase 1: I/O module with bioio backend
-- [x] Phase 2: Registration module (phase correlation, apply_shift, register_volume)
-- [x] Phase 3: Spot finding & extraction (find_spots_3d, extract_from_location)
-- [x] Phase 4: Barcode processing (encode/decode, codebook, filter_reads)
-- [x] Phase 5: Preprocessing (min_max_normalize, histogram_match, morphological_reconstruction, tophat_filter, make_projection)
-- [x] Phase 6: Dataset/FOV orchestration layer (STARMapDataset, FOV, fluent pipeline API)
-- [x] Phase 7: E2E validation + SNR-gated normalization + noise-floor spot finding threshold
-- [x] Phase 8: Real data E2E benchmark (tissue-2D, LN, cell-culture-3D — 2 FOVs each)
-- [x] Phase 9: Performance optimization (streaming pipeline, memory fixes — 50% RSS reduction, 2x speedup)
+All synthetic presets: 2 FOVs each. Benchmark presets at `starfinder_benchmark/e2e/data/{preset}/`.
 
-## Notes for Claude Code
-Update this file by adding tips whenever you make mistakes to help improve your accuracy.
+### Registration Benchmark Datasets
 
-### Development Philosophy
-- Don't tend to over-engineer, be efficient and effective.
+At `starfinder_benchmark/registration/data/`:
+- **Synthetic** (`synthetic/`): 6 presets — tiny, small, medium, large, thick_medium, tissue. Single-channel ref/mov pairs with known shifts + deformations.
+- **Real** (`real/`): 3 datasets — cell_culture_3D, tissue_2D, LN. Round1/round2 MIP extractions from real data.
+
+### Benchmark Results Location
+
+All benchmarks at `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/{module}/{data/results}`:
+
+| Module | Contents |
+|-----------|----------|
+| `registration` | Global/local registration comparisons (Python vs MATLAB), CPD, TPS |
+| `e2e` | E2E pipeline results |
+| `spot_finding` | Spot finding benchmark results |
+
+## 4. Development
+
+### Current Status
+
+Milestone 1 (Snakemake 9 modularization): COMPLETED. Milestone 2 (Python backend): Phases 0-9 DONE — I/O, registration, spot finding, barcode, preprocessing, dataset/FOV orchestration, E2E validation, real data benchmarks, performance optimization (streaming + 50% RSS reduction).
+
+Detailed docs in `docs/` and `docs/plans/`. Development notes in `docs/notes.md`.
+
+### Notes for Claude Code
+
+#### Development Philosophy
+- Don't over-engineer — be efficient and effective.
 - Only write the minimum required tests.
+- Only change what was explicitly requested — no unsolicited modifications to parameters, counts, or values beyond the task scope.
+- Verify diagnosis against actual code before stating root causes — read the relevant code first, don't guess.
 
-### Tips
+#### Environment & Workflow
+- Always save the proposed plan in `docs/plans/`, each plan should have **Date:** and **Status:** properties at the beginning.  
+- If you finish implementing a plan from `docs/plans/`, mark its **Status** as "FINISHED" in the corresponding plan document.
+- After implementing changes, run `uv run pytest test/ -v` and report results before committing.
+- Run Python with `uv run python` (from `src/python/`)
 - The `~/wanglab` directory is a network mount. Use `Write` instead of `Edit` tool to avoid false "file modified" errors.
-- Development notes are in `docs/notes.md`.
-- Array axis convention: `(Z, Y, X, C)` for Python, matches ITK/SimpleITK.
-- CSV coordinates: 1-based for MATLAB compatibility (Python uses 0-based internally).
-- Run Python with `uv run python`
 - Always ask before using `git push`
-- When creating a commit message, review the previous git history. Use numbered messages for new modules or major changes; otherwise, use a prefix(addtional info if needed): message. 
-- **Registration sign convention**: `phase_correlate()` returns detected displacement (how much `moving` differs from `fixed`). To correct alignment, apply the **negative** shift: `correction = tuple(-s for s in detected_shift)`
-- **Benchmark shift ranges**: When testing registration, ensure shift ranges are proportional to volume size (≤25% of each dimension) to maintain sufficient image overlap for phase correlation.
-- **Demons registration axis ordering**: SimpleITK uses (dx, dy, dz) for displacement vectors, NumPy uses (dz, dy, dx). The `demons.py` module handles this conversion internally.
-- **Demons defaults**: `demons_register()` defaults to Thirion demons with 3-level anti-aliased pyramid (`method="demons"`, `iterations=[100,50,25]`, `sigma=1.0`, `pyramid_mode="antialias"`). This matches MATLAB's `imregdemons` quality while being 1.6x faster with identical memory usage. The old single-level defaults (`iterations=[50]`, `sigma=0.5`, `pyramid_mode="sitk"`) are still available for quick tests.
-- **Anti-aliased pyramid mode**: `pyramid_mode="antialias"` uses Butterworth-filtered downsampling matching MATLAB's `imregdemons` internal `antialiasResize`. The old `"sitk"` mode does naive subsampling that destroys sparse spots at coarse levels — avoid for multi-level pyramids.
-- **Python vs MATLAB local registration benchmark (2026-02-11)**: With matched settings ([100,50,25], sigma/AFS=1.0), Python `py_diffeo` beats MATLAB on NCC (+0.115) and Match Rate (+0.022). Python `py_demons` (Thirion) is 1.6x faster. Results at `local_comparison/`.
-- **Registration quality metrics**: For sparse fluorescence images, use spot-based metrics (Spot IoU, Match Rate) instead of MAE. MAE is dominated by background pixels (99% of image) and doesn't reflect spot alignment quality.
-- **Benchmark data generation**:
-  - Use `apply_global_shift()` with zero-padding, NOT `np.roll()` which wraps around
-  - Use fixed pixel margins (5px) for spot placement, not percentage-based (causes blank bands on large images)
-  - Use preset-specific random seeds to ensure different shifts for each preset
-  - Exclude 0 from Z-shift options to ensure non-zero Z displacements
-  - Cap deformation magnitudes at fixed pixels (15/30px) for large images to avoid excessive warping
-- **Benchmark data location**: `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/` — task-scoped layout:
-  - `registration/data/` — synthetic (7 presets) and real (3 datasets)
-  - `registration/results/` — global_python, global_matlab, local_tuning, local_matlab, local_python, local_antialias, global_comparison, local_comparison, figures, scripts
-  - `e2e/` — end-to-end validation results
-  - `spot_finding/` — spot finding benchmark results
-- **Two-phase benchmark workflow**: Phase 1 saves `registered_{backend}.tif` + `run_{backend}.json`; Phase 2 (`evaluate.py`) computes `metrics_{backend}.json` + `inspection_{backend}.png` uniformly for all backends
-- **FOV directory layout**: `FOV.input_dir()` returns `{input_root}/{round}/{fov_id}/`. The synthetic small dataset uses `{base}/{fov}/{round}/` — tests create symlinks to restructure.
-- **FOV fluent API**: All processing methods return `self` for chaining. State lives in `fov.images`, `fov.global_shifts`, `fov.all_spots`, `fov.good_spots`. Config is delegated to `fov.dataset`.
-- **SubtileConfig.compute_windows()**: Uses `height // sqrt_pieces` for tile size (MATLAB `dims(1)`). Overlap extends inward only — no overlap on outer edges. 0-based internally; `create_subtiles()` converts to 1-based for `subtile_coords.csv`.
-- **Spot finding defaults**: `find_spots_3d()` and `FOV.spot_finding()` default to `intensity_estimation="noise"` with `intensity_threshold=5.0` (k-sigma). This uses MAD-based noise-floor thresholding (`median + k × MAD × 1.4826`). For MATLAB compatibility, use `intensity_estimation="adaptive"` with `intensity_threshold=0.2`. The `intensity_threshold` parameter means k-sigma in noise mode but fraction-of-max in adaptive/global modes — always pass both parameters together.
-- **SNR-gated normalization**: `min_max_normalize(volume, snr_threshold=5.0)` skips normalization for channels with `max/mean < 5.0`. This prevents noise inflation in empty channels. The e2e pipeline uses `enhance_contrast(snr_threshold=5.0)`.
-- **E2E validation**: `test/test_e2e.py` uses a session-scoped `e2e_result` fixture that runs the full pipeline on the small synthetic dataset. The fixture is shared across all 8 e2e tests.
-- **MIP fast path for large volumes**: For volumes >100M voxels, `evaluate_registration(use_mip=True)` computes SSIM and spot metrics (detect_spots, spot_colocalization, spot_matching_accuracy) on 2D MIP instead of full 3D. Output includes `"ssim_method"` and `"spot_method"` fields ("mip" or "3d") to indicate which path was used. `evaluate_directory(use_mip_above=)` controls the threshold. CLI flag: `--use-mip-above`.
-- **Testdata codebook generation**: `generate_codebook(n_genes)` enumerates all CNNNNC barcodes (C + {A,C,G,T}^3 + C = 64 max) with unique color sequences. Used by the "large" preset. For presets needing >64 genes, would require longer barcodes (more rounds).
-- **E2E benchmark datasets and results**: Located at `starfinder_benchmark/e2e/`. Data in `data/{large,tissue,thick_medium}/`, results in `results/{large,tissue,thick_medium}/`. Each `run_e2e_{preset}.py` script is self-contained and reproducible — it restructures directories, runs the full pipeline, generates inspection images, QC CSVs (with per-step timing and memory), and validates against ground truth.
-- **E2E benchmark output structure**: `log/{fov}.csv` (QC), `log/gr_inspect/{fov}_inspection_registration.png`, `log/signal_inspect/{fov}_goodSpots.png`, `log/gr_shifts/{fov}.txt`, `signal/{fov}_goodSpots.csv`.
-- **E2E benchmark QC CSV columns** (27 cols): `log/{fov}.csv` includes detection metrics (detection_recall, detection_precision), extraction/filtering metrics (codebook_match_rate, n_correct_form, correct_form_rate, validated_rate), decoding accuracy (gene/color_seq accuracy vs GT), registration (shift_max_error_px), per-step timing (load, enhance, registration, spot_finding, extraction, filtration), and memory (RSS after key steps, peak RSS).
-- **E2E benchmark scaling results (synthetic, pre-optimization)**: large ~52s/FOV 2.4GB, thick_medium ~179s/FOV 7.5GB, tissue ~482s/FOV 20GB. All achieve perfect recall, >98% precision, 100% gene accuracy. Registration dominates runtime (~60%). Memory scales linearly with voxel count.
-- **MATLAB channel order is wavelength-sorted, not filename-sorted**: The default `channel_order_dict` in `STARMapDataset.m` sorts by wavelength (488→546→594→647nm), mapping to `["ch00", "ch02", "ch01", "ch03"]`. **ch01 and ch02 are swapped.** All three real datasets use this default (`seq_channel_order: []` in YAML). In Python, pass `channel_order=["ch00", "ch02", "ch01", "ch03"]` to match MATLAB.
-- **`load_codebook` handles headerless CSV and BOM**: Real `genes.csv` files lack the `gene,barcode` header row and may have UTF-8 BOM (`\xef\xbb\xbf`). The function opens with `encoding="utf-8-sig"` and peeks at the first line to detect headers. Backward compatible with header-bearing files.
-- **`FOV.rotate()` fast path**: For exact 90° multiples (the common case with `rotate_angle: -90`), uses `np.rot90` (zero-copy view, instant) instead of `scipy.ndimage.rotate` (interpolation, 390s on 3072³×4 volumes). General angles fall back to scipy. Pipeline order: `load → rotate → enhance → registration → spot_finding → extraction → filtration`.
-- **Real data spot finding needs `"adaptive"` mode**: The `"noise"` mode (default) gives 19.2M spots on tissue-2D (3072×3072×30) — too many due to autofluorescence. MATLAB tissue-2D uses `"adaptive"` at 0.4 (`intensity_threshold: 0.4` in YAML). Python with matching params: 67K total → 35.8K good (53.4% match rate, 0.77 ratio vs MATLAB's 46.7K). Always check per-dataset MATLAB config for the threshold.
-- **Real data E2E benchmark results**: Located at `starfinder_benchmark/e2e/results/{tissue_2D,LN,cell_culture_3D}/`. Each dataset has a self-contained `run_e2e_{dataset}.py` script. Output structure matches synthetic benchmarks: `signal/`, `log/{fov}.csv` (QC), `log/gr_inspect/`, `log/signal_inspect/`, `log/gr_shifts/`, `log/matlab_comparison/` (separated from QC). Plan at `docs/plans/2026-02-17-real-data-e2e-benchmark-plan.md`.
-- **Real data E2E benchmark results summary (2 FOVs each)**:
-  - tissue-2D: 0.77 spot ratio vs MATLAB, 100% gene overlap, ~510s/FOV, 20GB peak RSS
-  - LN: 1.19-1.21 spot ratio (Python finds more), 95% gene overlap, ~190s/FOV, 8GB peak RSS. Has dz sign flip issue.
-  - cell-culture-3D: 0.95-0.98 spot ratio (best MATLAB agreement), 100% gene overlap, ~250s/FOV, 5.6GB peak RSS
-- **LN dataset specifics**: `ref_round="round4"` (unusual — most datasets use round1), `start_base="A"` (not "C"), `end_bases="AC"`, `voxel_size=(1,1,1)`, 50 Z-slices (thickest dataset). MATLAB shift log embedded in text log at `log/{fov}.txt` (not CSV).
-- **cell-culture-3D dataset specifics**: 6 sequencing rounds (most rounds), 998 genes (largest codebook), `voxel_size=(1,2,2)` (anisotropic), FOVs start at Position351 (not 001). MATLAB shift log also in text format at `log/{fov}.txt`.
-- **MATLAB shift log formats**: tissue-2D uses structured CSV at `log/gr_shifts/{fov}.txt`; LN and cell-culture-3D embed shifts in text log at `log/{fov}.txt` — use `parse_matlab_shifts_from_log()` regex parser in the benchmark scripts.
-- **Streaming pipeline** (`FOV.run_streaming()`): Processes one sequencing round at a time, discarding after registration. Only ref round remains in memory after completion. Produces identical results to batch mode. Use for memory-constrained cluster jobs.
-- **Phase correlation uses `rfftn`/`irfftn`** (not `fftn`/`ifftn`): Exploits conjugate symmetry of real input — ~50% less memory for FFT arrays. Mathematically equivalent (same argmax, relative diff ~4×10⁻⁷).
-- **`apply_shift` integer fast path**: Phase correlation always returns integer shifts. Uses `np.roll` + zero-fill (no FFT allocation) instead of `fourier_shift` → FFT round-trip. Sub-pixel shifts fall back to the FFT path.
-- **`_make_ref_3d` uses uint16**: `np.sum(uint8_volume, axis=-1, dtype=np.uint16)` — max sum of 4 uint8 channels = 1020, fits in uint16. Default `np.sum` uses int64 (8 bytes/px), wasting 6 bytes/px.
-- **Performance optimization results (2026-02-23)**: Streaming + memory fixes achieve ~50% peak RSS reduction and ~2x runtime speedup. tissue_2D: 19.9→11.0 GB, cell_culture_3D: 5.5→2.8 GB. Speedup from eliminating FFT round-trips in `apply_shift` for integer shifts.
-- **Streaming benchmark script**: `starfinder_benchmark/e2e/results/run_streaming_benchmark.py` — single parametrized script for all 6 datasets. Usage: `uv run python run_streaming_benchmark.py <dataset>`.
-- **CPD correspondence-aware subsampling**: `cpd_register()` uses `_subsample_with_neighbors()` (FPS anchors + K nearest neighbors) for the fixed cloud and `_gather_candidates()` (radius-based search) for the moving cloud. This preserves 98-100% of true nearest-neighbor correspondences (was 22-82% with independent FPS). Key params: `candidate_radius=15.0` (moving search radius), `k_neighbors=3` (fixed neighbors per anchor). Total point budget stays near `max_control_points` via `max_anchors = max_control_points // (1 + k_neighbors)`.
+- Commit messages: review git history. Use numbered messages for new modules/major changes; otherwise use `prefix(info): message`.
 
+#### Key Conventions
+- Array axis convention: `(Z, Y, X, C)` for Python, matches ITK/SimpleITK
+- CSV coordinates: 1-based for MATLAB compatibility (Python uses 0-based internally)
+- **Registration sign convention**: `phase_correlate()` returns detected displacement. To correct alignment, apply the **negative** shift.
+- **MATLAB channel order is wavelength-sorted**: `["ch00", "ch02", "ch01", "ch03"]` — ch01 and ch02 are swapped. All three real datasets use this default.
+- **Spot finding modes**: `"noise"` (default, k-sigma MAD) for synthetic data; `"adaptive"` (fraction-of-max) for real data. Always pass `intensity_estimation` and `intensity_threshold` together.
