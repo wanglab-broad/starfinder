@@ -28,6 +28,7 @@ from starfinder.registration.pointset import (
     cpd_register,
     register_volume_cpd,
     register_volume_tps,
+    sanitize_displacement_field,
     tps_register,
 )
 
@@ -48,6 +49,8 @@ __all__ = [
     # Local (non-rigid) — CPD
     "cpd_register",
     "register_volume_cpd",
+    # Field utilities
+    "sanitize_displacement_field",
     # Quality metrics
     "normalized_cross_correlation",
     "structural_similarity",

@@ -273,3 +273,203 @@ class TestCPDRegistration:
 
         with pytest.raises(ValueError, match="Too few spots"):
             cpd_register(vol, vol)
+
+
+# ─── Sanitize / Boundary Mode / Zoom Order Tests ────────────────────────
+
+
+class TestSanitizeDisplacementField:
+    """Tests for sanitize_displacement_field."""
+
+    def test_clamp_prevents_oob(self):
+        """Clamping should ensure position + displacement stays in [0, dim-1]."""
+        from starfinder.registration.pointset import sanitize_displacement_field
+
+        shape = (8, 32, 32)
+        field = np.zeros((*shape, 3), dtype=np.float32)
+        # Push everything 50px in Y — way beyond the volume
+        field[..., 1] = 50.0
+
+        sanitized = sanitize_displacement_field(field, clamp=True)
+
+        # After clamping: position + displacement should be in [0, 31]
+        yy = np.arange(shape[1]).reshape(1, -1, 1).astype(np.float32)
+        src_y = yy + sanitized[..., 1]
+        assert src_y.min() >= 0.0
+        assert src_y.max() <= shape[1] - 1
+
+    def test_clamp_with_margin(self):
+        """Margin should tighten the valid range."""
+        from starfinder.registration.pointset import sanitize_displacement_field
+
+        shape = (4, 16, 16)
+        field = np.zeros((*shape, 3), dtype=np.float32)
+        field[..., 2] = -20.0  # push X far negative
+
+        sanitized = sanitize_displacement_field(field, clamp=True, margin=2)
+
+        xx = np.arange(shape[2]).reshape(1, 1, -1).astype(np.float32)
+        src_x = xx + sanitized[..., 2]
+        assert src_x.min() >= 2.0
+        assert src_x.max() <= shape[2] - 1 - 2
+
+    def test_smooth_reduces_gradient(self):
+        """Smoothing should reduce the max gradient of the field."""
+        from starfinder.registration.pointset import sanitize_displacement_field
+
+        shape = (4, 64, 64)
+        field = np.zeros((*shape, 3), dtype=np.float32)
+        # Sharp step: half of Y-axis has +5px displacement
+        field[:, 32:, :, 1] = 5.0
+
+        smoothed = sanitize_displacement_field(
+            field, clamp=False, smooth_sigma=2.0
+        )
+
+        # Gradient across the step should be smaller after smoothing
+        grad_orig = np.abs(np.diff(field[:, :, :, 1], axis=1)).max()
+        grad_smooth = np.abs(np.diff(smoothed[:, :, :, 1], axis=1)).max()
+        assert grad_smooth < grad_orig, (
+            f"Smoothing did not reduce gradient: {grad_orig:.2f} → {grad_smooth:.2f}"
+        )
+
+    def test_fold_detection_finds_known_fold(self):
+        """Fold detection should flag regions with crossing displacements."""
+        from starfinder.registration.pointset import sanitize_displacement_field
+
+        shape = (4, 32, 32)
+        field = np.zeros((*shape, 3), dtype=np.float32)
+        # Create a fold: displacement gradient in Y exceeds -1.
+        # d_y(y) = 40*(0.5 - y/31), so ∂d_y/∂y = -40/31 ≈ -1.29.
+        # J_yy = 1 + (-1.29) = -0.29 < 0 → fold everywhere.
+        for y in range(32):
+            field[:, y, :, 1] = 40.0 * (0.5 - y / 31.0)
+
+        _, fold_mask = sanitize_displacement_field(
+            field, clamp=False, detect_folds=True
+        )
+
+        assert fold_mask.shape == shape
+        assert fold_mask.any(), "Expected folds but none detected"
+
+    def test_no_fold_on_zero_field(self):
+        """Zero displacement should have no folds."""
+        from starfinder.registration.pointset import sanitize_displacement_field
+
+        field = np.zeros((4, 16, 16, 3), dtype=np.float32)
+        _, fold_mask = sanitize_displacement_field(
+            field, clamp=False, detect_folds=True
+        )
+        assert not fold_mask.any(), "No folds expected on zero field"
+
+    def test_original_not_modified(self):
+        """sanitize_displacement_field should not modify the input array."""
+        from starfinder.registration.pointset import sanitize_displacement_field
+
+        field = np.full((4, 16, 16, 3), 50.0, dtype=np.float32)
+        original = field.copy()
+
+        sanitize_displacement_field(field, clamp=True)
+        np.testing.assert_array_equal(field, original)
+
+
+class TestBoundaryModeNearest:
+    """boundary_mode='nearest' should eliminate black bands."""
+
+    def test_nearest_no_black_band(self):
+        """Shifting a bright volume should not create zero-filled edges."""
+        from starfinder.registration.pointset import apply_tps_deformation
+
+        # Uniform bright volume
+        shape = (8, 32, 32)
+        vol = np.full(shape, 100.0, dtype=np.float32)
+
+        # Displacement field: src_y = y + 10, so rows y=22..31 map to
+        # source y=32..41 (OOB). With constant mode → black band at bottom.
+        field = np.zeros((*shape, 3), dtype=np.float32)
+        field[..., 1] = 10.0
+
+        # With constant mode: bottom rows (y >= 22) should be 0
+        result_const = apply_tps_deformation(vol, field, boundary_mode="constant")
+        assert (result_const[:, -5:, :] == 0).all(), (
+            "Expected black band at bottom with constant boundary"
+        )
+
+        # With nearest mode: no zeros
+        result_nearest = apply_tps_deformation(vol, field, boundary_mode="nearest")
+        assert (result_nearest > 0).all(), (
+            "Expected no black band with nearest boundary"
+        )
+
+    def test_nearest_preserves_dtype(self):
+        """Result dtype should match input regardless of boundary_mode."""
+        from starfinder.registration.pointset import apply_tps_deformation
+
+        vol = np.full((4, 16, 16), 50, dtype=np.uint8)
+        field = np.zeros((4, 16, 16, 3), dtype=np.float32)
+
+        result = apply_tps_deformation(vol, field, boundary_mode="nearest")
+        assert result.dtype == np.uint8
+
+
+class TestZoomOrder:
+    """zoom_order parameter controls spline interpolation for field upsampling."""
+
+    def test_zoom_order_1_produces_valid_field(self):
+        """Linear zoom should produce a valid displacement field."""
+        from starfinder.registration.pointset import tps_displacement_field
+
+        rng = np.random.default_rng(42)
+        n_pts = 30
+        positions = np.column_stack([
+            rng.uniform(2, 14, n_pts),
+            rng.uniform(10, 118, n_pts),
+            rng.uniform(10, 118, n_pts),
+        ])
+        displacements = rng.uniform(-3, 3, (n_pts, 3)).astype(np.float32)
+        shape = (16, 128, 128)
+
+        field_cubic = tps_displacement_field(
+            positions, displacements, shape,
+            smoothing=1.0, grid_spacing=16, zoom_order=3,
+        )
+        field_linear = tps_displacement_field(
+            positions, displacements, shape,
+            smoothing=1.0, grid_spacing=16, zoom_order=1,
+        )
+
+        assert field_cubic.shape == field_linear.shape
+        assert field_linear.dtype == np.float32
+        # Both should be similar — linear is just less smooth
+        diff = np.abs(field_cubic - field_linear).mean()
+        assert diff < 2.0, f"Mean difference {diff:.3f} too large"
+
+    def test_field_smooth_sigma_smooths_field(self):
+        """field_smooth_sigma should produce a smoother field."""
+        from starfinder.registration.pointset import tps_displacement_field
+
+        rng = np.random.default_rng(42)
+        n_pts = 30
+        positions = np.column_stack([
+            rng.uniform(2, 14, n_pts),
+            rng.uniform(10, 118, n_pts),
+            rng.uniform(10, 118, n_pts),
+        ])
+        displacements = rng.uniform(-3, 3, (n_pts, 3)).astype(np.float32)
+        shape = (16, 128, 128)
+
+        field_raw = tps_displacement_field(
+            positions, displacements, shape,
+            smoothing=1.0, grid_spacing=16,
+        )
+        field_smooth = tps_displacement_field(
+            positions, displacements, shape,
+            smoothing=1.0, grid_spacing=16, field_smooth_sigma=2.0,
+        )
+
+        # Smoothed field should have smaller max gradient
+        grad_raw = np.abs(np.diff(field_raw[..., 1], axis=1)).max()
+        grad_smooth = np.abs(np.diff(field_smooth[..., 1], axis=1)).max()
+        assert grad_smooth <= grad_raw, (
+            f"Smoothed field gradient ({grad_smooth:.3f}) not <= raw ({grad_raw:.3f})"
+        )

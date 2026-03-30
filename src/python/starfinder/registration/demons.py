@@ -320,6 +320,7 @@ def matlab_compatible_config() -> dict:
 def apply_deformation(
     volume: np.ndarray,
     displacement_field: np.ndarray,
+    boundary_mode: str = "constant",
 ) -> np.ndarray:
     """Apply displacement field to warp a volume.
 
@@ -330,6 +331,10 @@ def apply_deformation(
     displacement_field : np.ndarray
         Displacement field with shape (Z, Y, X, 3) where the last dimension
         contains (dz, dy, dx) displacement vectors.
+    boundary_mode : str
+        How to handle out-of-bounds source coordinates:
+        - ``"constant"`` (default): Fill with 0 (black bands at edges).
+        - ``"nearest"``: Extend edge pixels via nearest-neighbor extrapolator.
 
     Returns
     -------
@@ -363,6 +368,8 @@ def apply_deformation(
     resampler.SetInterpolator(sitk.sitkLinear)
     resampler.SetDefaultPixelValue(0)
     resampler.SetTransform(transform)
+    if boundary_mode == "nearest":
+        resampler.UseNearestNeighborExtrapolatorOn()
 
     warped_sitk = resampler.Execute(volume_sitk)
 
@@ -380,6 +387,7 @@ def register_volume_local(
     smoothing_sigma: float = 1.0,
     method: str = "demons",
     pyramid_mode: str = "antialias",
+    boundary_mode: str = "constant",
 ) -> tuple[np.ndarray, np.ndarray]:
     """Register multi-channel volume using demons.
 
@@ -408,6 +416,9 @@ def register_volume_local(
         Demons variant: "demons" (default), "diffeomorphic", "symmetric", "fast_symmetric".
     pyramid_mode : str, optional
         Pyramid strategy: "antialias" (default) or "sitk".
+    boundary_mode : str, optional
+        How to handle out-of-bounds source coordinates:
+        ``"constant"`` (default) fills with 0; ``"nearest"`` extends edges.
 
     Returns
     -------
@@ -446,6 +457,8 @@ def register_volume_local(
     resampler.SetInterpolator(sitk.sitkLinear)
     resampler.SetDefaultPixelValue(0)
     resampler.SetTransform(transform)
+    if boundary_mode == "nearest":
+        resampler.UseNearestNeighborExtrapolatorOn()
 
     for c in range(n_channels):
         vol_sitk = sitk.GetImageFromArray(images[:, :, :, c].astype(np.float64))

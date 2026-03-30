@@ -293,6 +293,7 @@ class FOV:
         layers_to_register: list[str] | None = None,
         method: str = "demons",
         fallback: bool = True,
+        boundary_mode: str = "constant",
         # Demons parameters
         iterations: list[int] | None = None,
         smoothing_sigma: float = 1.0,
@@ -325,6 +326,12 @@ class FOV:
         falls back to demons if insufficient spot matches.
 
         Displacement fields are ephemeral (applied then discarded).
+
+        Parameters
+        ----------
+        boundary_mode : str
+            How to handle out-of-bounds source coordinates during warping:
+            ``"constant"`` (default) fills with 0; ``"nearest"`` extends edges.
         """
         if layers_to_register is None:
             layers_to_register = self.layers.to_register
@@ -345,6 +352,7 @@ class FOV:
                         self.images[round_name],
                         ref_3d,
                         mov_3d,
+                        boundary_mode=boundary_mode,
                         detection_threshold=detection_threshold,
                         max_control_points=max_control_points,
                         beta=beta,
@@ -368,6 +376,7 @@ class FOV:
                         iterations=iterations,
                         smoothing_sigma=smoothing_sigma,
                         pyramid_mode=pyramid_mode,
+                        boundary_mode=boundary_mode,
                     )
             elif method == "tps":
                 try:
@@ -377,6 +386,7 @@ class FOV:
                         self.images[round_name],
                         ref_3d,
                         mov_3d,
+                        boundary_mode=boundary_mode,
                         detection_threshold=detection_threshold,
                         match_distance=match_distance,
                         min_matches=min_matches,
@@ -397,6 +407,7 @@ class FOV:
                         iterations=iterations,
                         smoothing_sigma=smoothing_sigma,
                         pyramid_mode=pyramid_mode,
+                        boundary_mode=boundary_mode,
                     )
             else:
                 from starfinder.registration import register_volume_local
@@ -409,6 +420,7 @@ class FOV:
                     smoothing_sigma=smoothing_sigma,
                     method=method,
                     pyramid_mode=pyramid_mode,
+                    boundary_mode=boundary_mode,
                 )
 
             self.images[round_name] = registered

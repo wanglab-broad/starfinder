@@ -15,6 +15,116 @@ from scipy.spatial import cKDTree
 from scipy.spatial.distance import cdist
 
 
+def sanitize_displacement_field(
+    field: np.ndarray,
+    *,
+    clamp: bool = True,
+    margin: int = 0,
+    smooth_sigma: float | None = None,
+    detect_folds: bool = False,
+) -> np.ndarray | tuple[np.ndarray, np.ndarray]:
+    """Post-process a displacement field to reduce interpolation artifacts.
+
+    Parameters
+    ----------
+    field : np.ndarray
+        Displacement field with shape (Z, Y, X, 3), (dz, dy, dx).
+    clamp : bool
+        If True, clip ``position + displacement`` to ``[margin, dim-1-margin]``
+        so that source coordinates never go out of bounds. Eliminates black
+        bands from ``map_coordinates(cval=0)`` or SimpleITK zero-fill.
+    margin : int
+        Safety margin for clamping (pixels from each edge). Default 0.
+    smooth_sigma : float or None
+        If set, apply Gaussian smoothing to each displacement component.
+        Removes cubic-zoom ringing and softens sharp gradients that cause
+        field folding.
+    detect_folds : bool
+        If True, also return a boolean mask where det(J) < 0 (non-injective
+        mapping). Diagnostic only — the caller decides what to do.
+
+    Returns
+    -------
+    np.ndarray or tuple[np.ndarray, np.ndarray]
+        Sanitized field (same shape). If ``detect_folds=True``, returns
+        ``(field, fold_mask)`` where ``fold_mask`` has shape (Z, Y, X).
+    """
+    from scipy.ndimage import gaussian_filter
+
+    field = field.copy()
+    shape = field.shape[:3]  # (Z, Y, X)
+
+    # Gaussian smoothing (before clamping so clamp sees smoothed values)
+    if smooth_sigma is not None and smooth_sigma > 0:
+        for d in range(3):
+            field[..., d] = gaussian_filter(field[..., d], sigma=smooth_sigma)
+
+    # Coordinate clamping
+    if clamp:
+        for d in range(3):
+            # Build coordinate grid for this axis
+            ax_len = shape[d]
+            lo = float(margin)
+            hi = float(ax_len - 1 - margin)
+
+            # Create position array matching field shape
+            slices = [None, None, None]
+            slices[d] = slice(None)
+            pos = np.arange(ax_len, dtype=np.float32)
+            # Reshape for broadcasting: e.g. for d=1 → (1, Y, 1)
+            bcast_shape = [1, 1, 1]
+            bcast_shape[d] = ax_len
+            pos = pos.reshape(bcast_shape)
+
+            src = pos + field[..., d]
+            field[..., d] = np.clip(src, lo, hi) - pos
+
+    # Fold detection via Jacobian determinant
+    if detect_folds:
+        fold_mask = _detect_folds(field)
+        return field, fold_mask
+
+    return field
+
+
+def _detect_folds(field: np.ndarray) -> np.ndarray:
+    """Compute fold mask where det(Jacobian of deformation) < 0.
+
+    The deformation is phi(x) = x + d(x). The Jacobian of phi is
+    J = I + grad(d), so det(J) < 0 means the mapping folds (non-injective).
+    Uses finite differences on the displacement field.
+
+    Parameters
+    ----------
+    field : np.ndarray
+        Displacement field, shape (Z, Y, X, 3).
+
+    Returns
+    -------
+    np.ndarray
+        Boolean mask, shape (Z, Y, X), True where det(J) < 0.
+    """
+    # Gradient of each displacement component w.r.t. each spatial axis
+    # grad[i][j] = d(field[..., i]) / d(axis_j)
+    grad = np.empty((3, 3) + field.shape[:3], dtype=np.float32)
+    for i in range(3):
+        for j in range(3):
+            grad[i, j] = np.gradient(field[..., i], axis=j)
+
+    # Jacobian of deformation = I + grad(displacement)
+    for i in range(3):
+        grad[i, i] += 1.0
+
+    # det(J) via explicit 3x3 formula
+    det = (
+        grad[0, 0] * (grad[1, 1] * grad[2, 2] - grad[1, 2] * grad[2, 1])
+        - grad[0, 1] * (grad[1, 0] * grad[2, 2] - grad[1, 2] * grad[2, 0])
+        + grad[0, 2] * (grad[1, 0] * grad[2, 1] - grad[1, 1] * grad[2, 0])
+    )
+
+    return det < 0
+
+
 def detect_and_match_spots(
     fixed: np.ndarray,
     moving: np.ndarray,
@@ -154,6 +264,8 @@ def tps_displacement_field(
     shape: tuple[int, int, int],
     smoothing: float = 1.0,
     grid_spacing: int = 32,
+    zoom_order: int = 3,
+    field_smooth_sigma: float | None = None,
 ) -> np.ndarray:
     """Interpolate sparse displacements into a dense field via TPS.
 
@@ -173,6 +285,12 @@ def tps_displacement_field(
         0 = exact interpolation (may overfit noisy matches).
     grid_spacing : int
         Stride for the coarse evaluation grid in YX dimensions.
+    zoom_order : int
+        Spline order for coarse→full zoom. Default 3 (cubic).
+        Use 1 (linear) to eliminate ringing artifacts.
+    field_smooth_sigma : float or None
+        If set, Gaussian-smooth the displacement field after zoom.
+        Removes ringing and softens sharp gradients.
 
     Returns
     -------
@@ -213,7 +331,12 @@ def tps_displacement_field(
     )
     field = np.empty((*shape, 3), dtype=np.float32)
     for d in range(3):
-        field[..., d] = zoom(coarse_field[..., d], zoom_factors, order=3)
+        field[..., d] = zoom(coarse_field[..., d], zoom_factors, order=zoom_order)
+
+    # Sanitize: smooth + clamp to prevent OOB and reduce ringing
+    field = sanitize_displacement_field(
+        field, clamp=True, smooth_sigma=field_smooth_sigma,
+    )
 
     return field
 
@@ -221,6 +344,7 @@ def tps_displacement_field(
 def apply_tps_deformation(
     volume: np.ndarray,
     displacement_field: np.ndarray,
+    boundary_mode: str = "constant",
 ) -> np.ndarray:
     """Warp a volume using a displacement field, slice-by-slice.
 
@@ -233,6 +357,10 @@ def apply_tps_deformation(
         Input volume, shape (Z, Y, X).
     displacement_field : np.ndarray
         Displacement field, shape (Z, Y, X, 3) with (dz, dy, dx).
+    boundary_mode : str
+        How to handle out-of-bounds source coordinates:
+        - ``"constant"`` (default): Fill with 0 (black bands at edges).
+        - ``"nearest"``: Extend edge pixels (no black bands).
 
     Returns
     -------
@@ -257,7 +385,7 @@ def apply_tps_deformation(
 
         coords = np.array([src_z, src_y, src_x])
         result[z] = map_coordinates(
-            volume, coords, order=1, mode="constant", cval=0
+            volume, coords, order=1, mode=boundary_mode, cval=0
         )
 
     return result
@@ -272,6 +400,8 @@ def tps_register(
     max_control_points: int = 1000,
     smoothing: float = 1.0,
     grid_spacing: int = 32,
+    zoom_order: int = 3,
+    field_smooth_sigma: float | None = None,
 ) -> np.ndarray:
     """Compute TPS displacement field between fixed and moving volumes.
 
@@ -295,6 +425,10 @@ def tps_register(
         TPS smoothing parameter.
     grid_spacing : int
         Coarse grid stride for TPS evaluation.
+    zoom_order : int
+        Spline order for coarse→full zoom (default 3). Use 1 for no ringing.
+    field_smooth_sigma : float or None
+        Gaussian smoothing sigma for the displacement field after zoom.
 
     Returns
     -------
@@ -320,6 +454,7 @@ def tps_register(
     return tps_displacement_field(
         positions, displacements, fixed.shape,
         smoothing=smoothing, grid_spacing=grid_spacing,
+        zoom_order=zoom_order, field_smooth_sigma=field_smooth_sigma,
     )
 
 
@@ -327,6 +462,7 @@ def register_volume_tps(
     images: np.ndarray,
     ref_image: np.ndarray,
     mov_image: np.ndarray,
+    boundary_mode: str = "constant",
     **kwargs,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Register multi-channel volume using TPS.
@@ -341,9 +477,13 @@ def register_volume_tps(
         Reference image, shape (Z, Y, X).
     mov_image : np.ndarray
         Moving image, shape (Z, Y, X).
+    boundary_mode : str
+        How to handle out-of-bounds source coordinates:
+        ``"constant"`` (default) fills with 0; ``"nearest"`` extends edges.
     **kwargs
         Passed to ``tps_register()``: detection_threshold, match_distance,
-        min_matches, max_control_points, smoothing, grid_spacing.
+        min_matches, max_control_points, smoothing, grid_spacing,
+        zoom_order, field_smooth_sigma.
 
     Returns
     -------
@@ -358,7 +498,8 @@ def register_volume_tps(
     registered = np.empty_like(images)
     for c in range(n_channels):
         registered[:, :, :, c] = apply_tps_deformation(
-            images[:, :, :, c], displacement_field
+            images[:, :, :, c], displacement_field,
+            boundary_mode=boundary_mode,
         )
 
     return registered, displacement_field
@@ -673,6 +814,8 @@ def cpd_displacement_field(
     grid_spacing: int = 16,
     B: np.ndarray | None = None,
     t: np.ndarray | None = None,
+    zoom_order: int = 3,
+    field_smooth_sigma: float | None = None,
 ) -> np.ndarray:
     """Generate dense backward displacement field from CPD results.
 
@@ -699,6 +842,11 @@ def cpd_displacement_field(
         (D, D) affine matrix from cpd_affine.
     t : np.ndarray, optional
         (D,) affine translation from cpd_affine.
+    zoom_order : int
+        Spline order for coarse→full zoom. Default 3 (cubic).
+        Use 1 (linear) to eliminate ringing artifacts.
+    field_smooth_sigma : float or None
+        If set, Gaussian-smooth the displacement field after zoom.
 
     Returns
     -------
@@ -755,7 +903,12 @@ def cpd_displacement_field(
     )
     field = np.empty((*shape, D), dtype=np.float32)
     for d in range(D):
-        field[..., d] = zoom(coarse_field[..., d], zoom_factors, order=3)
+        field[..., d] = zoom(coarse_field[..., d], zoom_factors, order=zoom_order)
+
+    # Sanitize: smooth + clamp to prevent OOB and reduce ringing
+    field = sanitize_displacement_field(
+        field, clamp=True, smooth_sigma=field_smooth_sigma,
+    )
 
     return field
 
@@ -772,6 +925,8 @@ def cpd_register(
     grid_spacing: int = 16,
     candidate_radius: float = 15.0,
     k_neighbors: int = 3,
+    zoom_order: int = 3,
+    field_smooth_sigma: float | None = None,
 ) -> np.ndarray:
     """End-to-end CPD registration.
 
@@ -814,6 +969,10 @@ def cpd_register(
     k_neighbors : int
         Number of nearest neighbors per FPS anchor in the fixed cloud.
         Preserves local cluster structure for CPD soft assignment.
+    zoom_order : int
+        Spline order for coarse→full zoom (default 3). Use 1 for no ringing.
+    field_smooth_sigma : float or None
+        Gaussian smoothing sigma for the displacement field after zoom.
 
     Returns
     -------
@@ -888,6 +1047,7 @@ def cpd_register(
         Y, W, beta, fixed.shape,
         grid_spacing=grid_spacing,
         B=B_affine, t=t_affine,
+        zoom_order=zoom_order, field_smooth_sigma=field_smooth_sigma,
     )
 
 
@@ -895,6 +1055,7 @@ def register_volume_cpd(
     images: np.ndarray,
     ref_image: np.ndarray,
     mov_image: np.ndarray,
+    boundary_mode: str = "constant",
     **kwargs,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Register multi-channel volume using CPD.
@@ -909,10 +1070,13 @@ def register_volume_cpd(
         Reference image, shape (Z, Y, X).
     mov_image : np.ndarray
         Moving image, shape (Z, Y, X).
+    boundary_mode : str
+        How to handle out-of-bounds source coordinates:
+        ``"constant"`` (default) fills with 0; ``"nearest"`` extends edges.
     **kwargs
         Passed to ``cpd_register()``: detection_threshold, max_control_points,
         beta, lmbda, w, affine_first, grid_spacing, candidate_radius,
-        k_neighbors.
+        k_neighbors, zoom_order, field_smooth_sigma.
 
     Returns
     -------
@@ -927,7 +1091,8 @@ def register_volume_cpd(
     registered = np.empty_like(images)
     for c in range(n_channels):
         registered[:, :, :, c] = apply_tps_deformation(
-            images[:, :, :, c], displacement_field
+            images[:, :, :, c], displacement_field,
+            boundary_mode=boundary_mode,
         )
 
     return registered, displacement_field
