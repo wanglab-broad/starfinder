@@ -283,7 +283,7 @@ class TestE2ESubtileRoundTrip:
         coords_df = fov.create_subtiles()
 
         # Load first subtile and run spot finding
-        npz_path = fov.paths.subtile_dir / "subtile_00000.npz"
+        npz_path = fov.paths.subtile_dir / "subtile_data_1.npz"
         sub_fov = FOV.from_subtile(npz_path, ds, "FOV_001")
 
         ref_image = sub_fov.images[ds.layers.ref]

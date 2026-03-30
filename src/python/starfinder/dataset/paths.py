@@ -21,6 +21,12 @@ class FOVPaths:
     def subtile_dir(self) -> Path:
         return self.output_root / "output" / "subtile" / self.fov_id
 
+    def rsf_log(self) -> Path:
+        return self.output_root / "log" / f"{self.fov_id}_rsf.txt"
+
+    def gr_log(self) -> Path:
+        return self.output_root / "log" / f"{self.fov_id}_gr.txt"
+
     def signal_csv(self, slot: str) -> Path:
         return self.output_root / "signal" / f"{self.fov_id}_{slot}.csv"
 

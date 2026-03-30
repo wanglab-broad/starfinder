@@ -138,6 +138,13 @@ properties:
           type: string
     description: "Additional imaging rounds beyond sequencing"
 
+  # ==================== Backend Selection ====================
+  backend:
+    type: string
+    enum: ["python", "matlab"]
+    default: "matlab"
+    description: "Processing backend for registration and spot finding"
+
   # ==================== Workflow Mode ====================
   workflow_mode:
     type: string
@@ -364,6 +371,10 @@ $defs:
         type: boolean
       ref_round:
         type: string
+      method:
+        type: string
+        enum: ["demons", "tps", "cpd"]
+        default: "demons"
     additionalProperties: true
 
   spot_finding_params:
@@ -376,10 +387,9 @@ $defs:
       intensity_threshold:
         type: number
         minimum: 0
-        maximum: 1
       intensity_estimation:
         type: string
-        enum: ["local", "global"]
+        enum: ["local", "global", "noise", "adaptive", "adaptive_round"]
     additionalProperties: true
 
   load_codebook_params:

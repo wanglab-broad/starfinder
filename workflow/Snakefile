@@ -21,8 +21,15 @@ validate(config, schema="schemas/config.schema.yaml")
 ### ==================== [ Include Rule Files ] =========================
 
 include: "rules/common.smk"
-include: "rules/registration.smk"
-include: "rules/spot-finding.smk"
+
+# Backend-specific rule files: only one set of core rules is active per run
+if BACKEND == "python":
+    include: "rules/registration-py.smk"
+    include: "rules/spot-finding-py.smk"
+elif BACKEND == "matlab":
+    include: "rules/registration.smk"
+    include: "rules/spot-finding.smk"
+
 include: "rules/segmentation.smk"
 include: "rules/stitching.smk"
 include: "rules/reads-assignment.smk"

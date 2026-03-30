@@ -597,6 +597,72 @@ class FOV:
         self.reads_filtration(end_bases=end_bases, start_base=start_base)
         return self
 
+    @log_step
+    def run_streaming_gr(
+        self,
+        *,
+        rotate_angle: float | None = None,
+        snr_threshold: float | None = None,
+        ref_img: Literal["merged", "single-channel"] = "merged",
+        mov_img: Literal["merged", "single-channel"] = "merged",
+        ref_channel: int = 0,
+        hist_equalize: bool = False,
+        hist_equalize_ref_channel: int = 0,
+        morph_recon: bool = False,
+        morph_recon_radius: int = 3,
+    ) -> FOV:
+        """Streaming global registration only (for subtile workflow).
+
+        Processes one non-ref round at a time to reduce peak memory.
+        After this method, the FOV has all images loaded with global
+        shifts applied, ready for ``create_subtiles()``.
+        """
+        ref = self.layers.ref
+
+        # --- Phase 1: Load and preprocess ref round ---
+        self.load_raw_images(rounds=[ref])
+        if rotate_angle is not None:
+            self._rotate_round(ref, rotate_angle)
+        self.enhance_contrast(layers=[ref], snr_threshold=snr_threshold)
+        if hist_equalize:
+            # For hist_equalize we need to save the reference for later rounds
+            pass  # ref round is the reference itself
+        if morph_recon:
+            self.morph_recon(radius=morph_recon_radius, layers=[ref])
+
+        # --- Phase 2: Non-ref rounds (one at a time) ---
+        for round_name in self.layers.to_register:
+            self.load_raw_images(rounds=[round_name])
+            if rotate_angle is not None:
+                self._rotate_round(round_name, rotate_angle)
+            self.enhance_contrast(
+                layers=[round_name], snr_threshold=snr_threshold
+            )
+            if hist_equalize:
+                from starfinder.preprocessing import histogram_match
+
+                reference = self.images[ref][:, :, :, hist_equalize_ref_channel]
+                self.images[round_name] = histogram_match(
+                    self.images[round_name], reference
+                )
+            if morph_recon:
+                self.morph_recon(
+                    radius=morph_recon_radius, layers=[round_name]
+                )
+            self.global_registration(
+                layers_to_register=[round_name],
+                ref_img=ref_img,
+                mov_img=mov_img,
+                ref_channel=ref_channel,
+                save_shifts=False,
+            )
+
+        # Save shift log once
+        if self.global_shifts:
+            self._save_shift_log()
+
+        return self
+
     # --- Output ---
 
     def save_ref_merged(self) -> Path:
@@ -643,6 +709,48 @@ class FOV:
         out.to_csv(path, index=False)
         return path
 
+    def save_log(self, log_type: Literal["rsf", "gr"] = "rsf") -> Path:
+        """Write a pipeline log file (summary of steps run)."""
+        import time
+
+        path = self.paths.rsf_log() if log_type == "rsf" else self.paths.gr_log()
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        lines = [
+            f"FOV: {self.fov_id}",
+            f"Backend: python",
+            f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}",
+            f"Rounds: {self.layers.seq}",
+            f"Ref round: {self.layers.ref}",
+            f"Global shifts: {dict(self.global_shifts)}",
+            f"Local registered: {self.local_registered}",
+            f"All spots: {len(self.all_spots) if self.all_spots is not None else 0}",
+            f"Good spots: {len(self.good_spots) if self.good_spots is not None else 0}",
+        ]
+        path.write_text("\n".join(lines) + "\n")
+        return path
+
+    def save_score_log(self, suffix: str = "") -> Path:
+        """Write spot-finding score log (spot count summary)."""
+        path = self.paths.score_log(suffix)
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        n_all = len(self.all_spots) if self.all_spots is not None else 0
+        n_good = len(self.good_spots) if self.good_spots is not None else 0
+
+        lines = [
+            f"FOV: {self.fov_id}",
+            f"Total spots detected: {n_all}",
+            f"Good spots (codebook matched): {n_good}",
+            f"Match rate: {n_good / n_all:.4f}" if n_all > 0 else "Match rate: N/A",
+        ]
+        if self.good_spots is not None and "gene" in self.good_spots.columns:
+            lines.append(
+                f"Unique genes: {self.good_spots['gene'].nunique()}"
+            )
+        path.write_text("\n".join(lines) + "\n")
+        return path
+
     # --- Subtile operations ---
 
     def create_subtiles(
@@ -676,13 +784,14 @@ class FOV:
                     # 2D projected (Y, X, C) or (Y, X)
                     arrays[f"images_{round_name}"] = img[sy, sx]
 
-            # Save NPZ
-            npz_path = out_dir / f"subtile_{t:05d}.npz"
+            # Save NPZ — 1-based naming to match Snakemake wildcard {n_subtile}
+            subtile_id = t + 1
+            npz_path = out_dir / f"subtile_data_{subtile_id}.npz"
             np.savez_compressed(
                 npz_path,
                 **arrays,
                 fov_id=self.fov_id,
-                subtile_id=t,
+                subtile_id=subtile_id,
                 layers_seq=self.layers.seq,
                 layers_ref=self.layers.ref,
             )
@@ -690,7 +799,7 @@ class FOV:
             # 1-based coordinates for stitch_subtile.py
             coord_rows.append(
                 {
-                    "t": t,
+                    "t": subtile_id,
                     "scoords_x": window.x_start + 1,
                     "scoords_y": window.y_start + 1,
                     "ecoords_x": window.x_end,  # exclusive→inclusive + 0→1

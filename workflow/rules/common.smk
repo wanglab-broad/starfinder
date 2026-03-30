@@ -11,6 +11,12 @@ import random
 import pandas as pd
 from pathlib import Path
 
+### ==================== [ Backend Selection ] =========================
+
+BACKEND = config.get("backend", "matlab")
+if BACKEND not in ("python", "matlab"):
+    raise ValueError(f"Unknown backend '{BACKEND}'. Valid options: 'python', 'matlab'")
+
 ### ==================== [ Workflow Mode Configuration ] =========================
 
 # Workflow mode: "free" allows mix-and-match, presets enable predefined rule combinations
@@ -246,16 +252,18 @@ def get_overall_output(wildcards):
             elif current_rule == 'rsf_single_fov_seq':
                 output_list += [f"{OUTPUT_DIR}/signal/{fovID}_allSpots.csv" for fovID in FOVS]
             elif current_rule == 'gr_single_fov_subtile':
+                subtile_ext = "npz" if BACKEND == "python" else "mat"
                 output_list += [f"{OUTPUT_DIR}/log/{fovID}_gr.txt" for fovID in FOVS]
                 output_list += [f"{OUTPUT_DIR}/images/ref_merged/{fovID}.tif" for fovID in FOVS]
                 output_list += [f"{OUTPUT_DIR}/output/subtile/{fovID}/subtile_coords.csv" for fovID in FOVS]
-                output_list += [f"{OUTPUT_DIR}/output/subtile/{fovID}/subtile_data_{i}.mat" for fovID in FOVS for i in N_SUBTILE]
+                output_list += [f"{OUTPUT_DIR}/output/subtile/{fovID}/subtile_data_{i}.{subtile_ext}" for fovID in FOVS for i in N_SUBTILE]
             elif current_rule == 'lrsf_single_fov_subtile':
                 output_list += [f"{OUTPUT_DIR}/log/sf_scores/{fovID}_{i}.txt" for fovID in FOVS for i in N_SUBTILE]
                 output_list += [f"{OUTPUT_DIR}/output/subtile/{fovID}/subtile_goodSpots_{i}.csv" for fovID in FOVS for i in N_SUBTILE]
             elif current_rule == 'deep_create_subtile':
+                subtile_ext = "npz" if BACKEND == "python" else "mat"
                 output_list += [f"{OUTPUT_DIR}/output/subtile/{fovID}/subtile_coords.csv" for fovID in FOVS]
-                output_list += [f"{OUTPUT_DIR}/output/subtile/{fovID}/subtile_data_{i}.mat" for fovID in FOVS for i in N_SUBTILE]
+                output_list += [f"{OUTPUT_DIR}/output/subtile/{fovID}/subtile_data_{i}.{subtile_ext}" for fovID in FOVS for i in N_SUBTILE]
             elif current_rule == 'deep_rsf_subtile':
                 output_list += [f"{OUTPUT_DIR}/log/sf_scores/{fovID}_{i}.txt" for fovID in FOVS for i in N_SUBTILE]
                 output_list += [f"{OUTPUT_DIR}/output/subtile/{fovID}/subtile_goodSpots_{i}.csv" for fovID in FOVS for i in N_SUBTILE]

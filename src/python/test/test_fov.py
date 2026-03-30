@@ -206,7 +206,7 @@ class TestFOVSubtile:
         assert coords_df["scoords_y"].min() >= 1
 
         # Load back from NPZ
-        npz_path = fov.paths.subtile_dir / "subtile_00000.npz"
+        npz_path = fov.paths.subtile_dir / "subtile_data_1.npz"
         assert npz_path.exists()
 
         loaded = FOV.from_subtile(
