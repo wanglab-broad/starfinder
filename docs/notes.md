@@ -1996,3 +1996,62 @@ Replace conda with uv for faster, more reproducible Python dependency management
 - [x] Synthetic dataset generator implemented (2026-01-29)
 - [x] Mini (1 FOV) and standard (4 FOVs) presets available
 - [ ] Add real dataset subset for integration testing
+
+---
+
+## Aging Dataset E2E Benchmark — Pad Balance Analysis (2026-03-31)
+
+### Overview
+
+Ran E2E benchmark on the aging (mPFC) dataset: 2 FOVs (Position400, Position401), 9 rounds, 2048×2048×36, 14,242 codebook entries (2,044 genes), multi-segment barcodes (split_index=5, end_base=["CC","TT"]), adaptive spot finding @0.2. Compared against old pipeline results in `ref/` folder.
+
+Report: `starfinder_benchmark/e2e/results/aging/aging_pad_balance_report.html`
+
+### Key Results
+
+**Read counts:** Current pipeline detects ~35% fewer reads than reference (182K vs 281K per FOV). Expected — current uses global-only registration while reference used local registration. Gene coverage remains >99.6% (2,037–2,039 / 2,044 genes).
+
+**Expression profile correlation:** Highly correlated between pipelines — Pearson r=0.96 (raw), 0.87 (log1p); Spearman ρ=0.85. Top-10 genes rank nearly identically. STAR probes correlate more tightly (ρ=0.87) than RIBO (ρ=0.78).
+
+**STAR/RIBO ratio:** Consistent at ~1.5× across both pipelines and FOVs. STAR reads ~110K, RIBO reads ~72K per FOV.
+
+### Pad Balance Findings
+
+**Overall pad balance improved in current pipeline** (for moderate-expression genes): median CV drops 5–16%, number of genes with CV<0.5 increases. At top 10% expression, changes are net-neutral.
+
+**STAR vs RIBO asymmetry:** STAR top-50 genes have median CV ~0.7–0.9; RIBO top-50 median CV ~1.5. RIBO genes frequently have a single dominant pad capturing >85% of reads.
+
+**Most balanced genes (validation controls):** Slc1a2 STAR (CV=0.017, 2 pads near 50/50), Ggt1 RIBO (CV=0.13, 4 pads), Ezh2 RIBO (CV=0.14, 4 pads), Kalrn RIBO (CV=0.27, 4 pads, 1,236 reads).
+
+**Most skewed genes:** G3bp1 RIBO (pad_3 = 98.4%), Sox4 RIBO (pad_4 = 99.7%), Cxcl2 RIBO (pad_2 = 97.9%), Penk RIBO (pad_1 = 95.7%).
+
+### Root Cause Analysis of Pad Imbalance
+
+Investigated four hypotheses for why certain pads dominate:
+
+**H1: Codebook uniqueness (REJECTED).** All pads for the same gene have identical minimum Hamming distance (=2) to the nearest other codebook entry. Pads differ by exactly one color digit at one position (the pad-distinguishing position). Barcode decodability is identical across pads — the dominant pad is not more unique.
+
+**H2: Dominant pad consistency (CONFIRMED).** 100% of skewed genes (14/14 tested) show the same dominant pad across Cur Pos400, Cur Pos401, and Ref Pos400 — different FOVs, different pipelines. Even dominance percentages are stable (±3%). The 3 inconsistent genes (Slc1a2, Kalrn, Ggt1) are the balanced ones where pads are near-equal and random fluctuation flips the nominal winner.
+
+**H3: STAR vs RIBO comparison (MIXED).** For the same gene, RIBO is sometimes more balanced (Atp1a3: STAR CV=0.79 vs RIBO CV=0.42) and sometimes worse (Mbp: STAR CV=0.74 vs RIBO CV=1.50). No universal pattern at individual gene level — but in aggregate, RIBO has more extreme outliers.
+
+**H4: Pad count and expression level effects (CONFIRMED).** More pads → higher median CV (2 pads: 0.47, 3 pads: 0.63, 4 pads: 0.67). Higher expression → higher CV (Q1: 0.47, Q4: 0.75). More pads = more chances for one outlier; higher expression amplifies the imbalance.
+
+### Conclusion: Three-Layer Causation Model
+
+1. **Differential probe hybridization efficiency (dominant cause).** Each pad targets a different site along the same mRNA. Different binding sites have different accessibility (secondary structure, GC content, protein occlusion). This is a well-known padlock probe problem — different targeting sequences for the same transcript can have 10–100× different capture efficiency. Fixed across conditions.
+
+2. **RCA amplification bias (amplifying factor).** Small hybridization differences are amplified during rolling circle amplification. A pad with 2× better hybridization can end up with 5–10× more reads post-amplification, explaining the extreme 90–99% dominance.
+
+3. **Signal-to-noise threshold effect (explains RIBO skew).** RIBO probes have ~1.5× fewer reads overall. When signal is lower, weak pads fall below the detection threshold (adaptive@0.2) while strong pads remain detectable. For a 4-pad gene with true efficiencies [100%, 30%, 20%, 10%]: high signal → all pads detected (moderate CV); low signal → only 1–2 pads survive (extreme CV).
+
+### Practical Implications
+
+- Pad imbalance is **not a pipeline quality issue** — it's an upstream probe design property.
+- Gene-level quantification (summing across pads) is the correct approach.
+- Genes with CV > 1.5 should be flagged as effectively single-probe genes in downstream analysis.
+- Well-balanced genes (Slc1a2, Ggt1, Ezh2, Kalrn) can serve as internal QC controls.
+
+### Config Correction
+
+Fixed CLAUDE.md aging dataset entry: changed `seg1 end="CC", seg2 end="AT"(STAR)/"TT"(RIBO)` to `end_base=["CC","TT"] (seg1/seg2)`. The end_base config applies to both probe types identically — there is no STAR/RIBO distinction for end_base.

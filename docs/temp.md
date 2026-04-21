@@ -2,9 +2,137 @@
 Note: this is not a TODO list.
 
 --- 
+
+2026-03-30 
+paused cpd registraion 
+start snaakeamke transtion 
+
+Can you help make the following modifications?
+1. Instead of a prefix, use a suffix in the smk files, for example, registration-py.smk
+2. for the scripts, drop the prefix, just use "xxx.py"
+3. for the Common Python Helper, use Snakemake `script:` directive instead of subprocess
+4. use sdata as a variable name instead of ds, for example, sdata = STARMapDataset.from_config(snakemake.config)
+5. also enable steaming mode in gr_single_fov_subtile
+
+interpolation artifact issues
+subsample region for fft
+when finish a plan, mark finished 
+iterative CPD?
+
+I also want:
+1. some randomness of the gaussian spot generation (i,e, slightly variant intensity and size across rounds for the same spot)
+2. for step 6, modify the network-mount scripts based on our new implementation, do not need to keep the old import path 
+3. Remove old unnecessary tests if possible 
+The ultimate goal of this iteration for the synthetic data generation process is to:
+1. unify these two systems
+  - the primary synthetic data generation codebase should be starfinder.benchmark.data but its primary function is to generate a multi-round, multi-channel dataset for E2E tests just like starfinder.testdata. The registration benchmark data generation is a single round, single channel special case of the primary use. Thus, move starfinder.testdata to starfinder.benchmark and unify these two. 
+  - make the size presets consistent, including tiny, small, medium, large, tissue, thick_medium 
+2. re-design the generation of images with local deformation 
+  - the previous workflow directly applies the deformation on the image which could cause un-natural blank / noise region on the image, I suggest the following workflow: modify the initial coordinates of the synthetic spots based on the local deformation, then generate spots on the new locations after deformation
+
+Please create an implementation plan according to my input. 
+
+
+local/block CPD?
+diffusion-based method to match two images?
+find a way to not change spot morphology 
+
+can you help modify the synthetic data generation for our e2e_LR test:
+1. Replace linear_small with d = c0 + c1*x + c2*y + c3*z + c4*x*y
+2. Deformation caps at 10px instead of 5px 
+what do you think?
+
+
+for the maximum shifs along xy, make it 50 for all datasets, max z shift 10 for thick_medium
+some questions:
+1. for registration, spotfinding, and extraction, you can do one-round-at-a-time, but what about the filtering process how do you plan to handle that? do you need to save any intermidiate results?
+2. I think the MIP-based FFT not making sense, the z-shift is very critical to make sure correct color extraction 
+3. I think Parallelization will be handled via Snakemake later, right?
+
+for the e2e benchmark script using real data, modify it so that:
+1. refer to the most updated script for synthetic data benchmark, modify file saving locations
+2. the qc metrics matches the setting when using synthetic data, since we don't have the groud truth, just simply remove those ones. Also, to achieve a better consistentcy, don't include the matlab comparison metrics in the log/{fov}.csv qc files. 
+3. keep the following metrics:
+  - gene_coverage
+  - mean_color_score
+4. save the matlab comparison metrics in log/matlab_comparison/{fov}.csv
+  - include n_all_spots, n_good_spots, codebook_match_rate of two beckends
+
+
+
+for the e2e benchmark script using synthetic data, modify it so that:
+1. save the registration inspection image under log/gr_inspect folder
+2. save the signal inspection image under log/signal_inspect folder
+3. change the {fov}_qc.csv to {fov}.csv
+4. rename the following qc metrics (old, new):
+  - spot_recall, detection_recall
+  - spot_precision, detection_precision
+  - n_correct_form_CNNNNC, n_correct_form
+5. remove the following qc metrics:
+  - spot_mean_distance_px
+
+
+
+can we make it consistent?
+1. for mini, match it with the small dataset size in the registration benchmark 
+2. for standard,  match it with the medium dataset size in the registration benchmark
+3. use the same naming scheme, replace mini with small, standard with medium 
+
+Here are some additional context:
+1. for the tissue-2D and cell-culture-3D datasets, the fifth channel is the DAPI staining for nuclei, for decoding benchmark you only need the first 4 channels
+2. the max projection of tissue-2D is just for visualization and downstream segmentation 
+
+
+what about SNR-gated normalization + round_max spot finding threshold + md=2
+
+Yeah, the real issue is per-channel min_max_normalize inflates noise in channels with no signal. what if we calculate SNR for each channel, if it is too low, we skip the normalization for that channel? Does this make sense 
+
+
+Still many false positive spots. Create a plan to change spot finding implementation in python so that it matches MATLAB's imregionalmax + regionprops3 workflow. Save the plan to docs/plans
+
+
+Please consider the following comments and revise the v2 plan:
+1. Don't need to differentiate the dataset in the validation test, make it one e2e fixture with a test config as input. Use the mini dataset as the default. 
+2. No need to test multi-fov behavior using pytest
+
+Please consider the following comments and revise the v2 plan:
+1. Save the e2e validation results and intermediate files into the starfinder_benchmark/results/e2e_validation folder for my visual inspection 
+2. Create synthetic datasets in starfinder_benchmark/data/synthetic for e2e validation, use size medium as the default  
+3. don't need to differentiate the dataset in the validation test, make it one e2e fixture with a test config as input.
+
+
+Please consider the following comments and revise the design:
+1. LayerState should be part of the dataset level metadata (STARmapDataset.layers) and inherit by FOV class (FOV.layers), current validation is good 
+2. RegistrationResult should be a FOV level results (FOV.registration). global_shifts can be simplified as a dict where keys are round names and values are shift in that round. Also fix the name collision
+3. Codebook should be part of the dataset level metadata (STARmapDataset.codebook) and inherit by FOV class (FOV.codebook)
+4. CropWindow should be renamed as Subtile and as part of the dataset level attribute (STARmapDataset.subtile). Subtile should include number of subtile, subtile_id and corresponding subtile window
+5. Fix the Logging Strategy and use it in key processing steps such as preprocessing, registration, and spot finding 
+6. Fix #7, #5, #2, #4, #10, #12 and minor issues on your list 
+7. Do a documentation reorg / clean up for the main object design
+
+
+I have the following comments:
+1. I agree that the there are so many dataclasses, maybe we can simplify some of them
+2. For the codebook class, I suggest we keep it 
+3. For the registration, there might be multi-step registration happening in production (e.g. global first, then local), so the dataclass need to handle that situation. However, the most important results to keep is the global shift
+
+Please revise the plan again based on my comments 
+
+
+
 SSIM on 2D MIP if image is too large. 
 
 let's implement the MIP-based spot detection and do a test run to validate the performance gain. 
+
+I think the python_matlab one works great, what is the config setting of that one? 
+can we plan another benchmark test to compare different setting of python_matlab and the matlab orignal, with large synthetic data and two smaller real datasets?
+1. same iteration setting for both python_matlab and matlab original
+2. record time and memeory usage for each test run 
+3. for python_matlab, try method=demons and method=diffeomorphic
+4. always use pyramid_mode="antialias"
+
+Save results in starfinder_benchmark/registration/local_comparison folder 
+
 
 
 Issue: synthetic dataset design is not relecting the real data

@@ -43,7 +43,7 @@ Peak occurs during registration — all N rounds loaded simultaneously + registr
 
 ---
 
-## Tier 1: Quick Wins
+## Tier 1: Quick Wins (COMPLETED — commit 560f3f8)
 
 ### 1.1 Vectorize Barcode Extraction
 
@@ -96,7 +96,7 @@ z0 = np.clip(z_arr - vz, 0, Z)
 
 ---
 
-## Tier 2: Streaming Pipeline (Memory Optimization)
+## Tier 2: Streaming Pipeline (COMPLETED — commit cb520a7)
 
 ### Motivation
 
@@ -166,11 +166,247 @@ def run_streaming(self, ...) -> FOV:
 
 ---
 
-## Tier 3: Hybrid Registration (FFT Global + Spot-Based Local)
+## Tier 3: Registration Memory & Apply Optimization (COMPLETED — commit 9a7ce22)
+
+### Motivation
+
+Profiling after Tiers 1-2 showed that streaming alone only reduced peak RSS by 11-23% because **FFT temporaries during registration dominate peak RSS**, not round image storage. Three targeted fixes in the global registration path reduced peak RSS by ~50%.
+
+### 3.1 `_make_ref_3d` uint16 Sum
+
+**Problem**: `np.sum(uint8_volume, axis=-1)` defaults to int64 (8 bytes/pixel). Max sum of 4 uint8 channels = 1020, which fits in uint16 (2 bytes/pixel).
+
+**Location**: `src/python/starfinder/dataset/fov.py`
+
+**Fix**: `np.sum(vol, axis=-1, dtype=np.uint16)` — saves 6 bytes/pixel, or 3.2 GB for tissue-sized volumes.
+
+### 3.2 `phase_correlate` rfftn
+
+**Problem**: `np.fft.fftn`/`ifftn` computes the full complex spectrum for real-valued input. Since the input is real, the spectrum has conjugate symmetry — half the data is redundant.
+
+**Location**: `src/python/starfinder/registration/phase_correlation.py`
+
+**Fix**: Use `np.fft.rfftn`/`irfftn`. The last axis is halved from X to X//2+1. Produces complex64 arrays at ~50% the size. Mathematically equivalent (same argmax, relative diff ~4×10⁻⁷).
+
+### 3.3 `apply_shift` Integer Fast Path
+
+**Problem**: Phase correlation always returns integer shifts, but `apply_shift` used `fourier_shift` → FFT round-trip, allocating full complex arrays.
+
+**Location**: `src/python/starfinder/registration/phase_correlation.py`
+
+**Fix**: For integer shifts, use `np.roll` + zero-fill (no FFT). Sub-pixel shifts fall back to the FFT path.
+
+**Results (streaming + memory fixes vs batch baseline)**:
+- tissue-2D: 19.9 → 11.0 GB (44-45% reduction), 2.2x faster
+- cell-culture-3D: 5.5 → 2.8 GB (48-51% reduction), 2.3x faster
+
+---
+
+## Tier 4: Demons Registration Efficiency
+
+### Motivation
+
+Registration remains the dominant bottleneck at 44-60% of runtime. After Tiers 1-3 optimized everything *around* demons (streaming, global-reg FFTs, extraction), the demons algorithm itself is the next target. The current anti-aliased pyramid implementation has several memory and compute inefficiencies that can be fixed **without changing the algorithm**, preserving exact registration quality.
+
+### Profiling: Where Demons Spends Time and Memory
+
+For tissue-2D (3072×3072×30, padded to 3072×3072×32), one round of `_run_antialias_pyramid`:
+
+| Operation | Time | Peak Memory Spike | Location |
+|-----------|------|-------------------|----------|
+| Pad + convert to float64 | ~1s | 2 × 2.3 GB = **4.6 GB** | `demons.py:141-146` |
+| Level 0: `antialias_resize` FFT (0.25×) | ~40-50s | **4.8 GB** (complex128 at full res) | `pyramid.py:87` |
+| Level 0: demons (100 iter) | ~80-100s | ~0.1 GB (coarse) | `demons.py:173` |
+| Level 1: `antialias_resize` FFT (0.5×) | ~30-40s | ~1.2 GB | `pyramid.py:87` |
+| Level 1: field upsample + crop/pad | ~5s | ~1.0 GB (3 tmp arrays) | `demons.py:177-198` |
+| Level 1: demons (50 iter) | ~50-70s | ~0.5 GB | `demons.py:205` |
+| Level 2: no downsample (factor=1.0) | 0s | 0 | — |
+| Level 2: field upsample + crop/pad | ~10s | ~6.9 GB (full-res field × 3 components) | `demons.py:177-198` |
+| Level 2: demons (25 iter) | ~60-80s | ~2 GB (SimpleITK internal) | `demons.py:205` |
+| Final displacement field | — | **6.9 GB** (Z×Y×X×3 float64) | `demons.py:208` |
+| `apply_deformation` × 4 channels | ~60-80s | ~2.3 GB per call (volume + field copies) | `demons.py:327,336` |
+
+**Key insight**: The `antialias_resize` FFT at level 0 creates a **4.8 GB complex128 spike** from a full-resolution volume — larger than the demons iterations themselves. And `apply_deformation` redundantly converts the displacement field to SimpleITK 4 times (once per channel).
+
+### 4.1 Use `rfftn`/`irfftn` in `antialias_resize`
+
+**Problem**: `pyramid.py:87` uses full-spectrum FFT on real-valued input:
+```python
+vol = np.real(np.fft.ifftn(np.fft.fftn(vol) * filt))
+```
+`fftn` produces complex128 arrays at the full input size. Since the input is real, conjugate symmetry means half the spectrum is redundant.
+
+**Location**: `src/python/starfinder/registration/pyramid.py` lines 81-87
+
+**Fix**: Use `rfftn`/`irfftn` (real-input FFT). The last axis is halved from X to X//2+1:
+```python
+# Also update butterworth_3d to accept rfft_shape for last axis
+filt = butterworth_3d_rfft(vol.shape, cutoff, order=2)
+vol = np.fft.irfftn(np.fft.rfftn(vol) * filt, s=vol.shape)
+```
+
+`butterworth_3d` must be updated to produce a half-spectrum filter: the last axis uses `np.fft.rfftfreq(X)` (length X//2+1) instead of `np.fft.fftfreq(X)` (length X). The first N-1 axes still use `fftfreq`.
+
+**Precedent**: Already proven in `phase_correlate` (Tier 3.2). Same pattern — real input, real output, half-spectrum FFT.
+
+**Expected impact** (tissue-2D level 0 downsample):
+- Current: complex128 at 3072×3072×32 = **4.8 GB**
+- Proposed: complex128 at 3072×3072×17 = **2.5 GB**
+- **Saves ~2.3 GB peak spike per FFT call**
+- Butterworth filter also halved: 2.3 GB → 1.2 GB
+
+**Difficulty**: Low — same pattern as phase_correlate rfftn fix.
+
+### 4.2 Use float32 Precision in Antialias Pyramid
+
+**Problem**: `demons.py:145-146` converts padded volumes to float64 to "match MATLAB's double precision." But:
+- The **sitk pyramid path** (line 67-68) already uses float32 successfully
+- Displacement magnitudes are typically 1-5 pixels — float32 has 7 significant digits, more than enough
+- SimpleITK internally uses float32 for demons computation regardless of input precision
+- The output is applied to uint8 images — float64 warp precision is wasted
+
+**Location**: `src/python/starfinder/registration/demons.py` lines 145-146; `pyramid.py` line 81
+
+**Fix**: Use float32 throughout the antialias pipeline:
+```python
+fixed_padded = fixed_padded.astype(np.float32)
+moving_padded = moving_padded.astype(np.float32)
+```
+And in `antialias_resize`:
+```python
+vol = volume.astype(np.float32)
+# FFT produces complex64 instead of complex128 → half memory
+```
+
+**Expected impact** (tissue-2D):
+- Padded volumes: 2 × 2.3 GB → 2 × 1.15 GB (**-2.3 GB**)
+- FFT arrays: complex128 → complex64 (**additional 50% reduction**, stacks with rfftn)
+- Butterworth filter: float64 → float32 (**-50%**)
+- Displacement field: 6.9 GB → 3.45 GB (**-3.45 GB**)
+- **Combined with rfftn: level 0 FFT spike drops from 4.8 GB → ~0.6 GB (8x reduction)**
+
+**Risk**: Low — need to verify registration quality is preserved. Run E2E on small synthetic to confirm NCC/Match Rate unchanged.
+
+**Difficulty**: Low — change dtype constants.
+
+### 4.3 Eliminate Redundant `.astype()` Copies
+
+**Problem**: Several `.astype(np.float64)` calls create unnecessary copies when the array is already the target dtype:
+
+1. `demons.py:166-167` — `fixed_level` from `antialias_resize` is already float64; `.astype(np.float64)` copies the entire volume
+2. `demons.py:201` — `upsampled` is already float64; `.astype(np.float64)` on the reversed view copies the entire field
+3. `demons.py:327` — `volume.astype(np.float64)` in `apply_deformation` always copies even for float64 input
+4. `demons.py:336` — `field_sitk_order.astype(np.float64)` always copies the displacement field
+
+**Location**: `src/python/starfinder/registration/demons.py` lines 166-167, 201, 327, 336
+
+**Fix**: Guard with dtype check, or use `np.asarray(arr, dtype=target)` which avoids copying when already correct:
+```python
+# Before:
+fixed_sitk = sitk.GetImageFromArray(fixed_level.astype(np.float64))
+
+# After:
+fixed_sitk = sitk.GetImageFromArray(np.ascontiguousarray(fixed_level))
+```
+
+**Expected impact** (tissue-2D): Eliminates 4 redundant full-volume copies totaling **~14 GB** of transient allocations across a single registration call.
+
+**Difficulty**: Trivial — single-line changes.
+
+### 4.4 Reuse `DisplacementFieldTransform` Across Channels
+
+**Problem**: `register_volume_local` (line 408-409) calls `apply_deformation` independently for each of 4 channels. Each call:
+1. Converts the displacement field from (dz,dy,dx) → (dx,dy,dz) via `.astype()` — **creates a copy of the 6.9 GB field**
+2. Creates a `sitk.DisplacementFieldTransform` — wraps the field in SimpleITK
+3. Creates a `sitk.ResampleImageFilter` — sets up interpolation
+
+The displacement field is identical for all channels. Steps 1-3 are redundant 3 out of 4 times.
+
+**Location**: `src/python/starfinder/registration/demons.py` lines 357-411
+
+**Fix**: Factor out transform setup, reuse for all channels:
+```python
+def register_volume_local(images, ref_image, mov_image, **kwargs):
+    displacement_field = demons_register(ref_image, mov_image, **kwargs)
+
+    sitk = _import_sitk()
+    input_dtype = images.dtype
+
+    # Create transform ONCE
+    field_sitk_order = displacement_field[..., ::-1]
+    field_sitk = sitk.GetImageFromArray(
+        np.ascontiguousarray(field_sitk_order, dtype=np.float64), isVector=True
+    )
+    transform = sitk.DisplacementFieldTransform(field_sitk)
+
+    resampler = sitk.ResampleImageFilter()
+    resampler.SetInterpolator(sitk.sitkLinear)
+    resampler.SetDefaultPixelValue(0)
+    resampler.SetTransform(transform)
+
+    # Apply to each channel (only Execute per channel)
+    n_channels = images.shape[-1]
+    registered = np.empty_like(images)
+    for c in range(n_channels):
+        vol_sitk = sitk.GetImageFromArray(images[:,:,:,c].astype(np.float64))
+        resampler.SetReferenceImage(vol_sitk)
+        warped = resampler.Execute(vol_sitk)
+        registered[:,:,:,c] = sitk.GetArrayFromImage(warped).astype(input_dtype)
+
+    return registered, displacement_field
+```
+
+**Expected impact**:
+- **Memory**: Eliminates 3 redundant field copies (3 × 6.9 GB = **20.7 GB transient** for tissue-2D)
+- **Time**: Saves ~15-20s of setup overhead per round (~40-60s total across all channels)
+
+**Difficulty**: Low — refactor loop in `register_volume_local`.
+
+### 4.5 Pre-allocate Field Upsample Buffer
+
+**Problem**: `demons.py:184-198` creates a `tmp = np.zeros(target_shape)` array 3 times (once per displacement component dz, dy, dx), each the full size of the current pyramid level.
+
+**Location**: `src/python/starfinder/registration/demons.py` lines 184-198
+
+**Fix**: Pre-allocate a single buffer and reuse:
+```python
+tmp = np.zeros(target_shape, dtype=np.float64)
+for d in range(3):
+    tmp[:] = 0
+    tmp[slices] = upsampled[..., d][src_slices]
+    upsampled[..., d] = tmp
+```
+
+**Expected impact**: Minor — saves 2 array allocations at full resolution (~4.6 GB transient for tissue-2D).
+
+**Difficulty**: Trivial.
+
+### 4.6 Cache Butterworth Filter Between Fixed/Moving
+
+**Problem**: At each pyramid level, `antialias_resize` is called for both `fixed_padded` and `moving_padded` with the same shape. Each call independently computes `butterworth_3d(vol.shape, cutoff)` — a full-sized float64 array.
+
+**Location**: `src/python/starfinder/registration/pyramid.py` lines 83-86
+
+**Fix**: Accept an optional pre-computed filter, or cache within `_run_antialias_pyramid`:
+```python
+if factor < 1.0:
+    cutoff = 0.5 * factor
+    filt = butterworth_3d(fixed_padded.shape, cutoff, order=2)  # compute once
+    fixed_level = antialias_resize(fixed_padded, factor, filt=filt)
+    moving_level = antialias_resize(moving_padded, factor, filt=filt)
+```
+
+**Expected impact**: Minor time savings (~2-5s per level). Also avoids a ~2.3 GB transient allocation per level.
+
+**Difficulty**: Trivial — add optional parameter.
+
+---
+
+## Tier 5: Hybrid Registration (FFT Global + Spot-Based Local)
 
 Registration is 44-60% of runtime. The current approach uses phase correlation for global alignment and demons for local refinement. The strategy is to **keep FFT-based phase correlation for global shifts** (proven, accurate in all 3 axes) and **replace demons with spot-based TPS for local refinement** (fast, sparse-native).
 
-### 3.1 Architecture
+### 5.1 Architecture
 
 ```
 Current:   phase_correlate (global) → demons (local)       ~290s per round
@@ -182,7 +418,7 @@ Proposed:  phase_correlate (global) → spot-based TPS (local) → demons (fallb
 - **Local deformation** is what demons spends 200+ seconds on. But for sparse fluorescence images (95-99% background), demons wastes computation on uninformative pixels. Spot-based TPS operates directly on the signal.
 - **Demons stays as fallback** for difficult cases (low spot count, large deformations)
 
-### 3.2 Spot-Based Local Registration (TPS)
+### 5.2 Spot-Based Local Registration (TPS)
 
 **Key feasibility findings**:
 - Spot detection is fast enough to run *before* registration: tissue-2D detects 67K spots in 30s (vs 290s demons)
@@ -243,7 +479,7 @@ field = field.reshape(Z, Y, X, 3)
 - If too few spots match (< ~100), TPS becomes unstable → fall back to demons
 - If TPS quality (NCC, Match Rate) is below threshold → fall back to demons
 
-### 3.3 Demons Early Stopping (Fallback Optimization)
+### 5.3 Demons Early Stopping (Fallback Optimization)
 
 When demons is used as fallback, it should converge faster since global alignment is already done.
 
@@ -257,12 +493,12 @@ SimpleITK's `DemonsRegistrationFilter` supports `AddCommand(EventEnum.sitkIterat
 
 **Difficulty**: Medium — need to implement callback, tune threshold, validate quality isn't degraded.
 
-### 3.4 External Libraries (if TPS is insufficient)
+### 5.4 External Libraries (if TPS is insufficient)
 
 - `probreg` — Coherent Point Drift (CPD): probabilistic, handles outliers, supports rigid/affine/nonrigid. `pip install probreg`
 - `pycpd` — Pure NumPy CPD: simpler, no dependencies. `pip install pycpd`
 
-### 3.5 Validation Plan
+### 5.5 Validation Plan
 
 Run a focused benchmark (all 6 datasets, 2 FOVs each) comparing:
 - Current: phase correlation + demons (baseline)
@@ -275,7 +511,7 @@ Metrics: NCC, Match Rate, runtime, peak memory. Accept if ≥ 95% of current qua
 
 ## Implementation Roadmap
 
-### Phase A: Quick Wins (1-2 sessions)
+### Phase A: Quick Wins (COMPLETED — commit 560f3f8)
 
 | Task | Files | Impact |
 |------|-------|--------|
@@ -283,9 +519,9 @@ Metrics: NCC, Match Rate, runtime, peak memory. Accept if ≥ 95% of current qua
 | A2. float32 normalization | `preprocessing/normalization.py` | 50% norm memory reduction |
 | A3. Vectorize color_seq concat | `dataset/fov.py` | Minor cleanup |
 
-**Tests**: All 155 unit + 8 E2E tests must pass unchanged.
+**Tests**: All 155 unit + 8 E2E tests pass unchanged.
 
-### Phase B: Streaming Pipeline (1-2 sessions)
+### Phase B: Streaming Pipeline (COMPLETED — commit cb520a7)
 
 | Task | Files | Impact |
 |------|-------|--------|
@@ -293,16 +529,39 @@ Metrics: NCC, Match Rate, runtime, peak memory. Accept if ≥ 95% of current qua
 | B2. Per-round load/enhance/register/extract | `dataset/fov.py` | Restructured pipeline flow |
 | B3. Validate streaming vs batch results | `test/test_e2e.py` | Bit-identical output |
 
-**Tests**: Add E2E test that runs streaming mode and compares output to batch mode.
+**Tests**: E2E test runs streaming mode and confirms identical output to batch mode.
 
-### Phase C: Hybrid Registration (2-3 sessions)
+### Phase C: Registration Memory Fixes (COMPLETED — commit 9a7ce22)
 
 | Task | Files | Impact |
 |------|-------|--------|
-| C1. Spot-based TPS local registration | New: `registration/pointset.py` | Replace demons: 290s → ~40s |
-| C2. Integration into FOV pipeline | `dataset/fov.py` | Wire TPS into `local_registration()` |
-| C3. Demons fallback + early stopping | `registration/demons.py` | Fallback: 20-40% faster |
-| C4. Benchmark TPS vs demons | Benchmark scripts | Validate on all 6 datasets |
+| C1. `_make_ref_3d` uint16 sum | `dataset/fov.py` | -3.2 GB on tissue volumes |
+| C2. `phase_correlate` rfftn/irfftn | `registration/phase_correlation.py` | ~50% less FFT memory |
+| C3. `apply_shift` integer fast path | `registration/phase_correlation.py` | No FFT for integer shifts |
+
+**Results**: tissue-2D: 19.9 → 11.0 GB (-45%), 2.2x faster.
+
+### Phase D: Demons Registration Efficiency (1-2 sessions)
+
+| Task | Files | Impact |
+|------|-------|--------|
+| D1. `rfftn`/`irfftn` in `antialias_resize` | `registration/pyramid.py` | -2.3 GB FFT spike (tissue) |
+| D2. float32 precision in antialias pyramid | `registration/demons.py`, `registration/pyramid.py` | Halve all array sizes |
+| D3. Eliminate redundant `.astype()` copies | `registration/demons.py` | -14 GB transient allocs |
+| D4. Reuse `DisplacementFieldTransform` across channels | `registration/demons.py` | -20 GB transient, -40s time |
+| D5. Pre-allocate field upsample buffer | `registration/demons.py` | -4.6 GB transient |
+| D6. Cache Butterworth filter | `registration/pyramid.py` | -2.3 GB transient, -5s |
+
+**Tests**: All 155 unit + 8 E2E tests must pass unchanged. Registration quality (NCC, Match Rate) identical — no algorithmic change.
+
+### Phase E: Hybrid Registration (2-3 sessions)
+
+| Task | Files | Impact |
+|------|-------|--------|
+| E1. Spot-based TPS local registration | New: `registration/pointset.py` | Replace demons: 290s → ~40s |
+| E2. Integration into FOV pipeline | `dataset/fov.py` | Wire TPS into `local_registration()` |
+| E3. Demons fallback + early stopping | `registration/demons.py` | Fallback: 20-40% faster |
+| E4. Benchmark TPS vs demons | Benchmark scripts | Validate on all 6 datasets |
 
 **Tests**: Registration quality benchmarks on all 6 datasets. NCC/Match Rate must meet or exceed current demons.
 
@@ -314,26 +573,30 @@ Metrics: NCC, Match Rate, runtime, peak memory. Accept if ≥ 95% of current qua
 
 | After Phase | Runtime | Memory | Key Change |
 |-------------|---------|--------|------------|
-| Current | 510s | 20 GB | — |
+| Baseline | 510s | 20 GB | — |
 | Phase A (vectorize) | ~445s (-13%) | 18 GB | Extraction fixed |
 | Phase B (streaming) | ~460s (+3% I/O) | 7 GB (-65%) | 2 rounds in memory |
-| Phase C (spot-based TPS) | ~200s (-61%) | 7 GB | Local reg: 290s → ~45s |
+| Phase C (global reg memory) | ~230s (-55%) | 11 GB (-45%) | rfftn + integer roll |
+| **Phase D (demons efficiency)** | **~190s (-63%)** | **~6 GB (-70%)** | **float32 + reuse transform** |
+| Phase E (spot-based TPS) | ~120s (-76%) | ~5 GB (-75%) | Local reg: 290s → ~45s |
 
 ### cell-culture-3D Per-FOV (current: ~249s, 5.5 GB peak)
 
 | After Phase | Runtime | Memory | Key Change |
 |-------------|---------|--------|------------|
-| Current | 249s | 5.5 GB | Extraction 28% |
-| Phase A | ~190s (-24%) | 5 GB | Extraction vectorized |
+| Baseline | 249s | 5.5 GB | Extraction 28% |
+| Phase A (vectorize) | ~190s (-24%) | 5 GB | Extraction vectorized |
 | Phase B (streaming) | ~200s | 2 GB (-64%) | 2 rounds in memory |
-| Phase C (spot-based TPS) | ~100s (-60%) | 2 GB | Local reg: 110s → ~20s |
+| Phase C (global reg memory) | ~110s (-56%) | 2.8 GB (-49%) | rfftn + integer roll |
+| **Phase D (demons efficiency)** | **~90s (-64%)** | **~1.5 GB (-73%)** | **float32 + reuse transform** |
+| Phase E (spot-based TPS) | ~55s (-78%) | ~1.2 GB (-78%) | Local reg: 110s → ~20s |
 
 ---
 
 ## Validation Strategy
 
-1. **Correctness**: All 155 unit tests + 8 E2E tests must pass unchanged for Tiers 1-2
-2. **Registration quality**: For Tier 3 algorithmic changes, benchmark NCC and Match Rate against current demons on all 6 datasets. Accept if ≥ 95% of current quality.
+1. **Correctness**: All 155 unit tests + 8 E2E tests must pass unchanged for Phases A-D
+2. **Registration quality**: For Phase D, verify NCC and Match Rate are unchanged (no algorithmic change, only precision/memory). For Phase E, benchmark against demons on all 6 datasets. Accept if ≥ 95% of current quality.
 3. **Memory profiling**: Use `/proc/self/status` RSS tracking (already in benchmark scripts)
 4. **Regression benchmarks**: Re-run E2E on `small` synthetic dataset after each phase
 
@@ -341,9 +604,9 @@ Metrics: NCC, Match Rate, runtime, peak memory. Accept if ≥ 95% of current qua
 
 ## Dependencies
 
-- **Tiers 1-2**: No new packages (NumPy, SciPy, scikit-image already available)
-- **Tier 3 (core)**: No new packages — TPS uses `scipy.interpolate.RBFInterpolator`, spot matching uses `scipy.spatial.cKDTree`
-- **Tier 3 (optional)**: `probreg` or `pycpd` for CPD if TPS is insufficient
+- **Phases A-D**: No new packages (NumPy, SciPy, scikit-image, SimpleITK already available)
+- **Phase E (core)**: No new packages — TPS uses `scipy.interpolate.RBFInterpolator`, spot matching uses `scipy.spatial.cKDTree`
+- **Phase E (optional)**: `probreg` or `pycpd` for CPD if TPS is insufficient
 
 ---
 
