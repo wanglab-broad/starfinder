@@ -16,3 +16,6 @@ workflow/.snakemake
 workflow/snakemake-logs
 .snakemake
 
+# Agent session artifacts
+.codex
+

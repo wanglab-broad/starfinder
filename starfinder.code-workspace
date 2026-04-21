@@ -5,6 +5,9 @@
 		},
 		{
 			"path": "../../wanglab/Data/Analyzed/sample-dataset"
+		},
+		{
+			"path": "../../wanglab/jiahao/test/starfinder_benchmark"
 		}
 	]
 }
