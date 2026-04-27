@@ -2055,3 +2055,70 @@ Investigated four hypotheses for why certain pads dominate:
 ### Config Correction
 
 Fixed CLAUDE.md aging dataset entry: changed `seg1 end="CC", seg2 end="AT"(STAR)/"TT"(RIBO)` to `end_base=["CC","TT"] (seg1/seg2)`. The end_base config applies to both probe types identically — there is no STAR/RIBO distinction for end_base.
+
+---
+
+## Postcode Decoder Benchmark Status (2026-04-27)
+
+Plan: `docs/plans/2026-04-21-postcode-decoding-benchmark-plan.md` (FINISHED)
+
+Follow-up status plan: `docs/plans/2026-04-27-project-status-and-plan.md` (FINISHED)
+
+Benchmark location:
+`/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/decoding/postcode/`
+
+### Repo-Side Helper
+
+Added `extract_intensity_tensor()` in `starfinder.barcode.extraction` and
+exported it from `starfinder.barcode`. The helper uses the same zero-padded
+neighborhood sum as `extract_from_location()` but returns raw intensity tensors
+with shape `(N, C, R)` for probabilistic decoders.
+
+Focused verification passed:
+
+```bash
+cd src/python
+uv run pytest test/test_extraction.py -v
+# 9 passed in 0.32s
+```
+
+### Synthetic Medium Findings
+
+Detected-spot benchmark, 2 FOVs:
+
+| FOV | Input spots | SF assigned | PC assigned | Agreement | SF accuracy | PC top1 accuracy | PC p80 accuracy | PC time | Peak RSS |
+|-----|-------------|-------------|-------------|-----------|-------------|------------------|-----------------|---------|----------|
+| FOV_001 | 449 | 306 | 322 | 0.675 | 0.675 | 0.715 | 0.996 | 1.50s | 606 MB |
+| FOV_002 | 457 | 348 | 418 | 0.757 | 0.748 | 0.908 | 1.000 | 0.91s | 900 MB |
+
+Interpretation: tensor ordering and codebook one-hot encoding are likely
+correct. Postcode increases assigned calls on synthetic data, and the
+high-confidence `p >= 0.8` calls are very clean. This supports keeping the raw
+intensity helper, but synthetic success alone does not justify pipeline
+integration.
+
+### Aging Smoke Findings
+
+`Position400 --spot-limit 5000 --num-iter 30 --batch-size 5000`:
+
+| Input spots | Full detected spots | SF assigned | PC assigned | Agreement | Base-gene count rho | Top10 Jaccard | PC time | Peak RSS |
+|-------------|---------------------|-------------|-------------|-----------|---------------------|---------------|---------|----------|
+| 5,000 | 682,811 | 3,015 | 4,945 | 0.578 | 0.749 | 0.667 | 445.6s | 40,960 MB |
+
+Interpretation: aging is the relevant production test, but the current Postcode
+execution strategy is not practical for full-FOV aging. A 5k-spot subset already
+uses about 40 GB RSS, and one full FOV has 682,811 detected spots. The 50k smoke
+and 2-FOV aging benchmark should remain blocked until memory use is reduced.
+
+GPU synthetic runs were completed but are not clearly useful at this small
+scale because overhead dominates. Aging GPU attempts produced partial inputs but
+no completed comparison CSV, so they are not treated as successful benchmark
+results.
+
+### Decision
+
+No more Postcode runs on 2026-04-27. Commit the repo-side tensor helper and
+documentation. The next decoder work should be a memory-strategy experiment,
+not a larger aging run: chunk spot inputs, avoid saving full probability
+matrices, save compact top-call outputs, and compare chunked calls against the
+existing 5k smoke before scaling to 50k or a full FOV.

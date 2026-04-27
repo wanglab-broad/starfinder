@@ -8,7 +8,7 @@ from starfinder.barcode.encoding import (
     decode_color_seq,
     encode_bases,
 )
-from starfinder.barcode.extraction import extract_from_location
+from starfinder.barcode.extraction import extract_from_location, extract_intensity_tensor
 from starfinder.barcode.filtering import filter_reads
 
 __all__ = [
@@ -18,6 +18,7 @@ __all__ = [
     "decode_color_seq",
     "encode_bases",
     "extract_from_location",
+    "extract_intensity_tensor",
     "filter_reads",
     "load_codebook",
 ]

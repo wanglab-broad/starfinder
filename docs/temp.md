@@ -2,6 +2,26 @@
 Note: this is not a TODO list.
 
 --- 
+2026-04-21
+follow-up questions:
+1. can we divide the all spots into chunks with 5000 spots each and run it chunk by chunk? does this stratergy make sense?
+2. can you help run the test again with GPU acceleration? keep the current results for comparison 
+
+
+two questions:
+1. how many conputational resources would it take to decode all spots detected in a single FOV of the aging datatset?
+2. Did the current run use GPU acceleration? 
+
+
+Here are my responses: 
+1. testing with aging dataset should be done since we need to figure out wheather this tool is helpful in real production case. we can test it with the synthetic data first and also benchmark the time and memory usage to predict the fieability.  
+2. yes, we need to redo the spot detection and create a new intensity matrix for each position as common input 
+3. what does this point mean? can you elaborate more 
+4. approve
+5. approve
+6. approve
+7. approve
+8. save the full matrix for synthetic data first, then decide for the real data later. 
 
 2026-03-30 
 paused cpd registraion 

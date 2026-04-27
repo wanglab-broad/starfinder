@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from starfinder.barcode import extract_from_location
+from starfinder.barcode import extract_from_location, extract_intensity_tensor
 
 
 def _make_spots(*positions):
@@ -114,3 +114,46 @@ class TestExtractFromLocation:
         # With only one channel having signal, normalized max ≈ 1.0
         # so -log(1.0) ≈ 0 (with small epsilon correction)
         assert color_score[0] < 0.01
+
+
+class TestExtractIntensityTensor:
+    """Tests for extract_intensity_tensor function."""
+
+    def test_argmax_matches_extract_from_location_across_rounds(self):
+        """Raw tensor argmax matches per-round winner-take-all calls."""
+        round1 = np.zeros((5, 32, 32, 4), dtype=np.uint8)
+        round2 = np.zeros((5, 32, 32, 4), dtype=np.uint8)
+        spots = _make_spots((2, 10, 10), (3, 20, 20))
+
+        # Spot 0: round1 -> channel 2, round2 -> channel 4.
+        # Spot 1: round1 -> channel 1, round2 -> channel 3.
+        # Signals are offset from the center to exercise neighborhood pooling.
+        round1[2, 10, 11, 1] = 100
+        round1[3, 20, 19, 0] = 120
+        round2[2, 11, 10, 3] = 130
+        round2[4, 20, 20, 2] = 140
+
+        images = {"round1": round1, "round2": round2}
+        round_order = ["round1", "round2"]
+
+        tensor = extract_intensity_tensor(
+            images, spots, round_order, voxel_size=(1, 1, 1)
+        )
+        tensor_seq = np.array(
+            [
+                "".join(str(channel + 1) for channel in row.argmax(axis=0))
+                for row in tensor
+            ],
+            dtype=object,
+        )
+
+        expected_cols = []
+        for round_name in round_order:
+            color_seq, _ = extract_from_location(
+                images[round_name], spots, voxel_size=(1, 1, 1)
+            )
+            expected_cols.append(color_seq)
+        expected = np.char.add(expected_cols[0].astype(str), expected_cols[1].astype(str))
+
+        assert tensor.shape == (2, 4, 2)
+        np.testing.assert_array_equal(tensor_seq, expected)
