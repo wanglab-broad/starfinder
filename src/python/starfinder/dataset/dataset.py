@@ -90,11 +90,12 @@ class STARMapDataset:
             )
             if subtile_params.get("run") or subtile_params.get("sqrt_pieces"):
                 sqrt_pieces = subtile_params.get("sqrt_pieces", 4)
-                sdata.subtile = SubtileConfig.compute_windows(
+                subtile = SubtileConfig(sqrt_pieces=sqrt_pieces)
+                subtile.compute_windows(
                     height=config.get("img_row", 0),
                     width=config.get("img_col", 0),
-                    sqrt_pieces=sqrt_pieces,
                 )
+                sdata.subtile = subtile
                 break
 
         return sdata

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from starfinder.dataset import STARMapDataset
+from starfinder.dataset import CropWindow, STARMapDataset
 
 
 @pytest.fixture
@@ -63,3 +63,32 @@ class TestSTARMapDataset:
         sample_config["channel_order"] = ["ch00", "ch01", "ch02", "ch03"]
         ds = STARMapDataset.from_config(sample_config)
         assert ds.channel_order == ["ch00", "ch01", "ch02", "ch03"]
+
+    @pytest.mark.parametrize(
+        "rule_name", ["gr_single_fov_subtile", "deep_create_subtile"]
+    )
+    def test_from_config_builds_subtile_windows(self, sample_config, rule_name):
+        sample_config.update(
+            {
+                "img_row": 100,
+                "img_col": 100,
+                "rules": {
+                    rule_name: {
+                        "parameters": {
+                            "create_subtiles": {"run": True, "sqrt_pieces": 2}
+                        }
+                    }
+                },
+            }
+        )
+
+        ds = STARMapDataset.from_config(sample_config)
+
+        assert ds.subtile is not None
+        assert ds.subtile.sqrt_pieces == 2
+        assert ds.subtile.windows == [
+            CropWindow(0, 52, 0, 52),
+            CropWindow(0, 52, 48, 100),
+            CropWindow(48, 100, 0, 52),
+            CropWindow(48, 100, 48, 100),
+        ]
