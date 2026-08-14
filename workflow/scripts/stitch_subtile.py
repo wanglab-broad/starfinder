@@ -46,7 +46,9 @@ reads_df.to_csv(snakemake.output[0], index=False)
 # visualize reads on ref_merged
 ref_merged_img_path = os.path.join(image_path, 'ref_merged', f'{current_fov_id}.tif')
 ref_merged_img = imread(ref_merged_img_path)  
-if ref_merged_img.ndim == 3:
+if ref_merged_img.ndim == 4:
+    ref_merged_img = np.max(ref_merged_img, axis=(0, 3))
+elif ref_merged_img.ndim == 3:
     ref_merged_img = np.max(ref_merged_img, axis=0)
 
 plt.figure(figsize=(15,15))
