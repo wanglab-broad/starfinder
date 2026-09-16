@@ -38,6 +38,11 @@ build-backend = "hatchling.build"
 packages = ["starfinder"]
 
 [dependency-groups]
+docs = [
+    "sphinx>=8.1,<9",
+    "myst-parser>=4,<5",
+    "pydata-sphinx-theme>=0.16,<0.17",
+]
 dev = [
     "ipykernel>=7.1.0",
     "jupyter>=1.1.1",

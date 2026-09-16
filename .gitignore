@@ -30,3 +30,7 @@ workflow/snakemake-logs
 /docs/notes.md
 /docs/temp.md
 /docs/plan_milestone_*.md
+
+# Sphinx-generated files (build output should normally live outside the checkout)
+/docs/_build/
+/docs/api/generated/

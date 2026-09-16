@@ -186,6 +186,7 @@ All benchmarks at `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/{m
 - Record progress at meaningful decisions, blockers, handoffs, and completion. The completion summary must identify code/PR and commit/push/merge state, exact commands/configuration/data/environment, validation actually performed, artifacts, limitations, and follow-ups. If code is uncommitted, record that and preserve an identifiable patch/snapshot.
 - Set an implementation issue to `Done` only after its acceptance checklist and evidence are complete; verify assignee, milestone, status, and milestone progress. Chapter evidence/writing issues remain open until the thesis agent assesses the results and incorporates accepted reasoning and figure provenance. Null results can satisfy a benchmark task.
 - Current status and validation evidence live in Linear. [Historical plans and results](https://linear.app/jiahaoh/document/historical-record-index-and-migration-provenance-881cc5edc52b) preserve old claims with their dates and provenance; they do not establish current completion or correctness.
+- The authorized autonomous documentation pilot uses one active worker per project and a fresh CLI session per issue, with bounded same-issue repairs. Carry accepted code forward on the dedicated project branch; record session ID, host/worktree, revisions, commands, validation, and stop/resume state in Linear. Sidebar visibility is optional. Successful agent exit alone is not acceptance; preserve blockers and leave unresolved issues open. Follow the linked workflow and the current issue's implementation/validation handoff instructions.
 
 ### Plans and artifact storage
 
@@ -211,7 +212,6 @@ All benchmarks at `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/{m
 - After implementing changes, run `uv run pytest test/ -v` and report results before committing.
 - Run Python with `uv run python` (from `src/python/`)
 - The `~/wanglab` directory is a network mount. Use `Write` instead of `Edit` tool to avoid false "file modified" errors.
-- Always ask before using `git push`
 - Commit messages: review git history. Use numbered messages for new modules/major changes; otherwise use `prefix(info): message`.
 
 #### Key Conventions

@@ -2,6 +2,9 @@
 
 Python backend for the STARfinder spatial transcriptomics pipeline.
 
+See the [documentation build guide](../../docs/README.md) for the local Sphinx site
+and generated Python API reference.
+
 ## Installation
 
 ```bash

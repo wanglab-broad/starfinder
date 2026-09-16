@@ -2,6 +2,25 @@
 
 This directory is for maintained software documentation: installation, usage, API behavior, architecture, and reproducible examples.
 
+## Build and preview the site
+
+The site uses Sphinx, MyST Markdown, and the PyData theme. From the repository root:
+
+```bash
+cd src/python
+uv sync --locked --no-default-groups --group docs
+DOCS_OUTPUT=/absolute/path/outside/checkout/starfinder-docs-html
+uv run --group docs sphinx-build -n -W --keep-going -b html ../../docs "$DOCS_OUTPUT"
+uv run python -m http.server 8000 --bind 127.0.0.1 --directory "$DOCS_OUTPUT"
+```
+
+Replace the output path with a fresh external directory, then open
+<http://127.0.0.1:8000/> on the build host. Stop the preview with Ctrl-C.
+See [contributing](contributing.md) for import requirements and validation details,
+and [the site index](index.md) for current coverage. No microscopy data or MATLAB
+license is needed to build the site. Exact dependency resolutions are in
+`src/python/uv.lock`; the dependency group is named `docs`.
+
 ## Software entry points
 
 - [Project overview and setup](../README.md)
