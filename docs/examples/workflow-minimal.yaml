@@ -1,0 +1,37 @@
+# Minimal Python direct-mode example. Replace /absolute paths for real data,
+# or use prepare_workflow.py to materialize a dry-run-only input tree.
+config_path: /absolute/run/config.yaml
+starfinder_path: /absolute/starfinder
+root_input_path: /absolute/input
+root_output_path: /absolute/output
+# Parsed even when the associated downstream rules are disabled:
+envs_path: /absolute/conda-envs
+fiji_path: /absolute/Fiji.app/ImageJ-linux64
+dataset_id: example
+sample_id: sample
+output_id: direct
+fov_id_pattern: tile_{i}
+n_fovs: 1
+n_rounds: 4
+ref_round: round1
+rotate_angle: 0
+img_col: 32
+img_row: 32
+backend: python
+workflow_mode: direct
+subset_list: []
+subset_range: false
+subset_start: 1
+subset_end: 1
+subset_random: false
+n_random_tests: 1
+additional_round: []
+seq_channel_order: [ch00, ch02, ch01, ch03]
+rules:
+  rsf_single_fov:
+    run: true
+    parameters:
+      global_registration: {run: true}
+      spot_finding: {run: true, intensity_estimation: noise, intensity_threshold: 5.0}
+      reads_extraction: {run: true, voxel_size: [1, 2, 2]}
+      reads_filtration: {run: true, end_base: CC, start_base: C}
