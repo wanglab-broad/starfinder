@@ -2,6 +2,8 @@
 
 Python backend for the STARfinder spatial transcriptomics pipeline.
 
+Documentation publication URL: <https://wanglab-broad.github.io/starfinder/>.
+
 See the [documentation build guide](../../docs/README.md) for the local Sphinx site
 and generated Python API reference.
 Start with the [Python image-to-molecule quickstart](../../docs/getting-started.md)

@@ -17,7 +17,8 @@ permissions:
 
 concurrency:
   group: docs-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # Do not interrupt a publication already in flight.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/codex/docs-autonomous' }}
 
 jobs:
   docs:
@@ -67,6 +68,30 @@ jobs:
         timeout-minutes: 5
         run: |
           uv run --group docs sphinx-build -n -W --keep-going -b linkcheck ../../docs "$DOCS_RUN/linkcheck" 2>&1 | tee "$DOCS_RUN/linkcheck.log"
+      - name: Record publication revision
+        if: github.event_name == 'push' && github.ref == 'refs/heads/codex/docs-autonomous'
+        run: |
+          uv run --group docs python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          run_url = f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
+          metadata = {
+              "revision": os.environ["GITHUB_SHA"],
+              "ref": os.environ["GITHUB_REF"],
+              "run_url": run_url,
+              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+          }
+          (Path(os.environ["DOCS_RUN"]) / "html" / "build-info.json").write_text(
+              json.dumps(metadata, indent=2) + "\n", encoding="utf-8"
+          )
+          PY
+      - name: Upload Pages site
+        if: github.event_name == 'push' && github.ref == 'refs/heads/codex/docs-autonomous'
+        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
+        with:
+          path: ${{ runner.temp }}/docs-validation/html
       - name: Record validation scope
         if: always()
         env:
@@ -96,3 +121,26 @@ jobs:
             ${{ runner.temp }}/docs-validation/quickstart/synthetic_config.json
             ${{ runner.temp }}/docs-validation/recipes/summary.json
             ${{ runner.temp }}/docs-validation/linkcheck/output.*
+            ${{ runner.temp }}/docs-validation/html/build-info.json
+
+  deploy:
+    # Only the selected publication branch can deploy; PRs remain read-only.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/codex/docs-autonomous'
+    needs: docs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: github-pages
+      cancel-in-progress: false
+    steps:
+      - name: Check Pages configuration
+        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
+      - name: Deploy checked documentation
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4

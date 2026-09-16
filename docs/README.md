@@ -2,6 +2,10 @@
 
 This directory is for maintained software documentation: installation, usage, API behavior, architecture, and reproducible examples.
 
+The documentation publication URL is <https://wanglab-broad.github.io/starfinder/>.
+See [publishing and release verification](contributing.md#publish-and-verify-a-release)
+for the selected branch, deployment checks and how to identify the live revision.
+
 ## Build and preview the site
 
 The site uses Sphinx, MyST Markdown, and the PyData theme. From the repository root:

@@ -150,7 +150,62 @@ installation/build/example logs, interpreter/package versions, seed/config and
 example summaries for 14 days. It also retains linkcheck output when requested.
 Record the run URL, tested commit and result in the PR/issue before calling CI
 verified. Copy cited evidence to durable external storage before artifact expiry.
-This workflow validates documentation; it does not deploy a website.
+Successful push runs on `codex/docs-autonomous` also publish the checked HTML
+as described below. Pull requests, `main`, `dev` and manual dispatch validate
+only; they do not publish.
+
+### Publish and verify a release
+
+The publication URL is <https://wanglab-broad.github.io/starfinder/>. The selected
+source branch is **`codex/docs-autonomous`**; it is independent of the repository's
+default branch, `main`. Repository **Settings → Pages → Build and deployment**
+must use **GitHub Actions**. The `github-pages` environment must permit the
+selected branch. Changing the publication branch requires updating both push
+guards in the build job, the deploy-job guard and the environment's deployment
+branch policy. Keep the branch in the workflow's push trigger list as well.
+See [GitHub's custom workflow requirements](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
+
+Every push to the selected branch triggers publishing, including documentation,
+docstring and dependency edits. The workflow first passes the strict build and
+bounded examples, adds `build-info.json` with the source revision and Actions run
+URL, then uploads the HTML through `actions/upload-pages-artifact`. The dependent
+`deploy` job uses `actions/deploy-pages`, with `pages: write` and `id-token: write`
+restricted to that job. PR checks have no deployment permissions. There is no
+generated-site branch and no Jekyll transformation; Sphinx's relative links keep
+`_static`, `_modules`, API and search assets under `/starfinder/`.
+
+After a reviewed change is committed and pushed to the selected branch:
+
+1. Open its **Documentation** Actions run. Confirm the `docs` and `deploy` jobs
+   succeeded for the expected SHA, and follow the `github-pages` environment URL.
+   Merely enabling Pages or passing a local build does not establish publication.
+2. Open `build-info.json` under the site URL. Match `revision` and `run_url` to
+   the pushed commit/run; allow deployment propagation before diagnosing a stale
+   response. Record the public URL, revision and run URL in the release handoff.
+3. Open the home page and all eight navigation sections. Check a nested
+   [Python API page](api/python.rst), its function anchor and `[source]` backlink;
+   open [MATLAB dataset methods](api/matlab/dataset.rst) and
+   [workflow configuration](workflows.md). Follow links between guides and APIs.
+4. Search for `min_max_normalize` in the site's search UI and open a matching
+   API result. In browser developer tools, check for JavaScript errors and failed
+   requests to CSS, fonts, scripts and `searchindex.js`. Check nested pages as
+   well as the home page: assets must resolve beneath `/starfinder/`, not at the
+   host root. A downloaded search index alone does not verify interactive search.
+5. Retain the validation logs, published-page checks and limitations with the
+   release record. Confirm a documentation-changing **push** produced the
+   deployment; a manual run or settings change does not test that trigger.
+
+If the deployment fails, inspect Pages availability, the Actions permissions,
+the environment's branch policy and the failed job before changing code. A
+failed build must not publish; the previous successful site remains the release
+until a replacement deployment succeeds. Revert an unwanted documentation
+change in the selected branch and let normal checks/deployment run again. Do not
+force-push or mark an inaccessible site as verified. Keep this source branch
+until a reviewed migration updates the workflow and environment together.
+
+Publishing documents supported software usage. It does not validate optional
+backends, MATLAB execution, UGER submission, real-data provenance, biological
+accuracy or a cell-level endpoint; those need separate evidence.
 
 ### Optional imports and external links
 
