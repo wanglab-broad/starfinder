@@ -140,6 +140,7 @@ def generate_overview_grid(output_dir: Path) -> None:
 
 # Real dataset configurations
 # Structure: dataset_path/round{N}/fov/*_ch0{N}.tif
+#: Real-data extraction configuration, including file/FOV/round selections; source paths require local data.
 REAL_DATASETS = {
     "cell_culture_3D": {
         "path": "/home/unix/jiahao/wanglab/Data/Processed/sample-dataset/cell-culture-3D",
@@ -205,7 +206,7 @@ def extract_real_benchmark_data(
 ) -> dict:
     """Extract real dataset round1/round2 pairs for benchmarking.
 
-    Structure expected: dataset_path/round{N}/fov/*_ch0{N}.tif
+    Structure expected: ``dataset_path/round{N}/fov/*_ch0{N}.tif``
 
     Parameters
     ----------

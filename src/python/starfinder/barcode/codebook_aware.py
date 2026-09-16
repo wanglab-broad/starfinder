@@ -56,7 +56,27 @@ def _validate_codebook(
 
 
 def channel_probabilities(intensity_tensor: np.ndarray, eps: float = 1e-6) -> np.ndarray:
-    """Convert raw `(N, C, R)` intensities to per-round channel probabilities."""
+    """Convert raw `(N, C, R)` intensities to per-round channel probabilities.
+
+    Parameters
+    ----------
+    intensity_tensor : np.ndarray
+        Numeric neighborhood sums, shape ``(N, C, R)``. Nonfinite and negative
+        values become zero before adding eps.
+    eps : float
+        Positive additive pseudocount, default 1e-6, in input intensity units.
+
+    Returns
+    -------
+    np.ndarray
+        Float64 probabilities of the same shape, summing to one along C.
+        All-zero rounds become uniform distributions when C is positive.
+
+    Raises
+    ------
+    ValueError
+        Input is not 3D or eps is nonpositive.
+    """
     if intensity_tensor.ndim != 3:
         raise ValueError(
             f"Expected intensity tensor shape (N, C, R), got {intensity_tensor.shape}"
@@ -74,7 +94,28 @@ def channel_probabilities(intensity_tensor: np.ndarray, eps: float = 1e-6) -> np
 
 
 def wta_color_sequences(probs: np.ndarray) -> tuple[np.ndarray, pd.DataFrame]:
-    """Return WTA color sequences plus per-round margin diagnostics."""
+    """Return WTA color sequences plus per-round margin diagnostics.
+
+    Parameters
+    ----------
+    probs : np.ndarray
+        Channel probabilities, shape ``(N, C, R)``, with at least one channel.
+
+    Returns
+    -------
+    color_seq : np.ndarray
+        Object array of N strings. Labels are one-based channel numbers;
+        ``M`` means tied maxima (absolute tolerance 1e-12), ``N`` nonfinite input.
+    diagnostics : pd.DataFrame
+        Per-round top_channel (one-based), top_prob, second_prob and margin
+        (top minus second), plus min_round_margin. Round names use zero-based
+        indices, e.g. ``round0_margin``.
+
+    Raises
+    ------
+    ValueError
+        Input is not 3D or contains zero channels.
+    """
     if probs.ndim != 3:
         raise ValueError(f"Expected probabilities shape (N, C, R), got {probs.shape}")
 
@@ -123,7 +164,27 @@ def build_one_error_index(
     n_channels: int,
     n_rounds: int,
 ) -> dict[str, list[str]]:
-    """Map every one-color-error sequence to valid codebook candidates."""
+    """Map every one-color-error sequence to valid codebook candidates.
+
+    Parameters
+    ----------
+    seq_to_gene : dict[str, str]
+        Valid color-sequence to gene mapping; labels must be digits in 1..C.
+    n_channels : int
+        Channel count C (normally four).
+    n_rounds : int
+        Required sequence length R.
+
+    Returns
+    -------
+    dict[str, list[str]]
+        Each single-substitution sequence maps to sorted valid candidates.
+
+    Raises
+    ------
+    ValueError
+        Codebook lengths or color labels are invalid.
+    """
     _validate_codebook(seq_to_gene, n_channels, n_rounds)
 
     labels = [str(i + 1) for i in range(n_channels)]
@@ -159,7 +220,31 @@ def candidate_sequences(
     unknown_chars: str = "MN",
     max_hamming: int = 1,
 ) -> list[str]:
-    """Return valid codebook candidates near an observed WTA sequence."""
+    """Return valid codebook candidates near an observed WTA sequence.
+
+    Parameters
+    ----------
+    wta_seq : str
+        Observed sequence in one-based color labels or unknown_chars.
+    one_error_index : dict[str, list[str]]
+        Index from :func:`starfinder.barcode.build_one_error_index`.
+    seq_to_gene : dict[str, str]
+        Valid sequence-to-gene mapping.
+    unknown_chars : str
+        Labels counted as unknown edits, default ``MN``.
+    max_hamming : int
+        Maximum known mismatches plus unknown positions, default 1.
+
+    Returns
+    -------
+    list[str]
+        Exact match alone when present; otherwise sorted nearby sequences.
+
+    Raises
+    ------
+    ValueError
+        max_hamming is negative.
+    """
     if max_hamming < 0:
         raise ValueError("max_hamming must be non-negative")
     if wta_seq in seq_to_gene:
@@ -201,7 +286,29 @@ def score_candidates(
     candidates: list[str],
     eps: float = 1e-12,
 ) -> pd.DataFrame:
-    """Score candidate codebook sequences for one spot."""
+    """Score candidate codebook sequences for one spot.
+
+    Parameters
+    ----------
+    probs_for_spot : np.ndarray
+        One spot's channel probabilities, shape ``(C, R)``.
+    candidates : list[str]
+        Equal-length valid color sequences with labels in 1..C.
+    eps : float
+        Positive probability floor for logarithms, default 1e-12.
+
+    Returns
+    -------
+    pd.DataFrame
+        Columns ``seq``, ``score`` (sum of negative natural log probabilities,
+        lower is better), ``geomean_prob``. Sorted by score then sequence.
+        Empty candidates return an empty table with these columns.
+
+    Raises
+    ------
+    ValueError
+        Input is not 2D or candidate length/labels are invalid.
+    """
     if probs_for_spot.ndim != 2:
         raise ValueError(
             f"Expected one-spot probabilities shape (C, R), got {probs_for_spot.shape}"
@@ -280,7 +387,62 @@ def decode_codebook_aware(
     allow_exact: bool = True,
     allow_rescue: bool = True,
 ) -> pd.DataFrame:
-    """Decode intensities using exact WTA calls plus gated codebook rescue."""
+    """Decode intensities using exact WTA calls plus gated codebook rescue.
+
+    Parameters
+    ----------
+    intensity_tensor : np.ndarray
+        Raw numeric intensities ``(N, C, R)``; normalized by
+        :func:`starfinder.barcode.channel_probabilities`.
+    seq_to_gene : dict[str, str]
+        Color sequence (length R, labels 1..C) to gene mapping.
+    spot_ids : array-like or None
+        N identifiers retained in output; None uses zero-based row numbers.
+    max_hamming : int
+        Maximum known substitutions plus unknown rounds for rescue, default 1.
+    unknown_chars : str
+        Unknown WTA labels, default ``MN``.
+    min_corrected_round_margin : float or None
+        Despite the name, an UPPER bound on the original top-minus-second
+        probability margin at known corrected rounds, default 0.20. None
+        disables this gate; confidently called colors are otherwise protected.
+    min_score_delta : float
+        Minimum runner-up minus best candidate negative-log score, default 0.25.
+        A sole candidate has infinite separation.
+    min_geomean_prob : float
+        Minimum geometric mean probability of rescued sequence, default 0.45.
+    max_correction_penalty : float
+        Maximum extra negative-log score relative to WTA over changed known
+        rounds, default 1.50; unknown rounds do not contribute to this penalty.
+    allow_exact : bool
+        Default True: accept exact WTA matches before rescue gates.
+    allow_rescue : bool
+        Default True: consider nearby codebook sequences for non-exact calls.
+
+    Returns
+    -------
+    pd.DataFrame
+        One row per spot, including rejected rows. Columns: spot_id,
+        color_seq_wta, gene_wta, decoded_seq, gene, call_type, reject_reason,
+        hamming_to_wta, corrected_rounds, score, score_delta, geomean_prob,
+        min_round_margin, corrected_round_margin, mean_total_intensity.
+        call_type is exact, rescued_unknown, rescued_hK, or rejected.
+        corrected_rounds is a comma-separated string of zero-based round indices.
+        Scores use natural logarithms; probabilities/margins are dimensionless.
+        Empty input returns the same column schema.
+
+    Raises
+    ------
+    ValueError
+        Tensor is not 3D, max_hamming is negative, IDs have the wrong length,
+        or the codebook has invalid sequence lengths/color labels.
+
+    Notes
+    -----
+    Rejection reasons identify rescue_disabled, no_candidate, ambiguous_candidate,
+    too_many_edits, corrected_round_margin_too_high, correction_penalty_too_high,
+    or geomean_prob_too_low. This function does not mutate the input tensor.
+    """
     if intensity_tensor.ndim != 3:
         raise ValueError(
             f"Expected intensity tensor shape (N, C, R), got {intensity_tensor.shape}"

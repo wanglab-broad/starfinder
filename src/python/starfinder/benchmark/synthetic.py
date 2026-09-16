@@ -1,8 +1,11 @@
 """Unified synthetic data generation for STARfinder testing and benchmarking.
 
 This module provides:
+
 - Multi-round, multi-channel FOV datasets for E2E pipeline testing
+
 - Single-channel ref/moving pairs for registration benchmarking
+
 - Coordinate-first rendering: transforms are applied to spot positions
   before rendering, so images always contain clean analytical Gaussians
 
@@ -30,6 +33,7 @@ from starfinder.benchmark.presets import SIZE_PRESETS, SPOT_COUNTS, SHIFT_RANGES
 # ---------------------------------------------------------------------------
 
 # Test codebook: 8 genes with barcodes starting/ending with C
+#: Default list of (gene, nucleotide barcode) pairs for small synthetic datasets.
 TEST_CODEBOOK = [
     ("GeneA", "CACGC"),
     ("GeneB", "CATGC"),
@@ -116,6 +120,8 @@ def encode_barcode_to_colors(barcode: str) -> str:
 
 # Deformation configurations (as percentage of smallest XY dimension)
 # These will be scaled to actual pixels based on image size, with optional caps
+#: Named deformation dictionaries. Percentage fields are relative to min(Y, X),
+#: cap_px is in voxels. Use scale_deformation_config before rendering a field.
 DEFORMATION_CONFIGS = {
     "polynomial_small": {"type": "polynomial", "max_displacement_pct": 3.0, "cap_px": 15.0},
     "polynomial_large": {"type": "polynomial", "max_displacement_pct": 6.0, "cap_px": 30.0},
@@ -342,7 +348,50 @@ def apply_deformation_to_spots(
 
 @dataclass
 class SyntheticConfig:
-    """Configuration for synthetic dataset generation."""
+    """Configuration for synthetic dataset generation.
+
+    Parameters
+    ----------
+    height : int
+        Y pixels. Default 256.
+    width : int
+        X pixels. Default 256.
+    n_z : int
+        Z slices. Default 10.
+    n_fovs : int
+        Number of FOVs. Default 2.
+    n_rounds : int
+        Sequencing round count. Default 4.
+    n_channels : int
+        Channel count, normally four for the color codebook. Default 4.
+    n_spots_per_fov : int
+        Number of sampled spots per FOV. Default 50.
+    spot_sigma : float
+        Gaussian spot width in voxel units. Default 1.5.
+    spot_intensity : tuple[int, int]
+        Inclusive minimum/maximum sampled peak intensities. Default (200, 255).
+    background_mean : int
+        Constant rendering background intensity. Default 20.
+    background_std : int
+        Compatibility field; currently unused by dataset generation. Default 5.
+    noise_std : int
+        Gaussian noise standard deviation in intensity units. Default 10.
+    add_noise : bool
+        Whether to add noise. Default True.
+    dtype : Literal['uint8', 'uint16']
+        Output uint8 or uint16. Default 'uint8'.
+    max_shift_xy : int
+        Maximum sampled X/Y translation magnitude in voxels. Default 5.
+    max_shift_z : int
+        Maximum sampled Z translation magnitude in voxels. Default 2.
+    seed : int
+        Random seed. Default 42.
+    codebook : list[tuple[str, str]] | None
+        List of (gene, nucleotide barcode) pairs; None uses TEST_CODEBOOK. Default None.
+    deformation : str | None
+        DEFORMATION_CONFIGS name for non-reference rounds; None disables deformation. Default None.
+
+    """
 
     # Image dimensions
     height: int = 256
@@ -391,11 +440,17 @@ def get_preset_config(
     Parameters
     ----------
     preset : {"tiny", "small", "medium", "large", "tissue", "thick_medium"}
+
         - "tiny": 2 FOVs, 128x128x8, 10 spots (quick tests)
+
         - "small": 2 FOVs, 256x256x16, 50 spots (unit tests)
+
         - "medium": 2 FOVs, 512x512x32, 400 spots (integration tests)
+
         - "large": 2 FOVs, 1024x1024x30, 1500 spots (e2e benchmarking)
+
         - "tissue": 2 FOVs, 3072x3072x30, 14000 spots (tissue-2D scale)
+
         - "thick_medium": 2 FOVs, 1024x1024x100, 5200 spots (thick tissue)
 
     Returns

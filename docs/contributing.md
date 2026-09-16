@@ -19,7 +19,7 @@ Sphinx imports the installed `starfinder` checkout, including its top-level
 imports, so install the package's runtime dependencies as well as the `docs`
 group. The build does not mock imports, download datasets, execute notebooks,
 run Snakemake, or start MATLAB. SimpleITK, SpatialData, napari, and a MATLAB
-license are not required for this representative API page.
+license are not required to build the Python API reference.
 
 ## Build HTML with warnings treated as errors
 
@@ -36,7 +36,7 @@ reports all warnings before exiting. A successful build exits with status 0 and
 writes `index.html`, `search.html`, and `searchindex.js` under the output directory.
 For a full reread into an existing output directory, add `-E -a`.
 
-The autosummary list uses reStructuredText (`docs/api/python.rst`) so Sphinx can
+The module autosummary lists use reStructuredText (`docs/api/*.rst`) so Sphinx can
 discover it before parsing the Markdown pages. Autosummary writes disposable
 `.rst` stubs into `docs/api/generated/`; Git ignores
 these files. Do not edit them: update the API list or source docstrings instead.

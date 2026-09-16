@@ -92,6 +92,11 @@ class BenchmarkSuite:
     Attributes:
         name: Name of the benchmark suite.
         results: List of collected BenchmarkResult objects.
+
+    Parameters
+    ----------
+    name : str
+        Human-readable suite name. The result list is initially empty.
     """
 
     def __init__(self, name: str):
@@ -99,14 +104,26 @@ class BenchmarkSuite:
         self.results: list[BenchmarkResult] = []
 
     def add(self, result: BenchmarkResult) -> None:
-        """Add a result to the suite."""
+        """Add a result to the suite.
+
+        Parameters
+        ----------
+        result : BenchmarkResult
+            Result to append to this suite.
+
+        Returns
+        -------
+        None
+            Mutates results in place.
+        """
         self.results.append(result)
 
     def summary(self) -> dict[str, float]:
         """Compute summary statistics across all results.
 
         Returns:
-            Dict with mean_time, min_time, max_time, mean_memory.
+            Dict with mean_time, min_time, max_time, std_time (seconds),
+            and mean_memory (MiB of traced allocations). Empty suites return {}.
         """
         if not self.results:
             return {}
@@ -125,7 +142,20 @@ class BenchmarkSuite:
     def filter(
         self, method: str | None = None, operation: str | None = None
     ) -> list[BenchmarkResult]:
-        """Filter results by method and/or operation."""
+        """Filter results by method and/or operation.
+
+        Parameters
+        ----------
+        method : str or None
+            Exact method name; None does not filter methods.
+        operation : str or None
+            Exact operation name; None does not filter operations.
+
+        Returns
+        -------
+        list[BenchmarkResult]
+            Matching results; with both filters None this is the stored list.
+        """
         filtered = self.results
         if method is not None:
             filtered = [r for r in filtered if r.method == method]
@@ -142,6 +172,7 @@ class BenchmarkSuite:
 DEFAULT_BENCHMARK_DATA_DIR = DEFAULT_BENCHMARK_DIR / BENCHMARK_TASK / "data"
 
 # Preset order for early stopping (smallest to largest)
+#: Registration benchmark traversal order for early stopping; independent of synthetic dataset presets.
 PRESET_ORDER = ["tiny", "small", "medium", "large", "xlarge", "tissue", "thick_medium"]
 
 
@@ -177,7 +208,26 @@ def timeout_handler(seconds: int):
 
 @dataclass
 class BenchmarkPair:
-    """Container for a benchmark ref/mov pair with metadata."""
+    """Container for a benchmark ref/mov pair with metadata.
+
+    Parameters
+    ----------
+    preset : str
+        Preset or real dataset name.
+    pair_type : str
+        Shift or deformation identifier.
+    ref : np.ndarray
+        Numeric reference volume (Z,Y,X).
+    mov : np.ndarray
+        Numeric moving volume (Z,Y,X), same grid as ref.
+    ground_truth : dict
+        Pair metadata including known displacement where available.
+    ref_path : Path
+        Reference TIFF Path.
+    mov_path : Path
+        Moving TIFF Path.
+
+    """
 
     preset: str
     pair_type: str  # "shift" or deformation name
@@ -190,7 +240,52 @@ class BenchmarkPair:
 
 @dataclass
 class RegistrationResult:
-    """Result of a registration benchmark run."""
+    """Result of a registration benchmark run.
+
+    Parameters
+    ----------
+    preset : str
+        Preset/dataset name.
+    pair_type : str
+        Shift/deformation identifier.
+    method : str
+        Method name.
+    status : str
+        success, timeout, or error text.
+    time_seconds : float | None
+        Mean elapsed seconds, or None when unavailable.
+    time_std : float | None
+        Standard deviation of elapsed seconds, or None.
+    memory_mb : float | None
+        Mean peak traced allocation in MiB, not process RSS; or None.
+    n_runs : int
+        Completed repetitions.
+    shift_detected : tuple[int, int, int] | None
+        Detected (dz,dy,dx) displacement in voxels, or None. Default None.
+    shift_error_l2 : float | None
+        Euclidean displacement error in voxel units, or None. Default None.
+    ncc_before : float | None
+        NCC before registration, or None. Default None.
+    ncc_after : float | None
+        NCC after registration, or None. Default None.
+    ssim_before : float | None
+        SSIM before registration, or None. Default None.
+    ssim_after : float | None
+        SSIM after registration, or None. Default None.
+    spot_iou_before : float | None
+        Spot IoU before registration, or None. Default None.
+    spot_iou_after : float | None
+        Spot IoU after registration, or None. Default None.
+    spot_match_rate : float | None
+        Matched-spot fraction, or None. Default None.
+    inspection_path : Path | None
+        Saved inspection image Path, or None. Default None.
+    registered_path : Path | None
+        Saved registered TIFF Path, or None. Default None.
+    metrics_path : Path | None
+        Saved metrics Path, or None. Default None.
+
+    """
 
     preset: str
     pair_type: str
@@ -221,11 +316,17 @@ class RegistrationBenchmarkRunner:
     """Specialized benchmark runner for registration algorithms.
 
     This class orchestrates registration benchmarks with:
+
     - Loading benchmark pairs from generated data
+
     - Running global and local registration methods
+
     - Computing quality metrics before/after registration
+
     - Generating inspection images
+
     - Selective volume saving (failed/best/worst only)
+
     - Early stopping when methods timeout
 
     Example:
@@ -234,6 +335,25 @@ class RegistrationBenchmarkRunner:
         ...     methods={"numpy_fft": phase_correlate},
         ...     presets=["tiny", "small", "medium"],
         ... )
+
+    Parameters
+    ----------
+    data_dir : pathlib.Path or str
+        Input benchmark data root; default is institutional storage.
+    results_dir : pathlib.Path or str or None
+        Output directory; None uses data_dir.parent / "results".
+    timeout_seconds : int
+        Per-run alarm timeout in seconds, default 600 (Unix main thread only).
+    n_warmup : int
+        Discarded warmup runs, default 1.
+    n_repetitions : int
+        Timed repetitions for averaging, default 3.
+
+    Notes
+    -----
+    Global methods must return detected displacement; the runner negates it.
+    Local methods return backward fields; this runner applies them using
+    SimpleITK's apply_deformation even for TPS/CPD methods.
     """
 
     def __init__(
@@ -248,7 +368,7 @@ class RegistrationBenchmarkRunner:
 
         Args:
             data_dir: Path to benchmark data directory.
-            results_dir: Path to save results. Defaults to data_dir/results.
+            results_dir: Path to save results. Defaults to data_dir.parent / "results".
             timeout_seconds: Maximum seconds per benchmark run.
             n_warmup: Number of warmup runs (discarded).
             n_repetitions: Number of timed runs for averaging.
@@ -364,8 +484,11 @@ class RegistrationBenchmarkRunner:
         """Determine if registered volume should be saved.
 
         Saves volumes for:
+
         - Failed cases (status != "success")
+
         - Best result per preset (highest spot_iou_after)
+
         - Worst result per preset (lowest spot_iou_after)
 
         Args:
@@ -1059,8 +1182,11 @@ class RegistrationBenchmarkRunner:
         """Save tuning results with aggregate ranking.
 
         Produces three files:
+
         - tuning_results.csv: All individual run results
+
         - tuning_ranking.csv: Configs ranked by mean Spot Match Rate
+
         - top3_configs.json: Top 3 configs for Phase 2 validation
 
         Args:

@@ -84,7 +84,8 @@ def extract_from_location(
     -------
     color_seq : np.ndarray
         1D string array of length N. Values: "1"-"4" (1-based channel),
-        "M" (tie), or "N" (no signal).
+        "M" (tie, including an all-zero multi-channel neighborhood), or
+        "N" (NaN maximum).
     color_score : np.ndarray
         1D float array of length N. Score = -log(max_normalized_value).
         inf for "M" or "N" assignments.
@@ -140,6 +141,36 @@ def extract_intensity_tensor(
     ``extract_from_location()``, but skips L2 normalization and
     winner-take-all assignment. Output shape is ``(N, C, R)`` for direct
     use by probabilistic decoders such as Postcode.
+
+    Parameters
+    ----------
+    images : dict[str, np.ndarray]
+        Round names to numeric ``(Z, Y, X, C)`` images with equal channel counts.
+    spots : pd.DataFrame
+        Columns ``z, y, x`` contain valid zero-based voxel indices (cast to int).
+    round_order : list[str]
+        Order of the output R axis. Each name must exist in images.
+    voxel_size : tuple[int, int, int]
+        Nonnegative integer neighborhood half-widths ``(dz, dy, dx)`` in voxels,
+        default (1, 2, 2), not physical voxel spacing. Edges are zero-padded.
+
+    Returns
+    -------
+    np.ndarray
+        Float64 neighborhood sums, shape ``(N, C, R)``; no normalization.
+        Empty round_order returns shape ``(N, 0, 0)``.
+
+    Raises
+    ------
+    KeyError
+        A round or required coordinate column is missing.
+    ValueError
+        An image is not 4D or channel counts differ.
+
+    See Also
+    --------
+    starfinder.barcode.extract_from_location
+    starfinder.barcode.decode_codebook_aware
     """
     if not round_order:
         return np.empty((len(spots), 0, 0), dtype=np.float64)

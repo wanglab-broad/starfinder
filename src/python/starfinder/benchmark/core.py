@@ -17,12 +17,12 @@ T = TypeVar("T")
 class BenchmarkResult:
     """Result of a single benchmark run.
 
-    Attributes:
+    Parameters:
         method: Name of the method/implementation being benchmarked.
         operation: Name of the operation (e.g., "phase_correlate", "load_tiff").
         size: Tuple describing input size (e.g., (Z, Y, X) for volumes).
         time_seconds: Execution time in seconds.
-        memory_mb: Peak memory usage in megabytes.
+        memory_mb: Peak traced allocations divided by 1024² (MiB), not process RSS.
         metrics: Additional custom metrics (e.g., accuracy, error).
     """
 

@@ -23,6 +23,34 @@ class STARMapDataset:
 
     Non-frozen: allows lazy loading of codebook and subtile config.
     FOVs access dataset-level state via delegation properties.
+
+    Parameters
+    ----------
+    input_root : Path
+        Resolved input sample directory (Path), before round/FOV components.
+    output_root : Path
+        Resolved output directory (Path).
+    dataset_id : str
+        Dataset identifier.
+    sample_id : str
+        Input sample identifier.
+    output_id : str
+        Output run identifier.
+    layers : LayerState
+        Shared round categories/reference; default new empty LayerState.
+    channel_order : ChannelOrder
+        Ordered channel filename patterns; default empty list, set before loading.
+    codebook : Codebook | None
+        Shared loaded Codebook, default None.
+    subtile : SubtileConfig | None
+        Shared SubtileConfig, default None.
+    rotate_angle : float
+        Stored angle in degrees, default 0; call rotate or pass streaming rotate_angle explicitly.
+    maximum_projection : bool
+        Default False; save_ref_merged projects along Z when True.
+    fov_pattern : str
+        Percent-format FOV naming pattern; default Position%03d.
+
     """
 
     # Paths
@@ -50,8 +78,29 @@ class STARMapDataset:
         """Create dataset from validated Snakemake config dict.
 
         Handles both direct Python API keys and Snakemake config keys:
+
         - ``channel_order`` or ``seq_channel_order`` → channel_order
+
         - ``fov_id_pattern`` or ``fov_pattern`` → fov_pattern
+
+        Parameters
+        ----------
+        config : dict
+            Required: n_rounds, ref_round, root_input_path, root_output_path,
+            dataset_id, sample_id, output_id. Channel and FOV aliases are described
+            above. Optional rotate_angle, maximum_projection and subtile settings
+            are read from config; this factory does not run schema validation.
+
+        Returns
+        -------
+        STARMapDataset
+            Dataset with configured LayerState; does not load images or codebook.
+            Call layers.validate() explicitly to check round invariants.
+
+        Raises
+        ------
+        KeyError
+            Required keys are missing.
         """
         layers = LayerState(
             seq=[f"round{i}" for i in range(1, config["n_rounds"] + 1)],
@@ -101,13 +150,37 @@ class STARMapDataset:
         return sdata
 
     def fov(self, fov_id: str) -> FOV:
-        """Create a new FOV instance for processing."""
+        """Create a new FOV instance for processing.
+
+        Parameters
+        ----------
+        fov_id : str
+            FOV identifier, used in paths.
+
+        Returns
+        -------
+        FOV
+            New empty processor sharing this dataset, without loading images.
+        """
         from starfinder.dataset.fov import FOV
 
         return FOV(dataset=self, fov_id=fov_id)
 
     def fov_ids(self, n_fovs: int, start: int = 0) -> list[str]:
-        """Generate FOV ID list based on pattern."""
+        """Generate FOV ID list based on pattern.
+
+        Parameters
+        ----------
+        n_fovs : int
+            Number of names to generate.
+        start : int
+            First numeric FOV index, default 0.
+
+        Returns
+        -------
+        list[str]
+            fov_pattern percent-formatted with start through start+n_fovs-1.
+        """
         return [self.fov_pattern % i for i in range(start, start + n_fovs)]
 
     def load_codebook(
@@ -116,7 +189,23 @@ class STARMapDataset:
         split_index: int | None = None,
         do_reverse: bool = True,
     ) -> None:
-        """Load codebook from CSV and store on self.codebook."""
+        """Load codebook from CSV and store on self.codebook.
+
+        Parameters
+        ----------
+        path : pathlib.Path or str
+            Two-column gene,barcode CSV, with or without a header.
+        do_reverse : bool
+            Reverse bases before encoding, default True.
+        split_index : int or None
+            Optional two-segment split, default None.
+
+        Returns
+        -------
+        STARMapDataset
+            This dataset with codebook replaced. Errors propagate from
+            :meth:`starfinder.dataset.Codebook.from_csv`.
+        """
         self.codebook = Codebook.from_csv(
             path, do_reverse=do_reverse, split_index=split_index
         )

@@ -125,10 +125,15 @@ def _run_antialias_pyramid(sitk, fixed, moving, demons, iterations):
     (SimpleITK internally uses float32 for demons computation).
 
     Memory optimizations (Phase D):
+
     - float32 volumes + complex64 FFT (vs float64/complex128)
+
     - rfftn/irfftn halves FFT array size
+
     - Butterworth filter cached between fixed/moving at each level
+
     - Pre-allocated buffer for field upsampling
+
     - No redundant .astype() copies
     """
     from starfinder.registration.pyramid import (
@@ -261,16 +266,22 @@ def demons_register(
         Default is 1.0 (matches MATLAB's AccumulatedFieldSmoothing).
     method : str, optional
         Demons variant to use. Options:
+
         - "demons" (default): Classic Thirion demons. Best speed/memory,
           matches MATLAB's imregdemons algorithm.
+
         - "diffeomorphic": Topology-preserving. Better quality on large
           deformations but ~37% more memory.
+
         - "symmetric": Standard symmetric forces demons.
+
         - "fast_symmetric": Faster symmetric forces variant.
     pyramid_mode : str, optional
         Multi-resolution pyramid strategy:
+
         - "antialias" (default): MATLAB-matching Butterworth-filtered
           downsampling. Use with multi-level pyramids.
+
         - "sitk": SimpleITK's built-in shrink (naive subsampling).
           Degrades quality for multi-level pyramids on sparse images.
 
@@ -279,6 +290,19 @@ def demons_register(
     np.ndarray
         Displacement field with shape (Z, Y, X, 3) where the last dimension
         contains (dz, dy, dx) displacement vectors.
+
+    Raises
+    ------
+    ImportError
+        SimpleITK is unavailable. Install the ``local-registration`` extra.
+
+    Notes
+    -----
+    Dense fields use backward sampling: the value at output voxel p is sampled
+    from moving voxel ``p + field[p]``. Components are ``(dz, dy, dx)`` in voxel
+    units, not micrometres; SimpleITK images use default unit spacing. Fields
+    are float64; warped images preserve the input dtype. Do not negate these
+    fields as if they were translations for ``apply_shift``.
     """
     sitk = _import_sitk()
 
@@ -333,13 +357,28 @@ def apply_deformation(
         contains (dz, dy, dx) displacement vectors.
     boundary_mode : str
         How to handle out-of-bounds source coordinates:
+
         - ``"constant"`` (default): Fill with 0 (black bands at edges).
+
         - ``"nearest"``: Extend edge pixels via nearest-neighbor extrapolator.
 
     Returns
     -------
     np.ndarray
         Warped volume with same shape as input.
+
+    Raises
+    ------
+    ImportError
+        SimpleITK is unavailable. Install the ``local-registration`` extra.
+
+    Notes
+    -----
+    Dense fields use backward sampling: the value at output voxel p is sampled
+    from moving voxel ``p + field[p]``. Components are ``(dz, dy, dx)`` in voxel
+    units, not micrometres; SimpleITK images use default unit spacing. Fields
+    are float64; warped images preserve the input dtype. Do not negate these
+    fields as if they were translations for ``apply_shift``.
     """
     sitk = _import_sitk()
 
@@ -424,8 +463,23 @@ def register_volume_local(
     -------
     tuple[np.ndarray, np.ndarray]
         Tuple of (registered_images, displacement_field).
+
         - registered_images: Warped volume with shape (Z, Y, X, C)
+
         - displacement_field: Computed field with shape (Z, Y, X, 3)
+
+    Raises
+    ------
+    ImportError
+        SimpleITK is unavailable. Install the ``local-registration`` extra.
+
+    Notes
+    -----
+    Dense fields use backward sampling: the value at output voxel p is sampled
+    from moving voxel ``p + field[p]``. Components are ``(dz, dy, dx)`` in voxel
+    units, not micrometres; SimpleITK images use default unit spacing. Fields
+    are float64; warped images preserve the input dtype. Do not negate these
+    fields as if they were translations for ``apply_shift``.
     """
     # Compute displacement field from reference and moving images
     displacement_field = demons_register(

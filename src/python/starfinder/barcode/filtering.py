@@ -40,10 +40,15 @@ def filter_reads(
         Filtered spots with an added ``gene`` column.
     stats : dict[str, float]
         Filtration statistics:
+
         - ``"n_total"``: total number of input spots
+
         - ``"n_in_codebook"``: number matching codebook
+
         - ``"in_codebook"``: fraction matching codebook
+
         - ``"correct_form"``: fraction with correct start/end bases (if end_bases)
+
         - ``"validated"``: fraction of correct-form reads in codebook (if end_bases)
     """
     color_seqs = spots["color_seq"]

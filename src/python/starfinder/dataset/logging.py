@@ -8,7 +8,19 @@ logger = logging.getLogger("starfinder")
 
 
 def log_step(func):
-    """Decorator to log FOV processing steps with timing."""
+    """Decorator to log FOV processing steps with timing.
+
+    Parameters
+    ----------
+    func : callable
+        FOV instance method; self must expose fov_id.
+
+    Returns
+    -------
+    callable
+        Wrapper preserving signature/metadata, return value and exceptions.
+        Logs start, completion with elapsed seconds, or failure, to ``starfinder``.
+    """
 
     @wraps(func)
     def wrapper(self, *args, **kwargs):

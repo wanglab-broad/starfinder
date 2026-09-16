@@ -11,7 +11,7 @@ def phase_correlate(
     workers: int | None = None,
 ) -> tuple[float, float, float]:
     """
-    Compute shift to align moving image to fixed using phase correlation.
+    Detect the displacement of moving relative to fixed by FFT correlation.
 
     Args:
         fixed: Reference volume with shape (Z, Y, X).
@@ -20,7 +20,9 @@ def phase_correlate(
             -1 for all available CPUs.
 
     Returns:
-        Tuple of (dz, dy, dx) shift values.
+        Detected displacement ``(dz, dy, dx)`` in voxels (integer-valued floats).
+        Correct alignment with ``apply_shift(moving, tuple(-s for s in shift))``.
+        Inputs must be equal-shaped 3D numeric volumes; FFTs use float32.
     """
     from scipy.fft import irfftn, rfftn
 
@@ -64,7 +66,9 @@ def apply_shift(
 
     Args:
         volume: Input volume with shape (Z, Y, X).
-        shift: Tuple of (dz, dy, dx) shift values.
+        shift: Translation to apply, ``(dz, dy, dx)`` in voxels. Positive
+            components move content toward larger indices. Negate the detected
+            displacement returned by :func:`starfinder.registration.phase_correlate`.
         workers: Number of parallel workers for FFT. None for single-threaded,
             -1 for all available CPUs.
 
@@ -139,7 +143,10 @@ def register_volume(
             -1 for all available CPUs.
 
     Returns:
-        Tuple of (registered_images, shifts).
+        Tuple of registered images (same shape/dtype as ``images``) and
+        detected displacement ``(dz, dy, dx)`` in voxels. The negative
+        displacement is applied to every channel; the returned shifts are
+        not the correction translation.
     """
     # Calculate shift (how much mov_image is shifted from ref_image)
     shifts = phase_correlate(ref_image, mov_image, workers=workers)

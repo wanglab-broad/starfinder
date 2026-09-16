@@ -152,7 +152,9 @@ def detect_and_match_spots(
     -------
     tuple[np.ndarray, np.ndarray]
         ``(positions, displacements)`` where:
+
         - positions: (N, 3) matched spot positions in **fixed** image coords
+
         - displacements: (N, 3) displacement vectors (dz, dy, dx) at each position
 
     Raises
@@ -359,7 +361,9 @@ def apply_tps_deformation(
         Displacement field, shape (Z, Y, X, 3) with (dz, dy, dx).
     boundary_mode : str
         How to handle out-of-bounds source coordinates:
+
         - ``"constant"`` (default): Fill with 0 (black bands at edges).
+
         - ``"nearest"``: Extend edge pixels (no black bands).
 
     Returns
@@ -489,7 +493,9 @@ def register_volume_tps(
     -------
     tuple[np.ndarray, np.ndarray]
         ``(registered_images, displacement_field)`` where:
+
         - registered_images: shape (Z, Y, X, C), same dtype as input
+
         - displacement_field: shape (Z, Y, X, 3), float32
     """
     displacement_field = tps_register(ref_image, mov_image, **kwargs)
@@ -1082,7 +1088,9 @@ def register_volume_cpd(
     -------
     tuple[np.ndarray, np.ndarray]
         ``(registered_images, displacement_field)`` where:
+
         - registered_images: shape (Z, Y, X, C), same dtype as input
+
         - displacement_field: shape (Z, Y, X, 3), float32
     """
     displacement_field = cpd_register(ref_image, mov_image, **kwargs)

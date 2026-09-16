@@ -120,7 +120,18 @@ def run_benchmark(*args, **kwargs):
 
 
 def print_benchmark_table(results: list[BenchmarkResult]) -> None:
-    """Print registration benchmark results with shift error."""
+    """Print registration benchmark results with shift error.
+
+    Parameters
+    ----------
+    results : list[BenchmarkResult]
+        Registration results, optionally containing shift/error metrics.
+
+    Returns
+    -------
+    None
+        Writes a Markdown table to standard output.
+    """
     print()
     print("| Method  | Size           | Time (s) | Memory (MB) | Shift Error |")
     print("|---------|----------------|----------|-------------|-------------|")

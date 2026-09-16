@@ -24,7 +24,28 @@ class FOV:
 
     Mutable. NOT thread-safe. One instance per Snakemake job.
     Delegates to dataset for layers, codebook, and channel_order.
-    All processing methods return ``self`` for fluent chaining.
+    Image-processing methods return ``self`` for fluent chaining; output
+    methods return paths/tables. See individual methods.
+
+    Parameters
+    ----------
+    dataset : STARMapDataset
+        Shared STARMapDataset.
+    fov_id : str
+        FOV identifier.
+    images : dict[str, ImageArray]
+        Round to (Z,Y,X,C) numeric array mapping; default empty dict.
+    metadata : dict[str, dict]
+        Round to loader metadata mapping; default empty dict.
+    global_shifts : dict[str, Shift3D]
+        Round to detected (dz,dy,dx) voxel displacement; default empty dict.
+    local_registered : set[str]
+        Names of locally registered rounds; default empty set.
+    all_spots : pd.DataFrame | None
+        Detected/extracted zero-based spot DataFrame, default None.
+    good_spots : pd.DataFrame | None
+        Filtered spot DataFrame, default None.
+
     """
 
     dataset: STARMapDataset
@@ -42,20 +63,37 @@ class FOV:
 
     @property
     def layers(self) -> LayerState:
+        """Shared dataset LayerState.
+        """
         return self.dataset.layers
 
     @property
     def codebook(self) -> Codebook | None:
+        """Shared dataset Codebook, or None before loading.
+        """
         return self.dataset.codebook
 
     # --- Path helpers ---
 
     @property
     def paths(self) -> FOVPaths:
+        """FOVPaths for this field of view; no directories are created.
+        """
         return FOVPaths(self.dataset.output_root, self.fov_id)
 
     def input_dir(self, round_name: str) -> Path:
-        """Input directory for a specific round."""
+        """Input directory for a specific round.
+
+        Parameters
+        ----------
+        round_name : str
+            Round name appended to input_root before fov_id.
+
+        Returns
+        -------
+        pathlib.Path
+            Input directory; does not create it.
+        """
         return self.dataset.input_root / round_name / self.fov_id
 
     # --- Image loading ---
@@ -73,6 +111,24 @@ class FOV:
         """Load raw TIFF stacks for specified rounds.
 
         Delegates to ``starfinder.io.load_image_stacks()`` per round.
+
+        Parameters
+        ----------
+        rounds : list[str] | None
+            Round names to load; None uses the dataset layers selected by layer_slot.
+        channel_order : ChannelOrder | None
+            Filename channel patterns in output C order; None uses dataset.channel_order.
+        convert_uint8 : bool
+            True min-max scales loaded non-uint8 stacks to uint8; False preserves their dtype.
+        subdir : str
+            Optional subdirectory beneath each round/FOV input directory.
+        layer_slot : Literal['seq', 'other']
+            Round category used when rounds is None: seq (default) or other.
+
+        Returns
+        -------
+        FOV
+            This instance, with processing state updated in place.
         """
         from starfinder.io import load_image_stacks
 
@@ -127,8 +183,18 @@ class FOV:
         """Rotate all loaded volumes by angle degrees in the YX plane.
 
         Applied after loading, before any other processing.
-        For exact 90-degree multiples, uses np.rot90 (zero-copy, instant).
+        For exact 90-degree multiples, uses np.rot90 followed by a contiguous copy.
         For other angles, uses scipy.ndimage.rotate with bilinear interpolation.
+
+        Parameters
+        ----------
+        angle : float
+            Rotation angle in degrees, positive counterclockwise in the YX plane.
+
+        Returns
+        -------
+        FOV
+            This instance, with processing state updated in place.
         """
         for round_name in list(self.images.keys()):
             self._rotate_round(round_name, angle)
@@ -147,6 +213,16 @@ class FOV:
         snr_threshold : float or None
             If set, channels with max/mean < snr_threshold are not
             normalized (raw values kept). Prevents noise inflation.
+
+        Parameters
+        ----------
+        layers : list[str] | None
+            Rounds to process; None uses all configured layers for preprocessing, sequencing layers for extraction.
+
+        Returns
+        -------
+        FOV
+            This instance, with processing state updated in place.
         """
         from starfinder.preprocessing import min_max_normalize
 
@@ -163,7 +239,22 @@ class FOV:
         nbins: int = 64,
         layers: list[str] | None = None,
     ) -> FOV:
-        """Histogram matching to reference layer's channel."""
+        """Histogram matching to reference layer's channel.
+
+        Parameters
+        ----------
+        ref_channel : int
+            Zero-based reference channel index; also selects moving channel in single-channel registration.
+        nbins : int
+            Compatibility argument forwarded to histogram_match; currently unused.
+        layers : list[str] | None
+            Rounds to process; None uses all configured layers for preprocessing, sequencing layers for extraction.
+
+        Returns
+        -------
+        FOV
+            This instance, with processing state updated in place.
+        """
         from starfinder.preprocessing import histogram_match
 
         reference = self.images[self.layers.ref][:, :, :, ref_channel]
@@ -180,7 +271,20 @@ class FOV:
     def morph_recon(
         self, radius: int = 3, layers: list[str] | None = None
     ) -> FOV:
-        """Background removal via morphological reconstruction."""
+        """Background removal via morphological reconstruction.
+
+        Parameters
+        ----------
+        radius : int
+            Nonnegative structuring-element radius in voxels for each channel.
+        layers : list[str] | None
+            Rounds to process; None uses all configured layers for preprocessing, sequencing layers for extraction.
+
+        Returns
+        -------
+        FOV
+            This instance, with processing state updated in place.
+        """
         from starfinder.preprocessing import morphological_reconstruction
 
         self._apply_to_layers(
@@ -192,7 +296,20 @@ class FOV:
     def tophat(
         self, radius: int = 3, layers: list[str] | None = None
     ) -> FOV:
-        """White tophat filtering."""
+        """White tophat filtering.
+
+        Parameters
+        ----------
+        radius : int
+            Nonnegative structuring-element radius in voxels for each channel.
+        layers : list[str] | None
+            Rounds to process; None uses all configured layers for preprocessing, sequencing layers for extraction.
+
+        Returns
+        -------
+        FOV
+            This instance, with processing state updated in place.
+        """
         from starfinder.preprocessing import tophat_filter
 
         self._apply_to_layers(
@@ -204,7 +321,18 @@ class FOV:
     def make_projection(
         self, method: Literal["max", "sum"] = "max"
     ) -> FOV:
-        """Apply Z-projection to ALL images."""
+        """Apply Z-projection to ALL images.
+
+        Parameters
+        ----------
+        method : Literal['max', 'sum']
+            Projection method max or sum (removes Z axis).
+
+        Returns
+        -------
+        FOV
+            This instance, with processing state updated in place.
+        """
         from starfinder.utils import make_projection as _make_projection
 
         for name in list(self.images):
@@ -243,6 +371,29 @@ class FOV:
 
         Stores shifts in ``self.global_shifts`` and optionally writes
         a shift log CSV.
+
+        Parameters
+        ----------
+        layers_to_register : list[str] | None
+            Rounds to register; None uses all configured non-reference layers. Unloaded rounds are skipped.
+        ref_img : Literal['merged', 'single-channel']
+            Reference representation: merged sums channels as uint16; single-channel selects ref_channel.
+        mov_img : Literal['merged', 'single-channel']
+            Moving representation: merged sums channels as uint16; single-channel selects ref_channel.
+        ref_channel : int
+            Zero-based reference channel index; also selects moving channel in single-channel registration.
+        save_shifts : bool
+            Whether to write detected displacements to the FOV shift-log CSV.
+
+        Returns
+        -------
+        FOV
+            This instance, with processing state updated in place.
+
+        Notes
+        -----
+        global_shifts and the row/col/z log contain detected displacement, not
+        the correction translation. See :func:`starfinder.registration.register_volume`.
         """
         from starfinder.registration import register_volume
 
@@ -316,14 +467,17 @@ class FOV:
         """Local (non-rigid) registration.
 
         Supports three methods:
+
         - ``"demons"`` (default): Iterative voxel-level optimization via SimpleITK.
+
         - ``"tps"``: Spot-based Thin Plate Spline — fits a smooth displacement
           field from matched spot correspondences. No SimpleITK dependency.
+
         - ``"cpd"``: Coherent Point Drift — simultaneous correspondence and
           transformation via EM on GMM. No SimpleITK dependency.
 
         When ``method="tps"`` or ``method="cpd"`` and ``fallback=True``,
-        falls back to demons if insufficient spot matches.
+        falls back to demons on any ValueError from that registration call.
 
         Displacement fields are ephemeral (applied then discarded).
 
@@ -332,6 +486,52 @@ class FOV:
         boundary_mode : str
             How to handle out-of-bounds source coordinates during warping:
             ``"constant"`` (default) fills with 0; ``"nearest"`` extends edges.
+
+        Parameters
+        ----------
+        ref_channel : int
+            Zero-based reference channel index; also selects moving channel in single-channel registration.
+        layers_to_register : list[str] | None
+            Rounds to register; None uses all configured non-reference layers. Unloaded rounds are skipped.
+        method : str
+            Local registration backend: demons, diffeomorphic, symmetric, fast_symmetric, tps, or cpd.
+        fallback : bool
+            For TPS/CPD, True catches any ValueError and retries demons; False propagates it. Fallback requires SimpleITK.
+        iterations : list[int] | None
+            Demons iterations per pyramid level; None uses [100, 50, 25].
+        smoothing_sigma : float
+            Demons displacement smoothing standard deviation in voxel units.
+        pyramid_mode : str
+            Demons pyramid: antialias (default) or sitk.
+        detection_threshold : float
+            TPS/CPD noise-floor detection k in median + k * MAD * 1.4826.
+        match_distance : float
+            TPS maximum correspondence distance in voxel-index Euclidean units.
+        min_matches : int
+            TPS minimum matched pairs; insufficient matches raise ValueError.
+        max_control_points : int
+            Maximum TPS control points or target CPD point count.
+        tps_smoothing : float
+            Smoothing passed to tps_register as smoothing.
+        grid_spacing : int
+            Coarse dense-field grid stride in voxel indices for TPS/CPD.
+        beta : float | None
+            CPD kernel width in voxels; None estimates it from moving-point neighbor distances.
+        lmbda : float
+            CPD regularization weight; larger values favor smoother transformations.
+        cpd_w : float
+            CPD expected outlier fraction in [0, 1), passed as w.
+        affine_first : bool
+            Whether CPD performs affine alignment before nonrigid fitting.
+        candidate_radius : float
+            CPD moving-candidate search radius in voxel units.
+        k_neighbors : int
+            CPD neighbors retained per fixed-point sampling anchor.
+
+        Returns
+        -------
+        FOV
+            This instance, with processing state updated in place.
         """
         if layers_to_register is None:
             layers_to_register = self.layers.to_register
@@ -440,7 +640,22 @@ class FOV:
         intensity_threshold: float = 5.0,
         min_distance: int = 1,
     ) -> FOV:
-        """Detect spots on the reference round."""
+        """Detect spots on the reference round.
+
+        Parameters
+        ----------
+        intensity_estimation : Literal['noise', 'adaptive', 'adaptive_round', 'global']
+            Spot threshold mode: noise, adaptive, adaptive_round, or global; pass together with intensity_threshold.
+        intensity_threshold : float
+            Noise k-sigma multiplier, or intensity fraction for adaptive/global modes.
+        min_distance : int
+            Peak separation and excluded image-border width in voxels.
+
+        Returns
+        -------
+        FOV
+            This instance, with processing state updated in place.
+        """
         from starfinder.spotfinding import find_spots_3d
 
         ref_image = self.images[self.layers.ref]
@@ -485,6 +700,18 @@ class FOV:
 
         Adds ``{round}_color``, ``{round}_score`` columns per round,
         and a concatenated ``color_seq`` column.
+
+        Parameters
+        ----------
+        voxel_size : tuple[int, int, int]
+            Extraction half-widths (dz, dy, dx) in voxel indices, not physical spacing.
+        layers : list[str] | None
+            Rounds to process; None uses all configured layers for preprocessing, sequencing layers for extraction.
+
+        Returns
+        -------
+        FOV
+            This instance, with processing state updated in place.
         """
         if layers is None:
             layers = self.layers.seq
@@ -501,7 +728,25 @@ class FOV:
         end_bases: str | None = None,
         start_base: str = "C",
     ) -> FOV:
-        """Filter reads against codebook."""
+        """Filter reads against codebook.
+
+        Parameters
+        ----------
+        end_bases : str | None
+            Optional decoded sequence suffix for filtering; None disables suffix filtering.
+        start_base : str
+            Starting nucleotide for color decoding when end_bases is supplied.
+
+        Returns
+        -------
+        FOV
+            This instance, with processing state updated in place.
+
+        Raises
+        ------
+        ValueError
+            Dataset codebook has not been loaded.
+        """
         from starfinder.barcode import filter_reads
 
         if self.codebook is None:
@@ -536,12 +781,12 @@ class FOV:
         local_method: str | None = None,
         local_kwargs: dict | None = None,
     ) -> FOV:
-        """Memory-efficient streaming pipeline. Peak memory = 2 x round_size.
+        """Streaming pipeline retaining the reference and one moving round.
 
         Processes one round at a time instead of loading all rounds
-        simultaneously. Produces identical results to the batch flow
-        (load_all -> enhance_all -> register_all -> spot_find ->
-        extract_all -> filter).
+        simultaneously. Temporary registration/extraction buffers also consume
+        memory. Operations are load, optional rotation, enhancement, registration,
+        spot finding, extraction, and filtering.
 
         Parameters
         ----------
@@ -554,6 +799,28 @@ class FOV:
         The spot DataFrame (all_spots) accumulates per-round color columns
         throughout. Only image volumes are loaded and discarded per-round.
         Filtering runs at the end on the complete color_seq column.
+
+        Parameters
+        ----------
+        rotate_angle : float | None
+            Optional rotation in degrees before enhancement; None skips rotation (does not read dataset.rotate_angle).
+        snr_threshold : float | None
+            Optional max/mean threshold for skipping normalization; None disables the gate.
+        intensity_estimation : Literal['noise', 'adaptive', 'adaptive_round', 'global']
+            Spot threshold mode: noise, adaptive, adaptive_round, or global; pass together with intensity_threshold.
+        intensity_threshold : float
+            Noise k-sigma multiplier, or intensity fraction for adaptive/global modes.
+        voxel_size : tuple[int, int, int]
+            Extraction half-widths (dz, dy, dx) in voxel indices, not physical spacing.
+        end_bases : str | None
+            Optional decoded sequence suffix for filtering; None disables suffix filtering.
+        start_base : str
+            Starting nucleotide for color decoding when end_bases is supplied.
+
+        Returns
+        -------
+        FOV
+            This instance, with processing state updated in place.
         """
         ref = self.layers.ref
 
@@ -616,6 +883,32 @@ class FOV:
         Processes one non-ref round at a time to reduce peak memory.
         After this method, the FOV has all images loaded with global
         shifts applied, ready for ``create_subtiles()``.
+
+        Parameters
+        ----------
+        rotate_angle : float | None
+            Optional rotation in degrees before enhancement; None skips rotation (does not read dataset.rotate_angle).
+        snr_threshold : float | None
+            Optional max/mean threshold for skipping normalization; None disables the gate.
+        ref_img : Literal['merged', 'single-channel']
+            Reference representation: merged sums channels as uint16; single-channel selects ref_channel.
+        mov_img : Literal['merged', 'single-channel']
+            Moving representation: merged sums channels as uint16; single-channel selects ref_channel.
+        ref_channel : int
+            Zero-based reference channel index; also selects moving channel in single-channel registration.
+        hist_equalize : bool
+            Whether to histogram-match non-reference rounds to the reference channel.
+        hist_equalize_ref_channel : int
+            Zero-based reference channel used for histogram matching.
+        morph_recon : bool
+            Whether to remove background by morphological reconstruction.
+        morph_recon_radius : int
+            Morphological reconstruction radius in voxels.
+
+        Returns
+        -------
+        FOV
+            This instance, with processing state updated in place.
         """
         ref = self.layers.ref
 
@@ -666,7 +959,13 @@ class FOV:
     # --- Output ---
 
     def save_ref_merged(self) -> Path:
-        """Save reference merged image as TIFF."""
+        """Save reference merged image as TIFF.
+
+        Returns
+        -------
+        pathlib.Path
+            Written TIFF path; maximum_projection optionally removes Z. Does not sum channels.
+        """
         from starfinder.io import save_stack
         from starfinder.utils import make_projection
 
@@ -687,6 +986,25 @@ class FOV:
         """Save spots to CSV with 1-based coordinates.
 
         Converts internal 0-based (z, y, x) to CSV 1-based (x, y, z, gene).
+
+        Parameters
+        ----------
+        slot : Literal['allSpots', 'goodSpots']
+            goodSpots selects filtered spots; allSpots selects all detected spots.
+        columns : list[str] | None
+            Columns to write; None uses x, y, z and gene when present. Included x/y/z are incremented by one.
+
+        Returns
+        -------
+        pathlib.Path
+            Written CSV path. The in-memory DataFrame is unchanged.
+
+        Raises
+        ------
+        ValueError
+            Selected spots are absent or empty.
+        KeyError
+            Requested columns are missing.
         """
         spots = self.good_spots if slot == "goodSpots" else self.all_spots
         if spots is None or spots.empty:
@@ -710,7 +1028,18 @@ class FOV:
         return path
 
     def save_log(self, log_type: Literal["rsf", "gr"] = "rsf") -> Path:
-        """Write a pipeline log file (summary of steps run)."""
+        """Write a pipeline log file (summary of steps run).
+
+        Parameters
+        ----------
+        log_type : Literal['rsf', 'gr']
+            rsf selects the read/spot log; gr selects the global-registration log.
+
+        Returns
+        -------
+        pathlib.Path
+            Written summary text-file path.
+        """
         import time
 
         path = self.paths.rsf_log() if log_type == "rsf" else self.paths.gr_log()
@@ -731,7 +1060,18 @@ class FOV:
         return path
 
     def save_score_log(self, suffix: str = "") -> Path:
-        """Write spot-finding score log (spot count summary)."""
+        """Write spot-finding score log (spot count summary).
+
+        Parameters
+        ----------
+        suffix : str
+            Optional text appended to fov_id in the score-log filename.
+
+        Returns
+        -------
+        pathlib.Path
+            Written spot-count summary path.
+        """
         path = self.paths.score_log(suffix)
         path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -762,6 +1102,21 @@ class FOV:
 
         Returns subtile coordinates DataFrame with 1-based coords
         for ``stitch_subtile.py`` compatibility.
+
+        Parameters
+        ----------
+        out_dir : Path | None
+            Output directory for compressed subtile NPZs and coordinates CSV; None uses paths.subtile_dir.
+
+        Returns
+        -------
+        pd.DataFrame
+            Subtile table with t (one-based ID), scoords_x/y (one-based starts), ecoords_x/y (one-based inclusive ends). Also writes NPZs and subtile_coords.csv.
+
+        Raises
+        ------
+        ValueError
+            Dataset subtile configuration is absent. Compute its windows first.
         """
         if self.dataset.subtile is None:
             raise ValueError("SubtileConfig not set on dataset.")
@@ -818,7 +1173,22 @@ class FOV:
         dataset: STARMapDataset,
         fov_id: str,
     ) -> FOV:
-        """Load FOV state from a saved NPZ subtile."""
+        """Load FOV state from a saved NPZ subtile.
+
+        Parameters
+        ----------
+        subtile_path : Path
+            Path to a trusted NPZ written by create_subtiles (loaded with allow_pickle=True).
+        dataset : STARMapDataset
+            Dataset providing shared configuration, layers and codebook.
+        fov_id : str
+            Field-of-view identifier used in output paths.
+
+        Returns
+        -------
+        FOV
+            New FOV with image arrays loaded; dataset state is supplied by caller. Spots, shifts and metadata are not restored.
+        """
         data = np.load(subtile_path, allow_pickle=True)
 
         fov = cls(dataset=dataset, fov_id=fov_id)

@@ -17,7 +17,14 @@ def make_projection(volume: np.ndarray, method: str = "max") -> np.ndarray:
     Returns
     -------
     np.ndarray
-        Projected image with shape (Y, X) or (Y, X, C), dtype uint8.
+        Projected image with shape (Y, X) or (Y, X, C). ``max`` preserves
+        input dtype; ``sum`` casts input to uint32 before summing and
+        rescales the result to uint8. Intended for nonnegative intensities.
+
+    Raises
+    ------
+    ValueError
+        If method is neither ``"max"`` nor ``"sum"``.
     """
     if method == "max":
         return np.max(volume, axis=0)

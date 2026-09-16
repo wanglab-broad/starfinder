@@ -8,6 +8,7 @@ maps base pairs to colors 1-4.
 """
 
 # Forward lookup: base pair -> color
+#: Ordered nucleotide pair to STARmap color string (1..4).
 BASE_PAIR_TO_COLOR = {
     "AA": "1", "CC": "1", "GG": "1", "TT": "1",
     "AC": "2", "CA": "2", "GT": "2", "TG": "2",
@@ -16,6 +17,7 @@ BASE_PAIR_TO_COLOR = {
 }
 
 # Reverse lookup: color -> candidate base pairs
+#: STARmap color string (1..4) to compatible nucleotide-pair strings.
 COLOR_TO_BASE_PAIRS = {
     "1": ["AA", "CC", "GG", "TT"],
     "2": ["AC", "CA", "GT", "TG"],
@@ -24,6 +26,7 @@ COLOR_TO_BASE_PAIRS = {
 }
 
 # Color to 0-based channel index
+#: STARmap color string (1..4) to zero-based array channel index (0..3).
 COLOR_TO_CHANNEL = {"1": 0, "2": 1, "3": 2, "4": 3}
 
 
@@ -47,6 +50,15 @@ def encode_bases(sequence: str) -> str:
     --------
     >>> encode_bases("CGCAC")
     '4422'
+
+    Raises
+    ------
+    KeyError
+        A pair contains characters outside uppercase A/C/G/T.
+
+    Notes
+    -----
+    Inputs shorter than two bases return an empty string; case is not normalized.
     """
     colors = []
     for i in range(len(sequence) - 1):
@@ -78,6 +90,17 @@ def decode_color_seq(color_seq: str, start_base: str) -> str:
     --------
     >>> decode_color_seq("4422", "C")
     'CGCAC'
+
+    Raises
+    ------
+    KeyError
+        A color is not in 1..4 (including M/N).
+    IndexError
+        The initial base does not match any candidate for a nonempty input.
+
+    Notes
+    -----
+    Empty color_seq returns an empty string, not start_base.
     """
     barcode = ""
     ref_base = start_base

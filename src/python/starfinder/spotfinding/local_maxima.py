@@ -27,13 +27,18 @@ def find_spots_3d(
     Parameters
     ----------
     image : np.ndarray
-        4D array with shape (Z, Y, X, C). Must be integer dtype (uint8/uint16).
+        4D numeric intensity array with shape (Z, Y, X, C). Global mode
+        requires uint8/uint16; other modes also accept floating-point arrays.
     intensity_estimation : str
         Thresholding mode:
+
         - "adaptive": threshold = channel_max * intensity_threshold
+
         - "adaptive_round": threshold = round_max * intensity_threshold
           (max across ALL channels, not per-channel)
+
         - "global": threshold = dtype_max * intensity_threshold
+
         - "noise": threshold = median + intensity_threshold * MAD * 1.4826
           (noise-floor based, intensity_threshold acts as k-sigma)
     intensity_threshold : float
@@ -52,6 +57,18 @@ def find_spots_3d(
         Detected spots with columns [z, y, x, intensity, channel].
         Coordinates are 0-based. Channel is 0-based index.
         Empty DataFrame with correct schema if no spots found.
+
+    Raises
+    ------
+    ValueError
+        If image is not 4D, mode is unknown, or global mode receives a dtype
+        other than uint8/uint16.
+
+    Notes
+    -----
+    The default mode is ``noise`` with threshold 5.0 and min_distance 1.
+    Distance is in voxel indices, without physical-spacing correction.
+    The peak finder excludes a border of width ``min_distance`` by default.
     """
     if image.ndim != 4:
         raise ValueError(f"Expected 4D (Z, Y, X, C) image, got {image.ndim}D")

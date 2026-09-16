@@ -38,6 +38,19 @@ def load_codebook(
         Mapping from gene name to color sequence.
     seq_to_gene : dict[str, str]
         Mapping from color sequence to gene name.
+
+    Raises
+    ------
+    FileNotFoundError
+        Input CSV is absent.
+    KeyError
+        Required header keys or nucleotide pairs are invalid.
+
+    Notes
+    -----
+    Both headerless gene,barcode rows and a header starting with gene are
+    accepted (UTF-8 BOM supported). Duplicate genes or color sequences
+    overwrite earlier dictionary entries; uniqueness is not validated.
     """
     path = Path(path)
 

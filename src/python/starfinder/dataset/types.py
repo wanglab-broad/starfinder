@@ -19,8 +19,20 @@ class LayerState:
     """Tracks which rounds belong to sequencing vs other categories.
 
     Invariants:
+
     - ``ref`` must be in ``seq`` or ``other`` (if set)
+
     - A round cannot appear in both ``seq`` and ``other``
+
+    Parameters
+    ----------
+    seq : list[str]
+        Sequencing round names, default new empty list.
+    other : list[str]
+        Non-sequencing round names, default new empty list.
+    ref : str | None
+        Reference round name or None (default). Call validate explicitly to enforce invariants.
+
     """
 
     seq: list[str] = field(default_factory=list)
@@ -52,6 +64,14 @@ class Codebook:
 
     Wraps the two dicts returned by ``starfinder.barcode.load_codebook()``
     into a single object with named access.
+
+    Parameters
+    ----------
+    gene_to_seq : list[str]
+        Gene name to color-sequence string mapping.
+    seq_to_gene : dict[str, str]
+        Color-sequence string to gene name mapping.
+
     """
 
     gene_to_seq: dict[str, str]
@@ -64,6 +84,8 @@ class Codebook:
 
     @property
     def n_genes(self) -> int:
+        """Number of distinct genes in gene_to_seq (integer).
+        """
         return len(self.gene_to_seq)
 
     @classmethod
@@ -76,6 +98,27 @@ class Codebook:
         """Load codebook from CSV file.
 
         Delegates to ``starfinder.barcode.load_codebook()``.
+
+        Parameters
+        ----------
+        path : pathlib.Path or str
+            Two-column gene,barcode CSV, with or without a header.
+        do_reverse : bool
+            Reverse bases before encoding, default True.
+        split_index : int or None
+            Optional two-segment split; None encodes one segment.
+
+        Returns
+        -------
+        Codebook
+            Mapping container from :func:`starfinder.barcode.load_codebook`.
+
+        Raises
+        ------
+        FileNotFoundError
+            CSV does not exist.
+        KeyError
+            A required header or nucleotide pair is invalid.
         """
         from starfinder.barcode import load_codebook
 
@@ -90,6 +133,18 @@ class CropWindow:
     """Immutable crop region for subtile extraction (Y/X only; Z kept whole).
 
     All coordinates are 0-based with exclusive end (Python slice convention).
+
+    Parameters
+    ----------
+    y_start : int
+        Zero-based inclusive Y start.
+    y_end : int
+        Zero-based exclusive Y end.
+    x_start : int
+        Zero-based inclusive X start.
+    x_end : int
+        Zero-based exclusive X end.
+
     """
 
     y_start: int
@@ -111,6 +166,16 @@ class SubtileConfig:
 
     Computes overlapping 2D windows that tile the Y/X plane.
     Matches MATLAB ``MakeSubtileTable`` / ``CreateSubtiles`` tiling logic.
+
+    Parameters
+    ----------
+    sqrt_pieces : int
+        Positive number of tiles per axis.
+    overlap_ratio : float
+        Fractional overlap; default 0.1.
+    windows : list[CropWindow]
+        Computed CropWindow list; default new empty list. Call compute_windows before extraction.
+
     """
 
     sqrt_pieces: int
@@ -128,6 +193,19 @@ class SubtileConfig:
         Tiles are ``sqrt_pieces x sqrt_pieces`` with overlap. Edge tiles
         are clamped to image boundaries. Outer edges have no overlap
         extension. Uses height for tile size (MATLAB uses dims(1)).
+
+        Parameters
+        ----------
+        height : int
+            Image height Y in pixels; tile size is height // sqrt_pieces for BOTH axes.
+        width : int
+            Image width X in pixels, used for clipping right edges.
+
+        Returns
+        -------
+        None
+            Replaces windows in row-major order. Non-square sizes and remainders
+            are not redistributed; check window coverage before using these cases.
         """
         n = self.sqrt_pieces
         tile_size = height // n

@@ -5,12 +5,15 @@ from __future__ import annotations
 from pathlib import Path
 
 # Root benchmark directory and current task
+#: Institutional benchmark root Path; override input/output paths on other hosts.
 DEFAULT_BENCHMARK_DIR = Path(
     "/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark"
 )
+#: Default benchmark task subdirectory name.
 BENCHMARK_TASK = "registration"
 
 # Standard volume size presets (Z, Y, X)
+#: Registration preset names to volume shapes (Z, Y, X) in voxels.
 SIZE_PRESETS: dict[str, tuple[int, int, int]] = {
     "tiny": (8, 128, 128),
     "small": (16, 256, 256),
@@ -21,6 +24,7 @@ SIZE_PRESETS: dict[str, tuple[int, int, int]] = {
 }
 
 # Spot density: approximately 50 spots per 10^6 voxels
+#: Registration preset names to synthetic spot counts.
 SPOT_COUNTS: dict[str, int] = {
     "tiny": 10,
     "small": 50,
@@ -31,6 +35,7 @@ SPOT_COUNTS: dict[str, int] = {
 }
 
 # Shift ranges for global registration testing (≤25% of each dimension)
+#: Registration presets to inclusive z and shared yx shift ranges (low, high), in voxels.
 SHIFT_RANGES: dict[str, dict[str, tuple[int, int]]] = {
     "tiny": {"z": (-2, 2), "yx": (-10, 10)},
     "small": {"z": (-4, 4), "yx": (-25, 25)},
@@ -46,7 +51,7 @@ def get_size_preset(name: str) -> tuple[int, int, int]:
     Get volume size for a preset name.
 
     Args:
-        name: Preset name (tiny, small, medium, large, xlarge, tissue).
+        name: Preset name (tiny, small, medium, large, tissue, thick_medium).
 
     Returns:
         Tuple of (Z, Y, X) dimensions.

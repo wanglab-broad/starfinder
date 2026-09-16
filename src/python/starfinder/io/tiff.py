@@ -20,8 +20,7 @@ def load_multipage_tiff(
     path: Path | str,
     convert_uint8: bool = True,
 ) -> np.ndarray:
-    """
-    Load a multi-page TIFF file.
+    """Load a multi-page TIFF file.
 
     Automatically detects OME-TIFF and ImageJ hyperstacks and uses their
     dimension metadata for correct interpretation. Plain TIFFs are read
@@ -36,6 +35,15 @@ def load_multipage_tiff(
 
     Raises:
         FileNotFoundError: If the file does not exist.
+
+    Notes
+    -----
+    OME/ImageJ metadata selects ``T=0, C=0`` through bioio. Plain TIFFs retain
+    raw axis order; only 2D input is expanded to a singleton Z axis. Supply
+    plain TIFFs already arranged as ZYX; arbitrary higher-dimensional TIFFs
+    are not reordered. ``convert_uint8=False`` preserves dtype; True preserves
+    uint8 or min-max scales other dtypes to 0..255 (constant arrays become 0).
+    No physical pixel spacing is returned.
     """
     path = Path(path)
     if not path.exists():
@@ -93,8 +101,7 @@ def load_image_stacks(
     subdir: str = "",
     convert_uint8: bool = True,
 ) -> tuple[np.ndarray, dict]:
-    """
-    Load multiple channel TIFFs from a directory.
+    """Load multiple channel TIFFs from a directory.
 
     Args:
         round_dir: Directory containing channel TIFF files.
@@ -112,6 +119,12 @@ def load_image_stacks(
     Notes:
         If channels have different sizes, crops to minimum and logs warning.
         Metadata includes: shape, dtype, original_shapes, cropped (bool).
+
+    The channel list must be nonempty. Patterns match ``*{channel}*.tif``;
+    multiple matches use the first filesystem glob result (not a sorted choice).
+    Cropping keeps the low-index corner. With ``convert_uint8=True``, non-uint8
+    values are scaled once across the entire stacked array, not per channel.
+    False preserves the NumPy-promoted dtype of the stacked inputs.
     """
     round_dir = Path(round_dir)
     search_dir = round_dir / subdir if subdir else round_dir

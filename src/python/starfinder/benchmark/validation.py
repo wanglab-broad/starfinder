@@ -172,6 +172,23 @@ def compare_genes(
     -------
     dict with ``gene_accuracy``, ``color_seq_accuracy``,
     ``gene_confusion``, ``n_matched``, ``spot_match``.
+
+    Parameters
+    ----------
+    spots : pd.DataFrame
+        Detected zero-based z,y,x coordinates and optional gene/color_seq columns.
+    ground_truth : dict
+        Synthetic ground truth with fovs[fov_id]["spots"] records.
+    fov_id : str
+        FOV key in ground_truth.
+    position_tolerance : float
+        Maximum voxel-index Euclidean distance for matching, default 5.0.
+
+    Notes
+    -----
+    No matched pairs yield zero accuracy. With matched pairs, an absent gene
+    or color_seq column yields None for its accuracy. Missing required ground
+    truth/coordinate keys raise KeyError. See :func:`starfinder.benchmark.compare_spots`.
     """
     gt_spots = ground_truth["fovs"][fov_id]["spots"]
 
@@ -229,7 +246,29 @@ def compare_genes(
 def e2e_summary(
     shift_result: dict, spot_result: dict, gene_result: dict
 ) -> dict:
-    """Combine comparison results into a single summary dict."""
+    """Combine comparison results into a single summary dict.
+
+    Parameters
+    ----------
+    shift_result : dict
+        Output of :func:`starfinder.benchmark.compare_shifts`.
+    spot_result : dict
+        Output of :func:`starfinder.benchmark.compare_spots`.
+    gene_result : dict
+        Output of :func:`starfinder.benchmark.compare_genes`.
+
+    Returns
+    -------
+    dict
+        shift_max_error, shift_passed, spot_recall, spot_precision,
+        spot_mean_distance, gene_accuracy, and color_seq_accuracy. Distances
+        remain in voxel units; fractions are dimensionless.
+
+    Raises
+    ------
+    KeyError
+        Required comparison keys are missing.
+    """
     return {
         "shift_max_error": shift_result["max_error"],
         "shift_passed": shift_result["passed"],

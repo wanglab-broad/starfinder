@@ -115,9 +115,13 @@ def spot_colocalization(
     Returns
     -------
     dict with keys:
+
         - iou: Intersection over Union (Jaccard index)
+
         - dice: Dice coefficient (F1 score)
+
         - n_ref_pixels: Number of spot pixels in reference
+
         - n_img_pixels: Number of spot pixels in image
     """
     ref_threshold = np.percentile(ref, threshold_percentile)
@@ -155,8 +159,10 @@ def detect_spots(
 
     Supports two workflows:
 
+
     - ``threshold_mode="percentile"`` (default): percentile-based threshold
       with connected-component centroids. Used by quality metrics.
+
     - ``threshold_mode="noise"``: per-channel MAD-based noise-floor threshold
       with ``peak_local_max`` suppression. Matches ``find_spots_3d`` workflow.
 
@@ -268,7 +274,9 @@ def spot_matching_accuracy(
     a spot must be matched across ALL sequencing rounds to decode its barcode.
 
     The matching rate has exponential impact on decoding success:
+
     - 90% match/round × 4 rounds = 65% decoded
+
     - 99% match/round × 4 rounds = 96% decoded
 
     Parameters
@@ -283,12 +291,19 @@ def spot_matching_accuracy(
     Returns
     -------
     dict with keys:
+
         - matched: Number of matched spots
+
         - match_rate: Fraction of reference spots that were matched
+
         - mean_distance: Mean distance of matched pairs
+
         - unmatched_ref: Number of unmatched reference spots
+
         - unmatched_mov: Number of unmatched moving spots
+
         - total_ref: Total reference spots
+
         - total_mov: Total moving spots
     """
     if len(ref_spots) == 0 or len(mov_spots) == 0:

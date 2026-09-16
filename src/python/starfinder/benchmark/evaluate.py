@@ -60,13 +60,21 @@ def evaluate_registration(
 
     Returns:
         Flat dict with before/after metrics:
+
         - ncc_before, ncc_after
+
         - ssim_before, ssim_after
+
         - ssim_method: "mip" if computed on MIP, "3d" if full volume
+
         - spot_iou_before, spot_iou_after
+
         - spot_dice_before, spot_dice_after
+
         - match_rate_before, match_rate_after
+
         - match_distance_before, match_distance_after
+
         - n_spots_ref, n_spots_before, n_spots_after
     """
     from starfinder.registration.metrics import registration_quality_report
