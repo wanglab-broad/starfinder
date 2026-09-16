@@ -19,6 +19,11 @@ workflow/snakemake-logs
 # Agent session artifacts
 .codex
 
+# Local worktrees, environments, and agent permissions
+/.worktrees/
+/src/python/.conda/
+/.claude/settings.local.json
+
 # Disposable agent plans; canonical plans and run reports belong in Linear.
 /.agent-work/
 /docs/plans/
