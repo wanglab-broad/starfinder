@@ -13,8 +13,9 @@ examples. Getting started provides a tested synthetic image-to-molecule
 quickstart. The MATLAB reference parses project-owned source and links workflow
 stages to Python operations; it does not certify MATLAB runtime behavior.
 The workflow guide maps rules and configuration to source, with bounded DAG
-examples and explicit downstream and cluster limitations. Other pages identify
-coverage that is still planned.
+examples and explicit downstream and cluster limitations. Development recipes
+exercise small Python inputs; conventions and troubleshooting explain axes,
+channels, thresholds, backend requirements and workflow diagnostics.
 ```
 
 ```{toctree}
