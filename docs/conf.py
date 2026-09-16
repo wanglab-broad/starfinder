@@ -38,6 +38,12 @@ html_title = "STARfinder documentation"
 html_theme_options = {"navigation_depth": 2}
 html_show_sourcelink = True
 
+# Preview URLs describe a local server, not a public documentation resource.
+linkcheck_ignore = [r"http://127\.0\.0\.1(?::\d+)?/"]
+linkcheck_timeout = 15
+linkcheck_retries = 1
+linkcheck_workers = 5
+
 
 def _alias_source_module(app, modname, attribute):
     """Keep type-alias source lookup in STARfinder, not builtins/NumPy."""
