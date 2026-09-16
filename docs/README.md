@@ -23,6 +23,7 @@ license is needed to build the site. Exact dependency resolutions are in
 
 ## Software entry points
 
+- [Minimal Python image-to-molecule quickstart](getting-started.md)
 - [Project overview and setup](../README.md)
 - [Python package documentation](../src/python/README.md)
 - [Workflow examples](../example/README.md)

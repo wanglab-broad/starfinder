@@ -9,8 +9,9 @@ Start with [getting started](getting-started.md), or look up the
 
 ```{note}
 The Python API reference includes an export inventory and small executable
-examples. The other pages identify coverage that is still planned, including
-the end-to-end tutorial, MATLAB reference, and workflow guide.
+examples. Getting started provides a tested synthetic image-to-molecule
+quickstart. The other pages identify coverage that is still planned, including
+the MATLAB reference and workflow guide.
 ```
 
 ```{toctree}
