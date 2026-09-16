@@ -43,6 +43,7 @@ docs = [
     "myst-parser>=4,<5",
     "pydata-sphinx-theme>=0.16,<0.17",
     "sphinxcontrib-matlabdomain>=0.22,<0.23",
+    "sphinx-design>=0.6,<0.7",
 ]
 dev = [
     "ipykernel>=7.1.0",

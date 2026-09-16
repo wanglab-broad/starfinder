@@ -14,7 +14,9 @@ uv sync --locked --no-default-groups --group docs
 ```
 
 The `docs` dependency group in `src/python/pyproject.toml` declares Sphinx 8.x,
-MyST Parser 4.x, PyData Sphinx Theme 0.16.x, and sphinxcontrib-matlabdomain 0.22.x.
+MyST Parser 4.x, PyData Sphinx Theme 0.16.x, sphinx-design 0.6.x, and
+sphinxcontrib-matlabdomain 0.22.x. Site styling lives in `docs/_static/custom.css`
+and the logo in `docs/_static/logo.png`; theme options are set in `docs/conf.py`.
 `src/python/uv.lock` records exact
 resolved versions and platform/Python markers. Use `--locked` to detect stale lock
 metadata; no optional package extras are needed for the current site. A first
