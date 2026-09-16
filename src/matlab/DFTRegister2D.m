@@ -1,4 +1,9 @@
 function [params, regImg] = DFTRegister2D(fixedImage, movingImage, preFFT)
+% Estimate integer translation between equal-sized (row, column) images.
+%
+% fixedImage/movingImage are spatial images unless preFFT=true (default false).
+% Returns params.shifts=[rowShift, colShift] and params.diffphase. Optional regImg
+% is produced by DFTApply2D. Pass correction params directly to that function.
 if nargin < 3
     preFFT = false;
 end

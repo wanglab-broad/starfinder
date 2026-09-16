@@ -1,6 +1,11 @@
 function input_img = MorphologicalReconstruction( input_img, radius )
-% MorphologicalReconstruction
-% Morphological opening is useful for removing small objects from an image while preserving the shape and size of larger objects in the image
+% Remove background slice by slice in cell-wrapped 4-D images.
+%
+% input_img is a cell array of (row, column, Z, C) arrays; radius is the disk
+% structuring-element radius in pixels. Uses erosion/reconstruction followed by
+% top-hat and bottom-hat operations in each 2-D plane. Returns the updated cells;
+% processed channel values are converted to uint8 before assignment into the
+% existing arrays. Requires Image Processing Toolbox.
     
     % Get dims 
     Nround = numel(input_img);

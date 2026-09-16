@@ -1,5 +1,11 @@
 function [ gene_to_seq, seq_to_gene ] = LoadCodebook( input_path, split_index, do_reverse )
-% new_LoadCodebook
+% Read input_path/genes.csv into gene/color-sequence dictionaries.
+%
+% CSV columns are gene name and uppercase DNA barcode. do_reverse reverses
+% barcode strings before encoding; split_index=[] disables segment rearrangement.
+% A nonempty split_index removes that encoded character and concatenates the
+% suffix before the prefix. Returns gene_to_seq and seq_to_gene dictionaries.
+% The class method defaults do_reverse=true; this helper requires all arguments.
 
     % load file
     fname = fullfile(input_path, 'genes.csv');

@@ -10,7 +10,8 @@ uv sync --locked --no-default-groups --group docs
 ```
 
 The `docs` dependency group in `src/python/pyproject.toml` declares Sphinx 8.x,
-MyST Parser 4.x, and PyData Sphinx Theme 0.16.x. `src/python/uv.lock` records exact
+MyST Parser 4.x, PyData Sphinx Theme 0.16.x, and sphinxcontrib-matlabdomain 0.22.x.
+`src/python/uv.lock` records exact
 resolved versions and platform/Python markers. Use `--locked` to detect stale lock
 metadata; no optional package extras are needed for the current site. A first
 installation needs access to the package registry (or an existing uv cache).
@@ -19,7 +20,15 @@ Sphinx imports the installed `starfinder` checkout, including its top-level
 imports, so install the package's runtime dependencies as well as the `docs`
 group. The build does not mock imports, download datasets, execute notebooks,
 run Snakemake, or start MATLAB. SimpleITK, SpatialData, napari, and a MATLAB
-license are not required to build the Python API reference.
+license are not required to build the API references. The MATLAB extension
+parses only `src/matlab/`; it needs `sphinx.ext.autodoc` enabled alongside it.
+Keep MATLAB help immediately after the function/class signature. Reference
+pages in `docs/api/matlab/` use `mat:currentmodule:: .` for root-level sources
+and explicitly prefixed `mat:autoclass`, `mat:automethod`, and
+`mat:autofunction` directives so Python and MATLAB objects remain distinct.
+When adding a MATLAB interface, update its help and the relevant inventory page.
+See the [extension's upstream documentation](https://github.com/sphinx-contrib/matlabdomain)
+for directive syntax. Source parsing does not validate MATLAB execution.
 
 ## Build HTML with warnings treated as errors
 

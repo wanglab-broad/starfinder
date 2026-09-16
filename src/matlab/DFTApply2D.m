@@ -1,4 +1,9 @@
 function reg = DFTApply2D(movingImage, params, preFFT)
+% Translate a (row, column) image with Fourier correction parameters.
+%
+% movingImage is spatial data unless preFFT=true (default false). params has
+% shifts=[rowShift, colShift] and diffphase. Returns a real magnitude image reg
+% with wrapped borders zeroed; there is no explicit integer dtype restoration.
 if nargin < 3
     preFFT = false;
 end

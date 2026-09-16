@@ -1,5 +1,9 @@
 function colorSeq = EncodeBases( seq )
-% EncodeBases
+% Encode a scalar DNA string of length L into L-1 color characters.
+%
+% seq uses uppercase A/C/G/T. Adjacent pairs map to labels 1 through 4; the
+% returned colorSeq is a scalar string. AA/CC/GG/TT map to 1; AC/CA/GT/TG to 2;
+% AG/CT/GA/TC to 3; AT/CG/GC/TA to 4. Unknown pairs are not accepted.
 
     % construct hash table for encoding
     % k = {'AT','CT','GT','TT',...

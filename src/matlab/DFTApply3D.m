@@ -1,4 +1,10 @@
 function reg = DFTApply3D(movingVolume, params, preFFT)
+% Apply Fourier translation and zero wrapped borders of a 3-D moving volume.
+%
+% movingVolume is (row, column, Z); params contains shifts in that order and
+% diffphase, normally from DFTRegister3D. preFFT defaults to false; true accepts
+% Fourier data. Returns reg, a real magnitude image of the same spatial shape.
+% The inverse FFT result is not explicitly cast back to the input integer dtype.
 if nargin < 3
     preFFT = false;
 end

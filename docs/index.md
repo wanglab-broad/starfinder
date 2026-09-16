@@ -4,14 +4,15 @@ STARfinder processes STARmap-related spatial transcriptomics images with
 Python and MATLAB backends coordinated by Snakemake.
 
 Start with [getting started](getting-started.md), or look up the
-[Python API](api/python.rst). To build this site locally, follow
+[Python API](api/python.rst) and [MATLAB API](api/matlab.md). To build this site locally, follow
 [contributing](contributing.md).
 
 ```{note}
 The Python API reference includes an export inventory and small executable
 examples. Getting started provides a tested synthetic image-to-molecule
-quickstart. The other pages identify coverage that is still planned, including
-the MATLAB reference and workflow guide.
+quickstart. The MATLAB reference parses project-owned source and links workflow
+stages to Python operations; it does not certify MATLAB runtime behavior.
+Other pages identify coverage that is still planned, including the workflow guide.
 ```
 
 ```{toctree}

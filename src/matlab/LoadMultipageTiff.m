@@ -1,4 +1,8 @@
 function FinalImage = LoadMultipageTiff( fname, convert_uint8 )
+% Read a multipage grayscale TIFF into a row-by-column-by-Z integer array.
+%
+% fname is a TIFF path. convert_uint8 defaults to false (preserve bit depth);
+% true applies im2uint8. FinalImage contains one TIFF page per Z plane.
 
     % Suppress all warnings 
     warning('off','all');
@@ -29,4 +33,3 @@ function FinalImage = LoadMultipageTiff( fname, convert_uint8 )
     TifLink.close();
     
 end
-

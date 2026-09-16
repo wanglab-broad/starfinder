@@ -3,6 +3,7 @@
 from importlib.metadata import version as package_version
 import posixpath
 import re
+from pathlib import Path
 
 project = "STARfinder"
 author = "STARfinder contributors"
@@ -14,7 +15,11 @@ extensions = [
     "sphinx.ext.autosummary",
     "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
+    "sphinxcontrib.matlab",
 ]
+# Parse only project-owned MATLAB code; no MATLAB process or license is needed.
+matlab_src_dir = str(Path(__file__).resolve().parents[1] / "src" / "matlab")
+matlab_auto_link = None
 source_suffix = {".md": "markdown", ".rst": "restructuredtext"}
 root_doc = "index"
 templates_path = ["_templates"]
