@@ -19,3 +19,9 @@ workflow/snakemake-logs
 # Agent session artifacts
 .codex
 
+# Disposable agent plans; canonical plans and run reports belong in Linear.
+/.agent-work/
+/docs/plans/
+/docs/notes.md
+/docs/temp.md
+/docs/plan_milestone_*.md

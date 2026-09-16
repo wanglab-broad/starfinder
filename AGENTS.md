@@ -45,7 +45,7 @@ starfinder/
 │   └── minimal_config.yaml
 ├── config/                # Conda environment definitions
 ├── profile/broad-uger/    # UGER cluster execution profile
-└── docs/                  # Design documents, plans, and development notes
+└── docs/                  # Maintained software documentation
 ```
 
 ### Python Backend
@@ -176,13 +176,29 @@ All benchmarks at `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/{m
 
 ## 4. Development
 
-### Current Status
+### Project coordination
 
-Milestone 1 (Snakemake 9 modularization): COMPLETED. Milestone 2 (Python backend): Phases 0-9 DONE — I/O, registration, spot finding, barcode, preprocessing, dataset/FOV orchestration, E2E validation, real data benchmarks, performance optimization (streaming + 50% RSS reduction).
+- Use Linear under the `PhD Thesis` initiative. [starfinder: Chapter II evidence and benchmarks](https://linear.app/jiahaoh/project/starfinder-chapter-ii-evidence-and-benchmarks-6f9ba2048496) owns W-92–W-94. [starfinder: review and plan](https://linear.app/jiahaoh/project/starfinder-review-and-plan-71b35aa5e5e3) retains review, coordination, and historical-record migration (W-95). [Chapter II](https://linear.app/jiahaoh/project/thesis-chapter-ii-starfinder-ef5247cb257d) owns scientific scope and acceptance; this repository owns implementation and benchmark execution.
+- Follow the living [initiative-wide workflow and handoff conventions](https://linear.app/jiahaoh/document/thesis-and-implementation-workflow-c12f30bffe9f), a PhD Thesis resource for all chapters, development projects, repositories, and hosts. Read the current version before a new handoff. Reuse existing issues, assign them to Jiahao (`assignee: "me"`), and use the relevant project milestone. Record the executing agent/session in a comment.
+- Update the canonical workflow in place as agreed practices evolve. Track substantive changes in a matching administrative issue, add dated rationale to its change log, and synchronize affected repository instructions and live issue templates. Preserve its URL; keep project-specific execution details here or in the project, and label unsettled proposals explicitly.
+- Before work, read the issue and dependencies, inspect Git state, and verify the repository, starting revision, data, environment, resource limits, and acceptance criteria. Unknown inputs remain explicitly unverified. Preserve unrelated edits; use separate branches/worktrees for concurrent agents.
+- Propose scope changes in the linked chapter discussion. Do not turn historical plan checklists into new authorized work automatically.
+- Record progress at meaningful decisions, blockers, handoffs, and completion. The completion summary must identify code/PR and commit/push/merge state, exact commands/configuration/data/environment, validation actually performed, artifacts, limitations, and follow-ups. If code is uncommitted, record that and preserve an identifiable patch/snapshot.
+- Set an implementation issue to `Done` only after its acceptance checklist and evidence are complete; verify assignee, milestone, status, and milestone progress. Chapter evidence/writing issues remain open until the thesis agent assesses the results and incorporates accepted reasoning and figure provenance. Null results can satisfy a benchmark task.
+- Current status and validation evidence live in Linear. [Historical plans and results](https://linear.app/jiahaoh/document/historical-record-index-and-migration-provenance-881cc5edc52b) preserve old claims with their dates and provenance; they do not establish current completion or correctness.
 
-Detailed docs in `docs/` and `docs/plans/`. Development notes in `docs/notes.md`.
+### Plans and artifact storage
 
-### Notes for Claude Code
+- Put short plans, scope, and acceptance criteria in the Linear issue description; progress, decisions, and result summaries in comments; substantial plans/reports in linked Linear project documents.
+- Do not commit planning-mode files, prompt histories, development diaries, or run-specific benchmark reports. Planning tools may use ignored `.agent-work/` files or their own temporary directory, but transfer the execution-ready plan to Linear before handoff. If Linear is unavailable, preserve temporary notes and sync them before declaring completion.
+- Keep maintained installation/API/usage/architecture documentation, benchmark runners, reusable configurations, evaluation code, and small fixtures in Git. Existing examples and Python package documentation remain the software entry points; `docs/` is for maintained documentation.
+- Store new run outputs outside the checkout at `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/<issue-id>/<run-id>/`. Use unique run IDs and retain existing run locations. Put metrics, logs, figures, and a manifest together.
+- Each manifest records issue URL, run ID/date/host, code commit and dirty-state/patch identity, dataset source/version/checksums, command/configuration/environment, seeds and hardware/resources, validation/exit status, output paths/checksums, limitations, owner, retention, and backup status. Unknown historical values are explicitly unverified.
+- Jiahao owns retention decisions. Retain cited evidence through thesis completion and related publication/release; verify a replacement before deleting it. Institutional backup coverage is unverified unless separately confirmed. Private server paths alone are insufficient for public release reproducibility.
+- Return accepted scientific interpretation, figure provenance, and manuscript changes to the thesis repository. Linear is the shared handoff; software Git is not the scientific execution diary.
+- Before removing legacy records, preserve exact bytes and Git-state metadata outside the checkout, verify the Linear copy, and repair references. Do not rewrite Git history.
+
+### Guidance for coding agents
 
 #### Development Philosophy
 - Don't over-engineer — be efficient and effective.
@@ -191,8 +207,7 @@ Detailed docs in `docs/` and `docs/plans/`. Development notes in `docs/notes.md`
 - Verify diagnosis against actual code before stating root causes — read the relevant code first, don't guess.
 
 #### Environment & Workflow
-- Always save the proposed plan in `docs/plans/`, each plan should have **Date:** and **Status:** properties at the beginning.  
-- If you finish implementing a plan from `docs/plans/`, mark its **Status** as "FINISHED" in the corresponding plan document.
+- Read and update the linked Linear issue as described above; use its checklist and status for completion.
 - After implementing changes, run `uv run pytest test/ -v` and report results before committing.
 - Run Python with `uv run python` (from `src/python/`)
 - The `~/wanglab` directory is a network mount. Use `Write` instead of `Edit` tool to avoid false "file modified" errors.
