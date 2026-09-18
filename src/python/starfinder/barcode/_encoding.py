@@ -9,7 +9,7 @@ maps base pairs to colors 1-4.
 
 # Forward lookup: base pair -> color
 #: Ordered nucleotide pair to STARmap color string (1..4).
-BASE_PAIR_TO_COLOR = {
+_BASE_PAIR_TO_COLOR = {
     "AA": "1", "CC": "1", "GG": "1", "TT": "1",
     "AC": "2", "CA": "2", "GT": "2", "TG": "2",
     "AG": "3", "CT": "3", "GA": "3", "TC": "3",
@@ -18,7 +18,7 @@ BASE_PAIR_TO_COLOR = {
 
 # Reverse lookup: color -> candidate base pairs
 #: STARmap color string (1..4) to compatible nucleotide-pair strings.
-COLOR_TO_BASE_PAIRS = {
+_COLOR_TO_BASE_PAIRS = {
     "1": ["AA", "CC", "GG", "TT"],
     "2": ["AC", "CA", "GT", "TG"],
     "3": ["AG", "CT", "GA", "TC"],
@@ -27,14 +27,14 @@ COLOR_TO_BASE_PAIRS = {
 
 # Color to 0-based channel index
 #: STARmap color string (1..4) to zero-based array channel index (0..3).
-COLOR_TO_CHANNEL = {"1": 0, "2": 1, "3": 2, "4": 3}
+_COLOR_TO_CHANNEL = {"1": 0, "2": 1, "3": 2, "4": 3}
 
 
 def encode_bases(sequence: str) -> str:
     """Encode a DNA sequence to a color-space sequence.
 
     Pure encoding with no reversal. Applies a sliding 2-base window
-    and maps each pair to a color digit via BASE_PAIR_TO_COLOR.
+    and maps each pair to a color digit via _BASE_PAIR_TO_COLOR.
 
     Parameters
     ----------
@@ -63,11 +63,11 @@ def encode_bases(sequence: str) -> str:
     colors = []
     for i in range(len(sequence) - 1):
         pair = sequence[i : i + 2]
-        colors.append(BASE_PAIR_TO_COLOR[pair])
+        colors.append(_BASE_PAIR_TO_COLOR[pair])
     return "".join(colors)
 
 
-def decode_color_seq(color_seq: str, start_base: str) -> str:
+def decode_color_sequence(color_seq: str, start_base: str) -> str:
     """Decode a color sequence back to a DNA barcode.
 
     Uses chain tracking: given the start base, each color digit constrains
@@ -88,7 +88,7 @@ def decode_color_seq(color_seq: str, start_base: str) -> str:
 
     Examples
     --------
-    >>> decode_color_seq("4422", "C")
+    >>> decode_color_sequence("4422", "C")
     'CGCAC'
 
     Raises
@@ -106,7 +106,7 @@ def decode_color_seq(color_seq: str, start_base: str) -> str:
     ref_base = start_base
 
     for j, color in enumerate(color_seq):
-        candidates = COLOR_TO_BASE_PAIRS[color]
+        candidates = _COLOR_TO_BASE_PAIRS[color]
         for pair in candidates:
             if pair[0] == ref_base:
                 if j == 0:

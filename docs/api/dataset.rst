@@ -12,7 +12,6 @@ Stateful orchestration and value types. Methods document state mutations and out
    FOV
    FOVPaths
    LayerState
-   Codebook
    CropWindow
    SubtileConfig
    log_step

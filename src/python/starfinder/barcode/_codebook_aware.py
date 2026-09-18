@@ -55,7 +55,7 @@ def _validate_codebook(
                 )
 
 
-def channel_probabilities(intensity_tensor: np.ndarray, eps: float = 1e-6) -> np.ndarray:
+def _channel_probabilities(intensity_tensor: np.ndarray, eps: float = 1e-6) -> np.ndarray:
     """Convert raw `(N, C, R)` intensities to per-round channel probabilities.
 
     Parameters
@@ -93,7 +93,7 @@ def channel_probabilities(intensity_tensor: np.ndarray, eps: float = 1e-6) -> np
     return adjusted / totals
 
 
-def wta_color_sequences(probs: np.ndarray) -> tuple[np.ndarray, pd.DataFrame]:
+def _wta_color_sequences(probs: np.ndarray) -> tuple[np.ndarray, pd.DataFrame]:
     """Return WTA color sequences plus per-round margin diagnostics.
 
     Parameters
@@ -159,7 +159,7 @@ def wta_color_sequences(probs: np.ndarray) -> tuple[np.ndarray, pd.DataFrame]:
     return color_seq, pd.DataFrame(diagnostics)
 
 
-def build_one_error_index(
+def _build_one_error_index(
     seq_to_gene: dict[str, str],
     n_channels: int,
     n_rounds: int,
@@ -213,7 +213,7 @@ def _unknown_count(observed: str, unknown_chars: str) -> int:
     return sum(char in unknown_chars for char in observed)
 
 
-def candidate_sequences(
+def _candidate_sequences(
     wta_seq: str,
     one_error_index: dict[str, list[str]],
     seq_to_gene: dict[str, str],
@@ -227,7 +227,7 @@ def candidate_sequences(
     wta_seq : str
         Observed sequence in one-based color labels or unknown_chars.
     one_error_index : dict[str, list[str]]
-        Index from :func:`starfinder.barcode.build_one_error_index`.
+        Index from :func:`starfinder.barcode._build_one_error_index`.
     seq_to_gene : dict[str, str]
         Valid sequence-to-gene mapping.
     unknown_chars : str
@@ -281,7 +281,7 @@ def _sequence_score(
     return score
 
 
-def score_candidates(
+def _score_candidates(
     probs_for_spot: np.ndarray,
     candidates: list[str],
     eps: float = 1e-12,
@@ -373,7 +373,7 @@ def _reject(row: dict[str, object], reason: str) -> dict[str, object]:
     return row
 
 
-def decode_codebook_aware(
+def _decode_codebook_aware(
     intensity_tensor: np.ndarray,
     seq_to_gene: dict[str, str],
     *,
@@ -393,7 +393,7 @@ def decode_codebook_aware(
     ----------
     intensity_tensor : np.ndarray
         Raw numeric intensities ``(N, C, R)``; normalized by
-        :func:`starfinder.barcode.channel_probabilities`.
+        :func:`starfinder.barcode._channel_probabilities`.
     seq_to_gene : dict[str, str]
         Color sequence (length R, labels 1..C) to gene mapping.
     spot_ids : array-like or None
@@ -461,9 +461,9 @@ def decode_codebook_aware(
     if n_spots == 0:
         return pd.DataFrame(columns=OUTPUT_COLUMNS)
 
-    probs = channel_probabilities(intensity_tensor)
-    wta_seqs, diagnostics = wta_color_sequences(probs)
-    one_error_index = build_one_error_index(seq_to_gene, n_channels, n_rounds)
+    probs = _channel_probabilities(intensity_tensor)
+    wta_seqs, diagnostics = _wta_color_sequences(probs)
+    one_error_index = _build_one_error_index(seq_to_gene, n_channels, n_rounds)
 
     values = np.asarray(intensity_tensor, dtype=np.float64)
     values = np.where(np.isfinite(values), values, 0.0)
@@ -503,7 +503,7 @@ def decode_codebook_aware(
             rows.append(_reject(row, "rescue_disabled"))
             continue
 
-        candidates = candidate_sequences(
+        candidates = _candidate_sequences(
             wta_seq,
             one_error_index,
             seq_to_gene,
@@ -515,14 +515,14 @@ def decode_codebook_aware(
             rows.append(_reject(row, "no_candidate"))
             continue
 
-        scores = score_candidates(probs_for_spot, candidates)
+        scores = _score_candidates(probs_for_spot, candidates)
         best = scores.iloc[0]
         score_delta = (
             float(scores.iloc[1]["score"] - best["score"])
             if len(scores) > 1
             else np.inf
         )
-        if np.isfinite(score_delta) and score_delta < min_score_delta:
+        if np.isfinite(score_delta) and (score_delta <= 1e-12 or score_delta < min_score_delta):
             rows.append(_reject(row, "ambiguous_candidate"))
             continue
 
@@ -592,14 +592,3 @@ def decode_codebook_aware(
         rows.append(row)
 
     return pd.DataFrame(rows, columns=OUTPUT_COLUMNS)
-
-
-__all__ = [
-    "OUTPUT_COLUMNS",
-    "build_one_error_index",
-    "candidate_sequences",
-    "channel_probabilities",
-    "decode_codebook_aware",
-    "score_candidates",
-    "wta_color_sequences",
-]

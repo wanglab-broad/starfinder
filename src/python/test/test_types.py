@@ -3,7 +3,6 @@
 import pytest
 
 from starfinder.dataset.types import (
-    Codebook,
     CropWindow,
     LayerState,
     SubtileConfig,
@@ -34,23 +33,6 @@ class TestLayerState:
     def test_validate_passes(self):
         ls = LayerState(seq=["r1", "r2"], other=["p1"], ref="r1")
         ls.validate()  # should not raise
-
-
-class TestCodebook:
-    """Tests for Codebook dataclass."""
-
-    def test_from_csv(self, small_dataset):
-        cb = Codebook.from_csv(small_dataset / "codebook.csv")
-        assert cb.n_genes == 8
-        assert "GeneA" in cb.genes
-        assert len(cb.seq_to_gene) == 8
-
-    def test_genes_sorted(self):
-        cb = Codebook(
-            gene_to_seq={"B": "11", "A": "22"},
-            seq_to_gene={"11": "B", "22": "A"},
-        )
-        assert cb.genes == ["A", "B"]
 
 
 class TestCropWindow:

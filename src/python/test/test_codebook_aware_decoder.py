@@ -1,203 +1,264 @@
-"""Tests for the codebook-aware barcode decoder."""
+"""Numerical regression and explicit correction policies for public decoding."""
 
+from dataclasses import replace
 import numpy as np
 import pandas as pd
 import pytest
-
-from starfinder.barcode import filter_reads
-from starfinder.barcode.codebook_aware import (
-    build_one_error_index,
-    candidate_sequences,
-    channel_probabilities,
-    decode_codebook_aware,
-    wta_color_sequences,
+from starfinder.barcode import (
+    decode_barcodes,
+    WtaDecoderConfig,
+    CodebookAwareDecoderConfig,
+    InvalidIntensityError,
+    filter_reads,
+    ReadFilterConfig,
 )
+from .barcode_cases import codebook, intensity, tensor
 
 
-def _tensor_for_sequences(sequences, n_channels=4, high=100.0, low=1.0):
-    n_spots = len(sequences)
-    n_rounds = len(sequences[0]) if sequences else 0
-    tensor = np.full((n_spots, n_channels, n_rounds), low, dtype=np.float64)
-    for spot_idx, seq in enumerate(sequences):
-        for round_idx, color in enumerate(seq):
-            tensor[spot_idx, int(color) - 1, round_idx] = high
-    return tensor
-
-
-def test_channel_probabilities_sum_to_one():
-    tensor = np.array(
-        [
-            [[1, 0], [2, 0], [3, 0], [4, 0]],
-            [[0, 0], [0, 0], [0, 0], [0, 0]],
-        ],
-        dtype=np.float64,
+def decode(values, mapping, **options):
+    return decode_barcodes(
+        intensity(values), codebook(mapping), config=CodebookAwareDecoderConfig(**options)
     )
 
-    probs = channel_probabilities(tensor)
 
-    np.testing.assert_allclose(probs.sum(axis=1), 1.0)
-    np.testing.assert_allclose(probs[1, :, :], 0.25)
+def test_known_wta_and_probability_score_semantics():
+    values = np.array([[[3.0], [4.0], [0.0], [0.0]]])
+    ext = intensity(values)
+    book = codebook({"2": "gene"})
+    wta = decode_barcodes(ext, book, config=WtaDecoderConfig(diagnostics=True))
+    aware = decode_barcodes(ext, book, config=CodebookAwareDecoderConfig(diagnostics=True))
+    assert wta.table.wta_l2_nll[0] == pytest.approx(-np.log(4 / (5 + 1e-6)))
+    assert aware.table.probability_nll[0] == pytest.approx(-np.log((4 + 1e-6) / (7 + 4e-6)))
+    assert wta.table.gene_id[0] == aware.table.gene_id[0] == "gene"
+    assert "probability_nll" not in wta.table and "wta_l2_nll" not in aware.table
+    np.testing.assert_allclose(aware.diagnostics["probabilities"].sum(axis=1), 1)
 
 
-def test_wta_exact_matches_filter_reads():
-    seq_to_gene = {"1234": "GeneA", "2222": "GeneB"}
-    tensor = _tensor_for_sequences(["1234", "2222", "1111"])
-
-    decoded = decode_codebook_aware(tensor, seq_to_gene, allow_rescue=False)
-
-    probs = channel_probabilities(tensor)
-    color_seq, _ = wta_color_sequences(probs)
-    spots = pd.DataFrame({"spot_id": [0, 1, 2], "color_seq": color_seq})
-    good, _ = filter_reads(spots, seq_to_gene)
-    expected_genes = spots["color_seq"].map(seq_to_gene)
-
-    assert list(decoded["color_seq_wta"]) == list(spots["color_seq"])
-    assert list(decoded["gene_wta"]) == list(expected_genes)
-    assert set(decoded.loc[decoded["call_type"] == "exact", "spot_id"]) == set(
-        good["spot_id"]
+def test_exact_and_unmatched_preserve_ids():
+    result = decode(
+        tensor(["1234", "2222", "1111"]), {"1234": "A", "2222": "B"}, allow_rescue=False
     )
-    assert decoded.loc[2, "call_type"] == "no_call"
-    assert decoded.loc[2, "reject_reason"] == "rescue_disabled"
+    assert result.table.call_status.tolist() == ["assigned", "assigned", "unmatched"]
+    assert result.table.spot_id.tolist() == ["s0", "s1", "s2"]
+    assert result.table.failure_reason[2] == "rescue_disabled"
+    assert filter_reads(result).accepted.gene_id.tolist() == ["A", "B"]
 
 
-def test_one_error_index_returns_expected_candidate():
-    seq_to_gene = {"4422": "GeneA"}
-    index = build_one_error_index(seq_to_gene, n_channels=4, n_rounds=4)
-
-    assert index["4322"] == ["4422"]
-    assert candidate_sequences("4322", index, seq_to_gene, max_hamming=1) == ["4422"]
-    assert candidate_sequences("4321", index, seq_to_gene, max_hamming=1) == []
-
-
-def test_low_margin_one_error_is_rescued():
-    seq_to_gene = {"4422": "GeneA"}
-    tensor = _tensor_for_sequences(["4422"])
-    # Round 1 WTA is channel 3 by a tiny margin, making observed seq 4322.
-    tensor[0, :, 1] = [1.0, 1.0, 51.0, 50.0]
-
-    decoded = decode_codebook_aware(
-        tensor,
-        seq_to_gene,
-        min_corrected_round_margin=0.02,
-        min_geomean_prob=0.30,
+def test_rescue_margin_boundary_and_probability_gate():
+    values = tensor(["4422"])
+    values[0, :, 1] = [1, 1, 51, 50]
+    kwargs = dict(diagnostics=True, min_geomean_probability=0.3)
+    result = decode(values, {"4422": "A"}, **kwargs)
+    row = result.table.iloc[0]
+    assert row.observed_color_sequence == "4322" and row.decoded_color_sequence == "4422"
+    assert row.call_type == "rescued_h1" and row.corrected_rounds == "1"
+    margin = row.corrected_round_margin
+    assert (
+        decode(
+            values, {"4422": "A"}, max_corrected_round_margin=margin, **kwargs
+        ).table.call_status[0]
+        == "assigned"
     )
-
-    row = decoded.iloc[0]
-    assert row["color_seq_wta"] == "4322"
-    assert row["decoded_seq"] == "4422"
-    assert row["gene"] == "GeneA"
-    assert row["call_type"] == "rescued_h1"
-    assert row["corrected_rounds"] == "1"
-
-
-def test_high_margin_wrong_sequence_is_rejected():
-    seq_to_gene = {"4422": "GeneA"}
-    tensor = _tensor_for_sequences(["4422"])
-    # Round 1 WTA is confidently channel 3; the decoder should not override it.
-    tensor[0, :, 1] = [1.0, 1.0, 90.0, 10.0]
-
-    decoded = decode_codebook_aware(
-        tensor,
-        seq_to_gene,
-        min_corrected_round_margin=0.20,
-        min_geomean_prob=0.10,
+    assert (
+        decode(
+            values, {"4422": "A"}, max_corrected_round_margin=np.nextafter(margin, 0), **kwargs
+        ).table.failure_reason[0]
+        == "corrected_round_margin_too_high"
     )
+    assert (
+        decode(values, {"4422": "A"}, min_geomean_probability=1).table.failure_reason[0]
+        == "geomean_prob_too_low"
+    )
+    assert (
+        decode(values, {"4422": "A"}, max_correction_penalty=0).table.failure_reason[0]
+        == "correction_penalty_too_high"
+    )
+    assert decode(values, {"4422": "A"}, max_hamming=0).table.failure_reason[0] == "no_candidate"
+    candidate = result.diagnostics["candidates"].iloc[0]
+    assert candidate.color_sequence == "4422" and candidate.spot_id == "s0"
+    assert candidate.probability_nll == row.probability_nll
 
-    row = decoded.iloc[0]
-    assert row["color_seq_wta"] == "4322"
-    assert row["call_type"] == "no_call"
-    assert row["reject_reason"] == "corrected_round_margin_too_high"
 
-
-def test_ambiguous_candidates_are_rejected():
-    seq_to_gene = {"4422": "GeneA", "4222": "GeneB"}
-    tensor = _tensor_for_sequences(["4422"])
-    # Observed 4322 is one edit from both codebook entries with equal support.
-    tensor[0, :, 1] = [1.0, 40.0, 41.0, 40.0]
-
-    decoded = decode_codebook_aware(
-        tensor,
-        seq_to_gene,
-        min_corrected_round_margin=0.20,
-        min_score_delta=0.25,
-        min_geomean_prob=0.10,
+def test_high_margin_and_rescue_disabled():
+    values = tensor(["4422"])
+    values[0, :, 1] = [1, 1, 90, 10]
+    assert (
+        decode(values, {"4422": "A"}, min_geomean_probability=0.1).table.failure_reason[0]
+        == "corrected_round_margin_too_high"
+    )
+    assert (
+        decode(values, {"4422": "A"}, allow_rescue=False).table.failure_reason[0]
+        == "rescue_disabled"
+    )
+    assert (
+        decode(tensor(["4422"]), {"4422": "A"}, allow_exact=False).table.call_status[0]
+        == "unmatched"
     )
 
-    row = decoded.iloc[0]
-    assert row["color_seq_wta"] == "4322"
-    assert row["call_type"] == "no_call"
-    assert row["reject_reason"] == "ambiguous_candidate"
+
+def test_equal_candidate_scores_ambiguous_even_zero_delta_gate():
+    values = tensor(["4422"])
+    values[0, :, 1] = [1, 40, 41, 40]
+    result = decode(
+        values,
+        {"4422": "A", "4222": "B"},
+        min_score_delta=0,
+        min_geomean_probability=0.1,
+        diagnostics=True,
+    )
+    assert result.table.call_status[0] == "ambiguous" and pd.isna(result.table.gene_id[0])
+    assert result.diagnostics["candidates"].color_sequence.tolist() == ["4222", "4422"]
 
 
-def test_unknown_round_wildcard_rescue():
-    seq_to_gene = {"4422": "GeneA"}
-    tensor = _tensor_for_sequences(["4422"])
-    # Round 1 has no signal, producing an M wildcard: observed seq 4M22.
-    tensor[0, :, 1] = 0.0
+def test_zero_signal_is_not_rescued_but_nonzero_tie_can_be():
+    values = tensor(["4422"])
+    values[0, :, 1] = 0
+    result = decode(values, {"4422": "A"}, min_geomean_probability=0.1)
+    assert result.table.call_status[0] == "no_signal" and pd.isna(result.table.gene_id[0])
+    assert result.table.failure_reason[0] == "zero_signal_round"
+    values[0, :, 1] = [1, 1, 50, 50]
+    rescued = decode(values, {"4422": "A"}, min_geomean_probability=0.1)
+    assert rescued.table.call_type[0] == "rescued_unknown"
+    ambiguous = decode(values, {"4422": "A", "4322": "B"}, min_geomean_probability=0.1)
+    assert ambiguous.table.call_status[0] == "ambiguous"
+    wta = decode_barcodes(intensity(values), codebook({"4422": "A"}), config=WtaDecoderConfig())
+    assert wta.table.call_status[0] == "ambiguous"
 
-    decoded = decode_codebook_aware(
-        tensor,
-        seq_to_gene,
-        max_hamming=1,
-        min_geomean_prob=0.30,
+
+@pytest.mark.parametrize("config", [WtaDecoderConfig(), CodebookAwareDecoderConfig()])
+def test_negatives_separate_from_zero_and_ties(config):
+    values = np.array([[[3.0], [-2.0], [0.0], [-1.0]]])
+    original = values.copy()
+    with pytest.raises(InvalidIntensityError):
+        decode_barcodes(intensity(values), codebook({"1": "A"}), config=config)
+    result = decode_barcodes(
+        intensity(values),
+        codebook({"1": "A"}),
+        config=replace(config, negative_policy="clip_negative"),
+    )
+    assert result.table.call_status[0] == "assigned"
+    assert result.diagnostics["clipped_count"] == 2 and result.diagnostics["clipped_range"] == (
+        -2.0,
+        -1.0,
+    )
+    np.testing.assert_array_equal(values, original)
+
+
+def test_labels_mapping_invalid_masks_and_empty_schema():
+    ext = intensity(tensor(["1234"]))
+    book = codebook({"1234": "A"})
+    with pytest.raises(ValueError, match="labels"):
+        decode_barcodes(
+            ext, replace(book, round_labels=book.round_labels[::-1]), config=WtaDecoderConfig()
+        )
+    mapping = {"1": 1, "2": 0, "3": 2, "4": 3}
+    remapped = replace(book, color_to_channel=mapping)
+    vals = ext.values[:, [1, 0, 2, 3], :]
+    mapped = decode_barcodes(
+        replace(ext, values=vals), remapped, config=CodebookAwareDecoderConfig(diagnostics=True)
+    )
+    assert mapped.table.gene_id[0] == "A"
+    assert mapped.diagnostics["probabilities"][0, :, 0].argmax() == 1
+    invalid = decode_barcodes(
+        replace(ext, valid=np.zeros((1, 4), bool)), book, config=WtaDecoderConfig()
+    )
+    assert invalid.table.failure_reason[0] == "invalid_measurement"
+    for config in (
+        WtaDecoderConfig(diagnostics=True),
+        CodebookAwareDecoderConfig(diagnostics=True),
+    ):
+        empty = decode_barcodes(intensity(np.empty((0, 4, 4))), book, config=config)
+        assert empty.table.empty and isinstance(empty.table.spot_id.dtype, pd.StringDtype)
+        filtered = filter_reads(empty)
+        assert filtered.counts == {"total": 0, "accepted": 0, "rejected": 0}
+        assert filtered.fractions["accepted"] is None
+        assert filtered.diagnostics["undefined_fraction_reasons"]["accepted"] == "empty_population"
+        assert filtered.accepted.dtypes.equals(filtered.table.dtypes)
+
+
+def test_filter_rerun_scores_endpoints_and_all_rejected():
+    result = decode(tensor(["12", "11"]), {"12": "A", "11": "B"})
+    original = result.table.copy(deep=True)
+    diagnostic = filter_reads(result, config=ReadFilterConfig(end_bases="CC"))
+    assert diagnostic.counts["accepted"] == 2
+    excluding = filter_reads(
+        result, config=ReadFilterConfig(end_bases="CC", exclude_invalid_endpoints=True)
+    )
+    assert excluding.accepted.gene_id.tolist() == ["B"]
+    rejected = filter_reads(
+        result, config=ReadFilterConfig(score_bounds={"probability_nll": (None, -1)})
+    )
+    assert len(rejected.table) == 2 and rejected.accepted.empty
+    assert rejected.table.spot_id.tolist() == result.table.spot_id.tolist()
+    pd.testing.assert_frame_equal(result.table, original)
+    with pytest.raises(ValueError, match="unavailable"):
+        filter_reads(result, config=ReadFilterConfig(score_bounds={"wta_l2_nll": (0, 1)}))
+
+
+def test_wta_exact_tie_vs_probability_tolerance_is_explicit():
+    values = np.array([[[1.0], [1.0 + 1e-13], [0.0], [0.0]]])
+    book = codebook({"1": "A", "2": "B"})
+    wta = decode_barcodes(intensity(values), book, config=WtaDecoderConfig())
+    aware = decode_barcodes(
+        intensity(values), book, config=CodebookAwareDecoderConfig(min_score_delta=0)
+    )
+    assert wta.table.call_status[0] == "assigned" and wta.table.gene_id[0] == "B"
+    assert (
+        aware.table.observed_color_sequence[0] == "M" and aware.table.call_status[0] == "ambiguous"
     )
 
-    row = decoded.iloc[0]
-    assert row["color_seq_wta"] == "4M22"
-    assert row["decoded_seq"] == "4422"
-    assert row["gene"] == "GeneA"
-    assert row["call_type"] == "rescued_unknown"
-    assert row["corrected_rounds"] == "1"
 
-
-def test_unknown_round_multiple_candidates_rejected():
-    seq_to_gene = {"4422": "GeneA", "4322": "GeneB"}
-    tensor = _tensor_for_sequences(["4422"])
-    tensor[0, :, 1] = 0.0
-
-    decoded = decode_codebook_aware(
-        tensor,
-        seq_to_gene,
-        max_hamming=1,
-        min_score_delta=0.25,
-        min_geomean_prob=0.10,
+def test_rescue_geomean_penalty_and_separation_boundaries():
+    values = tensor(["4422"])
+    values[0, :, 1] = [1, 2, 51, 50]
+    baseline = decode(
+        values, {"4422": "A", "4222": "B"}, diagnostics=True, min_geomean_probability=0
+    )
+    scores = baseline.diagnostics["candidates"]
+    probability = float(scores.geomean_probability.iloc[0])
+    delta = float(scores.probability_nll.iloc[1] - scores.probability_nll.iloc[0])
+    assert (
+        decode(
+            values,
+            {"4422": "A", "4222": "B"},
+            min_geomean_probability=probability,
+            min_score_delta=delta,
+        ).table.call_status[0]
+        == "assigned"
+    )
+    assert (
+        decode(
+            values, {"4422": "A", "4222": "B"}, min_score_delta=np.nextafter(delta, np.inf)
+        ).table.failure_reason[0]
+        == "ambiguous_candidate"
+    )
+    assert (
+        decode(
+            values, {"4422": "A"}, min_geomean_probability=np.nextafter(probability, np.inf)
+        ).table.failure_reason[0]
+        == "geomean_prob_too_low"
+    )
+    # The penalty compares changed-round -log probabilities; probe either side
+    # of its mathematical value with tolerance for the two logarithm operations.
+    penalty = np.log((51 + 1e-6) / (50 + 1e-6))
+    assert (
+        decode(values, {"4422": "A"}, max_correction_penalty=penalty + 1e-12).table.call_status[0]
+        == "assigned"
+    )
+    assert (
+        decode(values, {"4422": "A"}, max_correction_penalty=penalty - 1e-12).table.failure_reason[
+            0
+        ]
+        == "correction_penalty_too_high"
     )
 
-    row = decoded.iloc[0]
-    assert row["color_seq_wta"] == "4M22"
-    assert row["call_type"] == "no_call"
-    assert row["reject_reason"] == "ambiguous_candidate"
 
+def test_result_validation_rejects_nonfinite_and_duplicate_ids():
+    from .barcode_cases import intensity
 
-def test_output_schema_for_empty_input():
-    decoded = decode_codebook_aware(np.empty((0, 4, 4)), {"4422": "GeneA"})
-
-    assert decoded.empty
-    assert list(decoded.columns) == [
-        "spot_id",
-        "color_seq_wta",
-        "gene_wta",
-        "decoded_seq",
-        "gene",
-        "call_type",
-        "reject_reason",
-        "hamming_to_wta",
-        "corrected_rounds",
-        "score",
-        "score_delta",
-        "geomean_prob",
-        "min_round_margin",
-        "corrected_round_margin",
-        "mean_total_intensity",
-    ]
-
-
-def test_invalid_shapes_raise():
-    with pytest.raises(ValueError, match="Expected intensity tensor"):
-        decode_codebook_aware(np.zeros((4, 4)), {"4422": "GeneA"})
-
-    with pytest.raises(ValueError, match="expected 4"):
-        decode_codebook_aware(np.zeros((1, 4, 4)), {"442": "GeneA"})
-
-    with pytest.raises(ValueError, match="outside 1..4"):
-        decode_codebook_aware(np.zeros((1, 4, 4)), {"5522": "GeneA"})
+    values = tensor(["1", "2"])
+    with pytest.raises(ValueError, match="unique"):
+        intensity(values, ids=("same", "same"))
+    values[0, 0, 0] = np.nan
+    with pytest.raises(ValueError, match="finite"):
+        intensity(values)

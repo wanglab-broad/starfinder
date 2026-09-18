@@ -229,7 +229,7 @@ and joins on **(spot_namespace, spot_id)**; never regenerate IDs for a subset or
 join by row position. Results reject duplicate IDs within a namespace. Callers
 must choose distinct namespaces for independent detection results; identities
 are not promised invariant across changed images or detector configurations.
-The structured barcode/export redesign remains a subsequent migration.
+Barcode results now carry these identities; the full workflow/export coordination redesign is separate.
 
 Before: `find_spots_3d(image, intensity_estimation="adaptive", intensity_threshold=0.2)`.
 After:
@@ -243,18 +243,83 @@ result = find_spots(image, config=LocalMaximaConfig("adaptive", 0.2),
 spots = result.spots
 ```
 
-Extraction's `voxel_size=(1, 2, 2)` means integer **half-widths** `(dz, dy, dx)`
-of a `3 × 5 × 5` neighborhood, not micrometre spacing. Coordinate columns are
-cast to integers and must index the input volume. Edge neighborhoods use zero
-padding. {func}`starfinder.barcode.extract_from_location` uses L2-normalized
-intensities; codebook-aware decoding instead normalizes raw tensors across C
-into probabilities. Those scores are not interchangeable.
+### Independent barcode stages
 
-Color strings use one-based channel labels (`'1'` through `'4'` for four channels).
-The extractor returns `M` for a tied maximum (including an all-zero multi-channel
-neighborhood) and `N` for a NaN maximum. The probability decoder sanitizes
-nonfinite/negative input to zero, adds a pseudocount, and therefore turns a
-signal-free round into uniform probabilities and an `M` tie.
+`extract_intensities(rounds, spots, config=NeighborhoodSumConfig(...))` takes an
+ordered mapping of round names to `ImageLoadResult`, plus `SpotFindingResult`.
+All images must share shape, frame/grid metadata and channel labels in the same
+order. `IntensityExtractionResult` retains float64 `(N,C,R)` values, namespace,
+IDs, labels, metadata, effective config and Boolean `(N,R)` valid flags. Empty
+spots retain `(0,C,R)`; C and R must be nonzero. Images and coordinates must be
+finite. Coordinates are within voxel-center bounds `[0,size-1]` before nearest
+sampling with `floor(coord+.5)`; subpixel coordinates are not truncated. Integer
+`neighborhood_radius_zyx=(1,2,2)` means half-widths of a 3×5×5 neighborhood,
+not physical spacing. Clipped slices implement zero-padded boundaries without a
+padded-volume allocation. Sums accumulate in float64 and inputs are not mutated.
+
+`load_codebook` returns `barcode.Codebook`; explicit `round_labels` and
+`channel_labels` are required. Its ordered table has `gene_id`, `color_sequence`
+and optional `base_sequence`. Duplicate IDs/rows, encoded collisions, invalid
+symbols/lengths/mapping/splits raise errors with row context. Colors `'1'`–`'4'`
+are symbols: `color_to_channel` maps them to four distinct zero-based channels.
+`EncodingConfig(reverse_bases=True)` preserves STARmap/synthetic reversal;
+`encode_bases` alone does not reverse. A split removes that encoded character
+and swaps the remaining segments. Lookup constants and numerical helpers are
+private; the old combined extraction and decoder interfaces have been removed.
+
+`decode_barcodes(extracted, codebook, config=...)` requires exact label order.
+Every input identity retains one row with `assigned`, `unmatched`, `ambiguous`
+or `no_signal` status, reason, observed/decoded sequence and nullable gene ID.
+Nonfinite inputs fail. Negative values fail with `InvalidIntensityError` unless
+`negative_policy="clip_negative"` is explicit; diagnostics record clipped count
+and range. An unavailable measurement prevents assignment, and any zero-total
+round gives `no_signal`, even if the codebook could otherwise rescue a wildcard.
+
+`WtaDecoderConfig` uses exact channel ties and `wta_l2_nll`, the sum over rounds
+of `-log(max / (sqrt(sum(intensity**2)) + 1e-6))`. `CodebookAwareDecoderConfig`
+uses additive-1e-6 channel probabilities, `probability_nll` (sum of negative logs,
+1e-12 floor), and `geomean_probability`. These scores are not interchangeable.
+The probability decoder uses 1e-12 absolute channel-tie tolerance. A nonzero
+observed tie can be rescued by a unique supported candidate; equally scored
+candidates remain ambiguous even with `min_score_delta=0`. Exact calls bypass
+rescue gates. `max_corrected_round_margin` is an upper bound; other rescue gates
+are `max_hamming`, `min_score_delta`, `min_geomean_probability`,
+`max_correction_penalty`, `allow_exact` and `allow_rescue`.
+
+With `diagnostics=True`, results expose acquisition-ordered `probabilities`,
+identity-labeled `per_round` margins and `candidates` scores/ranks. Candidate
+ordering is score then color sequence; deterministic order does not resolve
+ambiguity into a gene assignment. WTA also exposes `wta_round_l2_nll`.
+
+`filter_reads(decoded, config=ReadFilterConfig(...))` can rerun without image
+access or decoding. It retains a complete table with acceptance/rejection reasons,
+an `accepted` view and counts/fractions. Predicates name allowed call statuses and
+inclusive method-specific score bounds; unavailable score columns error, and NaN
+fails a requested bound. Endpoint checks are diagnostic-only unless
+`exclude_invalid_endpoints=True`. Empty counts are zero and undefined fractions
+are `None` with a reason. IDs and typed columns survive all-rejected results.
+
+Before: combined extraction returned channel calls and scores; codebook loading
+returned two dictionaries, and filtering dropped rejected rows. After:
+
+```python
+from starfinder.barcode import (
+    extract_intensities, decode_barcodes, filter_reads,
+    NeighborhoodSumConfig, WtaDecoderConfig, ReadFilterConfig,
+)
+extracted = extract_intensities(rounds, spots,
+    config=NeighborhoodSumConfig((1, 2, 2)))
+decoded = decode_barcodes(extracted, codebook, config=WtaDecoderConfig())
+filtered = filter_reads(decoded,
+    config=ReadFilterConfig(score_bounds={"wta_l2_nll": (None, 1.0)}))
+accepted = filtered.accepted
+```
+
+FOV exposes the same three operations and stores `intensity_result`,
+`decoding_result` and `filtering_result`. Its current output adapters preserve
+shared MATLAB-facing columns/filenames. Historical saved-tensor diagnostic
+scripts explicitly declare positional channel/round axes; missing historical
+physical geometry remains unverified. No historical notebook outputs are rerun.
 
 {meth}`starfinder.dataset.FOV.save_signal` copies selected columns, increments
 `x`, `y`, and `z` by one, and leaves the in-memory table unchanged. Subtile tables

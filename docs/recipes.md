@@ -119,8 +119,9 @@ it does not append dataset/sample IDs. Configure rounds with
 {py:meth}`~starfinder.dataset.FOV.load_raw_images`,
 {py:meth}`~starfinder.dataset.FOV.global_registration`,
 {py:meth}`~starfinder.dataset.FOV.find_spots`,
-{py:meth}`~starfinder.dataset.FOV.reads_extraction` and
-{py:meth}`~starfinder.dataset.FOV.reads_filtration` in order.
+{py:meth}`~starfinder.dataset.FOV.extract_intensities`,
+{py:meth}`~starfinder.dataset.FOV.decode_barcodes` and
+{py:meth}`~starfinder.dataset.FOV.filter_reads` in order.
 
 ```{literalinclude} examples/recipes.py
 :language: python
@@ -129,7 +130,7 @@ it does not append dataset/sample IDs. Configure rounds with
 
 Recorded outcome: **10 candidates detected, 7 retained** for FOV_001. The script
 checks nonempty codebook-matched output, not fixed counts as a biological target.
-`do_reverse=True` matches this generator's encoding; real codebooks need their
+`EncodingConfig(reverse_bases=True)` matches this generator's encoding; real codebooks need their
 own orientation check. `voxel_size=(1,2,2)` is a 3×5×5 extraction neighborhood
 in ZYX, not physical spacing. No enhancement, local registration or suffix
 filtering is enabled in this example.
@@ -140,7 +141,7 @@ Workflow settings: `seq_channel_order`, `n_rounds`, `ref_round`, plus the
 The YAML wrapper is not identical to this direct API: its filtering field is
 `end_base`, while the FOV keyword is `end_bases`. For base/color conversions
 alone, see {py:func}`~starfinder.barcode.encode_bases` and
-{py:func}`~starfinder.barcode.decode_color_seq`.
+{py:func}`~starfinder.barcode.decode_color_sequence`.
 
 ## Inspect molecule outputs
 

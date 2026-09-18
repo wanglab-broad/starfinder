@@ -39,6 +39,7 @@ def small_pipeline_dataset(small_dataset, tmp_path):
         channel_order=["ch00", "ch01", "ch02", "ch03"],
         fov_pattern="FOV_%03d",
     )
+    ds.load_codebook(small_dataset / "codebook.csv")
     return ds
 
 
@@ -96,7 +97,7 @@ class TestFOVPipeline:
             fov.load_raw_images()
             .enhance_contrast()
             .global_registration().find_spots(config=LocalMaximaConfig())
-            .reads_extraction()
+            .extract_intensities().decode_barcodes()
         )
 
         assert "color_seq" in fov.all_spots.columns
@@ -114,10 +115,10 @@ class TestFOVPipeline:
             fov.load_raw_images()
             .enhance_contrast()
             .global_registration().find_spots(config=LocalMaximaConfig())
-            .reads_extraction()
+            .extract_intensities().decode_barcodes()
         )
         small_pipeline_dataset.load_codebook(small_dataset / "codebook.csv")
-        fov.reads_filtration()
+        fov.filter_reads()
 
         assert fov.good_spots is not None
         assert "gene" in fov.good_spots.columns
@@ -128,10 +129,10 @@ class TestFOVPipeline:
             fov.load_raw_images()
             .enhance_contrast()
             .global_registration().find_spots(config=LocalMaximaConfig())
-            .reads_extraction()
+            .extract_intensities().decode_barcodes()
         )
         small_pipeline_dataset.load_codebook(small_dataset / "codebook.csv")
-        fov.reads_filtration()
+        fov.filter_reads()
 
         # Only save if there are good spots
         if len(fov.good_spots) > 0:

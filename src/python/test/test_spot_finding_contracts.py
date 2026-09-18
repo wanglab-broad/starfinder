@@ -117,19 +117,23 @@ def test_ids_survive_subset_join_and_reject_collision():
 def test_fov_namespace_and_downstream_identity(tmp_path):
     from starfinder.dataset import STARMapDataset, LayerState
     dataset = STARMapDataset(tmp_path, tmp_path, 'dataset', 'sample', 'out',
-                            layers=LayerState(seq=['round1'], ref='round1'))
+                            layers=LayerState(seq=['round1'], ref='round1'),
+                            channel_order=['a','b','c','d'])
     fov = dataset.fov('FOV')
-    image = np.zeros((5, 9, 9, 2), dtype=np.uint8)
+    image = np.zeros((5, 9, 9, 4), dtype=np.uint8)
     image[2, 4, 4, 0] = 100
     fov.images['round1'] = image
     fov.find_spots()
     ids = fov.all_spots.spot_id.copy()
     namespace = fov.spot_result.spot_namespace
-    fov.reads_extraction()
+    fov.extract_intensities()
     pd.testing.assert_series_equal(ids, fov.all_spots.spot_id)
     assert fov.all_spots.spot_namespace.tolist() == [namespace]
-    from starfinder.barcode import filter_reads
-    accepted, _ = filter_reads(fov.all_spots, {'1': 'gene'})
+    from starfinder.barcode import Codebook
+    dataset.codebook = Codebook(pd.DataFrame({'gene_id':['gene'],'color_sequence':['1']}),
+                               ('round1',), ('a','b','c','d'))
+    fov.decode_barcodes().filter_reads()
+    accepted = fov.filtering_result.accepted
     pd.testing.assert_series_equal(ids, accepted.spot_id)
     assert accepted.spot_namespace.tolist() == [namespace]
     fov.subtile_id = 1

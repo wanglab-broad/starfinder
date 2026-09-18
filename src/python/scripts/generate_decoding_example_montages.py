@@ -23,8 +23,8 @@ from qc_codebook_aware_rescues import (
     stack_dir_for,
 )
 
-from starfinder.barcode import load_codebook
-from starfinder.barcode.codebook_aware import channel_probabilities
+from _decoding_inputs import saved_codebook
+from _decoding_inputs import tensor_diagnostics
 
 
 def parse_args() -> argparse.Namespace:
@@ -63,7 +63,7 @@ def h1_corrected_round_metrics(decoded: pd.DataFrame, tensor: np.ndarray) -> pd.
 
         spot_id = int(getattr(row, "spot_id"))
         values = np.asarray(tensor[spot_id : spot_id + 1], dtype=np.float64)
-        probs = channel_probabilities(values)[0]
+        probs = tensor_diagnostics(values)['probabilities'][0]
         intensities = values[0]
 
         wta_ch = int(wta_color) - 1
@@ -267,7 +267,7 @@ def main() -> None:
         args.split_index,
         result_dir=args.result_dir,
     )
-    _gene_to_seq, seq_to_gene = load_codebook(codebook_path, split_index=split_index)
+    seq_to_gene = saved_codebook(codebook_path, split_index=split_index).seq_to_gene
 
     h1_metrics = h1_corrected_round_metrics(merged, tensor)
     selected = select_decoding_examples(

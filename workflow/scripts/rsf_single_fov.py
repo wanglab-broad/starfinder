@@ -9,6 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, snakemake.config["starfinder_path"] + "/src/python")
 
+from starfinder.barcode import NeighborhoodSumConfig, ReadFilterConfig
 from starfinder.spot_finding import LocalMaximaConfig
 from starfinder.dataset import STARMapDataset
 
@@ -84,14 +85,14 @@ else:
             ), threshold_value=params["spot_finding"]["intensity_threshold"]))
 
     if params.get("reads_extraction", {}).get("run"):
-        fov.reads_extraction(
-            voxel_size=tuple(params["reads_extraction"]["voxel_size"])
+        fov.extract_intensities(
+            config=NeighborhoodSumConfig(tuple(params["reads_extraction"]["voxel_size"]))
         )
 
     if params.get("reads_filtration", {}).get("run"):
-        fov.reads_filtration(
-            end_bases=params["reads_filtration"].get("end_base"),
-            start_base=params["reads_filtration"].get("start_base", "C"),
+        fov.decode_barcodes().filter_reads(
+            config=ReadFilterConfig(end_bases=params["reads_filtration"].get("end_base"),
+            start_base=params["reads_filtration"].get("start_base", "C")),
         )
 
 # --- Save outputs ---

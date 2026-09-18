@@ -24,7 +24,7 @@ from typing import Literal
 
 import numpy as np
 
-from starfinder.barcode.encoding import BASE_PAIR_TO_COLOR, COLOR_TO_CHANNEL, encode_bases
+from starfinder.barcode import EncodingConfig
 from starfinder.benchmark.presets import SIZE_PRESETS, SPOT_COUNTS, SHIFT_RANGES
 
 
@@ -111,7 +111,7 @@ def encode_barcode_to_colors(barcode: str) -> str:
     str
         4-character color sequence (e.g., "4422")
     """
-    return encode_bases(barcode[::-1])
+    return EncodingConfig(reverse_bases=True).encode(barcode)
 
 
 # ---------------------------------------------------------------------------
@@ -774,7 +774,7 @@ def generate_synthetic_dataset(
                 channel_spots: list[SpotTuple] = []
                 for spot in spots_info:
                     color = spot["color_seq"][round_idx - 1]
-                    spot_channel = COLOR_TO_CHANNEL[color]
+                    spot_channel = int(color) - 1
                     if spot_channel == ch:
                         z, y, x = spot["position"]
 

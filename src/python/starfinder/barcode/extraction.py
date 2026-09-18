@@ -1,206 +1,157 @@
-"""Color vector extraction from spot locations.
+"""Labeled neighborhood sums, independent of decoding and filtering."""
 
-Reference: src/matlab/ExtractFromLocation.m
-
-Reads per-channel intensities in a voxel neighborhood around each detected
-spot, L2-normalizes, and performs winner-take-all channel assignment.
-"""
-
+from dataclasses import dataclass
+from numbers import Integral
+from collections.abc import Mapping
 import numpy as np
-import pandas as pd
+
+from starfinder.image import ImageMetadata, _validate_image
+from starfinder.io import ImageLoadResult
+from starfinder.spot_finding import SpotFindingResult
+from .codebook import _labels
 
 
-def _sum_neighborhood_intensities(
-    image: np.ndarray,
-    spots: pd.DataFrame,
-    voxel_size: tuple[int, int, int],
-) -> np.ndarray:
-    """Sum per-channel intensities around each spot."""
-    if image.ndim != 4:
-        raise ValueError(f"Expected 4D (Z, Y, X, C) image, got {image.ndim}D")
+@dataclass(frozen=True)
+class NeighborhoodSumConfig:
+    """Float64 sums with nearest floor(coord+.5) sampling and zero boundaries.
 
-    n_points = len(spots)
-    n_channels = image.shape[3]
-    dz, dy, dx = voxel_size
-
-    if n_points == 0:
-        return np.empty((0, n_channels), dtype=np.float64)
-
-    # Pad image with zeros so boundary spots use zero-padded neighborhoods.
-    # Padding zeros contribute nothing to the sum, matching the original
-    # clipping behavior without per-spot boundary checks.
-    if dz > 0 or dy > 0 or dx > 0:
-        padded = np.pad(
-            image, ((dz, dz), (dy, dy), (dx, dx), (0, 0)), mode="constant"
-        )
-    else:
-        padded = image
-
-    # Spot coordinates index directly into padded image
-    z_arr = spots["z"].values.astype(int)
-    y_arr = spots["y"].values.astype(int)
-    x_arr = spots["x"].values.astype(int)
-
-    # Build neighborhood offset grid
-    nz, ny, nx = 2 * dz + 1, 2 * dy + 1, 2 * dx + 1
-    oz, oy, ox = np.mgrid[0:nz, 0:ny, 0:nx]
-    oz_flat = oz.ravel()  # (nz*ny*nx,)
-    oy_flat = oy.ravel()
-    ox_flat = ox.ravel()
-
-    # Compute all voxel indices for all spots: (N, neighborhood_size)
-    z_idx = z_arr[:, None] + oz_flat[None, :]
-    y_idx = y_arr[:, None] + oy_flat[None, :]
-    x_idx = x_arr[:, None] + ox_flat[None, :]
-
-    # Extract all neighborhoods at once: (N, neighborhood_size, C)
-    neighborhoods = padded[z_idx, y_idx, x_idx, :]
-
-    # Sum over spatial dims -> (N, C) per-spot color vectors
-    return neighborhoods.sum(axis=1).astype(np.float64)
-
-
-def extract_from_location(
-    image: np.ndarray,
-    spots: pd.DataFrame,
-    voxel_size: tuple[int, int, int] = (1, 2, 2),
-) -> tuple[np.ndarray, np.ndarray]:
-    """Extract color vectors from spot neighborhoods.
-
-    For each spot, sums intensities in a voxel neighborhood per channel,
-    L2-normalizes, and assigns a winner-take-all channel label.
-
-    Parameters
-    ----------
-    image : np.ndarray
-        4D array with shape (Z, Y, X, C).
-    spots : pd.DataFrame
-        Must have columns [z, y, x] with 0-based coordinates.
-    voxel_size : tuple[int, int, int]
-        Half-widths (dz, dy, dx) for the extraction neighborhood.
-        Default (1, 2, 2) matches MATLAB's [dx, dy, dz] = [2, 2, 1].
-
-    Returns
-    -------
-    color_seq : np.ndarray
-        1D string array of length N. Values: "1"-"4" (1-based channel),
-        "M" (tie, including an all-zero multi-channel neighborhood), or
-        "N" (NaN maximum).
-    color_score : np.ndarray
-        1D float array of length N. Score = -log(max_normalized_value).
-        inf for "M" or "N" assignments.
+    Half-widths are voxel counts, never physical spacing. Inputs are not mutated.
+    A clipped slice is equivalent to zero padding without allocating padded images.
     """
-    if image.ndim != 4:
-        raise ValueError(f"Expected 4D (Z, Y, X, C) image, got {image.ndim}D")
 
-    n_points = len(spots)
-    n_channels = image.shape[3]
+    neighborhood_radius_zyx: tuple[int, int, int] = (1, 2, 2)
+    sampling: str = "nearest"
+    boundary: str = "zero"
 
-    if n_points == 0:
-        return np.empty(0, dtype=object), np.empty(0, dtype=np.float64)
-
-    color_vecs = _sum_neighborhood_intensities(image, spots, voxel_size)
-
-    # L2 normalize per spot
-    norms = np.sqrt((color_vecs**2).sum(axis=1, keepdims=True)) + 1e-6
-    color_vecs /= norms
-
-    # Winner-take-all channel assignment
-    color_max = color_vecs.max(axis=1)  # (N,)
-    argmax = color_vecs.argmax(axis=1)  # (N,)
-
-    # Detect ties (multiple channels share the max) and NaN
-    tie_mask = (color_vecs == color_max[:, None]).sum(axis=1) > 1
-    nan_mask = np.isnan(color_max)
-    normal_mask = ~nan_mask & ~tie_mask
-
-    # Build color_seq
-    channel_labels = np.array([str(i + 1) for i in range(n_channels)])
-    color_seq = np.empty(n_points, dtype=object)
-    color_seq[nan_mask] = "N"
-    color_seq[tie_mask] = "M"
-    color_seq[normal_mask] = channel_labels[argmax[normal_mask]]
-
-    # Build color_score (inf for ties and NaN, -log(max) for normal)
-    color_score = np.full(n_points, np.inf, dtype=np.float64)
-    if normal_mask.any():
-        color_score[normal_mask] = -np.log(color_max[normal_mask])
-
-    return color_seq, color_score
+    def __post_init__(self):
+        if (
+            not isinstance(self.neighborhood_radius_zyx, tuple)
+            or len(self.neighborhood_radius_zyx) != 3
+            or any(
+                isinstance(x, bool) or not isinstance(x, Integral) or x < 0
+                for x in self.neighborhood_radius_zyx
+            )
+        ):
+            raise ValueError("neighborhood_radius_zyx must be a nonnegative integer triple")
+        if self.sampling != "nearest" or self.boundary != "zero":
+            raise ValueError("only nearest sampling and zero boundary are supported")
 
 
-def extract_intensity_tensor(
-    images: dict[str, np.ndarray],
-    spots: pd.DataFrame,
-    round_order: list[str],
-    voxel_size: tuple[int, int, int] = (1, 2, 2),
-) -> np.ndarray:
-    """Return raw per-(spot, channel, round) intensities.
+@dataclass(frozen=True)
+class IntensityExtractionResult:
+    """Finite float64 N×C×R sums, stable identities and explicit acquisition axes.
 
-    Uses the same zero-padded voxel-neighborhood sum as
-    ``extract_from_location()``, but skips L2 normalization and
-    winner-take-all assignment. Output shape is ``(N, C, R)`` for direct
-    use by probabilistic decoders such as Postcode.
-
-    Parameters
-    ----------
-    images : dict[str, np.ndarray]
-        Round names to numeric ``(Z, Y, X, C)`` images with equal channel counts.
-    spots : pd.DataFrame
-        Columns ``z, y, x`` contain valid zero-based voxel indices (cast to int).
-    round_order : list[str]
-        Order of the output R axis. Each name must exist in images.
-    voxel_size : tuple[int, int, int]
-        Nonnegative integer neighborhood half-widths ``(dz, dy, dx)`` in voxels,
-        default (1, 2, 2), not physical voxel spacing. Edges are zero-padded.
-
-    Returns
-    -------
-    np.ndarray
-        Float64 neighborhood sums, shape ``(N, C, R)``; no normalization.
-        Empty round_order returns shape ``(N, 0, 0)``.
-
-    Raises
-    ------
-    KeyError
-        A round or required coordinate column is missing.
-    ValueError
-        An image is not 4D or channel counts differ.
-
-    See Also
-    --------
-    starfinder.barcode.extract_from_location
-    starfinder.barcode.decode_codebook_aware
+    valid is Boolean N×R; false marks an unavailable measurement, not zero signal.
+    Signed extraction is allowed; decoding chooses reject/clip_negative explicitly.
     """
-    if not round_order:
-        return np.empty((len(spots), 0, 0), dtype=np.float64)
 
-    missing = [round_name for round_name in round_order if round_name not in images]
-    if missing:
-        raise KeyError(f"Missing images for rounds: {missing}")
+    values: np.ndarray
+    spot_ids: tuple[str, ...]
+    spot_namespace: str
+    channel_labels: tuple[str, ...]
+    round_labels: tuple[str, ...]
+    metadata: ImageMetadata
+    config: NeighborhoodSumConfig
+    valid: np.ndarray
+    diagnostics: dict
 
-    first = images[round_order[0]]
-    if first.ndim != 4:
-        raise ValueError(f"Expected 4D (Z, Y, X, C) image, got {first.ndim}D")
+    def __post_init__(self):
+        _labels(self.channel_labels, "channel_labels")
+        _labels(self.round_labels, "round_labels")
+        if not isinstance(self.spot_namespace, str) or not self.spot_namespace.strip():
+            raise ValueError("spot_namespace must be nonempty")
+        if (
+            not isinstance(self.spot_ids, tuple)
+            or any(not isinstance(s, str) or not s for s in self.spot_ids)
+            or len(set(self.spot_ids)) != len(self.spot_ids)
+        ):
+            raise ValueError("spot_ids must be unique nonempty strings")
+        shape = (len(self.spot_ids), len(self.channel_labels), len(self.round_labels))
+        if (
+            not isinstance(self.values, np.ndarray)
+            or self.values.dtype != np.float64
+            or self.values.shape != shape
+            or not np.isfinite(self.values).all()
+        ):
+            raise ValueError("values must be finite float64 (N,C,R) matching identities/labels")
+        if (
+            not isinstance(self.valid, np.ndarray)
+            or self.valid.dtype != bool
+            or self.valid.shape != (shape[0], shape[2])
+        ):
+            raise ValueError("valid must be Boolean (N,R)")
+        if not isinstance(self.metadata, ImageMetadata) or not isinstance(
+            self.config, NeighborhoodSumConfig
+        ):
+            raise TypeError("metadata/config type mismatch")
 
-    n_points = len(spots)
-    n_channels = first.shape[3]
-    tensor = np.empty((n_points, n_channels, len(round_order)), dtype=np.float64)
 
-    for round_idx, round_name in enumerate(round_order):
-        image = images[round_name]
-        if image.ndim != 4:
-            raise ValueError(
-                f"Expected 4D (Z, Y, X, C) image for {round_name}, "
-                f"got {image.ndim}D"
+def extract_intensities(
+    rounds: Mapping[str, ImageLoadResult],
+    spots: SpotFindingResult,
+    *,
+    config: NeighborhoodSumConfig = NeighborhoodSumConfig(),
+) -> IntensityExtractionResult:
+    """Sum ordered, labeled ZYXC rounds at spot coordinates on their common grid.
+
+    Mapping insertion order defines R. Every round must have exactly the same
+    shape, metadata and channel order. Coordinates must lie within voxel-center
+    bounds [0, size-1] before rounding. Empty spots retain shape (0,C,R).
+    """
+    if not isinstance(config, NeighborhoodSumConfig) or not isinstance(spots, SpotFindingResult):
+        raise TypeError("expected NeighborhoodSumConfig and SpotFindingResult")
+    spots.__post_init__()
+    labels = tuple(rounds)
+    _labels(labels, "round_labels")
+    first = rounds[labels[0]]
+    if not isinstance(first, ImageLoadResult):
+        raise TypeError("rounds must contain ImageLoadResult")
+    channel_labels = tuple(first.channel_labels)
+    _labels(channel_labels, "channel_labels")
+    coords = spots.spots[["z", "y", "x"]].to_numpy()
+    shape = first.image.shape
+    images = []
+    for label, loaded in rounds.items():
+        if not isinstance(loaded, ImageLoadResult):
+            raise TypeError(f"{label}: expected ImageLoadResult")
+        image = _validate_image(loaded.image, ndim=(4,))
+        if (
+            image.shape != shape
+            or loaded.metadata != spots.metadata
+            or tuple(loaded.channel_labels) != channel_labels
+            or image.shape[3] != len(channel_labels)
+        ):
+            raise ValueError(f"{label}: frame/grid/channel label mismatch")
+        images.append(image)
+    detector_labels = spots.diagnostics.get("channel_labels")
+    if detector_labels is not None and tuple(detector_labels) != channel_labels:
+        raise ValueError("spot channel labels disagree with extraction labels")
+    if "channel" in spots.spots and (spots.spots.channel >= len(channel_labels)).any():
+        raise ValueError("spot channel outside labeled image")
+    if (coords < 0).any() or (coords > np.asarray(shape[:3]) - 1).any():
+        raise ValueError("coordinates outside voxel-center bounds")
+    centers = np.floor(coords + 0.5).astype(np.int64)
+    values = np.empty((len(coords), len(channel_labels), len(labels)), dtype=np.float64)
+    radius = np.asarray(config.neighborhood_radius_zyx)
+    for r, image in enumerate(images):
+        for n, center in enumerate(centers):
+            lo = np.maximum(center - radius, 0)
+            hi = np.minimum(center + radius + 1, shape[:3])
+            values[n, :, r] = image[tuple(slice(a, b) for a, b in zip(lo, hi))].sum(
+                axis=(0, 1, 2), dtype=np.float64
             )
-        if image.shape[3] != n_channels:
-            raise ValueError(
-                f"All rounds must have {n_channels} channels; "
-                f"{round_name} has {image.shape[3]}"
-            )
-        tensor[:, :, round_idx] = _sum_neighborhood_intensities(
-            image, spots, voxel_size
-        )
-
-    return tensor
+    return IntensityExtractionResult(
+        values,
+        tuple(spots.spots.spot_id),
+        spots.spot_namespace,
+        channel_labels,
+        labels,
+        spots.metadata,
+        config,
+        np.ones((len(coords), len(labels)), dtype=bool),
+        {
+            "source_shape_zyx": shape[:3],
+            "calculation_dtype": "float64",
+            "sampling": "floor(coord+.5)",
+        },
+    )

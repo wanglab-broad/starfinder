@@ -218,7 +218,7 @@ def compare_genes(
         if has_gene:
             gt_gene = gt_spots[gt_idx]["gene"]
             pred_gene = spots.iloc[det_idx]["gene"]
-            if gt_gene == pred_gene:
+            if pd.notna(pred_gene) and gt_gene == pred_gene:
                 correct_genes += 1
             else:
                 key = f"{gt_gene}->{pred_gene}"

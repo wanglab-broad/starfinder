@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from starfinder.image import ImageMetadata
+from starfinder.spot_finding import LocalMaximaConfig
 from starfinder.registration import estimate_transform, apply_transform, TranslationConfig
 from starfinder.io import ImageConversionConfig, ImageLoadConfig, convert_image
 from starfinder.preprocessing import MinMaxNormalizationConfig
@@ -21,7 +22,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import spearmanr
 
-from starfinder.barcode import decode_codebook_aware, extract_intensity_tensor, load_codebook
+from _decoding_inputs import saved_decoding, saved_extraction, saved_codebook, report_table
 from starfinder.benchmark.validation import compare_genes
 
 BENCHMARK_ROOT = Path("/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark")
@@ -39,21 +40,21 @@ PAD_SUFFIX_RE = re.compile(r"_(STAR|RIBO)_pad_\d+$")
 CONFIGS: dict[str, dict[str, Any]] = {
     "wta_exact": {"allow_rescue": False},
     "conservative": {
-        "min_corrected_round_margin": 0.10,
+        "max_corrected_round_margin": 0.10,
         "min_score_delta": 0.50,
-        "min_geomean_prob": 0.55,
+        "min_geomean_probability": 0.55,
         "max_correction_penalty": 0.75,
     },
     "balanced": {
-        "min_corrected_round_margin": 0.20,
+        "max_corrected_round_margin": 0.20,
         "min_score_delta": 0.25,
-        "min_geomean_prob": 0.45,
+        "min_geomean_probability": 0.45,
         "max_correction_penalty": 1.50,
     },
     "permissive": {
-        "min_corrected_round_margin": 0.30,
+        "max_corrected_round_margin": 0.30,
         "min_score_delta": 0.10,
-        "min_geomean_prob": 0.35,
+        "min_geomean_probability": 0.35,
         "max_correction_penalty": 2.50,
     },
 }
@@ -389,7 +390,7 @@ def prepare_synthetic_inputs(
     images = load_and_register_synthetic_images(data_dir, fov_id, ground_truth["n_rounds"])
     spots = detect_synthetic_spots(images, spot_namespace=json.dumps([dataset, "synthetic", fov_id]))
     round_order = [f"round{i}" for i in range(1, ground_truth["n_rounds"] + 1)]
-    tensor = extract_intensity_tensor(images, spots, round_order)
+    tensor = saved_extraction(images, spots, round_order, namespace=f"{dataset}/{fov_id}")
     prep_time = time.perf_counter() - t0
     save_cached_inputs(tensor, spots, output_dir, dataset, fov_id)
 
@@ -451,7 +452,7 @@ def prepare_real_backend_inputs(
     images = load_registered_real_images(variant_dir, int(config["n_rounds"]))
     round_order = [f"round{i}" for i in range(1, int(config["n_rounds"]) + 1)]
     voxel_size = tuple(int(v) for v in config["voxel_size"])
-    tensor = extract_intensity_tensor(images, spots, round_order, voxel_size=voxel_size)
+    tensor = saved_extraction(images, spots, round_order, neighborhood_radius_zyx=voxel_size, namespace=f"{dataset}/{fov_id}")
     prep_time = time.perf_counter() - t0
     save_cached_inputs(tensor, spots, output_dir, dataset, fov_id)
 
@@ -535,11 +536,12 @@ def prepare_real_raw_inputs(
 
     round_order = [f"round{i}" for i in range(1, int(config["n_rounds"]) + 1)]
     tensor_t0 = time.perf_counter()
-    tensor = extract_intensity_tensor(
+    tensor = saved_extraction(
         fov.images,
         spots,
         round_order,
-        voxel_size=tuple(int(v) for v in config["voxel_size"]),
+        neighborhood_radius_zyx=tuple(int(v) for v in config["voxel_size"]),
+        namespace=f"{dataset}/{fov_id}",
     )
     tensor_elapsed = time.perf_counter() - tensor_t0
     tensor_rss = current_rss_mb()
@@ -606,7 +608,9 @@ def decoded_eval_frame(
     *,
     use_wta: bool,
 ) -> pd.DataFrame:
-    merged = spots.merge(decoded, on="spot_id", how="left")
+    spots = spots.copy()
+    spots['spot_id'] = spots.spot_id.astype('string')
+    merged = spots.merge(decoded, on="spot_id", how="left", validate="one_to_one")
     if use_wta:
         gene = merged["gene_wta"]
         color_seq = merged["color_seq_wta"]
@@ -639,7 +643,7 @@ def synthetic_metrics(
     rescued_ids = set(
         decoded.loc[decoded["call_type"].astype(str).str.startswith("rescued"), "spot_id"]
     )
-    rescued_eval = cba_eval.loc[spots["spot_id"].isin(rescued_ids)]
+    rescued_eval = cba_eval.loc[spots["spot_id"].astype("string").isin(rescued_ids)]
     if len(rescued_eval):
         rescued_result = compare_genes(rescued_eval, ground_truth, fov_id)
         rescued_accuracy = rescued_result["gene_accuracy"]
@@ -767,12 +771,14 @@ def run_dataset_fov(
         gc.collect()
         rss_before = current_rss_mb()
         t0 = time.perf_counter()
-        decoded = decode_codebook_aware(
+        decoded_result = saved_decoding(
             tensor,
             seq_to_gene,
             spot_ids=spots["spot_id"].to_numpy(),
+            namespace=f"{dataset}/{fov_id}",
             **config,
         )
+        decoded = report_table(decoded_result)
         elapsed = time.perf_counter() - t0
         rss_after = current_rss_mb()
         peak_after = peak_rss_mb()
@@ -840,7 +846,7 @@ def run_synthetic_medium(args: argparse.Namespace) -> list[dict[str, Any]]:
     data_dir = args.postcode_root / "data" / "synthetic_medium"
     result_dir = args.postcode_root / "results" / "synthetic_medium"
     ground_truth = json.loads((data_dir / "ground_truth.json").read_text())
-    _gene_to_seq, seq_to_gene = load_codebook(data_dir / "codebook.csv")
+    seq_to_gene = saved_codebook(data_dir / "codebook.csv").seq_to_gene
 
     rows = []
     for fov_id in args.synthetic_fovs:
@@ -867,7 +873,7 @@ def run_synthetic_preset(args: argparse.Namespace, preset: str) -> list[dict[str
     dataset = f"synthetic_{preset}"
     data_dir = BENCHMARK_ROOT / "e2e" / "data" / preset
     ground_truth = json.loads((data_dir / "ground_truth.json").read_text())
-    _gene_to_seq, seq_to_gene = load_codebook(data_dir / "codebook.csv")
+    seq_to_gene = saved_codebook(data_dir / "codebook.csv").seq_to_gene
 
     rows = []
     for fov_id in args.synthetic_fovs:
@@ -910,10 +916,10 @@ def run_real_dataset(args: argparse.Namespace, dataset: str) -> list[dict[str, A
         )
         if seq_to_gene is None:
             split_index = config.get("split_index")
-            _gene_to_seq, seq_to_gene = load_codebook(
+            seq_to_gene = saved_codebook(
                 config["codebook_path"],
                 split_index=split_index,
-            )
+            ).seq_to_gene
         rows.extend(
             run_dataset_fov(
                 dataset=dataset,

@@ -32,7 +32,8 @@ objects and are not duplicate implementations.
 * ``starfinder.spot_finding`` → :doc:`spot_finding` (module)
 * ``starfinder.find_spots`` → :doc:`spot_finding`
 * ``starfinder.barcode`` → :doc:`barcode` (module)
-* ``starfinder.extract_from_location`` → :doc:`barcode`
+* ``starfinder.extract_intensities`` → :doc:`barcode`
+* ``starfinder.decode_barcodes`` → :doc:`barcode`
 * ``starfinder.load_codebook`` → :doc:`barcode`
 * ``starfinder.filter_reads`` → :doc:`barcode`
 * ``starfinder.preprocessing`` → :doc:`preprocessing` (module)
@@ -47,10 +48,8 @@ Canonical coverage
 ------------------
 
 Synthetic names on :doc:`benchmark.synthetic` are also re-exported by
-``starfinder.benchmark``. The barcode codebook-aware helpers are also available
-from ``starfinder.barcode.codebook_aware``; its ``__all__`` is a subset of the
-barcode table. Other implementation-module import aliases point to the same
-objects documented here.
+``starfinder.benchmark``. Barcode mechanics and lookup constants are private; use structured decoding
+diagnostics for per-round probabilities and candidate scores.
 
 .. list-table:: Export inventory
    :header-rows: 1
@@ -106,35 +105,37 @@ objects documented here.
      - :doc:`spot_finding`
    * - ``starfinder.spot_finding.find_spots``
      - :doc:`spot_finding`
-   * - ``starfinder.barcode.BASE_PAIR_TO_COLOR``
+   * - ``starfinder.barcode.BarcodeDecodingResult``
      - :doc:`barcode`
-   * - ``starfinder.barcode.COLOR_TO_BASE_PAIRS``
+   * - ``starfinder.barcode.Codebook``
      - :doc:`barcode`
-   * - ``starfinder.barcode.COLOR_TO_CHANNEL``
+   * - ``starfinder.barcode.CodebookAwareDecoderConfig``
      - :doc:`barcode`
-   * - ``starfinder.barcode.build_one_error_index``
+   * - ``starfinder.barcode.EncodingConfig``
      - :doc:`barcode`
-   * - ``starfinder.barcode.candidate_sequences``
+   * - ``starfinder.barcode.IntensityExtractionResult``
      - :doc:`barcode`
-   * - ``starfinder.barcode.channel_probabilities``
+   * - ``starfinder.barcode.InvalidIntensityError``
      - :doc:`barcode`
-   * - ``starfinder.barcode.decode_color_seq``
+   * - ``starfinder.barcode.NeighborhoodSumConfig``
      - :doc:`barcode`
-   * - ``starfinder.barcode.decode_codebook_aware``
+   * - ``starfinder.barcode.ReadFilterConfig``
+     - :doc:`barcode`
+   * - ``starfinder.barcode.ReadFilteringResult``
+     - :doc:`barcode`
+   * - ``starfinder.barcode.WtaDecoderConfig``
+     - :doc:`barcode`
+   * - ``starfinder.barcode.decode_barcodes``
+     - :doc:`barcode`
+   * - ``starfinder.barcode.decode_color_sequence``
      - :doc:`barcode`
    * - ``starfinder.barcode.encode_bases``
      - :doc:`barcode`
-   * - ``starfinder.barcode.extract_from_location``
-     - :doc:`barcode`
-   * - ``starfinder.barcode.extract_intensity_tensor``
+   * - ``starfinder.barcode.extract_intensities``
      - :doc:`barcode`
    * - ``starfinder.barcode.filter_reads``
      - :doc:`barcode`
    * - ``starfinder.barcode.load_codebook``
-     - :doc:`barcode`
-   * - ``starfinder.barcode.score_candidates``
-     - :doc:`barcode`
-   * - ``starfinder.barcode.wta_color_sequences``
      - :doc:`barcode`
    * - ``starfinder.dataset.STARMapDataset``
      - :doc:`dataset`
@@ -143,8 +144,6 @@ objects documented here.
    * - ``starfinder.dataset.FOVPaths``
      - :doc:`dataset`
    * - ``starfinder.dataset.LayerState``
-     - :doc:`dataset`
-   * - ``starfinder.dataset.Codebook``
      - :doc:`dataset`
    * - ``starfinder.dataset.CropWindow``
      - :doc:`dataset`

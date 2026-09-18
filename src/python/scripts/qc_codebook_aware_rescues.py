@@ -20,13 +20,8 @@ import numpy as np
 import pandas as pd
 import tifffile
 
-from starfinder.barcode import load_codebook
-from starfinder.barcode.codebook_aware import (
-    build_one_error_index,
-    candidate_sequences,
-    channel_probabilities,
-    score_candidates,
-)
+from _decoding_inputs import saved_codebook
+from _decoding_inputs import tensor_diagnostics, observed_candidates, saved_decoding
 
 BENCHMARK_ROOT = Path("/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark")
 DEFAULT_RESULT_DIR = BENCHMARK_ROOT / "decoding" / "codebook_aware" / "results"
@@ -376,13 +371,12 @@ def target_no_call_candidates(
     n_channels: int,
     n_rounds: int,
 ) -> pd.Series:
-    one_error_index = build_one_error_index(seq_to_gene, n_channels, n_rounds)
     seq_to_base = {seq: strip_pad_suffix(gene) for seq, gene in seq_to_gene.items()}
     cache: dict[str, str] = {}
     unique_wta = decoded.loc[decoded["call_group"] == "no_call", "color_seq_wta"].unique()
     for wta_seq in unique_wta:
         seq = normalize_sequence(wta_seq)
-        candidates = candidate_sequences(seq, one_error_index, seq_to_gene)
+        candidates = observed_candidates(seq, seq_to_gene).color_sequence.tolist()
         target_candidates = [
             candidate for candidate in candidates if seq_to_base[candidate] == target_gene
         ]
@@ -555,7 +549,7 @@ def select_examples(
 
 def probs_for_spot(tensor: np.ndarray, spot_id: int) -> np.ndarray:
     values = np.asarray(tensor[spot_id : spot_id + 1], dtype=np.float64)
-    return channel_probabilities(values)[0]
+    return tensor_diagnostics(values)['probabilities'][0]
 
 
 def best_target_candidate(
@@ -565,8 +559,14 @@ def best_target_candidate(
     candidates = [candidate for candidate in candidate_list if candidate]
     if not candidates:
         return ""
-    scores = score_candidates(probs, sorted(set(candidates)))
-    return str(scores.iloc[0]["seq"])
+    # Recover an intensity representation whose additive-pseudocount probabilities
+    # equal the supplied public probabilities, then read public candidate scores.
+    scale = max(1.0, 1e-6 / float(probs.min()))
+    values = np.maximum(probs * scale - 1e-6, 0)[None, ...]
+    result = saved_decoding(values, {s:s for s in sorted(set(candidates))},
+        max_hamming=probs.shape[1], allow_exact=False)
+    scores = result.diagnostics['candidates']
+    return str(scores.iloc[0]['color_sequence'])
 
 
 def margin_round(probs: np.ndarray) -> int:
@@ -691,7 +691,7 @@ def all_rescued_h1_tensor_metrics(
         wta_ch = int(wta_color) - 1
         target_ch = int(target_color) - 1
         values = np.asarray(tensor[spot_id : spot_id + 1], dtype=np.float64)
-        probs = channel_probabilities(values)[0]
+        probs = tensor_diagnostics(values)['probabilities'][0]
         intensities = values[0]
 
         wta_intensity = float(intensities[wta_ch, round_idx])
@@ -1115,7 +1115,7 @@ def main() -> None:
         args.split_index,
         result_dir=args.result_dir,
     )
-    _gene_to_seq, seq_to_gene = load_codebook(codebook_path, split_index=split_index)
+    seq_to_gene = saved_codebook(codebook_path, split_index=split_index).seq_to_gene
     tensor_metric_genes = list(dict.fromkeys([*args.genes, *args.control_genes, "Kalrn"]))
     _tensor_metrics, tensor_summary = write_h1_tensor_metrics(
         merged,

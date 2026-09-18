@@ -11,12 +11,13 @@ import numpy as np
 import pandas as pd
 
 from starfinder.barcode import (
-    channel_probabilities, decode_codebook_aware, extract_intensity_tensor,
+    Codebook, NeighborhoodSumConfig, CodebookAwareDecoderConfig,
+    decode_barcodes, extract_intensities,
 )
 from starfinder.benchmark import measure
 from starfinder.benchmark.synthetic import create_test_volume
 from starfinder.dataset import LayerState, STARMapDataset
-from starfinder.io import load_volume, save_volume
+from starfinder.io import ImageLoadResult, load_volume, save_volume
 from starfinder.preprocessing import normalize_intensity
 from starfinder.registration import estimate_transform, apply_transform, TranslationConfig, DemonsConfig, WarpConfig, DenseDisplacementTransform, InsufficientLandmarksError
 from starfinder.spot_finding import find_spots, LocalMaximaConfig
@@ -55,16 +56,19 @@ def main(output: Path) -> None:
         image, config=LocalMaximaConfig("adaptive", 0.2),
         metadata=ImageMetadata("example/sample/FOV/round1"),
         spot_namespace="example/sample/FOV",
-    ).spots
-    assert spots[["z", "y", "x"]].values.tolist() == [[5, 10, 10]]
-    tensor = extract_intensity_tensor(
-        {"round1": image}, spots, ["round1"], voxel_size=(0, 0, 0)
     )
-    assert tensor.shape == (1, 4, 1) and tensor.dtype == np.float64
-    np.testing.assert_allclose(channel_probabilities(tensor).sum(axis=1), 1)
-    decoded = decode_codebook_aware(tensor, {"1": "GeneA"})
-    assert decoded.loc[0, "gene"] == "GeneA"
-    assert decoded.loc[0, "call_type"] == "exact"
+    assert spots.spots[["z", "y", "x"]].values.tolist() == [[5, 10, 10]]
+    channels = ('ch00', 'ch01', 'ch02', 'ch03')
+    extracted = extract_intensities(
+        {'round1': ImageLoadResult(image, spots.metadata, channels, (), {})}, spots,
+        config=NeighborhoodSumConfig((0, 0, 0)))
+    assert extracted.values.shape == (1, 4, 1) and extracted.values.dtype == np.float64
+    book = Codebook(pd.DataFrame({'gene_id':['GeneA'], 'color_sequence':['1']}),
+                    ('round1',), channels)
+    decoded = decode_barcodes(extracted, book, config=CodebookAwareDecoderConfig(diagnostics=True))
+    np.testing.assert_allclose(decoded.diagnostics['probabilities'].sum(axis=1), 1)
+    assert decoded.table.loc[0, 'gene_id'] == 'GeneA'
+    assert decoded.table.loc[0, 'call_type'] == 'exact'
 
     dataset = STARMapDataset(
         input_root=output, output_root=output,
@@ -72,7 +76,7 @@ def main(output: Path) -> None:
         layers=LayerState(seq=["round1", "round2"], ref="round1"),
     )
     fov = dataset.fov("Position000")
-    fov.good_spots = spots.assign(gene="GeneA")
+    fov.good_spots = spots.spots.assign(gene="GeneA")
     csv = pd.read_csv(fov.save_signal())
     assert csv[["x", "y", "z"]].values.tolist() == [[11, 11, 6]]
     assert fov.good_spots[["z", "y", "x"]].values.tolist() == [[5, 10, 10]]

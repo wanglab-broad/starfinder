@@ -66,8 +66,8 @@ It calls `workflow/scripts/rsf_single_fov.py` or `.m` respectively.
 | enhance | Optional `enhance_contrast`, `hist_equalize`, `morph_recon` | `EnhanceContrast`, `HistEqualize`, `MorphRecon` | Preprocessed arrays |
 | registration | Optional `global_registration`, `local_registration` | `GlobalRegistration`, `LocalRegistration` | Aligned arrays and reference image |
 | spot_finding | `find_spots` | `SpotFinding` | Candidate coordinates |
-| extraction | `reads_extraction` | `ReadsExtraction` | Per-round intensities/color calls |
-| filtration | `reads_filtration` using loaded codebook | `LoadCodebook`, `ReadsFiltration` | Decoded, filtered molecules |
+| extraction | `extract_intensities` / `decode_barcodes` | `ReadsExtraction` | Per-round intensities/color calls |
+| filtration | `filter_reads` using loaded codebook | `LoadCodebook`, `ReadsFiltration` | Decoded, filtered molecules |
 
 The direct rule declares these outputs, relative to OUTPUT:
 

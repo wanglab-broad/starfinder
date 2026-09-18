@@ -1,28 +1,27 @@
 starfinder.barcode
 ==================
 
-Color labels are one-based channel numbers encoded as strings. Spatial coordinates remain zero-based. Raw tensors have shape ``(N, C, R)``. See :doc:`contracts`.
+Independent codebook validation, intensity extraction, decoding and filtering.
+See :doc:`contracts` for labels, identities, score meanings and numerical policy.
 
 .. currentmodule:: starfinder.barcode
 
 .. autosummary::
-   :toctree: generated
+   :toctree: generated/
 
-   build_one_error_index
-   candidate_sequences
-   channel_probabilities
-   decode_color_seq
-   decode_codebook_aware
+   BarcodeDecodingResult
+   Codebook
+   CodebookAwareDecoderConfig
+   EncodingConfig
+   IntensityExtractionResult
+   InvalidIntensityError
+   NeighborhoodSumConfig
+   ReadFilterConfig
+   ReadFilteringResult
+   WtaDecoderConfig
+   decode_barcodes
+   decode_color_sequence
    encode_bases
-   extract_from_location
-   extract_intensity_tensor
+   extract_intensities
    filter_reads
    load_codebook
-   score_candidates
-   wta_color_sequences
-
-.. autodata:: starfinder.barcode.encoding.BASE_PAIR_TO_COLOR
-
-.. autodata:: starfinder.barcode.encoding.COLOR_TO_BASE_PAIRS
-
-.. autodata:: starfinder.barcode.encoding.COLOR_TO_CHANNEL

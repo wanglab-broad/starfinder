@@ -406,7 +406,7 @@ def load_seq_to_gene(
     codebook_path: Path | None,
     split_index: int | None,
 ) -> dict[str, str] | None:
-    from starfinder.barcode import load_codebook
+    from _decoding_inputs import saved_codebook
 
     resolved_path = codebook_path
     resolved_split = split_index
@@ -416,10 +416,10 @@ def load_seq_to_gene(
             resolved_split = auto_split
     if resolved_path is None or not resolved_path.exists():
         return None
-    _gene_to_seq, seq_to_gene = load_codebook(
+    seq_to_gene = saved_codebook(
         resolved_path,
         split_index=resolved_split,
-    )
+    ).seq_to_gene
     return seq_to_gene
 
 
@@ -441,10 +441,18 @@ def make_codebook_neighbor_bias(
     if not seq_to_gene:
         return pd.DataFrame()
 
-    from starfinder.barcode.codebook_aware import build_one_error_index
+    from _decoding_inputs import observed_candidates
 
     n_channels, n_rounds = infer_codebook_shape(seq_to_gene)
-    one_error_index = build_one_error_index(seq_to_gene, n_channels, n_rounds)
+    # Enumerate the diagnostic population, then obtain candidates via public results.
+    observed_sequences = set()
+    for sequence in seq_to_gene:
+        for i in range(n_rounds):
+            for color in '1234':
+                if color != sequence[i]:
+                    observed_sequences.add(sequence[:i] + color + sequence[i+1:])
+    one_error_index = {seq: observed_candidates(seq, seq_to_gene).color_sequence.tolist()
+                       for seq in sorted(observed_sequences)}
     seq_to_base = {
         seq: strip_pad_suffix(gene)
         for seq, gene in seq_to_gene.items()

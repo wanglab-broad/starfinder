@@ -6,9 +6,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from starfinder.barcode import Codebook, EncodingConfig, load_codebook
 from starfinder.dataset.types import (
     ChannelOrder,
-    Codebook,
     LayerState,
     SubtileConfig,
 )
@@ -187,7 +187,7 @@ class STARMapDataset:
         self,
         path: Path | str,
         split_index: int | None = None,
-        do_reverse: bool = True,
+        reverse_bases: bool = True,
     ) -> None:
         """Load codebook from CSV and store on self.codebook.
 
@@ -195,17 +195,18 @@ class STARMapDataset:
         ----------
         path : pathlib.Path or str
             Two-column gene,barcode CSV, with or without a header.
-        do_reverse : bool
+        reverse_bases : bool
             Reverse bases before encoding, default True.
         split_index : int or None
             Optional two-segment split, default None.
 
         Returns
         -------
-        STARMapDataset
-            This dataset with codebook replaced. Errors propagate from
-            :meth:`starfinder.dataset.Codebook.from_csv`.
+        None
+            Stores the canonical barcode Codebook. Sequencing round labels and
+            channel_order must be configured explicitly. Errors propagate from
+            :func:`starfinder.barcode.load_codebook`.
         """
-        self.codebook = Codebook.from_csv(
-            path, do_reverse=do_reverse, split_index=split_index
-        )
+        self.codebook = load_codebook(path, round_labels=tuple(self.layers.seq),
+            channel_labels=tuple(self.channel_order),
+            encoding=EncodingConfig(reverse_bases=reverse_bases, split_index=split_index))

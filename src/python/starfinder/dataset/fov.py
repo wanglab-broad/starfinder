@@ -16,7 +16,9 @@ from starfinder.io import ImageLoadConfig
 from starfinder.preprocessing import (MinMaxNormalizationConfig, HistogramMatchingConfig, ReconstructionConfig, TophatConfig, ProjectionConfig)
 from starfinder.dataset.logging import log_step
 from starfinder.dataset.paths import FOVPaths
-from starfinder.dataset.types import Codebook, ImageArray
+from starfinder.dataset.types import ImageArray
+from starfinder.barcode import (Codebook, IntensityExtractionResult, NeighborhoodSumConfig,
+    WtaDecoderConfig, ReadFilterConfig, BarcodeDecodingResult, ReadFilteringResult)
 
 if TYPE_CHECKING:
     from starfinder.dataset.dataset import STARMapDataset
@@ -70,6 +72,11 @@ class FOV:
     all_spots: pd.DataFrame | None = None
     good_spots: pd.DataFrame | None = None
 
+    intensity_result: IntensityExtractionResult | None = None
+    decoding_result: BarcodeDecodingResult | None = None
+    filtering_result: ReadFilteringResult | None = None
+    _round_intensities: dict = field(default_factory=dict)
+
     load_diagnostics: dict[str, dict] = field(default_factory=dict)
 
     # --- Delegated properties ---
@@ -82,7 +89,7 @@ class FOV:
 
     @property
     def codebook(self) -> Codebook | None:
-        """Shared dataset Codebook, or None before loading.
+        """Shared barcode Codebook, or None before loading.
         """
         return self.dataset.codebook
 
@@ -623,100 +630,75 @@ class FOV:
         self.all_spots["spot_namespace"] = pd.Series(namespace, index=self.all_spots.index, dtype="string")
         return self
 
-    def _extract_round(
-        self,
-        round_name: str,
-        voxel_size: tuple[int, int, int] = (1, 2, 2),
-    ) -> None:
-        """Extract colors for a single round, adding columns to all_spots."""
-        from starfinder.barcode import extract_from_location
+    def _extract_round(self, round_name, voxel_size=(1, 2, 2)):
+        from starfinder.barcode import extract_intensities
+        from starfinder.io import ImageLoadResult
+        loaded = ImageLoadResult(self.images[round_name],
+            self.metadata.get(round_name, ImageMetadata(f"{self.fov_id}/{round_name}")),
+            tuple(self.dataset.channel_order), (), {})
+        self._round_intensities[round_name] = extract_intensities(
+            {round_name: loaded}, self.spot_result,
+            config=NeighborhoodSumConfig(tuple(voxel_size)))
 
-        color, score = extract_from_location(
-            self.images[round_name], self.all_spots, voxel_size
-        )
-        self.all_spots[f"{round_name}_color"] = color
-        self.all_spots[f"{round_name}_score"] = score
-
-    def _build_color_seq(self, layers: list[str] | None = None) -> None:
-        """Concatenate per-round color columns into color_seq string."""
-        if layers is None:
-            layers = self.layers.seq
-        color_cols = [f"{r}_color" for r in layers]
-        self.all_spots["color_seq"] = self.all_spots[color_cols].astype(str).agg(
-            "".join, axis=1
-        )
+    def _assemble_intensities(self, layers=None):
+        layers = self.layers.seq if layers is None else layers
+        results = [self._round_intensities[r] for r in layers]
+        first = results[0]
+        if any(r.spot_ids != first.spot_ids or r.metadata != first.metadata or
+               r.channel_labels != first.channel_labels or r.config != first.config or
+               r.diagnostics['source_shape_zyx'] != first.diagnostics['source_shape_zyx'] for r in results):
+            raise ValueError("inconsistent round extraction results")
+        self.intensity_result = IntensityExtractionResult(
+            np.concatenate([r.values for r in results], axis=2), first.spot_ids,
+            first.spot_namespace, first.channel_labels, tuple(layers), first.metadata,
+            first.config, np.concatenate([r.valid for r in results], axis=1),
+            {'rounds': {r: self._round_intensities[r].diagnostics for r in layers}})
+        self._round_intensities.clear()
 
     @log_step
-    def reads_extraction(
-        self,
-        voxel_size: tuple[int, int, int] = (1, 2, 2),
-        layers: list[str] | None = None,
-    ) -> FOV:
-        """Extract color sequences from spot locations across rounds.
-
-        Adds ``{round}_color``, ``{round}_score`` columns per round,
-        and a concatenated ``color_seq`` column.
-
-        Parameters
-        ----------
-        voxel_size : tuple[int, int, int]
-            Extraction half-widths (dz, dy, dx) in voxel indices, not physical spacing.
-        layers : list[str] | None
-            Rounds to process; None uses all configured layers for preprocessing, sequencing layers for extraction.
-
-        Returns
-        -------
-        FOV
-            This instance, with processing state updated in place.
-        """
-        if layers is None:
-            layers = self.layers.seq
-
+    def extract_intensities(self, *, config=NeighborhoodSumConfig(), layers=None):
+        """Extract labeled intensities; decoding is a separate reusable stage."""
+        if not isinstance(config, NeighborhoodSumConfig):
+            raise TypeError("config must be NeighborhoodSumConfig")
+        config.__post_init__()
+        layers = self.layers.seq if layers is None else layers
+        if not layers or len(set(layers)) != len(layers):
+            raise ValueError("extraction rounds must be nonempty and unique")
+        self._round_intensities.clear()
         for round_name in layers:
-            self._extract_round(round_name, voxel_size)
-        self._build_color_seq(layers)
+            self._extract_round(round_name, config.neighborhood_radius_zyx)
+        self._assemble_intensities(layers)
         return self
 
     @log_step
-    def reads_filtration(
-        self,
-        *,
-        end_bases: str | None = None,
-        start_base: str = "C",
-    ) -> FOV:
-        """Filter reads against codebook.
-
-        Parameters
-        ----------
-        end_bases : str | None
-            Optional decoded sequence suffix for filtering; None disables suffix filtering.
-        start_base : str
-            Starting nucleotide for color decoding when end_bases is supplied.
-
-        Returns
-        -------
-        FOV
-            This instance, with processing state updated in place.
-
-        Raises
-        ------
-        ValueError
-            Dataset codebook has not been loaded.
-        """
-        from starfinder.barcode import filter_reads
-
+    def decode_barcodes(self, *, config=WtaDecoderConfig(diagnostics=True)):
+        """Decode the stored intensity result and retain every spot identity."""
+        from starfinder.barcode import decode_barcodes
         if self.codebook is None:
-            raise ValueError(
-                "Codebook not loaded. Call dataset.load_codebook() first."
-            )
+            raise ValueError("Codebook not loaded. Call dataset.load_codebook() first.")
+        self.decoding_result = decode_barcodes(self.intensity_result, self.codebook, config=config)
+        # Existing output adapters retain their MATLAB-facing columns until W-142.
+        table = self.decoding_result.table
+        self.all_spots = self.spot_result.spots.copy()
+        self.all_spots['spot_namespace'] = self.spot_result.spot_namespace
+        self.all_spots = self.all_spots.merge(table, on=['spot_namespace', 'spot_id'], validate='one_to_one')
+        self.all_spots['color_seq'] = self.all_spots.observed_color_sequence
+        self.all_spots['gene'] = self.all_spots.gene_id
+        scores = self.decoding_result.diagnostics.get('wta_round_l2_nll')
+        for i, name in enumerate(self.intensity_result.round_labels):
+            self.all_spots[f'{name}_color'] = self.all_spots.color_seq.str[i]
+            if scores is not None:
+                score_table = pd.Series(scores[:, i], index=self.intensity_result.spot_ids)
+                self.all_spots[f'{name}_score'] = self.all_spots.spot_id.map(score_table)
+        return self
 
-        good, _stats = filter_reads(
-            self.all_spots,
-            self.codebook.seq_to_gene,
-            end_bases=end_bases,
-            start_base=start_base,
-        )
-        self.good_spots = good
+    @log_step
+    def filter_reads(self, *, config=ReadFilterConfig()):
+        """Rerun explicit read predicates without decoding or image access."""
+        from starfinder.barcode import filter_reads
+        self.filtering_result = filter_reads(self.decoding_result, config=config)
+        keys = self.filtering_result.accepted[['spot_namespace', 'spot_id']]
+        self.good_spots = self.all_spots.merge(keys, on=['spot_namespace', 'spot_id'], validate='one_to_one')
         return self
 
     # --- Streaming pipeline ---
@@ -752,9 +734,9 @@ class FOV:
         local_kwargs : dict or None
             Extra keyword arguments passed to ``local_registration()``.
 
-        The spot DataFrame (all_spots) accumulates per-round color columns
-        throughout. Only image volumes are loaded and discarded per-round.
-        Filtering runs at the end on the complete color_seq column.
+        Labeled intensity results accumulate across rounds while image volumes
+        are loaded and discarded per-round. Decoding then filtering run once on
+        the complete tensor; filtering can subsequently rerun without images.
 
         Parameters
         ----------
@@ -813,8 +795,9 @@ class FOV:
             self._save_shift_log()
 
         # --- Phase 3: Finalize (spot DataFrame only, images released) ---
-        self._build_color_seq()
-        self.reads_filtration(end_bases=end_bases, start_base=start_base)
+        self._assemble_intensities()
+        self.decode_barcodes()
+        self.filter_reads(config=ReadFilterConfig(end_bases=end_bases, start_base=start_base))
         return self
 
     @log_step

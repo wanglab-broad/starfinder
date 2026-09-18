@@ -6,7 +6,6 @@ from starfinder.dataset.logging import log_step
 from starfinder.dataset.paths import FOVPaths
 from starfinder.dataset.types import (
     ChannelOrder,
-    Codebook,
     CropWindow,
     ImageArray,
     LayerState,
@@ -18,7 +17,6 @@ __all__ = [
     "FOV",
     "FOVPaths",
     "LayerState",
-    "Codebook",
     "CropWindow",
     "SubtileConfig",
     "ImageArray",

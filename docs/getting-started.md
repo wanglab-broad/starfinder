@@ -80,7 +80,7 @@ configuration to `synthetic_config.json` and generated truth to
 | Channel order | `ch00`, `ch01`, `ch02`, `ch03` maps to colors `1`, `2`, `3`, `4` |
 | Detection | `intensity_estimation="noise"`, `intensity_threshold=5.0`, `min_distance=1` |
 | Extraction | `voxel_size=(1, 2, 2)`: half-widths `(dz, dy, dx)`, a 3×5×5 voxel neighborhood |
-| Codebook/filtering | `do_reverse=True` matches the generator's reversed-barcode encoding; retain exact color-sequence matches |
+| Codebook/filtering | `EncodingConfig(reverse_bases=True)` matches the generator's reversed-barcode encoding; retain exact color-sequence matches |
 
 The generator writes `synthetic/FOV_001/round1/ch00.tif`; the dataset loader
 expects `input/round1/FOV_001/ch00.tif`. The script copies the small TIFFs into

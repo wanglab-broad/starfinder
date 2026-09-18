@@ -3,6 +3,7 @@
 Run from src/python with a new external output directory; see getting-started.md.
 """
 
+from starfinder.barcode import NeighborhoodSumConfig, ReadFilterConfig
 from starfinder.spot_finding import LocalMaximaConfig
 import argparse
 import json
@@ -47,7 +48,7 @@ def main(output: Path) -> None:
         fov_pattern="FOV_%03d",
     )
     dataset.layers.validate()
-    dataset.load_codebook(output / "synthetic" / "codebook.csv", do_reverse=True)
+    dataset.load_codebook(output / "synthetic" / "codebook.csv", reverse_bases=True)
     summary = {"preset": "tiny", "seed": config.seed, "fovs": {}}
     for fov_id in dataset.fov_ids(config.n_fovs, start=1):
         fov = dataset.fov(fov_id)
@@ -57,8 +58,8 @@ def main(output: Path) -> None:
             assert volume.dtype == np.uint8
         fov.global_registration(ref_img="merged", mov_img="merged", save_shifts=True)
         fov.find_spots(config=LocalMaximaConfig(threshold_mode="noise", threshold_value=5.0, min_distance_voxels=1))
-        fov.reads_extraction(voxel_size=(1, 2, 2))
-        fov.reads_filtration()
+        fov.extract_intensities(config=NeighborhoodSumConfig((1, 2, 2)))
+        fov.decode_barcodes().filter_reads()
 
         # These are completion checks, not a benchmark of detection accuracy.
         assert 0 < len(fov.good_spots) <= len(fov.all_spots)

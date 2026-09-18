@@ -49,7 +49,7 @@ If filtering raises `Codebook not loaded`, call
 {py:meth}`~starfinder.dataset.STARMapDataset.load_codebook` first. If candidates
 exist but none survive, inspect `all_spots['color_seq']` alongside
 `dataset.codebook.seq_to_gene`: check channel ordering, sequencing-round order,
-barcode orientation (`do_reverse`), sequence lengths and optional suffix
+barcode orientation (`EncodingConfig.reverse_bases`), sequence lengths and optional suffix
 filtering. `M` is a tied maximum and `N` a NaN maximum; they are not valid
 four-color gene calls. A codebook parser `KeyError` can indicate an unexpected
 header or unsupported nucleotide pair. Use the actual two-column `gene,barcode`

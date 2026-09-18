@@ -2,7 +2,7 @@
 
 from starfinder.image import ImageMetadata
 from starfinder import barcode, preprocessing, registration, spot_finding
-from starfinder.barcode import extract_from_location, filter_reads, load_codebook
+from starfinder.barcode import decode_barcodes, extract_intensities, filter_reads, load_codebook
 from starfinder.dataset import FOV, STARMapDataset
 from starfinder.io import load_round, load_volume, save_volume
 from starfinder.preprocessing import (
@@ -35,7 +35,8 @@ __all__ = [
     "find_spots",
     # Barcode processing
     "barcode",
-    "extract_from_location",
+    "extract_intensities",
+    "decode_barcodes",
     "load_codebook",
     "filter_reads",
     # Preprocessing

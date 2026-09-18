@@ -95,8 +95,8 @@ is implied by this reference.
 | Global registration | {mat:func}`DFTRegister3D`, {mat:func}`DFTApply3D` | {py:func}`starfinder.registration.estimate_transform`, {py:func}`starfinder.registration.apply_transform` |
 | Local registration | {mat:func}`RegisterImagesLocal` | {py:func}`starfinder.registration.estimate_transform` |
 | Spot finding | {mat:func}`SpotFindingMax3D` | {py:func}`starfinder.spot_finding.find_spots` |
-| Extraction | {mat:func}`ExtractFromLocation` | {py:func}`starfinder.barcode.extract_from_location` |
-| Codebook / decoding | {mat:func}`LoadCodebook`, {mat:func}`EncodeBases`, {mat:func}`DecodeCS` | {py:func}`starfinder.barcode.load_codebook`, {py:func}`starfinder.barcode.encode_bases`, {py:func}`starfinder.barcode.decode_color_seq` |
+| Extraction | {mat:func}`ExtractFromLocation` | {py:func}`starfinder.barcode.extract_intensities` |
+| Codebook / decoding | {mat:func}`LoadCodebook`, {mat:func}`EncodeBases`, {mat:func}`DecodeCS` | {py:func}`starfinder.barcode.load_codebook`, {py:func}`starfinder.barcode.encode_bases`, {py:func}`starfinder.barcode.decode_color_sequence` |
 | Filtration | {mat:func}`FilterReads`, {mat:func}`FilterReadsMultiSegment` | {py:func}`starfinder.barcode.filter_reads` |
 | Preview | {mat:func}`MakeProjections`, {mat:func}`MakeMontage`, {mat:func}`PlotCentroids` | [FOV output and preview methods](generated/starfinder.dataset.FOV.rst); no direct exported montage helper |
 

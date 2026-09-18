@@ -49,6 +49,7 @@ class TestSTARMapDataset:
         assert ids == ["FOV_001", "FOV_002", "FOV_003"]
 
     def test_load_codebook(self, sample_config, small_dataset):
+        sample_config["channel_order"] = ["ch00", "ch01", "ch02", "ch03"]
         ds = STARMapDataset.from_config(sample_config)
         assert ds.codebook is None
         ds.load_codebook(small_dataset / "codebook.csv")
