@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import numpy as np
 
+from ..image import _validate_image, _triple
+from ._resampling import _cast_warp_output, _output_dtype
+
 
 def phase_correlate(
     fixed: np.ndarray,
@@ -23,8 +26,15 @@ def phase_correlate(
         Detected displacement ``(dz, dy, dx)`` in voxels (integer-valued floats).
         Correct alignment with ``apply_shift(moving, tuple(-s for s in shift))``.
         Inputs must be equal-shaped 3D numeric volumes; FFTs use float32.
+        Singleton axes return zero. Odd-axis peaks at n//2 are nonwrapped;
+        even half-period displacement is reported as +n/2 (ambiguous sign).
     """
     from scipy.fft import irfftn, rfftn
+
+    fixed = _validate_image(fixed, ndim=(3,))
+    moving = _validate_image(moving, ndim=(3,))
+    if fixed.shape != moving.shape:
+        raise ValueError("fixed and moving must have equal shapes")
 
     # Cast to float32 for faster FFT (complex64 vs complex128)
     fixed = np.asarray(fixed, dtype=np.float32)
@@ -45,10 +55,12 @@ def phase_correlate(
     iz, iy, ix = np.unravel_index(peak_idx, cc.shape)
 
     # Convert to signed shifts (handle wrap-around)
+    # Singleton zero and odd n//2 stay nonnegative; even n/2 unwraps
+    # to -n/2, giving the declared positive half-period displacement.
     # Negate to get shift of moving relative to fixed
-    dz = float(-(iz if iz < nz // 2 else iz - nz))
-    dy = float(-(iy if iy < ny // 2 else iy - ny))
-    dx = float(-(ix if ix < nx // 2 else ix - nx))
+    dz = float(-(iz if iz < (nz + 1) // 2 else iz - nz))
+    dy = float(-(iy if iy < (ny + 1) // 2 else iy - ny))
+    dx = float(-(ix if ix < (nx + 1) // 2 else ix - nx))
 
     return (dz, dy, dx)
 
@@ -57,6 +69,8 @@ def apply_shift(
     volume: np.ndarray,
     shift: tuple[float, float, float],
     workers: int | None = None,
+    *,
+    output_dtype: str = "input",
 ) -> np.ndarray:
     """
     Apply shift to volume and zero out wrapped regions.
@@ -71,25 +85,37 @@ def apply_shift(
             displacement returned by :func:`starfinder.registration.phase_correlate`.
         workers: Number of parallel workers for FFT. None for single-threaded,
             -1 for all available CPUs.
+        output_dtype: "input" (default), "float32" or "float64". Explicit float
+            output avoids final integer quantization; it does not select the
+            calculation precision.
 
     Returns:
-        Shifted volume with same shape and dtype.
+        Shifted volume with the same shape; dtype is preserved by default.
+        Integer outputs are rounded nearest-even, clipped to the dtype range,
+        then cast once. Floating outputs retain signed Fourier values.
     """
+    volume = _validate_image(volume, ndim=(3,))
+    shift = _triple(shift, "shift")
+    dtype = _output_dtype(volume.dtype, output_dtype)
+
     # Fast path: integer shifts via np.roll (no FFT overhead)
     int_shift = tuple(int(round(s)) for s in shift)
     if all(abs(s - i) < 1e-6 for s, i in zip(shift, int_shift)):
-        return _apply_integer_shift(volume, int_shift)
+        return _apply_integer_shift(volume, int_shift).astype(dtype, copy=False)
 
     # Sub-pixel path: FFT-based shift
     from scipy.fft import fftn, ifftn
     from scipy.ndimage import fourier_shift
 
-    volume_f32 = np.asarray(volume, dtype=np.float32)
-    shifted_fft = fourier_shift(fftn(volume_f32, workers=workers), shift)
-    result = np.abs(ifftn(shifted_fft, workers=workers))
+    calculation_dtype = np.float64 if volume.dtype == np.float64 else np.float32
+    volume_float = np.asarray(volume, dtype=calculation_dtype)
+    shifted_fft = fourier_shift(fftn(volume_float, workers=workers), shift)
+    # Real projection retains signed intensities (and discards the Nyquist
+    # imaginary component for fractional shifts of even-length real signals).
+    result = ifftn(shifted_fft, workers=workers).real
 
     _zero_wrapped_edges(result, shift)
-    return result.astype(volume.dtype)
+    return _cast_warp_output(result, dtype)
 
 
 def _apply_integer_shift(volume: np.ndarray, shift: tuple[int, int, int]) -> np.ndarray:
@@ -108,6 +134,9 @@ def _zero_wrapped_edges(
 ) -> None:
     """Zero out wrapped boundary regions after a circular shift."""
     nz, ny, nx = result.shape
+    if any(abs(s) >= n for s, n in zip(shift, result.shape)):
+        result.fill(0)
+        return
     dz, dy, dx = shift
 
     if dz > 0:
@@ -131,6 +160,8 @@ def register_volume(
     ref_image: np.ndarray,
     mov_image: np.ndarray,
     workers: int | None = None,
+    *,
+    output_dtype: str = "input",
 ) -> tuple[np.ndarray, tuple[float, float, float]]:
     """
     Register multi-channel volume using phase correlation.
@@ -141,9 +172,12 @@ def register_volume(
         mov_image: Moving image with shape (Z, Y, X) for shift calculation.
         workers: Number of parallel workers for FFT. None for single-threaded,
             -1 for all available CPUs.
+        output_dtype: "input" (default), "float32" or "float64". Explicit float
+            output avoids final integer quantization; it does not select the
+            calculation precision.
 
     Returns:
-        Tuple of registered images (same shape/dtype as ``images``) and
+        Tuple of registered images (same shape as ``images``; selected dtype) and
         detected displacement ``(dz, dy, dx)`` in voxels. The negative
         displacement is applied to every channel; the returned shifts are
         not the correction translation.
@@ -156,9 +190,11 @@ def register_volume(
 
     # Apply correction to each channel
     n_channels = images.shape[-1]
-    registered = np.zeros_like(images)
+    registered = np.zeros_like(images, dtype=_output_dtype(images.dtype, output_dtype))
 
     for c in range(n_channels):
-        registered[:, :, :, c] = apply_shift(images[:, :, :, c], correction, workers=workers)
+        registered[:, :, :, c] = apply_shift(
+            images[:, :, :, c], correction, workers=workers, output_dtype=output_dtype
+        )
 
     return registered, shifts

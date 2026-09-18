@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import numpy as np
 
+from ._resampling import _cast_warp_output, _output_dtype
+
 
 def _import_sitk():
     """Lazy import SimpleITK with helpful error message."""
@@ -345,6 +347,8 @@ def apply_deformation(
     volume: np.ndarray,
     displacement_field: np.ndarray,
     boundary_mode: str = "constant",
+    *,
+    output_dtype: str = "input",
 ) -> np.ndarray:
     """Apply displacement field to warp a volume.
 
@@ -362,6 +366,10 @@ def apply_deformation(
 
         - ``"nearest"``: Extend edge pixels via nearest-neighbor extrapolator.
 
+    output_dtype : str, optional
+        "input" (default), "float32" or "float64". Interpolate in floating
+        point, then round nearest-even, clip and cast once for integer output.
+
     Returns
     -------
     np.ndarray
@@ -377,13 +385,13 @@ def apply_deformation(
     Dense fields use backward sampling: the value at output voxel p is sampled
     from moving voxel ``p + field[p]``. Components are ``(dz, dy, dx)`` in voxel
     units, not micrometres; SimpleITK images use default unit spacing. Fields
-    are float64; warped images preserve the input dtype. Do not negate these
+    are float64; warped images preserve the input dtype by default. Do not negate these
     fields as if they were translations for ``apply_shift``.
     """
     sitk = _import_sitk()
 
     # Preserve input dtype
-    input_dtype = volume.dtype
+    dtype = _output_dtype(volume.dtype, output_dtype)
 
     # D3: np.require avoids redundant copy when already contiguous float64
     volume_sitk = sitk.GetImageFromArray(
@@ -415,7 +423,7 @@ def apply_deformation(
     # Convert back to numpy and preserve input dtype
     warped = sitk.GetArrayFromImage(warped_sitk)
 
-    return warped.astype(input_dtype)
+    return _cast_warp_output(warped, dtype)
 
 
 def register_volume_local(
@@ -427,6 +435,8 @@ def register_volume_local(
     method: str = "demons",
     pyramid_mode: str = "antialias",
     boundary_mode: str = "constant",
+    *,
+    output_dtype: str = "input",
 ) -> tuple[np.ndarray, np.ndarray]:
     """Register multi-channel volume using demons.
 
@@ -459,6 +469,10 @@ def register_volume_local(
         How to handle out-of-bounds source coordinates:
         ``"constant"`` (default) fills with 0; ``"nearest"`` extends edges.
 
+    output_dtype : str, optional
+        "input" (default), "float32" or "float64". Interpolate in floating
+        point, then round nearest-even, clip and cast once for integer output.
+
     Returns
     -------
     tuple[np.ndarray, np.ndarray]
@@ -478,7 +492,7 @@ def register_volume_local(
     Dense fields use backward sampling: the value at output voxel p is sampled
     from moving voxel ``p + field[p]``. Components are ``(dz, dy, dx)`` in voxel
     units, not micrometres; SimpleITK images use default unit spacing. Fields
-    are float64; warped images preserve the input dtype. Do not negate these
+    are float64; warped images preserve the input dtype by default. Do not negate these
     fields as if they were translations for ``apply_shift``.
     """
     # Compute displacement field from reference and moving images
@@ -493,7 +507,7 @@ def register_volume_local(
     # converting the field (dz,dy,dx)→(dx,dy,dz), creating a
     # DisplacementFieldTransform, and setting up a ResampleImageFilter.
     sitk = _import_sitk()
-    input_dtype = images.dtype
+    dtype = _output_dtype(images.dtype, output_dtype)
 
     field_sitk = sitk.GetImageFromArray(
         np.require(displacement_field[..., ::-1], dtype=np.float64, requirements='C'),
@@ -503,7 +517,7 @@ def register_volume_local(
 
     # Set up resampler once with shared spatial metadata
     n_channels = images.shape[-1]
-    registered = np.empty_like(images)
+    registered = np.empty_like(images, dtype=dtype)
 
     ref_vol_sitk = sitk.GetImageFromArray(images[:, :, :, 0].astype(np.float64))
     resampler = sitk.ResampleImageFilter()
@@ -517,6 +531,6 @@ def register_volume_local(
     for c in range(n_channels):
         vol_sitk = sitk.GetImageFromArray(images[:, :, :, c].astype(np.float64))
         warped = resampler.Execute(vol_sitk)
-        registered[:, :, :, c] = sitk.GetArrayFromImage(warped).astype(input_dtype)
+        registered[:, :, :, c] = _cast_warp_output(sitk.GetArrayFromImage(warped), dtype)
 
     return registered, displacement_field

@@ -31,8 +31,50 @@ CSV log likewise store detected `(dy, dx, dz)` components, with no origin offset
 Dense fields from demons, TPS and CPD use a different operation:
 `registered[p] = moving[p + field[p]]`. Supply these fields directly to their
 warp functions, without negating them. TPS/CPD fields are float32; demons fields
-are float64. Warp functions preserve image dtype, so interpolation can be
-quantized for integer images. SimpleITK component reversal is handled internally.
+are float64. SimpleITK component reversal is handled internally.
+
+### Translation edge cases and resampling precision
+
+The FFT estimator still returns integer-valued displacements; these corrections
+do not add subpixel estimation. Singleton axes return zero. For odd length `n`,
+a correlation peak at `n//2` is not wrapped. An exact even half-period cannot
+distinguish positive from negative motion: `phase_correlate` reports `+n/2`,
+whereas `phase_correlate_skimage` retains its native `-n/2` convention. Both
+align the periodic interior; their zero-filled boundaries can differ.
+
+`apply_shift` uses exact integer rolling (within its existing `1e-6` voxel
+integer tolerance), otherwise Fourier shifting followed by the **real part**
+of the inverse FFT. Signed intensities and negative ringing are retained;
+the previous magnitude operation lost signs. For even axes, taking the real
+part also projects away the fractional-shift Nyquist imaginary component.
+This is periodic Fourier interpolation followed by zeroing wrapped edges,
+not spatial interpolation of a zero-padded volume. Shifts spanning an entire
+axis return zeros. Lost edge content is not recoverable.
+
+All existing registration application functions and multichannel wrappers
+accept `output_dtype="input"` (default), `"float32"` or `"float64"`. For example:
+
+```python
+shifted = apply_shift(image, (0, 0, 0.5), output_dtype="float32")
+```
+
+Source dtype is preserved by default. Integer output is interpolated in floating
+point, rounded **once with nearest-even ties**, saturated to the source dtype's
+range, then cast. Explicit floating output skips rounding and clipping; it does
+not rescale intensities or select calculation precision. This intentionally
+changes legacy truncation (Fourier/SimpleITK), SciPy's implicit integer rounding,
+and overflow/wrap behavior. For example, interpolated `0.5, 1.5, 2.5, 3.5` now
+becomes `0, 2, 2, 4`, while uint8 Fourier overshoot saturates to `[0, 255]`.
+
+Fractional Fourier application calculates in float32, except float64 source
+images use float64. Native SimpleITK linear resampling uses float64; SciPy
+linear sampling produces a float64 slice before final conversion. Integer
+rolling preserves exact stored values; interpolation of wide integers remains
+subject to floating precision. Tests use `2e-6` absolute tolerance for small
+float32 signed Fourier fixtures and `1e-12` for float64, not a universal
+full-image accuracy guarantee. No estimator tuning or calibration is implied.
+Translation stays compact, SimpleITK reuses the prepared transform across
+channels, and TPS/CPD allocate coordinates and sampled values per Z slice.
 
 ## Intensities and channels
 

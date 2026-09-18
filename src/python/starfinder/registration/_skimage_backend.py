@@ -21,6 +21,8 @@ def phase_correlate_skimage(
         Detected displacement ``(dz, dy, dx)`` in voxels, matching
         :func:`starfinder.registration.phase_correlate`. Negate this tuple
         before applying it to ``moving``. Inputs must be equal-shaped 3D arrays.
+        Exact even half-periods retain scikit-image's -n/2 convention, unlike
+        the FFT backend's +n/2; this sign is intrinsically ambiguous.
     """
     shift, error, diffphase = phase_cross_correlation(fixed, moving)
     # Negate scikit-image correction to return detected displacement.

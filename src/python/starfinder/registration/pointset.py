@@ -11,8 +11,11 @@ from __future__ import annotations
 import numpy as np
 from scipy.interpolate import RBFInterpolator
 from scipy.ndimage import map_coordinates, zoom
+
 from scipy.spatial import cKDTree
 from scipy.spatial.distance import cdist
+
+from ._resampling import _cast_warp_output, _output_dtype
 
 
 def sanitize_displacement_field(
@@ -350,11 +353,13 @@ def apply_tps_deformation(
     volume: np.ndarray,
     displacement_field: np.ndarray,
     boundary_mode: str = "constant",
+    *,
+    output_dtype: str = "input",
 ) -> np.ndarray:
     """Warp a volume using a displacement field, slice-by-slice.
 
-    Processes one Z-slice at a time to limit memory usage to ~113 MB
-    (for 3072x3072) instead of ~3.4 GB for the full coordinate grid.
+    Processes coordinates and floating samples one Z-slice at a time rather
+    than allocating a full-volume coordinate grid or floating input copy.
 
     Parameters
     ----------
@@ -369,13 +374,18 @@ def apply_tps_deformation(
 
         - ``"nearest"``: Extend edge pixels (no black bands).
 
+    output_dtype : str, optional
+        "input" (default), "float32" or "float64". Interpolate in floating
+        point, then round nearest-even, clip and cast once for integer output.
+
     Returns
     -------
     np.ndarray
-        Warped volume, same shape and dtype as input.
+        Warped volume, same shape as input; source dtype by default.
     """
     nz, ny, nx = volume.shape
-    result = np.empty_like(volume)
+    dtype = _output_dtype(volume.dtype, output_dtype)
+    result = np.empty_like(volume, dtype=dtype)
 
     # Pre-compute YX coordinate grids (reused across slices)
     yy, xx = np.mgrid[0:ny, 0:nx].astype(np.float32)
@@ -391,9 +401,12 @@ def apply_tps_deformation(
         src_x = xx + dx
 
         coords = np.array([src_z, src_y, src_x])
-        result[z] = map_coordinates(
-            volume, coords, order=1, mode=boundary_mode, cval=0
+        # Request floating interpolation directly: SciPy otherwise rounds
+        # into the source integer dtype before our final conversion.
+        sampled = map_coordinates(
+            volume, coords, order=1, mode=boundary_mode, cval=0, output=np.float64
         )
+        result[z] = _cast_warp_output(sampled, dtype)
 
     return result
 
@@ -470,6 +483,8 @@ def register_volume_tps(
     ref_image: np.ndarray,
     mov_image: np.ndarray,
     boundary_mode: str = "constant",
+    *,
+    output_dtype: str = "input",
     **kwargs,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Register multi-channel volume using TPS.
@@ -492,23 +507,27 @@ def register_volume_tps(
         min_matches, max_control_points, smoothing, grid_spacing,
         zoom_order, field_smooth_sigma.
 
+    output_dtype : str, optional
+        "input" (default), "float32" or "float64". Interpolate in floating
+        point, then round nearest-even, clip and cast once for integer output.
+
     Returns
     -------
     tuple[np.ndarray, np.ndarray]
         ``(registered_images, displacement_field)`` where:
 
-        - registered_images: shape (Z, Y, X, C), same dtype as input
+        - registered_images: shape (Z, Y, X, C), source dtype by default
 
         - displacement_field: shape (Z, Y, X, 3), float32
     """
     displacement_field = tps_register(ref_image, mov_image, **kwargs)
 
     n_channels = images.shape[-1]
-    registered = np.empty_like(images)
+    registered = np.empty_like(images, dtype=_output_dtype(images.dtype, output_dtype))
     for c in range(n_channels):
         registered[:, :, :, c] = apply_tps_deformation(
             images[:, :, :, c], displacement_field,
-            boundary_mode=boundary_mode,
+            boundary_mode=boundary_mode, output_dtype=output_dtype,
         )
 
     return registered, displacement_field
@@ -1068,6 +1087,8 @@ def register_volume_cpd(
     ref_image: np.ndarray,
     mov_image: np.ndarray,
     boundary_mode: str = "constant",
+    *,
+    output_dtype: str = "input",
     **kwargs,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Register multi-channel volume using CPD.
@@ -1090,23 +1111,27 @@ def register_volume_cpd(
         beta, lmbda, w, affine_first, grid_spacing, candidate_radius,
         k_neighbors, zoom_order, field_smooth_sigma.
 
+    output_dtype : str, optional
+        "input" (default), "float32" or "float64". Interpolate in floating
+        point, then round nearest-even, clip and cast once for integer output.
+
     Returns
     -------
     tuple[np.ndarray, np.ndarray]
         ``(registered_images, displacement_field)`` where:
 
-        - registered_images: shape (Z, Y, X, C), same dtype as input
+        - registered_images: shape (Z, Y, X, C), source dtype by default
 
         - displacement_field: shape (Z, Y, X, 3), float32
     """
     displacement_field = cpd_register(ref_image, mov_image, **kwargs)
 
     n_channels = images.shape[-1]
-    registered = np.empty_like(images)
+    registered = np.empty_like(images, dtype=_output_dtype(images.dtype, output_dtype))
     for c in range(n_channels):
         registered[:, :, :, c] = apply_tps_deformation(
             images[:, :, :, c], displacement_field,
-            boundary_mode=boundary_mode,
+            boundary_mode=boundary_mode, output_dtype=output_dtype,
         )
 
     return registered, displacement_field
