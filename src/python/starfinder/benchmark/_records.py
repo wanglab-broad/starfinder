@@ -10,11 +10,12 @@ def _json(value):
 
 @dataclass(frozen=True)
 class BenchmarkCase:
-    """Explicit registration inputs relative to input_root (NPY or TIFF).
+    """Explicit inputs relative to input_root (registration NPY/TIFF; pipeline TIFF).
 
     config requires registration, reference_metadata, moving_metadata and
     evaluation entries. truth and artifacts are named file references, never
-    inferred from directory names. Only the registration task is built in.
+    inferred from directory names. Pipeline cases supply workflow, sources, fov_id and count evaluation;
+    see the maintained benchmark recipes.
     """
     case_id: str
     task: str

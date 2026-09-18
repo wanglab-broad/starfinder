@@ -14,7 +14,7 @@ import uuid
 
 from ._records import BenchmarkCase, BenchmarkTrialResult, _json
 from ._storage import (_write, _read, _identity, _digest, _inside, _reference, _verified,
-                       _array, _save_array, SCHEMA_VERSION)
+                       _array, _save_array, _save_transform, SCHEMA_VERSION)
 from ._adapters import _validate, _process, _evaluate
 
 
@@ -135,7 +135,7 @@ def run_benchmark(cases, *, input_root, output_root, owner, repetitions=1,
         directory.mkdir(parents=True, exist_ok=False)
         case = case_map[slot['case_id']]
         trial = BenchmarkTrialResult(run_id, case.case_id, slot['trial_id'],
-            case.config['registration']['method'], None,
+            case.config['registration']['method'] if case.task == 'registration' else 'pipeline', None,
             {'processing': 'failed', 'evaluation': 'not_run'}, {}, case.config, {}, {},
             provenance={'case': case.to_dict(), 'source_references': references[case.case_id]})
         # Include loading, estimator attempts, application and persistence in scope.
@@ -146,8 +146,16 @@ def run_benchmark(cases, *, input_root, output_root, owner, repetitions=1,
         try:
             arrays = {}
             for name, ref in references[case.case_id]['inputs'].items():
-                arrays[name] = _array(_verified(inputs, ref))
-                trial.artifacts[name] = _save_array(root, directory, name, arrays[name])
+                source = _verified(inputs, ref)
+                if case.task == 'pipeline':
+                    dest = directory / (name + source.suffix)
+                    with source.open('rb') as src, dest.open('xb') as dst:
+                        import shutil
+                        shutil.copyfileobj(src, dst)
+                    trial.artifacts[name] = _reference(root, dest)
+                else:
+                    arrays[name] = _array(source)
+                    trial.artifacts[name] = _save_array(root, directory, name, arrays[name])
             # Copy truth and explicitly supplied artifacts byte-for-byte into the run.
             for category in ('truth', 'artifacts'):
                 for name, ref in references[case.case_id][category].items():
@@ -157,24 +165,17 @@ def run_benchmark(cases, *, input_root, output_root, owner, repetitions=1,
                         import shutil
                         shutil.copyfileobj(src, dst)
                     trial.artifacts[category + ':' + name] = _reference(root, dest)
-            registered, result = _process(case, arrays['reference'], arrays['moving'], trial.attempts)
-            trial.actual_method = result.diagnostics.method
-            trial.effective_configs = {**case.config, 'registration': asdict(result.diagnostics.effective_config),
-                'application': asdict(result.application_config)}
-            trial.artifacts['registered'] = _save_array(root, directory, 'registered', registered)
-            transform = result.transform
-            # Do not use asdict on a dense field: avoid an extra full-volume copy.
-            record = {k: v for k, v in vars(transform).items() if k != 'displacement_zyx'}
-            for key in ('reference_metadata', 'moving_metadata'):
-                record[key] = asdict(record[key])
-            if hasattr(transform, 'displacement_zyx'):
-                trial.artifacts['field'] = _save_array(root, directory, 'field', transform.displacement_zyx)
-                record['displacement_artifact'] = trial.artifacts['field']
-            record['application_config'] = asdict(result.application_config)
-            record['diagnostics'] = asdict(result.diagnostics)
-            _write(directory / 'transform.json', record)
-            trial.artifacts['transform'] = _reference(root, directory / 'transform.json')
-            trial.status['processing'] = 'fallback_success' if len(trial.attempts) > 1 else 'success'
+            if case.task == 'pipeline':
+                from ._pipeline import _process_pipeline
+                _process_pipeline(case, root, directory, trial)
+            else:
+                registered, result = _process(case, arrays['reference'], arrays['moving'], trial.attempts)
+                trial.actual_method = result.diagnostics.method
+                trial.effective_configs = {**case.config, 'registration': asdict(result.diagnostics.effective_config),
+                    'application': asdict(result.application_config)}
+                trial.artifacts['registered'] = _save_array(root, directory, 'registered', registered)
+                _save_transform(root, directory, 'transform', result, trial.artifacts)
+                trial.status['processing'] = 'fallback_success' if len(trial.attempts) > 1 else 'success'
         except MemoryError:
             raise
         except Exception as exc:
@@ -208,7 +209,9 @@ def evaluate_benchmark(run_dir):
     for trial in trials:
         if trial.status['processing'] in ('success', 'fallback_success'):
             case = BenchmarkCase.from_dict(trial.provenance['case'])
-            for name in ('reference', 'moving', 'registered', 'transform', *('truth:' + k for k in case.truth)):
+            required = (('pipeline', 'spots', 'reads') if case.task == 'pipeline' else
+                ('reference', 'moving', 'registered', 'transform', *('truth:' + k for k in case.truth)))
+            for name in required:
                 if name not in trial.artifacts:
                     raise FileNotFoundError(f'required artifact reference missing: {name}')
     directory = root / 'evaluations' / _unique()
@@ -223,10 +226,14 @@ def evaluate_benchmark(run_dir):
         else:
             try:
                 case = BenchmarkCase.from_dict(trial.provenance['case'])
-                arrays = {k: _array(_verified(root, trial.artifacts[k])) for k in ('reference', 'moving', 'registered')}
-                transform = _read(_verified(root, trial.artifacts['transform']))
-                truth = {k: _read(_verified(root, trial.artifacts['truth:' + k])) for k in case.truth}
-                trial.metrics = _evaluate(case, arrays, transform, truth)
+                if case.task == 'pipeline':
+                    from ._pipeline import _evaluate_pipeline
+                    trial.metrics = _evaluate_pipeline(root, trial)
+                else:
+                    arrays = {k: _array(_verified(root, trial.artifacts[k])) for k in ('reference', 'moving', 'registered')}
+                    transform = _read(_verified(root, trial.artifacts['transform']))
+                    truth = {k: _read(_verified(root, trial.artifacts['truth:' + k])) for k in case.truth}
+                    trial.metrics = _evaluate(case, arrays, transform, truth)
                 trial.status['evaluation'] = 'undefined' if any(x['status'] != 'ok' for x in trial.metrics.values()) else 'success'
             except Exception as exc:
                 trial.status['evaluation'] = 'failed'

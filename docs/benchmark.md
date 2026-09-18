@@ -1,10 +1,18 @@
 # Benchmark lifecycle
 
+```{toctree}
+:hidden:
+
+benchmark-recipes
+```
+
 The supported interface is `BenchmarkCase`, `BenchmarkTrialResult`,
 `run_benchmark`, `evaluate_benchmark`, and `report_benchmark`. The built-in task
-adapter is registration (translation, demons, TPS or CPD). Unsupported tasks
-fail explicitly. Pipeline and external backend adapters are separate work;
-this interface does not silently choose a research protocol.
+adapters are registration (translation, demons, TPS or CPD) and the shared
+Dataset/FOV pipeline. Unsupported tasks fail explicitly. See the
+[maintained recipes](benchmark-recipes.md) for source-derived profiles, pipeline
+input/output contracts, saved reports and optional backend prerequisites.
+No adapter silently chooses a research protocol.
 
 ## Four commands
 

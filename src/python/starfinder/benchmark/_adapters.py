@@ -20,6 +20,9 @@ def _config(value):
 
 
 def _validate(case):
+    if case.task == 'pipeline':
+        from ._pipeline import _validate_pipeline
+        return _validate_pipeline(case)
     if case.task != 'registration':
         raise ValueError(f'unsupported benchmark task: {case.task}')
     if set(case.inputs) != {'reference', 'moving'}:

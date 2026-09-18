@@ -62,3 +62,21 @@ def _save_array(root, directory, name, value):
     with path.open('xb') as stream:
         np.save(stream, value, allow_pickle=False)
     return _reference(root, path)
+
+
+def _save_transform(root, directory, name, result, artifacts):
+    """Persist a registration result without copying a dense field in asdict."""
+    from dataclasses import asdict
+    transform = result.transform
+    record = {k: v for k, v in vars(transform).items() if k != 'displacement_zyx'}
+    for key in ('reference_metadata', 'moving_metadata'):
+        record[key] = asdict(record[key])
+    if hasattr(transform, 'displacement_zyx'):
+        field_name = 'field' if name == 'transform' else name + '-field'
+        artifacts[field_name] = _save_array(root, directory, field_name, transform.displacement_zyx)
+        record['displacement_artifact'] = artifacts[field_name]
+    record['application_config'] = asdict(result.application_config)
+    record['diagnostics'] = asdict(result.diagnostics)
+    path = directory / (name + '.json')
+    _write(path, record)
+    artifacts[name] = _reference(root, path)
