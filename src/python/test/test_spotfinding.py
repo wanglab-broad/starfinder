@@ -1,5 +1,7 @@
 """Tests for starfinder.spotfinding module."""
 
+from starfinder.io import ImageLoadConfig
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -13,12 +15,11 @@ class TestFindSpots3D:
 
     def test_finds_known_spots(self, small_dataset, small_ground_truth):
         """Detects spots in small synthetic dataset, count sanity check."""
-        from starfinder.io import load_image_stacks
+        from starfinder.io import load_round
 
-        images, _ = load_image_stacks(
-            small_dataset / "FOV_001" / "round1",
-            channel_order=["ch00", "ch01", "ch02", "ch03"],
-        )
+        loaded_round = load_round(small_dataset / "FOV_001" / "round1", config=ImageLoadConfig(channel_labels=tuple(["ch00", "ch01", "ch02", "ch03"])))
+        images = loaded_round.image
+        _ = loaded_round.diagnostics
         spots = find_spots_3d(images)
 
         # Small dataset has 50 ground truth spots across 4 channels in round 1

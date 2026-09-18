@@ -1,5 +1,8 @@
 """Bounded API contract examples; pass an external output directory."""
 
+from starfinder.preprocessing import MinMaxNormalizationConfig
+from starfinder.preprocessing import ProjectionConfig
+
 import importlib.util
 from pathlib import Path
 import sys
@@ -13,12 +16,12 @@ from starfinder.barcode import (
 from starfinder.benchmark import measure
 from starfinder.benchmark.synthetic import create_test_volume
 from starfinder.dataset import LayerState, STARMapDataset
-from starfinder.io import load_multipage_tiff, save_stack
-from starfinder.preprocessing import min_max_normalize
+from starfinder.io import load_volume, save_volume
+from starfinder.preprocessing import normalize_intensity
 from starfinder.registration import apply_shift, demons_register, phase_correlate
 from starfinder.registration.pointset import apply_tps_deformation
 from starfinder.spotfinding import find_spots_3d
-from starfinder.utils import make_projection
+from starfinder.preprocessing import project_image
 
 
 def main(output: Path) -> None:
@@ -36,13 +39,13 @@ def main(output: Path) -> None:
     field[...] = displacement
     np.testing.assert_array_equal(apply_tps_deformation(moving, field), fixed)
 
-    normalized = min_max_normalize(fixed)
+    normalized = normalize_intensity(fixed, config=MinMaxNormalizationConfig('uint8', (0, 255)))
     assert normalized.dtype == np.uint8 and normalized.max() == 255
-    projection = make_projection(fixed)
-    assert projection.shape == (24, 24) and projection.dtype == np.uint16
-    save_stack(fixed, output / "volume.tif")
+    projection = project_image(fixed, config=ProjectionConfig(method='max'))
+    assert projection.shape == (1, 24, 24) and projection.dtype == np.uint16
+    save_volume(fixed, output / "volume.tif")
     np.testing.assert_array_equal(
-        load_multipage_tiff(output / "volume.tif", convert_uint8=False), fixed
+        load_volume(output / "volume.tif").image, fixed
     )
 
     image = np.zeros(fixed.shape + (4,), dtype=np.uint16)

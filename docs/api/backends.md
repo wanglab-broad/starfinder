@@ -7,7 +7,7 @@ license, or optional algorithm packages. See [build instructions](../contributin
 | Interface | Dependency / behavior |
 | --- | --- |
 | Plain TIFF I/O | `tifffile`, installed with the base package |
-| Metadata-aware OME/ImageJ reads | `bioio` plus explicitly selected `bioio_tifffile.Reader`, both base dependencies |
+| Metadata-aware OME/ImageJ reads | `tifffile` series axes with explicit ambiguous T/C/series selection |
 | Global registration | NumPy/SciPy; comparison wrapper uses scikit-image |
 | TPS/CPD registration and point-set warping | NumPy/SciPy/scikit-image; no SimpleITK or external CPD package |
 | Demons registration and `apply_deformation` | Lazy SimpleITK import; missing package raises `ImportError` when called |
@@ -34,7 +34,7 @@ equivalence. Demons uses unit image spacing. Unknown demons method names raise
 The packaging extras `ome`, `spatialdata`, and `visualization` install
 `bioio-ome-tiff`, SpatialData packages, and napari respectively. Current public
 Python functions do not switch to those packages automatically. In particular,
-`save_stack` writes TIFF through tifffile, and FOV output methods write TIFF,
+`save_volume` writes TIFF through tifffile, and FOV output methods write TIFF,
 CSV, text, and NPZ; there is no public SpatialData writer in this checkout.
 
 Benchmark constants include institutional default paths. Pass `data_dir`,

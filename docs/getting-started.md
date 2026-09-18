@@ -76,7 +76,7 @@ configuration to `synthetic_config.json` and generated truth to
 | Signal and noise | Gaussian spot sigma 1.5 voxels; sampled peak intensity 200–255 before per-round jitter; background 20; Gaussian noise sigma 10 |
 | Motion | Integer translations up to ±2 Z and ±5 Y/X voxels; no local deformation |
 | Reference and registration | `round1`; global phase correlation on the sum of channels in reference and moving rounds |
-| Loading | `convert_uint8=False` preserves the generated `uint8` values |
+| Loading | Default loading preserves the generated `uint8` values |
 | Channel order | `ch00`, `ch01`, `ch02`, `ch03` maps to colors `1`, `2`, `3`, `4` |
 | Detection | `intensity_estimation="noise"`, `intensity_threshold=5.0`, `min_distance=1` |
 | Extraction | `voxel_size=(1, 2, 2)`: half-widths `(dz, dy, dx)`, a 3×5×5 voxel neighborhood |

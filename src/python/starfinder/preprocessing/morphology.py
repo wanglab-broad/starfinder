@@ -1,93 +1,79 @@
-"""Morphological preprocessing for STARfinder.
-
-Ports MATLAB MorphologicalReconstruction.m and STARMapDataset.Tophat.
-"""
+"""XY slice-wise morphology with safe intermediate precision."""
+from dataclasses import dataclass
 
 import numpy as np
-from skimage.morphology import (
-    black_tophat,
-    disk,
-    erosion,
-    reconstruction,
-    white_tophat,
-)
+from skimage.morphology import black_tophat, disk, erosion, reconstruction, white_tophat
+
+from starfinder.image import _validate_image
 
 
-def tophat_filter(volume: np.ndarray, radius: int = 3) -> np.ndarray:
-    """White tophat filtering per Z-slice.
+def _radius(radius):
+    if isinstance(radius, bool) or not isinstance(radius, int) or radius < 0:
+        raise ValueError("radius_yx must be a nonnegative integer")
 
-    Removes large-scale background by subtracting the morphological opening
-    from the original. Matches MATLAB ``imtophat(slice, strel('disk', r))``.
 
-    Parameters
-    ----------
-    volume : np.ndarray
-        Input volume with shape (Z, Y, X) or (Z, Y, X, C).
-    radius : int
-        Radius of the disk structuring element (default 3).
+@dataclass(frozen=True)
+class ReconstructionConfig:
+    """Disk radius in XY pixels, independently applied to each Z/channel slice."""
+    radius_yx: int = 3
 
-    Returns
-    -------
-    np.ndarray
-        Filtered volume, dtype uint8, same shape as input.
-    """
-    is_3d = volume.ndim == 3
-    if is_3d:
-        volume = volume[..., np.newaxis]
+    def __post_init__(self):
+        _radius(self.radius_yx)
 
+
+@dataclass(frozen=True)
+class TophatConfig:
+    """Disk radius in XY pixels; no filtering along Z or channels."""
+    radius_yx: int = 3
+
+    def __post_init__(self):
+        _radius(self.radius_yx)
+
+
+def _morph(volume, radius, reconstruct):
+    volume = _validate_image(volume)
+    if volume.dtype.kind in "ui" and volume.dtype.itemsize > 4:
+        raise ValueError("morphology supports integers up to 32 bits and floating images")
+    channels = volume[..., None] if volume.ndim == 3 else volume
+    result = np.empty_like(channels)
     se = disk(radius)
-    result = np.empty_like(volume, dtype=np.uint8)
+    for c in range(channels.shape[-1]):
+        for z in range(channels.shape[0]):
+            image = channels[z, :, :, c].astype(np.float64)
+            if reconstruct:
+                background = reconstruction(erosion(image, se), image, method="dilation")
+                image = image - background
+                image = image + white_tophat(image, se) - black_tophat(image, se)
+            else:
+                image = white_tophat(image, se)
+            if not np.isfinite(image).all():
+                raise ValueError("morphology produced nonfinite values")
+            # Explicit saturation to representable source dtype, never wrap.
+            limits = np.iinfo(volume.dtype) if volume.dtype.kind in "ui" else np.finfo(volume.dtype)
+            image = np.clip(image, limits.min, limits.max)
+            if not np.isfinite(image).all():
+                raise ValueError("morphology produced nonfinite values")
+            result[z, :, :, c] = image.astype(volume.dtype)
+    return result[..., 0] if volume.ndim == 3 else result
 
-    for c in range(volume.shape[3]):
-        for z in range(volume.shape[0]):
-            result[z, :, :, c] = white_tophat(volume[z, :, :, c], se)
 
-    if is_3d:
-        result = result[..., 0]
-    return result
+def filter_tophat(volume: np.ndarray, *, config: TophatConfig = TophatConfig()) -> np.ndarray:
+    """White tophat per XY slice/channel, preserving source dtype and shape.
 
-
-def morphological_reconstruction(volume: np.ndarray, radius: int = 3) -> np.ndarray:
-    """Background removal via morphological reconstruction.
-
-    Per Z-slice algorithm (matching MATLAB MorphologicalReconstruction.m):
-      1. marker = erosion(slice, disk(radius))
-      2. obr = reconstruction(marker, slice, method='dilation')
-      3. subtracted = slice - obr
-      4. result = subtracted + white_tophat(subtracted, se) - black_tophat(subtracted, se)
-
-    Parameters
-    ----------
-    volume : np.ndarray
-        Input volume with shape (Z, Y, X) or (Z, Y, X, C).
-    radius : int
-        Radius of the disk structuring element (default 3).
-
-    Returns
-    -------
-    np.ndarray
-        Reconstructed volume, dtype uint8, same shape as input.
+    Allocates an output and float64 slice work. Reflect boundaries (skimage
+    default), disk footprint. Constants give zero; empty/nonfinite inputs error.
+    Inputs are not mutated. Results saturate to source dtype representability.
     """
-    is_3d = volume.ndim == 3
-    if is_3d:
-        volume = volume[..., np.newaxis]
+    return _morph(volume, config.radius_yx, False)
 
-    se = disk(radius)
-    result = np.empty_like(volume, dtype=np.uint8)
 
-    for c in range(volume.shape[3]):
-        for z in range(volume.shape[0]):
-            slc = volume[z, :, :, c]
-            marker = erosion(slc, se)
-            obr = reconstruction(marker, slc, method="dilation")
-            subtracted = slc.astype(np.int16) - obr.astype(np.int16)
-            subtracted = np.clip(subtracted, 0, 255).astype(np.uint8)
-            # Enhance: add tophat, subtract bothat (use int16 to avoid overflow)
-            top = white_tophat(subtracted, se).astype(np.int16)
-            bot = black_tophat(subtracted, se).astype(np.int16)
-            enhanced = subtracted.astype(np.int16) + top - bot
-            result[z, :, :, c] = np.clip(enhanced, 0, 255).astype(np.uint8)
+def reconstruct_background(volume: np.ndarray, *, config: ReconstructionConfig = ReconstructionConfig()) -> np.ndarray:
+    """Subtract reconstructed background then add white and subtract black tophat.
 
-    if is_3d:
-        result = result[..., 0]
-    return result
+    Float64 slice intermediates avoid uint16 signed overflow. Output retains
+    source dtype, explicitly saturating to its representable range (float
+    outputs may be negative). Allocates output and slice work, not a full float
+    volume. Disk/reflect XY boundaries; no Z/channel mixing. Constants give
+    zero. Empty/nonfinite inputs error. Input is never mutated.
+    """
+    return _morph(volume, config.radius_yx, True)

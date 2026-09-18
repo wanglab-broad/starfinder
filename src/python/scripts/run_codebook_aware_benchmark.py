@@ -3,6 +3,9 @@
 
 from __future__ import annotations
 
+from starfinder.io import ImageConversionConfig, ImageLoadConfig, convert_image
+from starfinder.preprocessing import MinMaxNormalizationConfig
+
 import argparse
 import gc
 import json
@@ -325,20 +328,24 @@ def load_and_register_synthetic_images(
     fov_id: str,
     n_rounds: int,
 ) -> dict[str, np.ndarray]:
-    from starfinder.io import load_image_stacks
-    from starfinder.preprocessing import min_max_normalize
+    from starfinder.io import load_round
+    from starfinder.preprocessing import normalize_intensity
     from starfinder.registration.phase_correlation import register_volume
 
     images: dict[str, np.ndarray] = {}
     channel_order = ["ch00", "ch01", "ch02", "ch03"]
     for round_idx in range(1, n_rounds + 1):
         round_name = f"round{round_idx}"
-        image, _meta = load_image_stacks(
-            data_dir / fov_id / round_name,
-            channel_order=channel_order,
-            convert_uint8=True,
-        )
-        images[round_name] = min_max_normalize(image, snr_threshold=5.0)
+        loaded_round = load_round(data_dir / fov_id / round_name, config=ImageLoadConfig(channel_labels=tuple(channel_order)))
+        image = loaded_round.image
+        # Preserve this runner's explicit historical non-uint8 scaling choice.
+        if image.dtype != np.uint8:
+            image = convert_image(image, config=ImageConversionConfig(
+                "uint8", "rescale", output_range=(0, 255), range_policy="data",
+                scope="global", rounding="truncate",
+            ))
+        _meta = loaded_round.diagnostics
+        images[round_name] = normalize_intensity(image, config=MinMaxNormalizationConfig('uint8', (0, 255), snr_threshold=5.0))
 
     ref_merged = np.sum(images["round1"], axis=-1, dtype=np.uint16)
     for round_idx in range(2, n_rounds + 1):
@@ -394,7 +401,7 @@ def prepare_synthetic_inputs(
 
 
 def load_registered_real_images(variant_dir: Path, n_rounds: int) -> dict[str, np.ndarray]:
-    from starfinder.io import load_multipage_tiff
+    from starfinder.io import load_volume
 
     stack_dir = variant_dir / "registered_final"
     if not stack_dir.exists():
@@ -403,10 +410,11 @@ def load_registered_real_images(variant_dir: Path, n_rounds: int) -> dict[str, n
     images: dict[str, np.ndarray] = {}
     for round_idx in range(1, n_rounds + 1):
         round_name = f"round{round_idx}"
-        images[round_name] = load_multipage_tiff(
-            stack_dir / f"{round_name}.tif",
-            convert_uint8=False,
-        )
+        images[round_name] = np.stack([
+            load_volume(stack_dir / f"{round_name}.tif", config=ImageLoadConfig(
+                source_axes="ZYXC", channel_index=c, channel_labels=(f"ch{c:02d}",)
+            )).image for c in range(4)
+        ], axis=-1)
     return images
 
 

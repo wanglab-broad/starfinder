@@ -1,14 +1,15 @@
 """STARfinder: Spatial transcriptomics data processing pipeline."""
 
+from starfinder.image import ImageMetadata
 from starfinder import barcode, preprocessing, registration, spotfinding
 from starfinder.barcode import extract_from_location, filter_reads, load_codebook
 from starfinder.dataset import FOV, STARMapDataset
-from starfinder.io import load_image_stacks, load_multipage_tiff, save_stack
+from starfinder.io import load_round, load_volume, save_volume
 from starfinder.preprocessing import (
-    histogram_match,
-    min_max_normalize,
-    morphological_reconstruction,
-    tophat_filter,
+    match_histogram,
+    normalize_intensity,
+    reconstruct_background,
+    filter_tophat,
 )
 from starfinder.registration import (
     apply_shift,
@@ -17,18 +18,19 @@ from starfinder.registration import (
     register_volume,
 )
 from starfinder.spotfinding import find_spots_3d
-from starfinder.utils import make_projection
+from starfinder.preprocessing import project_image
 
 __version__ = "0.1.0"
 
 __all__ = [
+    "ImageMetadata",
     # Dataset/FOV orchestration
     "STARMapDataset",
     "FOV",
     # I/O functions
-    "load_multipage_tiff",
-    "load_image_stacks",
-    "save_stack",
+    "load_volume",
+    "load_round",
+    "save_volume",
     # Registration module and functions
     "registration",
     "phase_correlate",
@@ -45,12 +47,12 @@ __all__ = [
     "filter_reads",
     # Preprocessing
     "preprocessing",
-    "min_max_normalize",
-    "histogram_match",
-    "morphological_reconstruction",
-    "tophat_filter",
+    "normalize_intensity",
+    "match_histogram",
+    "reconstruct_background",
+    "filter_tophat",
     # Utilities
-    "make_projection",
+    "project_image",
     # Package metadata
     "__version__",
 ]

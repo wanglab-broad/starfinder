@@ -50,7 +50,7 @@ def main(output: Path) -> None:
     summary = {"preset": "tiny", "seed": config.seed, "fovs": {}}
     for fov_id in dataset.fov_ids(config.n_fovs, start=1):
         fov = dataset.fov(fov_id)
-        fov.load_raw_images(convert_uint8=False)
+        fov.load_raw_images()
         for volume in fov.images.values():
             assert volume.shape == (8, 128, 128, 4)
             assert volume.dtype == np.uint8

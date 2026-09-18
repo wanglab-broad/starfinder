@@ -1,11 +1,6 @@
-starfinder.utils
-================
+Projection helpers
+==================
 
-Projection helpers. Maximum projection preserves the input dtype; sum projection rescales to uint8.
-
-.. currentmodule:: starfinder.utils
-
-.. autosummary::
-   :toctree: generated
-
-   make_projection
+Projection now lives in :doc:`preprocessing` as
+:func:`starfinder.preprocessing.project_image`. It retains singleton Z and has
+no implicit display rescaling. The old Python utility module is removed.

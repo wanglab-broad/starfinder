@@ -1,5 +1,7 @@
 """Small development recipes; reuse quickstart inputs and write new outputs."""
 
+from starfinder.io import ImageLoadConfig
+
 import argparse
 import json
 from pathlib import Path
@@ -8,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 from starfinder.dataset import FOV, LayerState, STARMapDataset
-from starfinder.io import load_image_stacks, load_multipage_tiff, save_stack
+from starfinder.io import load_round, load_volume, save_volume
 from starfinder.registration import apply_shift, phase_correlate
 from starfinder.spotfinding import find_spots_3d
 
@@ -16,13 +18,13 @@ from starfinder.spotfinding import find_spots_3d
 def image_io(output: Path) -> np.ndarray:
     volume = np.zeros((12, 24, 24), dtype=np.uint16)
     volume[5, 10, 10] = 1000
-    save_stack(volume, output / "channels" / "ch00.tif")
-    save_stack(volume // 2, output / "channels" / "ch01.tif")
-    loaded = load_multipage_tiff(output / "channels" / "ch00.tif", convert_uint8=False)
+    save_volume(volume, output / "channels" / "ch00.tif")
+    save_volume(volume // 2, output / "channels" / "ch01.tif")
+    loaded = load_volume(output / "channels" / "ch00.tif").image
     np.testing.assert_array_equal(loaded, volume)
-    image, metadata = load_image_stacks(
-        output / "channels", channel_order=["ch00", "ch01"], convert_uint8=False,
-    )
+    loaded_round = load_round(output / "channels", config=ImageLoadConfig(channel_labels=tuple(["ch00", "ch01"])))
+    image = loaded_round.image
+    metadata = loaded_round.diagnostics
     assert image.shape == (12, 24, 24, 2) and image.dtype == np.uint16
     assert not metadata["cropped"]
     np.testing.assert_array_equal(image[..., 1], volume // 2)
@@ -62,7 +64,7 @@ def decode_fov(quickstart: Path, output: Path) -> FOV:
     dataset.layers.validate()
     dataset.load_codebook(quickstart / "synthetic" / "codebook.csv", do_reverse=True)
     fov = dataset.fov("FOV_001")
-    fov.load_raw_images(convert_uint8=False)
+    fov.load_raw_images()
     assert all(image.shape == (8, 128, 128, 4) for image in fov.images.values())
     fov.global_registration(ref_img="merged", mov_img="merged", save_shifts=True)
     fov.spot_finding(intensity_estimation="noise", intensity_threshold=5.0)

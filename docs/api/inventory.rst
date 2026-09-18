@@ -21,10 +21,11 @@ subpackage page for each object's canonical reference; aliases refer to the same
 objects and are not duplicate implementations.
 
 * ``starfinder.STARMapDataset`` → :doc:`dataset`
+* ``starfinder.ImageMetadata`` → :doc:`image`
 * ``starfinder.FOV`` → :doc:`dataset`
-* ``starfinder.load_multipage_tiff`` → :doc:`io`
-* ``starfinder.load_image_stacks`` → :doc:`io`
-* ``starfinder.save_stack`` → :doc:`io`
+* ``starfinder.load_volume`` → :doc:`io`
+* ``starfinder.load_round`` → :doc:`io`
+* ``starfinder.save_volume`` → :doc:`io`
 * ``starfinder.registration`` → :doc:`registration` (module)
 * ``starfinder.phase_correlate`` → :doc:`registration`
 * ``starfinder.apply_shift`` → :doc:`registration`
@@ -37,11 +38,11 @@ objects and are not duplicate implementations.
 * ``starfinder.load_codebook`` → :doc:`barcode`
 * ``starfinder.filter_reads`` → :doc:`barcode`
 * ``starfinder.preprocessing`` → :doc:`preprocessing` (module)
-* ``starfinder.min_max_normalize`` → :doc:`preprocessing`
-* ``starfinder.histogram_match`` → :doc:`preprocessing`
-* ``starfinder.morphological_reconstruction`` → :doc:`preprocessing`
-* ``starfinder.tophat_filter`` → :doc:`preprocessing`
-* ``starfinder.make_projection`` → :doc:`utils`
+* ``starfinder.normalize_intensity`` → :doc:`preprocessing`
+* ``starfinder.match_histogram`` → :doc:`preprocessing`
+* ``starfinder.reconstruct_background`` → :doc:`preprocessing`
+* ``starfinder.filter_tophat`` → :doc:`preprocessing`
+* ``starfinder.project_image`` → :doc:`preprocessing`
 * ``starfinder.__version__``: package version string (``0.1.0``).
 
 Canonical coverage
@@ -59,19 +60,39 @@ objects documented here.
 
    * - Export / explicit submodule interface
      - Reference page
-   * - ``starfinder.io.load_multipage_tiff``
+   * - ``starfinder.image.ImageMetadata``
+     - :doc:`image`
+   * - ``starfinder.io.ImageConversionConfig``
      - :doc:`io`
-   * - ``starfinder.io.load_image_stacks``
+   * - ``starfinder.io.ImageLoadConfig``
      - :doc:`io`
-   * - ``starfinder.io.save_stack``
+   * - ``starfinder.io.ImageLoadResult``
      - :doc:`io`
-   * - ``starfinder.preprocessing.min_max_normalize``
+   * - ``starfinder.io.convert_image``
+     - :doc:`io`
+   * - ``starfinder.preprocessing.HistogramMatchingConfig``
      - :doc:`preprocessing`
-   * - ``starfinder.preprocessing.histogram_match``
+   * - ``starfinder.preprocessing.MinMaxNormalizationConfig``
      - :doc:`preprocessing`
-   * - ``starfinder.preprocessing.morphological_reconstruction``
+   * - ``starfinder.preprocessing.ProjectionConfig``
      - :doc:`preprocessing`
-   * - ``starfinder.preprocessing.tophat_filter``
+   * - ``starfinder.preprocessing.ReconstructionConfig``
+     - :doc:`preprocessing`
+   * - ``starfinder.preprocessing.TophatConfig``
+     - :doc:`preprocessing`
+   * - ``starfinder.io.load_volume``
+     - :doc:`io`
+   * - ``starfinder.io.load_round``
+     - :doc:`io`
+   * - ``starfinder.io.save_volume``
+     - :doc:`io`
+   * - ``starfinder.preprocessing.normalize_intensity``
+     - :doc:`preprocessing`
+   * - ``starfinder.preprocessing.match_histogram``
+     - :doc:`preprocessing`
+   * - ``starfinder.preprocessing.reconstruct_background``
+     - :doc:`preprocessing`
+   * - ``starfinder.preprocessing.filter_tophat``
      - :doc:`preprocessing`
    * - ``starfinder.registration.phase_correlate``
      - :doc:`registration`
@@ -257,8 +278,8 @@ objects documented here.
      - :doc:`benchmark.synthetic`
    * - ``starfinder.benchmark.synthetic.DEFORMATION_CONFIGS``
      - :doc:`benchmark.synthetic`
-   * - ``starfinder.utils.make_projection``
-     - :doc:`utils`
+   * - ``starfinder.preprocessing.project_image``
+     - :doc:`preprocessing`
    * - ``starfinder.registration.pointset.detect_and_match_spots``
      - :doc:`registration.pointset`
    * - ``starfinder.registration.pointset.subsample_control_points``

@@ -8,7 +8,14 @@ Intensity normalization and background removal. See :doc:`contracts` for shape a
 .. autosummary::
    :toctree: generated
 
-   min_max_normalize
-   histogram_match
-   morphological_reconstruction
-   tophat_filter
+   normalize_intensity
+   match_histogram
+   reconstruct_background
+   filter_tophat
+
+   project_image
+   HistogramMatchingConfig
+   MinMaxNormalizationConfig
+   ProjectionConfig
+   ReconstructionConfig
+   TophatConfig

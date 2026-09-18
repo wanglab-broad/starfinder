@@ -1,5 +1,7 @@
 """Tests for starfinder.registration module."""
 
+from starfinder.io import ImageLoadConfig
+
 import numpy as np
 import pytest
 
@@ -16,18 +18,18 @@ class TestPhaseCorrelate:
 
     def test_zero_shift(self, small_dataset):
         """Identical images return (0, 0, 0)."""
-        from starfinder.io import load_multipage_tiff
+        from starfinder.io import load_volume
 
-        vol = load_multipage_tiff(small_dataset / "FOV_001" / "round1" / "ch00.tif")
+        vol = load_volume(small_dataset / "FOV_001" / "round1" / "ch00.tif").image
         shift = phase_correlate(vol, vol)
 
         assert np.allclose(shift, (0, 0, 0), atol=0.1)
 
     def test_known_shift(self, small_dataset):
         """Recovers integer shift applied via np.roll."""
-        from starfinder.io import load_multipage_tiff
+        from starfinder.io import load_volume
 
-        vol = load_multipage_tiff(small_dataset / "FOV_001" / "round1" / "ch00.tif")
+        vol = load_volume(small_dataset / "FOV_001" / "round1" / "ch00.tif").image
         moved = np.roll(vol, (2, -3, 5), axis=(0, 1, 2))
         shift = phase_correlate(vol, moved)
 
@@ -39,9 +41,9 @@ class TestApplyShift:
 
     def test_roundtrip(self, small_dataset):
         """shift -> apply -> inverse shift preserves non-zero data."""
-        from starfinder.io import load_multipage_tiff
+        from starfinder.io import load_volume
 
-        vol = load_multipage_tiff(small_dataset / "FOV_001" / "round1" / "ch00.tif")
+        vol = load_volume(small_dataset / "FOV_001" / "round1" / "ch00.tif").image
         original_sum = vol.sum()
 
         shifted = apply_shift(vol, (3, -2, 4))
@@ -58,12 +60,11 @@ class TestRegisterVolume:
 
     def test_registers_multichannel(self, small_dataset):
         """Registers all channels and returns shifts."""
-        from starfinder.io import load_image_stacks
+        from starfinder.io import load_round
 
-        images, _ = load_image_stacks(
-            small_dataset / "FOV_001" / "round1",
-            ["ch00", "ch01", "ch02", "ch03"],
-        )
+        loaded_round = load_round(small_dataset / "FOV_001" / "round1", config=ImageLoadConfig(channel_labels=tuple(["ch00", "ch01", "ch02", "ch03"])))
+        images = loaded_round.image
+        _ = loaded_round.diagnostics
 
         # Create shifted version
         shifted = np.roll(images, (2, -3, 5, 0), axis=(0, 1, 2, 3))
@@ -83,9 +84,9 @@ class TestBackendParity:
 
     def test_backends_match(self, small_dataset):
         """Both backends return same shift for same input."""
-        from starfinder.io import load_multipage_tiff
+        from starfinder.io import load_volume
 
-        vol = load_multipage_tiff(small_dataset / "FOV_001" / "round1" / "ch00.tif")
+        vol = load_volume(small_dataset / "FOV_001" / "round1" / "ch00.tif").image
         moved = np.roll(vol, (2, 3, -1), axis=(0, 1, 2))
 
         shift_np = phase_correlate(vol, moved)

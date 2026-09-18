@@ -250,7 +250,7 @@ def generate_raw_registered_stack_cache(
 
     from starfinder.dataset import STARMapDataset
     from starfinder.dataset.types import LayerState
-    from starfinder.io import save_stack
+    from starfinder.io import save_volume
 
     config = RAW_REAL_DATASETS[dataset]
     stack_dir = raw_registered_stack_dir(result_dir, dataset, fov_id)
@@ -284,7 +284,7 @@ def generate_raw_registered_stack_cache(
     stack_dir.mkdir(parents=True, exist_ok=True)
     for round_idx in range(1, int(config["n_rounds"]) + 1):
         round_name = f"round{round_idx}"
-        save_stack(fov.images[round_name], stack_dir / f"{round_name}.tif")
+        save_volume(fov.images[round_name], stack_dir / f"{round_name}.tif")
 
     metadata = {
         "dataset": dataset,

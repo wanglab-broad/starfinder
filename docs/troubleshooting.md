@@ -25,14 +25,14 @@ imports/parses APIs; it does not execute these optional algorithms.
 
 | Symptom | Diagnosis and next check |
 | --- | --- |
-| `Directory not found` or `No TIFF file found matching channel pattern` | Inspect the resolved `input_root/round/FOV` and actual filenames. {py:func}`~starfinder.io.load_image_stacks` matches `*{pattern}*.tif`; `.tiff` and a wrong suffix/layout will not match that glob. The synthetic generator's FOV/round layout needs the quickstart's explicit layout conversion. |
+| `Directory not found` or `No TIFF file found matching channel pattern` | Inspect the resolved `input_root/round/FOV` and actual filenames. {py:func}`~starfinder.io.load_round` matches `*{pattern}*.tif`; `.tiff` is also supported, but a wrong suffix/layout will not match. The synthetic generator's FOV/round layout needs the quickstart's explicit layout conversion. |
 | `min() arg is an empty sequence` while loading | An empty `channel_order` reaches the channel loader without a default. Supply a nonempty, acquisition-correct list; check `seq_channel_order` when using {py:meth}`~starfinder.dataset.STARMapDataset.from_config`. |
-| Multiple-file warning or unexpected channel intensities | Narrow each pattern to exactly one file. The first glob match is used, not a guaranteed sorted selection. Check [channel order](conventions.md#channel-order) against the codebook. |
+| Ambiguous-file error or unexpected channel intensities | Narrow each pattern to exactly one file, or provide explicit source paths. Check [channel order](conventions.md#channel-order) against the codebook. |
 | Channel-size mismatch warning or smaller-than-expected image | The loader crops to minimum Z/Y/X dimensions. Inspect `metadata['original_shapes']` and `metadata['cropped']`; verify acquisition/export alignment before accepting the crop. Cropping is not registration. |
 | `Expected 4D (Z, Y, X, C) image` in detection | Inspect `image.shape`. For a known single-channel ZYX volume, append a singleton channel axis with `volume[..., None]`. A YX projection or unknown axis order cannot be repaired by blindly appending dimensions. |
 | Shape unpacking/broadcast error during global registration | The single-channel registration call expects equal-shaped 3D ZYX inputs. Check both shapes and the intended channel/merge; the function does not provide full input-shape validation. |
 | `Global mode requires uint8/uint16` | The global threshold uses dtype maximum. Check whether your input is floating point and choose an explicitly justified threshold mode or scaling step; casting arbitrary floats to uint8 can discard signal. |
-| TIFF loaded with wrong dimensions or intensity range | Plain TIFFs retain raw axis order; OME/ImageJ reads select `T=0,C=0`. Check metadata and `convert_uint8`: its default rescales non-uint8 arrays. Use `convert_uint8=False` when preserving raw dtype/intensity is intended. |
+| TIFF loaded with wrong dimensions or intensity range | Plain TIFFs default to ZYX; ambiguous OME/ImageJ axes require explicit selection. Inspect `ImageLoadConfig` and result diagnostics. Dtype is preserved unless an explicit conversion is configured. |
 
 The [I/O recipe](recipes.md#read-and-write-image-stacks) checks a lossless uint16
 round-trip. It does not validate arbitrary multi-channel acquisition formats.

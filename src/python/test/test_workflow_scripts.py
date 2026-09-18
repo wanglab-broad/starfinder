@@ -8,7 +8,7 @@ import matplotlib
 import numpy as np
 import pandas as pd
 
-from starfinder.io import save_stack
+from starfinder.io import save_volume
 
 matplotlib.use("Agg")
 
@@ -42,7 +42,7 @@ def test_stitch_subtile_plots_4d_reference_image(tmp_path):
 
     reference_image = np.zeros((2, 8, 8, 4), dtype=np.uint8)
     reference_image[1, 4, 3, 2] = 255
-    save_stack(reference_image, image_path)
+    save_volume(reference_image, image_path)
 
     reads_output = signal_path / "FOV_001_goodSpots.csv"
     preview_output = signal_path / "FOV_001_goodSpots.png"

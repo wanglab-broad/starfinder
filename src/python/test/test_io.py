@@ -1,15 +1,17 @@
 """Tests for starfinder.io module."""
 
+from starfinder.io import ImageLoadConfig
+
 import numpy as np
 import pytest
 import tifffile
 from pathlib import Path
 
-from starfinder.io import load_multipage_tiff, load_image_stacks, save_stack
+from starfinder.io import load_volume, load_round, save_volume
 
 
 class TestLoadMultipageTiff:
-    """Tests for load_multipage_tiff function."""
+    """Tests for load_volume function."""
 
     def test_load_returns_zyx_shape(self, tmp_path: Path):
         """Loading a multi-page TIFF returns (Z, Y, X) array."""
@@ -18,34 +20,34 @@ class TestLoadMultipageTiff:
         tiff_path = tmp_path / "test.tif"
         tifffile.imwrite(tiff_path, test_data)
 
-        result = load_multipage_tiff(tiff_path)
+        result = load_volume(tiff_path).image
 
         assert result.shape == (5, 64, 32)
 
-    def test_load_converts_to_uint8_by_default(self, tmp_path: Path):
-        """Loading converts to uint8 by default."""
+    def test_load_preserves_uint16_by_default(self, tmp_path: Path):
+        """Loading preserves uint16 by default."""
         test_data = np.random.randint(0, 65535, (3, 32, 32), dtype=np.uint16)
         tiff_path = tmp_path / "test16.tif"
         tifffile.imwrite(tiff_path, test_data)
 
-        result = load_multipage_tiff(tiff_path)
+        result = load_volume(tiff_path).image
 
-        assert result.dtype == np.uint8
+        assert result.dtype == np.uint16
 
-    def test_load_preserves_dtype_when_convert_false(self, tmp_path: Path):
-        """Loading preserves original dtype when convert_uint8=False."""
+    def test_load_preserves_dtype_without_conversion(self, tmp_path: Path):
+        """Loading preserves original dtype without a conversion config."""
         test_data = np.random.randint(0, 65535, (3, 32, 32), dtype=np.uint16)
         tiff_path = tmp_path / "test16.tif"
         tifffile.imwrite(tiff_path, test_data)
 
-        result = load_multipage_tiff(tiff_path, convert_uint8=False)
+        result = load_volume(tiff_path).image
 
         assert result.dtype == np.uint16
 
     def test_load_nonexistent_file_raises(self):
         """Loading non-existent file raises FileNotFoundError."""
         with pytest.raises(FileNotFoundError):
-            load_multipage_tiff("/nonexistent/path.tif")
+            load_volume("/nonexistent/path.tif").image
 
     def test_load_ome_tiff_uses_metadata(self, tmp_path: Path):
         """Loading OME-TIFF uses dimension metadata for correct interpretation."""
@@ -62,7 +64,7 @@ class TestLoadMultipageTiff:
             metadata={"axes": "ZYX"},
         )
 
-        result = load_multipage_tiff(tiff_path, convert_uint8=False)
+        result = load_volume(tiff_path).image
 
         # Should be (3, 32, 32) - Z=3, not collapsed to (1, 32, 32) as RGB
         assert result.shape == (3, 32, 32)
@@ -81,21 +83,21 @@ class TestLoadMultipageTiff:
             metadata={"axes": "ZYX"},
         )
 
-        result = load_multipage_tiff(tiff_path, convert_uint8=False)
+        result = load_volume(tiff_path).image
 
         assert result.shape == (4, 64, 64)
 
 
 class TestSaveStack:
-    """Tests for save_stack function."""
+    """Tests for save_volume function."""
 
     def test_save_3d_roundtrip(self, tmp_path: Path):
         """Saving and reloading 3D array preserves data."""
         original = np.random.randint(0, 255, (5, 64, 32), dtype=np.uint8)
         tiff_path = tmp_path / "output.tif"
 
-        save_stack(original, tiff_path)
-        result = load_multipage_tiff(tiff_path, convert_uint8=False)
+        save_volume(original, tiff_path)
+        result = load_volume(tiff_path).image
 
         np.testing.assert_array_equal(result, original)
 
@@ -105,13 +107,13 @@ class TestSaveStack:
 
         # Write first file
         data1 = np.zeros((3, 32, 32), dtype=np.uint8)
-        save_stack(data1, tiff_path)
+        save_volume(data1, tiff_path)
 
         # Overwrite with different data
         data2 = np.ones((5, 64, 64), dtype=np.uint8) * 255
-        save_stack(data2, tiff_path)
+        save_volume(data2, tiff_path)
 
-        result = load_multipage_tiff(tiff_path, convert_uint8=False)
+        result = load_volume(tiff_path).image
         assert result.shape == (5, 64, 64)
 
     def test_save_with_compression(self, tmp_path: Path):
@@ -122,8 +124,8 @@ class TestSaveStack:
         path_uncompressed = tmp_path / "uncompressed.tif"
         path_compressed = tmp_path / "compressed.tif"
 
-        save_stack(data, path_uncompressed, compress=False)
-        save_stack(data, path_compressed, compress=True)
+        save_volume(data, path_uncompressed, compress=False)
+        save_volume(data, path_compressed, compress=True)
 
         size_uncompressed = path_uncompressed.stat().st_size
         size_compressed = path_compressed.stat().st_size
@@ -133,7 +135,7 @@ class TestSaveStack:
 
 
 class TestLoadImageStacks:
-    """Tests for load_image_stacks function."""
+    """Tests for load_round function."""
 
     def test_load_returns_zyxc_shape(self, tmp_path: Path):
         """Loading multiple channels returns (Z, Y, X, C) array."""
@@ -142,9 +144,9 @@ class TestLoadImageStacks:
             data = np.full((5, 64, 32), i * 50, dtype=np.uint8)
             tifffile.imwrite(tmp_path / f"img_{ch}.tif", data)
 
-        result, metadata = load_image_stacks(
-            tmp_path, ["ch00", "ch01", "ch02", "ch03"]
-        )
+        loaded_round = load_round(tmp_path, config=ImageLoadConfig(channel_labels=tuple(["ch00", "ch01", "ch02", "ch03"])))
+        result = loaded_round.image
+        metadata = loaded_round.diagnostics
 
         assert result.shape == (5, 64, 32, 4)
         assert result.dtype == np.uint8
@@ -155,7 +157,9 @@ class TestLoadImageStacks:
         tifffile.imwrite(tmp_path / "img_ch00.tif", np.zeros((3, 32, 32), dtype=np.uint8))
         tifffile.imwrite(tmp_path / "img_ch01.tif", np.full((3, 32, 32), 100, dtype=np.uint8))
 
-        result, _ = load_image_stacks(tmp_path, ["ch00", "ch01"])
+        loaded_round = load_round(tmp_path, config=ImageLoadConfig(channel_labels=tuple(["ch00", "ch01"])))
+        result = loaded_round.image
+        _ = loaded_round.diagnostics
 
         assert result[0, 0, 0, 0] == 0    # ch00 is first
         assert result[0, 0, 0, 1] == 100  # ch01 is second
@@ -167,7 +171,9 @@ class TestLoadImageStacks:
         tifffile.imwrite(tmp_path / "ch01.tif", np.zeros((5, 60, 30), dtype=np.uint8))
 
         with pytest.warns(UserWarning, match="size mismatch"):
-            result, metadata = load_image_stacks(tmp_path, ["ch00", "ch01"])
+            loaded_round = load_round(tmp_path, config=ImageLoadConfig(channel_labels=tuple(["ch00", "ch01"]), crop_policy="minimum"))
+            result = loaded_round.image
+            metadata = loaded_round.diagnostics
 
         assert result.shape == (5, 60, 30, 2)  # Cropped to minimum
         assert metadata["cropped"] is True
@@ -177,12 +183,12 @@ class TestLoadImageStacks:
         tifffile.imwrite(tmp_path / "ch00.tif", np.zeros((3, 32, 32), dtype=np.uint8))
 
         with pytest.raises(ValueError, match="ch01"):
-            load_image_stacks(tmp_path, ["ch00", "ch01"])
+            load_round(tmp_path, config=ImageLoadConfig(channel_labels=tuple(["ch00", "ch01"])))
 
     def test_load_nonexistent_dir_raises(self):
         """Non-existent directory raises FileNotFoundError."""
         with pytest.raises(FileNotFoundError):
-            load_image_stacks("/nonexistent/dir", ["ch00"])
+            load_round("/nonexistent/dir", config=ImageLoadConfig(channel_labels=tuple(["ch00"])))
 
     def test_load_with_subdir(self, tmp_path: Path):
         """Loading with subdir searches in subdirectory."""
@@ -190,6 +196,8 @@ class TestLoadImageStacks:
         subdir.mkdir()
         tifffile.imwrite(subdir / "ch00.tif", np.zeros((3, 32, 32), dtype=np.uint8))
 
-        result, _ = load_image_stacks(tmp_path, ["ch00"], subdir="images")
+        loaded_round = load_round(tmp_path, config=ImageLoadConfig(channel_labels=tuple(["ch00"]), subdir="images"))
+        result = loaded_round.image
+        _ = loaded_round.diagnostics
 
         assert result.shape == (3, 32, 32, 1)

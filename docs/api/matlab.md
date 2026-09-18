@@ -89,9 +89,9 @@ is implied by this reference.
 | Stage | MATLAB interface | Python operation |
 | --- | --- | --- |
 | Orchestration | {mat:class}`STARMapDataset` | {py:class}`starfinder.dataset.STARMapDataset`, {py:class}`starfinder.dataset.FOV` |
-| Load / output | {mat:func}`LoadImageStacks`, {mat:func}`LoadMultipageTiff`, {mat:func}`SaveSingleStack` | {py:func}`starfinder.io.load_image_stacks`, {py:func}`starfinder.io.load_multipage_tiff`, {py:func}`starfinder.io.save_stack` |
-| Enhance | {mat:func}`MinMaxNorm`, {mat:func}`MorphologicalReconstruction` | {py:func}`starfinder.preprocessing.min_max_normalize`, {py:func}`starfinder.preprocessing.morphological_reconstruction` |
-| Histogram / background | {mat:meth}`STARMapDataset.HistEqualize`, {mat:meth}`STARMapDataset.Tophat` | {py:func}`starfinder.preprocessing.histogram_match`, {py:func}`starfinder.preprocessing.tophat_filter` |
+| Load / output | {mat:func}`LoadImageStacks`, {mat:func}`LoadMultipageTiff`, {mat:func}`SaveSingleStack` | {py:func}`starfinder.io.load_round`, {py:func}`starfinder.io.load_volume`, {py:func}`starfinder.io.save_volume` |
+| Enhance | {mat:func}`MinMaxNorm`, {mat:func}`MorphologicalReconstruction` | {py:func}`starfinder.preprocessing.normalize_intensity`, {py:func}`starfinder.preprocessing.reconstruct_background` |
+| Histogram / background | {mat:meth}`STARMapDataset.HistEqualize`, {mat:meth}`STARMapDataset.Tophat` | {py:func}`starfinder.preprocessing.match_histogram`, {py:func}`starfinder.preprocessing.filter_tophat` |
 | Global registration | {mat:func}`DFTRegister3D`, {mat:func}`DFTApply3D` | {py:func}`starfinder.registration.phase_correlate`, {py:func}`starfinder.registration.apply_shift` |
 | Local registration | {mat:func}`RegisterImagesLocal` | {py:func}`starfinder.registration.demons_register` |
 | Spot finding | {mat:func}`SpotFindingMax3D` | {py:func}`starfinder.spotfinding.find_spots_3d` |

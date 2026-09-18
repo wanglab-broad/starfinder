@@ -41,9 +41,9 @@ For fuller input details and limitations, see the [quickstart](getting-started.m
 
 ## Read and write image stacks
 
-{py:func}`~starfinder.io.save_stack` writes TIFF;
-{py:func}`~starfinder.io.load_multipage_tiff` reads one ZYX channel;
-{py:func}`~starfinder.io.load_image_stacks` stacks channels in the supplied order.
+{py:func}`~starfinder.io.save_volume` writes TIFF;
+{py:func}`~starfinder.io.load_volume` reads one ZYX channel;
+{py:func}`~starfinder.io.load_round` stacks channels in the supplied order.
 This example preserves uint16 values and checks for unexpected cropping.
 
 ```{literalinclude} examples/recipes.py
@@ -52,10 +52,10 @@ This example preserves uint16 values and checks for unexpected cropping.
 ```
 
 Expected: exact intensity round-trip, shape `(12,24,24,2)`, uint16, no cropping.
-`convert_uint8=True` instead min-max scales non-uint8 input; it is not a unit
-conversion. Plain TIFFs must already have ZYX axes. OME/ImageJ loading selects
-`T=0,C=0`; a generic multi-channel TIFF is not automatically split into channels.
-`save_stack` overwrites an existing file, so use a fresh destination.
+Use `ImageLoadConfig(conversion=ImageConversionConfig(...))` for explicit
+cast/clip/rescale; it is not physical-unit conversion. Plain TIFFs are ZYX by
+default. OME/ImageJ loading requires explicit selection for ambiguous T/C axes.
+`save_volume` overwrites an existing file, so use a fresh destination.
 
 For workflows, check `seq_channel_order`, path identifiers and `n_rounds` in
 [top-level configuration](workflow-configuration.md#top-level-fields).

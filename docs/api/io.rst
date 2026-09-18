@@ -1,13 +1,19 @@
 starfinder.io
 =============
 
-TIFF readers select the first time point/channel for metadata-aware files. See :doc:`contracts` for scaling and channel ordering.
+TIFF readers preserve dtype and require explicit selection for ambiguous axes.
+See :doc:`contracts` for conversion, geometry and channel ordering.
 
 .. currentmodule:: starfinder.io
 
 .. autosummary::
    :toctree: generated
 
-   load_multipage_tiff
-   load_image_stacks
-   save_stack
+   load_volume
+   load_round
+   save_volume
+
+   ImageConversionConfig
+   ImageLoadConfig
+   ImageLoadResult
+   convert_image

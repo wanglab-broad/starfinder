@@ -1,5 +1,7 @@
 """Tests for starfinder.registration.pointset (TPS and CPD local registration)."""
 
+from starfinder.io import ImageLoadConfig
+
 import numpy as np
 import pytest
 from scipy.ndimage import map_coordinates
@@ -9,12 +11,10 @@ class TestTPSIdentity:
     """Identical images should produce near-zero displacement."""
 
     def test_identity_no_displacement(self, small_dataset):
-        from starfinder.io import load_multipage_tiff
+        from starfinder.io import load_volume
         from starfinder.registration.pointset import tps_register
 
-        vol = load_multipage_tiff(
-            small_dataset / "FOV_001" / "round1" / "ch00.tif"
-        )
+        vol = load_volume(small_dataset / "FOV_001" / "round1" / "ch00.tif").image
 
         field = tps_register(
             vol, vol,
@@ -115,13 +115,12 @@ class TestRegisterVolumeTPS:
     """register_volume_tps should produce correct output shape."""
 
     def test_register_volume_tps_shape(self, small_dataset):
-        from starfinder.io import load_image_stacks
+        from starfinder.io import load_round
         from starfinder.registration.pointset import register_volume_tps
 
-        images, _ = load_image_stacks(
-            small_dataset / "FOV_001" / "round1",
-            ["ch00", "ch01", "ch02", "ch03"],
-        )
+        loaded_round = load_round(small_dataset / "FOV_001" / "round1", config=ImageLoadConfig(channel_labels=tuple(["ch00", "ch01", "ch02", "ch03"])))
+        images = loaded_round.image
+        _ = loaded_round.diagnostics
 
         ref_3d = images[:, :, :, 0]
 

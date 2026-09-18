@@ -1,5 +1,7 @@
 """Tests for starfinder.registration.demons module."""
 
+from starfinder.io import ImageLoadConfig
+
 import numpy as np
 import pytest
 
@@ -12,10 +14,10 @@ class TestDemonsRegister:
 
     def test_identity(self, small_dataset):
         """Identical images produce near-zero displacement field."""
-        from starfinder.io import load_multipage_tiff
+        from starfinder.io import load_volume
         from starfinder.registration.demons import demons_register
 
-        vol = load_multipage_tiff(small_dataset / "FOV_001" / "round1" / "ch00.tif")
+        vol = load_volume(small_dataset / "FOV_001" / "round1" / "ch00.tif").image
         # Use fast single-level config for unit test speed
         field = demons_register(vol, vol, iterations=[25], pyramid_mode="sitk")
 
@@ -28,10 +30,10 @@ class TestDemonsRegister:
         """Recovers direction of synthetic smooth deformation."""
         from scipy.ndimage import gaussian_filter, map_coordinates
 
-        from starfinder.io import load_multipage_tiff
+        from starfinder.io import load_volume
         from starfinder.registration.demons import demons_register
 
-        vol = load_multipage_tiff(small_dataset / "FOV_001" / "round1" / "ch00.tif")
+        vol = load_volume(small_dataset / "FOV_001" / "round1" / "ch00.tif").image
 
         # Create smooth synthetic deformation (simulate tissue warping)
         rng = np.random.default_rng(42)
@@ -71,10 +73,10 @@ class TestApplyDeformation:
 
     def test_identity_field(self, small_dataset):
         """Zero displacement field returns original volume."""
-        from starfinder.io import load_multipage_tiff
+        from starfinder.io import load_volume
         from starfinder.registration.demons import apply_deformation
 
-        vol = load_multipage_tiff(small_dataset / "FOV_001" / "round1" / "ch00.tif")
+        vol = load_volume(small_dataset / "FOV_001" / "round1" / "ch00.tif").image
 
         # Zero displacement field
         field = np.zeros((*vol.shape, 3), dtype=np.float32)
@@ -90,13 +92,12 @@ class TestRegisterVolumeLocal:
 
     def test_multichannel(self, small_dataset):
         """Registers all channels using computed field."""
-        from starfinder.io import load_image_stacks
+        from starfinder.io import load_round
         from starfinder.registration.demons import register_volume_local
 
-        images, _ = load_image_stacks(
-            small_dataset / "FOV_001" / "round1",
-            ["ch00", "ch01", "ch02", "ch03"],
-        )
+        loaded_round = load_round(small_dataset / "FOV_001" / "round1", config=ImageLoadConfig(channel_labels=tuple(["ch00", "ch01", "ch02", "ch03"])))
+        images = loaded_round.image
+        _ = loaded_round.diagnostics
 
         # Use ch00 as ref/mov (identity case)
         ref_img = images[:, :, :, 0]
@@ -181,10 +182,10 @@ class TestAntialiasedDemonsRegister:
 
     def test_identity_antialias_pyramid(self, small_dataset):
         """Identical images with antialias pyramid produce near-zero field."""
-        from starfinder.io import load_multipage_tiff
+        from starfinder.io import load_volume
         from starfinder.registration.demons import demons_register
 
-        vol = load_multipage_tiff(small_dataset / "FOV_001" / "round1" / "ch00.tif")
+        vol = load_volume(small_dataset / "FOV_001" / "round1" / "ch00.tif").image
         field = demons_register(
             vol, vol,
             iterations=[25, 10],

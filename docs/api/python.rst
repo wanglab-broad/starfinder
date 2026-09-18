@@ -13,6 +13,7 @@ public methods and source links. The :doc:`inventory` records coverage and alias
    contracts
    backends
    examples
+   image
    io
    preprocessing
    registration

@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
+import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 import pandas as pd
 
+from starfinder.image import ImageMetadata, _validate_image
+from starfinder.io import ImageLoadConfig
+from starfinder.preprocessing import (MinMaxNormalizationConfig, HistogramMatchingConfig, ReconstructionConfig, TophatConfig, ProjectionConfig)
 from starfinder.dataset.logging import log_step
 from starfinder.dataset.paths import FOVPaths
 from starfinder.dataset.types import Codebook, ImageArray, Shift3D
@@ -35,7 +39,7 @@ class FOV:
         FOV identifier.
     images : dict[str, ImageArray]
         Round to (Z,Y,X,C) numeric array mapping; default empty dict.
-    metadata : dict[str, dict]
+    metadata : dict[str, ImageMetadata]
         Round to loader metadata mapping; default empty dict.
     global_shifts : dict[str, Shift3D]
         Round to detected (dz,dy,dx) voxel displacement; default empty dict.
@@ -53,11 +57,13 @@ class FOV:
 
     # Mutable state
     images: dict[str, ImageArray] = field(default_factory=dict)
-    metadata: dict[str, dict] = field(default_factory=dict)
+    metadata: dict[str, ImageMetadata] = field(default_factory=dict)
     global_shifts: dict[str, Shift3D] = field(default_factory=dict)
     local_registered: set[str] = field(default_factory=set)
     all_spots: pd.DataFrame | None = None
     good_spots: pd.DataFrame | None = None
+
+    load_diagnostics: dict[str, dict] = field(default_factory=dict)
 
     # --- Delegated properties ---
 
@@ -104,13 +110,13 @@ class FOV:
         rounds: list[str] | None = None,
         channel_order: ChannelOrder | None = None,
         *,
-        convert_uint8: bool = True,
+        config: ImageLoadConfig | None = None,
         subdir: str = "",
         layer_slot: Literal["seq", "other"] = "seq",
     ) -> FOV:
         """Load raw TIFF stacks for specified rounds.
 
-        Delegates to ``starfinder.io.load_image_stacks()`` per round.
+        Delegates to ``starfinder.io.load_round()`` per round.
 
         Parameters
         ----------
@@ -118,8 +124,8 @@ class FOV:
             Round names to load; None uses the dataset layers selected by layer_slot.
         channel_order : ChannelOrder | None
             Filename channel patterns in output C order; None uses dataset.channel_order.
-        convert_uint8 : bool
-            True min-max scales loaded non-uint8 stacks to uint8; False preserves their dtype.
+        config : ImageLoadConfig | None
+            Explicit loading/conversion policy; None preserves source dtype.
         subdir : str
             Optional subdirectory beneath each round/FOV input directory.
         layer_slot : Literal['seq', 'other']
@@ -130,8 +136,10 @@ class FOV:
         FOV
             This instance, with processing state updated in place.
         """
-        from starfinder.io import load_image_stacks
+        from starfinder.io import load_round
 
+        if config is not None and (channel_order is not None or subdir):
+            raise ValueError("select channels/subdir through config or arguments, not both")
         if rounds is None:
             rounds = (
                 self.layers.seq if layer_slot == "seq" else self.layers.other
@@ -140,14 +148,13 @@ class FOV:
             channel_order = self.dataset.channel_order
 
         for round_name in rounds:
-            img, meta = load_image_stacks(
-                self.input_dir(round_name),
-                channel_order=channel_order,
-                subdir=subdir,
-                convert_uint8=convert_uint8,
+            load_config = config or ImageLoadConfig(
+                channel_labels=tuple(channel_order), subdir=subdir,
             )
-            self.images[round_name] = img
-            self.metadata[round_name] = meta
+            loaded = load_round(self.input_dir(round_name), config=load_config)
+            self.images[round_name] = loaded.image
+            self.metadata[round_name] = loaded.metadata
+            self.load_diagnostics[round_name] = loaded.diagnostics
         return self
 
     # --- Preprocessing ---
@@ -162,10 +169,12 @@ class FOV:
 
     def _rotate_round(self, round_name: str, angle: float) -> None:
         """Rotate a single round's image in-place."""
-        vol = self.images[round_name]
+        vol = _validate_image(self.images[round_name])
+        source = self.metadata.get(round_name, ImageMetadata(f"{self.fov_id}/{round_name}"))
+        rotated_metadata = source.rotated(vol.shape[:3], angle, frame_id=f"{source.frame_id}/rotate:{angle}")
         k_90 = round(angle / 90)
         if abs(angle - k_90 * 90) < 1e-6:
-            yx_axes = (1, 2) if vol.ndim == 4 else (0, 1)
+            yx_axes = (1, 2)
             # np.rot90 and imrotate share sign convention: k=1 is CCW, k=-1 is CW
             self.images[round_name] = np.ascontiguousarray(
                 np.rot90(vol, k=k_90, axes=yx_axes)
@@ -173,10 +182,17 @@ class FOV:
         else:
             from scipy.ndimage import rotate as ndimage_rotate
 
-            yx_axes = (1, 2) if vol.ndim == 4 else (0, 1)
+            yx_axes = (1, 2)
             self.images[round_name] = ndimage_rotate(
                 vol, angle, axes=yx_axes, reshape=False, order=1
             ).astype(vol.dtype)
+
+        self.metadata[round_name] = rotated_metadata
+        self.load_diagnostics.setdefault(round_name, {})["rotation"] = {
+            "source_metadata": asdict(source), "source_shape_zyx": vol.shape[:3],
+            "output_shape_zyx": self.images[round_name].shape[:3], "angle_degrees": angle,
+            "mapping": "source = R @ (output - output_center) + source_center",
+        }
 
     @log_step
     def rotate(self, *, angle: float) -> FOV:
@@ -211,8 +227,9 @@ class FOV:
         Parameters
         ----------
         snr_threshold : float or None
-            If set, channels with max/mean < snr_threshold are not
-            normalized (raw values kept). Prevents noise inflation.
+            If set, nonconstant channels with max/mean < snr_threshold keep
+            raw values clipped to uint8. Constant channels always map to zero.
+            Prevents noise inflation without overriding the constant policy.
 
         Parameters
         ----------
@@ -224,10 +241,10 @@ class FOV:
         FOV
             This instance, with processing state updated in place.
         """
-        from starfinder.preprocessing import min_max_normalize
+        from starfinder.preprocessing import normalize_intensity
 
         self._apply_to_layers(
-            lambda v: min_max_normalize(v, snr_threshold=snr_threshold),
+            lambda v: normalize_intensity(v, config=MinMaxNormalizationConfig('uint8', (0, 255), snr_threshold=snr_threshold)),
             layers,
         )
         return self
@@ -236,7 +253,6 @@ class FOV:
     def hist_equalize(
         self,
         ref_channel: int = 0,
-        nbins: int = 64,
         layers: list[str] | None = None,
     ) -> FOV:
         """Histogram matching to reference layer's channel.
@@ -245,8 +261,6 @@ class FOV:
         ----------
         ref_channel : int
             Zero-based reference channel index; also selects moving channel in single-channel registration.
-        nbins : int
-            Compatibility argument forwarded to histogram_match; currently unused.
         layers : list[str] | None
             Rounds to process; None uses all configured layers for preprocessing, sequencing layers for extraction.
 
@@ -255,15 +269,15 @@ class FOV:
         FOV
             This instance, with processing state updated in place.
         """
-        from starfinder.preprocessing import histogram_match
+        from starfinder.preprocessing import match_histogram
 
         reference = self.images[self.layers.ref][:, :, :, ref_channel]
         if layers is None:
             layers = self.layers.all_layers
         for name in layers:
             if name in self.images:
-                self.images[name] = histogram_match(
-                    self.images[name], reference, nbins=nbins
+                self.images[name] = match_histogram(
+                    self.images[name], reference, config=HistogramMatchingConfig()
                 )
         return self
 
@@ -285,10 +299,10 @@ class FOV:
         FOV
             This instance, with processing state updated in place.
         """
-        from starfinder.preprocessing import morphological_reconstruction
+        from starfinder.preprocessing import reconstruct_background
 
         self._apply_to_layers(
-            lambda v: morphological_reconstruction(v, radius=radius), layers
+            lambda v: reconstruct_background(v, config=ReconstructionConfig(radius_yx=radius)), layers
         )
         return self
 
@@ -310,15 +324,15 @@ class FOV:
         FOV
             This instance, with processing state updated in place.
         """
-        from starfinder.preprocessing import tophat_filter
+        from starfinder.preprocessing import filter_tophat
 
         self._apply_to_layers(
-            lambda v: tophat_filter(v, radius=radius), layers
+            lambda v: filter_tophat(v, config=TophatConfig(radius_yx=radius)), layers
         )
         return self
 
     @log_step
-    def make_projection(
+    def project_image(
         self, method: Literal["max", "sum"] = "max"
     ) -> FOV:
         """Apply Z-projection to ALL images.
@@ -326,19 +340,24 @@ class FOV:
         Parameters
         ----------
         method : Literal['max', 'sum']
-            Projection method max or sum (removes Z axis).
+            Projection method max or sum (retains singleton Z; sum does not rescale).
 
         Returns
         -------
         FOV
             This instance, with processing state updated in place.
         """
-        from starfinder.utils import make_projection as _make_projection
+        from starfinder.preprocessing import project_image as _project_image
 
         for name in list(self.images):
-            self.images[name] = _make_projection(
-                self.images[name], method=method
+            source_shape = self.images[name].shape[:3]
+            self.images[name] = _project_image(
+                self.images[name], config=ProjectionConfig(method=method)
             )
+            source = self.metadata.get(name, ImageMetadata(f"{self.fov_id}/{name}"))
+            self.metadata[name] = source.projected(method=method)
+            self.load_diagnostics.setdefault(name, {})["projection_source_metadata"] = asdict(source)
+            self.load_diagnostics[name]["projection_source_shape_zyx"] = source_shape
         return self
 
     # --- Registration ---
@@ -932,10 +951,10 @@ class FOV:
                 layers=[round_name], snr_threshold=snr_threshold
             )
             if hist_equalize:
-                from starfinder.preprocessing import histogram_match
+                from starfinder.preprocessing import match_histogram
 
                 reference = self.images[ref][:, :, :, hist_equalize_ref_channel]
-                self.images[round_name] = histogram_match(
+                self.images[round_name] = match_histogram(
                     self.images[round_name], reference
                 )
             if morph_recon:
@@ -964,18 +983,21 @@ class FOV:
         Returns
         -------
         pathlib.Path
-            Written TIFF path; maximum_projection optionally removes Z. Does not sum channels.
+            Written TIFF path; maximum_projection optionally reduces Z to one plane. Does not sum channels.
         """
-        from starfinder.io import save_stack
-        from starfinder.utils import make_projection
+        from starfinder.io import save_volume
+        from starfinder.preprocessing import project_image
 
         ref_image = self.images[self.layers.ref]
+        metadata = self.metadata.get(self.layers.ref)
         if self.dataset.maximum_projection:
-            ref_image = make_projection(ref_image)
+            ref_image = project_image(ref_image)
+            if metadata is not None:
+                metadata = metadata.projected(method="max")
 
         path = self.paths.ref_merged_tif
         path.parent.mkdir(parents=True, exist_ok=True)
-        save_stack(ref_image, path)
+        save_volume(ref_image, path, metadata=metadata)
         return path
 
     def save_signal(
@@ -1130,14 +1152,22 @@ class FOV:
         for t, window in enumerate(subtile_cfg.windows):
             sy, sx = window.to_slice()
 
-            # Extract cropped images for each round
+            # Singleton Z is retained for both volume and projected images.
             arrays = {}
             for round_name, img in self.images.items():
-                if img.ndim == 4:
-                    arrays[f"images_{round_name}"] = img[:, sy, sx, :]
-                else:
-                    # 2D projected (Y, X, C) or (Y, X)
-                    arrays[f"images_{round_name}"] = img[sy, sx]
+                _validate_image(img)
+                if not (0 <= window.y_start < window.y_end <= img.shape[1]
+                        and 0 <= window.x_start < window.x_end <= img.shape[2]):
+                    raise ValueError("subtile crop must lie within the image")
+                arrays[f"images_{round_name}"] = img[:, sy, sx, ...]
+                source = self.metadata.get(round_name, ImageMetadata(f"{self.fov_id}/{round_name}"))
+                geometry = source.cropped((0, window.y_start, window.x_start),
+                    frame_id=f"{source.frame_id}/subtile:{t + 1}")
+                arrays[f"metadata_{round_name}"] = json.dumps(asdict(geometry))
+                arrays[f"source_mapping_{round_name}"] = json.dumps({
+                    "source_metadata": asdict(source),
+                    "source_start_zyx": [0, window.y_start, window.x_start],
+                })
 
             # Save NPZ — 1-based naming to match Snakemake wildcard {n_subtile}
             subtile_id = t + 1
@@ -1187,7 +1217,7 @@ class FOV:
         Returns
         -------
         FOV
-            New FOV with image arrays loaded; dataset state is supplied by caller. Spots, shifts and metadata are not restored.
+            New FOV with image arrays loaded; dataset state is supplied by caller. Geometry is restored; spots and shifts are not restored.
         """
         data = np.load(subtile_path, allow_pickle=True)
 
@@ -1196,4 +1226,11 @@ class FOV:
             if key.startswith("images_"):
                 round_name = key[len("images_") :]
                 fov.images[round_name] = data[key]
+                metadata_key = f"metadata_{round_name}"
+                fov.metadata[round_name] = (ImageMetadata(**json.loads(str(data[metadata_key])))
+                    if metadata_key in data else ImageMetadata(f"{fov_id}/{round_name}/unknown-subtile"))
+                mapping_key = f"source_mapping_{round_name}"
+                if mapping_key in data:
+                    fov.load_diagnostics[round_name] = json.loads(str(data[mapping_key]))
+        data.close()
         return fov

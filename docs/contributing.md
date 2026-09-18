@@ -72,7 +72,7 @@ uv run python -m http.server 8000 --bind 127.0.0.1 --directory "$DOCS_OUTPUT"
 
 Open <http://127.0.0.1:8000/> on the same host. For a remote build host, forward
 the preview port through your normal SSH connection. Stop the server with Ctrl-C.
-Check the eight navigation sections, search for `min_max_normalize`, open its
+Check the eight navigation sections, search for `normalize_intensity`, open its
 generated API page, and follow the `[source]` link beside its signature. The
 separate page-source link shows the documentation markup.
 
@@ -188,7 +188,7 @@ After a reviewed change is committed and pushed to the selected branch:
    [Python API page](api/python.rst), its function anchor and `[source]` backlink;
    open [MATLAB dataset methods](api/matlab/dataset.rst) and
    [workflow configuration](workflows.md). Follow links between guides and APIs.
-4. Search for `min_max_normalize` in the site's search UI and open a matching
+4. Search for `normalize_intensity` in the site's search UI and open a matching
    API result. In browser developer tools, check for JavaScript errors and failed
    requests to CSS, fonts, scripts and `searchindex.js`. Check nested pages as
    well as the home page: assets must resolve beneath `/starfinder/`, not at the

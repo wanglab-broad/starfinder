@@ -46,10 +46,10 @@ Color `2` therefore selects ch01 there, but selects ch02 under the real-data
 MATLAB ordering. Check acquisition and codebook metadata together before decoding.
 A channel permutation can produce plausible intensities with incorrect genes.
 
-Use unambiguous patterns: {py:func}`~starfinder.io.load_image_stacks` searches
-`*{channel}*.tif`, picks the first glob result if several match, and crops channel
-size mismatches to the minimum shape at the low-index corner. Inspect returned
-`original_shapes` and `cropped`. MATLAB's loader expects a struct array for custom
+Use unambiguous patterns: {py:func}`~starfinder.io.load_round` searches
+`*{channel}*.tif` and `*{channel}*.tiff`, and rejects ambiguous matches. Channel
+size mismatches error unless an explicit minimum crop is requested. Inspect
+`ImageLoadResult.diagnostics` for `original_shapes` and `cropped`. MATLAB's loader expects a struct array for custom
 channel settings; the schema's string list is not portable to that custom path.
 See the [backend configuration caveat](workflow-configuration.md#top-level-fields).
 
