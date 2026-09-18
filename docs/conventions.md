@@ -1,7 +1,7 @@
 # Conventions
 
 Use this checklist when moving data between Python, MATLAB and workflow YAML.
-The [generated Python contracts](api/contracts.md) and
+The [Python contracts](api/contracts.md) and
 [MATLAB reference](api/matlab.md#array-and-calling-conventions) give further
 operation-specific details. Corresponding APIs do not imply numerical parity.
 

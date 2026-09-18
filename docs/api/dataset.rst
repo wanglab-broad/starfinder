@@ -13,15 +13,10 @@ FOV remains the public acronym. See :doc:`contracts` and :doc:`../coordination`.
    Dataset
    ExecutionConfig
    FOV
+   from_workflow_config
    PipelineConfig
    RecoveryConfig
    RegistrationStep
    RoundState
    SubtileConfig
    WorkflowConfig
-   from_workflow_config
-
-.. toctree::
-   :hidden:
-
-   ../coordination

@@ -26,3 +26,10 @@ uv run pytest test/ -v
 # Generate synthetic inputs only (choose a new external directory)
 uv run starfinder synthetic generate --mode e2e --owner Jiahao --preset tiny --seed 42 --output /absolute/path/outside/checkout/synthetic-tiny
 ```
+
+## Architecture and migration
+
+See [project context](../../CONTEXT.md), [Python migration](../../docs/migration.md),
+and [the five-section documentation site](../../docs/index.md).
+Detailed contracts live in the site; operational instructions live in
+[AGENTS.md](../../AGENTS.md).

@@ -10,8 +10,6 @@ persistence adapter writes workflow TIFFs, JSON, scene tables and annotations.
 .. autosummary::
    :toctree: generated
 
-   SyntheticConfig
-   SyntheticDataset
    generate_codebook
    generate_dataset
    generate_displacement_field
@@ -19,6 +17,8 @@ persistence adapter writes workflow TIFFs, JSON, scene tables and annotations.
    generate_volume
    get_preset_config
    render_spots
+   SyntheticConfig
+   SyntheticDataset
 
 Scene and result contracts
 --------------------------

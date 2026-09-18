@@ -40,6 +40,6 @@ The class does not validate that every prerequisite stage has run.
 
 .. mat:autoclass:: STARMapDataset
    :members:
-   :member-order: bysource
+   :member-order: alphabetical
 
 .. mat:automethod:: STARMapDataset.STARMapDataset

@@ -14,18 +14,18 @@ Do not interpret the Python and MATLAB score/filter options as equivalent.
 
 .. mat:currentmodule:: .
 
-.. mat:autofunction:: SpotFindingMax3D
-
-.. mat:autofunction:: ExtractFromLocation
+.. mat:autofunction:: DecodeCS
 
 .. mat:autofunction:: EncodeBases
 
-.. mat:autofunction:: DecodeCS
-
-.. mat:autofunction:: Str2Colorseq
-
-.. mat:autofunction:: LoadCodebook
+.. mat:autofunction:: ExtractFromLocation
 
 .. mat:autofunction:: FilterReads
 
 .. mat:autofunction:: FilterReadsMultiSegment
+
+.. mat:autofunction:: LoadCodebook
+
+.. mat:autofunction:: SpotFindingMax3D
+
+.. mat:autofunction:: Str2Colorseq

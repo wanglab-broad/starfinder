@@ -1,245 +1,194 @@
 Public API coverage inventory
 =============================
 
-Coverage boundary
------------------
+Supported names below match the explicit ``__all__`` of the installed checkout.
+Replaced Python interfaces have no compatibility aliases. Private implementation
+modules, imported dependencies and CLI implementation helpers are excluded.
+Class pages include public methods, properties and dataclass fields; signatures
+show literal defaults (``<factory>`` means a fresh per-instance value).
+This inventory is software coverage, not scientific qualification.
 
-Supported root and subpackage ``__all__`` exports are covered below, including
-the independent synthetic package. Removed names have no compatibility aliases.
-Class pages include public methods, properties and dataclass fields. Signatures
-show literal defaults; ``<factory>`` means a fresh collection/value per instance.
+Root convenience exports
+------------------------
 
-This is a source-based API inventory, not a scientific validation claim or a
-promise that every parameter combination is supported.
+Root exports refer to the same objects as their owning namespaces; modules and
+``__version__`` are listed as metadata rather than callable APIs.
 
-Root aliases
-------------
+* ``starfinder.__version__`` (module or version metadata)
+* ``starfinder.apply_transform`` → :py:obj:`starfinder.registration.apply_transform`
+* ``starfinder.barcode`` (module or version metadata)
+* ``starfinder.Dataset`` → :py:obj:`starfinder.dataset.Dataset`
+* ``starfinder.decode_barcodes`` → :py:obj:`starfinder.barcode.decode_barcodes`
+* ``starfinder.estimate_transform`` → :py:obj:`starfinder.registration.estimate_transform`
+* ``starfinder.extract_intensities`` → :py:obj:`starfinder.barcode.extract_intensities`
+* ``starfinder.filter_reads`` → :py:obj:`starfinder.barcode.filter_reads`
+* ``starfinder.filter_tophat`` → :py:obj:`starfinder.preprocessing.filter_tophat`
+* ``starfinder.find_spots`` → :py:obj:`starfinder.spot_finding.find_spots`
+* ``starfinder.FOV`` → :py:obj:`starfinder.dataset.FOV`
+* ``starfinder.ImageMetadata`` → :py:obj:`starfinder.image.ImageMetadata`
+* ``starfinder.load_codebook`` → :py:obj:`starfinder.barcode.load_codebook`
+* ``starfinder.load_round`` → :py:obj:`starfinder.io.load_round`
+* ``starfinder.load_volume`` → :py:obj:`starfinder.io.load_volume`
+* ``starfinder.match_histogram`` → :py:obj:`starfinder.preprocessing.match_histogram`
+* ``starfinder.normalize_intensity`` → :py:obj:`starfinder.preprocessing.normalize_intensity`
+* ``starfinder.preprocessing`` (module or version metadata)
+* ``starfinder.project_image`` → :py:obj:`starfinder.preprocessing.project_image`
+* ``starfinder.reconstruct_background`` → :py:obj:`starfinder.preprocessing.reconstruct_background`
+* ``starfinder.registration`` (module or version metadata)
+* ``starfinder.save_volume`` → :py:obj:`starfinder.io.save_volume`
+* ``starfinder.spot_finding`` (module or version metadata)
 
-``import starfinder`` re-exports the following names. Use the corresponding
-subpackage page for each object's canonical reference; aliases refer to the same
-objects and are not duplicate implementations.
+Owning namespaces (alphabetical)
+--------------------------------
 
-* ``starfinder.Dataset`` → :doc:`dataset`
-* ``starfinder.ImageMetadata`` → :doc:`image`
-* ``starfinder.FOV`` → :doc:`dataset`
-* ``starfinder.load_volume`` → :doc:`io`
-* ``starfinder.load_round`` → :doc:`io`
-* ``starfinder.save_volume`` → :doc:`io`
-* ``starfinder.estimate_transform`` → :doc:`registration`
-* ``starfinder.apply_transform`` → :doc:`registration`
-* ``starfinder.registration`` → :doc:`registration` (module)
-* ``starfinder.spot_finding`` → :doc:`spot_finding` (module)
-* ``starfinder.find_spots`` → :doc:`spot_finding`
-* ``starfinder.barcode`` → :doc:`barcode` (module)
-* ``starfinder.extract_intensities`` → :doc:`barcode`
-* ``starfinder.decode_barcodes`` → :doc:`barcode`
-* ``starfinder.load_codebook`` → :doc:`barcode`
-* ``starfinder.filter_reads`` → :doc:`barcode`
-* ``starfinder.preprocessing`` → :doc:`preprocessing` (module)
-* ``starfinder.normalize_intensity`` → :doc:`preprocessing`
-* ``starfinder.match_histogram`` → :doc:`preprocessing`
-* ``starfinder.reconstruct_background`` → :doc:`preprocessing`
-* ``starfinder.filter_tophat`` → :doc:`preprocessing`
-* ``starfinder.project_image`` → :doc:`preprocessing`
-* ``starfinder.__version__``: package version string (``0.1.0``).
+starfinder.barcode
+~~~~~~~~~~~~~~~~~~
 
-Canonical coverage
-------------------
+* :py:obj:`starfinder.barcode.BarcodeDecodingResult`
+* :py:obj:`starfinder.barcode.Codebook`
+* :py:obj:`starfinder.barcode.CodebookAwareDecoderConfig`
+* :py:obj:`starfinder.barcode.decode_barcodes`
+* :py:obj:`starfinder.barcode.decode_color_sequence`
+* :py:obj:`starfinder.barcode.encode_bases`
+* :py:obj:`starfinder.barcode.EncodingConfig`
+* :py:obj:`starfinder.barcode.extract_intensities`
+* :py:obj:`starfinder.barcode.filter_reads`
+* :py:obj:`starfinder.barcode.IntensityExtractionResult`
+* :py:obj:`starfinder.barcode.InvalidIntensityError`
+* :py:obj:`starfinder.barcode.load_codebook`
+* :py:obj:`starfinder.barcode.NeighborhoodSumConfig`
+* :py:obj:`starfinder.barcode.ReadFilterConfig`
+* :py:obj:`starfinder.barcode.ReadFilteringResult`
+* :py:obj:`starfinder.barcode.WtaDecoderConfig`
 
-Synthetic names belong to :doc:`synthetic` exclusively. Barcode mechanics and lookup constants are private; use structured decoding
-diagnostics for per-round probabilities and candidate scores.
+starfinder.benchmark
+~~~~~~~~~~~~~~~~~~~~
 
-.. list-table:: Export inventory
-   :header-rows: 1
-   :widths: 70 30
+* :py:obj:`starfinder.benchmark.BenchmarkCase`
+* :py:obj:`starfinder.benchmark.BenchmarkTrialResult`
+* :py:obj:`starfinder.benchmark.evaluate_benchmark`
+* :py:obj:`starfinder.benchmark.report_benchmark`
+* :py:obj:`starfinder.benchmark.run_benchmark`
 
-   * - Export / explicit submodule interface
-     - Reference page
-   * - ``starfinder.image.InvalidImageError``
-     - :doc:`image`
-   * - ``starfinder.image.IncompatibleGeometryError``
-     - :doc:`image`
-   * - ``starfinder.image.ImageMetadata``
-     - :doc:`image`
-   * - ``starfinder.io.ImageConversionConfig``
-     - :doc:`io`
-   * - ``starfinder.io.ImageLoadConfig``
-     - :doc:`io`
-   * - ``starfinder.io.ImageLoadResult``
-     - :doc:`io`
-   * - ``starfinder.io.convert_image``
-     - :doc:`io`
-   * - ``starfinder.preprocessing.HistogramMatchingConfig``
-     - :doc:`preprocessing`
-   * - ``starfinder.preprocessing.MinMaxNormalizationConfig``
-     - :doc:`preprocessing`
-   * - ``starfinder.preprocessing.ProjectionConfig``
-     - :doc:`preprocessing`
-   * - ``starfinder.preprocessing.ReconstructionConfig``
-     - :doc:`preprocessing`
-   * - ``starfinder.preprocessing.TophatConfig``
-     - :doc:`preprocessing`
-   * - ``starfinder.io.load_volume``
-     - :doc:`io`
-   * - ``starfinder.io.load_round``
-     - :doc:`io`
-   * - ``starfinder.io.save_volume``
-     - :doc:`io`
-   * - ``starfinder.preprocessing.normalize_intensity``
-     - :doc:`preprocessing`
-   * - ``starfinder.preprocessing.match_histogram``
-     - :doc:`preprocessing`
-   * - ``starfinder.preprocessing.reconstruct_background``
-     - :doc:`preprocessing`
-   * - ``starfinder.preprocessing.filter_tophat``
-     - :doc:`preprocessing`
-   * - ``starfinder.spot_finding.LocalMaximaConfig``
-     - :doc:`spot_finding`
-   * - ``starfinder.spot_finding.NoiseLandmarkConfig``
-     - :doc:`spot_finding`
-   * - ``starfinder.spot_finding.PercentileCentroidConfig``
-     - :doc:`spot_finding`
-   * - ``starfinder.spot_finding.SpotFindingResult``
-     - :doc:`spot_finding`
-   * - ``starfinder.spot_finding.find_spots``
-     - :doc:`spot_finding`
-   * - ``starfinder.barcode.BarcodeDecodingResult``
-     - :doc:`barcode`
-   * - ``starfinder.barcode.Codebook``
-     - :doc:`barcode`
-   * - ``starfinder.barcode.CodebookAwareDecoderConfig``
-     - :doc:`barcode`
-   * - ``starfinder.barcode.EncodingConfig``
-     - :doc:`barcode`
-   * - ``starfinder.barcode.IntensityExtractionResult``
-     - :doc:`barcode`
-   * - ``starfinder.barcode.InvalidIntensityError``
-     - :doc:`barcode`
-   * - ``starfinder.barcode.NeighborhoodSumConfig``
-     - :doc:`barcode`
-   * - ``starfinder.barcode.ReadFilterConfig``
-     - :doc:`barcode`
-   * - ``starfinder.barcode.ReadFilteringResult``
-     - :doc:`barcode`
-   * - ``starfinder.barcode.WtaDecoderConfig``
-     - :doc:`barcode`
-   * - ``starfinder.barcode.decode_barcodes``
-     - :doc:`barcode`
-   * - ``starfinder.barcode.decode_color_sequence``
-     - :doc:`barcode`
-   * - ``starfinder.barcode.encode_bases``
-     - :doc:`barcode`
-   * - ``starfinder.barcode.extract_intensities``
-     - :doc:`barcode`
-   * - ``starfinder.barcode.filter_reads``
-     - :doc:`barcode`
-   * - ``starfinder.barcode.load_codebook``
-     - :doc:`barcode`
-   * - ``starfinder.dataset.Dataset``
-     - :doc:`dataset`
-   * - ``starfinder.dataset.FOV``
-     - :doc:`dataset`
-   * - ``starfinder.dataset.RoundState``
-     - :doc:`dataset`
-   * - ``starfinder.dataset.CropWindow``
-     - :doc:`dataset`
-   * - ``starfinder.dataset.SubtileConfig``
-     - :doc:`dataset`
-   * - ``starfinder.dataset.PipelineConfig``
-     - :doc:`dataset`
-   * - ``starfinder.dataset.ExecutionConfig``
-     - :doc:`dataset`
-   * - ``starfinder.dataset.RegistrationStep``
-     - :doc:`dataset`
-   * - ``starfinder.dataset.RecoveryConfig``
-     - :doc:`dataset`
-   * - ``starfinder.dataset.WorkflowConfig``
-     - :doc:`dataset`
-   * - ``starfinder.dataset.from_workflow_config``
-     - :doc:`dataset`
-   * - ``starfinder.io.export_spots``
-     - :doc:`io`
-   * - ``starfinder.registration.estimate_transform``
-     - :doc:`registration`
-   * - ``starfinder.registration.apply_transform``
-     - :doc:`registration`
-   * - ``starfinder.registration.TranslationConfig``
-     - :doc:`registration`
-   * - ``starfinder.registration.DemonsConfig``
-     - :doc:`registration`
-   * - ``starfinder.registration.TpsConfig``
-     - :doc:`registration`
-   * - ``starfinder.registration.CpdConfig``
-     - :doc:`registration`
-   * - ``starfinder.registration.WarpConfig``
-     - :doc:`registration`
-   * - ``starfinder.registration.TranslationTransform``
-     - :doc:`registration`
-   * - ``starfinder.registration.DenseDisplacementTransform``
-     - :doc:`registration`
-   * - ``starfinder.registration.RegistrationResult``
-     - :doc:`registration`
-   * - ``starfinder.registration.RegistrationDiagnostics``
-     - :doc:`registration`
-   * - ``starfinder.registration.InvalidRegistrationConfigError``
-     - :doc:`registration`
-   * - ``starfinder.registration.RegistrationEstimationError``
-     - :doc:`registration`
-   * - ``starfinder.registration.InsufficientLandmarksError``
-     - :doc:`registration`
-   * - ``starfinder.registration.RegistrationBackendUnavailableError``
-     - :doc:`registration`
-   * - ``starfinder.registration.UnsupportedTransformOperationError``
-     - :doc:`registration`
-   * - ``starfinder.evaluation.registration.evaluate_registration``
-     - :doc:`evaluation.registration`
-   * - ``starfinder.evaluation.registration.evaluate_translation``
-     - :doc:`evaluation.registration`
-   * - ``starfinder.evaluation.spot_finding.evaluate_spots``
-     - :doc:`evaluation.registration`
-   * - ``starfinder.evaluation.barcode.evaluate_decoding``
-     - :doc:`evaluation.registration`
-   * - ``starfinder.synthetic.SyntheticConfig``
-     - :doc:`synthetic`
-   * - ``starfinder.synthetic.SyntheticDataset``
-     - :doc:`synthetic`
-   * - ``starfinder.synthetic.generate_codebook``
-     - :doc:`synthetic`
-   * - ``starfinder.synthetic.generate_dataset``
-     - :doc:`synthetic`
-   * - ``starfinder.synthetic.generate_displacement_field``
-     - :doc:`synthetic`
-   * - ``starfinder.synthetic.generate_registration_pairs``
-     - :doc:`synthetic`
-   * - ``starfinder.synthetic.generate_volume``
-     - :doc:`synthetic`
-   * - ``starfinder.synthetic.get_preset_config``
-     - :doc:`synthetic`
-   * - ``starfinder.synthetic.render_spots``
-     - :doc:`synthetic`
-   * - ``starfinder.preprocessing.project_image``
-     - :doc:`preprocessing`
+starfinder.dataset
+~~~~~~~~~~~~~~~~~~
 
-   * - ``starfinder.benchmark.BenchmarkCase``
-     - :doc:`benchmark`
-   * - ``starfinder.benchmark.BenchmarkTrialResult``
-     - :doc:`benchmark`
-   * - ``starfinder.benchmark.run_benchmark``
-     - :doc:`benchmark`
-   * - ``starfinder.benchmark.evaluate_benchmark``
-     - :doc:`benchmark`
-   * - ``starfinder.benchmark.report_benchmark``
-     - :doc:`benchmark`
+* :py:obj:`starfinder.dataset.CropWindow`
+* :py:obj:`starfinder.dataset.Dataset`
+* :py:obj:`starfinder.dataset.ExecutionConfig`
+* :py:obj:`starfinder.dataset.FOV`
+* :py:obj:`starfinder.dataset.from_workflow_config`
+* :py:obj:`starfinder.dataset.PipelineConfig`
+* :py:obj:`starfinder.dataset.RecoveryConfig`
+* :py:obj:`starfinder.dataset.RegistrationStep`
+* :py:obj:`starfinder.dataset.RoundState`
+* :py:obj:`starfinder.dataset.SubtileConfig`
+* :py:obj:`starfinder.dataset.WorkflowConfig`
 
-Internal interfaces
--------------------
+starfinder.evaluation
+~~~~~~~~~~~~~~~~~~~~~
 
-* Registration numerical modules are private. Removed public modules and
-  wrappers have no aliases; use ``estimate_transform`` and ``apply_transform``.
-* ``starfinder.__main__.main`` implements the ``starfinder`` CLI;
-  ``uv run starfinder --help`` lists the supported commands.
-* Benchmark storage, adapters, measurement and rendering helpers are private.
-  Imported dependencies, loggers and nested closures are not STARfinder APIs.
+* :py:obj:`starfinder.evaluation.EvaluationResult`
 
-When changing exports, update this inventory and the relevant autosummary list.
-Generated object stubs and HTML are build products; do not commit them.
+starfinder.evaluation.barcode
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* :py:obj:`starfinder.evaluation.barcode.evaluate_decoding`
+
+starfinder.evaluation.matching
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* :py:obj:`starfinder.evaluation.matching.match_points`
+
+starfinder.evaluation.registration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* :py:obj:`starfinder.evaluation.registration.evaluate_landmark_alignment`
+* :py:obj:`starfinder.evaluation.registration.evaluate_mask_overlap`
+* :py:obj:`starfinder.evaluation.registration.evaluate_registration`
+* :py:obj:`starfinder.evaluation.registration.evaluate_translation`
+* :py:obj:`starfinder.evaluation.registration.normalized_cross_correlation`
+* :py:obj:`starfinder.evaluation.registration.structural_similarity`
+
+starfinder.evaluation.spot_finding
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* :py:obj:`starfinder.evaluation.spot_finding.evaluate_spots`
+
+starfinder.image
+~~~~~~~~~~~~~~~~
+
+* :py:obj:`starfinder.image.ImageMetadata`
+* :py:obj:`starfinder.image.IncompatibleGeometryError`
+* :py:obj:`starfinder.image.InvalidImageError`
+
+starfinder.io
+~~~~~~~~~~~~~
+
+* :py:obj:`starfinder.io.convert_image`
+* :py:obj:`starfinder.io.export_spots`
+* :py:obj:`starfinder.io.ImageConversionConfig`
+* :py:obj:`starfinder.io.ImageLoadConfig`
+* :py:obj:`starfinder.io.ImageLoadResult`
+* :py:obj:`starfinder.io.load_round`
+* :py:obj:`starfinder.io.load_volume`
+* :py:obj:`starfinder.io.save_volume`
+
+starfinder.preprocessing
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+* :py:obj:`starfinder.preprocessing.filter_tophat`
+* :py:obj:`starfinder.preprocessing.HistogramMatchingConfig`
+* :py:obj:`starfinder.preprocessing.match_histogram`
+* :py:obj:`starfinder.preprocessing.MinMaxNormalizationConfig`
+* :py:obj:`starfinder.preprocessing.normalize_intensity`
+* :py:obj:`starfinder.preprocessing.project_image`
+* :py:obj:`starfinder.preprocessing.ProjectionConfig`
+* :py:obj:`starfinder.preprocessing.reconstruct_background`
+* :py:obj:`starfinder.preprocessing.ReconstructionConfig`
+* :py:obj:`starfinder.preprocessing.TophatConfig`
+
+starfinder.registration
+~~~~~~~~~~~~~~~~~~~~~~~
+
+* :py:obj:`starfinder.registration.apply_transform`
+* :py:obj:`starfinder.registration.CpdConfig`
+* :py:obj:`starfinder.registration.DemonsConfig`
+* :py:obj:`starfinder.registration.DenseDisplacementTransform`
+* :py:obj:`starfinder.registration.estimate_transform`
+* :py:obj:`starfinder.registration.InsufficientLandmarksError`
+* :py:obj:`starfinder.registration.InvalidRegistrationConfigError`
+* :py:obj:`starfinder.registration.RegistrationBackendUnavailableError`
+* :py:obj:`starfinder.registration.RegistrationDiagnostics`
+* :py:obj:`starfinder.registration.RegistrationEstimationError`
+* :py:obj:`starfinder.registration.RegistrationResult`
+* :py:obj:`starfinder.registration.TpsConfig`
+* :py:obj:`starfinder.registration.TranslationConfig`
+* :py:obj:`starfinder.registration.TranslationTransform`
+* :py:obj:`starfinder.registration.UnsupportedTransformOperationError`
+* :py:obj:`starfinder.registration.WarpConfig`
+
+starfinder.spot_finding
+~~~~~~~~~~~~~~~~~~~~~~~
+
+* :py:obj:`starfinder.spot_finding.find_spots`
+* :py:obj:`starfinder.spot_finding.LocalMaximaConfig`
+* :py:obj:`starfinder.spot_finding.NoiseLandmarkConfig`
+* :py:obj:`starfinder.spot_finding.PercentileCentroidConfig`
+* :py:obj:`starfinder.spot_finding.SpotFindingResult`
+
+starfinder.synthetic
+~~~~~~~~~~~~~~~~~~~~
+
+* :py:obj:`starfinder.synthetic.generate_codebook`
+* :py:obj:`starfinder.synthetic.generate_dataset`
+* :py:obj:`starfinder.synthetic.generate_displacement_field`
+* :py:obj:`starfinder.synthetic.generate_registration_pairs`
+* :py:obj:`starfinder.synthetic.generate_volume`
+* :py:obj:`starfinder.synthetic.get_preset_config`
+* :py:obj:`starfinder.synthetic.render_spots`
+* :py:obj:`starfinder.synthetic.SyntheticConfig`
+* :py:obj:`starfinder.synthetic.SyntheticDataset`
+
+Update this inventory and the owning autosummary list when exports change.
+Generated object stubs and HTML are disposable build products, never authored API.

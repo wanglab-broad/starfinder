@@ -40,83 +40,52 @@ MATLAB API
 ::::{grid} 1 2 2 3
 :gutter: 3
 
-:::{grid-item-card} {fas}`rocket` Getting started
+:::{grid-item-card} {fas}`rocket` Get started
 :link: getting-started
 :link-type: doc
 :class-card: sf-card
-Generate tiny synthetic images and process them to molecule-level CSVs on a
-local CPU. A tested quickstart with no microscopy data or MATLAB license.
+Generate tiny synthetic images and process them to molecule-level CSVs on a local CPU.
 :::
 
-:::{grid-item-card} {fas}`diagram-project` Workflows
+:::{grid-item-card} {fas}`diagram-project` Workflow
 :link: workflows
 :link-type: doc
 :class-card: sf-card
-Snakemake rules and configuration mapped to source, with bounded DAG examples
-and explicit downstream and cluster limitations.
+Configure Snakemake, coordinate Dataset/FOV processing, and understand downstream boundaries.
 :::
 
-:::{grid-item-card} {fab}`python` Python API
-:link: api/python
+:::{grid-item-card} {fas}`flask` Benchmark
+:link: benchmark
 :link-type: doc
 :class-card: sf-card
-Public reference with an export inventory, array and coordinate contracts,
-backend behavior, and small executable examples.
+Generate inputs, run explicit cases, evaluate saved outputs and report results with provenance.
 :::
 
-:::{grid-item-card} {fas}`square-root-variable` MATLAB API
-:link: api/matlab
+:::{grid-item-card} {fas}`code` API
+:link: api/index
 :link-type: doc
 :class-card: sf-card
-Reference parsed from project-owned source, linking workflow stages to Python
-operations. It does not certify MATLAB runtime behavior.
+Alphabetical Python and MATLAB references, supported exports and source links.
 :::
 
-:::{grid-item-card} {fas}`flask` Recipes
-:link: recipes
+:::{grid-item-card} {fas}`ruler-combined` Wiki / Convention
+:link: wiki
 :link-type: doc
 :class-card: sf-card
-Development recipes that exercise small Python inputs with fixed seeds and
-documented resource bounds.
+Architecture, spatial contracts, recipes, migration and contributor guidance.
 :::
 
-:::{grid-item-card} {fas}`ruler-combined` Conventions
-:link: conventions
-:link-type: doc
-:class-card: sf-card
-Axis order, channel order, coordinate bases, registration sign, and threshold
-modes shared by both backends.
-:::
-
-:::{grid-item-card} {fas}`life-ring` Troubleshooting
-:link: troubleshooting
-:link-type: doc
-:class-card: sf-card
-Backend requirements, environment problems, and workflow diagnostics.
-:::
-
-:::{grid-item-card} {fas}`code-pull-request` Contributing
-:link: contributing
-:link-type: doc
-:class-card: sf-card
-Build and preview this site locally, run the documentation checks, and publish
-a verified release.
-:::
 ::::
 
 ```{toctree}
 :hidden:
 :maxdepth: 2
 
-Getting started <getting-started>
-Workflows <workflows>
+Get started <getting-started>
+Workflow <workflows>
 Benchmark <benchmark>
-Python API <api/python>
-MATLAB API <api/matlab>
-Recipes <recipes>
-Conventions <conventions>
-Troubleshooting <troubleshooting>
-Contributing <contributing>
+API <api/index>
+Wiki / Convention <wiki>
 ```
 
 ## Existing entry points

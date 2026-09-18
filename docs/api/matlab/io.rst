@@ -8,14 +8,14 @@ Output channel filenames need not match acquisition channel identifiers.
 
 .. mat:currentmodule:: .
 
-.. mat:autofunction:: LoadMultipageTiff
+.. mat:autofunction:: AdjustSizeAcrossRound
 
 .. mat:autofunction:: LoadImageStacks
 
-.. mat:autofunction:: AdjustSizeAcrossRound
-
-.. mat:autofunction:: SaveSingleStack
+.. mat:autofunction:: LoadMultipageTiff
 
 .. mat:autofunction:: SaveImageNestedFolder
 
 .. mat:autofunction:: SaveImageSingleFolder
+
+.. mat:autofunction:: SaveSingleStack

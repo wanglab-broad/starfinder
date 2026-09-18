@@ -9,8 +9,8 @@ explicit geometry and namespace. See :doc:`contracts` for distinct policies.
 .. autosummary::
    :toctree: generated
 
+   find_spots
    LocalMaximaConfig
    NoiseLandmarkConfig
    PercentileCentroidConfig
    SpotFindingResult
-   find_spots

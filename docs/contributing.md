@@ -64,6 +64,8 @@ When removing or renaming an export, also remove its obsolete generated stub;
 autosummary does not delete old pages, which otherwise retain broken imports
 and appear as orphan documents on subsequent builds.
 Keep generated HTML, logs, and run-specific validation artifacts outside Git.
+Run `uv run python ../../docs/check_reference.py` to check export parity,
+alphabetical references and the five-section navigation before building.
 
 ## Preview and check the result
 
@@ -75,7 +77,11 @@ uv run python -m http.server 8000 --bind 127.0.0.1 --directory "$DOCS_OUTPUT"
 
 Open <http://127.0.0.1:8000/> on the same host. For a remote build host, forward
 the preview port through your normal SSH connection. Stop the server with Ctrl-C.
-Check the eight navigation sections, search for `normalize_intensity`, open its
+For a project-path preview, build into a `starfinder` subdirectory of your
+external preview root, serve that parent directory, and open
+<http://127.0.0.1:8000/starfinder/>. This checks the same relative asset and source
+paths used by Pages.
+Check the five navigation sections (Get started, Workflow, Benchmark, API, Wiki / Convention), search for `normalize_intensity`, open its
 generated API page, and follow the `[source]` link beside its signature. The
 separate page-source link shows the documentation markup.
 
@@ -187,7 +193,7 @@ After a reviewed change is committed and pushed to the selected branch:
 2. Open `build-info.json` under the site URL. Match `revision` and `run_url` to
    the pushed commit/run; allow deployment propagation before diagnosing a stale
    response. Record the public URL, revision and run URL in the release handoff.
-3. Open the home page and all eight navigation sections. Check a nested
+3. Open the home page and all five navigation sections (Get started, Workflow, Benchmark, API, Wiki / Convention). Check a nested
    [Python API page](api/python.rst), its function anchor and `[source]` backlink;
    open [MATLAB dataset methods](api/matlab/dataset.rst) and
    [workflow configuration](workflows.md). Follow links between guides and APIs.

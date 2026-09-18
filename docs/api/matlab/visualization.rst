@@ -8,8 +8,8 @@ Python preview/output methods are documented under :doc:`../dataset`.
 
 .. mat:currentmodule:: .
 
-.. mat:autofunction:: MakeProjections
-
 .. mat:autofunction:: MakeMontage
+
+.. mat:autofunction:: MakeProjections
 
 .. mat:autofunction:: PlotCentroids

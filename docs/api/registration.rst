@@ -10,9 +10,11 @@ Translations store correction vectors; dense fields are pull fields. See
 .. autosummary::
    :toctree: generated
 
+   apply_transform
    CpdConfig
    DemonsConfig
    DenseDisplacementTransform
+   estimate_transform
    InsufficientLandmarksError
    InvalidRegistrationConfigError
    RegistrationBackendUnavailableError
@@ -24,5 +26,3 @@ Translations store correction vectors; dense fields are pull fields. See
    TranslationTransform
    UnsupportedTransformOperationError
    WarpConfig
-   apply_transform
-   estimate_transform

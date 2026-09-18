@@ -32,6 +32,7 @@ autosummary_generate = True
 # Types are already documented by the NumPy-style docstrings. Render those as
 # text without duplicating annotation cross-references to external inventories.
 autodoc_typehints = "none"
+autodoc_member_order = "alphabetical"
 # No network inventories or mocked package imports are needed for this build.
 napoleon_use_param = False
 napoleon_use_rtype = False
@@ -101,9 +102,9 @@ def _landing_page_class(app, pagename, templatename, context, doctree):
 def _source_backlinks(app, pagename, templatename, context, doctree):
     """Resolve viewcode backlinks when one source module has several aliases.
 
-    Sphinx 8 viewcode keeps one import prefix per source module. Point-set
-    helpers use direct imports while the high-level API uses re-exports, so
-    the generated backlink prefix can be wrong. Use the documented object's
+    Sphinx 8 viewcode keeps one import prefix per source module. Public
+    namespaces re-export private implementations, so the generated backlink
+    prefix can be wrong. Use the documented object's
     actual anchor on the already-selected destination page.
     """
     if not pagename.startswith("_modules/") or "body" not in context:

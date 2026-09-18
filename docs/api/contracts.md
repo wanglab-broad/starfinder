@@ -187,8 +187,8 @@ image = normalize_intensity(loaded.image, config=MinMaxNormalizationConfig(
 
 Access `.image` instead of treating the loader result as an array or tuple.
 The old I/O names, preprocessing names and `starfinder.utils` projection import
-have no aliases. FOV/Dataset's remaining coordination renames belong to the
-separate orchestration migration. MATLAB APIs and shared configuration keys are
+have no aliases. FOV/Dataset coordination changes are documented in the
+[coordination guide](../coordination.md). MATLAB APIs and shared configuration keys are
 unchanged; Python numeric corrections are not claims of MATLAB equivalence.
 
 ## Spots, barcodes and output
@@ -326,5 +326,5 @@ physical geometry remains unverified. No historical notebook outputs are rerun.
 `x`, `y`, and `z` by one, and leaves the in-memory table unchanged. Subtile tables
 use one-based inclusive start/end coordinates and one-based tile IDs;
 {class}`starfinder.dataset.CropWindow` uses zero-based, end-exclusive slices.
-Benchmark comparison helpers expect zero-based `z, y, x`; convert exported
+Evaluation functions expect zero-based `z, y, x`; convert exported
 signal CSVs before using them.

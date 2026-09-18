@@ -70,3 +70,10 @@ For questions and help requests, please use the [issue tracker](https://github.c
 
 ## License
 [MIT license]()
+
+## Architecture and migration
+
+See [project context](CONTEXT.md), [Python migration](docs/migration.md),
+and [the five-section documentation site](docs/index.md).
+Detailed contracts live in the site; operational instructions live in
+[AGENTS.md](AGENTS.md).

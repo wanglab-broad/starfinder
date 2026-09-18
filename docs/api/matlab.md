@@ -9,13 +9,14 @@ workflow entry scripts are not included as public API objects.
 ```{toctree}
 :maxdepth: 1
 
+matlab-index
 matlab/dataset
 matlab/io
-matlab/registration
-matlab/reads
 matlab/preprocessing
-matlab/visualization
+matlab/reads
+matlab/registration
 matlab/utilities
+matlab/visualization
 ```
 
 ## Array and calling conventions

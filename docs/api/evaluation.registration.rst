@@ -82,6 +82,20 @@ scientific truth/calibration or define an E01 protocol. MATLAB is excluded.
 
    EvaluationResult
 
+.. currentmodule:: starfinder.evaluation.barcode
+
+.. autosummary::
+   :toctree: generated
+
+   evaluate_decoding
+
+.. currentmodule:: starfinder.evaluation.matching
+
+.. autosummary::
+   :toctree: generated
+
+   match_points
+
 .. currentmodule:: starfinder.evaluation.registration
 
 .. autosummary::
@@ -94,23 +108,9 @@ scientific truth/calibration or define an E01 protocol. MATLAB is excluded.
    normalized_cross_correlation
    structural_similarity
 
-.. currentmodule:: starfinder.evaluation.matching
-
-.. autosummary::
-   :toctree: generated
-
-   match_points
-
 .. currentmodule:: starfinder.evaluation.spot_finding
 
 .. autosummary::
    :toctree: generated
 
    evaluate_spots
-
-.. currentmodule:: starfinder.evaluation.barcode
-
-.. autosummary::
-   :toctree: generated
-
-   evaluate_decoding

@@ -11,6 +11,6 @@ Explicit cases, trial records and saved-artifact lifecycle. See
 
    BenchmarkCase
    BenchmarkTrialResult
-   run_benchmark
    evaluate_benchmark
    report_benchmark
+   run_benchmark

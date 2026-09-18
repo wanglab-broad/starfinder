@@ -1,26 +1,41 @@
 Python API
 ==========
 
-This reference renders the installed checkout's signatures, defaults, docstrings,
-public methods and source links. The :doc:`inventory` records coverage and aliases;
-:doc:`contracts` explains arrays, units and coordinate conventions, and
-:doc:`backends` records optional dependency and fallback behavior.
+The reference renders supported signatures, defaults, public members and source
+links. See :doc:`inventory` for exact namespace exports and :doc:`python-index`
+for functions/classes A–Z. :doc:`contracts` defines arrays and geometry;
+:doc:`backends` covers dependencies and explicit failure behavior.
 
 .. toctree::
    :maxdepth: 1
 
    inventory
-   contracts
-   backends
-   examples
+   python-index
+
+Modules (alphabetical)
+----------------------
+
+.. toctree::
+   :maxdepth: 1
+
+   barcode
+   benchmark
+   dataset
+   evaluation.registration
    image
    io
    preprocessing
    registration
    spot_finding
-   barcode
-   dataset
-   benchmark
    synthetic
+
+Previous reference locations
+----------------------------
+
+.. toctree::
+   :maxdepth: 1
+
+   registration.benchmark
+   registration.pointset
+   registration.pyramid
    utils
-   evaluation.registration

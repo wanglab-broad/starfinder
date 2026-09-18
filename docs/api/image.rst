@@ -9,5 +9,5 @@ Spatial metadata and explicit index/physical conversion. See :doc:`contracts`.
    :toctree: generated
 
    ImageMetadata
-   InvalidImageError
    IncompatibleGeometryError
+   InvalidImageError

@@ -9,12 +9,11 @@ See :doc:`contracts` for conversion, geometry and channel ordering.
 .. autosummary::
    :toctree: generated
 
-   load_volume
-   load_round
-   save_volume
+   convert_image
    export_spots
-
    ImageConversionConfig
    ImageLoadConfig
    ImageLoadResult
-   convert_image
+   load_round
+   load_volume
+   save_volume

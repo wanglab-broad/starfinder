@@ -25,6 +25,16 @@ and [the site index](index.md) for current coverage. No microscopy data or MATLA
 license is needed to build the site. Exact dependency resolutions are in
 `src/python/uv.lock`; the dependency group is named `docs`.
 
+## Site structure
+
+The five sections are Get started, Workflow, Benchmark, API (Python/MATLAB),
+and Wiki / Convention. Start with [architecture](architecture.md) and the
+[Python migration guide](migration.md) when updating existing callers.
+[CONTEXT.md](../CONTEXT.md) is concise orientation; [AGENTS.md](../AGENTS.md)
+owns operations. Detailed interfaces remain canonical in the site.
+Run `uv run python ../../docs/check_reference.py` from `src/python` to check
+export parity and alphabetical reference lists.
+
 ## Software entry points
 
 - [Minimal Python image-to-molecule quickstart](getting-started.md)
