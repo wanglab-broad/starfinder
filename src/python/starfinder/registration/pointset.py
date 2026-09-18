@@ -162,14 +162,17 @@ def detect_and_match_spots(
     ValueError
         If fewer than ``min_matches`` pairs are found.
     """
-    from starfinder.registration.metrics import detect_spots
+    from starfinder.spot_finding import find_spots, NoiseLandmarkConfig
+    from starfinder.image import ImageMetadata
 
-    fixed_spots = detect_spots(
-        fixed, threshold_mode="noise", noise_k=detection_threshold,
-    )
-    moving_spots = detect_spots(
-        moving, threshold_mode="noise", noise_k=detection_threshold,
-    )
+    fixed_spots = find_spots(
+        fixed, config=NoiseLandmarkConfig(noise_sigma=detection_threshold),
+        metadata=ImageMetadata("registration/fixed"), spot_namespace="registration/fixed",
+    ).spots[["z", "y", "x"]].to_numpy()
+    moving_spots = find_spots(
+        moving, config=NoiseLandmarkConfig(noise_sigma=detection_threshold),
+        metadata=ImageMetadata("registration/moving"), spot_namespace="registration/moving",
+    ).spots[["z", "y", "x"]].to_numpy()
 
     if len(fixed_spots) == 0 or len(moving_spots) == 0:
         raise ValueError(
@@ -991,14 +994,17 @@ def cpd_register(
         If fewer than 10 spots detected in either volume, or too few
         moving candidates within the search radius.
     """
-    from starfinder.registration.metrics import detect_spots
+    from starfinder.spot_finding import find_spots, NoiseLandmarkConfig
+    from starfinder.image import ImageMetadata
 
-    fixed_spots = detect_spots(
-        fixed, threshold_mode="noise", noise_k=detection_threshold,
-    )
-    moving_spots = detect_spots(
-        moving, threshold_mode="noise", noise_k=detection_threshold,
-    )
+    fixed_spots = find_spots(
+        fixed, config=NoiseLandmarkConfig(noise_sigma=detection_threshold),
+        metadata=ImageMetadata("registration/fixed"), spot_namespace="registration/fixed",
+    ).spots[["z", "y", "x"]].to_numpy()
+    moving_spots = find_spots(
+        moving, config=NoiseLandmarkConfig(noise_sigma=detection_threshold),
+        metadata=ImageMetadata("registration/moving"), spot_namespace="registration/moving",
+    ).spots[["z", "y", "x"]].to_numpy()
 
     if len(fixed_spots) < 10 or len(moving_spots) < 10:
         raise ValueError(

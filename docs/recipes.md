@@ -89,7 +89,7 @@ For {mat:func}`DFTRegister3D` / {mat:func}`DFTApply3D`, use the
 
 ## Detect spots in a volume
 
-{py:func}`~starfinder.spotfinding.find_spots_3d` requires a channel axis, even
+{py:func}`~starfinder.spot_finding.find_spots` accepts an explicit singleton channel axis, including
 for one channel. This example uses the same uint16 volume and exercises two
 explicit mode/threshold pairs.
 
@@ -118,7 +118,7 @@ it does not append dataset/sample IDs. Configure rounds with
 {py:meth}`~starfinder.dataset.STARMapDataset.load_codebook`, then call
 {py:meth}`~starfinder.dataset.FOV.load_raw_images`,
 {py:meth}`~starfinder.dataset.FOV.global_registration`,
-{py:meth}`~starfinder.dataset.FOV.spot_finding`,
+{py:meth}`~starfinder.dataset.FOV.find_spots`,
 {py:meth}`~starfinder.dataset.FOV.reads_extraction` and
 {py:meth}`~starfinder.dataset.FOV.reads_filtration` in order.
 

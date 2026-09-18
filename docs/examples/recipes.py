@@ -12,7 +12,8 @@ import pandas as pd
 from starfinder.dataset import FOV, LayerState, STARMapDataset
 from starfinder.io import load_round, load_volume, save_volume
 from starfinder.registration import apply_shift, phase_correlate
-from starfinder.spotfinding import find_spots_3d
+from starfinder.spot_finding import find_spots, LocalMaximaConfig
+from starfinder.image import ImageMetadata
 
 
 def image_io(output: Path) -> np.ndarray:
@@ -46,10 +47,12 @@ def detect_spots(volume: np.ndarray) -> None:
     # Add a channel axis to this known single-channel ZYX volume.
     image = volume[..., np.newaxis]
     for mode, threshold in [("noise", 5.0), ("adaptive", 0.2)]:
-        spots = find_spots_3d(
-            image, intensity_estimation=mode, intensity_threshold=threshold,
-            min_distance=1,
-        )
+        spots = find_spots(
+            image,
+            config=LocalMaximaConfig(threshold_mode=mode, threshold_value=threshold),
+            metadata=ImageMetadata("example/sample/FOV/round1"),
+            spot_namespace="example/sample/FOV",
+        ).spots
         assert spots[["z", "y", "x", "channel"]].values.tolist() == [[5, 10, 10, 0]]
     print("Detection: one spot at internal (z,y,x)=(5,10,10), channel 0")
 
@@ -67,7 +70,7 @@ def decode_fov(quickstart: Path, output: Path) -> FOV:
     fov.load_raw_images()
     assert all(image.shape == (8, 128, 128, 4) for image in fov.images.values())
     fov.global_registration(ref_img="merged", mov_img="merged", save_shifts=True)
-    fov.spot_finding(intensity_estimation="noise", intensity_threshold=5.0)
+    fov.find_spots(config=LocalMaximaConfig(threshold_mode="noise", threshold_value=5.0))
     fov.reads_extraction(voxel_size=(1, 2, 2))
     fov.reads_filtration()
     assert 0 < len(fov.good_spots) <= len(fov.all_spots)

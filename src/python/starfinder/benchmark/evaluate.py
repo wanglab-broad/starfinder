@@ -22,6 +22,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from starfinder.spot_finding import find_spots, PercentileCentroidConfig
+from starfinder.image import ImageMetadata
+
 import numpy as np
 import tifffile
 
@@ -82,7 +85,6 @@ def evaluate_registration(
     if use_mip:
         # Compute metrics on 2D MIP (fast path for large volumes)
         from starfinder.registration.metrics import (
-            detect_spots,
             normalized_cross_correlation,
             spot_colocalization,
             spot_matching_accuracy,
@@ -105,9 +107,9 @@ def evaluate_registration(
         coloc_before = spot_colocalization(ref_mip, mov_mip)
         coloc_after = spot_colocalization(ref_mip, reg_mip)
 
-        ref_spots = detect_spots(ref_mip)
-        before_spots = detect_spots(mov_mip)
-        after_spots = detect_spots(reg_mip)
+        ref_spots = find_spots(ref_mip[None, ...], config=PercentileCentroidConfig(), metadata=ImageMetadata("evaluation/ref_mip"), spot_namespace="evaluation/ref_mip").spots[["y", "x"]].to_numpy()
+        before_spots = find_spots(mov_mip[None, ...], config=PercentileCentroidConfig(), metadata=ImageMetadata("evaluation/mov_mip"), spot_namespace="evaluation/mov_mip").spots[["y", "x"]].to_numpy()
+        after_spots = find_spots(reg_mip[None, ...], config=PercentileCentroidConfig(), metadata=ImageMetadata("evaluation/reg_mip"), spot_namespace="evaluation/reg_mip").spots[["y", "x"]].to_numpy()
 
         match_before = spot_matching_accuracy(ref_spots, before_spots)
         match_after = spot_matching_accuracy(ref_spots, after_spots)

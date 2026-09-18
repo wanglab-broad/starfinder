@@ -1,5 +1,6 @@
 """Pytest fixtures for STARfinder tests."""
 
+from starfinder.spot_finding import LocalMaximaConfig
 import json
 from pathlib import Path
 
@@ -101,8 +102,7 @@ def e2e_result(small_dataset: Path, small_ground_truth: dict, tmp_path_factory):
     (
         fov.load_raw_images()
         .enhance_contrast(snr_threshold=5.0)
-        .global_registration()
-        .spot_finding()
+        .global_registration().find_spots(config=LocalMaximaConfig())
         .reads_extraction()
         .reads_filtration()
     )

@@ -11,7 +11,6 @@ from starfinder.registration.demons import (
     register_volume_local,
 )
 from starfinder.registration.metrics import (
-    detect_spots,
     normalized_cross_correlation,
     print_quality_report,
     registration_quality_report,
@@ -56,7 +55,6 @@ __all__ = [
     "structural_similarity",
     "spot_colocalization",
     "spot_matching_accuracy",
-    "detect_spots",
     "registration_quality_report",
     "print_quality_report",
 ]

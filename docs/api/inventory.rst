@@ -31,8 +31,8 @@ objects and are not duplicate implementations.
 * ``starfinder.apply_shift`` → :doc:`registration`
 * ``starfinder.register_volume`` → :doc:`registration`
 * ``starfinder.phase_correlate_skimage`` → :doc:`registration`
-* ``starfinder.spotfinding`` → :doc:`spotfinding` (module)
-* ``starfinder.find_spots_3d`` → :doc:`spotfinding`
+* ``starfinder.spot_finding`` → :doc:`spot_finding` (module)
+* ``starfinder.find_spots`` → :doc:`spot_finding`
 * ``starfinder.barcode`` → :doc:`barcode` (module)
 * ``starfinder.extract_from_location`` → :doc:`barcode`
 * ``starfinder.load_codebook`` → :doc:`barcode`
@@ -128,14 +128,20 @@ objects documented here.
      - :doc:`registration`
    * - ``starfinder.registration.spot_matching_accuracy``
      - :doc:`registration`
-   * - ``starfinder.registration.detect_spots``
-     - :doc:`registration`
    * - ``starfinder.registration.registration_quality_report``
      - :doc:`registration`
    * - ``starfinder.registration.print_quality_report``
      - :doc:`registration`
-   * - ``starfinder.spotfinding.find_spots_3d``
-     - :doc:`spotfinding`
+   * - ``starfinder.spot_finding.LocalMaximaConfig``
+     - :doc:`spot_finding`
+   * - ``starfinder.spot_finding.NoiseLandmarkConfig``
+     - :doc:`spot_finding`
+   * - ``starfinder.spot_finding.PercentileCentroidConfig``
+     - :doc:`spot_finding`
+   * - ``starfinder.spot_finding.SpotFindingResult``
+     - :doc:`spot_finding`
+   * - ``starfinder.spot_finding.find_spots``
+     - :doc:`spot_finding`
    * - ``starfinder.barcode.BASE_PAIR_TO_COLOR``
      - :doc:`barcode`
    * - ``starfinder.barcode.COLOR_TO_BASE_PAIRS``

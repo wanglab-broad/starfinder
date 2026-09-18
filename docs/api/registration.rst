@@ -25,6 +25,5 @@ Global shifts are detected displacement in voxel units; negate them for :func:`s
    structural_similarity
    spot_colocalization
    spot_matching_accuracy
-   detect_spots
    registration_quality_report
    print_quality_report

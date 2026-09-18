@@ -94,7 +94,7 @@ is implied by this reference.
 | Histogram / background | {mat:meth}`STARMapDataset.HistEqualize`, {mat:meth}`STARMapDataset.Tophat` | {py:func}`starfinder.preprocessing.match_histogram`, {py:func}`starfinder.preprocessing.filter_tophat` |
 | Global registration | {mat:func}`DFTRegister3D`, {mat:func}`DFTApply3D` | {py:func}`starfinder.registration.phase_correlate`, {py:func}`starfinder.registration.apply_shift` |
 | Local registration | {mat:func}`RegisterImagesLocal` | {py:func}`starfinder.registration.demons_register` |
-| Spot finding | {mat:func}`SpotFindingMax3D` | {py:func}`starfinder.spotfinding.find_spots_3d` |
+| Spot finding | {mat:func}`SpotFindingMax3D` | {py:func}`starfinder.spot_finding.find_spots` |
 | Extraction | {mat:func}`ExtractFromLocation` | {py:func}`starfinder.barcode.extract_from_location` |
 | Codebook / decoding | {mat:func}`LoadCodebook`, {mat:func}`EncodeBases`, {mat:func}`DecodeCS` | {py:func}`starfinder.barcode.load_codebook`, {py:func}`starfinder.barcode.encode_bases`, {py:func}`starfinder.barcode.decode_color_seq` |
 | Filtration | {mat:func}`FilterReads`, {mat:func}`FilterReadsMultiSegment` | {py:func}`starfinder.barcode.filter_reads` |

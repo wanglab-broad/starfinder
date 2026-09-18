@@ -357,17 +357,13 @@ def load_and_register_synthetic_images(
     return images
 
 
-def detect_synthetic_spots(images: dict[str, np.ndarray]) -> pd.DataFrame:
-    from starfinder.spotfinding import find_spots_3d
+def detect_synthetic_spots(images: dict[str, np.ndarray], *, spot_namespace: str) -> pd.DataFrame:
+    from starfinder.spot_finding import find_spots, LocalMaximaConfig
+    from starfinder.image import ImageMetadata
 
-    spots = find_spots_3d(
-        images["round1"],
-        intensity_estimation="noise",
-        intensity_threshold=5.0,
-        min_distance=1,
-    )
+    spots = find_spots(images["round1"], config=LocalMaximaConfig(threshold_mode="noise", threshold_value=5.0, min_distance_voxels=1), metadata=ImageMetadata(f"{spot_namespace}/round1"), spot_namespace=spot_namespace).spots
     spots = spots.reset_index(drop=True)
-    spots.insert(0, "spot_id", np.arange(len(spots), dtype=int))
+    spots["spot_namespace"] = spot_namespace
     return spots
 
 
@@ -388,7 +384,7 @@ def prepare_synthetic_inputs(
 
     t0 = time.perf_counter()
     images = load_and_register_synthetic_images(data_dir, fov_id, ground_truth["n_rounds"])
-    spots = detect_synthetic_spots(images)
+    spots = detect_synthetic_spots(images, spot_namespace=json.dumps([dataset, "synthetic", fov_id]))
     round_order = [f"round{i}" for i in range(1, ground_truth["n_rounds"] + 1)]
     tensor = extract_intensity_tensor(images, spots, round_order)
     prep_time = time.perf_counter() - t0
@@ -523,10 +519,7 @@ def prepare_real_raw_inputs(
     step_info["input_rss_after_registration_mb"] = round(rss, 1)
     elapsed, rss = timed_prep_step(
         "spot_finding",
-        lambda: fov.spot_finding(
-            intensity_estimation=config["intensity_estimation"],
-            intensity_threshold=float(config["intensity_threshold"]),
-        ),
+        lambda: fov.find_spots(config=LocalMaximaConfig(threshold_mode=config["intensity_estimation"], threshold_value=float(config["intensity_threshold"]))),
     )
     step_info["input_time_spot_finding_s"] = round(elapsed, 3)
     step_info["input_rss_after_spot_finding_mb"] = round(rss, 1)

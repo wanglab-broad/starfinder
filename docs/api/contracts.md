@@ -132,13 +132,56 @@ unchanged; Python numeric corrections are not claims of MATLAB equivalence.
 
 ## Spots, barcodes and output
 
-{func}`starfinder.spotfinding.find_spots_3d` returns `z, y, x, intensity, channel`.
-Coordinates and channel indices are zero-based. Noise mode uses
-`median + k * MAD * 1.4826`; adaptive mode uses each channel maximum,
-adaptive_round uses the maximum across all channels, and global mode uses the
-uint8/uint16 dtype maximum. Always pass `intensity_estimation` and
-`intensity_threshold` together when changing modes. `min_distance` also controls
-the default excluded image border. Distances are not adjusted for anisotropy.
+{func}`starfinder.spot_finding.find_spots` requires `config`, `metadata` and
+`spot_namespace`, and returns {class}`starfinder.spot_finding.SpotFindingResult`.
+Its `spots` table has `spot_id` (pandas string) and `z/y/x` (float64), including
+empty results. Coordinates are zero-based voxel indices; physical conversion
+requires complete `ImageMetadata`. Detection never performs landmark matching.
+
+{class}`starfinder.spot_finding.LocalMaximaConfig` preserves the pipeline's
+per-channel peaks: noise uses `median + threshold_value * MAD * 1.4826` (sigma
+units); adaptive uses channel maximum, adaptive_round the image maximum, and
+global the uint8/uint16 maximum (fractions in [0,1]). `min_distance_voxels` is a
+positive integer, with `exclude_border=True` by default. Singleton Z is processed
+as a YX plane with Z=0 and only the YX border excluded. Other volumes retain the
+original 3D peak policy. No spacing correction is applied to distances.
+Optional `channel` is int64; `peak_intensity` is float64 in original input units
+and can be omitted with `measure_peak_intensity=False`. No integrated intensity
+or detection score is invented. Optional `channel_labels` must uniquely label
+all channels, and their tuple is recorded in diagnostics.
+
+{class}`starfinder.spot_finding.NoiseLandmarkConfig` retains registration's
+per-channel MAD peaks followed by its original radius deduplication: for each
+pair within `min_distance_voxels`, drop the higher concatenated index.
+{class}`starfinder.spot_finding.PercentileCentroidConfig` instead sums channels,
+thresholds strictly above `threshold_percentile` in [0,100], labels face-connected
+components and computes intensity-weighted centroids. These policies return
+coordinates without inventing channel or peak measurements. All accept finite
+ZYX/ZYXC arrays; 2D callers must explicitly add singleton Z. The benchmark MIP
+caller now does this, correcting the old accidental collapse of a 2D image's X
+axis by the former detector. This is an intentional dimensional correction.
+
+Namespaces must identify dataset/sample/FOV and subtile when applicable. FOV
+uses an unambiguous JSON array of those identifiers (subtile ID is one-based or
+null for a full FOV), exposes `spot_result`, and retains `spot_id` and
+`spot_namespace` in its downstream tables. IDs survive filtering, reordering
+and joins on **(spot_namespace, spot_id)**; never regenerate IDs for a subset or
+join by row position. Results reject duplicate IDs within a namespace. Callers
+must choose distinct namespaces for independent detection results; identities
+are not promised invariant across changed images or detector configurations.
+The structured barcode/export redesign remains a subsequent migration.
+
+Before: `find_spots_3d(image, intensity_estimation="adaptive", intensity_threshold=0.2)`.
+After:
+
+```python
+from starfinder.image import ImageMetadata
+from starfinder.spot_finding import find_spots, LocalMaximaConfig
+result = find_spots(image, config=LocalMaximaConfig("adaptive", 0.2),
+                    metadata=ImageMetadata("dataset/sample/FOV/round1"),
+                    spot_namespace="dataset/sample/FOV")
+spots = result.spots
+```
 
 Extraction's `voxel_size=(1, 2, 2)` means integer **half-widths** `(dz, dy, dx)`
 of a `3 × 5 × 5` neighborhood, not micrometre spacing. Coordinate columns are

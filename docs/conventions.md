@@ -73,8 +73,9 @@ not runtime-validated.
 
 ## Spot-finding thresholds
 
-Always specify **`intensity_estimation` and `intensity_threshold` together** in
-{py:func}`~starfinder.spotfinding.find_spots_3d`, FOV calls and workflow parameters.
+For {py:func}`~starfinder.spot_finding.find_spots` and FOV calls, set
+`LocalMaximaConfig(threshold_mode=..., threshold_value=...)` together. Shared
+workflow keys remain `intensity_estimation` and `intensity_threshold`.
 
 | Python mode | Absolute cutoff | Example pair |
 | --- | --- | --- |

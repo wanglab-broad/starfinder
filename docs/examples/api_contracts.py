@@ -20,7 +20,8 @@ from starfinder.io import load_volume, save_volume
 from starfinder.preprocessing import normalize_intensity
 from starfinder.registration import apply_shift, demons_register, phase_correlate
 from starfinder.registration.pointset import apply_tps_deformation
-from starfinder.spotfinding import find_spots_3d
+from starfinder.spot_finding import find_spots, LocalMaximaConfig
+from starfinder.image import ImageMetadata
 from starfinder.preprocessing import project_image
 
 
@@ -50,9 +51,11 @@ def main(output: Path) -> None:
 
     image = np.zeros(fixed.shape + (4,), dtype=np.uint16)
     image[..., 0] = fixed
-    spots = find_spots_3d(
-        image, intensity_estimation="adaptive", intensity_threshold=0.2
-    )
+    spots = find_spots(
+        image, config=LocalMaximaConfig("adaptive", 0.2),
+        metadata=ImageMetadata("example/sample/FOV/round1"),
+        spot_namespace="example/sample/FOV",
+    ).spots
     assert spots[["z", "y", "x"]].values.tolist() == [[5, 10, 10]]
     tensor = extract_intensity_tensor(
         {"round1": image}, spots, ["round1"], voxel_size=(0, 0, 0)

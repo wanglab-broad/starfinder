@@ -1,7 +1,7 @@
 """STARfinder: Spatial transcriptomics data processing pipeline."""
 
 from starfinder.image import ImageMetadata
-from starfinder import barcode, preprocessing, registration, spotfinding
+from starfinder import barcode, preprocessing, registration, spot_finding
 from starfinder.barcode import extract_from_location, filter_reads, load_codebook
 from starfinder.dataset import FOV, STARMapDataset
 from starfinder.io import load_round, load_volume, save_volume
@@ -17,7 +17,7 @@ from starfinder.registration import (
     phase_correlate_skimage,
     register_volume,
 )
-from starfinder.spotfinding import find_spots_3d
+from starfinder.spot_finding import find_spots
 from starfinder.preprocessing import project_image
 
 __version__ = "0.1.0"
@@ -38,8 +38,8 @@ __all__ = [
     "register_volume",
     "phase_correlate_skimage",
     # Spot finding
-    "spotfinding",
-    "find_spots_3d",
+    "spot_finding",
+    "find_spots",
     # Barcode processing
     "barcode",
     "extract_from_location",

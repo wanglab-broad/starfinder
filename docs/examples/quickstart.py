@@ -3,6 +3,7 @@
 Run from src/python with a new external output directory; see getting-started.md.
 """
 
+from starfinder.spot_finding import LocalMaximaConfig
 import argparse
 import json
 import shutil
@@ -55,9 +56,7 @@ def main(output: Path) -> None:
             assert volume.shape == (8, 128, 128, 4)
             assert volume.dtype == np.uint8
         fov.global_registration(ref_img="merged", mov_img="merged", save_shifts=True)
-        fov.spot_finding(
-            intensity_estimation="noise", intensity_threshold=5.0, min_distance=1,
-        )
+        fov.find_spots(config=LocalMaximaConfig(threshold_mode="noise", threshold_value=5.0, min_distance_voxels=1))
         fov.reads_extraction(voxel_size=(1, 2, 2))
         fov.reads_filtration()
 

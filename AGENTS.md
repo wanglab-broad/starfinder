@@ -58,7 +58,7 @@ Uses `(Z, Y, X, C)` axis ordering (volumetric-first, channel-last). Replaces MAT
 |--------|-------------|
 | `io` | TIFF I/O with bioio backend |
 | `registration` | Global (phase correlation, apply_shift) + local (demons, TPS, CPD) |
-| `spotfinding` | 3D spot detection with noise/adaptive/global thresholding |
+| `spot_finding` | 3D spot detection with noise/adaptive/global thresholding |
 | `barcode` | Encode/decode, codebook, extraction, filtering pipeline |
 | `preprocessing` | min_max_normalize, histogram_match, morphological_reconstruction, tophat |
 | `dataset` | STARMapDataset + FOV orchestration (fluent API, streaming mode) |

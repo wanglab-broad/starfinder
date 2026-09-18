@@ -17,7 +17,7 @@ public methods and source links. The :doc:`inventory` records coverage and alias
    io
    preprocessing
    registration
-   spotfinding
+   spot_finding
    barcode
    dataset
    benchmark

@@ -9,6 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, snakemake.config["starfinder_path"] + "/src/python")
 
+from starfinder.spot_finding import LocalMaximaConfig
 from starfinder.dataset import STARMapDataset
 
 # --- Build dataset from Snakemake config ---
@@ -78,12 +79,9 @@ else:
         fov.local_registration(method=method)
 
     if params.get("spot_finding", {}).get("run"):
-        fov.spot_finding(
-            intensity_estimation=params["spot_finding"].get(
+        fov.find_spots(config=LocalMaximaConfig(threshold_mode=params["spot_finding"].get(
                 "intensity_estimation", "noise"
-            ),
-            intensity_threshold=params["spot_finding"]["intensity_threshold"],
-        )
+            ), threshold_value=params["spot_finding"]["intensity_threshold"]))
 
     if params.get("reads_extraction", {}).get("run"):
         fov.reads_extraction(

@@ -1,5 +1,6 @@
 """Tests for FOV pipeline on small synthetic dataset."""
 
+from starfinder.spot_finding import LocalMaximaConfig
 import json
 
 import numpy as np
@@ -82,11 +83,11 @@ class TestFOVPipeline:
     def test_spot_finding(self, small_pipeline_dataset):
         fov = small_pipeline_dataset.fov("FOV_001")
         fov.load_raw_images().enhance_contrast().global_registration()
-        fov.spot_finding()
+        fov.find_spots(config=LocalMaximaConfig())
 
         assert fov.all_spots is not None
         assert len(fov.all_spots) > 0
-        for col in ["z", "y", "x", "intensity", "channel"]:
+        for col in ["spot_id", "spot_namespace", "z", "y", "x", "peak_intensity", "channel"]:
             assert col in fov.all_spots.columns
 
     def test_reads_extraction(self, small_pipeline_dataset):
@@ -94,8 +95,7 @@ class TestFOVPipeline:
         (
             fov.load_raw_images()
             .enhance_contrast()
-            .global_registration()
-            .spot_finding()
+            .global_registration().find_spots(config=LocalMaximaConfig())
             .reads_extraction()
         )
 
@@ -113,8 +113,7 @@ class TestFOVPipeline:
         (
             fov.load_raw_images()
             .enhance_contrast()
-            .global_registration()
-            .spot_finding()
+            .global_registration().find_spots(config=LocalMaximaConfig())
             .reads_extraction()
         )
         small_pipeline_dataset.load_codebook(small_dataset / "codebook.csv")
@@ -128,8 +127,7 @@ class TestFOVPipeline:
         (
             fov.load_raw_images()
             .enhance_contrast()
-            .global_registration()
-            .spot_finding()
+            .global_registration().find_spots(config=LocalMaximaConfig())
             .reads_extraction()
         )
         small_pipeline_dataset.load_codebook(small_dataset / "codebook.csv")

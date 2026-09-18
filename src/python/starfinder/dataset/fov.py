@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 
 from starfinder.image import ImageMetadata, _validate_image
+from starfinder.spot_finding import LocalMaximaConfig, SpotFindingResult
 from starfinder.io import ImageLoadConfig
 from starfinder.preprocessing import (MinMaxNormalizationConfig, HistogramMatchingConfig, ReconstructionConfig, TophatConfig, ProjectionConfig)
 from starfinder.dataset.logging import log_step
@@ -45,6 +46,10 @@ class FOV:
         Round to detected (dz,dy,dx) voxel displacement; default empty dict.
     local_registered : set[str]
         Names of locally registered rounds; default empty set.
+    spot_result : SpotFindingResult | None
+        Detection table, geometry, identity namespace and effective config.
+    subtile_id : int | None
+        One-based saved subtile ID, or None for the full FOV.
     all_spots : pd.DataFrame | None
         Detected/extracted zero-based spot DataFrame, default None.
     good_spots : pd.DataFrame | None
@@ -60,6 +65,8 @@ class FOV:
     metadata: dict[str, ImageMetadata] = field(default_factory=dict)
     global_shifts: dict[str, Shift3D] = field(default_factory=dict)
     local_registered: set[str] = field(default_factory=set)
+    spot_result: SpotFindingResult | None = None
+    subtile_id: int | None = None
     all_spots: pd.DataFrame | None = None
     good_spots: pd.DataFrame | None = None
 
@@ -650,40 +657,25 @@ class FOV:
     # --- Spot finding & barcode ---
 
     @log_step
-    def spot_finding(
-        self,
-        *,
-        intensity_estimation: Literal[
-            "noise", "adaptive", "adaptive_round", "global"
-        ] = "noise",
-        intensity_threshold: float = 5.0,
-        min_distance: int = 1,
-    ) -> FOV:
-        """Detect spots on the reference round.
+    def find_spots(self, *, config: LocalMaximaConfig = LocalMaximaConfig()) -> FOV:
+        """Detect reference-round spots with explicit config and FOV identity.
 
-        Parameters
-        ----------
-        intensity_estimation : Literal['noise', 'adaptive', 'adaptive_round', 'global']
-            Spot threshold mode: noise, adaptive, adaptive_round, or global; pass together with intensity_threshold.
-        intensity_threshold : float
-            Noise k-sigma multiplier, or intensity fraction for adaptive/global modes.
-        min_distance : int
-            Peak separation and excluded image-border width in voxels.
-
-        Returns
-        -------
-        FOV
-            This instance, with processing state updated in place.
+        The namespace encodes dataset/sample/FOV and, for saved subtiles, the
+        one-based subtile ID. IDs are retained in extraction/filtering tables.
         """
-        from starfinder.spotfinding import find_spots_3d
+        from starfinder.spot_finding import find_spots
 
-        ref_image = self.images[self.layers.ref]
-        self.all_spots = find_spots_3d(
-            ref_image,
-            intensity_estimation=intensity_estimation,
-            intensity_threshold=intensity_threshold,
-            min_distance=min_distance,
-        )
+        if not isinstance(config, LocalMaximaConfig):
+            raise TypeError("FOV detection requires LocalMaximaConfig")
+        if config.channel_labels is None and self.dataset.channel_order:
+            config = replace(config, channel_labels=tuple(self.dataset.channel_order))
+        namespace = json.dumps([self.dataset.dataset_id, self.dataset.sample_id,
+                                self.fov_id, self.subtile_id], separators=(",", ":"))
+        metadata = self.metadata.get(self.layers.ref, ImageMetadata(f"{self.fov_id}/{self.layers.ref}"))
+        self.spot_result = find_spots(self.images[self.layers.ref], config=config,
+                                     metadata=metadata, spot_namespace=namespace)
+        self.all_spots = self.spot_result.spots.copy()
+        self.all_spots["spot_namespace"] = pd.Series(namespace, index=self.all_spots.index, dtype="string")
         return self
 
     def _extract_round(
@@ -848,10 +840,7 @@ class FOV:
         if rotate_angle is not None:
             self._rotate_round(ref, rotate_angle)
         self.enhance_contrast(layers=[ref], snr_threshold=snr_threshold)
-        self.spot_finding(
-            intensity_estimation=intensity_estimation,
-            intensity_threshold=intensity_threshold,
-        )
+        self.find_spots(config=LocalMaximaConfig(threshold_mode=intensity_estimation, threshold_value=intensity_threshold))
         self._extract_round(ref, voxel_size)
 
         # --- Phase 2: Non-ref rounds (one at a time) ---
@@ -1222,6 +1211,9 @@ class FOV:
         data = np.load(subtile_path, allow_pickle=True)
 
         fov = cls(dataset=dataset, fov_id=fov_id)
+        if "subtile_id" not in data:
+            raise ValueError("saved subtile requires subtile_id for spot namespace")
+        fov.subtile_id = int(data["subtile_id"])
         for key in data.files:
             if key.startswith("images_"):
                 round_name = key[len("images_") :]

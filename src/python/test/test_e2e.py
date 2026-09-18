@@ -270,7 +270,8 @@ class TestE2ESubtileRoundTrip:
     def test_subtile_spot_coordinate_mapping(self, e2e_result):
         """Spots found in a subtile remap to valid global coordinates."""
         from starfinder.dataset import FOV, SubtileConfig
-        from starfinder.spotfinding import find_spots_3d
+        from starfinder.spot_finding import find_spots, LocalMaximaConfig
+        from starfinder.image import ImageMetadata
 
         fov, ds, gt = e2e_result
         Z, Y, X = gt["image_shape"]
@@ -287,7 +288,7 @@ class TestE2ESubtileRoundTrip:
         sub_fov = FOV.from_subtile(npz_path, ds, "FOV_001")
 
         ref_image = sub_fov.images[ds.layers.ref]
-        sub_spots = find_spots_3d(ref_image)
+        sub_spots = find_spots(ref_image, config=LocalMaximaConfig(threshold_mode="noise", threshold_value=5.0, min_distance_voxels=1), metadata=ImageMetadata("direct/test_e2e"), spot_namespace="direct/test_e2e").spots
 
         if len(sub_spots) == 0:
             pytest.skip("No spots detected in subtile")
