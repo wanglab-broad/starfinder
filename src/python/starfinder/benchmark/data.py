@@ -1,6 +1,6 @@
 """Benchmark data utilities: inspection images and real data extraction.
 
-Synthetic data generation has moved to ``starfinder.benchmark.synthetic``.
+Synthetic data generation has moved to ``starfinder.synthetic``.
 This module retains visualization helpers and real dataset extraction.
 """
 

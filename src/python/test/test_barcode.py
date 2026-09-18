@@ -15,7 +15,8 @@ from starfinder.barcode import (
     WtaDecoderConfig,
     filter_reads,
 )
-from starfinder.benchmark.synthetic import TEST_CODEBOOK, encode_barcode_to_colors
+from starfinder.synthetic._presets import _TEST_CODEBOOK
+from starfinder.barcode import EncodingConfig
 from .barcode_cases import CHANNELS, intensity, tensor
 
 ROUNDS = tuple(f"r{i}" for i in range(4))
@@ -25,9 +26,9 @@ SMALL = Path(__file__).resolve().parents[3] / "tests/fixtures/synthetic/small/co
 def test_encoding_roundtrips_and_synthetic_reversal():
     assert encode_bases("CGCAC") == "4422"
     assert decode_color_sequence("4422", "C") == "CGCAC"
-    for gene, bases in TEST_CODEBOOK:
+    for gene, bases in _TEST_CODEBOOK:
         seq = EncodingConfig().encode(bases)
-        assert seq == encode_barcode_to_colors(bases) == encode_bases(bases[::-1])
+        assert seq == EncodingConfig(reverse_bases=True).encode(bases) == encode_bases(bases[::-1])
         assert decode_color_sequence(seq, bases[-1]) == bases[::-1]
     assert EncodingConfig(False).encode("CACGC") == "2244"
     bases = "ACGTAC"
@@ -40,7 +41,7 @@ def test_load_canonical_order_and_ground_truth_calls():
     assert isinstance(cb, Codebook) and cb.n_genes == 8
     assert cb.gene_to_seq["GeneA"] == "4422"
     assert cb.seq_to_gene["4422"] == "GeneA"
-    assert cb.genes == [g for g, _ in TEST_CODEBOOK]
+    assert cb.genes == [g for g, _ in _TEST_CODEBOOK]
     result = decode_barcodes(
         intensity(tensor(cb.table.color_sequence.tolist()), rounds=ROUNDS),
         cb,

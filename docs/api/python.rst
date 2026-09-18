@@ -21,6 +21,6 @@ public methods and source links. The :doc:`inventory` records coverage and alias
    barcode
    dataset
    benchmark
-   benchmark.synthetic
+   synthetic
    utils
    evaluation.registration

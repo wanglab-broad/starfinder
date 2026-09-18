@@ -4,9 +4,8 @@ Public API coverage inventory
 Coverage boundary
 -----------------
 
-Every name in the root and seven subpackage ``__all__`` lists is covered below.
-The synthetic module, utility function, and non-underscored definitions in the
-point-set, pyramid and legacy registration-benchmark modules are also included.
+Supported root and subpackage ``__all__`` exports are covered below, including
+the independent synthetic package. Removed names have no compatibility aliases.
 Class pages include public methods, properties and dataclass fields. Signatures
 show literal defaults; ``<factory>`` means a fresh collection/value per instance.
 
@@ -47,8 +46,7 @@ objects and are not duplicate implementations.
 Canonical coverage
 ------------------
 
-Synthetic names on :doc:`benchmark.synthetic` are also re-exported by
-``starfinder.benchmark``. Barcode mechanics and lookup constants are private; use structured decoding
+Synthetic names belong to :doc:`synthetic` exclusively. Barcode mechanics and lookup constants are private; use structured decoding
 diagnostics for per-round probabilities and candidate scores.
 
 .. list-table:: Export inventory
@@ -219,14 +217,6 @@ diagnostics for per-round probabilities and candidate scores.
      - :doc:`benchmark`
    * - ``starfinder.benchmark.BENCHMARK_TASK``
      - :doc:`benchmark`
-   * - ``starfinder.benchmark.SIZE_PRESETS``
-     - :doc:`benchmark`
-   * - ``starfinder.benchmark.SPOT_COUNTS``
-     - :doc:`benchmark`
-   * - ``starfinder.benchmark.SHIFT_RANGES``
-     - :doc:`benchmark`
-   * - ``starfinder.benchmark.get_size_preset``
-     - :doc:`benchmark`
    * - ``starfinder.benchmark.generate_inspection_image``
      - :doc:`benchmark`
    * - ``starfinder.benchmark.generate_overview_grid``
@@ -257,42 +247,26 @@ diagnostics for per-round probabilities and candidate scores.
      - :doc:`benchmark`
    * - ``starfinder.benchmark.save_json``
      - :doc:`benchmark`
-   * - ``starfinder.benchmark.synthetic.generate_codebook``
-     - :doc:`benchmark.synthetic`
-   * - ``starfinder.benchmark.synthetic.encode_barcode_to_colors``
-     - :doc:`benchmark.synthetic`
-   * - ``starfinder.benchmark.synthetic.scale_deformation_config``
-     - :doc:`benchmark.synthetic`
-   * - ``starfinder.benchmark.synthetic.create_deformation_field``
-     - :doc:`benchmark.synthetic`
-   * - ``starfinder.benchmark.synthetic.apply_shift_to_spots``
-     - :doc:`benchmark.synthetic`
-   * - ``starfinder.benchmark.synthetic.apply_deformation_to_spots``
-     - :doc:`benchmark.synthetic`
-   * - ``starfinder.benchmark.synthetic.SyntheticConfig``
-     - :doc:`benchmark.synthetic`
-   * - ``starfinder.benchmark.synthetic.get_preset_config``
-     - :doc:`benchmark.synthetic`
-   * - ``starfinder.benchmark.synthetic.create_test_image_stack``
-     - :doc:`benchmark.synthetic`
-   * - ``starfinder.benchmark.synthetic.create_test_volume``
-     - :doc:`benchmark.synthetic`
-   * - ``starfinder.benchmark.synthetic.generate_synthetic_dataset``
-     - :doc:`benchmark.synthetic`
-   * - ``starfinder.benchmark.synthetic.generate_registration_benchmark``
-     - :doc:`benchmark.synthetic`
-   * - ``starfinder.benchmark.synthetic.TEST_CODEBOOK``
-     - :doc:`benchmark.synthetic`
-   * - ``starfinder.benchmark.synthetic.DEFORMATION_CONFIGS``
-     - :doc:`benchmark.synthetic`
+   * - ``starfinder.synthetic.SyntheticConfig``
+     - :doc:`synthetic`
+   * - ``starfinder.synthetic.SyntheticDataset``
+     - :doc:`synthetic`
+   * - ``starfinder.synthetic.generate_codebook``
+     - :doc:`synthetic`
+   * - ``starfinder.synthetic.generate_dataset``
+     - :doc:`synthetic`
+   * - ``starfinder.synthetic.generate_displacement_field``
+     - :doc:`synthetic`
+   * - ``starfinder.synthetic.generate_registration_pairs``
+     - :doc:`synthetic`
+   * - ``starfinder.synthetic.generate_volume``
+     - :doc:`synthetic`
+   * - ``starfinder.synthetic.get_preset_config``
+     - :doc:`synthetic`
+   * - ``starfinder.synthetic.render_spots``
+     - :doc:`synthetic`
    * - ``starfinder.preprocessing.project_image``
      - :doc:`preprocessing`
-
-Additional type alias
----------------------
-
-``starfinder.benchmark.synthetic.SpotTuple`` is documented on
-:doc:`benchmark.synthetic`; it is not re-exported by the benchmark package.
 
 Internal and deprecated interfaces
 ----------------------------------

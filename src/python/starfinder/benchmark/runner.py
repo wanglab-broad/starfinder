@@ -792,7 +792,7 @@ class RegistrationBenchmarkRunner:
             List of RegistrationResult objects.
         """
         from starfinder.registration import apply_transform
-        from starfinder.benchmark.synthetic import DEFORMATION_CONFIGS
+        from starfinder.synthetic._presets import DEFORMATION_CONFIGS
 
         if presets is None:
             presets = PRESET_ORDER if data_category == "synthetic" else ["cell_culture_3D", "tissue_2D", "LN"]
@@ -1010,7 +1010,7 @@ class RegistrationBenchmarkRunner:
             presets = ["medium"]
         if pair_types is None:
             if data_category == "synthetic":
-                from starfinder.benchmark.synthetic import DEFORMATION_CONFIGS
+                from starfinder.synthetic._presets import DEFORMATION_CONFIGS
 
                 pair_types = list(DEFORMATION_CONFIGS.keys())
             else:

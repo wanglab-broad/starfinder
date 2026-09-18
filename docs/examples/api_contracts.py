@@ -15,7 +15,7 @@ from starfinder.barcode import (
     decode_barcodes, extract_intensities, filter_reads,
 )
 from starfinder.benchmark import measure
-from starfinder.benchmark.synthetic import create_test_volume
+from starfinder.synthetic import generate_volume
 from starfinder.dataset import RoundState, Dataset, RegistrationStep
 from starfinder.io import ImageLoadResult, load_volume, save_volume
 from starfinder.preprocessing import normalize_intensity
@@ -99,7 +99,7 @@ def main(output: Path) -> None:
     else:
         raise AssertionError("Expected insufficient landmarks without fallback")
 
-    synthetic = create_test_volume((12, 24, 24), n_spots=3, seed=97)
+    synthetic = generate_volume((12, 24, 24), n_spots=3, seed=97)
     assert synthetic.shape == fixed.shape and synthetic.dtype == np.uint8
     result, seconds, memory_mib = measure(lambda: int(synthetic.sum()))
     assert result > 0 and seconds >= 0 and memory_mib >= 0

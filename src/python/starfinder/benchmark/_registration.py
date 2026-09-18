@@ -9,7 +9,7 @@ from __future__ import annotations
 import numpy as np
 
 from starfinder.benchmark.core import BenchmarkResult, measure
-from starfinder.benchmark.presets import SIZE_PRESETS
+from starfinder.synthetic._presets import SIZE_PRESETS
 from starfinder.registration import estimate_transform, TranslationConfig
 from starfinder.image import ImageMetadata
 
@@ -32,7 +32,7 @@ def run_benchmark(
     Returns:
         List of BenchmarkResult objects.
     """
-    from starfinder.benchmark.synthetic import create_test_volume
+    from starfinder.synthetic import generate_volume
 
     if sizes is None:
         sizes = [
@@ -46,7 +46,7 @@ def run_benchmark(
 
     for size in sizes:
         # Generate synthetic volume
-        fixed = create_test_volume(
+        fixed = generate_volume(
             shape=size,
             n_spots=20,
             spot_intensity=200,

@@ -3,7 +3,7 @@
 import pytest
 
 from starfinder.barcode import encode_bases
-from starfinder.benchmark.synthetic import encode_barcode_to_colors
+from starfinder.barcode import EncodingConfig
 
 
 class TestTwoBaseEncoding:
@@ -59,7 +59,7 @@ class TestTwoBaseEncoding:
     )
     def test_barcode_encoding(self, barcode: str, expected_color_seq: str):
         """Verify barcode encoding matches expected color sequence."""
-        result = encode_barcode_to_colors(barcode)
+        result = EncodingConfig(reverse_bases=True).encode(barcode)
         assert result == expected_color_seq, (
             f"Barcode {barcode} -> reversed {barcode[::-1]} -> "
             f"expected {expected_color_seq}, got {result}"
@@ -68,5 +68,5 @@ class TestTwoBaseEncoding:
     def test_encoding_output_length(self):
         """Verify color sequence is one less than barcode length."""
         barcode = "CACGC"
-        result = encode_barcode_to_colors(barcode)
+        result = EncodingConfig(reverse_bases=True).encode(barcode)
         assert len(result) == len(barcode) - 1

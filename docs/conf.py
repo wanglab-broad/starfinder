@@ -87,15 +87,7 @@ linkcheck_retries = 1
 linkcheck_workers = 5
 
 
-def _alias_source_module(app, modname, attribute):
-    """Keep type-alias source lookup in STARfinder, not builtins/NumPy."""
-    if modname == "starfinder.benchmark.synthetic" and attribute == "SpotTuple":
-        return modname
-    return None
-
-
 def setup(app):
-    app.connect("viewcode-follow-imported", _alias_source_module)
     app.connect("html-page-context", _source_backlinks)
     app.connect("html-page-context", _landing_page_class)
 

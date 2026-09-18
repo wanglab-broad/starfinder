@@ -232,7 +232,8 @@ class TestReporting:
         assert data[0]["metrics"]["accuracy"] == 0.99
 
 
-from starfinder.benchmark import SIZE_PRESETS, get_size_preset
+from starfinder.synthetic._presets import SIZE_PRESETS
+from starfinder.synthetic import get_preset_config
 
 
 class TestPresets:
@@ -251,12 +252,12 @@ class TestPresets:
 
     def test_get_size_preset(self):
         """get_size_preset() returns correct shape."""
-        shape = get_size_preset("tiny")
+        shape = get_preset_config("tiny").shape_zyx
         assert len(shape) == 3
         assert all(isinstance(s, int) for s in shape)
 
     def test_get_size_preset_invalid(self):
         """get_size_preset() raises for unknown preset."""
         import pytest
-        with pytest.raises(ValueError, match="Unknown size preset"):
-            get_size_preset("nonexistent")
+        with pytest.raises(ValueError, match="Unknown preset"):
+            get_preset_config("nonexistent")

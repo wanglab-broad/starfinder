@@ -11,12 +11,9 @@ Usage:
 import argparse
 from pathlib import Path
 
-from .synthetic import (
-    generate_synthetic_dataset,
-    generate_registration_benchmark,
-    get_preset_config,
-)
-from .presets import SIZE_PRESETS
+from starfinder.synthetic import generate_dataset, generate_registration_pairs, get_preset_config
+from starfinder.synthetic._presets import SIZE_PRESETS
+from ._synthetic_io import _write_dataset, _write_registration_pairs
 
 
 def main():
@@ -72,12 +69,13 @@ def main():
         config.add_noise = not args.no_noise
         config.dtype = args.dtype
 
-        ground_truth = generate_synthetic_dataset(
-            output_dir=args.output,
+        result = generate_dataset(
             config=config,
             preset=args.preset,
         )
 
+        _write_dataset(result, args.output)
+        ground_truth = result.historical_truth
         n_fovs = len(ground_truth["fovs"])
         n_spots = sum(len(fov["spots"]) for fov in ground_truth["fovs"].values())
         print(f"Generated {n_fovs} FOV(s) with {n_spots} total spots")
@@ -86,13 +84,13 @@ def main():
 
     elif args.mode == "registration":
         print(f"Generating registration benchmark (preset: {args.preset})...")
-        summary = generate_registration_benchmark(
-            output_dir=args.output,
+        results = generate_registration_pairs(
             presets=[args.preset],
             seed=args.seed,
             add_noise=not args.no_noise,
         )
         print(f"Output: {args.output}")
+        summary = _write_registration_pairs(results, args.output)
         for preset, info in summary.get("presets", {}).items():
             print(f"  {preset}: {info['shape']}, {info['n_pairs']} pairs")
 

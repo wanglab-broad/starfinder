@@ -15,7 +15,7 @@ from starfinder.registration import TranslationConfig
 import numpy as np
 import pandas as pd
 
-from starfinder.benchmark.synthetic import generate_synthetic_dataset, get_preset_config
+from starfinder.synthetic import generate_dataset, get_preset_config
 from starfinder.dataset import RegistrationStep, RoundState, Dataset
 
 
@@ -25,7 +25,10 @@ def main(output: Path) -> None:
     config = get_preset_config("tiny")
     config.seed = 42
     (output / "synthetic_config.json").write_text(json.dumps(asdict(config), indent=2))
-    truth = generate_synthetic_dataset(output / "synthetic", config=config, preset="tiny")
+    from starfinder.benchmark._synthetic_io import _write_dataset
+    generated = generate_dataset(config=config, preset="tiny")
+    _write_dataset(generated, output / "synthetic")
+    truth = generated.historical_truth
 
     rounds = [f"round{i}" for i in range(1, config.n_rounds + 1)]
     channels = [f"ch{i:02d}" for i in range(config.n_channels)]

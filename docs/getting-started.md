@@ -63,7 +63,7 @@ being run remain the same. It uses the public
 ## Input and processing configuration
 
 The source is the repository's
-{py:func}`~starfinder.benchmark.synthetic.get_preset_config` **tiny** preset,
+{py:func}`~starfinder.synthetic.get_preset_config` **tiny** preset,
 generated locally with a fixed seed of **42**. The script saves the full generator
 configuration to `synthetic_config.json` and generated truth to
 `synthetic/ground_truth.json` (generator truth format version 2.0).
@@ -82,7 +82,7 @@ configuration to `synthetic_config.json` and generated truth to
 | Extraction | `voxel_size=(1, 2, 2)`: half-widths `(dz, dy, dx)`, a 3×5×5 voxel neighborhood |
 | Codebook/filtering | `EncodingConfig(reverse_bases=True)` matches the generator's reversed-barcode encoding; retain exact color-sequence matches |
 
-The generator writes `synthetic/FOV_001/round1/ch00.tif`; the dataset loader
+The example persistence adapter writes `synthetic/FOV_001/round1/ch00.tif`; the dataset loader
 expects `input/round1/FOV_001/ch00.tif`. The script copies the small TIFFs into
 that second layout. Both layouts remain available for inspection. The direct
 constructor takes resolved sample input/output roots; this example does not use
@@ -173,3 +173,5 @@ MATLAB, local-registration, and cell-level workflows require separate validation
 ```{literalinclude} examples/quickstart.py
 :language: python
 ```
+
+Generation itself is pure and returns `SyntheticDataset`; the quickstart saves it through the benchmark persistence adapter. See [synthetic contracts](api/synthetic.rst) for scene eligibility and W-93 truth/reproducibility limitations.
