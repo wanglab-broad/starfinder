@@ -110,6 +110,7 @@ a verified release.
 
 Getting started <getting-started>
 Workflows <workflows>
+Benchmark <benchmark>
 Python API <api/python>
 MATLAB API <api/matlab>
 Recipes <recipes>

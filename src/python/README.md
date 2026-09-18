@@ -24,5 +24,5 @@ uv sync --locked --no-default-groups
 uv run pytest test/ -v
 
 # Generate synthetic inputs only (choose a new external directory)
-uv run python -m starfinder.benchmark --preset tiny --seed 42 --output /absolute/path/outside/checkout/synthetic-tiny
+uv run starfinder synthetic generate --mode e2e --owner Jiahao --preset tiny --seed 42 --output /absolute/path/outside/checkout/synthetic-tiny
 ```

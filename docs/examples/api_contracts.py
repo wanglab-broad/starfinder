@@ -14,7 +14,6 @@ from starfinder.barcode import (
     Codebook, NeighborhoodSumConfig, CodebookAwareDecoderConfig,
     decode_barcodes, extract_intensities, filter_reads,
 )
-from starfinder.benchmark import measure
 from starfinder.synthetic import generate_volume
 from starfinder.dataset import RoundState, Dataset, RegistrationStep
 from starfinder.io import ImageLoadResult, load_volume, save_volume
@@ -101,8 +100,7 @@ def main(output: Path) -> None:
 
     synthetic = generate_volume((12, 24, 24), n_spots=3, seed=97)
     assert synthetic.shape == fixed.shape and synthetic.dtype == np.uint8
-    result, seconds, memory_mib = measure(lambda: int(synthetic.sum()))
-    assert result > 0 and seconds >= 0 and memory_mib >= 0
+    assert int(synthetic.sum()) > 0
     print("All API contract examples passed (synthetic seed=97).")
 
 

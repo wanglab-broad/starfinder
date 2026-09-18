@@ -143,7 +143,7 @@ def test_fov_namespace_and_downstream_identity(tmp_path):
 
 
 def test_mip_caller_keeps_two_spatial_axes():
-    from starfinder.benchmark.evaluate import _evaluate_images
+    from starfinder.benchmark._legacy_evaluation import _evaluate_images
     image = np.zeros((3, 24, 24), dtype=np.uint8)
     image[1, 10, 8] = 100
     image[1, 10, 16] = 200  # same Y, distinct X must not collapse into one spot

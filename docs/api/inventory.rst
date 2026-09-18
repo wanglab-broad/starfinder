@@ -191,60 +191,14 @@ diagnostics for per-round probabilities and candidate scores.
      - :doc:`registration`
    * - ``starfinder.registration.UnsupportedTransformOperationError``
      - :doc:`registration`
-   * - ``starfinder.benchmark.BenchmarkResult``
-     - :doc:`benchmark`
-   * - ``starfinder.benchmark.BenchmarkSuite``
-     - :doc:`benchmark`
-   * - ``starfinder.benchmark.benchmark``
-     - :doc:`benchmark`
-   * - ``starfinder.benchmark.measure``
-     - :doc:`benchmark`
-   * - ``starfinder.benchmark.run_benchmark``
-     - :doc:`benchmark`
-   * - ``starfinder.benchmark.run_comparison``
-     - :doc:`benchmark`
-   * - ``starfinder.benchmark.RegistrationBenchmarkRunner``
-     - :doc:`benchmark`
-   * - ``starfinder.benchmark.RegistrationResult``
-     - :doc:`benchmark`
-   * - ``starfinder.benchmark.BenchmarkPair``
-     - :doc:`benchmark`
-   * - ``starfinder.benchmark.PRESET_ORDER``
-     - :doc:`benchmark`
-   * - ``starfinder.benchmark.timeout_handler``
-     - :doc:`benchmark`
-   * - ``starfinder.benchmark.DEFAULT_BENCHMARK_DIR``
-     - :doc:`benchmark`
-   * - ``starfinder.benchmark.BENCHMARK_TASK``
-     - :doc:`benchmark`
-   * - ``starfinder.benchmark.generate_inspection_image``
-     - :doc:`benchmark`
-   * - ``starfinder.benchmark.generate_overview_grid``
-     - :doc:`benchmark`
-   * - ``starfinder.benchmark.extract_real_benchmark_data``
-     - :doc:`benchmark`
-   * - ``starfinder.benchmark.REAL_DATASETS``
-     - :doc:`benchmark`
    * - ``starfinder.evaluation.registration.evaluate_registration``
      - :doc:`evaluation.registration`
-   * - ``starfinder.benchmark.evaluate_directory``
-     - :doc:`benchmark`
-   * - ``starfinder.benchmark.evaluate_single``
-     - :doc:`benchmark`
-   * - ``starfinder.benchmark.generate_inspection``
-     - :doc:`benchmark`
    * - ``starfinder.evaluation.registration.evaluate_translation``
      - :doc:`evaluation.registration`
    * - ``starfinder.evaluation.spot_finding.evaluate_spots``
      - :doc:`evaluation.registration`
    * - ``starfinder.evaluation.barcode.evaluate_decoding``
      - :doc:`evaluation.registration`
-   * - ``starfinder.benchmark.print_table``
-     - :doc:`benchmark`
-   * - ``starfinder.benchmark.save_csv``
-     - :doc:`benchmark`
-   * - ``starfinder.benchmark.save_json``
-     - :doc:`benchmark`
    * - ``starfinder.synthetic.SyntheticConfig``
      - :doc:`synthetic`
    * - ``starfinder.synthetic.SyntheticDataset``
@@ -266,21 +220,26 @@ diagnostics for per-round probabilities and candidate scores.
    * - ``starfinder.preprocessing.project_image``
      - :doc:`preprocessing`
 
-Internal and deprecated interfaces
-----------------------------------
+   * - ``starfinder.benchmark.BenchmarkCase``
+     - :doc:`benchmark`
+   * - ``starfinder.benchmark.BenchmarkTrialResult``
+     - :doc:`benchmark`
+   * - ``starfinder.benchmark.run_benchmark``
+     - :doc:`benchmark`
+   * - ``starfinder.benchmark.evaluate_benchmark``
+     - :doc:`benchmark`
+   * - ``starfinder.benchmark.report_benchmark``
+     - :doc:`benchmark`
+
+Internal interfaces
+-------------------
 
 * Registration numerical modules are private. Removed public modules and
   wrappers have no aliases; use ``estimate_transform`` and ``apply_transform``.
-* ``starfinder.benchmark.__main__.main`` implements the ``starfinder-generate``
-  CLI; it is not a Python call interface. Its parser is available through
-  ``uv run python -m starfinder.benchmark --help``.
-* Implementation-only constants ``SPOT_COLUMNS``, ``OUTPUT_COLUMNS`` and
-  ``DEFAULT_BENCHMARK_DATA_DIR`` and
-  ``benchmark.evaluate.DEFAULT_BENCHMARK_TASK_DIR``, ``SYNTHETIC_PRESETS``,
-  and its separate ``REAL_DATASETS`` lookup define output schemas/default paths; their
-  behavior is described on the corresponding function pages. ``T`` in
-  ``benchmark.core`` is an internal typing variable. Imported dependencies
-  (``np``, ``pd``, ``Path``), loggers and nested closures are not STARfinder APIs.
+* ``starfinder.__main__.main`` implements the ``starfinder`` CLI;
+  ``uv run starfinder --help`` lists the supported commands.
+* Benchmark storage, adapters, measurement and rendering helpers are private.
+  Imported dependencies, loggers and nested closures are not STARfinder APIs.
 
 When changing exports, update this inventory and the relevant autosummary list.
 Generated object stubs and HTML are build products; do not commit them.

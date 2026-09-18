@@ -12,9 +12,8 @@ license, or optional algorithm packages. See [build instructions](../contributin
 | TPS/CPD registration and point-set warping | NumPy/SciPy/scikit-image; no SimpleITK or external CPD package |
 | Demons estimation and SimpleITK application | Lazy SimpleITK import; missing package raises `RegistrationBackendUnavailableError` when called |
 | `FOV.register` | Specific errors propagate; no automatic fallback |
-| `RegistrationBenchmarkRunner.run_local_benchmark` | Applies each result using its application_config (SciPy for TPS/CPD, SimpleITK for demons) |
+| `benchmark.run_benchmark` | Applies each result using its application_config (SciPy for TPS/CPD, SimpleITK for demons) |
 | Benchmark inspection images | Base Matplotlib; file-oriented plotting selects the Agg backend |
-| `timeout_handler` | Unix `SIGALRM`; no-op on platforms without it. Use in the main thread; nesting does not preserve an earlier alarm timer |
 
 From `src/python`, enable demons with:
 
@@ -39,8 +38,7 @@ Python functions do not switch to those packages automatically. In particular,
 `save_volume` writes TIFF through tifffile, and FOV output methods write TIFF,
 CSV, text, and NPZ; there is no public SpatialData writer in this checkout.
 
-Benchmark constants include institutional default paths. Pass `data_dir`,
-`results_dir`, and output paths explicitly on other hosts. Synthetic preset
-names and registration benchmark size presets are separate inventories; inspect
-their generated tables before scheduling a run. A documentation build does not
-run benchmarks or certify their performance claims.
+Benchmark cases require explicit input/output roots, ownership and configuration;
+there are no public institutional default paths. See [benchmark lifecycle](../benchmark.md).
+Use an external supervisor for CPU/time/memory limits. A documentation build does
+not run benchmarks or certify performance claims.

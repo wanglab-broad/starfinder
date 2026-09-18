@@ -151,7 +151,7 @@ def test_pure_report_no_detection_or_io(monkeypatch, tmp_path):
 
 
 def test_benchmark_adapter_uses_canonical_metrics():
-    from starfinder.benchmark.evaluate import _evaluate_images
+    from starfinder.benchmark._legacy_evaluation import _evaluate_images
     image = np.arange(3 * 9 * 9, dtype=float).reshape(3, 9, 9)
     for mip in (False, True):
         r = _evaluate_images(image, image, image, use_mip=mip)

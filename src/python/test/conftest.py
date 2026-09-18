@@ -21,7 +21,7 @@ def small_dataset() -> Path:
     if not path.exists():
         pytest.skip(
             "Small synthetic dataset not found. Run: "
-            "uv run python -m starfinder.benchmark --preset small --output tests/fixtures/synthetic/small"
+            "uv run starfinder synthetic generate --mode e2e --owner Jiahao --preset small --seed 42 --output tests/fixtures/synthetic/small"
         )
     return path
 
@@ -33,7 +33,7 @@ def medium_dataset() -> Path:
     if not path.exists():
         pytest.skip(
             "Medium synthetic dataset not found. Run: "
-            "uv run python -m starfinder.benchmark --preset medium --output tests/fixtures/synthetic/medium"
+            "uv run starfinder synthetic generate --mode e2e --owner Jiahao --preset medium --seed 42 --output tests/fixtures/synthetic/medium"
         )
     return path
 

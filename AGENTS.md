@@ -75,7 +75,7 @@ cd src/python
 uv sync                                    # Install dependencies
 uv run pytest test/ -v                     # Run tests
 uv run pytest test/ -v --cov=starfinder    # Run tests with coverage
-uv run python -m starfinder.benchmark --preset small --output ../../tests/fixtures/synthetic/small  # Generate synthetic data
+uv run starfinder synthetic generate --mode e2e --owner Jiahao --preset small --seed 42 --output ../../tests/fixtures/synthetic/small  # Generate synthetic data
 ```
 
 ### MATLAB Backend

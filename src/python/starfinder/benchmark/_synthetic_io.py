@@ -112,7 +112,7 @@ def _write_dataset(result, output_dir, *, annotations=True):
 def _write_registration_pairs(results, output_dir, *, inspections=True):
     """Persist already generated pairs; never rerun generation."""
     import tifffile
-    from .data import generate_inspection_image
+    from ._reporting import generate_inspection_image
     summary = {'presets': {}}
     for preset, result in results.items():
         directory = Path(output_dir) / 'synthetic' / preset
