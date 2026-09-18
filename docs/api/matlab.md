@@ -88,7 +88,7 @@ is implied by this reference.
 
 | Stage | MATLAB interface | Python operation |
 | --- | --- | --- |
-| Orchestration | {mat:class}`STARMapDataset` | {py:class}`starfinder.dataset.STARMapDataset`, {py:class}`starfinder.dataset.FOV` |
+| Orchestration | {mat:class}`STARMapDataset` | {py:class}`starfinder.dataset.Dataset`, {py:class}`starfinder.dataset.FOV` |
 | Load / output | {mat:func}`LoadImageStacks`, {mat:func}`LoadMultipageTiff`, {mat:func}`SaveSingleStack` | {py:func}`starfinder.io.load_round`, {py:func}`starfinder.io.load_volume`, {py:func}`starfinder.io.save_volume` |
 | Enhance | {mat:func}`MinMaxNorm`, {mat:func}`MorphologicalReconstruction` | {py:func}`starfinder.preprocessing.normalize_intensity`, {py:func}`starfinder.preprocessing.reconstruct_background` |
 | Histogram / background | {mat:meth}`STARMapDataset.HistEqualize`, {mat:meth}`STARMapDataset.Tophat` | {py:func}`starfinder.preprocessing.match_histogram`, {py:func}`starfinder.preprocessing.filter_tophat` |

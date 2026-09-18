@@ -7,7 +7,7 @@ from time import perf_counter
 logger = logging.getLogger("starfinder")
 
 
-def log_step(func):
+def _log_step(func):
     """Decorator to log FOV processing steps with timing.
 
     Parameters

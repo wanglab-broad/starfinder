@@ -3,7 +3,7 @@
 from starfinder.image import ImageMetadata
 from starfinder import barcode, preprocessing, registration, spot_finding
 from starfinder.barcode import decode_barcodes, extract_intensities, filter_reads, load_codebook
-from starfinder.dataset import FOV, STARMapDataset
+from starfinder.dataset import FOV, Dataset
 from starfinder.io import load_round, load_volume, save_volume
 from starfinder.preprocessing import (
     match_histogram,
@@ -20,7 +20,7 @@ __version__ = "0.1.0"
 __all__ = [
     "ImageMetadata",
     # Dataset/FOV orchestration
-    "STARMapDataset",
+    "Dataset",
     "FOV",
     # I/O functions
     "load_volume",

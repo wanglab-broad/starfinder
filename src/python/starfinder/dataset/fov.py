@@ -14,63 +14,36 @@ from starfinder.image import ImageMetadata, _validate_image
 from starfinder.spot_finding import LocalMaximaConfig, SpotFindingResult
 from starfinder.io import ImageLoadConfig
 from starfinder.preprocessing import (MinMaxNormalizationConfig, HistogramMatchingConfig, ReconstructionConfig, TophatConfig, ProjectionConfig)
-from starfinder.dataset.logging import log_step
-from starfinder.dataset.paths import FOVPaths
-from starfinder.dataset.types import ImageArray
+from starfinder.dataset._logging import _log_step
+from starfinder.dataset._paths import _FovPaths
+from starfinder.dataset.config import PipelineConfig, ExecutionConfig, RegistrationStep
+from starfinder.registration import RegistrationResult
 from starfinder.barcode import (Codebook, IntensityExtractionResult, NeighborhoodSumConfig,
     WtaDecoderConfig, ReadFilterConfig, BarcodeDecodingResult, ReadFilteringResult)
 
 if TYPE_CHECKING:
-    from starfinder.dataset.dataset import STARMapDataset
-    from starfinder.dataset.types import ChannelOrder, LayerState
+    from starfinder.dataset.dataset import Dataset
+    from starfinder.dataset.types import RoundState
 
 
 @dataclass
 class FOV:
-    """Per-FOV processing state and methods.
+    """Mutable per-FOV coordinator. Public operations own the algorithms.
 
-    Mutable. NOT thread-safe. One instance per Snakemake job.
-    Delegates to dataset for layers, codebook, and channel_order.
-    Image-processing methods return ``self`` for fluent chaining; output
-    methods return paths/tables. See individual methods.
-
-    Parameters
-    ----------
-    dataset : STARMapDataset
-        Shared STARMapDataset.
-    fov_id : str
-        FOV identifier.
-    images : dict[str, ImageArray]
-        Round to (Z,Y,X,C) numeric array mapping; default empty dict.
-    metadata : dict[str, ImageMetadata]
-        Round to loader metadata mapping; default empty dict.
-    global_shifts : dict[str, tuple[float, float, float]]
-        Round to detected (dz,dy,dx) voxel displacement; default empty dict.
-    local_registered : set[str]
-        Names of locally registered rounds; default empty set.
-    spot_result : SpotFindingResult | None
-        Detection table, geometry, identity namespace and effective config.
-    subtile_id : int | None
-        One-based saved subtile ID, or None for the full FOV.
-    all_spots : pd.DataFrame | None
-        Detected/extracted zero-based spot DataFrame, default None.
-    good_spots : pd.DataFrame | None
-        Filtered spot DataFrame, default None.
-
+    Stores round images/metadata, structured scientific results, ordered
+    registration results and attempts. One instance per job; not thread-safe.
     """
 
-    dataset: STARMapDataset
+    dataset: Dataset
     fov_id: str
 
     # Mutable state
-    images: dict[str, ImageArray] = field(default_factory=dict)
+    images: dict[str, np.ndarray] = field(default_factory=dict)
     metadata: dict[str, ImageMetadata] = field(default_factory=dict)
-    global_shifts: dict[str, tuple[float, float, float]] = field(default_factory=dict)
-    local_registered: set[str] = field(default_factory=set)
+    registration_results: dict[str, list[RegistrationResult]] = field(default_factory=dict)
+    registration_attempts: dict[str, list[dict]] = field(default_factory=dict)
     spot_result: SpotFindingResult | None = None
     subtile_id: int | None = None
-    all_spots: pd.DataFrame | None = None
-    good_spots: pd.DataFrame | None = None
 
     intensity_result: IntensityExtractionResult | None = None
     decoding_result: BarcodeDecodingResult | None = None
@@ -82,10 +55,10 @@ class FOV:
     # --- Delegated properties ---
 
     @property
-    def layers(self) -> LayerState:
-        """Shared dataset LayerState.
+    def rounds(self) -> RoundState:
+        """Shared dataset RoundState.
         """
-        return self.dataset.layers
+        return self.dataset.rounds
 
     @property
     def codebook(self) -> Codebook | None:
@@ -96,10 +69,10 @@ class FOV:
     # --- Path helpers ---
 
     @property
-    def paths(self) -> FOVPaths:
-        """FOVPaths for this field of view; no directories are created.
+    def paths(self) -> _FovPaths:
+        """_FovPaths for this field of view; no directories are created.
         """
-        return FOVPaths(self.dataset.output_root, self.fov_id)
+        return _FovPaths(self.dataset.output_root, self.fov_id)
 
     def input_dir(self, round_name: str) -> Path:
         """Input directory for a specific round.
@@ -118,15 +91,15 @@ class FOV:
 
     # --- Image loading ---
 
-    @log_step
-    def load_raw_images(
+    @_log_step
+    def load_images(
         self,
         rounds: list[str] | None = None,
-        channel_order: ChannelOrder | None = None,
+        channel_order: tuple[str, ...] | None = None,
         *,
         config: ImageLoadConfig | None = None,
         subdir: str = "",
-        layer_slot: Literal["seq", "other"] = "seq",
+        round_category: Literal["sequencing", "other"] = "sequencing",
     ) -> FOV:
         """Load raw TIFF stacks for specified rounds.
 
@@ -135,14 +108,14 @@ class FOV:
         Parameters
         ----------
         rounds : list[str] | None
-            Round names to load; None uses the dataset layers selected by layer_slot.
-        channel_order : ChannelOrder | None
+            Round names to load; None uses the dataset rounds selected by round_category.
+        channel_order : tuple[str, ...] | None
             Filename channel patterns in output C order; None uses dataset.channel_order.
         config : ImageLoadConfig | None
             Explicit loading/conversion policy; None preserves source dtype.
         subdir : str
             Optional subdirectory beneath each round/FOV input directory.
-        layer_slot : Literal['seq', 'other']
+        round_category : Literal['seq', 'other']
             Round category used when rounds is None: seq (default) or other.
 
         Returns
@@ -152,15 +125,23 @@ class FOV:
         """
         from starfinder.io import load_round
 
+        if round_category not in ("sequencing", "other"):
+            raise ValueError("invalid round_category")
+        if config is not None and tuple(config.channel_labels) != self.dataset.channel_order:
+            raise ValueError("load channel labels differ from dataset channel_order")
         if config is not None and (channel_order is not None or subdir):
             raise ValueError("select channels/subdir through config or arguments, not both")
         if rounds is None:
             rounds = (
-                self.layers.seq if layer_slot == "seq" else self.layers.other
+                self.rounds.sequencing_rounds if round_category == "sequencing" else self.rounds.other_rounds
             )
         if channel_order is None:
             channel_order = self.dataset.channel_order
 
+        if tuple(channel_order) != self.dataset.channel_order:
+            raise ValueError("channel_order differs from dataset")
+        if len(set(rounds)) != len(rounds) or not set(rounds) <= set(self.rounds.all_rounds):
+            raise ValueError("load rounds must be unique configured rounds")
         for round_name in rounds:
             load_config = config or ImageLoadConfig(
                 channel_labels=tuple(channel_order), subdir=subdir,
@@ -173,13 +154,12 @@ class FOV:
 
     # --- Preprocessing ---
 
-    def _apply_to_layers(self, func, layers: list[str] | None) -> None:
-        """Apply a function to images for the given layers (or all)."""
-        if layers is None:
-            layers = self.layers.all_layers
-        for name in layers:
-            if name in self.images:
-                self.images[name] = func(self.images[name])
+    def _apply_to_rounds(self, func, rounds: list[str] | None) -> None:
+        """Apply a function to images for the given rounds (or all)."""
+        if rounds is None:
+            rounds = self.rounds.all_rounds
+        for name in rounds:
+            self.images[name] = func(self.images[name])
 
     def _rotate_round(self, round_name: str, angle: float) -> None:
         """Rotate a single round's image in-place."""
@@ -208,7 +188,7 @@ class FOV:
             "mapping": "source = R @ (output - output_center) + source_center",
         }
 
-    @log_step
+    @_log_step
     def rotate(self, *, angle: float) -> FOV:
         """Rotate all loaded volumes by angle degrees in the YX plane.
 
@@ -230,385 +210,113 @@ class FOV:
             self._rotate_round(round_name, angle)
         return self
 
-    @log_step
-    def enhance_contrast(
-        self,
-        layers: list[str] | None = None,
-        snr_threshold: float | None = None,
-    ) -> FOV:
-        """Per-channel min-max normalization.
-
-        Parameters
-        ----------
-        snr_threshold : float or None
-            If set, nonconstant channels with max/mean < snr_threshold keep
-            raw values clipped to uint8. Constant channels always map to zero.
-            Prevents noise inflation without overriding the constant policy.
-
-        Parameters
-        ----------
-        layers : list[str] | None
-            Rounds to process; None uses all configured layers for preprocessing, sequencing layers for extraction.
-
-        Returns
-        -------
-        FOV
-            This instance, with processing state updated in place.
-        """
+    @_log_step
+    def normalize_intensity(self, *, config=MinMaxNormalizationConfig('uint8', (0, 255)), rounds=None):
+        """Normalize selected rounds with an explicit output policy."""
         from starfinder.preprocessing import normalize_intensity
-
-        self._apply_to_layers(
-            lambda v: normalize_intensity(v, config=MinMaxNormalizationConfig('uint8', (0, 255), snr_threshold=snr_threshold)),
-            layers,
-        )
+        self._apply_to_rounds(lambda image: normalize_intensity(image, config=config), rounds)
         return self
 
-    @log_step
-    def hist_equalize(
-        self,
-        ref_channel: int = 0,
-        layers: list[str] | None = None,
-    ) -> FOV:
-        """Histogram matching to reference layer's channel.
-
-        Parameters
-        ----------
-        ref_channel : int
-            Zero-based reference channel index; also selects moving channel in single-channel registration.
-        layers : list[str] | None
-            Rounds to process; None uses all configured layers for preprocessing, sequencing layers for extraction.
-
-        Returns
-        -------
-        FOV
-            This instance, with processing state updated in place.
-        """
+    @_log_step
+    def match_histogram(self, *, config=HistogramMatchingConfig(), reference_channel=0, rounds=None, reference=None):
+        """Match selected rounds to one reference channel; retain its pre-match copy."""
         from starfinder.preprocessing import match_histogram
-
-        reference = self.images[self.layers.ref][:, :, :, ref_channel]
-        if layers is None:
-            layers = self.layers.all_layers
-        for name in layers:
-            if name in self.images:
-                self.images[name] = match_histogram(
-                    self.images[name], reference, config=HistogramMatchingConfig()
-                )
+        if reference is None:
+            reference = self.images[self.rounds.reference_round][..., reference_channel].copy()
+        self._apply_to_rounds(lambda image: match_histogram(image, reference, config=config), rounds)
         return self
 
-    @log_step
-    def morph_recon(
-        self, radius: int = 3, layers: list[str] | None = None
-    ) -> FOV:
-        """Background removal via morphological reconstruction.
-
-        Parameters
-        ----------
-        radius : int
-            Nonnegative structuring-element radius in voxels for each channel.
-        layers : list[str] | None
-            Rounds to process; None uses all configured layers for preprocessing, sequencing layers for extraction.
-
-        Returns
-        -------
-        FOV
-            This instance, with processing state updated in place.
-        """
+    @_log_step
+    def reconstruct_background(self, *, config=ReconstructionConfig(), rounds=None):
+        """Apply public reconstruction to selected rounds."""
         from starfinder.preprocessing import reconstruct_background
-
-        self._apply_to_layers(
-            lambda v: reconstruct_background(v, config=ReconstructionConfig(radius_yx=radius)), layers
-        )
+        self._apply_to_rounds(lambda image: reconstruct_background(image, config=config), rounds)
         return self
 
-    @log_step
-    def tophat(
-        self, radius: int = 3, layers: list[str] | None = None
-    ) -> FOV:
-        """White tophat filtering.
-
-        Parameters
-        ----------
-        radius : int
-            Nonnegative structuring-element radius in voxels for each channel.
-        layers : list[str] | None
-            Rounds to process; None uses all configured layers for preprocessing, sequencing layers for extraction.
-
-        Returns
-        -------
-        FOV
-            This instance, with processing state updated in place.
-        """
+    @_log_step
+    def filter_tophat(self, *, config=TophatConfig(), rounds=None):
+        """Apply public tophat to selected rounds."""
         from starfinder.preprocessing import filter_tophat
-
-        self._apply_to_layers(
-            lambda v: filter_tophat(v, config=TophatConfig(radius_yx=radius)), layers
-        )
+        self._apply_to_rounds(lambda image: filter_tophat(image, config=config), rounds)
         return self
 
-    @log_step
-    def project_image(
-        self, method: Literal["max", "sum"] = "max"
-    ) -> FOV:
-        """Apply Z-projection to ALL images.
-
-        Parameters
-        ----------
-        method : Literal['max', 'sum']
-            Projection method max or sum (retains singleton Z; sum does not rescale).
-
-        Returns
-        -------
-        FOV
-            This instance, with processing state updated in place.
-        """
-        from starfinder.preprocessing import project_image as _project_image
-
-        for name in list(self.images):
+    @_log_step
+    def project_image(self, *, config=ProjectionConfig(), rounds=None):
+        """Project selected rounds, retaining singleton Z and source mapping."""
+        from starfinder.preprocessing import project_image
+        for name in list(self.images) if rounds is None else rounds:
             source_shape = self.images[name].shape[:3]
-            self.images[name] = _project_image(
-                self.images[name], config=ProjectionConfig(method=method)
-            )
+            self.images[name] = project_image(self.images[name], config=config)
             source = self.metadata.get(name, ImageMetadata(f"{self.fov_id}/{name}"))
-            self.metadata[name] = source.projected(method=method)
-            self.load_diagnostics.setdefault(name, {})["projection_source_metadata"] = asdict(source)
-            self.load_diagnostics[name]["projection_source_shape_zyx"] = source_shape
+            self.metadata[name] = source.projected(method=config.method)
+            self.load_diagnostics.setdefault(name, {})['projection_source_metadata'] = asdict(source)
+            self.load_diagnostics[name]['projection_source_shape_zyx'] = source_shape
         return self
 
     # --- Registration ---
 
-    def _make_ref_3d(
-        self,
-        round_name: str,
-        mode: Literal["merged", "single-channel"],
-        channel: int,
-    ) -> np.ndarray:
-        """Create 3D reference/moving image for registration."""
-        img = self.images[round_name]
-        if mode == "merged":
-            # uint16 is sufficient: max sum of 4 uint8 channels = 1020
-            return np.sum(img, axis=-1, dtype=np.uint16)
-        else:
-            return img[:, :, :, channel]
+    def _registration_image(self, name, mode, channel):
+        image = _validate_image(self.images[name], ndim=(4,))
+        if mode == 'merged':
+            # Preserve signed/high-bit-depth input instead of overflowing uint16.
+            return image.sum(axis=-1, dtype=np.float64)
+        if channel >= image.shape[-1]:
+            raise ValueError('registration channel outside image')
+        return image[..., channel]
 
-    @log_step
-    def global_registration(
-        self,
-        *,
-        layers_to_register: list[str] | None = None,
-        ref_img: Literal["merged", "single-channel"] = "merged",
-        mov_img: Literal["merged", "single-channel"] = "merged",
-        ref_channel: int = 0,
-        save_shifts: bool = True,
-    ) -> FOV:
-        """Global (rigid) registration using phase correlation.
+    @_log_step
+    def register(self, step: RegistrationStep, *, rounds=None):
+        """Estimate then apply; only opted-in estimation failures can recover.
 
-        Stores shifts in ``self.global_shifts`` and optionally writes
-        a shift log CSV.
-
-        Parameters
-        ----------
-        layers_to_register : list[str] | None
-            Rounds to register; None uses all configured non-reference layers. Unloaded rounds are skipped.
-        ref_img : Literal['merged', 'single-channel']
-            Reference representation: merged sums channels as uint16; single-channel selects ref_channel.
-        mov_img : Literal['merged', 'single-channel']
-            Moving representation: merged sums channels as uint16; single-channel selects ref_channel.
-        ref_channel : int
-            Zero-based reference channel index; also selects moving channel in single-channel registration.
-        save_shifts : bool
-            Whether to write detected displacements to the FOV shift-log CSV.
-
-        Returns
-        -------
-        FOV
-            This instance, with processing state updated in place.
-
-        Notes
-        -----
-        global_shifts and the row/col/z log contain detected displacement, not
-        the correction translation. See :func:`starfinder.registration.estimate_transform`.
+        Ordered attempts include requested/actual method, effective config,
+        outcome and failure. Apply errors propagate and are recorded too.
         """
-        from starfinder.registration import estimate_transform, apply_transform, TranslationConfig
-
-        if layers_to_register is None:
-            layers_to_register = self.layers.to_register
-
-        ref_round = self.layers.ref
-        ref_3d = self._make_ref_3d(ref_round, ref_img, ref_channel)
-
-        for round_name in layers_to_register:
-            if round_name not in self.images:
-                continue
-            mov_3d = self._make_ref_3d(round_name, mov_img, ref_channel)
-            result = estimate_transform(ref_3d, mov_3d, config=TranslationConfig(),
-                reference_metadata=self.metadata.get(ref_round, ImageMetadata(f"{self.fov_id}/{ref_round}")),
-                moving_metadata=self.metadata.get(round_name, ImageMetadata(f"{self.fov_id}/{round_name}")))
-            registered = apply_transform(self.images[round_name], result.transform, config=result.application_config)
-            shifts = tuple(-x for x in result.transform.correction_zyx)
-            self.metadata[round_name] = result.transform.reference_metadata
-            self.images[round_name] = registered
-            self.global_shifts[round_name] = shifts
-
-        if save_shifts and self.global_shifts:
-            self._save_shift_log()
-
+        from starfinder.registration import estimate_transform, apply_transform
+        step.__post_init__()
+        ref = self.rounds.reference_round
+        reference = self._registration_image(ref, step.reference_image, step.reference_channel)
+        for name in self.rounds.moving_rounds if rounds is None else rounds:
+            moving = self._registration_image(name, step.moving_image, step.reference_channel)
+            configs = (step.config,) + (tuple(step.recovery.alternatives) if step.recovery else ())
+            for index, config in enumerate(configs):
+                attempt = dict(requested_method=step.config.method, actual_method=config.method,
+                               config=asdict(config), failure=None, outcome='estimating')
+                self.registration_attempts.setdefault(name, []).append(attempt)
+                try:
+                    result = estimate_transform(reference, moving, config=config,
+                        reference_metadata=self.metadata[ref], moving_metadata=self.metadata[name])
+                except Exception as error:
+                    attempt.update(outcome='failed', failure={'type': type(error).__name__, 'message': str(error)})
+                    if step.recovery and isinstance(error, step.recovery.allowed_errors) and index + 1 < len(configs):
+                        continue
+                    raise
+                try:
+                    warp = step.warp or result.application_config
+                    registered = apply_transform(self.images[name], result.transform, config=warp)
+                except Exception as error:
+                    attempt.update(outcome='application_failed', failure={'type': type(error).__name__, 'message': str(error)})
+                    raise
+                attempt.update(outcome='succeeded', application_config=asdict(warp))
+                self.images[name] = registered
+                self.metadata[name] = result.transform.reference_metadata
+                self.registration_results.setdefault(name, []).append(replace(result, application_config=warp))
+                break
         return self
 
-    def _save_shift_log(self) -> None:
-        """Write global shifts to CSV in MATLAB-compatible format."""
+    def _save_shift_log(self):
+        """Preserve MATLAB detected-displacement row/col/z columns."""
+        from starfinder.registration import TranslationTransform
+        rows = []
+        for name, results in self.registration_results.items():
+            for result in results:
+                if isinstance(result.transform, TranslationTransform):
+                    dz, dy, dx = (-v for v in result.transform.correction_zyx)
+                    rows.append(dict(fov_id=self.fov_id, round=name, row=dy, col=dx, z=dz))
         path = self.paths.shift_log()
         path.parent.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame(rows, columns=['fov_id', 'round', 'row', 'col', 'z']).to_csv(path, index=False)
 
-        rows = []
-        for round_name, (dz, dy, dx) in self.global_shifts.items():
-            rows.append(
-                {
-                    "fov_id": self.fov_id,
-                    "round": round_name,
-                    "row": dy,
-                    "col": dx,
-                    "z": dz,
-                }
-            )
-        pd.DataFrame(rows).to_csv(path, index=False)
-
-    @log_step
-    def local_registration(
-        self,
-        *,
-        ref_channel: int = 0,
-        layers_to_register: list[str] | None = None,
-        method: str = "demons",
-        boundary_mode: str = "constant",
-        # Demons parameters
-        iterations: list[int] | None = None,
-        smoothing_sigma: float = 1.0,
-        pyramid_mode: str = "antialias",
-        # TPS parameters
-        detection_threshold: float = 3.0,
-        match_distance: float = 10.0,
-        min_matches: int = 50,
-        max_control_points: int = 1000,
-        tps_smoothing: float = 1.0,
-        grid_spacing: int = 32,
-        # CPD parameters
-        beta: float | None = None,
-        lmbda: float = 2.0,
-        cpd_w: float = 0.15,
-        affine_first: bool = True,
-        candidate_radius: float = 15.0,
-        k_neighbors: int = 3,
-    ) -> FOV:
-        """Local (non-rigid) registration.
-
-        Supports three methods:
-
-        - ``"demons"`` (default): Iterative voxel-level optimization via SimpleITK.
-
-        - ``"tps"``: Spot-based Thin Plate Spline — fits a smooth displacement
-          field from matched spot correspondences. No SimpleITK dependency.
-
-        - ``"cpd"``: Coherent Point Drift — simultaneous correspondence and
-          transformation via EM on GMM. No SimpleITK dependency.
-
-        No automatic fallback occurs. Invalid inputs/configuration and estimator
-        failures propagate with their specific exception types.
-
-        Displacement fields are ephemeral (applied then discarded).
-
-        Parameters
-        ----------
-        boundary_mode : str
-            How to handle out-of-bounds source coordinates during warping:
-            ``"constant"`` (default) fills with 0; ``"nearest"`` extends edges.
-
-        Parameters
-        ----------
-        ref_channel : int
-            Zero-based reference channel index; also selects moving channel in single-channel registration.
-        layers_to_register : list[str] | None
-            Rounds to register; None uses all configured non-reference layers. Unloaded rounds are skipped.
-        method : str
-            Local registration backend: demons, diffeomorphic, symmetric, fast_symmetric, tps, or cpd.
-        iterations : list[int] | None
-            Demons iterations per pyramid level; None uses [100, 50, 25].
-        smoothing_sigma : float
-            Demons displacement smoothing standard deviation in voxel units.
-        pyramid_mode : str
-            Demons pyramid: antialias (default) or sitk.
-        detection_threshold : float
-            TPS/CPD noise-floor detection k in median + k * MAD * 1.4826.
-        match_distance : float
-            TPS maximum correspondence distance in voxel-index Euclidean units.
-        min_matches : int
-            TPS minimum matched pairs; insufficient matches raise ValueError.
-        max_control_points : int
-            Maximum TPS control points or target CPD point count.
-        tps_smoothing : float
-            Smoothing passed to tps_register as smoothing.
-        grid_spacing : int
-            Coarse dense-field grid stride in voxel indices for TPS/CPD.
-        beta : float | None
-            CPD kernel width in voxels; None estimates it from moving-point neighbor distances.
-        lmbda : float
-            CPD regularization weight; larger values favor smoother transformations.
-        cpd_w : float
-            CPD expected outlier fraction in [0, 1), passed as w.
-        affine_first : bool
-            Whether CPD performs affine alignment before nonrigid fitting.
-        candidate_radius : float
-            CPD moving-candidate search radius in voxel units.
-        k_neighbors : int
-            CPD neighbors retained per fixed-point sampling anchor.
-
-        Returns
-        -------
-        FOV
-            This instance, with processing state updated in place.
-        """
-        if layers_to_register is None:
-            layers_to_register = self.layers.to_register
-
-        ref_round = self.layers.ref
-        ref_3d = self.images[ref_round][:, :, :, ref_channel]
-
-        for round_name in layers_to_register:
-            if round_name not in self.images:
-                continue
-            mov_3d = self.images[round_name][:, :, :, ref_channel]
-
-            from starfinder.registration import (estimate_transform, apply_transform,
-                CpdConfig, TpsConfig, DemonsConfig)
-            if method == "cpd":
-                config = CpdConfig(detection_noise_sigma=detection_threshold,
-                    max_control_points=max_control_points, kernel_width_voxels=beta,
-                    regularization_weight=lmbda, outlier_fraction=cpd_w,
-                    affine_first=affine_first, grid_spacing_voxels=grid_spacing,
-                    candidate_radius_voxels=candidate_radius, neighbors_per_anchor=k_neighbors)
-            elif method == "tps":
-                config = TpsConfig(detection_noise_sigma=detection_threshold,
-                    match_distance_voxels=match_distance, min_matches=min_matches,
-                    max_control_points=max_control_points, smoothing=tps_smoothing,
-                    grid_spacing_voxels=grid_spacing)
-            else:
-                config = DemonsConfig(variant=method,
-                    iterations=tuple(iterations) if iterations is not None else (100, 50, 25),
-                    smoothing_sigma=smoothing_sigma, pyramid_mode=pyramid_mode)
-            result = estimate_transform(ref_3d, mov_3d, config=config,
-                reference_metadata=self.metadata.get(ref_round, ImageMetadata(f"{self.fov_id}/{ref_round}")),
-                moving_metadata=self.metadata.get(round_name, ImageMetadata(f"{self.fov_id}/{round_name}")))
-            registered = apply_transform(self.images[round_name], result.transform,
-                config=replace(result.application_config, boundary_mode=boundary_mode))
-            self.metadata[round_name] = result.transform.reference_metadata
-
-            self.images[round_name] = registered
-            self.local_registered.add(round_name)
-
-        return self
-
-    # --- Spot finding & barcode ---
-
-    @log_step
+    @_log_step
     def find_spots(self, *, config: LocalMaximaConfig = LocalMaximaConfig()) -> FOV:
         """Detect reference-round spots with explicit config and FOV identity.
 
@@ -623,14 +331,12 @@ class FOV:
             config = replace(config, channel_labels=tuple(self.dataset.channel_order))
         namespace = json.dumps([self.dataset.dataset_id, self.dataset.sample_id,
                                 self.fov_id, self.subtile_id], separators=(",", ":"))
-        metadata = self.metadata.get(self.layers.ref, ImageMetadata(f"{self.fov_id}/{self.layers.ref}"))
-        self.spot_result = find_spots(self.images[self.layers.ref], config=config,
+        metadata = self.metadata.get(self.rounds.reference_round, ImageMetadata(f"{self.fov_id}/{self.rounds.reference_round}"))
+        self.spot_result = find_spots(self.images[self.rounds.reference_round], config=config,
                                      metadata=metadata, spot_namespace=namespace)
-        self.all_spots = self.spot_result.spots.copy()
-        self.all_spots["spot_namespace"] = pd.Series(namespace, index=self.all_spots.index, dtype="string")
         return self
 
-    def _extract_round(self, round_name, voxel_size=(1, 2, 2)):
+    def _extract_round(self, round_name, config=NeighborhoodSumConfig()):
         from starfinder.barcode import extract_intensities
         from starfinder.io import ImageLoadResult
         loaded = ImageLoadResult(self.images[round_name],
@@ -638,396 +344,179 @@ class FOV:
             tuple(self.dataset.channel_order), (), {})
         self._round_intensities[round_name] = extract_intensities(
             {round_name: loaded}, self.spot_result,
-            config=NeighborhoodSumConfig(tuple(voxel_size)))
+            config=config)
 
-    def _assemble_intensities(self, layers=None):
-        layers = self.layers.seq if layers is None else layers
-        results = [self._round_intensities[r] for r in layers]
+    def _assemble_intensities(self, rounds=None):
+        rounds = self.rounds.sequencing_rounds if rounds is None else rounds
+        results = [self._round_intensities[r] for r in rounds]
         first = results[0]
-        if any(r.spot_ids != first.spot_ids or r.metadata != first.metadata or
+        if any(r.spot_ids != first.spot_ids or r.spot_namespace != first.spot_namespace or r.metadata != first.metadata or
                r.channel_labels != first.channel_labels or r.config != first.config or
                r.diagnostics['source_shape_zyx'] != first.diagnostics['source_shape_zyx'] for r in results):
             raise ValueError("inconsistent round extraction results")
         self.intensity_result = IntensityExtractionResult(
             np.concatenate([r.values for r in results], axis=2), first.spot_ids,
-            first.spot_namespace, first.channel_labels, tuple(layers), first.metadata,
+            first.spot_namespace, first.channel_labels, tuple(rounds), first.metadata,
             first.config, np.concatenate([r.valid for r in results], axis=1),
-            {'rounds': {r: self._round_intensities[r].diagnostics for r in layers}})
+            {'rounds': {r: self._round_intensities[r].diagnostics for r in rounds}})
         self._round_intensities.clear()
 
-    @log_step
-    def extract_intensities(self, *, config=NeighborhoodSumConfig(), layers=None):
+    @_log_step
+    def extract_intensities(self, *, config=NeighborhoodSumConfig(), rounds=None):
         """Extract labeled intensities; decoding is a separate reusable stage."""
         if not isinstance(config, NeighborhoodSumConfig):
             raise TypeError("config must be NeighborhoodSumConfig")
         config.__post_init__()
-        layers = self.layers.seq if layers is None else layers
-        if not layers or len(set(layers)) != len(layers):
+        rounds = self.rounds.sequencing_rounds if rounds is None else rounds
+        if not rounds or len(set(rounds)) != len(rounds):
             raise ValueError("extraction rounds must be nonempty and unique")
         self._round_intensities.clear()
-        for round_name in layers:
-            self._extract_round(round_name, config.neighborhood_radius_zyx)
-        self._assemble_intensities(layers)
+        for round_name in rounds:
+            self._extract_round(round_name, config)
+        self._assemble_intensities(rounds)
         return self
 
-    @log_step
+    @_log_step
     def decode_barcodes(self, *, config=WtaDecoderConfig(diagnostics=True)):
         """Decode the stored intensity result and retain every spot identity."""
         from starfinder.barcode import decode_barcodes
         if self.codebook is None:
             raise ValueError("Codebook not loaded. Call dataset.load_codebook() first.")
         self.decoding_result = decode_barcodes(self.intensity_result, self.codebook, config=config)
-        # Existing output adapters retain their MATLAB-facing columns until W-142.
-        table = self.decoding_result.table
-        self.all_spots = self.spot_result.spots.copy()
-        self.all_spots['spot_namespace'] = self.spot_result.spot_namespace
-        self.all_spots = self.all_spots.merge(table, on=['spot_namespace', 'spot_id'], validate='one_to_one')
-        self.all_spots['color_seq'] = self.all_spots.observed_color_sequence
-        self.all_spots['gene'] = self.all_spots.gene_id
-        scores = self.decoding_result.diagnostics.get('wta_round_l2_nll')
-        for i, name in enumerate(self.intensity_result.round_labels):
-            self.all_spots[f'{name}_color'] = self.all_spots.color_seq.str[i]
-            if scores is not None:
-                score_table = pd.Series(scores[:, i], index=self.intensity_result.spot_ids)
-                self.all_spots[f'{name}_score'] = self.all_spots.spot_id.map(score_table)
         return self
 
-    @log_step
+    @_log_step
     def filter_reads(self, *, config=ReadFilterConfig()):
         """Rerun explicit read predicates without decoding or image access."""
         from starfinder.barcode import filter_reads
         self.filtering_result = filter_reads(self.decoding_result, config=config)
-        keys = self.filtering_result.accepted[['spot_namespace', 'spot_id']]
-        self.good_spots = self.all_spots.merge(keys, on=['spot_namespace', 'spot_id'], validate='one_to_one')
         return self
 
-    # --- Streaming pipeline ---
+    @_log_step
+    def run(self, config: PipelineConfig, *, execution: ExecutionConfig = ExecutionConfig()):
+        """Run one scientific sequence with batch or streaming residency.
 
-    @log_step
-    def run_streaming(
-        self,
-        *,
-        rotate_angle: float | None = None,
-        snr_threshold: float | None = None,
-        intensity_estimation: Literal[
-            "noise", "adaptive", "adaptive_round", "global"
-        ] = "noise",
-        intensity_threshold: float = 5.0,
-        voxel_size: tuple[int, int, int] = (1, 2, 2),
-        end_bases: str | None = None,
-        start_base: str = "C",
-        local_method: str | None = None,
-        local_kwargs: dict | None = None,
-    ) -> FOV:
-        """Streaming pipeline retaining the reference and one moving round.
-
-        Processes one round at a time instead of loading all rounds
-        simultaneously. Temporary registration/extraction buffers also consume
-        memory. Operations are load, optional rotation, enhancement, registration,
-        spot finding, extraction, and filtering.
-
-        Parameters
-        ----------
-        local_method : str or None
-            If set (e.g. ``"tps"`` or ``"demons"``), applies local
-            registration after global registration for each non-ref round.
-        local_kwargs : dict or None
-            Extra keyword arguments passed to ``local_registration()``.
-
-        Labeled intensity results accumulate across rounds while image volumes
-        are loaded and discarded per-round. Decoding then filtering run once on
-        the complete tensor; filtering can subsequently rerun without images.
-
-        Parameters
-        ----------
-        rotate_angle : float | None
-            Optional rotation in degrees before enhancement; None skips rotation (does not read dataset.rotate_angle).
-        snr_threshold : float | None
-            Optional max/mean threshold for skipping normalization; None disables the gate.
-        intensity_estimation : Literal['noise', 'adaptive', 'adaptive_round', 'global']
-            Spot threshold mode: noise, adaptive, adaptive_round, or global; pass together with intensity_threshold.
-        intensity_threshold : float
-            Noise k-sigma multiplier, or intensity fraction for adaptive/global modes.
-        voxel_size : tuple[int, int, int]
-            Extraction half-widths (dz, dy, dx) in voxel indices, not physical spacing.
-        end_bases : str | None
-            Optional decoded sequence suffix for filtering; None disables suffix filtering.
-        start_base : str
-            Starting nucleotide for color decoding when end_bases is supplied.
-
-        Returns
-        -------
-        FOV
-            This instance, with processing state updated in place.
+        Reference first, then moving rounds in declared order. Histogram targets
+        are captured before downstream reference processing. Loading may be
+        disabled for resident/subtile data. Images without registration must
+        already declare the same frame/grid for extraction.
         """
-        ref = self.layers.ref
-
-        # --- Phase 1: Reference round (kept in memory throughout) ---
-        self.load_raw_images(rounds=[ref])
-        if rotate_angle is not None:
-            self._rotate_round(ref, rotate_angle)
-        self.enhance_contrast(layers=[ref], snr_threshold=snr_threshold)
-        self.find_spots(config=LocalMaximaConfig(threshold_mode=intensity_estimation, threshold_value=intensity_threshold))
-        self._extract_round(ref, voxel_size)
-
-        # --- Phase 2: Non-ref rounds (one at a time) ---
-        for round_name in self.layers.to_register:
-            self.load_raw_images(rounds=[round_name])
-            if rotate_angle is not None:
-                self._rotate_round(round_name, rotate_angle)
-            self.enhance_contrast(
-                layers=[round_name], snr_threshold=snr_threshold
-            )
-            self.global_registration(
-                layers_to_register=[round_name], save_shifts=False
-            )
-            if local_method is not None:
-                self.local_registration(
-                    layers_to_register=[round_name],
-                    method=local_method,
-                    **(local_kwargs or {}),
-                )
-            self._extract_round(round_name, voxel_size)
-            del self.images[round_name]
-
-        # Save shift log once (not per-round)
-        if self.global_shifts:
-            self._save_shift_log()
-
-        # --- Phase 3: Finalize (spot DataFrame only, images released) ---
-        self._assemble_intensities()
-        self.decode_barcodes()
-        self.filter_reads(config=ReadFilterConfig(end_bases=end_bases, start_base=start_base))
-        return self
-
-    @log_step
-    def run_streaming_gr(
-        self,
-        *,
-        rotate_angle: float | None = None,
-        snr_threshold: float | None = None,
-        ref_img: Literal["merged", "single-channel"] = "merged",
-        mov_img: Literal["merged", "single-channel"] = "merged",
-        ref_channel: int = 0,
-        hist_equalize: bool = False,
-        hist_equalize_ref_channel: int = 0,
-        morph_recon: bool = False,
-        morph_recon_radius: int = 3,
-    ) -> FOV:
-        """Streaming global registration only (for subtile workflow).
-
-        Processes one non-ref round at a time to reduce peak memory.
-        After this method, the FOV has all images loaded with global
-        shifts applied, ready for ``create_subtiles()``.
-
-        Parameters
-        ----------
-        rotate_angle : float | None
-            Optional rotation in degrees before enhancement; None skips rotation (does not read dataset.rotate_angle).
-        snr_threshold : float | None
-            Optional max/mean threshold for skipping normalization; None disables the gate.
-        ref_img : Literal['merged', 'single-channel']
-            Reference representation: merged sums channels as uint16; single-channel selects ref_channel.
-        mov_img : Literal['merged', 'single-channel']
-            Moving representation: merged sums channels as uint16; single-channel selects ref_channel.
-        ref_channel : int
-            Zero-based reference channel index; also selects moving channel in single-channel registration.
-        hist_equalize : bool
-            Whether to histogram-match non-reference rounds to the reference channel.
-        hist_equalize_ref_channel : int
-            Zero-based reference channel used for histogram matching.
-        morph_recon : bool
-            Whether to remove background by morphological reconstruction.
-        morph_recon_radius : int
-            Morphological reconstruction radius in voxels.
-
-        Returns
-        -------
-        FOV
-            This instance, with processing state updated in place.
-        """
-        ref = self.layers.ref
-
-        # --- Phase 1: Load and preprocess ref round ---
-        self.load_raw_images(rounds=[ref])
-        if rotate_angle is not None:
-            self._rotate_round(ref, rotate_angle)
-        self.enhance_contrast(layers=[ref], snr_threshold=snr_threshold)
-        if hist_equalize:
-            # For hist_equalize we need to save the reference for later rounds
-            pass  # ref round is the reference itself
-        if morph_recon:
-            self.morph_recon(radius=morph_recon_radius, layers=[ref])
-
-        # --- Phase 2: Non-ref rounds (one at a time) ---
-        for round_name in self.layers.to_register:
-            self.load_raw_images(rounds=[round_name])
-            if rotate_angle is not None:
-                self._rotate_round(round_name, rotate_angle)
-            self.enhance_contrast(
-                layers=[round_name], snr_threshold=snr_threshold
-            )
-            if hist_equalize:
-                from starfinder.preprocessing import match_histogram
-
-                reference = self.images[ref][:, :, :, hist_equalize_ref_channel]
-                self.images[round_name] = match_histogram(
-                    self.images[round_name], reference
-                )
-            if morph_recon:
-                self.morph_recon(
-                    radius=morph_recon_radius, layers=[round_name]
-                )
-            self.global_registration(
-                layers_to_register=[round_name],
-                ref_img=ref_img,
-                mov_img=mov_img,
-                ref_channel=ref_channel,
-                save_shifts=False,
-            )
-
-        # Save shift log once
-        if self.global_shifts:
-            self._save_shift_log()
-
+        if not isinstance(config, PipelineConfig) or not isinstance(execution, ExecutionConfig):
+            raise TypeError('run requires PipelineConfig and ExecutionConfig')
+        config.__post_init__()
+        execution.__post_init__()
+        self.rounds.validate()
+        ref = self.rounds.reference_round
+        if ref is None:
+            raise ValueError('reference_round is required')
+        if config.extraction and not (config.detection or self.spot_result is not None):
+            raise ValueError('extraction requires detections')
+        if config.decoding and not (config.extraction or self.intensity_result is not None):
+            raise ValueError('decoding requires intensities')
+        if config.filtering and not (config.decoding or self.decoding_result is not None):
+            raise ValueError('filtering requires decoding')
+        if config.decoding and self.codebook is None:
+            raise ValueError('decoding requires a loaded codebook')
+        if config.load and execution.mode == 'batch':
+            self.load_images(rounds=self.rounds.all_rounds, config=config.load)
+        histogram_reference = None
+        if config.extraction:
+            self._round_intensities.clear()
+        for name in [ref] + self.rounds.moving_rounds:
+            if config.load and execution.mode == 'streaming':
+                self.load_images(rounds=[name], config=config.load)
+            if name not in self.images or name not in self.metadata:
+                raise ValueError(f'missing image/metadata for {name}')
+            if config.rotation_degrees is not None:
+                self._rotate_round(name, config.rotation_degrees)
+            if config.normalization:
+                self.normalize_intensity(config=config.normalization, rounds=[name])
+            if config.histogram:
+                if name == ref:
+                    histogram_reference = self.images[ref][..., config.histogram_reference_channel].copy()
+                self.match_histogram(config=config.histogram, rounds=[name], reference=histogram_reference)
+            if config.reconstruction and not config.reconstruction_after_registration:
+                self.reconstruct_background(config=config.reconstruction, rounds=[name])
+            if config.tophat:
+                self.filter_tophat(config=config.tophat, rounds=[name])
+            if config.projection:
+                self.project_image(config=config.projection, rounds=[name])
+            if name != ref:
+                processed_reference = self.images[ref]
+                if config.reconstruction and config.reconstruction_after_registration:
+                    self.images[ref] = registration_reference
+                try:
+                    for step in config.registration:
+                        self.register(step, rounds=[name])
+                finally:
+                    self.images[ref] = processed_reference
+            if config.reconstruction and config.reconstruction_after_registration:
+                # Keep the registration reference before the post-registration
+                # operation; use its snapshot for each moving round below.
+                if name == ref:
+                    registration_reference = self.images[ref].copy()
+                self.reconstruct_background(config=config.reconstruction, rounds=[name])
+            if name == ref and config.detection:
+                self.find_spots(config=config.detection)
+            if config.extraction and name in self.rounds.sequencing_rounds:
+                self._extract_round(name, config.extraction)
+            if execution.mode == 'streaming' and not execution.retain_images and name != ref:
+                del self.images[name]
+        if config.extraction:
+            self._assemble_intensities()
+        if config.decoding:
+            self.decode_barcodes(config=config.decoding)
+        if config.filtering:
+            self.filter_reads(config=config.filtering)
         return self
 
     # --- Output ---
 
-    def save_ref_merged(self) -> Path:
-        """Save reference merged image as TIFF.
-
-        Returns
-        -------
-        pathlib.Path
-            Written TIFF path; maximum_projection optionally reduces Z to one plane. Does not sum channels.
-        """
+    def save_reference_image(self, *, projection: ProjectionConfig | None = None) -> Path:
+        """Save reference TIFF using the unchanged shared filename."""
         from starfinder.io import save_volume
         from starfinder.preprocessing import project_image
-
-        ref_image = self.images[self.layers.ref]
-        metadata = self.metadata.get(self.layers.ref)
-        if self.dataset.maximum_projection:
-            ref_image = project_image(ref_image)
-            if metadata is not None:
-                metadata = metadata.projected(method="max")
-
+        ref = self.rounds.reference_round
+        image, metadata = self.images[ref], self.metadata[ref]
+        if projection is not None:
+            image = project_image(image, config=projection)
+            metadata = metadata.projected(method=projection.method)
         path = self.paths.ref_merged_tif
         path.parent.mkdir(parents=True, exist_ok=True)
-        save_volume(ref_image, path, metadata=metadata)
+        save_volume(image, path, metadata=metadata)
         return path
 
-    def save_signal(
-        self,
-        slot: Literal["allSpots", "goodSpots"] = "goodSpots",
-        columns: list[str] | None = None,
-    ) -> Path:
-        """Save spots to CSV with 1-based coordinates.
+    def save_spots(self, slot='goodSpots', columns=None, *, path=None):
+        """Export identities and coordinates once; shared slot filenames retained."""
+        from starfinder.io import export_spots
+        if slot not in ('goodSpots', 'allSpots'):
+            raise ValueError('slot must be goodSpots or allSpots')
+        reads = self.filtering_result if slot == 'goodSpots' else self.decoding_result
+        return export_spots(self.spot_result, reads, path or self.paths.signal_csv(slot),
+                            accepted_only=slot == 'goodSpots', columns=columns)
 
-        Converts internal 0-based (z, y, x) to CSV 1-based (x, y, z, gene).
-
-        Parameters
-        ----------
-        slot : Literal['allSpots', 'goodSpots']
-            goodSpots selects filtered spots; allSpots selects all detected spots.
-        columns : list[str] | None
-            Columns to write; None uses x, y, z and gene when present. Included x/y/z are incremented by one.
-
-        Returns
-        -------
-        pathlib.Path
-            Written CSV path. The in-memory DataFrame is unchanged.
-
-        Raises
-        ------
-        ValueError
-            Selected spots are absent or empty.
-        KeyError
-            Requested columns are missing.
-        """
-        spots = self.good_spots if slot == "goodSpots" else self.all_spots
-        if spots is None or spots.empty:
-            raise ValueError(f"No spots in '{slot}' to save.")
-
-        if columns is None:
-            base = ["x", "y", "z"]
-            if "gene" in spots.columns:
-                base.append("gene")
-            columns = base
-
-        out = spots[columns].copy()
-        # Convert 0-based → 1-based for coordinate columns
-        for col in ("x", "y", "z"):
-            if col in out.columns:
-                out[col] = out[col] + 1
-
-        path = self.paths.signal_csv(slot)
+    def save_processing_log(self, log_type='rsf'):
+        """Persist ordered registration attempts and stage counts."""
+        if log_type not in ('rsf', 'gr'):
+            raise ValueError('invalid log_type')
+        path = self.paths.rsf_log() if log_type == 'rsf' else self.paths.gr_log()
         path.parent.mkdir(parents=True, exist_ok=True)
-        out.to_csv(path, index=False)
+        path.write_text(json.dumps(dict(fov_id=self.fov_id, backend='python',
+            rounds=asdict(self.rounds), registration_attempts=self.registration_attempts,
+            detected=len(self.spot_result.spots) if self.spot_result is not None else None,
+            filtering=self.filtering_result.counts if self.filtering_result is not None else None), indent=2))
+        self._save_shift_log()
         return path
 
-    def save_log(self, log_type: Literal["rsf", "gr"] = "rsf") -> Path:
-        """Write a pipeline log file (summary of steps run).
-
-        Parameters
-        ----------
-        log_type : Literal['rsf', 'gr']
-            rsf selects the read/spot log; gr selects the global-registration log.
-
-        Returns
-        -------
-        pathlib.Path
-            Written summary text-file path.
-        """
-        import time
-
-        path = self.paths.rsf_log() if log_type == "rsf" else self.paths.gr_log()
-        path.parent.mkdir(parents=True, exist_ok=True)
-
-        lines = [
-            f"FOV: {self.fov_id}",
-            f"Backend: python",
-            f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}",
-            f"Rounds: {self.layers.seq}",
-            f"Ref round: {self.layers.ref}",
-            f"Global shifts: {dict(self.global_shifts)}",
-            f"Local registered: {self.local_registered}",
-            f"All spots: {len(self.all_spots) if self.all_spots is not None else 0}",
-            f"Good spots: {len(self.good_spots) if self.good_spots is not None else 0}",
-        ]
-        path.write_text("\n".join(lines) + "\n")
-        return path
-
-    def save_score_log(self, suffix: str = "") -> Path:
-        """Write spot-finding score log (spot count summary).
-
-        Parameters
-        ----------
-        suffix : str
-            Optional text appended to fov_id in the score-log filename.
-
-        Returns
-        -------
-        pathlib.Path
-            Written spot-count summary path.
-        """
+    def save_diagnostics(self, suffix=''):
+        """Write counts, undefined fractions and explicit registration attempts."""
         path = self.paths.score_log(suffix)
         path.parent.mkdir(parents=True, exist_ok=True)
-
-        n_all = len(self.all_spots) if self.all_spots is not None else 0
-        n_good = len(self.good_spots) if self.good_spots is not None else 0
-
-        lines = [
-            f"FOV: {self.fov_id}",
-            f"Total spots detected: {n_all}",
-            f"Good spots (codebook matched): {n_good}",
-            f"Match rate: {n_good / n_all:.4f}" if n_all > 0 else "Match rate: N/A",
-        ]
-        if self.good_spots is not None and "gene" in self.good_spots.columns:
-            lines.append(
-                f"Unique genes: {self.good_spots['gene'].nunique()}"
-            )
-        path.write_text("\n".join(lines) + "\n")
+        path.write_text(json.dumps(dict(
+            detected=len(self.spot_result.spots) if self.spot_result is not None else None,
+            counts=self.filtering_result.counts if self.filtering_result is not None else None,
+            fractions=self.filtering_result.fractions if self.filtering_result is not None else None,
+            registration_attempts=self.registration_attempts), indent=2))
         return path
 
     # --- Subtile operations ---
@@ -1094,8 +583,11 @@ class FOV:
                 **arrays,
                 fov_id=self.fov_id,
                 subtile_id=subtile_id,
-                layers_seq=self.layers.seq,
-                layers_ref=self.layers.ref,
+                layers_seq=self.rounds.sequencing_rounds,
+                layers_ref=self.rounds.reference_round,
+                other_rounds=self.rounds.other_rounds,
+                dataset_id=self.dataset.dataset_id, sample_id=self.dataset.sample_id,
+                channel_labels=self.dataset.channel_order,
             )
 
             # 1-based coordinates for stitch_subtile.py
@@ -1117,7 +609,7 @@ class FOV:
     def from_subtile(
         cls,
         subtile_path: Path,
-        dataset: STARMapDataset,
+        dataset: Dataset,
         fov_id: str,
     ) -> FOV:
         """Load FOV state from a saved NPZ subtile.
@@ -1126,8 +618,8 @@ class FOV:
         ----------
         subtile_path : Path
             Path to a trusted NPZ written by create_subtiles (loaded with allow_pickle=True).
-        dataset : STARMapDataset
-            Dataset providing shared configuration, layers and codebook.
+        dataset : Dataset
+            Dataset providing shared configuration, rounds and codebook.
         fov_id : str
             Field-of-view identifier used in output paths.
 
@@ -1138,6 +630,15 @@ class FOV:
         """
         data = np.load(subtile_path, allow_pickle=True)
 
+        if str(data["fov_id"]) != fov_id or str(data["dataset_id"]) != dataset.dataset_id or str(data["sample_id"]) != dataset.sample_id:
+            data.close()
+            raise ValueError("subtile identity differs from dataset/FOV")
+        if (list(data["layers_seq"]) != dataset.rounds.sequencing_rounds or
+            str(data["layers_ref"]) != dataset.rounds.reference_round or
+            list(data["other_rounds"]) != dataset.rounds.other_rounds or
+            tuple(data["channel_labels"]) != dataset.channel_order):
+            data.close()
+            raise ValueError("subtile round/channel labels differ from dataset")
         fov = cls(dataset=dataset, fov_id=fov_id)
         if "subtile_id" not in data:
             raise ValueError("saved subtile requires subtile_id for spot namespace")

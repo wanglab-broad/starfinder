@@ -12,6 +12,7 @@ See :doc:`contracts` for conversion, geometry and channel ordering.
    load_volume
    load_round
    save_volume
+   export_spots
 
    ImageConversionConfig
    ImageLoadConfig

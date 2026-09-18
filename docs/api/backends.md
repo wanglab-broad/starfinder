@@ -11,7 +11,7 @@ license, or optional algorithm packages. See [build instructions](../contributin
 | Global registration | NumPy/SciPy; TranslationConfig selects scipy_fft or skimage |
 | TPS/CPD registration and point-set warping | NumPy/SciPy/scikit-image; no SimpleITK or external CPD package |
 | Demons estimation and SimpleITK application | Lazy SimpleITK import; missing package raises `RegistrationBackendUnavailableError` when called |
-| `FOV.local_registration` | Specific errors propagate; no automatic fallback |
+| `FOV.register` | Specific errors propagate; no automatic fallback |
 | `RegistrationBenchmarkRunner.run_local_benchmark` | Applies each result using its application_config (SciPy for TPS/CPD, SimpleITK for demons) |
 | Benchmark inspection images | Base Matplotlib; file-oriented plotting selects the Agg backend |
 | `timeout_handler` | Unix `SIGALRM`; no-op on platforms without it. Use in the main thread; nesting does not preserve an earlier alarm timer |

@@ -60,6 +60,9 @@ The module autosummary lists use reStructuredText (`docs/api/*.rst`) so Sphinx c
 discover it before parsing the Markdown pages. Autosummary writes disposable
 `.rst` stubs into `docs/api/generated/`; Git ignores
 these files. Do not edit them: update the API list or source docstrings instead.
+When removing or renaming an export, also remove its obsolete generated stub;
+autosummary does not delete old pages, which otherwise retain broken imports
+and appear as orphan documents on subsequent builds.
 Keep generated HTML, logs, and run-specific validation artifacts outside Git.
 
 ## Preview and check the result

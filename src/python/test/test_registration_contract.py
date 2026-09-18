@@ -1,3 +1,4 @@
+from starfinder.dataset import RegistrationStep
 """Bounded shared registration contracts; no scientific benchmark execution."""
 
 import importlib.util
@@ -213,18 +214,19 @@ def test_removed_public_paths_and_exports():
 
 def test_fov_cpd_defaults_and_no_fallback(tmp_path, monkeypatch):
     import starfinder.registration as registration
-    from starfinder.dataset import LayerState, STARMapDataset
+    from starfinder.dataset import RoundState, Dataset
 
-    dataset = STARMapDataset(
+    dataset = Dataset(
         input_root=tmp_path,
         output_root=tmp_path,
         dataset_id="test",
         sample_id="sample",
         output_id="test",
-        layers=LayerState(seq=["r1", "r2"], ref="r1"),
+        rounds=RoundState(sequencing_rounds=["r1", "r2"], reference_round="r1"),
     )
     fov = dataset.fov("FOV")
     fov.images = {r: np.zeros((8, 8, 8, 2), dtype=np.uint8) for r in ["r1", "r2"]}
+    fov.metadata = {r: ImageMetadata(r) for r in ("r1", "r2")}
     calls = []
 
     def fail(reference, moving, *, config, **kwargs):
@@ -233,12 +235,12 @@ def test_fov_cpd_defaults_and_no_fallback(tmp_path, monkeypatch):
 
     monkeypatch.setattr(registration, "estimate_transform", fail)
     with pytest.raises(InsufficientLandmarksError):
-        fov.local_registration(method="cpd")
+        fov.register(RegistrationStep(CpdConfig(detection_noise_sigma=3, grid_spacing_voxels=32)))
     assert len(calls) == 1
     assert isinstance(calls[0], CpdConfig)
     assert calls[0].detection_noise_sigma == 3
     assert calls[0].grid_spacing_voxels == 32
-    assert not fov.local_registered
+    assert not fov.registration_results
 
 
 def test_simpleitk_prepares_transform_once_for_channels(monkeypatch):

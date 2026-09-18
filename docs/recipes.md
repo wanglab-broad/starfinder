@@ -112,12 +112,12 @@ See [threshold conventions](conventions.md#spot-finding-thresholds) for MATLAB
 ## Decode one FOV
 
 Reuse the quickstart's prepared round/FOV layout. The direct
-{py:class}`~starfinder.dataset.STARMapDataset` constructor takes resolved roots;
+{py:class}`~starfinder.dataset.Dataset` constructor takes resolved roots;
 it does not append dataset/sample IDs. Configure rounds with
-{py:class}`~starfinder.dataset.LayerState`, load a codebook with
-{py:meth}`~starfinder.dataset.STARMapDataset.load_codebook`, then call
-{py:meth}`~starfinder.dataset.FOV.load_raw_images`,
-{py:meth}`~starfinder.dataset.FOV.global_registration`,
+{py:class}`~starfinder.dataset.RoundState`, load a codebook with
+{py:meth}`~starfinder.dataset.Dataset.load_codebook`, then call
+{py:meth}`~starfinder.dataset.FOV.load_images`,
+{py:meth}`~starfinder.dataset.FOV.register`,
 {py:meth}`~starfinder.dataset.FOV.find_spots`,
 {py:meth}`~starfinder.dataset.FOV.extract_intensities`,
 {py:meth}`~starfinder.dataset.FOV.decode_barcodes` and
@@ -139,16 +139,16 @@ Workflow settings: `seq_channel_order`, `n_rounds`, `ref_round`, plus the
 `load_codebook`, `reads_extraction.voxel_size` and `reads_filtration` blocks in
 [configuration](workflow-configuration.md#rule-resources-and-parameters).
 The YAML wrapper is not identical to this direct API: its filtering field is
-`end_base`, while the FOV keyword is `end_bases`. For base/color conversions
+`end_base`, while the typed `ReadFilterConfig` field is `end_bases`. For base/color conversions
 alone, see {py:func}`~starfinder.barcode.encode_bases` and
 {py:func}`~starfinder.barcode.decode_color_sequence`.
 
 ## Inspect molecule outputs
 
-{py:meth}`~starfinder.dataset.FOV.save_signal` adds one to coordinate columns
+{py:meth}`~starfinder.dataset.FOV.save_spots` adds one to coordinate columns
 without mutating the in-memory table. Save all diagnostic columns explicitly
 for candidates; the default filtered CSV contains `x,y,z,gene`.
-{py:meth}`~starfinder.dataset.FOV.save_log` writes a processing summary.
+{py:meth}`~starfinder.dataset.FOV.save_processing_log` writes a processing summary.
 
 ```{literalinclude} examples/recipes.py
 :language: python

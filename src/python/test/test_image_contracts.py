@@ -1,3 +1,4 @@
+from starfinder.preprocessing import MinMaxNormalizationConfig
 """Bounded W-137 geometry, numeric-policy and persistence regressions."""
 from dataclasses import asdict
 import importlib
@@ -190,19 +191,19 @@ def test_processing_invalid_images(image):
 
 
 def test_fov_subtile_rotation_and_projection_metadata(tmp_path):
-    from starfinder.dataset import STARMapDataset, LayerState, SubtileConfig, FOV
-    dataset = STARMapDataset(input_root=tmp_path, output_root=tmp_path, dataset_id="test", sample_id="small", output_id="output", layers=LayerState(seq=["round1"], ref="round1"))
+    from starfinder.dataset import Dataset, RoundState, SubtileConfig, FOV
+    dataset = Dataset(input_root=tmp_path, output_root=tmp_path, dataset_id="test", sample_id="small", output_id="output", rounds=RoundState(sequencing_rounds=["round1"], reference_round="round1"), channel_order=("ch00",))
     dataset.subtile = SubtileConfig(2, overlap_ratio=0)
     dataset.subtile.compute_windows(8, 8)
     save_volume(np.ones((2, 8, 8), np.uint16), tmp_path / "round1/fov/ch00.tif", metadata=geometry())
-    loaded_fov = FOV(dataset, "fov").load_raw_images(channel_order=["ch00"])
+    loaded_fov = FOV(dataset, "fov").load_images(channel_order=["ch00"])
     assert loaded_fov.metadata["round1"] == geometry()
     assert loaded_fov.images["round1"].dtype == np.uint16
     fov = FOV(dataset, "fov", images={"round1": np.arange(128, dtype=np.uint16).reshape(2, 8, 8, 1)}, metadata={"round1": geometry()})
     fov.rotate(angle=90)
     rotated_meta = fov.metadata["round1"]
     fov.create_subtiles(out_dir=tmp_path / "tiles")
-    child = FOV.from_subtile(tmp_path / "tiles/subtile_data_4.npz", dataset, "child")
+    child = FOV.from_subtile(tmp_path / "tiles/subtile_data_4.npz", dataset, "fov")
     assert child.images["round1"].shape == (2, 4, 4, 1)
     np.testing.assert_allclose(child.metadata["round1"].index_to_world((0, 0, 0)), rotated_meta.index_to_world((0, 4, 4)))
     child.project_image()

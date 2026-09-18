@@ -84,12 +84,12 @@ is specifically for the Python batch/direct wrapper.
 
 | Block | Schema fields and constraints | Wrapper behavior / defaults |
 | --- | --- | --- |
-| `enhance_contrast` | boolean `run` | Python direct/GR batch calls enhancement only when true; optional top-level parameter `snr_threshold` is forwarded; MATLAB uses min-max enhancement |
+| `enhance_contrast` | boolean `run` | Python calls normalization only when true in both execution modes; optional top-level parameter `snr_threshold` is forwarded; MATLAB uses min-max enhancement |
 | `hist_equalize` | boolean `run`, integer `reference_channel` | Python direct/GR/deep uses channel index 0 by default; MATLAB deep passes the configured 1-based index, direct uses its method default |
-| `morph_recon` | boolean `run`, integer `radius` >=1 | Python default radius 3; used in direct/GR and subtile processing, not deep creation |
-| `global_registration` | boolean `run`, string `ref_round`, `ref_img`/`mov_img` in `merged-image`,`single-channel` | Python default image modes are merged; Python uses dataset top-level `ref_round`, not this block's reference; MATLAB wrappers pass the block reference; MATLAB deep uses scale 0.25 |
+| `morph_recon` | boolean `run`, integer `radius` >=1 | Python default radius 3; used in direct/GR and subtile processing, also supported in deep creation |
+| `global_registration` | boolean `run`, string `ref_round`, `ref_img`/`mov_img` in `merged-image`,`single-channel` | Python default image modes are merged; Python requires this block's reference to match top-level `ref_round`; MATLAB wrappers pass the block reference; MATLAB deep uses scale 0.25 |
 | `create_subtiles` | boolean `run`, integer `sqrt_pieces` >=1 | Grid default 4; only GR/deep creation rules produce subtile files; Python creation scripts call splitting unconditionally |
-| `local_registration` | boolean `run`, string `ref_round`, method `demons`,`tps`,`cpd` (schema default `demons`) | Python direct/local-subtile wrappers forward method only; demons needs optional SimpleITK; MATLAB wrappers do not forward `method`; deep subtile does not perform local registration |
+| `local_registration` | boolean `run`, string `ref_round`, method `demons`,`tps`,`cpd` (schema default `demons`) | Python translates supported method-specific settings; demons needs optional SimpleITK; MATLAB wrappers do not forward `method`; deep subtile does not perform local registration |
 | `spot_finding` | boolean `run`, string `ref_round`, nonnegative numeric `intensity_threshold`, mode `local`,`global`,`noise`,`adaptive`,`adaptive_round` | Python wrappers default mode to `noise` but require a threshold when used; pass both explicitly. `local` is schema-accepted but unsupported by Python detector; MATLAB supports adaptive/global only |
 | `load_codebook` | boolean `run`, integer-array `split_index` | Python wrappers load unconditionally, turn missing/empty split into None; MATLAB respects `run` |
 | `reads_extraction` | boolean `run`, exactly three integers >=1 in `voxel_size` | Pixel half-widths, Python `(z,y,x)` versus MATLAB `(row,column,z)`; e.g. `[1,2,2]` versus `[2,2,1]`, not physical microns |
@@ -102,19 +102,18 @@ subtile wrappers pass only the threshold and retain the method's adaptive mode;
 only the deep wrapper forwards `intensity_estimation`. Putting `noise` in a
 MATLAB configuration does not enable the Python detector.
 
-`streaming: true` is an extra Python parameter supported in direct, GR and deep
-creation scripts, default false. It selects a different fixed processing path;
-it does not honor all batch `run` flags. For example direct streaming always
-runs enhancement, registration, detection, extraction and filtering and does
-not forward histogram-equalization/morphological-reconstruction flags. Do not
-use it as a drop-in switch for an arbitrary batch recipe. Python registration
-kwargs such as TPS control settings are not forwarded by these wrappers.
+`streaming: true` selects round-at-a-time loading in the same Python
+`FOV.run(PipelineConfig, execution=ExecutionConfig(...))` sequence as batch.
+Every enabled/disabled stage and its supported settings follow the same path.
+Creation jobs explicitly retain processed images for subtile export, so streaming
+creation does not imply bounded total resident image memory. Local registration
+settings are translated to typed method configs (including TPS/CPD controls).
+Unknown Python rule parameters and conflicting reference rounds raise early;
+shared MATLAB keys remain unchanged. See [coordination](coordination.md).
 
-For subtiles, Python `STARMapDataset.from_config` inspects GR settings before
-deep settings, irrespective of enabled mode, when configuring windows. Keep
-only the relevant creation section in production configs or make the grid
-settings consistent (the full example uses 2 for both). Dimensions must match
-the arrays **after rotation**; the schema cannot verify that.
+`from_workflow_config` chooses the relevant subtile creation settings; image
+sizes must match arrays after rotation. Rectangular and remainder dimensions
+are partitioned independently with complete edge coverage.
 
 ## Downstream parameter blocks
 

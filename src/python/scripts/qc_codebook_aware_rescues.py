@@ -243,8 +243,10 @@ def generate_raw_registered_stack_cache(
     if dataset not in RAW_REAL_DATASETS:
         raise FileNotFoundError(f"No raw-E2E stack cache recipe for {dataset}/{fov_id}")
 
-    from starfinder.dataset import STARMapDataset
-    from starfinder.dataset.types import LayerState
+    from starfinder.dataset import Dataset, RegistrationStep
+    from starfinder.registration import TranslationConfig
+    from starfinder.preprocessing import MinMaxNormalizationConfig
+    from starfinder.dataset.types import RoundState
     from starfinder.io import save_volume
 
     config = RAW_REAL_DATASETS[dataset]
@@ -256,25 +258,25 @@ def generate_raw_registered_stack_cache(
     if all(path.exists() for path in expected):
         return stack_dir
 
-    ds = STARMapDataset(
+    ds = Dataset(
         input_root=config["data_root"],
         output_root=result_dir / dataset / "registered_stack_cache_output",
         dataset_id="sample-dataset",
         sample_id=config["sample_id"],
         output_id=f"{dataset}-registered-stack-cache",
-        layers=LayerState(
-            seq=[f"round{i}" for i in range(1, int(config["n_rounds"]) + 1)],
-            ref=config["ref_round"],
+        rounds=RoundState(
+            sequencing_rounds=[f"round{i}" for i in range(1, int(config["n_rounds"]) + 1)],
+            reference_round=config["ref_round"],
         ),
         channel_order=config["channel_order"],
         fov_pattern=config["fov_pattern"],
     )
     fov = ds.fov(fov_id)
     print(f"Generating registered stack cache for {dataset} {fov_id}")
-    fov.load_raw_images()
+    fov.load_images()
     fov.rotate(angle=float(config["rotate_angle"]))
-    fov.enhance_contrast(snr_threshold=float(config["snr_threshold"]))
-    fov.global_registration()
+    fov.normalize_intensity(config=MinMaxNormalizationConfig("uint8", (0, 255), snr_threshold=float(config["snr_threshold"])))
+    fov.register(RegistrationStep(TranslationConfig()))
 
     stack_dir.mkdir(parents=True, exist_ok=True)
     for round_idx in range(1, int(config["n_rounds"]) + 1):
@@ -291,7 +293,7 @@ def generate_raw_registered_stack_cache(
         },
         "global_shifts": {
             round_name: list(shift)
-            for round_name, shift in fov.global_shifts.items()
+            for round_name, shift in ((name, tuple(-v for v in results[0].transform.correction_zyx)) for name, results in fov.registration_results.items())
         },
     }
     (stack_dir / "metadata.json").write_text(json.dumps(metadata, indent=2))

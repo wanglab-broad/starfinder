@@ -26,7 +26,7 @@ imports/parses APIs; it does not execute these optional algorithms.
 | Symptom | Diagnosis and next check |
 | --- | --- |
 | `Directory not found` or `No TIFF file found matching channel pattern` | Inspect the resolved `input_root/round/FOV` and actual filenames. {py:func}`~starfinder.io.load_round` matches `*{pattern}*.tif`; `.tiff` is also supported, but a wrong suffix/layout will not match. The synthetic generator's FOV/round layout needs the quickstart's explicit layout conversion. |
-| `min() arg is an empty sequence` while loading | An empty `channel_order` reaches the channel loader without a default. Supply a nonempty, acquisition-correct list; check `seq_channel_order` when using {py:meth}`~starfinder.dataset.STARMapDataset.from_config`. |
+| `min() arg is an empty sequence` while loading | An empty `channel_order` reaches the channel loader without a default. Supply a nonempty, acquisition-correct list; check `seq_channel_order` when using {py:func}`~starfinder.dataset.from_workflow_config`. |
 | Ambiguous-file error or unexpected channel intensities | Narrow each pattern to exactly one file, or provide explicit source paths. Check [channel order](conventions.md#channel-order) against the codebook. |
 | Channel-size mismatch warning or smaller-than-expected image | The loader crops to minimum Z/Y/X dimensions. Inspect `metadata['original_shapes']` and `metadata['cropped']`; verify acquisition/export alignment before accepting the crop. Cropping is not registration. |
 | `Expected 4D (Z, Y, X, C) image` in detection | Inspect `image.shape`. For a known single-channel ZYX volume, append a singleton channel axis with `volume[..., None]`. A YX projection or unknown axis order cannot be repaired by blindly appending dimensions. |
@@ -46,8 +46,8 @@ adaptive fractions. Python rejects the schema-accepted `local` spot mode;
 see [threshold conventions](conventions.md#spot-finding-thresholds).
 
 If filtering raises `Codebook not loaded`, call
-{py:meth}`~starfinder.dataset.STARMapDataset.load_codebook` first. If candidates
-exist but none survive, inspect `all_spots['color_seq']` alongside
+{py:meth}`~starfinder.dataset.Dataset.load_codebook` first. If candidates
+exist but none survive, inspect `fov.decoding_result.table['observed_color_sequence']` alongside
 `dataset.codebook.seq_to_gene`: check channel ordering, sequencing-round order,
 barcode orientation (`EncodingConfig.reverse_bases`), sequence lengths and optional suffix
 filtering. `M` is a tied maximum and `N` a NaN maximum; they are not valid
@@ -55,13 +55,12 @@ four-color gene calls. A codebook parser `KeyError` can indicate an unexpected
 header or unsupported nucleotide pair. Use the actual two-column `gene,barcode`
 format described by {py:func}`~starfinder.barcode.load_codebook`.
 
-`save_signal` raises `No spots in '...' to save` for an empty or absent table.
-Inspect counts **before saving** and retain diagnostic state/logs; do not invent
-molecules to satisfy the output contract. Its default columns omit extraction
-scores/colors; pass `columns=list(fov.all_spots.columns)` to save candidate
-diagnostics, as in the recipe. Calling extraction before detection or omitting
-a configured round leaves required columns/images unavailable; follow the
-[one-FOV call order](recipes.md#decode-one-fov).
+`save_spots` writes header-only CSVs for successful zero detections or all-rejected
+results. Missing processing results still raise. Export joins coordinates by
+namespace and ID, rejects duplicate/missing identities, and leaves source tables
+unchanged. Select diagnostic columns explicitly, as in the recipe. Extraction
+requires matching frame/grid metadata for every round; register moving images
+or supply verified common metadata when they are already aligned.
 
 A one-voxel overlay offset often warrants checking origins: signal CSVs are
 1-based XYZ, Python indexing is 0-based ZYX. Verify that conversion exactly
@@ -82,7 +81,7 @@ image directories. A successful DAG does not inspect TIFF content.
 | Startup `KeyError`, even with downstream flags off | Rule parsing indexes fields including `envs_path`, `fiji_path`, `additional_round` and `subset_list`. Schema-optional does not mean every script can omit a key; the minimal documentation template supplies these. |
 | Only config preparation is scheduled | Request explicit target `all`; the preparation rule occurs before it in the Snakefile. Use the [documented dry-run command](workflows.md#small-reproducible-dry-run). |
 | Missing direct/subtile/deep rule sections | Preset modes need their named sections and select them regardless of their `run` flags. See [mode selection](workflows.md#modes-and-backend-selection). |
-| Reference-round `KeyError` | Check `ref_round` belongs to the loaded rounds, and their names match exactly. In the direct API, call {py:meth}`~starfinder.dataset.LayerState.validate` explicitly; it checks membership/overlap but does not check that TIFFs exist or require a non-null reference. |
+| Reference-round `KeyError` | Check `ref_round` belongs to the loaded rounds, and their names match exactly. In the direct API, call {py:meth}`~starfinder.dataset.RoundState.validate` explicitly; it checks membership/overlap but does not check that TIFFs exist or require a non-null reference. |
 | A YAML edit or CLI override seems ineffective | Check exact key spelling and the selected wrapper. Unknown parameter fields can pass validation. Python wrappers do not forward every API option; MATLAB receives JSON serialized from the original YAML, not all merged CLI values. See [overrides](workflow-configuration.md#overrides-and-validation-boundaries). |
 | Input directories exist but the job fails | DAG inputs are round/FOV directories, not validated TIFF inventories. Check files, channels, codebook and backend compatibility. Schema validation does not check reference membership or scientific parameter suitability. |
 

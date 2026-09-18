@@ -23,7 +23,8 @@ def compare_shifts(
     Parameters
     ----------
     detected_shifts : dict[str, tuple[float, float, float]]
-        ``fov.global_shifts`` — maps round name to (dz, dy, dx).
+        Detected displacements mapped by round name to (dz, dy, dx); derive
+        these as the negative of stored translation corrections.
         Reference round is absent (no self-shift).
     ground_truth : dict
         Loaded ``ground_truth.json``.

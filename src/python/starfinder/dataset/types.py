@@ -4,57 +4,55 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TypeAlias
 
 import numpy as np
 
-# Type aliases
-ImageArray: TypeAlias = np.ndarray  # Shape: (Z, Y, X, C)
-ChannelOrder: TypeAlias = list[str]  # e.g., ["ch00", "ch01", "ch02", "ch03"]
-
+# Round categories
 
 @dataclass
-class LayerState:
-    """Tracks which rounds belong to sequencing vs other categories.
+class RoundState:
+    """Tracks which rounds belong to sequencing vs other_rounds categories.
 
     Invariants:
 
-    - ``ref`` must be in ``seq`` or ``other`` (if set)
+    - ``reference_round`` must be in ``sequencing_rounds`` or ``other_rounds`` (if set)
 
-    - A round cannot appear in both ``seq`` and ``other``
+    - A round cannot appear in both ``sequencing_rounds`` and ``other_rounds``
 
     Parameters
     ----------
-    seq : list[str]
+    sequencing_rounds : list[str]
         Sequencing round names, default new empty list.
-    other : list[str]
+    other_rounds : list[str]
         Non-sequencing round names, default new empty list.
-    ref : str | None
+    reference_round : str | None
         Reference round name or None (default). Call validate explicitly to enforce invariants.
 
     """
 
-    seq: list[str] = field(default_factory=list)
-    other: list[str] = field(default_factory=list)
-    ref: str | None = None
+    sequencing_rounds: list[str] = field(default_factory=list)
+    other_rounds: list[str] = field(default_factory=list)
+    reference_round: str | None = None
 
     @property
-    def all_layers(self) -> list[str]:
-        """All loaded layers in order (seq first, then other)."""
-        return self.seq + self.other
+    def all_rounds(self) -> list[str]:
+        """All loaded layers in order (sequencing_rounds first, then other_rounds)."""
+        return self.sequencing_rounds + self.other_rounds
 
     @property
-    def to_register(self) -> list[str]:
-        """Layers that need registration (all except ref)."""
-        return [r for r in self.all_layers if r != self.ref]
+    def moving_rounds(self) -> list[str]:
+        """Layers that need registration (all except reference_round)."""
+        return [r for r in self.all_rounds if r != self.reference_round]
 
     def validate(self) -> None:
         """Check invariants. Raises ValueError if violated."""
-        if self.ref is not None and self.ref not in self.all_layers:
-            raise ValueError(f"ref '{self.ref}' not found in seq or other")
-        overlap = set(self.seq) & set(self.other)
+        if self.reference_round is not None and self.reference_round not in self.all_rounds:
+            raise ValueError(f"reference_round '{self.reference_round}' not found in sequencing_rounds or other_rounds")
+        if len(set(self.all_rounds)) != len(self.all_rounds) or any(not isinstance(r, str) or not r for r in self.all_rounds):
+            raise ValueError("round names must be nonempty and unique")
+        overlap = set(self.sequencing_rounds) & set(self.other_rounds)
         if overlap:
-            raise ValueError(f"Rounds in both seq and other: {overlap}")
+            raise ValueError(f"Rounds in both sequencing_rounds and other_rounds: {overlap}")
 
 
 @dataclass(frozen=True)
@@ -121,43 +119,47 @@ class SubtileConfig:
 
         Tiles are ``sqrt_pieces x sqrt_pieces`` with overlap. Edge tiles
         are clamped to image boundaries. Outer edges have no overlap
-        extension. Uses height for tile size (MATLAB uses dims(1)).
+        extension. Partitions each axis independently and covers remainder pixels.
 
         Parameters
         ----------
         height : int
-            Image height Y in pixels; tile size is height // sqrt_pieces for BOTH axes.
+            Image height Y in pixels; partitions use integer proportional boundaries.
         width : int
             Image width X in pixels, used for clipping right edges.
 
         Returns
         -------
         None
-            Replaces windows in row-major order. Non-square sizes and remainders
-            are not redistributed; check window coverage before using these cases.
+            Replaces windows in row-major order. Rectangular images and remainder pixels are fully covered.
         """
         n = self.sqrt_pieces
-        tile_size = height // n
-        overlap_half = int(tile_size * self.overlap_ratio) // 2
+        if isinstance(n, bool) or not isinstance(n, int) or n < 1 or min(height, width) < n:
+            raise ValueError("positive dimensions must accommodate sqrt_pieces")
+        if not np.isfinite(self.overlap_ratio) or not 0 <= self.overlap_ratio < 1:
+            raise ValueError("overlap_ratio must be in [0, 1)")
+        tile_y, tile_x = height // n, width // n
+        overlap_y = int(tile_y * self.overlap_ratio) // 2
+        overlap_x = int(tile_x * self.overlap_ratio) // 2
 
         self.windows = []
         for row in range(n):
             for col in range(n):
                 # Base tile boundaries
-                y0 = row * tile_size
-                y1 = (row + 1) * tile_size
-                x0 = col * tile_size
-                x1 = (col + 1) * tile_size
+                y0 = row * height // n
+                y1 = (row + 1) * height // n
+                x0 = col * width // n
+                x1 = (col + 1) * width // n
 
                 # Extend by overlap (except at outer edges)
                 if row > 0:
-                    y0 -= overlap_half
+                    y0 -= overlap_y
                 if row < n - 1:
-                    y1 += overlap_half
+                    y1 += overlap_y
                 if col > 0:
-                    x0 -= overlap_half
+                    x0 -= overlap_x
                 if col < n - 1:
-                    x1 += overlap_half
+                    x1 += overlap_x
 
                 # Clamp to image boundary
                 y1 = min(y1, height)

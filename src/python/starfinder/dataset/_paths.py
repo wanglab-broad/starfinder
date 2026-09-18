@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 @dataclass(frozen=True)
-class FOVPaths:
+class _FovPaths:
     """Immutable path helper for consistent output locations.
 
     Parameters

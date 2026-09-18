@@ -1,3 +1,10 @@
+from starfinder.dataset import PipelineConfig, ExecutionConfig, RegistrationStep
+from starfinder.registration import TranslationConfig
+from starfinder.io import ImageLoadConfig
+from starfinder.preprocessing import MinMaxNormalizationConfig
+from starfinder.spot_finding import LocalMaximaConfig
+from starfinder.barcode import NeighborhoodSumConfig, WtaDecoderConfig, ReadFilterConfig
+from .coordination_helpers import spot_table, detected_shifts
 """End-to-end pipeline validation against synthetic ground truth.
 
 Validates that the full pipeline (load → enhance → register → spot_find →
@@ -20,10 +27,10 @@ class TestE2EPipelineSmokeTest:
     def test_pipeline_produces_output(self, e2e_result):
         fov, ds, gt = e2e_result
 
-        assert fov.good_spots is not None
-        assert len(fov.good_spots) > 0
-        assert "gene" in fov.good_spots.columns
-        assert fov.good_spots["gene"].nunique() >= 1
+        assert spot_table(fov, accepted=True) is not None
+        assert len(spot_table(fov, accepted=True)) > 0
+        assert "gene" in spot_table(fov, accepted=True).columns
+        assert spot_table(fov, accepted=True)["gene"].nunique() >= 1
 
 
 class TestE2EShiftRecovery:
@@ -31,7 +38,7 @@ class TestE2EShiftRecovery:
 
     def test_shift_recovery(self, e2e_result):
         fov, ds, gt = e2e_result
-        result = compare_shifts(fov.global_shifts, gt, "FOV_001", tolerance=1.5)
+        result = compare_shifts(detected_shifts(fov), gt, "FOV_001", tolerance=1.5)
 
         # Print metrics for calibration
         for round_name, info in result["per_round"].items():
@@ -48,7 +55,7 @@ class TestE2EShiftRecovery:
                 )
 
     def test_shift_log_csv_matches(self, e2e_result):
-        """Shift log CSV values must match fov.global_shifts exactly."""
+        """Shift log CSV values must match detected_shifts(fov) exactly."""
         fov, ds, gt = e2e_result
         shift_path = fov.paths.shift_log()
         assert shift_path.exists(), f"Shift log not found: {shift_path}"
@@ -56,7 +63,7 @@ class TestE2EShiftRecovery:
         df = pd.read_csv(shift_path)
         for _, row in df.iterrows():
             round_name = row["round"]
-            dz, dy, dx = fov.global_shifts[round_name]
+            dz, dy, dx = detected_shifts(fov)[round_name]
             assert row["row"] == pytest.approx(dy), (
                 f"{round_name}: CSV row={row['row']} != dy={dy}"
             )
@@ -74,7 +81,7 @@ class TestE2ESpotDetection:
     def test_spot_recall(self, e2e_result):
         fov, ds, gt = e2e_result
         result = compare_spots(
-            fov.all_spots, gt, "FOV_001", position_tolerance=5.0
+            spot_table(fov), gt, "FOV_001", position_tolerance=5.0
         )
 
         print(
@@ -100,7 +107,7 @@ class TestE2ESpotDetection:
         """All detected spot coordinates within image bounds."""
         fov, ds, gt = e2e_result
         Z, Y, X = gt["image_shape"]
-        spots = fov.all_spots
+        spots = spot_table(fov)
 
         assert (spots["z"] >= 0).all() and (spots["z"] < Z).all(), (
             f"z out of bounds: [{spots['z'].min()}, {spots['z'].max()}] vs [0, {Z})"
@@ -120,7 +127,7 @@ class TestE2EBarcodeDecoding:
         """Color sequences extracted at GT spot locations match GT."""
         fov, ds, gt = e2e_result
         result = compare_genes(
-            fov.all_spots, gt, "FOV_001", position_tolerance=5.0
+            spot_table(fov), gt, "FOV_001", position_tolerance=5.0
         )
 
         print(
@@ -132,7 +139,7 @@ class TestE2EBarcodeDecoding:
         """Decoded gene labels match ground truth for spatially matched spots."""
         fov, ds, gt = e2e_result
         result = compare_genes(
-            fov.good_spots, gt, "FOV_001", position_tolerance=5.0
+            spot_table(fov, accepted=True), gt, "FOV_001", position_tolerance=5.0
         )
 
         print(
@@ -147,9 +154,9 @@ class TestE2EBarcodeDecoding:
         )
 
         # All gene labels must be valid codebook entries
-        assert fov.good_spots["gene"].notna().all(), "NaN gene values found"
+        assert spot_table(fov, accepted=True)["gene"].notna().all(), "NaN gene values found"
         codebook_genes = set(ds.codebook.gene_to_seq.keys())
-        detected_genes = set(fov.good_spots["gene"])
+        detected_genes = set(spot_table(fov, accepted=True)["gene"])
         assert detected_genes.issubset(codebook_genes), (
             f"Unknown genes: {detected_genes - codebook_genes}"
         )
@@ -160,8 +167,8 @@ class TestE2EStreamingMode:
 
     def test_streaming_matches_batch(self, e2e_result, small_dataset, tmp_path_factory):
         """Streaming mode output must be identical to batch mode."""
-        from starfinder.dataset import STARMapDataset
-        from starfinder.dataset.types import LayerState
+        from starfinder.dataset import Dataset
+        from starfinder.dataset.types import RoundState
 
         batch_fov, _, _ = e2e_result
 
@@ -173,15 +180,15 @@ class TestE2EStreamingMode:
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.symlink_to(round_dir)
 
-        ds = STARMapDataset(
+        ds = Dataset(
             input_root=tmp_path,
             output_root=tmp_path / "output",
             dataset_id="test",
             sample_id="small",
             output_id="out",
-            layers=LayerState(
-                seq=["round1", "round2", "round3", "round4"],
-                ref="round1",
+            rounds=RoundState(
+                sequencing_rounds=["round1", "round2", "round3", "round4"],
+                reference_round="round1",
             ),
             channel_order=["ch00", "ch01", "ch02", "ch03"],
             fov_pattern="FOV_%03d",
@@ -189,19 +196,24 @@ class TestE2EStreamingMode:
         ds.load_codebook(small_dataset / "codebook.csv")
 
         stream_fov = ds.fov("FOV_001")
-        stream_fov.run_streaming(snr_threshold=5.0)
+        stream_fov.run(PipelineConfig(
+            load=ImageLoadConfig(channel_labels=ds.channel_order),
+            normalization=MinMaxNormalizationConfig('uint8', (0, 255), snr_threshold=5.0),
+            registration=(RegistrationStep(TranslationConfig()),), detection=LocalMaximaConfig(),
+            extraction=NeighborhoodSumConfig(), decoding=WtaDecoderConfig(diagnostics=True), filtering=ReadFilterConfig()),
+            execution=ExecutionConfig('streaming'))
 
         # Both must produce good spots
-        assert stream_fov.good_spots is not None
-        assert len(stream_fov.good_spots) > 0
+        assert spot_table(stream_fov, accepted=True) is not None
+        assert len(spot_table(stream_fov, accepted=True)) > 0
 
         # Sort by position for consistent comparison
         batch_spots = (
-            batch_fov.good_spots.sort_values(["z", "y", "x"])
+            spot_table(batch_fov, accepted=True).sort_values(["z", "y", "x"])
             .reset_index(drop=True)
         )
         stream_spots = (
-            stream_fov.good_spots.sort_values(["z", "y", "x"])
+            spot_table(stream_fov, accepted=True).sort_values(["z", "y", "x"])
             .reset_index(drop=True)
         )
 
@@ -217,17 +229,17 @@ class TestE2EStreamingMode:
         )
 
         # Same global shifts
-        assert set(stream_fov.global_shifts) == set(batch_fov.global_shifts)
-        for rnd in stream_fov.global_shifts:
+        assert set(detected_shifts(stream_fov)) == set(detected_shifts(batch_fov))
+        for rnd in detected_shifts(stream_fov):
             for i in range(3):
-                assert stream_fov.global_shifts[rnd][i] == pytest.approx(
-                    batch_fov.global_shifts[rnd][i]
+                assert detected_shifts(stream_fov)[rnd][i] == pytest.approx(
+                    detected_shifts(batch_fov)[rnd][i]
                 )
 
     def test_streaming_releases_memory(self, e2e_result, small_dataset, tmp_path_factory):
         """After streaming, only ref round remains in images dict."""
-        from starfinder.dataset import STARMapDataset
-        from starfinder.dataset.types import LayerState
+        from starfinder.dataset import Dataset
+        from starfinder.dataset.types import RoundState
 
         batch_fov, _, _ = e2e_result
 
@@ -239,15 +251,15 @@ class TestE2EStreamingMode:
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.symlink_to(round_dir)
 
-        ds = STARMapDataset(
+        ds = Dataset(
             input_root=tmp_path,
             output_root=tmp_path / "output",
             dataset_id="test",
             sample_id="small",
             output_id="out",
-            layers=LayerState(
-                seq=["round1", "round2", "round3", "round4"],
-                ref="round1",
+            rounds=RoundState(
+                sequencing_rounds=["round1", "round2", "round3", "round4"],
+                reference_round="round1",
             ),
             channel_order=["ch00", "ch01", "ch02", "ch03"],
             fov_pattern="FOV_%03d",
@@ -255,7 +267,12 @@ class TestE2EStreamingMode:
         ds.load_codebook(small_dataset / "codebook.csv")
 
         stream_fov = ds.fov("FOV_001")
-        stream_fov.run_streaming(snr_threshold=5.0)
+        stream_fov.run(PipelineConfig(
+            load=ImageLoadConfig(channel_labels=ds.channel_order),
+            normalization=MinMaxNormalizationConfig('uint8', (0, 255), snr_threshold=5.0),
+            registration=(RegistrationStep(TranslationConfig()),), detection=LocalMaximaConfig(),
+            extraction=NeighborhoodSumConfig(), decoding=WtaDecoderConfig(diagnostics=True), filtering=ReadFilterConfig()),
+            execution=ExecutionConfig('streaming'))
 
         # Only ref round should remain in memory
         assert set(stream_fov.images.keys()) == {"round1"}
@@ -287,7 +304,7 @@ class TestE2ESubtileRoundTrip:
         npz_path = fov.paths.subtile_dir / "subtile_data_1.npz"
         sub_fov = FOV.from_subtile(npz_path, ds, "FOV_001")
 
-        ref_image = sub_fov.images[ds.layers.ref]
+        ref_image = sub_fov.images[ds.rounds.reference_round]
         sub_spots = find_spots(ref_image, config=LocalMaximaConfig(threshold_mode="noise", threshold_value=5.0, min_distance_voxels=1), metadata=ImageMetadata("direct/test_e2e"), spot_namespace="direct/test_e2e").spots
 
         if len(sub_spots) == 0:

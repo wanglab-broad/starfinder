@@ -57,7 +57,7 @@ scheduler-enforced limits. A two-minute timeout was used during validation.
 
 The executable source is included below so the displayed recipe and the script
 being run remain the same. It uses the public
-{py:class}`~starfinder.dataset.STARMapDataset` and
+{py:class}`~starfinder.dataset.Dataset` and
 {py:class}`~starfinder.dataset.FOV` APIs.
 
 ## Input and processing configuration
@@ -86,7 +86,7 @@ The generator writes `synthetic/FOV_001/round1/ch00.tif`; the dataset loader
 expects `input/round1/FOV_001/ch00.tif`. The script copies the small TIFFs into
 that second layout. Both layouts remain available for inspection. The direct
 constructor takes resolved sample input/output roots; this example does not use
-a Snakemake YAML or `from_config` path expansion.
+a Snakemake YAML or `from_workflow_config` path expansion.
 
 The synthetic channel order above differs from the wavelength-sorted order
 `ch00, ch02, ch01, ch03` used for the real datasets. Do not transfer it to real

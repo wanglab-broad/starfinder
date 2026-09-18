@@ -482,20 +482,22 @@ def prepare_real_raw_inputs(
                 cached_raw_input_info(output_dir, dataset, fov_id),
             )
 
-    from starfinder.dataset import STARMapDataset
-    from starfinder.dataset.types import LayerState
+    from starfinder.dataset import Dataset, RegistrationStep
+    from starfinder.registration import TranslationConfig
+    from starfinder.preprocessing import MinMaxNormalizationConfig
+    from starfinder.dataset.types import RoundState
 
     t0 = time.perf_counter()
     print(f"\nPreparing raw-E2E inputs for {dataset} {fov_id}")
-    ds = STARMapDataset(
+    ds = Dataset(
         input_root=config["data_root"],
         output_root=output_dir / dataset / "raw_pipeline_cache",
         dataset_id="sample-dataset",
         sample_id=config["sample_id"],
         output_id=config["output_id"],
-        layers=LayerState(
-            seq=[f"round{i}" for i in range(1, int(config["n_rounds"]) + 1)],
-            ref=config["ref_round"],
+        rounds=RoundState(
+            sequencing_rounds=[f"round{i}" for i in range(1, int(config["n_rounds"]) + 1)],
+            reference_round=config["ref_round"],
         ),
         channel_order=config["channel_order"],
         fov_pattern=config["fov_pattern"],
@@ -504,7 +506,7 @@ def prepare_real_raw_inputs(
     fov = ds.fov(fov_id)
 
     step_info: dict[str, float] = {}
-    elapsed, rss = timed_prep_step("load", fov.load_raw_images)
+    elapsed, rss = timed_prep_step("load", fov.load_images)
     step_info["input_time_load_s"] = round(elapsed, 3)
     step_info["input_rss_after_load_mb"] = round(rss, 1)
     elapsed, rss = timed_prep_step(
@@ -514,11 +516,11 @@ def prepare_real_raw_inputs(
     step_info["input_rss_after_rotate_mb"] = round(rss, 1)
     elapsed, rss = timed_prep_step(
         "enhance",
-        lambda: fov.enhance_contrast(snr_threshold=float(config["snr_threshold"])),
+        lambda: fov.normalize_intensity(config=MinMaxNormalizationConfig("uint8", (0, 255), snr_threshold=float(config["snr_threshold"]))),
     )
     step_info["input_time_enhance_s"] = round(elapsed, 3)
     step_info["input_rss_after_enhance_mb"] = round(rss, 1)
-    elapsed, rss = timed_prep_step("registration", fov.global_registration)
+    elapsed, rss = timed_prep_step("registration", lambda: fov.register(RegistrationStep(TranslationConfig())))
     step_info["input_time_registration_s"] = round(elapsed, 3)
     step_info["input_rss_after_registration_mb"] = round(rss, 1)
     elapsed, rss = timed_prep_step(
@@ -528,9 +530,9 @@ def prepare_real_raw_inputs(
     step_info["input_time_spot_finding_s"] = round(elapsed, 3)
     step_info["input_rss_after_spot_finding_mb"] = round(rss, 1)
 
-    if fov.all_spots is None:
+    if fov.spot_result is None:
         raise ValueError(f"No spots detected for {dataset} {fov_id}")
-    spots = fov.all_spots.reset_index(drop=True).copy()
+    spots = fov.spot_result.spots.reset_index(drop=True).copy()
     if "spot_id" not in spots:
         spots.insert(0, "spot_id", np.arange(len(spots), dtype=int))
 
@@ -562,7 +564,7 @@ def prepare_real_raw_inputs(
         "tensor_shape": list(tensor.shape),
         "global_shifts": {
             round_name: list(shift)
-            for round_name, shift in fov.global_shifts.items()
+            for round_name, shift in ((name, tuple(-v for v in results[0].transform.correction_zyx)) for name, results in fov.registration_results.items())
         },
         "dataset_config": {
             key: str(value) if isinstance(value, Path) else value

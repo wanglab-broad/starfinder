@@ -12,14 +12,14 @@ import pandas as pd
 
 from starfinder.barcode import (
     Codebook, NeighborhoodSumConfig, CodebookAwareDecoderConfig,
-    decode_barcodes, extract_intensities,
+    decode_barcodes, extract_intensities, filter_reads,
 )
 from starfinder.benchmark import measure
 from starfinder.benchmark.synthetic import create_test_volume
-from starfinder.dataset import LayerState, STARMapDataset
+from starfinder.dataset import RoundState, Dataset, RegistrationStep
 from starfinder.io import ImageLoadResult, load_volume, save_volume
 from starfinder.preprocessing import normalize_intensity
-from starfinder.registration import estimate_transform, apply_transform, TranslationConfig, DemonsConfig, WarpConfig, DenseDisplacementTransform, InsufficientLandmarksError
+from starfinder.registration import estimate_transform, apply_transform, TranslationConfig, TpsConfig, DemonsConfig, WarpConfig, DenseDisplacementTransform, InsufficientLandmarksError
 from starfinder.spot_finding import find_spots, LocalMaximaConfig
 from starfinder.image import ImageMetadata
 from starfinder.preprocessing import project_image
@@ -70,16 +70,18 @@ def main(output: Path) -> None:
     assert decoded.table.loc[0, 'gene_id'] == 'GeneA'
     assert decoded.table.loc[0, 'call_type'] == 'exact'
 
-    dataset = STARMapDataset(
+    dataset = Dataset(
         input_root=output, output_root=output,
         dataset_id="example", sample_id="example", output_id="example",
-        layers=LayerState(seq=["round1", "round2"], ref="round1"),
+        rounds=RoundState(sequencing_rounds=["round1", "round2"], reference_round="round1"),
     )
     fov = dataset.fov("Position000")
-    fov.good_spots = spots.spots.assign(gene="GeneA")
-    csv = pd.read_csv(fov.save_signal())
+    fov.spot_result = spots
+    fov.decoding_result = decoded
+    fov.filtering_result = filter_reads(decoded)
+    csv = pd.read_csv(fov.save_spots())
     assert csv[["x", "y", "z"]].values.tolist() == [[11, 11, 6]]
-    assert fov.good_spots[["z", "y", "x"]].values.tolist() == [[5, 10, 10]]
+    assert fov.spot_result.spots[["z", "y", "x"]].values.tolist() == [[5, 10, 10]]
 
     if importlib.util.find_spec("SimpleITK") is None:
         try:
@@ -88,9 +90,10 @@ def main(output: Path) -> None:
             assert "SimpleITK" in str(exc)
         else:
             raise AssertionError("Expected missing SimpleITK error")
-    fov.images = {r: np.zeros_like(image) for r in dataset.layers.seq}
+    fov.images = {r: np.zeros_like(image) for r in dataset.rounds.sequencing_rounds}
+    fov.metadata = {r: ImageMetadata(r) for r in dataset.rounds.sequencing_rounds}
     try:
-        fov.local_registration(method="tps")
+        fov.register(RegistrationStep(TpsConfig(), "single-channel", "single-channel"))
     except InsufficientLandmarksError:
         pass
     else:

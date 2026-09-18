@@ -21,7 +21,7 @@ These are axis permutations, not coordinate-origin conversions. Confirm file
 metadata first; do not use `reshape` to exchange axes. For a single channel,
 the analogous permutations are `(1,2,0)` and `(2,0,1)`.
 
-{py:meth}`~starfinder.dataset.FOV.save_signal` adds one to selected x/y/z columns
+{py:meth}`~starfinder.dataset.FOV.save_spots` adds one to selected x/y/z columns
 in a copy. In-memory `(z,y,x)=(5,10,10)` becomes CSV `(x,y,z)=(11,11,6)`.
 To index a NumPy image from that CSV, select columns by name in ZYX order and
 subtract one **once**, as in the [output recipe](recipes.md#inspect-molecule-outputs).
@@ -58,8 +58,8 @@ See the [backend configuration caveat](workflow-configuration.md#top-level-field
 | Interface / stored value | Meaning and correction |
 | --- | --- |
 | Python {py:func}`~starfinder.registration.estimate_transform` | Correction `(dz,dy,dx)`; apply it using {py:func}`~starfinder.registration.apply_transform` |
-| Python {py:meth}`~starfinder.dataset.FOV.global_registration` | Apply the negative internally; returned/stored shifts remain detected displacements |
-| Python `global_shifts` / `log/gr_shifts/*.txt` | Internal ZYX vectors; log columns `row,col,z` contain detected `(dy,dx,dz)`, with no origin offset |
+| Python {py:meth}`~starfinder.dataset.FOV.register` | Estimate/apply correction transforms; results retain their typed direction |
+| Python `log/gr_shifts/*.txt` | Log columns `row,col,z` contain detected `(dy,dx,dz)`, with no origin offset |
 | MATLAB {mat:func}`DFTRegister3D` → {mat:func}`DFTApply3D` | Correction parameters in `(row,column,Z)` order; passed directly, without Python's negation |
 | Python dense local displacement field | Backward sampling: `registered[p] = moving[p + field[p]]`; pass directly to its warp function |
 

@@ -13,7 +13,7 @@ units unless a function explicitly says otherwise. Unknown calibration stays unk
 | Spot coordinates | `(N, 3)` or DataFrame `z, y, x` | Zero-based voxel indices |
 | Raw extracted intensities | `(N, C, R)` | Float64 neighborhood sums, rounds in caller-supplied order |
 | Dense displacement field | `(Z, Y, X, 3)` | Last axis `(dz, dy, dx)`, backward sampling |
-| Signal CSV | `x, y, z[, gene]` by default | One-based coordinates, written by `FOV.save_signal` |
+| Signal CSV | `x, y, z[, gene]` by default | One-based coordinates, written by `FOV.save_spots` |
 
 ## Displacement and correction
 
@@ -35,7 +35,8 @@ registered = apply_transform(moving, result.transform, config=result.application
 A `TranslationTransform.correction_zyx` moves content toward larger indices for
 positive components. Pull sampling is `moving[p - correction_zyx]`. A moving
 image displaced by `(1, -2, 3)` therefore gets correction `(-1, 2, -3)`.
-`FOV.global_shifts` and its MATLAB-compatible CSV retain detected displacements.
+`FOV.registration_results` stores correction transforms. Its MATLAB-compatible
+shift CSV retains detected displacements (the negative correction).
 
 `DenseDisplacementTransform.displacement_zyx` uses
 `registered[p] = moving[p + displacement_zyx[p]]`, in ZYX voxel-index components.
@@ -321,7 +322,7 @@ shared MATLAB-facing columns/filenames. Historical saved-tensor diagnostic
 scripts explicitly declare positional channel/round axes; missing historical
 physical geometry remains unverified. No historical notebook outputs are rerun.
 
-{meth}`starfinder.dataset.FOV.save_signal` copies selected columns, increments
+{meth}`starfinder.dataset.FOV.save_spots` copies selected columns, increments
 `x`, `y`, and `z` by one, and leaves the in-memory table unchanged. Subtile tables
 use one-based inclusive start/end coordinates and one-based tile IDs;
 {class}`starfinder.dataset.CropWindow` uses zero-based, end-exclusive slices.

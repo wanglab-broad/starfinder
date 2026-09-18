@@ -1,25 +1,27 @@
 starfinder.dataset
 ==================
 
-Stateful orchestration and value types. Methods document state mutations and output paths. Image-processing methods require loaded four-dimensional rounds unless stated otherwise. See :doc:`contracts` and :doc:`backends`.
+Dataset/FOV coordination with typed scientific stages and separate residency.
+FOV remains the public acronym. See :doc:`contracts` and :doc:`../coordination`.
 
 .. currentmodule:: starfinder.dataset
 
 .. autosummary::
    :toctree: generated
 
-   STARMapDataset
-   FOV
-   FOVPaths
-   LayerState
    CropWindow
+   Dataset
+   ExecutionConfig
+   FOV
+   PipelineConfig
+   RecoveryConfig
+   RegistrationStep
+   RoundState
    SubtileConfig
-   log_step
+   WorkflowConfig
+   from_workflow_config
 
-.. py:data:: ImageArray
+.. toctree::
+   :hidden:
 
-   Alias of ``numpy.ndarray`` for a ``(Z, Y, X, C)`` image; no runtime shape or dtype enforcement.
-
-.. py:data:: ChannelOrder
-
-   Alias of ``list[str]``: filename channel patterns in desired output channel order.
+   ../coordination

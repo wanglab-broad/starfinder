@@ -20,7 +20,7 @@ Root aliases
 subpackage page for each object's canonical reference; aliases refer to the same
 objects and are not duplicate implementations.
 
-* ``starfinder.STARMapDataset`` → :doc:`dataset`
+* ``starfinder.Dataset`` → :doc:`dataset`
 * ``starfinder.ImageMetadata`` → :doc:`image`
 * ``starfinder.FOV`` → :doc:`dataset`
 * ``starfinder.load_volume`` → :doc:`io`
@@ -137,24 +137,30 @@ diagnostics for per-round probabilities and candidate scores.
      - :doc:`barcode`
    * - ``starfinder.barcode.load_codebook``
      - :doc:`barcode`
-   * - ``starfinder.dataset.STARMapDataset``
+   * - ``starfinder.dataset.Dataset``
      - :doc:`dataset`
    * - ``starfinder.dataset.FOV``
      - :doc:`dataset`
-   * - ``starfinder.dataset.FOVPaths``
-     - :doc:`dataset`
-   * - ``starfinder.dataset.LayerState``
+   * - ``starfinder.dataset.RoundState``
      - :doc:`dataset`
    * - ``starfinder.dataset.CropWindow``
      - :doc:`dataset`
    * - ``starfinder.dataset.SubtileConfig``
      - :doc:`dataset`
-   * - ``starfinder.dataset.ImageArray``
+   * - ``starfinder.dataset.PipelineConfig``
      - :doc:`dataset`
-   * - ``starfinder.dataset.ChannelOrder``
+   * - ``starfinder.dataset.ExecutionConfig``
      - :doc:`dataset`
-   * - ``starfinder.dataset.log_step``
+   * - ``starfinder.dataset.RegistrationStep``
      - :doc:`dataset`
+   * - ``starfinder.dataset.RecoveryConfig``
+     - :doc:`dataset`
+   * - ``starfinder.dataset.WorkflowConfig``
+     - :doc:`dataset`
+   * - ``starfinder.dataset.from_workflow_config``
+     - :doc:`dataset`
+   * - ``starfinder.io.export_spots``
+     - :doc:`io`
    * - ``starfinder.registration.estimate_transform``
      - :doc:`registration`
    * - ``starfinder.registration.apply_transform``

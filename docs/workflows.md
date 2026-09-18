@@ -61,10 +61,10 @@ It calls `workflow/scripts/rsf_single_fov.py` or `.m` respectively.
 
 | Stage | Python script operation | MATLAB script operation | Data transition |
 | --- | --- | --- | --- |
-| load | `STARMapDataset.from_config`, `load_codebook`, `FOV.load_raw_images` | `STARMapDataset`, `LoadRawImages` | Round/FOV channel stacks → in-memory images; Python loads the codebook before processing |
+| load | `from_workflow_config`, `load_codebook`, `FOV.load_images` | `STARMapDataset`, `LoadRawImages` | Round/FOV channel stacks → in-memory images; Python loads the codebook before processing |
 | rotate | `FOV.rotate` if angle is nonzero | `LoadRawImages(..., 'rotate_angle', ...)` | Rotated image arrays; no standalone stage file |
-| enhance | Optional `enhance_contrast`, `hist_equalize`, `morph_recon` | `EnhanceContrast`, `HistEqualize`, `MorphRecon` | Preprocessed arrays |
-| registration | Optional `global_registration`, `local_registration` | `GlobalRegistration`, `LocalRegistration` | Aligned arrays and reference image |
+| enhance | Optional `normalize_intensity`, `match_histogram`, `reconstruct_background` | `EnhanceContrast`, `HistEqualize`, `MorphRecon` | Preprocessed arrays |
+| registration | Ordered `register(RegistrationStep(...))` | `GlobalRegistration`, `LocalRegistration` | Aligned arrays and reference image |
 | spot_finding | `find_spots` | `SpotFinding` | Candidate coordinates |
 | extraction | `extract_intensities` / `decode_barcodes` | `ReadsExtraction` | Per-round intensities/color calls |
 | filtration | `filter_reads` using loaded codebook | `LoadCodebook`, `ReadsFiltration` | Decoded, filtered molecules |
@@ -75,8 +75,8 @@ The direct rule declares these outputs, relative to OUTPUT:
 - `images/ref_merged/{fovID}.tif`;
 - `signal/{fovID}_goodSpots.csv`, containing 1-based `x,y,z` and `gene`.
 
-The Python script writes them using `save_ref_merged`, `save_signal`, `save_log`
-and `save_score_log`. MATLAB also writes preview images. Benchmarked rules write
+The Python script writes them using `save_reference_image`, `save_spots`, `save_processing_log`
+and `save_diagnostics`. MATLAB also writes preview images. Benchmarked rules write
 `log/benchmark/{rule}/{fovID}[_{n_subtile}].txt`. A reference projection is not a
 segmentation label image, and a goodSpots CSV is not a cell-by-gene matrix.
 

@@ -10,9 +10,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from starfinder.dataset import FOV, LayerState, STARMapDataset
+from starfinder.dataset import RegistrationStep, FOV, RoundState, Dataset
 from starfinder.io import load_round, load_volume, save_volume
-from starfinder.registration import estimate_transform, apply_transform, TranslationConfig
+from starfinder.registration import TranslationConfig, estimate_transform, apply_transform, TranslationConfig
 from starfinder.spot_finding import find_spots, LocalMaximaConfig
 from starfinder.image import ImageMetadata
 
@@ -60,42 +60,42 @@ def detect_spots(volume: np.ndarray) -> None:
 
 
 def decode_fov(quickstart: Path, output: Path) -> FOV:
-    dataset = STARMapDataset(
+    dataset = Dataset(
         input_root=quickstart / "input", output_root=output / "results",
         dataset_id="tiny", sample_id="synthetic", output_id="recipes",
-        layers=LayerState(seq=["round1", "round2", "round3", "round4"], ref="round1"),
+        rounds=RoundState(sequencing_rounds=["round1", "round2", "round3", "round4"], reference_round="round1"),
         channel_order=["ch00", "ch01", "ch02", "ch03"],
     )
-    dataset.layers.validate()
+    dataset.rounds.validate()
     dataset.load_codebook(quickstart / "synthetic" / "codebook.csv", reverse_bases=True)
     fov = dataset.fov("FOV_001")
-    fov.load_raw_images()
+    fov.load_images()
     assert all(image.shape == (8, 128, 128, 4) for image in fov.images.values())
-    fov.global_registration(ref_img="merged", mov_img="merged", save_shifts=True)
+    fov.register(RegistrationStep(TranslationConfig()))
     fov.find_spots(config=LocalMaximaConfig(threshold_mode="noise", threshold_value=5.0))
     fov.extract_intensities(config=NeighborhoodSumConfig((1, 2, 2)))
     fov.decode_barcodes().filter_reads()
-    assert 0 < len(fov.good_spots) <= len(fov.all_spots)
-    assert set(fov.good_spots["gene"]) <= set(dataset.codebook.genes)
-    print(f"FOV_001: {len(fov.all_spots)} detected, {len(fov.good_spots)} retained")
+    assert 0 < len(fov.filtering_result.accepted) <= len(fov.spot_result.spots)
+    assert set(fov.filtering_result.accepted["gene_id"]) <= set(dataset.codebook.genes)
+    print(f"FOV_001: {len(fov.spot_result.spots)} detected, {len(fov.filtering_result.accepted)} retained")
     return fov
 
 
 def inspect_outputs(fov: FOV) -> dict:
-    all_path = fov.save_signal("allSpots", columns=list(fov.all_spots.columns))
-    good_path = fov.save_signal("goodSpots")
-    log_path = fov.save_log()
+    all_path = fov.save_spots("allSpots", columns=["spot_namespace", "spot_id", "x", "y", "z", "gene", "color_seq", "call_status"])
+    good_path = fov.save_spots("goodSpots")
+    log_path = fov.save_processing_log()
     candidates = pd.read_csv(all_path, dtype={"color_seq": str})
     molecules = pd.read_csv(good_path)
     assert list(molecules.columns) == ["x", "y", "z", "gene"]
     assert candidates["color_seq"].str.fullmatch(r"[1-4MN]{4}").all()
-    assert len(candidates) == len(fov.all_spots)
-    assert len(molecules) == len(fov.good_spots)
+    assert len(candidates) == len(fov.spot_result.spots)
+    assert len(molecules) == len(fov.filtering_result.accepted)
     # CSV columns are Cartesian XYZ, but NumPy indexing requires zero-based ZYX.
     coordinates = molecules[["z", "y", "x"]].to_numpy(dtype=int) - 1
-    np.testing.assert_array_equal(coordinates, fov.good_spots[["z", "y", "x"]])
+    np.testing.assert_array_equal(coordinates, fov.spot_result.spots.merge(fov.filtering_result.accepted[["spot_id"]], on="spot_id", validate="one_to_one")[["z", "y", "x"]])
     assert (coordinates >= 0).all() and (coordinates < (8, 128, 128)).all()
-    reference = fov.images[fov.layers.ref]
+    reference = fov.images[fov.rounds.reference_round]
     intensities = reference[coordinates[:, 0], coordinates[:, 1], coordinates[:, 2], :]
     assert intensities.shape == (len(molecules), 4)
     print(molecules.head().to_string(index=False))

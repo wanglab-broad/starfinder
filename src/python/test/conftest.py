@@ -1,3 +1,6 @@
+from starfinder.preprocessing import MinMaxNormalizationConfig
+from starfinder.dataset import RegistrationStep
+from starfinder.registration import TranslationConfig
 """Pytest fixtures for STARfinder tests."""
 
 from starfinder.spot_finding import LocalMaximaConfig
@@ -68,10 +71,10 @@ def e2e_result(small_dataset: Path, small_ground_truth: dict, tmp_path_factory):
 
     Session-scoped: runs once, shared across all e2e tests.
     Pipeline: load → enhance → global_reg → spot_find →
-    reads_extract → reads_filter → save_signal.
+    reads_extract → reads_filter → save_spots.
     """
-    from starfinder.dataset import STARMapDataset
-    from starfinder.dataset.types import LayerState
+    from starfinder.dataset import Dataset
+    from starfinder.dataset.types import RoundState
 
     tmp_path = tmp_path_factory.mktemp("e2e")
 
@@ -83,15 +86,15 @@ def e2e_result(small_dataset: Path, small_ground_truth: dict, tmp_path_factory):
             target.parent.mkdir(parents=True, exist_ok=True)
             target.symlink_to(round_dir)
 
-    ds = STARMapDataset(
+    ds = Dataset(
         input_root=tmp_path,
         output_root=tmp_path / "output",
         dataset_id="test",
         sample_id="small",
         output_id="out",
-        layers=LayerState(
-            seq=["round1", "round2", "round3", "round4"],
-            ref="round1",
+        rounds=RoundState(
+            sequencing_rounds=["round1", "round2", "round3", "round4"],
+            reference_round="round1",
         ),
         channel_order=["ch00", "ch01", "ch02", "ch03"],
         fov_pattern="FOV_%03d",
@@ -100,12 +103,13 @@ def e2e_result(small_dataset: Path, small_ground_truth: dict, tmp_path_factory):
 
     fov = ds.fov("FOV_001")
     (
-        fov.load_raw_images()
-        .enhance_contrast(snr_threshold=5.0)
-        .global_registration().find_spots(config=LocalMaximaConfig())
+        fov.load_images()
+        .normalize_intensity(config=MinMaxNormalizationConfig('uint8', (0, 255), snr_threshold=5.0))
+        .register(RegistrationStep(TranslationConfig())).find_spots(config=LocalMaximaConfig())
         .extract_intensities()
         .decode_barcodes().filter_reads()
     )
-    fov.save_signal(slot="goodSpots")
+    fov.save_spots(slot="goodSpots")
+    fov.save_processing_log()
 
     return fov, ds, small_ground_truth

@@ -1,3 +1,4 @@
+from .coordination_helpers import spot_table, detected_shifts
 """Bounded detector policy, typed schema and identity acceptance cases."""
 from dataclasses import replace
 
@@ -115,20 +116,20 @@ def test_ids_survive_subset_join_and_reject_collision():
 
 
 def test_fov_namespace_and_downstream_identity(tmp_path):
-    from starfinder.dataset import STARMapDataset, LayerState
-    dataset = STARMapDataset(tmp_path, tmp_path, 'dataset', 'sample', 'out',
-                            layers=LayerState(seq=['round1'], ref='round1'),
+    from starfinder.dataset import Dataset, RoundState
+    dataset = Dataset(tmp_path, tmp_path, 'dataset', 'sample', 'out',
+                            rounds=RoundState(sequencing_rounds=['round1'], reference_round='round1'),
                             channel_order=['a','b','c','d'])
     fov = dataset.fov('FOV')
     image = np.zeros((5, 9, 9, 4), dtype=np.uint8)
     image[2, 4, 4, 0] = 100
     fov.images['round1'] = image
     fov.find_spots()
-    ids = fov.all_spots.spot_id.copy()
+    ids = spot_table(fov).spot_id.copy()
     namespace = fov.spot_result.spot_namespace
     fov.extract_intensities()
-    pd.testing.assert_series_equal(ids, fov.all_spots.spot_id)
-    assert fov.all_spots.spot_namespace.tolist() == [namespace]
+    pd.testing.assert_series_equal(ids, spot_table(fov).spot_id)
+    assert spot_table(fov).spot_namespace.tolist() == [namespace]
     from starfinder.barcode import Codebook
     dataset.codebook = Codebook(pd.DataFrame({'gene_id':['gene'],'color_sequence':['1']}),
                                ('round1',), ('a','b','c','d'))
