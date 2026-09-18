@@ -64,9 +64,9 @@ Python expects `input_root/round/FOV/*ch*.tif`. MATLAB's corresponding entry is
 
 ## Register two volumes
 
-{py:func}`~starfinder.registration.phase_correlate` measures displacement;
-{py:func}`~starfinder.registration.apply_shift` applies a translation. Here
-`fixed` is the volume returned by `image_io`.
+{py:func}`~starfinder.registration.estimate_transform` returns a correction
+transform and matching application config. Apply that result with
+{py:func}`~starfinder.registration.apply_transform`:
 
 ```{literalinclude} examples/recipes.py
 :language: python
@@ -76,7 +76,7 @@ Python expects `input_root/round/FOV/*ch*.tif`. MATLAB's corresponding entry is
 Expected: detected `(1,-2,3)`, correction `(-1,2,-3)`, exact equality after
 correction because the single spot stays away from edges. Real data may lose
 edge content; equality is not a general quality criterion.
-{py:func}`~starfinder.registration.register_volume` performs the negation
+{py:func}`~starfinder.registration.estimate_transform` supplies the correction
 internally. Supply equal-shaped 3D volumes; select or merge channels explicitly
 before calling a single-channel function.
 

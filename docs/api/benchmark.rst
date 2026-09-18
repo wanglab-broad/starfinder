@@ -13,6 +13,7 @@ Measurement, reporting, registration evaluation, and data helpers. Timings are s
    benchmark
    measure
    run_comparison
+   run_benchmark
    RegistrationBenchmarkRunner
    RegistrationResult
    BenchmarkPair

@@ -11,12 +11,7 @@ from starfinder.preprocessing import (
     reconstruct_background,
     filter_tophat,
 )
-from starfinder.registration import (
-    apply_shift,
-    phase_correlate,
-    phase_correlate_skimage,
-    register_volume,
-)
+from starfinder.registration import estimate_transform, apply_transform
 from starfinder.spot_finding import find_spots
 from starfinder.preprocessing import project_image
 
@@ -33,10 +28,8 @@ __all__ = [
     "save_volume",
     # Registration module and functions
     "registration",
-    "phase_correlate",
-    "apply_shift",
-    "register_volume",
-    "phase_correlate_skimage",
+    "estimate_transform",
+    "apply_transform",
     # Spot finding
     "spot_finding",
     "find_spots",

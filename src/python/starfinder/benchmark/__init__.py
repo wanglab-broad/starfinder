@@ -62,7 +62,10 @@ from starfinder.benchmark.validation import (
     e2e_summary,
 )
 
+from ._registration import run_benchmark
+
 __all__ = [
+    "run_benchmark",
     # Core
     "BenchmarkResult",
     "BenchmarkSuite",

@@ -11,7 +11,7 @@ import pandas as pd
 
 from starfinder.dataset import FOV, LayerState, STARMapDataset
 from starfinder.io import load_round, load_volume, save_volume
-from starfinder.registration import apply_shift, phase_correlate
+from starfinder.registration import estimate_transform, apply_transform, TranslationConfig
 from starfinder.spot_finding import find_spots, LocalMaximaConfig
 from starfinder.image import ImageMetadata
 
@@ -34,10 +34,11 @@ def image_io(output: Path) -> np.ndarray:
 
 
 def register_volumes(fixed: np.ndarray) -> None:
-    moving = apply_shift(fixed, (1, -2, 3))
+    moving = np.roll(fixed, (1, -2, 3), axis=(0, 1, 2))
     assert fixed.ndim == moving.ndim == 3 and fixed.shape == moving.shape
-    detected = phase_correlate(fixed, moving, workers=1)
-    corrected = apply_shift(moving, tuple(-s for s in detected))
+    result = estimate_transform(fixed, moving, config=TranslationConfig(), reference_metadata=ImageMetadata("reference"), moving_metadata=ImageMetadata("moving"))
+    detected = tuple(-x for x in result.transform.correction_zyx)
+    corrected = apply_transform(moving, result.transform, config=result.application_config)
     assert detected == (1, -2, 3)
     np.testing.assert_array_equal(corrected, fixed)
     print("Registration: detected", detected, "; correction (-1, 2, -3)")

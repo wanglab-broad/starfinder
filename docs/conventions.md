@@ -57,15 +57,15 @@ See the [backend configuration caveat](workflow-configuration.md#top-level-field
 
 | Interface / stored value | Meaning and correction |
 | --- | --- |
-| Python {py:func}`~starfinder.registration.phase_correlate` | Detected displacement `(dz,dy,dx)`; negate it for {py:func}`~starfinder.registration.apply_shift` |
-| Python {py:func}`~starfinder.registration.register_volume` and {py:meth}`~starfinder.dataset.FOV.global_registration` | Apply the negative internally; returned/stored shifts remain detected displacements |
+| Python {py:func}`~starfinder.registration.estimate_transform` | Correction `(dz,dy,dx)`; apply it using {py:func}`~starfinder.registration.apply_transform` |
+| Python {py:meth}`~starfinder.dataset.FOV.global_registration` | Apply the negative internally; returned/stored shifts remain detected displacements |
 | Python `global_shifts` / `log/gr_shifts/*.txt` | Internal ZYX vectors; log columns `row,col,z` contain detected `(dy,dx,dz)`, with no origin offset |
 | MATLAB {mat:func}`DFTRegister3D` → {mat:func}`DFTApply3D` | Correction parameters in `(row,column,Z)` order; passed directly, without Python's negation |
 | Python dense local displacement field | Backward sampling: `registered[p] = moving[p + field[p]]`; pass directly to its warp function |
 
 For a moving volume displaced by `(1,-2,3)`, Python detects `(1,-2,3)` and applies
 `(-1,2,-3)`. The [registration recipe](recipes.md#register-two-volumes) verifies
-this with an interior spot. Positive `apply_shift` components move content
+this with an interior spot. Positive translation correction components move content
 toward larger indices; wrapped edges are zeroed. Lost edge content cannot be
 recovered. Dense fields have shape `(Z,Y,X,3)` with components `(dz,dy,dx)`;
 they are not global translation arguments. MATLAB behavior here is source-checked,

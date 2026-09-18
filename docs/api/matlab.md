@@ -92,8 +92,8 @@ is implied by this reference.
 | Load / output | {mat:func}`LoadImageStacks`, {mat:func}`LoadMultipageTiff`, {mat:func}`SaveSingleStack` | {py:func}`starfinder.io.load_round`, {py:func}`starfinder.io.load_volume`, {py:func}`starfinder.io.save_volume` |
 | Enhance | {mat:func}`MinMaxNorm`, {mat:func}`MorphologicalReconstruction` | {py:func}`starfinder.preprocessing.normalize_intensity`, {py:func}`starfinder.preprocessing.reconstruct_background` |
 | Histogram / background | {mat:meth}`STARMapDataset.HistEqualize`, {mat:meth}`STARMapDataset.Tophat` | {py:func}`starfinder.preprocessing.match_histogram`, {py:func}`starfinder.preprocessing.filter_tophat` |
-| Global registration | {mat:func}`DFTRegister3D`, {mat:func}`DFTApply3D` | {py:func}`starfinder.registration.phase_correlate`, {py:func}`starfinder.registration.apply_shift` |
-| Local registration | {mat:func}`RegisterImagesLocal` | {py:func}`starfinder.registration.demons_register` |
+| Global registration | {mat:func}`DFTRegister3D`, {mat:func}`DFTApply3D` | {py:func}`starfinder.registration.estimate_transform`, {py:func}`starfinder.registration.apply_transform` |
+| Local registration | {mat:func}`RegisterImagesLocal` | {py:func}`starfinder.registration.estimate_transform` |
 | Spot finding | {mat:func}`SpotFindingMax3D` | {py:func}`starfinder.spot_finding.find_spots` |
 | Extraction | {mat:func}`ExtractFromLocation` | {py:func}`starfinder.barcode.extract_from_location` |
 | Codebook / decoding | {mat:func}`LoadCodebook`, {mat:func}`EncodeBases`, {mat:func}`DecodeCS` | {py:func}`starfinder.barcode.load_codebook`, {py:func}`starfinder.barcode.encode_bases`, {py:func}`starfinder.barcode.decode_color_seq` |
@@ -101,9 +101,7 @@ is implied by this reference.
 | Preview | {mat:func}`MakeProjections`, {mat:func}`MakeMontage`, {mat:func}`PlotCentroids` | [FOV output and preview methods](generated/starfinder.dataset.FOV.rst); no direct exported montage helper |
 
 MATLAB passes the correction parameters from `DFTRegister3D` directly to
-`DFTApply3D` in `(row, column, Z)` order. Python `phase_correlate` returns the
-detected displacement in `(dz, dy, dx)` order and `apply_shift` requires its
-negative to correct alignment. Never transfer a shift vector without checking
+`DFTApply3D` in `(row, column, Z)` order. Python `estimate_transform` returns the correction in `(dz, dy, dx)` order; `apply_transform` applies it directly to correct alignment. Never transfer a shift vector without checking
 both axis order and sign. See [Python contracts](contracts.md).
 
 ## Runtime requirements and validation limits

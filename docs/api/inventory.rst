@@ -26,11 +26,9 @@ objects and are not duplicate implementations.
 * ``starfinder.load_volume`` → :doc:`io`
 * ``starfinder.load_round`` → :doc:`io`
 * ``starfinder.save_volume`` → :doc:`io`
+* ``starfinder.estimate_transform`` → :doc:`registration`
+* ``starfinder.apply_transform`` → :doc:`registration`
 * ``starfinder.registration`` → :doc:`registration` (module)
-* ``starfinder.phase_correlate`` → :doc:`registration`
-* ``starfinder.apply_shift`` → :doc:`registration`
-* ``starfinder.register_volume`` → :doc:`registration`
-* ``starfinder.phase_correlate_skimage`` → :doc:`registration`
 * ``starfinder.spot_finding`` → :doc:`spot_finding` (module)
 * ``starfinder.find_spots`` → :doc:`spot_finding`
 * ``starfinder.barcode`` → :doc:`barcode` (module)
@@ -60,6 +58,10 @@ objects documented here.
 
    * - Export / explicit submodule interface
      - Reference page
+   * - ``starfinder.image.InvalidImageError``
+     - :doc:`image`
+   * - ``starfinder.image.IncompatibleGeometryError``
+     - :doc:`image`
    * - ``starfinder.image.ImageMetadata``
      - :doc:`image`
    * - ``starfinder.io.ImageConversionConfig``
@@ -94,44 +96,6 @@ objects documented here.
      - :doc:`preprocessing`
    * - ``starfinder.preprocessing.filter_tophat``
      - :doc:`preprocessing`
-   * - ``starfinder.registration.phase_correlate``
-     - :doc:`registration`
-   * - ``starfinder.registration.apply_shift``
-     - :doc:`registration`
-   * - ``starfinder.registration.register_volume``
-     - :doc:`registration`
-   * - ``starfinder.registration.phase_correlate_skimage``
-     - :doc:`registration`
-   * - ``starfinder.registration.demons_register``
-     - :doc:`registration`
-   * - ``starfinder.registration.apply_deformation``
-     - :doc:`registration`
-   * - ``starfinder.registration.register_volume_local``
-     - :doc:`registration`
-   * - ``starfinder.registration.matlab_compatible_config``
-     - :doc:`registration`
-   * - ``starfinder.registration.tps_register``
-     - :doc:`registration`
-   * - ``starfinder.registration.register_volume_tps``
-     - :doc:`registration`
-   * - ``starfinder.registration.cpd_register``
-     - :doc:`registration`
-   * - ``starfinder.registration.register_volume_cpd``
-     - :doc:`registration`
-   * - ``starfinder.registration.sanitize_displacement_field``
-     - :doc:`registration`
-   * - ``starfinder.registration.normalized_cross_correlation``
-     - :doc:`registration`
-   * - ``starfinder.registration.structural_similarity``
-     - :doc:`registration`
-   * - ``starfinder.registration.spot_colocalization``
-     - :doc:`registration`
-   * - ``starfinder.registration.spot_matching_accuracy``
-     - :doc:`registration`
-   * - ``starfinder.registration.registration_quality_report``
-     - :doc:`registration`
-   * - ``starfinder.registration.print_quality_report``
-     - :doc:`registration`
    * - ``starfinder.spot_finding.LocalMaximaConfig``
      - :doc:`spot_finding`
    * - ``starfinder.spot_finding.NoiseLandmarkConfig``
@@ -186,14 +150,44 @@ objects documented here.
      - :doc:`dataset`
    * - ``starfinder.dataset.SubtileConfig``
      - :doc:`dataset`
-   * - ``starfinder.dataset.Shift3D``
-     - :doc:`dataset`
    * - ``starfinder.dataset.ImageArray``
      - :doc:`dataset`
    * - ``starfinder.dataset.ChannelOrder``
      - :doc:`dataset`
    * - ``starfinder.dataset.log_step``
      - :doc:`dataset`
+   * - ``starfinder.registration.estimate_transform``
+     - :doc:`registration`
+   * - ``starfinder.registration.apply_transform``
+     - :doc:`registration`
+   * - ``starfinder.registration.TranslationConfig``
+     - :doc:`registration`
+   * - ``starfinder.registration.DemonsConfig``
+     - :doc:`registration`
+   * - ``starfinder.registration.TpsConfig``
+     - :doc:`registration`
+   * - ``starfinder.registration.CpdConfig``
+     - :doc:`registration`
+   * - ``starfinder.registration.WarpConfig``
+     - :doc:`registration`
+   * - ``starfinder.registration.TranslationTransform``
+     - :doc:`registration`
+   * - ``starfinder.registration.DenseDisplacementTransform``
+     - :doc:`registration`
+   * - ``starfinder.registration.RegistrationResult``
+     - :doc:`registration`
+   * - ``starfinder.registration.RegistrationDiagnostics``
+     - :doc:`registration`
+   * - ``starfinder.registration.InvalidRegistrationConfigError``
+     - :doc:`registration`
+   * - ``starfinder.registration.RegistrationEstimationError``
+     - :doc:`registration`
+   * - ``starfinder.registration.InsufficientLandmarksError``
+     - :doc:`registration`
+   * - ``starfinder.registration.RegistrationBackendUnavailableError``
+     - :doc:`registration`
+   * - ``starfinder.registration.UnsupportedTransformOperationError``
+     - :doc:`registration`
    * - ``starfinder.benchmark.BenchmarkResult``
      - :doc:`benchmark`
    * - ``starfinder.benchmark.BenchmarkSuite``
@@ -201,6 +195,8 @@ objects documented here.
    * - ``starfinder.benchmark.benchmark``
      - :doc:`benchmark`
    * - ``starfinder.benchmark.measure``
+     - :doc:`benchmark`
+   * - ``starfinder.benchmark.run_benchmark``
      - :doc:`benchmark`
    * - ``starfinder.benchmark.run_comparison``
      - :doc:`benchmark`
@@ -286,34 +282,6 @@ objects documented here.
      - :doc:`benchmark.synthetic`
    * - ``starfinder.preprocessing.project_image``
      - :doc:`preprocessing`
-   * - ``starfinder.registration.pointset.detect_and_match_spots``
-     - :doc:`registration.pointset`
-   * - ``starfinder.registration.pointset.subsample_control_points``
-     - :doc:`registration.pointset`
-   * - ``starfinder.registration.pointset.tps_displacement_field``
-     - :doc:`registration.pointset`
-   * - ``starfinder.registration.pointset.apply_tps_deformation``
-     - :doc:`registration.pointset`
-   * - ``starfinder.registration.pointset.cpd_affine``
-     - :doc:`registration.pointset`
-   * - ``starfinder.registration.pointset.cpd_nonrigid``
-     - :doc:`registration.pointset`
-   * - ``starfinder.registration.pointset.cpd_displacement_field``
-     - :doc:`registration.pointset`
-   * - ``starfinder.registration.pyramid.butterworth_3d``
-     - :doc:`registration.pyramid`
-   * - ``starfinder.registration.pyramid.antialias_resize``
-     - :doc:`registration.pyramid`
-   * - ``starfinder.registration.pyramid.pad_for_pyramiding``
-     - :doc:`registration.pyramid`
-   * - ``starfinder.registration.pyramid.crop_padding``
-     - :doc:`registration.pyramid`
-   * - ``starfinder.registration.benchmark.benchmark_registration``
-     - :doc:`registration.benchmark`
-   * - ``starfinder.registration.benchmark.run_benchmark``
-     - :doc:`registration.benchmark`
-   * - ``starfinder.registration.benchmark.print_benchmark_table``
-     - :doc:`registration.benchmark`
 
 Additional type alias
 ---------------------
@@ -324,12 +292,8 @@ Additional type alias
 Internal and deprecated interfaces
 ----------------------------------
 
-* ``starfinder.registration.benchmark.run_benchmark`` is explicitly deprecated
-  in source; use ``benchmark_registration`` in that module, or the current
-  benchmark runner. No other exported interface carries a deprecation marker.
-* Underscored functions/modules, including implementation routines in
-  ``registration._skimage_backend``, are internal. Its deliberately re-exported
-  ``phase_correlate_skimage`` function is public and covered above.
+* Registration numerical modules are private. Removed public modules and
+  wrappers have no aliases; use ``estimate_transform`` and ``apply_transform``.
 * ``starfinder.benchmark.__main__.main`` implements the ``starfinder-generate``
   CLI; it is not a Python call interface. Its parser is available through
   ``uv run python -m starfinder.benchmark --help``.

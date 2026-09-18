@@ -16,7 +16,7 @@ from starfinder.io import ImageLoadConfig
 from starfinder.preprocessing import (MinMaxNormalizationConfig, HistogramMatchingConfig, ReconstructionConfig, TophatConfig, ProjectionConfig)
 from starfinder.dataset.logging import log_step
 from starfinder.dataset.paths import FOVPaths
-from starfinder.dataset.types import Codebook, ImageArray, Shift3D
+from starfinder.dataset.types import Codebook, ImageArray
 
 if TYPE_CHECKING:
     from starfinder.dataset.dataset import STARMapDataset
@@ -42,7 +42,7 @@ class FOV:
         Round to (Z,Y,X,C) numeric array mapping; default empty dict.
     metadata : dict[str, ImageMetadata]
         Round to loader metadata mapping; default empty dict.
-    global_shifts : dict[str, Shift3D]
+    global_shifts : dict[str, tuple[float, float, float]]
         Round to detected (dz,dy,dx) voxel displacement; default empty dict.
     local_registered : set[str]
         Names of locally registered rounds; default empty set.
@@ -63,7 +63,7 @@ class FOV:
     # Mutable state
     images: dict[str, ImageArray] = field(default_factory=dict)
     metadata: dict[str, ImageMetadata] = field(default_factory=dict)
-    global_shifts: dict[str, Shift3D] = field(default_factory=dict)
+    global_shifts: dict[str, tuple[float, float, float]] = field(default_factory=dict)
     local_registered: set[str] = field(default_factory=set)
     spot_result: SpotFindingResult | None = None
     subtile_id: int | None = None
@@ -419,9 +419,9 @@ class FOV:
         Notes
         -----
         global_shifts and the row/col/z log contain detected displacement, not
-        the correction translation. See :func:`starfinder.registration.register_volume`.
+        the correction translation. See :func:`starfinder.registration.estimate_transform`.
         """
-        from starfinder.registration import register_volume
+        from starfinder.registration import estimate_transform, apply_transform, TranslationConfig
 
         if layers_to_register is None:
             layers_to_register = self.layers.to_register
@@ -433,9 +433,12 @@ class FOV:
             if round_name not in self.images:
                 continue
             mov_3d = self._make_ref_3d(round_name, mov_img, ref_channel)
-            registered, shifts = register_volume(
-                self.images[round_name], ref_3d, mov_3d
-            )
+            result = estimate_transform(ref_3d, mov_3d, config=TranslationConfig(),
+                reference_metadata=self.metadata.get(ref_round, ImageMetadata(f"{self.fov_id}/{ref_round}")),
+                moving_metadata=self.metadata.get(round_name, ImageMetadata(f"{self.fov_id}/{round_name}")))
+            registered = apply_transform(self.images[round_name], result.transform, config=result.application_config)
+            shifts = tuple(-x for x in result.transform.correction_zyx)
+            self.metadata[round_name] = result.transform.reference_metadata
             self.images[round_name] = registered
             self.global_shifts[round_name] = shifts
 
@@ -469,7 +472,6 @@ class FOV:
         ref_channel: int = 0,
         layers_to_register: list[str] | None = None,
         method: str = "demons",
-        fallback: bool = True,
         boundary_mode: str = "constant",
         # Demons parameters
         iterations: list[int] | None = None,
@@ -502,8 +504,8 @@ class FOV:
         - ``"cpd"``: Coherent Point Drift — simultaneous correspondence and
           transformation via EM on GMM. No SimpleITK dependency.
 
-        When ``method="tps"`` or ``method="cpd"`` and ``fallback=True``,
-        falls back to demons on any ValueError from that registration call.
+        No automatic fallback occurs. Invalid inputs/configuration and estimator
+        failures propagate with their specific exception types.
 
         Displacement fields are ephemeral (applied then discarded).
 
@@ -521,8 +523,6 @@ class FOV:
             Rounds to register; None uses all configured non-reference layers. Unloaded rounds are skipped.
         method : str
             Local registration backend: demons, diffeomorphic, symmetric, fast_symmetric, tps, or cpd.
-        fallback : bool
-            For TPS/CPD, True catches any ValueError and retries demons; False propagates it. Fallback requires SimpleITK.
         iterations : list[int] | None
             Demons iterations per pyramid level; None uses [100, 50, 25].
         smoothing_sigma : float
@@ -570,84 +570,29 @@ class FOV:
                 continue
             mov_3d = self.images[round_name][:, :, :, ref_channel]
 
+            from starfinder.registration import (estimate_transform, apply_transform,
+                CpdConfig, TpsConfig, DemonsConfig)
             if method == "cpd":
-                try:
-                    from starfinder.registration import register_volume_cpd
-
-                    registered, _ = register_volume_cpd(
-                        self.images[round_name],
-                        ref_3d,
-                        mov_3d,
-                        boundary_mode=boundary_mode,
-                        detection_threshold=detection_threshold,
-                        max_control_points=max_control_points,
-                        beta=beta,
-                        lmbda=lmbda,
-                        w=cpd_w,
-                        affine_first=affine_first,
-                        grid_spacing=grid_spacing,
-                        candidate_radius=candidate_radius,
-                        k_neighbors=k_neighbors,
-                    )
-                except ValueError:
-                    if not fallback:
-                        raise
-                    # Fall back to demons
-                    from starfinder.registration import register_volume_local
-
-                    registered, _ = register_volume_local(
-                        self.images[round_name],
-                        ref_3d,
-                        mov_3d,
-                        iterations=iterations,
-                        smoothing_sigma=smoothing_sigma,
-                        pyramid_mode=pyramid_mode,
-                        boundary_mode=boundary_mode,
-                    )
+                config = CpdConfig(detection_noise_sigma=detection_threshold,
+                    max_control_points=max_control_points, kernel_width_voxels=beta,
+                    regularization_weight=lmbda, outlier_fraction=cpd_w,
+                    affine_first=affine_first, grid_spacing_voxels=grid_spacing,
+                    candidate_radius_voxels=candidate_radius, neighbors_per_anchor=k_neighbors)
             elif method == "tps":
-                try:
-                    from starfinder.registration import register_volume_tps
-
-                    registered, _ = register_volume_tps(
-                        self.images[round_name],
-                        ref_3d,
-                        mov_3d,
-                        boundary_mode=boundary_mode,
-                        detection_threshold=detection_threshold,
-                        match_distance=match_distance,
-                        min_matches=min_matches,
-                        max_control_points=max_control_points,
-                        smoothing=tps_smoothing,
-                        grid_spacing=grid_spacing,
-                    )
-                except ValueError:
-                    if not fallback:
-                        raise
-                    # Fall back to demons
-                    from starfinder.registration import register_volume_local
-
-                    registered, _ = register_volume_local(
-                        self.images[round_name],
-                        ref_3d,
-                        mov_3d,
-                        iterations=iterations,
-                        smoothing_sigma=smoothing_sigma,
-                        pyramid_mode=pyramid_mode,
-                        boundary_mode=boundary_mode,
-                    )
+                config = TpsConfig(detection_noise_sigma=detection_threshold,
+                    match_distance_voxels=match_distance, min_matches=min_matches,
+                    max_control_points=max_control_points, smoothing=tps_smoothing,
+                    grid_spacing_voxels=grid_spacing)
             else:
-                from starfinder.registration import register_volume_local
-
-                registered, _ = register_volume_local(
-                    self.images[round_name],
-                    ref_3d,
-                    mov_3d,
-                    iterations=iterations,
-                    smoothing_sigma=smoothing_sigma,
-                    method=method,
-                    pyramid_mode=pyramid_mode,
-                    boundary_mode=boundary_mode,
-                )
+                config = DemonsConfig(variant=method,
+                    iterations=tuple(iterations) if iterations is not None else (100, 50, 25),
+                    smoothing_sigma=smoothing_sigma, pyramid_mode=pyramid_mode)
+            result = estimate_transform(ref_3d, mov_3d, config=config,
+                reference_metadata=self.metadata.get(ref_round, ImageMetadata(f"{self.fov_id}/{ref_round}")),
+                moving_metadata=self.metadata.get(round_name, ImageMetadata(f"{self.fov_id}/{round_name}")))
+            registered = apply_transform(self.images[round_name], result.transform,
+                config=replace(result.application_config, boundary_mode=boundary_mode))
+            self.metadata[round_name] = result.transform.reference_metadata
 
             self.images[round_name] = registered
             self.local_registered.add(round_name)

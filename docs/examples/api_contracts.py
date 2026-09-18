@@ -18,8 +18,7 @@ from starfinder.benchmark.synthetic import create_test_volume
 from starfinder.dataset import LayerState, STARMapDataset
 from starfinder.io import load_volume, save_volume
 from starfinder.preprocessing import normalize_intensity
-from starfinder.registration import apply_shift, demons_register, phase_correlate
-from starfinder.registration.pointset import apply_tps_deformation
+from starfinder.registration import estimate_transform, apply_transform, TranslationConfig, DemonsConfig, WarpConfig, DenseDisplacementTransform, InsufficientLandmarksError
 from starfinder.spot_finding import find_spots, LocalMaximaConfig
 from starfinder.image import ImageMetadata
 from starfinder.preprocessing import project_image
@@ -30,15 +29,16 @@ def main(output: Path) -> None:
     fixed = np.zeros((12, 24, 24), dtype=np.uint16)
     fixed[5, 10, 10] = 1000
     displacement = (1, -2, 3)
-    moving = apply_shift(fixed, displacement)
-    detected = phase_correlate(fixed, moving, workers=1)
+    moving = np.roll(fixed, displacement, axis=(0, 1, 2))
+    result = estimate_transform(fixed, moving, config=TranslationConfig(), reference_metadata=ImageMetadata("reference"), moving_metadata=ImageMetadata("moving"))
+    detected = tuple(-x for x in result.transform.correction_zyx)
     assert detected == displacement
     np.testing.assert_array_equal(
-        apply_shift(moving, tuple(-s for s in detected)), fixed
+        apply_transform(moving, result.transform, config=result.application_config), fixed
     )
     field = np.empty(fixed.shape + (3,), dtype=np.float32)
     field[...] = displacement
-    np.testing.assert_array_equal(apply_tps_deformation(moving, field), fixed)
+    np.testing.assert_array_equal(apply_transform(moving, DenseDisplacementTransform(field, fixed.shape, moving.shape, ImageMetadata("reference"), ImageMetadata("moving")), config=WarpConfig(backend="scipy")), fixed)
 
     normalized = normalize_intensity(fixed, config=MinMaxNormalizationConfig('uint8', (0, 255)))
     assert normalized.dtype == np.uint8 and normalized.max() == 255
@@ -79,19 +79,18 @@ def main(output: Path) -> None:
 
     if importlib.util.find_spec("SimpleITK") is None:
         try:
-            demons_register(fixed, moving, iterations=[1])
+            estimate_transform(fixed, moving, config=DemonsConfig(iterations=(1,)), reference_metadata=ImageMetadata("reference"), moving_metadata=ImageMetadata("moving"))
         except ImportError as exc:
             assert "SimpleITK" in str(exc)
         else:
             raise AssertionError("Expected missing SimpleITK error")
-        for fallback, error in [(False, ValueError), (True, ImportError)]:
-            fov.images = {r: np.zeros_like(image) for r in dataset.layers.seq}
-            try:
-                fov.local_registration(method="tps", fallback=fallback)
-            except error:
-                pass
-            else:
-                raise AssertionError(f"Expected {error.__name__}")
+    fov.images = {r: np.zeros_like(image) for r in dataset.layers.seq}
+    try:
+        fov.local_registration(method="tps")
+    except InsufficientLandmarksError:
+        pass
+    else:
+        raise AssertionError("Expected insufficient landmarks without fallback")
 
     synthetic = create_test_volume((12, 24, 24), n_spots=3, seed=97)
     assert synthetic.shape == fixed.shape and synthetic.dtype == np.uint8

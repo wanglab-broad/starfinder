@@ -17,10 +17,6 @@ Stateful orchestration and value types. Methods document state mutations and out
    SubtileConfig
    log_step
 
-.. py:data:: Shift3D
-
-   Alias of ``tuple[float, float, float]``: voxel components ``(dz, dy, dx)``; the producing function defines the sign.
-
 .. py:data:: ImageArray
 
    Alias of ``numpy.ndarray`` for a ``(Z, Y, X, C)`` image; no runtime shape or dtype enforcement.

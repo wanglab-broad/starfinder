@@ -1,5 +1,7 @@
 """Tests for starfinder.registration.pointset (TPS and CPD local registration)."""
 
+from starfinder.image import ImageMetadata
+from starfinder.registration import estimate_transform, apply_transform, TpsConfig, InsufficientLandmarksError
 from starfinder.io import ImageLoadConfig
 
 import numpy as np
@@ -12,7 +14,7 @@ class TestTPSIdentity:
 
     def test_identity_no_displacement(self, small_dataset):
         from starfinder.io import load_volume
-        from starfinder.registration.pointset import tps_register
+        from starfinder.registration._tps import tps_register
 
         vol = load_volume(small_dataset / "FOV_001" / "round1" / "ch00.tif").image
 
@@ -69,10 +71,8 @@ class TestTPSKnownDeformation:
         deformed = map_coordinates(vol, warped_coords, order=1, mode="constant", cval=0)
         deformed = deformed.astype(np.float32)
 
-        from starfinder.registration.pointset import (
-            apply_tps_deformation,
-            tps_register,
-        )
+        from starfinder.registration._resampling import apply_tps_deformation
+        from starfinder.registration._tps import tps_register
 
         field = tps_register(
             vol, deformed,
@@ -102,12 +102,12 @@ class TestTPSTooFewSpots:
     """ValueError when insufficient matches."""
 
     def test_too_few_spots_raises(self):
-        from starfinder.registration.pointset import tps_register
+        from starfinder.registration._tps import tps_register
 
         # Uniform dark volume — no spots to detect
         vol = np.ones((8, 32, 32), dtype=np.float32) * 10.0
 
-        with pytest.raises(ValueError, match="spot"):
+        with pytest.raises(InsufficientLandmarksError, match="spot"):
             tps_register(vol, vol, min_matches=50)
 
 
@@ -116,7 +116,6 @@ class TestRegisterVolumeTPS:
 
     def test_register_volume_tps_shape(self, small_dataset):
         from starfinder.io import load_round
-        from starfinder.registration.pointset import register_volume_tps
 
         loaded_round = load_round(small_dataset / "FOV_001" / "round1", config=ImageLoadConfig(channel_labels=tuple(["ch00", "ch01", "ch02", "ch03"])))
         images = loaded_round.image
@@ -124,12 +123,9 @@ class TestRegisterVolumeTPS:
 
         ref_3d = images[:, :, :, 0]
 
-        registered, field = register_volume_tps(
-            images, ref_3d, ref_3d,
-            detection_threshold=2.0,
-            min_matches=10,
-            smoothing=5.0,
-        )
+        _registration = estimate_transform(ref_3d, ref_3d, config=TpsConfig(detection_noise_sigma=2.0, min_matches=10, smoothing=5.0), reference_metadata=ImageMetadata("test/reference"), moving_metadata=ImageMetadata("test/moving"))
+        registered = apply_transform(images, _registration.transform, config=_registration.application_config)
+        field = _registration.transform.displacement_zyx
 
         assert registered.shape == images.shape
         assert registered.dtype == images.dtype
@@ -145,7 +141,7 @@ class TestCPDRegistration:
 
     def test_cpd_nonrigid_identity(self):
         """Identical point clouds should produce near-zero displacements."""
-        from starfinder.registration.pointset import cpd_nonrigid
+        from starfinder.registration._cpd import cpd_nonrigid
 
         rng = np.random.default_rng(42)
         points = rng.uniform(0, 100, (50, 3))
@@ -160,7 +156,7 @@ class TestCPDRegistration:
 
     def test_cpd_affine_recovery(self):
         """Affine CPD should recover a known affine transform."""
-        from starfinder.registration.pointset import cpd_affine
+        from starfinder.registration._cpd import cpd_affine
 
         rng = np.random.default_rng(123)
         Y = rng.uniform(10, 90, (80, 3))
@@ -188,7 +184,7 @@ class TestCPDRegistration:
 
     def test_cpd_nonrigid_polynomial(self):
         """Non-rigid CPD should reduce error for polynomial deformation."""
-        from starfinder.registration.pointset import cpd_nonrigid
+        from starfinder.registration._cpd import cpd_nonrigid
 
         rng = np.random.default_rng(99)
         # Generate points in a 100×100×16 space
@@ -217,11 +213,9 @@ class TestCPDRegistration:
 
     def test_cpd_register_improves_ncc(self):
         """Full CPD pipeline should improve NCC on deformed synthetic volume."""
-        from starfinder.registration.metrics import normalized_cross_correlation
-        from starfinder.registration.pointset import (
-            apply_tps_deformation,
-            cpd_register,
-        )
+        from starfinder.evaluation.registration import normalized_cross_correlation
+        from starfinder.registration._resampling import apply_tps_deformation
+        from starfinder.registration._cpd import cpd_register
 
         rng = np.random.default_rng(42)
         shape = (16, 128, 128)
@@ -266,11 +260,11 @@ class TestCPDRegistration:
 
     def test_cpd_register_too_few_spots(self):
         """CPD should raise ValueError on volume with too few spots."""
-        from starfinder.registration.pointset import cpd_register
+        from starfinder.registration._cpd import cpd_register
 
         vol = np.ones((8, 32, 32), dtype=np.float32) * 10.0
 
-        with pytest.raises(ValueError, match="Too few spots"):
+        with pytest.raises(InsufficientLandmarksError, match="Too few spots"):
             cpd_register(vol, vol)
 
 
@@ -282,14 +276,14 @@ class TestSanitizeDisplacementField:
 
     def test_clamp_prevents_oob(self):
         """Clamping should ensure position + displacement stays in [0, dim-1]."""
-        from starfinder.registration.pointset import sanitize_displacement_field
+        from starfinder.registration._fields import sanitize_displacement_field
 
         shape = (8, 32, 32)
         field = np.zeros((*shape, 3), dtype=np.float32)
         # Push everything 50px in Y — way beyond the volume
         field[..., 1] = 50.0
 
-        sanitized = sanitize_displacement_field(field, clamp=True)
+        sanitized = sanitize_displacement_field(field, clamp=True).field
 
         # After clamping: position + displacement should be in [0, 31]
         yy = np.arange(shape[1]).reshape(1, -1, 1).astype(np.float32)
@@ -299,13 +293,13 @@ class TestSanitizeDisplacementField:
 
     def test_clamp_with_margin(self):
         """Margin should tighten the valid range."""
-        from starfinder.registration.pointset import sanitize_displacement_field
+        from starfinder.registration._fields import sanitize_displacement_field
 
         shape = (4, 16, 16)
         field = np.zeros((*shape, 3), dtype=np.float32)
         field[..., 2] = -20.0  # push X far negative
 
-        sanitized = sanitize_displacement_field(field, clamp=True, margin=2)
+        sanitized = sanitize_displacement_field(field, clamp=True, margin=2).field
 
         xx = np.arange(shape[2]).reshape(1, 1, -1).astype(np.float32)
         src_x = xx + sanitized[..., 2]
@@ -314,16 +308,14 @@ class TestSanitizeDisplacementField:
 
     def test_smooth_reduces_gradient(self):
         """Smoothing should reduce the max gradient of the field."""
-        from starfinder.registration.pointset import sanitize_displacement_field
+        from starfinder.registration._fields import sanitize_displacement_field
 
         shape = (4, 64, 64)
         field = np.zeros((*shape, 3), dtype=np.float32)
         # Sharp step: half of Y-axis has +5px displacement
         field[:, 32:, :, 1] = 5.0
 
-        smoothed = sanitize_displacement_field(
-            field, clamp=False, smooth_sigma=2.0
-        )
+        smoothed = sanitize_displacement_field(field, clamp=False, smooth_sigma=2.0).field
 
         # Gradient across the step should be smaller after smoothing
         grad_orig = np.abs(np.diff(field[:, :, :, 1], axis=1)).max()
@@ -334,7 +326,7 @@ class TestSanitizeDisplacementField:
 
     def test_fold_detection_finds_known_fold(self):
         """Fold detection should flag regions with crossing displacements."""
-        from starfinder.registration.pointset import sanitize_displacement_field
+        from starfinder.registration._fields import sanitize_displacement_field
 
         shape = (4, 32, 32)
         field = np.zeros((*shape, 3), dtype=np.float32)
@@ -344,26 +336,26 @@ class TestSanitizeDisplacementField:
         for y in range(32):
             field[:, y, :, 1] = 40.0 * (0.5 - y / 31.0)
 
-        _, fold_mask = sanitize_displacement_field(
-            field, clamp=False, detect_folds=True
-        )
+        _processed = sanitize_displacement_field(field, clamp=False, detect_folds=True)
+        _ = _processed.field
+        fold_mask = _processed.fold_mask
 
         assert fold_mask.shape == shape
         assert fold_mask.any(), "Expected folds but none detected"
 
     def test_no_fold_on_zero_field(self):
         """Zero displacement should have no folds."""
-        from starfinder.registration.pointset import sanitize_displacement_field
+        from starfinder.registration._fields import sanitize_displacement_field
 
         field = np.zeros((4, 16, 16, 3), dtype=np.float32)
-        _, fold_mask = sanitize_displacement_field(
-            field, clamp=False, detect_folds=True
-        )
+        _processed = sanitize_displacement_field(field, clamp=False, detect_folds=True)
+        _ = _processed.field
+        fold_mask = _processed.fold_mask
         assert not fold_mask.any(), "No folds expected on zero field"
 
     def test_original_not_modified(self):
         """sanitize_displacement_field should not modify the input array."""
-        from starfinder.registration.pointset import sanitize_displacement_field
+        from starfinder.registration._fields import sanitize_displacement_field
 
         field = np.full((4, 16, 16, 3), 50.0, dtype=np.float32)
         original = field.copy()
@@ -377,7 +369,7 @@ class TestBoundaryModeNearest:
 
     def test_nearest_no_black_band(self):
         """Shifting a bright volume should not create zero-filled edges."""
-        from starfinder.registration.pointset import apply_tps_deformation
+        from starfinder.registration._resampling import apply_tps_deformation
 
         # Uniform bright volume
         shape = (8, 32, 32)
@@ -402,7 +394,7 @@ class TestBoundaryModeNearest:
 
     def test_nearest_preserves_dtype(self):
         """Result dtype should match input regardless of boundary_mode."""
-        from starfinder.registration.pointset import apply_tps_deformation
+        from starfinder.registration._resampling import apply_tps_deformation
 
         vol = np.full((4, 16, 16), 50, dtype=np.uint8)
         field = np.zeros((4, 16, 16, 3), dtype=np.float32)
@@ -416,7 +408,7 @@ class TestZoomOrder:
 
     def test_zoom_order_1_produces_valid_field(self):
         """Linear zoom should produce a valid displacement field."""
-        from starfinder.registration.pointset import tps_displacement_field
+        from starfinder.registration._tps import tps_displacement_field
 
         rng = np.random.default_rng(42)
         n_pts = 30
@@ -445,7 +437,7 @@ class TestZoomOrder:
 
     def test_field_smooth_sigma_smooths_field(self):
         """field_smooth_sigma should produce a smoother field."""
-        from starfinder.registration.pointset import tps_displacement_field
+        from starfinder.registration._tps import tps_displacement_field
 
         rng = np.random.default_rng(42)
         n_pts = 30

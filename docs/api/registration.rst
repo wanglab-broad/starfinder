@@ -1,29 +1,28 @@
 starfinder.registration
 =======================
 
-Global shifts are detected displacement in voxel units; negate them for :func:`starfinder.registration.apply_shift`. Dense fields instead map output coordinates to input coordinates. See :doc:`contracts` and :doc:`backends`.
+Estimate once, then apply the returned transform with its application config.
+Translations store correction vectors; dense fields are pull fields. See
+:doc:`contracts` and :doc:`backends` for geometry, errors and supported dimensions.
 
 .. currentmodule:: starfinder.registration
 
 .. autosummary::
    :toctree: generated
 
-   phase_correlate
-   apply_shift
-   register_volume
-   phase_correlate_skimage
-   demons_register
-   apply_deformation
-   register_volume_local
-   matlab_compatible_config
-   tps_register
-   register_volume_tps
-   cpd_register
-   register_volume_cpd
-   sanitize_displacement_field
-   normalized_cross_correlation
-   structural_similarity
-   spot_colocalization
-   spot_matching_accuracy
-   registration_quality_report
-   print_quality_report
+   CpdConfig
+   DemonsConfig
+   DenseDisplacementTransform
+   InsufficientLandmarksError
+   InvalidRegistrationConfigError
+   RegistrationBackendUnavailableError
+   RegistrationDiagnostics
+   RegistrationEstimationError
+   RegistrationResult
+   TpsConfig
+   TranslationConfig
+   TranslationTransform
+   UnsupportedTransformOperationError
+   WarpConfig
+   apply_transform
+   estimate_transform

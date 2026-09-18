@@ -260,7 +260,7 @@ class RegistrationResult:
         Mean peak traced allocation in MiB, not process RSS; or None.
     n_runs : int
         Completed repetitions.
-    shift_detected : tuple[int, int, int] | None
+    shift_detected : tuple[float, float, float] | None
         Detected (dz,dy,dx) displacement in voxels, or None. Default None.
     shift_error_l2 : float | None
         Euclidean displacement error in voxel units, or None. Default None.
@@ -296,7 +296,7 @@ class RegistrationResult:
     memory_mb: float | None
     n_runs: int
     # Accuracy (for global registration with known ground truth)
-    shift_detected: tuple[int, int, int] | None = None
+    shift_detected: tuple[float, float, float] | None = None
     shift_error_l2: float | None = None
     # Quality metrics
     ncc_before: float | None = None
@@ -332,7 +332,7 @@ class RegistrationBenchmarkRunner:
     Example:
         >>> runner = RegistrationBenchmarkRunner()
         >>> results = runner.run_global_benchmark(
-        ...     methods={"numpy_fft": phase_correlate},
+        ...     methods={"scipy_fft": configured_estimator},
         ...     presets=["tiny", "small", "medium"],
         ... )
 
@@ -351,9 +351,8 @@ class RegistrationBenchmarkRunner:
 
     Notes
     -----
-    Global methods must return detected displacement; the runner negates it.
-    Local methods return backward fields; this runner applies them using
-    SimpleITK's apply_deformation even for TPS/CPD methods.
+    Methods return registration.RegistrationResult. Application uses each
+    result's application_config, retaining its native resampling backend.
     """
 
     def __init__(
@@ -608,7 +607,7 @@ class RegistrationBenchmarkRunner:
         shift_detected = None
         shift_error_l2 = None
         if operation == "global" and reg_result is not None:
-            shift_detected = tuple(int(s) for s in reg_result)
+            shift_detected = tuple(-s for s in reg_result.transform.correction_zyx)
             if "shift_zyx" in pair.ground_truth:
                 gt_shift = pair.ground_truth["shift_zyx"]
                 shift_error_l2 = float(np.sqrt(sum(
@@ -649,7 +648,7 @@ class RegistrationBenchmarkRunner:
 
         Args:
             methods: Dict mapping method name to registration function.
-                     Each function should take (ref, mov) and return shift tuple.
+                     Each function should take (ref, mov) and return a registration.RegistrationResult.
             presets: List of presets to benchmark. Defaults to PRESET_ORDER.
             pair_types: List of pair types. Defaults to ["shift"] for global.
             data_category: "synthetic" or "real".
@@ -658,7 +657,7 @@ class RegistrationBenchmarkRunner:
         Returns:
             List of RegistrationResult objects.
         """
-        from starfinder.registration import apply_shift
+        from starfinder.registration import apply_transform
 
         if presets is None:
             presets = PRESET_ORDER if data_category == "synthetic" else ["cell_culture_3D", "tissue_2D", "LN"]
@@ -669,10 +668,8 @@ class RegistrationBenchmarkRunner:
         preset_results: dict[str, list[RegistrationResult]] = {}
 
         # Apply function for global registration
-        def apply_global(mov, shift):
-            # Negate shift to correct alignment
-            correction = tuple(-s for s in shift)
-            return apply_shift(mov, correction)
+        def apply_global(mov, result):
+            return apply_transform(mov, result.transform, config=result.application_config)
 
         for method_name, method_fn in methods.items():
             print(f"\n=== Method: {method_name} ===")
@@ -785,7 +782,7 @@ class RegistrationBenchmarkRunner:
 
         Args:
             methods: Dict mapping method name to registration function.
-                     Each function should take (ref, mov) and return displacement field.
+                     Each function should take (ref, mov) and return a registration.RegistrationResult.
             presets: List of presets to benchmark.
             pair_types: List of deformation types. Defaults to all deformations.
             data_category: "synthetic" or "real".
@@ -794,7 +791,7 @@ class RegistrationBenchmarkRunner:
         Returns:
             List of RegistrationResult objects.
         """
-        from starfinder.registration import apply_deformation
+        from starfinder.registration import apply_transform
         from starfinder.benchmark.synthetic import DEFORMATION_CONFIGS
 
         if presets is None:
@@ -830,7 +827,7 @@ class RegistrationBenchmarkRunner:
                         continue
 
                     result, registered = self._run_single_benchmark(
-                        pair, method_name, method_fn, apply_deformation, "local"
+                        pair, method_name, method_fn, lambda mov, result: apply_transform(mov, result.transform, config=result.application_config), "local"
                     )
 
                     # Track timeout for early stopping
@@ -1006,7 +1003,8 @@ class RegistrationBenchmarkRunner:
         from functools import partial
         from itertools import product
 
-        from starfinder.registration import apply_deformation, demons_register
+        from starfinder.registration import apply_transform, estimate_transform, DemonsConfig
+        from starfinder.image import ImageMetadata
 
         if presets is None:
             presets = ["medium"]
@@ -1037,10 +1035,10 @@ class RegistrationBenchmarkRunner:
                 "smoothing_sigma": sigma,
             }
             method_fns[name] = partial(
-                demons_register,
-                method=method,
-                iterations=iterations,
-                smoothing_sigma=sigma,
+                estimate_transform,
+                config=DemonsConfig(variant=method, iterations=tuple(iterations), smoothing_sigma=sigma),
+                reference_metadata=ImageMetadata("benchmark/reference"),
+                moving_metadata=ImageMetadata("benchmark/moving"),
             )
 
         total_runs = len(configs) * len(presets) * len(pair_types)
@@ -1087,7 +1085,7 @@ class RegistrationBenchmarkRunner:
 
                         result, registered = self._run_single_benchmark(
                             pair, config_name, method_fn,
-                            apply_deformation, "local",
+                            lambda mov, result: apply_transform(mov, result.transform, config=result.application_config), "local",
                         )
 
                         if result.status == "success":

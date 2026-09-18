@@ -10,7 +10,6 @@ from starfinder.dataset.types import (
     CropWindow,
     ImageArray,
     LayerState,
-    Shift3D,
     SubtileConfig,
 )
 
@@ -22,7 +21,6 @@ __all__ = [
     "Codebook",
     "CropWindow",
     "SubtileConfig",
-    "Shift3D",
     "ImageArray",
     "ChannelOrder",
     "log_step",

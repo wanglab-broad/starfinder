@@ -8,11 +8,11 @@ license, or optional algorithm packages. See [build instructions](../contributin
 | --- | --- |
 | Plain TIFF I/O | `tifffile`, installed with the base package |
 | Metadata-aware OME/ImageJ reads | `tifffile` series axes with explicit ambiguous T/C/series selection |
-| Global registration | NumPy/SciPy; comparison wrapper uses scikit-image |
+| Global registration | NumPy/SciPy; TranslationConfig selects scipy_fft or skimage |
 | TPS/CPD registration and point-set warping | NumPy/SciPy/scikit-image; no SimpleITK or external CPD package |
-| Demons registration and `apply_deformation` | Lazy SimpleITK import; missing package raises `ImportError` when called |
-| `FOV.local_registration(method='tps'/'cpd', fallback=True)` | Any `ValueError` from the selected registration call triggers a demons retry; this then requires SimpleITK |
-| `RegistrationBenchmarkRunner.run_local_benchmark` | Applies fields through `apply_deformation`, so even a TPS/CPD method needs SimpleITK for this runner's warp step |
+| Demons estimation and SimpleITK application | Lazy SimpleITK import; missing package raises `RegistrationBackendUnavailableError` when called |
+| `FOV.local_registration` | Specific errors propagate; no automatic fallback |
+| `RegistrationBenchmarkRunner.run_local_benchmark` | Applies each result using its application_config (SciPy for TPS/CPD, SimpleITK for demons) |
 | Benchmark inspection images | Base Matplotlib; file-oriented plotting selects the Agg backend |
 | `timeout_handler` | Unix `SIGALRM`; no-op on platforms without it. Use in the main thread; nesting does not preserve an earlier alarm timer |
 
@@ -22,14 +22,16 @@ From `src/python`, enable demons with:
 uv sync --extra local-registration
 ```
 
-Setting `fallback=False` on FOV TPS/CPD calls propagates their `ValueError`
-instead of attempting demons. Direct `tps_register`, `cpd_register` and their
-multi-channel wrappers have no automatic fallback. Importing the registration
-subpackage is possible without SimpleITK because only the calls import it.
-`matlab_compatible_config()` returns a parameter dictionary without needing
-SimpleITK; it describes parameter choices, not a claim of cross-backend numerical
-equivalence. Demons uses unit image spacing. Unknown demons method names raise
-`ValueError` once SimpleITK is available.
+Direct and FOV calls have no automatic fallback. Invalid configurations raise
+`InvalidRegistrationConfigError` before backend execution; insufficient landmarks
+raise `InsufficientLandmarksError`, a `RegistrationEstimationError`. Missing
+SimpleITK raises `RegistrationBackendUnavailableError`. Unknown diagnostics are
+`None`; no convergence or iteration count is fabricated.
+
+`DemonsConfig()` preserves the former direct demons defaults. TPS uses noise
+sigma 3 and grid spacing 32; direct CPD uses 5 and 16. The FOV adapter explicitly
+retains its prior CPD values 3 and 32. These are effective settings, not claims
+of MATLAB numerical equivalence. No MATLAB API changes are included.
 
 The packaging extras `ome`, `spatialdata`, and `visualization` install
 `bioio-ome-tiff`, SpatialData packages, and napari respectively. Current public

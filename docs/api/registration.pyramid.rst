@@ -1,14 +1,8 @@
-starfinder.registration.pyramid
-===============================
+:orphan:
 
-Lower-level image-pyramid helpers used by demons. Available by explicit submodule import; these NumPy/SciPy helpers do not themselves require SimpleITK.
+Registration pyramid migration
+==============================
 
-.. currentmodule:: starfinder.registration.pyramid
-
-.. autosummary::
-   :toctree: generated
-
-   butterworth_3d
-   antialias_resize
-   pad_for_pyramiding
-   crop_padding
+The former Python module was removed without aliases. Numerical implementation
+is private. Use :doc:`registration` for transform estimation/application and
+:doc:`benchmark` for experiment orchestration. MATLAB interfaces are unchanged.

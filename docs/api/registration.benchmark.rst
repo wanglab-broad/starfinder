@@ -1,13 +1,8 @@
-starfinder.registration.benchmark
-=================================
+:orphan:
 
-Legacy registration benchmark interface. ``run_benchmark`` is deprecated and forwards all arguments to ``benchmark_registration``; it emits no deprecation warning. Prefer :class:`starfinder.benchmark.RegistrationBenchmarkRunner` for new benchmark workflows.
+Registration benchmark migration
+================================
 
-.. currentmodule:: starfinder.registration.benchmark
-
-.. autosummary::
-   :toctree: generated
-
-   benchmark_registration
-   run_benchmark
-   print_benchmark_table
+The former Python module was removed without aliases. Numerical implementation
+is private. Use :doc:`registration` for transform estimation/application and
+:doc:`benchmark` for experiment orchestration. MATLAB interfaces are unchanged.

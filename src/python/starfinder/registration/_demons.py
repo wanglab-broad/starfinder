@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import numpy as np
+from ._errors import RegistrationBackendUnavailableError
 
-from ._resampling import _cast_warp_output, _output_dtype
 
 
 def _import_sitk():
@@ -13,7 +13,7 @@ def _import_sitk():
         import SimpleITK as sitk
         return sitk
     except ImportError:
-        raise ImportError(
+        raise RegistrationBackendUnavailableError(
             "SimpleITK required for local registration. "
             "Install with: uv add 'starfinder[local-registration]'"
         )
@@ -138,7 +138,7 @@ def _run_antialias_pyramid(sitk, fixed, moving, demons, iterations):
 
     - No redundant .astype() copies
     """
-    from starfinder.registration.pyramid import (
+    from starfinder.registration._pyramid import (
         antialias_resize,
         butterworth_3d,
         crop_padding,
@@ -319,218 +319,3 @@ def demons_register(
         return _run_sitk_pyramid(sitk, fixed, moving, demons, iterations)
 
 
-def matlab_compatible_config() -> dict:
-    """Return config matching MATLAB imregdemons defaults.
-
-    Uses classic Thirion demons with anti-aliased 3-level pyramid,
-    matching MATLAB's ``imregdemons(moving, fixed, [100 50 25])``
-    with ``AccumulatedFieldSmoothing=1.0``.
-
-    Returns
-    -------
-    dict
-        Keyword arguments for :func:`demons_register`.
-
-    Examples
-    --------
-    >>> field = demons_register(fixed, moving, **matlab_compatible_config())
-    """
-    return {
-        "iterations": [100, 50, 25],
-        "smoothing_sigma": 1.0,
-        "method": "demons",
-        "pyramid_mode": "antialias",
-    }
-
-
-def apply_deformation(
-    volume: np.ndarray,
-    displacement_field: np.ndarray,
-    boundary_mode: str = "constant",
-    *,
-    output_dtype: str = "input",
-) -> np.ndarray:
-    """Apply displacement field to warp a volume.
-
-    Parameters
-    ----------
-    volume : np.ndarray
-        Input volume with shape (Z, Y, X).
-    displacement_field : np.ndarray
-        Displacement field with shape (Z, Y, X, 3) where the last dimension
-        contains (dz, dy, dx) displacement vectors.
-    boundary_mode : str
-        How to handle out-of-bounds source coordinates:
-
-        - ``"constant"`` (default): Fill with 0 (black bands at edges).
-
-        - ``"nearest"``: Extend edge pixels via nearest-neighbor extrapolator.
-
-    output_dtype : str, optional
-        "input" (default), "float32" or "float64". Interpolate in floating
-        point, then round nearest-even, clip and cast once for integer output.
-
-    Returns
-    -------
-    np.ndarray
-        Warped volume with same shape as input.
-
-    Raises
-    ------
-    ImportError
-        SimpleITK is unavailable. Install the ``local-registration`` extra.
-
-    Notes
-    -----
-    Dense fields use backward sampling: the value at output voxel p is sampled
-    from moving voxel ``p + field[p]``. Components are ``(dz, dy, dx)`` in voxel
-    units, not micrometres; SimpleITK images use default unit spacing. Fields
-    are float64; warped images preserve the input dtype by default. Do not negate these
-    fields as if they were translations for ``apply_shift``.
-    """
-    sitk = _import_sitk()
-
-    # Preserve input dtype
-    dtype = _output_dtype(volume.dtype, output_dtype)
-
-    # D3: np.require avoids redundant copy when already contiguous float64
-    volume_sitk = sitk.GetImageFromArray(
-        np.require(volume, dtype=np.float64, requirements='C')
-    )
-
-    # Convert displacement field from numpy convention (dz, dy, dx) to
-    # SimpleITK convention (dx, dy, dz). The [..., ::-1] creates a
-    # non-contiguous view; np.require ensures contiguous float64.
-    field_sitk = sitk.GetImageFromArray(
-        np.require(displacement_field[..., ::-1], dtype=np.float64, requirements='C'),
-        isVector=True,
-    )
-
-    # Create displacement field transform
-    transform = sitk.DisplacementFieldTransform(field_sitk)
-
-    # Resample the volume using the displacement field
-    resampler = sitk.ResampleImageFilter()
-    resampler.SetReferenceImage(volume_sitk)
-    resampler.SetInterpolator(sitk.sitkLinear)
-    resampler.SetDefaultPixelValue(0)
-    resampler.SetTransform(transform)
-    if boundary_mode == "nearest":
-        resampler.UseNearestNeighborExtrapolatorOn()
-
-    warped_sitk = resampler.Execute(volume_sitk)
-
-    # Convert back to numpy and preserve input dtype
-    warped = sitk.GetArrayFromImage(warped_sitk)
-
-    return _cast_warp_output(warped, dtype)
-
-
-def register_volume_local(
-    images: np.ndarray,
-    ref_image: np.ndarray,
-    mov_image: np.ndarray,
-    iterations: list[int] | None = None,
-    smoothing_sigma: float = 1.0,
-    method: str = "demons",
-    pyramid_mode: str = "antialias",
-    boundary_mode: str = "constant",
-    *,
-    output_dtype: str = "input",
-) -> tuple[np.ndarray, np.ndarray]:
-    """Register multi-channel volume using demons.
-
-    This function computes the displacement field between ref_image and mov_image,
-    then applies that field to all channels in the images volume.
-
-    D4: The displacement field transform and resampler are created once and
-    reused for all channels, avoiding 3 redundant field copies and setup
-    overhead (~20 GB transient + ~40s for tissue-sized volumes).
-
-    Parameters
-    ----------
-    images : np.ndarray
-        Multi-channel volume with shape (Z, Y, X, C).
-    ref_image : np.ndarray
-        Reference image with shape (Z, Y, X) for field calculation.
-    mov_image : np.ndarray
-        Moving image with shape (Z, Y, X) for field calculation.
-    iterations : list[int] | None, optional
-        Number of iterations per pyramid level.
-        Default is [100, 50, 25] (3-level anti-aliased pyramid).
-    smoothing_sigma : float, optional
-        Standard deviation for displacement field smoothing.
-        Default is 1.0 (matches MATLAB's AccumulatedFieldSmoothing).
-    method : str, optional
-        Demons variant: "demons" (default), "diffeomorphic", "symmetric", "fast_symmetric".
-    pyramid_mode : str, optional
-        Pyramid strategy: "antialias" (default) or "sitk".
-    boundary_mode : str, optional
-        How to handle out-of-bounds source coordinates:
-        ``"constant"`` (default) fills with 0; ``"nearest"`` extends edges.
-
-    output_dtype : str, optional
-        "input" (default), "float32" or "float64". Interpolate in floating
-        point, then round nearest-even, clip and cast once for integer output.
-
-    Returns
-    -------
-    tuple[np.ndarray, np.ndarray]
-        Tuple of (registered_images, displacement_field).
-
-        - registered_images: Warped volume with shape (Z, Y, X, C)
-
-        - displacement_field: Computed field with shape (Z, Y, X, 3)
-
-    Raises
-    ------
-    ImportError
-        SimpleITK is unavailable. Install the ``local-registration`` extra.
-
-    Notes
-    -----
-    Dense fields use backward sampling: the value at output voxel p is sampled
-    from moving voxel ``p + field[p]``. Components are ``(dz, dy, dx)`` in voxel
-    units, not micrometres; SimpleITK images use default unit spacing. Fields
-    are float64; warped images preserve the input dtype by default. Do not negate these
-    fields as if they were translations for ``apply_shift``.
-    """
-    # Compute displacement field from reference and moving images
-    displacement_field = demons_register(
-        ref_image, mov_image, iterations=iterations,
-        smoothing_sigma=smoothing_sigma, method=method,
-        pyramid_mode=pyramid_mode,
-    )
-
-    # D4: Create transform ONCE, reuse for all channels.
-    # Previously apply_deformation was called per channel, each time
-    # converting the field (dz,dy,dx)→(dx,dy,dz), creating a
-    # DisplacementFieldTransform, and setting up a ResampleImageFilter.
-    sitk = _import_sitk()
-    dtype = _output_dtype(images.dtype, output_dtype)
-
-    field_sitk = sitk.GetImageFromArray(
-        np.require(displacement_field[..., ::-1], dtype=np.float64, requirements='C'),
-        isVector=True,
-    )
-    transform = sitk.DisplacementFieldTransform(field_sitk)
-
-    # Set up resampler once with shared spatial metadata
-    n_channels = images.shape[-1]
-    registered = np.empty_like(images, dtype=dtype)
-
-    ref_vol_sitk = sitk.GetImageFromArray(images[:, :, :, 0].astype(np.float64))
-    resampler = sitk.ResampleImageFilter()
-    resampler.SetReferenceImage(ref_vol_sitk)
-    resampler.SetInterpolator(sitk.sitkLinear)
-    resampler.SetDefaultPixelValue(0)
-    resampler.SetTransform(transform)
-    if boundary_mode == "nearest":
-        resampler.UseNearestNeighborExtrapolatorOn()
-
-    for c in range(n_channels):
-        vol_sitk = sitk.GetImageFromArray(images[:, :, :, c].astype(np.float64))
-        warped = resampler.Execute(vol_sitk)
-        registered[:, :, :, c] = _cast_warp_output(sitk.GetArrayFromImage(warped), dtype)
-
-    return registered, displacement_field

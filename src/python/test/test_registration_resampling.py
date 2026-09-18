@@ -1,10 +1,14 @@
 """Bounded numerical regressions, separate from the registration API migration."""
 
+from starfinder.image import ImageMetadata
+from starfinder.registration import estimate_transform, apply_transform, TranslationConfig, DenseDisplacementTransform, WarpConfig
 import numpy as np
 import pytest
 
-from starfinder.registration import apply_shift, phase_correlate, phase_correlate_skimage
-from starfinder.registration.pointset import apply_tps_deformation
+from starfinder.registration._translation import apply_shift
+from starfinder.registration._translation import phase_correlate
+from starfinder.registration._skimage_backend import phase_correlate_skimage
+from starfinder.registration._resampling import apply_tps_deformation
 
 
 @pytest.mark.parametrize("shape,displacement", [
@@ -79,8 +83,10 @@ def _native_warp(backend):
     if backend == "scipy":
         return apply_tps_deformation
     pytest.importorskip("SimpleITK")
-    from starfinder.registration.demons import apply_deformation
-    return apply_deformation
+    def warp(source, field, output_dtype="input"):
+        transform = DenseDisplacementTransform(field, source.shape, source.shape, ImageMetadata("ref"), ImageMetadata("mov"))
+        return apply_transform(source, transform, config=WarpConfig(backend="simpleitk", output_dtype=output_dtype))
+    return warp
 
 
 @pytest.mark.parametrize("backend", ["scipy", "simpleitk"])
@@ -107,38 +113,31 @@ def test_native_fractional_rounding_and_float_output(backend, dtype, values):
     np.testing.assert_array_equal(warp(source, field * 0), source)
 
 
-@pytest.mark.parametrize("method", ["tps", "cpd", "local"])
-def test_channels_use_same_final_conversion(method, monkeypatch):
-    if method == "local":
+@pytest.mark.parametrize("backend", ["scipy", "simpleitk"])
+def test_channels_use_same_final_conversion(backend):
+    if backend == "simpleitk":
         pytest.importorskip("SimpleITK")
-        from starfinder.registration import demons as module
-        estimator = "demons_register"
-    else:
-        from starfinder.registration import pointset as module
-        estimator = method + "_register"
     source = np.broadcast_to(np.arange(5, dtype=np.int16), (3, 3, 5)).copy()
     images = np.stack([source, -source], axis=-1)
     field = np.zeros((*source.shape, 3), dtype=np.float64)
     field[..., 2] = .5
-    # Isolate application from estimation; exercise the actual native resampler.
-    monkeypatch.setattr(module, estimator, lambda *args, **kwargs: field)
-    register = getattr(module, "register_volume_" + method)
-    actual, returned = register(images, source, source)
-    floating, _ = register(images, source, source, output_dtype="float32")
+    transform = DenseDisplacementTransform(field, source.shape, source.shape, ImageMetadata("ref"), ImageMetadata("mov"))
+    actual = apply_transform(images, transform, config=WarpConfig(backend=backend))
+    floating = apply_transform(images, transform, config=WarpConfig(backend=backend, output_dtype="float32"))
     np.testing.assert_array_equal(actual[1, 1, :-1, 0], [0, 2, 2, 4])
     np.testing.assert_array_equal(actual[1, 1, :-1, 1], [0, -2, -2, -4])
     np.testing.assert_array_equal(floating[1, 1, :-1, 0], [.5, 1.5, 2.5, 3.5])
     assert floating.dtype == np.float32 and actual.dtype == images.dtype
-    assert returned is field
 
 
 def test_multichannel_translation_float_output():
-    from starfinder.registration import register_volume
     source = np.zeros((1, 5, 7), dtype=np.int16)
     source[0, 2, 3] = 13
     moving = np.roll(source, 1, axis=2)
     images = np.stack([moving, -moving], axis=-1)
-    result, shift = register_volume(images, source, moving, output_dtype="float64")
+    _registration = estimate_transform(source, moving, config=TranslationConfig(), reference_metadata=ImageMetadata("test/reference"), moving_metadata=ImageMetadata("test/moving"))
+    result = apply_transform(images, _registration.transform, config=WarpConfig(output_dtype="float64"))
+    shift = tuple(-x for x in _registration.transform.correction_zyx)
     assert shift == (0, 0, 1) and result.dtype == np.float64
     np.testing.assert_array_equal(result, np.stack([source, -source], axis=-1))
 

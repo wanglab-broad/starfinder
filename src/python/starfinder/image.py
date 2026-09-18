@@ -3,22 +3,30 @@ from dataclasses import dataclass, replace
 
 import numpy as np
 
-__all__ = ["ImageMetadata"]
+__all__ = ["ImageMetadata", "InvalidImageError", "IncompatibleGeometryError"]
+
+
+class InvalidImageError(ValueError):
+    """An image does not satisfy the finite real array contract."""
+
+
+class IncompatibleGeometryError(ValueError):
+    """Image grids require an unsupported geometry conversion."""
 
 
 def _validate_image(image, *, ndim=(3, 4)):
     image = np.asarray(image)
     if image.ndim not in ndim or any(n == 0 for n in image.shape):
-        raise ValueError("image must be nonempty ZYX or ZYXC")
+        raise InvalidImageError("image must be nonempty ZYX or ZYXC")
     if image.dtype.kind not in "uif" or not np.isfinite(image).all():
-        raise ValueError("image must contain finite real numeric values")
+        raise InvalidImageError("image must contain finite real numeric values")
     return image
 
 
 def _triple(value, name):
     a = np.asarray(value, dtype=float)
     if a.shape != (3,) or not np.isfinite(a).all():
-        raise ValueError(f"{name} must be a finite triple")
+        raise IncompatibleGeometryError(f"{name} must be a finite triple")
     return tuple(float(x) for x in a)
 
 
@@ -39,21 +47,21 @@ class ImageMetadata:
 
     def __post_init__(self):
         if not isinstance(self.frame_id, str) or not self.frame_id:
-            raise ValueError("frame_id must be a nonempty string")
+            raise IncompatibleGeometryError("frame_id must be a nonempty string")
         for name in ("spacing_zyx", "origin_zyx"):
             value = getattr(self, name)
             if value is not None:
                 value = _triple(value, name)
                 if name == "spacing_zyx" and any(x <= 0 for x in value):
-                    raise ValueError("spacing_zyx must be strictly positive")
+                    raise IncompatibleGeometryError("spacing_zyx must be strictly positive")
                 object.__setattr__(self, name, value)
         if self.direction_zyx is not None:
             d = np.asarray(self.direction_zyx, dtype=float)
             if d.shape != (3, 3) or not np.isfinite(d).all() or not np.allclose(d.T @ d, np.eye(3), atol=1e-8, rtol=0):
-                raise ValueError("direction_zyx must be finite and orthonormal")
+                raise IncompatibleGeometryError("direction_zyx must be finite and orthonormal")
             object.__setattr__(self, "direction_zyx", tuple(tuple(float(x) for x in row) for row in d))
         if self.spatial_unit is not None and (not isinstance(self.spatial_unit, str) or not self.spatial_unit):
-            raise ValueError("spatial_unit must be a nonempty string or None")
+            raise IncompatibleGeometryError("spatial_unit must be a nonempty string or None")
 
     def index_to_world(self, index_zyx):
         """Convert finite (..., 3) voxel indices to physical ZYX coordinates."""
@@ -68,13 +76,13 @@ class ImageMetadata:
 
     def _require_physical(self):
         if any(getattr(self, n) is None for n in ("spacing_zyx", "origin_zyx", "direction_zyx", "spatial_unit")):
-            raise ValueError("physical conversion requires complete geometry and spatial_unit")
+            raise IncompatibleGeometryError("physical conversion requires complete geometry and spatial_unit")
 
     @staticmethod
     def _points(value):
         points = np.asarray(value, dtype=float)
         if points.ndim < 1 or points.shape[-1] != 3 or not np.isfinite(points).all():
-            raise ValueError("coordinates must be finite (..., 3) ZYX points")
+            raise IncompatibleGeometryError("coordinates must be finite (..., 3) ZYX points")
         return points
 
     def cropped(self, start_zyx, *, frame_id):
@@ -98,7 +106,7 @@ class ImageMetadata:
         """
         shape = np.asarray(_triple(shape_zyx, "shape_zyx"))
         if not np.isfinite(angle):
-            raise ValueError("angle must be finite")
+            raise IncompatibleGeometryError("angle must be finite")
         k = round(angle / 90)
         right = abs(angle - k * 90) < 1e-6
         theta = np.deg2rad(k * 90 if right else angle)
@@ -113,7 +121,7 @@ class ImageMetadata:
         origin = None
         if spacing is not None:
             if not right and not np.isclose(spacing[1], spacing[2]):
-                raise ValueError("non-right-angle rotation of anisotropic XY geometry requires unsupported shear")
+                raise IncompatibleGeometryError("non-right-angle rotation of anisotropic XY geometry requires unsupported shear")
             new_spacing = tuple(np.asarray(spacing)[[0, 2, 1]]) if right and k % 2 else spacing
             if self.direction_zyx is not None:
                 direction = np.asarray(self.direction_zyx) @ np.diag(spacing) @ r @ np.diag(1 / np.array(new_spacing))
@@ -131,5 +139,5 @@ class ImageMetadata:
         its identifier. The source metadata must be retained by the caller.
         """
         if method not in ("max", "sum"):
-            raise ValueError("projection method must be max or sum")
+            raise IncompatibleGeometryError("projection method must be max or sum")
         return ImageMetadata(f"{self.frame_id}/projection:{method}")

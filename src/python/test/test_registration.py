@@ -1,16 +1,16 @@
 """Tests for starfinder.registration module."""
 
+from starfinder.image import ImageMetadata
+from starfinder.registration import estimate_transform, apply_transform, TranslationConfig
 from starfinder.io import ImageLoadConfig
 
 import numpy as np
 import pytest
 
-from starfinder.registration import (
-    phase_correlate,
-    apply_shift,
-    register_volume,
-    phase_correlate_skimage,
-)
+from starfinder.registration._translation import phase_correlate
+from starfinder.registration._translation import apply_shift
+pass
+from starfinder.registration._skimage_backend import phase_correlate_skimage
 
 
 class TestPhaseCorrelate:
@@ -73,7 +73,9 @@ class TestRegisterVolume:
         ref_img = images[:, :, :, 0]
         mov_img = shifted[:, :, :, 0]
 
-        registered, shifts = register_volume(shifted, ref_img, mov_img)
+        _registration = estimate_transform(ref_img, mov_img, config=TranslationConfig(), reference_metadata=ImageMetadata("test/reference"), moving_metadata=ImageMetadata("test/moving"))
+        registered = apply_transform(shifted, _registration.transform, config=_registration.application_config)
+        shifts = tuple(-x for x in _registration.transform.correction_zyx)
 
         assert registered.shape == images.shape
         assert np.allclose(shifts, (2, -3, 5), atol=0.5)

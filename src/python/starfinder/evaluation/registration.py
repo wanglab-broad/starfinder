@@ -9,8 +9,6 @@ because a spot must match across ALL sequencing rounds to decode its barcode.
 
 from __future__ import annotations
 
-from starfinder.spot_finding import find_spots, PercentileCentroidConfig
-from starfinder.image import ImageMetadata
 
 import numpy as np
 from scipy.spatial.distance import cdist
@@ -93,43 +91,19 @@ def normalized_cross_correlation(img1: np.ndarray, img2: np.ndarray) -> float:
     return float(np.mean(img1_norm * img2_norm))
 
 
-def spot_colocalization(
+def evaluate_mask_overlap(
     ref: np.ndarray,
     img: np.ndarray,
-    threshold_percentile: float = 99.0,
 ) -> dict[str, float]:
-    """Compute spot colocalization metrics (IoU and Dice).
+    """Compute IoU and Dice from supplied equal-shaped Boolean masks.
 
-    Measures how well bright spots overlap between two images. This is more
-    relevant than MAE for sparse fluorescence images because it focuses on
-    spot alignment rather than background pixels.
-
-    Parameters
-    ----------
-    ref : np.ndarray
-        Reference image.
-    img : np.ndarray
-        Image to compare (same shape as ref).
-    threshold_percentile : float, optional
-        Percentile threshold for defining "spots". Default is 99 (top 1%).
-
-    Returns
-    -------
-    dict with keys:
-
-        - iou: Intersection over Union (Jaccard index)
-
-        - dice: Dice coefficient (F1 score)
-
-        - n_ref_pixels: Number of spot pixels in reference
-
-        - n_img_pixels: Number of spot pixels in image
+    No thresholding/detection is performed here. Returns iou, dice,
+    n_ref_pixels and n_img_pixels. Existing empty-mask values remain zero;
+    undefined-metric result redesign belongs to evaluation consolidation.
     """
-    ref_threshold = np.percentile(ref, threshold_percentile)
-    img_threshold = np.percentile(img, threshold_percentile)
-
-    ref_spots = ref > ref_threshold
-    img_spots = img > img_threshold
+    if ref.dtype != bool or img.dtype != bool or ref.shape != img.shape:
+        raise ValueError("mask overlap requires equal-shaped Boolean masks")
+    ref_spots, img_spots = ref, img
 
     intersection = np.logical_and(ref_spots, img_spots).sum()
     union = np.logical_or(ref_spots, img_spots).sum()
@@ -149,7 +123,7 @@ def spot_colocalization(
     }
 
 
-def spot_matching_accuracy(
+def evaluate_landmark_alignment(
     ref_spots: np.ndarray,
     mov_spots: np.ndarray,
     max_distance: float = 2.0,
@@ -243,32 +217,37 @@ def spot_matching_accuracy(
     }
 
 
-def registration_quality_report(
+def evaluate_registration(
     ref: np.ndarray,
     before: np.ndarray,
     after: np.ndarray,
-    spot_threshold: float = 99.5,
+    *,
+    reference_spots: np.ndarray,
+    before_spots: np.ndarray,
+    after_spots: np.ndarray,
+    reference_mask: np.ndarray,
+    before_mask: np.ndarray,
+    after_mask: np.ndarray,
     match_tolerance: float = 2.0,
 ) -> dict[str, dict[str, float]]:
-    """Generate comprehensive registration quality report.
+    """Compute before/after metrics using supplied detections and masks.
 
     Parameters
     ----------
-    ref : np.ndarray
-        Reference image/volume.
-    before : np.ndarray
-        Image before registration (same shape as ref).
-    after : np.ndarray
-        Image after registration (same shape as ref).
-    spot_threshold : float, optional
-        Percentile threshold for spot detection. Default is 99.5.
-    match_tolerance : float, optional
-        Maximum distance for spot matching. Default is 2.0 pixels.
+    ref, before, after : np.ndarray
+        Reference, moving and registered images on an equal grid.
+    reference_spots, before_spots, after_spots : np.ndarray
+        Supplied point arrays, with consistent coordinate axes and units.
+    reference_mask, before_mask, after_mask : np.ndarray
+        Supplied Boolean masks on the image grid; no detection is performed.
+    match_tolerance : float
+        Matching threshold in the point coordinate units (default 2 voxels).
 
     Returns
     -------
     dict
-        Dictionary with metrics for "before" and "after", plus "improvement".
+        Existing nested before/after NCC, SSIM, overlap and matching metrics.
+        Numerical/undefined-value policies are unchanged by this relocation.
     """
     # Image-based metrics
     ncc_before = normalized_cross_correlation(ref, before)
@@ -277,16 +256,12 @@ def registration_quality_report(
     ssim_before = structural_similarity(ref, before)
     ssim_after = structural_similarity(ref, after)
 
-    coloc_before = spot_colocalization(ref, before, spot_threshold)
-    coloc_after = spot_colocalization(ref, after, spot_threshold)
+    coloc_before = evaluate_mask_overlap(reference_mask, before_mask)
+    coloc_after = evaluate_mask_overlap(reference_mask, after_mask)
 
-    # Spot matching
-    ref_spots = find_spots(ref, config=PercentileCentroidConfig(spot_threshold), metadata=ImageMetadata("registration/ref"), spot_namespace="registration/ref").spots[["z", "y", "x"]].to_numpy()
-    before_spots = find_spots(before, config=PercentileCentroidConfig(spot_threshold), metadata=ImageMetadata("registration/before"), spot_namespace="registration/before").spots[["z", "y", "x"]].to_numpy()
-    after_spots = find_spots(after, config=PercentileCentroidConfig(spot_threshold), metadata=ImageMetadata("registration/after"), spot_namespace="registration/after").spots[["z", "y", "x"]].to_numpy()
-
-    match_before = spot_matching_accuracy(ref_spots, before_spots, match_tolerance)
-    match_after = spot_matching_accuracy(ref_spots, after_spots, match_tolerance)
+    ref_spots = reference_spots
+    match_before = evaluate_landmark_alignment(ref_spots, before_spots, match_tolerance)
+    match_after = evaluate_landmark_alignment(ref_spots, after_spots, match_tolerance)
 
     return {
         "ncc": {"before": ncc_before, "after": ncc_after},
@@ -306,54 +281,4 @@ def registration_quality_report(
     }
 
 
-def print_quality_report(report: dict[str, dict[str, float]]) -> None:
-    """Print a formatted registration quality report.
-
-    Parameters
-    ----------
-    report : dict
-        Output from registration_quality_report().
-    """
-    print("=" * 60)
-    print("REGISTRATION QUALITY REPORT")
-    print("=" * 60)
-
-    print(f"\n{'Metric':<25} {'Before':>12} {'After':>12} {'Change':>12}")
-    print("-" * 60)
-
-    # NCC
-    b, a = report["ncc"]["before"], report["ncc"]["after"]
-    print(f"{'NCC (↑ better)':<25} {b:>12.4f} {a:>12.4f} {(a-b)/abs(b+1e-10)*100:>+11.1f}%")
-
-    # SSIM
-    b, a = report["ssim"]["before"], report["ssim"]["after"]
-    print(f"{'SSIM (↑ better)':<25} {b:>12.4f} {a:>12.4f} {(a-b)/max(abs(b),0.001)*100:>+11.1f}%")
-
-    # Spot IoU
-    b, a = report["spot_iou"]["before"], report["spot_iou"]["after"]
-    print(f"{'Spot IoU (↑ better)':<25} {b:>12.4f} {a:>12.4f} {(a-b)/max(b,0.001)*100:>+11.1f}%")
-
-    # Spot Dice
-    b, a = report["spot_dice"]["before"], report["spot_dice"]["after"]
-    print(f"{'Spot Dice (↑ better)':<25} {b:>12.4f} {a:>12.4f} {(a-b)/max(b,0.001)*100:>+11.1f}%")
-
-    # Match rate
-    b, a = report["match_rate"]["before"], report["match_rate"]["after"]
-    print(f"{'Match Rate (↑ better)':<25} {b*100:>11.1f}% {a*100:>11.1f}% {(a-b)/max(b,0.001)*100:>+11.1f}%")
-
-    # Match distance
-    b, a = report["match_distance"]["before"], report["match_distance"]["after"]
-    b_str = f"{b:.2f}" if not np.isnan(b) else "N/A"
-    a_str = f"{a:.2f}" if not np.isnan(a) else "N/A"
-    print(f"{'Match Distance (↓ better)':<25} {b_str:>12} {a_str:>12}")
-
-    print("-" * 60)
-
-    # Barcode decoding projection
-    b_rate = report["match_rate"]["before"]
-    a_rate = report["match_rate"]["after"]
-    print(f"\n📈 Projected barcode decoding (4 rounds):")
-    print(f"   Before: {b_rate*100:.1f}%/round → {b_rate**4*100:.1f}% decoded")
-    print(f"   After:  {a_rate*100:.1f}%/round → {a_rate**4*100:.1f}% decoded")
-
-    print("=" * 60)
+__all__ = ["structural_similarity", "normalized_cross_correlation", "evaluate_mask_overlap", "evaluate_landmark_alignment", "evaluate_registration"]

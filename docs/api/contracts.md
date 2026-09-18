@@ -17,32 +17,49 @@ units unless a function explicitly says otherwise. Unknown calibration stays unk
 
 ## Displacement and correction
 
-{func}`starfinder.registration.phase_correlate` and
-{func}`starfinder.registration.phase_correlate_skimage` return the **detected
-displacement** of moving relative to fixed, `(dz, dy, dx)`. For a moving image
-translated by `(1, -2, 3)`, correct it with
-`apply_shift(moving, (-1, 2, -3))`. Positive values passed to
-{func}`starfinder.registration.apply_shift` move content toward larger indices.
-Wrapped edges are zero-filled; content lost at an edge cannot be recovered.
-{func}`starfinder.registration.register_volume` applies that negation internally
-but returns the detected displacement. `FOV.global_shifts` and its `row, col, z`
-CSV log likewise store detected `(dy, dx, dz)` components, with no origin offset.
+{func}`starfinder.registration.estimate_transform` accepts finite real ZYX
+arrays and explicit reference/moving `ImageMetadata`. Choose a frozen
+`TranslationConfig`, `DemonsConfig`, `TpsConfig` or `CpdConfig`; there is no
+independent method selector. Its `RegistrationResult` contains the transform,
+measured diagnostics (unknown values stay `None`) and `application_config`.
 
-Dense fields from demons, TPS and CPD use a different operation:
-`registered[p] = moving[p + field[p]]`. Supply these fields directly to their
-warp functions, without negating them. TPS/CPD fields are float32; demons fields
-are float64. SimpleITK component reversal is handled internally.
+```python
+from starfinder.image import ImageMetadata
+from starfinder.registration import estimate_transform, apply_transform, TranslationConfig
+result = estimate_transform(reference, moving, config=TranslationConfig(),
+    reference_metadata=ImageMetadata("reference"),
+    moving_metadata=ImageMetadata("moving"))
+registered = apply_transform(moving, result.transform, config=result.application_config)
+```
+
+A `TranslationTransform.correction_zyx` moves content toward larger indices for
+positive components. Pull sampling is `moving[p - correction_zyx]`. A moving
+image displaced by `(1, -2, 3)` therefore gets correction `(-1, 2, -3)`.
+`FOV.global_shifts` and its MATLAB-compatible CSV retain detected displacements.
+
+`DenseDisplacementTransform.displacement_zyx` uses
+`registered[p] = moving[p + displacement_zyx[p]]`, in ZYX voxel-index components.
+TPS/CPD fields are float32; demons fields are float64. Do not negate dense fields.
+Direction and units are validated; inversion/composition/conversion is not implicit.
+
+Apply accepts ZYX or ZYXC and preserves channel order. Output metadata is
+`result.transform.reference_metadata`. Equal-shaped grids with matching physical
+fields are required; frame identifiers may differ. Explicitly unknown geometry
+is allowed, but is never inferred. Unsupported conversion raises
+`image.IncompatibleGeometryError`. Translation supports singleton axes; current
+local estimation requires 3D, with demons axes at least four voxels. Dense
+application also supports singleton axes.
 
 ### Translation edge cases and resampling precision
 
 The FFT estimator still returns integer-valued displacements; these corrections
 do not add subpixel estimation. Singleton axes return zero. For odd length `n`,
 a correlation peak at `n//2` is not wrapped. An exact even half-period cannot
-distinguish positive from negative motion: `phase_correlate` reports `+n/2`,
-whereas `phase_correlate_skimage` retains its native `-n/2` convention. Both
+distinguish positive from negative motion: `TranslationConfig(backend="scipy_fft")` reports correction `-n/2`,
+whereas the `skimage` backend retains correction `+n/2`. Both
 align the periodic interior; their zero-filled boundaries can differ.
 
-`apply_shift` uses exact integer rolling (within its existing `1e-6` voxel
+Translation application uses exact integer rolling (within its existing `1e-6` voxel
 integer tolerance), otherwise Fourier shifting followed by the **real part**
 of the inverse FFT. Signed intensities and negative ringing are retained;
 the previous magnitude operation lost signs. For even axes, taking the real
@@ -51,11 +68,12 @@ This is periodic Fourier interpolation followed by zeroing wrapped edges,
 not spatial interpolation of a zero-padded volume. Shifts spanning an entire
 axis return zeros. Lost edge content is not recoverable.
 
-All existing registration application functions and multichannel wrappers
-accept `output_dtype="input"` (default), `"float32"` or `"float64"`. For example:
+`WarpConfig` accepts `output_dtype="input"` (default), `"float32"` or `"float64"`. For example:
 
 ```python
-shifted = apply_shift(image, (0, 0, 0.5), output_dtype="float32")
+from dataclasses import replace
+registered_float = apply_transform(moving, result.transform,
+    config=replace(result.application_config, output_dtype="float32"))
 ```
 
 Source dtype is preserved by default. Integer output is interpolated in floating

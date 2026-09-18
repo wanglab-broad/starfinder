@@ -1,17 +1,8 @@
-starfinder.registration.pointset
-================================
+:orphan:
 
-Lower-level point-set helpers, available by explicit submodule import. Their fields use backward sampling: ``output[p] = moving[p + field[p]]``. See :doc:`registration` for the high-level TPS/CPD entry points.
+Registration pointset migration
+===============================
 
-.. currentmodule:: starfinder.registration.pointset
-
-.. autosummary::
-   :toctree: generated
-
-   detect_and_match_spots
-   subsample_control_points
-   tps_displacement_field
-   apply_tps_deformation
-   cpd_affine
-   cpd_nonrigid
-   cpd_displacement_field
+The former Python module was removed without aliases. Numerical implementation
+is private. Use :doc:`registration` for transform estimation/application and
+:doc:`benchmark` for experiment orchestration. MATLAB interfaces are unchanged.

@@ -1,60 +1,36 @@
-"""Registration module for image alignment."""
+"""Typed transform estimation and application in voxel-index coordinates."""
 
-from starfinder.registration._skimage_backend import phase_correlate_skimage
-
-# Local registration exports (lazy import - SimpleITK optional)
-# Import will fail gracefully with helpful message if SimpleITK missing
-from starfinder.registration.demons import (
-    apply_deformation,
-    demons_register,
-    matlab_compatible_config,
-    register_volume_local,
+from ._api import apply_transform, estimate_transform
+from ._config import CpdConfig, DemonsConfig, TpsConfig, TranslationConfig, WarpConfig
+from ._errors import (
+    InsufficientLandmarksError,
+    InvalidRegistrationConfigError,
+    RegistrationBackendUnavailableError,
+    RegistrationEstimationError,
+    UnsupportedTransformOperationError,
 )
-from starfinder.registration.metrics import (
-    normalized_cross_correlation,
-    print_quality_report,
-    registration_quality_report,
-    spot_colocalization,
-    spot_matching_accuracy,
-    structural_similarity,
-)
-from starfinder.registration.phase_correlation import (
-    apply_shift,
-    phase_correlate,
-    register_volume,
-)
-from starfinder.registration.pointset import (
-    cpd_register,
-    register_volume_cpd,
-    register_volume_tps,
-    sanitize_displacement_field,
-    tps_register,
+from ._types import (
+    DenseDisplacementTransform,
+    RegistrationDiagnostics,
+    RegistrationResult,
+    TranslationTransform,
 )
 
 __all__ = [
-    # Global (rigid)
-    "phase_correlate",
-    "apply_shift",
-    "register_volume",
-    "phase_correlate_skimage",
-    # Local (non-rigid) — demons
-    "demons_register",
-    "apply_deformation",
-    "register_volume_local",
-    "matlab_compatible_config",
-    # Local (non-rigid) — TPS
-    "tps_register",
-    "register_volume_tps",
-    # Local (non-rigid) — CPD
-    "cpd_register",
-    "register_volume_cpd",
-    # Field utilities
-    "sanitize_displacement_field",
-    # Quality metrics
-    "normalized_cross_correlation",
-    "structural_similarity",
-    "spot_colocalization",
-    "spot_matching_accuracy",
-    "registration_quality_report",
-    "print_quality_report",
+    "estimate_transform",
+    "apply_transform",
+    "TranslationConfig",
+    "DemonsConfig",
+    "TpsConfig",
+    "CpdConfig",
+    "WarpConfig",
+    "TranslationTransform",
+    "DenseDisplacementTransform",
+    "RegistrationResult",
+    "RegistrationDiagnostics",
+    "InvalidRegistrationConfigError",
+    "RegistrationEstimationError",
+    "InsufficientLandmarksError",
+    "RegistrationBackendUnavailableError",
+    "UnsupportedTransformOperationError",
 ]

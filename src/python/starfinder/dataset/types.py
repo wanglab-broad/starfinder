@@ -9,7 +9,6 @@ from typing import TypeAlias
 import numpy as np
 
 # Type aliases
-Shift3D: TypeAlias = tuple[float, float, float]  # (dz, dy, dx)
 ImageArray: TypeAlias = np.ndarray  # Shape: (Z, Y, X, C)
 ChannelOrder: TypeAlias = list[str]  # e.g., ["ch00", "ch01", "ch02", "ch03"]
 

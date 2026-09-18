@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from starfinder.image import ImageMetadata
+from starfinder.registration import estimate_transform, apply_transform, TranslationConfig
 from starfinder.io import ImageConversionConfig, ImageLoadConfig, convert_image
 from starfinder.preprocessing import MinMaxNormalizationConfig
 
@@ -330,7 +332,6 @@ def load_and_register_synthetic_images(
 ) -> dict[str, np.ndarray]:
     from starfinder.io import load_round
     from starfinder.preprocessing import normalize_intensity
-    from starfinder.registration.phase_correlation import register_volume
 
     images: dict[str, np.ndarray] = {}
     channel_order = ["ch00", "ch01", "ch02", "ch03"]
@@ -351,7 +352,9 @@ def load_and_register_synthetic_images(
     for round_idx in range(2, n_rounds + 1):
         round_name = f"round{round_idx}"
         mov_merged = np.sum(images[round_name], axis=-1, dtype=np.uint16)
-        registered, _shifts = register_volume(images[round_name], ref_merged, mov_merged)
+        _registration = estimate_transform(ref_merged, mov_merged, config=TranslationConfig(), reference_metadata=ImageMetadata("synthetic/round1"), moving_metadata=ImageMetadata(f"synthetic/{round_name}"))
+        registered = apply_transform(images[round_name], _registration.transform, config=_registration.application_config)
+        _shifts = tuple(-x for x in _registration.transform.correction_zyx)
         images[round_name] = registered
 
     return images

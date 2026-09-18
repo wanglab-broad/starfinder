@@ -12,7 +12,7 @@ MATLAB runtime or cluster execution.
 | Symptom | Check and supported action |
 | --- | --- |
 | `ImportError` mentioning SimpleITK from demons or `apply_deformation` | From `src/python`, install the declared extra with `uv sync --extra local-registration`, then use the same uv environment to run. Installation requires registry/cache access. Global registration does not need this extra. |
-| A TPS/CPD FOV call unexpectedly tries demons | {py:meth}`~starfinder.dataset.FOV.local_registration` catches `ValueError` with `fallback=True` (default), then retries demons. Inspect the original warning, e.g. insufficient matched control points. In the direct Python API, `fallback=False` exposes that error; it does not repair the data or enable demons. Workflow wrappers do not forward this option. |
+| TPS/CPD cannot estimate a transform | Inspect `InsufficientLandmarksError` or `RegistrationEstimationError`. FOV and direct estimation propagate errors; there is no default fallback. |
 | Installing SpatialData or napari does not change output files | These packaging extras do not enable a public SpatialData writer or automatic viewer. FOV outputs are TIFF/CSV/text/NPZ. Inspect CSVs with the [output recipe](recipes.md#inspect-molecule-outputs). |
 | MATLAB launcher fails before image processing | Check `/broad/software/scripts/useuse`, `use Matlab`, license and required toolboxes on the execution host. The workflow launcher depends on Broad environment setup; finding a `matlab` executable alone is insufficient. See [MATLAB requirements](api/matlab.md#runtime-requirements-and-validation-limits). |
 

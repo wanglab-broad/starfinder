@@ -80,14 +80,14 @@ def evaluate_registration(
 
         - n_spots_ref, n_spots_before, n_spots_after
     """
-    from starfinder.registration.metrics import registration_quality_report
+    from starfinder.evaluation.registration import evaluate_registration as evaluate_registration_metrics
 
     if use_mip:
         # Compute metrics on 2D MIP (fast path for large volumes)
-        from starfinder.registration.metrics import (
+        from starfinder.evaluation.registration import (
             normalized_cross_correlation,
-            spot_colocalization,
-            spot_matching_accuracy,
+            evaluate_mask_overlap,
+            evaluate_landmark_alignment,
             structural_similarity,
         )
 
@@ -104,15 +104,15 @@ def evaluate_registration(
         ssim_after = structural_similarity(ref_mip, reg_mip)
 
         # Spot metrics on MIP (avoids 3D label/center_of_mass on huge volumes)
-        coloc_before = spot_colocalization(ref_mip, mov_mip)
-        coloc_after = spot_colocalization(ref_mip, reg_mip)
+        coloc_before = evaluate_mask_overlap(ref_mip > np.percentile(ref_mip, 99), mov_mip > np.percentile(mov_mip, 99))
+        coloc_after = evaluate_mask_overlap(ref_mip > np.percentile(ref_mip, 99), reg_mip > np.percentile(reg_mip, 99))
 
         ref_spots = find_spots(ref_mip[None, ...], config=PercentileCentroidConfig(), metadata=ImageMetadata("evaluation/ref_mip"), spot_namespace="evaluation/ref_mip").spots[["y", "x"]].to_numpy()
         before_spots = find_spots(mov_mip[None, ...], config=PercentileCentroidConfig(), metadata=ImageMetadata("evaluation/mov_mip"), spot_namespace="evaluation/mov_mip").spots[["y", "x"]].to_numpy()
         after_spots = find_spots(reg_mip[None, ...], config=PercentileCentroidConfig(), metadata=ImageMetadata("evaluation/reg_mip"), spot_namespace="evaluation/reg_mip").spots[["y", "x"]].to_numpy()
 
-        match_before = spot_matching_accuracy(ref_spots, before_spots)
-        match_after = spot_matching_accuracy(ref_spots, after_spots)
+        match_before = evaluate_landmark_alignment(ref_spots, before_spots)
+        match_after = evaluate_landmark_alignment(ref_spots, after_spots)
 
         return {
             "ncc_before": ncc_before,
@@ -135,7 +135,11 @@ def evaluate_registration(
         }
 
     # Full report including SSIM
-    report = registration_quality_report(ref, mov_before, registered)
+    def detections(image, label):
+        return find_spots(image, config=PercentileCentroidConfig(99.5), metadata=ImageMetadata(label), spot_namespace=label).spots[["z", "y", "x"]].to_numpy()
+    report = evaluate_registration_metrics(ref, mov_before, registered,
+        reference_spots=detections(ref, "evaluation/ref"), before_spots=detections(mov_before, "evaluation/before"), after_spots=detections(registered, "evaluation/after"),
+        reference_mask=ref > np.percentile(ref, 99.5), before_mask=mov_before > np.percentile(mov_before, 99.5), after_mask=registered > np.percentile(registered, 99.5))
 
     # Flatten nested structure: {'ncc': {'before': 0.5}} -> {'ncc_before': 0.5}
     flat = {}

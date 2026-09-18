@@ -16,7 +16,7 @@ The script exits nonzero if a contract assertion fails. It checks detected versu
 applied shifts, backward field sampling, normalization/projection, TIFF dtype
 round-trip, spot detection, barcode extraction/decoding, dataset CSV origin, and
 a small benchmark measurement. If SimpleITK is absent, it checks the documented
-error and TPS fallback behavior. It does not install or execute optional demons.
+error and TPS no-fallback behavior. It does not install or execute optional demons.
 
 ```{literalinclude} ../examples/api_contracts.py
 :language: python

@@ -8,17 +8,15 @@ from __future__ import annotations
 
 import numpy as np
 
-from starfinder.benchmark import (
-    BenchmarkResult,
-    SIZE_PRESETS,
-    measure,
-)
-from starfinder.registration import phase_correlate, phase_correlate_skimage
+from starfinder.benchmark.core import BenchmarkResult, measure
+from starfinder.benchmark.presets import SIZE_PRESETS
+from starfinder.registration import estimate_transform, TranslationConfig
+from starfinder.image import ImageMetadata
 
 
-def benchmark_registration(
+def run_benchmark(
     sizes: list[tuple[int, int, int]] | None = None,
-    methods: list[str] | None = None,
+    configs: tuple[TranslationConfig, ...] = (TranslationConfig(), TranslationConfig(backend="skimage")),
     n_runs: int = 5,
     seed: int = 42,
 ) -> list[BenchmarkResult]:
@@ -27,7 +25,7 @@ def benchmark_registration(
 
     Args:
         sizes: List of (Z, Y, X) sizes. Defaults to tiny, small, medium.
-        methods: List of method names ("numpy", "skimage"). Defaults to both.
+        configs: Translation configs; defaults to scipy_fft and skimage.
         n_runs: Number of runs per measurement.
         seed: Random seed for reproducibility.
 
@@ -42,14 +40,6 @@ def benchmark_registration(
             SIZE_PRESETS["small"],
             SIZE_PRESETS["medium"],
         ]
-
-    if methods is None:
-        methods = ["numpy", "skimage"]
-
-    method_funcs = {
-        "numpy": phase_correlate,
-        "skimage": phase_correlate_skimage,
-    }
 
     rng = np.random.default_rng(seed)
     results = []
@@ -74,8 +64,12 @@ def benchmark_registration(
         )
         moving = np.roll(fixed, known_shift, axis=(0, 1, 2))
 
-        for method_name in methods:
-            func = method_funcs[method_name]
+        for config in configs:
+            method_name = config.backend
+            def func(reference, moving):
+                return estimate_transform(reference, moving, config=config,
+                    reference_metadata=ImageMetadata("benchmark/reference"),
+                    moving_metadata=ImageMetadata("benchmark/moving"))
 
             # Warm-up
             _ = func(fixed, moving)
@@ -86,7 +80,8 @@ def benchmark_registration(
             detected_shift = None
 
             for _ in range(n_runs):
-                detected_shift, elapsed, mem = measure(lambda: func(fixed, moving))
+                registration, elapsed, mem = measure(lambda: func(fixed, moving))
+                detected_shift = tuple(-s for s in registration.transform.correction_zyx)
                 times.append(elapsed)
                 memories.append(mem)
 
@@ -112,36 +107,3 @@ def benchmark_registration(
 
     return results
 
-
-# Re-export for backwards compatibility
-def run_benchmark(*args, **kwargs):
-    """Deprecated: Use benchmark_registration() instead."""
-    return benchmark_registration(*args, **kwargs)
-
-
-def print_benchmark_table(results: list[BenchmarkResult]) -> None:
-    """Print registration benchmark results with shift error.
-
-    Parameters
-    ----------
-    results : list[BenchmarkResult]
-        Registration results, optionally containing shift/error metrics.
-
-    Returns
-    -------
-    None
-        Writes a Markdown table to standard output.
-    """
-    print()
-    print("| Method  | Size           | Time (s) | Memory (MB) | Shift Error |")
-    print("|---------|----------------|----------|-------------|-------------|")
-
-    for r in results:
-        size_str = f"{r.size[1]}×{r.size[2]}×{r.size[0]}"
-        error = r.metrics.get("shift_error", 0.0)
-        print(
-            f"| {r.method:<7} | {size_str:<14} | {r.time_seconds:>8.3f} | "
-            f"{r.memory_mb:>11.1f} | {error:>11.2f} |"
-        )
-
-    print()

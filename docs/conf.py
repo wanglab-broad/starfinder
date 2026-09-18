@@ -90,7 +90,7 @@ linkcheck_workers = 5
 def _alias_source_module(app, modname, attribute):
     """Keep type-alias source lookup in STARfinder, not builtins/NumPy."""
     if modname == "starfinder.dataset" and attribute in {
-        "Shift3D", "ImageArray", "ChannelOrder"
+        "ImageArray", "ChannelOrder"
     }:
         return "starfinder.dataset.types"
     if modname == "starfinder.benchmark.synthetic" and attribute == "SpotTuple":

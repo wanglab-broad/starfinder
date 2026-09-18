@@ -23,6 +23,4 @@ public methods and source links. The :doc:`inventory` records coverage and alias
    benchmark
    benchmark.synthetic
    utils
-   registration.pointset
-   registration.pyramid
-   registration.benchmark
+   evaluation.registration
