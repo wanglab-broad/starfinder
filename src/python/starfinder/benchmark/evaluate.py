@@ -8,7 +8,7 @@ by applying identical metric computation to all registered images.
 
 Usage:
     # Evaluate a single registered image
-    metrics = evaluate_registration(ref, mov_before, registered)
+    # Pure metrics: starfinder.evaluation.registration.evaluate_registration
 
     # Evaluate all results in a backend directory tree
     results = evaluate_directory(result_dir, data_dir)
@@ -42,117 +42,36 @@ SYNTHETIC_PRESETS = {
 }
 
 
-def evaluate_registration(
-    ref: np.ndarray,
-    mov_before: np.ndarray,
-    registered: np.ndarray,
-    use_mip: bool = False,
-) -> dict:
-    """Compute registration quality metrics.
+def _evaluate_images(ref, mov_before, registered, use_mip=False):
+    """Benchmark adapter: explicitly prepare legacy detections, then evaluate.
 
-    This is the core Phase 2 function. It computes all quality metrics
-    between the reference and registered images, using the same code path
-    regardless of which backend produced the registered image.
-
-    Args:
-        ref: Reference volume (Z, Y, X).
-        mov_before: Original moving volume before registration.
-        registered: Registered volume (Z, Y, X).
-        use_mip: If True, compute SSIM and spot metrics on 2D MIP instead
-            of full 3D volume. Much faster for large volumes.
-
-    Returns:
-        Flat dict with before/after metrics:
-
-        - ncc_before, ncc_after
-
-        - ssim_before, ssim_after
-
-        - ssim_method: "mip" if computed on MIP, "3d" if full volume
-
-        - spot_iou_before, spot_iou_after
-
-        - spot_dice_before, spot_dice_after
-
-        - match_rate_before, match_rate_after
-
-        - match_distance_before, match_distance_after
-
-        - n_spots_ref, n_spots_before, n_spots_after
+    Historical percentile choices remain here, outside pure evaluation. Volume
+    NCC is retained for both policies. Constant reference range uses explicit 1.
     """
-    from starfinder.evaluation.registration import evaluate_registration as evaluate_registration_metrics
+    from dataclasses import asdict
+    from starfinder.evaluation.registration import evaluate_registration
 
-    if use_mip:
-        # Compute metrics on 2D MIP (fast path for large volumes)
-        from starfinder.evaluation.registration import (
-            normalized_cross_correlation,
-            evaluate_mask_overlap,
-            evaluate_landmark_alignment,
-            structural_similarity,
-        )
-
-        ncc_before = normalized_cross_correlation(ref, mov_before)
-        ncc_after = normalized_cross_correlation(ref, registered)
-
-        # MIP: collapse Z axis to get (Y, X) images
-        ref_mip = np.max(ref, axis=0)
-        mov_mip = np.max(mov_before, axis=0)
-        reg_mip = np.max(registered, axis=0)
-
-        # SSIM on MIP
-        ssim_before = structural_similarity(ref_mip, mov_mip)
-        ssim_after = structural_similarity(ref_mip, reg_mip)
-
-        # Spot metrics on MIP (avoids 3D label/center_of_mass on huge volumes)
-        coloc_before = evaluate_mask_overlap(ref_mip > np.percentile(ref_mip, 99), mov_mip > np.percentile(mov_mip, 99))
-        coloc_after = evaluate_mask_overlap(ref_mip > np.percentile(ref_mip, 99), reg_mip > np.percentile(reg_mip, 99))
-
-        ref_spots = find_spots(ref_mip[None, ...], config=PercentileCentroidConfig(), metadata=ImageMetadata("evaluation/ref_mip"), spot_namespace="evaluation/ref_mip").spots[["y", "x"]].to_numpy()
-        before_spots = find_spots(mov_mip[None, ...], config=PercentileCentroidConfig(), metadata=ImageMetadata("evaluation/mov_mip"), spot_namespace="evaluation/mov_mip").spots[["y", "x"]].to_numpy()
-        after_spots = find_spots(reg_mip[None, ...], config=PercentileCentroidConfig(), metadata=ImageMetadata("evaluation/reg_mip"), spot_namespace="evaluation/reg_mip").spots[["y", "x"]].to_numpy()
-
-        match_before = evaluate_landmark_alignment(ref_spots, before_spots)
-        match_after = evaluate_landmark_alignment(ref_spots, after_spots)
-
-        return {
-            "ncc_before": ncc_before,
-            "ncc_after": ncc_after,
-            "ssim_before": ssim_before,
-            "ssim_after": ssim_after,
-            "ssim_method": "mip",
-            "spot_iou_before": coloc_before["iou"],
-            "spot_iou_after": coloc_after["iou"],
-            "spot_dice_before": coloc_before["dice"],
-            "spot_dice_after": coloc_after["dice"],
-            "match_rate_before": match_before["match_rate"],
-            "match_rate_after": match_after["match_rate"],
-            "match_distance_before": match_before["mean_distance"],
-            "match_distance_after": match_after["mean_distance"],
-            "n_spots_ref": len(ref_spots),
-            "n_spots_before": len(before_spots),
-            "n_spots_after": len(after_spots),
-            "spot_method": "mip",
-        }
-
-    # Full report including SSIM
-    def detections(image, label):
-        return find_spots(image, config=PercentileCentroidConfig(99.5), metadata=ImageMetadata(label), spot_namespace=label).spots[["z", "y", "x"]].to_numpy()
-    report = evaluate_registration_metrics(ref, mov_before, registered,
-        reference_spots=detections(ref, "evaluation/ref"), before_spots=detections(mov_before, "evaluation/before"), after_spots=detections(registered, "evaluation/after"),
-        reference_mask=ref > np.percentile(ref, 99.5), before_mask=mov_before > np.percentile(mov_before, 99.5), after_mask=registered > np.percentile(registered, 99.5))
-
-    # Flatten nested structure: {'ncc': {'before': 0.5}} -> {'ncc_before': 0.5}
-    flat = {}
-    for metric, values in report.items():
-        if isinstance(values, dict):
-            for key, val in values.items():
-                flat[f"{metric}_{key}"] = val
-        else:
-            flat[metric] = values
-
-    flat["ssim_method"] = "3d"
-    flat["spot_method"] = "3d"
-    return flat
+    images = [ref, mov_before, registered]
+    domain = [x.max(axis=0)[None, ...] for x in images] if use_mip else images
+    percentile = 99.0 if use_mip else 99.5
+    metadata = ImageMetadata("benchmark/reference-grid")
+    spots = [find_spots(x, config=PercentileCentroidConfig(99.5),
+                       metadata=metadata, spot_namespace=f"evaluation/{i}")
+             .spots[["z", "y", "x"]].to_numpy() for i, x in enumerate(domain)]
+    masks = [x > np.percentile(x, percentile) for x in domain]
+    data_range = float(np.ptp(domain[0])) or 1.0
+    report = evaluate_registration(
+        *images, reference_spots=spots[0], before_spots=spots[1], after_spots=spots[2],
+        reference_mask=masks[0], before_mask=masks[1], after_mask=masks[2],
+        reference_metadata=metadata, before_metadata=metadata, after_metadata=metadata,
+        data_range=data_range, ssim_policy="mip" if use_mip else "volume",
+        matching_policy="greedy", match_threshold=2.0, units="voxel")
+    return {**report.values,
+            **{k: v for k, v in report.counts.items() if k.startswith("n_spots")},
+            "ssim_method": "mip" if use_mip else "3d",
+            "spot_method": "mip" if use_mip else "3d",
+            "evaluation": asdict(report),
+            "detection_config": {"percentile": 99.5, "mask_percentile": percentile, "method": "percentile_centroid"}}
 
 
 def generate_inspection(
@@ -264,18 +183,12 @@ def generate_inspection(
     ]
     if metadata.get("time_seconds") is not None:
         info_lines.append(f"Time:    {metadata['time_seconds']:.2f}s")
-    if metadata.get("ncc_after") is not None:
-        ncc_before = metadata.get("ncc_before", 0) or 0
-        info_lines.append(f"NCC:     {ncc_before:.3f} -> {metadata['ncc_after']:.3f}")
-    if metadata.get("ssim_after") is not None:
-        ssim_before = metadata.get("ssim_before", 0) or 0
-        info_lines.append(f"SSIM:    {ssim_before:.3f} -> {metadata['ssim_after']:.3f}")
-    if metadata.get("spot_iou_after") is not None:
-        iou_before = metadata.get("spot_iou_before", 0) or 0
-        info_lines.append(f"IoU:     {iou_before:.3f} -> {metadata['spot_iou_after']:.3f}")
-    if metadata.get("match_rate_after") is not None:
-        mr_before = metadata.get("match_rate_before", 0) or 0
-        info_lines.append(f"MR:      {mr_before:.3f} -> {metadata['match_rate_after']:.3f}")
+    def metric_text(value):
+        return "undefined" if value is None else f"{value:.3f}"
+    for key, label in (("ncc", "NCC"), ("ssim", "SSIM"),
+                       ("spot_iou", "IoU"), ("match_rate", "MR")):
+        info_lines.append(f"{label}: {metric_text(metadata.get(key + '_before'))} -> "
+                          f"{metric_text(metadata.get(key + '_after'))}")
 
     ax4.text(
         0.05, 0.95, "\n".join(info_lines),
@@ -440,7 +353,7 @@ def evaluate_single(
     registered = tifffile.imread(str(registered_path))
 
     # Compute metrics
-    metrics = evaluate_registration(ref, mov, registered, use_mip=use_mip)
+    metrics = _evaluate_images(ref, mov, registered, use_mip=use_mip)
 
     # Load run metadata if available
     run_json = _find_run_json(registered_path)

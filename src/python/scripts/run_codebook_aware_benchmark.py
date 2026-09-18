@@ -23,7 +23,9 @@ import pandas as pd
 from scipy.stats import spearmanr
 
 from _decoding_inputs import saved_decoding, saved_extraction, saved_codebook, report_table
-from starfinder.benchmark.validation import compare_genes
+from starfinder.evaluation.barcode import evaluate_decoding
+from starfinder.evaluation.spot_finding import evaluate_spots
+from starfinder.image import ImageMetadata
 
 BENCHMARK_ROOT = Path("/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark")
 POSTCODE_ROOT = BENCHMARK_ROOT / "decoding" / "postcode"
@@ -638,8 +640,16 @@ def synthetic_metrics(
 ) -> dict[str, Any]:
     wta_eval = decoded_eval_frame(spots, decoded, use_wta=True)
     cba_eval = decoded_eval_frame(spots, decoded, use_wta=False)
-    wta_result = compare_genes(wta_eval, ground_truth, fov_id)
-    cba_result = compare_genes(cba_eval, ground_truth, fov_id)
+    truth = pd.DataFrame(ground_truth["fovs"][fov_id]["spots"])
+    truth_coords = np.array([s["position"] for s in ground_truth["fovs"][fov_id]["spots"]]).reshape(-1, 3)
+    metadata = ImageMetadata(f"{fov_id}/reference")
+    def evaluate(table):
+        matches = evaluate_spots(table[["z", "y", "x"]].to_numpy(), truth_coords,
+            policy="greedy", threshold=5.0, boundary="exclusive", units="voxel",
+            reference_metadata=metadata, observed_metadata=metadata)
+        return evaluate_decoding(table, truth, matches=matches)
+    wta_result = evaluate(wta_eval)
+    cba_result = evaluate(cba_eval)
     n_gt = len(ground_truth["fovs"][fov_id]["spots"])
 
     rescued_ids = set(
@@ -647,24 +657,24 @@ def synthetic_metrics(
     )
     rescued_eval = cba_eval.loc[spots["spot_id"].astype("string").isin(rescued_ids)]
     if len(rescued_eval):
-        rescued_result = compare_genes(rescued_eval, ground_truth, fov_id)
-        rescued_accuracy = rescued_result["gene_accuracy"]
+        rescued_result = evaluate(rescued_eval)
+        rescued_accuracy = rescued_result.values["gene_accuracy"]
         wrong_rescue_rate = (
-            1.0 - rescued_accuracy if rescued_result["n_matched"] > 0 else np.nan
+            1.0 - rescued_accuracy if rescued_result.counts["matched"] > 0 else np.nan
         )
-        rescued_matched = rescued_result["n_matched"]
+        rescued_matched = rescued_result.counts["matched"]
     else:
         rescued_accuracy = np.nan
         wrong_rescue_rate = np.nan
         rescued_matched = 0
 
     return {
-        "wta_gene_accuracy": wta_result["gene_accuracy"],
-        "cba_gene_accuracy": cba_result["gene_accuracy"],
-        "wta_color_seq_accuracy": wta_result["color_seq_accuracy"],
-        "cba_color_seq_accuracy": cba_result["color_seq_accuracy"],
-        "wta_recall": wta_result["correct_genes"] / n_gt if n_gt else 0.0,
-        "cba_recall": cba_result["correct_genes"] / n_gt if n_gt else 0.0,
+        "wta_gene_accuracy": wta_result.values["gene_accuracy"],
+        "cba_gene_accuracy": cba_result.values["gene_accuracy"],
+        "wta_color_seq_accuracy": wta_result.values["color_seq_accuracy"],
+        "cba_color_seq_accuracy": cba_result.values["color_seq_accuracy"],
+        "wta_recall": wta_result.counts["correct_gene"] / n_gt if n_gt else None,
+        "cba_recall": cba_result.counts["correct_gene"] / n_gt if n_gt else None,
         "rescued_matched": rescued_matched,
         "rescued_gene_accuracy": rescued_accuracy,
         "wrong_rescue_rate": wrong_rescue_rate,

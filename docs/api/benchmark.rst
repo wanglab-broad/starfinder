@@ -1,7 +1,7 @@
 starfinder.benchmark
 ====================
 
-Measurement, reporting, registration evaluation, and data helpers. Timings are seconds; ``memory_mb`` is traced allocation peak divided by 1024², not total process RSS. Paths defaulting to institutional storage must be overridden on other hosts. Synthetic generators are on :doc:`synthetic`.
+Measurement, reporting, registration evaluation, and data helpers. Timings are seconds; ``memory_mb`` is traced allocation peak divided by 1024², not total process RSS. Paths defaulting to institutional storage must be overridden on other hosts. Synthetic generators are on :doc:`synthetic`. Pure metrics are on :doc:`evaluation.registration`.
 
 .. currentmodule:: starfinder.benchmark
 
@@ -21,14 +21,9 @@ Measurement, reporting, registration evaluation, and data helpers. Timings are s
    generate_inspection_image
    generate_overview_grid
    extract_real_benchmark_data
-   evaluate_registration
    evaluate_directory
    evaluate_single
    generate_inspection
-   compare_shifts
-   compare_spots
-   compare_genes
-   e2e_summary
    print_table
    save_csv
    save_json

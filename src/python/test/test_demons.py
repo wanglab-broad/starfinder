@@ -221,7 +221,7 @@ class TestAntialiasedDemonsRegister:
             method="demons", pyramid_mode="sitk",
         )
         reg_sitk = apply_transform(deformed, DenseDisplacementTransform(field_sitk, deformed.shape, deformed.shape, ImageMetadata("test/reference"), ImageMetadata("test/moving")), config=WarpConfig(backend="simpleitk"))
-        ncc_sitk = normalized_cross_correlation(vol, reg_sitk)
+        ncc_sitk = normalized_cross_correlation(vol, reg_sitk).values["ncc"]
 
         # Anti-aliased 2-level pyramid
         field_aa = demons_register(
@@ -229,7 +229,7 @@ class TestAntialiasedDemonsRegister:
             method="demons", pyramid_mode="antialias",
         )
         reg_aa = apply_transform(deformed, DenseDisplacementTransform(field_aa, deformed.shape, deformed.shape, ImageMetadata("test/reference"), ImageMetadata("test/moving")), config=WarpConfig(backend="simpleitk"))
-        ncc_aa = normalized_cross_correlation(vol, reg_aa)
+        ncc_aa = normalized_cross_correlation(vol, reg_aa).values["ncc"]
 
         assert field_aa.shape == (*vol.shape, 3)
         assert ncc_aa > ncc_sitk, (

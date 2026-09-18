@@ -24,7 +24,6 @@ from starfinder.benchmark.presets import (
     BENCHMARK_TASK,
 )
 from starfinder.benchmark.evaluate import (
-    evaluate_registration,
     evaluate_directory,
     evaluate_single,
     generate_inspection,
@@ -35,12 +34,7 @@ from starfinder.benchmark.data import (
     extract_real_benchmark_data,
     REAL_DATASETS,
 )
-from starfinder.benchmark.validation import (
-    compare_shifts,
-    compare_spots,
-    compare_genes,
-    e2e_summary,
-)
+
 
 from ._registration import run_benchmark
 
@@ -67,15 +61,10 @@ __all__ = [
     "extract_real_benchmark_data",
     "REAL_DATASETS",
     # Evaluation (Phase 2)
-    "evaluate_registration",
     "evaluate_directory",
     "evaluate_single",
     "generate_inspection",
     # Validation (e2e comparison)
-    "compare_shifts",
-    "compare_spots",
-    "compare_genes",
-    "e2e_summary",
     # Reporting
     "print_table",
     "save_csv",

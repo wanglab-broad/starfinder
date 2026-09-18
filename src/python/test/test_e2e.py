@@ -18,7 +18,18 @@ runs the pipeline once and shares results across all tests.
 import pandas as pd
 import pytest
 
-from starfinder.benchmark.validation import compare_genes, compare_shifts, compare_spots
+from starfinder.evaluation.registration import evaluate_translation
+from starfinder.evaluation.spot_finding import evaluate_spots
+from starfinder.evaluation.barcode import evaluate_decoding
+from starfinder.image import ImageMetadata
+import numpy as np
+
+
+def matching_config():
+    metadata = ImageMetadata("synthetic/reference")
+    return dict(policy="greedy", threshold=5.0, units="voxel", boundary="exclusive",
+                reference_metadata=metadata, observed_metadata=metadata)
+
 
 
 class TestE2EPipelineSmokeTest:
@@ -38,16 +49,20 @@ class TestE2EShiftRecovery:
 
     def test_shift_recovery(self, e2e_result):
         fov, ds, gt = e2e_result
-        result = compare_shifts(detected_shifts(fov), gt, "FOV_001", tolerance=1.5)
+        metadata = ImageMetadata("synthetic/displacement")
+        result = evaluate_translation(detected_shifts(fov), gt["fovs"]["FOV_001"]["shifts"],
+            tolerance=1.5, units="voxel", reference_metadata=metadata, observed_metadata=metadata,
+            eligible_rounds=ds.rounds.moving_rounds)
+        assert result.values["passed"] is True
 
         # Print metrics for calibration
-        for round_name, info in result["per_round"].items():
+        for round_name, info in result.details["per_round"].items():
             print(
                 f"  {round_name}: gt={info['gt']}, "
                 f"detected={info['detected']}, error={info['error']}"
             )
 
-        for round_name, info in result["per_round"].items():
+        for round_name, info in result.details["per_round"].items():
             for axis, axis_name in enumerate(["dz", "dy", "dx"]):
                 assert info["error"][axis] < 1.5, (
                     f"{round_name} {axis_name}: error={info['error'][axis]:.2f}px "
@@ -80,27 +95,28 @@ class TestE2ESpotDetection:
 
     def test_spot_recall(self, e2e_result):
         fov, ds, gt = e2e_result
-        result = compare_spots(
-            spot_table(fov), gt, "FOV_001", position_tolerance=5.0
-        )
+        result = evaluate_spots(
+            spot_table(fov)[["z", "y", "x"]].to_numpy(),
+            np.array([s["position"] for s in gt["fovs"]["FOV_001"]["spots"]]),
+            **matching_config())
 
         print(
-            f"\n  Spot detection: recall={result['recall']:.3f}, "
-            f"precision={result['precision']:.3f}, "
-            f"mean_dist={result['mean_distance']:.2f}px, "
-            f"matched={result['n_matched']}/{result['n_gt']} GT spots, "
-            f"detected={result['n_detected']} total"
+            f"\n  Spot detection: recall={result.values['recall']:.3f}, "
+            f"precision={result.values['precision']:.3f}, "
+            f"mean_dist={result.values['mean_distance']:.2f}px, "
+            f"matched={result.counts['matched']}/{result.counts['total_reference']} GT spots, "
+            f"detected={result.counts['total_observed']} total"
         )
 
-        assert result["recall"] >= 0.7, (
-            f"Recall {result['recall']:.3f} < 0.7 "
-            f"({result['n_matched']}/{result['n_gt']} matched)"
+        assert result.values["recall"] >= 0.7, (
+            f"Recall {result.values['recall']:.3f} < 0.7 "
+            f"({result.counts['matched']}/{result.counts['total_reference']} matched)"
         )
         # With noise-based threshold (k=5σ above noise floor),
         # observed 20 spots for 20 GT → precision ~1.0.
-        assert result["precision"] >= 0.5, (
-            f"Precision {result['precision']:.3f} < 0.005 "
-            f"({result['n_matched']}/{result['n_detected']} near GT)"
+        assert result.values["precision"] >= 0.5, (
+            f"Precision {result.values['precision']:.3f} < 0.005 "
+            f"({result.counts['matched']}/{result.counts['total_observed']} near GT)"
         )
 
     def test_spot_positions_reasonable(self, e2e_result):
@@ -126,31 +142,35 @@ class TestE2EBarcodeDecoding:
     def test_color_seq_accuracy(self, e2e_result):
         """Color sequences extracted at GT spot locations match GT."""
         fov, ds, gt = e2e_result
-        result = compare_genes(
-            spot_table(fov), gt, "FOV_001", position_tolerance=5.0
-        )
+        truth = pd.DataFrame(gt["fovs"]["FOV_001"]["spots"])
+        detected = spot_table(fov)
+        matches = evaluate_spots(detected[["z", "y", "x"]].to_numpy(),
+            np.array(truth["position"].tolist()), **matching_config())
+        result = evaluate_decoding(detected, truth, matches=matches)
 
         print(
-            f"\n  Color seq accuracy: {result['color_seq_accuracy']:.3f} "
-            f"({result['correct_color_seq']}/{result['n_matched']} matched)"
+            f"\n  Color seq accuracy: {result.values['color_seq_accuracy']:.3f} "
+            f"({result.counts['correct_color_seq']}/{result.counts['matched']} matched)"
         )
 
     def test_gene_accuracy(self, e2e_result):
         """Decoded gene labels match ground truth for spatially matched spots."""
         fov, ds, gt = e2e_result
-        result = compare_genes(
-            spot_table(fov, accepted=True), gt, "FOV_001", position_tolerance=5.0
-        )
+        truth = pd.DataFrame(gt["fovs"]["FOV_001"]["spots"])
+        detected = spot_table(fov, accepted=True)
+        matches = evaluate_spots(detected[["z", "y", "x"]].to_numpy(),
+            np.array(truth["position"].tolist()), **matching_config())
+        result = evaluate_decoding(detected, truth, matches=matches)
 
         print(
-            f"\n  Gene accuracy: {result['gene_accuracy']:.3f} "
-            f"({result['correct_genes']}/{result['n_matched']} matched)"
+            f"\n  Gene accuracy: {result.values['gene_accuracy']:.3f} "
+            f"({result.counts['correct_gene']}/{result.counts['matched']} matched)"
         )
-        if result["gene_confusion"]:
-            print(f"  Confusion: {result['gene_confusion']}")
+        if result.details["gene_confusion"]:
+            print(f"  Confusion: {result.details['gene_confusion']}")
 
-        assert result["gene_accuracy"] >= 0.5, (
-            f"Gene accuracy {result['gene_accuracy']:.3f} < 0.5"
+        assert result.values["gene_accuracy"] >= 0.5, (
+            f"Gene accuracy {result.values['gene_accuracy']:.3f} < 0.5"
         )
 
         # All gene labels must be valid codebook entries

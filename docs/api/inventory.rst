@@ -225,22 +225,20 @@ diagnostics for per-round probabilities and candidate scores.
      - :doc:`benchmark`
    * - ``starfinder.benchmark.REAL_DATASETS``
      - :doc:`benchmark`
-   * - ``starfinder.benchmark.evaluate_registration``
-     - :doc:`benchmark`
+   * - ``starfinder.evaluation.registration.evaluate_registration``
+     - :doc:`evaluation.registration`
    * - ``starfinder.benchmark.evaluate_directory``
      - :doc:`benchmark`
    * - ``starfinder.benchmark.evaluate_single``
      - :doc:`benchmark`
    * - ``starfinder.benchmark.generate_inspection``
      - :doc:`benchmark`
-   * - ``starfinder.benchmark.compare_shifts``
-     - :doc:`benchmark`
-   * - ``starfinder.benchmark.compare_spots``
-     - :doc:`benchmark`
-   * - ``starfinder.benchmark.compare_genes``
-     - :doc:`benchmark`
-   * - ``starfinder.benchmark.e2e_summary``
-     - :doc:`benchmark`
+   * - ``starfinder.evaluation.registration.evaluate_translation``
+     - :doc:`evaluation.registration`
+   * - ``starfinder.evaluation.spot_finding.evaluate_spots``
+     - :doc:`evaluation.registration`
+   * - ``starfinder.evaluation.barcode.evaluate_decoding``
+     - :doc:`evaluation.registration`
    * - ``starfinder.benchmark.print_table``
      - :doc:`benchmark`
    * - ``starfinder.benchmark.save_csv``

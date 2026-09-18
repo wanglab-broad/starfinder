@@ -527,7 +527,7 @@ class RegistrationBenchmarkRunner:
     ) -> dict:
         """Compute registration quality metrics.
 
-        Delegates to evaluate.evaluate_registration() for consistent
+        Delegates to evaluate._evaluate_images() for consistent
         metric computation across all backends.
 
         Args:
@@ -538,10 +538,10 @@ class RegistrationBenchmarkRunner:
         Returns:
             Dict with flattened before/after metrics.
         """
-        from starfinder.benchmark.evaluate import evaluate_registration
+        from starfinder.benchmark.evaluate import _evaluate_images
 
         use_mip = ref.size > 100_000_000
-        return evaluate_registration(ref, mov, registered, use_mip=use_mip)
+        return _evaluate_images(ref, mov, registered, use_mip=use_mip)
 
     def _run_single_benchmark(
         self,
@@ -610,9 +610,13 @@ class RegistrationBenchmarkRunner:
             shift_detected = tuple(-s for s in reg_result.transform.correction_zyx)
             if "shift_zyx" in pair.ground_truth:
                 gt_shift = pair.ground_truth["shift_zyx"]
-                shift_error_l2 = float(np.sqrt(sum(
-                    (d - g) ** 2 for d, g in zip(shift_detected, gt_shift)
-                )))
+                from starfinder.evaluation.registration import evaluate_translation
+                from starfinder.image import ImageMetadata
+                metadata = ImageMetadata("benchmark/displacement")
+                shift_error_l2 = evaluate_translation(
+                    {"moving": shift_detected}, {"moving": gt_shift},
+                    reference_metadata=metadata, observed_metadata=metadata,
+                    units="voxel", tolerance=None).values["mean_error_l2"]
 
         result = RegistrationResult(
             preset=pair.preset,
@@ -930,7 +934,7 @@ class RegistrationBenchmarkRunner:
                 "shift_error_l2": r.shift_error_l2,
                 "ncc_before": r.ncc_before,
                 "ncc_after": r.ncc_after,
-                "ncc_delta": (r.ncc_after or 0) - (r.ncc_before or 0),
+                "ncc_delta": r.ncc_after - r.ncc_before if r.ncc_after is not None and r.ncc_before is not None else None,
                 "ssim_before": r.ssim_before,
                 "ssim_after": r.ssim_after,
                 "spot_iou_before": r.spot_iou_before,

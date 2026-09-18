@@ -1,7 +1,6 @@
 """Private registration numerical implementation."""
 from __future__ import annotations
 import numpy as np
-from scipy.spatial import cKDTree
 from ._errors import InsufficientLandmarksError
 def detect_and_match_spots(
     fixed: np.ndarray,
@@ -58,39 +57,25 @@ def detect_and_match_spots(
             f"{len(moving_spots)} moving spots — need at least {min_matches}."
         )
 
-    # Greedy nearest-neighbor matching via KDTree
-    tree = cKDTree(moving_spots)
-    distances, indices = tree.query(fixed_spots, k=1)
-
-    # Filter by match distance
-    valid = distances <= match_distance
-    matched_fixed = fixed_spots[valid]
-    matched_moving = moving_spots[indices[valid]]
-
-    # Remove duplicate moving matches (keep closest)
-    used_moving: set[int] = set()
-    keep = []
-    # Sort by distance so we keep closest matches
-    order = np.argsort(distances[valid])
-    matched_indices = indices[valid]
-    for i in order:
-        mov_idx = matched_indices[i]
-        if mov_idx not in used_moving:
-            used_moving.add(mov_idx)
-            keep.append(i)
-    keep = np.array(keep) if keep else np.array([], dtype=int)
-
-    if len(keep) < min_matches:
+    from starfinder.evaluation.matching import match_points
+    # Both index arrays are searched in the same voxel-coordinate domain;
+    # these candidate correspondences do not assert aligned biological frames.
+    metadata = ImageMetadata("registration/candidate-search")
+    matches = match_points(fixed_spots, moving_spots, policy="nearest_candidate",
+        threshold=match_distance, units="voxel", reference_metadata=metadata,
+        observed_metadata=metadata)
+    pairs = matches.details["matched_pairs"]
+    if len(pairs) < min_matches:
         raise InsufficientLandmarksError(
-            f"Only {len(keep)} spot matches found (need {min_matches}). "
+            f"Only {len(pairs)} spot matches found (need {min_matches}). "
             f"Detected {len(fixed_spots)} fixed, {len(moving_spots)} moving spots. "
             f"Try lowering detection_threshold or increasing match_distance."
         )
 
-    positions = matched_fixed[keep]
+    positions = fixed_spots[[i for i, _, _ in pairs]]
     # Backward-mapping convention: displacement points from fixed-space to
     # moving-space so map_coordinates(moving, pos + disp) recovers fixed.
-    displacements = matched_moving[keep] - matched_fixed[keep]
+    displacements = moving_spots[[j for _, j, _ in pairs]] - positions
 
     return positions, displacements
 

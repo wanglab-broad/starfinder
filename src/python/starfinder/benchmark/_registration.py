@@ -86,9 +86,12 @@ def run_benchmark(
                 memories.append(mem)
 
             # Compute shift error
-            error = np.sqrt(
-                sum((d - e) ** 2 for d, e in zip(detected_shift, known_shift))
-            )
+            from starfinder.evaluation.registration import evaluate_translation
+            metadata = ImageMetadata("benchmark/displacement")
+            error = evaluate_translation(
+                {"moving": detected_shift}, {"moving": known_shift},
+                reference_metadata=metadata, observed_metadata=metadata,
+                units="voxel", tolerance=None).values["mean_error_l2"]
 
             results.append(
                 BenchmarkResult(

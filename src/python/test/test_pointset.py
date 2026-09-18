@@ -244,7 +244,7 @@ class TestCPDRegistration:
             vol, warped_coords, order=1, mode="constant", cval=0
         ).astype(np.float32)
 
-        ncc_before = normalized_cross_correlation(vol, deformed)
+        ncc_before = normalized_cross_correlation(vol, deformed).values["ncc"]
 
         field = cpd_register(
             vol, deformed,
@@ -252,7 +252,7 @@ class TestCPDRegistration:
             grid_spacing=8,
         )
         recovered = apply_tps_deformation(deformed, field)
-        ncc_after = normalized_cross_correlation(vol, recovered)
+        ncc_after = normalized_cross_correlation(vol, recovered).values["ncc"]
 
         assert ncc_after > ncc_before, (
             f"NCC did not improve: {ncc_before:.4f} → {ncc_after:.4f}"
