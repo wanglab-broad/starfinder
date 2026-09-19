@@ -1,0 +1,146 @@
+name: Documentation
+
+on:
+  pull_request:
+  push:
+    # main is the GitHub default; dev and the pilot branch also need validation.
+    branches: [main, dev, codex/docs-autonomous]
+  workflow_dispatch:
+    inputs:
+      check_external_links:
+        description: Check public external links (requires network access)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  # Do not interrupt a publication already in flight.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/codex/docs-autonomous' }}
+
+jobs:
+  docs:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+        working-directory: src/python
+    env:
+      UV_PYTHON: '3.12'
+      UV_LOCKED: 'true'
+      UV_NO_DEFAULT_GROUPS: 'true'
+      PYTHONDONTWRITEBYTECODE: '1'
+      OMP_NUM_THREADS: '1'
+      OPENBLAS_NUM_THREADS: '1'
+      MKL_NUM_THREADS: '1'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+        with:
+          version: '0.9.28'
+          enable-cache: true
+          cache-dependency-glob: src/python/uv.lock
+      - name: Set external output paths
+        run: |
+          echo "MPLCONFIGDIR=$RUNNER_TEMP/docs-matplotlib" >> "$GITHUB_ENV"
+          echo "DOCS_RUN=$RUNNER_TEMP/docs-validation" >> "$GITHUB_ENV"
+      - name: Install locked runtime and docs dependencies
+        run: |
+          mkdir -p "$DOCS_RUN"
+          uv sync --locked --no-default-groups --group docs 2>&1 | tee "$DOCS_RUN/install.log"
+          uv run --group docs python --version | tee "$DOCS_RUN/python.log"
+          uv pip freeze --python .venv/bin/python > "$DOCS_RUN/packages.txt"
+      - name: Strict HTML and internal references
+        run: |
+          uv run --group docs sphinx-build -n -W --keep-going -b html ../../docs "$DOCS_RUN/html" 2>&1 | tee "$DOCS_RUN/html.log"
+      - name: Fixed-input quickstart and recipes
+        timeout-minutes: 5
+        run: |
+          uv run --group docs python ../../docs/examples/quickstart.py "$DOCS_RUN/quickstart" 2>&1 | tee "$DOCS_RUN/quickstart.log"
+          uv run --group docs python ../../docs/examples/recipes.py "$DOCS_RUN/quickstart" "$DOCS_RUN/recipes" 2>&1 | tee "$DOCS_RUN/recipes.log"
+      - name: External links (manual opt-in)
+        if: github.event_name == 'workflow_dispatch' && inputs.check_external_links
+        timeout-minutes: 5
+        run: |
+          uv run --group docs sphinx-build -n -W --keep-going -b linkcheck ../../docs "$DOCS_RUN/linkcheck" 2>&1 | tee "$DOCS_RUN/linkcheck.log"
+      - name: Record publication revision
+        if: github.event_name == 'push' && github.ref == 'refs/heads/codex/docs-autonomous'
+        run: |
+          uv run --group docs python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          run_url = f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
+          metadata = {
+              "revision": os.environ["GITHUB_SHA"],
+              "ref": os.environ["GITHUB_REF"],
+              "run_url": run_url,
+              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+          }
+          (Path(os.environ["DOCS_RUN"]) / "html" / "build-info.json").write_text(
+              json.dumps(metadata, indent=2) + "\n", encoding="utf-8"
+          )
+          PY
+      - name: Upload Pages site
+        if: github.event_name == 'push' && github.ref == 'refs/heads/codex/docs-autonomous'
+        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
+        with:
+          path: ${{ runner.temp }}/docs-validation/html
+      - name: Record validation scope
+        if: always()
+        env:
+          CHECK_EXTERNAL_LINKS: ${{ github.event_name == 'workflow_dispatch' && inputs.check_external_links }}
+        run: |
+          {
+            echo 'Docs CI checks internal references and executes the seed-42 tiny quickstart and recipes.'
+            echo 'Optional backend execution, MATLAB, Snakemake/UGER, large data, and the full Python suite are outside this job.'
+            if [ "$CHECK_EXTERNAL_LINKS" = true ]; then
+              echo 'External link checking requested; consult its step outcome and artifact logs.'
+            else
+              echo 'External link checking skipped; opt in via workflow_dispatch or run the documented local command.'
+            fi
+            echo 'Loopback preview URLs are excluded from external link checking.'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Retain validation evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: docs-validation-${{ github.run_id }}-${{ github.run_attempt }}
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/docs-validation/*.log
+            ${{ runner.temp }}/docs-validation/packages.txt
+            ${{ runner.temp }}/docs-validation/quickstart/summary.json
+            ${{ runner.temp }}/docs-validation/quickstart/synthetic_config.json
+            ${{ runner.temp }}/docs-validation/recipes/summary.json
+            ${{ runner.temp }}/docs-validation/linkcheck/output.*
+            ${{ runner.temp }}/docs-validation/html/build-info.json
+
+  deploy:
+    # Only the selected publication branch can deploy; PRs remain read-only.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/codex/docs-autonomous'
+    needs: docs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: github-pages
+      cancel-in-progress: false
+    steps:
+      - name: Check Pages configuration
+        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
+      - name: Deploy checked documentation
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4

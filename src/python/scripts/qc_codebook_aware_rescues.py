@@ -20,13 +20,8 @@ import numpy as np
 import pandas as pd
 import tifffile
 
-from starfinder.barcode import load_codebook
-from starfinder.barcode.codebook_aware import (
-    build_one_error_index,
-    candidate_sequences,
-    channel_probabilities,
-    score_candidates,
-)
+from _decoding_inputs import saved_codebook
+from _decoding_inputs import tensor_diagnostics, observed_candidates, saved_decoding
 
 BENCHMARK_ROOT = Path("/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark")
 DEFAULT_RESULT_DIR = BENCHMARK_ROOT / "decoding" / "codebook_aware" / "results"
@@ -248,9 +243,11 @@ def generate_raw_registered_stack_cache(
     if dataset not in RAW_REAL_DATASETS:
         raise FileNotFoundError(f"No raw-E2E stack cache recipe for {dataset}/{fov_id}")
 
-    from starfinder.dataset import STARMapDataset
-    from starfinder.dataset.types import LayerState
-    from starfinder.io import save_stack
+    from starfinder.dataset import Dataset, RegistrationStep
+    from starfinder.registration import TranslationConfig
+    from starfinder.preprocessing import MinMaxNormalizationConfig
+    from starfinder.dataset.types import RoundState
+    from starfinder.io import save_volume
 
     config = RAW_REAL_DATASETS[dataset]
     stack_dir = raw_registered_stack_dir(result_dir, dataset, fov_id)
@@ -261,30 +258,30 @@ def generate_raw_registered_stack_cache(
     if all(path.exists() for path in expected):
         return stack_dir
 
-    ds = STARMapDataset(
+    ds = Dataset(
         input_root=config["data_root"],
         output_root=result_dir / dataset / "registered_stack_cache_output",
         dataset_id="sample-dataset",
         sample_id=config["sample_id"],
         output_id=f"{dataset}-registered-stack-cache",
-        layers=LayerState(
-            seq=[f"round{i}" for i in range(1, int(config["n_rounds"]) + 1)],
-            ref=config["ref_round"],
+        rounds=RoundState(
+            sequencing_rounds=[f"round{i}" for i in range(1, int(config["n_rounds"]) + 1)],
+            reference_round=config["ref_round"],
         ),
         channel_order=config["channel_order"],
         fov_pattern=config["fov_pattern"],
     )
     fov = ds.fov(fov_id)
     print(f"Generating registered stack cache for {dataset} {fov_id}")
-    fov.load_raw_images()
+    fov.load_images()
     fov.rotate(angle=float(config["rotate_angle"]))
-    fov.enhance_contrast(snr_threshold=float(config["snr_threshold"]))
-    fov.global_registration()
+    fov.normalize_intensity(config=MinMaxNormalizationConfig("uint8", (0, 255), snr_threshold=float(config["snr_threshold"])))
+    fov.register(RegistrationStep(TranslationConfig()))
 
     stack_dir.mkdir(parents=True, exist_ok=True)
     for round_idx in range(1, int(config["n_rounds"]) + 1):
         round_name = f"round{round_idx}"
-        save_stack(fov.images[round_name], stack_dir / f"{round_name}.tif")
+        save_volume(fov.images[round_name], stack_dir / f"{round_name}.tif")
 
     metadata = {
         "dataset": dataset,
@@ -296,7 +293,7 @@ def generate_raw_registered_stack_cache(
         },
         "global_shifts": {
             round_name: list(shift)
-            for round_name, shift in fov.global_shifts.items()
+            for round_name, shift in ((name, tuple(-v for v in results[0].transform.correction_zyx)) for name, results in fov.registration_results.items())
         },
     }
     (stack_dir / "metadata.json").write_text(json.dumps(metadata, indent=2))
@@ -376,13 +373,12 @@ def target_no_call_candidates(
     n_channels: int,
     n_rounds: int,
 ) -> pd.Series:
-    one_error_index = build_one_error_index(seq_to_gene, n_channels, n_rounds)
     seq_to_base = {seq: strip_pad_suffix(gene) for seq, gene in seq_to_gene.items()}
     cache: dict[str, str] = {}
     unique_wta = decoded.loc[decoded["call_group"] == "no_call", "color_seq_wta"].unique()
     for wta_seq in unique_wta:
         seq = normalize_sequence(wta_seq)
-        candidates = candidate_sequences(seq, one_error_index, seq_to_gene)
+        candidates = observed_candidates(seq, seq_to_gene).color_sequence.tolist()
         target_candidates = [
             candidate for candidate in candidates if seq_to_base[candidate] == target_gene
         ]
@@ -555,7 +551,7 @@ def select_examples(
 
 def probs_for_spot(tensor: np.ndarray, spot_id: int) -> np.ndarray:
     values = np.asarray(tensor[spot_id : spot_id + 1], dtype=np.float64)
-    return channel_probabilities(values)[0]
+    return tensor_diagnostics(values)['probabilities'][0]
 
 
 def best_target_candidate(
@@ -565,8 +561,14 @@ def best_target_candidate(
     candidates = [candidate for candidate in candidate_list if candidate]
     if not candidates:
         return ""
-    scores = score_candidates(probs, sorted(set(candidates)))
-    return str(scores.iloc[0]["seq"])
+    # Recover an intensity representation whose additive-pseudocount probabilities
+    # equal the supplied public probabilities, then read public candidate scores.
+    scale = max(1.0, 1e-6 / float(probs.min()))
+    values = np.maximum(probs * scale - 1e-6, 0)[None, ...]
+    result = saved_decoding(values, {s:s for s in sorted(set(candidates))},
+        max_hamming=probs.shape[1], allow_exact=False)
+    scores = result.diagnostics['candidates']
+    return str(scores.iloc[0]['color_sequence'])
 
 
 def margin_round(probs: np.ndarray) -> int:
@@ -691,7 +693,7 @@ def all_rescued_h1_tensor_metrics(
         wta_ch = int(wta_color) - 1
         target_ch = int(target_color) - 1
         values = np.asarray(tensor[spot_id : spot_id + 1], dtype=np.float64)
-        probs = channel_probabilities(values)[0]
+        probs = tensor_diagnostics(values)['probabilities'][0]
         intensities = values[0]
 
         wta_intensity = float(intensities[wta_ch, round_idx])
@@ -1115,7 +1117,7 @@ def main() -> None:
         args.split_index,
         result_dir=args.result_dir,
     )
-    _gene_to_seq, seq_to_gene = load_codebook(codebook_path, split_index=split_index)
+    seq_to_gene = saved_codebook(codebook_path, split_index=split_index).seq_to_gene
     tensor_metric_genes = list(dict.fromkeys([*args.genes, *args.control_genes, "Kalrn"]))
     _tensor_metrics, tensor_summary = write_h1_tensor_metrics(
         merged,

@@ -1,5 +1,12 @@
 function [color_seq, color_score] = ExtractFromLocation( input_img, allSpots, voxel_size )
-%ExtractFromLocation
+% Call one color per spot by summing a clipped neighborhood in each channel.
+%
+% input_img is (row, column, Z, C); allSpots is a table with 1-based x, y, z.
+% voxel_size contains nonnegative integer half-widths [row, column, Z].
+% Returns N-by-1 string color_seq and numeric color_score. Unique maxima yield
+% 1-based channel labels; ties yield "M"; NaN maxima yield "N". Invalid calls
+% have Inf scores. Scores are -log of the largest L2-normalized channel sum.
+% An all-zero neighborhood with multiple channels is a tie, not an "N" call.
 
     % get dims
     [dimX, dimY, dimZ, Nchannel] = size(input_img);

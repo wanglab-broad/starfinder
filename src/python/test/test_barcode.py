@@ -1,224 +1,140 @@
-"""Tests for barcode encoding, decoding, codebook loading, and filtering."""
+"""Canonical codebook validation, encoding and public API inventory."""
 
 from pathlib import Path
-
+import importlib
+import numpy as np
 import pandas as pd
 import pytest
-
-from starfinder.barcode.encoding import (
-    BASE_PAIR_TO_COLOR,
-    COLOR_TO_BASE_PAIRS,
-    decode_color_seq,
+from starfinder.barcode import (
+    Codebook,
+    EncodingConfig,
+    load_codebook,
     encode_bases,
+    decode_color_sequence,
+    decode_barcodes,
+    WtaDecoderConfig,
+    filter_reads,
 )
-from starfinder.barcode.codebook import load_codebook
-from starfinder.barcode.filtering import filter_reads
-from starfinder.benchmark.synthetic import TEST_CODEBOOK
+from starfinder.synthetic._presets import _TEST_CODEBOOK
+from starfinder.barcode import EncodingConfig
+from .barcode_cases import CHANNELS, intensity, tensor
 
-# Resolve path relative to this file → repo root / tests/fixtures/...
-_REPO_ROOT = Path(__file__).resolve().parents[3]
-SMALL_CODEBOOK = _REPO_ROOT / "tests" / "fixtures" / "synthetic" / "small" / "codebook.csv"
-
-
-# --- Encoding ---
+ROUNDS = tuple(f"r{i}" for i in range(4))
+SMALL = Path(__file__).resolve().parents[3] / "tests/fixtures/synthetic/small/codebook.csv"
 
 
-class TestEncodeBases:
-    def test_known_sequence(self):
-        """encode_bases('CGCAC') should produce '4422' (no reversal)."""
-        assert encode_bases("CGCAC") == "4422"
-
-    def test_output_length(self):
-        assert len(encode_bases("CGCAC")) == 4
-        assert len(encode_bases("AC")) == 1
-
-    def test_all_same_bases(self):
-        """Same-base pairs always map to color '1'."""
-        assert encode_bases("AAAA") == "111"
-        assert encode_bases("CCCC") == "111"
+def test_encoding_roundtrips_and_synthetic_reversal():
+    assert encode_bases("CGCAC") == "4422"
+    assert decode_color_sequence("4422", "C") == "CGCAC"
+    for gene, bases in _TEST_CODEBOOK:
+        seq = EncodingConfig().encode(bases)
+        assert seq == EncodingConfig(reverse_bases=True).encode(bases) == encode_bases(bases[::-1])
+        assert decode_color_sequence(seq, bases[-1]) == bases[::-1]
+    assert EncodingConfig(False).encode("CACGC") == "2244"
+    bases = "ACGTAC"
+    raw = encode_bases(bases)
+    assert EncodingConfig(False, 2).encode(bases) == raw[3:] + raw[:2]
 
 
-# --- Decoding ---
+def test_load_canonical_order_and_ground_truth_calls():
+    cb = load_codebook(SMALL, round_labels=ROUNDS, channel_labels=CHANNELS)
+    assert isinstance(cb, Codebook) and cb.n_genes == 8
+    assert cb.gene_to_seq["GeneA"] == "4422"
+    assert cb.seq_to_gene["4422"] == "GeneA"
+    assert cb.genes == [g for g, _ in _TEST_CODEBOOK]
+    result = decode_barcodes(
+        intensity(tensor(cb.table.color_sequence.tolist()), rounds=ROUNDS),
+        cb,
+        config=WtaDecoderConfig(),
+    )
+    assert filter_reads(result).accepted.gene_id.tolist() == cb.genes
 
 
-class TestDecodeColorSeq:
-    def test_known_decode(self):
-        """decode_color_seq('4422', 'C') should produce 'CGCAC'."""
-        assert decode_color_seq("4422", "C") == "CGCAC"
+@pytest.mark.parametrize("header", ["", "gene,barcode\n", "\ufeffgene,barcode\n"])
+def test_csv_headers_and_bom(tmp_path, header):
+    path = tmp_path / "book.csv"
+    path.write_text(header + "A,CACGC\nB,CATGC\n")
+    cb = load_codebook(path, round_labels=ROUNDS, channel_labels=CHANNELS)
+    assert cb.genes == ["A", "B"] and cb.gene_to_seq["A"] == "4422"
 
-    def test_encode_decode_roundtrip(self):
-        """encode -> decode with correct start base recovers original."""
-        for barcode in ["CGCAC", "ACGTG", "TTTTT", "ATCGA"]:
-            encoded = encode_bases(barcode)
-            decoded = decode_color_seq(encoded, barcode[0])
-            assert decoded == barcode, f"Roundtrip failed for {barcode}"
 
-    def test_all_codebook_entries_roundtrip(self):
-        """All 8 codebook barcodes survive encode->decode roundtrip."""
-        for gene, barcode in TEST_CODEBOOK:
-            # The codebook uses reversed barcodes for encoding
-            reversed_bc = barcode[::-1]
-            encoded = encode_bases(reversed_bc)
-            decoded = decode_color_seq(encoded, reversed_bc[0])
-            assert decoded == reversed_bc, (
-                f"{gene}: {reversed_bc} -> {encoded} -> {decoded}"
+@pytest.mark.parametrize(
+    "rows",
+    [
+        "A,CACGC\nA,CATGC\n",
+        "A,CACGC\nB,CACGC\n",
+        "A,CACGC\nA,CACGC\n",
+        "A,ACNTG\n",
+        "A,AC\n",
+        ",CACGC\n",
+    ],
+)
+def test_invalid_csv_has_row_context(tmp_path, rows):
+    path = tmp_path / "bad.csv"
+    path.write_text("gene,barcode\n" + rows)
+    with pytest.raises(ValueError, match="row [23]"):
+        load_codebook(path, round_labels=ROUNDS, channel_labels=CHANNELS)
+
+
+@pytest.mark.parametrize("split", [-1, 0, True, 1.5])
+def test_invalid_split_config(split):
+    with pytest.raises(ValueError):
+        EncodingConfig(split_index=split)
+
+
+def test_split_range_and_mapping_errors(tmp_path):
+    path = tmp_path / "bad.csv"
+    path.write_text("A,CACGC\n")
+    with pytest.raises(ValueError, match="row 1.*split"):
+        load_codebook(
+            path,
+            round_labels=ROUNDS,
+            channel_labels=CHANNELS,
+            encoding=EncodingConfig(split_index=3),
+        )
+    for mapping in ({"1": 0}, dict(zip("1234", [0, 0, 2, 3])), dict(zip("1234", [0, 1, 2, 4]))):
+        with pytest.raises(ValueError, match="map"):
+            load_codebook(
+                SMALL, round_labels=ROUNDS, channel_labels=CHANNELS, color_to_channel=mapping
             )
 
-    def test_single_color(self):
-        """Single-color sequence produces 2-base barcode."""
-        result = decode_color_seq("1", "A")
-        assert result == "AA"
-        assert len(result) == 2
+
+def test_no_old_public_interfaces():
+    import starfinder.barcode as barcode
+    import starfinder.dataset as dataset
+
+    for name in (
+        "extract_from_location",
+        "extract_intensity_tensor",
+        "decode_codebook_aware",
+        "decode_color_seq",
+        "BASE_PAIR_TO_COLOR",
+        "COLOR_TO_CHANNEL",
+        "build_one_error_index",
+        "candidate_sequences",
+        "score_candidates",
+        "channel_probabilities",
+        "wta_color_sequences",
+    ):
+        assert not hasattr(barcode, name)
+    assert not hasattr(dataset, "Codebook")
+    for module in ("starfinder.barcode.encoding", "starfinder.barcode.codebook_aware"):
+        with pytest.raises(ModuleNotFoundError):
+            importlib.import_module(module)
 
 
-# --- Codebook ---
+def test_distinct_bases_with_identical_encoding_collide(tmp_path):
+    path = tmp_path / "collision.csv"
+    path.write_text("A,AA\nB,CC\n")
+    with pytest.raises(ValueError, match="row 2.*collision"):
+        load_codebook(path, round_labels=("r",), channel_labels=CHANNELS)
 
 
-class TestLoadCodebook:
-    def test_load_small_codebook(self):
-        gene_to_seq, seq_to_gene = load_codebook(SMALL_CODEBOOK)
-        assert len(gene_to_seq) == 8
-        assert len(seq_to_gene) == 8
-
-    def test_gene_lookup(self):
-        gene_to_seq, _ = load_codebook(SMALL_CODEBOOK)
-        # CACGC reversed = CGCAC, encode -> 4422
-        assert gene_to_seq["GeneA"] == "4422"
-
-    def test_seq_lookup(self):
-        _, seq_to_gene = load_codebook(SMALL_CODEBOOK)
-        assert seq_to_gene["4422"] == "GeneA"
-
-    def test_bidirectional_consistency(self):
-        """gene_to_seq and seq_to_gene are inverses."""
-        gene_to_seq, seq_to_gene = load_codebook(SMALL_CODEBOOK)
-        for gene, seq in gene_to_seq.items():
-            assert seq_to_gene[seq] == gene
-
-    def test_no_reverse(self):
-        """With do_reverse=False, encoding uses barcode as-is."""
-        gene_to_seq_rev, _ = load_codebook(SMALL_CODEBOOK, do_reverse=True)
-        gene_to_seq_fwd, _ = load_codebook(SMALL_CODEBOOK, do_reverse=False)
-        # Results should differ (unless a barcode is a palindrome)
-        assert gene_to_seq_rev != gene_to_seq_fwd
-
-    def test_load_codebook_without_header(self, tmp_path):
-        """load_codebook should handle CSV files without gene,barcode header."""
-        codebook_file = tmp_path / "genes.csv"
-        codebook_file.write_text("GeneA,CACGC\nGeneB,CATGC\n")
-        gene_to_seq, seq_to_gene = load_codebook(codebook_file)
-        assert "GeneA" in gene_to_seq
-        assert "GeneB" in gene_to_seq
-        assert len(gene_to_seq) == 2
-
-    def test_load_codebook_with_bom(self, tmp_path):
-        """load_codebook should handle UTF-8 BOM in codebook files."""
-        codebook_file = tmp_path / "genes.csv"
-        codebook_file.write_bytes(b"\xef\xbb\xbfGeneA,CACGC\r\nGeneB,CATGC\r\n")
-        gene_to_seq, seq_to_gene = load_codebook(codebook_file)
-        assert "GeneA" in gene_to_seq
-        assert len(gene_to_seq) == 2
-
-
-# --- Filtering ---
-
-
-class TestFilterReads:
-    @pytest.fixture()
-    def codebook(self):
-        _, seq_to_gene = load_codebook(SMALL_CODEBOOK)
-        return seq_to_gene
-
-    def test_basic_filtering(self, codebook):
-        """Valid color sequences get gene assigned."""
-        spots = pd.DataFrame({
-            "z": [1, 2], "y": [10, 20], "x": [30, 40],
-            "color_seq": ["4422", "4242"],
-        })
-        good, stats = filter_reads(spots, codebook)
-
-        assert len(good) == 2
-        assert good.iloc[0]["gene"] == "GeneA"
-        assert good.iloc[1]["gene"] == "GeneB"
-        assert stats["in_codebook"] == 1.0
-
-    def test_invalid_filtered_out(self, codebook):
-        """Non-codebook sequences are excluded."""
-        spots = pd.DataFrame({
-            "z": [1, 2, 3], "y": [10, 20, 30], "x": [30, 40, 50],
-            "color_seq": ["4422", "1111", "9999"],
-        })
-        good, stats = filter_reads(spots, codebook)
-
-        assert len(good) == 1
-        assert good.iloc[0]["gene"] == "GeneA"
-        assert stats["n_in_codebook"] == 1
-        assert stats["n_total"] == 3
-
-    def test_stats_keys(self, codebook):
-        spots = pd.DataFrame({
-            "z": [1], "y": [10], "x": [30],
-            "color_seq": ["4422"],
-        })
-        _, stats = filter_reads(spots, codebook)
-        assert "n_total" in stats
-        assert "n_in_codebook" in stats
-        assert "in_codebook" in stats
-
-    def test_end_bases_diagnostic(self, codebook):
-        """end_bases adds diagnostic stats without changing filtering."""
-        spots = pd.DataFrame({
-            "z": [1, 2], "y": [10, 20], "x": [30, 40],
-            "color_seq": ["4422", "1111"],
-        })
-        good, stats = filter_reads(spots, codebook, end_bases="CC", start_base="C")
-
-        # Filtering result unchanged — only codebook match matters
-        assert len(good) == 1
-        # Diagnostic keys present
-        assert "correct_form" in stats
-        assert "validated" in stats
-
-    def test_empty_input(self, codebook):
-        spots = pd.DataFrame({"z": [], "y": [], "x": [], "color_seq": []})
-        good, stats = filter_reads(spots, codebook)
-        assert len(good) == 0
-        assert stats["in_codebook"] == 0.0
-
-    def test_gene_column_added(self, codebook):
-        """Output DataFrame has 'gene' column."""
-        spots = pd.DataFrame({
-            "z": [1], "y": [10], "x": [30],
-            "color_seq": ["4422"],
-        })
-        good, _ = filter_reads(spots, codebook)
-        assert "gene" in good.columns
-
-
-# --- End-to-end ---
-
-
-class TestEndToEnd:
-    def test_ground_truth_pipeline(self):
-        """Codebook + filtering recovers gene names from known color sequences."""
-        gene_to_seq, seq_to_gene = load_codebook(SMALL_CODEBOOK)
-
-        # Simulate extracted spots with known color sequences from all 8 genes
-        spots_data = []
-        expected_genes = []
-        for gene, barcode in TEST_CODEBOOK:
-            seq = gene_to_seq[gene]
-            spots_data.append({"z": 1, "y": 10, "x": 20, "color_seq": seq})
-            expected_genes.append(gene)
-
-        # Add some invalid reads
-        spots_data.append({"z": 1, "y": 10, "x": 20, "color_seq": "1111"})
-        spots_data.append({"z": 1, "y": 10, "x": 20, "color_seq": "XXXX"})
-
-        spots = pd.DataFrame(spots_data)
-        good, stats = filter_reads(spots, seq_to_gene)
-
-        assert len(good) == 8
-        assert list(good["gene"]) == expected_genes
-        assert stats["n_in_codebook"] == 8
-        assert stats["n_total"] == 10
+def test_canonical_csv_and_optional_bases_validated(tmp_path):
+    path = tmp_path / "canonical.csv"
+    path.write_text("gene_id,color_sequence,base_sequence\nA,4422,CACGC\n")
+    cb = load_codebook(path, round_labels=ROUNDS, channel_labels=CHANNELS)
+    assert cb.gene_to_seq == {"A": "4422"}
+    path.write_text("gene_id,color_sequence,base_sequence\nA,4422,CATGC\n")
+    with pytest.raises(ValueError, match="row 2.*disagrees"):
+        load_codebook(path, round_labels=ROUNDS, channel_labels=CHANNELS)

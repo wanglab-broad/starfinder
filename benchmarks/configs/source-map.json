@@ -1,0 +1,422 @@
+{
+  "schema_version": 1,
+  "scope": {
+    "max_file_depth": 6,
+    "suffixes": [
+      ".py",
+      ".m",
+      ".sh",
+      ".ipynb"
+    ],
+    "excluded_directories": [
+      ".cache",
+      ".git",
+      ".ipynb_checkpoints",
+      ".venv",
+      "__pycache__",
+      "env",
+      "environments",
+      "envs",
+      "records",
+      "runs",
+      "venv"
+    ],
+    "exclude_hidden_directories": true,
+    "follow_symlinks": false
+  },
+  "source_root_label": "starfinder_benchmark",
+  "files": [
+    {
+      "source": "decoding/postcode/scripts/common.py",
+      "source_sha256": "e1aa0d2376b8593277c3bf5856cabfbe804f616e99b905b1fbf61516c9a0e6be",
+      "disposition": "optional-postcode",
+      "maintained_target": "docs/benchmark-recipes.md#optional-recipes",
+      "notes": "Preserve; external Postcode environment/model/codebook and qualified inputs required; no core dependency."
+    },
+    {
+      "source": "decoding/postcode/scripts/run_decoding_aging.py",
+      "source_sha256": "22fabbf3122899750052df59710befbb3dabcbc8dcdc364cd15dea4f05bdbd77",
+      "disposition": "optional-postcode",
+      "maintained_target": "docs/benchmark-recipes.md#optional-recipes",
+      "notes": "Preserve; external Postcode environment/model/codebook and qualified inputs required; no core dependency."
+    },
+    {
+      "source": "decoding/postcode/scripts/run_decoding_synthetic.py",
+      "source_sha256": "68c58e40c89ffa4fd9ec9dd7588066f19272eb599b83520187d14248dfad04bf",
+      "disposition": "optional-postcode",
+      "maintained_target": "docs/benchmark-recipes.md#optional-recipes",
+      "notes": "Preserve; external Postcode environment/model/codebook and qualified inputs required; no core dependency."
+    },
+    {
+      "source": "e2e/results/run_streaming_benchmark.py",
+      "source_sha256": "d45e37699961ec9d5f094e10518ba5bf980801115abf5e73ddafbe287545425b",
+      "disposition": "pipeline-recipe",
+      "maintained_target": "benchmarks/configs/pipeline.json",
+      "notes": "Shared Dataset/FOV pipeline via common lifecycle; explicit source map replaces host roots and per-dataset loops; historical diagnostics retained."
+    },
+    {
+      "source": "e2e/results/LN/run_e2e_LN.py",
+      "source_sha256": "e7209c762348d76a4720f4d5f4c2dcf5a9f57331fd0cabe4616484c3cb9d7004",
+      "disposition": "pipeline-recipe",
+      "maintained_target": "benchmarks/configs/pipeline.json",
+      "notes": "Shared Dataset/FOV pipeline via common lifecycle; explicit source map replaces host roots and per-dataset loops; historical diagnostics retained."
+    },
+    {
+      "source": "e2e/results/aging/run_e2e_aging.py",
+      "source_sha256": "b02b2f81677528348047bd46a36d1046c2abf91b0ac9a1061a007ef7323cb943",
+      "disposition": "pipeline-recipe",
+      "maintained_target": "benchmarks/configs/pipeline.json",
+      "notes": "Shared Dataset/FOV pipeline via common lifecycle; explicit source map replaces host roots and per-dataset loops; historical diagnostics retained."
+    },
+    {
+      "source": "e2e/results/cell_culture_3D/run_e2e_cell_culture_3D.py",
+      "source_sha256": "0380ea4a6a1ea7021ccbd82bf7ef7223c5302b36220e12c21157c2bc55919470",
+      "disposition": "pipeline-recipe",
+      "maintained_target": "benchmarks/configs/pipeline.json",
+      "notes": "Shared Dataset/FOV pipeline via common lifecycle; explicit source map replaces host roots and per-dataset loops; historical diagnostics retained."
+    },
+    {
+      "source": "e2e/results/figures/plot_scaling.py",
+      "source_sha256": "c3917798365b1567d9ae306ecfd5379e93de03cbb7d9f265d5814f39fa632ed5",
+      "disposition": "saved-report",
+      "maintained_target": "benchmarks/report_saved.py",
+      "notes": "Selected saved-table joins/reporting only; plots/notebook outputs remain historical; explicit timing scopes, no implicit pooling."
+    },
+    {
+      "source": "e2e/results/large/run_e2e_large.py",
+      "source_sha256": "6730d50029d83980c43a2d9de1850398f4f85bf15ae89bdf3a347e59cbfa6a86",
+      "disposition": "pipeline-recipe",
+      "maintained_target": "benchmarks/configs/pipeline.json",
+      "notes": "Shared Dataset/FOV pipeline via common lifecycle; explicit source map replaces host roots and per-dataset loops; historical diagnostics retained."
+    },
+    {
+      "source": "e2e/results/thick_medium/run_e2e_thick_medium.py",
+      "source_sha256": "57a17b9e95a086a7b728de71a645e706659ba748f7e4c7e11248174234ed947c",
+      "disposition": "pipeline-recipe",
+      "maintained_target": "benchmarks/configs/pipeline.json",
+      "notes": "Shared Dataset/FOV pipeline via common lifecycle; explicit source map replaces host roots and per-dataset loops; historical diagnostics retained."
+    },
+    {
+      "source": "e2e/results/tissue/run_e2e_tissue.py",
+      "source_sha256": "e11cf03fa0efa4ca649f06fcbf5772fed06b6debfd62b22d82f49f8d1f59d6a4",
+      "disposition": "pipeline-recipe",
+      "maintained_target": "benchmarks/configs/pipeline.json",
+      "notes": "Shared Dataset/FOV pipeline via common lifecycle; explicit source map replaces host roots and per-dataset loops; historical diagnostics retained."
+    },
+    {
+      "source": "e2e/results/tissue_2D/run_e2e_tissue2D.py",
+      "source_sha256": "3a1cd20a8d38c2d6ca5d5b05bc630079cc8f2e4c9e5708a3b1b26a516b5afb31",
+      "disposition": "pipeline-recipe",
+      "maintained_target": "benchmarks/configs/pipeline.json",
+      "notes": "Shared Dataset/FOV pipeline via common lifecycle; explicit source map replaces host roots and per-dataset loops; historical diagnostics retained."
+    },
+    {
+      "source": "e2e_LR/data/generate_data.py",
+      "source_sha256": "dda1b017227364eab5132be5dd36b86ce4b22d242667dcf8fb3f9155606a58a3",
+      "disposition": "optional-synthetic",
+      "maintained_target": "docs/benchmark-recipes.md#optional-recipes",
+      "notes": "Standalone synthetic CLI; preserve LR deformation/seed recipe; do not qualify process-dependent hash seeds."
+    },
+    {
+      "source": "e2e_LR/results/run_e2e_LR.py",
+      "source_sha256": "c46cbdcc6117ef03d39ff452ec07f9b9968baea095efe33cc4255217ee72fe39",
+      "disposition": "pipeline-recipe",
+      "maintained_target": "benchmarks/configs/pipeline.json",
+      "notes": "Shared Dataset/FOV pipeline via common lifecycle; explicit source map replaces host roots and per-dataset loops; historical diagnostics retained."
+    },
+    {
+      "source": "e2e_LR/results/run_e2e_LR_aging.py",
+      "source_sha256": "0b64457e99aee4244107dc0cdf4f29973086b17f9d9ff8b88b6b4799f50a0c3a",
+      "disposition": "pipeline-recipe",
+      "maintained_target": "benchmarks/configs/pipeline.json",
+      "notes": "Shared Dataset/FOV pipeline via common lifecycle; explicit source map replaces host roots and per-dataset loops; historical diagnostics retained."
+    },
+    {
+      "source": "e2e_backend_comparison/scripts/backend_common.py",
+      "source_sha256": "487f5b37ac433df3974e688f872449438c1abd2b5ccce59101eade1adf0473a1",
+      "disposition": "pipeline-recipe",
+      "maintained_target": "benchmarks/configs/pipeline.json",
+      "notes": "Shared Dataset/FOV pipeline via common lifecycle; explicit source map replaces host roots and per-dataset loops; historical diagnostics retained."
+    },
+    {
+      "source": "e2e_backend_comparison/scripts/diagnose_lr_effects.py",
+      "source_sha256": "373e6cdf0dc72dde71db77fb1d5ea6276d9e09329c43835cd33358e0c0f0b12a",
+      "disposition": "saved-report",
+      "maintained_target": "benchmarks/report_saved.py",
+      "notes": "Selected saved-table joins/reporting only; plots/notebook outputs remain historical; explicit timing scopes, no implicit pooling."
+    },
+    {
+      "source": "e2e_backend_comparison/scripts/evaluate_registered_stack.py",
+      "source_sha256": "32d38779c125d66991df2e308226288405dfc36f1885166df170aba63871c0aa",
+      "disposition": "pipeline-recipe",
+      "maintained_target": "benchmarks/recipes.py",
+      "notes": "Detection/extraction on supplied registered TIFFs is processing, not saved-only evaluation; use empty registration stages explicitly."
+    },
+    {
+      "source": "e2e_backend_comparison/scripts/run_hybrid_matlab_global_python_lr.py",
+      "source_sha256": "a31e8f075591f02256219282b9bdaed5ab23f6a03e940766c09b94fb7595cf63",
+      "disposition": "optional-hybrid",
+      "maintained_target": "docs/benchmark-recipes.md#optional-recipes",
+      "notes": "Preserve both global/local backend orderings; MATLAB exports and explicit geometry/channel manifest required."
+    },
+    {
+      "source": "e2e_backend_comparison/scripts/run_hybrid_python_global_matlab_lr.py",
+      "source_sha256": "9b2cf485014f13db0e07c21523276d39929adff0541e6ff5dacecb1fc5bc2e68",
+      "disposition": "optional-hybrid",
+      "maintained_target": "docs/benchmark-recipes.md#optional-recipes",
+      "notes": "Preserve both global/local backend orderings; MATLAB exports and explicit geometry/channel manifest required."
+    },
+    {
+      "source": "e2e_backend_comparison/scripts/run_matlab_backend.m",
+      "source_sha256": "a42fc6c2d7e988633dc2ae5321f68e765b614878b912e3127b093ef9c7cb08a4",
+      "disposition": "optional-matlab",
+      "maintained_target": "docs/benchmark-recipes.md#optional-recipes",
+      "notes": "Preserve source/API unchanged; licensed MATLAB and separately authorized inputs/resources required."
+    },
+    {
+      "source": "e2e_backend_comparison/scripts/run_python_backend.py",
+      "source_sha256": "cb7c46e40a0a6781c01a6b2e083eee054efa46524aa086d5f99d17b64cb933fc",
+      "disposition": "pipeline-recipe",
+      "maintained_target": "benchmarks/configs/pipeline.json",
+      "notes": "Shared Dataset/FOV pipeline via common lifecycle; explicit source map replaces host roots and per-dataset loops; historical diagnostics retained."
+    },
+    {
+      "source": "e2e_backend_comparison/scripts/summarize_results.py",
+      "source_sha256": "1c0938998e0c88d503efcc693b91344fa491435d9820cc19539f4bccd0acdaf7",
+      "disposition": "saved-report",
+      "maintained_target": "benchmarks/report_saved.py",
+      "notes": "Selected saved-table joins/reporting only; plots/notebook outputs remain historical; explicit timing scopes, no implicit pooling."
+    },
+    {
+      "source": "registration/results/imregdemons_ref/Demons2D.m",
+      "source_sha256": "233f71ce5c6bdcc5255069d7e2126ade04f4618fef045697fbd9673e23e69d7a",
+      "disposition": "reference-only",
+      "maintained_target": null,
+      "notes": "Private reference snapshot; ownership/license unassessed; redistribution excluded."
+    },
+    {
+      "source": "registration/results/imregdemons_ref/Demons3D.m",
+      "source_sha256": "52d02b3e565909cc1d61300a51c2cca6db4cb124561eaf40047c936b7fd0e659",
+      "disposition": "reference-only",
+      "maintained_target": null,
+      "notes": "Private reference snapshot; ownership/license unassessed; redistribution excluded."
+    },
+    {
+      "source": "registration/results/imregdemons_ref/MultiResolutionDemons2D.m",
+      "source_sha256": "f95a94d226cc04ba9c2ee1be90cf01c57e23ff988078a554c44d8c6f1c5bcdf7",
+      "disposition": "reference-only",
+      "maintained_target": null,
+      "notes": "Private reference snapshot; ownership/license unassessed; redistribution excluded."
+    },
+    {
+      "source": "registration/results/imregdemons_ref/MultiResolutionDemons3D.m",
+      "source_sha256": "f06a85eddb1ae671dbeaef918aa17e887a002b57444889f5eac4446c88563ed1",
+      "disposition": "reference-only",
+      "maintained_target": null,
+      "notes": "Private reference snapshot; ownership/license unassessed; redistribution excluded."
+    },
+    {
+      "source": "registration/results/imregdemons_ref/imregdemons.m",
+      "source_sha256": "7077b863ccb6c0f80c49d3b9f70755ce36cc73acd1229fc894f864cdeb0b8576",
+      "disposition": "reference-only",
+      "maintained_target": null,
+      "notes": "Private reference snapshot; ownership/license unassessed; redistribution excluded."
+    },
+    {
+      "source": "registration/results/imregdemons_ref/padForPyramiding.m",
+      "source_sha256": "d5c3d253820dcd260fd7377c6e415828a92f345415603dbca4a9a7b1f7427afa",
+      "disposition": "reference-only",
+      "maintained_target": null,
+      "notes": "Private reference snapshot; ownership/license unassessed; redistribution excluded."
+    },
+    {
+      "source": "registration/results/imregdemons_ref/parseOptionalDemonsInputs.m",
+      "source_sha256": "7110f4acd37290404d5e401cae3d183e53ca3d9d66b3406565df07e75d25742f",
+      "disposition": "reference-only",
+      "maintained_target": null,
+      "notes": "Private reference snapshot; ownership/license unassessed; redistribution excluded."
+    },
+    {
+      "source": "registration/results/imregdemons_ref/validatePyramiding.m",
+      "source_sha256": "e747034002f55a750881eebeb39af85fa66f5a553a1fcf352a24d443e70bb7ef",
+      "disposition": "reference-only",
+      "maintained_target": null,
+      "notes": "Private reference snapshot; ownership/license unassessed; redistribution excluded."
+    },
+    {
+      "source": "registration/results/scripts/benchmark_antialias_large.py",
+      "source_sha256": "a413137436d33056703d34a6394310465293c6618372544de87c3577787dff29",
+      "disposition": "registration-recipe",
+      "maintained_target": "benchmarks/configs/registration.json",
+      "notes": "Common run/evaluate/report; explicit profile selection; no inferred dataset sweep. Legacy scheduler/timeouts/resume remain provenance, not current policy."
+    },
+    {
+      "source": "registration/results/scripts/benchmark_cpd_single.py",
+      "source_sha256": "efe2ebd90718cefa976bb0f2f31e75e4a37f31d14bbec26f83a681a56f2411cb",
+      "disposition": "registration-recipe",
+      "maintained_target": "benchmarks/configs/registration.json",
+      "notes": "Common run/evaluate/report; explicit profile selection; no inferred dataset sweep. Legacy scheduler/timeouts/resume remain provenance, not current policy."
+    },
+    {
+      "source": "registration/results/scripts/benchmark_global.m",
+      "source_sha256": "aecc933cfdade994ead9df76717d61aa4da23937ec7c579df5be80632a558bbc",
+      "disposition": "optional-matlab",
+      "maintained_target": "docs/benchmark-recipes.md#optional-recipes",
+      "notes": "Preserve source/API unchanged; licensed MATLAB and separately authorized inputs/resources required."
+    },
+    {
+      "source": "registration/results/scripts/benchmark_global_single.m",
+      "source_sha256": "ea77f4a44a2807d55b6eaf8c85fcb6556ad6c798fa57bc00a5ed86a9b0d1c5d1",
+      "disposition": "optional-matlab",
+      "maintained_target": "docs/benchmark-recipes.md#optional-recipes",
+      "notes": "Preserve source/API unchanged; licensed MATLAB and separately authorized inputs/resources required."
+    },
+    {
+      "source": "registration/results/scripts/benchmark_global_single.py",
+      "source_sha256": "84b84a02d0855e99653e583c7fdd4b21f84705a963416bcf7a1c6f1f609695ec",
+      "disposition": "registration-recipe",
+      "maintained_target": "benchmarks/configs/registration.json",
+      "notes": "Common run/evaluate/report; explicit profile selection; no inferred dataset sweep. Legacy scheduler/timeouts/resume remain provenance, not current policy."
+    },
+    {
+      "source": "registration/results/scripts/benchmark_imregdemons.m",
+      "source_sha256": "62282d557aded90b54b64a315aa53574f3a9e7ab859d6989e6f485b5bed5f52b",
+      "disposition": "optional-matlab",
+      "maintained_target": "docs/benchmark-recipes.md#optional-recipes",
+      "notes": "Preserve source/API unchanged; licensed MATLAB and separately authorized inputs/resources required."
+    },
+    {
+      "source": "registration/results/scripts/benchmark_ln_fast.m",
+      "source_sha256": "a302de688c69bdd2f9286bae778d50d114cb973948b78c924f267266b1641707",
+      "disposition": "optional-matlab",
+      "maintained_target": "docs/benchmark-recipes.md#optional-recipes",
+      "notes": "Preserve source/API unchanged; licensed MATLAB and separately authorized inputs/resources required."
+    },
+    {
+      "source": "registration/results/scripts/benchmark_local_comparison_matlab.m",
+      "source_sha256": "e4fb83ec14ef8afafc9ef6dc210700f4b463e3f7dc10d3a58c9f168dbec9aa95",
+      "disposition": "optional-matlab",
+      "maintained_target": "docs/benchmark-recipes.md#optional-recipes",
+      "notes": "Preserve source/API unchanged; licensed MATLAB and separately authorized inputs/resources required."
+    },
+    {
+      "source": "registration/results/scripts/benchmark_local_comparison_single.py",
+      "source_sha256": "e1322aa85ae48d08dc44317ac09a38ced8bdfbb1ab227d99b477a700b5901ea2",
+      "disposition": "registration-recipe",
+      "maintained_target": "benchmarks/configs/registration.json",
+      "notes": "Common run/evaluate/report; explicit profile selection; no inferred dataset sweep. Legacy scheduler/timeouts/resume remain provenance, not current policy."
+    },
+    {
+      "source": "registration/results/scripts/benchmark_local_single.m",
+      "source_sha256": "a9f9d97237981ec219f8f9fc641cfc20dbed79316fda74ff58d147a00b500be6",
+      "disposition": "optional-matlab",
+      "maintained_target": "docs/benchmark-recipes.md#optional-recipes",
+      "notes": "Preserve source/API unchanged; licensed MATLAB and separately authorized inputs/resources required."
+    },
+    {
+      "source": "registration/results/scripts/benchmark_local_single.py",
+      "source_sha256": "6ab02b3e0f9f4613ce6ddd89a9eb86fded9b9a2d586587b927deaf57c2e81030",
+      "disposition": "registration-recipe",
+      "maintained_target": "benchmarks/configs/registration.json",
+      "notes": "Common run/evaluate/report; explicit profile selection; no inferred dataset sweep. Legacy scheduler/timeouts/resume remain provenance, not current policy."
+    },
+    {
+      "source": "registration/results/scripts/benchmark_tps_single.py",
+      "source_sha256": "77e3fe3d793a657863b0779d5c3f7e3d8ae08396d3dce9cb5f0686d04727f9ca",
+      "disposition": "registration-recipe",
+      "maintained_target": "benchmarks/configs/registration.json",
+      "notes": "Common run/evaluate/report; explicit profile selection; no inferred dataset sweep. Legacy scheduler/timeouts/resume remain provenance, not current policy."
+    },
+    {
+      "source": "registration/results/scripts/generate_global_comparison.py",
+      "source_sha256": "cb682a66af2224e85ab4f7cc724ebea4832de352dc6d0fd4b029a232542cda16",
+      "disposition": "saved-report",
+      "maintained_target": "benchmarks/report_saved.py",
+      "notes": "Selected saved-table joins/reporting only; plots/notebook outputs remain historical; explicit timing scopes, no implicit pooling."
+    },
+    {
+      "source": "registration/results/scripts/generate_local_comparison.py",
+      "source_sha256": "bcbaef913514adee76a16aea6b0c5ac70b9c890a76a98f5d664ef25a5ab3588a",
+      "disposition": "saved-report",
+      "maintained_target": "benchmarks/report_saved.py",
+      "notes": "Selected saved-table joins/reporting only; plots/notebook outputs remain historical; explicit timing scopes, no implicit pooling."
+    },
+    {
+      "source": "registration/results/scripts/generate_local_comparison_v2.py",
+      "source_sha256": "2b865fb56fc8238f367d6553b8a1e20270810211ce73ce389958e7b3712b6cad",
+      "disposition": "saved-report",
+      "maintained_target": "benchmarks/report_saved.py",
+      "notes": "Selected saved-table joins/reporting only; plots/notebook outputs remain historical; explicit timing scopes, no implicit pooling."
+    },
+    {
+      "source": "registration/results/scripts/qc_local_comparison.ipynb",
+      "source_sha256": "7f516fa22d2c922c353e7d3448e84e40582da172757cad267f25d7225ee602a0",
+      "disposition": "saved-report",
+      "maintained_target": "benchmarks/report_saved.py",
+      "notes": "Selected saved-table joins/reporting only; plots/notebook outputs remain historical; explicit timing scopes, no implicit pooling."
+    },
+    {
+      "source": "registration/results/scripts/run_cpd_python.py",
+      "source_sha256": "e0fe644aef632bb1adeafed8a349f0e07705329ca9cc4a4af83ffd18c729cf1d",
+      "disposition": "registration-recipe",
+      "maintained_target": "benchmarks/configs/registration.json",
+      "notes": "Common run/evaluate/report; explicit profile selection; no inferred dataset sweep. Legacy scheduler/timeouts/resume remain provenance, not current policy."
+    },
+    {
+      "source": "registration/results/scripts/run_global_matlab.sh",
+      "source_sha256": "e81440bf6bdf85e58245d021cc535670179a4012430ebbbd4d858aede81303bb",
+      "disposition": "optional-matlab",
+      "maintained_target": "docs/benchmark-recipes.md#optional-recipes",
+      "notes": "Preserve source/API unchanged; licensed MATLAB and separately authorized inputs/resources required."
+    },
+    {
+      "source": "registration/results/scripts/run_global_python.py",
+      "source_sha256": "4cd3b87fcafbfe2ad08fe69aa4bb5a7fcc6eaa1374091551ca3a3f6f3cbfcfb1",
+      "disposition": "registration-recipe",
+      "maintained_target": "benchmarks/configs/registration.json",
+      "notes": "Common run/evaluate/report; explicit profile selection; no inferred dataset sweep. Legacy scheduler/timeouts/resume remain provenance, not current policy."
+    },
+    {
+      "source": "registration/results/scripts/run_local_comparison.py",
+      "source_sha256": "c06933f8fb4635a2550b2ac62657cd833e256141ec76f3816097eba2d1da693c",
+      "disposition": "registration-recipe",
+      "maintained_target": "benchmarks/configs/registration.json",
+      "notes": "Common run/evaluate/report; explicit profile selection; no inferred dataset sweep. Legacy scheduler/timeouts/resume remain provenance, not current policy."
+    },
+    {
+      "source": "registration/results/scripts/run_local_comparison_v2.py",
+      "source_sha256": "b46e2e6418d1524244a2448076b11a015f5e09a23c08a6e8f3a0a4c957ac822f",
+      "disposition": "registration-recipe",
+      "maintained_target": "benchmarks/configs/registration.json",
+      "notes": "Common run/evaluate/report; explicit profile selection; no inferred dataset sweep. Legacy scheduler/timeouts/resume remain provenance, not current policy."
+    },
+    {
+      "source": "registration/results/scripts/run_local_matlab.sh",
+      "source_sha256": "46e3706db929bfa69b3a517e428fffb1efdd0d39b52449da3f4dff53e18a847e",
+      "disposition": "optional-matlab",
+      "maintained_target": "docs/benchmark-recipes.md#optional-recipes",
+      "notes": "Preserve source/API unchanged; licensed MATLAB and separately authorized inputs/resources required."
+    },
+    {
+      "source": "registration/results/scripts/run_local_python.py",
+      "source_sha256": "3784673cc805b520a8a398041c3aaa5606130d979edd614554d739fb7323a223",
+      "disposition": "registration-recipe",
+      "maintained_target": "benchmarks/configs/registration.json",
+      "notes": "Common run/evaluate/report; explicit profile selection; no inferred dataset sweep. Legacy scheduler/timeouts/resume remain provenance, not current policy."
+    },
+    {
+      "source": "registration/results/scripts/run_local_python_resume.py",
+      "source_sha256": "0f4c52b1595f7d70e2ba47491bf7520c1679ede442e01733342ded11545a1a3a",
+      "disposition": "registration-recipe",
+      "maintained_target": "benchmarks/configs/registration.json",
+      "notes": "Common run/evaluate/report; explicit profile selection; no inferred dataset sweep. Legacy scheduler/timeouts/resume remain provenance, not current policy."
+    },
+    {
+      "source": "registration/results/scripts/run_tps_python.py",
+      "source_sha256": "7139155a5e9ce29561439b866081b5b4910428216cd3ad0d13b50cbb70531398",
+      "disposition": "registration-recipe",
+      "maintained_target": "benchmarks/configs/registration.json",
+      "notes": "Common run/evaluate/report; explicit profile selection; no inferred dataset sweep. Legacy scheduler/timeouts/resume remain provenance, not current policy."
+    }
+  ]
+}

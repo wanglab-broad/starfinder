@@ -1,0 +1,869 @@
+{
+  "schema_version": 1,
+  "profiles": {
+    "LN-batch": {
+      "source": "e2e/results/LN/run_e2e_LN.py",
+      "parameters": {
+        "n_rounds": 4,
+        "reference_round": "round4",
+        "channel_order": [
+          "ch00",
+          "ch02",
+          "ch01",
+          "ch03"
+        ],
+        "fov_pattern": "Position%03d",
+        "fov_ids": [
+          1,
+          2
+        ],
+        "rotation_degrees": -90,
+        "snr_threshold": 5.0,
+        "threshold_mode": "adaptive",
+        "threshold_value": 0.2,
+        "neighborhood_radius_zyx": [
+          1,
+          1,
+          1
+        ],
+        "end_bases": "AC",
+        "start_base": "A",
+        "split_index": null,
+        "registration": [
+          {
+            "method": "translation",
+            "ref_img": "merged-image",
+            "mov_img": "merged-image"
+          }
+        ]
+      },
+      "execution": "batch",
+      "layout": "round_fov",
+      "qualification": "dormant; supply qualified input manifest, explicit FOV/round count and resource authorization"
+    },
+    "LN-streaming": {
+      "source": "e2e/results/run_streaming_benchmark.py",
+      "parameters": {
+        "n_rounds": 4,
+        "reference_round": "round4",
+        "channel_order": [
+          "ch00",
+          "ch02",
+          "ch01",
+          "ch03"
+        ],
+        "fov_pattern": "Position%03d",
+        "fov_ids": [
+          1,
+          2
+        ],
+        "rotation_degrees": -90,
+        "snr_threshold": 5.0,
+        "threshold_mode": "adaptive",
+        "threshold_value": 0.2,
+        "neighborhood_radius_zyx": [
+          1,
+          1,
+          1
+        ],
+        "end_bases": "AC",
+        "start_base": "A",
+        "split_index": null,
+        "registration": [
+          {
+            "method": "translation",
+            "ref_img": "merged-image",
+            "mov_img": "merged-image"
+          }
+        ]
+      },
+      "execution": "streaming",
+      "layout": "round_fov",
+      "qualification": "dormant; supply qualified input manifest, explicit FOV/round count and resource authorization"
+    },
+    "LN-global-local": {
+      "source": "e2e_LR/results/run_e2e_LR.py",
+      "parameters": {
+        "n_rounds": 4,
+        "reference_round": "round4",
+        "channel_order": [
+          "ch00",
+          "ch02",
+          "ch01",
+          "ch03"
+        ],
+        "fov_pattern": "Position%03d",
+        "fov_ids": [
+          1,
+          2
+        ],
+        "rotation_degrees": -90,
+        "snr_threshold": 5.0,
+        "threshold_mode": "adaptive",
+        "threshold_value": 0.2,
+        "neighborhood_radius_zyx": [
+          1,
+          1,
+          1
+        ],
+        "end_bases": "AC",
+        "start_base": "A",
+        "split_index": null,
+        "registration": [
+          {
+            "method": "translation",
+            "ref_img": "merged-image",
+            "mov_img": "merged-image"
+          },
+          {
+            "method": "demons",
+            "ref_img": "single-channel",
+            "mov_img": "single-channel",
+            "ref_channel": 0,
+            "iterations": [
+              100,
+              50,
+              25
+            ],
+            "smoothing_sigma": 1.0,
+            "pyramid_mode": "antialias"
+          }
+        ]
+      },
+      "execution": "streaming",
+      "layout": "round_fov",
+      "qualification": "dormant; supply qualified input manifest, explicit FOV/round count and resource authorization"
+    },
+    "aging-batch": {
+      "source": "e2e/results/aging/run_e2e_aging.py",
+      "parameters": {
+        "n_rounds": 9,
+        "reference_round": "round1",
+        "channel_order": [
+          "ch00",
+          "ch02",
+          "ch01",
+          "ch03"
+        ],
+        "fov_pattern": "Position%03d",
+        "fov_ids": [
+          400,
+          401
+        ],
+        "rotation_degrees": -90,
+        "snr_threshold": 5.0,
+        "threshold_mode": "adaptive",
+        "threshold_value": 0.2,
+        "neighborhood_radius_zyx": [
+          2,
+          2,
+          1
+        ],
+        "end_bases": "CC",
+        "start_base": "C",
+        "split_index": 4,
+        "registration": [
+          {
+            "method": "translation",
+            "ref_img": "merged-image",
+            "mov_img": "merged-image"
+          }
+        ]
+      },
+      "execution": "batch",
+      "layout": "round_fov",
+      "qualification": "dormant; supply qualified input manifest, explicit FOV/round count and resource authorization"
+    },
+    "cell_culture_3D-batch": {
+      "source": "e2e/results/cell_culture_3D/run_e2e_cell_culture_3D.py",
+      "parameters": {
+        "n_rounds": 6,
+        "reference_round": "round1",
+        "channel_order": [
+          "ch00",
+          "ch02",
+          "ch01",
+          "ch03"
+        ],
+        "fov_pattern": "Position%03d",
+        "fov_ids": [
+          351,
+          352
+        ],
+        "rotation_degrees": -90,
+        "snr_threshold": 5.0,
+        "threshold_mode": "adaptive",
+        "threshold_value": 0.2,
+        "neighborhood_radius_zyx": [
+          1,
+          2,
+          2
+        ],
+        "end_bases": "CC",
+        "start_base": "C",
+        "split_index": null,
+        "registration": [
+          {
+            "method": "translation",
+            "ref_img": "merged-image",
+            "mov_img": "merged-image"
+          }
+        ]
+      },
+      "execution": "batch",
+      "layout": "round_fov",
+      "qualification": "dormant; supply qualified input manifest, explicit FOV/round count and resource authorization"
+    },
+    "cell_culture_3D-streaming": {
+      "source": "e2e/results/run_streaming_benchmark.py",
+      "parameters": {
+        "n_rounds": 6,
+        "reference_round": "round1",
+        "channel_order": [
+          "ch00",
+          "ch02",
+          "ch01",
+          "ch03"
+        ],
+        "fov_pattern": "Position%03d",
+        "fov_ids": [
+          351,
+          352
+        ],
+        "rotation_degrees": -90,
+        "snr_threshold": 5.0,
+        "threshold_mode": "adaptive",
+        "threshold_value": 0.2,
+        "neighborhood_radius_zyx": [
+          1,
+          2,
+          2
+        ],
+        "end_bases": "CC",
+        "start_base": "C",
+        "split_index": null,
+        "registration": [
+          {
+            "method": "translation",
+            "ref_img": "merged-image",
+            "mov_img": "merged-image"
+          }
+        ]
+      },
+      "execution": "streaming",
+      "layout": "round_fov",
+      "qualification": "dormant; supply qualified input manifest, explicit FOV/round count and resource authorization"
+    },
+    "cell_culture_3D-global-local": {
+      "source": "e2e_LR/results/run_e2e_LR.py",
+      "parameters": {
+        "n_rounds": 6,
+        "reference_round": "round1",
+        "channel_order": [
+          "ch00",
+          "ch02",
+          "ch01",
+          "ch03"
+        ],
+        "fov_pattern": "Position%03d",
+        "fov_ids": [
+          351,
+          352
+        ],
+        "rotation_degrees": -90,
+        "snr_threshold": 5.0,
+        "threshold_mode": "adaptive",
+        "threshold_value": 0.2,
+        "neighborhood_radius_zyx": [
+          1,
+          2,
+          2
+        ],
+        "end_bases": "CC",
+        "start_base": "C",
+        "split_index": null,
+        "registration": [
+          {
+            "method": "translation",
+            "ref_img": "merged-image",
+            "mov_img": "merged-image"
+          },
+          {
+            "method": "demons",
+            "ref_img": "single-channel",
+            "mov_img": "single-channel",
+            "ref_channel": 0,
+            "iterations": [
+              100,
+              50,
+              25
+            ],
+            "smoothing_sigma": 1.0,
+            "pyramid_mode": "antialias"
+          }
+        ]
+      },
+      "execution": "streaming",
+      "layout": "round_fov",
+      "qualification": "dormant; supply qualified input manifest, explicit FOV/round count and resource authorization"
+    },
+    "large-batch": {
+      "source": "e2e/results/large/run_e2e_large.py",
+      "parameters": {
+        "n_rounds": null,
+        "reference_round": "round1",
+        "channel_order": [
+          "ch00",
+          "ch01",
+          "ch02",
+          "ch03"
+        ],
+        "fov_pattern": "FOV_%03d",
+        "fov_ids": null,
+        "rotation_degrees": null,
+        "snr_threshold": 5.0,
+        "threshold_mode": "noise",
+        "threshold_value": 5.0,
+        "neighborhood_radius_zyx": [
+          1,
+          2,
+          2
+        ],
+        "end_bases": "CC",
+        "start_base": "C",
+        "split_index": null,
+        "registration": [
+          {
+            "method": "translation",
+            "ref_img": "merged-image",
+            "mov_img": "merged-image"
+          }
+        ]
+      },
+      "execution": "batch",
+      "layout": "fov_round",
+      "qualification": "dormant; supply qualified input manifest, explicit FOV/round count and resource authorization"
+    },
+    "large-streaming": {
+      "source": "e2e/results/run_streaming_benchmark.py",
+      "parameters": {
+        "n_rounds": null,
+        "reference_round": "round1",
+        "channel_order": [
+          "ch00",
+          "ch01",
+          "ch02",
+          "ch03"
+        ],
+        "fov_pattern": "FOV_%03d",
+        "fov_ids": null,
+        "rotation_degrees": null,
+        "snr_threshold": 5.0,
+        "threshold_mode": "noise",
+        "threshold_value": 5.0,
+        "neighborhood_radius_zyx": [
+          1,
+          2,
+          2
+        ],
+        "end_bases": "CC",
+        "start_base": "C",
+        "split_index": null,
+        "registration": [
+          {
+            "method": "translation",
+            "ref_img": "merged-image",
+            "mov_img": "merged-image"
+          }
+        ]
+      },
+      "execution": "streaming",
+      "layout": "fov_round",
+      "qualification": "dormant; supply qualified input manifest, explicit FOV/round count and resource authorization"
+    },
+    "large-global-local": {
+      "source": "e2e_LR/results/run_e2e_LR.py",
+      "parameters": {
+        "n_rounds": null,
+        "reference_round": "round1",
+        "channel_order": [
+          "ch00",
+          "ch01",
+          "ch02",
+          "ch03"
+        ],
+        "fov_pattern": "FOV_%03d",
+        "fov_ids": null,
+        "rotation_degrees": null,
+        "snr_threshold": 5.0,
+        "threshold_mode": "noise",
+        "threshold_value": 5.0,
+        "neighborhood_radius_zyx": [
+          1,
+          2,
+          2
+        ],
+        "end_bases": "CC",
+        "start_base": "C",
+        "split_index": null,
+        "registration": [
+          {
+            "method": "translation",
+            "ref_img": "merged-image",
+            "mov_img": "merged-image"
+          },
+          {
+            "method": "demons",
+            "ref_img": "single-channel",
+            "mov_img": "single-channel",
+            "ref_channel": 0,
+            "iterations": [
+              100,
+              50,
+              25
+            ],
+            "smoothing_sigma": 1.0,
+            "pyramid_mode": "antialias"
+          }
+        ]
+      },
+      "execution": "streaming",
+      "layout": "fov_round",
+      "qualification": "dormant; supply qualified input manifest, explicit FOV/round count and resource authorization"
+    },
+    "thick_medium-batch": {
+      "source": "e2e/results/thick_medium/run_e2e_thick_medium.py",
+      "parameters": {
+        "n_rounds": null,
+        "reference_round": "round1",
+        "channel_order": [
+          "ch00",
+          "ch01",
+          "ch02",
+          "ch03"
+        ],
+        "fov_pattern": "FOV_%03d",
+        "fov_ids": null,
+        "rotation_degrees": null,
+        "snr_threshold": 5.0,
+        "threshold_mode": "noise",
+        "threshold_value": 5.0,
+        "neighborhood_radius_zyx": [
+          1,
+          2,
+          2
+        ],
+        "end_bases": "CC",
+        "start_base": "C",
+        "split_index": null,
+        "registration": [
+          {
+            "method": "translation",
+            "ref_img": "merged-image",
+            "mov_img": "merged-image"
+          }
+        ]
+      },
+      "execution": "batch",
+      "layout": "fov_round",
+      "qualification": "dormant; supply qualified input manifest, explicit FOV/round count and resource authorization"
+    },
+    "thick_medium-streaming": {
+      "source": "e2e/results/run_streaming_benchmark.py",
+      "parameters": {
+        "n_rounds": null,
+        "reference_round": "round1",
+        "channel_order": [
+          "ch00",
+          "ch01",
+          "ch02",
+          "ch03"
+        ],
+        "fov_pattern": "FOV_%03d",
+        "fov_ids": null,
+        "rotation_degrees": null,
+        "snr_threshold": 5.0,
+        "threshold_mode": "noise",
+        "threshold_value": 5.0,
+        "neighborhood_radius_zyx": [
+          1,
+          2,
+          2
+        ],
+        "end_bases": "CC",
+        "start_base": "C",
+        "split_index": null,
+        "registration": [
+          {
+            "method": "translation",
+            "ref_img": "merged-image",
+            "mov_img": "merged-image"
+          }
+        ]
+      },
+      "execution": "streaming",
+      "layout": "fov_round",
+      "qualification": "dormant; supply qualified input manifest, explicit FOV/round count and resource authorization"
+    },
+    "thick_medium-global-local": {
+      "source": "e2e_LR/results/run_e2e_LR.py",
+      "parameters": {
+        "n_rounds": null,
+        "reference_round": "round1",
+        "channel_order": [
+          "ch00",
+          "ch01",
+          "ch02",
+          "ch03"
+        ],
+        "fov_pattern": "FOV_%03d",
+        "fov_ids": null,
+        "rotation_degrees": null,
+        "snr_threshold": 5.0,
+        "threshold_mode": "noise",
+        "threshold_value": 5.0,
+        "neighborhood_radius_zyx": [
+          1,
+          2,
+          2
+        ],
+        "end_bases": "CC",
+        "start_base": "C",
+        "split_index": null,
+        "registration": [
+          {
+            "method": "translation",
+            "ref_img": "merged-image",
+            "mov_img": "merged-image"
+          },
+          {
+            "method": "demons",
+            "ref_img": "single-channel",
+            "mov_img": "single-channel",
+            "ref_channel": 0,
+            "iterations": [
+              100,
+              50,
+              25
+            ],
+            "smoothing_sigma": 1.0,
+            "pyramid_mode": "antialias"
+          }
+        ]
+      },
+      "execution": "streaming",
+      "layout": "fov_round",
+      "qualification": "dormant; supply qualified input manifest, explicit FOV/round count and resource authorization"
+    },
+    "tissue-batch": {
+      "source": "e2e/results/tissue/run_e2e_tissue.py",
+      "parameters": {
+        "n_rounds": null,
+        "reference_round": "round1",
+        "channel_order": [
+          "ch00",
+          "ch01",
+          "ch02",
+          "ch03"
+        ],
+        "fov_pattern": "FOV_%03d",
+        "fov_ids": null,
+        "rotation_degrees": null,
+        "snr_threshold": 5.0,
+        "threshold_mode": "noise",
+        "threshold_value": 5.0,
+        "neighborhood_radius_zyx": [
+          1,
+          2,
+          2
+        ],
+        "end_bases": "CC",
+        "start_base": "C",
+        "split_index": null,
+        "registration": [
+          {
+            "method": "translation",
+            "ref_img": "merged-image",
+            "mov_img": "merged-image"
+          }
+        ]
+      },
+      "execution": "batch",
+      "layout": "fov_round",
+      "qualification": "dormant; supply qualified input manifest, explicit FOV/round count and resource authorization"
+    },
+    "tissue-streaming": {
+      "source": "e2e/results/run_streaming_benchmark.py",
+      "parameters": {
+        "n_rounds": null,
+        "reference_round": "round1",
+        "channel_order": [
+          "ch00",
+          "ch01",
+          "ch02",
+          "ch03"
+        ],
+        "fov_pattern": "FOV_%03d",
+        "fov_ids": null,
+        "rotation_degrees": null,
+        "snr_threshold": 5.0,
+        "threshold_mode": "noise",
+        "threshold_value": 5.0,
+        "neighborhood_radius_zyx": [
+          1,
+          2,
+          2
+        ],
+        "end_bases": "CC",
+        "start_base": "C",
+        "split_index": null,
+        "registration": [
+          {
+            "method": "translation",
+            "ref_img": "merged-image",
+            "mov_img": "merged-image"
+          }
+        ]
+      },
+      "execution": "streaming",
+      "layout": "fov_round",
+      "qualification": "dormant; supply qualified input manifest, explicit FOV/round count and resource authorization"
+    },
+    "tissue-global-local": {
+      "source": "e2e_LR/results/run_e2e_LR.py",
+      "parameters": {
+        "n_rounds": null,
+        "reference_round": "round1",
+        "channel_order": [
+          "ch00",
+          "ch01",
+          "ch02",
+          "ch03"
+        ],
+        "fov_pattern": "FOV_%03d",
+        "fov_ids": null,
+        "rotation_degrees": null,
+        "snr_threshold": 5.0,
+        "threshold_mode": "noise",
+        "threshold_value": 5.0,
+        "neighborhood_radius_zyx": [
+          1,
+          2,
+          2
+        ],
+        "end_bases": "CC",
+        "start_base": "C",
+        "split_index": null,
+        "registration": [
+          {
+            "method": "translation",
+            "ref_img": "merged-image",
+            "mov_img": "merged-image"
+          },
+          {
+            "method": "demons",
+            "ref_img": "single-channel",
+            "mov_img": "single-channel",
+            "ref_channel": 0,
+            "iterations": [
+              100,
+              50,
+              25
+            ],
+            "smoothing_sigma": 1.0,
+            "pyramid_mode": "antialias"
+          }
+        ]
+      },
+      "execution": "streaming",
+      "layout": "fov_round",
+      "qualification": "dormant; supply qualified input manifest, explicit FOV/round count and resource authorization"
+    },
+    "tissue_2D-batch": {
+      "source": "e2e/results/tissue_2D/run_e2e_tissue2D.py",
+      "parameters": {
+        "n_rounds": 4,
+        "reference_round": "round1",
+        "channel_order": [
+          "ch00",
+          "ch02",
+          "ch01",
+          "ch03"
+        ],
+        "fov_pattern": "tile_%d",
+        "fov_ids": [
+          1,
+          2
+        ],
+        "rotation_degrees": -90,
+        "snr_threshold": 5.0,
+        "threshold_mode": "adaptive",
+        "threshold_value": 0.4,
+        "neighborhood_radius_zyx": [
+          1,
+          2,
+          2
+        ],
+        "end_bases": "CC",
+        "start_base": "C",
+        "split_index": null,
+        "registration": [
+          {
+            "method": "translation",
+            "ref_img": "merged-image",
+            "mov_img": "merged-image"
+          }
+        ]
+      },
+      "execution": "batch",
+      "layout": "round_fov",
+      "qualification": "dormant; supply qualified input manifest, explicit FOV/round count and resource authorization"
+    },
+    "tissue_2D-streaming": {
+      "source": "e2e/results/run_streaming_benchmark.py",
+      "parameters": {
+        "n_rounds": 4,
+        "reference_round": "round1",
+        "channel_order": [
+          "ch00",
+          "ch02",
+          "ch01",
+          "ch03"
+        ],
+        "fov_pattern": "tile_%d",
+        "fov_ids": [
+          1,
+          2
+        ],
+        "rotation_degrees": -90,
+        "snr_threshold": 5.0,
+        "threshold_mode": "adaptive",
+        "threshold_value": 0.4,
+        "neighborhood_radius_zyx": [
+          1,
+          2,
+          2
+        ],
+        "end_bases": "CC",
+        "start_base": "C",
+        "split_index": null,
+        "registration": [
+          {
+            "method": "translation",
+            "ref_img": "merged-image",
+            "mov_img": "merged-image"
+          }
+        ]
+      },
+      "execution": "streaming",
+      "layout": "round_fov",
+      "qualification": "dormant; supply qualified input manifest, explicit FOV/round count and resource authorization"
+    },
+    "tissue_2D-global-local": {
+      "source": "e2e_LR/results/run_e2e_LR.py",
+      "parameters": {
+        "n_rounds": 4,
+        "reference_round": "round1",
+        "channel_order": [
+          "ch00",
+          "ch02",
+          "ch01",
+          "ch03"
+        ],
+        "fov_pattern": "tile_%d",
+        "fov_ids": [
+          1,
+          2
+        ],
+        "rotation_degrees": -90,
+        "snr_threshold": 5.0,
+        "threshold_mode": "adaptive",
+        "threshold_value": 0.4,
+        "neighborhood_radius_zyx": [
+          1,
+          2,
+          2
+        ],
+        "end_bases": "CC",
+        "start_base": "C",
+        "split_index": null,
+        "registration": [
+          {
+            "method": "translation",
+            "ref_img": "merged-image",
+            "mov_img": "merged-image"
+          },
+          {
+            "method": "demons",
+            "ref_img": "single-channel",
+            "mov_img": "single-channel",
+            "ref_channel": 0,
+            "iterations": [
+              100,
+              50,
+              25
+            ],
+            "smoothing_sigma": 1.0,
+            "pyramid_mode": "antialias"
+          }
+        ]
+      },
+      "execution": "streaming",
+      "layout": "round_fov",
+      "qualification": "dormant; supply qualified input manifest, explicit FOV/round count and resource authorization"
+    },
+    "aging-global-local": {
+      "source": "e2e_LR/results/run_e2e_LR_aging.py",
+      "parameters": {
+        "n_rounds": 9,
+        "reference_round": "round1",
+        "channel_order": [
+          "ch00",
+          "ch02",
+          "ch01",
+          "ch03"
+        ],
+        "fov_pattern": "Position%03d",
+        "fov_ids": [
+          400,
+          401
+        ],
+        "rotation_degrees": -90,
+        "snr_threshold": 5.0,
+        "threshold_mode": "adaptive",
+        "threshold_value": 0.2,
+        "neighborhood_radius_zyx": [
+          2,
+          2,
+          1
+        ],
+        "end_bases": "CC",
+        "start_base": "C",
+        "split_index": 4,
+        "registration": [
+          {
+            "method": "translation",
+            "ref_img": "merged-image",
+            "mov_img": "merged-image"
+          },
+          {
+            "method": "demons",
+            "ref_img": "single-channel",
+            "mov_img": "single-channel",
+            "ref_channel": 0,
+            "iterations": [
+              100,
+              50,
+              25
+            ],
+            "smoothing_sigma": 1.0,
+            "pyramid_mode": "antialias"
+          }
+        ]
+      },
+      "execution": "streaming",
+      "layout": "round_fov",
+      "qualification": "dormant; supply qualified input manifest, explicit FOV/round count and resource authorization"
+    }
+  }
+}

@@ -1,10 +1,11 @@
 classdef STARMapDataset
-% STARMapDataset, the primary class for the STARMap imaging analysis pipeline
-% ====Properties====
-% ...
-
-% ====Methods====
-% ...
+% Coordinate one FOV of the MATLAB STARmap image-to-molecule workflow.
+%
+% This is a value class: retain returned objects (obj = obj.Method(...)).
+% Images are dictionaries keyed by round, containing row-by-column-by-Z-by-C
+% arrays. Spot tables store 1-based x (column), y (row), z (plane) coordinates.
+% The default sequencing channel order is ch00, ch02, ch01, ch03.
+% Workflow entry points in workflow/scripts supply configuration and paths.
     
     properties
         
@@ -43,9 +44,10 @@ classdef STARMapDataset
         
         % 1.Construction method of Pipeline object
         function obj = STARMapDataset( inputPath, outputPath, varargin )
-            % the construction method of pipeline object, use this to create
-            % an object to start analysis by providing an inputPath
-            % useGPU: default == false
+            % Create a dataset from inputPath and outputPath directory paths.
+            % Creates outputPath when absent; initializes empty dictionaries.
+            % Optional positional useGPU defaults to false. The stored flag
+            % does not itself move arrays to a GPU. Returns the new value object.
             
             % Input parser
             p = inputParser;
@@ -92,6 +94,11 @@ classdef STARMapDataset
 
         % 2.Load raw images 
         function obj = LoadRawImages( obj, varargin )
+            % Load round TIFFs into image/metadata dictionaries, rotate/flip and crop.
+            % Optional positional arguments: fovID="", update_layer_slot="seq",
+            % folder_list=round* directories, channel_order_dict=wavelength-sorted seq
+            % channels, zrange=[], convert_uint8=false, rotate_angle=0, flip="", useGPU=false.
+            % flip accepts vertical/horizontal/both. Returns obj; useGPU is parsed but unused.
 
             % Input parser
             p = inputParser;
@@ -198,6 +205,11 @@ classdef STARMapDataset
 
         % 3.Enhance Contrast
         function obj = EnhanceContrast( obj, method, varargin )
+            % Enhance selected images and return obj. Required method: "min-max" or
+            % "imadjustn". Optional positional layer defaults to layers.seq. Name/value
+            % options: low_in=0.01, high_in=0.95, low_out=0, high_out=1, gamma=1.
+            % Only low_in/high_in/gamma are used by the imadjustn branch; output limits
+            % low_out/high_out are parsed but unused.
 
             % Input parser
             p = inputParser;
@@ -259,6 +271,9 @@ classdef STARMapDataset
 
         % 4.Hitogram Equalization
         function obj = HistEqualize( obj, varargin )
+            % Match each channel histogram to a reference volume and return obj.
+            % Optional positional layer=layers.seq. Name/value options: reference_channel=1,
+            % reference_layer="round1", nbins=64. Uses imhistmatchn.
             
             % Input parser
             p = inputParser;
@@ -295,6 +310,8 @@ classdef STARMapDataset
 
         % 5.Morphological reconstruction
         function obj = MorphRecon( obj, varargin )
+            % Apply slice-wise MorphologicalReconstruction and return obj.
+            % Optional positional arguments: layer=layers.seq, radius=3 pixels.
             
             % Input parser
             p = inputParser;
@@ -323,6 +340,9 @@ classdef STARMapDataset
         
         % 5.5 Whilte tophat
         function obj = Tophat( obj, varargin )
+            % Apply a 2-D disk top-hat per Z plane and return obj.
+            % Optional positional arguments: layer=layers.seq, radius=3 pixels.
+            % Processed values are converted to uint8 before assignment into image arrays.
             
             % Input parser
             p = inputParser;
@@ -363,6 +383,9 @@ classdef STARMapDataset
         
         % Make Projections
         function obj = MakeProjection( obj, varargin )
+            % Populate projections for each selected layer and return obj.
+            % Optional positional arguments: layer=layers.all, method="max".
+            % See MakeProjections for the unsupported numeric-array sum branch.
             
             % Input parser
             p = inputParser;
@@ -386,6 +409,10 @@ classdef STARMapDataset
 
         % View Projections
         function obj = ViewProjection( obj, varargin )
+            % Display a projection montage, optionally export it, and return obj.
+            % Optional positional arguments: layer=layers.all, enhance_contrast=false,
+            % save=false, output_path=outputPath/projection_montage.tif.
+            % Requires MakeProjection first; uses MATLAB graphics and exportgraphics.
             
             % Input parser
             p = inputParser;
@@ -418,6 +445,10 @@ classdef STARMapDataset
         
         % Save Stack Images
         function obj = SaveImages( obj, varargin )
+            % Write loaded images to TIFF folders and return obj.
+            % Optional positional arguments: layer=layers.all, folder_format="nested",
+            % group_channel=true, maximum_projection=true, output_path=outputPath.
+            % See SaveImageNestedFolder and SaveImageSingleFolder for filenames/limitations.
             
             % Input parser
             p = inputParser;
@@ -462,6 +493,14 @@ classdef STARMapDataset
             
         % 6.Global registration
         function obj = GlobalRegistration( obj, varargin )
+            % Register image rounds to a reference and return obj.
+            % Optional positional arguments: layer=layers.seq, ref_layer=layers.ref,
+            % layers_to_register=[], ref_channel="DAPI", ref_img="merged-image",
+            % mov_img="merged-image", input_image_ref="", input_image_mov="", scale=1.
+            % Image selectors accept merged-image, single-channel, or input_image.
+            % Name/value options: save_shifts=true, log_suffix="". Saves row/column/Z
+            % correction shifts in outputPath/log/gr_shifts. Reference registration entry
+            % holds an image; moving entries hold parameter structs. Set layers.ref first.
 
             % Input parser
             p = inputParser;
@@ -589,6 +628,14 @@ classdef STARMapDataset
 
         % 7.Local (Non-rigid) registration test
         function obj = LocalRegistration( obj, varargin )
+            % Apply demons registration per moving round and return obj.
+            % Optional positional arguments: layer=layers.seq, ref_layer=layers.ref,
+            % ref_channel="DAPI", ref_img="merged-image", mov_img="merged-image", input_image="".
+            % Name/value options: Iterations=10, AccumulatedFieldSmoothing=1.
+            % Use merged-image for both selectors in the workflow recipe. The reference
+            % single-channel branch directly indexes with ref_channel, while the moving
+            % branch matches channel names; do not assume these selectors are interchangeable.
+            % The helper displacement field is discarded by this method.
 
             % Input parser
             p = inputParser;
@@ -661,6 +708,11 @@ classdef STARMapDataset
 
         % 7.Spot finding
         function obj = SpotFinding( obj, varargin )
+            % Detect maxima and populate signal.allSpots; returns obj.
+            % Optional positional arguments: ref_layer=layers.ref, method="max3d",
+            % intensity_estimation="adaptive", intensity_threshold=0.2. Selects channels
+            % whose metadata name contains seq. Pass intensity mode and threshold together.
+            % Nonempty centroids become 1-based x/y/z columns; see SpotFindingMax3D.
             
             % Input parser
             p = inputParser;
@@ -708,6 +760,10 @@ classdef STARMapDataset
         
         % 8.Reads extraction
         function obj = ReadsExtraction( obj, varargin )
+            % Append per-round color/score columns and concatenated color_seq; returns obj.
+            % Optional positional layer=layers.seq; name/value voxel_size=[2 2 1].
+            % Requires signal.allSpots with 1-based x/y/z and loaded sequencing rounds.
+            % voxel_size contains row/column/Z half-widths; see ExtractFromLocation.
             
             % Input parser
             p = inputParser;
@@ -757,6 +813,9 @@ classdef STARMapDataset
         
         % 9.Load codebook
         function obj = LoadCodebook( obj, varargin )
+            % Load gene/color dictionaries into codebook and return obj.
+            % Name/value options: input_path=inputPath, do_reverse=true, split_index=[].
+            % See the standalone LoadCodebook helper for the genes.csv format.
         
             % Input parser
             p = inputParser;
@@ -787,6 +846,12 @@ classdef STARMapDataset
         
         % 10.Reads filtration
         function obj = ReadsFiltration( obj, varargin )
+            % Drop N/M calls, select codebook reads, optionally save statistics; returns obj.
+            % Name/value options: q_score_thershold=0.5 (spelling retained; unused),
+            % n_barcode_segments=1, end_base=["CC"], split_index=[5], save_scores=true.
+            % Requires extracted signal.allSpots.color_seq and loaded codebook. Stores
+            % signal.goodSpots and signal.scores; logs go to outputPath/log/sf_scores.
+            % Terminal-base checks are diagnostics rather than filtering gates.
             
             % Input parser
             p = inputParser;
@@ -890,6 +955,11 @@ classdef STARMapDataset
 
         % 11.Preview reads
         function obj = ViewSignal( obj, varargin )
+            % Plot signal x/y coordinates over a background and return obj.
+            % Optional positional arguments: signal_slot="goodSpots" (or "allSpots"),
+            % bg_img=reference registration Z maximum when available (otherwise []),
+            % spots_color="red", spots_size=1, save=false, output_path=outputPath/signal.
+            % For save=true writes a PNG preview; requires graphics and a valid background.
     
             % Input parser
             p = inputParser;
@@ -959,6 +1029,12 @@ classdef STARMapDataset
         
         % 12.Save reads
         function obj = SaveSignal( obj, varargin )
+            % Write a 1-based spot CSV and return obj.
+            % Optional positional arguments: signal_slot="goodSpots" (or "allSpots"),
+            % output_path=outputPath/signal, field_to_keep=["x","y","z","gene"].
+            % field_to_keep="all" writes all columns. Subtiles use the fixed path
+            % outputPath/output/subtile/fovID/subtile_<slot>_<index>.csv instead.
+            % The subtile parent directory must already exist.
             
             % Input parser
             p = inputParser;
@@ -1018,6 +1094,11 @@ classdef STARMapDataset
         
         % 13.Create subtiles
         function obj = CreateSubtiles( obj, varargin )
+            % Create crop-coordinate metadata and optionally save value objects; returns obj.
+            % Optional positional arguments: sqrt_pieces=4, overlap_ratio=0.1, save=false,
+            % output_path=outputPath/output, ref_layer=layers.ref. Requires loaded images
+            % and reference metadata. Writes subtile/fovID/subtile_coords.csv and
+            % subtile_data_<index>.mat (-v7.3) when save=true. See MakeSubtileTable.
             
             % Input parser
             p = inputParser;
@@ -1092,5 +1173,4 @@ classdef STARMapDataset
     
     
 end
-
 

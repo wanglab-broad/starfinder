@@ -1,5 +1,10 @@
 function barcodes = DecodeCS( color_seq, start_base )
-%DecodeCS
+% Decode color strings using a known first nucleotide.
+%
+% color_seq is a nonempty string array containing labels 1 through 4;
+% start_base is one uppercase A/C/G/T character. Returns a row string array
+% barcodes; each decoded sequence has one more base than its color sequence.
+% Invalid labels and empty sequences are not handled as missing reads.
 
     % get dims
     Npoint = numel(color_seq);

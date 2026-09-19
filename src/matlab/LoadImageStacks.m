@@ -1,5 +1,11 @@
 function [output_img, dims] = LoadImageStacks( round_dir, sub_dir, channel_order_dict, convert_uint8 )
-%LOADIMAGESTACKS Load image stacks for each round
+% Load one round's channel TIFFs into a (row, column, Z, C) integer array.
+%
+% round_dir is one dir() record (folder and name); sub_dir selects the FOV.
+% channel_order_dict is a struct array with channel filename patterns and names.
+% convert_uint8 chooses im2uint8 conversion. Supply one matching TIFF per channel.
+% Returns output_img cropped to common channel extents and dims equal to
+% [rows, columns, planes, channels, bit_depth]. Both loaders disable warnings.
         
     % Suppress all warnings 
     warning('off','all');

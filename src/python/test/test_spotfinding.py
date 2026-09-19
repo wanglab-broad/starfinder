@@ -1,25 +1,27 @@
-"""Tests for starfinder.spotfinding module."""
+"""Tests for starfinder.spot_finding module."""
+
+from starfinder.io import ImageLoadConfig
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from starfinder.spotfinding import find_spots_3d
-from starfinder.spotfinding.local_maxima import SPOT_COLUMNS
+from starfinder.spot_finding import find_spots, LocalMaximaConfig
+from starfinder.image import ImageMetadata
+SPOT_COLUMNS = ["spot_id", "z", "y", "x", "channel", "peak_intensity"]
 
 
 class TestFindSpots3D:
-    """Tests for find_spots_3d function."""
+    """Tests for find_spots function."""
 
     def test_finds_known_spots(self, small_dataset, small_ground_truth):
         """Detects spots in small synthetic dataset, count sanity check."""
-        from starfinder.io import load_image_stacks
+        from starfinder.io import load_round
 
-        images, _ = load_image_stacks(
-            small_dataset / "FOV_001" / "round1",
-            channel_order=["ch00", "ch01", "ch02", "ch03"],
-        )
-        spots = find_spots_3d(images)
+        loaded_round = load_round(small_dataset / "FOV_001" / "round1", config=ImageLoadConfig(channel_labels=tuple(["ch00", "ch01", "ch02", "ch03"])))
+        images = loaded_round.image
+        _ = loaded_round.diagnostics
+        spots = find_spots(images, config=LocalMaximaConfig(threshold_mode="noise", threshold_value=5.0, min_distance_voxels=1), metadata=ImageMetadata("direct/test_spotfinding"), spot_namespace="direct/test_spotfinding").spots
 
         # Small dataset has 50 ground truth spots across 4 channels in round 1
         # Detection may find more (noise peaks) or fewer (dim spots), but
@@ -31,13 +33,13 @@ class TestFindSpots3D:
         """DataFrame columns = [z, y, x, intensity, channel]."""
         image = np.zeros((5, 32, 32, 2), dtype=np.uint8)
         image[2, 16, 16, 0] = 200  # one bright spot
-        spots = find_spots_3d(image)
+        spots = find_spots(image, config=LocalMaximaConfig(threshold_mode="noise", threshold_value=5.0, min_distance_voxels=1), metadata=ImageMetadata("direct/test_spotfinding"), spot_namespace="direct/test_spotfinding").spots
         assert list(spots.columns) == SPOT_COLUMNS
 
     def test_empty_image(self):
         """Blank image returns empty DataFrame with correct schema."""
         image = np.zeros((5, 32, 32, 2), dtype=np.uint8)
-        spots = find_spots_3d(image)
+        spots = find_spots(image, config=LocalMaximaConfig(threshold_mode="noise", threshold_value=5.0, min_distance_voxels=1), metadata=ImageMetadata("direct/test_spotfinding"), spot_namespace="direct/test_spotfinding").spots
         assert len(spots) == 0
         assert list(spots.columns) == SPOT_COLUMNS
 
@@ -48,17 +50,13 @@ class TestFindSpots3D:
         image[2, 10, 10, 0] = 10  # dim spot
 
         # threshold = 100 * 0.05 = 5 → both spots detected
-        spots_low = find_spots_3d(
-            image, intensity_estimation="adaptive", intensity_threshold=0.05
-        )
+        spots_low = find_spots(image, config=LocalMaximaConfig(threshold_mode="adaptive", threshold_value=0.05, min_distance_voxels=1), metadata=ImageMetadata("direct/test_spotfinding"), spot_namespace="direct/test_spotfinding").spots
         assert len(spots_low) == 2
 
         # threshold = 100 * 0.5 = 50 → only bright spot
-        spots_high = find_spots_3d(
-            image, intensity_estimation="adaptive", intensity_threshold=0.5
-        )
+        spots_high = find_spots(image, config=LocalMaximaConfig(threshold_mode="adaptive", threshold_value=0.5, min_distance_voxels=1), metadata=ImageMetadata("direct/test_spotfinding"), spot_namespace="direct/test_spotfinding").spots
         assert len(spots_high) == 1
-        assert spots_high.iloc[0]["intensity"] == 100
+        assert spots_high.iloc[0]["peak_intensity"] == 100
 
     def test_global_threshold(self):
         """Global mode: threshold = dtype_max * fraction."""
@@ -67,11 +65,11 @@ class TestFindSpots3D:
         image[2, 10, 10, 0] = 40  # dim spot
 
         # global threshold = 255 * 0.1 = 25.5 → both detected
-        spots = find_spots_3d(image, intensity_estimation="global", intensity_threshold=0.1)
+        spots = find_spots(image, config=LocalMaximaConfig(threshold_mode="global", threshold_value=0.1, min_distance_voxels=1), metadata=ImageMetadata("direct/test_spotfinding"), spot_namespace="direct/test_spotfinding").spots
         assert len(spots) == 2
 
         # global threshold = 255 * 0.5 = 127.5 → only bright spot
-        spots = find_spots_3d(image, intensity_estimation="global", intensity_threshold=0.5)
+        spots = find_spots(image, config=LocalMaximaConfig(threshold_mode="global", threshold_value=0.5, min_distance_voxels=1), metadata=ImageMetadata("direct/test_spotfinding"), spot_namespace="direct/test_spotfinding").spots
         assert len(spots) == 1
 
     def test_multichannel(self):
@@ -81,7 +79,7 @@ class TestFindSpots3D:
         image[2, 20, 20, 2] = 200  # channel 2
         image[3, 15, 15, 3] = 200  # channel 3
 
-        spots = find_spots_3d(image)
+        spots = find_spots(image, config=LocalMaximaConfig(threshold_mode="noise", threshold_value=5.0, min_distance_voxels=1), metadata=ImageMetadata("direct/test_spotfinding"), spot_namespace="direct/test_spotfinding").spots
         assert len(spots) == 3
 
         # Check each channel has exactly one spot
@@ -93,12 +91,12 @@ class TestFindSpots3D:
         image = np.zeros((10, 64, 64, 1), dtype=np.uint8)
         image[3, 25, 40, 0] = 255
 
-        spots = find_spots_3d(image)
+        spots = find_spots(image, config=LocalMaximaConfig(threshold_mode="noise", threshold_value=5.0, min_distance_voxels=1), metadata=ImageMetadata("direct/test_spotfinding"), spot_namespace="direct/test_spotfinding").spots
         assert len(spots) == 1
         assert spots.iloc[0]["z"] == 3
         assert spots.iloc[0]["y"] == 25
         assert spots.iloc[0]["x"] == 40
-        assert spots.iloc[0]["intensity"] == 255
+        assert spots.iloc[0]["peak_intensity"] == 255
         assert spots.iloc[0]["channel"] == 0
 
     def test_noise_threshold(self):
@@ -112,10 +110,10 @@ class TestFindSpots3D:
         image[2, 16, 16, 0] = 200  # bright spot well above noise
 
         # k=5: threshold ≈ 20 + 5*5*1.4826 ≈ 57 → bright spot detected
-        spots = find_spots_3d(image, intensity_estimation="noise", intensity_threshold=5.0)
+        spots = find_spots(image, config=LocalMaximaConfig(threshold_mode="noise", threshold_value=5.0, min_distance_voxels=1), metadata=ImageMetadata("direct/test_spotfinding"), spot_namespace="direct/test_spotfinding").spots
         assert len(spots) >= 1
         # The bright spot should be among the detected
-        bright = spots[spots["intensity"] >= 150]
+        bright = spots[spots["peak_intensity"] >= 150]
         assert len(bright) == 1
         assert bright.iloc[0]["z"] == 2
         assert bright.iloc[0]["y"] == 16
@@ -132,16 +130,12 @@ class TestFindSpots3D:
         image[2, 10, 10, 1] = 255  # bright spot in ch1
 
         # adaptive_round: threshold = 255 * 0.2 = 51 → ch0 spot (50) suppressed
-        spots_round = find_spots_3d(
-            image, intensity_estimation="adaptive_round", intensity_threshold=0.2
-        )
+        spots_round = find_spots(image, config=LocalMaximaConfig(threshold_mode="adaptive_round", threshold_value=0.2, min_distance_voxels=1), metadata=ImageMetadata("direct/test_spotfinding"), spot_namespace="direct/test_spotfinding").spots
         ch0_spots = spots_round[spots_round["channel"] == 0]
         assert len(ch0_spots) == 0
         assert len(spots_round[spots_round["channel"] == 1]) == 1
 
         # adaptive: ch0 threshold = 50 * 0.2 = 10 → ch0 spot detected
-        spots_adaptive = find_spots_3d(
-            image, intensity_estimation="adaptive", intensity_threshold=0.2
-        )
+        spots_adaptive = find_spots(image, config=LocalMaximaConfig(threshold_mode="adaptive", threshold_value=0.2, min_distance_voxels=1), metadata=ImageMetadata("direct/test_spotfinding"), spot_namespace="direct/test_spotfinding").spots
         ch0_spots = spots_adaptive[spots_adaptive["channel"] == 0]
         assert len(ch0_spots) == 1

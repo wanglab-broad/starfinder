@@ -339,6 +339,25 @@ $defs:
         minimum: 1
     additionalProperties: true
 
+  registration_recovery_params:
+    description: "Python-only opt-in recovery; validation/dependency/application errors never recover"
+    type: object
+    required: [allowed_errors, alternatives]
+    additionalProperties: false
+    properties:
+      allowed_errors:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items:
+          enum: [RegistrationEstimationError, InsufficientLandmarksError]
+      alternatives:
+        type: array
+        minItems: 1
+        items:
+          type: object
+          description: "Ordered estimator configs; Python adapter validates method-specific fields"
+
   global_registration_params:
     type: object
     properties:
@@ -352,6 +371,12 @@ $defs:
       mov_img:
         type: string
         enum: ["merged-image", "single-channel"]
+      ref_channel:
+        type: integer
+        minimum: 0
+        description: "Python zero-based reference/moving channel"
+      recovery:
+        $ref: "#/$defs/registration_recovery_params"
     additionalProperties: true
 
   create_subtiles_params:
@@ -375,6 +400,12 @@ $defs:
         type: string
         enum: ["demons", "tps", "cpd"]
         default: "demons"
+      ref_channel:
+        type: integer
+        minimum: 0
+        description: "Python zero-based reference/moving channel"
+      recovery:
+        $ref: "#/$defs/registration_recovery_params"
     additionalProperties: true
 
   spot_finding_params:

@@ -1,38 +1,32 @@
-"""Barcode processing: encoding, decoding, codebook lookup, and filtering."""
+"""Validated codebooks and independent intensity extraction, decoding and filtering."""
 
-from starfinder.barcode.codebook import load_codebook
-from starfinder.barcode.codebook_aware import (
-    build_one_error_index,
-    candidate_sequences,
-    channel_probabilities,
-    decode_codebook_aware,
-    score_candidates,
-    wta_color_sequences,
+from ._encoding import encode_bases, decode_color_sequence
+from .codebook import Codebook, EncodingConfig, load_codebook
+from .extraction import NeighborhoodSumConfig, IntensityExtractionResult, extract_intensities
+from .decoding import (
+    WtaDecoderConfig,
+    CodebookAwareDecoderConfig,
+    BarcodeDecodingResult,
+    InvalidIntensityError,
+    decode_barcodes,
 )
-from starfinder.barcode.encoding import (
-    BASE_PAIR_TO_COLOR,
-    COLOR_TO_BASE_PAIRS,
-    COLOR_TO_CHANNEL,
-    decode_color_seq,
-    encode_bases,
-)
-from starfinder.barcode.extraction import extract_from_location, extract_intensity_tensor
-from starfinder.barcode.filtering import filter_reads
+from .filtering import ReadFilterConfig, ReadFilteringResult, filter_reads
 
 __all__ = [
-    "BASE_PAIR_TO_COLOR",
-    "COLOR_TO_BASE_PAIRS",
-    "COLOR_TO_CHANNEL",
-    "build_one_error_index",
-    "candidate_sequences",
-    "channel_probabilities",
-    "decode_color_seq",
-    "decode_codebook_aware",
+    "BarcodeDecodingResult",
+    "Codebook",
+    "CodebookAwareDecoderConfig",
+    "EncodingConfig",
+    "IntensityExtractionResult",
+    "InvalidIntensityError",
+    "NeighborhoodSumConfig",
+    "ReadFilterConfig",
+    "ReadFilteringResult",
+    "WtaDecoderConfig",
+    "decode_barcodes",
+    "decode_color_sequence",
     "encode_bases",
-    "extract_from_location",
-    "extract_intensity_tensor",
+    "extract_intensities",
     "filter_reads",
     "load_codebook",
-    "score_candidates",
-    "wta_color_sequences",
 ]

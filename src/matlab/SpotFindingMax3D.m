@@ -1,5 +1,13 @@
 function props = SpotFindingMax3D( input_img, intensity_estimation, intensity_threshold )
-%SpotFindingMax3D 
+% Find per-channel 3-D regional maxima above an intensity threshold.
+%
+% input_img has shape (row, column, Z, C). intensity_estimation is "adaptive"
+% (fraction of each channel maximum) or "global" (fraction of uint8/uint16
+% full scale). intensity_threshold is that fraction; always supply both options.
+% There is no "noise" mode. Maxima must be strictly above the threshold.
+% Returns per-channel regionprops3 rows with Centroid, MaxIntensity and Channel.
+% Centroid is cast to int16 and contains 1-based (x=column, y=row, z=plane).
+% Channels are concatenated without cross-channel deduplication.
 
     props = [];
     Nchannel = size(input_img, 4);

@@ -3,6 +3,12 @@
 
 from __future__ import annotations
 
+from starfinder.image import ImageMetadata
+from starfinder.spot_finding import LocalMaximaConfig
+from starfinder.registration import estimate_transform, apply_transform, TranslationConfig
+from starfinder.io import ImageConversionConfig, ImageLoadConfig, convert_image
+from starfinder.preprocessing import MinMaxNormalizationConfig
+
 import argparse
 import gc
 import json
@@ -16,8 +22,10 @@ import numpy as np
 import pandas as pd
 from scipy.stats import spearmanr
 
-from starfinder.barcode import decode_codebook_aware, extract_intensity_tensor, load_codebook
-from starfinder.benchmark.validation import compare_genes
+from _decoding_inputs import saved_decoding, saved_extraction, saved_codebook, report_table
+from starfinder.evaluation.barcode import evaluate_decoding
+from starfinder.evaluation.spot_finding import evaluate_spots
+from starfinder.image import ImageMetadata
 
 BENCHMARK_ROOT = Path("/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark")
 POSTCODE_ROOT = BENCHMARK_ROOT / "decoding" / "postcode"
@@ -34,21 +42,21 @@ PAD_SUFFIX_RE = re.compile(r"_(STAR|RIBO)_pad_\d+$")
 CONFIGS: dict[str, dict[str, Any]] = {
     "wta_exact": {"allow_rescue": False},
     "conservative": {
-        "min_corrected_round_margin": 0.10,
+        "max_corrected_round_margin": 0.10,
         "min_score_delta": 0.50,
-        "min_geomean_prob": 0.55,
+        "min_geomean_probability": 0.55,
         "max_correction_penalty": 0.75,
     },
     "balanced": {
-        "min_corrected_round_margin": 0.20,
+        "max_corrected_round_margin": 0.20,
         "min_score_delta": 0.25,
-        "min_geomean_prob": 0.45,
+        "min_geomean_probability": 0.45,
         "max_correction_penalty": 1.50,
     },
     "permissive": {
-        "min_corrected_round_margin": 0.30,
+        "max_corrected_round_margin": 0.30,
         "min_score_delta": 0.10,
-        "min_geomean_prob": 0.35,
+        "min_geomean_probability": 0.35,
         "max_correction_penalty": 2.50,
     },
 }
@@ -325,42 +333,43 @@ def load_and_register_synthetic_images(
     fov_id: str,
     n_rounds: int,
 ) -> dict[str, np.ndarray]:
-    from starfinder.io import load_image_stacks
-    from starfinder.preprocessing import min_max_normalize
-    from starfinder.registration.phase_correlation import register_volume
+    from starfinder.io import load_round
+    from starfinder.preprocessing import normalize_intensity
 
     images: dict[str, np.ndarray] = {}
     channel_order = ["ch00", "ch01", "ch02", "ch03"]
     for round_idx in range(1, n_rounds + 1):
         round_name = f"round{round_idx}"
-        image, _meta = load_image_stacks(
-            data_dir / fov_id / round_name,
-            channel_order=channel_order,
-            convert_uint8=True,
-        )
-        images[round_name] = min_max_normalize(image, snr_threshold=5.0)
+        loaded_round = load_round(data_dir / fov_id / round_name, config=ImageLoadConfig(channel_labels=tuple(channel_order)))
+        image = loaded_round.image
+        # Preserve this runner's explicit historical non-uint8 scaling choice.
+        if image.dtype != np.uint8:
+            image = convert_image(image, config=ImageConversionConfig(
+                "uint8", "rescale", output_range=(0, 255), range_policy="data",
+                scope="global", rounding="truncate",
+            ))
+        _meta = loaded_round.diagnostics
+        images[round_name] = normalize_intensity(image, config=MinMaxNormalizationConfig('uint8', (0, 255), snr_threshold=5.0))
 
     ref_merged = np.sum(images["round1"], axis=-1, dtype=np.uint16)
     for round_idx in range(2, n_rounds + 1):
         round_name = f"round{round_idx}"
         mov_merged = np.sum(images[round_name], axis=-1, dtype=np.uint16)
-        registered, _shifts = register_volume(images[round_name], ref_merged, mov_merged)
+        _registration = estimate_transform(ref_merged, mov_merged, config=TranslationConfig(), reference_metadata=ImageMetadata("synthetic/round1"), moving_metadata=ImageMetadata(f"synthetic/{round_name}"))
+        registered = apply_transform(images[round_name], _registration.transform, config=_registration.application_config)
+        _shifts = tuple(-x for x in _registration.transform.correction_zyx)
         images[round_name] = registered
 
     return images
 
 
-def detect_synthetic_spots(images: dict[str, np.ndarray]) -> pd.DataFrame:
-    from starfinder.spotfinding import find_spots_3d
+def detect_synthetic_spots(images: dict[str, np.ndarray], *, spot_namespace: str) -> pd.DataFrame:
+    from starfinder.spot_finding import find_spots, LocalMaximaConfig
+    from starfinder.image import ImageMetadata
 
-    spots = find_spots_3d(
-        images["round1"],
-        intensity_estimation="noise",
-        intensity_threshold=5.0,
-        min_distance=1,
-    )
+    spots = find_spots(images["round1"], config=LocalMaximaConfig(threshold_mode="noise", threshold_value=5.0, min_distance_voxels=1), metadata=ImageMetadata(f"{spot_namespace}/round1"), spot_namespace=spot_namespace).spots
     spots = spots.reset_index(drop=True)
-    spots.insert(0, "spot_id", np.arange(len(spots), dtype=int))
+    spots["spot_namespace"] = spot_namespace
     return spots
 
 
@@ -381,9 +390,9 @@ def prepare_synthetic_inputs(
 
     t0 = time.perf_counter()
     images = load_and_register_synthetic_images(data_dir, fov_id, ground_truth["n_rounds"])
-    spots = detect_synthetic_spots(images)
+    spots = detect_synthetic_spots(images, spot_namespace=json.dumps([dataset, "synthetic", fov_id]))
     round_order = [f"round{i}" for i in range(1, ground_truth["n_rounds"] + 1)]
-    tensor = extract_intensity_tensor(images, spots, round_order)
+    tensor = saved_extraction(images, spots, round_order, namespace=f"{dataset}/{fov_id}")
     prep_time = time.perf_counter() - t0
     save_cached_inputs(tensor, spots, output_dir, dataset, fov_id)
 
@@ -394,7 +403,7 @@ def prepare_synthetic_inputs(
 
 
 def load_registered_real_images(variant_dir: Path, n_rounds: int) -> dict[str, np.ndarray]:
-    from starfinder.io import load_multipage_tiff
+    from starfinder.io import load_volume
 
     stack_dir = variant_dir / "registered_final"
     if not stack_dir.exists():
@@ -403,10 +412,11 @@ def load_registered_real_images(variant_dir: Path, n_rounds: int) -> dict[str, n
     images: dict[str, np.ndarray] = {}
     for round_idx in range(1, n_rounds + 1):
         round_name = f"round{round_idx}"
-        images[round_name] = load_multipage_tiff(
-            stack_dir / f"{round_name}.tif",
-            convert_uint8=False,
-        )
+        images[round_name] = np.stack([
+            load_volume(stack_dir / f"{round_name}.tif", config=ImageLoadConfig(
+                source_axes="ZYXC", channel_index=c, channel_labels=(f"ch{c:02d}",)
+            )).image for c in range(4)
+        ], axis=-1)
     return images
 
 
@@ -444,7 +454,7 @@ def prepare_real_backend_inputs(
     images = load_registered_real_images(variant_dir, int(config["n_rounds"]))
     round_order = [f"round{i}" for i in range(1, int(config["n_rounds"]) + 1)]
     voxel_size = tuple(int(v) for v in config["voxel_size"])
-    tensor = extract_intensity_tensor(images, spots, round_order, voxel_size=voxel_size)
+    tensor = saved_extraction(images, spots, round_order, neighborhood_radius_zyx=voxel_size, namespace=f"{dataset}/{fov_id}")
     prep_time = time.perf_counter() - t0
     save_cached_inputs(tensor, spots, output_dir, dataset, fov_id)
 
@@ -474,20 +484,22 @@ def prepare_real_raw_inputs(
                 cached_raw_input_info(output_dir, dataset, fov_id),
             )
 
-    from starfinder.dataset import STARMapDataset
-    from starfinder.dataset.types import LayerState
+    from starfinder.dataset import Dataset, RegistrationStep
+    from starfinder.registration import TranslationConfig
+    from starfinder.preprocessing import MinMaxNormalizationConfig
+    from starfinder.dataset.types import RoundState
 
     t0 = time.perf_counter()
     print(f"\nPreparing raw-E2E inputs for {dataset} {fov_id}")
-    ds = STARMapDataset(
+    ds = Dataset(
         input_root=config["data_root"],
         output_root=output_dir / dataset / "raw_pipeline_cache",
         dataset_id="sample-dataset",
         sample_id=config["sample_id"],
         output_id=config["output_id"],
-        layers=LayerState(
-            seq=[f"round{i}" for i in range(1, int(config["n_rounds"]) + 1)],
-            ref=config["ref_round"],
+        rounds=RoundState(
+            sequencing_rounds=[f"round{i}" for i in range(1, int(config["n_rounds"]) + 1)],
+            reference_round=config["ref_round"],
         ),
         channel_order=config["channel_order"],
         fov_pattern=config["fov_pattern"],
@@ -496,7 +508,7 @@ def prepare_real_raw_inputs(
     fov = ds.fov(fov_id)
 
     step_info: dict[str, float] = {}
-    elapsed, rss = timed_prep_step("load", fov.load_raw_images)
+    elapsed, rss = timed_prep_step("load", fov.load_images)
     step_info["input_time_load_s"] = round(elapsed, 3)
     step_info["input_rss_after_load_mb"] = round(rss, 1)
     elapsed, rss = timed_prep_step(
@@ -506,36 +518,34 @@ def prepare_real_raw_inputs(
     step_info["input_rss_after_rotate_mb"] = round(rss, 1)
     elapsed, rss = timed_prep_step(
         "enhance",
-        lambda: fov.enhance_contrast(snr_threshold=float(config["snr_threshold"])),
+        lambda: fov.normalize_intensity(config=MinMaxNormalizationConfig("uint8", (0, 255), snr_threshold=float(config["snr_threshold"]))),
     )
     step_info["input_time_enhance_s"] = round(elapsed, 3)
     step_info["input_rss_after_enhance_mb"] = round(rss, 1)
-    elapsed, rss = timed_prep_step("registration", fov.global_registration)
+    elapsed, rss = timed_prep_step("registration", lambda: fov.register(RegistrationStep(TranslationConfig())))
     step_info["input_time_registration_s"] = round(elapsed, 3)
     step_info["input_rss_after_registration_mb"] = round(rss, 1)
     elapsed, rss = timed_prep_step(
         "spot_finding",
-        lambda: fov.spot_finding(
-            intensity_estimation=config["intensity_estimation"],
-            intensity_threshold=float(config["intensity_threshold"]),
-        ),
+        lambda: fov.find_spots(config=LocalMaximaConfig(threshold_mode=config["intensity_estimation"], threshold_value=float(config["intensity_threshold"]))),
     )
     step_info["input_time_spot_finding_s"] = round(elapsed, 3)
     step_info["input_rss_after_spot_finding_mb"] = round(rss, 1)
 
-    if fov.all_spots is None:
+    if fov.spot_result is None:
         raise ValueError(f"No spots detected for {dataset} {fov_id}")
-    spots = fov.all_spots.reset_index(drop=True).copy()
+    spots = fov.spot_result.spots.reset_index(drop=True).copy()
     if "spot_id" not in spots:
         spots.insert(0, "spot_id", np.arange(len(spots), dtype=int))
 
     round_order = [f"round{i}" for i in range(1, int(config["n_rounds"]) + 1)]
     tensor_t0 = time.perf_counter()
-    tensor = extract_intensity_tensor(
+    tensor = saved_extraction(
         fov.images,
         spots,
         round_order,
-        voxel_size=tuple(int(v) for v in config["voxel_size"]),
+        neighborhood_radius_zyx=tuple(int(v) for v in config["voxel_size"]),
+        namespace=f"{dataset}/{fov_id}",
     )
     tensor_elapsed = time.perf_counter() - tensor_t0
     tensor_rss = current_rss_mb()
@@ -556,7 +566,7 @@ def prepare_real_raw_inputs(
         "tensor_shape": list(tensor.shape),
         "global_shifts": {
             round_name: list(shift)
-            for round_name, shift in fov.global_shifts.items()
+            for round_name, shift in ((name, tuple(-v for v in results[0].transform.correction_zyx)) for name, results in fov.registration_results.items())
         },
         "dataset_config": {
             key: str(value) if isinstance(value, Path) else value
@@ -602,7 +612,9 @@ def decoded_eval_frame(
     *,
     use_wta: bool,
 ) -> pd.DataFrame:
-    merged = spots.merge(decoded, on="spot_id", how="left")
+    spots = spots.copy()
+    spots['spot_id'] = spots.spot_id.astype('string')
+    merged = spots.merge(decoded, on="spot_id", how="left", validate="one_to_one")
     if use_wta:
         gene = merged["gene_wta"]
         color_seq = merged["color_seq_wta"]
@@ -628,33 +640,41 @@ def synthetic_metrics(
 ) -> dict[str, Any]:
     wta_eval = decoded_eval_frame(spots, decoded, use_wta=True)
     cba_eval = decoded_eval_frame(spots, decoded, use_wta=False)
-    wta_result = compare_genes(wta_eval, ground_truth, fov_id)
-    cba_result = compare_genes(cba_eval, ground_truth, fov_id)
+    truth = pd.DataFrame(ground_truth["fovs"][fov_id]["spots"])
+    truth_coords = np.array([s["position"] for s in ground_truth["fovs"][fov_id]["spots"]]).reshape(-1, 3)
+    metadata = ImageMetadata(f"{fov_id}/reference")
+    def evaluate(table):
+        matches = evaluate_spots(table[["z", "y", "x"]].to_numpy(), truth_coords,
+            policy="greedy", threshold=5.0, boundary="exclusive", units="voxel",
+            reference_metadata=metadata, observed_metadata=metadata)
+        return evaluate_decoding(table, truth, matches=matches)
+    wta_result = evaluate(wta_eval)
+    cba_result = evaluate(cba_eval)
     n_gt = len(ground_truth["fovs"][fov_id]["spots"])
 
     rescued_ids = set(
         decoded.loc[decoded["call_type"].astype(str).str.startswith("rescued"), "spot_id"]
     )
-    rescued_eval = cba_eval.loc[spots["spot_id"].isin(rescued_ids)]
+    rescued_eval = cba_eval.loc[spots["spot_id"].astype("string").isin(rescued_ids)]
     if len(rescued_eval):
-        rescued_result = compare_genes(rescued_eval, ground_truth, fov_id)
-        rescued_accuracy = rescued_result["gene_accuracy"]
+        rescued_result = evaluate(rescued_eval)
+        rescued_accuracy = rescued_result.values["gene_accuracy"]
         wrong_rescue_rate = (
-            1.0 - rescued_accuracy if rescued_result["n_matched"] > 0 else np.nan
+            1.0 - rescued_accuracy if rescued_result.counts["matched"] > 0 else np.nan
         )
-        rescued_matched = rescued_result["n_matched"]
+        rescued_matched = rescued_result.counts["matched"]
     else:
         rescued_accuracy = np.nan
         wrong_rescue_rate = np.nan
         rescued_matched = 0
 
     return {
-        "wta_gene_accuracy": wta_result["gene_accuracy"],
-        "cba_gene_accuracy": cba_result["gene_accuracy"],
-        "wta_color_seq_accuracy": wta_result["color_seq_accuracy"],
-        "cba_color_seq_accuracy": cba_result["color_seq_accuracy"],
-        "wta_recall": wta_result["correct_genes"] / n_gt if n_gt else 0.0,
-        "cba_recall": cba_result["correct_genes"] / n_gt if n_gt else 0.0,
+        "wta_gene_accuracy": wta_result.values["gene_accuracy"],
+        "cba_gene_accuracy": cba_result.values["gene_accuracy"],
+        "wta_color_seq_accuracy": wta_result.values["color_seq_accuracy"],
+        "cba_color_seq_accuracy": cba_result.values["color_seq_accuracy"],
+        "wta_recall": wta_result.counts["correct_gene"] / n_gt if n_gt else None,
+        "cba_recall": cba_result.counts["correct_gene"] / n_gt if n_gt else None,
         "rescued_matched": rescued_matched,
         "rescued_gene_accuracy": rescued_accuracy,
         "wrong_rescue_rate": wrong_rescue_rate,
@@ -763,12 +783,14 @@ def run_dataset_fov(
         gc.collect()
         rss_before = current_rss_mb()
         t0 = time.perf_counter()
-        decoded = decode_codebook_aware(
+        decoded_result = saved_decoding(
             tensor,
             seq_to_gene,
             spot_ids=spots["spot_id"].to_numpy(),
+            namespace=f"{dataset}/{fov_id}",
             **config,
         )
+        decoded = report_table(decoded_result)
         elapsed = time.perf_counter() - t0
         rss_after = current_rss_mb()
         peak_after = peak_rss_mb()
@@ -836,7 +858,7 @@ def run_synthetic_medium(args: argparse.Namespace) -> list[dict[str, Any]]:
     data_dir = args.postcode_root / "data" / "synthetic_medium"
     result_dir = args.postcode_root / "results" / "synthetic_medium"
     ground_truth = json.loads((data_dir / "ground_truth.json").read_text())
-    _gene_to_seq, seq_to_gene = load_codebook(data_dir / "codebook.csv")
+    seq_to_gene = saved_codebook(data_dir / "codebook.csv").seq_to_gene
 
     rows = []
     for fov_id in args.synthetic_fovs:
@@ -863,7 +885,7 @@ def run_synthetic_preset(args: argparse.Namespace, preset: str) -> list[dict[str
     dataset = f"synthetic_{preset}"
     data_dir = BENCHMARK_ROOT / "e2e" / "data" / preset
     ground_truth = json.loads((data_dir / "ground_truth.json").read_text())
-    _gene_to_seq, seq_to_gene = load_codebook(data_dir / "codebook.csv")
+    seq_to_gene = saved_codebook(data_dir / "codebook.csv").seq_to_gene
 
     rows = []
     for fov_id in args.synthetic_fovs:
@@ -906,10 +928,10 @@ def run_real_dataset(args: argparse.Namespace, dataset: str) -> list[dict[str, A
         )
         if seq_to_gene is None:
             split_index = config.get("split_index")
-            _gene_to_seq, seq_to_gene = load_codebook(
+            seq_to_gene = saved_codebook(
                 config["codebook_path"],
                 split_index=split_index,
-            )
+            ).seq_to_gene
         rows.extend(
             run_dataset_fov(
                 dataset=dataset,

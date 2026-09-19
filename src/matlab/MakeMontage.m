@@ -1,5 +1,10 @@
 function output_img = MakeMontage( input_img, layer_list, enhance_contrast )
-%MakeMontage
+% Display projections by round and channel and return a figure handle.
+%
+% input_img is a dictionary of projection cell arrays; layer_list is the string
+% array of keys in display order. enhance_contrast selects automatic display
+% range. Rows represent rounds, columns channels, with red grid lines. Despite
+% the output_img name, the return value is gcf, not a pixel array.
         
     img_list = {};
     Nchannel_list = [];

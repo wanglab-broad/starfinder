@@ -310,3 +310,13 @@ rule rsf_preparation:
         json_config = config['config_path'].replace('.yaml', '.json')
     run:
         json_path = yaml_to_json(config['config_path'])
+
+# Validate only active Python adapters; shared MATLAB configuration stays intact.
+if BACKEND == "python":
+    import sys
+    sys.path.insert(0, str(Path(config["starfinder_path"]) / "src" / "python"))
+    from starfinder.dataset import from_workflow_config
+    for python_rule in ("rsf_single_fov", "gr_single_fov_subtile",
+                        "lrsf_single_fov_subtile", "deep_create_subtile", "deep_rsf_subtile"):
+        if is_rule_enabled(python_rule):
+            from_workflow_config(config, python_rule)

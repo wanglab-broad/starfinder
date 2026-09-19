@@ -1,207 +1,102 @@
-# AGENTS.md
+# Agent operations
 
-This file provides guidance to Coding Agents (i.e., Claude Code, Codex, Gemini) when working with code in this repository.
+Read [CONTEXT.md](CONTEXT.md) for vocabulary and package responsibilities,
+[architecture](docs/architecture.md) and [contracts](docs/api/contracts.md) for
+maintained behavior, and [migration](docs/migration.md) for breaking Python changes.
+Python naming is snake_case/PascalCase with the explicit exception **FOV stays FOV**.
+MATLAB APIs and shared MATLAB-facing keys, filenames and coordinate contracts stay unchanged.
 
-## 1. Project Overview
+## Scope and ownership
 
-STARfinder is a spatial transcriptomics data processing pipeline for STARmap-related methods. It's a hybrid MATLAB/Python/Snakemake workflow that processes large-scale image datasets from raw microscopy images to cell-by-gene expression matrices.
+Before work, read the live issue, dependencies and acceptance criteria, and the
+[current initiative workflow](https://linear.app/jiahaoh/document/thesis-and-implementation-workflow-c12f30bffe9f).
+Verify repository/worktree, branch, clean starting revision, inputs, environment
+and resource limits. Record session/host/revision and a short plan in Linear;
+assign Jiahao and require the relevant milestone. Unknown inputs remain unverified.
+Preserve unrelated edits; never reset another checkout or rewrite Git history.
 
-### Technology Stack
+Linear owns current scope, plans, decisions and validation evidence. Software Git
+owns maintained code/docs/configs/tests, not diaries or benchmark run reports.
+Scientific acceptance belongs to Chapter II/W-57 and W-92/W-93/W-94/W-124; software
+checks do not qualify data, molecular truth or scientific claims. Scope changes
+belong in the linked chapter discussion. Historical checklists do not authorize work.
 
-- Orchestration: Snakemake 9.x
-- Image processing:
-  - MATLAB backend: MATLAB 2023b+ (core algorithms in `src/matlab/`)
-  - Python backend: Python 3.10+ with uv (I/O, registration, processing in `src/python/`)
-- Post-processing: Python 3.9+ (reads assignment, segmentation, analysis)
-- Cluster execution: Broad UGER with cluster-generic executor plugin
+For the housekeeping batch, read the live
+[migration map](https://linear.app/jiahaoh/document/starfinder-housekeeping-migration-map-and-execution-contract-7d255182a5af),
+[architecture decisions](https://linear.app/jiahaoh/document/starfinder-housekeeping-architecture-decisions-and-plan-03a0c3468eeb),
+and [controller guidance](https://linear.app/jiahaoh/document/reusable-autonomous-issue-controller-operating-guideline-be87b45b6d96).
+Use only the current issue on `codex/housekeeping` in the isolated housekeeping
+worktree. Preserve dirty main-checkout AGENTS.md and `.claude/` exactly.
+One controller/worker owns the project, with a fresh session per issue and bounded
+same-issue repairs. Follow the current phase's commit instructions. No push,
+merge or publication in implementation; `codex/docs-autonomous` publishes on push.
+Do not change deployment guards. Final audit/PR, human review and release remain
+separate W-148/W-149/W-150 responsibilities. Leave the project open.
 
-## 2. Codebase
+## Implementation
 
-### Pipeline Order
+Change only the authorized slice and maintained callers/tests/docs needed for
+coherence. Verify diagnoses in actual code. Prefer functions and small typed
+configs/results; avoid duplicated algorithms and compatibility shims for replaced
+Python APIs. Keep arrays ZYX/ZYXC, explicit channel ordering and boundary conversions
+as specified in the site contracts. Update notebooks' imports without executing
+historical notebooks or rewriting outputs. Do not qualify process-dependent
+synthetic hash seeds under housekeeping. Preserve historical source before extraction.
 
-```
-load → rotate → enhance → registration → spot_finding → extraction → filtration
-```
+## Environment and validation
 
-### Directory Structure
+From `src/python`, run Python with `uv run python`. On GP099-29C use
+`/home/unix/jiahao/.local/bin/uv` and
+`UV_PYTHON=/home/unix/jiahao/miniforge3/bin/python3.12`; system Python 3.8 is unsuitable.
+Use `PYTHONDONTWRITEBYTECODE=1 UV_LOCKED=true UV_NO_SYNC=true` with the prepared
+locked environment. Set `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`, `MKL_NUM_THREADS`,
+`ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS` and `NUMEXPR_NUM_THREADS` to 1,
+and `CUDA_VISIBLE_DEVICES=""`. Keep TMPDIR on local `/tmp/starfinder-housekeeping`,
+not the SMB artifact mount, because tests create symlinks. Use a writable uv cache
+when the default cache is sandboxed. Do not silently alter dependencies or lock.
+If editable metadata requires reinstalling, record
+`uv sync --locked --group docs --extra local-registration` and verify extras.
 
-```
-starfinder/
-├── src/
-│   ├── matlab/            # MATLAB backend (~28 scripts). Main: STARMapDataset.m
-│   ├── matlab-addon/      # External MATLAB toolboxes (TIFF handling, natural sort)
-│   └── python/            # Python package (starfinder)
-│       ├── starfinder/    # Source modules (see Python Backend below)
-│       └── test/          # pytest tests
-├── workflow/
-│   ├── Snakefile          # Main entry point (~58 lines)
-│   ├── rules/             # Modular rule files (common, registration, spot-finding, etc.)
-│   ├── schemas/           # JSON Schema for config validation
-│   └── scripts/           # Python and MATLAB execution scripts
-├── tests/
-│   ├── fixtures/synthetic/ # Synthetic test datasets (small, medium)
-│   ├── qc_*.ipynb         # QC validation notebooks
-│   ├── tissue_2D_test.yaml
-│   └── minimal_config.yaml
-├── config/                # Conda environment definitions
-├── profile/broad-uger/    # UGER cluster execution profile
-└── docs/                  # Design documents, plans, and development notes
-```
-
-### Python Backend
-
-Uses `(Z, Y, X, C)` axis ordering (volumetric-first, channel-last). Replaces MATLAB components.
-
-#### Module Map
-
-| Module | Description |
-|--------|-------------|
-| `io` | TIFF I/O with bioio backend |
-| `registration` | Global (phase correlation, apply_shift) + local (demons, TPS, CPD) |
-| `spotfinding` | 3D spot detection with noise/adaptive/global thresholding |
-| `barcode` | Encode/decode, codebook, extraction, filtering pipeline |
-| `preprocessing` | min_max_normalize, histogram_match, morphological_reconstruction, tophat |
-| `dataset` | STARMapDataset + FOV orchestration (fluent API, streaming mode) |
-| `benchmark` | Measurement framework, synthetic data generation, evaluation |
-| `benchmark.synthetic` | Coordinate-first rendering, presets: tiny/small/medium/large/tissue/thick_medium |
-
-Dependencies: numpy, scipy, scikit-image, tifffile, pandas, h5py, bioio, bioio-tifffile. Optional: SimpleITK (local registration), spatialdata (modern output).
-
-#### Common Commands
+Run focused checks, then the required gates before committing (the controller may
+run these after the uncommitted implementation handoff; do not duplicate them):
 
 ```bash
-cd src/python
-
-uv sync                                    # Install dependencies
-uv run pytest test/ -v                     # Run tests
-uv run pytest test/ -v --cov=starfinder    # Run tests with coverage
-uv run python -m starfinder.benchmark --preset small --output ../../tests/fixtures/synthetic/small  # Generate synthetic data
+uv run pytest test/ -v
+uv run --group docs sphinx-build -n -W --keep-going -b html ../../docs /external/new-run/html
+uv run python ../../docs/check_reference.py
 ```
 
-### MATLAB Backend
+Run affected bounded examples from [contributing](docs/contributing.md). Generated
+API stubs are ignored/disposable; edit authored lists/docstrings. Never weaken
+assertions, hide warnings/skips or claim an unexecuted backend passed. SimpleITK
+must be installed for its execution coverage; MATLAB execution is excluded.
 
-28 scripts in `src/matlab/`. Main entry point: `STARMapDataset.m`. Addons in `src/matlab-addon/`.
+Housekeeping limits: one CPU, one numerical thread, no GPU; 5400 s worker,
+1800 s/check, at most two repairs; target process RSS ≤4 GiB, new artifacts ≤1 GiB.
+New images ≤32×64×64, ≤4 channels/rounds. Existing exceptions: small fixture
+16×256×256, pointset 16×128×128, compression 10×128×128, tiny examples 8×128×128,
+benchmark allocation 256×1024 float32. Do not regenerate existing fixture TIFFs.
+No scientific sweeps, large generation, training, real-image processing or cloud jobs.
+Measure with `/usr/bin/time -v`; maximum RSS is KiB. CPU affinity/thread settings
+and supervisor timeouts are controls, not proof of an enforced cgroup RSS cap.
+Stop for actual resource overruns rather than expanding limits.
 
-#### Module Map
+## Artifacts and handoff
 
-| Script | Function |
-|--------|----------|
-| `STARMapDataset.m` | Main orchestrator (dataset config, pipeline coordination) |
-| `LoadImageStacks.m` / `LoadMultipageTiff.m` | TIFF I/O |
-| `DFTRegister3D.m` / `DFTApply3D.m` | Global registration (phase correlation) |
-| `RegisterImagesGlobal.m` / `RegisterImagesLocal.m` | Registration orchestration |
-| `SpotFindingMax3D.m` | 3D spot detection |
-| `ExtractFromLocation.m` | Barcode extraction |
-| `EncodeBases.m` / `DecodeCS.m` / `Str2Colorseq.m` | Barcode encoding/decoding |
-| `LoadCodebook.m` / `FilterReads.m` | Codebook loading and read filtering |
-| `MinMaxNorm.m` / `MorphologicalReconstruction.m` | Preprocessing |
-| `MakeProjections.m` / `MakeMontage.m` | Visualization |
+Write logs, previews, metrics, manifests and patches outside Git under
+`/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/<issue>/<unique-run>/`.
+Use full-file writes on the SMB mount. Each manifest records issue/run/date/host,
+code revision and dirty patch identity, data/config/source checksums, exact commands,
+environment, seeds/resources, validation/exit status, output checksums and limitations.
+Owner Jiahao; retain through thesis/project handoff and associated publication;
+no deletion without owner decision. Backup coverage is unverified unless confirmed.
+Private paths alone do not establish public reproducibility.
 
-#### Common Commands
-
-MATLAB scripts are called via Python subprocess in Snakemake rules. The `run_matlab_scripts()` function in `workflow/rules/common.smk` sources the Broad environment and MATLAB module before execution. No standalone CLI — always invoked through Snakemake.
-
-### Snakemake Orchestration
-
-#### Workflow Commands
-
-```bash
-conda env create -f ./config/environment-v9.yaml                              # Create environment
-snakemake -s workflow/Snakefile --configfile tests/tissue_2D_test.yaml -n      # Dry run
-snakemake -s workflow/Snakefile --configfile tests/tissue_2D_test.yaml \
-  --profile profile/broad-uger --workflow-profile profile/broad-uger          # Run on UGER
-snakemake -s workflow/Snakefile --configfile tests/tissue_2D_test.yaml --dag | dot -Tpng > dag.png  # DAG
-snakemake -s workflow/Snakefile --configfile tests/tissue_2D_test.yaml --lint  # Lint
-```
-
-#### Configuration System
-
-Config validated against JSON Schema at startup (`workflow/schemas/config.schema.yaml`).
-
-**Required top-level keys:**
-- Paths: `config_path`, `starfinder_path`, `root_input_path`, `root_output_path`
-- Dataset metadata: `dataset_id`, `sample_id`, `output_id`, `fov_id_pattern`, `n_fovs`, `n_rounds`, `ref_round`, `rotate_angle`, `img_col`, `img_row`
-- `workflow_mode`: 'free', 'direct', 'subtile', or 'deep'
-- `rules`: Per-rule configuration with `run`, `resources`, and `parameters` sections
-
-**Config templates:** `tests/tissue_2D_test.yaml` (full), `tests/minimal_config.yaml` (minimal)
-
-## 3. Dataset
-
-### Data Flow
-
-```
-Raw Images (TIFF) → Registration → Spot Finding → Decoding → Filtering → Spot-level Matrix
-Cell Morphology (TIFF) → Segmentation → Reads Assignment → Cell Expression Matrix (H5AD)
-```
-
-### Sequencing Benchmark Datasets
-
-#### Real Datasets (Zenodo DOI: 10.5281/zenodo.11176779)
-
-| Dataset | FOVs | Rounds | Ref | Dimensions | Genes | Voxel Size | Params |
-|---------|------|--------|-----|------------|-------|------------|--------|
-| cell-culture-3D | 70 (Pos351-420) | 6 | round1 | 1496×1496×30 | 998 | (1,2,2) | end="CC", adaptive@0.2 |
-| tissue-2D | 56 tiles | 4 | round1 | 3072×3072×30 | 64 | (1,1,1) | end="CC", adaptive@0.4 |
-| LN | 64 (Pos001-064) | 4 | round4 | 1496×1496×50 | 61 | (1,1,1) | end="AC", start="A", adaptive@0.2 |
-| aging | 848 (Pos400-; 6 in sample) | 9 | round1 | 2048×2048×36 | 2044 | (0.35,0.14,0.14) | 2-seg barcodes, split_index=5, end_base=["CC","TT"] (seg1/seg2), adaptive@0.2 |
-
-#### Synthetic Datasets (`tests/fixtures/synthetic/`)
-
-| Preset | Dimensions | Genes | Spots/FOV | Purpose |
-|--------|-----------|-------|-----------|---------|
-| small | 256×256×16 | 8 | 50 | Unit tests, CI |
-| medium | 512×512×32 | 8 | 100 | Integration tests |
-| large | 1024×1024×30 | 64 | 2000 | E2E benchmark |
-| tissue | 3072×3072×30 | 64 | 14000 | E2E benchmark |
-| thick_medium | 1024×1024×100 | 64 | 5200 | E2E benchmark |
-
-All synthetic presets: 2 FOVs each. Benchmark presets at `starfinder_benchmark/e2e/data/{preset}/`.
-
-### Registration Benchmark Datasets
-
-At `starfinder_benchmark/registration/data/`:
-- **Synthetic** (`synthetic/`): 6 presets — tiny, small, medium, large, thick_medium, tissue. Single-channel ref/mov pairs with known shifts + deformations.
-- **Real** (`real/`): 3 datasets — cell_culture_3D, tissue_2D, LN. Round1/round2 MIP extractions from real data.
-
-### Benchmark Results Location
-
-All benchmarks at `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/{module}/{data/results}`:
-
-| Module | Contents |
-|-----------|----------|
-| `registration` | Global/local registration comparisons (Python vs MATLAB), CPD, TPS |
-| `e2e` | E2E pipeline results |
-| `spot_finding` | Spot finding benchmark results |
-
-## 4. Development
-
-### Current Status
-
-Milestone 1 (Snakemake 9 modularization): COMPLETED. Milestone 2 (Python backend): Phases 0-9 DONE — I/O, registration, spot finding, barcode, preprocessing, dataset/FOV orchestration, E2E validation, real data benchmarks, performance optimization (streaming + 50% RSS reduction).
-
-Detailed docs in `docs/` and `docs/plans/`. Development notes in `docs/notes.md`.
-
-### Notes for Claude Code
-
-#### Development Philosophy
-- Don't over-engineer — be efficient and effective.
-- Only write the minimum required tests.
-- Only change what was explicitly requested — no unsolicited modifications to parameters, counts, or values beyond the task scope.
-- Verify diagnosis against actual code before stating root causes — read the relevant code first, don't guess.
-
-#### Environment & Workflow
-- Always save the proposed plan in `docs/plans/`, each plan should have **Date:** and **Status:** properties at the beginning.  
-- If you finish implementing a plan from `docs/plans/`, mark its **Status** as "FINISHED" in the corresponding plan document.
-- After implementing changes, run `uv run pytest test/ -v` and report results before committing.
-- Run Python with `uv run python` (from `src/python/`)
-- The `~/wanglab` directory is a network mount. Use `Write` instead of `Edit` tool to avoid false "file modified" errors.
-- Always ask before using `git push`
-- Commit messages: review git history. Use numbered messages for new modules/major changes; otherwise use `prefix(info): message`.
-
-#### Key Conventions
-- Array axis convention: `(Z, Y, X, C)` for Python, matches ITK/SimpleITK
-- CSV coordinates: 1-based for MATLAB compatibility (Python uses 0-based internally)
-- **Registration sign convention**: `phase_correlate()` returns detected displacement. To correct alignment, apply the **negative** shift.
-- **MATLAB channel order is wavelength-sorted**: `["ch00", "ch02", "ch01", "ch03"]` — ch01 and ch02 are swapped. All three real datasets use this default.
-- **Spot finding modes**: `"noise"` (default, k-sigma MAD) for synthetic data; `"adaptive"` (fraction-of-max) for real data. Always pass `intensity_estimation` and `intensity_threshold` together.
+Record meaningful progress and completion in Linear. Supply exact commands/results,
+artifacts and limitations, commit/push/merge state and follow-ups. If uncommitted,
+preserve a patch and untracked source snapshot. Mark Done only after acceptance and
+controller evidence review; verify assignee/milestone/status and milestone progress.
+Implementation Done is neither human nor scientific acceptance. Review history for
+commit style: numbered messages for major modules, otherwise `prefix(info): message`.
+Update live workflow guidance in place for agreed substantive practice changes,
+with an administrative issue, dated rationale and synchronized affected instructions.

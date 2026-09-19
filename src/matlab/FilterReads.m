@@ -1,5 +1,12 @@
 function obj = FilterReads( obj, end_base )
-% FilterReads
+% Select codebook-matching reads from a STARMapDataset value object.
+%
+% obj needs signal.allSpots.color_seq, signal.scores and codebook.seqToGene.
+% end_base is a string array of two-base pairs, e.g. ["CC"]. The first pair's
+% first base seeds decoding. Returns obj with signal.goodSpots (including gene)
+% and appended diagnostic scores. Terminal-base checks are statistics only;
+% selection uses contains(color_seq, codebook_keys), followed by dictionary lookup.
+% Use equal-length codebook/read strings; this is not error-correcting decoding.
 
     % This is just as a sanity check; reads are actually filtered
     % by whether they are in the codebook

@@ -3,54 +3,36 @@
 import pytest
 
 from starfinder.dataset.types import (
-    Codebook,
     CropWindow,
-    LayerState,
+    RoundState,
     SubtileConfig,
 )
 
 
 class TestLayerState:
-    """Tests for LayerState dataclass."""
+    """Tests for RoundState dataclass."""
 
     def test_all_layers_order(self):
-        ls = LayerState(seq=["r1", "r2"], other=["p1"], ref="r1")
-        assert ls.all_layers == ["r1", "r2", "p1"]
+        ls = RoundState(sequencing_rounds=["r1", "r2"], other_rounds=["p1"], reference_round="r1")
+        assert ls.all_rounds == ["r1", "r2", "p1"]
 
     def test_to_register_excludes_ref(self):
-        ls = LayerState(seq=["r1", "r2", "r3"], ref="r1")
-        assert ls.to_register == ["r2", "r3"]
+        ls = RoundState(sequencing_rounds=["r1", "r2", "r3"], reference_round="r1")
+        assert ls.moving_rounds == ["r2", "r3"]
 
     def test_validate_ref_not_in_layers(self):
-        ls = LayerState(seq=["r1"], ref="missing")
+        ls = RoundState(sequencing_rounds=["r1"], reference_round="missing")
         with pytest.raises(ValueError, match="not found"):
             ls.validate()
 
     def test_validate_overlap(self):
-        ls = LayerState(seq=["r1"], other=["r1"], ref="r1")
-        with pytest.raises(ValueError, match="both seq and other"):
+        ls = RoundState(sequencing_rounds=["r1"], other_rounds=["r1"], reference_round="r1")
+        with pytest.raises(ValueError, match="unique"):
             ls.validate()
 
     def test_validate_passes(self):
-        ls = LayerState(seq=["r1", "r2"], other=["p1"], ref="r1")
+        ls = RoundState(sequencing_rounds=["r1", "r2"], other_rounds=["p1"], reference_round="r1")
         ls.validate()  # should not raise
-
-
-class TestCodebook:
-    """Tests for Codebook dataclass."""
-
-    def test_from_csv(self, small_dataset):
-        cb = Codebook.from_csv(small_dataset / "codebook.csv")
-        assert cb.n_genes == 8
-        assert "GeneA" in cb.genes
-        assert len(cb.seq_to_gene) == 8
-
-    def test_genes_sorted(self):
-        cb = Codebook(
-            gene_to_seq={"B": "11", "A": "22"},
-            seq_to_gene={"11": "B", "22": "A"},
-        )
-        assert cb.genes == ["A", "B"]
 
 
 class TestCropWindow:

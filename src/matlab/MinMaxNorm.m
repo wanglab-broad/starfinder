@@ -1,8 +1,10 @@
 function input_img = MinMaxNorm( input_img )
-%MinMaxNorm is used to normalize the intensity profile of each channel
-%   -----IO-----
-%   input_img: mat with input images 
-%   output_img: mat with normalized images
+% Normalize each channel of cell-wrapped (row, column, Z, C) images.
+%
+% input_img is a cell array, typically a slice of the dataset image dictionary.
+% Returns the updated cell array. stretchlim(...,0) determines channel limits
+% across planes and imadjustn rescales intensities. Requires Image Processing
+% Toolbox; this is not Python's direct floating-point min/max division.
 
 
     Nround = numel(input_img);

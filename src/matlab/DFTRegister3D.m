@@ -1,4 +1,11 @@
 function [params, regImg] = DFTRegister3D(fixedVolume, movingVolume, preFFT)
+% Estimate integer translation by FFT cross-correlation of equal-sized volumes.
+%
+% fixedVolume and movingVolume are (row, column, Z) arrays. preFFT defaults to
+% false; true means both inputs are already Fourier transformed. Returns params
+% with shifts [rowShift, colShift, zShift] and diffphase. Optional regImg is the
+% magnitude image from DFTApply3D. Pass params directly to DFTApply3D to correct
+% the moving image; these are correction shifts, not Python displacement values.
 if nargin < 3
     preFFT = false;
 end

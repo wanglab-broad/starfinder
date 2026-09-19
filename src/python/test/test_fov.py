@@ -1,17 +1,21 @@
+from starfinder.dataset import RegistrationStep
+from starfinder.registration import TranslationConfig
+from .coordination_helpers import spot_table, detected_shifts
 """Tests for FOV pipeline on small synthetic dataset."""
 
+from starfinder.spot_finding import LocalMaximaConfig
 import json
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from starfinder.dataset import FOV, STARMapDataset, SubtileConfig
+from starfinder.dataset import FOV, Dataset, SubtileConfig
 
 
 @pytest.fixture
 def small_pipeline_dataset(small_dataset, tmp_path):
-    """Create a STARMapDataset pointing at the small synthetic data.
+    """Create a Dataset pointing at the small synthetic data.
 
     The small dataset layout is {base}/{fov}/{round}/ but FOV.input_dir()
     expects {input_root}/{round}/{fov}/. This fixture creates symlinks
@@ -25,19 +29,20 @@ def small_pipeline_dataset(small_dataset, tmp_path):
             target.parent.mkdir(parents=True, exist_ok=True)
             target.symlink_to(round_dir)
 
-    ds = STARMapDataset(
+    ds = Dataset(
         input_root=tmp_path,
         output_root=tmp_path / "output",
         dataset_id="test",
         sample_id="small",
         output_id="out",
-        layers=__import__("starfinder.dataset.types", fromlist=["LayerState"]).LayerState(
-            seq=["round1", "round2", "round3", "round4"],
-            ref="round1",
+        rounds=__import__("starfinder.dataset.types", fromlist=["RoundState"]).RoundState(
+            sequencing_rounds=["round1", "round2", "round3", "round4"],
+            reference_round="round1",
         ),
         channel_order=["ch00", "ch01", "ch02", "ch03"],
         fov_pattern="FOV_%03d",
     )
+    ds.load_codebook(small_dataset / "codebook.csv")
     return ds
 
 
@@ -46,7 +51,7 @@ class TestFOVPipeline:
 
     def test_load_raw_images(self, small_pipeline_dataset):
         fov = small_pipeline_dataset.fov("FOV_001")
-        fov.load_raw_images()
+        fov.load_images()
 
         assert len(fov.images) == 4
         for r in ["round1", "round2", "round3", "round4"]:
@@ -56,23 +61,24 @@ class TestFOVPipeline:
 
     def test_enhance_contrast(self, small_pipeline_dataset):
         fov = small_pipeline_dataset.fov("FOV_001")
-        fov.load_raw_images().enhance_contrast()
+        fov.load_images().normalize_intensity()
 
         for r in fov.images:
             assert fov.images[r].dtype == np.uint8
 
     def test_global_registration(self, small_pipeline_dataset):
         fov = small_pipeline_dataset.fov("FOV_001")
-        fov.load_raw_images().enhance_contrast().global_registration()
+        fov.load_images().normalize_intensity().register(RegistrationStep(TranslationConfig()))
 
         # Reference round should not be in global_shifts
-        assert "round1" not in fov.global_shifts
+        assert "round1" not in detected_shifts(fov)
         # Other rounds should have shifts
         for r in ["round2", "round3", "round4"]:
-            assert r in fov.global_shifts
-            assert len(fov.global_shifts[r]) == 3  # (dz, dy, dx)
+            assert r in detected_shifts(fov)
+            assert len(detected_shifts(fov)[r]) == 3  # (dz, dy, dx)
 
         # Shift log should be saved
+        fov.save_processing_log()
         shift_path = fov.paths.shift_log()
         assert shift_path.exists()
         shift_df = pd.read_csv(shift_path)
@@ -81,63 +87,58 @@ class TestFOVPipeline:
 
     def test_spot_finding(self, small_pipeline_dataset):
         fov = small_pipeline_dataset.fov("FOV_001")
-        fov.load_raw_images().enhance_contrast().global_registration()
-        fov.spot_finding()
+        fov.load_images().normalize_intensity().register(RegistrationStep(TranslationConfig()))
+        fov.find_spots(config=LocalMaximaConfig())
 
-        assert fov.all_spots is not None
-        assert len(fov.all_spots) > 0
-        for col in ["z", "y", "x", "intensity", "channel"]:
-            assert col in fov.all_spots.columns
+        assert spot_table(fov) is not None
+        assert len(spot_table(fov)) > 0
+        for col in ["spot_id", "spot_namespace", "z", "y", "x", "peak_intensity", "channel"]:
+            assert col in spot_table(fov).columns
 
     def test_reads_extraction(self, small_pipeline_dataset):
         fov = small_pipeline_dataset.fov("FOV_001")
         (
-            fov.load_raw_images()
-            .enhance_contrast()
-            .global_registration()
-            .spot_finding()
-            .reads_extraction()
+            fov.load_images()
+            .normalize_intensity()
+            .register(RegistrationStep(TranslationConfig())).find_spots(config=LocalMaximaConfig())
+            .extract_intensities().decode_barcodes()
         )
 
-        assert "color_seq" in fov.all_spots.columns
-        for r in ["round1", "round2", "round3", "round4"]:
-            assert f"{r}_color" in fov.all_spots.columns
-            assert f"{r}_score" in fov.all_spots.columns
+        assert "color_seq" in spot_table(fov).columns
+        assert fov.decoding_result.diagnostics['wta_round_l2_nll'].shape == (len(fov.spot_result.spots), 4)
 
         # color_seq should be 4 characters (one per round)
-        for seq in fov.all_spots["color_seq"]:
+        for seq in spot_table(fov)["color_seq"]:
             assert len(seq) == 4
 
     def test_reads_filtration(self, small_pipeline_dataset, small_dataset):
         fov = small_pipeline_dataset.fov("FOV_001")
         (
-            fov.load_raw_images()
-            .enhance_contrast()
-            .global_registration()
-            .spot_finding()
-            .reads_extraction()
+            fov.load_images()
+            .normalize_intensity()
+            .register(RegistrationStep(TranslationConfig())).find_spots(config=LocalMaximaConfig())
+            .extract_intensities().decode_barcodes()
         )
         small_pipeline_dataset.load_codebook(small_dataset / "codebook.csv")
-        fov.reads_filtration()
+        fov.filter_reads()
 
-        assert fov.good_spots is not None
-        assert "gene" in fov.good_spots.columns
+        assert spot_table(fov, accepted=True) is not None
+        assert "gene" in spot_table(fov, accepted=True).columns
 
     def test_save_signal(self, small_pipeline_dataset, small_dataset):
         fov = small_pipeline_dataset.fov("FOV_001")
         (
-            fov.load_raw_images()
-            .enhance_contrast()
-            .global_registration()
-            .spot_finding()
-            .reads_extraction()
+            fov.load_images()
+            .normalize_intensity()
+            .register(RegistrationStep(TranslationConfig())).find_spots(config=LocalMaximaConfig())
+            .extract_intensities().decode_barcodes()
         )
         small_pipeline_dataset.load_codebook(small_dataset / "codebook.csv")
-        fov.reads_filtration()
+        fov.filter_reads()
 
         # Only save if there are good spots
-        if len(fov.good_spots) > 0:
-            path = fov.save_signal(slot="goodSpots")
+        if len(spot_table(fov, accepted=True)) > 0:
+            path = fov.save_spots(slot="goodSpots")
             assert path.exists()
 
             df = pd.read_csv(path)
@@ -153,21 +154,21 @@ class TestFOVPipeline:
 
     def test_save_ref_merged(self, small_pipeline_dataset):
         fov = small_pipeline_dataset.fov("FOV_001")
-        fov.load_raw_images()
-        path = fov.save_ref_merged()
+        fov.load_images()
+        path = fov.save_reference_image()
         assert path.exists()
 
     def test_fluent_chaining(self, small_pipeline_dataset):
         """Verify methods return self for chaining."""
         fov = small_pipeline_dataset.fov("FOV_001")
-        result = fov.load_raw_images().enhance_contrast()
+        result = fov.load_images().normalize_intensity()
         assert result is fov
 
 
     def test_rotate(self, small_pipeline_dataset):
         """FOV.rotate() should rotate all volumes in the YX plane."""
         fov = small_pipeline_dataset.fov("FOV_001")
-        fov.load_raw_images()
+        fov.load_images()
         original_shape = fov.images["round1"].shape
         # Capture a pixel before rotation
         original_val = fov.images["round1"].copy()
@@ -186,7 +187,7 @@ class TestFOVSubtile:
 
     def test_create_and_load_subtiles(self, small_pipeline_dataset):
         fov = small_pipeline_dataset.fov("FOV_001")
-        fov.load_raw_images()
+        fov.load_images()
 
         # Configure subtiles (2x2 grid)
         small_pipeline_dataset.subtile = SubtileConfig(

@@ -1,5 +1,10 @@
 function [input_img, metadata] = AdjustSizeAcrossRound( input_img, metadata, layer_list, zrange )
-%AdjustSizeAcrossRound 
+% Crop image dictionaries to common row/column extents across layer_list.
+%
+% input_img and metadata are dictionaries keyed by round; layer_list is a string
+% array. zrange is a 1-based plane-index vector, or [] for 1:minZ. Returns both
+% updated dictionaries. Existing metadata.dims is not refreshed; dimZ is set to
+% max(zrange), so it is not a plane count for non-default ranges.
           
     % Collapse to common sized array across each round 
     fprintf('Adjust size across each round...\n');

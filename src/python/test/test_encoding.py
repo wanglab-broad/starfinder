@@ -2,8 +2,8 @@
 
 import pytest
 
-from starfinder.barcode.encoding import BASE_PAIR_TO_COLOR, encode_bases
-from starfinder.benchmark.synthetic import encode_barcode_to_colors
+from starfinder.barcode import encode_bases
+from starfinder.barcode import EncodingConfig
 
 
 class TestTwoBaseEncoding:
@@ -15,33 +15,33 @@ class TestTwoBaseEncoding:
         for b1 in bases:
             for b2 in bases:
                 pair = b1 + b2
-                assert pair in BASE_PAIR_TO_COLOR, f"Missing pair: {pair}"
+                assert encode_bases(pair) in "1234", f"Missing pair: {pair}"
 
     def test_encoding_symmetry(self):
         """Verify encoding follows expected color groups."""
         # Color 1: same bases
-        assert BASE_PAIR_TO_COLOR["AA"] == "1"
-        assert BASE_PAIR_TO_COLOR["CC"] == "1"
-        assert BASE_PAIR_TO_COLOR["GG"] == "1"
-        assert BASE_PAIR_TO_COLOR["TT"] == "1"
+        assert encode_bases("AA") == "1"
+        assert encode_bases("CC") == "1"
+        assert encode_bases("GG") == "1"
+        assert encode_bases("TT") == "1"
 
         # Color 2: A<->C, G<->T
-        assert BASE_PAIR_TO_COLOR["AC"] == "2"
-        assert BASE_PAIR_TO_COLOR["CA"] == "2"
-        assert BASE_PAIR_TO_COLOR["GT"] == "2"
-        assert BASE_PAIR_TO_COLOR["TG"] == "2"
+        assert encode_bases("AC") == "2"
+        assert encode_bases("CA") == "2"
+        assert encode_bases("GT") == "2"
+        assert encode_bases("TG") == "2"
 
         # Color 3: A<->G, C<->T
-        assert BASE_PAIR_TO_COLOR["AG"] == "3"
-        assert BASE_PAIR_TO_COLOR["GA"] == "3"
-        assert BASE_PAIR_TO_COLOR["CT"] == "3"
-        assert BASE_PAIR_TO_COLOR["TC"] == "3"
+        assert encode_bases("AG") == "3"
+        assert encode_bases("GA") == "3"
+        assert encode_bases("CT") == "3"
+        assert encode_bases("TC") == "3"
 
         # Color 4: A<->T, C<->G
-        assert BASE_PAIR_TO_COLOR["AT"] == "4"
-        assert BASE_PAIR_TO_COLOR["TA"] == "4"
-        assert BASE_PAIR_TO_COLOR["CG"] == "4"
-        assert BASE_PAIR_TO_COLOR["GC"] == "4"
+        assert encode_bases("AT") == "4"
+        assert encode_bases("TA") == "4"
+        assert encode_bases("CG") == "4"
+        assert encode_bases("GC") == "4"
 
     @pytest.mark.parametrize(
         "barcode,expected_color_seq",
@@ -59,7 +59,7 @@ class TestTwoBaseEncoding:
     )
     def test_barcode_encoding(self, barcode: str, expected_color_seq: str):
         """Verify barcode encoding matches expected color sequence."""
-        result = encode_barcode_to_colors(barcode)
+        result = EncodingConfig(reverse_bases=True).encode(barcode)
         assert result == expected_color_seq, (
             f"Barcode {barcode} -> reversed {barcode[::-1]} -> "
             f"expected {expected_color_seq}, got {result}"
@@ -68,5 +68,5 @@ class TestTwoBaseEncoding:
     def test_encoding_output_length(self):
         """Verify color sequence is one less than barcode length."""
         barcode = "CACGC"
-        result = encode_barcode_to_colors(barcode)
+        result = EncodingConfig(reverse_bases=True).encode(barcode)
         assert len(result) == len(barcode) - 1

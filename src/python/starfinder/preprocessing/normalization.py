@@ -1,99 +1,92 @@
-"""Intensity normalization and histogram matching for STARfinder.
-
-Ports MATLAB MinMaxNorm.m and STARMapDataset.HistEqualize.
-"""
+"""Finite-array intensity processing with explicit output policies."""
+from dataclasses import dataclass
 
 import numpy as np
 from skimage.exposure import match_histograms
 
+from starfinder.image import _validate_image
+from starfinder.io.conversion import ImageConversionConfig, _cast, _dtype, convert_image
 
-def min_max_normalize(
-    volume: np.ndarray,
-    snr_threshold: float | None = None,
-) -> np.ndarray:
-    """Per-channel min-max normalization to uint8.
 
-    Matches MATLAB ``stretchlim(ch, 0)`` + ``imadjustn(ch, [min, max])``:
-    compute global min/max per channel across all Z slices, then linearly
-    rescale to [0, 255].
+@dataclass(frozen=True)
+class MinMaxNormalizationConfig:
+    """Declared output dtype/range, global or per-channel min-max scaling.
 
-    Parameters
-    ----------
-    volume : np.ndarray
-        Input volume with shape (Z, Y, X) or (Z, Y, X, C).
-    snr_threshold : float or None
-        If set, channels with ``max / mean < snr_threshold`` are not
-        normalized (raw values kept, clipped to uint8). This prevents
-        noise inflation in channels with no real signal.
-        Recommended value: 5.0.
-
-    Returns
-    -------
-    np.ndarray
-        Normalized volume, dtype uint8, same shape as input.
+    Integer rounding defaults to truncate, preserving historical uint8 behavior.
+    Nonconstant low-SNR groups (max/mean < threshold; nonpositive mean gives
+    SNR=0) retain raw values clipped to output_range. Constant groups always
+    map to its lower endpoint, including a nonzero lower endpoint when
+    explicitly requested, regardless of the SNR gate.
     """
-    is_3d = volume.ndim == 3
-    if is_3d:
-        volume = volume[..., np.newaxis]
 
-    result = np.empty_like(volume, dtype=np.uint8)
-    for c in range(volume.shape[3]):
-        ch = volume[:, :, :, c].astype(np.float32)
-        lo = ch.min()
-        hi = ch.max()
+    output_dtype: str
+    output_range: tuple[float, float]
+    scope: str = "per_channel"
+    snr_threshold: float | None = None
+    rounding: str = "truncate"
 
-        # SNR gating: skip normalization for low-SNR channels
-        if snr_threshold is not None:
-            ch_mean = ch.mean()
-            snr = hi / ch_mean if ch_mean > 0 else 0.0
-            if snr < snr_threshold:
-                result[:, :, :, c] = np.clip(ch, 0, 255).astype(np.uint8)
-                continue
+    def __post_init__(self):
+        ImageConversionConfig(self.output_dtype, "rescale", output_range=self.output_range, range_policy="data", scope=self.scope, rounding=self.rounding)
+        if self.snr_threshold is not None and (not np.isfinite(self.snr_threshold) or self.snr_threshold < 0):
+            raise ValueError("snr_threshold must be finite and nonnegative")
 
-        if lo == hi:
-            result[:, :, :, c] = 0
-        else:
-            result[:, :, :, c] = ((ch - lo) / (hi - lo) * 255).astype(np.uint8)
 
-    if is_3d:
-        result = result[..., 0]
+def normalize_intensity(volume: np.ndarray, *, config: MinMaxNormalizationConfig) -> np.ndarray:
+    """Normalize finite nonempty ZYX/ZYXC data without input mutation.
+
+    Allocates the output and float64 work per channel (or whole volume for
+    global scope). No spatial boundary operation. Constants map to the declared
+    lower endpoint before SNR gating, for both global and per-channel scope.
+    """
+    volume = _validate_image(volume)
+    result = np.empty(volume.shape, dtype=config.output_dtype)
+    groups = range(volume.shape[-1]) if volume.ndim == 4 and config.scope == "per_channel" else [None]
+    for c in groups:
+        key = (..., c) if c is not None else (...,)
+        channel = volume[key]
+        mode = "rescale"
+        if channel.min() != channel.max():
+            mean = channel.mean(dtype=np.float64)
+            snr = float(channel.max()) / mean if mean > 0 else 0.0
+            if config.snr_threshold is not None and snr < config.snr_threshold:
+                mode = "clip"
+        conversion = ImageConversionConfig(config.output_dtype, mode, output_range=config.output_range, range_policy="data" if mode == "rescale" else "declared", rounding=config.rounding)
+        result[key] = convert_image(channel, config=conversion)
     return result
 
 
-def histogram_match(
-    volume: np.ndarray,
-    reference: np.ndarray,
-    nbins: int = 64,
-) -> np.ndarray:
-    """Match histogram of each channel to a reference volume.
+@dataclass(frozen=True)
+class HistogramMatchingConfig:
+    """Exact CDF matching; input dtype retained by default.
 
-    Ports MATLAB ``imhistmatchn``. Uses scikit-image exact CDF matching
-    (``nbins`` accepted for API compatibility but unused — the difference
-    is negligible for uint8 data).
-
-    Parameters
-    ----------
-    volume : np.ndarray
-        Input volume with shape (Z, Y, X) or (Z, Y, X, C).
-    reference : np.ndarray
-        Reference volume with shape (Z, Y, X). Each channel of *volume*
-        is matched to this single reference.
-    nbins : int
-        Accepted for API compatibility; not used by skimage.
-
-    Returns
-    -------
-    np.ndarray
-        Histogram-matched volume, same shape and dtype as input.
+    Integer values truncate by default. Out-of-range reference values raise
+    rather than wrap; an explicit floating output_dtype can retain them.
     """
-    is_3d = volume.ndim == 3
-    if is_3d:
-        volume = volume[..., np.newaxis]
 
-    result = np.empty_like(volume)
-    for c in range(volume.shape[3]):
-        result[:, :, :, c] = match_histograms(volume[:, :, :, c], reference)
+    output_dtype: str | None = None
+    rounding: str = "truncate"
 
-    if is_3d:
-        result = result[..., 0]
-    return result
+    def __post_init__(self):
+        if self.output_dtype is not None:
+            _dtype(self.output_dtype)
+        if self.rounding not in ("truncate", "nearest_even"):
+            raise ValueError("unsupported rounding")
+
+
+def match_histogram(volume: np.ndarray, reference: np.ndarray, *, config: HistogramMatchingConfig = HistogramMatchingConfig()) -> np.ndarray:
+    """Match each ZYX channel to one finite ZYX reference CDF.
+
+    Allocates output plus float64/skimage CDF work for one channel at a time;
+    inputs are unchanged. Reference spatial shape may differ. Empty/nonfinite
+    inputs error; constant inputs use skimage's exact CDF mapping. No bins or
+    spatial padding are used.
+    """
+    volume = _validate_image(volume)
+    reference = _validate_image(reference, ndim=(3,))
+    channels = volume[..., None] if volume.ndim == 3 else volume
+    dtype = config.output_dtype or volume.dtype
+    result = np.empty(channels.shape, dtype=dtype)
+    for c in range(channels.shape[-1]):
+        matched = match_histograms(channels[..., c], reference)
+        result[..., c] = _cast(matched, dtype, config.rounding)
+    return result[..., 0] if volume.ndim == 3 else result

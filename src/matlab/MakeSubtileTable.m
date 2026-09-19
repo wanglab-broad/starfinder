@@ -1,5 +1,11 @@
 function output_table = MakeSubtileTable( dims, sqrt_pieces, overlap_ratio )
-% MakeSubtileTable
+% Construct overlapping XY crop bounds for a square tiling grid.
+%
+% dims supplies image dimensions, sqrt_pieces is grid side count, overlap_ratio
+% sets overlap on each side relative to floor(dims(1)/sqrt_pieces). Returns a
+% table with 1-based inclusive scoords/ecoords, zero-based ind_x/ind_y and
+% upperleft offsets, tile IDs t, and inputdim sizes. Both axes use a tile size
+% computed from dims(1); rectangular-image behavior needs separate validation.
 
     column_headers = {'t', 'ind_x', 'ind_y',...
                     'scoords_x', 'scoords_y', 'ecoords_x', 'ecoords_y',...

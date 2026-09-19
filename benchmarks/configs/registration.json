@@ -1,0 +1,140 @@
+{
+  "schema_version": 1,
+  "profiles": {
+    "tps-default": {
+      "source": "registration/results/scripts/benchmark_tps_single.py",
+      "registration": {
+        "method": "tps",
+        "detection_noise_sigma": 3.0,
+        "match_distance_voxels": 10.0,
+        "min_matches": 50,
+        "max_control_points": 1000,
+        "smoothing": 1.0,
+        "grid_spacing_voxels": 32
+      },
+      "qualification": "source-derived configuration; real/large inputs unqualified"
+    },
+    "tps-small": {
+      "source": "registration/results/scripts/benchmark_tps_single.py",
+      "registration": {
+        "method": "tps",
+        "detection_noise_sigma": 2.0,
+        "match_distance_voxels": 15.0,
+        "min_matches": 5,
+        "max_control_points": 1000,
+        "smoothing": 2.0,
+        "grid_spacing_voxels": 16
+      },
+      "qualification": "source-derived configuration; real/large inputs unqualified"
+    },
+    "cpd-default": {
+      "source": "registration/results/scripts/benchmark_cpd_single.py",
+      "registration": {
+        "method": "cpd",
+        "detection_noise_sigma": 5.0,
+        "max_control_points": 1000,
+        "kernel_width_voxels": null,
+        "regularization_weight": 2.0,
+        "outlier_fraction": 0.15,
+        "affine_first": true,
+        "grid_spacing_voxels": 16
+      },
+      "qualification": "source-derived configuration; real/large inputs unqualified"
+    },
+    "cpd-small": {
+      "source": "registration/results/scripts/benchmark_cpd_single.py",
+      "registration": {
+        "method": "cpd",
+        "detection_noise_sigma": 5.0,
+        "max_control_points": 1000,
+        "kernel_width_voxels": null,
+        "regularization_weight": 2.0,
+        "outlier_fraction": 0.15,
+        "affine_first": true,
+        "grid_spacing_voxels": 8
+      },
+      "qualification": "source-derived configuration; real/large inputs unqualified"
+    },
+    "translation": {
+      "source": "registration/results/scripts/benchmark_global_single.py",
+      "registration": {
+        "method": "translation",
+        "backend": "scipy_fft",
+        "fft_workers": 1
+      },
+      "qualification": "legacy warmup/estimator-only timing is not reproduced"
+    },
+    "py_demons": {
+      "source": "registration/results/scripts/benchmark_local_comparison_single.py",
+      "registration": {
+        "method": "demons",
+        "variant": "demons",
+        "iterations": [
+          100,
+          50,
+          25
+        ],
+        "smoothing_sigma": 1.0,
+        "pyramid_mode": "antialias"
+      },
+      "qualification": "distinct comparison-v2 configuration"
+    },
+    "py_diffeo": {
+      "source": "registration/results/scripts/benchmark_local_comparison_single.py",
+      "registration": {
+        "method": "demons",
+        "variant": "diffeomorphic",
+        "iterations": [
+          100,
+          50,
+          25
+        ],
+        "smoothing_sigma": 1.0,
+        "pyramid_mode": "antialias"
+      },
+      "qualification": "distinct comparison-v2 configuration"
+    },
+    "local-default": {
+      "source": "registration/results/scripts/benchmark_local_single.py",
+      "registration": {
+        "method": "demons",
+        "variant": "demons",
+        "iterations": [
+          100,
+          50,
+          25
+        ],
+        "smoothing_sigma": 1.0,
+        "pyramid_mode": "antialias"
+      },
+      "qualification": "distinct comparison-v2 configuration"
+    },
+    "antialias-old": {
+      "source": "registration/results/scripts/benchmark_antialias_large.py",
+      "registration": {
+        "method": "demons",
+        "variant": "symmetric",
+        "iterations": [
+          25
+        ],
+        "smoothing_sigma": 0.5,
+        "pyramid_mode": "sitk"
+      },
+      "qualification": "optional dormant large experiment; no execution"
+    },
+    "antialias-two-level": {
+      "source": "registration/results/scripts/benchmark_antialias_large.py",
+      "registration": {
+        "method": "demons",
+        "variant": "symmetric",
+        "iterations": [
+          50,
+          25
+        ],
+        "smoothing_sigma": 0.5,
+        "pyramid_mode": "antialias"
+      },
+      "qualification": "optional dormant large experiment; no execution"
+    }
+  }
+}

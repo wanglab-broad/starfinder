@@ -1,5 +1,10 @@
 function tile_config = ParseFijiTileConfiguration(tile_config_file)
-% load TileConfiguration from Fiji
+% Read a Fiji tile configuration text file into a fov/x/y/z table.
+%
+% tile_config_file is a path; parsing starts at line 5. FOV names are truncated
+% before the first dot. Each coordinate axis has abs(min(axis)) added, then is
+% cast to int32. This is an offset transform, not a conversion to 1-based voxel
+% indices, and a positive minimum is shifted further positive.
 
     opts = delimitedTextImportOptions("NumVariables", 6);
 

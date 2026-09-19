@@ -1,5 +1,9 @@
 """Tests for starfinder.registration.demons module."""
 
+from starfinder.image import ImageMetadata
+from starfinder.registration import estimate_transform, apply_transform, DemonsConfig, DenseDisplacementTransform, WarpConfig
+from starfinder.io import ImageLoadConfig
+
 import numpy as np
 import pytest
 
@@ -12,10 +16,10 @@ class TestDemonsRegister:
 
     def test_identity(self, small_dataset):
         """Identical images produce near-zero displacement field."""
-        from starfinder.io import load_multipage_tiff
-        from starfinder.registration.demons import demons_register
+        from starfinder.io import load_volume
+        from starfinder.registration._demons import demons_register
 
-        vol = load_multipage_tiff(small_dataset / "FOV_001" / "round1" / "ch00.tif")
+        vol = load_volume(small_dataset / "FOV_001" / "round1" / "ch00.tif").image
         # Use fast single-level config for unit test speed
         field = demons_register(vol, vol, iterations=[25], pyramid_mode="sitk")
 
@@ -28,10 +32,10 @@ class TestDemonsRegister:
         """Recovers direction of synthetic smooth deformation."""
         from scipy.ndimage import gaussian_filter, map_coordinates
 
-        from starfinder.io import load_multipage_tiff
-        from starfinder.registration.demons import demons_register
+        from starfinder.io import load_volume
+        from starfinder.registration._demons import demons_register
 
-        vol = load_multipage_tiff(small_dataset / "FOV_001" / "round1" / "ch00.tif")
+        vol = load_volume(small_dataset / "FOV_001" / "round1" / "ch00.tif").image
 
         # Create smooth synthetic deformation (simulate tissue warping)
         rng = np.random.default_rng(42)
@@ -71,14 +75,13 @@ class TestApplyDeformation:
 
     def test_identity_field(self, small_dataset):
         """Zero displacement field returns original volume."""
-        from starfinder.io import load_multipage_tiff
-        from starfinder.registration.demons import apply_deformation
+        from starfinder.io import load_volume
 
-        vol = load_multipage_tiff(small_dataset / "FOV_001" / "round1" / "ch00.tif")
+        vol = load_volume(small_dataset / "FOV_001" / "round1" / "ch00.tif").image
 
         # Zero displacement field
         field = np.zeros((*vol.shape, 3), dtype=np.float32)
-        result = apply_deformation(vol, field)
+        result = apply_transform(vol, DenseDisplacementTransform(field, vol.shape, vol.shape, ImageMetadata("test/reference"), ImageMetadata("test/moving")), config=WarpConfig(backend="simpleitk"))
 
         assert result.shape == vol.shape
         # Should be nearly identical (interpolation may introduce tiny differences)
@@ -90,23 +93,20 @@ class TestRegisterVolumeLocal:
 
     def test_multichannel(self, small_dataset):
         """Registers all channels using computed field."""
-        from starfinder.io import load_image_stacks
-        from starfinder.registration.demons import register_volume_local
+        from starfinder.io import load_round
 
-        images, _ = load_image_stacks(
-            small_dataset / "FOV_001" / "round1",
-            ["ch00", "ch01", "ch02", "ch03"],
-        )
+        loaded_round = load_round(small_dataset / "FOV_001" / "round1", config=ImageLoadConfig(channel_labels=tuple(["ch00", "ch01", "ch02", "ch03"])))
+        images = loaded_round.image
+        _ = loaded_round.diagnostics
 
         # Use ch00 as ref/mov (identity case)
         ref_img = images[:, :, :, 0]
         mov_img = images[:, :, :, 0]
 
         # Use fast single-level config for unit test speed
-        registered, field = register_volume_local(
-            images, ref_img, mov_img,
-            iterations=[25], pyramid_mode="sitk",
-        )
+        _registration = estimate_transform(ref_img, mov_img, config=DemonsConfig(iterations=[25], pyramid_mode='sitk'), reference_metadata=ImageMetadata("test/reference"), moving_metadata=ImageMetadata("test/moving"))
+        registered = apply_transform(images, _registration.transform, config=_registration.application_config)
+        field = _registration.transform.displacement_zyx
 
         assert registered.shape == images.shape
         assert field.shape == (*images.shape[:3], 3)
@@ -119,7 +119,7 @@ class TestPyramidUtilities:
 
     def test_butterworth_filter_shape(self):
         """Butterworth filter has correct shape and peak at DC."""
-        from starfinder.registration.pyramid import butterworth_3d
+        from starfinder.registration._pyramid import butterworth_3d
 
         shape = (8, 16, 16)
         filt = butterworth_3d(shape, cutoff=0.25, order=2)
@@ -133,7 +133,7 @@ class TestPyramidUtilities:
 
     def test_antialias_resize_roundtrip(self):
         """Down then up approximately recovers original (smooth signal)."""
-        from starfinder.registration.pyramid import antialias_resize
+        from starfinder.registration._pyramid import antialias_resize
 
         # Need sufficient volume size for meaningful roundtrip — small volumes
         # (e.g. 8×32×32) have too few samples after 2x downsampling.
@@ -152,7 +152,8 @@ class TestPyramidUtilities:
 
     def test_pad_crop_roundtrip(self):
         """Pad then crop recovers exact original."""
-        from starfinder.registration.pyramid import crop_padding, pad_for_pyramiding
+        from starfinder.registration._pyramid import crop_padding
+        from starfinder.registration._pyramid import pad_for_pyramiding
 
         vol = np.random.default_rng(42).random((5, 13, 17))
         padded, pad_widths = pad_for_pyramiding(vol, pyramid_levels=3)
@@ -166,7 +167,7 @@ class TestPyramidUtilities:
 
     def test_pad_no_op_when_already_divisible(self):
         """No padding added when dims already divisible."""
-        from starfinder.registration.pyramid import pad_for_pyramiding
+        from starfinder.registration._pyramid import pad_for_pyramiding
 
         vol = np.ones((8, 16, 32))
         padded, pad_widths = pad_for_pyramiding(vol, pyramid_levels=3)
@@ -181,10 +182,10 @@ class TestAntialiasedDemonsRegister:
 
     def test_identity_antialias_pyramid(self, small_dataset):
         """Identical images with antialias pyramid produce near-zero field."""
-        from starfinder.io import load_multipage_tiff
-        from starfinder.registration.demons import demons_register
+        from starfinder.io import load_volume
+        from starfinder.registration._demons import demons_register
 
-        vol = load_multipage_tiff(small_dataset / "FOV_001" / "round1" / "ch00.tif")
+        vol = load_volume(small_dataset / "FOV_001" / "round1" / "ch00.tif").image
         field = demons_register(
             vol, vol,
             iterations=[25, 10],
@@ -199,8 +200,8 @@ class TestAntialiasedDemonsRegister:
         """Anti-aliased pyramid outperforms SITK naive pyramid on dense data."""
         from scipy.ndimage import gaussian_filter, map_coordinates
 
-        from starfinder.registration.demons import apply_deformation, demons_register
-        from starfinder.registration.metrics import normalized_cross_correlation
+        from starfinder.registration._demons import demons_register
+        from starfinder.evaluation.registration import normalized_cross_correlation
 
         # Dense synthetic volume (not sparse spots) — large enough for
         # multi-level pyramid to be meaningful
@@ -219,16 +220,16 @@ class TestAntialiasedDemonsRegister:
             vol, deformed, iterations=[50, 25],
             method="demons", pyramid_mode="sitk",
         )
-        reg_sitk = apply_deformation(deformed, field_sitk)
-        ncc_sitk = normalized_cross_correlation(vol, reg_sitk)
+        reg_sitk = apply_transform(deformed, DenseDisplacementTransform(field_sitk, deformed.shape, deformed.shape, ImageMetadata("test/reference"), ImageMetadata("test/moving")), config=WarpConfig(backend="simpleitk"))
+        ncc_sitk = normalized_cross_correlation(vol, reg_sitk).values["ncc"]
 
         # Anti-aliased 2-level pyramid
         field_aa = demons_register(
             vol, deformed, iterations=[50, 25],
             method="demons", pyramid_mode="antialias",
         )
-        reg_aa = apply_deformation(deformed, field_aa)
-        ncc_aa = normalized_cross_correlation(vol, reg_aa)
+        reg_aa = apply_transform(deformed, DenseDisplacementTransform(field_aa, deformed.shape, deformed.shape, ImageMetadata("test/reference"), ImageMetadata("test/moving")), config=WarpConfig(backend="simpleitk"))
+        ncc_aa = normalized_cross_correlation(vol, reg_aa).values["ncc"]
 
         assert field_aa.shape == (*vol.shape, 3)
         assert ncc_aa > ncc_sitk, (
@@ -241,10 +242,9 @@ class TestMatlabCompatibleConfig:
 
     def test_config_keys(self):
         """Config has expected keys and values."""
-        from starfinder.registration.demons import matlab_compatible_config
 
-        config = matlab_compatible_config()
-        assert config["iterations"] == [100, 50, 25]
-        assert config["smoothing_sigma"] == 1.0
-        assert config["method"] == "demons"
-        assert config["pyramid_mode"] == "antialias"
+        config = DemonsConfig()
+        assert config.iterations == (100, 50, 25)
+        assert config.smoothing_sigma == 1.0
+        assert config.variant == "demons"
+        assert config.pyramid_mode == "antialias"

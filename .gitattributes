@@ -1,0 +1,6 @@
+# Review grouping only; authored implementation is never marked generated.
+src/python/test/** review-test
+tests/** review-test
+docs/** review-documentation
+AGENTS.md review-agent-guidance
+CONTEXT.md review-agent-guidance

@@ -1,159 +1,101 @@
-"""Tests for starfinder.barcode.extraction module."""
+"""Neighborhood, geometry and subpixel extraction contracts."""
 
+from dataclasses import replace
 import numpy as np
 import pandas as pd
 import pytest
-
-from starfinder.barcode import extract_from_location, extract_intensity_tensor
-
-
-def _make_spots(*positions):
-    """Helper: create spots DataFrame from (z, y, x) tuples."""
-    return pd.DataFrame(positions, columns=["z", "y", "x"])
-
-
-class TestExtractFromLocation:
-    """Tests for extract_from_location function."""
-
-    def test_single_spot_extraction(self):
-        """Extracts correct channel from single-channel signal."""
-        image = np.zeros((5, 32, 32, 4), dtype=np.uint8)
-        # Put strong signal in channel 2 (0-based) at spot location
-        image[2, 16, 16, 2] = 200
-        spots = _make_spots((2, 16, 16))
-
-        color_seq, color_score = extract_from_location(image, spots)
-
-        assert len(color_seq) == 1
-        assert color_seq[0] == "3"  # channel 2 (0-based) → "3" (1-based)
-
-    def test_winner_take_all(self):
-        """Selects channel with maximum normalized intensity."""
-        image = np.zeros((5, 32, 32, 4), dtype=np.uint8)
-        # Channel 0: weak, Channel 3: strong
-        image[2, 16, 16, 0] = 50
-        image[2, 16, 16, 3] = 200
-        spots = _make_spots((2, 16, 16))
-
-        color_seq, _ = extract_from_location(image, spots, voxel_size=(0, 0, 0))
-
-        assert color_seq[0] == "4"  # channel 3 (0-based) → "4" (1-based)
-
-    def test_tie_returns_M(self):
-        """Equal max in multiple channels returns 'M'."""
-        image = np.zeros((5, 32, 32, 4), dtype=np.uint8)
-        image[2, 16, 16, 0] = 100
-        image[2, 16, 16, 1] = 100
-        spots = _make_spots((2, 16, 16))
-
-        color_seq, color_score = extract_from_location(image, spots, voxel_size=(0, 0, 0))
-
-        assert color_seq[0] == "M"
-        assert color_score[0] == np.inf
-
-    def test_zero_signal_handling(self):
-        """All-zero neighborhood handled gracefully (epsilon prevents NaN)."""
-        image = np.zeros((5, 32, 32, 4), dtype=np.uint8)
-        spots = _make_spots((2, 16, 16))
-
-        color_seq, color_score = extract_from_location(image, spots)
-
-        # All channels equal after normalization (all zero → epsilon only) → tie
-        assert color_seq[0] == "M"
-        assert color_score[0] == np.inf
-
-    def test_voxel_neighborhood(self):
-        """voxel_size controls extraction window size."""
-        image = np.zeros((5, 32, 32, 4), dtype=np.uint8)
-        # Place signal around the spot but not at center
-        image[2, 14, 16, 1] = 200  # 2 pixels away in Y
-        spots = _make_spots((2, 16, 16))
-
-        # voxel_size=(0, 0, 0) → only center pixel → no signal → tie
-        seq_narrow, _ = extract_from_location(image, spots, voxel_size=(0, 0, 0))
-        assert seq_narrow[0] == "M"
-
-        # voxel_size=(0, 2, 0) → ±2 in Y → includes signal
-        seq_wide, _ = extract_from_location(image, spots, voxel_size=(0, 2, 0))
-        assert seq_wide[0] == "2"  # channel 1 → "2"
-
-    def test_boundary_clipping(self):
-        """Spots near edges don't crash, extents clipped."""
-        image = np.zeros((5, 32, 32, 4), dtype=np.uint8)
-        image[0, 0, 0, 0] = 200  # corner spot
-        spots = _make_spots((0, 0, 0))
-
-        color_seq, _ = extract_from_location(image, spots)
-        assert color_seq[0] == "1"  # channel 0 → "1"
-
-    def test_multiple_spots(self):
-        """Batch processing of multiple spots."""
-        image = np.zeros((5, 32, 32, 4), dtype=np.uint8)
-        image[1, 5, 5, 0] = 200  # spot 0 → channel 1
-        image[2, 15, 15, 2] = 200  # spot 1 → channel 3
-        image[3, 25, 25, 3] = 200  # spot 2 → channel 4
-        spots = _make_spots((1, 5, 5), (2, 15, 15), (3, 25, 25))
-
-        color_seq, color_score = extract_from_location(image, spots, voxel_size=(0, 0, 0))
-
-        assert len(color_seq) == 3
-        assert color_seq[0] == "1"
-        assert color_seq[1] == "3"
-        assert color_seq[2] == "4"
-        # All scores should be finite for clean single-channel signals
-        assert all(np.isfinite(color_score))
-
-    def test_score_computation(self):
-        """Score = -log(max_normalized) ≈ 0 for single-channel signal."""
-        image = np.zeros((5, 32, 32, 4), dtype=np.uint8)
-        image[2, 16, 16, 0] = 200  # only one channel has signal
-        spots = _make_spots((2, 16, 16))
-
-        _, color_score = extract_from_location(image, spots, voxel_size=(0, 0, 0))
-
-        # With only one channel having signal, normalized max ≈ 1.0
-        # so -log(1.0) ≈ 0 (with small epsilon correction)
-        assert color_score[0] < 0.01
+from starfinder.barcode import (
+    extract_intensities,
+    NeighborhoodSumConfig,
+    decode_barcodes,
+    WtaDecoderConfig,
+)
+from starfinder.io import ImageLoadResult
+from starfinder.spot_finding import SpotFindingResult, LocalMaximaConfig
+from starfinder.image import ImageMetadata
+from .barcode_cases import CHANNELS, META, codebook
 
 
-class TestExtractIntensityTensor:
-    """Tests for extract_intensity_tensor function."""
+def spots(points, ids=None):
+    table = pd.DataFrame(points, columns=["z", "y", "x"], dtype="float64")
+    table["spot_id"] = pd.Series(ids or [f"s{i}" for i in range(len(table))], dtype="string")
+    return SpotFindingResult(
+        table, META, "test/sample/fov", LocalMaximaConfig(), {"channel_labels": CHANNELS}
+    )
 
-    def test_argmax_matches_extract_from_location_across_rounds(self):
-        """Raw tensor argmax matches per-round winner-take-all calls."""
-        round1 = np.zeros((5, 32, 32, 4), dtype=np.uint8)
-        round2 = np.zeros((5, 32, 32, 4), dtype=np.uint8)
-        spots = _make_spots((2, 10, 10), (3, 20, 20))
 
-        # Spot 0: round1 -> channel 2, round2 -> channel 4.
-        # Spot 1: round1 -> channel 1, round2 -> channel 3.
-        # Signals are offset from the center to exercise neighborhood pooling.
-        round1[2, 10, 11, 1] = 100
-        round1[3, 20, 19, 0] = 120
-        round2[2, 11, 10, 3] = 130
-        round2[4, 20, 20, 2] = 140
+def loaded(image, **kwargs):
+    return ImageLoadResult(
+        image, kwargs.get("metadata", META), kwargs.get("channel_labels", CHANNELS), (), {}
+    )
 
-        images = {"round1": round1, "round2": round2}
-        round_order = ["round1", "round2"]
 
-        tensor = extract_intensity_tensor(
-            images, spots, round_order, voxel_size=(1, 1, 1)
+def test_integer_sums_edges_round_order_and_immutability():
+    rng = np.random.default_rng(141)
+    image = rng.integers(0, 65536, (4, 7, 8, 4), dtype=np.uint16)
+    original = image.copy()
+    found = spots([(0, 0, 0), (2, 3, 4), (3, 6, 7)], ["corner", "middle", "last"])
+    result = extract_intensities(
+        {"later": loaded(image), "earlier": loaded(image)},
+        found,
+        config=NeighborhoodSumConfig((1, 2, 1)),
+    )
+    for i, (z, y, x) in enumerate(found.spots[["z", "y", "x"]].to_numpy().astype(int)):
+        expected = image[max(0, z - 1) : z + 2, max(0, y - 2) : y + 3, max(0, x - 1) : x + 2].sum(
+            (0, 1, 2)
         )
-        tensor_seq = np.array(
-            [
-                "".join(str(channel + 1) for channel in row.argmax(axis=0))
-                for row in tensor
-            ],
-            dtype=object,
-        )
+        np.testing.assert_array_equal(result.values[i, :, 0], expected)
+    assert result.round_labels == ("later", "earlier")
+    assert result.spot_ids == ("corner", "middle", "last")
+    assert result.values.dtype == np.float64 and result.valid.all()
+    np.testing.assert_array_equal(image, original)
 
-        expected_cols = []
-        for round_name in round_order:
-            color_seq, _ = extract_from_location(
-                images[round_name], spots, voxel_size=(1, 1, 1)
-            )
-            expected_cols.append(color_seq)
-        expected = np.char.add(expected_cols[0].astype(str), expected_cols[1].astype(str))
 
-        assert tensor.shape == (2, 4, 2)
-        np.testing.assert_array_equal(tensor_seq, expected)
+def test_half_voxel_rounds_up_and_no_coordinate_truncation():
+    image = np.zeros((1, 3, 4, 4), dtype=np.uint8)
+    image[0, 1, 2, 2] = 200
+    found = spots([(0, 0.5, 1.5)])
+    result = extract_intensities(
+        {"r0": loaded(image)}, found, config=NeighborhoodSumConfig((0, 0, 0))
+    )
+    np.testing.assert_array_equal(result.values[0, :, 0], [0, 0, 200, 0])
+    assert found.spots.x[0] == 1.5
+    decoded = decode_barcodes(result, codebook({"3": "gene"}), config=WtaDecoderConfig())
+    assert decoded.table.gene_id[0] == "gene"
+
+
+@pytest.mark.parametrize("point", [(-0.01, 0, 0), (0, -1, 0), (0, 0, 3.01), (1, 0, 0)])
+def test_out_of_bounds_rejected_before_rounding(point):
+    with pytest.raises(ValueError, match="bounds"):
+        extract_intensities({"r": loaded(np.ones((1, 3, 4, 4)))}, spots([point]))
+
+
+@pytest.mark.parametrize("change", ["shape", "frame", "spacing", "channels", "nonfinite"])
+def test_round_mismatch_rejected(change):
+    a = loaded(np.ones((1, 3, 4, 4)))
+    b = a
+    if change == "shape":
+        b = loaded(np.ones((1, 3, 5, 4)))
+    if change == "frame":
+        b = replace(a, metadata=ImageMetadata("other"))
+    if change == "spacing":
+        b = replace(a, metadata=ImageMetadata(META.frame_id, (1, 1, 1)))
+    if change == "channels":
+        b = replace(a, channel_labels=CHANNELS[::-1])
+    if change == "nonfinite":
+        b = loaded(np.full((1, 3, 4, 4), np.nan))
+    with pytest.raises(ValueError):
+        extract_intensities({"a": a, "b": b}, spots([(0, 1, 1)]))
+
+
+def test_empty_and_nonempty_axes():
+    result = extract_intensities({"r": loaded(np.ones((1, 3, 4, 4)))}, spots([]))
+    assert result.values.shape == (0, 4, 1) and result.valid.shape == (0, 1)
+    with pytest.raises(ValueError):
+        extract_intensities({}, spots([]))
+
+
+@pytest.mark.parametrize("radius", [(-1, 0, 0), (0.5, 0, 0), (True, 0, 0), (1, 2)])
+def test_invalid_neighborhood(radius):
+    with pytest.raises(ValueError):
+        NeighborhoodSumConfig(radius)

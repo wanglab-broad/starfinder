@@ -1,4 +1,11 @@
 function SaveImageSingleFolder(input_img, layer, output_folder, fovID, group_channel, channel_order_dict, maximum_projection)
+% Save a cell-wrapped (row, column, Z, C) image using bundled saveastiff.
+%
+% layer, output_folder and fovID set output paths. With group_channel=true,
+% channel_order_dict(c).name chooses a subfolder; maximum_projection selects
+% Z maxima or full volumes. Channels sharing a name overwrite the same FOV file.
+% The group_channel=false branch references undefined r and is not a usable
+% recipe in this checkout. Returns no value.
    
     Nchannel = size(input_img{1}, 4);
     options.overwrite = true;

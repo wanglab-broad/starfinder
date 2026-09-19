@@ -19,3 +19,18 @@ workflow/snakemake-logs
 # Agent session artifacts
 .codex
 
+# Local worktrees, environments, and agent permissions
+/.worktrees/
+/src/python/.conda/
+/.claude/settings.local.json
+
+# Disposable agent plans; canonical plans and run reports belong in Linear.
+/.agent-work/
+/docs/plans/
+/docs/notes.md
+/docs/temp.md
+/docs/plan_milestone_*.md
+
+# Sphinx-generated files (build output should normally live outside the checkout)
+/docs/_build/
+/docs/api/generated/

@@ -1,5 +1,12 @@
 function obj = FilterReadsMultiSegment( obj, end_base, split_index )
-% FilterReads
+% Filter a multi-segment barcode dataset and report segment-form statistics.
+%
+% obj has the same required fields and returned updates as FilterReads.
+% end_base supplies one two-base pair per segment; split_index supplies 1-based
+% color split positions. The common two-segment case uses one split index
+% (first segment ends at split_index-1). Membership uses the complete color
+% string; segment terminal-base checks are diagnostic, not selection gates.
+% General multi-split behavior is unvalidated; use the configured dataset recipe.
 
     % This is just as a sanity check; reads are actually filtered
     % by whether they are in the codebook

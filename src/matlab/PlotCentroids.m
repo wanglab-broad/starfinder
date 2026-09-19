@@ -1,5 +1,10 @@
 function output_img = PlotCentroids(input_centroid, input_img, color, msize, input_title)
-% Plot centroids on image
+% Overlay spot-table x/y coordinates on a 2-D background image.
+%
+% input_centroid is a table with 1-based x (column) and y (row); input_img is a
+% 2-D background. Pass color and msize explicitly (the short-argument default
+% handling does not initialize msize). input_title is optional, default ''.
+% Returns output_img as a figure handle; Z is not shown.
 
     if nargin < 4
         color = 'red';
