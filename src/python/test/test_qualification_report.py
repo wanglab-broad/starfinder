@@ -49,6 +49,28 @@ def test_draft_does_not_claim_final_validation(packet):
     assert context == original
 
 
+def test_main_check_summary_keeps_raw_records_only_in_appendix(packet):
+    from qualification_report import check_summary, details
+    checks = [{
+        'check': 'Controller pytest', 'outcome': 'passed', 'result': '784 passed; 18 warnings',
+        'exit_code': 0, 'peak_rss_kib': 573512, 'wall_seconds': 142.96,
+        'sha256': 'b' * 64, 'command': ['uv', 'run', 'pytest'],
+        'log': '/external/check.log', 'session': 'session-identity',
+        'environment_overrides': {'OMP_NUM_THREADS': '1'}, 'future_raw_field': 'raw-detail',
+    }]
+    original = deepcopy(checks)
+    summary = check_summary(checks)
+    appendix = details('Complete check records', checks)
+    for value in ('Controller pytest', 'passed', '784 passed; 18 warnings', '573512', '142.96'):
+        assert value in summary
+    for key in ('sha256', 'command', 'log', 'session', 'environment_overrides', 'future_raw_field'):
+        assert key not in summary
+        assert key in appendix
+    assert 'b' * 64 not in summary and 'b' * 64 in appendix
+    assert 'raw-detail' not in summary and 'raw-detail' in appendix
+    assert checks == original
+
+
 def test_final_replaces_stale_draft_tables_and_embedded_state(packet):
     prepare, context = packet
     context = final_context(context)

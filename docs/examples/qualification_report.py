@@ -25,6 +25,13 @@ def details(title, value):
     return '<details><summary>'+html.escape(title)+'</summary><pre>'+html.escape(json.dumps(value, indent=2))+'</pre></details>'
 
 
+def check_summary(checks):
+    """Show outcomes/resources; retain raw records unchanged for the appendix."""
+    fields = ('check', 'outcome', 'result', 'exit_code', 'peak_rss_kib', 'wall_seconds')
+    rows = [{key: row[key] for key in fields if key in row} for row in checks]
+    return render_table(pd.DataFrame(rows).fillna('unavailable'))
+
+
 def publication_context(context):
     """Derive visible and embedded delivery state from explicit packet evidence.
 
@@ -281,7 +288,7 @@ def render(root, destination):
         +details('Saved failure diagnostics',failure['failures']))
     section('qualification','Independent checks, isolation and reproducibility',
         '<p>The full-grid oracle uses published constants, independent descriptor bytes/draws and 55-step scalar bisection for the inverse background map. It imports no production renderer, geometry or observation implementation. Every saved preset is checked. Exact regeneration is a separate persistence/repeatability check, not the analytic oracle.</p>'
-        +render_table(pd.DataFrame([{k:v for k,v in row.items() if k not in ('command','log')} for row in context['checks']]).fillna('unavailable'))
+        +check_summary(context['checks'])
         +'<p>Float64 combined image oracle: absolute tolerance 2e−10. Float32 saved arrays: max(1e−6, |oracle|×eps32/2+2e−10), relative tolerance zero. Literal binary-representable signal arithmetic is exact; coordinates 1e−12; inverse residual 2e−10. Saved byte/dtype/config checks use exact equality. Noise amplitudes may respond to changed upstream intensity, while standardized streams and unrelated latents remain fixed.</p>'
         +'<p>Calibration/evaluation descriptors differ but generation is rejected. No evaluation scene was used for development. Cross-version NumPy portability, calibrated ranges, original RNA abundance, benchmark matching/eligibility, historical v1/v2/large shifts and empirical add_noise/background_std semantics remain outside this qualification.</p>')
     section('w93','Criterion-mapped W-93 evidence and limits',render_table(context['w93'])+
