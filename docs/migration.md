@@ -156,3 +156,17 @@ This guide does not claim bitwise equivalence or MATLAB runtime validation.
 W-92/W-93/W-94/W-124 and Chapter II retain scientific qualification; notably,
 historical process-dependent synthetic hash seeds and scientific molecular-truth
 qualification remain unresolved.
+
+### Explicit formed-scene background and noise controls
+
+Use `BackgroundConfig`, `TextureConfig` and `NoiseConfig` with
+`generate_formed_scene` for the frozen processed-image background/noise model.
+The historical `SyntheticConfig.background_std` remains unused and
+`render_spots(add_noise=False)` still draws background with SD `background/4`.
+Those APIs and their saved fixtures retain historical values; neither is a
+noise-off oracle. There is no automatic mapping from the unused field to a
+new stochastic component. In the formed API, every background/noise enable flag
+defaults false and disables its contribution regardless of retained parameters.
+Enable `NoiseConfig.independent_enabled` with explicit `sigma` for additive
+residual noise; structured background widths/brightness are separate controls.
+See [the API](api/synthetic.rst) for order, identity and provenance contracts.

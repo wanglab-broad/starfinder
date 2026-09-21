@@ -372,3 +372,15 @@ rounds/four channels; tests additionally use the existing `(8,32,32)` preset.
 They test temporary recovery versus persistent loss, source gain before mixing,
 disabled-control equality, keyed randomness, and cross-process repeatability.
 No historical TIFF is read or regenerated. No calibrated assay claim follows.
+
+For structured backgrounds and independent residual noise (synthetic/1 A5/A6):
+
+```bash
+uv run python ../../docs/examples/background_noise.py
+uv run pytest test/test_background_noise.py -v
+```
+
+The example allocates at most `(3,7,9)` ZYX, three rounds/four channels; the
+statistics test uses `(8,32,32)`. No external/legacy TIFF inputs, empirical
+calibration or saved fixtures are needed. Use the bounded environment/resource
+profile and `/usr/bin/time -v`; exact measurements belong in the run manifest.

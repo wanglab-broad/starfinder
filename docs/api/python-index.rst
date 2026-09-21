@@ -2,6 +2,7 @@ Python functions and classes A–Z
 ================================
 
 * :py:obj:`starfinder.registration.apply_transform`
+* :py:obj:`starfinder.synthetic.BackgroundConfig`
 * :py:obj:`starfinder.barcode.BarcodeDecodingResult`
 * :py:obj:`starfinder.benchmark.BenchmarkCase`
 * :py:obj:`starfinder.benchmark.BenchmarkTrialResult`
@@ -70,6 +71,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.evaluation.matching.match_points`
 * :py:obj:`starfinder.preprocessing.MinMaxNormalizationConfig`
 * :py:obj:`starfinder.barcode.NeighborhoodSumConfig`
+* :py:obj:`starfinder.synthetic.NoiseConfig`
 * :py:obj:`starfinder.spot_finding.NoiseLandmarkConfig`
 * :py:obj:`starfinder.preprocessing.normalize_intensity`
 * :py:obj:`starfinder.evaluation.registration.normalized_cross_correlation`
@@ -103,6 +105,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.dataset.SubtileConfig`
 * :py:obj:`starfinder.synthetic.SyntheticConfig`
 * :py:obj:`starfinder.synthetic.SyntheticDataset`
+* :py:obj:`starfinder.synthetic.TextureConfig`
 * :py:obj:`starfinder.preprocessing.TophatConfig`
 * :py:obj:`starfinder.registration.TpsConfig`
 * :py:obj:`starfinder.registration.TranslationConfig`

@@ -214,6 +214,70 @@ def _readout_effects(config, intended, ids, labels, stream):
 
 
 @dataclass(frozen=True)
+class TextureConfig:
+    """Persistent Gaussian blobs, independent of formed molecules.
+
+    Count/density/coordinates and placement follow FormedSceneConfig. Default
+    enabled count is four. Width distributions are axial/lateral (YX shared),
+    in voxel indices; brightness is peak intensity. Supplied values use blob-N
+    IDs. Enable this component with BackgroundConfig.texture_enabled.
+    """
+
+    count: int | None = None
+    density: float | None = None
+    coordinates: object = None
+    max_count: int = 1024
+    placement: str = "uniform"
+    spatial_weights: object = None
+    cluster_centers: object = None
+    cluster_weights: object = None
+    spread_zyx: tuple[float, float, float] = (1, 2, 2)
+    axial_width: ScalarDistribution = field(default_factory=ScalarDistribution)
+    lateral_width: ScalarDistribution = field(default_factory=lambda: ScalarDistribution(parameters=(3,)))
+    brightness: ScalarDistribution = field(default_factory=lambda: ScalarDistribution(parameters=(5,)))
+
+
+@dataclass(frozen=True)
+class BackgroundConfig:
+    """Analytic reference background and destination-frame R×C baseline.
+
+    All flags default false. Gradient is max(0, intercept + slopes dot
+    normalized ZYX). Regions are supplied K×3 centers, positive sigma_zyx
+    triples and nonnegative heights (None gives (2,8,8), 10 per region).
+    Tissue weights and baselines are nonnegative R×C arrays, default zero.
+    Disabled parameters are validated and retained, but contribute zero.
+    """
+
+    baseline_enabled: bool = False
+    baseline: object = None
+    gradient_enabled: bool = False
+    gradient_intercept: float = 0.0
+    gradient_slopes_zyx: tuple[float, float, float] = (0, 0, 0)
+    regions_enabled: bool = False
+    region_centers: object = ()
+    region_sigma_zyx: object = None
+    region_heights: object = None
+    texture_enabled: bool = False
+    texture: TextureConfig = field(default_factory=TextureConfig)
+    tissue_weights: object = None
+
+
+@dataclass(frozen=True)
+class NoiseConfig:
+    """Separate residual normals: sqrt(alpha*J)*Z_dep, then sigma*Z_ind.
+
+    J includes signal, weighted tissue and baseline. Both flags default false;
+    alpha/sigma are finite nonnegative scalars (zero by default). Round/channel
+    keyed standardized draws persist when strengths change. No photon claim.
+    """
+
+    dependent_enabled: bool = False
+    alpha: float = 0.0
+    independent_enabled: bool = False
+    sigma: float = 0.0
+
+
+@dataclass(frozen=True)
 class FormedSceneConfig:
     """Inputs for one bounded development FOV; readout defaults clean/disabled.
 
@@ -251,6 +315,8 @@ class FormedSceneConfig:
     elongation: ScalarDistribution = field(default_factory=ScalarDistribution)
     angle: ScalarDistribution = field(default_factory=lambda: ScalarDistribution(parameters=(0,)))
     readout: ReadoutEffectsConfig = field(default_factory=ReadoutEffectsConfig)
+    background: BackgroundConfig = field(default_factory=BackgroundConfig)
+    noise: NoiseConfig = field(default_factory=NoiseConfig)
 
 
 @dataclass
@@ -372,8 +438,8 @@ def generate_formed_scene(codebook: Codebook, *, config: FormedSceneConfig = For
                           metadata: ImageMetadata | None = None) -> FormedScene:
     """Generate an in-memory formed population and controlled readout images.
 
-    Implements A1–A5/A8 and truth/provenance of A9 in synthetic/1. Background,
-    noise and geometry are disabled; no hidden legacy defaults apply.
+    Implements A1–A6/A8 and truth/provenance of A9 in synthetic/1. Geometry is
+    identity; optional background/noise default disabled with no hidden defaults.
     Invalid input or nonfinite generation raises ValueError (wrong typed objects
     raise TypeError). Density overflow/max_count errors never cap or retry N.
     """
@@ -406,9 +472,9 @@ def generate_formed_scene(codebook: Codebook, *, config: FormedSceneConfig = For
     metadata = ImageMetadata(**asdict(metadata))
     streams = {}
 
-    def stream(component, entity=None, round_label=None):
+    def stream(component, entity=None, round_label=None, channel_label=None):
         descriptor = [CONTRACT, config.split, config.seed, config.scene_key,
-                      component, entity, round_label, None]
+                      component, entity, round_label, channel_label]
         encoded = _json(descriptor)
         digest = hashlib.sha256(encoded.encode("utf-8")).hexdigest()
         streams[encoded] = dict(descriptor=descriptor, sha256=digest, bit_generator="PCG64", numpy_version=np.__version__)
@@ -513,6 +579,13 @@ def generate_formed_scene(codebook: Codebook, *, config: FormedSceneConfig = For
         for key in ("trend_multiplier", "weak_multiplier"):
             table[key] = effects[key][:, r]
         round_tables.append(table)
+    from ._observation import _prepare_background, evaluate_background, _observe
+    background, effective_background = _prepare_background(config.background, shape, len(images), stream)
+    for component in background:
+        component['frame_id'] = metadata.frame_id
+    tissue = evaluate_background(background, np.moveaxis(np.indices(shape, dtype=np.float64), 0, -1))
+    observation, effective_noise = _observe(images, tissue, effective_background, config.noise,
+                                           codebook.channel_labels, stream)
     clipping = {}
     for label, image in images.items():
         if not np.isfinite(image).all():
@@ -531,6 +604,11 @@ def generate_formed_scene(codebook: Codebook, *, config: FormedSceneConfig = For
     config_payload = _plain(asdict(config))
     config_payload["type"] = "FormedSceneConfig"
     config_payload["readout"]["type"] = "ReadoutEffectsConfig"
+    config_payload["background"]["type"] = "BackgroundConfig"
+    config_payload["background"]["texture"]["type"] = "TextureConfig"
+    config_payload["noise"]["type"] = "NoiseConfig"
+    for key in ("axial_width", "lateral_width", "brightness"):
+        config_payload["background"]["texture"][key]["type"] = "ScalarDistribution"
     for key in ("brightness", "axial_width", "lateral_width", "elongation", "angle"):
         config_payload[key]["type"] = "ScalarDistribution"
     codebook_payload = dict(rows=codebook.table.to_dict("records"), round_labels=list(codebook.round_labels),
@@ -538,26 +616,33 @@ def generate_formed_scene(codebook: Codebook, *, config: FormedSceneConfig = For
                             encoding=asdict(codebook.encoding))
     effective = dict(config_payload, count=n, placement="explicit" if coordinates is not None else config.placement,
                      abundance_probabilities=abundances.tolist(), readout=effective_readout,
-                     effects_enabled=any(v for k, v in effective_readout.items() if k.endswith("_enabled")))
+                     background=effective_background, noise=effective_noise,
+                     effects_enabled=any(v for group in (effective_readout, effective_background, effective_noise)
+                                         for k, v in group.items() if k.endswith("_enabled")))
     payload = dict(contract_id=CONTRACT, contract_revision=SPEC_REVISION,
-                   generator="starfinder.synthetic.generate_formed_scene", generator_version="2",
+                   generator="starfinder.synthetic.generate_formed_scene", generator_version="3",
                    truth_namespace=namespace,
                    requested_config=config_payload, effective_config=effective, codebook=codebook_payload,
                    geometry=asdict(metadata), singleton_z_sampling=bool(shape[0] == 1),
                    amplicon_ids=list(ids), signal_axes="NCR", round_labels=list(codebook.round_labels),
                    channel_labels=list(codebook.channel_labels), streams=list(streams.values()),
-                   transforms=transforms, background_components=[], observation=dict(
+                   transforms=transforms, background_components=background, observation=dict(
+                       **observation,
                        shape_zyxc=[*config.shape_zyx, 4], dtype=config.dtype, clipping_counts=clipping,
                        image_sha256={k: hashlib.sha256(v.tobytes()).hexdigest() for k, v in images.items()}),
                    truth_components=["formed", "round_truth", "intended", "pre_mix", "realized"],
                    order=["formed", "persistent_properties", "intended", "survival", "dropout",
-                          "weakening", "trend", "source_gain", "mixing", "render", "cast", "truth"])
+                          "weakening", "trend", "source_gain", "mixing", "render", "tissue",
+                          "baseline", "noise.dependent", "noise.independent", "cast", "truth"])
     payload["config_sha256"] = hashlib.sha256(_json(dict(config=config_payload, codebook=codebook_payload,
                                                         metadata=asdict(metadata))).encode()).hexdigest()
     provenance = dict(contract_id="starfinder.artifacts/1", source_kind="synthetic",
                       source_id="formed:" + payload["config_sha256"],
                       dataset_version=config.dataset_version,
-                      catalog=("docs/datasets.md#controlled-readout-development-v1" if effective["effects_enabled"]
+                      catalog=("docs/datasets.md#structured-background-development-v1" if
+                               any(v for group in (effective_background, effective_noise)
+                                   for k, v in group.items() if k.endswith("_enabled")) else
+                               "docs/datasets.md#controlled-readout-development-v1" if effective["effects_enabled"]
                                else "docs/datasets.md#formed-amplicon-clean-development-v1"),
                       uri=None, sha256=None,
                       unverified_reason="In-memory source; serialized artifact identities must be recorded by the publisher.",
@@ -566,7 +651,8 @@ def generate_formed_scene(codebook: Codebook, *, config: FormedSceneConfig = For
                                      geometry=asdict(metadata), conversion=None),
                       extensions={"starfinder.synthetic": payload},
                       limitations=["Development processed-image model, not calibrated D04 or biological RNA truth.",
-                                   "Background, noise and geometry disabled; no eligibility inferred.",
+                                   "Geometry is identity; no eligibility inferred.",
+                                   "Analytic background and residual noise are not measured tissue or detector physics.",
                                    "Readout probabilities and gains are effective controls, not calibrated chemistry.",
                                    "Bitwise repeatability is limited to the pinned NumPy environment."])
     return FormedScene(images, metadata, formed, pd.concat(round_tables, ignore_index=True),

@@ -4,7 +4,7 @@ starfinder.synthetic
 The :doc:`formed-amplicon specification <../synthetic-specification>` defines
 ``starfinder.synthetic/1`` and independent acceptance cases for the new
 development model. ``generate_formed_scene`` implements its scene/truth and controlled readout
-slices; the historical APIs retain their original semantics.
+and background/noise slices; the historical APIs retain their original semantics.
 
 Pure processed-image scene generation. Importing this package does not import
 benchmark orchestration. Generation returns arrays in memory; the benchmark
@@ -15,6 +15,7 @@ persistence adapter writes workflow TIFFs, JSON, scene tables and annotations.
 .. autosummary::
    :toctree: generated
 
+   BackgroundConfig
    formed_scene_preset
    FormedScene
    FormedSceneConfig
@@ -25,11 +26,13 @@ persistence adapter writes workflow TIFFs, JSON, scene tables and annotations.
    generate_registration_pairs
    generate_volume
    get_preset_config
+   NoiseConfig
    ReadoutEffectsConfig
    render_spots
    ScalarDistribution
    SyntheticConfig
    SyntheticDataset
+   TextureConfig
 
 Formed scenes
 -------------
@@ -68,7 +71,7 @@ overflow fail rather than returning nonfinite images.
 Rendering uses the specified ellipsoidal four-sigma support, float64 accumulation
 in sorted amplicon-ID order, then one cast. Integers use nearest-even rounding and
 saturation with clipping counts; floats retain their values without normalization.
-Backgrounds, noise and geometry remain disabled. With readout effects disabled,
+Backgrounds and noise default disabled; geometry remains identity. With readout effects disabled,
 intended, pre-mix and realized amplitudes are equal but independent arrays.
 The clean model's identity transforms and complete per-round state are explicit.
 
@@ -145,9 +148,66 @@ The example checks exact A4 histories [8,4,2], [8,0,2], [8,1,2] and [8,0,0],
 asymmetric A5 mixing [8,2,0,0], combined gain/trend/weakening/mixing, and center
 extraction in 3D and Z=1. Detector ``spot-1`` is explicitly placed at ``gt-A``;
 this is a supplied-coordinate extraction oracle, not detection accuracy.
-Background addition in A5 belongs to the separate background implementation.
+The background/noise example and tests cover destination baseline addition in A5.
 
 .. literalinclude:: ../examples/readout_effects.py
+   :language: python
+
+Structured backgrounds and residual noise
+-----------------------------------------
+
+Pass ``background=BackgroundConfig(...)`` and ``noise=NoiseConfig(...)`` to
+``FormedSceneConfig``. Generator version 3 adds these controls without changing
+the clean preset image values. The defaults contribute exactly zero. Each
+Boolean enable flag is independent; retained disabled parameters are validated
+but neither rendered nor randomly sampled.
+
+* ``baseline_enabled`` adds nonnegative ``baseline`` (R,C) in destination channel
+  order, after signal/tissue assembly. None means zero; no broadcasting.
+* ``gradient_enabled`` adds max(0, intercept + slopes dot normalized ZYX) to
+  the reference scalar background. ``gradient_intercept`` is nonnegative;
+  ``gradient_slopes_zyx`` may be signed. Singleton normalized coordinates are zero.
+* ``regions_enabled`` adds untruncated Gaussian bumps with supplied
+  ``region_centers`` (K,3), ``region_sigma_zyx`` (K,3) and ``region_heights`` (K,).
+  None widths/heights select (2,8,8) and 10 per center; empty centers give zero.
+* ``texture_enabled`` uses ``TextureConfig`` for count, Poisson density, or
+  explicit coordinates. Uniform, weighted and clustered placement reuse the
+  formed placement laws, under separate background streams. Default enabled
+  count is four, widths (1,3,3), peak height 5. Axial and lateral widths and
+  height accept ``ScalarDistribution``; lateral width is shared by Y and X.
+  Supplied property values use ``blob-0``, etc. Width stream entities are compact
+  JSON [blob ID, "axial"] and [blob ID, "lateral"]. Count over max_count fails
+  without capping or retrying. All Gaussian tails are untruncated.
+* Nonnegative ``tissue_weights`` (R,C), default zero, scale the summed scalar
+  background into destination channels. Neither mixing nor molecular loss acts
+  on tissue or baseline. Background components are not cells or molecular truth.
+* ``dependent_enabled`` adds sqrt(alpha*J)*Z_dep to pre-noise total J; then
+  ``independent_enabled`` adds sigma*Z_ind. Nonnegative scalar ``alpha`` and
+  ``sigma`` default zero. J includes signal, tissue and baseline. Float output
+  retains negative residuals; integer output rounds/saturates only once.
+
+``background_components`` in the synthetic provenance extension retains
+analytic reference-frame coefficients, blob IDs, centers, widths and heights.
+The internal evaluator accepts real reference coordinates so the geometry
+component can later supply inverse-mapped output positions. This release uses
+identity geometry; no deformation has been implemented here. No existing noisy
+image is sampled or given a second noise model. Requested configuration,
+effective baselines/weights/noise, round/channel stream descriptors, standardized
+draw hashes, pre-noise image hashes and final clipping counts remain separate.
+Noise strengths do not resample molecules, codewords, masks, latents or transforms.
+
+These are effective processed-image approximations, not empirical tissue,
+photon statistics or detector calibration. From ``src/python``::
+
+   uv run python ../../docs/examples/background_noise.py
+
+The example checks gradient/Gaussian literals, infinite tails and noise isolation
+in (3,7,9) and (1,7,9), with no saved images. Focused tests additionally check A5/A6,
+independently derived PCG64 draws, residual mean/variance, invalid parameters,
+zero/disabled controls and unchanged molecular truth. Run resource measurements
+and exact outcomes belong in the issue's external manifest, not this API guide.
+
+.. literalinclude:: ../examples/background_noise.py
    :language: python
 
 Historical scene and result contracts

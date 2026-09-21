@@ -486,3 +486,28 @@ are retained in `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs
 Intended use is bounded effective-model development, not calibrated evaluation.
 No historical fixture bytes change. Owner Jiahao; retain through thesis/publication;
 backup and public-release reproducibility remain unverified.
+
+### Structured background development v1
+
+`structured-background-development-v1` is the bounded W-162 in-memory example
+in `docs/examples/background_noise.py`, using synthetic/1 and generator version 3.
+It inherits seed 42, scene `formed-v1`, development split, sample/FOV identity,
+three ordered rounds, four channels, codebook and mapping from `formed_scene_preset`.
+Shapes are `(3,7,9)` and `(1,7,9)` ZYX, float64 ZYXC, unknown physical calibration,
+N=0 (background-only oracle). It independently checks a normalized X gradient
+with intercept 1/slopes (0,0,8); a height-8 Gaussian at (0,2,2) of width (1,1,1),
+including tails beyond four sigma; and two uniform texture blobs with widths
+(1,3,3)/height 5 and unit destination weights, with residual alpha=4/sigma=2.
+Background/noise enabled individually as shown in the source; geometry is identity.
+No historical TIFFs or measured backgrounds are consumed or regenerated.
+
+`test_background_noise.py` also uses bounded `(3,7,9)` molecule/isolation probes
+and `(8,32,32)` residual-statistics arrays (three rounds, four channels), literal
+A5/A6 arithmetic, explicit blob/count-density laws and independent SHA-256/PCG64
+expectations. Configurations and tolerances are maintained in that test source;
+run manifests pin source hashes, commands, measurements and provenance. No fixture
+bytes are committed. Analytic backgrounds are not cells, empirical tissue or
+calibrated evaluation data; W-93/W-167 qualification remains separate. Latent
+records, standardized noise stream hashes and pre-noise/final image hashes are
+retained independently. Owner Jiahao; external evidence retained through
+thesis/publication, backup unverified.
