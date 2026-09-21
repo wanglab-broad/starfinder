@@ -328,3 +328,29 @@ and default/disabled saving in batch/streaming. The provenance-only example
 explicitly disables checkpoint saving; the image-checkpoint example uses the
 new persistent-run default and also requires the `checkpoint` extra.
 See [candidate checkpoints](candidate-checkpoints.md) for limits and storage policy.
+
+For the complete saved synthetic development example (two explicit amplicons,
+three rounds, four channels; ZYX `(3,7,9)` and `(1,7,9)`), use separate processes:
+
+```bash
+uv run python ../../docs/examples/saved_synthetic.py create /external/new-run/delivery
+uv run python ../../docs/examples/saved_synthetic.py reload /external/new-run/delivery
+uv run python ../../docs/examples/saved_synthetic.py report /external/new-run/delivery
+uv run pytest test/test_saved_synthetic_example.py -v
+```
+
+Requires the prepared `checkpoint` extra. Create saves full synthetic truth,
+configuration/codebook/streams, prepared and registered HDF5 images, provenance,
+and pre-rejection Parquet candidates/signals. Reload uses only saved artifacts,
+repeats extraction/decoding/QC with saved settings, and compares exact values,
+identities and geometry to uninterrupted outputs. It checks independent literal
+truth/signals as well. No historical fixture TIFFs or notebooks are used.
+
+Open `/external/new-run/delivery/review.html` directly in a browser (File → Open).
+For a remote host, copy the single HTML file to your computer and open that copy;
+all essential figures/tables are embedded. Keep the adjacent delivery manifest,
+report identity and run logs for provenance. The report reads saved outputs and
+reload evidence; it never regenerates or reruns processing. Its XY overlays are
+explicit display projections, while the saved images retain Z. Existing reports
+are never overwritten. This is a development fixture, not D04 qualification or
+human gate approval; full validation and browser opening are separate evidence.

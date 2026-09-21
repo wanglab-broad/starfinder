@@ -366,3 +366,34 @@ Focused format evidence and saved output hashes belong to W-159's external
 Small-file sizes/timings are illustrative; W-171 owns storage qualification.
 Owner Jiahao, retention through thesis/publication, backup unverified. These
 private development artifacts do not establish public reproducibility.
+
+### Saved formed development v1
+
+`saved-formed-z3-v1` and `saved-formed-z1-v1` are the explicit two-object
+integration fixtures in `docs/examples/saved_synthetic.py`. They derive from
+the formed development v1 model above, generator version 1 / synthetic contract
+`starfinder.synthetic/1`, with no external accession or historical TIFF ancestor.
+Root seed 42, scene `formed-v1`, development split, sample `sample`, FOV `FOV_001`;
+three ordered rounds `(round10,round2,round1)`, four channels
+`(ch02,ch00,ch03,ch01)`, mapping `1→1,2→0,3→3,4→2`. Explicit `formed-A`/`formed-B`
+centers are `(Z//2,2,2)`/`(Z//2,4,6)` with genes `gene-A=123`/`gene-B=214`.
+Brightness is 8, axial/lateral sigma .25, elongation 1, angle 0, all effects off.
+Shape is float32 ZYXC `(3,7,9,4)` or `(1,7,9,4)`; physical calibration is unknown.
+This is the same sampled 3D model for Z=1, not a projection or calibrated D04.
+
+The script saves complete formed/per-round truth and float64 NCR intended,
+pre-mix and realized signals; prepared/registered HDF5, run provenance and
+pre-rejection Parquet checkpoint; and example-only uninterrupted decoding/QC
+comparison tables. These comparison tables are not a new decoded/final artifact
+API. It independently requires two objects, six history rows, literal active
+amplitudes 8 and inactive 0; exact image/extraction/downstream round trips use
+separate processes. Registration is an explicit zero-correction clean control.
+Report-only display projections preserve the original saved Z geometry.
+
+Verification date 2026-09-21; effective config/order/stream descriptors,
+generator/source checksums, output identities and limitations belong to the
+external W-160 manifest under
+`/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-160/20260921T054407Z-db98e9ef/`.
+Intended use: bounded persistence/integration and human software review, not
+scientific accuracy, historical seed qualification or public reproducibility.
+Jiahao owns retention through thesis/publication; backup unverified.
