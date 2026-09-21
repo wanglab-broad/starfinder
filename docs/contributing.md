@@ -410,3 +410,16 @@ This reuses W-154's `(3,4,5,4)`/Z=1, two-round arithmetic and no historical TIFF
 Checks cover all-rejected/empty populations, exact calls/QC/diagnostics, source
 collisions, reversed sample order, omitted/missing sources and failed writes.
 See [molecular checkpoints](molecular-checkpoints.md) for memory and policy limits.
+
+## Static summaries and saved inspection
+
+See [offline summaries](run-summaries.md) for bounded preparation/render commands
+and notebook access. Focused checks:
+
+```bash
+uv run pytest test/test_run_summaries.py test/test_saved_synthetic_example.py -v
+```
+
+These reuse saved-formed-v3 (maximum `(9,32,32,4)`, three rounds), add an intentional
+insufficient-landmarks failure with partial signals, and verify saved-only reading.
+Notebook cells run as Python; live Jupyter needs a separate optional environment.

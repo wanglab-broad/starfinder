@@ -562,3 +562,17 @@ These are development software fixtures, not calibrated evaluation data or
 MATLAB parity evidence. Existing H5AD/assignment links are retained, not scientifically
 qualified. Owner Jiahao; retain through thesis/publication; backup and public
 reproducibility remain unverified.
+
+### Saved summary development v1
+
+`saved-summary-v1` in `docs/examples/run_summaries.py` reuses saved-formed-v3,
+without changing its model or existing bytes. A deliberate TPS failure reloads
+the Z=9 prepared checkpoint: two objects cannot provide sufficient landmarks.
+The true run is failed with partial extraction and unavailable decoded/final
+metrics. Successful Z=9/Z=1 runs retain decoded/final artifacts from the current
+API. Seed 42, three rounds, four channels, `(9,32,32,4)` / `(1,32,32,4)` float32
+and unknown calibration remain unchanged. No historical TIFFs are regenerated.
+`inputs.json` pins saved inputs before rendering; external W-165 manifests pin
+source/config/output hashes and commands. These are software fixtures, not
+qualified evaluation data. Owner Jiahao; retain through thesis/publication;
+backup unverified.

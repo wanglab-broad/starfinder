@@ -195,6 +195,13 @@ starfinder.registration
 * :py:obj:`starfinder.registration.UnsupportedTransformOperationError`
 * :py:obj:`starfinder.registration.WarpConfig`
 
+starfinder.reporting
+~~~~~~~~~~~~~~~~~~~~
+
+* :py:obj:`starfinder.reporting.embed_figure`
+* :py:obj:`starfinder.reporting.render_table`
+* :py:obj:`starfinder.reporting.write_run_summary`
+
 starfinder.spot_finding
 ~~~~~~~~~~~~~~~~~~~~~~~
 

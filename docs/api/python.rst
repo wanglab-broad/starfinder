@@ -27,6 +27,7 @@ Modules (alphabetical)
    preprocessing
    provenance
    registration
+   reporting
    spot_finding
    synthetic
 

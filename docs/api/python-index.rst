@@ -21,6 +21,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.io.DecodedCheckpoint`
 * :py:obj:`starfinder.registration.DemonsConfig`
 * :py:obj:`starfinder.registration.DenseDisplacementTransform`
+* :py:obj:`starfinder.reporting.embed_figure`
 * :py:obj:`starfinder.barcode.encode_bases`
 * :py:obj:`starfinder.barcode.EncodingConfig`
 * :py:obj:`starfinder.registration.estimate_transform`
@@ -102,6 +103,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.registration.RegistrationResult`
 * :py:obj:`starfinder.dataset.RegistrationStep`
 * :py:obj:`starfinder.synthetic.render_spots`
+* :py:obj:`starfinder.reporting.render_table`
 * :py:obj:`starfinder.benchmark.report_benchmark`
 * :py:obj:`starfinder.dataset.RoundState`
 * :py:obj:`starfinder.benchmark.run_benchmark`
@@ -126,4 +128,5 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.registration.UnsupportedTransformOperationError`
 * :py:obj:`starfinder.registration.WarpConfig`
 * :py:obj:`starfinder.dataset.WorkflowConfig`
+* :py:obj:`starfinder.reporting.write_run_summary`
 * :py:obj:`starfinder.barcode.WtaDecoderConfig`

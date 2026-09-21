@@ -16,6 +16,7 @@ Image checkpoints <image-checkpoints>
 Fiji inspection <fiji-inspection>
 Candidate checkpoints <candidate-checkpoints>
 Molecular checkpoints <molecular-checkpoints>
+Offline summaries <run-summaries>
 Synthetic specification <synthetic-specification>
 Backend requirements <api/backends>
 API examples <api/examples>

@@ -1,9 +1,7 @@
 """Offline review of saved examples and optional revision-pinned execution evidence."""
 from collections import defaultdict
 from datetime import datetime, timezone
-import base64
 import html
-from io import BytesIO, StringIO
 import json
 from pathlib import Path
 
@@ -17,22 +15,8 @@ import pandas as pd
 
 from starfinder.barcode import decode_color_sequence
 from starfinder.io import load_candidate_checkpoint, load_image_checkpoint
+from starfinder.reporting import render_table as table, embed_figure as figure
 from saved_synthetic import checksum, read_json, verify_files, write_json
-
-
-def table(rows):
-    return pd.DataFrame(rows).to_html(index=False, escape=True, border=0)
-
-
-def figure(fig, label, svg=False):
-    output = StringIO() if svg else BytesIO()
-    fig.savefig(output, format='svg' if svg else 'png', dpi=130, bbox_inches='tight')
-    plt.close(fig)
-    if svg:
-        content = output.getvalue()
-        content = content[content.index('<svg '):]
-        return content.replace('<svg ', '<svg role="img" aria-label="'+html.escape(label, quote=True)+'" ', 1)
-    return '<img alt="'+html.escape(label, quote=True)+'" src="data:image/png;base64,'+base64.b64encode(output.getvalue()).decode()+'">'
 
 
 def inspection_figure(loaded, formed, round_index, name):
