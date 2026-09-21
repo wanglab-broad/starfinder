@@ -325,3 +325,19 @@ map followed by translation, and an out-of-frame round in 3D and Z=1. The focuse
 tests independently check fractional 3D shifts, local-map literals, a scalar
 bisection inverse oracle, signal/noise isolation and cross-process repeatability.
 These checks qualify development arithmetic only.
+
+Controlled development package
+------------------------------
+
+.. autosummary::
+   :toctree: generated
+
+   DEVELOPMENT_FACTORS
+   development_preset_factors
+   development_scene_preset
+   DEVELOPMENT_SIZES
+
+``development_scene_preset(condition="clean", size="small")`` returns the
+versioned ``controlled-development-v1`` codebook/config. See
+:doc:`../development-presets` for exact factors, sizes, shared-scene comparisons,
+saved-only inspection and the development-only qualification boundary.

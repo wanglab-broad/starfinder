@@ -423,3 +423,9 @@ uv run pytest test/test_run_summaries.py test/test_saved_synthetic_example.py -v
 These reuse saved-formed-v3 (maximum `(9,32,32,4)`, three rounds), add an intentional
 insufficient-landmarks failure with partial signals, and verify saved-only reading.
 Notebook cells run as Python; live Jupyter needs a separate optional environment.
+
+For the bounded controlled preset package, follow
+[development presets](development-presets.md). Run its `create` and saved-only
+`inspect` commands in separate processes, plus `test/test_development_presets.py`.
+There are 63 fixed cases (three sizes, maximum `(9,48,48)` ZYX, three rounds/four
+channels), with measured per-case costs; this does not authorize a size sweep.

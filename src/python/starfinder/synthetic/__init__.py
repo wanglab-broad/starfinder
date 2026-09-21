@@ -21,3 +21,15 @@ __all__ += ['BackgroundConfig', 'NoiseConfig', 'TextureConfig',
 from ._geometry import GeometryConfig
 
 __all__ += ["GeometryConfig"]
+
+from ._development import (DEVELOPMENT_FACTORS as _DEVELOPMENT_FACTORS,
+                           DEVELOPMENT_SIZES as _DEVELOPMENT_SIZES,
+                           development_preset_factors, development_scene_preset)
+
+#: Named individual controls in the controlled-development-v1 package.
+DEVELOPMENT_FACTORS = _DEVELOPMENT_FACTORS
+#: Development size names mapped to bounded ZYX voxel shapes.
+DEVELOPMENT_SIZES = _DEVELOPMENT_SIZES
+
+__all__ += ["DEVELOPMENT_FACTORS", "DEVELOPMENT_SIZES",
+            "development_preset_factors", "development_scene_preset"]

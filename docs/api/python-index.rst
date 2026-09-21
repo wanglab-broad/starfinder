@@ -21,6 +21,10 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.io.DecodedCheckpoint`
 * :py:obj:`starfinder.registration.DemonsConfig`
 * :py:obj:`starfinder.registration.DenseDisplacementTransform`
+* :py:obj:`starfinder.synthetic.DEVELOPMENT_FACTORS`
+* :py:obj:`starfinder.synthetic.development_preset_factors`
+* :py:obj:`starfinder.synthetic.development_scene_preset`
+* :py:obj:`starfinder.synthetic.DEVELOPMENT_SIZES`
 * :py:obj:`starfinder.reporting.embed_figure`
 * :py:obj:`starfinder.barcode.encode_bases`
 * :py:obj:`starfinder.barcode.EncodingConfig`

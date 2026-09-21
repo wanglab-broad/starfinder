@@ -18,6 +18,7 @@ Candidate checkpoints <candidate-checkpoints>
 Molecular checkpoints <molecular-checkpoints>
 Offline summaries <run-summaries>
 Synthetic specification <synthetic-specification>
+Controlled development presets <development-presets>
 Backend requirements <api/backends>
 API examples <api/examples>
 Coordination <coordination>

@@ -576,3 +576,23 @@ and unknown calibration remain unchanged. No historical TIFFs are regenerated.
 source/config/output hashes and commands. These are software fixtures, not
 qualified evaluation data. Owner Jiahao; retain through thesis/publication;
 backup unverified.
+
+### Controlled development package v1
+
+`controlled-development-v1-{size}-{condition}` is defined by
+`synthetic.development_scene_preset` and the [preset guide](development-presets.md).
+It packages formed synthetic/1 generator 4, frozen specification
+`f9512694a0960c10ce5236efbaaf9d6f425c1d8a`, seed 42, scene key
+`controlled-development-v1`, development split and unknown physical calibration.
+Sizes are ZYX `(1,32,32)`, `(9,32,32)`, `(9,48,48)`, three rounds/four channels,
+float32 images and float64 NCR truth. The guide pins explicit gt-A/gt-B positions,
+codebook/order/mapping and every parameter for clean, 19 individual-factor and
+one combined condition. Namespaces vary; unrelated latents within a size do not.
+Structured backgrounds share the molecule map; Z=1 is sampling, not projection.
+No historical inputs/TIFFs are consumed or replaced, and no empirical calibration,
+cell truth or evaluation qualification is implied. Saved HDF5/Parquet/NPZ/JSON
+and inspection HTML stay external. The W-166 run manifest records source/config,
+outputs, exact validation and measured costs under
+`/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-166/20260921T220125Z-c16d44c7/`.
+Owner Jiahao; retain through thesis/publication; backup/public reproducibility
+unverified. W-167 owns independent qualification; W-93/W-57 remain open.

@@ -215,6 +215,10 @@ starfinder.synthetic
 ~~~~~~~~~~~~~~~~~~~~
 
 * :py:obj:`starfinder.synthetic.BackgroundConfig`
+* :py:obj:`starfinder.synthetic.DEVELOPMENT_FACTORS`
+* :py:obj:`starfinder.synthetic.development_preset_factors`
+* :py:obj:`starfinder.synthetic.development_scene_preset`
+* :py:obj:`starfinder.synthetic.DEVELOPMENT_SIZES`
 * :py:obj:`starfinder.synthetic.formed_scene_preset`
 * :py:obj:`starfinder.synthetic.FormedScene`
 * :py:obj:`starfinder.synthetic.FormedSceneConfig`
