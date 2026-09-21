@@ -5,6 +5,10 @@
 functions. `PipelineConfig` describes the scientific sequence; `ExecutionConfig`
 controls when images are loaded and released. Unknown config arguments raise.
 
+An empty FOV can explicitly load [prepared or registered HDF5 image checkpoints](image-checkpoints.md)
+with `load_image_checkpoint`. Loading restores saved values/state without rerunning
+processing; continue registered data through the downstream methods directly.
+
 ```python
 from starfinder.dataset import PipelineConfig, ExecutionConfig, RegistrationStep
 from starfinder.io import ImageLoadConfig

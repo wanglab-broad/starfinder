@@ -185,6 +185,20 @@ These checks exercise A1–A3, A8 and the in-memory truth/provenance portion of
 A9. Actual image/table checkpoint reloads remain separate W-158/W-159/W-160
 acceptance. All new scenes fit the catalog's development resource boundaries.
 
+For explicit HDF5 image persistence and reload (literal 3D/Z=1 arrays,
+maximum `(3,4,5,4)`, two sequencing rounds and separately shaped stain/reference
+layers), use a fresh external directory:
+
+```bash
+uv run python ../../docs/examples/image_checkpoints.py /external/new-run/image-example
+uv run pytest test/test_image_checkpoints.py -v
+```
+
+The example checks registered image values and downstream equality, and records
+small-fixture I/O cost in `summary.json`. These tests generate only their own
+literal TIFFs; they never replace cataloged historical fixtures. See
+[image checkpoints](image-checkpoints.md) for format limitations and integrity rules.
+
 `.github/workflows/docs.yml` runs on all pull requests, pushes to `main`
 (the verified GitHub default branch), `dev` and `codex/docs-autonomous`, and
 manual dispatch. There is no path filter: source and dependency changes can

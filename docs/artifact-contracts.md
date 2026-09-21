@@ -3,7 +3,9 @@
 **Contract ID: `starfinder.artifacts/1`.** This is the W-154 specification for
 processing persistence. W-156 implements run/event/failure metadata and diagnostic
 components through `starfinder.provenance`; see [usage](coordination.md#persistent-run-attribution).
-Image/table checkpoint payload writers remain separate deliveries.
+W-158 implements opt-in per-FOV HDF5 prepared inputs and registered image
+checkpoints; see [image checkpoint usage](image-checkpoints.md). Table checkpoint
+payload writers remain a separate delivery.
 [Array contracts](api/contracts.md) remain authoritative for numerical APIs.
 The acceptance cases below freeze independent expectations before W-156,
 W-158 and W-159 implement persistence. A producer records this contract ID and

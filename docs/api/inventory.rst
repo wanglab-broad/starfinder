@@ -127,11 +127,16 @@ starfinder.io
 
 * :py:obj:`starfinder.io.convert_image`
 * :py:obj:`starfinder.io.export_spots`
+* :py:obj:`starfinder.io.ImageCheckpoint`
 * :py:obj:`starfinder.io.ImageConversionConfig`
+* :py:obj:`starfinder.io.ImageLayer`
 * :py:obj:`starfinder.io.ImageLoadConfig`
 * :py:obj:`starfinder.io.ImageLoadResult`
+* :py:obj:`starfinder.io.ImageProcessingState`
+* :py:obj:`starfinder.io.load_image_checkpoint`
 * :py:obj:`starfinder.io.load_round`
 * :py:obj:`starfinder.io.load_volume`
+* :py:obj:`starfinder.io.save_image_checkpoint`
 * :py:obj:`starfinder.io.save_volume`
 
 starfinder.preprocessing

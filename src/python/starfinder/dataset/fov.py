@@ -13,7 +13,7 @@ import pandas as pd
 
 from starfinder.image import ImageMetadata, _validate_image
 from starfinder.spot_finding import LocalMaximaConfig, SpotFindingResult
-from starfinder.io import ImageLoadConfig
+from starfinder.io import ImageCheckpoint, ImageLoadConfig
 from starfinder.preprocessing import (MinMaxNormalizationConfig, HistogramMatchingConfig, ReconstructionConfig, TophatConfig, ProjectionConfig)
 from starfinder.dataset._logging import _log_step
 from starfinder.dataset._paths import _FovPaths
@@ -52,6 +52,7 @@ class FOV:
     _round_intensities: dict = field(default_factory=dict)
 
     load_diagnostics: dict[str, dict] = field(default_factory=dict)
+    image_checkpoint: ImageCheckpoint | None = None
 
     # --- Delegated properties ---
 
@@ -157,6 +158,51 @@ class FOV:
         return self
 
     # --- Preprocessing ---
+
+    def load_image_checkpoint(self, path, *, require_registered=False, sha256=None) -> FOV:
+        """Load an explicit prepared/registered artifact into an empty FOV.
+
+        Identity, round order and sequencing labels must match this dataset.
+        Registered sequencing geometry must agree; prepared frames may differ
+        before explicit registration. All rounds must be present; partial artifacts are
+        inspectable through ``io.load_image_checkpoint`` instead. No operation
+        or transform is reapplied. Call downstream methods directly to continue
+        from registered images; ``run`` remains an explicit full pipeline call.
+        Existing images/results raise ValueError rather than being overwritten.
+        """
+        from starfinder.io import load_image_checkpoint
+
+        if (self.images or self.metadata or self.registration_results or self.registration_attempts or
+                self.spot_result is not None or self.intensity_result is not None or
+                self.decoding_result is not None or self.filtering_result is not None or self._round_intensities):
+            raise ValueError('load_image_checkpoint requires an empty FOV')
+        saved = load_image_checkpoint(path, sha256=sha256)
+        identity = saved.artifact
+        if (identity['dataset_id'], identity['sample_id'], identity['FOV'], identity['subtile']) != (
+                self.dataset.dataset_id, self.dataset.sample_id, self.fov_id, self.subtile_id):
+            raise ValueError('checkpoint dataset/sample/FOV/subtile identity mismatch')
+        if saved.rounds != self.rounds or {layer.round_label for layer in saved.layers} != set(self.rounds.all_rounds):
+            raise ValueError('checkpoint rounds differ or are incomplete')
+        if require_registered or saved.artifact['stage'] == 'registered_images':
+            images = saved.sequencing_images(require_registered=True)
+        else:
+            images = {layer.round_label: layer.loaded for layer in saved.layers
+                      if layer.round_label in self.rounds.sequencing_rounds}
+            if any(loaded.image.ndim != 4 for loaded in images.values()):
+                raise ValueError('FOV sequencing requires explicit ZYXC layers')
+        if any(loaded.channel_labels != self.dataset.channel_order for loaded in images.values()):
+            raise ValueError('checkpoint channel labels differ from dataset')
+        if any(layer.processing.terminal_state in ('failed', 'skipped') for layer in saved.layers):
+            raise ValueError('checkpoint has unavailable rounds')
+        self.images = {layer.round_label: layer.loaded.image for layer in saved.layers}
+        self.metadata = {layer.round_label: layer.loaded.metadata for layer in saved.layers}
+        self.load_diagnostics = {layer.round_label: layer.loaded.diagnostics for layer in saved.layers}
+        self.registration_results = {layer.round_label: list(layer.processing.registrations)
+                                     for layer in saved.layers if layer.processing.registrations}
+        self.registration_attempts = {layer.round_label: list(layer.processing.attempts)
+                                      for layer in saved.layers if layer.processing.attempts}
+        self.image_checkpoint = saved
+        return self
 
     def _apply_to_rounds(self, func, rounds: list[str] | None) -> None:
         """Apply a function to images for the given rounds (or all)."""

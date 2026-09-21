@@ -45,10 +45,13 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.synthetic.generate_volume`
 * :py:obj:`starfinder.synthetic.get_preset_config`
 * :py:obj:`starfinder.preprocessing.HistogramMatchingConfig`
+* :py:obj:`starfinder.io.ImageCheckpoint`
 * :py:obj:`starfinder.io.ImageConversionConfig`
+* :py:obj:`starfinder.io.ImageLayer`
 * :py:obj:`starfinder.io.ImageLoadConfig`
 * :py:obj:`starfinder.io.ImageLoadResult`
 * :py:obj:`starfinder.image.ImageMetadata`
+* :py:obj:`starfinder.io.ImageProcessingState`
 * :py:obj:`starfinder.image.IncompatibleGeometryError`
 * :py:obj:`starfinder.registration.InsufficientLandmarksError`
 * :py:obj:`starfinder.barcode.IntensityExtractionResult`
@@ -56,6 +59,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.barcode.InvalidIntensityError`
 * :py:obj:`starfinder.registration.InvalidRegistrationConfigError`
 * :py:obj:`starfinder.barcode.load_codebook`
+* :py:obj:`starfinder.io.load_image_checkpoint`
 * :py:obj:`starfinder.io.load_round`
 * :py:obj:`starfinder.io.load_volume`
 * :py:obj:`starfinder.spot_finding.LocalMaximaConfig`
@@ -86,6 +90,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.dataset.RoundState`
 * :py:obj:`starfinder.benchmark.run_benchmark`
 * :py:obj:`starfinder.provenance.RunRecorder`
+* :py:obj:`starfinder.io.save_image_checkpoint`
 * :py:obj:`starfinder.io.save_volume`
 * :py:obj:`starfinder.synthetic.ScalarDistribution`
 * :py:obj:`starfinder.spot_finding.SpotFindingResult`

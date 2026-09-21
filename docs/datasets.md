@@ -314,3 +314,35 @@ allocate their images. Test code/config identities belong in each run manifest.
 New images remain at most `(32,64,64)` ZYX with four rounds/four channels. Existing
 exceptions do not authorize new large fixtures, sweeps or real-image processing.
 Use the current AGENTS.md/issue profile for time, CPU, memory and storage controls.
+
+### Image checkpoint literal v1
+
+`image-contract-v1` is the hand-constructed software fixture in
+`docs/examples/image_checkpoints.py` and `src/python/test/test_image_checkpoints.py`.
+It extends the W-154 artifact arithmetic without using a historical TIFF,
+external accession, random generator or molecular truth. Sample `sample` has
+`FOV-Z1`/`FOV-Z3` in the example (test FOV `FOV`), sequencing order
+`(round10,round2)` and channels `(ch02,ch00,ch03,ch01)`. Example images are uint16
+ZYXC `(1,4,5,4)` or `(3,4,5,4)`, with value 7 in reference channel 1 at
+`(Z//2,2,1)` and value 9 in moving channel 0 at `(Z//2,1,2)`. The explicit
+correction `(0,1,-1)` aligns them. Codebook `gene-A=12` uses the nonidentity
+mapping `1→1,2→0,3→3,4→2`. Physical calibration is unknown; no seed applies.
+Prepared and registered HDF5 stages, a run record and exact extraction/decoding/
+filtering equivalence are saved externally.
+
+I1 test variants use literal `arange` uint8/uint16/int16/float32/float64 arrays,
+signed values and signed zero, the specification's explicit geometry
+`((2,3,4),(10,20,30),diag(1,-1,-1),um)`, plus a ZYX `(1,2,3)` uint8 stain and
+`(2,3,4)` float32 registration reference with distinct unknown frames. These are
+software geometry oracles, not calibration measurements. I2 dense fields are
+float32/float64 ZYX3; the half-index ramp independently requires nearest-even
+`[0,2,2,4,0]`. Tests also retain partial/failed state and reject corrupt components.
+New temporary TIFFs are derived only from these literal arrays; no existing
+fixture bytes are regenerated. Maximum new image bounds remain `(3,4,5,4)`.
+
+Verification date: 2026-09-21. Source/config/input/output hashes, exact commands,
+measured resources and small-fixture storage costs are recorded in
+`/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-158/20260921T044025Z-6f7ab365/implementation-manifest.json`
+and `image-example-handoff/summary.json`. This is software round-trip evidence, not
+E10 format superiority, D04 qualification or public reproducibility. Owner,
+retention and unverified backup status follow this catalog's convention.
