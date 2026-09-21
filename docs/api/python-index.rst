@@ -80,6 +80,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.provenance.read_run`
 * :py:obj:`starfinder.barcode.ReadFilterConfig`
 * :py:obj:`starfinder.barcode.ReadFilteringResult`
+* :py:obj:`starfinder.synthetic.ReadoutEffectsConfig`
 * :py:obj:`starfinder.preprocessing.reconstruct_background`
 * :py:obj:`starfinder.preprocessing.ReconstructionConfig`
 * :py:obj:`starfinder.dataset.RecoveryConfig`

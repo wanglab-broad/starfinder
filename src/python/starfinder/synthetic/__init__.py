@@ -10,8 +10,8 @@ __all__ = ['SyntheticConfig', 'SyntheticDataset', 'generate_codebook',
            'get_preset_config', 'generate_displacement_field', 'render_spots',
            'generate_volume', 'generate_dataset', 'generate_registration_pairs']
 
-from ._formed import (FormedScene, FormedSceneConfig, ScalarDistribution,
+from ._formed import (FormedScene, FormedSceneConfig, ReadoutEffectsConfig, ScalarDistribution,
                       formed_scene_preset, generate_formed_scene)
 
-__all__ += ['FormedScene', 'FormedSceneConfig', 'ScalarDistribution',
+__all__ += ['FormedScene', 'FormedSceneConfig', 'ReadoutEffectsConfig', 'ScalarDistribution',
             'formed_scene_preset', 'generate_formed_scene']

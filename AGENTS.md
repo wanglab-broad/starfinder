@@ -28,9 +28,9 @@ For Chapter II development, read the live
 [outline](https://linear.app/jiahaoh/document/chapter-ii-development-outline-and-priorities-6d2ed68bc91f),
 [execution plan](https://linear.app/jiahaoh/document/chapter-ii-development-milestones-1-2-execution-plan-and-acceptance-c16c39fb9624)
 and [controller guidance](https://linear.app/jiahaoh/document/reusable-autonomous-issue-controller-operating-guideline-be87b45b6d96).
-The authorized batch is ordered W-153 through W-160, project
-`ae82ed79-ed07-4f20-896f-2dbc79f83a7d`, on `codex/chapter-ii-batch1-20260921`
-in `.worktrees/chapter-ii-batch1-20260921`. Each worker owns only its dispatched
+The authorized batch is ordered W-161 through W-167, project
+`ae82ed79-ed07-4f20-896f-2dbc79f83a7d`, on `codex/chapter-ii-batch2-20260921`
+in `.worktrees/chapter-ii-batch2-20260921`. Each worker owns only its dispatched
 issue. Preserve dirty main-checkout AGENTS.md and `.claude/` exactly; never edit
 another worktree. Historical housekeeping branch, state and authorization do not
 apply here. One outer controller owns dispatch, with fresh sessions per issue and
@@ -38,11 +38,18 @@ bounded same-issue repairs; never launch a nested controller or parallel worker.
 Follow the current phase's commit instructions: implementation handoff is
 uncommitted; controller review precedes a separately requested local commit.
 No push, merge, deployment or publication; do not change deployment guards.
-Leave the project open. Stop after W-160. W-173/W-174 are human-owned gates,
-excluded from all execution allowlists; W-161 and later are not authorized.
+Leave the project and W-93/W-57 open. Stop after W-167. W-173/W-174 are human-owned
+gates, excluded from all execution allowlists; W-168–W-172 are not authorized.
+W-173 and W-175 are complete; batch 2 inherits Jiahao's explicit approval of
+baseline `61474a31d4ce37ce4199bbac0aecdd9c233a83c7` on 2026-09-21.
+W-174 remains open; technical completion cannot supply human approval.
 Only Jiahao's explicit revision/packet approval and live read-back can pass a
-human gate. W-160 must deliver standalone, browser-opened HTML from saved 3D
-and Z=1 outputs, linked from W-160/W-173; it cannot depend on W-165.
+human gate. W-167 must deliver standalone, browser-opened offline HTML using
+W-165 facilities and the accepted W-175 presentation, linked from W-167/W-174.
+Preserve the prior packets, explicit truth/detection correspondence and separate
+observed colors, nucleotide decoding, gene assignment and filtering. Include
+controlled-effect comparisons, saved-output inspection, qualification and honest
+success/partial/failure diagnostics; pin report and manifest hashes/code revision.
 
 ## Implementation
 
@@ -65,11 +72,14 @@ Use `PYTHONDONTWRITEBYTECODE=1 UV_LOCKED=true UV_NO_SYNC=true UV_OFFLINE=true` w
 locked environment. Set `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`, `MKL_NUM_THREADS`,
 `ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS`, `NUMEXPR_NUM_THREADS`,
 `VECLIB_MAXIMUM_THREADS` and `BLIS_NUM_THREADS` to 1,
-and `CUDA_VISIBLE_DEVICES=""`, `MPLBACKEND=Agg`. Keep TMPDIR on local `/tmp/starfinder-batch1-20260921`,
+and `CUDA_VISIBLE_DEVICES=""`, `MPLBACKEND=Agg`. Keep TMPDIR on local `/tmp/starfinder-batch2-20260921`,
 not the SMB artifact mount, because tests create symlinks. Use a writable uv cache
 when the default cache is sandboxed. Do not silently alter dependencies or lock.
-The operator prepared this worktree with
-`uv sync --locked --no-default-groups --group docs --extra dev --extra local-registration`.
+Reuse the prepared locked Python 3.12 environment with
+`UV_PROJECT_ENVIRONMENT=/home/unix/jiahao/Github/starfinder/.worktrees/chapter-ii-batch1-20260921/src/python/.venv`
+and `PYTHONPATH=/home/unix/jiahao/Github/starfinder/.worktrees/chapter-ii-batch2-20260921/src/python`.
+The operator prepared its docs/dev/local-registration/checkpoint dependencies;
+verify actual availability and source paths before checks.
 Do not install/sync during validation. Verify imported source paths and extras;
 record a missing dependency as a blocker. Propose required format dependencies
 explicitly before a separately authorized setup.

@@ -451,3 +451,38 @@ Report barcodes use the existing nucleotide decoder on observed saved color call
 not the gene assignment. All detections include GT/color/barcode/gene comparison
 and a separate filter status/reason. WTA is exact matching with no correction or
 matching distance; endpoint filtering is disabled. Earlier packets remain intact.
+
+### Controlled readout development v1
+
+`readout-contract-z3-v1` and `readout-contract-z1-v1` are software arithmetic
+fixtures defined by `docs/examples/readout_effects.py`, parent formed development
+v1 / `starfinder.synthetic/1`, generator version 2. Frozen specification revision
+is `f9512694a0960c10ce5236efbaaf9d6f425c1d8a`. No external input, accession,
+calibration, historical TIFF ancestor or biological RNA truth is claimed.
+Existing clean presets retain their numerical values with this generator;
+version 2 adds optional readout configuration/provenance, not new clean images.
+
+Each case has one explicit `gt-A` at `(Z//2,3,4)`, gene-A color codeword `222`,
+A=8, widths/elongation=1, angle=0; float32 ZYXC `(3,7,9,4)` or `(1,7,9,4)`.
+Physical spacing/units remain unknown; coordinates/widths are voxel indices.
+Seed 42, scene `formed-v1`, development split, sample `sample`, FOV `FOV_001`;
+round order `(round10,round2,round1)`, channels `(ch02,ch00,ch03,ch01)` and
+mapping `1→1,2→0,3→3,4→2`. Z=1 samples the same 3D kernel with axial truncation.
+
+Cases retain clean, trend b=.5, middle-round dropout or weakening factor .25,
+and loss from index 1. Independent expected active histories are [8,8,8],
+[8,4,2], [8,0,2], [8,1,2], [8,0,0]. Mixing adds M[1,0]=.25 to identity;
+the combined case also uses gain .5, trend .5 and middle weakening .25.
+All expectations are binary-representable and checked exactly, including
+rendered centers/extraction. Full intended/pre-mix/realized signals, formed and
+round truth, requested/effective config and keyed SHA-256/PCG64 streams survive.
+Background, noise and deformation remain disabled. A supplied detector point
+`spot-1` corresponds explicitly to `gt-A`; neither ID nor row ordering establishes
+correspondence. Tests use intermediate probabilities to verify independent
+round.dropout/round.weakening/round.loss streams and cross-process invariance.
+
+Source/config hashes, environment, measured checks and example output identities
+are retained in `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-161/20260921T195700Z-c102e072/implementation-manifest.json`.
+Intended use is bounded effective-model development, not calibrated evaluation.
+No historical fixture bytes change. Owner Jiahao; retain through thesis/publication;
+backup and public-release reproducibility remain unverified.

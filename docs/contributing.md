@@ -358,3 +358,17 @@ recipe and the runtime verification script. Use the installed Fiji separately;
 it is not a Python package dependency or part of pytest. Existing reports
 are never overwritten. This is a development fixture, not D04 qualification or
 human gate approval; full validation and browser opening are separate evidence.
+
+For controlled readout effects (frozen synthetic/1 A4/A5), run the bounded
+3D/Z=1 analytic/extraction example and independent component checks:
+
+```bash
+uv run python ../../docs/examples/readout_effects.py
+uv run pytest test/test_readout_effects.py test/test_formed_scene.py test/test_synthetic_specification_examples.py -v
+```
+
+The example uses one explicit formed object in `(3,7,9)` and `(1,7,9)`, three
+rounds/four channels; tests additionally use the existing `(8,32,32)` preset.
+They test temporary recovery versus persistent loss, source gain before mixing,
+disabled-control equality, keyed randomness, and cross-process repeatability.
+No historical TIFF is read or regenerated. No calibrated assay claim follows.

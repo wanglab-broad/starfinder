@@ -3,8 +3,8 @@ starfinder.synthetic
 
 The :doc:`formed-amplicon specification <../synthetic-specification>` defines
 ``starfinder.synthetic/1`` and independent acceptance cases for the new
-development model. ``generate_formed_scene`` implements its clean scene/truth
-slice; the historical APIs retain their original semantics.
+development model. ``generate_formed_scene`` implements its scene/truth and controlled readout
+slices; the historical APIs retain their original semantics.
 
 Pure processed-image scene generation. Importing this package does not import
 benchmark orchestration. Generation returns arrays in memory; the benchmark
@@ -25,6 +25,7 @@ persistence adapter writes workflow TIFFs, JSON, scene tables and annotations.
    generate_registration_pairs
    generate_volume
    get_preset_config
+   ReadoutEffectsConfig
    render_spots
    ScalarDistribution
    SyntheticConfig
@@ -67,8 +68,8 @@ overflow fail rather than returning nonfinite images.
 Rendering uses the specified ellipsoidal four-sigma support, float64 accumulation
 in sorted amplicon-ID order, then one cast. Integers use nearest-even rounding and
 saturation with clipping counts; floats retain their values without normalization.
-All round effects, backgrounds, noise and geometry are disabled in this slice.
-Intended, pre-mix and realized amplitudes are equal but independent arrays.
+Backgrounds, noise and geometry remain disabled. With readout effects disabled,
+intended, pre-mix and realized amplitudes are equal but independent arrays.
 The clean model's identity transforms and complete per-round state are explicit.
 
 SHA-256/PCG64 streams use stable component/entity names, never Python ``hash()``.
@@ -92,6 +93,61 @@ candidate identities, then prints both preset provenance payloads. It writes
 no files and makes no detection-accuracy or storage-round-trip claim.
 
 .. literalinclude:: ../examples/formed_scene.py
+   :language: python
+
+Controlled readout
+------------------
+
+Pass ``readout=ReadoutEffectsConfig(...)`` in ``FormedSceneConfig``. Each effect
+has an independent Boolean ``*_enabled`` switch, default false. The generator
+validates requested parameters even when disabled or N=0. It records both the
+requested values and effective identities; disabled controls draw no randomness.
+
+* ``dropout_probability`` and ``weakening_probability`` are length-R sequences
+  in [0,1], default zero. ``weak_factor`` is length R in [0,1], default one.
+  Enable with ``dropout_enabled`` and ``weakening_enabled``. Separate per-ID,
+  round-label keyed uniform draws select each event; overlapping flags survive.
+* ``trend_enabled`` applies ``trend_base**r`` with base in [0,1], default one,
+  and zero-based acquisition index r. Even base zero gives multiplier one at r=0.
+* ``loss_enabled`` selects IDs once using ``loss_probability`` in [0,1], default
+  zero. ``loss_start`` is a zero-based acquisition index, default 1 when R>1,
+  otherwise 0. Selected objects remain lost thereafter. Their nullable
+  ``first_loss_round`` records this planned start even in preceding history rows.
+* ``gain_enabled`` applies supplied nonnegative finite ``gains`` of shape (R,C)
+  to source amplitudes, default ones.
+* ``mixing_enabled`` applies supplied nonnegative finite ``mixing`` of shape
+  (R,C,C), default per-round identity. Destination rows and source columns use
+  the codebook's explicit channel order: ``realized[d] = sum_s M[d,s]*pre_mix[s]``.
+  No normalization, implicit broadcasting, carryover or new identity is inferred.
+
+``None`` selects defaults only for the sequences, matrices and ``loss_start``.
+Loss/trend probabilities and scales are finite scalar numbers; flags and the
+integer loss index are type-checked. Wrong shapes, nonfinite/negative values,
+probabilities/factors above one and overflow fail explicitly. A zero mixing
+matrix may suppress all emission without marking a molecule lost.
+
+The order is survival/dropout, weakening, trend, source gain, then mixing.
+Intended amplitudes and codewords never change. ``pre_mix`` and ``realized``
+retain full NCR amplitude histories; ``round_truth`` retains each effect flag,
+weak/trend multipliers, loss start and emission/geometry visibility separately.
+Gains and matrices are shared across objects and retained in effective config.
+Lost and invisible objects remain in both truth tables. Changing readout controls
+preserves base positions, identities, widths and unrelated component draws.
+The existing clean presets retain their numerical outputs; generator version 2
+adds these controls and records the more detailed order/configuration.
+These are processed-image development controls, not calibrated chemical rates.
+
+From ``src/python``::
+
+   uv run python ../../docs/examples/readout_effects.py
+
+The example checks exact A4 histories [8,4,2], [8,0,2], [8,1,2] and [8,0,0],
+asymmetric A5 mixing [8,2,0,0], combined gain/trend/weakening/mixing, and center
+extraction in 3D and Z=1. Detector ``spot-1`` is explicitly placed at ``gt-A``;
+this is a supplied-coordinate extraction oracle, not detection accuracy.
+Background addition in A5 belongs to the separate background implementation.
+
+.. literalinclude:: ../examples/readout_effects.py
    :language: python
 
 Historical scene and result contracts

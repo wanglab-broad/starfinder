@@ -1,4 +1,4 @@
-"""Bounded clean formed-amplicon model, starfinder.synthetic/1.
+"""Bounded formed-amplicon model, starfinder.synthetic/1.
 
 Historical rendering has different support, precision and observation semantics;
 this implementation deliberately does not alter those historical fixtures.
@@ -118,8 +118,104 @@ def _draw(spec, name, identity, stream):
 
 
 @dataclass(frozen=True)
+class ReadoutEffectsConfig:
+    """Optional effective readout controls; every enable flag defaults false.
+
+    Probabilities/factors are length-R sequences (None selects zero probability
+    or unit weakening). Trend is b**r, b in [0,1]. Loss is one draw per ID,
+    starting at zero-based loss_start (None means 1 for R>1, else 0).
+    Gains are R by C; mixing is R by C by C with destination rows/source
+    columns. None selects ones/identity. No broadcasting or normalization.
+    All requested values are validated even when disabled; disabled values
+    become algebraic identities and consume no random draws.
+    """
+
+    dropout_enabled: bool = False
+    dropout_probability: tuple[float, ...] | None = None
+    weakening_enabled: bool = False
+    weakening_probability: tuple[float, ...] | None = None
+    weak_factor: tuple[float, ...] | None = None
+    trend_enabled: bool = False
+    trend_base: float = 1.0
+    loss_enabled: bool = False
+    loss_probability: float = 0.0
+    loss_start: int | None = None
+    gain_enabled: bool = False
+    gains: object = None
+    mixing_enabled: bool = False
+    mixing: object = None
+
+
+def _readout_effects(config, intended, ids, labels, stream):
+    if not isinstance(config, ReadoutEffectsConfig):
+        raise TypeError("readout must be ReadoutEffectsConfig")
+    n, c, rounds = intended.shape
+    flags = {name: getattr(config, name + "_enabled") for name in
+             ("dropout", "weakening", "trend", "loss", "gain", "mixing")}
+    if any(type(value) is not bool for value in flags.values()):
+        raise ValueError("readout enable flags must be Boolean")
+
+    def parameter(value, name, shape, default, upper=None):
+        result = np.full(shape, default, dtype=np.float64) if value is None else _array(value, name)
+        if (result.shape != shape or (result < 0).any()
+                or (upper is not None and (result > upper).any())):
+            raise ValueError(f"invalid {name}: expected shape {shape} and values in [0, {upper}]")
+        return result
+
+    drop = parameter(config.dropout_probability, "dropout_probability", (rounds,), 0, 1)
+    weak = parameter(config.weakening_probability, "weakening_probability", (rounds,), 0, 1)
+    factor = parameter(config.weak_factor, "weak_factor", (rounds,), 1, 1)
+    base = parameter(_array(config.trend_base, "trend_base"), "trend_base", (), 1, 1)
+    loss = parameter(_array(config.loss_probability, "loss_probability"), "loss_probability", (), 0, 1)
+    start = min(1, rounds - 1) if config.loss_start is None else config.loss_start
+    _integer(start, "loss_start", 0, rounds - 1)
+    gains = parameter(config.gains, "gains", (rounds, c), 1)
+    mixing = parameter(np.repeat(np.eye(c)[None], rounds, axis=0)
+                       if config.mixing is None else config.mixing,
+                       "mixing", (rounds, c, c), 0)
+    if not flags["dropout"]:
+        drop = np.zeros(rounds)
+    if not flags["weakening"]:
+        weak, factor = np.zeros(rounds), np.ones(rounds)
+    if not flags["trend"]:
+        base = 1.0
+    if not flags["loss"]:
+        loss = 0.0
+    if not flags["gain"]:
+        gains = np.ones((rounds, c))
+    if not flags["mixing"]:
+        mixing = np.repeat(np.eye(c)[None], rounds, axis=0)
+    dropped, weakened, lost = (np.zeros((n, rounds), dtype=bool) for _ in range(3))
+    first_loss = [pd.NA] * n
+    for i, identity in enumerate(ids):
+        if flags["loss"] and stream("round.loss", identity).random() < loss:
+            first_loss[i] = start
+            lost[i, start:] = True
+        for r, label in enumerate(labels):
+            if flags["dropout"]:
+                dropped[i, r] = stream("round.dropout", identity, label).random() < drop[r]
+            if flags["weakening"]:
+                weakened[i, r] = stream("round.weakening", identity, label).random() < weak[r]
+    trend = np.full((n, rounds), base) ** np.arange(rounds)
+    multiplier = np.where(weakened, factor[None, :], 1.0)
+    with np.errstate(over="ignore", invalid="ignore"):
+        pre_mix = (intended * (~lost & ~dropped)[:, None, :]
+                   * multiplier[:, None, :] * trend[:, None, :] * gains.T[None, :, :])
+        realized = np.einsum("rds,nsr->ndr", mixing, pre_mix)
+    if not np.isfinite(pre_mix).all() or not np.isfinite(realized).all():
+        raise ValueError("nonfinite readout amplitudes")
+    state = dict(dropped=dropped, weakened=weakened, lost=lost,
+                 trend_multiplier=trend, weak_multiplier=multiplier)
+    effective = dict(type="ReadoutEffectsConfig", **{k + "_enabled": v for k, v in flags.items()},
+                     dropout_probability=drop.tolist(), weakening_probability=weak.tolist(),
+                     weak_factor=factor.tolist(), trend_base=float(base), loss_probability=float(loss),
+                     loss_start=start, gains=gains.tolist(), mixing=mixing.tolist())
+    return pre_mix, realized, state, first_loss, effective
+
+
+@dataclass(frozen=True)
 class FormedSceneConfig:
-    """Inputs for one bounded development FOV; effects are clean/disabled.
+    """Inputs for one bounded development FOV; readout defaults clean/disabled.
 
     Select coordinates, count or density (all None defaults to count=8).
     Explicit coordinates are N by 3 in the order of amplicon_ids; default IDs
@@ -154,6 +250,7 @@ class FormedSceneConfig:
     lateral_width: ScalarDistribution = field(default_factory=ScalarDistribution)
     elongation: ScalarDistribution = field(default_factory=ScalarDistribution)
     angle: ScalarDistribution = field(default_factory=lambda: ScalarDistribution(parameters=(0,)))
+    readout: ReadoutEffectsConfig = field(default_factory=ReadoutEffectsConfig)
 
 
 @dataclass
@@ -273,10 +370,10 @@ def _kernel(shape, point, sz, sl, elongation, angle):
 
 def generate_formed_scene(codebook: Codebook, *, config: FormedSceneConfig = FormedSceneConfig(),
                           metadata: ImageMetadata | None = None) -> FormedScene:
-    """Generate a clean, in-memory formed population and repeated readout images.
+    """Generate an in-memory formed population and controlled readout images.
 
-    Implements A1–A3/A8 and truth/provenance of A9 in synthetic/1. Round effects,
-    background, noise and geometry are disabled; no hidden legacy defaults apply.
+    Implements A1–A5/A8 and truth/provenance of A9 in synthetic/1. Background,
+    noise and geometry are disabled; no hidden legacy defaults apply.
     Invalid input or nonfinite generation raises ValueError (wrong typed objects
     raise TypeError). Density overflow/max_count errors never cap or retry N.
     """
@@ -309,9 +406,9 @@ def generate_formed_scene(codebook: Codebook, *, config: FormedSceneConfig = For
     metadata = ImageMetadata(**asdict(metadata))
     streams = {}
 
-    def stream(component, entity=None):
+    def stream(component, entity=None, round_label=None):
         descriptor = [CONTRACT, config.split, config.seed, config.scene_key,
-                      component, entity, None, None]
+                      component, entity, round_label, None]
         encoded = _json(descriptor)
         digest = hashlib.sha256(encoded.encode("utf-8")).hexdigest()
         streams[encoded] = dict(descriptor=descriptor, sha256=digest, bit_generator="PCG64", numpy_version=np.__version__)
@@ -381,6 +478,8 @@ def generate_formed_scene(codebook: Codebook, *, config: FormedSceneConfig = For
     for i, sequence in enumerate(sequences):
         for r, color in enumerate(sequence):
             intended[i, codebook.color_to_channel[color], r] = values[i, 0]
+    pre_mix, realized, effects, first_loss, effective_readout = _readout_effects(
+        config.readout, intended, ids, codebook.round_labels, stream)
     images = {label: np.zeros((*shape, 4), dtype=np.float64) for label in codebook.round_labels}
     intersects = np.zeros(n, dtype=bool)
     truncated = np.zeros(n, dtype=bool)
@@ -392,7 +491,7 @@ def generate_formed_scene(codebook: Codebook, *, config: FormedSceneConfig = For
         if intersects[i]:
             with np.errstate(over="ignore", invalid="ignore"):
                 for r, image in enumerate(images.values()):
-                    image[slices] += kernel[..., None] * intended[i, :, r]
+                    image[slices] += kernel[..., None] * realized[i, :, r]
     round_tables = []
     transforms = {}
     for r, label in enumerate(codebook.round_labels):
@@ -405,14 +504,14 @@ def generate_formed_scene(codebook: Codebook, *, config: FormedSceneConfig = For
         table["round_index"] = np.full(n, r, dtype=np.int64)
         table["transform_id"] = pd.Series([transform_id]*n, dtype="string")
         for key in ("dropped", "weakened", "lost"):
-            table[key] = np.zeros(n, dtype=bool)
-        table["emitting"] = np.any(intended[:, :, r] > 0, axis=1)
+            table[key] = effects[key][:, r]
+        table["emitting"] = np.any(realized[:, :, r] > 0, axis=1)
         table["center_in_bounds"] = ((points >= 0) & (points <= shape - 1)).all(axis=1)
         table["support_intersects"] = intersects
         table["support_truncated"] = truncated
-        table["first_loss_round"] = pd.Series([pd.NA]*n, dtype="Int64")
-        table["trend_multiplier"] = np.ones(n, dtype=np.float64)
-        table["weak_multiplier"] = np.ones(n, dtype=np.float64)
+        table["first_loss_round"] = pd.Series(first_loss, dtype="Int64")
+        for key in ("trend_multiplier", "weak_multiplier"):
+            table[key] = effects[key][:, r]
         round_tables.append(table)
     clipping = {}
     for label, image in images.items():
@@ -431,15 +530,17 @@ def generate_formed_scene(codebook: Codebook, *, config: FormedSceneConfig = For
         clipping[label] = dict(below=low_count, above=high_count)
     config_payload = _plain(asdict(config))
     config_payload["type"] = "FormedSceneConfig"
+    config_payload["readout"]["type"] = "ReadoutEffectsConfig"
     for key in ("brightness", "axial_width", "lateral_width", "elongation", "angle"):
         config_payload[key]["type"] = "ScalarDistribution"
     codebook_payload = dict(rows=codebook.table.to_dict("records"), round_labels=list(codebook.round_labels),
                             channel_labels=list(codebook.channel_labels), color_to_channel=codebook.color_to_channel,
                             encoding=asdict(codebook.encoding))
     effective = dict(config_payload, count=n, placement="explicit" if coordinates is not None else config.placement,
-                     abundance_probabilities=abundances.tolist(), effects_enabled=False)
+                     abundance_probabilities=abundances.tolist(), readout=effective_readout,
+                     effects_enabled=any(v for k, v in effective_readout.items() if k.endswith("_enabled")))
     payload = dict(contract_id=CONTRACT, contract_revision=SPEC_REVISION,
-                   generator="starfinder.synthetic.generate_formed_scene", generator_version="1",
+                   generator="starfinder.synthetic.generate_formed_scene", generator_version="2",
                    truth_namespace=namespace,
                    requested_config=config_payload, effective_config=effective, codebook=codebook_payload,
                    geometry=asdict(metadata), singleton_z_sampling=bool(shape[0] == 1),
@@ -449,13 +550,15 @@ def generate_formed_scene(codebook: Codebook, *, config: FormedSceneConfig = For
                        shape_zyxc=[*config.shape_zyx, 4], dtype=config.dtype, clipping_counts=clipping,
                        image_sha256={k: hashlib.sha256(v.tobytes()).hexdigest() for k, v in images.items()}),
                    truth_components=["formed", "round_truth", "intended", "pre_mix", "realized"],
-                   order=["formed", "persistent_properties", "intended", "identity_effects", "render", "cast", "truth"])
+                   order=["formed", "persistent_properties", "intended", "survival", "dropout",
+                          "weakening", "trend", "source_gain", "mixing", "render", "cast", "truth"])
     payload["config_sha256"] = hashlib.sha256(_json(dict(config=config_payload, codebook=codebook_payload,
                                                         metadata=asdict(metadata))).encode()).hexdigest()
     provenance = dict(contract_id="starfinder.artifacts/1", source_kind="synthetic",
                       source_id="formed:" + payload["config_sha256"],
                       dataset_version=config.dataset_version,
-                      catalog="docs/datasets.md#formed-amplicon-clean-development-v1",
+                      catalog=("docs/datasets.md#controlled-readout-development-v1" if effective["effects_enabled"]
+                               else "docs/datasets.md#formed-amplicon-clean-development-v1"),
                       uri=None, sha256=None,
                       unverified_reason="In-memory source; serialized artifact identities must be recorded by the publisher.",
                       selection=dict(axes="ZYXC", round_labels=list(codebook.round_labels),
@@ -463,10 +566,11 @@ def generate_formed_scene(codebook: Codebook, *, config: FormedSceneConfig = For
                                      geometry=asdict(metadata), conversion=None),
                       extensions={"starfinder.synthetic": payload},
                       limitations=["Development processed-image model, not calibrated D04 or biological RNA truth.",
-                                   "Round effects, background, noise and geometry disabled; no eligibility inferred.",
+                                   "Background, noise and geometry disabled; no eligibility inferred.",
+                                   "Readout probabilities and gains are effective controls, not calibrated chemistry.",
                                    "Bitwise repeatability is limited to the pinned NumPy environment."])
     return FormedScene(images, metadata, formed, pd.concat(round_tables, ignore_index=True),
-                       intended, intended.copy(), intended.copy(), ids, codebook.round_labels,
+                       intended, pre_mix, realized, ids, codebook.round_labels,
                        codebook.channel_labels, codebook, provenance)
 
 

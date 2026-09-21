@@ -205,6 +205,7 @@ starfinder.synthetic
 * :py:obj:`starfinder.synthetic.generate_registration_pairs`
 * :py:obj:`starfinder.synthetic.generate_volume`
 * :py:obj:`starfinder.synthetic.get_preset_config`
+* :py:obj:`starfinder.synthetic.ReadoutEffectsConfig`
 * :py:obj:`starfinder.synthetic.render_spots`
 * :py:obj:`starfinder.synthetic.ScalarDistribution`
 * :py:obj:`starfinder.synthetic.SyntheticConfig`
