@@ -79,9 +79,9 @@ def make_scene(depth):
     from starfinder.synthetic import ScalarDistribution, formed_scene_preset, generate_formed_scene
     book, config = formed_scene_preset('formed-z1-v1' if depth == 1 else 'formed-small-v1')
     z = depth // 2
-    config = replace(config, dataset_version=f'saved-formed-z{depth}-v2',
+    config = replace(config, dataset_version=f'saved-formed-z{depth}-v3',
         shape_zyx=(depth, 32, 32), coordinates=((z, 10, 10), (z, 22, 22)),
-        amplicon_ids=('spot-A', 'spot-B'), gene_ids={'spot-A': 'gene-A', 'spot-B': 'gene-B'},
+        amplicon_ids=('gt-A', 'gt-B'), gene_ids={'gt-A': 'gene-A', 'gt-B': 'gene-B'},
         brightness=ScalarDistribution(parameters=(8,)), axial_width=ScalarDistribution(parameters=(1,)),
         lateral_width=ScalarDistribution(parameters=(1.25,)))
     return generate_formed_scene(book, config=config)
@@ -90,16 +90,21 @@ def make_scene(depth):
 def assert_truth(formed, per_round, arrays, depth):
     """Literal two-object oracle, independent of renderer and pipeline outputs."""
     indexed = formed.set_index('amplicon_id')
-    assert len(formed) == 2 and set(indexed.index) == {'spot-A', 'spot-B'}
-    np.testing.assert_array_equal(indexed.loc[['spot-A', 'spot-B'], ['z', 'y', 'x']],
+    assert len(formed) == 2 and set(indexed.index) == {'gt-A', 'gt-B'}
+    np.testing.assert_array_equal(indexed.loc[['gt-A', 'gt-B'], ['z', 'y', 'x']],
                                   [[depth // 2, 10, 10], [depth // 2, 22, 22]])
-    assert indexed.loc['spot-A', 'gene_id'] == 'gene-A'
-    assert indexed.loc['spot-B', 'gene_id'] == 'gene-B'
+    assert indexed.loc['gt-A', 'gene_id'] == 'gene-A'
+    assert indexed.loc['gt-B', 'gene_id'] == 'gene-B'
+    assert indexed.loc['gt-A', 'codeword'] == '123'
+    assert indexed.loc['gt-B', 'codeword'] == '214'
+    if 'barcode' in indexed:
+        assert indexed.loc['gt-A', 'barcode'] == 'CCAG'
+        assert indexed.loc['gt-B', 'barcode'] == 'CAAT'
     assert len(per_round) == 6
     for label in ('round10', 'round2', 'round1'):
         rows = per_round[per_round.round_label == label].set_index('amplicon_id')
-        assert set(rows.index) == {'spot-A', 'spot-B'} and len(rows) == 2
-        np.testing.assert_array_equal(rows.loc[['spot-A', 'spot-B'], ['z', 'y', 'x']],
+        assert set(rows.index) == {'gt-A', 'gt-B'} and len(rows) == 2
+        np.testing.assert_array_equal(rows.loc[['gt-A', 'gt-B'], ['z', 'y', 'x']],
                                       [[depth // 2, 10, 10], [depth // 2, 22, 22]])
         assert rows[['emitting', 'center_in_bounds', 'support_intersects']].all().all()
         assert not rows[['dropped', 'weakened', 'lost']].any().any()
@@ -142,15 +147,19 @@ def create(directory):
         expected = assert_truth(scene.formed, scene.round_truth,
             {n: getattr(scene, n) for n in ('intended', 'pre_mix', 'realized')}, depth)
         assert_sampled_images(scene.rounds, depth)
-        scene.formed.to_parquet(root / 'formed.parquet', index=False)
+        # Independent literal nucleotide expectations under the saved start-base C
+        # convention: C-C-A-G (123), C-A-A-T (214). The model truth is color-space.
+        formed = scene.formed.copy()
+        formed['barcode'] = formed.amplicon_id.map({'gt-A': 'CCAG', 'gt-B': 'CAAT'}).astype('string')
+        formed.to_parquet(root / 'formed.parquet', index=False)
         scene.round_truth.to_parquet(root / 'round-truth.parquet', index=False)
         np.savez(root / 'truth-signals.npz', intended=scene.intended, pre_mix=scene.pre_mix, realized=scene.realized)
         write_json(root / 'synthetic.json', scene.provenance)
         source = dict(scene.provenance, uri=str(root / 'synthetic.json'),
             sha256=checksum(root / 'synthetic.json'), unverified_reason=None,
-            catalog='docs/datasets.md#saved-formed-development-v2')
+            catalog='docs/datasets.md#saved-formed-development-v3')
         rounds = RoundState(list(scene.round_labels), reference_round=scene.round_labels[0])
-        dataset = Dataset(root, root / 'unused', f'saved-formed-z{depth}-v2', 'sample', 'output', rounds, scene.channel_labels)
+        dataset = Dataset(root, root / 'unused', f'saved-formed-z{depth}-v3', 'sample', 'output', rounds, scene.channel_labels)
         dataset.codebook = scene.codebook
         fov = dataset.fov('FOV_001')
         fov.images.update(scene.rounds)

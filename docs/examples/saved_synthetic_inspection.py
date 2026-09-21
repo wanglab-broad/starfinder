@@ -53,7 +53,7 @@ def export_recipe(directory):
     script = Path(__file__).with_name('inspect_saved_synthetic_fiji.py')
     shutil.copyfile(script, directory / script.name)
     (directory / 'fiji-import.html').write_text('''<!doctype html><html lang="en"><meta charset="utf-8">
-<title>Fiji import · saved fixture v2</title><style>body{font:17px/1.6 system-ui;max-width:900px;margin:40px auto;padding:20px}td,th{padding:8px;border:1px solid #aaa}pre{white-space:pre-wrap}</style>
+<title>Fiji import · saved fixture v3</title><style>body{font:17px/1.6 system-ui;max-width:900px;margin:40px auto;padding:20px}td,th{padding:8px;border:1px solid #aaa}pre{white-space:pre-wrap}</style>
 <h1>Inspect the saved rounds in Fiji</h1>
 <p>Open the TIFF files under z9/inspection or z1/inspection directly with File → Open. Each is float32, 32×32 XY, four channels, nine or one Z slices, one frame. Plane labels show round, channel and zero-based Z.</p>
 <p>For canonical HDF5, choose File → Import → HDF5, open z9/registered/images.h5 or z1/registered/images.h5, select only the three image datasets, choose individual hyperstacks (custom layout), and enter <strong>zyxc</strong>.</p>

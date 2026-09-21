@@ -46,7 +46,7 @@ to keep all round/format windows open with explicit plane labels. The script
 uses the plugin's custom-layout reader and ImageJ's TIFF reader, checks all
 voxels against each other and independent Gaussian expectations, and records
 versions, dimensions, labels and numeric results in `fiji-verification.json`.
-It also saves the active spot-A center plane as PNG from each reopened stack.
+It also saves the active gt-A center plane as PNG from each reopened stack.
 Interactive “Show images” mode reads without writing artifacts. Headless viewer
 evidence is protected; use a fresh delivery directory for another recorded run.
 

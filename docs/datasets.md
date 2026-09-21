@@ -434,3 +434,20 @@ checks and viewer evidence are in the W-175 manifest under
 Original v1 artifacts remain intact. Intended use: small software integration and
 human inspection. Jiahao owns retention through thesis/publication; backup and
 public-release reproducibility remain unverified.
+
+
+### Saved formed development v3
+
+`saved-formed-z9-v3` and `saved-formed-z1-v3` retain all v2 numerical settings
+and molecular processing. Ground-truth IDs are now `gt-A`/`gt-B`; detector display
+IDs `spot-1`/`spot-2` derive from the stable zero-based detector IDs, never row
+positions after sorting/filtering. Coordinate correspondence is explicitly
+`spot-1 ↔ gt-B`, `spot-2 ↔ gt-A`. Simulation and detection namespaces stay separate.
+
+Saved simulation truth includes literal nucleotide expectations `gt-A=CCAG` and
+`gt-B=CAAT` under start base C, corresponding to GT colors `123` and `214`.
+The model itself specifies color-space truth, not independently sampled DNA.
+Report barcodes use the existing nucleotide decoder on observed saved color calls,
+not the gene assignment. All detections include GT/color/barcode/gene comparison
+and a separate filter status/reason. WTA is exact matching with no correction or
+matching distance; endpoint filtering is disabled. Earlier packets remain intact.

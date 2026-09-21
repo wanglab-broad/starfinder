@@ -15,6 +15,7 @@ from matplotlib.patches import Patch
 import numpy as np
 import pandas as pd
 
+from starfinder.barcode import decode_color_sequence
 from starfinder.io import load_candidate_checkpoint, load_image_checkpoint
 from saved_synthetic import checksum, read_json, verify_files, write_json
 
@@ -61,6 +62,44 @@ def inspection_figure(loaded, formed, round_index, name):
     fig.colorbar(view,ax=axes[0,:],label='Stored intensity — shared linear scale',shrink=.8)
     fig.suptitle(name+' | channel-specific saved float32 data',fontsize=15)
     return figure(fig,f'{name} center slices, XZ views and per-spot intensity profiles')
+
+
+def decoding_rows(saved, formed, decoded, filtered, filtering):
+    """Join saved stages by identity, including rejected and unmatched detections."""
+    keys = ['spot_namespace', 'spot_id']
+    calls = decoded.set_index(keys, verify_integrity=True)
+    outcomes = filtered.set_index(keys, verify_integrity=True)
+    signal_indices = {identity: i for i, identity in enumerate(saved.intensities.spot_ids)}
+    rows, identities, signals = [], [], []
+    for candidate in saved.spots.spots.itertuples():
+        key = (saved.spots.spot_namespace, candidate.spot_id)
+        call, outcome = calls.loc[key], outcomes.loc[key]
+        display = f'spot-{int(candidate.spot_id)+1}'
+        matches = formed[(formed.z == candidate.z) & (formed.y == candidate.y) & (formed.x == candidate.x)]
+        match = matches.iloc[0] if len(matches) == 1 else None
+        gt = match.amplicon_id if match is not None else ('unmatched' if matches.empty else 'ambiguous GT match')
+        observed = call.observed_color_sequence
+        barcode = (decode_color_sequence(observed, filtering['start_base'])
+                   if isinstance(observed, str) and observed and set(observed) <= set('1234') else 'unavailable (invalid color call)')
+        row = {'Detected spot ID': display, 'Matched GT ID': gt,
+            'Color sequence': observed, 'Decoded barcode': barcode,
+            'Assigned gene': call.gene_id if pd.notna(call.gene_id) else 'unassigned',
+            'Filter status': 'accepted' if outcome.accepted else 'rejected',
+            'Rejection reason': outcome.rejection_reasons or call.failure_reason or '—',
+            'GT color sequence': match.codeword if match is not None else '—',
+            'GT barcode': match.barcode if match is not None else '—',
+            'GT gene': match.gene_id if match is not None else '—'}
+        if 'hamming_to_wta' in call:
+            row['Matching distance (Hamming to WTA)'] = call.hamming_to_wta
+        rows.append(row)
+        identities.append(dict(simulation_namespace=match.namespace if match is not None else None,
+            simulation_id=gt, detector_display=display, detector_namespace=key[0], detector_id=key[1]))
+        i = signal_indices[candidate.spot_id]
+        for r, name in enumerate(saved.intensities.round_labels):
+            signals.append({'Matched GT ID': gt, 'Detected spot ID': display, 'Round': name,
+                **{c: saved.intensities.values[i,k,r] for k,c in enumerate(saved.intensities.channel_labels)},
+                'Valid': bool(saved.intensities.valid[i,r])})
+    return rows, identities, signals
 
 
 def phase(invocation):
@@ -174,15 +213,16 @@ def render_report(directory):
     sections=['<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Batch 1 · review round 2</title>',
         '<style>body{font:16px/1.55 system-ui,sans-serif;color:#203047;max-width:1400px;margin:36px auto;padding:0 26px;background:#fff}h1{font-size:2.4rem}h2{margin-top:52px;border-bottom:2px solid #deebf4;padding-bottom:8px}h3{margin-top:30px}table{border-collapse:collapse;margin:18px 0;max-width:100%;display:block;overflow:auto;font-size:.94rem}td,th{padding:9px 14px;border:1px solid #d8e1e8;text-align:left}th{background:#eef4f8}img,svg{max-width:100%;height:auto}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.8rem;background:#f3f6f8;padding:16px}nav{background:#eef4f8;padding:16px}nav a{margin-right:18px;display:inline-block}a{color:#14598d}details{margin:18px 0}summary{cursor:pointer;font-weight:600}.lead{font-size:1.15rem}.badge{background:#dceee4;padding:5px 12px;border-radius:4px}</style></head><body>',
         '<h1>Batch 1 · review round 2</h1><p class="lead">Saved 3D and singleton-Z examples with visible Gaussian gradients, reload comparisons and Fiji inspection files.</p>',
-        '<p><span class="badge">Fixture revision 2</span> · source '+html.escape(context.get('reviewed_commit',manifest['code']['commit'])[:7])+'</p>',
+        '<p><span class="badge">Fixture revision 3</span> · source '+html.escape(context.get('reviewed_commit',manifest['code']['commit'])[:7])+'</p>',
         '<p><strong>Decision requested:</strong> Jiahao, approve or request changes against this packet. W-173 remains open; technical delivery does not approve the next batch.</p>',
         '<p>Two spots and three rounds are preserved. Independent Gaussian checks pass; image, signal, decoding and filtering reload comparisons are exact. This is a software development fixture with no noise, biological calibration or scientific accuracy claim.</p>',
-        '<nav aria-label="Contents">'+''.join(f'<a href="#{i}">{label}</a>' for i,label in [('datasets','Data & settings'),('images','Images & signals'),('reload','Reload checks'),('fiji','Fiji inspection'),('execution','Execution & tokens'),('validation','Validation & limitations'),('response','Review response'),('reproducibility','Reproducibility')])+'</nav>',
+        '<nav aria-label="Contents">'+''.join(f'<a href="#{i}">{label}</a>' for i,label in [('datasets','Data & settings'),('images','Images & signals'),('decoding-z9','3D decoding'),('decoding-z1','Z=1 decoding'),('reload','Reload checks'),('fiji','Fiji inspection'),('execution','Execution & tokens'),('validation','Validation & limitations'),('response','Review response'),('reproducibility','Reproducibility')])+'</nav>',
         '<h2 id="datasets">Data and frozen settings</h2>',
-        table([{'Fixture':f"saved-formed-z{c['depth']}-v2",'Shape (ZYXC)':str(c['shape']),'Dtype':'float32','Objects':2,'Rounds':3,'Calibration':'unknown'} for c in manifest['cases']]),
-        '<p>The 3D fixture exceeds the requested (4,32,32,4) minimum. The deliberate (1,32,32,4) counterpart samples the same 3D kernel at z=0; it is not a projection. Version 1 packets remain preserved separately.</p>',
-        table([{'Acquisition':'Round order','Value':'round10 → round2 → round1'},{'Acquisition':'Channel order','Value':'ch02 → ch00 → ch03 → ch01'},{'Acquisition':'Color symbol → channel index','Value':'1→1, 2→0, 3→3, 4→2'}]),
-        table([{'Parameter':'Spot centers (ZYX)','Value':'spot-A=(Z//2,10,10); spot-B=(Z//2,22,22)'},{'Parameter':'Peak brightness','Value':'8 (unchanged)'},{'Parameter':'Gaussian widths','Value':'axial σ=1 slice; lateral σ=1.25 pixels'},{'Parameter':'Shape','Value':'elongation=1; angle=0'},{'Parameter':'Support','Value':'closed ellipsoid: (dz/1)²+(dy/1.25)²+(dx/1.25)² ≤16; zero outside'},{'Parameter':'Boundaries','Value':'3D support fully in bounds; Z=1 support is truncated axially without renormalization'}]),
+        table([{'Fixture':f"saved-formed-z{c['depth']}-v3",'Shape (ZYXC)':str(c['shape']),'Dtype':'float32','Objects':2,'Rounds':3,'Calibration':'unknown'} for c in manifest['cases']]),
+        '<p>The 3D fixture exceeds the requested (4,32,32,4) minimum. The deliberate (1,32,32,4) counterpart samples the same 3D kernel at z=0; it is not a projection. Version 1 and 2 packets remain preserved separately; revision 3 changes truth labels and adds decoding inspection.</p>',
+        table([{'Acquisition':'Round order','Value':'round10 → round2 → round1'},{'Acquisition':'Channel order','Value':'ch02 → ch00 → ch03 → ch01'},{'Acquisition':'Color symbol → channel index','Value':'1→1 (ch00), 2→0 (ch02), 3→3 (ch01), 4→2 (ch03)'}]),
+        '<p>Color calls follow round10 → round2 → round1. Nucleotide barcodes use decode_color_sequence with the saved start_base=C; the initial C is included (3 colors → 4 bases). No reversal is applied to this displayed sequencing-direction barcode. The color-only codebook carries EncodingConfig(reverse_bases=True, split_index=None), applicable when importing base sequences; no base-sequence column or split is used here. End bases are unset and endpoint exclusion is disabled. WTA matches exact color strings; no error correction or matching-distance field is produced (distance is not a WTA score).</p>',
+        table([{'Parameter':'Spot centers (ZYX)','Value':'gt-A=(Z//2,10,10); gt-B=(Z//2,22,22)'},{'Parameter':'Peak brightness','Value':'8 (unchanged)'},{'Parameter':'Gaussian widths','Value':'axial σ=1 slice; lateral σ=1.25 pixels'},{'Parameter':'Shape','Value':'elongation=1; angle=0'},{'Parameter':'Support','Value':'closed ellipsoid: (dz/1)²+(dy/1.25)²+(dx/1.25)² ≤16; zero outside'},{'Parameter':'Boundaries','Value':'3D support fully in bounds; Z=1 support is truncated axially without renormalization'}]),
         table([{'Processing':'Registration','Setting':'TranslationConfig defaults; all measured corrections exactly (0,0,0)'},{'Processing':'Spot finding','Setting':'LocalMaximaConfig: adaptive, threshold 0.1; existing defaults'},{'Processing':'Extraction','Setting':'NeighborhoodSumConfig radius=(0,0,0); center values'},{'Processing':'Decoding / filtering','Setting':'WtaDecoderConfig / ReadFilterConfig defaults, frozen in saved configuration'}]),
         table([{'Simulation':'Root seed','Setting':'42; independent component stream descriptors saved'},{'Simulation':'Input/model','Setting':'formed development v1 model; explicit coordinates and genes'},{'Simulation':'Effects','Setting':'background, noise, round effects, crosstalk, dropout and deformation disabled'},{'Simulation':'Scope','Setting':'processed images; not calibrated D04 or RNA truth'}]),
         '<h2 id="images">Saved images, identity and signals</h2><p>All image panels share a linear 0–8 scale. Center slices retain separate channels; XZ cuts use each spot’s active channel. Profiles show stored samples. Crosses identify simulated centers, before decoding.</p>']
@@ -194,16 +234,15 @@ def render_report(directory):
         sections.append(f'<h3>{case["root"]}: '+('3D' if case['depth']>1 else 'intentional singleton Z')+'</h3>')
         for r,(name,loaded) in enumerate(images.items()): sections.append(inspection_figure(loaded,formed,r,name))
         decoded=pd.read_parquet(root/'uninterrupted-decoded.parquet')
-        rows=[];signals=[]
-        for i,candidate in saved.spots.spots.iterrows():
-            match=formed[(formed.z==candidate.z)&(formed.y==candidate.y)&(formed.x==candidate.x)].iloc[0]
-            assignment=decoded.set_index('spot_id').loc[candidate.spot_id,'gene_id']
-            display=f'candidate-{i+1}'
-            rows.append({'Simulated ID':match.amplicon_id,'Gene truth (before decoding)':match.gene_id,'Detector display':display,'Decoded assignment':assignment,'Coordinate ZYX':str((candidate.z,candidate.y,candidate.x))})
-            correspondence.append(dict(case=case['root'],simulation_namespace=match.namespace,simulation_id=match.amplicon_id,detector_display=display,detector_namespace=saved.spots.spot_namespace,detector_id=candidate.spot_id))
-            for r,name in enumerate(saved.intensities.round_labels):
-                signals.append({'Simulated ID':match.amplicon_id,'Candidate':display,'Round':name,**{c:saved.intensities.values[i,k,r] for k,c in enumerate(saved.intensities.channel_labels)},'Valid':bool(saved.intensities.valid[i,r])})
-        sections.append(table(rows)+'<p>Simulation and detector namespaces are distinct. Correspondence is an explicit coordinate match; full namespaced identifiers are retained in the appendix.</p>'+table(signals))
+        filtered=pd.read_parquet(root/'uninterrupted-filtered.parquet')
+        rows, identities, signals = decoding_rows(saved, formed, decoded, filtered, case['settings']['filtering'])
+        correspondence.extend(dict(case=case['root'], **row) for row in identities)
+        sections.append('<h4 id="decoding-'+case['root']+'">Per-spot decoding and independent truth</h4>'+table(rows)+
+            '<p>Simulation and detector namespaces are distinct. Correspondence is an explicit coordinate match, not numbering. '
+            'Display IDs are spot- plus the original zero-based numeric detector ID + 1; sorting or filtering never renumbers them. '
+            'All detections remain listed with a separate filter status. Observed colors come from the saved decoder results; '
+            'nucleotide conversion uses those colors, never the assigned gene. GT colors and barcodes come from saved simulation truth. '
+            'The model specifies color-space truth; GT nucleotide expectations are independently fixed under the saved start-base convention.</p>'+table(signals))
     sections.extend(['<h2 id="reload">Independent and fresh-process checks</h2>',table([{'Check':'Gaussian image samples','Result':'All voxels: absolute tolerance 1e-6, relative tolerance 0'},{'Check':'Peak / lateral neighbor / support edge / outside','Result':'8 / 5.8091923 / 0.002683701 / 0'},{'Check':'Truth population / round history','Result':'2 objects / 6 history rows; all emitting; no dropped/lost rows'},{'Check':'Prepared versus registered images','Result':'Bytes, dtype, geometry, channel labels exact; zero registration correction'},{'Check':'Reloaded extraction / signal validity','Result':'Exact values and stable identity'},{'Check':'Decoding, filtering and counts','Result':'Exact uninterrupted-versus-reloaded tables; gene-A and gene-B accepted'},{'Check':'Fresh process','Result':'Separate creation and reload process IDs, recorded below'},{'Check':'TIFF versus canonical HDF5','Result':'All float32 values and ordered labels exact'}]),
         '<h2 id="fiji">Fiji inspection</h2>',
         '<p>'+('Fiji reopened both formats for all six saved rounds. All voxel values agree with the independent Gaussian oracle and between HDF5 and TIFF; dimensions and labels pass.' if viewer else 'Fiji runtime evidence is not supplied in this example invocation; format checks alone do not establish viewer compatibility.')+'</p>',
@@ -216,7 +255,7 @@ def render_report(directory):
         '<p>Six redundant parameter combinations were removed: ten depth×dtype round trips become six (all five dtypes in 3D plus float32 Z=1); six depth×empty-input cases become four (all three empty forms in 3D plus explicit-empty Z=1). The four depth×precision Gaussian cases remain because singleton support and float tolerances interact. Failure/corruption, overwrite, independent truth and fresh-process coverage remain. The saved-example integration test is reused.</p>',
         '<p>Known limits: clean processed-image examples only; no real-data calibration, biological accuracy claim, MATLAB, later-batch work or public release reproducibility. Physical calibration and backup coverage remain unknown. Resource limits are measured targets, not enforced memory caps. Original packet history is retained.</p>',
         '<h2 id="response">Human review response</h2>',
-        table(context.get('responses',[{'Review point':'1. Readability','Change':'Single current report; exact identifiers collapsed'},{'Review point':'2. Graph','Change':'Recorded phases, attempts, pauses and unique-session token coverage when evidence is supplied'},{'Review point':'3–4. Navigation and formatting','Change':'Linked contents and separate parameter/comparison tables'},{'Review point':'5. Dimensions / naming / gradients','Change':'Version 2, 9×32×32×4 and explicit Z=1; spot-A/B; sampled Gaussian profiles'},{'Review point':'5. Fiji / TIFF','Change':'Canonical custom-layout import; value-preserving per-round TIFFs; runtime evidence separately required'},{'Review point':'6. Tests','Change':'Six redundant combinations removed; required coverage retained'}])),
+        table(context.get('responses',[{'Review point':'1. Readability','Change':'Single current report; exact identifiers collapsed'},{'Review point':'2. Graph','Change':'Recorded phases, attempts, pauses and unique-session token coverage when evidence is supplied'},{'Review point':'3–4. Navigation and formatting','Change':'Linked contents and separate parameter/comparison tables'},{'Review point':'5. Dimensions / naming / gradients','Change':'Version 3, 9×32×32×4 and explicit Z=1; gt-A/B; sampled Gaussian profiles'},{'Review point':'5. Fiji / TIFF','Change':'Canonical custom-layout import; value-preserving per-round TIFFs; runtime evidence separately required'},{'Review point':'6. Tests','Change':'Six redundant combinations removed; required coverage retained'}])),
         '<h2 id="reproducibility">Reproducibility appendix</h2><details><summary>Exact revisions, hashes, process identities, commands, configuration and source tables</summary>',
         '<p>Report hashes are in report-identity.json and the outer manifest, avoiding a self-referential hash. Essential figures and tables are embedded; data links are optional inspection downloads.</p>',
         '<h3>Full identity correspondence</h3>'+table(correspondence),
