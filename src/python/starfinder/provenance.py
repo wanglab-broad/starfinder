@@ -26,6 +26,7 @@ __all__ = ["RunRecorder", "read_run"]
 _CONTRACT = "starfinder.artifacts/1"
 _STAGES = {"prepared_input", "registered_images", "candidates_signals", "decoded_pre_qc", "final_accepted"}
 _STAGE = {"register": "registered_images", "estimate_transform": "registered_images",
+          "save_candidate_checkpoint": "candidates_signals",
           "apply_transform": "registered_images", "find_spots": "candidates_signals",
           "_extract_round": "candidates_signals", "_assemble_intensities": "candidates_signals",
           "extract_intensities": "candidates_signals", "decode_barcodes": "decoded_pre_qc",
@@ -342,7 +343,9 @@ class RunRecorder:
 
     Pass this object to ``FOV.run(..., provenance=recorder)``. It can be used
     once. Updates publish run.json atomically; completed runs are never replaced.
-    This records processing state, not image/table checkpoints or a scheduler.
+    This records processing state and, after complete extraction in FOV.run,
+    invokes the optional Parquet checkpoint writer before decoding/QC. It is
+    not a scheduler; image and decoded/final payload writers remain separate.
 
     Parameters
     ----------
@@ -362,10 +365,14 @@ class RunRecorder:
         Supplied seed/stream identity; None remains explicitly unknown.
     owner, retention : str
         Artifact ownership and retention policy; no automatic deletion.
+    save_candidates_signals : bool
+        Provisionally True: persist the complete pre-rejection checkpoint.
+        Requires the checkpoint extra. False records an explicit omission.
     """
 
     def __init__(self, directory, *, dataset_id, sample_id, code=None, sources=(),
-                 seed=None, owner="unspecified", retention="owner decision required"):
+                 seed=None, owner="unspecified", retention="owner decision required",
+                 save_candidates_signals=True):
         import starfinder
         self.directory = Path(directory)
         self._used = False
@@ -373,6 +380,7 @@ class RunRecorder:
         self._attempts = {}
         self._failure_exceptions = {}
         self._fov = None
+        _require(type(save_candidates_signals) is bool, 'save_candidates_signals must be Boolean')
         self._run = dict(_header("run"), run_id=uuid.uuid4().hex, created_at=_now(), status="running",
             dataset_id=dataset_id, sample_id=sample_id,
             code=copy.deepcopy(code) if code is not None else dict(commit=None, dirty=None, patch_sha256=None,
@@ -380,9 +388,9 @@ class RunRecorder:
                 unknown_reason="revision and dirty state not supplied"),
             environment=_environment(copy.deepcopy(seed)), config=dict(requested=None, effective=None, operations={}),
             sources=copy.deepcopy(list(sources)), artifacts=[], events=[], failures=[],
-            saving_policy=dict(provenance=True, diagnostics=True, images=False, candidates_signals=True,
+            saving_policy=dict(provenance=True, diagnostics=True, images=False, candidates_signals=save_candidates_signals,
                                decoded_pre_qc=True, final_accepted=True,
-                               payload_writer="separate checkpoint APIs; no implicit payload save"),
+                               payload_writer="candidate checkpoint after extraction; other payloads explicit"),
             owner=owner, retention=retention, backup_status="unverified", extensions={"starfinder.provenance": {}})
         _validate(self._run)
         self.directory.mkdir(parents=True, exist_ok=False)
@@ -416,6 +424,46 @@ class RunRecorder:
         _validate(self._encode(candidate))
         self._run = candidate
         self._publish()
+
+    def _save_candidates(self, fov):
+        """Persist assembled signals before any decoding/QC rejection."""
+        from starfinder.io import CandidateSaveResult, save_candidate_checkpoint
+        if not self._run['saving_policy']['candidates_signals']:
+            fov.candidate_checkpoint_save = CandidateSaveResult(None, 0, 'candidates_signals_disabled')
+            self._run['extensions']['starfinder.provenance']['candidate_checkpoint'] = dict(
+                size_bytes=0, reason='candidates_signals_disabled', path=None)
+            self._publish()
+            return
+        with self._operation('save_candidate_checkpoint', {}, round_name=None):
+            saved = save_candidate_checkpoint(self.directory / 'candidates-signals',
+                fov.spot_result, fov.intensity_result, codebook=fov.codebook,
+                dataset_id=self._run['dataset_id'], sample_id=self._run['sample_id'],
+                FOV=fov.fov_id, subtile=fov.subtile_id, run_id=self.run_id,
+                code=self._run['code'], config=self._run['config'], sources=self._run['sources'],
+                enabled=self._run['saving_policy']['candidates_signals'])
+            fov.candidate_checkpoint_save = saved
+            self._run['extensions']['starfinder.provenance']['candidate_checkpoint'] = dict(
+                size_bytes=saved.size_bytes, reason=saved.reason,
+                path=str(saved.path) if saved.path else None)
+            if saved.path is not None:
+                artifact = json.loads(saved.path.read_text())
+                artifact['config_ref'] = 'config/effective'
+                for descriptor in artifact['components']:
+                    descriptor['path'] = 'candidates-signals/' + descriptor['path']
+                artifact['components'].append(dict(component_id='candidate_manifest',
+                    path='candidates-signals/artifact.json', format='json',
+                    size=saved.path.stat().st_size, sha256=_hash(saved.path)))
+                # The run links the format-specific manifest, rather than
+                # interpreting another codec's typed metadata as run metadata.
+                artifact['payload'] = dict(manifest_component='candidate_manifest',
+                    shape=artifact['payload']['shape'], size_bytes=saved.size_bytes)
+                artifact['extensions'] = {'starfinder.checkpoint': dict(
+                    manifest_path='candidates-signals/artifact.json', manifest_sha256=_hash(saved.path))}
+                self.record_artifact(artifact)
+            self._publish()
+        if saved.path is not None:
+            self._run['events'][-1]['output_artifacts'].append(artifact['artifact_id'])
+            self._publish()
 
     def _loaded_sources(self, name, loaded, config):
         layers = loaded.diagnostics.get('source_layers', [])
@@ -520,7 +568,8 @@ class RunRecorder:
             outcome = "succeeded"
         except BaseException as error:
             event = self._event(operation, "failed", diagnostics=diagnostics, **arguments)
-            self._failure(event, error, "application" if operation == "apply_transform" else None)
+            self._failure(event, error, "application" if operation == "apply_transform" else
+                          "serialization" if operation == "save_candidate_checkpoint" and isinstance(error, OSError) else None)
             self._publish()
             raise
         else:
@@ -577,7 +626,9 @@ class RunRecorder:
                 sample_id=self._run["sample_id"], FOV=fov.fov_id, subtile=fov.subtile_id, parents=[],
                 config_ref="config/effective", source_refs=[s["source_id"] for s in self._run["sources"]],
                 components=[], payload={"operation_event_ids": [e["event_id"] for e in events], "stage_state": state},
-                omission_reason=None if failures else "incomplete_stage" if state == 'partial' else "payload_not_saved_by_provenance_recorder",
+                omission_reason=None if failures else "incomplete_stage" if state == 'partial' else
+                    "candidates_signals_disabled" if stage == 'candidates_signals' and not self._run['saving_policy']['candidates_signals'] else
+                    "payload_not_saved_by_provenance_recorder",
                 failure_id=failures[-1]["failure_id"] if failures else None)
             self._run["artifacts"].append(artifact)
             events[-1]["output_artifacts"].append(artifact["artifact_id"])

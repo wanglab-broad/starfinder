@@ -312,3 +312,19 @@ The explicit `dev` group is needed with `UV_NO_DEFAULT_GROUPS=true` above.
 The full Python suite is separate from bounded documentation CI. Local build
 success does not establish a successful Actions run, deployment, optional-backend
 execution or external link availability.
+
+For pre-rejection Parquet persistence, prepare the optional `checkpoint` extra
+before execution, then run the bounded 3D/Z=1 examples and focused checks:
+
+```bash
+uv run python ../../docs/examples/candidate_checkpoints.py /external/new-run/candidate-example
+uv run pytest test/test_candidate_checkpoints.py -v
+```
+
+These reuse the W-154 literal `(3,4,5,4)`/`(1,4,5,4)` arithmetic, two rounds,
+no random seed, and no historical TIFFs. Checks cover typed empty/invalid/reordered
+payloads, identity/integrity rejection, trace lookup, exact downstream equivalence
+and default/disabled saving in batch/streaming. The provenance-only example
+explicitly disables checkpoint saving; the image-checkpoint example uses the
+new persistent-run default and also requires the `checkpoint` extra.
+See [candidate checkpoints](candidate-checkpoints.md) for limits and storage policy.

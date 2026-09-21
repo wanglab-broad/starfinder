@@ -13,6 +13,7 @@ Conventions <conventions>
 API contracts <api/contracts>
 Artifact contracts <artifact-contracts>
 Image checkpoints <image-checkpoints>
+Candidate checkpoints <candidate-checkpoints>
 Synthetic specification <synthetic-specification>
 Backend requirements <api/backends>
 API examples <api/examples>

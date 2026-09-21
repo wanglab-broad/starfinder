@@ -114,10 +114,14 @@ def _types():
     # Local import avoids the dataset -> io import cycle. No arbitrary imports
     # or constructors are selected by file content.
     from starfinder.dataset.types import RoundState
+    from starfinder.barcode import NeighborhoodSumConfig, EncodingConfig
+    from starfinder.spot_finding import LocalMaximaConfig, NoiseLandmarkConfig, PercentileCentroidConfig
     return {cls.__name__: cls for cls in (
         ImageMetadata, ImageProcessingState, RoundState, RegistrationResult,
         RegistrationDiagnostics, TranslationTransform, DenseDisplacementTransform,
         TranslationConfig, DemonsConfig, TpsConfig, CpdConfig, WarpConfig,
+        NeighborhoodSumConfig, EncodingConfig, LocalMaximaConfig,
+        NoiseLandmarkConfig, PercentileCentroidConfig,
     )}
 
 
@@ -281,7 +285,7 @@ def _validate_layers(layers, rounds, stage):
 
 def _validate_context(config, code, sources, parents, provenance):
     _require(isinstance(config, dict) and isinstance(code, dict) and
-             (_text(code.get('commit')) or _is_hash(code.get('patch_sha256'))),
+             (_text(code.get('commit')) or _is_hash(code.get('patch_sha256')) or _text(code.get('unknown_reason'))),
              'code revision/patch and config required')
     _require(provenance is None or isinstance(provenance, dict) and
              _text(provenance.get('uri')) and _is_hash(provenance.get('sha256')),

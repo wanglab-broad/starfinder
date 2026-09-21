@@ -6341,6 +6341,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+checkpoint = [
+    { name = "pyarrow" },
+]
 dev = [
     { name = "pytest" },
     { name = "pytest-cov" },
@@ -6390,6 +6393,7 @@ requires-dist = [
     { name = "napari", marker = "extra == 'visualization'", specifier = ">=0.4" },
     { name = "numpy", specifier = ">=1.24" },
     { name = "pandas", specifier = ">=2.0" },
+    { name = "pyarrow", marker = "extra == 'checkpoint'", specifier = "==23.0.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1" },
@@ -6400,7 +6404,7 @@ requires-dist = [
     { name = "spatialdata-io", marker = "extra == 'spatialdata'", specifier = ">=0.1" },
     { name = "tifffile", specifier = ">=2023.0" },
 ]
-provides-extras = ["ome", "local-registration", "spatialdata", "visualization", "dev"]
+provides-extras = ["checkpoint", "ome", "local-registration", "spatialdata", "visualization", "dev"]
 
 [package.metadata.requires-dev]
 dev = [

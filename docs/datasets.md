@@ -346,3 +346,23 @@ measured resources and small-fixture storage costs are recorded in
 and `image-example-handoff/summary.json`. This is software round-trip evidence, not
 E10 format superiority, D04 qualification or public reproducibility. Owner,
 retention and unverified backup status follow this catalog's convention.
+
+### Candidate checkpoint literal extension v1
+
+W-159 reuses `artifact-contract-v1` above without regenerating image fixtures.
+`docs/examples/candidate_checkpoints.py` saves its complete two-candidate table,
+float64 `(2,4,2)` signals and Boolean `(2,2)` validity in Parquet, with empty
+N=0 and invalid-A-round2 variants. Geometry stays unknown. The nonlexical round/
+channel labels, nonidentity codebook mapping and literal gene-A/no-signal oracle
+are unchanged. Tests add nullable Int16/Boolean/string, uint8/float32 optional
+columns, signed zero, physical row reordering and malformed artifacts; these are
+schema/integrity probes, not molecular truth. The batch/streaming save-policy
+checks reuse the bounded provenance literal fixture above. No seed, accession,
+historical TIFF or new scientific population applies.
+
+Focused format evidence and saved output hashes belong to W-159's external
+`implementation-manifest.json` and `candidate-example-handoff/summary.json` under
+`/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-159/20260921T051139Z-97c371d3/`.
+Small-file sizes/timings are illustrative; W-171 owns storage qualification.
+Owner Jiahao, retention through thesis/publication, backup unverified. These
+private development artifacts do not establish public reproducibility.

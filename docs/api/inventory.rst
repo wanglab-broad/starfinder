@@ -126,6 +126,10 @@ starfinder.io
 ~~~~~~~~~~~~~
 
 * :py:obj:`starfinder.io.convert_image`
+* :py:obj:`starfinder.io.CandidateCheckpoint`
+* :py:obj:`starfinder.io.CandidateSaveResult`
+* :py:obj:`starfinder.io.load_candidate_checkpoint`
+* :py:obj:`starfinder.io.save_candidate_checkpoint`
 * :py:obj:`starfinder.io.export_spots`
 * :py:obj:`starfinder.io.ImageCheckpoint`
 * :py:obj:`starfinder.io.ImageConversionConfig`

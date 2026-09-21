@@ -53,6 +53,7 @@ class FOV:
 
     load_diagnostics: dict[str, dict] = field(default_factory=dict)
     image_checkpoint: ImageCheckpoint | None = None
+    candidate_checkpoint_save: object | None = None
 
     # --- Delegated properties ---
 
@@ -471,6 +472,9 @@ class FOV:
         already declare the same frame/grid for extraction.
         Optional ``provenance`` is a single-use RunRecorder writing to a fresh
         external directory, including failed/interrupted stages and diagnostics.
+        Its provisional candidate/signal saving default runs after extraction,
+        before decoding/QC; disable on the recorder explicitly. Without a
+        recorder, results remain in-memory and no destination is inferred.
         """
         if not isinstance(config, PipelineConfig) or not isinstance(execution, ExecutionConfig):
             raise TypeError('run requires PipelineConfig and ExecutionConfig')
@@ -535,6 +539,11 @@ class FOV:
                 del self.images[name]
         if config.extraction:
             self._assemble_intensities()
+            if provenance is not None:
+                provenance._save_candidates(self)
+            else:
+                from starfinder.io import CandidateSaveResult
+                self.candidate_checkpoint_save = CandidateSaveResult(None, 0, 'no_persistent_run_destination')
         if config.decoding:
             self.decode_barcodes(config=config.decoding)
         if config.filtering:

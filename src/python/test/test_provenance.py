@@ -33,7 +33,8 @@ def fixture(root, z=3, empty=False):
 
 
 def recorder(root):
-    return RunRecorder(root, dataset_id='literal', sample_id='sample', owner='test', retention='test fixture')
+    return RunRecorder(root, dataset_id='literal', sample_id='sample', owner='test', retention='test fixture',
+                       save_candidates_signals=False)
 
 
 def state(run):

@@ -30,7 +30,8 @@ def main(directory):
                 extraction=NeighborhoodSumConfig((0, 0, 0)), decoding=WtaDecoderConfig(),
                 filtering=ReadFilterConfig())
             record = RunRecorder(directory/f'z{z}-{mode}', dataset_id='literal', sample_id='sample',
-                owner='example caller', retention='retain with associated analysis')
+                owner='example caller', retention='retain with associated analysis',
+                save_candidates_signals=False)  # This example isolates provenance.
             fov.run(config, execution=ExecutionConfig(mode), provenance=record)
             run = read_run(record.path)
             assert run['status'] == 'succeeded'

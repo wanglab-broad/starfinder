@@ -13,3 +13,9 @@ from starfinder.io.checkpoints import (
 )
 __all__ += ["ImageCheckpoint", "ImageLayer", "ImageProcessingState",
             "load_image_checkpoint", "save_image_checkpoint"]
+
+from starfinder.io.candidates import (
+    CandidateCheckpoint, CandidateSaveResult, load_candidate_checkpoint, save_candidate_checkpoint,
+)
+__all__ += ["CandidateCheckpoint", "CandidateSaveResult", "load_candidate_checkpoint",
+            "save_candidate_checkpoint"]

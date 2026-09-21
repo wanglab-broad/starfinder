@@ -105,6 +105,13 @@ All rows retain `(spot_namespace, spot_id)`, including ambiguous/unmatched calls
 Filtering keeps rejection reasons. Export joins by identity rather than row order.
 Rerun filtering without decoding, or decoding without repeating extraction.
 
+Persistent `FOV.run(..., provenance=RunRecorder(...))` now saves the complete
+candidate/signal checkpoint before decoding/QC by default. Prepare the optional
+`checkpoint` extra first, or set `RunRecorder(..., save_candidates_signals=False)`
+for an explicit provenance-only run. In-memory runs without a recorder do not
+infer a destination. Use `io.load_candidate_checkpoint` to rerun existing
+decoding/filtering without images; see [checkpoint usage](candidate-checkpoints.md).
+
 ### Coordinate a pipeline
 
 Before: `dataset.fov(id).run_streaming(...)` and separate batch stage calls.

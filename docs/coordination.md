@@ -159,10 +159,12 @@ exact manifest bytes. It checks schema, references, geometry, component paths,
 size and checksum before returning records; it does not execute processing or
 instantiate arbitrary serialized configuration types.
 
-The recorder saves **provenance**, not image/table checkpoint payloads. Requested
-saving defaults are retained for checkpoint writers; unlinked payloads have
-explicit omitted records, and unsuccessful stages have failed records. Neither
-is reloadable as an image or candidate checkpoint. A checkpoint writer can call
+The recorder saves provenance and, by default, the complete
+[candidate/signal checkpoint](candidate-checkpoints.md) after extraction and
+before decoding/QC. This requires the optional `checkpoint` extra. Explicitly
+set `save_candidates_signals=False` for provenance-only operation. Other unlinked
+payloads have omitted records, and unsuccessful stages have failed records;
+these records alone are not reloadable checkpoints. A checkpoint writer can call
 `record.record_artifact(record_dict)` while the run is active, after validating
 its format-specific payload; components must already exist under the run root.
 The recorder verifies those component hashes and links their immutable IDs.
