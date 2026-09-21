@@ -148,6 +148,12 @@ starfinder.preprocessing
 * :py:obj:`starfinder.preprocessing.ReconstructionConfig`
 * :py:obj:`starfinder.preprocessing.TophatConfig`
 
+starfinder.provenance
+~~~~~~~~~~~~~~~~~~~~~
+
+* :py:obj:`starfinder.provenance.read_run`
+* :py:obj:`starfinder.provenance.RunRecorder`
+
 starfinder.registration
 ~~~~~~~~~~~~~~~~~~~~~~~
 

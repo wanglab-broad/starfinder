@@ -66,6 +66,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.dataset.PipelineConfig`
 * :py:obj:`starfinder.preprocessing.project_image`
 * :py:obj:`starfinder.preprocessing.ProjectionConfig`
+* :py:obj:`starfinder.provenance.read_run`
 * :py:obj:`starfinder.barcode.ReadFilterConfig`
 * :py:obj:`starfinder.barcode.ReadFilteringResult`
 * :py:obj:`starfinder.preprocessing.reconstruct_background`
@@ -80,6 +81,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.benchmark.report_benchmark`
 * :py:obj:`starfinder.dataset.RoundState`
 * :py:obj:`starfinder.benchmark.run_benchmark`
+* :py:obj:`starfinder.provenance.RunRecorder`
 * :py:obj:`starfinder.io.save_volume`
 * :py:obj:`starfinder.spot_finding.SpotFindingResult`
 * :py:obj:`starfinder.evaluation.registration.structural_similarity`

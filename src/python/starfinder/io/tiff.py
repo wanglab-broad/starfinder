@@ -174,6 +174,8 @@ def load_round(round_dir: Path | str, *, config: ImageLoadConfig) -> ImageLoadRe
     if cropped:
         metadata = metadata.cropped((0, 0, 0), frame_id=f"{metadata.frame_id}/crop:{shape}")
     diagnostics = {"original_shapes": shapes, "cropped": cropped, "crop_start_zyx": (0, 0, 0) if cropped else None, "source_dtype": str(data.dtype), "conversion": _conversion_diagnostics(data, config.conversion)}
+    diagnostics["source_layers"] = [dict(metadata=asdict(r.metadata), diagnostics=r.diagnostics)
+                                    for r in loaded]
     if config.conversion is not None:
         data = convert_image(data, config=config.conversion)
     diagnostics["output_dtype"] = str(data.dtype)

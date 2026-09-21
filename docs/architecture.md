@@ -13,6 +13,7 @@ streaming select image residency, not different scientific pipelines.
 | `image` | ImageMetadata, spatial validation/conversion | Does not own intensities or acquisition state |
 | `io` | Image/table persistence and explicit conversion | Does not process experiments |
 | `preprocessing` | Typed finite-array operations | Does not own FOV state |
+| `provenance` | Versioned run events, attribution, failures and diagnostic components | Observes coordination; no scheduler or scientific qualification |
 | `registration` | Estimate/apply transforms and diagnostics | Does not evaluate truth or time experiments |
 | `spot_finding` | Detection and stable SpotFindingResult identities | Does not perform registration evaluation |
 | `synthetic` | Processed-image scenes, rendering and truth records | Does not orchestrate benchmarks or invent molecular truth |

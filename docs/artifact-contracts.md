@@ -1,7 +1,9 @@
 # Artifact, checkpoint and provenance contracts
 
 **Contract ID: `starfinder.artifacts/1`.** This is the W-154 specification for
-processing persistence, not a claim that the readers/writers already exist.
+processing persistence. W-156 implements run/event/failure metadata and diagnostic
+components through `starfinder.provenance`; see [usage](coordination.md#persistent-run-attribution).
+Image/table checkpoint payload writers remain separate deliveries.
 [Array contracts](api/contracts.md) remain authoritative for numerical APIs.
 The acceptance cases below freeze independent expectations before W-156,
 W-158 and W-159 implement persistence. A producer records this contract ID and

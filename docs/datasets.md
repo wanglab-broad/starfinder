@@ -223,6 +223,31 @@ W-155 bounded verification evidence and source/config hashes (2026-09-21):
 Scientific calibration, backend image rendering and storage round trips remain
 unverified by this oracle; ownership/retention follows the catalog convention.
 
+### Provenance literal example v1
+
+`provenance-literal-v1` is a hand-constructed software fixture defined by
+`docs/examples/provenance.py` and `src/python/test/test_provenance.py` (2026-09-21).
+It has dataset/sample `literal/sample`, FOV `FOV` in tests or `FOV-Z1/FOV-Z3`
+in the example, rounds `(round10,round2)`, channels `(b,a,d,c)` and one gene
+with color sequence `11` and the standard color-to-channel mapping. Supplied
+uint16 ZYXC arrays are `(1,7,9,4)` or `(3,7,9,4)`; the local-registration
+diagnostic test uses `(4,7,9,4)` to meet the existing Demons minimum. One channel
+has a single value 7 at `(Z//2,3,4)` in both rounds; the empty variant is zero.
+There is no generator, random seed, accession, historical TIFF ancestor or
+scientific truth claim. Prepared, registered, candidate/signal, decoded and
+filtered **in-memory** states supply provenance records; images/tables are not
+checkpointed by the recorder. Geometry is unknown except for the explicit
+metadata test `(spacing,origin,direction,unit)=((2,3,4),(10,20,30),diag(1,-1,-1),um)`.
+That literal calibration is a software oracle, not a measurement. New temporary
+TIFFs in the loader-attribution test are derived only from these literal arrays;
+no existing fixture TIFF is regenerated.
+
+Source/config hashes, execution evidence and limits are in the external W-156
+`implementation-manifest.json` under
+`/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-156/20260921T032857Z-dbab02d9/`.
+Intended use is metadata/integrity/failure regression. No D04 qualification,
+image/table reload equivalence or molecular acceptance is implied.
+
 ### Existing fixture inventory
 
 The small D06 fixture's 32 existing TIFFs occupy 33,645,376 bytes. W-153 checked

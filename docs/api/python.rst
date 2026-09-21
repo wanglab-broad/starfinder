@@ -25,6 +25,7 @@ Modules (alphabetical)
    image
    io
    preprocessing
+   provenance
    registration
    spot_finding
    synthetic

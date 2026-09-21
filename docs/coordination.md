@@ -100,3 +100,87 @@ to batch and streaming; this can change results from legacy streaming recipes
 that silently forced or omitted operations. Tests establish software behavior,
 not scientific validation. MATLAB execution and historical notebook reruns are
 excluded.
+
+## Persistent run attribution
+
+`starfinder.provenance.RunRecorder` observes the existing `FOV.run` sequence.
+Use a fresh directory outside the checkout for each attempt:
+
+```python
+from starfinder.provenance import RunRecorder, read_run
+
+record = RunRecorder(output_directory, dataset_id=dataset.dataset_id,
+                     sample_id=dataset.sample_id, owner="analysis owner",
+                     retention="retain through analysis handoff")
+fov.run(pipeline, execution=execution, provenance=record)
+run = read_run(record.path)
+assert run["status"] == "succeeded"
+```
+
+`run.json` follows `starfinder.artifacts/1`. It holds requested pipeline/residency
+config, per-operation effective parameters, ordered started/terminal events,
+registration attempts and actual transforms, warnings, failures and recovery
+links. `extensions["starfinder.provenance"]` contains initial/final state,
+per-stage status, codebook identity and round registration state. Event snapshots
+preserve each completed operation's geometry and counts before streaming releases
+images. Successful empty detection has a succeeded event and zero count;
+unassembled per-round signals retain a partial stage and `incomplete_stage`
+omission rather than claiming a complete combined result.
+Unavailable values remain null with reasons. Unknown physical calibration remains
+null. Existing processing/shift log filenames and MATLAB contracts are unchanged.
+
+Supply `code` with `commit`, `dirty`, `patch_sha256`, `snapshot_sha256`,
+`package_version` and `source_location` for attributable work. Dirty code requires
+a patch or source-snapshot SHA-256. Unknown revision/dirty values require
+`unknown_reason`; the default explicitly marks them unknown and never guesses
+from a neighboring checkout. `seed` carries caller-supplied seed/stream identity.
+The environment records dependency/Python versions, host, backend and a fixed
+thread/device allowlist; it does not dump environment variables or credentials.
+Resource allocation remains explicitly unknown unless documented by the external
+execution manifest. Explicit caller metadata and exception messages should not
+contain secrets.
+
+Optional `sources` entries carry `source_id`, `catalog`, `uri`, `sha256`,
+`unverified_reason` and a `selection` object. Null hashes need a nonempty reason.
+Resident arrays receive C-order byte hashes with shape/dtype/geometry in their
+selection. Loaded TIFFs receive file hashes and per-channel selection/original
+geometry, separately from derived output geometry. A source path or content hash
+does not establish acquisition lineage or public accessibility.
+
+Compact transforms stay in typed JSON metadata. Dense transforms and numerical
+array diagnostics use lossless, checksummed NPY components with explicit dtype
+and shape, loaded without pickle. Tagged nonfinite diagnostic floats distinguish
+infinity/NaN from missing values. `read_run(path, sha256=...)` can also pin the
+exact manifest bytes. It checks schema, references, geometry, component paths,
+size and checksum before returning records; it does not execute processing or
+instantiate arbitrary serialized configuration types.
+
+The recorder saves **provenance**, not image/table checkpoint payloads. Requested
+saving defaults are retained for checkpoint writers; unlinked payloads have
+explicit omitted records, and unsuccessful stages have failed records. Neither
+is reloadable as an image or candidate checkpoint. A checkpoint writer can call
+`record.record_artifact(record_dict)` while the run is active, after validating
+its format-specific payload; components must already exist under the run root.
+The recorder verifies those component hashes and links their immutable IDs.
+Image and candidate/signal payloads remain separate APIs owned by their format
+implementations. Decoded/final table persistence is a separate delivery.
+
+Writes publish `run.json` last by atomic replacement. The same recorder/directory
+cannot be reused. A caught interruption is recorded as interrupted; a hard kill
+may leave running plus a started event, which the reader never promotes to
+success. Serialization/I/O failures propagate, even if recording that failure is
+itself impossible. The last published state and orphan temporary/components are
+inspectable, never silently completed or regenerated. No resume scheduler or
+automatic cleanup is added. The run's own checksum belongs in an external
+handoff manifest; benchmark/controller logs, commands, resource measurements and
+retention evidence remain outside the software artifact schema.
+
+Run the bounded Z=1/3 example from `src/python` with a new output path:
+
+```bash
+uv run python ../../docs/examples/provenance.py /external/new-run/provenance
+```
+
+It uses two rounds/four channels, literal uint16 `(Z,7,9,4)` arrays and no random
+seed or historical TIFFs. This checks attribution and software behavior, not
+scientific validity or image/table reload equivalence.

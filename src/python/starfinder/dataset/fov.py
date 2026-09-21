@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, replace
+from contextlib import nullcontext
 import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -150,6 +151,9 @@ class FOV:
             self.images[round_name] = loaded.image
             self.metadata[round_name] = loaded.metadata
             self.load_diagnostics[round_name] = loaded.diagnostics
+            recorder = getattr(self, '_provenance', None)
+            if recorder:
+                recorder._loaded_sources(round_name, loaded, load_config)
         return self
 
     # --- Preprocessing ---
@@ -161,6 +165,7 @@ class FOV:
         for name in rounds:
             self.images[name] = func(self.images[name])
 
+    @_log_step
     def _rotate_round(self, round_name: str, angle: float) -> None:
         """Rotate a single round's image in-place."""
         vol = _validate_image(self.images[round_name])
@@ -272,27 +277,38 @@ class FOV:
         outcome and failure. Apply errors propagate and are recorded too.
         """
         from starfinder.registration import estimate_transform, apply_transform
+        recorder = getattr(self, '_provenance', None)
         step.__post_init__()
         ref = self.rounds.reference_round
         reference = self._registration_image(ref, step.reference_image, step.reference_channel)
         for name in self.rounds.moving_rounds if rounds is None else rounds:
             moving = self._registration_image(name, step.moving_image, step.reference_channel)
             configs = (step.config,) + (tuple(step.recovery.alternatives) if step.recovery else ())
+            recovered_errors = []
             for index, config in enumerate(configs):
                 attempt = dict(requested_method=step.config.method, actual_method=config.method,
                                config=asdict(config), failure=None, outcome='estimating')
                 self.registration_attempts.setdefault(name, []).append(attempt)
                 try:
-                    result = estimate_transform(reference, moving, config=config,
-                        reference_metadata=self.metadata[ref], moving_metadata=self.metadata[name])
+                    context = recorder._operation('estimate_transform', config, round_name=name,
+                        requested=step.config.method, actual=config.method) if recorder else nullcontext()
+                    with context as diagnostics:
+                        result = estimate_transform(reference, moving, config=config,
+                            reference_metadata=self.metadata[ref], moving_metadata=self.metadata[name])
+                        if recorder:
+                            diagnostics['result'] = recorder._encode(result)
                 except Exception as error:
                     attempt.update(outcome='failed', failure={'type': type(error).__name__, 'message': str(error)})
                     if step.recovery and isinstance(error, step.recovery.allowed_errors) and index + 1 < len(configs):
+                        recovered_errors.append(error)
                         continue
                     raise
                 try:
                     warp = step.warp or result.application_config
-                    registered = apply_transform(self.images[name], result.transform, config=warp)
+                    context = recorder._operation('apply_transform', warp, round_name=name,
+                        requested=step.config.method, actual=config.method) if recorder else nullcontext()
+                    with context:
+                        registered = apply_transform(self.images[name], result.transform, config=warp)
                 except Exception as error:
                     attempt.update(outcome='application_failed', failure={'type': type(error).__name__, 'message': str(error)})
                     raise
@@ -300,6 +316,10 @@ class FOV:
                 self.images[name] = registered
                 self.metadata[name] = result.transform.reference_metadata
                 self.registration_results.setdefault(name, []).append(replace(result, application_config=warp))
+                if recorder:
+                    for error in recovered_errors:
+                        recorder._recover(error, 'estimate_transform', round_name=name,
+                            requested=step.config.method, actual=config.method)
                 break
         return self
 
@@ -336,6 +356,7 @@ class FOV:
                                      metadata=metadata, spot_namespace=namespace)
         return self
 
+    @_log_step
     def _extract_round(self, round_name, config=NeighborhoodSumConfig()):
         from starfinder.barcode import extract_intensities
         from starfinder.io import ImageLoadResult
@@ -346,6 +367,7 @@ class FOV:
             {round_name: loaded}, self.spot_result,
             config=config)
 
+    @_log_step
     def _assemble_intensities(self, rounds=None):
         rounds = self.rounds.sequencing_rounds if rounds is None else rounds
         results = [self._round_intensities[r] for r in rounds]
@@ -393,13 +415,16 @@ class FOV:
         return self
 
     @_log_step
-    def run(self, config: PipelineConfig, *, execution: ExecutionConfig = ExecutionConfig()):
+    def run(self, config: PipelineConfig, *, execution: ExecutionConfig = ExecutionConfig(),
+            provenance=None):
         """Run one scientific sequence with batch or streaming residency.
 
         Reference first, then moving rounds in declared order. Histogram targets
         are captured before downstream reference processing. Loading may be
         disabled for resident/subtile data. Images without registration must
         already declare the same frame/grid for extraction.
+        Optional ``provenance`` is a single-use RunRecorder writing to a fresh
+        external directory, including failed/interrupted stages and diagnostics.
         """
         if not isinstance(config, PipelineConfig) or not isinstance(execution, ExecutionConfig):
             raise TypeError('run requires PipelineConfig and ExecutionConfig')

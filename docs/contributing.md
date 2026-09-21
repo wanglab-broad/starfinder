@@ -147,6 +147,19 @@ Each script refuses an existing output directory. Success ends with
 
 ### CI triggers and evidence
 
+For persistent processing attribution, run the bounded Z=1/3 example with a
+fresh external output directory and its focused regression checks:
+
+```bash
+uv run python ../../docs/examples/provenance.py /external/new-run/provenance
+uv run pytest test/test_provenance.py test/test_coordination_contract.py -v
+```
+
+These cases use literal arrays no larger than `(4,7,9,4)` in the provenance
+tests, two rounds, no random streams and no historical TIFF fixture generation.
+They qualify run-record integrity, failure visibility and unchanged scientific
+sequence; image/table checkpoint formats have separate acceptance cases.
+
 For the formed-amplicon specification's independent arithmetic and stream
 checks (no rendered images or historical fixture inputs), run from `src/python`:
 
