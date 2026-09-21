@@ -125,6 +125,18 @@ starfinder.image
 starfinder.io
 ~~~~~~~~~~~~~
 
+* :py:obj:`starfinder.io.ArtifactReference`
+* :py:obj:`starfinder.io.DecodedCheckpoint`
+* :py:obj:`starfinder.io.FinalCheckpoint`
+* :py:obj:`starfinder.io.MoleculeBatch`
+* :py:obj:`starfinder.io.MoleculeIndex`
+* :py:obj:`starfinder.io.checkpoint_reference`
+* :py:obj:`starfinder.io.load_decoded_checkpoint`
+* :py:obj:`starfinder.io.load_final_checkpoint`
+* :py:obj:`starfinder.io.load_molecule_index`
+* :py:obj:`starfinder.io.save_decoded_checkpoint`
+* :py:obj:`starfinder.io.save_final_checkpoint`
+* :py:obj:`starfinder.io.save_molecule_index`
 * :py:obj:`starfinder.io.convert_image`
 * :py:obj:`starfinder.io.CandidateCheckpoint`
 * :py:obj:`starfinder.io.CandidateSaveResult`

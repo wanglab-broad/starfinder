@@ -324,8 +324,8 @@ uv run pytest test/test_candidate_checkpoints.py -v
 These reuse the W-154 literal `(3,4,5,4)`/`(1,4,5,4)` arithmetic, two rounds,
 no random seed, and no historical TIFFs. Checks cover typed empty/invalid/reordered
 payloads, identity/integrity rejection, trace lookup, exact downstream equivalence
-and default/disabled saving in batch/streaming. The provenance-only example
-explicitly disables checkpoint saving; the image-checkpoint example uses the
+and default/disabled saving in batch/streaming. The provenance example
+explicitly disables candidate/signal saving while retaining decoded/final output; the image-checkpoint example uses the
 new persistent-run default and also requires the `checkpoint` extra.
 See [candidate checkpoints](candidate-checkpoints.md) for limits and storage policy.
 
@@ -397,3 +397,16 @@ JSON output contains config, realized transform/inverse diagnostics and truth.
 Tests check independent local/translation expectations, boundaries, shared
 background coordinates, latent isolation and separate-process repeatability.
 No registration accuracy or calibrated deformation range is claimed.
+
+For decoded/final populations and sample source lookup, run the literal D1/S1
+example and focused checks in the prepared checkpoint environment:
+
+```bash
+uv run python ../../docs/examples/molecular_checkpoints.py /external/new-run/molecular-example
+uv run pytest test/test_molecular_checkpoints.py test/test_candidate_checkpoints.py test/test_provenance.py -v
+```
+
+This reuses W-154's `(3,4,5,4)`/Z=1, two-round arithmetic and no historical TIFFs.
+Checks cover all-rejected/empty populations, exact calls/QC/diagnostics, source
+collisions, reversed sample order, omitted/missing sources and failed writes.
+See [molecular checkpoints](molecular-checkpoints.md) for memory and policy limits.

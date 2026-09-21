@@ -6,7 +6,7 @@ components through `starfinder.provenance`; see [usage](coordination.md#persiste
 W-158 implements opt-in per-FOV HDF5 prepared inputs and registered image
 checkpoints; see [image checkpoint usage](image-checkpoints.md). W-159 implements
 the pre-rejection [Parquet candidate/signal checkpoint](candidate-checkpoints.md).
-Decoded/final table payload writers remain a separate delivery.
+W-164 implements [decoded/final tables and sample access](molecular-checkpoints.md).
 [Array contracts](api/contracts.md) remain authoritative for numerical APIs.
 The acceptance cases below freeze independent expectations before W-156,
 W-158 and W-159 implement persistence. A producer records this contract ID and
@@ -340,8 +340,8 @@ manifest and Linear evidence. Unreviewed W-154 edits are not an approved baselin
 | C1 | W-159 | Combined candidates/signals round trip of the literal example, empty/all-invalid/signed-signal cases and optional columns; preserve dtype, IDs, labels, config, coordinates, validity and codebook mapping |
 | C2 | W-159 | Deliberately shuffle all physical table rows; restore original candidate order and tensors; reject missing/duplicate/extra keys or altered labels; same-ID different-namespace FOVs stay distinct |
 | C3 | W-159 | Decode/filter reloaded versus uninterrupted example exactly, including failures for negative-policy mismatch; whole-FOV loading and source-trace identity checks |
-| D1 | W-164 (future) | Separate pre-QC and final records, complete rejected population/accounting, all-rejected/empty schemas, rerun filter without images; no invented scientific fields |
-| S1 | W-164/W-168 (future) | Sample batches concatenate exactly to full reads; source trace resolves pinned candidate artifact; omitted traces explicit; assembly/cell policy requires its own approved specification |
+| D1 | W-164 | Separate pre-QC and final records, complete rejected population/accounting, all-rejected/empty schemas, rerun filter without images; no invented scientific fields |
+| S1 | W-164 access / W-168 export policy | Sample batches concatenate exactly to full reads; source trace resolves pinned candidate artifact; omitted traces explicit; assembly/cell policy requires its own approved specification |
 | X1 | Each writer/reader owner | Missing/truncated/corrupt component; unsupported version; mismatched stage/config/geometry; incomplete write; no partial-success return |
 | E1 | W-155/W-157/W-160 | Synthetic specification/truth links use distinct namespaces and v1 provenance; new fixture catalog entry; saved 3D/Z=1 example and independent assertions in standalone review packet |
 

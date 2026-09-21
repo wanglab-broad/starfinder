@@ -108,7 +108,7 @@ Rerun filtering without decoding, or decoding without repeating extraction.
 Persistent `FOV.run(..., provenance=RunRecorder(...))` now saves the complete
 candidate/signal checkpoint before decoding/QC by default. Prepare the optional
 `checkpoint` extra first, or set `RunRecorder(..., save_candidates_signals=False)`
-for an explicit provenance-only run. In-memory runs without a recorder do not
+to omit trace persistence while retaining decoded/final outputs. In-memory runs without a recorder do not
 infer a destination. Use `io.load_candidate_checkpoint` to rerun existing
 decoding/filtering without images; see [checkpoint usage](candidate-checkpoints.md).
 

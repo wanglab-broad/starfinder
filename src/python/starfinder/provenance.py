@@ -27,6 +27,7 @@ _CONTRACT = "starfinder.artifacts/1"
 _STAGES = {"prepared_input", "registered_images", "candidates_signals", "decoded_pre_qc", "final_accepted"}
 _STAGE = {"register": "registered_images", "estimate_transform": "registered_images",
           "save_candidate_checkpoint": "candidates_signals",
+          "save_decoded_checkpoint": "decoded_pre_qc", "save_final_checkpoint": "final_accepted",
           "apply_transform": "registered_images", "find_spots": "candidates_signals",
           "_extract_round": "candidates_signals", "_assemble_intensities": "candidates_signals",
           "extract_intensities": "candidates_signals", "decode_barcodes": "decoded_pre_qc",
@@ -345,7 +346,8 @@ class RunRecorder:
     once. Updates publish run.json atomically; completed runs are never replaced.
     This records processing state and, after complete extraction in FOV.run,
     invokes the optional Parquet checkpoint writer before decoding/QC. It is
-    not a scheduler; image and decoded/final payload writers remain separate.
+    not a scheduler. Decoded and final payloads are saved when those stages run;
+    image payloads remain opt-in.
 
     Parameters
     ----------
@@ -390,7 +392,7 @@ class RunRecorder:
             sources=copy.deepcopy(list(sources)), artifacts=[], events=[], failures=[],
             saving_policy=dict(provenance=True, diagnostics=True, images=False, candidates_signals=save_candidates_signals,
                                decoded_pre_qc=True, final_accepted=True,
-                               payload_writer="candidate checkpoint after extraction; other payloads explicit"),
+                               payload_writer="candidates after extraction; decoded and final after their stages; images explicit"),
             owner=owner, retention=retention, backup_status="unverified", extensions={"starfinder.provenance": {}})
         _validate(self._run)
         self.directory.mkdir(parents=True, exist_ok=False)
@@ -464,6 +466,42 @@ class RunRecorder:
         if saved.path is not None:
             self._run['events'][-1]['output_artifacts'].append(artifact['artifact_id'])
             self._publish()
+
+    def _save_molecular(self, fov, stage):
+        from starfinder.io import checkpoint_reference, save_decoded_checkpoint, save_final_checkpoint
+        operation = 'save_decoded_checkpoint' if stage == 'decoded_pre_qc' else 'save_final_checkpoint'
+        directory = 'decoded-pre-qc' if stage == 'decoded_pre_qc' else 'final-accepted'
+        with self._operation(operation, {}, round_name=None):
+            if stage == 'decoded_pre_qc':
+                candidate = fov.candidate_checkpoint_save
+                source = checkpoint_reference(candidate.path) if candidate is not None and candidate.path else None
+                reason = None if source else candidate.reason if candidate is not None else 'candidate_checkpoint_not_saved'
+                path = save_decoded_checkpoint(self.directory/directory, fov.spot_result,
+                    fov.decoding_result, fov.codebook, candidate_source=source, trace_unavailable_reason=reason,
+                    dataset_id=self._run['dataset_id'], sample_id=self._run['sample_id'],
+                    FOV=fov.fov_id, subtile=fov.subtile_id, run_id=self.run_id,
+                    config=self._run['config'], code=self._run['code'], sources=self._run['sources'],
+                    links=dict(registration_results=fov.registration_results,
+                               registration_attempts=fov.registration_attempts,
+                               run_id=self.run_id, run_path=self.path))
+                fov.decoded_checkpoint_path = path
+            else:
+                path = save_final_checkpoint(self.directory/directory, fov.filtering_result,
+                    decoded_source=checkpoint_reference(fov.decoded_checkpoint_path),
+                    config=self._run['config'], code=self._run['code'])
+                fov.final_checkpoint_path = path
+            artifact = json.loads(path.read_text())
+            artifact['config_ref'] = 'config/effective'
+            for descriptor in artifact['components']:
+                descriptor['path'] = directory + '/' + descriptor['path']
+            artifact['components'].append(dict(component_id='molecular_manifest',
+                path=directory+'/artifact.json', format='json', size=path.stat().st_size, sha256=_hash(path)))
+            artifact['payload'] = dict(manifest_component='molecular_manifest')
+            artifact['extensions'] = {'starfinder.checkpoint': dict(
+                manifest_path=directory+'/artifact.json', manifest_sha256=_hash(path))}
+            self.record_artifact(artifact)
+        self._run['events'][-1]['output_artifacts'].append(artifact['artifact_id'])
+        self._publish()
 
     def _loaded_sources(self, name, loaded, config):
         layers = loaded.diagnostics.get('source_layers', [])
@@ -569,7 +607,7 @@ class RunRecorder:
         except BaseException as error:
             event = self._event(operation, "failed", diagnostics=diagnostics, **arguments)
             self._failure(event, error, "application" if operation == "apply_transform" else
-                          "serialization" if operation == "save_candidate_checkpoint" and isinstance(error, OSError) else None)
+                          "serialization" if operation in ("save_candidate_checkpoint", "save_decoded_checkpoint", "save_final_checkpoint") and isinstance(error, OSError) else None)
             self._publish()
             raise
         else:

@@ -540,3 +540,25 @@ local/inverse expectations and seed-42 geometry/noise isolation probes, all with
 `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-163/20260921T204405Z-ab340050/implementation-manifest.json`.
 No fixture image bytes are committed. Owner Jiahao; retain evidence through
 thesis/publication; backup and public-release reproducibility unverified.
+
+### Molecular checkpoint literal extension v1
+
+`molecular-contract-v1` reuses `artifact-contract-v1` (W-154) arithmetic in
+`docs/examples/molecular_checkpoints.py`: uint16 ZYXC `(3,4,5,4)` or `(1,4,5,4)`,
+R=2, C=4, candidates A/B, radius-zero float64 NCR signals, ordered rounds
+`(round10,round2)` and channels `(ch02,ch00,ch03,ch01)`. Color mapping
+`1→1,2→0,3→3,4→2` yields A=`12`/gene-A and B=no_signal. Physical calibration
+is unknown. No accession, random seed, historical TIFF regeneration or new
+molecular truth applies. FOV namespaces explicitly separate colliding local IDs.
+
+Normal, empty, all-rejected and explicitly omitted-trace variants save distinct
+pre-QC/final artifacts and a reversed sample/section index. Tests additionally
+cover invalid measurement, tied calls, codebook-aware diagnostics, physical
+row reordering and corrupt/missing sources. Literal source/config hashes, exact
+commands/environment, measured resources and output checksums belong to the
+external W-164 implementation manifest under
+`/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-164/20260921T210202Z-781f6135/`.
+These are development software fixtures, not calibrated evaluation data or
+MATLAB parity evidence. Existing H5AD/assignment links are retained, not scientifically
+qualified. Owner Jiahao; retain through thesis/publication; backup and public
+reproducibility remain unverified.

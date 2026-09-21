@@ -114,14 +114,16 @@ def _types():
     # Local import avoids the dataset -> io import cycle. No arbitrary imports
     # or constructors are selected by file content.
     from starfinder.dataset.types import RoundState
-    from starfinder.barcode import NeighborhoodSumConfig, EncodingConfig
+    from starfinder.barcode import (NeighborhoodSumConfig, EncodingConfig,
+                                   WtaDecoderConfig, CodebookAwareDecoderConfig, ReadFilterConfig)
     from starfinder.spot_finding import LocalMaximaConfig, NoiseLandmarkConfig, PercentileCentroidConfig
     return {cls.__name__: cls for cls in (
         ImageMetadata, ImageProcessingState, RoundState, RegistrationResult,
         RegistrationDiagnostics, TranslationTransform, DenseDisplacementTransform,
         TranslationConfig, DemonsConfig, TpsConfig, CpdConfig, WarpConfig,
         NeighborhoodSumConfig, EncodingConfig, LocalMaximaConfig,
-        NoiseLandmarkConfig, PercentileCentroidConfig,
+        NoiseLandmarkConfig, PercentileCentroidConfig, WtaDecoderConfig,
+        CodebookAwareDecoderConfig, ReadFilterConfig,
     )}
 
 

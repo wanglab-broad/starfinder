@@ -162,14 +162,17 @@ instantiate arbitrary serialized configuration types.
 The recorder saves provenance and, by default, the complete
 [candidate/signal checkpoint](candidate-checkpoints.md) after extraction and
 before decoding/QC. This requires the optional `checkpoint` extra. Explicitly
-set `save_candidates_signals=False` for provenance-only operation. Other unlinked
+set `save_candidates_signals=False` to omit source traces; decoded/final output
+still saves when those stages run and still requires PyArrow. Other unlinked
 payloads have omitted records, and unsuccessful stages have failed records;
 these records alone are not reloadable checkpoints. A checkpoint writer can call
 `record.record_artifact(record_dict)` while the run is active, after validating
 its format-specific payload; components must already exist under the run root.
 The recorder verifies those component hashes and links their immutable IDs.
 Image and candidate/signal payloads remain separate APIs owned by their format
-implementations. Decoded/final table persistence is a separate delivery.
+implementations. [Decoded/final persistence](molecular-checkpoints.md) saves
+separate pre-QC and accepted/QC artifacts, preserving source lookup and actual
+registration history without duplicating extracted traces.
 
 Writes publish `run.json` last by atomic replacement. The same recorder/directory
 cannot be reused. A caught interruption is recorded as interrupted; a hard kill

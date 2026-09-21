@@ -57,12 +57,18 @@ def test_success_empty_and_residency(tmp_path, z, empty):
         assert run['code']['commit'] is None and run['code']['unknown_reason']
         assert run['environment']['seed']['value'] is None
         assert state(run)['detection_config']['fields']['channel_labels'] == ['b', 'a', 'd', 'c']
-        assert all(a['status'] == 'omitted' and not a['components'] for a in run['artifacts'])
-        assert all(a['omission_reason'] for a in run['artifacts'])
+        for artifact in run['artifacts']:
+            if artifact['stage'] in ('decoded_pre_qc', 'final_accepted'):
+                assert artifact['status'] == 'complete' and artifact['components']
+                assert artifact['omission_reason'] is None
+            else:
+                assert artifact['status'] == 'omitted' and not artifact['components']
+                assert artifact['omission_reason']
         assert [e['sequence'] for e in run['events']] == list(range(len(run['events'])))
         expected = [('find_spots', 'round10'), ('_extract_round', 'round10'),
                     ('_extract_round', 'round2'), ('_assemble_intensities', None),
-                    ('decode_barcodes', None), ('filter_reads', None)]
+                    ('decode_barcodes', None), ('save_decoded_checkpoint', None),
+                    ('filter_reads', None), ('save_final_checkpoint', None)]
         assert [(e['operation'], e['round']) for e in run['events'] if e['outcome'] == 'succeeded'] == expected
         if not empty:
             np.testing.assert_array_equal(fov.intensity_result.values, [[[7, 7], [0, 0], [0, 0], [0, 0]]])
@@ -158,7 +164,7 @@ def test_dense_transform_component_and_integrity(tmp_path):
     lambda r: r['events'][0].update(sequence=True),
     lambda r: r['events'][0].update(config_ref='missing'),
     lambda r: r['events'][1].update(event_id=r['events'][0]['event_id']),
-    lambda r: r['artifacts'][0].update(status='complete'),
+    lambda r: next(a for a in r['artifacts'] if a['stage'] == 'candidates_signals').update(status='complete'),
     lambda r: r['artifacts'][0].update(source_refs=['missing']),
     lambda r: r['artifacts'][0].update(sample_id='foreign'),
 ])

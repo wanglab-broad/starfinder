@@ -15,6 +15,7 @@ Artifact contracts <artifact-contracts>
 Image checkpoints <image-checkpoints>
 Fiji inspection <fiji-inspection>
 Candidate checkpoints <candidate-checkpoints>
+Molecular checkpoints <molecular-checkpoints>
 Synthetic specification <synthetic-specification>
 Backend requirements <api/backends>
 API examples <api/examples>

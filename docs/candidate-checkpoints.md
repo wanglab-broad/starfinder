@@ -89,7 +89,8 @@ FOV or nearest coordinate. It returns the candidate, copied C×R signals and R
 validity, geometry, ordered labels, optional codebook and source/config context.
 Unknown IDs or a foreign locator raise ValueError. Disabled saving reports an
 unavailable reason in `CandidateSaveResult`/the run; there is no checkpoint to
-resolve. Sample assembly and decoded/final persistence remain separate work.
+resolve. Decoded/final persistence and ordered sample access are described in
+[molecular checkpoints](molecular-checkpoints.md). Sample assembly remains separate.
 
 ## Bounded example
 

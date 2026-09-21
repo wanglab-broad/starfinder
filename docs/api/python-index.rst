@@ -2,12 +2,14 @@ Python functions and classes A–Z
 ================================
 
 * :py:obj:`starfinder.registration.apply_transform`
+* :py:obj:`starfinder.io.ArtifactReference`
 * :py:obj:`starfinder.synthetic.BackgroundConfig`
 * :py:obj:`starfinder.barcode.BarcodeDecodingResult`
 * :py:obj:`starfinder.benchmark.BenchmarkCase`
 * :py:obj:`starfinder.benchmark.BenchmarkTrialResult`
 * :py:obj:`starfinder.io.CandidateCheckpoint`
 * :py:obj:`starfinder.io.CandidateSaveResult`
+* :py:obj:`starfinder.io.checkpoint_reference`
 * :py:obj:`starfinder.barcode.Codebook`
 * :py:obj:`starfinder.barcode.CodebookAwareDecoderConfig`
 * :py:obj:`starfinder.io.convert_image`
@@ -16,6 +18,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.dataset.Dataset`
 * :py:obj:`starfinder.barcode.decode_barcodes`
 * :py:obj:`starfinder.barcode.decode_color_sequence`
+* :py:obj:`starfinder.io.DecodedCheckpoint`
 * :py:obj:`starfinder.registration.DemonsConfig`
 * :py:obj:`starfinder.registration.DenseDisplacementTransform`
 * :py:obj:`starfinder.barcode.encode_bases`
@@ -34,6 +37,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.barcode.extract_intensities`
 * :py:obj:`starfinder.barcode.filter_reads`
 * :py:obj:`starfinder.preprocessing.filter_tophat`
+* :py:obj:`starfinder.io.FinalCheckpoint`
 * :py:obj:`starfinder.spot_finding.find_spots`
 * :py:obj:`starfinder.synthetic.formed_scene_preset`
 * :py:obj:`starfinder.synthetic.FormedScene`
@@ -64,13 +68,18 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.registration.InvalidRegistrationConfigError`
 * :py:obj:`starfinder.io.load_candidate_checkpoint`
 * :py:obj:`starfinder.barcode.load_codebook`
+* :py:obj:`starfinder.io.load_decoded_checkpoint`
+* :py:obj:`starfinder.io.load_final_checkpoint`
 * :py:obj:`starfinder.io.load_image_checkpoint`
+* :py:obj:`starfinder.io.load_molecule_index`
 * :py:obj:`starfinder.io.load_round`
 * :py:obj:`starfinder.io.load_volume`
 * :py:obj:`starfinder.spot_finding.LocalMaximaConfig`
 * :py:obj:`starfinder.preprocessing.match_histogram`
 * :py:obj:`starfinder.evaluation.matching.match_points`
 * :py:obj:`starfinder.preprocessing.MinMaxNormalizationConfig`
+* :py:obj:`starfinder.io.MoleculeBatch`
+* :py:obj:`starfinder.io.MoleculeIndex`
 * :py:obj:`starfinder.barcode.NeighborhoodSumConfig`
 * :py:obj:`starfinder.synthetic.NoiseConfig`
 * :py:obj:`starfinder.spot_finding.NoiseLandmarkConfig`
@@ -98,7 +107,10 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.benchmark.run_benchmark`
 * :py:obj:`starfinder.provenance.RunRecorder`
 * :py:obj:`starfinder.io.save_candidate_checkpoint`
+* :py:obj:`starfinder.io.save_decoded_checkpoint`
+* :py:obj:`starfinder.io.save_final_checkpoint`
 * :py:obj:`starfinder.io.save_image_checkpoint`
+* :py:obj:`starfinder.io.save_molecule_index`
 * :py:obj:`starfinder.io.save_volume`
 * :py:obj:`starfinder.synthetic.ScalarDistribution`
 * :py:obj:`starfinder.spot_finding.SpotFindingResult`

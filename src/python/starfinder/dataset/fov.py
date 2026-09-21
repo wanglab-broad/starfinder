@@ -54,6 +54,8 @@ class FOV:
     load_diagnostics: dict[str, dict] = field(default_factory=dict)
     image_checkpoint: ImageCheckpoint | None = None
     candidate_checkpoint_save: object | None = None
+    decoded_checkpoint_path: Path | None = None
+    final_checkpoint_path: Path | None = None
 
     # --- Delegated properties ---
 
@@ -546,8 +548,14 @@ class FOV:
                 self.candidate_checkpoint_save = CandidateSaveResult(None, 0, 'no_persistent_run_destination')
         if config.decoding:
             self.decode_barcodes(config=config.decoding)
+            if provenance is not None:
+                provenance._save_molecular(self, 'decoded_pre_qc')
         if config.filtering:
+            if provenance is not None and not config.decoding:
+                provenance._save_molecular(self, 'decoded_pre_qc')
             self.filter_reads(config=config.filtering)
+            if provenance is not None:
+                provenance._save_molecular(self, 'final_accepted')
         return self
 
     # --- Output ---

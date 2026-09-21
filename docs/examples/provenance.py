@@ -31,7 +31,7 @@ def main(directory):
                 filtering=ReadFilterConfig())
             record = RunRecorder(directory/f'z{z}-{mode}', dataset_id='literal', sample_id='sample',
                 owner='example caller', retention='retain with associated analysis',
-                save_candidates_signals=False)  # This example isolates provenance.
+                save_candidates_signals=False)  # Omit traces; decoded/final output still persists.
             fov.run(config, execution=ExecutionConfig(mode), provenance=record)
             run = read_run(record.path)
             assert run['status'] == 'succeeded'
@@ -39,7 +39,8 @@ def main(directory):
             assert run['extensions']['starfinder.provenance']['final_state']['detected'] == 1
             np.testing.assert_array_equal(fov.intensity_result.values, [[[7, 7], [0, 0], [0, 0], [0, 0]]])
             assert fov.filtering_result.accepted['gene_id'].tolist() == ['gene']
-            assert all(a['status'] == 'omitted' for a in run['artifacts'])
+            assert all(a['status'] == ('complete' if a['stage'] in
+                ('decoded_pre_qc', 'final_accepted') else 'omitted') for a in run['artifacts'])
     print('Provenance examples passed.')
 
 
