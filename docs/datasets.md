@@ -248,6 +248,43 @@ Source/config hashes, execution evidence and limits are in the external W-156
 Intended use is metadata/integrity/failure regression. No D04 qualification,
 image/table reload equivalence or molecular acceptance is implied.
 
+### Formed-amplicon clean development v1
+
+`formed-small-v1` and `formed-z1-v1` are new synthetic **development** scenes
+from `starfinder.synthetic.generate_formed_scene`, generator version `1`, under
+`starfinder.synthetic/1` (specification revision
+`f9512694a0960c10ce5236efbaaf9d6f425c1d8a`). They have no accession, external
+input, historical fixture ancestor or calibrated D04 status. The configuration
+is supplied by `formed_scene_preset`: shape ZYX `(8,32,32)` or `(1,32,32)`,
+float32 ZYXC, N=8 uniform formed positions, root seed 42, scene `formed-v1`,
+development split, sample `sample`, FOV `FOV_001`. Each preset name is its dataset
+version. Round order is `(round10,round2,round1)`, channels
+`(ch02,ch00,ch03,ch01)`, colors map `1→1,2→0,3→3,4→2`; supplied codebook rows are
+`gene-A=123`, `gene-B=214` with equal abundance. Brightness is 100, axial/lateral
+sigma and elongation 1, angle 0; all effects disabled. Physical spacing/origin/
+direction/units are unknown; lengths are voxel indices. Z=1 samples the same
+3D kernel rather than projecting a volume.
+
+The generated stage is a clean processed image plus complete formed/per-round
+truth, float64 NCR intended/pre-mix/realized amplitudes, stable IDs, visibility,
+configuration and SHA-256/PCG64 stream descriptors. No eligibility or biological
+RNA truth is inferred. Historical fixture TIFFs are unchanged. These fixtures
+exercise numerical/software reproducibility; they do not qualify assay realism,
+historical seeds, scientific accuracy, or checkpoint reloads.
+
+`docs/examples/formed_scene.py` also defines independent two-object 3D/Z=1
+extraction oracles, shape `(3,7,9)` or `(1,7,9)`, float32, A=8, widths=.25,
+explicit centers `(Z//2,2,2)` and `(Z//2,4,6)` and supplied gene-A/gene-B IDs.
+They use the same labels/mapping with no random property draws. Detector IDs are
+distinct; literal extracted signals and decoded calls are independently checked.
+
+Bounded verification date: 2026-09-21. Exact generator source/patch identities,
+configurations, rendered output hashes and environment are recorded in the W-157
+external `implementation-manifest.json` and `preset-artifacts/` under
+`/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-157/20260921T040822Z-08c03032/`.
+This private evidence retains Jiahao's ownership/retention and unverified backup
+status; it does not establish public reproducibility.
+
 ### Existing fixture inventory
 
 The small D06 fixture's 32 existing TIFFs occupy 33,645,376 bytes. W-153 checked

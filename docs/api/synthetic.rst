@@ -3,7 +3,8 @@ starfinder.synthetic
 
 The :doc:`formed-amplicon specification <../synthetic-specification>` defines
 ``starfinder.synthetic/1`` and independent acceptance cases for the new
-development model. The historical APIs below do not yet implement that contract.
+development model. ``generate_formed_scene`` implements its clean scene/truth
+slice; the historical APIs retain their original semantics.
 
 Pure processed-image scene generation. Importing this package does not import
 benchmark orchestration. Generation returns arrays in memory; the benchmark
@@ -14,18 +15,87 @@ persistence adapter writes workflow TIFFs, JSON, scene tables and annotations.
 .. autosummary::
    :toctree: generated
 
+   formed_scene_preset
+   FormedScene
+   FormedSceneConfig
    generate_codebook
    generate_dataset
    generate_displacement_field
+   generate_formed_scene
    generate_registration_pairs
    generate_volume
    get_preset_config
    render_spots
+   ScalarDistribution
    SyntheticConfig
    SyntheticDataset
 
-Scene and result contracts
---------------------------
+Formed scenes
+-------------
+
+``formed_scene_preset(name)`` returns a supplied ``Codebook`` and
+``FormedSceneConfig`` for ``formed-small-v1`` or ``formed-z1-v1``.
+``generate_formed_scene(codebook, config=..., metadata=...)`` returns
+``FormedScene`` with ordered ZYXC images, typed formed/per-round tables and
+float64 NCR intended/pre-mix/realized signal tensors. The tensor's N axis is
+explicitly labeled by ``amplicon_ids``. Tables join on namespace and amplicon ID;
+they are distinct from detected candidate identities. Zero-brightness,
+coincident and outside objects remain in truth. Visibility is recorded without
+an eligibility policy. Unknown calibration stays unknown; supplied
+``ImageMetadata`` is validated and preserved. Lengths are voxel indices even
+when physical metadata is supplied.
+
+Choose exactly one of coordinates/count/density; all omitted means count=8.
+Explicit coordinates are in the supplied ID order and may be outside the grid;
+singleton Z requires z=0. Gene IDs and supplied scalar properties are dictionaries
+keyed by amplicon ID. Generated IDs are ``amplicon-0``, etc. Uniform, weighted
+voxel-cell and rejected-normal cluster placement follow the specification.
+Abundances follow saved codebook row order. Density draws a Poisson count;
+``max_count`` overflow fails without truncating or retrying. This bounded API
+requires max_count <=1024, ZYX <=(32,64,64) and 1–4 rounds with four channels.
+
+``ScalarDistribution`` supports constant, uniform, lognormal, folded_lognormal
+(elongation only), and ID-keyed supplied modes. Parameters and their domains are
+documented in the specification and class. All-zero abundance/placement weights,
+negative count/density/brightness, zero width, elongation below one, nonfinite
+values, malformed codebooks/labels/spacing and incompatible distribution modes
+fail explicitly. Counts/seeds reject Booleans. Unknown constructor fields fail;
+unsupported effects cannot silently become active. Parameters are checked even
+for an empty population. Extreme draws, placement rejection exhaustion and output
+overflow fail rather than returning nonfinite images.
+
+Rendering uses the specified ellipsoidal four-sigma support, float64 accumulation
+in sorted amplicon-ID order, then one cast. Integers use nearest-even rounding and
+saturation with clipping counts; floats retain their values without normalization.
+All round effects, backgrounds, noise and geometry are disabled in this slice.
+Intended, pre-mix and realized amplitudes are equal but independent arrays.
+The clean model's identity transforms and complete per-round state are explicit.
+
+SHA-256/PCG64 streams use stable component/entity names, never Python ``hash()``.
+Actual random streams, descriptors, NumPy version, effective/requested config,
+encoding/mapping, image hashes and geometry are retained in
+``provenance["extensions"]["starfinder.synthetic"]``. Constant/supplied properties
+consume no streams. Codebook/config identity is hashed; publishers must additionally
+pin the generator code revision or source patch in their external artifact manifest.
+This payload is an in-memory synthetic source extension, not a saved checkpoint
+or a complete processing run manifest. Pass ``sources=[scene.provenance]`` to
+``starfinder.provenance.RunRecorder`` to retain its source ID, catalog/selection,
+explicit unsaved-source checksum reason and extension in a processing run.
+Only development generation is supported.
+
+Run the bounded example from ``src/python``::
+
+   uv run python ../../docs/examples/formed_scene.py
+
+It asserts independent 3D/Z=1 extraction and decoding values with distinct
+candidate identities, then prints both preset provenance payloads. It writes
+no files and makes no detection-accuracy or storage-round-trip claim.
+
+.. literalinclude:: ../examples/formed_scene.py
+   :language: python
+
+Historical scene and result contracts
+-------------------------------------
 
 ``render_spots(shape, spots, ...)`` accepts a pandas scene table with unique,
 non-null ``spot_id`` and finite ``z, y, x, intensity, sigma`` columns. Coordinates

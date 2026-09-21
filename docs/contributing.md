@@ -173,6 +173,18 @@ production simulator or storage round trip. They use development seed 42,
 four-element stream probes and separate processes with different hash seeds.
 The numerical oracle uses literal values and no image-volume allocation.
 
+For the clean production scene slice and its independent 3D/Z=1 downstream
+example (no existing TIFF inputs or disk writes):
+
+```bash
+uv run python ../../docs/examples/formed_scene.py
+uv run pytest test/test_formed_scene.py test/test_synthetic_specification_examples.py -v
+```
+
+These checks exercise A1–A3, A8 and the in-memory truth/provenance portion of
+A9. Actual image/table checkpoint reloads remain separate W-158/W-159/W-160
+acceptance. All new scenes fit the catalog's development resource boundaries.
+
 `.github/workflows/docs.yml` runs on all pull requests, pushes to `main`
 (the verified GitHub default branch), `dev` and `codex/docs-autonomous`, and
 manual dispatch. There is no path filter: source and dependency changes can

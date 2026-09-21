@@ -116,6 +116,12 @@ construction and recovery examples are in [coordination](coordination.md).
 ### Generate, evaluate and report
 
 `synthetic.generate_dataset(config)` returns arrays and truth records in memory.
+For the versioned clean formed-amplicon model, use
+`synthetic.generate_formed_scene(codebook, config=FormedSceneConfig(...))`.
+It preserves full stable-ID formed/per-round truth with independent streams;
+the historical generator remains available with its historical limitations.
+See the [synthetic API](api/synthetic.rst) for the distinct result and kernel
+contracts. No historical fixture or hash-derived seed is retroactively qualified.
 `render_spots` accepts an identity-bearing scene table instead of integer tuples.
 The CLI persists generated inputs; benchmark cases explicitly select them.
 `evaluation` accepts supplied results/truth and explicit matching/units; it does
@@ -141,4 +147,5 @@ Detailed numerical policies, tolerances and edge cases remain canonical in
 [synthetic](api/synthetic.rst) and [benchmark recipes](benchmark-recipes.md).
 This guide does not claim bitwise equivalence or MATLAB runtime validation.
 W-92/W-93/W-94/W-124 and Chapter II retain scientific qualification; notably,
-process-dependent synthetic hash seeds and molecular truth remain unresolved.
+historical process-dependent synthetic hash seeds and scientific molecular-truth
+qualification remain unresolved.

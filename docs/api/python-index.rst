@@ -32,11 +32,15 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.barcode.filter_reads`
 * :py:obj:`starfinder.preprocessing.filter_tophat`
 * :py:obj:`starfinder.spot_finding.find_spots`
+* :py:obj:`starfinder.synthetic.formed_scene_preset`
+* :py:obj:`starfinder.synthetic.FormedScene`
+* :py:obj:`starfinder.synthetic.FormedSceneConfig`
 * :py:obj:`starfinder.dataset.FOV`
 * :py:obj:`starfinder.dataset.from_workflow_config`
 * :py:obj:`starfinder.synthetic.generate_codebook`
 * :py:obj:`starfinder.synthetic.generate_dataset`
 * :py:obj:`starfinder.synthetic.generate_displacement_field`
+* :py:obj:`starfinder.synthetic.generate_formed_scene`
 * :py:obj:`starfinder.synthetic.generate_registration_pairs`
 * :py:obj:`starfinder.synthetic.generate_volume`
 * :py:obj:`starfinder.synthetic.get_preset_config`
@@ -83,6 +87,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.benchmark.run_benchmark`
 * :py:obj:`starfinder.provenance.RunRecorder`
 * :py:obj:`starfinder.io.save_volume`
+* :py:obj:`starfinder.synthetic.ScalarDistribution`
 * :py:obj:`starfinder.spot_finding.SpotFindingResult`
 * :py:obj:`starfinder.evaluation.registration.structural_similarity`
 * :py:obj:`starfinder.dataset.SubtileConfig`

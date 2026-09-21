@@ -186,13 +186,18 @@ starfinder.spot_finding
 starfinder.synthetic
 ~~~~~~~~~~~~~~~~~~~~
 
+* :py:obj:`starfinder.synthetic.formed_scene_preset`
+* :py:obj:`starfinder.synthetic.FormedScene`
+* :py:obj:`starfinder.synthetic.FormedSceneConfig`
 * :py:obj:`starfinder.synthetic.generate_codebook`
 * :py:obj:`starfinder.synthetic.generate_dataset`
 * :py:obj:`starfinder.synthetic.generate_displacement_field`
+* :py:obj:`starfinder.synthetic.generate_formed_scene`
 * :py:obj:`starfinder.synthetic.generate_registration_pairs`
 * :py:obj:`starfinder.synthetic.generate_volume`
 * :py:obj:`starfinder.synthetic.get_preset_config`
 * :py:obj:`starfinder.synthetic.render_spots`
+* :py:obj:`starfinder.synthetic.ScalarDistribution`
 * :py:obj:`starfinder.synthetic.SyntheticConfig`
 * :py:obj:`starfinder.synthetic.SyntheticDataset`
 
