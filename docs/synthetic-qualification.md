@@ -56,6 +56,20 @@ explicitly unavailable; a renderer cannot establish qualification or human appro
 uv run python ../../docs/examples/qualification_report.py /external/new-run /external/new-run/review.html
 ```
 
+The context defaults to `phase: "implementation"`, which visibly retains pending
+validation and uncommitted wording. After validation and the authorized local
+commit, create a new context with `phase: "final"`, `code.commit` set to the full
+40-character revision, `code.dirty: false`, and `controller_checks` containing the
+three successful pytest, strict Sphinx and reference records. Each record includes
+`command` (an argument list), `exit_code`, `log`, and its `sha256`. Verify those log
+hashes and committed source identities before rendering. The renderer rejects
+missing/failed gates or a dirty final revision, and derives the opening, acceptance
+table, check table and appendix delivery state from this context. It does not
+verify Git or execute controller commands. W-174 human approval stays pending.
+Update the context's source hashes, intervals (including repair/revalidation),
+session coverage and other evidence to the same snapshot; preserve earlier
+contexts separately. Browser-open and hash the new final report after rendering.
+
 Use a fresh output directory for each report revision; existing report and summary
 destinations are refused. Essential images/tables are embedded. Copy the single
 HTML for offline reading; companion summaries and HDF5/Parquet/TIFF links require

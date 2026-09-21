@@ -5,6 +5,7 @@ import html
 import json
 import os
 from pathlib import Path
+import re
 import sys
 
 import matplotlib.pyplot as plt
@@ -22,6 +23,60 @@ from saved_synthetic_report import decoding_rows, inspection_figure
 
 def details(title, value):
     return '<details><summary>'+html.escape(title)+'</summary><pre>'+html.escape(json.dumps(value, indent=2))+'</pre></details>'
+
+
+def publication_context(context):
+    """Derive visible and embedded delivery state from explicit packet evidence.
+
+    Existing contexts default to the implementation phase. Final packets require
+    a clean full revision and three successful controller check records; callers
+    supply the actual records, including commands and logs, after validation.
+    """
+    context = dict(context)
+    phase = context.get('phase', 'implementation')
+    if phase not in ('implementation', 'final'):
+        raise ValueError('packet phase must be implementation or final')
+    final = phase == 'final'
+    commit = context['code']['commit']
+    checks = context.get('controller_checks', [])
+    if final:
+        if context['code'].get('dirty') is not False or not re.fullmatch('[0-9a-f]{40}', commit):
+            raise ValueError('final packet requires a clean full source commit')
+        if len(checks) != 3 or any(
+            row.get('exit_code') != 0 or not row.get('command') or not row.get('log')
+            or not re.fullmatch('[0-9a-f]{64}', row.get('sha256', '')) for row in checks
+        ):
+            raise ValueError('final packet requires three successful controller records')
+        commands = [row['command'] for row in checks]
+        if not (any('pytest' in cmd for cmd in commands)
+                and any('sphinx-build' in cmd and '-n' in cmd and '-W' in cmd for cmd in commands)
+                and any(any(Path(arg).name == 'check_reference.py' for arg in cmd) for cmd in commands)):
+            raise ValueError('final packet requires pytest, strict Sphinx and reference gates')
+        outcome = ('The source is committed; all three controller gates passed. '
+                   'Jiahao: approve this identified packet/revision or request changes in W-174.')
+        appendix = ('The full committed source revision and successful controller records '
+                    'are embedded below. W-174 human approval remains pending.')
+        gate_status = 'All three controller gates passed; source committed'
+        packet_status = 'Final revision-pinned offline packet; browser evidence recorded separately'
+    else:
+        outcome = ('This implementation snapshot is uncommitted; full controller gates are pending. '
+                   'Jiahao: after controller checks and revision pinning, approve this identified '
+                   'packet/revision or request changes in W-174.')
+        appendix = ('Source revision plus uncommitted source snapshot identify this implementation '
+                    'phase. Controller validation, local commit pinning and W-174 human decision '
+                    'remain subsequent steps.')
+        gate_status = 'Pending controller; source uncommitted'
+        packet_status = 'Offline implementation packet; final revision pinning remains pending'
+    replacements = {'Full gates / local commit': gate_status, 'Review packet': packet_status}
+    context['acceptance'] = [dict(row, status=replacements.get(row['deliverable'], row['status']))
+                             for row in context['acceptance']]
+    context['checks'] = [row for row in context['checks'] if row['check'] != 'Controller gates']
+    context['checks'] += [dict(check='Controller gates', outcome=gate_status)]
+    if final:
+        context['checks'] += [dict(row, check='Controller gate '+str(i+1), outcome='passed')
+                              for i, row in enumerate(checks)]
+    context['phase'] = phase
+    return context, outcome, appendix
 
 
 def trajectory(context):
@@ -144,7 +199,7 @@ def representative(presets):
 
 
 def render(root, destination):
-    context = read_json(root/'review-context.json')
+    context, outcome, appendix = publication_context(read_json(root/'review-context.json'))
     for path, digest in context['pinned_inputs'].items():
         assert checksum(path) == digest, path
     presets, processing = Path(context['presets']), Path(context['processing'])
@@ -170,8 +225,8 @@ def render(root, destination):
         sections.append((identity,title,body))
     section('outcome','Outcome and requested decision',
         '<p class="lead">All 63 controlled development presets pass independent image/truth checks and exact cross-process reproduction. Clean 3D and Z=1 processing retain explicit truth correspondence, decoded calls and source traces. The deliberate TPS failure remains failed with partial extraction and unavailable final counts.</p>'
-        '<p><strong>Jiahao:</strong> after controller checks and revision pinning, approve this identified packet/revision or request changes in W-174. W-174 stays open. This implementation snapshot is uncommitted; full controller gates are pending. Technical qualification does not approve another batch.</p>'
-        '<p>These are bounded software-development fixtures, not calibrated D04, biological RNA truth, method-accuracy evidence or historical v1/v2 qualification. Source '+html.escape(context['code']['commit'][:12])+' plus the source snapshot in the appendix.</p>'
+        '<p>'+html.escape(outcome)+' W-174 stays open. Technical qualification does not approve another batch.</p>'
+        '<p>These are bounded software-development fixtures, not calibrated D04, biological RNA truth, method-accuracy evidence or historical v1/v2 qualification. Source revision <code>'+html.escape(context['code']['commit'])+'</code>; exact source identities are in the appendix.</p>'
         +render_table(context['acceptance'])+representative(presets))
     section('settings','Fixed settings and controlled comparisons',
         '<p>ZYXC float32 images; float64 NCR truth; ZYX voxel-index coordinates; physical calibration unknown. Rounds round10 → round2 → round1; channels ch02 → ch00 → ch03 → ch01. Mapping 1→1, 2→0, 3→3, 4→2. gt-A=123/gene-A and gt-B=214/gene-B. Root seed 42, development scene controlled-development-v1.</p>'
@@ -238,7 +293,7 @@ def render(root, destination):
         +'<p>Copied images/tables are portable inspection inputs; some provenance/source references retain original private paths and need the benchmark mount. Headless application opening is distinct from GUI interaction and reviewer-machine access. Those remain unverified. Preserve previous W-160/W-175 packets. Jiahao owns retention through thesis/publication; backup and public reproducibility are unverified.</p>')
     section('trajectory','Issue trajectory, attempts, human waits and usage',trajectory(context))
     section('appendix','Exact identities and reproduction appendix',
-        '<p>The report hash is stored in report-identity.json and the delivery manifest; the manifest hash is in manifest.sha256 and Linear, avoiding self-reference. Source revision plus uncommitted source snapshot identify this implementation phase. Controller validation, local commit pinning and W-174 human decision remain subsequent steps.</p>'
+        '<p>The report hash is stored in report-identity.json and the delivery manifest; the manifest hash is in manifest.sha256 and Linear, avoiding self-reference. '+html.escape(appendix)+'</p>'
         +details('Independent oracle evidence and configuration hashes',qualification)
         +details('Two fresh-process records, different PYTHONHASHSEED',repeat)
         +details('Code, source hashes, commands, sessions and pinned input identities',context))

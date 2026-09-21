@@ -50,7 +50,7 @@ def test_overlap_boundary_invisible_and_loss_keep_full_truth(depth):
     assert scene.rounds['round10'][z, 4, 6, 1] == 16
     assert not scene.rounds['round2'].any() and not scene.rounds['round1'].any()
     assert scene.intended.sum() == 4*3*8
-    # N=0 has typed empty truth and NCR arrays even with every effect enabled.
+    # N=0 retains typed empty truth and NCR arrays with dropout and loss enabled.
     empty = generate_formed_scene(book, config=replace(config, coordinates=(), amplicon_ids=(), gene_ids={}))
     assert empty.intended.shape == (0, 4, 3)
     assert len(empty.formed) == len(empty.round_truth) == 0
