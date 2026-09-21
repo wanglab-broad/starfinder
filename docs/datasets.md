@@ -201,6 +201,28 @@ replaced. Verification date and source/config hashes belong to the W-154 manifes
 Subsequent storage implementations must retain this example's independent
 expectations and record their own format/reload evidence.
 
+### Synthetic specification oracle v1
+
+`synthetic-contract-v1` is defined by
+[`docs/examples/synthetic_specification.py`](examples/synthetic_specification.py)
+and the [versioned model specification](synthetic-specification.md). It contains
+hand-calculated spot/signal/geometry expectations and development stream probes
+(root seed 42, scene key `formed-v1`, SHA-256/PCG64). It has no external data,
+accession, image files, physical calibration or historical fixture ancestry.
+The oracle uses float64 arithmetic and four-element noise probes; it does not
+render an image or establish molecular truth. Its declared downstream clean
+presets are `formed-small-v1` (8,32,32) and `formed-z1-v1` (1,32,32), float32
+ZYXC, three explicitly ordered rounds, four channels and two genes, with all
+effects disabled. They are **specified, not generated or qualified** here;
+W-157 must record actual generator/version/configuration and output hashes.
+They do not replace D06 or qualify D04. Round/channel/codebook mappings and
+independent tolerances are canonical in the specification.
+
+W-155 bounded verification evidence and source/config hashes (2026-09-21):
+`/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-155/20260921T031105Z-dd5b2c86/implementation-manifest.json`.
+Scientific calibration, backend image rendering and storage round trips remain
+unverified by this oracle; ownership/retention follows the catalog convention.
+
 ### Existing fixture inventory
 
 The small D06 fixture's 32 existing TIFFs occupy 33,645,376 bytes. W-153 checked

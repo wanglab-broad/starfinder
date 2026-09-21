@@ -1,6 +1,10 @@
 starfinder.synthetic
 ====================
 
+The :doc:`formed-amplicon specification <../synthetic-specification>` defines
+``starfinder.synthetic/1`` and independent acceptance cases for the new
+development model. The historical APIs below do not yet implement that contract.
+
 Pure processed-image scene generation. Importing this package does not import
 benchmark orchestration. Generation returns arrays in memory; the benchmark
 persistence adapter writes workflow TIFFs, JSON, scene tables and annotations.

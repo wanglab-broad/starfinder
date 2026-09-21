@@ -147,6 +147,19 @@ Each script refuses an existing output directory. Success ends with
 
 ### CI triggers and evidence
 
+For the formed-amplicon specification's independent arithmetic and stream
+checks (no rendered images or historical fixture inputs), run from `src/python`:
+
+```bash
+uv run python ../../docs/examples/synthetic_specification.py
+uv run pytest test/test_synthetic_specification_examples.py -v
+```
+
+These checks validate the [specification](synthetic-specification.md), not a
+production simulator or storage round trip. They use development seed 42,
+four-element stream probes and separate processes with different hash seeds.
+The numerical oracle uses literal values and no image-volume allocation.
+
 `.github/workflows/docs.yml` runs on all pull requests, pushes to `main`
 (the verified GitHub default branch), `dev` and `codex/docs-autonomous`, and
 manual dispatch. There is no path filter: source and dependency changes can

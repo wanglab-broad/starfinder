@@ -32,6 +32,10 @@ empty detection and undefined evaluation. Recovery is explicit in coordination.
 
 ## Where to find the contract
 
+[Synthetic specification](synthetic-specification.md) freezes the formed-amplicon
+model, independent random streams and numerical acceptance cases before its
+implementation. It distinguishes development truth from calibrated realism.
+
 [Artifact contracts](artifact-contracts.md) specify versioned run records,
 image and candidates/signals checkpoints, source lookup and downstream
 acceptance cases. They reuse the existing typed results; persistence delivery

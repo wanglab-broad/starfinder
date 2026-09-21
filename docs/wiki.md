@@ -12,6 +12,7 @@ Dataset catalog <datasets>
 Conventions <conventions>
 API contracts <api/contracts>
 Artifact contracts <artifact-contracts>
+Synthetic specification <synthetic-specification>
 Backend requirements <api/backends>
 API examples <api/examples>
 Coordination <coordination>
