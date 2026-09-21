@@ -32,6 +32,11 @@ empty detection and undefined evaluation. Recovery is explicit in coordination.
 
 ## Where to find the contract
 
+[Artifact contracts](artifact-contracts.md) specify versioned run records,
+image and candidates/signals checkpoints, source lookup and downstream
+acceptance cases. They reuse the existing typed results; persistence delivery
+is tracked separately from specification and scientific qualification.
+
 [Python contracts](api/contracts.md) define shapes, dtype, physical geometry,
 transforms, spot identities and barcode stages. [Conventions](conventions.md)
 explain boundary conversions; [API](api/index.md) lists supported interfaces.

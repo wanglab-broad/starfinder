@@ -11,6 +11,7 @@ Architecture <architecture>
 Dataset catalog <datasets>
 Conventions <conventions>
 API contracts <api/contracts>
+Artifact contracts <artifact-contracts>
 Backend requirements <api/backends>
 API examples <api/examples>
 Coordination <coordination>

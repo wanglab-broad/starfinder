@@ -5,6 +5,11 @@ These conventions describe the current Python implementation. Individual
 Arrays are accompanied by optional `ImageMetadata`; distances below are in voxel-index
 units unless a function explicitly says otherwise. Unknown calibration stays unknown.
 
+The versioned [artifact and checkpoint specification](../artifact-contracts.md)
+defines persistence stages, provenance, physical layouts and independent
+round-trip acceptance cases. It distinguishes planned persistence from these
+currently implemented numerical APIs.
+
 | Object | Shape / columns | Convention |
 | --- | --- | --- |
 | Single-channel volume | `(Z, Y, X)` | Numeric intensity array |

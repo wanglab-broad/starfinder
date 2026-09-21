@@ -178,6 +178,31 @@ external manifest link. Preserve older versions and hashes. Per-run logs, images
 and measurements remain outside Git; do not make this catalog a run diary.
 No new generated scientific fixture is introduced by W-153.
 
+### Artifact contract example v1
+
+`docs/examples/artifact_contracts.py` defines the hand-constructed synthetic
+development example `artifact-contract-v1` for [artifact contracts](artifact-contracts.md).
+Source is this versioned script, not a historical generator or D04. It uses
+no random streams (seed not applicable), accession or external input. One sample
+has distinct FOV namespaces for Z=1 and Z=3, two explicitly ordered rounds
+(`round10`, `round2`), four channels (`ch02`, `ch00`, `ch03`, `ch01`) and a one-gene
+codebook with explicit nonidentity color mapping. Arrays are uint16 ZYXC
+`(1,4,5,4)` or `(3,4,5,4)`; extraction is float64 NCR `(2,4,2)` with Boolean NR
+validity. Prepared/reference, transformed image, candidate/signal, decoded and
+accepted in-memory stages are exercised. Image spacing/units are unknown;
+a separate analytic geometry example supplies spacing `(2,3,4)` and units `um`
+without implying calibration of the images. Bounded numerical verification on
+2026-09-21 passed; format round trips remain unverified.
+
+Intended use is numerical/schema development, not assay realism, molecular
+truth or a storage round-trip qualification. No TIFF fixture is generated or
+replaced. Verification date and source/config hashes belong to the W-154 manifest:
+`/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-154/20260921T024246Z-52ac45ba/implementation-manifest.json`.
+Subsequent storage implementations must retain this example's independent
+expectations and record their own format/reload evidence.
+
+### Existing fixture inventory
+
 The small D06 fixture's 32 existing TIFFs occupy 33,645,376 bytes. W-153 checked
 all headers and SHA-256 hashes, compared truth/codebook bytes against the original
 checkout, then copied the existing TIFFs into this dedicated worktree. No TIFF
