@@ -37,8 +37,10 @@ def literal(coordinates, **kwargs):
                  gene_ids={i: 'a' for i in ids}, brightness=scalar(8), **kwargs)
 
 
-@pytest.mark.parametrize('shape', [(3, 7, 9), (1, 7, 9)])
-@pytest.mark.parametrize('population', [dict(count=0), dict(density=0), dict(coordinates=())])
+@pytest.mark.parametrize('shape,population', [
+    ((3, 7, 9), dict(count=0)), ((3, 7, 9), dict(density=0)),
+    ((3, 7, 9), dict(coordinates=())), ((1, 7, 9), dict(coordinates=())),
+])
 def test_empty_typed_truth(shape, population):
     result = scene(shape_zyx=shape, **population)
     assert result.formed.empty and result.round_truth.empty

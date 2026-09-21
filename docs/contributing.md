@@ -330,7 +330,7 @@ new persistent-run default and also requires the `checkpoint` extra.
 See [candidate checkpoints](candidate-checkpoints.md) for limits and storage policy.
 
 For the complete saved synthetic development example (two explicit amplicons,
-three rounds, four channels; ZYX `(3,7,9)` and `(1,7,9)`), use separate processes:
+three rounds, four channels; version 2 ZYX `(9,32,32)` and `(1,32,32)`), use separate processes:
 
 ```bash
 uv run python ../../docs/examples/saved_synthetic.py create /external/new-run/delivery
@@ -350,7 +350,11 @@ Open `/external/new-run/delivery/review.html` directly in a browser (File → Op
 For a remote host, copy the single HTML file to your computer and open that copy;
 all essential figures/tables are embedded. Keep the adjacent delivery manifest,
 report identity and run logs for provenance. The report reads saved outputs and
-reload evidence; it never regenerates or reruns processing. Its XY overlays are
-explicit display projections, while the saved images retain Z. Existing reports
+reload evidence; it never regenerates or reruns processing. Its channel-specific XY center slices, XZ views and intensity profiles share
+a linear display scale; saved images retain Z. Each round also has a float32
+ImageJ TIFF export, with ZYXC → ZCYX conversion and explicit plane labels.
+See [Fiji inspection](fiji-inspection.md) for the canonical HDF5 custom-layout
+recipe and the runtime verification script. Use the installed Fiji separately;
+it is not a Python package dependency or part of pytest. Existing reports
 are never overwritten. This is a development fixture, not D04 qualification or
 human gate approval; full validation and browser opening are separate evidence.

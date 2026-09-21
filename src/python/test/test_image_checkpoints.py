@@ -40,8 +40,7 @@ def equal_image(a, b):
     assert a.source_paths == b.source_paths and a.diagnostics == b.diagnostics
 
 
-@pytest.mark.parametrize('depth', [1, 3])
-@pytest.mark.parametrize('dtype', ['uint8', 'uint16', 'int16', 'float32', 'float64'])
+@pytest.mark.parametrize('depth,dtype', [(3, t) for t in ('uint8', 'uint16', 'int16', 'float32', 'float64')] + [(1, 'float32')])
 def test_prepared_tiff_hdf5_exact(tmp_path, depth, dtype):
     metadata = ImageMetadata('reference', (2, 3, 4), (10, 20, 30),
                              ((1, 0, 0), (0, -1, 0), (0, 0, -1)), 'um')

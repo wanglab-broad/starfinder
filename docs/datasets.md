@@ -370,7 +370,8 @@ private development artifacts do not establish public reproducibility.
 ### Saved formed development v1
 
 `saved-formed-z3-v1` and `saved-formed-z1-v1` are the explicit two-object
-integration fixtures in `docs/examples/saved_synthetic.py`. They derive from
+historical integration fixtures from `docs/examples/saved_synthetic.py` at
+commit `1bc7783`; the current example produces v2 below. They derive from
 the formed development v1 model above, generator version 1 / synthetic contract
 `starfinder.synthetic/1`, with no external accession or historical TIFF ancestor.
 Root seed 42, scene `formed-v1`, development split, sample `sample`, FOV `FOV_001`;
@@ -397,3 +398,39 @@ external W-160 manifest under
 Intended use: bounded persistence/integration and human software review, not
 scientific accuracy, historical seed qualification or public reproducibility.
 Jiahao owns retention through thesis/publication; backup unverified.
+
+
+### Saved formed development v2
+
+`saved-formed-z9-v2` and `saved-formed-z1-v2` replace v1 for the maintained
+saved example. Parent model remains formed development v1, generator 1,
+`starfinder.synthetic/1`; no external data or calibrated D04 ancestor.
+Float32 ZYXC shapes are `(9,32,32,4)` and the intentional `(1,32,32,4)`.
+Two simulated IDs `spot-A`/`spot-B` have centers `(Z//2,10,10)`/`(Z//2,22,22)`,
+gene truth `gene-A=123`/`gene-B=214`, peak brightness 8, axial sigma 1,
+lateral sigma 1.25, elongation 1 and angle 0. Support is the closed four-sigma
+ellipsoid with zero outside; the 3D support fits, while Z=1 samples its center
+slice without integration or renormalization and records axial truncation.
+
+Root seed 42, explicit identity/placement, scene `formed-v1`, development split,
+sample `sample`, FOV `FOV_001`, ordered rounds `(round10,round2,round1)`, channels
+`(ch02,ch00,ch03,ch01)`, color mapping and molecular processing are unchanged.
+Effects/noise/background/deformation remain disabled; physical calibration is
+unknown. Simulation and detection namespaces remain distinct, with explicit
+coordinate correspondence rather than row-position joins.
+
+The maintained example independently checks every image voxel against sampled
+Gaussian values (absolute tolerance 1e-6, relative tolerance 0), literal truth and
+exact checkpoint/downstream round trips in separate processes. Per-round TIFF
+inspection exports preserve all float32 values and plane labels in ImageJ ZCYX
+storage. The [Fiji recipe](fiji-inspection.md) reads canonical ZYXC HDF5 directly;
+no checkpoint layout/schema is replaced. The viewer's absent-calibration default
+is explicitly removed. Browser/Fiji runtime evidence is recorded per delivery.
+
+State: development-ready, not scientifically calibrated/evaluation-qualified.
+Verification date 2026-09-21; source/config/stream/seed and file hashes, fresh-process
+checks and viewer evidence are in the W-175 manifest under
+`/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-175/20260921T180549Z-round2/`.
+Original v1 artifacts remain intact. Intended use: small software integration and
+human inspection. Jiahao owns retention through thesis/publication; backup and
+public-release reproducibility remain unverified.
