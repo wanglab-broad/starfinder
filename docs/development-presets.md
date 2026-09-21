@@ -105,6 +105,8 @@ use each layer's `loaded.image`, metadata and channel labels. Prepared rounds
 with different frames cannot be passed as an already aligned extraction stack.
 
 The report is an inspection example, not the W-167/W-174 qualification packet.
+Use the [independent qualification example](synthetic-qualification.md) to audit
+saved presets, verify fresh-process repeatability and assemble a review packet.
 No browser, Fiji, MATLAB or scientific accuracy claim follows from creating it.
 Jiahao owns artifacts through thesis/publication; backup/public reproducibility
 remain unverified. Preserve earlier packets. Full qualification and human review

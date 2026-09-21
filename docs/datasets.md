@@ -596,3 +596,23 @@ outputs, exact validation and measured costs under
 `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-166/20260921T220125Z-c16d44c7/`.
 Owner Jiahao; retain through thesis/publication; backup/public reproducibility
 unverified. W-167 owns independent qualification; W-93/W-57 remain open.
+
+### Synthetic qualification edge probe v1
+
+`test_synthetic_qualification.py` retains four explicit formed objects in float64
+ZYXC `(3,7,9,4)` and `(1,7,9,4)`: edge at `(Z//2,2,-.5)`, far at
+`(Z//2,2,-20)`, overlap-A/B both at `(Z//2,4,6)`. All use gene-A=123,
+A=8, unit widths/elongation, angle 0, seed 42 and scene `formed-v1` in the
+development split. Middle-round dropout is certain; persistent loss starts at
+round index 2. Four formed rows and twelve histories survive, including the
+invisible object. Empty variants preserve typed tables and `(0,4,3)` arrays.
+No historical TIFFs, calibrated inputs or evaluation scenes are used.
+
+The [qualification example](synthetic-qualification.md) independently audits
+all 63 saved controlled-development-v1 presets and checks exact fresh-process
+reproduction; it does not replace or regenerate their saved bytes. New combined
+float64 checks reuse the small/Z=1 preset constants, with an independent bisection
+inverse and keyed noise oracle. Source/input/config hashes, commands, resources
+and qualification limits are pinned in the external W-167 delivery manifest.
+Owner Jiahao; retain through thesis/publication; backup/public reproducibility
+unverified. Development correctness does not qualify D04 or close W-93/W-57.

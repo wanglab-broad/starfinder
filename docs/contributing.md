@@ -429,3 +429,9 @@ For the bounded controlled preset package, follow
 `inspect` commands in separate processes, plus `test/test_development_presets.py`.
 There are 63 fixed cases (three sizes, maximum `(9,48,48)` ZYX, three rounds/four
 channels), with measured per-case costs; this does not authorize a size sweep.
+
+Follow [independent synthetic qualification](synthetic-qualification.md) to audit
+those saved cases without replacing their bytes. Run the `audit` command and two
+`repeat` processes with different `PYTHONHASHSEED` values, plus
+`uv run pytest test/test_synthetic_qualification.py -v`. Full-grid oracle checks
+and edge population accounting are distinct from persistence self-consistency.
