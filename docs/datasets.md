@@ -511,3 +511,32 @@ calibrated evaluation data; W-93/W-167 qualification remains separate. Latent
 records, standardized noise stream hashes and pre-noise/final image hashes are
 retained independently. Owner Jiahao; external evidence retained through
 thesis/publication, backup unverified.
+
+### Shared geometry development v1
+
+`geometry-contract-z3-v1` and `geometry-contract-z1-v1` are bounded in-memory
+fixtures in `docs/examples/formed_geometry.py`, synthetic/1 generator version 4,
+parent formed development v1, frozen specification revision
+`f9512694a0960c10ce5236efbaaf9d6f425c1d8a`. Shapes `(3,7,9)` and `(1,7,9)` ZYX,
+float64 ZYXC, three rounds/four channels and mapping inherited from
+`formed_scene_preset`. Seed 42, development split, scene `formed-v1`, sample
+`sample`, FOV `FOV_001`; physical calibration unknown, lengths in voxel indices.
+One `gt-A`, gene-A=123, center `(Z//2,2,3)`, A=8 and unit widths/elongation,
+angle zero. A height-8, unit-width analytic background region shares its center;
+destination weights `(1,0,0,0)` separate it from the first-round molecule channel.
+
+Round translations are `(0,0,.5)`, identity and `(0,0,-3.5)`. One local control
+at the reference center, scale 2, has vector `(0,0,.25)` in round10 and zero in
+later rounds. Expected X positions are 3.75, 3 and -0.5; the final out-of-frame
+center still contributes at x=0. Background uses the inverse map; puncta retain
+fixed shapes about mapped centers. No noise/readout effects, external data,
+legacy TIFF generation, empirical realism or D04 qualification is implied.
+Clean image arrays retain their previous values; version 4 adds geometry
+configuration, frame and inverse diagnostics to truth/provenance.
+
+`test_formed_geometry.py` adds explicit fractional shifts, independently computed
+local/inverse expectations and seed-42 geometry/noise isolation probes, all within
+`(3,7,9)` and `(1,7,9)`. Source/config hashes and measured outcomes are recorded in
+`/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-163/20260921T204405Z-ab340050/implementation-manifest.json`.
+No fixture image bytes are committed. Owner Jiahao; retain evidence through
+thesis/publication; backup and public-release reproducibility unverified.

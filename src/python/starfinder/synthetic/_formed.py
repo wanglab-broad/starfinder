@@ -15,6 +15,7 @@ import pandas as pd
 
 from starfinder.barcode import Codebook
 from starfinder.image import ImageMetadata
+from ._geometry import GeometryConfig, _prepare_geometry, _forward, _inverse
 
 CONTRACT = "starfinder.synthetic/1"
 SPEC_REVISION = "f9512694a0960c10ce5236efbaaf9d6f425c1d8a"
@@ -317,6 +318,7 @@ class FormedSceneConfig:
     readout: ReadoutEffectsConfig = field(default_factory=ReadoutEffectsConfig)
     background: BackgroundConfig = field(default_factory=BackgroundConfig)
     noise: NoiseConfig = field(default_factory=NoiseConfig)
+    geometry: GeometryConfig = field(default_factory=GeometryConfig)
 
 
 @dataclass
@@ -342,6 +344,18 @@ class FormedScene:
     channel_labels: tuple[str, ...]
     codebook: Codebook
     provenance: dict
+
+    @property
+    def round_metadata(self) -> dict[str, ImageMetadata]:
+        """Output grid metadata per round, with explicit destination frame IDs.
+
+        ``metadata`` remains the reference grid. Physical grid fields are shared;
+        deformation moves content, not the voxel grid or its calibration.
+        """
+        transforms = self.provenance['extensions']['starfinder.synthetic']['transforms']
+        return {t['round_label']: ImageMetadata(**dict(asdict(self.metadata),
+                                                      frame_id=t['destination_frame']))
+                for t in transforms.values()}
 
 
 def _plain(value):
@@ -547,43 +561,56 @@ def generate_formed_scene(codebook: Codebook, *, config: FormedSceneConfig = For
     pre_mix, realized, effects, first_loss, effective_readout = _readout_effects(
         config.readout, intended, ids, codebook.round_labels, stream)
     images = {label: np.zeros((*shape, 4), dtype=np.float64) for label in codebook.round_labels}
-    intersects = np.zeros(n, dtype=bool)
-    truncated = np.zeros(n, dtype=bool)
-    # Sorting IDs fixes accumulation order independently of caller scheduling.
-    for i in sorted(range(n), key=lambda i: ids[i]):
-        _, sz, sl, e, theta = values[i]
-        slices, kernel, truncated[i] = _kernel(shape, points[i], sz, sl, e, theta)
-        intersects[i] = kernel is not None and bool(np.any(kernel > 0))
-        if intersects[i]:
-            with np.errstate(over="ignore", invalid="ignore"):
-                for r, image in enumerate(images.values()):
-                    image[slices] += kernel[..., None] * realized[i, :, r]
+    maps, effective_geometry = _prepare_geometry(config.geometry, shape, codebook.round_labels, stream)
+    from ._observation import _prepare_background, evaluate_background, _observe
+    background, effective_background = _prepare_background(config.background, shape, len(images), stream)
+    for component in background:
+        component['frame_id'] = metadata.frame_id
+    grid = np.moveaxis(np.indices(shape, dtype=np.float64), 0, -1)
+    tissue = {}
     round_tables = []
     transforms = {}
     for r, label in enumerate(codebook.round_labels):
-        transform_id = _json([namespace, label, "identity"])
-        transforms[transform_id] = dict(kind="identity", direction="reference_to_round", units="voxel_index",
-                                        source_frame=metadata.frame_id, destination_frame=metadata.frame_id,
-                                        translation_zyx=[0., 0., 0.])
+        mapping = maps[r]
+        moved = _forward(points, mapping)
+        reference_grid, inverse_diagnostics = _inverse(grid, mapping)
+        tissue[label] = evaluate_background(background, reference_grid)
+        intersects = np.zeros(n, dtype=bool)
+        truncated = np.zeros(n, dtype=bool)
+        # Sorting IDs fixes accumulation order independently of caller scheduling.
+        for i in sorted(range(n), key=lambda i: ids[i]):
+            _, sz, sl, e, theta = values[i]
+            slices, kernel, truncated[i] = _kernel(shape, moved[i], sz, sl, e, theta)
+            intersects[i] = kernel is not None and bool(np.any(kernel > 0))
+            if intersects[i]:
+                with np.errstate(over="ignore", invalid="ignore"):
+                    images[label][slices] += kernel[..., None] * realized[i, :, r]
+        identity = not np.any(mapping['translation_zyx']) and not np.any(mapping['vectors_zyx'])
+        kind = "identity" if identity else "gaussian_rbf_translation"
+        transform_id = _json([namespace, label, kind])
+        destination = metadata.frame_id if identity else _json([metadata.frame_id, label, "round"])
+        transforms[transform_id] = dict(kind=kind, direction="reference_to_round", units="voxel_index",
+                                        source_frame=metadata.frame_id, destination_frame=destination,
+                                        round_label=label, **mapping, inverse=inverse_diagnostics,
+                                        composition="q + d(q) + t", interpolation="analytic; no image interpolation",
+                                        molecule_shape="fixed widths/angle; four-sigma support",
+                                        background_sampling="analytic B(F_inverse(p)); untruncated")
         table = formed[["namespace", "amplicon_id", "z", "y", "x"]].copy()
+        table[["z", "y", "x"]] = moved
+        table["frame_id"] = pd.Series([destination]*n, dtype="string")
         table["round_label"] = pd.Series([label]*n, dtype="string")
         table["round_index"] = np.full(n, r, dtype=np.int64)
         table["transform_id"] = pd.Series([transform_id]*n, dtype="string")
         for key in ("dropped", "weakened", "lost"):
             table[key] = effects[key][:, r]
         table["emitting"] = np.any(realized[:, :, r] > 0, axis=1)
-        table["center_in_bounds"] = ((points >= 0) & (points <= shape - 1)).all(axis=1)
+        table["center_in_bounds"] = ((moved >= 0) & (moved <= shape - 1)).all(axis=1)
         table["support_intersects"] = intersects
         table["support_truncated"] = truncated
         table["first_loss_round"] = pd.Series(first_loss, dtype="Int64")
         for key in ("trend_multiplier", "weak_multiplier"):
             table[key] = effects[key][:, r]
         round_tables.append(table)
-    from ._observation import _prepare_background, evaluate_background, _observe
-    background, effective_background = _prepare_background(config.background, shape, len(images), stream)
-    for component in background:
-        component['frame_id'] = metadata.frame_id
-    tissue = evaluate_background(background, np.moveaxis(np.indices(shape, dtype=np.float64), 0, -1))
     observation, effective_noise = _observe(images, tissue, effective_background, config.noise,
                                            codebook.channel_labels, stream)
     clipping = {}
@@ -607,6 +634,7 @@ def generate_formed_scene(codebook: Codebook, *, config: FormedSceneConfig = For
     config_payload["background"]["type"] = "BackgroundConfig"
     config_payload["background"]["texture"]["type"] = "TextureConfig"
     config_payload["noise"]["type"] = "NoiseConfig"
+    config_payload["geometry"]["type"] = "GeometryConfig"
     for key in ("axial_width", "lateral_width", "brightness"):
         config_payload["background"]["texture"][key]["type"] = "ScalarDistribution"
     for key in ("brightness", "axial_width", "lateral_width", "elongation", "angle"):
@@ -616,11 +644,11 @@ def generate_formed_scene(codebook: Codebook, *, config: FormedSceneConfig = For
                             encoding=asdict(codebook.encoding))
     effective = dict(config_payload, count=n, placement="explicit" if coordinates is not None else config.placement,
                      abundance_probabilities=abundances.tolist(), readout=effective_readout,
-                     background=effective_background, noise=effective_noise,
-                     effects_enabled=any(v for group in (effective_readout, effective_background, effective_noise)
+                     background=effective_background, noise=effective_noise, geometry=effective_geometry,
+                     effects_enabled=any(v for group in (effective_readout, effective_background, effective_noise, effective_geometry)
                                          for k, v in group.items() if k.endswith("_enabled")))
     payload = dict(contract_id=CONTRACT, contract_revision=SPEC_REVISION,
-                   generator="starfinder.synthetic.generate_formed_scene", generator_version="3",
+                   generator="starfinder.synthetic.generate_formed_scene", generator_version="4",
                    truth_namespace=namespace,
                    requested_config=config_payload, effective_config=effective, codebook=codebook_payload,
                    geometry=asdict(metadata), singleton_z_sampling=bool(shape[0] == 1),
@@ -632,14 +660,16 @@ def generate_formed_scene(codebook: Codebook, *, config: FormedSceneConfig = For
                        image_sha256={k: hashlib.sha256(v.tobytes()).hexdigest() for k, v in images.items()}),
                    truth_components=["formed", "round_truth", "intended", "pre_mix", "realized"],
                    order=["formed", "persistent_properties", "intended", "survival", "dropout",
-                          "weakening", "trend", "source_gain", "mixing", "render", "tissue",
+                          "weakening", "trend", "source_gain", "mixing", "geometry", "render", "tissue",
                           "baseline", "noise.dependent", "noise.independent", "cast", "truth"])
     payload["config_sha256"] = hashlib.sha256(_json(dict(config=config_payload, codebook=codebook_payload,
                                                         metadata=asdict(metadata))).encode()).hexdigest()
     provenance = dict(contract_id="starfinder.artifacts/1", source_kind="synthetic",
                       source_id="formed:" + payload["config_sha256"],
                       dataset_version=config.dataset_version,
-                      catalog=("docs/datasets.md#structured-background-development-v1" if
+                      catalog=("docs/datasets.md#shared-geometry-development-v1" if
+                               config.geometry.translation_enabled or config.geometry.local_enabled else
+                               "docs/datasets.md#structured-background-development-v1" if
                                any(v for group in (effective_background, effective_noise)
                                    for k, v in group.items() if k.endswith("_enabled")) else
                                "docs/datasets.md#controlled-readout-development-v1" if effective["effects_enabled"]
@@ -651,7 +681,7 @@ def generate_formed_scene(codebook: Codebook, *, config: FormedSceneConfig = For
                                      geometry=asdict(metadata), conversion=None),
                       extensions={"starfinder.synthetic": payload},
                       limitations=["Development processed-image model, not calibrated D04 or biological RNA truth.",
-                                   "Geometry is identity; no eligibility inferred.",
+                                   "Geometry is a bounded analytic development map; no eligibility inferred.",
                                    "Analytic background and residual noise are not measured tissue or detector physics.",
                                    "Readout probabilities and gains are effective controls, not calibrated chemistry.",
                                    "Bitwise repeatability is limited to the pinned NumPy environment."])

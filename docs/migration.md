@@ -170,3 +170,9 @@ defaults false and disables its contribution regardless of retained parameters.
 Enable `NoiseConfig.independent_enabled` with explicit `sigma` for additive
 residual noise; structured background widths/brightness are separate controls.
 See [the API](api/synthetic.rst) for order, identity and provenance contracts.
+
+Formed-scene generator version 4 adds optional `GeometryConfig`. Clean numerical
+images remain unchanged. Round truth adds explicit destination `frame_id`;
+transforms retain realized coefficients and inverse diagnostics. `scene.metadata`
+is the reference grid; use `scene.round_metadata[label]` when saving transformed
+rounds. Historical `SyntheticConfig` geometry and fixtures remain separate.

@@ -41,7 +41,7 @@ def test_a6_literal_injected_draws():
     background = dict(tissue_weights=[[0]*4], baseline=[[0]*4])
     for value, enabled, expected in [(9., True, 6.5), (9., False, 9.), (0., True, .5)]:
         images = {'r': np.full((1, 1, 1, 4), value)}
-        _observe(images, np.zeros((1, 1, 1)), background,
+        _observe(images, {label: np.zeros((1, 1, 1)) for label in images}, background,
                  NoiseConfig(enabled, 4, enabled, 2), ('a', 'b', 'c', 'd'), stream)
         np.testing.assert_array_equal(images['r'], expected)
 

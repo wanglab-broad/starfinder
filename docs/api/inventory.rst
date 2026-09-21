@@ -205,6 +205,7 @@ starfinder.synthetic
 * :py:obj:`starfinder.synthetic.generate_formed_scene`
 * :py:obj:`starfinder.synthetic.generate_registration_pairs`
 * :py:obj:`starfinder.synthetic.generate_volume`
+* :py:obj:`starfinder.synthetic.GeometryConfig`
 * :py:obj:`starfinder.synthetic.get_preset_config`
 * :py:obj:`starfinder.synthetic.NoiseConfig`
 * :py:obj:`starfinder.synthetic.ReadoutEffectsConfig`

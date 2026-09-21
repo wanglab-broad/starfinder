@@ -384,3 +384,16 @@ The example allocates at most `(3,7,9)` ZYX, three rounds/four channels; the
 statistics test uses `(8,32,32)`. No external/legacy TIFF inputs, empirical
 calibration or saved fixtures are needed. Use the bounded environment/resource
 profile and `/usr/bin/time -v`; exact measurements belong in the run manifest.
+
+For shared analytic geometry (synthetic/1 A7), with no external image input:
+
+```bash
+uv run python ../../docs/examples/formed_geometry.py
+uv run pytest test/test_formed_geometry.py test/test_formed_scene.py test/test_readout_effects.py test/test_background_noise.py -v
+```
+
+The example uses `(3,7,9)` and `(1,7,9)` with three rounds/four channels;
+JSON output contains config, realized transform/inverse diagnostics and truth.
+Tests check independent local/translation expectations, boundaries, shared
+background coordinates, latent isolation and separate-process repeatability.
+No registration accuracy or calibrated deformation range is claimed.

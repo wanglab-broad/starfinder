@@ -17,3 +17,7 @@ from ._formed import (BackgroundConfig, NoiseConfig, TextureConfig,
 __all__ += ['BackgroundConfig', 'NoiseConfig', 'TextureConfig',
             'FormedScene', 'FormedSceneConfig', 'ReadoutEffectsConfig', 'ScalarDistribution',
             'formed_scene_preset', 'generate_formed_scene']
+
+from ._geometry import GeometryConfig
+
+__all__ += ["GeometryConfig"]

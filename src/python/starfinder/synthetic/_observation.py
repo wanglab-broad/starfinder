@@ -149,7 +149,7 @@ def _observe(images, tissue, background, config, channels, stream):
     pre_noise_hashes = {}
     for r, (label, image) in enumerate(images.items()):
         with np.errstate(over='ignore', invalid='ignore'):
-            image += tissue[..., None] * np.asarray(background['tissue_weights'])[r]
+            image += tissue[label][..., None] * np.asarray(background['tissue_weights'])[r]
             image += np.asarray(background['baseline'])[r]
         if not np.isfinite(image).all() or (image < 0).any():
             raise ValueError('nonfinite or negative pre-noise total')

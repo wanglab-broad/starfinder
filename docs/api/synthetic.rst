@@ -25,6 +25,7 @@ persistence adapter writes workflow TIFFs, JSON, scene tables and annotations.
    generate_formed_scene
    generate_registration_pairs
    generate_volume
+   GeometryConfig
    get_preset_config
    NoiseConfig
    ReadoutEffectsConfig
@@ -71,7 +72,7 @@ overflow fail rather than returning nonfinite images.
 Rendering uses the specified ellipsoidal four-sigma support, float64 accumulation
 in sorted amplicon-ID order, then one cast. Integers use nearest-even rounding and
 saturation with clipping counts; floats retain their values without normalization.
-Backgrounds and noise default disabled; geometry remains identity. With readout effects disabled,
+Backgrounds, noise and geometry default disabled (identity geometry). With readout effects disabled,
 intended, pre-mix and realized amplitudes are equal but independent arrays.
 The clean model's identity transforms and complete per-round state are explicit.
 
@@ -188,10 +189,9 @@ but neither rendered nor randomly sampled.
 
 ``background_components`` in the synthetic provenance extension retains
 analytic reference-frame coefficients, blob IDs, centers, widths and heights.
-The internal evaluator accepts real reference coordinates so the geometry
-component can later supply inverse-mapped output positions. This release uses
-identity geometry; no deformation has been implemented here. No existing noisy
-image is sampled or given a second noise model. Requested configuration,
+The evaluator accepts inverse-mapped real reference coordinates from the shared
+analytic geometry component. No existing noisy image is sampled or given a
+second noise model. Requested configuration,
 effective baselines/weights/noise, round/channel stream descriptors, standardized
 draw hashes, pre-noise image hashes and final clipping counts remain separate.
 Noise strengths do not resample molecules, codewords, masks, latents or transforms.
@@ -270,3 +270,58 @@ Example
    ))
    image = result.rounds["FOV_001"]["round1"]
    visible = result.spot_truth.loc[result.spot_truth.rendered]
+
+Shared analytic geometry
+------------------------
+
+Pass ``geometry=GeometryConfig(...)`` to ``FormedSceneConfig``. Generator version
+4 adds absolute per-round geometry without changing clean image values. It uses
+``F(q) = q + sum(v_k * exp(-||q-c_k||²/(2*l_k²))) + t`` in reference ZYX voxel
+indices. Local displacement is evaluated before translation, always at the
+reference point; rounds never accumulate motion. ``translations_zyx`` is R×3,
+``centers_zyx`` K×3, ``scales`` K (default 8), and ``vectors_zyx`` R×K×3.
+Alternatively use uniform ``translation_max_zyx`` half-ranges or normal vector
+component SD ``strength``. These draws use separate label-keyed geometry streams;
+local entities are JSON ``["control-N","vector"]``, drawing Z,Y,X in order.
+Control count is bounded at 1024. Supplied coefficients consume no random draws.
+
+``translation_enabled`` and ``local_enabled`` default false. Disabled requests
+are retained and validated; effective maps are identity. Negative ranges/strength,
+nonpositive scales, malformed/nonfinite arrays, incompatible supplied/random
+controls and non-Boolean flags error. For Z=1, requested Z translations/vectors
+and control-center Z must be zero; random local Z is exactly zero.
+
+Each realized map must satisfy ``sum(norm(v_k)/(l_k*sqrt(e))) <= 0.5``; violations
+error without rescaling or redrawing. Background sampling solves
+``q_next = p - t - d(q)`` with maximum update <=1e-10 voxels in at most 100
+iterations, and checks composition residual <=2e-10. Actual iterations, update,
+residual, coefficients, frames, direction and conventions are recorded for each
+round. This conservative globally contractive family is not arbitrary elastic
+geometry, nor a calibrated realistic range. No registration estimator supplies
+truth. The correction for a translation is its negative; negating a nonlinear
+forward field does not invert it.
+
+Molecules retain reference coordinates in ``formed`` and realized coordinates
+in ``round_truth``. Out-of-frame objects are retained; their four-sigma support
+can still contribute. Kernels retain their original widths and angle (no Jacobian
+shape deformation). Backgrounds evaluate analytic ``B(F_inverse(p))`` on the output
+grid, including Gaussian tails and extrapolated gradients. No raster interpolation,
+periodic wrap, center rounding or clipped-center resampling occurs. Baselines and
+residual noise remain in the destination grid. Changing geometry preserves formed
+properties, signal histories, reference background latents and standardized noise.
+
+``scene.metadata`` is the reference grid. ``scene.round_metadata`` supplies each
+output's destination frame, retaining the same physical grid calibration. The
+round truth's ``frame_id`` and referenced transform agree with those frames.
+Identity rounds keep the reference frame; transformed rounds have distinct IDs.
+Image-saving callers should use the corresponding ``round_metadata[label]``.
+
+From ``src/python``::
+
+   uv run python ../../docs/examples/formed_geometry.py
+
+The example retains a shared molecular/background landmark, nonconstant local
+map followed by translation, and an out-of-frame round in 3D and Z=1. The focused
+tests independently check fractional 3D shifts, local-map literals, a scalar
+bisection inverse oracle, signal/noise isolation and cross-process repeatability.
+These checks qualify development arithmetic only.
