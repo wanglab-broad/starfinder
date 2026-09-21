@@ -8,6 +8,7 @@ covers operational work. Linear owns current decisions and execution evidence.
 :maxdepth: 1
 
 Architecture <architecture>
+Dataset catalog <datasets>
 Conventions <conventions>
 API contracts <api/contracts>
 Backend requirements <api/backends>
