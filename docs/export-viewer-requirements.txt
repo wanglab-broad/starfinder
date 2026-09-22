@@ -1,0 +1,24 @@
+# W-168 isolated candidate; resolve a separate hash lock before installation.
+# Preserve src/python/uv.lock and the prepared batch-1 environment.
+spatialdata==0.2.5
+ome-zarr==0.10.3
+napari==0.5.6
+napari-spatialdata==0.5.3
+PyQt5==5.15.11
+PyQt5-Qt5==5.15.16
+PyQt5-sip==12.17.0
+zarr==2.18.7
+numcodecs==0.15.1
+numpy==1.26.4
+pandas==2.2.3
+scipy==1.14.1
+anndata==0.10.9
+scanpy==1.10.4
+numba==0.60.0
+xarray==2024.7.0
+xarray-datatree==0.0.15
+multiscale-spatial-image==1.0.1
+spatial-image==1.1.0
+dask==2024.4.1
+distributed==2024.4.1
+fsspec==2023.6.0

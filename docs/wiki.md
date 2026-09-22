@@ -16,6 +16,7 @@ Image checkpoints <image-checkpoints>
 Fiji inspection <fiji-inspection>
 Candidate checkpoints <candidate-checkpoints>
 Molecular checkpoints <molecular-checkpoints>
+Sample export contract <sample-export-contract>
 Offline summaries <run-summaries>
 Synthetic specification <synthetic-specification>
 Controlled development presets <development-presets>

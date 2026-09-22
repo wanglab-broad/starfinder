@@ -160,3 +160,7 @@ scientific population is used.
 ```{literalinclude} examples/molecular_checkpoints.py
 :language: python
 ```
+
+The [sample export contract](sample-export-contract.md) specifies the later
+SpatialData/OME-Zarr adapter, supplied cell links and explicit assembly frames.
+The molecule index itself does not perform that assembly.

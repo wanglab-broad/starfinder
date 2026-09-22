@@ -616,3 +616,18 @@ inverse and keyed noise oracle. Source/input/config hashes, commands, resources
 and qualification limits are pinned in the external W-167 delivery manifest.
 Owner Jiahao; retain through thesis/publication; backup/public reproducibility
 unverified. Development correctness does not qualify D04 or close W-93/W-57.
+
+### Sample export literal specification v1
+
+`sample-export-contract-v1` defines E1–E9 in the
+[sample export contract](sample-export-contract.md). These are literal software
+oracles, not segmented biological truth: ZYX shapes from `(1,2,2)` to `(2,2,4)`,
+uint32 labels, two float32 channels with `I=100*z+10*y+x` and `I+1000`, no RNG.
+A later multichunk regional-read probe may use `(9,48,48)` with the same formula.
+Explicit literal physical/index geometry, IDs, populations, expected reduced
+values, native fallback and hard failures are specified before implementation.
+W-168 saves the JSON specification and hashes externally; W-169/W-170 must save
+component/config hashes before reuse and cannot claim those computations ran
+merely because expected values exist. No historical TIFF bytes are regenerated.
+Owner Jiahao; retain through thesis/publication; backup/public reproducibility
+unverified. Scientific population/overlap decisions remain W-152/W-57 scope.

@@ -1,0 +1,28 @@
+{
+  "schema_name": "starfinder.export_literal_cases",
+  "schema_version": 1,
+  "dataset_id": "sample-export-contract-v1",
+  "status": "independent expected values; exporter execution pending W-169/W-170",
+  "seed": null,
+  "seed_reason": "literal values; no random generator",
+  "image_formula": "I[z,y,x,c] = 100*z + 10*y + x + 1000*c",
+  "image_dtype": "float32",
+  "label_dtype": "uint32",
+  "channel_order": ["reference", "stain"],
+  "frame_id": "literal-sample",
+  "spacing_zyx": [2, 1, 1],
+  "origin_zyx": [10, 20, 30],
+  "direction_zyx": [[1,0,0],[0,1,0],[0,0,1]],
+  "spatial_unit": "micrometer",
+  "cases": [
+    {"id":"E1", "purpose":"Adjacent 2D cells test valid reduction.", "labels":[[[1,1,2,2],[1,1,2,2]]], "requested":[1,2,2], "achieved":[1,2,2], "expected_labels":[[[1,2]]], "expected_channel_zero":[[[5.5,7.5]]], "expected_origin":[10,20.5,30.5]},
+    {"id":"E2", "purpose":"A small cell tests loss detection and finer-grid fallback.", "labels":[[[1,0,2,2],[0,0,2,2]]], "requested":[1,2,2], "achieved":[1,1,1], "trial_missing":[1], "expected_labels":[[[1,0,2,2],[0,0,2,2]]]},
+    {"id":"E3", "purpose":"Adjacent labels competing for one block test tie handling.", "labels":[[[1,2],[1,2]]], "requested":[1,2,2], "achieved":[1,1,1], "trial_missing":[2], "expected_labels":[[[1,2],[1,2]]]},
+    {"id":"E4", "purpose":"Volumetric adjacent cells test axial and lateral reduction.", "labels":[[[1,1,2,2],[1,1,2,2]],[[1,1,2,2],[1,1,2,2]]], "requested":[2,2,2], "achieved":[2,2,2], "expected_labels":[[[1,2]]], "expected_channel_zero":[[[55.5,57.5]]], "expected_origin":[11,20.5,30.5]},
+    {"id":"E5", "purpose":"Two tiny 3D cells test background-majority fallback.", "labels":[[[1,0],[0,0]],[[0,0],[0,2]]], "requested":[2,2,2], "achieved":[1,1,1], "trial_missing":[1,2], "expected_labels":[[[1,0],[0,0]],[[0,0],[0,2]]]},
+    {"id":"E6", "purpose":"Disjoint FOV namespaces distinguish equal local labels.", "source_keys":[["A",1],["B",1]], "export_ids":[1,2], "overlap_behavior":"error; no biological merge"},
+    {"id":"E7", "purpose":"Coarser-grid impossibility must terminate a pyramid safely.", "native_case":"E1", "requested":[1,1,1], "expected_levels":[[1,1,1],[1,2,2]], "rejected_level":[1,4,4], "reason":"indivisible grid"},
+    {"id":"E8", "purpose":"An absent native declared label is an irrecoverable input error.", "native_case":"E1", "declared_ids":[1,2,3], "error":"missing native label 3"},
+    {"id":"E9", "purpose":"Empty and uncalibrated payloads preserve missingness honestly.", "labels":[[[0,0,0,0],[0,0,0,0]]], "requested":[1,2,2], "achieved":[1,2,2], "expected_labels":[[[0,0]]], "calibration_variant":"all physical fields null; explicit index frame"}
+  ]
+}
