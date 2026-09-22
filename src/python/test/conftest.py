@@ -26,16 +26,6 @@ def small_dataset() -> Path:
     return path
 
 
-@pytest.fixture(scope="session")
-def medium_dataset() -> Path:
-    """Path to pre-generated medium synthetic dataset (2 FOVs)."""
-    path = FIXTURES_DIR / "medium"
-    if not path.exists():
-        pytest.skip(
-            "Medium synthetic dataset not found. Run: "
-            "uv run starfinder synthetic generate --mode e2e --owner Jiahao --preset medium --seed 42 --output tests/fixtures/synthetic/medium"
-        )
-    return path
 
 
 @pytest.fixture(scope="session")
@@ -45,24 +35,8 @@ def small_ground_truth(small_dataset: Path) -> dict:
         return json.load(f)
 
 
-@pytest.fixture(scope="session")
-def medium_ground_truth(medium_dataset: Path) -> dict:
-    """Load ground truth metadata for medium dataset."""
-    with open(medium_dataset / "ground_truth.json") as f:
-        return json.load(f)
 
 
-@pytest.fixture(scope="session")
-def small_codebook(small_dataset: Path) -> dict[str, str]:
-    """Load codebook for small dataset as gene->barcode dict."""
-    import csv
-
-    codebook = {}
-    with open(small_dataset / "codebook.csv") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            codebook[row["gene"]] = row["barcode"]
-    return codebook
 
 
 @pytest.fixture(scope="session")

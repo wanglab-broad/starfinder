@@ -57,7 +57,8 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["test"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short -m 'not extended'"
+markers = ["extended: saved legacy-fixture end-to-end comparisons; run at batch acceptance or when affected"]
 
 [tool.ruff]
 line-length = 100

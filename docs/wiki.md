@@ -23,6 +23,7 @@ Independent synthetic qualification <synthetic-qualification>
 Backend requirements <api/backends>
 API examples <api/examples>
 Coordination <coordination>
+Batch execution <batch-execution>
 Recipes <recipes>
 Migration guide <migration>
 Troubleshooting <troubleshooting>

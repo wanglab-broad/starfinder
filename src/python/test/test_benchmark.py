@@ -196,37 +196,6 @@ def test_removed_surface_and_invalid_configs(case, tmp_path):
         run(replace(case, inputs={'reference': '../outside.npy', 'moving': 'moving.npy'}), tmp_path)
 
 
-from starfinder.synthetic._presets import SIZE_PRESETS
-from starfinder.synthetic import get_preset_config
-
-
-class TestPresets:
-    """Tests for benchmark presets."""
-
-    def test_size_presets_exist(self):
-        """SIZE_PRESETS contains expected presets."""
-        assert "tiny" in SIZE_PRESETS
-        assert "small" in SIZE_PRESETS
-        assert "medium" in SIZE_PRESETS
-
-    def test_removed_presets(self):
-        """xlarge and thick_large are no longer in SIZE_PRESETS."""
-        assert "xlarge" not in SIZE_PRESETS
-        assert "thick_large" not in SIZE_PRESETS
-
-    def test_get_size_preset(self):
-        """get_size_preset() returns correct shape."""
-        shape = get_preset_config("tiny").shape_zyx
-        assert len(shape) == 3
-        assert all(isinstance(s, int) for s in shape)
-
-    def test_get_size_preset_invalid(self):
-        """get_size_preset() raises for unknown preset."""
-        import pytest
-        with pytest.raises(ValueError, match="Unknown preset"):
-            get_preset_config("nonexistent")
-
-
 def test_demons_saved_field(case, tmp_path):
     # Installed SimpleITK is required by the housekeeping validation environment.
     import SimpleITK

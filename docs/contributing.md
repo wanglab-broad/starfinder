@@ -309,7 +309,11 @@ uv run --group dev pytest test/ -v
 ```
 
 The explicit `dev` group is needed with `UV_NO_DEFAULT_GROUPS=true` above.
-The full Python suite is separate from bounded documentation CI. Local build
+The default Python suite excludes extended end-to-end cases. Run
+`uv run --group dev pytest test/ -v -m extended` at batch acceptance and whenever
+those contracts are affected; `-m ""` selects all retained tests in one invocation.
+See [validation and reuse](batch-execution.md#validation-and-reuse).
+The Python suites are separate from bounded documentation CI. Local build
 success does not establish a successful Actions run, deployment, optional-backend
 execution or external link availability.
 

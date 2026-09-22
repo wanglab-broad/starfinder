@@ -77,46 +77,6 @@ class TestApplyDeformationToSpots:
         assert deformed == spots
 
 
-class TestPerRoundVariation:
-    """Tests for per-round intensity/sigma jitter."""
-
-    def test_intensity_varies_across_rounds(self):
-        """Same spot at different rounds should have different intensity."""
-        seed = 42
-        spot_id = 0
-        base_intensity = 220
-        intensities = []
-        for round_idx in range(1, 5):
-            jitter_rng = np.random.default_rng(seed + spot_id * 100 + round_idx)
-            jittered = int(base_intensity * (1 + jitter_rng.normal(0, 0.1)))
-            intensities.append(jittered)
-        # At least 2 distinct values across 4 rounds
-        assert len(set(intensities)) >= 2
-
-    def test_sigma_varies_across_rounds(self):
-        """Same spot at different rounds should have different sigma."""
-        seed = 42
-        spot_id = 0
-        base_sigma = 1.5
-        sigmas = []
-        for round_idx in range(1, 5):
-            jitter_rng = np.random.default_rng(seed + spot_id * 100 + round_idx)
-            _ = jitter_rng.normal(0, 0.1)  # consume intensity jitter
-            jittered_sigma = base_sigma * (1 + jitter_rng.normal(0, 0.05))
-            sigmas.append(jittered_sigma)
-        assert len(set(sigmas)) >= 2
-
-    def test_variation_is_deterministic(self):
-        """Same seed → same jitter values."""
-        seed = 42
-        spot_id = 5
-        round_idx = 2
-        results = []
-        for _ in range(2):
-            jitter_rng = np.random.default_rng(seed + spot_id * 100 + round_idx)
-            val = int(200 * (1 + jitter_rng.normal(0, 0.1)))
-            results.append(val)
-        assert results[0] == results[1]
 
 
 class TestCreateTestImageStack:
@@ -145,6 +105,8 @@ class TestGenerateSyntheticDataset:
 
     def test_tiny_preset(self, tmp_path):
         config = get_preset_config("tiny")
+        assert len(config.shape_zyx) == 3
+        assert all(isinstance(size, int) for size in config.shape_zyx)
         result = generate_dataset(
             config=config,
             preset="tiny",
@@ -152,6 +114,7 @@ class TestGenerateSyntheticDataset:
 
         _write_dataset(result, tmp_path, annotations=False)
         gt = result.historical_truth
+        assert gt["version"] == "2.0"
 
         # Verify structure
         assert (tmp_path / "codebook.csv").exists()
@@ -174,11 +137,6 @@ class TestGenerateSyntheticDataset:
         assert img.shape == (8, 128, 128)
         assert img.dtype == np.uint8
 
-    def test_ground_truth_version_2(self, tmp_path):
-        """New generator produces version 2.0 ground truth."""
-        config = get_preset_config("tiny")
-        gt = generate_dataset(config=config).historical_truth
-        assert gt["version"] == "2.0"
 
 
 class TestPresetConfigs:

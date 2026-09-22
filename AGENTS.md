@@ -28,28 +28,21 @@ For Chapter II development, read the live
 [outline](https://linear.app/jiahaoh/document/chapter-ii-development-outline-and-priorities-6d2ed68bc91f),
 [execution plan](https://linear.app/jiahaoh/document/chapter-ii-development-milestones-1-2-execution-plan-and-acceptance-c16c39fb9624)
 and [controller guidance](https://linear.app/jiahaoh/document/reusable-autonomous-issue-controller-operating-guideline-be87b45b6d96).
-The authorized batch is ordered W-161 through W-167, project
-`ae82ed79-ed07-4f20-896f-2dbc79f83a7d`, on `codex/chapter-ii-batch2-20260921`
-in `.worktrees/chapter-ii-batch2-20260921`. Each worker owns only its dispatched
-issue. Preserve dirty main-checkout AGENTS.md and `.claude/` exactly; never edit
-another worktree. Historical housekeeping branch, state and authorization do not
-apply here. One outer controller owns dispatch, with fresh sessions per issue and
-bounded same-issue repairs; never launch a nested controller or parallel worker.
-Follow the current phase's commit instructions: implementation handoff is
-uncommitted; controller review precedes a separately requested local commit.
-No push, merge, deployment or publication; do not change deployment guards.
-Leave the project and W-93/W-57 open. Stop after W-167. W-173/W-174 are human-owned
-gates, excluded from all execution allowlists; W-168–W-172 are not authorized.
-W-173 and W-175 are complete; batch 2 inherits Jiahao's explicit approval of
-baseline `61474a31d4ce37ce4199bbac0aecdd9c233a83c7` on 2026-09-21.
-W-174 remains open; technical completion cannot supply human approval.
-Only Jiahao's explicit revision/packet approval and live read-back can pass a
-human gate. W-167 must deliver standalone, browser-opened offline HTML using
-W-165 facilities and the accepted W-175 presentation, linked from W-167/W-174.
-Preserve the prior packets, explicit truth/detection correspondence and separate
-observed colors, nucleotide decoding, gene assignment and filtering. Include
-controlled-effect comparisons, saved-output inspection, qualification and honest
-success/partial/failure diagnostics; pin report and manifest hashes/code revision.
+Current authorization, allowlist, baseline, worktree, phase instructions and
+human gates belong to the live Linear batch contract, not a reusable static
+checklist. Each worker owns only its dispatched issue. Preserve unrelated edits
+and other worktrees. One controller owns dispatch; never launch a nested
+controller or parallel worker. Version-2 workers leave source uncommitted; the
+controller validates and commits it, then obtains independent acceptance.
+Push, merge, deployment and publication require their own authorization.
+Human approval and scientific acceptance remain separate from implementation Done.
+
+**Outer launcher only:** follow [batch execution](docs/batch-execution.md), start
+the authorized controller, confirm startup and return its execution identity and
+report destination, then end the turn. Do not sleep/poll or keep a model supervising
+idle execution. This rule does not stop workers from completing their own issue.
+Before batch 3, require completed W-176 and explicit live W-174 human approval;
+completion of either does not by itself authorize dispatch.
 
 ## Implementation
 
@@ -59,8 +52,8 @@ configs/results; avoid duplicated algorithms and compatibility shims for replace
 Python APIs. Keep arrays ZYX/ZYXC, explicit channel ordering and boundary conversions
 as specified in the site contracts. Update notebooks' imports without executing
 historical notebooks or rewriting outputs. Do not infer qualification of historical
-process-dependent synthetic hash seeds. W-154/W-155 must specify independent
-numerical expectations and round-trip criteria before dependent implementation.
+process-dependent synthetic hash seeds. Preserve independent numerical
+expectations and round-trip criteria for current behavior.
 Preserve historical source before extraction.
 
 ## Environment and validation
@@ -72,23 +65,29 @@ Use `PYTHONDONTWRITEBYTECODE=1 UV_LOCKED=true UV_NO_SYNC=true UV_OFFLINE=true` w
 locked environment. Set `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`, `MKL_NUM_THREADS`,
 `ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS`, `NUMEXPR_NUM_THREADS`,
 `VECLIB_MAXIMUM_THREADS` and `BLIS_NUM_THREADS` to 1,
-and `CUDA_VISIBLE_DEVICES=""`, `MPLBACKEND=Agg`. Keep TMPDIR on local `/tmp/starfinder-batch2-20260921`,
+and `CUDA_VISIBLE_DEVICES=""`, `MPLBACKEND=Agg`. Keep TMPDIR on local `/tmp/<unique-run-id>`,
 not the SMB artifact mount, because tests create symlinks. Use a writable uv cache
 when the default cache is sandboxed. Do not silently alter dependencies or lock.
 Reuse the prepared locked Python 3.12 environment with
 `UV_PROJECT_ENVIRONMENT=/home/unix/jiahao/Github/starfinder/.worktrees/chapter-ii-batch1-20260921/src/python/.venv`
-and `PYTHONPATH=/home/unix/jiahao/Github/starfinder/.worktrees/chapter-ii-batch2-20260921/src/python`.
+and set `PYTHONPATH` to the **current authorized worktree** plus `/src/python`.
 The operator prepared its docs/dev/local-registration/checkpoint dependencies;
 verify actual availability and source paths before checks.
 Do not install/sync during validation. Verify imported source paths and extras;
 record a missing dependency as a blocker. Propose required format dependencies
 explicitly before a separately authorized setup.
 
-Run focused checks, then the required gates before committing (the controller may
-run these after the uncommitted implementation handoff; do not duplicate them):
+Run focused checks during implementation. For executable-code candidates, run
+the retained default suite once before committing; documentation changes require
+the strict build and reference audit. The controller may run these after handoff;
+do not duplicate unchanged successful checks. At batch acceptance and for affected
+end-to-end contracts, also run the extended tests. See
+[validation policy](docs/batch-execution.md#validation-and-reuse) for evidence reuse.
+W-176 itself requires both suites and both documentation gates before commit:
 
 ```bash
 uv run pytest test/ -v
+uv run pytest test/ -v -m extended
 uv run --group docs sphinx-build -n -W --keep-going -b html ../../docs /external/new-run/html
 uv run python ../../docs/check_reference.py
 ```
