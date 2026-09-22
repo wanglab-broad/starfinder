@@ -23,7 +23,7 @@ def check_scene(depth):
     truth_namespace = scene.formed.namespace.iloc[0]
     # Independently supplied candidate coordinates in REVERSE order, distinct IDs
     # and namespace. This is an extraction oracle, not a detector/truth ID join.
-    candidates = SpotFindingResult(pd.DataFrame(dict(spot_id=['candidate-B', 'candidate-A'],
+    candidates = SpotFindingResult(pd.DataFrame(dict(spot_id=pd.Series(['candidate-B', 'candidate-A'], dtype='string'),
         z=[float(z)]*2, y=[4., 2.], x=[6., 2.])), scene.metadata,
         json.dumps([config.dataset_version, 'sample', config.FOV_id, 'independent-candidates']),
         LocalMaximaConfig(), {})

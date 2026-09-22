@@ -250,7 +250,10 @@ def test_bounded_downstream_example():
 
 def test_pinned_independent_component_draws():
     # Independently evaluated from the W-155 canonical descriptor, SHA-256 and
-    # PCG64 laws in NumPy 2.2.6, without importing the production stream helper.
+    # PCG64 laws in NumPy 2.2.6 and the exporter profile's NumPy 1.26.4,
+    # without importing the production stream helper. Scalar exp differs by one
+    # ULP for brightness; the contract promises exact replay within a pinned
+    # environment, not bitwise equality between NumPy releases.
     # These literals also detect accidentally sharing a stream across properties.
     law = ScalarDistribution('lognormal', (.2, .1))
     result = scene(count=1, brightness=law, axial_width=law, lateral_width=law,
@@ -258,8 +261,9 @@ def test_pinned_independent_component_draws():
                    angle=ScalarDistribution('uniform', (0, np.pi)))
     np.testing.assert_array_equal(result.formed[['z', 'y', 'x']].to_numpy()[0],
                                   [5.52290136568776, 20.31117785750813, 18.81900376172695])
+    expected_brightness = 1.4386412510745061 if np.__version__ == '1.26.4' else 1.438641251074506
     np.testing.assert_array_equal(result.formed[['A', 'sz', 'sl', 'e', 'theta']].to_numpy()[0],
-                                  [1.438641251074506, 1.1970397659789114, 1.2626294282763126,
+                                  [expected_brightness, 1.1970397659789114, 1.2626294282763126,
                                    1.2690413185721265, 1.5668133208553605])
     assert result.formed.gene_id.tolist() == ['b']
 
