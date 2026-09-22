@@ -26,6 +26,7 @@ Modules (alphabetical)
    io
    preprocessing
    provenance
+   raster
    registration
    reporting
    spot_finding

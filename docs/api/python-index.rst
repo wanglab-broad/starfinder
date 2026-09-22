@@ -92,8 +92,13 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.evaluation.registration.normalized_cross_correlation`
 * :py:obj:`starfinder.spot_finding.PercentileCentroidConfig`
 * :py:obj:`starfinder.dataset.PipelineConfig`
+* :py:obj:`starfinder.raster.prepare_rasters`
 * :py:obj:`starfinder.preprocessing.project_image`
 * :py:obj:`starfinder.preprocessing.ProjectionConfig`
+* :py:obj:`starfinder.raster.RasterConfig`
+* :py:obj:`starfinder.raster.RasterLevel`
+* :py:obj:`starfinder.raster.RasterPreparationError`
+* :py:obj:`starfinder.raster.RasterResult`
 * :py:obj:`starfinder.provenance.read_run`
 * :py:obj:`starfinder.barcode.ReadFilterConfig`
 * :py:obj:`starfinder.barcode.ReadFilteringResult`
@@ -106,6 +111,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.registration.RegistrationEstimationError`
 * :py:obj:`starfinder.registration.RegistrationResult`
 * :py:obj:`starfinder.dataset.RegistrationStep`
+* :py:obj:`starfinder.raster.remap_labels`
 * :py:obj:`starfinder.synthetic.render_spots`
 * :py:obj:`starfinder.reporting.render_table`
 * :py:obj:`starfinder.benchmark.report_benchmark`

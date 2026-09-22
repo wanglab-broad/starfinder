@@ -366,3 +366,53 @@ Sphinx/reference audit from [contributing](contributing.md). Focused W-168 check
 validate the specification fixture, dependency constraints and delivery behavior;
 they do not run W-169/W-170 algorithms or W-171 MATLAB comparisons. Implementation
 Done does not close W-57, W-93, human review or scientific acceptance.
+
+## Python raster preparation
+
+`starfinder.raster.prepare_rasters` implements the shared grid policy. Select
+image roles and channels explicitly before calling it: each mapping value is an
+`ImageLoadResult` with ZYXC data, ordered channel labels, source paths, and
+upstream transform history in its diagnostics. Pass the same `ImageMetadata`
+for labels; mismatched frame, geometry or shape fails before reduction.
+
+```python
+from starfinder.raster import RasterConfig, prepare_rasters
+
+prepared = prepare_rasters(
+    {"reference": selected_reference, "stain": selected_stain},
+    aligned_labels,
+    metadata=common_metadata,
+    declared_ids=(1, 2),
+    config=RasterConfig(factors_zyx=(1, 2, 2), coarser_levels=2,
+                        coordinate_space="physical", max_output_bytes=1048576),
+)
+base = prepared.levels[0]
+```
+
+This condition requests lateral reduction while preserving separate channels and
+all declared cells. The caller owns saved-artifact checksum verification and
+selection; preparation neither loads artifacts nor replays a transform history.
+Use `coordinate_space="index"` only with an explicit common named index frame
+and all physical metadata fields `None`.
+
+Every `RasterLevel` has aligned `images`, `labels`, `metadata`, absolute
+`factors_zyx`, and `index_to_source_zyx`. The last is an output-to-native affine
+center map, **not** a forward assembly transform. Physical `metadata` already
+incorporates its offset. Index metadata stays uncalibrated; use the explicit
+matrix for scale/translation without adding units. The result retains native
+metadata, requested configuration, every trial and its failure reasons, per-cell
+counts/support/centroid/Hausdorff metrics, dtypes, and total output array bytes.
+`max_output_bytes` is an optional output-array budget, not an RSS cap; exhausting
+it, including during native fallback, raises `RasterPreparationError` with
+required shape/bytes and trial diagnostics. Input validation/native missing IDs
+also fail explicitly, without a partial successful result.
+
+`remap_labels` accepts disjoint masks that already occupy one aligned grid and
+an exact explicit map from `(mask_namespace, local_label)` to
+`(cell_namespace, cell_id)`. Both cell-key components are nonempty strings.
+It returns `uint32` labels and reversible rows sorted by namespace/local ID.
+Overlap and reused global cell keys fail; no assembly or biological equivalence
+is inferred. Perform this remap separately and save its rows before preparation.
+Preparation alone preserves the supplied mask dtype and IDs, including at native
+resolution. Sources are not mutated. Expression/count/assignment inputs are not
+accepted or recalculated. W-170 owns serialization and table binding.

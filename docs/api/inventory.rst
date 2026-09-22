@@ -175,6 +175,16 @@ starfinder.provenance
 * :py:obj:`starfinder.provenance.read_run`
 * :py:obj:`starfinder.provenance.RunRecorder`
 
+starfinder.raster
+~~~~~~~~~~~~~~~~~~
+
+* :py:obj:`starfinder.raster.prepare_rasters`
+* :py:obj:`starfinder.raster.RasterConfig`
+* :py:obj:`starfinder.raster.RasterLevel`
+* :py:obj:`starfinder.raster.RasterPreparationError`
+* :py:obj:`starfinder.raster.RasterResult`
+* :py:obj:`starfinder.raster.remap_labels`
+
 starfinder.registration
 ~~~~~~~~~~~~~~~~~~~~~~~
 

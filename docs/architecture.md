@@ -15,6 +15,7 @@ streaming select image residency, not different scientific pipelines.
 | `preprocessing` | Typed finite-array operations | Does not own FOV state |
 | `provenance` | Versioned run events, attribution, failures and diagnostic components | Observes coordination; no scheduler or scientific qualification |
 | `reporting` | Offline saved-run summaries and presentation helpers | No processing reruns or scientific qualification |
+| `raster` | Aligned image/mask reduction, label fidelity and deterministic fallback | No assembly, projection, assignment or expression recalculation |
 | `registration` | Estimate/apply transforms and diagnostics | Does not evaluate truth or time experiments |
 | `spot_finding` | Detection and stable SpotFindingResult identities | Does not perform registration evaluation |
 | `synthetic` | Processed-image scenes, rendering and truth records | Does not orchestrate benchmarks or invent molecular truth |
