@@ -34,6 +34,51 @@ revision/packet, and a separately authorized batch contract. Include W-176 in
 human gates in the worker allowlist or equate software checks with human approval.
 Historical batch configurations and report packets remain preserved.
 
+## Batch 3 prerequisite sequence
+
+The [current execution contract](https://linear.app/jiahaoh/document/chapter-ii-development-milestones-1-2-execution-plan-and-acceptance-c16c39fb9624)
+records Jiahao's viewer, MATLAB and delivery decisions. Gate prerequisites by the
+work they enable; final export/report implementations do not precede their specification.
+
+W-168 selects compatible pinned SpatialData, OME-Zarr, napari, Qt,
+napari-spatialdata and Fiji reader/plugin versions. Prepare an isolated environment
+and qualify dependencies before dependent use, preserving the earlier environment
+and recording dependency/lock changes. Checks remain locked/offline/no-sync.
+
+Automated sessions of actual napari/SpatialData and Fiji viewers satisfy technical
+acceptance. Reopen exported fixtures, exercise applicable 2D navigation, 3D
+rendering, resolution levels and regional access, and verify channels, calibration,
+alignment and molecule/cell/label relationships. Retain versions, commands, input
+hashes, logs, screenshots and criterion results. A qualified virtual display and
+software rendering may be used within the existing no-GPU/resource limits.
+Import/schema/reader-only checks do not prove viewer acceptance. Required missing
+capabilities block W-170; no additional interactive desktop review is required.
+
+W-171 retains actual bounded Python/MATLAB comparisons. Its scoped execution
+exception includes environment/license/toolbox preflight. Use the existing
+Snakemake invocation path and unchanged MATLAB interfaces. Freeze stage criteria,
+tolerances, coordinate/channel/population mappings and independent spot matching
+before comparisons. Missing runtime execution blocks acceptance. Existing fixture,
+CPU/thread/no-GPU/time/RSS/storage limits remain in force.
+
+W-168 freezes the scientific evidence schema, saved-input identities, command
+interface, output paths, report/offline-opening checks and per-issue ownership.
+Its own specification and standalone HTML/manifest remain required; the final
+W-172 scientific renderer is not a prerequisite to starting W-168. W-169 supplies
+raster/fallback evidence, W-170 export/viewer evidence, W-171 storage/round-trip/
+backend evidence, and W-172 the integrated scientific HTML and execution audit.
+Each owning issue must implement and pass its applicable saved-evidence delivery
+checks before independent acceptance. Final rendering consumes saved results.
+Generic runner terminal HTML cannot replace scientific report acceptance.
+
+At the W-168 handoff, reconcile the stopped controller configuration/guidance and
+environment/data identities, then pin executable delivery hooks before dependent
+continuation. Schema 2 runs configured hooks at each issue's post-commit delivery
+step; specify an issue-aware command or a reviewed successor configuration.
+Do not silently change a running config or treat empty hooks as qualification.
+Runner telemetry collection remains fixed before the first job. These technical
+handoff steps introduce no additional human approval gate.
+
 ## Validation and reuse
 
 From `src/python`, in the prepared environment:

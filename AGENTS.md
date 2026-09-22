@@ -68,7 +68,7 @@ locked environment. Set `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`, `MKL_NUM_THRE
 and `CUDA_VISIBLE_DEVICES=""`, `MPLBACKEND=Agg`. Keep TMPDIR on local `/tmp/<unique-run-id>`,
 not the SMB artifact mount, because tests create symlinks. Use a writable uv cache
 when the default cache is sandboxed. Do not silently alter dependencies or lock.
-Reuse the prepared locked Python 3.12 environment with
+Before exporter/viewer setup, reuse the prepared locked Python 3.12 environment with
 `UV_PROJECT_ENVIRONMENT=/home/unix/jiahao/Github/starfinder/.worktrees/chapter-ii-batch1-20260921/src/python/.venv`
 and set `PYTHONPATH` to the **current authorized worktree** plus `/src/python`.
 The operator prepared its docs/dev/local-registration/checkpoint dependencies;
@@ -76,6 +76,9 @@ verify actual availability and source paths before checks.
 Do not install/sync during validation. Verify imported source paths and extras;
 record a missing dependency as a blocker. Propose required format dependencies
 explicitly before a separately authorized setup.
+For batch 3, W-168 specifies an isolated pinned exporter/viewer environment;
+preserve the batch-1 environment and record the selected environment identity
+before dependent use. Follow the agreed [prerequisite sequence](docs/batch-execution.md#batch-3-prerequisite-sequence).
 
 Run focused checks during implementation. For executable-code candidates, run
 the retained default suite once before committing; documentation changes require
@@ -95,7 +98,11 @@ uv run python ../../docs/check_reference.py
 Run affected bounded examples from [contributing](docs/contributing.md). Generated
 API stubs are ignored/disposable; edit authored lists/docstrings. Never weaken
 assertions, hide warnings/skips or claim an unexecuted backend passed. SimpleITK
-must be installed for its execution coverage; MATLAB execution is excluded.
+must be installed for its execution coverage. MATLAB execution is excluded except
+for W-171's agreed bounded Python/MATLAB qualification and its environment,
+license and toolbox preflight. Use the existing Snakemake invocation path,
+preserve MATLAB interfaces, and retain the resource limits below. Missing actual
+MATLAB execution blocks W-171; source inspection cannot substitute for it.
 
 Chapter II batch limits: CPU 0, one numerical thread, no GPU; 5400 s worker,
 1800 s/check, at most two repairs; target process RSS ≤4 GiB, new artifacts ≤1 GiB.

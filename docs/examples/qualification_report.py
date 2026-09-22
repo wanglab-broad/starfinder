@@ -22,7 +22,42 @@ from saved_synthetic_report import decoding_rows, inspection_figure
 
 
 def details(title, value):
-    return '<details><summary>'+html.escape(title)+'</summary><pre>'+html.escape(json.dumps(value, indent=2))+'</pre></details>'
+    return '<details><summary>'+html.escape(title)+'</summary><pre><code>'+html.escape(json.dumps(value, indent=2))+'</code></pre></details>'
+
+
+def parameter_table(rows):
+    """Keep parameter records escaped and readable as code without changing values."""
+    frame = pd.DataFrame(rows)
+    frame = frame.apply(lambda column: column.map(
+        lambda value: '<code>'+html.escape(str(value))+'</code>'))
+    frame.columns = [html.escape(str(column)) for column in frame.columns]
+    return frame.to_html(index=False, escape=False, border=0)
+
+
+# Explanations of the frozen controlled-development-v1 conditions, not new defaults.
+CONDITION_INTRODUCTIONS = {
+    'clean': 'Reference scene with two fixed amplicons and no enabled observation or geometry effects.',
+    'brightness': 'Doubles amplicon brightness while preserving positions and kernel shape.',
+    'axial_width': 'Broadens the kernel along Z; the center XY slice is unchanged for these centered amplicons.',
+    'lateral_width': 'Broadens each amplicon in the XY plane without changing its peak brightness.',
+    'elongation': 'Stretches each amplicon along Y at zero rotation while retaining the original X width.',
+    'placement': 'Moves the two amplicons into a seeded cluster around the first reference center.',
+    'dropout': 'Suppresses emission in the middle round, then restores it in the last round while retaining all truth rows.',
+    'weakening': 'Reduces middle-round emission to one quarter, then restores it in the last round.',
+    'trend': 'Halves emission at each successive round using absolute round factors.',
+    'loss': 'Removes emission persistently from the middle round onward while retaining every object in truth.',
+    'gain': 'Halves source-channel signals in every round before any channel mixing.',
+    'mixing': 'Adds quarter-strength leakage from source channel 1 to destination 0 and source 3 to destination 2, using zero-based channel indices.',
+    'baseline': 'Adds a different constant instrument offset to each destination channel in every round.',
+    'gradient': 'Adds a background increasing along X, with fixed channel-specific weights.',
+    'regions': 'Adds a broad Gaussian background region centered on the first reference amplicon.',
+    'texture': 'Adds two seeded, persistent Gaussian background blobs with uniformly sampled centers.',
+    'dependent_noise': 'Adds zero-mean noise whose amplitude scales with the square root of the local pre-noise intensity.',
+    'independent_noise': 'Adds zero-mean noise with a fixed standard deviation independent of intensity.',
+    'translation': 'Moves all objects by the same round-specific absolute ZYX translation.',
+    'local': 'Applies a smooth round-specific displacement strongest near the first reference amplicon.',
+    'combined': 'Combines weakening, trend, gain, mixing, backgrounds, both noises and global/local motion; appearance, placement, dropout and loss stay at clean settings.',
+}
 
 
 def check_summary(checks):
@@ -157,9 +192,7 @@ def trajectory(context):
 def gallery(presets, qualification):
     rows = {c['case']:c for c in qualification['cases']}
     result = []
-    for condition in ['clean','brightness','axial_width','lateral_width','elongation','placement',
-                      'dropout','weakening','trend','loss','gain','mixing','baseline','gradient','regions',
-                      'texture','dependent_noise','independent_noise','translation','local','combined']:
+    for condition, introduction in CONDITION_INTRODUCTIONS.items():
         root = presets/('small-'+condition)
         saved = load_image_checkpoint(root/'prepared')
         histories = pd.read_parquet(root/'round-truth.parquet')
@@ -173,10 +206,16 @@ def gallery(presets, qualification):
                 ax.annotate(row.amplicon_id,(row.x,row.y),xytext=(3,5),textcoords='offset points',color='white',fontsize=8)
         fig.colorbar(view, ax=axes, label='Stored intensity: fixed −1 to 16', shrink=.8)
         fig.suptitle(condition+' · round2 · XY z=4 · full truth marked even without emission')
-        result.append('<h3 id="case-'+condition+'">'+condition+'</h3>'+embed_figure(fig, condition+' saved channel-specific images and truth'))
+        result.append('<h3 id="case-'+condition+'"><code>'+condition+'</code></h3>'
+                      '<p class="condition-introduction">'+html.escape(introduction)+'</p>'
+                      +embed_figure(fig, condition+' saved channel-specific images and truth'))
         result.append('<p>Independent full-grid audit: pass; max absolute error '+f"{rows['small-'+condition]['max_absolute_error']:.3g}"+'.</p>')
     result.append('<h3>Combined geometry in Z=1 and wider 3D field</h3>')
     for size in ('z1','wide'):
+        result.append('<p><code>'+size+'</code>: '+(
+            'Combined effects sampled at a single Z plane of the 3D kernel, without projection or renormalization.'
+            if size == 'z1' else 'Combined effects in a wider 3D field with the same supplied molecular centers.'
+        )+'</p>')
         root = presets/(size+'-combined')
         layer = load_image_checkpoint(root/'prepared').layers[1]
         image = layer.loaded.image
@@ -227,6 +266,7 @@ def render(root, destination):
     if destination.exists():
         raise FileExistsError('Preserve previous review packets')
     css = 'body{font:16px/1.55 system-ui;color:#203047;max-width:1400px;margin:32px auto;padding:0 24px}h1{font-size:2.4rem}h2{margin-top:48px;border-bottom:2px solid #deebf4}h3{margin-top:30px}table{border-collapse:collapse;display:block;overflow:auto;margin:18px 0;font-size:.9rem}td,th{padding:8px 12px;border:1px solid #d8e1e8;text-align:left}th,nav{background:#eef4f8}img{max-width:100%;height:auto}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.8rem;background:#f3f6f8;padding:16px}nav{padding:16px}nav a{margin-right:18px;display:inline-block}a{color:#14598d}details{margin:16px 0}summary{cursor:pointer;font-weight:600}.lead{font-size:1.15rem}'
+    css += 'code{font-family:ui-monospace,monospace;background:#f3f6f8;padding:2px 4px;border-radius:3px}td code{white-space:pre-wrap;overflow-wrap:normal}pre code{padding:0}'
     sections=[]
     def section(identity,title,body):
         sections.append((identity,title,body))
@@ -236,9 +276,9 @@ def render(root, destination):
         '<p>These are bounded software-development fixtures, not calibrated D04, biological RNA truth, method-accuracy evidence or historical v1/v2 qualification. Source revision <code>'+html.escape(context['code']['commit'])+'</code>; exact source identities are in the appendix.</p>'
         +render_table(context['acceptance'])+representative(presets))
     section('settings','Fixed settings and controlled comparisons',
-        '<p>ZYXC float32 images; float64 NCR truth; ZYX voxel-index coordinates; physical calibration unknown. Rounds round10 → round2 → round1; channels ch02 → ch00 → ch03 → ch01. Mapping 1→1, 2→0, 3→3, 4→2. gt-A=123/gene-A and gt-B=214/gene-B. Root seed 42, development scene controlled-development-v1.</p>'
-        +render_table(context['parameters'])
-        +render_table([dict(condition=c['name'], factors=', '.join(c['factors']) or 'none', shape=c['shape'], seconds=c['seconds'], bytes=c['bytes']) for c in manifest['cases'] if c['name'].startswith('small-')])
+        '<p>Images: <code>ZYXC float32</code>; truth: <code>NCR float64</code>; coordinates: <code>ZYX</code> voxel indices; physical calibration unknown. Rounds: <code>round10 → round2 → round1</code>; channels: <code>ch02 → ch00 → ch03 → ch01</code>. Mapping: <code>1→1, 2→0, 3→3, 4→2</code>. Truth: <code>gt-A=123/gene-A</code> and <code>gt-B=214/gene-B</code>. Root seed: <code>42</code>; development scene: <code>controlled-development-v1</code>.</p>'
+        +parameter_table(context['parameters'])
+        +parameter_table([dict(condition=c['name'], factors=', '.join(c['factors']) or 'none', shape=c['shape'], seconds=c['seconds'], bytes=c['bytes']) for c in manifest['cases'] if c['name'].startswith('small-')])
         +'<p>Preset timings above are inherited W-166 creation measurements, not W-167 processing timings. Sizes: Z=1 (1×32×32), small (9×32×32), wide (9×48×48). Z=1 samples the 3D kernel without projection or renormalization; axial-width-only changes are image-invariant there. Only the named factor changes; namespaces differ intentionally. Different sizes do not promise identical overlapping noise samples.</p>')
     section('gallery','Saved single-factor and combined gallery',
         '<p>All panels use the same −1 to 16 display scale; values outside it saturate only in this display, never in saved float images. Crosses are full independent truth, not detections. The middle round exposes dropout, weakening and fractional motion. Combined enables weakening, trend, gain, mixing, all backgrounds, both noises, translation/local geometry; it leaves dropout/loss and appearance/placement off.</p>'

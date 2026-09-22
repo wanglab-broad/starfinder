@@ -83,3 +83,11 @@ separately. Count cumulative usage only once per unique session after verifying
 counter semantics; unknown sessions stay unknown, and tokens do not imply cost.
 Human waits are gate-open intervals, not measured human effort. Implementation,
 validation and repair intervals may overlap and must not be summed blindly.
+
+Use English throughout the review packet. Introduce every gallery condition with
+one sentence explaining the controlled change, including clean and combined
+cases. Render parameter names, values and configurations as escaped code, with
+multiline blocks for full configurations. In Linear delivery updates, show full
+host paths in fenced code blocks with the host and offline opening instructions;
+do not hide a Linux path behind a hyperlink that the reviewer cannot open.
+Verify the revised standalone HTML in a browser and preserve each earlier packet.
