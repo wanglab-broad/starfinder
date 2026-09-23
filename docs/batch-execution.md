@@ -81,6 +81,10 @@ handoff steps introduce no additional human approval gate.
 
 ## Validation and reuse
 
+For the final scientific packet and issue/attempt trajectory, see
+[integration review from saved evidence](integration-review.md). Final terminal
+read-back follows actual completion; it must not be predicted by the worker.
+
 From `src/python`, in the prepared environment:
 
 ```bash

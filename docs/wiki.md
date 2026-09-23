@@ -26,6 +26,7 @@ Backend requirements <api/backends>
 API examples <api/examples>
 Coordination <coordination>
 Batch execution <batch-execution>
+Integration review <integration-review>
 Recipes <recipes>
 Migration guide <migration>
 Troubleshooting <troubleshooting>
