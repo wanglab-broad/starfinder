@@ -29,6 +29,7 @@ Modules (alphabetical)
    raster
    registration
    reporting
+   sample_export
    spot_finding
    synthetic
 

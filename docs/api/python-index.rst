@@ -38,6 +38,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.evaluation.registration.evaluate_translation`
 * :py:obj:`starfinder.evaluation.EvaluationResult`
 * :py:obj:`starfinder.dataset.ExecutionConfig`
+* :py:obj:`starfinder.sample_export.export_sample`
 * :py:obj:`starfinder.io.export_spots`
 * :py:obj:`starfinder.barcode.extract_intensities`
 * :py:obj:`starfinder.barcode.filter_reads`
@@ -80,6 +81,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.io.load_round`
 * :py:obj:`starfinder.io.load_volume`
 * :py:obj:`starfinder.spot_finding.LocalMaximaConfig`
+* :py:obj:`starfinder.sample_export.lookup_export_trace`
 * :py:obj:`starfinder.preprocessing.match_histogram`
 * :py:obj:`starfinder.evaluation.matching.match_points`
 * :py:obj:`starfinder.preprocessing.MinMaxNormalizationConfig`
@@ -90,6 +92,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.spot_finding.NoiseLandmarkConfig`
 * :py:obj:`starfinder.preprocessing.normalize_intensity`
 * :py:obj:`starfinder.evaluation.registration.normalized_cross_correlation`
+* :py:obj:`starfinder.sample_export.open_sample_viewer`
 * :py:obj:`starfinder.spot_finding.PercentileCentroidConfig`
 * :py:obj:`starfinder.dataset.PipelineConfig`
 * :py:obj:`starfinder.raster.prepare_rasters`
@@ -118,12 +121,14 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.dataset.RoundState`
 * :py:obj:`starfinder.benchmark.run_benchmark`
 * :py:obj:`starfinder.provenance.RunRecorder`
+* :py:obj:`starfinder.sample_export.SampleExportConfig`
 * :py:obj:`starfinder.io.save_candidate_checkpoint`
 * :py:obj:`starfinder.io.save_decoded_checkpoint`
 * :py:obj:`starfinder.io.save_final_checkpoint`
 * :py:obj:`starfinder.io.save_image_checkpoint`
 * :py:obj:`starfinder.io.save_molecule_index`
 * :py:obj:`starfinder.io.save_volume`
+* :py:obj:`starfinder.sample_export.SavedFile`
 * :py:obj:`starfinder.synthetic.ScalarDistribution`
 * :py:obj:`starfinder.spot_finding.SpotFindingResult`
 * :py:obj:`starfinder.evaluation.registration.structural_similarity`

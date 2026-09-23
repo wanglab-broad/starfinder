@@ -212,6 +212,15 @@ starfinder.reporting
 * :py:obj:`starfinder.reporting.render_table`
 * :py:obj:`starfinder.reporting.write_run_summary`
 
+starfinder.sample_export
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+* :py:obj:`starfinder.sample_export.export_sample`
+* :py:obj:`starfinder.sample_export.lookup_export_trace`
+* :py:obj:`starfinder.sample_export.open_sample_viewer`
+* :py:obj:`starfinder.sample_export.SampleExportConfig`
+* :py:obj:`starfinder.sample_export.SavedFile`
+
 starfinder.spot_finding
 ~~~~~~~~~~~~~~~~~~~~~~~
 

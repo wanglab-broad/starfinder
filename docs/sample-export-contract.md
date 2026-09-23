@@ -416,3 +416,55 @@ is inferred. Perform this remap separately and save its rows before preparation.
 Preparation alone preserves the supplied mask dtype and IDs, including at native
 resolution. Sources are not mutated. Expression/count/assignment inputs are not
 accepted or recalculated. W-170 owns serialization and table binding.
+
+## Sample serializer and explicit-level napari adapter
+
+`starfinder.sample_export.export_sample` accepts the prepared `RasterResult`,
+a `SampleExportConfig`, checksummed `SavedFile` references for raster inputs,
+and a Parquet cell map. Optional molecular input is the existing `MoleculeIndex`;
+assignments are a separately checksummed Parquet table and expression is a
+checksummed H5AD. Every molecular source requires its explicit affine mapping.
+The map's cell keys and instance IDs must be unique; all emitted mask levels
+must contain exactly those positive IDs. Missing assignment rows become
+`unavailable`; explicit `unassigned` rows stay distinct. Measured zero expression
+rows are retained, mask-only cells stay unavailable, and table-only rows are
+listed in `unmatched-cells.parquet` with the original H5AD source retained.
+The destination must not exist. Writing occurs in a sibling temporary directory;
+failed writes are not published as completed exports.
+
+This opening condition uses each existing stored level's own calibrated map to
+avoid the pinned default napari multiscale reader's lost half-voxel translations:
+
+```python
+import napari
+from starfinder.sample_export import open_sample_viewer
+
+viewer = open_sample_viewer('/path/to/export', level=0)
+napari.run()
+```
+
+Use the layer list to select image channels and label levels together. This
+adapter retains SpatialData's UI but exposes raster levels as single-resolution
+napari layers with public `scale` and `translate`. Points remain in the common
+frame. It does not implement automatic zoom-based level switching. Select a
+label ID to show its cell key and original expression row in the **Cell and
+molecule source** dock. Selecting a point resolves its source checkpoint and
+trace, or its explicit omission reason. `lookup_export_trace` provides the same
+source lookup without a GUI. Missing source bytes or wrong hashes raise errors.
+
+NGFF dataset transforms contain absolute common-frame scale/translation for
+Fiji. SpatialData's top-level element transform retains base-grid-to-sample
+geometry. The adapter reads the dataset transforms directly, avoiding double
+application. Default SpatialData/napari multiscale display is not qualified for
+these stores: do not add the same raster again through the default element list.
+Opening paths for the pinned Fiji N5 Viewer are in `open-in-fiji.json` and the
+standalone export `README.html`. Actual Fiji interoperability remains a separate
+runtime gate; these instructions do not certify an unexecuted consumer.
+
+The current pinned Fiji N5 Viewer cannot yet parse the generated SpatialData
+raster groups. This is a required interoperability blocker, not a successful
+Fiji opening example. The manifest marks viewer qualification as unavailable;
+software round trips and successful explicit-level napari viewing do not remove
+that gate. In particular, the SpatialData top-level affine extension and NGFF
+consumer interpretation still require reconciliation without duplicate rasters
+or changed dependency pins.
