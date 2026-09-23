@@ -108,3 +108,8 @@ uv run pytest test/test_candidate_checkpoints.py -v
 ```{literalinclude} examples/candidate_checkpoints.py
 :language: python
 ```
+
+The [bounded foundation qualification](foundation-qualification.md) measures
+saving/override costs and documents the retained traceability default. Its
+alternative dtype/layout probes do not change the canonical float64 signal
+schema; production cost and optimal chunking remain unmeasured.

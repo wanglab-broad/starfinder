@@ -659,3 +659,23 @@ index frame. The third point is explicitly unassigned; the first two link to
 separate namespace-local cell `1` instances. Supplied expression remains
 `[[2,0],[0,0]]` in `gene-A/gene-B` order, without recounting these illustrative
 points. Candidate traces and affine provenance are saved before export.
+
+### Foundation backend and storage probes v1
+
+`foundation-backend-v1` is the no-RNG literal fixture in
+[foundation qualification](foundation-qualification.md) and its maintained
+`docs/examples/foundation_qualification.py`. Two uint16 rounds, four nonlexical
+channels, ZYXC `(5,9,11,4)` / `(1,9,11,4)`, two isolated centers and separate
+zero/tie probes exercise bounded Python/MATLAB stage comparisons. Index geometry
+is uncalibrated. The protocol freezes one-based XYZ/YXZ boundary conversions,
+nonidentity color mapping, populations, independent matching and tolerances.
+No historical TIFF, calibrated molecule or biological claim is involved.
+
+`foundation-storage-v1` combines the existing `(9,48,48)` ramp with exact
+uint16/float32/float64 representations and 256 distinct IDs repeating
+`artifact-contract-v1` candidate signals. HDF5/Parquet layout variants measure
+small-file cost without changing canonical checkpoint types or settings.
+External W-171 manifests record inputs/source/config hashes, actual MATLAB
+and Python execution, sizes/times/resources and limitations. The default-saving
+decision is bounded to software traceability; production costs are unmeasured.
+Owner Jiahao; retain through thesis/publication; backup unverified.

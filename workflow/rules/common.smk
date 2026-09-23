@@ -158,16 +158,34 @@ def yaml_to_json(yaml_file):
     return json_file
 
 def run_matlab_scripts(param_string, matlab_script_name):
-    matlab_script_path = f"{config['starfinder_path']}/workflow/scripts"
-    matlab_run_string = f"addpath('{matlab_script_path}'); {matlab_script_name}({param_string});exit;"
-    print(matlab_run_string)
+    """Run the existing MATLAB entry point on a local or Broad installation.
+
+    STARFINDER_MATLAB_EXECUTABLE explicitly selects an executable; otherwise use
+    PATH, then the historical Broad setup if present. Batch mode propagates
+    MATLAB errors to Snakemake instead of leaving an interactive process alive.
+    param_string remains the existing trusted MATLAB argument expression.
+    """
+    import re
+    import shlex
+    import shutil
     import subprocess
 
-    # Source the Broad useuse script and load MATLAB before running the command
-    # This is needed because subprocess spawns a fresh bash that doesn't have
-    # the environment from the jobscript's 'use Matlab'
-    cmd = f'source /broad/software/scripts/useuse && use Matlab && matlab -nodisplay -nosplash -nodesktop -r "{matlab_run_string}"'
-    subprocess.run(cmd, shell=True, executable='/bin/bash', check=True)
+    if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", matlab_script_name):
+        raise ValueError("MATLAB entry point must be a function name")
+    matlab_script_path = str(Path(config['starfinder_path']) / 'workflow/scripts').replace("'", "''")
+    expression = f"addpath('{matlab_script_path}'); {matlab_script_name}({param_string});"
+    selected = os.environ.get('STARFINDER_MATLAB_EXECUTABLE')
+    executable = shutil.which(selected or 'matlab')
+    arguments = ['-singleCompThread', '-batch', expression]
+    if executable:
+        subprocess.run([executable, *arguments], check=True)
+    elif selected:
+        raise FileNotFoundError(f"Selected MATLAB executable is unavailable: {selected}")
+    elif Path('/broad/software/scripts/useuse').is_file():
+        command = 'source /broad/software/scripts/useuse && use Matlab && exec ' + shlex.join(['matlab', *arguments])
+        subprocess.run(['/bin/bash', '-c', command], check=True)
+    else:
+        raise FileNotFoundError('MATLAB unavailable: set STARFINDER_MATLAB_EXECUTABLE or add matlab to PATH')
 
 
 def run_fiji_macros(fiji_path, macro_path):
