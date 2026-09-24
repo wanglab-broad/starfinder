@@ -59,8 +59,8 @@ uses the shared ``EncodingConfig(reverse_bases=True).encode(barcode)``.
 Scientific limitations
 ----------------------
 
-`W-93 <https://linear.app/jiahaoh/issue/W-93>`_ owns qualification of shared
-molecular truth and calibration. Registration seeds still use
+Qualification of shared molecular truth and calibration remains open.
+Registration seeds still use
 ``seed + hash(preset_or_deformation_name) % 10000``; resolved seeds are recorded,
 but this is not cross-process reproducibility. Existing spot dropout,
 integer rounding, per-round intensity/PSF jitter and random background are

@@ -16,7 +16,7 @@ relative path, SHA-256 and replacement target. Its bounded scope is file depth
 records, environments, Git/cache/hidden directories and symlinks. Files deeper
 than this boundary are not inventoried. Original files/results/notebook outputs
 are retained unchanged. The private byte archive and timestamp/Git-state
-manifest are linked from [W-146](https://linear.app/jiahaoh/issue/W-146).
+manifest are stored outside this repository.
 Preservation does not validate historical outputs, dates, scientific claims or
 licensing. Backup coverage remains unverified; Jiahao owns retention.
 
@@ -144,12 +144,12 @@ is made by placing these records in a common table.
 | Hybrid Python global → MATLAB LR | Qualified Python exports and separately run licensed MATLAB local stage; never substitute for the reverse hybrid. |
 | Backend diagnostics | External backend manifest plus matching saved spots/stacks/metrics; `diagnose_lr_effects.py` pairs retain their original labels. New saved tables can use the common report helper. |
 | Aging pad balance | Qualified pad/gene annotations and segmented codebook decisions; original diagnostics remain historical, not a new validated metric. |
-| LR synthetic generation | `starfinder synthetic generate` is the common entry point; original recipe has base seed 200, linear deformation magnitude 10, XY shift 50, Z shifts 5/7/10 for large/tissue/thick_medium. Process-dependent hash-derived seeds and truth remain unqualified. Do not run/generate these large presets as housekeeping. |
+| LR synthetic generation | `starfinder synthetic generate` is the common entry point; original recipe has base seed 200, linear deformation magnitude 10, XY shift 50, Z shifts 5/7/10 for large/tissue/thick_medium. Process-dependent hash-derived seeds and truth remain unqualified. Do not run/generate these large presets as routine validation. |
 | Antialias/large comparison | Explicit method profile, qualified image pairs and separately authorized memory/time; old symmetric and later demons/diffeomorphic recipes remain distinct. |
 
 No optional recipe is claimed as a runnable scientific experiment merely because
-its configuration parses. W-92/W-93/W-94/W-124 and Chapter II W-57 retain
-qualification and scientific acceptance. Bounded adapter tests use deterministic
+its configuration parses. Qualification and scientific acceptance remain
+separate from software validation. Bounded adapter tests use deterministic
 8×16×16 TIFFs, four channels/rounds and saved-table fixtures; no real-image
 processing, historical notebook execution or MATLAB run is part of validation.
 

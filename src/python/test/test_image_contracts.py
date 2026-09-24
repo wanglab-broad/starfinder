@@ -1,5 +1,5 @@
 from starfinder.preprocessing import MinMaxNormalizationConfig
-"""Bounded W-137 geometry, numeric-policy and persistence regressions."""
+"""Bounded image geometry, numeric-policy and persistence regressions."""
 from dataclasses import asdict
 import importlib
 

@@ -1,4 +1,4 @@
-"""Bounded W-142 contracts: 4x12x14, four channels and two rounds."""
+"""Bounded coordination contracts: 4x12x14, four channels and two rounds."""
 from dataclasses import replace
 from pathlib import Path
 import copy

@@ -174,4 +174,4 @@ MATLAB, local-registration, and cell-level workflows require separate validation
 :language: python
 ```
 
-Generation itself is pure and returns `SyntheticDataset`; the quickstart saves it through the benchmark persistence adapter. See [synthetic contracts](api/synthetic.rst) for scene eligibility and W-93 truth/reproducibility limitations.
+Generation itself is pure and returns `SyntheticDataset`; the quickstart saves it through the benchmark persistence adapter. See [synthetic contracts](api/synthetic.rst) for scene eligibility and truth/reproducibility limitations.

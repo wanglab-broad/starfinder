@@ -2,7 +2,7 @@
 
 Saved NPY tensors predate label metadata. These scripts declare round1..R and
 channel1..4 in their stored axis order; they do not claim recovered provenance.
-Scientific reevaluation of historical artifacts remains separate from housekeeping.
+Scientific reevaluation of historical artifacts remains a separate task.
 """
 
 import csv

@@ -45,6 +45,4 @@ export parity and alphabetical reference lists.
 
 ## Development records
 
-Task plans, progress, and run-specific reports are maintained in [Linear](https://linear.app/jiahaoh/document/thesis-and-implementation-workflow-c12f30bffe9f). Historical files formerly stored here are listed in the [migration index](https://linear.app/jiahaoh/document/historical-record-index-and-migration-provenance-881cc5edc52b), with their original paths, checksums, and preserved source snapshots. Historical results require evidence review before reuse.
-
-Keep benchmark runners, reusable configurations, evaluation code, and small fixtures in Git. Store large or run-specific outputs outside the checkout and link their provenance from the corresponding issue. See [agent instructions](../AGENTS.md) for the handoff and artifact convention.
+Keep benchmark runners, reusable configurations, evaluation code, and small fixtures in Git. Store large or run-specific outputs outside the checkout and record their provenance with the run. See [agent instructions](../AGENTS.md) for the handoff and artifact convention.

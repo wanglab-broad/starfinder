@@ -190,7 +190,7 @@ def generate_dataset(config: SyntheticConfig | None = None, *, preset: str = "sm
 
     return SyntheticDataset(rounds, metadata, tuple(f'ch{c:02d}' for c in range(config.n_channels)),
         _truth_table(truth_rows), None, config,
-        {'seed': config.seed, 'limitations': LIMITATIONS, 'scientific_owner': 'W-93',
+        {'seed': config.seed, 'limitations': LIMITATIONS,
          'encoding': {'reverse_bases': True}, 'background_std_used': False},
         perturbations, ground_truth, list(codebook))
 
@@ -200,7 +200,7 @@ def generate_registration_pairs(presets: list[str], *, seed: int = 42, add_noise
 
     Select presets explicitly. Forward displacement fields describe scene
     movement, not inverse registration pull fields. Process hash seeds remain
-    unqualified under W-93; resolved seeds are recorded in provenance.
+    unqualified; resolved seeds are recorded in provenance.
     """
     results = {}
 
@@ -321,6 +321,6 @@ def generate_registration_pairs(presets: list[str], *, seed: int = 42, add_noise
             _truth_table(truth_rows), None,
             {'preset': preset, 'shape_zyx': shape, 'n_spots': n_spots, 'seed': seed, 'add_noise': add_noise,
              'shift_range': deepcopy(shift_range), 'deformations': deepcopy(DEFORMATION_CONFIGS)},
-            {'seed': seed, 'effective_seeds': effective_seeds, 'limitations': LIMITATIONS, 'scientific_owner': 'W-93'},
+            {'seed': seed, 'effective_seeds': effective_seeds, 'limitations': LIMITATIONS},
             perturbations, ground_truth)
     return results

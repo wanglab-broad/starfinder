@@ -40,5 +40,5 @@ numerical behavior. MATLAB remains a separately documented backend; no parity
 or runtime validation is implied by corresponding names.
 
 At the repository root, CONTEXT.md gives concise orientation and AGENTS.md gives
-operational instructions. Linear holds live scope, decisions and run evidence;
-the site holds maintained software contracts rather than execution diaries.
+operational instructions. The site holds maintained software contracts rather
+than execution diaries.

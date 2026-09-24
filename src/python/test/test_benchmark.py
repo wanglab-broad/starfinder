@@ -228,7 +228,7 @@ class TestPresets:
 
 
 def test_demons_saved_field(case, tmp_path):
-    # Installed SimpleITK is required by the housekeeping validation environment.
+    # Installed SimpleITK is required by the validation environment.
     import SimpleITK
     assert SimpleITK.Version_VersionString()
     config = {**case.config, 'registration': {'method': 'demons', 'iterations': [1]},
