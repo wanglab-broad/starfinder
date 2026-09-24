@@ -45,4 +45,6 @@ export parity and alphabetical reference lists.
 
 ## Development records
 
+Historical files formerly stored in this folder were moved out of the repository. An index of them, with their original paths, checksums and preserved source snapshots, is kept outside the repository. Historical results require evidence review before reuse.
+
 Keep benchmark runners, reusable configurations, evaluation code, and small fixtures in Git. Store large or run-specific outputs outside the checkout and record their provenance with the run. See [agent instructions](../AGENTS.md) for the handoff and artifact convention.
