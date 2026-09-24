@@ -126,19 +126,19 @@ runs, checksum validation, and separate saved-output evaluations/reports.
 
 | Area | Change and consequence |
 | --- | --- |
-| I/O / preprocessing (W-137) | Preserve loaded dtype; conversion, cropping and channel selection are explicit. Constant normalization groups map to the lower endpoint even with SNR gating. Float64 computation can change quantization boundaries. Slice morphology avoids uint16 signed overflow; projection preserves singleton Z and uses wider sums without display scaling. |
-| Detection (W-138) | Singleton-Z local maxima operate in YX. Empty tables are typed, identities/geometry explicit. Distinct landmark and pipeline detector policies remain distinct. |
-| Translation (W-139) | Singleton axes return zero; odd-length peak wrapping is corrected. Signed fractional Fourier output uses the real inverse FFT rather than magnitude. Even half-period backend signs and Nyquist behavior are documented rather than hidden. |
-| Transform application (W-140) | Integer output rounds once with nearest-even ties and saturation; floating output retains signed interpolation/overshoot. No silent method fallback; unsupported geometry/backend/dimensions fail explicitly. |
-| Barcodes (W-141) | Validate codebook collisions and label alignment; neighborhoods use explicit ZYX radii and subpixel/boundary policy. Preserve ambiguous/unmatched/rejected identities instead of dropping them. Scores and endpoint filtering have explicit meanings. |
-| Coordination (W-142) | Merged registration images sum in float64. Rectangular subtiles cover both axes and remainders. Batch/streaming honor the same stage flags, unlike legacy forced/omitted stages. |
-| Synthetic (W-143) | Fractional scene centers render analytically. Integer-center rendering and historical randomness remain; namespace extraction does not establish molecular truth or cross-process reproducibility. |
-| Evaluation (W-144) | Centered NCC has no epsilon bias. Missing/failed shifts, zero denominators and constant images are undefined rather than zero/passing. Shift errors preserve floats; matching thresholds/policies are explicit. |
-| Benchmark / recipes (W-145–W-146) | Failures retain requested/actual method identity. Evaluation/reporting reuse saved artifacts. Optional legacy experiments remain recipes with prerequisites, not validated research results. |
+| I/O / preprocessing | Preserve loaded dtype; conversion, cropping and channel selection are explicit. Constant normalization groups map to the lower endpoint even with SNR gating. Float64 computation can change quantization boundaries. Slice morphology avoids uint16 signed overflow; projection preserves singleton Z and uses wider sums without display scaling. |
+| Detection | Singleton-Z local maxima operate in YX. Empty tables are typed, identities/geometry explicit. Distinct landmark and pipeline detector policies remain distinct. |
+| Translation | Singleton axes return zero; odd-length peak wrapping is corrected. Signed fractional Fourier output uses the real inverse FFT rather than magnitude. Even half-period backend signs and Nyquist behavior are documented rather than hidden. |
+| Transform application | Integer output rounds once with nearest-even ties and saturation; floating output retains signed interpolation/overshoot. No silent method fallback; unsupported geometry/backend/dimensions fail explicitly. |
+| Barcodes | Validate codebook collisions and label alignment; neighborhoods use explicit ZYX radii and subpixel/boundary policy. Preserve ambiguous/unmatched/rejected identities instead of dropping them. Scores and endpoint filtering have explicit meanings. |
+| Coordination | Merged registration images sum in float64. Rectangular subtiles cover both axes and remainders. Batch/streaming honor the same stage flags, unlike legacy forced/omitted stages. |
+| Synthetic | Fractional scene centers render analytically. Integer-center rendering and historical randomness remain; namespace extraction does not establish molecular truth or cross-process reproducibility. |
+| Evaluation | Centered NCC has no epsilon bias. Missing/failed shifts, zero denominators and constant images are undefined rather than zero/passing. Shift errors preserve floats; matching thresholds/policies are explicit. |
+| Benchmark / recipes | Failures retain requested/actual method identity. Evaluation/reporting reuse saved artifacts. Optional legacy experiments remain recipes with prerequisites, not validated research results. |
 
 Detailed numerical policies, tolerances and edge cases remain canonical in
 [contracts](api/contracts.md), [evaluation](api/evaluation.registration.rst),
 [synthetic](api/synthetic.rst) and [benchmark recipes](benchmark-recipes.md).
 This guide does not claim bitwise equivalence or MATLAB runtime validation.
-W-92/W-93/W-94/W-124 and Chapter II retain scientific qualification; notably,
+Scientific qualification remains separate; notably,
 process-dependent synthetic hash seeds and molecular truth remain unresolved.

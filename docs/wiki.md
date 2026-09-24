@@ -2,7 +2,7 @@
 
 Use these maintained guides for vocabulary, package responsibilities and detailed
 contracts. The repository's CONTEXT.md is the concise orientation; AGENTS.md
-covers operational work. Linear owns current decisions and execution evidence.
+covers operational work.
 
 ```{toctree}
 :maxdepth: 1

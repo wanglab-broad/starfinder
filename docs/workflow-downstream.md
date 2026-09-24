@@ -8,8 +8,8 @@ Python-only or supply their dependencies.
 
 The contracts below were checked against `workflow/rules/segmentation.smk`,
 `stitching.smk`, `reads-assignment.smk`, `utils.smk` and their scripts. They are
-not an executed image-to-cell validation. Scientific validation belongs to
-[W-92: public image-to-molecule-to-cell example](https://linear.app/jiahaoh/issue/W-92/verify-a-public-image-to-molecule-to-cell-example-for-chapter-ii).
+not an executed image-to-cell validation. Scientific validation on a public
+image-to-molecule-to-cell example is still pending.
 The [downstream examples](https://github.com/wanglab-broad/starfinder/blob/dev/example/downstream/README.md)
 remain an additional entry point.
 

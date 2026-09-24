@@ -1,7 +1,7 @@
 """Private historical real-data extraction; explicit dataset configuration.
 
 No extraction is executed by run/evaluate/report. Scientific qualification and
-any revision of this legacy conversion recipe remain outside housekeeping.
+any revision of this legacy conversion recipe remain separate tasks.
 """
 
 from __future__ import annotations

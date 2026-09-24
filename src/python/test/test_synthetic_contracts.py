@@ -38,7 +38,7 @@ def test_dataset_labels_identity_eligibility_and_config_copy(tmp_path, monkeypat
     assert result.molecular_truth is None
     assert result.config == config and result.config is not config
     assert result.channel_labels == ('ch00', 'ch01', 'ch02', 'ch03')
-    assert result.provenance['scientific_owner'] == 'W-93'
+    assert 'scientific_owner' not in result.provenance
     table = result.spot_truth
     assert len(table) == 2 * 4 * 8
     assert not table.duplicated(['spot_namespace', 'round_label', 'spot_id']).any()

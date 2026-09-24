@@ -7,9 +7,9 @@ from starfinder.image import ImageMetadata
 from ._config import SyntheticConfig
 
 LIMITATIONS = (
-    'Processed-image Gaussian scenes, not qualified molecular truth or calibrated acquisition physics; W-93.',
+    'Processed-image Gaussian scenes, not qualified molecular truth or calibrated acquisition physics.',
     'Integer sampled centers; deformation uses nearest-even rounded centers and drops out-of-bounds spots.',
-    'Registration preset/deformation seeds use process-dependent hash(); cross-process reproducibility unqualified (W-93).',
+    'Registration preset/deformation seeds use process-dependent hash(); cross-process reproducibility unqualified.',
 )
 
 @dataclass
