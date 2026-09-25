@@ -9,46 +9,27 @@ from pathlib import Path
 
 import pytest
 
-# Pre-generated fixtures path (at repo root /tests/fixtures/)
-REPO_ROOT = Path(__file__).parent.parent.parent.parent
-FIXTURES_DIR = REPO_ROOT / "tests" / "fixtures" / "synthetic"
+# Synthetic images are generated per session under pytest's temporary directory,
+# so the suite never depends on git-ignored files in the checkout.
+SMALL_DATASET_ARGS = ("--mode", "e2e", "--preset", "small", "--seed", "42")
 
 
 @pytest.fixture(scope="session")
-def small_dataset() -> Path:
-    """Path to pre-generated small synthetic dataset (2 FOVs, unit tests)."""
-    path = FIXTURES_DIR / "small"
-    if not path.exists():
-        pytest.skip(
-            "Small synthetic dataset not found. Run: "
-            "uv run starfinder synthetic generate --mode e2e --owner Jiahao --preset small --seed 42 --output tests/fixtures/synthetic/small"
-        )
-    return path
+def small_dataset(tmp_path_factory) -> Path:
+    """Small synthetic dataset (2 FOVs, 16x256x256 uint8), generated once per session."""
+    from starfinder.__main__ import main
 
-
-@pytest.fixture(scope="session")
-def medium_dataset() -> Path:
-    """Path to pre-generated medium synthetic dataset (2 FOVs)."""
-    path = FIXTURES_DIR / "medium"
-    if not path.exists():
-        pytest.skip(
-            "Medium synthetic dataset not found. Run: "
-            "uv run starfinder synthetic generate --mode e2e --owner Jiahao --preset medium --seed 42 --output tests/fixtures/synthetic/medium"
-        )
+    path = tmp_path_factory.mktemp("synthetic") / "small"
+    status = main(["synthetic", "generate", *SMALL_DATASET_ARGS,
+                   "--owner", "pytest", "--output", str(path)])
+    assert status == 0, f"synthetic generation exited with {status}"
     return path
 
 
 @pytest.fixture(scope="session")
 def small_ground_truth(small_dataset: Path) -> dict:
-    """Load ground truth metadata for small dataset."""
+    """Load ground truth metadata paired with the session's small dataset."""
     with open(small_dataset / "ground_truth.json") as f:
-        return json.load(f)
-
-
-@pytest.fixture(scope="session")
-def medium_ground_truth(medium_dataset: Path) -> dict:
-    """Load ground truth metadata for medium dataset."""
-    with open(medium_dataset / "ground_truth.json") as f:
         return json.load(f)
 
 

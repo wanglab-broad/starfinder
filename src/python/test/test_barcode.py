@@ -1,6 +1,5 @@
 """Canonical codebook validation, encoding and public API inventory."""
 
-from pathlib import Path
 import importlib
 import numpy as np
 import pandas as pd
@@ -20,7 +19,6 @@ from starfinder.barcode import EncodingConfig
 from .barcode_cases import CHANNELS, intensity, tensor
 
 ROUNDS = tuple(f"r{i}" for i in range(4))
-SMALL = Path(__file__).resolve().parents[3] / "tests/fixtures/synthetic/small/codebook.csv"
 
 
 def test_encoding_roundtrips_and_synthetic_reversal():
@@ -36,8 +34,8 @@ def test_encoding_roundtrips_and_synthetic_reversal():
     assert EncodingConfig(False, 2).encode(bases) == raw[3:] + raw[:2]
 
 
-def test_load_canonical_order_and_ground_truth_calls():
-    cb = load_codebook(SMALL, round_labels=ROUNDS, channel_labels=CHANNELS)
+def test_load_canonical_order_and_ground_truth_calls(small_dataset):
+    cb = load_codebook(small_dataset / "codebook.csv", round_labels=ROUNDS, channel_labels=CHANNELS)
     assert isinstance(cb, Codebook) and cb.n_genes == 8
     assert cb.gene_to_seq["GeneA"] == "4422"
     assert cb.seq_to_gene["4422"] == "GeneA"
@@ -82,7 +80,7 @@ def test_invalid_split_config(split):
         EncodingConfig(split_index=split)
 
 
-def test_split_range_and_mapping_errors(tmp_path):
+def test_split_range_and_mapping_errors(tmp_path, small_dataset):
     path = tmp_path / "bad.csv"
     path.write_text("A,CACGC\n")
     with pytest.raises(ValueError, match="row 1.*split"):
@@ -95,7 +93,10 @@ def test_split_range_and_mapping_errors(tmp_path):
     for mapping in ({"1": 0}, dict(zip("1234", [0, 0, 2, 3])), dict(zip("1234", [0, 1, 2, 4]))):
         with pytest.raises(ValueError, match="map"):
             load_codebook(
-                SMALL, round_labels=ROUNDS, channel_labels=CHANNELS, color_to_channel=mapping
+                small_dataset / "codebook.csv",
+                round_labels=ROUNDS,
+                channel_labels=CHANNELS,
+                color_to_channel=mapping,
             )
 
 

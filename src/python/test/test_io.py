@@ -18,7 +18,7 @@ class TestLoadMultipageTiff:
         # Create test TIFF: 5 slices, 64x32 pixels
         test_data = np.random.randint(0, 255, (5, 64, 32), dtype=np.uint8)
         tiff_path = tmp_path / "test.tif"
-        tifffile.imwrite(tiff_path, test_data)
+        tifffile.imwrite(tiff_path, test_data, photometric="minisblack")
 
         result = load_volume(tiff_path).image
 
@@ -28,7 +28,7 @@ class TestLoadMultipageTiff:
         """Loading preserves uint16 by default."""
         test_data = np.random.randint(0, 65535, (3, 32, 32), dtype=np.uint16)
         tiff_path = tmp_path / "test16.tif"
-        tifffile.imwrite(tiff_path, test_data)
+        tifffile.imwrite(tiff_path, test_data, photometric="minisblack")
 
         result = load_volume(tiff_path).image
 
@@ -38,7 +38,7 @@ class TestLoadMultipageTiff:
         """Loading preserves original dtype without a conversion config."""
         test_data = np.random.randint(0, 65535, (3, 32, 32), dtype=np.uint16)
         tiff_path = tmp_path / "test16.tif"
-        tifffile.imwrite(tiff_path, test_data)
+        tifffile.imwrite(tiff_path, test_data, photometric="minisblack")
 
         result = load_volume(tiff_path).image
 
@@ -60,6 +60,7 @@ class TestLoadMultipageTiff:
         tifffile.imwrite(
             tiff_path,
             test_data,
+            photometric="minisblack",
             ome=True,
             metadata={"axes": "ZYX"},
         )
@@ -79,6 +80,7 @@ class TestLoadMultipageTiff:
         tifffile.imwrite(
             tiff_path,
             test_data,
+            photometric="minisblack",
             imagej=True,
             metadata={"axes": "ZYX"},
         )
@@ -142,7 +144,7 @@ class TestLoadImageStacks:
         # Create 4 channel files
         for i, ch in enumerate(["ch00", "ch01", "ch02", "ch03"]):
             data = np.full((5, 64, 32), i * 50, dtype=np.uint8)
-            tifffile.imwrite(tmp_path / f"img_{ch}.tif", data)
+            tifffile.imwrite(tmp_path / f"img_{ch}.tif", data, photometric="minisblack")
 
         loaded_round = load_round(tmp_path, config=ImageLoadConfig(channel_labels=tuple(["ch00", "ch01", "ch02", "ch03"])))
         result = loaded_round.image
@@ -154,8 +156,8 @@ class TestLoadImageStacks:
     def test_load_respects_channel_order(self, tmp_path: Path):
         """Channels are stacked in the order specified."""
         # ch00 = all 0s, ch01 = all 100s
-        tifffile.imwrite(tmp_path / "img_ch00.tif", np.zeros((3, 32, 32), dtype=np.uint8))
-        tifffile.imwrite(tmp_path / "img_ch01.tif", np.full((3, 32, 32), 100, dtype=np.uint8))
+        tifffile.imwrite(tmp_path / "img_ch00.tif", np.zeros((3, 32, 32), dtype=np.uint8), photometric="minisblack")
+        tifffile.imwrite(tmp_path / "img_ch01.tif", np.full((3, 32, 32), 100, dtype=np.uint8), photometric="minisblack")
 
         loaded_round = load_round(tmp_path, config=ImageLoadConfig(channel_labels=tuple(["ch00", "ch01"])))
         result = loaded_round.image
@@ -167,8 +169,8 @@ class TestLoadImageStacks:
     def test_load_with_size_mismatch_crops_and_warns(self, tmp_path: Path):
         """Size mismatch between channels crops to minimum and warns."""
         # ch00: 5x64x32, ch01: 5x60x30
-        tifffile.imwrite(tmp_path / "ch00.tif", np.zeros((5, 64, 32), dtype=np.uint8))
-        tifffile.imwrite(tmp_path / "ch01.tif", np.zeros((5, 60, 30), dtype=np.uint8))
+        tifffile.imwrite(tmp_path / "ch00.tif", np.zeros((5, 64, 32), dtype=np.uint8), photometric="minisblack")
+        tifffile.imwrite(tmp_path / "ch01.tif", np.zeros((5, 60, 30), dtype=np.uint8), photometric="minisblack")
 
         with pytest.warns(UserWarning, match="size mismatch"):
             loaded_round = load_round(tmp_path, config=ImageLoadConfig(channel_labels=tuple(["ch00", "ch01"]), crop_policy="minimum"))
@@ -180,7 +182,7 @@ class TestLoadImageStacks:
 
     def test_load_missing_channel_raises(self, tmp_path: Path):
         """Missing channel file raises ValueError."""
-        tifffile.imwrite(tmp_path / "ch00.tif", np.zeros((3, 32, 32), dtype=np.uint8))
+        tifffile.imwrite(tmp_path / "ch00.tif", np.zeros((3, 32, 32), dtype=np.uint8), photometric="minisblack")
 
         with pytest.raises(ValueError, match="ch01"):
             load_round(tmp_path, config=ImageLoadConfig(channel_labels=tuple(["ch00", "ch01"])))
@@ -194,7 +196,7 @@ class TestLoadImageStacks:
         """Loading with subdir searches in subdirectory."""
         subdir = tmp_path / "images"
         subdir.mkdir()
-        tifffile.imwrite(subdir / "ch00.tif", np.zeros((3, 32, 32), dtype=np.uint8))
+        tifffile.imwrite(subdir / "ch00.tif", np.zeros((3, 32, 32), dtype=np.uint8), photometric="minisblack")
 
         loaded_round = load_round(tmp_path, config=ImageLoadConfig(channel_labels=tuple(["ch00"]), subdir="images"))
         result = loaded_round.image
