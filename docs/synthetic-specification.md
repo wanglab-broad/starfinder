@@ -2,9 +2,9 @@
 
 This page defines the model behind `starfinder.synthetic.generate_formed_scene`:
 its stages, the order of the effects and the random streams. The
-{doc}`synthetic API page <api/synthetic>` documents the Python interface. The
-historical generators (`generate_dataset`, `render_spots`) follow their own,
-older semantics and are not described here.
+{doc}`synthetic API page <api/synthetic>` documents the Python interface,
+including the multi-FOV datasets, registration pairs and benchmark presets
+built from these scenes.
 
 ## Scope
 
@@ -31,8 +31,11 @@ choices, not fitted ranges, and nothing on this page is a calibration claim.
   codebook. The library sets no upper bound on shape, rounds or counts: callers
   own memory and time. `max_count` (default 1024) is a user-settable guard, so
   a sampled or explicit N above it fails rather than being truncated.
-* Computation is float64. Output is float32 by default (float64, uint8 and
-  uint16 are explicit alternatives), cast once at the end. Integer output rounds
+* Latents, truth and signal tensors are float64. Images accumulate in the
+  `accumulation` dtype: float32 by default, float64 for float64 output or when
+  requested (the fixture and development presets request it). Output is
+  float32 by default (float64, uint8 and uint16 are explicit alternatives),
+  cast once at the end; more than 1% clipped voxel values in a round warns. Integer output rounds
   to nearest even, then saturates and counts clipped voxels. Float output keeps
   negative residuals. Nothing is normalized.
 * Every parameter must be finite. Booleans are rejected where integers are
@@ -70,13 +73,20 @@ are absolute with respect to the reference; nothing accumulates across rounds.
    normalized and acts on amplicon signal only.
 6. **Geometry.** Each round r maps reference points by
    `F_r(q) = q + d_r(q) + t_r`, with
-   `d_r(q) = Σ_k v_rk · exp(−‖q − c_k‖² / (2 l_k²))`. Translations are supplied
-   or drawn uniformly in [−a, a); local vectors are supplied or drawn with
-   normal components of SD `strength`. Each map must satisfy
-   `Σ_k ‖v_rk‖ / (l_k √e) ≤ 0.5`, which makes the inverse fixed point
+   `d_r(q) = Σ_k v_rk · exp(−‖q − c_k‖² / (2 l_k²)) + A_r(q − c) + P_r m(u)`,
+   grid centre `c = (shape − 1)/2`, `u = (q − c)/h` with `h` the largest half
+   extent (at least 1) and `m(u) = (u_z², u_y², u_x², u_z u_y, u_z u_x, u_y u_x)`.
+   Translations are supplied or drawn uniformly in [−a, a); local vectors are
+   supplied, drawn with normal components of SD `strength`, or drawn as
+   uniformly random directions of length `local_magnitude`; affine and
+   polynomial coefficients are supplied or drawn uniformly and scaled to a
+   per-axis displacement bound on the grid. A named reference round is held at
+   identity. Each map must satisfy
+   `Σ_k ‖v_rk‖ / (l_k √e) + ‖A_r‖_F + J_P ≤ 0.5` (J_P bounds the polynomial
+   Jacobian on the grid), which makes the inverse fixed point
    `q ← p − t − d(q)` contractive (stop at update ≤ 1e−10 voxels within 100
-   iterations; composition residual ≤ 2e−10). For Z=1, all requested Z motion
-   and control-center Z must be zero. A round's transform is labeled
+   iterations; composition residual ≤ 2e−10). For Z=1, all requested Z motion,
+   control-center Z and Z output rows must be zero. A round's transform is labeled
    `identity` exactly when its effective coefficients are zero.
 7. **Rendering.** Molecules move with their centers and keep their widths and
    angle. At integer voxel p about the moved center, with `dz, dy, dx = p − q`,
@@ -89,12 +99,17 @@ are absolute with respect to the reference; nothing accumulates across rounds.
    nonnegative R×C `tissue_weights`. B sums an optional clamped linear gradient
    `max(0, a0 + a·q/(shape − 1))` (singleton axes use 0), optional supplied
    Gaussian regions and optional texture blobs placed like the formed
-   population. Gaussian tails are untruncated; there is no periodic wrap.
+   population. Gaussian tails are untruncated; there is no periodic wrap. The
+   inverse is evaluated only when B has a component: exactly per axis for a
+   pure translation, otherwise block by block over the output grid.
 9. **Baseline.** Nonnegative R×C offsets are added in the destination frame;
    they are not moved, mixed or lost.
-10. **Noise.** With J the pre-noise total (signal, tissue and baseline), add
-    `sqrt(alpha·J)·Z_dep`, then `sigma·Z_ind`, from separate standard-normal
-    streams per round and channel in C-order ZYX.
+10. **Noise.** With J the pre-noise total (signal, tissue and baseline), the
+    dependent residual adds `sqrt(alpha·J)·Z_dep` (`model="gaussian"`) or
+    replaces J by `alpha·Poisson(J/alpha)` (`model="poisson"`, same mean and
+    variance); then read noise adds `sigma·Z_ind`. Draws come from separate
+    streams per round and channel in C-order ZYX (drawn in flat chunks, which
+    equals one full-plane draw).
 11. **Cast** once to the output dtype, recording clipping counts.
 
 All readout, background, noise and geometry controls default to disabled.
@@ -134,7 +149,8 @@ exact order:
   seeds are never used, so results do not depend on `PYTHONHASHSEED`.
 * Components: `count`, `placement`, `identity`, `brightness`, `width.axial`,
   `width.lateral`, `elongation`, `angle`, `round.dropout`, `round.weakening`,
-  `round.loss`, `geometry.translation`, `geometry.local`, `background.count`,
+  `round.loss`, `geometry.translation`, `geometry.local`, `geometry.affine`,
+  `geometry.polynomial`, `background.count`,
   `background.placement`, `background.width`, `background.brightness`,
   `noise.dependent`, `noise.independent`.
 * Persistent draws use the amplicon or blob ID as entity; per-round draws add
@@ -143,8 +159,9 @@ exact order:
   `["control-N","vector"]` per round and draw Z, Y, X in order. Cluster choice
   and rejected proposals consume that amplicon's own placement stream.
 * Consequences: changing one factor's parameters, appending IDs or reordering
-  work never changes another component's draws. Changing the shape can change
-  the noise array layout. Repeatability is exact within a pinned NumPy; NumPy
+  work never changes another component's draws. Multi-FOV datasets give each
+  FOV the scene key `[scene_key, FOV]`, so adding FOVs changes no other FOV.
+  Changing the shape can change the noise array layout. Repeatability is exact within a pinned NumPy; NumPy
   releases do not promise identical distribution algorithms.
 
 ## Development fixtures

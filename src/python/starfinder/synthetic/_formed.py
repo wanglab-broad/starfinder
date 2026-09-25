@@ -1,12 +1,14 @@
 """Formed-amplicon scene model; see docs/synthetic-specification.md.
 
-Historical rendering has different support, precision and observation semantics;
-this implementation deliberately does not alter those historical fixtures.
+Every synthetic image is rendered here: oracle fixtures (float64 accumulation)
+and the benchmark presets in _presets (float32 accumulation, round by round).
 """
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 import hashlib
+from types import SimpleNamespace
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -15,15 +17,16 @@ from starfinder.barcode import Codebook
 from starfinder.image import ImageMetadata
 from ._common import (ScalarDistribution, _array, _distribution, _draw, _integer,
                       _json, _label, _placement, _position, _probabilities)
-from ._geometry import GeometryConfig, _forward, _inverse, _kind, _prepare_geometry
-from ._observation import (BackgroundConfig, NoiseConfig, _observe,
-                           _prepare_background, evaluate_background)
+from ._geometry import (GeometryConfig, _forward, _inverse, _inverse_grid, _kind, _prepare_geometry,
+                        _translation_only)
+from ._observation import (BackgroundConfig, NoiseConfig, _noise, _observe, _prepare_background,
+                           evaluate_background, evaluate_background_translated)
 
 # First element of every stream descriptor; changing it would redraw every scene.
 _STREAM_NAMESPACE = "starfinder.synthetic/1"
 _STREAM_KEY = ("namespace", "split", "seed", "scene_key", "component", "entity",
                "round_label", "channel_label")
-_GENERATOR_VERSION = "5"
+_GENERATOR_VERSION = "6"
 _COMPONENTS = ("count", "placement", "identity", "brightness", "width.axial",
                "width.lateral", "elongation", "angle")
 
@@ -136,7 +139,10 @@ class FormedSceneConfig:
     are amplicon-0, amplicon-1, etc. Gene/property overrides are ID-keyed.
     Placement is uniform, weighted (ZYX spatial_weights), or clustered (centers,
     positive cluster_weights, spread_zyx). Density is Poisson amplicons/voxel.
-    Shape dimensions are positive integers; the codebook sets the round count.
+    Shape dimensions are positive integers; the codebook sets the round count
+    and channel labels. accumulation is the rendering dtype: None selects
+    float64 for float64 output and float32 otherwise (float64 is for oracle
+    fixtures).
     max_count is a user-settable allocation guard: a larger N fails, never
     truncates. split and scene_key are stream-key labels (no reserved values).
 
@@ -154,6 +160,7 @@ class FormedSceneConfig:
     split: str = "development"
     shape_zyx: tuple[int, int, int] = (8, 32, 32)
     dtype: str = "float32"
+    accumulation: str | None = None
     count: int | None = None
     density: float | None = None
     coordinates: tuple[tuple[float, float, float], ...] | None = None
@@ -253,17 +260,10 @@ def _kernel(shape, point, sz, sl, elongation, angle):
     return slices, kernel, truncated
 
 
-def generate_formed_scene(codebook: Codebook, *, config: FormedSceneConfig = FormedSceneConfig(),
-                          metadata: ImageMetadata | None = None) -> FormedScene:
-    """Generate an in-memory formed population and controlled readout images.
+def _prepare(codebook, config, metadata, stream_log):
+    """Validate inputs and draw every per-amplicon and per-round latent.
 
-    Stages and effect order follow docs/synthetic-specification.md. Readout,
-    background, noise and geometry are all optional and default disabled, so
-    the default geometry is identity; nothing is enabled implicitly. Invalid
-    input or nonfinite generation raises ValueError (wrong typed objects raise
-    TypeError). Density overflow/max_count errors never cap or retry N. Shape,
-    round count and max_count have no library upper bound: callers own memory
-    and time limits (images are R arrays of ZYX×4 float64 before the cast).
+    Returns the state shared by all rounds; images are rendered by _render_round.
     """
     if not isinstance(config, FormedSceneConfig) or not isinstance(codebook, Codebook):
         raise TypeError("expected FormedSceneConfig and Codebook")
@@ -283,6 +283,9 @@ def generate_formed_scene(codebook: Codebook, *, config: FormedSceneConfig = For
     shape = np.array(config.shape_zyx)
     if config.dtype not in ("float32", "float64", "uint8", "uint16"):
         raise ValueError("unsupported output dtype")
+    if config.accumulation not in (None, "float32", "float64"):
+        raise ValueError("accumulation must be None, float32 or float64")
+    accumulation = config.accumulation or ("float64" if config.dtype == "float64" else "float32")
     _integer(config.max_count, "max_count", 0)
     namespace = _json([config.dataset_version, config.sample_id, config.FOV_id, "formed"])
     if metadata is None:
@@ -290,14 +293,13 @@ def generate_formed_scene(codebook: Codebook, *, config: FormedSceneConfig = For
     if not isinstance(metadata, ImageMetadata):
         raise TypeError("metadata must be ImageMetadata")
     metadata = ImageMetadata(**asdict(metadata))
-    streams = {}
 
     def stream(component, entity=None, round_label=None, channel_label=None):
         descriptor = [_STREAM_NAMESPACE, config.split, config.seed, config.scene_key,
                       component, entity, round_label, channel_label]
         encoded = _json(descriptor)
         digest = hashlib.sha256(encoded.encode("utf-8")).hexdigest()
-        streams[encoded] = descriptor
+        stream_log[encoded] = descriptor
         return np.random.Generator(np.random.PCG64(int(digest, 16)))
 
     if sum(x is not None for x in (config.count, config.density, config.coordinates)) > 1:
@@ -360,78 +362,131 @@ def generate_formed_scene(codebook: Codebook, *, config: FormedSceneConfig = For
                                **{k: points[:, j] for j, k in enumerate(("z", "y", "x"))},
                                **{k: values[:, j] for j, k in enumerate(("A", "sz", "sl", "e", "theta"))}))
     formed = formed.astype({k: "string" for k in ("namespace", "amplicon_id", "gene_id", "codeword", "frame_id")})
-    intended = np.zeros((n, 4, len(codebook.round_labels)), dtype=np.float64)
+    channels = len(codebook.channel_labels)
+    intended = np.zeros((n, channels, len(codebook.round_labels)), dtype=np.float64)
     for i, sequence in enumerate(sequences):
         for r, color in enumerate(sequence):
             intended[i, codebook.color_to_channel[color], r] = values[i, 0]
     pre_mix, realized, effects, first_loss, effective_readout = _readout_effects(
         config.readout, intended, ids, codebook.round_labels, stream)
-    images = {label: np.zeros((*shape, 4), dtype=np.float64) for label in codebook.round_labels}
     maps, effective_geometry = _prepare_geometry(config.geometry, shape, codebook.round_labels, stream)
-    background, effective_background = _prepare_background(config.background, shape, len(images), stream)
+    background, effective_background = _prepare_background(
+        config.background, shape, len(codebook.round_labels), stream, channels)
     for component in background:
         component['frame_id'] = metadata.frame_id
-    grid = np.moveaxis(np.indices(shape, dtype=np.float64), 0, -1)
-    tissue = {}
-    round_tables = []
-    transforms = {}
-    for r, label in enumerate(codebook.round_labels):
-        mapping = maps[r]
-        moved = _forward(points, mapping)
-        reference_grid, inverse_diagnostics = _inverse(grid, mapping)
-        tissue[label] = evaluate_background(background, reference_grid)
-        intersects = np.zeros(n, dtype=bool)
-        truncated = np.zeros(n, dtype=bool)
-        # Sorting IDs fixes accumulation order independently of caller scheduling.
-        for i in sorted(range(n), key=lambda i: ids[i]):
-            _, sz, sl, e, theta = values[i]
-            slices, kernel, truncated[i] = _kernel(shape, moved[i], sz, sl, e, theta)
-            intersects[i] = kernel is not None and bool(np.any(kernel > 0))
-            if intersects[i]:
+    effective_noise = _noise(config.noise)
+    return SimpleNamespace(
+        config=config, codebook=codebook, shape=shape, namespace=namespace, metadata=metadata,
+        accumulation=accumulation, stream=stream, n=n, ids=ids, points=points, values=values,
+        formed=formed, abundances=abundances, explicit=coordinates is not None,
+        intended=intended, pre_mix=pre_mix, realized=realized, effects=effects, first_loss=first_loss,
+        maps=maps, background=background, effective_readout=effective_readout,
+        effective_geometry=effective_geometry, effective_background=effective_background,
+        effective_noise=effective_noise)
+
+
+def _render_round(plan, r, render=True):
+    """Render, observe and quantize round r; return (image, truth table, transform, clipping).
+
+    Channels are accumulated one ZYX plane at a time, so peak memory is the
+    output round plus one accumulation plane and the sampled background.
+    With render False only the truth table and transform are built (image,
+    clipping and inverse diagnostics are None).
+    """
+    shape, n, ids, values = plan.shape, plan.n, plan.ids, plan.values
+    label = plan.codebook.round_labels[r]
+    mapping = plan.maps[r]
+    moved = _forward(plan.points, mapping)
+    tissue = None
+    if not render:
+        tissue, inverse_diagnostics = None, None
+    elif plan.background and not _translation_only(mapping):
+        # Background is the only consumer of the full-grid inverse map.
+        tissue, inverse_diagnostics = _inverse_grid(
+            shape, mapping, lambda q: evaluate_background(plan.background, q), plan.accumulation)
+    elif plan.background:
+        # A translation (or identity) inverse is exact per axis: q = p - t.
+        tissue, residual = evaluate_background_translated(
+            plan.background, shape, mapping["translation_zyx"], plan.accumulation)
+        inverse_diagnostics = dict(iterations=1, max_update=0.0, max_residual=residual, tolerance=1e-10,
+                                   max_iterations=100, evaluated_on="output_grid_axes")
+    else:
+        _, inverse_diagnostics = _inverse(moved, mapping)
+        inverse_diagnostics.update(evaluated_on="moved_centers")
+    intersects = np.zeros(n, dtype=bool)
+    truncated = np.zeros(n, dtype=bool)
+    kernels = []
+    # Sorting IDs fixes accumulation order independently of caller scheduling.
+    for i in sorted(range(n), key=lambda i: ids[i]):
+        _, sz, sl, e, theta = values[i]
+        slices, kernel, truncated[i] = _kernel(shape, moved[i], sz, sl, e, theta)
+        intersects[i] = kernel is not None and bool(np.any(kernel > 0))
+        if intersects[i] and np.any(plan.realized[i, :, r]):
+            kernels.append((i, slices, kernel))
+    kind = _kind(mapping)
+    transform_id = _json([plan.namespace, label, kind])
+    frame = plan.metadata.frame_id
+    destination = frame if kind == "identity" else _json([frame, label, "round"])
+    transform = dict(kind=kind, direction="reference_to_round", units="voxel_index",
+                     source_frame=frame, destination_frame=destination,
+                     round_label=label, **mapping, inverse=inverse_diagnostics,
+                     composition="q + d(q) + t", interpolation="analytic; no image interpolation",
+                     molecule_shape="fixed widths/angle; four-sigma support",
+                     background_sampling="analytic B(F_inverse(p)); untruncated")
+    table = plan.formed[["namespace", "amplicon_id", "z", "y", "x"]].copy()
+    table[["z", "y", "x"]] = moved
+    table["frame_id"] = pd.Series([destination]*n, dtype="string")
+    table["round_label"] = pd.Series([label]*n, dtype="string")
+    table["round_index"] = np.full(n, r, dtype=np.int64)
+    table["transform_id"] = pd.Series([transform_id]*n, dtype="string")
+    for key in ("dropped", "weakened", "lost"):
+        table[key] = plan.effects[key][:, r]
+    table["emitting"] = np.any(plan.realized[:, :, r] > 0, axis=1)
+    table["center_in_bounds"] = ((moved >= 0) & (moved <= shape - 1)).all(axis=1)
+    table["support_intersects"] = intersects
+    table["support_truncated"] = truncated
+    table["first_loss_round"] = pd.Series(plan.first_loss, dtype="Int64")
+    for key in ("trend_multiplier", "weak_multiplier"):
+        table[key] = plan.effects[key][:, r]
+    if not render:
+        return None, table, transform_id, transform, None
+    dtype = plan.config.dtype
+    channels = plan.codebook.channel_labels
+    image = np.empty((*shape, len(channels)), dtype=dtype)
+    low_count = high_count = 0
+    for c, channel in enumerate(channels):
+        plane = np.zeros(tuple(shape), dtype=plan.accumulation)
+        for i, slices, kernel in kernels:
+            # Zero amplitudes are skipped; adding their zero products is exact.
+            if plan.realized[i, c, r]:
                 with np.errstate(over="ignore", invalid="ignore"):
-                    images[label][slices] += kernel[..., None] * realized[i, :, r]
-        kind = _kind(mapping)
-        transform_id = _json([namespace, label, kind])
-        destination = metadata.frame_id if kind == "identity" else _json([metadata.frame_id, label, "round"])
-        transforms[transform_id] = dict(kind=kind, direction="reference_to_round", units="voxel_index",
-                                        source_frame=metadata.frame_id, destination_frame=destination,
-                                        round_label=label, **mapping, inverse=inverse_diagnostics,
-                                        composition="q + d(q) + t", interpolation="analytic; no image interpolation",
-                                        molecule_shape="fixed widths/angle; four-sigma support",
-                                        background_sampling="analytic B(F_inverse(p)); untruncated")
-        table = formed[["namespace", "amplicon_id", "z", "y", "x"]].copy()
-        table[["z", "y", "x"]] = moved
-        table["frame_id"] = pd.Series([destination]*n, dtype="string")
-        table["round_label"] = pd.Series([label]*n, dtype="string")
-        table["round_index"] = np.full(n, r, dtype=np.int64)
-        table["transform_id"] = pd.Series([transform_id]*n, dtype="string")
-        for key in ("dropped", "weakened", "lost"):
-            table[key] = effects[key][:, r]
-        table["emitting"] = np.any(realized[:, :, r] > 0, axis=1)
-        table["center_in_bounds"] = ((moved >= 0) & (moved <= shape - 1)).all(axis=1)
-        table["support_intersects"] = intersects
-        table["support_truncated"] = truncated
-        table["first_loss_round"] = pd.Series(first_loss, dtype="Int64")
-        for key in ("trend_multiplier", "weak_multiplier"):
-            table[key] = effects[key][:, r]
-        round_tables.append(table)
-    effective_noise = _observe(images, tissue, effective_background, config.noise,
-                               codebook.channel_labels, stream)
-    clipping = {}
-    for label, image in images.items():
-        if not np.isfinite(image).all():
+                    plane[slices] += kernel * plan.realized[i, c, r]
+        if not np.isfinite(plane).all():
+            raise ValueError(f"{plan.accumulation} accumulation overflow")
+        _observe(plane, tissue, plan.effective_background, r, c, plan.effective_noise,
+                 label, channel, plan.stream)
+        if not np.isfinite(plane).all():
             raise ValueError("nonfinite rendered image")
-        low_count = high_count = 0
-        if config.dtype.startswith("uint"):
-            rounded = np.rint(image)
-            limit = np.iinfo(config.dtype).max
-            low_count, high_count = int((rounded < 0).sum()), int((rounded > limit).sum())
-            image = np.clip(rounded, 0, limit)
+        if dtype.startswith("uint"):
+            limit = np.iinfo(dtype).max
+            np.rint(plane, out=plane)
+            low_count += int(np.count_nonzero(plane < 0))
+            high_count += int(np.count_nonzero(plane > limit))
+            np.clip(plane, 0, limit, out=plane)
         with np.errstate(over="ignore"):
-            images[label] = image.astype(config.dtype)
-        if not np.isfinite(images[label]).all():
+            image[..., c] = plane
+        if not np.isfinite(image[..., c]).all():
             raise ValueError("output dtype overflow")
-        clipping[label] = dict(below=low_count, above=high_count)
+        del plane
+    if low_count + high_count > .01 * image.size:
+        warnings.warn(f"round {label}: {low_count + high_count} of {image.size} voxel values "
+                      f"({(low_count + high_count) / image.size:.1%}) were clipped to the "
+                      f"{dtype} range", RuntimeWarning, stacklevel=4)
+    return image, table, transform_id, transform, dict(below=low_count, above=high_count)
+
+
+def _provenance(plan, stream_log, digests, clipping, transforms):
+    config = plan.config
     config_payload = _plain(asdict(config))
     config_payload["type"] = "FormedSceneConfig"
     config_payload["readout"]["type"] = "ReadoutEffectsConfig"
@@ -443,37 +498,97 @@ def generate_formed_scene(codebook: Codebook, *, config: FormedSceneConfig = For
         config_payload["background"]["texture"][key]["type"] = "ScalarDistribution"
     for key in ("brightness", "axial_width", "lateral_width", "elongation", "angle"):
         config_payload[key]["type"] = "ScalarDistribution"
+    codebook = plan.codebook
     codebook_payload = dict(rows=codebook.table.to_dict("records"), round_labels=list(codebook.round_labels),
                             channel_labels=list(codebook.channel_labels), color_to_channel=codebook.color_to_channel,
                             encoding=asdict(codebook.encoding))
-    effective = dict(config_payload, count=n, placement="explicit" if coordinates is not None else config.placement,
-                     abundance_probabilities=abundances.tolist(), readout=effective_readout,
-                     background=effective_background, noise=effective_noise, geometry=effective_geometry,
-                     effects_enabled=any(v for group in (effective_readout, effective_background, effective_noise, effective_geometry)
-                                         for k, v in group.items() if k.endswith("_enabled")))
-    provenance = dict(
+    groups = (plan.effective_readout, plan.effective_background, plan.effective_noise, plan.effective_geometry)
+    effective = dict(config_payload, count=plan.n, placement="explicit" if plan.explicit else config.placement,
+                     accumulation=plan.accumulation, abundance_probabilities=plan.abundances.tolist(),
+                     readout=plan.effective_readout, background=plan.effective_background,
+                     noise=plan.effective_noise, geometry=plan.effective_geometry,
+                     effects_enabled=any(v for group in groups for k, v in group.items() if k.endswith("_enabled")))
+    return dict(
         generator="starfinder.synthetic.generate_formed_scene", generator_version=_GENERATOR_VERSION,
         requested_config=config_payload, effective_config=effective, seed=config.seed,
         stream_scheme=dict(key=list(_STREAM_KEY), namespace=_STREAM_NAMESPACE,
                            encoding="compact UTF-8 JSON array", digest="SHA-256, big-endian integer",
                            bit_generator="PCG64", numpy_version=np.__version__,
-                           streams=list(streams.values())),
-        codebook=codebook_payload,
-        image_sha256={k: hashlib.sha256(v.tobytes()).hexdigest() for k, v in images.items()},
-        clipping_counts=clipping, transforms=transforms)
-    return FormedScene(images, metadata, formed, pd.concat(round_tables, ignore_index=True),
-                       intended, pre_mix, realized, ids, codebook.round_labels,
-                       codebook.channel_labels, codebook, provenance)
+                           streams=list(stream_log.values())),
+        codebook=codebook_payload, image_sha256=digests, clipping_counts=clipping, transforms=transforms)
+
+
+def _generate(codebook, config, metadata, on_round=None, skip=()):
+    """Generate a scene; with on_round, hand over each round image and keep none.
+
+    on_round(label, image, round_metadata) is called once per round in codebook
+    order, so at most one round image is held in memory. Rounds in ``skip``
+    keep their truth rows and transform but are not rendered (no image, digest
+    or clipping record); other rounds are unaffected because draws are keyed.
+    """
+    stream_log = {}
+    plan = _prepare(codebook, config, metadata, stream_log)
+    rounds, tables, transforms, clipping, digests = {}, [], {}, {}, {}
+    for r, label in enumerate(plan.codebook.round_labels):
+        image, table, transform_id, transform, clip = _render_round(plan, r, label not in skip)
+        transforms[transform_id] = transform
+        tables.append(table)
+        if image is None:
+            continue
+        clipping[label] = clip
+        digests[label] = hashlib.sha256(image.data if image.flags.c_contiguous else image.tobytes()).hexdigest()
+        if on_round is None:
+            rounds[label] = image
+        else:
+            on_round(label, image, ImageMetadata(**dict(asdict(plan.metadata),
+                                                        frame_id=transform['destination_frame'])))
+        del image
+    provenance = _provenance(plan, stream_log, digests, clipping, transforms)
+    return FormedScene(rounds, plan.metadata, plan.formed, pd.concat(tables, ignore_index=True),
+                       plan.intended, plan.pre_mix, plan.realized, plan.ids, plan.codebook.round_labels,
+                       plan.codebook.channel_labels, plan.codebook, provenance)
+
+
+def generate_formed_scene(codebook: Codebook, *, config: FormedSceneConfig = FormedSceneConfig(),
+                          metadata: ImageMetadata | None = None) -> FormedScene:
+    """Generate an in-memory formed population and controlled readout images.
+
+    Stages and effect order follow docs/synthetic-specification.md. Readout,
+    background, noise and geometry are all optional and default disabled, so
+    the default geometry is identity; nothing is enabled implicitly. Invalid
+    input or nonfinite generation raises ValueError (wrong typed objects raise
+    TypeError). Density overflow/max_count errors never cap or retry N. Shape,
+    round count and max_count have no library upper bound: callers own memory
+    and time limits. Rounds are rendered one at a time into ZYXC arrays in the
+    accumulation dtype; all R output rounds are returned. Use generate_dataset
+    to write rounds as they are generated. Integer outputs warn (RuntimeWarning)
+    when more than 1% of a round's voxel values clip; counts stay in provenance.
+    """
+    return _generate(codebook, config, metadata)
 
 
 def formed_scene_preset(name: str = "formed-small-v1") -> tuple[Codebook, FormedSceneConfig]:
-    """Return the clean 3D (formed-small-v1) or singleton-Z (formed-z1-v1) preset.
+    """Return a registered scene preset as (codebook, config).
 
-    Both use N=8 uniform amplicons, seed 42 and every effect disabled.
+    Every SCENE_PRESETS name is accepted. Fixture tier: the clean 3D
+    (formed-small-v1) or singleton-Z (formed-z1-v1) scene, N=8 uniform
+    amplicons, seed 42, float64 accumulation and every effect disabled.
+    Development fixtures (z1-clean, small-combined, ...) delegate to
+    development_scene_preset. Benchmark tier: tiny, small, medium, large,
+    tissue and thick_medium, one FOV of benchmark_scene_preset (uint16).
+    Unknown names raise ValueError.
     """
     if name not in ("formed-small-v1", "formed-z1-v1"):
-        raise ValueError("unknown formed scene preset")
+        from ._development import DEVELOPMENT_FIXTURES, development_scene_preset
+        from ._presets import BENCHMARK_PRESETS, benchmark_scene_preset
+        if name in BENCHMARK_PRESETS:
+            return benchmark_scene_preset(name)
+        if name in DEVELOPMENT_FIXTURES:
+            condition, size = DEVELOPMENT_FIXTURES[name]
+            return development_scene_preset(condition, size=size)
+        raise ValueError(f"unknown formed scene preset: {name}")
     codebook = Codebook(pd.DataFrame(dict(gene_id=["gene-A", "gene-B"], color_sequence=["123", "214"])),
                         ("round10", "round2", "round1"), ("ch02", "ch00", "ch03", "ch01"),
                         {"1": 1, "2": 0, "3": 3, "4": 2})
-    return codebook, FormedSceneConfig(dataset_version=name, shape_zyx=(1 if name == "formed-z1-v1" else 8, 32, 32))
+    return codebook, FormedSceneConfig(dataset_version=name, accumulation="float64",
+                                       shape_zyx=(1 if name == "formed-z1-v1" else 8, 32, 32))

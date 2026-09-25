@@ -11,7 +11,7 @@ import pytest
 
 from starfinder.synthetic import (BackgroundConfig, NoiseConfig, TextureConfig, ScalarDistribution,
                                   ReadoutEffectsConfig, formed_scene_preset, generate_formed_scene)
-from starfinder.synthetic._observation import _observe, evaluate_background
+from starfinder.synthetic._observation import _noise, _observe, evaluate_background
 
 
 def generate(background=BackgroundConfig(), noise=NoiseConfig(), **kwargs):
@@ -44,10 +44,11 @@ def test_a6_literal_injected_draws():
         return Draw(-.5 if component == 'noise.dependent' else .25)
     background = dict(tissue_weights=[[0]*4], baseline=[[0]*4])
     for value, enabled, expected in [(9., True, 6.5), (9., False, 9.), (0., True, .5)]:
-        images = {'r': np.full((1, 1, 1, 4), value)}
-        _observe(images, {label: np.zeros((1, 1, 1)) for label in images}, background,
-                 NoiseConfig(enabled, 4, enabled, 2), ('a', 'b', 'c', 'd'), stream)
-        np.testing.assert_array_equal(images['r'], expected)
+        for c, channel in enumerate('abcd'):
+            plane = np.full((1, 1, 1), value)
+            _observe(plane, np.zeros((1, 1, 1)), background, 0, c,
+                     _noise(NoiseConfig(enabled, 4, enabled, 2)), 'r', channel, stream)
+            np.testing.assert_array_equal(plane, expected)
 
 
 def test_a5_baseline_after_mixing():
@@ -201,12 +202,15 @@ def test_noise_cast_once_and_round_channel_streams():
     book, base = formed_scene_preset()
     config = replace(base, count=0, shape_zyx=(1, 3, 3), dtype='float64',
         background=BackgroundConfig(baseline_enabled=True, baseline=[[0, .5, 1.5, 255.5]]*3))
-    scene = generate_formed_scene(book, config=replace(config, dtype='uint8'))
+    # 9 of 36 values (25%) clip in every round, above the 1% warning level.
+    with pytest.warns(RuntimeWarning, match='9 of 36 voxel values'):
+        scene = generate_formed_scene(book, config=replace(config, dtype='uint8'))
     np.testing.assert_array_equal(scene.rounds['round10'][0, 0, 0], [0, 0, 2, 255])
     assert payload(scene)['clipping_counts']['round10']['above'] == 9
     config = replace(config, noise=NoiseConfig(independent_enabled=True, sigma=10))
     signed = generate_formed_scene(book, config=config)
-    cast = generate_formed_scene(book, config=replace(config, dtype='uint8'))
+    with pytest.warns(RuntimeWarning, match='clipped to the uint8 range'):
+        cast = generate_formed_scene(book, config=replace(config, dtype='uint8'))
     for label, image in signed.rounds.items():
         np.testing.assert_array_equal(cast.rounds[label], np.clip(np.rint(image), 0, 255).astype('uint8'))
     streams = payload(signed)['stream_scheme']['streams']

@@ -1,12 +1,15 @@
 starfinder.synthetic
 ====================
 
-Pure processed-image scene generation. Importing this package does not import
-benchmark orchestration. ``generate_formed_scene`` implements the
-:doc:`formed-amplicon model <../synthetic-specification>`; the historical
-generators keep their original semantics. Generation returns arrays in memory;
-``save_formed_scene`` writes formed-scene fixtures, and the benchmark persistence
-adapter writes historical workflow TIFFs, JSON, scene tables and annotations.
+One processed-image scene generator for oracle fixtures and benchmark data.
+Importing this package does not import benchmark orchestration.
+``generate_formed_scene`` implements the
+:doc:`formed-amplicon model <../synthetic-specification>`; ``generate_dataset``
+and ``generate_registration_pair`` build multi-FOV datasets and registration
+pairs from the same scenes, and the benchmark presets below give them
+documented appearance defaults. Generation returns arrays in memory or hands
+each round to a callback; ``save_formed_scene`` writes formed-scene fixtures
+and ``starfinder synthetic generate`` writes the MATLAB-compatible layout.
 
 .. currentmodule:: starfinder.synthetic
 
@@ -14,6 +17,10 @@ adapter writes historical workflow TIFFs, JSON, scene tables and annotations.
    :toctree: generated
 
    BackgroundConfig
+   BENCHMARK_PRESETS
+   benchmark_scene_preset
+   deformation_geometry
+   DEFORMATION_PRESETS
    DEVELOPMENT_FACTORS
    DEVELOPMENT_FIXTURES
    development_preset_factors
@@ -22,20 +29,19 @@ adapter writes historical workflow TIFFs, JSON, scene tables and annotations.
    formed_scene_preset
    FormedScene
    FormedSceneConfig
+   forward_displacement
    generate_codebook
    generate_dataset
-   generate_displacement_field
    generate_formed_scene
-   generate_registration_pairs
-   generate_volume
+   generate_registration_pair
    GeometryConfig
-   get_preset_config
    NoiseConfig
+   PRESET_VERSION
    ReadoutEffectsConfig
-   render_spots
+   registration_scene_preset
    save_formed_scene
    ScalarDistribution
-   SyntheticConfig
+   SCENE_PRESETS
    SyntheticDataset
    TextureConfig
 
@@ -43,8 +49,9 @@ Formed scenes
 -------------
 
 ``formed_scene_preset(name)`` returns a supplied ``Codebook`` and
-``FormedSceneConfig`` for ``formed-small-v1`` (8×32×32) or ``formed-z1-v1``
-(1×32×32). ``generate_formed_scene(codebook, config=..., metadata=...)`` returns
+``FormedSceneConfig`` for any ``SCENE_PRESETS`` name: the fixture tier
+``formed-small-v1`` (8×32×32) or ``formed-z1-v1`` (1×32×32), the four
+development fixtures, or one FOV of a benchmark preset. ``generate_formed_scene(codebook, config=..., metadata=...)`` returns
 ``FormedScene`` with ordered ZYXC images, typed formed/per-round tables and
 float64 NCR intended/pre-mix/realized signal tensors. The tensor's N axis is
 explicitly labeled by ``amplicon_ids``. Tables join on namespace and amplicon ID;
@@ -74,9 +81,16 @@ explicitly. Counts/seeds reject Booleans. Parameters are checked even for an
 empty population. Extreme draws, placement rejection exhaustion and output
 overflow fail rather than returning nonfinite images.
 
-Rendering uses the ellipsoidal four-sigma support, float64 accumulation in
-sorted amplicon-ID order, then one cast. Integers use nearest-even rounding and
-saturation with clipping counts; floats retain their values without normalization.
+Rendering uses the ellipsoidal four-sigma support in sorted amplicon-ID order,
+one channel plane at a time, then one cast. ``accumulation`` selects the
+rendering dtype: ``None`` (default) means float64 for float64 output and
+float32 otherwise; the fixture and development presets request float64 so
+the independent oracle holds. Integers use nearest-even rounding and
+saturation with clipping counts; a ``RuntimeWarning`` names the round when more
+than 1% of its voxel values clip. Floats retain their values without
+normalization. Rounds are generated one at a time; ``generate_formed_scene``
+returns all of them, while ``generate_dataset`` can hand each round to a
+callback so only one round is held in memory.
 Readout effects, backgrounds, noise and geometry all default disabled. With
 readout effects disabled, intended, pre-mix and realized amplitudes are equal
 but independent arrays.
@@ -175,10 +189,15 @@ rendered nor randomly sampled.
 * Nonnegative ``tissue_weights`` (R,C), default zero, scale the summed scalar
   background into destination channels. Neither mixing nor molecular loss acts
   on tissue or baseline. Background components are not cells or molecular truth.
-* ``dependent_enabled`` adds sqrt(alpha*J)*Z_dep to pre-noise total J; then
-  ``independent_enabled`` adds sigma*Z_ind. Nonnegative scalar ``alpha`` and
-  ``sigma`` default zero. Float output retains negative residuals; integer
-  output rounds/saturates only once.
+* ``dependent_enabled`` applies the signal-dependent residual to pre-noise total
+  J: with ``model="gaussian"`` (default) it adds sqrt(alpha*J)*Z_dep; with
+  ``model="poisson"`` it replaces J by alpha*Poisson(J/alpha), with the same
+  mean and variance (alpha is intensity per detected count; zero draws
+  nothing). Then ``independent_enabled`` adds read noise sigma*Z_ind.
+  Nonnegative scalar ``alpha`` and ``sigma`` default zero. Both draw from the
+  round/channel keyed noise streams in flat chunks, equal to one full-plane
+  draw. Float output retains negative residuals; integer output
+  rounds/saturates only once.
 
 ``effective_config["background"]["components"]`` retains the analytic
 reference-frame components, blob IDs, centers, widths and heights. Noise
@@ -205,10 +224,25 @@ reference point; rounds never accumulate motion. ``translations_zyx`` is R×3,
 Alternatively use uniform ``translation_max_zyx`` half-ranges or normal vector
 component SD ``strength``. Supplied coefficients consume no random draws.
 
-``translation_enabled`` and ``local_enabled`` default false. Disabled requests
-are retained and validated; effective maps are identity. For Z=1, requested Z
-translations/vectors and control-center Z must be zero. Each realized map must
-satisfy ``sum(norm(v_k)/(l_k*sqrt(e))) <= 0.5``; violations error without
+Alternatively ``local_magnitude`` gives each control a uniformly random
+direction of that length.
+
+Affine and polynomial terms add ``A(q-c)`` and ``P m(u)`` to the displacement,
+with grid centre ``c=(shape-1)/2`` and ``u=(q-c)/h``, where the isotropic scale
+``h`` is the largest grid half extent (at least 1). ``affine_zyx`` is R×3×3 in
+voxels per voxel; ``polynomial_zyx`` is R×3×6 in voxels for the monomials
+``zz, yy, xx, zy, zx, yx`` of u. Alternatively ``affine_max_zyx`` and
+``polynomial_max_zyx`` draw uniform coefficients scaled so each output axis
+displacement is at most that bound on the grid (exact at a corner for the
+affine term). ``reference_round`` holds one round at identity and draws nothing
+for it.
+
+``translation_enabled``, ``local_enabled``, ``affine_enabled`` and
+``polynomial_enabled`` default false. Disabled requests are retained and
+validated; effective maps are identity. For Z=1, requested Z translations,
+vectors, control-center Z and Z output rows must be zero. Each realized map
+must satisfy ``sum(norm(v_k)/(l_k*sqrt(e))) + ||A||_F + J_P <= 0.5``, where J_P
+bounds the polynomial Jacobian on the grid; violations error without
 rescaling or redrawing. Actual inverse iterations, update, residual,
 coefficients, frames and direction are recorded for each round in
 ``provenance["transforms"]``. A transform, its destination frame and the
@@ -219,7 +253,12 @@ supplies truth; negating a nonlinear forward field does not invert it.
 Molecules retain reference coordinates in ``formed`` and realized coordinates
 in ``round_truth``. Kernels keep their widths and angle (no Jacobian shape
 deformation). Backgrounds evaluate analytic ``B(F_inverse(p))`` on the output
-grid. ``scene.metadata`` is the reference grid; ``scene.round_metadata``
+grid; the inverse is evaluated only when a background component exists,
+per axis for pure translations and otherwise in blocks of at most 2^18
+voxels. Without a background the recorded inverse diagnostics check the
+moved amplicon centers instead. ``forward_displacement(transform, shape)``
+evaluates a recorded map as a float32 ``F(q)-q`` field, optionally for a
+range of Z planes. ``scene.metadata`` is the reference grid; ``scene.round_metadata``
 supplies each output's destination frame with the same physical calibration.
 
 From ``src/python``::
@@ -247,63 +286,167 @@ single-factor comparisons; they are neither packaged nor oracle-checked.
 ``round_truth.csv``, ``signals.csv`` and ``provenance.json`` into a new or
 empty directory.
 
-Historical scene and result contracts
--------------------------------------
-
-``render_spots(shape, spots, ...)`` accepts a pandas scene table with unique,
-non-null ``spot_id`` and finite ``z, y, x, intensity, sigma`` columns. Coordinates
-are zero-based ZYX voxel indices; sigma is positive. This replaces the old
-integer tuple alias. Integer scene centers retain the historical Gaussian
-kernel, float32 accumulation, background/noise draws and clipping/truncating
-uint8/uint16 cast. Fractional centers are evaluated analytically on integer
-voxels. ``generate_volume`` returns a uint8 ZYX array using this same renderer.
-``get_preset_config(name).shape_zyx`` replaces the separate size lookup.
-
-``generate_dataset(config=...)`` returns ``SyntheticDataset``. Its ordered
-``rounds[fov_id][round_label]`` arrays are ZYXC, with matching ``metadata`` and
-``channel_labels``. ``generate_registration_pairs(["tiny"])`` returns a mapping
-of preset names to results whose rounds contain reference and moving ZYX images.
-Registration preset shift ranges intentionally differ from sequencing presets.
-Select registration presets explicitly; generation does not select experiments.
-
-``spot_truth`` retains identities scoped by FOV/preset, round/channel labels,
-rendered centers, continuous pre-rounding displaced centers where available,
-intensity/sigma, rendered/eligible flags, exclusion reasons, frame and units.
-Eligibility here means a center survived rendering bounds, not molecular or
-scientific qualification. Reference truth uses the reference frame. Frames are
-explicit; physical spacing/origin/direction remain unknown. Per-round shifts
-and forward displacement fields are in ``perturbations``; fields are sampled
-at integer scene centers and then rounded with nearest-even ties. These are
-forward scene perturbations, not inverse registration pull transforms. No
-implicit inversion is performed.
-
-``molecular_truth`` is None. ``historical_truth`` retains old generator records,
-including the v2 sequencing schema; field filenames there are serialization
-names, not evidence that any files were written. ``config`` is an independent
-copy and ``provenance`` records seeds, encoding and limitations. Barcode reversal
-uses the shared ``EncodingConfig(reverse_bases=True).encode(barcode)``.
-
-Historical scientific limitations
----------------------------------
-
-Qualification of shared molecular truth and calibration remains open.
-Registration seeds still use
-``seed + hash(preset_or_deformation_name) % 10000``; resolved seeds are recorded,
-but this is not cross-process reproducibility. Existing spot dropout,
-integer rounding, per-round intensity/PSF jitter and random background are
-preserved. ``background_std`` remains unused; even ``add_noise=False`` retains
-the historical randomized background. No acquisition calibration or molecular
-truth is invented by the namespace migration.
-
-Historical example
+Benchmark datasets
 ------------------
+
+``generate_dataset(codebook, config, fov_ids=("FOV_001",), preset=None,
+on_round=None)`` generates one formed scene per FOV ID. Each FOV sets
+``FOV_id`` and its own stream namespace, scene key ``[config.scene_key, FOV]``,
+so appending IDs never changes earlier FOVs. With ``on_round(fov, round_label,
+image, metadata)`` each round image is handed over when generated and not
+retained. The result is ``SyntheticDataset``: ``rounds``/``metadata`` per FOV,
+concatenated ``formed`` and ``round_truth`` (the namespace names the FOV),
+``spot_truth`` (one row per FOV, amplicon and round with the codeword channel,
+realized amplitude, visibility and a reason when not visible), per-FOV
+``provenance`` and ``historical_truth``. The last is the ``ground_truth.json``
+payload in the historical v2 keys (``image_shape``, ``n_rounds``, ``fovs`` with
+``shifts`` and ``spots`` holding ``id``, ``gene``, ``barcode``, ``color_seq``,
+reference ``position`` and ``intensity``), derived from the truth tables.
+Positions and shifts are continuous voxel indices; no molecular truth is implied.
+
+``generate_registration_pair(preset, deformation="shift", seed=None,
+dtype="uint16", noise=True, include_reference=True, on_round=None)`` images
+one scene in rounds ``reference`` and ``<deformation>``; only the moving round
+moves. All pairs of a preset share the scene, so reference images and amplicons
+are identical and ``include_reference=False`` skips rendering the reference
+again. ``historical_truth["pairs"]`` gives the shift or the deformation kind and
+Lipschitz bound; the transform records hold the full forward map.
+
+``deformation_geometry(name, shape)`` maps the historical deformation names in
+``DEFORMATION_PRESETS`` onto ``GeometryConfig``: YX magnitudes are a percent of
+min(Y, X) capped in pixels, Z magnitudes a percent of Z. ``polynomial_*`` and
+``linear_small`` use bounded polynomial or affine terms; ``gaussian_*`` and
+``multi_point`` use RBF controls at fixed fractions of the grid with random
+directions, reduced when needed to meet the invertibility bound
+(``multi_point`` usually is).
+
+``starfinder synthetic generate --mode e2e|registration --preset NAME --seed N
+--owner NAME --output NEW_DIR [--dtype uint8|uint16] [--no-noise]`` writes rounds
+as they are generated. E2E mode writes ``FOV_###/round#/ch##.tif`` (ZYX),
+``codebook.csv`` (gene,barcode), ``ground_truth.json``, ``scene_truth.csv``,
+``formed.csv``, ``round_truth.csv``, ``generation.json`` and ``manifest.json``.
+Registration mode writes ``synthetic/<preset>/ref.tif``, ``mov_shift.tif``,
+``mov_deform_<name>.tif`` (ch00, ZYX), ``field_<name>.npy`` (float32 Z×Y×X×3
+forward displacement on the reference grid) and the same truth files, plus
+``synthetic/summary.json``.
+
+Choosing a preset
+-----------------
+
+``SCENE_PRESETS`` is the single registry. Use the fixture and development tiers
+(float64 accumulation, literal or independent-oracle checks) for tests of the
+model itself, and the benchmark tier for pipeline, registration and timing
+work. Benchmark presets keep the historical shapes, amplicon counts per FOV
+(two FOVs), seeds and shift half-ranges:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Preset
+     - ZYX shape
+     - Amplicons/FOV
+     - Seed
+     - E2E shift z, yx
+     - Registration shift z, yx
+     - Genes
+     - Use
+   * - ``tiny``
+     - 8×128×128
+     - 10
+     - 42
+     - 2, 5
+     - 2, 10
+     - 12
+     - examples, smoke tests
+   * - ``small``
+     - 16×256×256
+     - 50
+     - 42
+     - 2, 5
+     - 4, 25
+     - 12
+     - the test suite's session data
+   * - ``medium``
+     - 32×512×512
+     - 400
+     - 42
+     - 8, 50
+     - 8, 50
+     - 12
+     - development benchmarks (about 30 s e2e on one thread)
+   * - ``large``
+     - 30×1024×1024
+     - 1500
+     - 123
+     - 7, 100
+     - 7, 100
+     - 64
+     - FOV-scale benchmarks
+   * - ``tissue``
+     - 30×3072×3072
+     - 14000
+     - 456
+     - 7, 300
+     - 7, 300
+     - 64
+     - tissue-scale memory and runtime
+   * - ``thick_medium``
+     - 100×1024×1024
+     - 5200
+     - 789
+     - 25, 100
+     - 25, 100
+     - 64
+     - thick sections
+
+Appearance defaults (``PRESET_VERSION = "benchmark-presets-v1"``) replace the
+historical constant background 20, noise σ 10 and uint8 amplitudes 200–255.
+They are documented engineering choices for realistic-looking development
+data, not calibration:
+
+* uint16 output, float32 accumulation; ``dtype="uint8"`` scales every intensity
+  by 1/16 so typical amplicons stay below 255.
+* Amplitude lognormal with median 1500 and log-SD 0.4 (a brightness spread of
+  roughly 0.5–2.2× across the central 95%). Gaussian widths lognormal with
+  medians 1.5 (axial) and 1.3 (lateral) voxels and log-SD 0.1; mild elongation
+  (folded lognormal, log-SD 0.1) at uniform angles.
+* A camera offset of 100 per channel, and a spatially varying tissue background:
+  a lateral gradient from 0.5 to 1.5 plus three broad Gaussian regions (heights
+  1, 0.8, 0.6), weighted 40, 30, 30 and 20 per channel. It moves with the tissue.
+* Poisson noise with alpha 1 plus Gaussian read noise σ 3.
+* 5% crosstalk from each channel into the next and a per-round trend of 0.95.
+* Round 1 is the reference; later rounds get uniform translations within the
+  e2e half-range. Registration pairs use the registration half-range or a
+  deformation preset.
+* tiny/small/medium use the historical GeneA–GeneH plus GeneI–GeneL, so every
+  channel holds amplicons in every round; larger presets use the 64-gene
+  ``generate_codebook(64)``.
+
+``SCENE_PRESETS[name]["peak_bytes_estimate"]`` estimates generation working
+memory for one round (output round plus two float planes and bounded blocks):
+about 0.29 GiB for ``medium``, 0.66 GiB for ``large``, 4.8 GiB for ``tissue`` and
+1.9 GiB for ``thick_medium``, plus the interpreter. ``medium`` generation is
+tested with ``/usr/bin/time -v``; ``large``, ``tissue`` and ``thick_medium`` are
+validated by configuration and this estimate only.
+
+Scientific limitations
+----------------------
+
+Qualification of shared molecular truth and calibration remains open. Appearance
+defaults are uncalibrated; no acquisition physics beyond the stated model is
+claimed. All draws use the documented SHA-256/PCG64 stream keys, so generation
+is byte-repeatable across processes for the same NumPy version.
+
+Example
+-------
 
 .. code-block:: python
 
-   from starfinder.synthetic import SyntheticConfig, generate_dataset
+   from dataclasses import replace
+   from starfinder.synthetic import benchmark_scene_preset, generate_dataset
 
-   result = generate_dataset(SyntheticConfig(
-       n_z=8, height=32, width=32, n_fovs=1, n_spots_per_fov=5,
-   ))
-   image = result.rounds["FOV_001"]["round1"]
+   codebook, config = benchmark_scene_preset("tiny")
+   result = generate_dataset(codebook, replace(config, shape_zyx=(8, 64, 64)),
+                             fov_ids=("FOV_001", "FOV_002"), preset="tiny")
+   image = result.rounds["FOV_001"]["round1"]          # ZYXC uint16
    visible = result.spot_truth.loc[result.spot_truth.rendered]

@@ -16,7 +16,8 @@ NAMESPACE = 'starfinder.synthetic/1'
 COMPONENTS = (
     'count', 'placement', 'identity', 'brightness', 'width.axial',
     'width.lateral', 'elongation', 'angle', 'round.dropout', 'round.weakening',
-    'round.loss', 'geometry.translation', 'geometry.local', 'background.count',
+    'round.loss', 'geometry.translation', 'geometry.local', 'geometry.affine',
+    'geometry.polynomial', 'background.count',
     'background.placement', 'background.width', 'background.brightness',
     'noise.dependent', 'noise.independent',
 )

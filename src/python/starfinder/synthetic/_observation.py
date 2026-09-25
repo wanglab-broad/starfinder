@@ -42,7 +42,8 @@ class BackgroundConfig:
     All flags default false. Gradient is max(0, intercept + slopes dot
     normalized ZYX). Regions are supplied K×3 centers, positive sigma_zyx
     triples and nonnegative heights (None gives (2,8,8), 10 per region).
-    Tissue weights and baselines are nonnegative R×C arrays, default zero.
+    Tissue weights and baselines are nonnegative R×C arrays, default zero
+    (C is the codebook channel count).
     Disabled parameters are validated and retained, but contribute zero.
     Instances are not hashable (see FormedSceneConfig).
     """
@@ -65,11 +66,15 @@ class BackgroundConfig:
 
 @dataclass(frozen=True)
 class NoiseConfig:
-    """Separate residual normals: sqrt(alpha*J)*Z_dep, then sigma*Z_ind.
+    """Separate residuals: signal-dependent first, then sigma*Z_ind (read noise).
 
-    J includes signal, weighted tissue and baseline. Both flags default false;
-    alpha/sigma are finite nonnegative scalars (zero by default). Round/channel
-    keyed standardized draws persist when strengths change. No photon claim.
+    ``model`` selects the dependent residual: "gaussian" adds sqrt(alpha*J)*Z_dep;
+    "poisson" replaces J by alpha*Poisson(J/alpha), with the same mean and
+    variance (alpha is intensity per detected count). J includes signal,
+    weighted tissue and baseline. Both flags default false; alpha/sigma are
+    finite nonnegative scalars (zero by default). Draws come from the
+    round/channel keyed noise streams; Gaussian standardized draws persist when
+    strengths change. No calibrated photon claim.
     Instances are not hashable (see FormedSceneConfig).
     """
 
@@ -79,6 +84,7 @@ class NoiseConfig:
     alpha: float = 0.0
     independent_enabled: bool = False
     sigma: float = 0.0
+    model: str = "gaussian"
 
 
 def _parameter(value, name, shape, default=0, *, positive=False):
@@ -150,12 +156,12 @@ def _texture(config, shape, enabled, stream):
     return result
 
 
-def _prepare_background(config, shape, rounds, stream):
+def _prepare_background(config, shape, rounds, stream, channels=4):
     if not isinstance(config, BackgroundConfig):
         raise TypeError('background must be BackgroundConfig')
     flags = _flags(config, ('baseline', 'gradient', 'regions', 'texture'))
-    baseline = _parameter(config.baseline, 'baseline', (rounds, 4))
-    weights = _parameter(config.tissue_weights, 'tissue_weights', (rounds, 4))
+    baseline = _parameter(config.baseline, 'baseline', (rounds, channels))
+    weights = _parameter(config.tissue_weights, 'tissue_weights', (rounds, channels))
     intercept = _parameter(_array(config.gradient_intercept, 'gradient_intercept'), 'gradient_intercept', ())
     slopes = _array(config.gradient_slopes_zyx, 'gradient_slopes_zyx')
     if slopes.shape != (3,):
@@ -208,30 +214,90 @@ def evaluate_background(components, coordinates):
     return result
 
 
-def _observe(images, tissue, background, config, channels, stream):
+def _noise(config):
+    """Validate NoiseConfig once; return the effective record used by every round."""
     if not isinstance(config, NoiseConfig):
         raise TypeError('noise must be NoiseConfig')
     flags = _flags(config, ('dependent', 'independent'))
+    if config.model not in ('gaussian', 'poisson'):
+        raise ValueError('noise model must be gaussian or poisson')
     alpha = float(_parameter(config.alpha, 'alpha', ())) if config.alpha is not None else None
     sigma = float(_parameter(config.sigma, 'sigma', ())) if config.sigma is not None else None
     if alpha is None or sigma is None:
         raise ValueError('noise strengths must be nonnegative scalars')
     alpha = alpha if config.dependent_enabled else 0.0
     sigma = sigma if config.independent_enabled else 0.0
-    for r, (label, image) in enumerate(images.items()):
+    return dict(type='NoiseConfig', **flags, alpha=alpha, sigma=sigma, model=config.model)
+
+
+def evaluate_background_translated(components, shape, translation, dtype=np.float64):
+    """Evaluate latent records on a grid moved by a pure translation, plane by plane.
+
+    Reference coordinates are p - t on every axis, so each component is
+    separable: gradients are sums and Gaussians are outer products of per-axis
+    factors. Equal to evaluate_background on the same coordinates up to
+    floating-point reassociation; returns the array and the maximum axis residual.
+    """
+    shape = tuple(int(n) for n in shape)
+    axes = [np.arange(n, dtype=np.float64) - t for n, t in zip(shape, translation)]
+    residual = max(float(np.max(np.abs(a + t - np.arange(len(a))), initial=0))
+                   for a, t in zip(axes, translation))
+    result = np.empty(shape, dtype=dtype)
+    with np.errstate(over='ignore', invalid='ignore', divide='ignore', under='ignore'):
+        terms = []
+        for component in components:
+            if component['kind'] == 'gradient':
+                size = np.asarray(component['shape_zyx'])
+                factors = [np.where(n == 1, 0, a / max(n - 1, 1)) * slope
+                           for a, n, slope in zip(axes, size, component['slopes_zyx'])]
+                terms.append(('gradient', component['intercept'], factors))
+            else:
+                factors = [np.exp(-.5 * ((a - c) / w) ** 2)
+                           for a, c, w in zip(axes, component['center_zyx'], component['sigma_zyx'])]
+                terms.append(('gaussian', component['height'], factors))
+        for z in range(shape[0]):
+            plane = np.zeros(shape[1:], dtype=np.float64)
+            for kind, value, (fz, fy, fx) in terms:
+                if kind == 'gradient':
+                    plane += np.maximum(0, value + fz[z] + fy[:, None] + fx[None, :])
+                else:
+                    plane += value * fz[z] * (fy[:, None] * fx[None, :])
+            result[z] = plane
+    if not np.isfinite(result).all():
+        raise ValueError('nonfinite structured background')
+    return result, residual
+
+
+# Noise draws per call; chunked draws equal one full-plane draw in C order.
+_NOISE_CHUNK = 1 << 22
+
+
+def _observe(plane, tissue, background, r, c, noise, label, channel, stream):
+    """Add tissue/baseline and residual noise to channel c of round r, in place.
+
+    plane is one contiguous ZYX accumulation plane; tissue is the reference
+    background sampled on this round's grid, or None without latent components.
+    Draws come from the (round, channel) keyed streams in flat chunks, so
+    rounds and channels may be generated one at a time.
+    """
+    with np.errstate(over='ignore', invalid='ignore'):
+        if tissue is not None:
+            plane += tissue * np.asarray(background['tissue_weights'])[r, c]
+        plane += np.asarray(background['baseline'])[r, c]
+    if not np.isfinite(plane).all() or (plane < 0).any():
+        raise ValueError('nonfinite or negative pre-noise total')
+    alpha, sigma = noise['alpha'], noise['sigma']
+    dependent = stream('noise.dependent', None, label, channel) if noise['dependent_enabled'] else None
+    independent = stream('noise.independent', None, label, channel) if noise['independent_enabled'] else None
+    flat = plane.reshape(-1)
+    for start in range(0, flat.size, _NOISE_CHUNK):
+        part = flat[start:start + _NOISE_CHUNK]
         with np.errstate(over='ignore', invalid='ignore'):
-            image += tissue[label][..., None] * np.asarray(background['tissue_weights'])[r]
-            image += np.asarray(background['baseline'])[r]
-        if not np.isfinite(image).all() or (image < 0).any():
-            raise ValueError('nonfinite or negative pre-noise total')
-        for c, channel in enumerate(channels):
-            plane = image[..., c]
             # Dependent scale uses J before either residual has been added.
-            for kind, enabled, strength in [('dependent', config.dependent_enabled, alpha),
-                                             ('independent', config.independent_enabled, sigma)]:
-                if enabled:
-                    draws = stream('noise.' + kind, None, label, channel).standard_normal(plane.shape)
-                    with np.errstate(over='ignore', invalid='ignore'):
-                        scale = np.sqrt(strength) * np.sqrt(plane) if kind == 'dependent' else strength
-                        plane += scale * draws
-    return dict(type='NoiseConfig', **flags, alpha=alpha, sigma=sigma)
+            if dependent is not None and noise['model'] == 'poisson':
+                if alpha > 0:
+                    part[...] = alpha * dependent.poisson(part / alpha)
+            elif dependent is not None:
+                part += np.sqrt(alpha) * np.sqrt(part) * dependent.standard_normal(part.size)
+            if independent is not None:
+                part += sigma * independent.standard_normal(part.size)

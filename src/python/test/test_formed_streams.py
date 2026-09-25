@@ -55,7 +55,9 @@ def every_effect(**changes):
                                   brightness=ScalarDistribution('uniform', (2, 4)))),
         noise=NoiseConfig(True, .5, True, .5),
         geometry=GeometryConfig(translation_enabled=True, translation_max_zyx=(.2, .5, .5),
-                                local_enabled=True, centers_zyx=((1, 4, 5),), strength=.05))
+                                local_enabled=True, centers_zyx=((1, 4, 5),), strength=.05,
+                                affine_enabled=True, affine_max_zyx=(.01, .05, .05),
+                                polynomial_enabled=True, polynomial_max_zyx=(.01, .05, .05)))
     return generate_formed_scene(book, config=replace(config, **changes))
 
 

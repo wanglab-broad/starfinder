@@ -55,7 +55,7 @@ class TestSTARMapDataset:
         assert ds.codebook is None
         ds.load_codebook(small_dataset / "codebook.csv")
         assert ds.codebook is not None
-        assert ds.codebook.n_genes == 8
+        assert ds.codebook.n_genes == 12
 
     def test_channel_order_default(self, sample_config):
         ds = from_workflow_config(sample_config).dataset
