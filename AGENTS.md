@@ -18,8 +18,9 @@ checkout or rewrite Git history.
 
 Linear owns current scope, plans, decisions and validation evidence. Software Git
 owns maintained code/docs/configs/tests, not diaries or benchmark run reports.
-Scientific acceptance belongs to Chapter II/W-57 and W-92/W-93/W-94/W-124; software
-checks do not qualify data, molecular truth or scientific claims. Scope changes
+Scientific acceptance belongs to the Chapter II project and its linked evidence and
+benchmark issues in Linear; software checks do not qualify data, molecular truth or
+scientific claims. Scope changes
 belong in the linked chapter discussion. Historical checklists do not authorize work.
 
 When an automated runner dispatches a task, the task's own instructions govern
