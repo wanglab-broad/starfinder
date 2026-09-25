@@ -122,6 +122,26 @@ The CLI persists generated inputs; benchmark cases explicitly select them.
 not rerun algorithms. [Benchmark](benchmark.md) documents immutable processing
 runs, checksum validation, and separate saved-output evaluations/reports.
 
+### Save and reload pipeline checkpoints
+
+An earlier development branch had an artifact and provenance contract with
+contract IDs, reference chains, per-file manifests, immutable directories and
+HTML reports. It was never merged, and it has been replaced by three plain
+checkpoints and one run record. There are no aliases.
+
+| Development branch | Current interface |
+| --- | --- |
+| `starfinder.provenance` run recorder and event snapshots | `run.json`, written by `FOV.run(..., checkpoints=CheckpointConfig())` |
+| `io.checkpoints`, `FOV.load_image_checkpoint` | `FOV.save_checkpoint("registered")`, `FOV.load_checkpoint("registered")` |
+| `io.candidates` combined candidates and signals | `candidates.csv` or `.parquet`, reloaded as `SpotFindingResult` and `IntensityExtractionResult` |
+| `io.molecules`, final checkpoints and `MoleculeIndex` | `pre_qc` checkpoint for decoding; final outputs stay the workflow CSVs |
+| `reporting` HTML summaries | None; read `run.json` or the checkpoint tables directly |
+
+Images are TIFF through `save_volume`, tables are CSV unless Parquet is
+requested, and the location is `<output_root>/checkpoints/<fov_id>/`. Spot
+identity, input SHA-256 hashes, atomic writes and reruns of decoding or
+filtering without images are kept. See [checkpoints](checkpoints.md).
+
 ## Intentional behavior changes — not mechanical equivalence
 
 | Area | Change and consequence |

@@ -14,6 +14,7 @@ Backend requirements <api/backends>
 API examples <api/examples>
 Synthetic model <synthetic-specification>
 Coordination <coordination>
+Checkpoints <checkpoints>
 Recipes <recipes>
 Migration guide <migration>
 Troubleshooting <troubleshooting>

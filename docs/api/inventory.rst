@@ -73,6 +73,7 @@ starfinder.benchmark
 starfinder.dataset
 ~~~~~~~~~~~~~~~~~~
 
+* :py:obj:`starfinder.dataset.CheckpointConfig`
 * :py:obj:`starfinder.dataset.CropWindow`
 * :py:obj:`starfinder.dataset.Dataset`
 * :py:obj:`starfinder.dataset.ExecutionConfig`
@@ -132,6 +133,8 @@ starfinder.io
 * :py:obj:`starfinder.io.ImageLoadResult`
 * :py:obj:`starfinder.io.load_round`
 * :py:obj:`starfinder.io.load_volume`
+* :py:obj:`starfinder.io.load_volume_zyxc`
+* :py:obj:`starfinder.io.read_checkpoint`
 * :py:obj:`starfinder.io.save_volume`
 
 starfinder.preprocessing

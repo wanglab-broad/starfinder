@@ -6,6 +6,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.barcode.BarcodeDecodingResult`
 * :py:obj:`starfinder.benchmark.BenchmarkCase`
 * :py:obj:`starfinder.benchmark.BenchmarkTrialResult`
+* :py:obj:`starfinder.dataset.CheckpointConfig`
 * :py:obj:`starfinder.barcode.Codebook`
 * :py:obj:`starfinder.barcode.CodebookAwareDecoderConfig`
 * :py:obj:`starfinder.io.convert_image`
@@ -65,6 +66,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.barcode.load_codebook`
 * :py:obj:`starfinder.io.load_round`
 * :py:obj:`starfinder.io.load_volume`
+* :py:obj:`starfinder.io.load_volume_zyxc`
 * :py:obj:`starfinder.spot_finding.LocalMaximaConfig`
 * :py:obj:`starfinder.preprocessing.match_histogram`
 * :py:obj:`starfinder.evaluation.matching.match_points`
@@ -78,6 +80,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.dataset.PipelineConfig`
 * :py:obj:`starfinder.preprocessing.project_image`
 * :py:obj:`starfinder.preprocessing.ProjectionConfig`
+* :py:obj:`starfinder.io.read_checkpoint`
 * :py:obj:`starfinder.barcode.ReadFilterConfig`
 * :py:obj:`starfinder.barcode.ReadFilteringResult`
 * :py:obj:`starfinder.synthetic.ReadoutEffectsConfig`

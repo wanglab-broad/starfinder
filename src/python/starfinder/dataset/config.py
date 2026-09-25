@@ -1,6 +1,7 @@
 """Validated scientific stages, separate from image residency and workflow keys."""
 from dataclasses import dataclass
 import math
+from pathlib import Path
 
 from starfinder.io import ImageLoadConfig
 from starfinder.preprocessing import (MinMaxNormalizationConfig, HistogramMatchingConfig,
@@ -71,6 +72,35 @@ class ExecutionConfig:
     def __post_init__(self):
         if self.mode not in ('batch', 'streaming') or not isinstance(self.retain_images, bool):
             raise ValueError('invalid execution policy')
+
+
+@dataclass(frozen=True)
+class CheckpointConfig:
+    """Opt-in per-FOV checkpoints and run record written by FOV.run.
+
+    Stages are registered images, candidates with signals and pre-QC decoding.
+    Files go to ``<directory>/<fov_id>/`` (``subtile_<n>/`` below it for
+    subtiles); None uses ``<output_root>/checkpoints``. Tables are CSV or
+    Parquet (requires pyarrow). hash_inputs streams SHA-256 of loaded TIFFs.
+    Without overwrite, an existing FOV directory is an error before processing.
+    """
+    stages: tuple[str, ...] = ('registered', 'candidates', 'pre_qc')
+    directory: Path | str | None = None
+    table_format: str = 'csv'
+    hash_inputs: bool = True
+    overwrite: bool = False
+
+    def __post_init__(self):
+        stages = tuple(self.stages)
+        if len(set(stages)) != len(stages) or any(s not in ('registered', 'candidates', 'pre_qc') for s in stages):
+            raise ValueError('stages must be unique names among registered, candidates and pre_qc')
+        object.__setattr__(self, 'stages', stages)
+        if self.directory is not None:
+            object.__setattr__(self, 'directory', Path(self.directory))
+        if self.table_format not in ('csv', 'parquet'):
+            raise ValueError('table_format must be csv or parquet')
+        if not isinstance(self.hash_inputs, bool) or not isinstance(self.overwrite, bool):
+            raise ValueError('hash_inputs and overwrite must be Boolean')
 
 
 @dataclass(frozen=True)
