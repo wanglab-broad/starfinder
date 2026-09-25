@@ -90,9 +90,10 @@ scripts use `snakemake.config`; MATLAB scripts read this JSON. See the
 
 `backend: matlab` is the default. `backend: python` selects only the Python core
 registration and spot-finding rules. It does not replace all downstream code:
-`nuclei_registration` still invokes MATLAB. The MATLAB launcher sources
-`/broad/software/scripts/useuse`, runs `use Matlab`, then starts MATLAB; a local
-MATLAB executable alone does not satisfy that Broad-specific launcher.
+`nuclei_registration` still invokes MATLAB. `matlab_launcher: path` (the
+default) runs a local MATLAB executable; `matlab_launcher: broad` sources
+`/broad/software/scripts/useuse` and runs `use Matlab` first. See the
+[MATLAB launcher](workflow-configuration.md#matlab-launcher) settings.
 
 | Mode | Selected core rules | Intermediate files and execution |
 | --- | --- | --- |
@@ -217,7 +218,8 @@ The explicit `--jobscript` is intentional: the checked-in profile puts a
 `jobscript` string under `default-resources`, which does not select Snakemake's
 jobscript template. Review a site-local copy of the template before submission:
 it activates `/stanley/WangLab/envs/starfinder-v9` and loads UGER, Anaconda3 and
-MATLAB through Broad `useuse`. Profile submit/status paths are relative to the
+MATLAB through Broad `useuse`. Set `matlab_launcher: broad` in configurations
+submitted this way. Profile submit/status paths are relative to the
 working directory; running from another directory requires absolute paths in
 a local profile copy. This guide does not certify submission on other clusters.
 

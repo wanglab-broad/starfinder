@@ -40,6 +40,10 @@ seq_channel_order: []
 
 additional_round: []
 
+# MATLAB on the Broad cluster: load it with use Matlab before each call
+matlab_launcher: "broad"
+matlab_single_thread: False
+
 # Workflow logic
 workflow_mode: "free" 
 

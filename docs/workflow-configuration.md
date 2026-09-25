@@ -29,6 +29,8 @@ An em dash in the default column means the schema defines no default.
 | `seq_channel_order` | array of strings | No | —; set explicit patterns for Python, e.g. `[ch00, ch02, ch01, ch03]` |
 | `additional_round` | array of objects with string `round_name` | No | —; supply `[]` when unused; accessed at parse time |
 | `backend` | `python` or `matlab` | No | `matlab` |
+| `matlab_launcher` | `path` or `broad` | No | `path`; how MATLAB rules start MATLAB, see [MATLAB launcher](#matlab-launcher) |
+| `matlab_single_thread` | boolean | No | `false`; `true` adds `-singleCompThread` to every MATLAB call |
 | `workflow_mode` | `free`, `direct`, `subtile`, `deep` | No | `free`; preset selection described in [workflows](workflows.md#modes-and-backend-selection) |
 | `subset_list` | array of integers >=1 | No | —; supply `[]` when unused; code indexes it directly |
 | `subset_range` | boolean | No | `false` |
@@ -59,6 +61,32 @@ it does not supply MATLAB's default. MATLAB's default order is
 loader expecting a struct array with `channel`/`name`, incompatible with this
 schema's string array. Use `seq_channel_order: []` for default MATLAB loading;
 do not assume a Python custom list is portable to MATLAB.
+
+## MATLAB launcher
+
+MATLAB rules (the MATLAB core backend and `nuclei_registration`, which runs
+under either backend) call
+[`run_matlab_scripts`](https://github.com/wanglab-broad/starfinder/blob/dev/workflow/rules/common.smk),
+which delegates to
+[`matlab_launcher.py`](https://github.com/wanglab-broad/starfinder/blob/dev/workflow/rules/matlab_launcher.py).
+It adds `workflow/scripts` to the MATLAB path and runs the entry point with
+`-batch`, so a MATLAB error ends the job with a non-zero exit status. The full
+command line is printed to the Snakemake log before MATLAB starts.
+
+| `matlab_launcher` | Command | Use |
+| --- | --- | --- |
+| `path` (default) | The executable named by the `STARFINDER_MATLAB_EXECUTABLE` environment variable if set, otherwise `matlab` on `PATH` | Local runs and hosts where MATLAB is already on `PATH` |
+| `broad` | `source /broad/software/scripts/useuse && use Matlab && exec matlab ...` in one Bash shell | Broad cluster jobs; `STARFINDER_MATLAB_EXECUTABLE` is ignored |
+
+An unknown launcher, a non-boolean `matlab_single_thread`, an entry-point name
+that is not a plain MATLAB function name, a missing executable or, for `broad`,
+a missing `useuse` script raises an error before MATLAB starts. Configurations
+without these keys use `path` and `false`; set `matlab_launcher: broad` in
+Broad cluster configurations.
+
+`matlab_single_thread: false` keeps MATLAB's default multithreading, so rules
+that declare `threads: 4` can use those cores. Set it to `true` only when MATLAB
+must stay on one computational thread, for example on a shared host.
 
 ## Rule resources and parameters
 

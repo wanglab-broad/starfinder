@@ -257,6 +257,13 @@ uv run --group dev pytest test/ -v
 ```
 
 The explicit `dev` group is needed with `UV_NO_DEFAULT_GROUPS=true` above.
+The default run excludes tests marked `extended` (the full-pipeline end-to-end
+comparisons in `test_e2e.py`). Run them with
+`uv run --group dev pytest test/ -v -m extended` when changing the pipeline.
+The `Tests` GitHub Actions workflow installs the locked `dev` and
+`local-registration` extras, then runs the default and extended suites on
+pushes and pull requests to `dev` and `main`. MATLAB is never executed there;
+the launcher tests mock `subprocess`.
 The full Python suite is separate from bounded documentation CI. Local build
 success does not establish a successful Actions run, deployment, optional-backend
 execution or external link availability.

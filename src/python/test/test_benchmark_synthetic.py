@@ -145,6 +145,8 @@ class TestGenerateSyntheticDataset:
 
     def test_tiny_preset(self, tmp_path):
         config = get_preset_config("tiny")
+        assert len(config.shape_zyx) == 3
+        assert all(isinstance(size, int) for size in config.shape_zyx)
         result = generate_dataset(
             config=config,
             preset="tiny",
@@ -189,9 +191,10 @@ class TestPresetConfigs:
             config = get_preset_config(name)
             assert isinstance(config, SyntheticConfig)
 
-    def test_invalid_preset_raises(self):
+    @pytest.mark.parametrize("name", ["nonexistent", "xlarge", "thick_large"])
+    def test_invalid_preset_raises(self, name):
         with pytest.raises(ValueError, match="Unknown preset"):
-            get_preset_config("nonexistent")
+            get_preset_config(name)
 
     def test_large_preset_has_64_gene_codebook(self):
         config = get_preset_config("large")

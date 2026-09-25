@@ -34,19 +34,6 @@ def small_ground_truth(small_dataset: Path) -> dict:
 
 
 @pytest.fixture(scope="session")
-def small_codebook(small_dataset: Path) -> dict[str, str]:
-    """Load codebook for small dataset as gene->barcode dict."""
-    import csv
-
-    codebook = {}
-    with open(small_dataset / "codebook.csv") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            codebook[row["gene"]] = row["barcode"]
-    return codebook
-
-
-@pytest.fixture(scope="session")
 def e2e_result(small_dataset: Path, small_ground_truth: dict, tmp_path_factory):
     """Run full pipeline on small dataset, return (fov, dataset, ground_truth).
 

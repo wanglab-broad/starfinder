@@ -23,6 +23,7 @@ class TestMinMaxNormalize:
         vol = np.random.RandomState(42).randint(50, 200, (5, 16, 16), dtype=np.uint8)
         result = normalize_intensity(vol, config=MinMaxNormalizationConfig('uint8', (0, 255)))
         assert result.dtype == np.uint8
+        assert result.shape == vol.shape
         assert result.min() == 0
         assert result.max() == 255
 
@@ -32,6 +33,8 @@ class TestMinMaxNormalize:
         vol[:, :, :, 0] = 100  # constant → zeros
         vol[:, :, :, 1] = np.arange(192, dtype=np.uint8).reshape(3, 8, 8)
         result = normalize_intensity(vol, config=MinMaxNormalizationConfig('uint8', (0, 255)))
+        assert result.shape == vol.shape
+        assert result.dtype == vol.dtype
         # Channel 0: constant → all zeros
         assert result[:, :, :, 0].max() == 0
         # Channel 1: variable → spans full range
@@ -42,20 +45,6 @@ class TestMinMaxNormalize:
         vol = np.full((3, 8, 8), 42, dtype=np.uint8)
         result = normalize_intensity(vol, config=MinMaxNormalizationConfig('uint8', (0, 255)))
         assert np.all(result == 0)
-
-    def test_3d_input(self):
-        """Handles (Z, Y, X) input without extra channel dim."""
-        vol = np.random.RandomState(0).randint(0, 256, (5, 16, 16), dtype=np.uint8)
-        result = normalize_intensity(vol, config=MinMaxNormalizationConfig('uint8', (0, 255)))
-        assert result.ndim == 3
-        assert result.shape == vol.shape
-
-    def test_4d_input(self):
-        """Handles (Z, Y, X, C) input."""
-        vol = np.random.RandomState(1).randint(0, 256, (5, 16, 16, 4), dtype=np.uint8)
-        result = normalize_intensity(vol, config=MinMaxNormalizationConfig('uint8', (0, 255)))
-        assert result.ndim == 4
-        assert result.shape == vol.shape
 
 
 class TestSNRGating:
@@ -97,13 +86,6 @@ class TestSNRGating:
 class TestHistogramMatch:
     """Tests for match_histogram."""
 
-    def test_dtype_preserved(self):
-        """Output dtype matches input dtype."""
-        vol = np.random.RandomState(42).randint(0, 128, (3, 16, 16), dtype=np.uint8)
-        ref = np.random.RandomState(99).randint(128, 256, (3, 16, 16), dtype=np.uint8)
-        result = match_histogram(vol, ref)
-        assert result.dtype == vol.dtype
-
     def test_shape_preserved(self):
         """Output shape matches input shape for 3D and 4D."""
         vol3d = np.random.RandomState(0).randint(0, 256, (3, 16, 16), dtype=np.uint8)
@@ -118,18 +100,14 @@ class TestHistogramMatch:
         vol = np.random.RandomState(42).randint(0, 50, (5, 32, 32), dtype=np.uint8)
         ref = np.random.RandomState(99).randint(200, 256, (5, 32, 32), dtype=np.uint8)
         result = match_histogram(vol, ref)
+        assert result.dtype == vol.dtype
+        assert result.shape == vol.shape
         # Result mean should be closer to ref mean than original was
         assert abs(result.mean() - ref.mean()) < abs(vol.mean() - ref.mean())
 
 
 class TestMorphologicalReconstruction:
     """Tests for reconstruct_background."""
-
-    def test_uint8_output(self):
-        """Output is uint8."""
-        vol = np.random.RandomState(42).randint(0, 256, (3, 32, 32), dtype=np.uint8)
-        result = reconstruct_background(vol, config=ReconstructionConfig(radius_yx=3))
-        assert result.dtype == np.uint8
 
     def test_shape_preserved(self):
         """Output shape matches input for 3D and 4D."""
@@ -145,6 +123,8 @@ class TestMorphologicalReconstruction:
         img = np.full((1, 64, 64), 100, dtype=np.uint8)
         img[0, 32, 32] = 255
         result = reconstruct_background(img, config=ReconstructionConfig(radius_yx=5))
+        assert result.dtype == img.dtype
+        assert result.shape == img.shape
         # Background should be suppressed (lower than original 100)
         bg_val = result[0, 0, 0]
         assert bg_val < 100
@@ -152,12 +132,6 @@ class TestMorphologicalReconstruction:
 
 class TestTophatFilter:
     """Tests for filter_tophat."""
-
-    def test_uint8_output(self):
-        """Output is uint8."""
-        vol = np.random.RandomState(42).randint(0, 256, (3, 32, 32), dtype=np.uint8)
-        result = filter_tophat(vol, config=TophatConfig(radius_yx=3))
-        assert result.dtype == np.uint8
 
     def test_shape_preserved(self):
         """Output shape matches input for 3D and 4D."""
@@ -172,6 +146,8 @@ class TestTophatFilter:
         img = np.full((1, 64, 64), 100, dtype=np.uint8)
         img[0, 32, 32] = 255  # small bright spot
         result = filter_tophat(img, config=TophatConfig(radius_yx=5))
+        assert result.dtype == img.dtype
+        assert result.shape == img.shape
         # Background should be ~0 (tophat removes structures larger than SE)
         assert result[0, 0, 0] < 10
         # Bright spot should be preserved (relative to background)

@@ -145,6 +145,17 @@ properties:
     default: "matlab"
     description: "Processing backend for registration and spot finding"
 
+  matlab_launcher:
+    type: string
+    enum: ["path", "broad"]
+    default: "path"
+    description: "MATLAB invocation: 'path' uses STARFINDER_MATLAB_EXECUTABLE or matlab on PATH; 'broad' loads 'use Matlab' first"
+
+  matlab_single_thread:
+    type: boolean
+    default: false
+    description: "Start MATLAB with -singleCompThread"
+
   # ==================== Workflow Mode ====================
   workflow_mode:
     type: string

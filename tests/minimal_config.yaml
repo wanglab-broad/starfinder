@@ -44,6 +44,9 @@ img_row: 2048                                   # Image height in pixels
 # seq_channel_order: []                         # Custom channel order (empty = default)
 # additional_round: []                          # Additional imaging rounds
 
+# matlab_launcher: "path"                       # "path" (default) or "broad" (use Matlab on the Broad cluster)
+# matlab_single_thread: False                   # True adds -singleCompThread to MATLAB calls
+
 # ==================== Workflow Mode ====================
 # Options: "free" (default), "direct", "subtile", "deep"
 workflow_mode: "free"

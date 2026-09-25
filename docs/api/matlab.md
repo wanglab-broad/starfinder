@@ -65,11 +65,14 @@ snakemake -s workflow/Snakefile --configfile /absolute/path/my-config.yaml \
 These templates require real paths and data; the documentation build does not
 run them. `rsf_preparation` converts the YAML to JSON for MATLAB.
 [`run_matlab_scripts`](https://github.com/wanglab-broad/starfinder/blob/dev/workflow/rules/common.smk)
-adds `workflow/scripts` to MATLAB's path, sources
-`/broad/software/scripts/useuse`, selects `use Matlab`, and calls MATLAB with
-`-nodisplay -nosplash -nodesktop -r`. Each entry script adds `src/matlab` and
-`src/matlab-addon` and receives the JSON config path plus FOV/subtile identifiers.
-An installed `matlab` binary alone does not supply that Broad environment.
+adds `workflow/scripts` to MATLAB's path and calls the entry point with
+`-batch`, printing the full command line to the Snakemake log. The
+`matlab_launcher` config key selects a local executable (`path`, the default) or
+the Broad `use Matlab` environment (`broad`), and `matlab_single_thread: true`
+adds `-singleCompThread`; see the
+[MATLAB launcher](../workflow-configuration.md#matlab-launcher) settings.
+Each entry script adds `src/matlab` and `src/matlab-addon` and receives the
+JSON config path plus FOV/subtile identifiers.
 See also the [workflow guide](../workflows.md) and
 [existing workflow examples](https://github.com/wanglab-broad/starfinder/blob/dev/example/README.md).
 
