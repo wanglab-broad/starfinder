@@ -2,6 +2,7 @@ Python functions and classes A–Z
 ================================
 
 * :py:obj:`starfinder.registration.apply_transform`
+* :py:obj:`starfinder.synthetic.BackgroundConfig`
 * :py:obj:`starfinder.barcode.BarcodeDecodingResult`
 * :py:obj:`starfinder.benchmark.BenchmarkCase`
 * :py:obj:`starfinder.benchmark.BenchmarkTrialResult`
@@ -15,6 +16,11 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.barcode.decode_color_sequence`
 * :py:obj:`starfinder.registration.DemonsConfig`
 * :py:obj:`starfinder.registration.DenseDisplacementTransform`
+* :py:obj:`starfinder.synthetic.DEVELOPMENT_FACTORS`
+* :py:obj:`starfinder.synthetic.DEVELOPMENT_FIXTURES`
+* :py:obj:`starfinder.synthetic.development_preset_factors`
+* :py:obj:`starfinder.synthetic.development_scene_preset`
+* :py:obj:`starfinder.synthetic.DEVELOPMENT_SIZES`
 * :py:obj:`starfinder.barcode.encode_bases`
 * :py:obj:`starfinder.barcode.EncodingConfig`
 * :py:obj:`starfinder.registration.estimate_transform`
@@ -32,13 +38,18 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.barcode.filter_reads`
 * :py:obj:`starfinder.preprocessing.filter_tophat`
 * :py:obj:`starfinder.spot_finding.find_spots`
+* :py:obj:`starfinder.synthetic.formed_scene_preset`
+* :py:obj:`starfinder.synthetic.FormedScene`
+* :py:obj:`starfinder.synthetic.FormedSceneConfig`
 * :py:obj:`starfinder.dataset.FOV`
 * :py:obj:`starfinder.dataset.from_workflow_config`
 * :py:obj:`starfinder.synthetic.generate_codebook`
 * :py:obj:`starfinder.synthetic.generate_dataset`
 * :py:obj:`starfinder.synthetic.generate_displacement_field`
+* :py:obj:`starfinder.synthetic.generate_formed_scene`
 * :py:obj:`starfinder.synthetic.generate_registration_pairs`
 * :py:obj:`starfinder.synthetic.generate_volume`
+* :py:obj:`starfinder.synthetic.GeometryConfig`
 * :py:obj:`starfinder.synthetic.get_preset_config`
 * :py:obj:`starfinder.preprocessing.HistogramMatchingConfig`
 * :py:obj:`starfinder.io.ImageConversionConfig`
@@ -59,6 +70,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.evaluation.matching.match_points`
 * :py:obj:`starfinder.preprocessing.MinMaxNormalizationConfig`
 * :py:obj:`starfinder.barcode.NeighborhoodSumConfig`
+* :py:obj:`starfinder.synthetic.NoiseConfig`
 * :py:obj:`starfinder.spot_finding.NoiseLandmarkConfig`
 * :py:obj:`starfinder.preprocessing.normalize_intensity`
 * :py:obj:`starfinder.evaluation.registration.normalized_cross_correlation`
@@ -68,6 +80,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.preprocessing.ProjectionConfig`
 * :py:obj:`starfinder.barcode.ReadFilterConfig`
 * :py:obj:`starfinder.barcode.ReadFilteringResult`
+* :py:obj:`starfinder.synthetic.ReadoutEffectsConfig`
 * :py:obj:`starfinder.preprocessing.reconstruct_background`
 * :py:obj:`starfinder.preprocessing.ReconstructionConfig`
 * :py:obj:`starfinder.dataset.RecoveryConfig`
@@ -80,12 +93,15 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.benchmark.report_benchmark`
 * :py:obj:`starfinder.dataset.RoundState`
 * :py:obj:`starfinder.benchmark.run_benchmark`
+* :py:obj:`starfinder.synthetic.save_formed_scene`
 * :py:obj:`starfinder.io.save_volume`
+* :py:obj:`starfinder.synthetic.ScalarDistribution`
 * :py:obj:`starfinder.spot_finding.SpotFindingResult`
 * :py:obj:`starfinder.evaluation.registration.structural_similarity`
 * :py:obj:`starfinder.dataset.SubtileConfig`
 * :py:obj:`starfinder.synthetic.SyntheticConfig`
 * :py:obj:`starfinder.synthetic.SyntheticDataset`
+* :py:obj:`starfinder.synthetic.TextureConfig`
 * :py:obj:`starfinder.preprocessing.TophatConfig`
 * :py:obj:`starfinder.registration.TpsConfig`
 * :py:obj:`starfinder.registration.TranslationConfig`
