@@ -224,20 +224,34 @@ def _translation_only(mapping):
 
 
 def _displacement(coordinates, mapping):
+    # Explicit three-term sums, in-place temporaries and skipped all-zero terms
+    # give the same bits as the direct expressions with fewer passes.
     result = np.zeros_like(coordinates, dtype=np.float64)
-    with np.errstate(over='ignore', invalid='ignore', divide='ignore'):
+    with np.errstate(over='ignore', invalid='ignore', divide='ignore', under='ignore'):
         for center, scale, vector in zip(mapping['centers_zyx'], mapping['scales'], mapping['vectors_zyx']):
             if not np.any(vector):
                 continue
-            delta = (coordinates - center) / scale
-            weight = np.exp(-.5 * np.sum(delta * delta, axis=-1))
-            result += weight[..., None] * vector
+            delta = coordinates - center
+            delta /= scale
+            np.multiply(delta, delta, out=delta)
+            weight = delta[..., 0] + delta[..., 1]
+            weight += delta[..., 2]
+            weight *= -.5
+            np.exp(weight, out=weight)
+            for k in range(3):
+                result[..., k] += weight * vector[k]
         if 'affine_zyx' in mapping:
             offset = coordinates - mapping['grid_center_zyx']
-            result += offset @ np.asarray(mapping['affine_zyx']).T
-            u = offset / mapping['grid_half_zyx']
-            terms = np.stack([u[..., a] * u[..., b] for a, b in _TERM_AXES], axis=-1)
-            result += terms @ np.asarray(mapping['polynomial_zyx']).T
+            affine = np.asarray(mapping['affine_zyx'])
+            if np.any(affine):
+                result += offset @ affine.T
+            polynomial = np.asarray(mapping['polynomial_zyx'])
+            if np.any(polynomial):
+                u = offset / mapping['grid_half_zyx']
+                terms = np.empty(u.shape[:-1] + (len(_TERM_AXES),))
+                for t, (a, b) in enumerate(_TERM_AXES):
+                    np.multiply(u[..., a], u[..., b], out=terms[..., t])
+                result += terms @ polynomial.T
     return result
 
 
@@ -267,6 +281,51 @@ def _inverse(coordinates, mapping):
     raise ValueError('inverse geometry did not converge in 100 iterations')
 
 
+def _inverse_per_point(coordinates, mapping):
+    """_inverse with per-point stopping: a point stops once its own update is <= 1e-10.
+
+    Same fixed point, update tolerance and residual limit as _inverse. Converged
+    points are removed once they are at least 1/8 of those still iterating
+    (until then they keep iterating, staying within the tolerance), so values
+    can differ from the whole-block iteration by less than the tolerance.
+    """
+    shape = coordinates.shape
+    # Component-major (3, N) storage keeps gathers and per-axis passes contiguous.
+    target = np.ascontiguousarray(np.moveaxis(coordinates - mapping['translation_zyx'], -1, 0)).reshape(3, -1)
+    q = np.empty_like(target)
+    index = np.arange(target.shape[1])
+    current, goal = target, target
+    max_update = 0.0
+    for iteration in range(1, 101):
+        step = _displacement(current.T, mapping).T
+        np.subtract(goal, step, out=step)
+        diff = step - current
+        np.abs(diff, out=diff)
+        update = np.maximum(diff[0], diff[1])
+        np.maximum(update, diff[2], out=update)
+        if not np.isfinite(update).all():
+            raise ValueError('nonfinite inverse geometry')
+        done = update <= 1e-10
+        finished = int(np.count_nonzero(done))
+        if finished == len(index):
+            q[:, index] = step
+            max_update = max(max_update, float(update.max(initial=0)))
+            q = np.moveaxis(q.reshape(3, *shape[:-1]), 0, -1)
+            residual = float(np.max(np.abs(_forward(q, mapping) - coordinates), initial=0))
+            if residual > 2e-10:
+                raise ValueError('inverse geometry residual exceeds 2e-10 voxels')
+            return q, dict(iterations=iteration, max_update=max_update, max_residual=residual,
+                           tolerance=1e-10, max_iterations=100, stopping='per_point')
+        if finished >= len(index) // 8:
+            q[:, index[done]] = step[:, done]
+            max_update = max(max_update, float(update[done].max(initial=0)))
+            keep = ~done
+            index, current, goal = index[keep], step[:, keep], goal[:, keep]
+        else:
+            current = step
+    raise ValueError('inverse geometry did not converge in 100 iterations')
+
+
 def _blocks(shape):
     """ZYX slices tiling the grid; grids up to _BLOCK_VOXELS voxels are one block."""
     z, y, x = (int(n) for n in shape)
@@ -282,16 +341,21 @@ def _inverse_grid(shape, mapping, evaluate, dtype=np.float64):
     """Evaluate evaluate(F_inverse(p)) on every output voxel p, block by block.
 
     Each block iterates to the same update tolerance and residual limit as
-    _inverse; diagnostics report the worst block.
+    _inverse; diagnostics report the worst block. float32 results (the
+    benchmark tier) stop each point separately (_inverse_per_point); float64
+    results (oracle fixtures) iterate whole blocks.
     """
     result = np.empty(tuple(int(n) for n in shape), dtype=dtype)
+    per_point = np.dtype(dtype) == np.float32
+    inverse = _inverse_per_point if per_point else _inverse
     diagnostics = dict(iterations=0, max_update=0.0, max_residual=0.0, tolerance=1e-10,
-                       max_iterations=100, evaluated_on='output_grid', blocks=0)
+                       max_iterations=100, evaluated_on='output_grid', blocks=0,
+                       stopping='per_point' if per_point else 'per_block')
     for block in _blocks(shape):
         start = np.array([s.start for s in block], dtype=np.float64)
         dims = tuple(s.stop - s.start for s in block)
         grid = np.moveaxis(np.indices(dims, dtype=np.float64), 0, -1) + start
-        reference, diag = _inverse(grid, mapping)
+        reference, diag = inverse(grid, mapping)
         result[block] = evaluate(reference)
         diagnostics.update(iterations=max(diagnostics['iterations'], diag['iterations']),
                            max_update=max(diagnostics['max_update'], diag['max_update']),

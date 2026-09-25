@@ -255,7 +255,10 @@ in ``round_truth``. Kernels keep their widths and angle (no Jacobian shape
 deformation). Backgrounds evaluate analytic ``B(F_inverse(p))`` on the output
 grid; the inverse is evaluated only when a background component exists,
 per axis for pure translations and otherwise in blocks of at most 2^18
-voxels. Without a background the recorded inverse diagnostics check the
+voxels. With float32 accumulation (the benchmark tier) each point stops once
+its own update is at most 1e-10 voxels; float64 accumulation (the fixture
+tiers) iterates whole blocks. Both use the same tolerance and residual limit,
+and ``inverse["stopping"]`` records which rule was used. Without a background the recorded inverse diagnostics check the
 moved amplicon centers instead. ``forward_displacement(transform, shape)``
 evaluates a recorded map as a float32 ``F(q)-q`` field, optionally for a
 range of Z planes. ``scene.metadata`` is the reference grid; ``scene.round_metadata``
@@ -373,7 +376,7 @@ work. Benchmark presets keep the historical shapes, amplicon counts per FOV
      - 8, 50
      - 8, 50
      - 12
-     - development benchmarks (about 30 s e2e on one thread)
+     - development benchmarks (about 26 s e2e and 57 s registration on one thread)
    * - ``large``
      - 30×1024×1024
      - 1500

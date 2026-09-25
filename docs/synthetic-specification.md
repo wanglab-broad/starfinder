@@ -101,7 +101,8 @@ are absolute with respect to the reference; nothing accumulates across rounds.
    Gaussian regions and optional texture blobs placed like the formed
    population. Gaussian tails are untruncated; there is no periodic wrap. The
    inverse is evaluated only when B has a component: exactly per axis for a
-   pure translation, otherwise block by block over the output grid.
+   pure translation, otherwise block by block over the output grid (per-point
+   stopping at the same tolerance for float32 accumulation).
 9. **Baseline.** Nonnegative R×C offsets are added in the destination frame;
    they are not moved, mixed or lost.
 10. **Noise.** With J the pre-noise total (signal, tissue and baseline), the

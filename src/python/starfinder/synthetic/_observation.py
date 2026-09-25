@@ -207,8 +207,13 @@ def evaluate_background(components, coordinates):
                 normalized = np.where(shape == 1, 0, normalized)
                 result += np.maximum(0, component['intercept'] + normalized @ component['slopes_zyx'])
             else:
-                delta = (coordinates - component['center_zyx']) / component['sigma_zyx']
-                result += component['height'] * np.exp(-.5 * np.sum(delta * delta, axis=-1))
+                # Explicit three-term sum: same bits as np.sum(delta * delta, axis=-1).
+                delta = coordinates - component['center_zyx']
+                delta /= component['sigma_zyx']
+                np.multiply(delta, delta, out=delta)
+                radius = delta[..., 0] + delta[..., 1]
+                radius += delta[..., 2]
+                result += component['height'] * np.exp(-.5 * radius)
     if not np.isfinite(result).all():
         raise ValueError('nonfinite structured background')
     return result
@@ -295,7 +300,9 @@ def _observe(plane, tissue, background, r, c, noise, label, channel, stream):
         with np.errstate(over='ignore', invalid='ignore'):
             # Dependent scale uses J before either residual has been added.
             if dependent is not None and noise['model'] == 'poisson':
-                if alpha > 0:
+                if alpha == 1:
+                    part[...] = dependent.poisson(part)  # same draws and values as alpha 1 below
+                elif alpha > 0:
                     part[...] = alpha * dependent.poisson(part / alpha)
             elif dependent is not None:
                 part += np.sqrt(alpha) * np.sqrt(part) * dependent.standard_normal(part.size)

@@ -397,3 +397,23 @@ def test_peak_estimate_formula():
     medium = _estimate_peak_bytes((32, 512, 512))
     # Working memory only (the interpreter and libraries add their own RSS).
     assert 200 * 2**20 < medium < 1024 * 2**20
+
+
+@pytest.mark.parametrize('name', ['multi_point', 'polynomial_large', 'linear_small'])
+def test_per_point_inverse_matches_whole_block_iteration(name):
+    shape = (4, 64, 64)
+    cb, config = registration_scene_preset('tiny', name)
+    config = replace(config, shape_zyx=shape, count=0,
+                     geometry=deformation_geometry(name, shape, reference_round='reference'))
+    mapping = _prepare(cb, config, None, {}).maps[1]
+    grid = np.moveaxis(np.indices(shape, dtype=np.float64), 0, -1)
+    block, block_diag = _geometry._inverse(grid, mapping)
+    point, point_diag = _geometry._inverse_per_point(grid, mapping)
+    # Same fixed point and stopping tolerance; per-point stopping may differ by < 1e-10.
+    np.testing.assert_allclose(point, block, rtol=0, atol=2e-10)
+    assert point_diag['stopping'] == 'per_point' and point_diag['max_residual'] <= 2e-10
+    assert point_diag['iterations'] == block_diag['iterations']
+    np.testing.assert_allclose(_geometry._forward(point, mapping), grid, rtol=0, atol=2e-10)
+    scene = generate_formed_scene(cb, config=config)
+    moving = next(t for t in scene.provenance['transforms'].values() if t['round_label'] == name)
+    assert moving['inverse']['stopping'] == 'per_point'

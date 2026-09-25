@@ -158,25 +158,28 @@ def timed_cli(tmp_path, mode, preset):
     clock = re.search(r'Elapsed \(wall clock\) time \(h:mm:ss or m:ss\): ([\d:.]+)', completed.stderr).group(1)
     seconds = sum(float(part) * 60**i for i, part in enumerate(reversed(clock.split(':'))))
     rss = int(re.search(r'Maximum resident set size \(kbytes\): (\d+)', completed.stderr).group(1))
-    print(f'\n  {preset} {mode}: wall {seconds:.1f} s, peak RSS {rss} KiB '
-          f'(estimate {SCENE_PRESETS[preset]["peak_bytes_estimate"] // 1024} KiB working memory)')
     return output, seconds, rss
 
 
 @pytest.mark.extended
-def test_medium_cli_both_modes_time_and_peak_rss(tmp_path):
-    """The one medium generation check: e2e within about one minute on one thread.
+def test_medium_cli_both_modes_time_and_peak_rss(tmp_path, capsys):
+    """The one medium generation check: each mode within about one minute on one thread.
 
-    Both modes stay far below the 4 GiB RSS stop target; each output is checked
-    and deleted before the next mode runs.
+    Both modes must also stay far below the 4 GiB RSS stop target. Each output
+    is checked and deleted before the next mode runs; measurements for both
+    modes are printed uncaptured, so they appear in the check log.
     """
     import shutil
-    output, seconds, rss = timed_cli(tmp_path, 'e2e', 'medium')
-    check_e2e_layout(output, 'medium')
-    shutil.rmtree(output)
-    assert seconds <= 60
-    assert rss < 4 * 2**20
-    output, seconds, rss = timed_cli(tmp_path, 'registration', 'medium')
-    check_registration_layout(output, 'medium')
-    shutil.rmtree(output)
-    assert rss < 4 * 2**20
+    measured = {}
+    for mode, check in (('e2e', check_e2e_layout), ('registration', check_registration_layout)):
+        output, seconds, rss = timed_cli(tmp_path, mode, 'medium')
+        check(output, 'medium')
+        shutil.rmtree(output)
+        measured[mode] = seconds, rss
+    with capsys.disabled():
+        for mode, (seconds, rss) in measured.items():
+            print(f'\n  medium {mode}: wall {seconds:.1f} s, peak RSS {rss} KiB (target <= 60 s, < 4 GiB; '
+                  f'estimate {SCENE_PRESETS["medium"]["peak_bytes_estimate"] // 1024} KiB working memory)')
+    for mode, (seconds, rss) in measured.items():
+        assert seconds <= 60, (mode, seconds)
+        assert rss < 4 * 2**20, (mode, rss)
