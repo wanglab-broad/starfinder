@@ -73,9 +73,10 @@ must be installed for its execution coverage; MATLAB execution is excluded.
 
 Housekeeping limits: one CPU, one numerical thread, no GPU; 5400 s worker,
 1800 s/check, at most two repairs; target process RSS ≤4 GiB, new artifacts ≤1 GiB.
-New images ≤32×64×64, ≤4 channels/rounds. Existing exceptions: small fixture
-16×256×256, pointset 16×128×128, compression 10×128×128, tiny examples 8×128×128,
-benchmark allocation 256×1024 float32. Do not regenerate existing fixture TIFFs.
+New images ≤32×64×64, ≤4 channels/rounds. Existing exceptions: small synthetic
+test dataset 16×256×256 (generated once per pytest session), pointset 16×128×128,
+compression 10×128×128, tiny examples 8×128×128, benchmark allocation 256×1024
+float32. Tests generate synthetic images in session; do not commit generated TIFFs.
 No scientific sweeps, large generation, training, real-image processing or cloud jobs.
 Measure with `/usr/bin/time -v`; maximum RSS is KiB. CPU affinity/thread settings
 and supervisor timeouts are controls, not proof of an enforced cgroup RSS cap.
