@@ -104,9 +104,12 @@ back with an explicit dtype map from the stage header: pandas `string`, nullable
 `Int64` or `boolean`, and float64. It is then cast to the recorded in-memory
 dtypes. String columns are read verbatim, without pandas' default missing-value
 parsing. A literal string equal to `<NA>`, or one that starts with a backslash,
-is written with one extra leading backslash, which is removed on reading. As a
-result every string round-trips exactly, including `""`, `"NA"`, `"NaN"`,
-`"null"`, `"N/A"` and `"<NA>"`, and stays distinct from a missing value.
+is written with one extra leading backslash, which is removed on reading.
+Printable text round-trips exactly in CSV and Parquet, including `""`, `"NA"`,
+`"NaN"`, `"null"`, `"N/A"` and `"<NA>"`, and stays distinct from a missing
+value. CSV raises a clear `ValueError`, naming the column, for any string that
+contains a control character (U+0000–U+001F or U+007F, which includes tab and
+newline); nothing is written with a changed value. Use Parquet for such data.
 Infinite scores survive, and floats round-trip exactly. Parquet stores the same
 columns and is cast through the same dtype map, so CSV and Parquet reload to
 identical typed results. Empty tables keep their columns and dtypes.

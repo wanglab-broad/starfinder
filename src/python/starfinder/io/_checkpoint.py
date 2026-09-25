@@ -22,6 +22,7 @@ STAGES = ("registered", "candidates", "pre_qc")
 TABLE_FORMATS = ("csv", "parquet")
 NA_TOKEN = "<NA>"
 ESCAPE = "\\"
+_CONTROL = "[\x00-\x1f\x7f]"
 # In-memory dtype -> dtype used to parse CSV text; the header restores the former.
 _CSV_DTYPES = {"string": "string", "str": "string", "float64": "float64",
                "int64": "Int64", "Int64": "Int64", "bool": "boolean", "boolean": "boolean"}
@@ -125,7 +126,7 @@ def _escape_strings(column):
     """CSV text for a string column: missing values stay NA (written as NA_TOKEN).
 
     Literal values equal to NA_TOKEN or starting with ESCAPE gain one leading
-    ESCAPE, so every string, including "", "NA" or "<NA>", reads back exactly.
+    ESCAPE, so printable text, including "", "NA" or "<NA>", reads back exactly.
     """
     literal = column.eq(NA_TOKEN).fillna(False) | column.str.startswith(ESCAPE).fillna(False)
     return column.mask(literal, ESCAPE + column)
@@ -149,7 +150,12 @@ def _write_table(frame, directory, name, table_format):
         text = frame.copy()
         for column, dtype in dtypes.items():
             if dtype in ("string", "str"):
-                text[column] = _escape_strings(frame[column].astype("string"))
+                strings = frame[column].astype("string")
+                # CSV holds printable text only; never write a changed value.
+                if strings.str.contains(_CONTROL, regex=True, na=False).any():
+                    raise ValueError(f"CSV checkpoint column {column!r} contains a control character "
+                                     "(U+0000-U+001F or U+007F); use table_format='parquet' for such data")
+                text[column] = _escape_strings(strings)
         with _atomic(path) as tmp:
             text.to_csv(tmp, index=False, float_format="%.17g", na_rep=NA_TOKEN)
     else:

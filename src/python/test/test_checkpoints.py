@@ -89,8 +89,9 @@ def assert_downstream_equal(a, b):
     assert (a.filtering_result.counts, a.filtering_result.fractions) == (b.filtering_result.counts, b.filtering_result.fractions)
 
 
-def record(fov):
-    return json.loads((fov.paths.checkpoint_dir / 'run.json').read_text())
+def record(fov, directory=None):
+    path = fov.paths.checkpoint_dir if directory is None else directory / fov.fov_id
+    return json.loads((path / 'run.json').read_text())
 
 
 @pytest.mark.parametrize('table_format', ['csv', 'parquet'])
@@ -235,10 +236,10 @@ def test_csv_and_parquet_reload_identically(tmp_path):
     assert table.failure_reason.eq('').sum() == 1 and table.gene_id.isna().sum() == 3
 
 
-# Strings pandas reads as missing by default, the escape itself, and CSV syntax.
+# Printable strings pandas reads as missing by default, the escape itself, and CSV syntax.
 TRICKY_STRINGS = ['', '<NA>', 'NA', 'NaN', 'nan', 'null', 'NULL', 'N/A', 'n/a', 'None', '#N/A',
                   '#NA', '-NaN', '-1.#IND', '1.#QNAN', '<NA', ' <NA> ', '\\', '\\<NA>', '\\\\x',
-                  'a,b', 'q"uote', 'line\nbreak', '  pad ']
+                  'a,b', 'q"uote', '  pad ']
 
 
 @pytest.mark.parametrize('dtype', ['string', 'str'])
@@ -260,6 +261,34 @@ def test_string_columns_are_lossless_and_identical_in_csv_and_parquet(tmp_path, 
     raw = pd.read_csv(tmp_path / 'table.csv', dtype=str, keep_default_na=False)
     assert (raw.text.iloc[1], raw.text.iloc[-1], raw.text.iloc[0]) == ('\\<NA>', '<NA>', '')
     assert raw.text.iloc[TRICKY_STRINGS.index('\\<NA>')] == '\\\\<NA>'
+
+
+@pytest.mark.parametrize('control', ['\x00', '\t', '\n', '\r', '\x1f', '\x7f'])
+def test_csv_rejects_control_characters_without_writing(tmp_path, control):
+    frame = pd.DataFrame({'spot_id': pd.array(['ok', f'a{control}b'], dtype='string'),
+                          'score': np.array([1.0, 2.0])})
+    with pytest.raises(ValueError, match="column 'spot_id'.*parquet"):
+        _write_table(frame, tmp_path, 'table', 'csv')
+    assert list(tmp_path.iterdir()) == []
+    name, dtypes = _write_table(frame, tmp_path, 'table', 'parquet')
+    pd.testing.assert_frame_equal(_read_table(tmp_path / name, dtypes), frame)
+
+
+def test_nul_gene_id_fails_csv_and_round_trips_through_parquet(tmp_path):
+    ds = dataset(tmp_path)
+    ds.codebook = Codebook(pd.DataFrame({'gene_id': ['a\x00b', 'other'], 'color_sequence': ['11', '22']}),
+                           ROUNDS, CHANNELS)
+    fov = resident(ds)
+    with pytest.raises(ValueError, match="column 'gene_id'.*parquet"):
+        fov.run(full(), checkpoints=CheckpointConfig(directory=tmp_path / 'csv'))
+    assert not (tmp_path / 'csv' / 'FOV' / 'pre_qc.csv').exists()
+    assert record(fov, tmp_path / 'csv')['error']['step'] == 'write_checkpoint:pre_qc'
+    saved = resident(ds).run(full(), checkpoints=CheckpointConfig(directory=tmp_path / 'parquet',
+                                                                    table_format='parquet'))
+    assert saved.decoding_result.table.gene_id.iloc[0] == 'a\x00b'
+    loaded = read_checkpoint(tmp_path / 'parquet' / 'FOV', 'pre_qc')['decoding_result']
+    assert_decoding_equal(loaded, saved.decoding_result)
+    assert loaded.table.gene_id.iloc[0] == 'a\x00b'
 
 
 def test_literal_na_gene_id_round_trips_in_csv_and_parquet(tmp_path):
