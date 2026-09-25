@@ -102,11 +102,14 @@ and WTA per-round scores. A reloaded result therefore lacks those keys.
 CSV is written with floats as `%.17g` and missing values as `<NA>`. It is read
 back with an explicit dtype map from the stage header: pandas `string`, nullable
 `Int64` or `boolean`, and float64. It is then cast to the recorded in-memory
-dtypes. Empty strings, missing values and infinite scores survive, and floats
-round-trip exactly. A string value equal to `<NA>` cannot be stored in CSV, and
-writing one raises `ValueError`. Parquet stores the same columns and is cast
-through the same dtype map, so CSV and Parquet reload to identical typed
-results. Empty tables keep their columns and dtypes.
+dtypes. String columns are read verbatim, without pandas' default missing-value
+parsing. A literal string equal to `<NA>`, or one that starts with a backslash,
+is written with one extra leading backslash, which is removed on reading. As a
+result every string round-trips exactly, including `""`, `"NA"`, `"NaN"`,
+`"null"`, `"N/A"` and `"<NA>"`, and stays distinct from a missing value.
+Infinite scores survive, and floats round-trip exactly. Parquet stores the same
+columns and is cast through the same dtype map, so CSV and Parquet reload to
+identical typed results. Empty tables keep their columns and dtypes.
 
 ## Reload and continue
 

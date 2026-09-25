@@ -15,7 +15,7 @@ from starfinder.dataset import (CheckpointConfig, Dataset, ExecutionConfig, Pipe
     RegistrationStep, RoundState)
 from starfinder.image import ImageMetadata
 from starfinder.io import ImageLoadConfig, load_volume_zyxc, read_checkpoint, save_volume
-from starfinder.io._checkpoint import _read_table, candidates_frame, parse_candidates
+from starfinder.io._checkpoint import _read_table, _write_table, candidates_frame, parse_candidates
 from starfinder.registration import DemonsConfig, TranslationConfig
 from starfinder.spot_finding import LocalMaximaConfig
 
@@ -233,6 +233,51 @@ def test_csv_and_parquet_reload_identically(tmp_path):
     # Empty strings, missing values and infinities survive CSV text.
     table = _read_table(tmp_path / 'csv' / 'FOV' / 'pre_qc.csv', header['dtypes'])
     assert table.failure_reason.eq('').sum() == 1 and table.gene_id.isna().sum() == 3
+
+
+# Strings pandas reads as missing by default, the escape itself, and CSV syntax.
+TRICKY_STRINGS = ['', '<NA>', 'NA', 'NaN', 'nan', 'null', 'NULL', 'N/A', 'n/a', 'None', '#N/A',
+                  '#NA', '-NaN', '-1.#IND', '1.#QNAN', '<NA', ' <NA> ', '\\', '\\<NA>', '\\\\x',
+                  'a,b', 'q"uote', 'line\nbreak', '  pad ']
+
+
+@pytest.mark.parametrize('dtype', ['string', 'str'])
+def test_string_columns_are_lossless_and_identical_in_csv_and_parquet(tmp_path, dtype):
+    values = TRICKY_STRINGS + [None]
+    frame = pd.DataFrame({'text': pd.array(values, dtype='string').astype(dtype),
+                          'other': pd.array([None] + TRICKY_STRINGS, dtype='string'),
+                          'score': np.r_[np.arange(len(TRICKY_STRINGS), dtype=float), np.nan]})
+    tables = {}
+    for table_format in ('csv', 'parquet'):
+        name, dtypes = _write_table(frame, tmp_path, 'table', table_format)
+        tables[table_format] = _read_table(tmp_path / name, dtypes)
+        pd.testing.assert_frame_equal(tables[table_format], frame)
+    pd.testing.assert_frame_equal(tables['csv'], tables['parquet'])
+    csv = tables['csv']
+    assert csv.text.isna().tolist() == [False] * len(TRICKY_STRINGS) + [True]
+    assert csv.text.iloc[1] == '<NA>' and csv.other.iloc[2] == '<NA>' and pd.isna(csv.other.iloc[0])
+    # Only the missing value is written as the bare token; the literal is escaped.
+    raw = pd.read_csv(tmp_path / 'table.csv', dtype=str, keep_default_na=False)
+    assert (raw.text.iloc[1], raw.text.iloc[-1], raw.text.iloc[0]) == ('\\<NA>', '<NA>', '')
+    assert raw.text.iloc[TRICKY_STRINGS.index('\\<NA>')] == '\\\\<NA>'
+
+
+def test_literal_na_gene_id_round_trips_in_csv_and_parquet(tmp_path):
+    ds = dataset(tmp_path)
+    ds.codebook = Codebook(pd.DataFrame({'gene_id': ['<NA>', 'NA'], 'color_sequence': ['11', '22']}),
+                           ROUNDS, CHANNELS)
+    saved = resident(ds).run(full(), checkpoints=CheckpointConfig(directory=tmp_path / 'csv'))
+    resident(ds).run(full(), checkpoints=CheckpointConfig(directory=tmp_path / 'parquet', table_format='parquet'))
+    genes = saved.decoding_result.table.gene_id
+    assert genes.iloc[0] == '<NA>' and genes.isna().sum() == 3
+    loaded = {f: read_checkpoint(tmp_path / f / 'FOV', 'pre_qc')['decoding_result'] for f in ('csv', 'parquet')}
+    assert_decoding_equal(loaded['csv'], saved.decoding_result)
+    assert_decoding_equal(loaded['csv'], loaded['parquet'])
+    for table_format in ('csv', 'parquet'):
+        fov = ds.fov('FOV').load_checkpoint('pre_qc', checkpoints=CheckpointConfig(directory=tmp_path / table_format))
+        fov.run(PipelineConfig(filtering=ReadFilterConfig()))
+        assert_downstream_equal(fov, saved)
+        assert fov.filtering_result.accepted.gene_id.tolist() == ['<NA>']
 
 
 def test_parquet_without_pyarrow_fails_before_image_load(tmp_path, monkeypatch):

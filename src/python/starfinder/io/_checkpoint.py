@@ -21,6 +21,7 @@ FORMAT_VERSION = 1
 STAGES = ("registered", "candidates", "pre_qc")
 TABLE_FORMATS = ("csv", "parquet")
 NA_TOKEN = "<NA>"
+ESCAPE = "\\"
 # In-memory dtype -> dtype used to parse CSV text; the header restores the former.
 _CSV_DTYPES = {"string": "string", "str": "string", "float64": "float64",
                "int64": "Int64", "Int64": "Int64", "bool": "boolean", "boolean": "boolean"}
@@ -120,6 +121,22 @@ def _dtype_map(frame):
     return dtypes
 
 
+def _escape_strings(column):
+    """CSV text for a string column: missing values stay NA (written as NA_TOKEN).
+
+    Literal values equal to NA_TOKEN or starting with ESCAPE gain one leading
+    ESCAPE, so every string, including "", "NA" or "<NA>", reads back exactly.
+    """
+    literal = column.eq(NA_TOKEN).fillna(False) | column.str.startswith(ESCAPE).fillna(False)
+    return column.mask(literal, ESCAPE + column)
+
+
+def _unescape_strings(column):
+    missing = column.eq(NA_TOKEN)
+    column = column.mask(column.str.startswith(ESCAPE), column.str.slice(len(ESCAPE)))
+    return column.mask(missing, pd.NA)
+
+
 def _write_table(frame, directory, name, table_format):
     """Write a table with its dtype map; return (file name, dtype map)."""
     dtypes = _dtype_map(frame)
@@ -129,11 +146,12 @@ def _write_table(frame, directory, name, table_format):
         with _atomic(path) as tmp:
             frame.to_parquet(tmp, index=False, engine="pyarrow")
     elif table_format == "csv":
-        strings = [c for c, d in dtypes.items() if d in ("string", "str")]
-        if strings and frame[strings].eq(NA_TOKEN).any().any():
-            raise ValueError(f"string values equal to {NA_TOKEN!r} cannot be stored in CSV")
+        text = frame.copy()
+        for column, dtype in dtypes.items():
+            if dtype in ("string", "str"):
+                text[column] = _escape_strings(frame[column].astype("string"))
         with _atomic(path) as tmp:
-            frame.to_csv(tmp, index=False, float_format="%.17g", na_rep=NA_TOKEN)
+            text.to_csv(tmp, index=False, float_format="%.17g", na_rep=NA_TOKEN)
     else:
         raise ValueError(f"table_format must be one of {TABLE_FORMATS}")
     return path.name, dtypes
@@ -146,9 +164,14 @@ def _read_table(path, dtypes):
         _require_parquet()
         frame = pd.read_parquet(path, engine="pyarrow")
     else:
+        # String columns are read verbatim (no NA parsing), then unescaped.
+        strings = [c for c, d in dtypes.items() if d in ("string", "str")]
         frame = pd.read_csv(path, dtype={c: _CSV_DTYPES[d] for c, d in dtypes.items()},
-                            keep_default_na=False, na_values=[NA_TOKEN],
-                            float_precision="round_trip")
+                            keep_default_na=False, float_precision="round_trip",
+                            na_values={c: [NA_TOKEN] for c in dtypes if c not in strings})
+        for column in strings:
+            if column in frame:
+                frame[column] = _unescape_strings(frame[column])
     if list(frame.columns) != list(dtypes):
         raise ValueError(f"{path.name}: columns differ from the checkpoint header")
     return frame.astype(dtypes).reset_index(drop=True)
