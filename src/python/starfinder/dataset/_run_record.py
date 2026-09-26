@@ -31,6 +31,12 @@ def _code():
         package_version = None
     root = Path(__file__).resolve().parents[1]
     try:
+        top = subprocess.run(["git", "-C", str(root), "rev-parse", "--show-toplevel"], capture_output=True,
+                             text=True, timeout=10, check=True).stdout.strip()
+        # An installed package can sit inside another project's repository; only
+        # a starfinder checkout (src/python/starfinder at its root) is recorded.
+        if not (Path(top) / "src" / "python" / "starfinder").resolve() == root:
+            raise subprocess.SubprocessError("package is not inside a starfinder checkout")
         commit = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"], capture_output=True,
                                 text=True, timeout=10, check=True).stdout.strip()
         dirty = bool(subprocess.run(["git", "-C", str(root), "status", "--porcelain", "--untracked-files=no"],
@@ -127,4 +133,9 @@ class _RunRecord:
             except Exception:
                 logger.exception(f"[{self.fov.fov_id}] Could not write {self.path}")
         else:
-            self.write()
+            try:
+                self.write()
+            except BaseException:
+                # The success was never recorded on disk; let the caller record the failure.
+                self.data.update(status="running", ended_at=None)
+                raise

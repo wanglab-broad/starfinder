@@ -388,6 +388,46 @@ def test_failed_final_write_never_replaces_original_error(tmp_path, monkeypatch,
     assert record(fov)['status'] == 'running'
 
 
+def test_failed_success_write_is_recorded_as_failed(tmp_path, monkeypatch):
+    import starfinder.dataset._run_record as run_record
+    original_write = run_record.write_json
+    failed = []
+
+    def write(data, path):
+        if data['status'] == 'succeeded' and not failed:
+            failed.append(path)
+            raise OSError('disk full')
+        original_write(data, path)
+    monkeypatch.setattr(run_record, 'write_json', write)
+    fov = resident(dataset(tmp_path))
+    with pytest.raises(OSError, match='disk full'):
+        fov.run(full(), checkpoints=CheckpointConfig(hash_inputs=False))
+    data = record(fov)
+    # The unrecorded success never leaves run.json at running.
+    assert data['status'] == 'failed' and data['error']['type'] == 'OSError'
+
+
+def test_json_files_are_strict_and_code_ignores_enclosing_repositories(tmp_path, monkeypatch):
+    import subprocess
+    import starfinder.dataset._run_record as run_record
+    from starfinder.io._checkpoint import write_json
+    write_json(dict(a=float('nan'), b=[np.float64('inf'), -np.inf], c=1.5), tmp_path / 'x.json')
+    text = (tmp_path / 'x.json').read_text()
+    assert json.loads(text, parse_constant=lambda c: pytest.fail(c)) == dict(a=None, b=[None, None], c=1.5)
+
+    def enclosing(args, **kwargs):
+        if 'rev-parse' in args and '--show-toplevel' in args:
+            return subprocess.CompletedProcess(args, 0, stdout=str(tmp_path) + '\n')
+        raise AssertionError('commit must not be read from another repository')
+    monkeypatch.setattr(run_record.subprocess, 'run', enclosing)
+    run_record._code.cache_clear()
+    try:
+        code = run_record._code()
+    finally:
+        run_record._code.cache_clear()
+    assert code['git_commit'] is None and code['git_dirty'] is None
+
+
 def test_run_record_fields_inputs_and_hashes(tmp_path):
     import hashlib
     ds = dataset(tmp_path)

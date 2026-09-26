@@ -98,6 +98,9 @@ holds the decoder configuration, labels and diagnostics. Array and table
 diagnostics are not saved: decoder probabilities, per-round and candidate tables,
 and WTA per-round scores. A reloaded result therefore lacks those keys.
 
+All JSON files are strict JSON: a non-finite diagnostic or configuration value
+(NaN or infinity) is written as `null`.
+
 ## Table formats
 
 CSV is written with floats as `%.17g` and missing values as `<NA>`. It is read
@@ -158,7 +161,7 @@ run starts, after each completed step and when the run ends. It contains:
 | `dataset_id`, `sample_id`, `fov_id`, `subtile_id` | Identity. |
 | `status`, `started_at`, `ended_at` | `running`, `succeeded`, `failed` or `interrupted`, with UTC times. |
 | `error` | `null`, or the failing `step` and `round`, the exception `type`, `message` and `traceback`. |
-| `code` | Package `version`, `git_commit` and `git_dirty`; each is `null` when unknown. |
+| `code` | Package `version`, `git_commit` and `git_dirty`; each is `null` when unknown. The commit is recorded only when the package runs from a starfinder checkout, never from an enclosing repository. |
 | `environment` | Python, platform and package versions (`null` when not installed). |
 | `config` | `pipeline`, `execution` and `checkpoints` configurations. |
 | `inputs` | Loaded TIFF `path` and streamed `sha256` (`null` with `hash_inputs=False`). |

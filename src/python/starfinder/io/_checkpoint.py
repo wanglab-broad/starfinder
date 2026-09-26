@@ -56,7 +56,7 @@ def _atomic(path):
 
 
 def _jsonable(value):
-    """Plain JSON values; tuples become lists and types become qualified names."""
+    """Plain JSON values; tuples become lists, types qualified names, NaN/inf null."""
     if is_dataclass(value) and not isinstance(value, type):
         return {f.name: _jsonable(getattr(value, f.name)) for f in fields(value)}
     if isinstance(value, dict):
@@ -64,7 +64,9 @@ def _jsonable(value):
     if isinstance(value, (list, tuple)):
         return [_jsonable(v) for v in value]
     if isinstance(value, np.generic):
-        return value.item()
+        value = value.item()
+    if isinstance(value, float) and not np.isfinite(value):
+        return None
     if isinstance(value, Path):
         return str(value)
     if isinstance(value, type):
@@ -73,9 +75,9 @@ def _jsonable(value):
 
 
 def write_json(data, path):
-    """Atomically write indented JSON."""
+    """Atomically write indented, strict JSON (non-finite floats become null)."""
     with _atomic(path) as tmp:
-        tmp.write_text(json.dumps(_jsonable(data), indent=2) + "\n")
+        tmp.write_text(json.dumps(_jsonable(data), indent=2, allow_nan=False) + "\n")
 
 
 def _tuples(value):
