@@ -30,7 +30,9 @@ class GeometryConfig:
     half extent (at least 1), so thin Z stacks have small u_z.
     Alternatively affine_max_zyx/polynomial_max_zyx draw uniform coefficients,
     scaled so each output axis displacement is at most that bound on the grid
-    (exact at a grid corner for affine terms).
+    (exact at a grid corner for affine terms). A drawn component is further
+    reduced, when needed, to an equal share of the invertibility budget left by
+    the other terms, so random draws always satisfy the bound below.
 
     Supplied values and random controls are mutually exclusive. reference_round
     names a round held at identity (no draws). Disabled controls retain
@@ -151,10 +153,11 @@ def _prepare_geometry(config, shape, labels, stream):
                     vectors[i, j] = draw / norm * magnitude if norm > 0 else 0
         if shape[0] == 1:
             vectors[..., 0] = 0
+    drawn = dict(affine=config.affine_enabled and config.affine_max_zyx is not None,
+                 polynomial=config.polynomial_enabled and config.polynomial_max_zyx is not None)
     for enabled, values, bound, component in (
-            (config.affine_enabled and config.affine_max_zyx is not None, affine, affine_max, 'affine'),
-            (config.polynomial_enabled and config.polynomial_max_zyx is not None,
-             polynomial, polynomial_max, 'polynomial')):
+            (drawn['affine'], affine, affine_max, 'affine'),
+            (drawn['polynomial'], polynomial, polynomial_max, 'polynomial')):
         if not enabled:
             continue
         reach = extent if component == 'affine' else np.array(
@@ -170,7 +173,24 @@ def _prepare_geometry(config, shape, labels, stream):
             values[i] = draw * np.divide(bound, peak, out=np.zeros(3), where=peak > 0)[:, None]
     for values in (translations, vectors, affine, polynomial):
         values[[not m for m in moving]] = 0
-    # Check supplied requests even when disabled; never rescale or retry a draw.
+    if any(drawn.values()):
+        # A displacement-bounded draw can still exceed the invertibility bound
+        # (e.g. large polynomial terms on a small grid). Only then, shrink each
+        # random component deterministically to an equal share of the budget
+        # left by the other terms; draws already within the bound are unchanged.
+        with np.errstate(over='ignore', invalid='ignore', divide='ignore'):
+            local = np.sum(np.hypot.reduce(vectors, axis=-1) / scales / np.sqrt(np.e), axis=1)
+        for i in range(r):
+            parts = dict(affine=np.sqrt(np.sum(affine[i]**2)),
+                         polynomial=_polynomial_jacobian_bound(polynomial[i], half, extent))
+            fixed = local[i] + sum(b for c, b in parts.items() if not drawn[c])
+            if not fixed + sum(b for c, b in parts.items() if drawn[c]) > .5:
+                continue
+            share = max(.999 * .5 - fixed, 0.0) / sum(drawn.values())
+            for component, values in (('affine', affine), ('polynomial', polynomial)):
+                if drawn[component] and parts[component] > share:
+                    values[i] *= share / parts[component]
+    # Check supplied requests even when disabled; never rescale or retry a supplied value.
     with np.errstate(over='ignore', invalid='ignore', divide='ignore'):
         bounds = np.sum(np.hypot.reduce(vectors, axis=-1) / scales / np.sqrt(np.e), axis=1)
         bounds = bounds + np.sqrt(np.sum(affine**2, axis=(1, 2)))

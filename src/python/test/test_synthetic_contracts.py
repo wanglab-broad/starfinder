@@ -339,6 +339,20 @@ def test_deformation_presets_are_invertible_percent_of_size(name):
                 assert getattr(geometry, key) == (spec['percent'] * shape[0] / 100, lateral, lateral)
 
 
+@pytest.mark.parametrize('preset', ['tiny', 'small', 'medium'])
+def test_random_polynomial_and_affine_draws_always_meet_the_invertibility_bound(preset):
+    # Seeds that exceeded the bound before random draws were capped to the
+    # remaining budget (tiny 366 crashed the registration CLI), plus a range.
+    known = {'tiny': [366], 'small': [290], 'medium': [64, 78, 226]}[preset]
+    names = [n for n, spec in DEFORMATION_PRESETS.items() if spec['kind'] in ('polynomial', 'affine')]
+    for name in names:
+        cb, config = registration_scene_preset(preset, name)
+        for seed in known + list(range(40)):
+            state = _prepare(cb, replace(config, seed=seed, count=0, background=BackgroundConfig()), None, {})
+            assert len(state.maps) == 2
+            assert all(m['lipschitz_bound'] <= .5 for m in state.maps), (name, seed)
+
+
 def test_registration_pairs_share_one_scene_and_record_forward_maps():
     first = generate_registration_pair('tiny', deformation='shift')
     second = generate_registration_pair('tiny', deformation='linear_small')

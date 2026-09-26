@@ -172,7 +172,9 @@ def deformation_geometry(name: str, shape_zyx, *, reference_round: str | None = 
     affine coefficients; gaussian_* and multi_point use Gaussian RBF controls
     with fixed centres, random directions and the percent radius. RBF
     magnitudes are reduced when needed to meet the conservative invertibility
-    bound (sum of norm(v)/(scale*sqrt(e)) <= 0.5). ``shift`` gives translation only.
+    bound (sum of norm(v)/(scale*sqrt(e)) <= 0.5); polynomial and affine draws
+    are reduced in the same way when their Jacobian bound would exceed it.
+    ``shift`` gives translation only.
     """
     shape = tuple(int(n) for n in shape_zyx)
     translation = dict(translation_enabled=translation_max_zyx is not None,
