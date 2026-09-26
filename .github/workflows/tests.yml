@@ -40,8 +40,8 @@ jobs:
           version: '0.9.28'
           enable-cache: true
           cache-dependency-glob: src/python/uv.lock
-      - name: Install locked dependencies with the dev and local-registration extras
-        run: uv sync --locked --extra dev --extra local-registration
+      - name: Install locked dependencies with the dev, local-registration and checkpoint extras
+        run: uv sync --locked --extra dev --extra local-registration --extra checkpoint
       # MATLAB is never executed: the launcher tests mock subprocess.
       - name: Default suite
         env:

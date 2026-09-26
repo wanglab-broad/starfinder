@@ -162,8 +162,10 @@ exact order:
 * Consequences: changing one factor's parameters, appending IDs or reordering
   work never changes another component's draws. Multi-FOV datasets give each
   FOV the scene key `[scene_key, FOV]`, so adding FOVs changes no other FOV.
-  Changing the shape can change the noise array layout. Repeatability is exact within a pinned NumPy; NumPy
-  releases do not promise identical distribution algorithms.
+  Changing the shape can change the noise array layout. Repeatability is exact for a pinned NumPy build on the
+  same CPU. NumPy releases do not promise identical distribution algorithms, and
+  CPU-specific implementations of `exp` can change derived values by one unit in
+  the last place between hosts.
 
 ## Development fixtures
 

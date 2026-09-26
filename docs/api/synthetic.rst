@@ -438,7 +438,11 @@ Scientific limitations
 Qualification of shared molecular truth and calibration remains open. Appearance
 defaults are uncalibrated; no acquisition physics beyond the stated model is
 claimed. All draws use the documented SHA-256/PCG64 stream keys, so generation
-is byte-repeatable across processes for the same NumPy version.
+is byte-repeatable across processes for the same NumPy build on the same CPU.
+NumPy selects CPU-specific implementations of transcendental functions such as
+``exp``, so values derived from them (lognormal properties, kernels, backgrounds)
+can differ by one unit in the last place between hosts; uniform draws and
+positions do not.
 
 Example
 -------

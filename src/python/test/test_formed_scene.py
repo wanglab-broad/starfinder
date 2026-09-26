@@ -347,9 +347,10 @@ def test_bounded_downstream_example():
 
 def test_pinned_independent_component_draws():
     # Independently evaluated from the canonical descriptor, SHA-256 and PCG64
-    # laws in NumPy 2.2.6 and NumPy 1.26.4, without importing the production
-    # stream helper. Scalar exp differs by one ULP for brightness; exact replay
-    # is promised within a pinned environment, not between NumPy releases.
+    # laws, without importing the production stream helper. Uniform draws are
+    # plain IEEE arithmetic and must match exactly. Lognormal properties go
+    # through exp, whose result NumPy dispatches per CPU (e.g. AVX-512 vs libm),
+    # so they may differ by one ULP between hosts and are compared to rounding.
     # These literals also detect accidentally sharing a stream across properties.
     law = ScalarDistribution('lognormal', (.2, .1))
     result = scene(count=1, brightness=law, axial_width=law, lateral_width=law,
@@ -357,8 +358,8 @@ def test_pinned_independent_component_draws():
                    angle=ScalarDistribution('uniform', (0, np.pi)))
     np.testing.assert_array_equal(result.formed[['z', 'y', 'x']].to_numpy()[0],
                                   [5.52290136568776, 20.31117785750813, 18.81900376172695])
-    expected_brightness = 1.4386412510745061 if np.__version__ == '1.26.4' else 1.438641251074506
-    np.testing.assert_array_equal(result.formed[['A', 'sz', 'sl', 'e', 'theta']].to_numpy()[0],
-                                  [expected_brightness, 1.1970397659789114, 1.2626294282763126,
-                                   1.2690413185721265, 1.5668133208553605])
+    np.testing.assert_allclose(result.formed[['A', 'sz', 'sl', 'e']].to_numpy()[0],
+                               [1.438641251074506, 1.1970397659789114, 1.2626294282763126,
+                                1.2690413185721265], rtol=1e-15, atol=0)
+    assert result.formed.theta.iloc[0] == 1.5668133208553605
     assert result.formed.gene_id.tolist() == ['b']
