@@ -81,6 +81,24 @@ def _json_dump(path, payload):
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False, allow_nan=False) + "\n", encoding="utf-8")
 
 
+def _compact_streams(provenance):
+    """Scene provenance with the per-stream descriptor list replaced by counts.
+
+    Descriptors follow from the documented key scheme and are about 1 kB each;
+    a tissue-sized FOV draws ~10^5 streams, so files keep counts per component.
+    """
+    scheme = provenance.get('stream_scheme')
+    if not isinstance(scheme, dict) or 'streams' not in scheme:
+        return provenance
+    streams = scheme['streams']
+    components = {}
+    for descriptor in streams:
+        components[descriptor[4]] = components.get(descriptor[4], 0) + 1
+    scheme = {k: v for k, v in scheme.items() if k != 'streams'}
+    return dict(provenance, stream_scheme=dict(scheme, stream_count=len(streams),
+                                               streams_per_component=dict(sorted(components.items()))))
+
+
 def _write_truth(directory, result, generation):
     """Truth tables shared by both modes; generation.json holds requested configs/provenance."""
     from dataclasses import asdict
@@ -88,7 +106,8 @@ def _write_truth(directory, result, generation):
     result.round_truth.to_csv(directory / 'round_truth.csv', index=False)
     result.spot_truth.to_csv(directory / 'scene_truth.csv', index=False)
     _json_dump(directory / 'ground_truth.json', result.historical_truth)
-    _json_dump(directory / 'generation.json', dict(generation, provenance=result.provenance,
+    provenance = {key: _compact_streams(value) for key, value in result.provenance.items()}
+    _json_dump(directory / 'generation.json', dict(generation, provenance=provenance,
         metadata={f: {r: asdict(m) for r, m in rounds.items()} for f, rounds in result.metadata.items()},
         molecular_truth=None))
 

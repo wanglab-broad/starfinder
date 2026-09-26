@@ -104,8 +104,9 @@ def test_large_presets_validate_by_configuration_and_memory_estimate(name):
         assert len(plan.maps) == len(book.round_labels)
     estimate = SCENE_PRESETS[name]['peak_bytes_estimate']
     voxels = int(np.prod(BENCHMARK_PRESETS[name]['shape_zyx']))
-    # Output round (uint16 ZYXC) plus two float32 planes dominate; far below tens of GB.
-    assert estimate >= voxels * (4 * 2 + 2 * 4)
+    # Output round (uint16 ZYXC), the writer's one-channel copy and two float32
+    # planes dominate; far below tens of GB.
+    assert estimate >= voxels * (5 * 2 + 2 * 4)
     assert estimate < 6 * 2**30
     print(f'{name}: estimated peak working set {estimate / 2**30:.2f} GiB')
 
@@ -351,6 +352,21 @@ def test_random_polynomial_and_affine_draws_always_meet_the_invertibility_bound(
             state = _prepare(cb, replace(config, seed=seed, count=0, background=BackgroundConfig()), None, {})
             assert len(state.maps) == 2
             assert all(m['lipschitz_bound'] <= .5 for m in state.maps), (name, seed)
+
+
+def test_documented_effective_multi_point_magnitudes():
+    # Keep the table in docs/api/synthetic.rst in step with deformation_geometry.
+    documented = {'tiny': 1.32, 'small': 2.64, 'medium': 5.27, 'large': 10.54,
+                  'thick_medium': 10.54, 'tissue': 20.0}
+    for name, used in documented.items():
+        geometry = deformation_geometry('multi_point', BENCHMARK_PRESETS[name]['shape_zyx'])
+        assert round(geometry.local_magnitude, 2) == used, name
+    for name in ('gaussian_small', 'gaussian_large'):
+        spec = DEFORMATION_PRESETS[name]
+        for preset in documented:
+            shape = BENCHMARK_PRESETS[preset]['shape_zyx']
+            requested = min(spec['percent'] * min(shape[1:]) / 100, spec['cap_px'])
+            assert deformation_geometry(name, shape).local_magnitude == requested
 
 
 def test_registration_pairs_share_one_scene_and_record_forward_maps():

@@ -320,8 +320,36 @@ Lipschitz bound; the transform records hold the full forward map.
 min(Y, X) capped in pixels, Z magnitudes a percent of Z. ``polynomial_*`` and
 ``linear_small`` use bounded polynomial or affine terms; ``gaussian_*`` and
 ``multi_point`` use RBF controls at fixed fractions of the grid with random
-directions, reduced when needed to meet the invertibility bound
-(``multi_point`` usually is).
+directions, reduced when needed to meet the invertibility bound. Random
+polynomial and affine draws are reduced the same way when their Jacobian bound
+would exceed it. ``gaussian_*`` keep their requested YX magnitude on every
+benchmark preset; ``multi_point`` (four overlapping controls) is reduced below
+``tissue``:
+
+.. list-table:: Effective ``multi_point`` YX magnitude (requested → used, pixels)
+   :header-rows: 1
+
+   * - Preset
+     - Requested
+     - Used
+   * - ``tiny``
+     - 5.12
+     - 1.32
+   * - ``small``
+     - 10.24
+     - 2.64
+   * - ``medium``
+     - 20
+     - 5.27
+   * - ``large``, ``thick_medium``
+     - 20
+     - 10.54
+   * - ``tissue``
+     - 20
+     - 20
+
+The used magnitude is ``GeometryConfig.local_magnitude`` of
+``deformation_geometry(name, shape)`` and is recorded with each transform.
 
 ``starfinder synthetic generate --mode e2e|registration --preset NAME --seed N
 --owner NAME --output NEW_DIR [--dtype uint8|uint16] [--no-noise]`` writes rounds
@@ -331,7 +359,10 @@ as they are generated. E2E mode writes ``FOV_###/round#/ch##.tif`` (ZYX),
 Registration mode writes ``synthetic/<preset>/ref.tif``, ``mov_shift.tif``,
 ``mov_deform_<name>.tif`` (ch00, ZYX), ``field_<name>.npy`` (float32 Z×Y×X×3
 forward displacement on the reference grid) and the same truth files, plus
-``synthetic/summary.json``.
+``synthetic/summary.json``. ``generation.json`` keeps each scene's provenance
+but replaces the ``stream_scheme`` descriptor list with ``stream_count`` and
+``streams_per_component``: descriptors follow from the key scheme, and a
+tissue-sized FOV draws about 10^5 of them.
 
 Choosing a preset
 -----------------
@@ -426,9 +457,10 @@ data, not calibration:
   ``generate_codebook(64)``.
 
 ``SCENE_PRESETS[name]["peak_bytes_estimate"]`` estimates generation working
-memory for one round (output round plus two float planes and bounded blocks):
-about 0.29 GiB for ``medium``, 0.66 GiB for ``large``, 4.8 GiB for ``tissue`` and
-1.9 GiB for ``thick_medium``, plus the interpreter. ``medium`` generation is
+memory for one round (output round, the writer's contiguous copy of one
+channel, two float planes and bounded blocks): about 0.30 GiB for ``medium``,
+0.72 GiB for ``large``, 5.3 GiB for ``tissue`` and 2.1 GiB for ``thick_medium``,
+plus the interpreter. ``medium`` generation is
 tested with ``/usr/bin/time -v``; ``large``, ``tissue`` and ``thick_medium`` are
 validated by configuration and this estimate only.
 

@@ -143,6 +143,18 @@ def test_cli_rejects_unknown_preset_and_existing_output(tmp_path, capsys):
               '--owner', 'pytest', '--output', str(tmp_path / 'used')])
 
 
+def test_generation_json_records_stream_counts_not_descriptors(tmp_path):
+    for mode in ('e2e', 'registration'):
+        root = generate(tmp_path, mode, 'tiny')
+        path = next(root.rglob('generation.json'))
+        for key, provenance in json.loads(path.read_text())['provenance'].items():
+            scheme = provenance['stream_scheme']
+            assert 'streams' not in scheme, (mode, key)
+            assert scheme['stream_count'] > 0
+            assert sum(scheme['streams_per_component'].values()) == scheme['stream_count']
+            assert scheme['bit_generator'] == 'PCG64' and scheme['key']
+
+
 def test_small_registration_cli(tmp_path):
     check_registration_layout(generate(tmp_path, 'registration', 'small'), 'small')
 

@@ -229,15 +229,16 @@ def registration_scene_preset(name: str, deformation: str = "shift", *,
 def _estimate_peak_bytes(shape_zyx, count=0, *, dtype="uint16", accumulation="float32", channels=4):
     """Upper estimate of generation working memory for one round, in bytes.
 
-    Output round (ZYXC), one accumulation plane, the sampled background plane,
-    noise draws for one chunk, one inverse-geometry block with temporaries and
-    the round's cached kernels (float64 boxes of up to 16^3 voxels).
+    Output round (ZYXC), the writer's contiguous copy of one output channel,
+    one accumulation plane, the sampled background plane, noise draws for one
+    chunk, one inverse-geometry block with temporaries and the round's cached
+    kernels (float64 boxes of up to 16^3 voxels).
     """
     from ._geometry import _BLOCK_VOXELS
     from ._observation import _NOISE_CHUNK
     voxels = int(np.prod(shape_zyx))
     item = np.dtype(accumulation).itemsize
-    return (voxels * channels * np.dtype(dtype).itemsize + 2 * voxels * item
+    return (voxels * (channels + 1) * np.dtype(dtype).itemsize + 2 * voxels * item
             + 4 * _NOISE_CHUNK * 8 + 12 * min(voxels, _BLOCK_VOXELS) * 8 + count * 16**3 * 8)
 
 
