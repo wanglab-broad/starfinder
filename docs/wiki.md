@@ -8,6 +8,7 @@ covers operational work.
 :maxdepth: 1
 
 Architecture <architecture>
+Dataset catalog <datasets>
 Conventions <conventions>
 API contracts <api/contracts>
 Backend requirements <api/backends>
