@@ -59,6 +59,10 @@ dev = [
 testpaths = ["test"]
 addopts = "-v --tb=short -m 'not extended'"
 markers = ["extended: full-pipeline end-to-end comparisons on the session's synthetic data; run with -m extended"]
+filterwarnings = [
+    "error::ResourceWarning",
+    "error::pytest.PytestUnraisableExceptionWarning",
+]
 
 [tool.ruff]
 line-length = 100
