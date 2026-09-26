@@ -449,6 +449,29 @@ def test_disabled_checkpoints_write_nothing_and_existing_directory_is_protected(
             CheckpointConfig(**bad)
 
 
+def test_overwrite_run_never_leaves_a_stale_stage_loadable(tmp_path, monkeypatch):
+    import starfinder.barcode as barcode
+    ds = dataset(tmp_path)
+    resident(ds).run(full(), checkpoints=CheckpointConfig(hash_inputs=False))
+    directory = tmp_path / 'out' / 'checkpoints' / 'FOV'
+    (directory / 'notes.txt').write_text('kept')
+    injected = RuntimeError('injected decoding failure')
+
+    def fail(*args, **kwargs):
+        raise injected
+    monkeypatch.setattr(barcode, 'decode_barcodes', fail)
+    with pytest.raises(RuntimeError):
+        resident(ds).run(full(), checkpoints=CheckpointConfig(hash_inputs=False, overwrite=True))
+    data = record(ds.fov('FOV'))
+    assert data['status'] == 'failed' and 'pre_qc' not in data['checkpoints']
+    # The earlier run's pre_qc files are gone, so they cannot be loaded as this run's.
+    assert not (directory / 'pre_qc.json').exists() and not (directory / 'pre_qc.csv').exists()
+    with pytest.raises(FileNotFoundError):
+        ds.fov('FOV').load_checkpoint('pre_qc')
+    assert (directory / 'notes.txt').read_text() == 'kept'
+    ds.fov('FOV').load_checkpoint('candidates')
+
+
 def test_load_checkpoint_rejects_mismatches_and_existing_results(tmp_path):
     ds = dataset(tmp_path)
     saved = resident(ds).run(full(), checkpoints=CheckpointConfig())

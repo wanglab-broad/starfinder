@@ -82,7 +82,8 @@ class CheckpointConfig:
     Files go to ``<directory>/<fov_id>/`` (``subtile_<n>/`` below it for
     subtiles); None uses ``<output_root>/checkpoints``. Tables are CSV or
     Parquet (requires pyarrow). hash_inputs streams SHA-256 of loaded TIFFs.
-    Without overwrite, an existing FOV directory is an error before processing.
+    Without overwrite, an existing FOV directory is an error before processing;
+    with it, run first removes that directory's earlier checkpoint files.
     """
     stages: tuple[str, ...] = ('registered', 'candidates', 'pre_qc')
     directory: Path | str | None = None

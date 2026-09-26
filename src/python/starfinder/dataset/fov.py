@@ -532,13 +532,16 @@ class FOV:
 
     def _start_run_record(self, checkpoints, config, execution):
         from starfinder.dataset._run_record import _RunRecord
-        from starfinder.io._checkpoint import _require_parquet
+        from starfinder.io._checkpoint import _require_parquet, clear_stages
         checkpoints.__post_init__()
         directory = self._checkpoint_dir(checkpoints)
         if directory.exists() and not checkpoints.overwrite:
             raise FileExistsError(f'checkpoint directory {directory} exists; pass overwrite=True to replace its files')
         if checkpoints.table_format == 'parquet':
             _require_parquet()
+        if directory.exists():
+            # Stages this run does not rewrite must not survive from an earlier run.
+            clear_stages(directory)
         directory.mkdir(parents=True, exist_ok=True)
         record = _RunRecord(self, directory, checkpoints, config, execution)
         record.write()

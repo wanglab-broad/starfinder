@@ -24,13 +24,14 @@ fov.run(pipeline, execution=execution, checkpoints=CheckpointConfig())
 | `directory` | `None` | Checkpoint root; `None` means `<output_root>/checkpoints`. |
 | `table_format` | `"csv"` | `"csv"` or `"parquet"` (requires the `checkpoint` extra, `pyarrow>=15`). |
 | `hash_inputs` | `True` | Record a streamed SHA-256 of every loaded TIFF. |
-| `overwrite` | `False` | Allow an existing FOV checkpoint directory. |
+| `overwrite` | `False` | Replace the checkpoints of an existing FOV directory. |
 
 `run` checks everything before it loads or processes any image. It raises
 `FileExistsError` if the FOV directory exists and `overwrite` is false, and
 `ImportError` if Parquet is requested without pyarrow. With `overwrite=True`,
-files are replaced as they are written. Nothing is deleted, so only the files
-listed in `run.json` belong to that run.
+`run` first removes the existing checkpoint files of that FOV (stage headers and
+tables, registered TIFFs and dense fields; other files are left alone), so a
+stage the new run does not reach can never be loaded from an earlier run.
 
 `run` writes a stage only when it computes it. `registered` is written for each
 round inside the round loop, `candidates` after detection or extraction, and

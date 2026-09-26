@@ -237,6 +237,25 @@ def header_path(directory, stage):
     return directory / "registered" / "transforms.json" if stage == "registered" else directory / f"{stage}.json"
 
 
+def clear_stages(directory):
+    """Remove every checkpoint file of a per-FOV directory, headers first.
+
+    Only files this module writes are removed (stage headers and tables,
+    registered TIFFs and dense fields); other files are left untouched. Removing
+    headers first means an interrupted clear never leaves a loadable stale stage.
+    """
+    directory = Path(directory)
+    registered = directory / "registered"
+    paths = [header_path(directory, stage) for stage in STAGES]
+    paths += [directory / f"{stage}.{fmt}" for stage in STAGES[1:] for fmt in TABLE_FORMATS]
+    if registered.is_dir():
+        paths += sorted(registered.glob("*.tif")) + sorted(registered.glob("*_field.npz"))
+    for path in paths:
+        path.unlink(missing_ok=True)
+    if registered.is_dir() and not any(registered.iterdir()):
+        registered.rmdir()
+
+
 def read_header(directory, stage):
     """Load a stage header; missing checkpoints raise FileNotFoundError."""
     path = header_path(directory, stage)
