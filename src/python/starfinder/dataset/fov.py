@@ -16,7 +16,7 @@ from starfinder.io import ImageLoadConfig
 from starfinder.preprocessing import (MinMaxNormalizationConfig, HistogramMatchingConfig, ReconstructionConfig, TophatConfig, ProjectionConfig)
 from starfinder.dataset._logging import _log_step
 from starfinder.dataset._paths import _FovPaths
-from starfinder.dataset.config import PipelineConfig, ExecutionConfig, RegistrationStep
+from starfinder.dataset.config import CheckpointConfig, PipelineConfig, ExecutionConfig, RegistrationStep
 from starfinder.registration import RegistrationResult
 from starfinder.barcode import (Codebook, IntensityExtractionResult, NeighborhoodSumConfig,
     WtaDecoderConfig, ReadFilterConfig, BarcodeDecodingResult, ReadFilteringResult)
@@ -51,6 +51,7 @@ class FOV:
     _round_intensities: dict = field(default_factory=dict)
 
     load_diagnostics: dict[str, dict] = field(default_factory=dict)
+    _run_record: object | None = field(default=None, init=False, repr=False, compare=False)
 
     # --- Delegated properties ---
 
@@ -150,6 +151,8 @@ class FOV:
             self.images[round_name] = loaded.image
             self.metadata[round_name] = loaded.metadata
             self.load_diagnostics[round_name] = loaded.diagnostics
+            if self._run_record is not None:
+                self._run_record.add_inputs(loaded.source_paths)
         return self
 
     # --- Preprocessing ---
@@ -161,6 +164,7 @@ class FOV:
         for name in rounds:
             self.images[name] = func(self.images[name])
 
+    @_log_step
     def _rotate_round(self, round_name: str, angle: float) -> None:
         """Rotate a single round's image in-place."""
         vol = _validate_image(self.images[round_name])
@@ -207,7 +211,7 @@ class FOV:
             This instance, with processing state updated in place.
         """
         for round_name in list(self.images.keys()):
-            self._rotate_round(round_name, angle)
+            self._rotate_round(round_name=round_name, angle=angle)
         return self
 
     @_log_step
@@ -336,6 +340,7 @@ class FOV:
                                      metadata=metadata, spot_namespace=namespace)
         return self
 
+    @_log_step
     def _extract_round(self, round_name, config=NeighborhoodSumConfig()):
         from starfinder.barcode import extract_intensities
         from starfinder.io import ImageLoadResult
@@ -372,7 +377,7 @@ class FOV:
             raise ValueError("extraction rounds must be nonempty and unique")
         self._round_intensities.clear()
         for round_name in rounds:
-            self._extract_round(round_name, config)
+            self._extract_round(round_name=round_name, config=config)
         self._assemble_intensities(rounds)
         return self
 
@@ -393,16 +398,28 @@ class FOV:
         return self
 
     @_log_step
-    def run(self, config: PipelineConfig, *, execution: ExecutionConfig = ExecutionConfig()):
+    def run(self, config: PipelineConfig, *, execution: ExecutionConfig = ExecutionConfig(),
+            checkpoints: CheckpointConfig | None = None):
         """Run one scientific sequence with batch or streaming residency.
 
         Reference first, then moving rounds in declared order. Histogram targets
         are captured before downstream reference processing. Loading may be
         disabled for resident/subtile data. Images without registration must
-        already declare the same frame/grid for extraction.
+        already declare the same frame/grid for extraction. Without image
+        operations or resident images (after load_checkpoint), the round loop
+        is skipped.
+
+        checkpoints=None writes nothing. Otherwise the selected stages and
+        run.json are written to the FOV checkpoint directory; see
+        :doc:`/checkpoints`. The directory, overwrite policy and Parquet support
+        are checked before any processing. On an exception the record gets
+        failed (or interrupted for other BaseExceptions) with the failing step
+        and round, and the original exception is re-raised.
         """
         if not isinstance(config, PipelineConfig) or not isinstance(execution, ExecutionConfig):
             raise TypeError('run requires PipelineConfig and ExecutionConfig')
+        if checkpoints is not None and not isinstance(checkpoints, CheckpointConfig):
+            raise TypeError('checkpoints must be CheckpointConfig or None')
         config.__post_init__()
         execution.__post_init__()
         self.rounds.validate()
@@ -417,57 +434,239 @@ class FOV:
             raise ValueError('filtering requires decoding')
         if config.decoding and self.codebook is None:
             raise ValueError('decoding requires a loaded codebook')
-        if config.load and execution.mode == 'batch':
-            self.load_images(rounds=self.rounds.all_rounds, config=config.load)
-        histogram_reference = None
-        if config.extraction:
-            self._round_intensities.clear()
-        for name in [ref] + self.rounds.moving_rounds:
-            if config.load and execution.mode == 'streaming':
-                self.load_images(rounds=[name], config=config.load)
-            if name not in self.images or name not in self.metadata:
-                raise ValueError(f'missing image/metadata for {name}')
-            if config.rotation_degrees is not None:
-                self._rotate_round(name, config.rotation_degrees)
-            if config.normalization:
-                self.normalize_intensity(config=config.normalization, rounds=[name])
-            if config.histogram:
-                if name == ref:
-                    histogram_reference = self.images[ref][..., config.histogram_reference_channel].copy()
-                self.match_histogram(config=config.histogram, rounds=[name], reference=histogram_reference)
-            if config.reconstruction and not config.reconstruction_after_registration:
-                self.reconstruct_background(config=config.reconstruction, rounds=[name])
-            if config.tophat:
-                self.filter_tophat(config=config.tophat, rounds=[name])
-            if config.projection:
-                self.project_image(config=config.projection, rounds=[name])
-            if name != ref:
-                processed_reference = self.images[ref]
+        record = self._start_run_record(checkpoints, config, execution) if checkpoints is not None else None
+        current = None
+        self._run_record = record
+        try:
+            image_stages = any((config.load, config.rotation_degrees is not None, config.normalization,
+                config.histogram, config.reconstruction, config.tophat, config.projection,
+                config.registration, config.detection, config.extraction))
+            stages = checkpoints.stages if checkpoints is not None else ()
+            if config.load and execution.mode == 'batch':
+                self.load_images(rounds=self.rounds.all_rounds, config=config.load)
+            histogram_reference = None
+            if config.extraction:
+                self._round_intensities.clear()
+            # A run resumed from candidates or pre_qc has no images to process.
+            loop_rounds = ([ref] + self.rounds.moving_rounds) if image_stages or self.images else []
+            for name in loop_rounds:
+                current = name
+                if config.load and execution.mode == 'streaming':
+                    self.load_images(rounds=[name], config=config.load)
+                if name not in self.images or name not in self.metadata:
+                    raise ValueError(f'missing image/metadata for {name}')
+                if config.rotation_degrees is not None:
+                    self._rotate_round(round_name=name, angle=config.rotation_degrees)
+                if config.normalization:
+                    self.normalize_intensity(config=config.normalization, rounds=[name])
+                if config.histogram:
+                    if name == ref:
+                        histogram_reference = self.images[ref][..., config.histogram_reference_channel].copy()
+                    self.match_histogram(config=config.histogram, rounds=[name], reference=histogram_reference)
+                if config.reconstruction and not config.reconstruction_after_registration:
+                    self.reconstruct_background(config=config.reconstruction, rounds=[name])
+                if config.tophat:
+                    self.filter_tophat(config=config.tophat, rounds=[name])
+                if config.projection:
+                    self.project_image(config=config.projection, rounds=[name])
+                if name != ref:
+                    processed_reference = self.images[ref]
+                    if config.reconstruction and config.reconstruction_after_registration:
+                        self.images[ref] = registration_reference
+                    try:
+                        for step in config.registration:
+                            self.register(step, rounds=[name])
+                    finally:
+                        self.images[ref] = processed_reference
                 if config.reconstruction and config.reconstruction_after_registration:
-                    self.images[ref] = registration_reference
-                try:
-                    for step in config.registration:
-                        self.register(step, rounds=[name])
-                finally:
-                    self.images[ref] = processed_reference
-            if config.reconstruction and config.reconstruction_after_registration:
-                # Keep the registration reference before the post-registration
-                # operation; use its snapshot for each moving round below.
-                if name == ref:
-                    registration_reference = self.images[ref].copy()
-                self.reconstruct_background(config=config.reconstruction, rounds=[name])
-            if name == ref and config.detection:
-                self.find_spots(config=config.detection)
-            if config.extraction and name in self.rounds.sequencing_rounds:
-                self._extract_round(name, config.extraction)
-            if execution.mode == 'streaming' and not execution.retain_images and name != ref:
-                del self.images[name]
-        if config.extraction:
-            self._assemble_intensities()
-        if config.decoding:
-            self.decode_barcodes(config=config.decoding)
-        if config.filtering:
-            self.filter_reads(config=config.filtering)
+                    # Keep the registration reference before the post-registration
+                    # operation; use its snapshot for each moving round below.
+                    if name == ref:
+                        registration_reference = self.images[ref].copy()
+                    self.reconstruct_background(config=config.reconstruction, rounds=[name])
+                if 'registered' in stages:
+                    self._write_checkpoint(stage='registered', directory=record.directory,
+                                           table_format=checkpoints.table_format, round_name=name)
+                if name == ref and config.detection:
+                    self.find_spots(config=config.detection)
+                if config.extraction and name in self.rounds.sequencing_rounds:
+                    self._extract_round(round_name=name, config=config.extraction)
+                if execution.mode == 'streaming' and not execution.retain_images and name != ref:
+                    del self.images[name]
+            current = None
+            if 'registered' in stages and record.data['checkpoints'].get('registered'):
+                self._write_checkpoint(stage='registered', directory=record.directory,
+                                       table_format=checkpoints.table_format, image_rounds=[ref] + self.rounds.moving_rounds)
+            if config.extraction:
+                self._assemble_intensities()
+            if 'candidates' in stages and (config.detection or config.extraction):
+                self._write_checkpoint(stage='candidates', directory=record.directory,
+                                       table_format=checkpoints.table_format)
+            if config.decoding:
+                self.decode_barcodes(config=config.decoding)
+                if 'pre_qc' in stages:
+                    self._write_checkpoint(stage='pre_qc', directory=record.directory,
+                                           table_format=checkpoints.table_format)
+            if config.filtering:
+                self.filter_reads(config=config.filtering)
+            if record is not None:
+                record.finish('succeeded')
+        except BaseException as error:
+            if record is not None and record.data['status'] == 'running':
+                record.finish('failed' if isinstance(error, Exception) else 'interrupted', error, current)
+            raise
+        finally:
+            self._run_record = None
+        return self
+
+    # --- Checkpoints ---
+
+    def _checkpoint_dir(self, checkpoints: CheckpointConfig) -> Path:
+        base = self.paths.checkpoint_dir if checkpoints.directory is None else Path(checkpoints.directory) / self.fov_id
+        return base if self.subtile_id is None else base / f'subtile_{self.subtile_id}'
+
+    def _checkpoint_header(self) -> dict:
+        return dict(dataset_id=self.dataset.dataset_id, sample_id=self.dataset.sample_id,
+                    fov_id=self.fov_id, subtile_id=self.subtile_id, rounds=asdict(self.rounds),
+                    channel_labels=list(self.dataset.channel_order))
+
+    def _start_run_record(self, checkpoints, config, execution):
+        from starfinder.dataset._run_record import _RunRecord
+        from starfinder.io._checkpoint import _require_parquet, clear_stages
+        checkpoints.__post_init__()
+        directory = self._checkpoint_dir(checkpoints)
+        if directory.exists() and not checkpoints.overwrite:
+            raise FileExistsError(f'checkpoint directory {directory} exists; pass overwrite=True to replace its files')
+        if checkpoints.table_format == 'parquet':
+            _require_parquet()
+        if directory.exists():
+            # Stages this run does not rewrite must not survive from an earlier run.
+            clear_stages(directory)
+        directory.mkdir(parents=True, exist_ok=True)
+        record = _RunRecord(self, directory, checkpoints, config, execution)
+        record.write()
+        return record
+
+    @_log_step
+    def _write_checkpoint(self, stage, directory, table_format, *, round_name=None, image_rounds=None):
+        """Write one stage (or one registered round) and record its files."""
+        from starfinder.io import _checkpoint as io
+        directory = Path(directory)
+        header = self._checkpoint_header()
+        if stage == 'registered' and round_name is not None:
+            path = io.write_registered_round(directory, round_name, self.images[round_name], self.metadata[round_name])
+            files = [path.relative_to(directory).as_posix()]
+        elif stage == 'registered':
+            if image_rounds is None:
+                image_rounds = self.rounds.all_rounds
+                missing = [r for r in image_rounds if r not in self.images or r not in self.metadata]
+                if missing:
+                    raise ValueError(f'registered checkpoint requires resident images for {missing}')
+                files = [io.write_registered_round(directory, r, self.images[r], self.metadata[r])
+                         .relative_to(directory).as_posix() for r in image_rounds]
+            else:
+                files = []
+            header.update(image_rounds=list(image_rounds), registration_attempts=self.registration_attempts)
+            files += [f'registered/{name}' for name in
+                      io.write_registered_header(directory, header, self.registration_results)]
+        elif stage == 'candidates':
+            if self.spot_result is None:
+                raise ValueError('candidates checkpoint requires spot_result')
+            files = io.write_candidates(directory, header, self.spot_result, self.intensity_result, table_format)
+        elif stage == 'pre_qc':
+            if self.decoding_result is None:
+                raise ValueError('pre_qc checkpoint requires decoding_result')
+            files = io.write_pre_qc(directory, header, self.decoding_result, table_format)
+        else:
+            io._check_stage(stage)
+        if self._run_record is not None:
+            self._run_record.add_checkpoint(stage, files)
+        return files
+
+    def save_checkpoint(self, stage: str, *, checkpoints: CheckpointConfig = CheckpointConfig()) -> Path:
+        """Write one checkpoint stage from the current results.
+
+        Parameters
+        ----------
+        stage : str
+            ``registered`` (all round images must be resident), ``candidates``
+            (spot_result, with intensity_result when present) or ``pre_qc``
+            (decoding_result).
+        checkpoints : CheckpointConfig
+            Directory, table_format and overwrite policy; stages and
+            hash_inputs are not used here.
+
+        Returns
+        -------
+        pathlib.Path
+            The per-FOV checkpoint directory.
+
+        Raises
+        ------
+        FileExistsError
+            The stage exists and overwrite is False.
+        ValueError
+            Unknown stage or missing results.
+        ImportError
+            Parquet was requested without pyarrow.
+        """
+        from starfinder.io._checkpoint import _check_stage, _require_parquet, header_path
+        _check_stage(stage)
+        checkpoints.__post_init__()
+        directory = self._checkpoint_dir(checkpoints)
+        if header_path(directory, stage).exists() and not checkpoints.overwrite:
+            raise FileExistsError(f'{stage} checkpoint exists in {directory}; pass overwrite=True')
+        if checkpoints.table_format == 'parquet':
+            _require_parquet()
+        self._write_checkpoint(stage=stage, directory=directory, table_format=checkpoints.table_format)
+        return directory
+
+    @_log_step
+    def load_checkpoint(self, stage: str, *, checkpoints: CheckpointConfig = CheckpointConfig()) -> FOV:
+        """Restore one checkpoint stage so later stages can run without images.
+
+        ``registered`` restores images, metadata, registration results and
+        attempts; ``candidates`` restores spot_result and intensity_result;
+        ``pre_qc`` restores decoding_result. Continue with run() and a
+        PipelineConfig that starts after the loaded stage.
+
+        Parameters
+        ----------
+        stage : str
+            ``registered``, ``candidates`` or ``pre_qc``.
+        checkpoints : CheckpointConfig
+            Only directory is used; the table format is read from the header.
+
+        Returns
+        -------
+        FOV
+            This instance, with the stage's results set.
+
+        Raises
+        ------
+        ValueError
+            This FOV already has results at or after the stage, or the saved
+            FOV id, round labels or channel order differ from this FOV.
+        FileNotFoundError
+            The stage was not written.
+        """
+        from starfinder.io._checkpoint import _check_stage, _jsonable, read_checkpoint, read_header
+        _check_stage(stage)
+        later = ['spot_result', 'intensity_result', 'decoding_result', 'filtering_result']
+        later = {'registered': ['images', 'registration_results', 'registration_attempts'] + later,
+                 'candidates': later, 'pre_qc': later[2:]}[stage]
+        occupied = [name for name in later if getattr(self, name) is not None and getattr(self, name) != {}]
+        if occupied:
+            raise ValueError(f'load_checkpoint({stage!r}) requires an FOV without {", ".join(occupied)}')
+        directory = self._checkpoint_dir(checkpoints)
+        header = read_header(directory, stage)
+        expected = _jsonable(self._checkpoint_header())
+        for key, label in (('fov_id', 'FOV id'), ('subtile_id', 'subtile id'),
+                           ('rounds', 'round labels'), ('channel_labels', 'channel order')):
+            if header.get(key) != expected[key]:
+                raise ValueError(f'{stage} checkpoint {label} {header.get(key)!r} differs from this FOV ({expected[key]!r})')
+        for name, value in read_checkpoint(directory, stage).items():
+            setattr(self, name, value)
         return self
 
     # --- Output ---

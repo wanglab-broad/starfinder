@@ -11,11 +11,12 @@ def main(argv=None):
     synthetic = groups.add_parser('synthetic', help='Processed-image synthetic generation')
     generate = synthetic.add_subparsers(dest='command', required=True).add_parser('generate')
     generate.add_argument('--mode', choices=['e2e', 'registration'], required=True)
-    generate.add_argument('--preset', required=True)
+    generate.add_argument('--preset', required=True, help='tiny, small, medium, large, tissue or thick_medium')
     generate.add_argument('--output', type=Path, required=True, help='New directory; existing paths are rejected')
     generate.add_argument('--seed', type=int, required=True)
-    generate.add_argument('--no-noise', action='store_true')
-    generate.add_argument('--dtype', choices=['uint8', 'uint16'], default='uint8', help='E2E image dtype; registration currently requires uint8')
+    generate.add_argument('--no-noise', action='store_true', help='Disable Poisson and read noise')
+    generate.add_argument('--dtype', choices=['uint8', 'uint16'], default='uint16',
+                          help='Image dtype (default uint16); uint8 scales intensities by 1/16')
     generate.add_argument('--owner', required=True)
     benchmark = groups.add_parser('benchmark', help='Run, reevaluate, or report saved trials')
     commands = benchmark.add_subparsers(dest='command', required=True)
@@ -34,20 +35,18 @@ def main(argv=None):
     try:
         from starfinder.benchmark._storage import _read, _write, _reference, SCHEMA_VERSION
         if args.group == 'synthetic':
-            from starfinder.synthetic import get_preset_config, generate_dataset, generate_registration_pairs
+            from starfinder.synthetic import BENCHMARK_PRESETS
             from starfinder.benchmark._synthetic_io import _write_dataset, _write_registration_pairs
             if not args.owner.strip():
                 raise ValueError('owner must be nonempty')
-            config = get_preset_config(args.preset)
-            if args.mode == 'registration' and args.dtype != 'uint8':
-                raise ValueError('registration generation supports uint8 only')
+            if args.preset not in BENCHMARK_PRESETS:
+                raise ValueError(f'unknown preset {args.preset!r}; choose from {list(BENCHMARK_PRESETS)}')
             args.output.mkdir(parents=True, exist_ok=False)
+            options = dict(seed=args.seed, dtype=args.dtype, noise=not args.no_noise)
             if args.mode == 'e2e':
-                config.seed, config.add_noise, config.dtype = args.seed, not args.no_noise, args.dtype
-                _write_dataset(generate_dataset(config=config, preset=args.preset), args.output, annotations=False)
+                _write_dataset(args.preset, args.output, **options)
             else:
-                _write_registration_pairs(generate_registration_pairs(presets=[args.preset], seed=args.seed,
-                    add_noise=not args.no_noise), args.output, inspections=False)
+                _write_registration_pairs(args.preset, args.output, **options)
             _write(args.output / 'manifest.json', {'schema_version': SCHEMA_VERSION,
                 'owner': args.owner, 'command': vars(args) | {'output': str(args.output)},
                 'artifacts': [_reference(args.output, p) for p in sorted(args.output.rglob('*')) if p.is_file()],

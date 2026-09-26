@@ -93,6 +93,11 @@ Coordinates convert from zero-based ZYX to one-based XYZ exactly at export.
 Empty detections and all-rejected results produce header-only CSVs. The default
 columns and shared filenames remain compatible with downstream consumers.
 
+`run(config, checkpoints=CheckpointConfig())` also saves registered images,
+candidates with signals and pre-QC decoding per FOV, plus a `run.json` record.
+`load_checkpoint(stage)` restores a stage so that a later `run` can continue
+without earlier steps. See [checkpoints](checkpoints.md).
+
 Two intentional corrections accompany coordination: merged registration images
 sum in float64 to preserve signed/high-range values, and rectangular subtiles
 cover both axes and remainder pixels. Stage flags/parameters now apply equally

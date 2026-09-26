@@ -3,6 +3,7 @@
 from starfinder.preprocessing import MinMaxNormalizationConfig
 from starfinder.preprocessing import ProjectionConfig
 
+from dataclasses import replace
 import importlib.util
 from pathlib import Path
 import sys
@@ -14,7 +15,7 @@ from starfinder.barcode import (
     Codebook, NeighborhoodSumConfig, CodebookAwareDecoderConfig,
     decode_barcodes, extract_intensities, filter_reads,
 )
-from starfinder.synthetic import generate_volume
+from starfinder.synthetic import formed_scene_preset, generate_formed_scene
 from starfinder.dataset import RoundState, Dataset, RegistrationStep
 from starfinder.io import ImageLoadResult, load_volume, save_volume
 from starfinder.preprocessing import normalize_intensity
@@ -98,8 +99,11 @@ def main(output: Path) -> None:
     else:
         raise AssertionError("Expected insufficient landmarks without fallback")
 
-    synthetic = generate_volume((12, 24, 24), n_spots=3, seed=97)
-    assert synthetic.shape == fixed.shape and synthetic.dtype == np.uint8
+    codebook, config = formed_scene_preset("formed-small-v1")
+    scene = generate_formed_scene(codebook, config=replace(
+        config, shape_zyx=(12, 24, 24), count=3, seed=97, dtype="uint16"))
+    synthetic = scene.rounds[codebook.round_labels[0]]
+    assert synthetic.shape == fixed.shape + (4,) and synthetic.dtype == np.uint16
     assert int(synthetic.sum()) > 0
     print("All API contract examples passed (synthetic seed=97).")
 

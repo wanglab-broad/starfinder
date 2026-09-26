@@ -32,12 +32,15 @@ path. Undefined metrics are valid results, not execution failures. Reporting
 failed trials succeeds: their statuses/errors remain in the report.
 
 Synthetic generation requires a new output directory. `--mode registration`
-writes reference/moving pairs; it currently supports uint8 only. The E2E mode
-supports `--dtype uint8|uint16`. No existing output is overwritten. Generation
-is backed by `starfinder.synthetic` functions; manifests record command, seed,
-owner and checksums. Existing process-dependent synthetic randomness remains
-unqualified; a seed is not a claim of cross-process reproducibility or molecular
-truth. See [synthetic API](api/synthetic.rst).
+writes one shared reference and a moving image per shift or deformation, with
+forward displacement fields; `--mode e2e` writes the FOV/round/channel TIFF
+layout. Both default to uint16 and accept `--dtype uint8` (intensities scaled
+by 1/16). Rounds are written as they are generated. No existing output is
+overwritten. Generation is backed by `starfinder.synthetic` functions; manifests
+record command, seed, owner and checksums, and `generation.json` records the
+generator and preset versions. Keyed random streams make outputs byte-repeatable
+across processes for a pinned NumPy; a seed is not a claim of molecular truth.
+See [synthetic API](api/synthetic.rst) for presets and their appearance defaults.
 
 ## Explicit configuration
 

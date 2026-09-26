@@ -1,0 +1,53 @@
+name: Tests
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+        working-directory: src/python
+    env:
+      UV_PYTHON: '3.12'
+      UV_LOCKED: 'true'
+      PYTHONDONTWRITEBYTECODE: '1'
+      OMP_NUM_THREADS: '1'
+      OPENBLAS_NUM_THREADS: '1'
+      MKL_NUM_THREADS: '1'
+      NUMEXPR_NUM_THREADS: '1'
+      ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS: '1'
+      MPLBACKEND: Agg
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+        with:
+          version: '0.9.28'
+          enable-cache: true
+          cache-dependency-glob: src/python/uv.lock
+      - name: Install locked dependencies with the dev, local-registration and checkpoint extras
+        run: uv sync --locked --extra dev --extra local-registration --extra checkpoint
+      # MATLAB is never executed: the launcher tests mock subprocess.
+      - name: Default suite
+        env:
+          UV_NO_SYNC: 'true'
+        run: uv run pytest test/ -v
+      - name: Extended suite
+        env:
+          UV_NO_SYNC: 'true'
+        run: uv run pytest test/ -v -m extended

@@ -44,6 +44,17 @@ class _FovPaths:
         """
         return self.output_root / "output" / "subtile" / self.fov_id
 
+    @property
+    def checkpoint_dir(self) -> Path:
+        """Default per-FOV checkpoint directory under checkpoints/.
+
+        Returns
+        -------
+        pathlib.Path
+            Path under output_root; no filesystem mutation.
+        """
+        return self.output_root / "checkpoints" / self.fov_id
+
     def rsf_log(self) -> Path:
         """Return log/<fov_id>_rsf.txt without creating it.
 

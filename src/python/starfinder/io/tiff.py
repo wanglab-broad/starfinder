@@ -180,6 +180,31 @@ def load_round(round_dir: Path | str, *, config: ImageLoadConfig) -> ImageLoadRe
     return ImageLoadResult(data, metadata, config.channel_labels, tuple(paths), diagnostics)
 
 
+def load_volume_zyxc(path: Path | str, *, channel_labels: tuple[str, ...] | None = None) -> ImageLoadResult:
+    """Load a whole ZYXC TIFF written by save_volume in one read, preserving dtype.
+
+    The file must declare ZYXC axes; singleton Z and C are kept. channel_labels
+    must match C; None labels channels channel0, channel1, ... Stored STARfinder
+    metadata is restored, otherwise the frame is the resolved path.
+    """
+    path = Path(path)
+    if not path.is_file():
+        raise FileNotFoundError(f"TIFF file not found: {path}")
+    with tifffile.TiffFile(path) as tif:
+        stored = (tif.shaped_metadata[0] if tif.shaped_metadata else None) or {}
+        if stored.get("axes") != "ZYXC":
+            raise ValueError(f"{path} does not declare ZYXC axes")
+        data = tif.series[0].asarray()
+    data = _validate_image(data, ndim=(4,))
+    labels = tuple(f"channel{i}" for i in range(data.shape[3])) if channel_labels is None else tuple(channel_labels)
+    if len(labels) != data.shape[3] or len(set(labels)) != len(labels):
+        raise ValueError("channel_labels must be unique and match the channel axis")
+    metadata = ImageMetadata(**stored["starfinder_metadata"]) if "starfinder_metadata" in stored else ImageMetadata(str(path.resolve()))
+    diagnostics = {"source_dtype": str(data.dtype), "output_dtype": str(data.dtype),
+                   "metadata_source": "stored" if "starfinder_metadata" in stored else "unknown"}
+    return ImageLoadResult(data, metadata, labels, (path,), diagnostics)
+
+
 def save_volume(image: np.ndarray, path: Path | str, compress: bool = False, *, metadata: ImageMetadata | None = None, conversion: ImageConversionConfig | None = None) -> None:
     """Write finite ZYX/ZYXC TIFF with explicit axes and optional geometry.
 

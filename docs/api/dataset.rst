@@ -9,6 +9,7 @@ FOV remains the public acronym. See :doc:`contracts` and :doc:`../coordination`.
 .. autosummary::
    :toctree: generated
 
+   CheckpointConfig
    CropWindow
    Dataset
    ExecutionConfig

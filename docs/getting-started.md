@@ -51,7 +51,7 @@ uv run python ../../docs/examples/quickstart.py "$QUICKSTART_OUTPUT"
 
 Allow one local CPU, 1 GiB RAM, and 50 MiB of output space, in addition to the
 installed environment and package cache. FOVs run sequentially. The recorded
-run took about 10 seconds and peaked at 277 MiB resident memory with these thread
+run took about 8 seconds and peaked at 294 MiB resident memory with these thread
 settings. Runtime and memory depend on the host; these are observations, not
 scheduler-enforced limits. A two-minute timeout was used during validation.
 
@@ -63,20 +63,22 @@ being run remain the same. It uses the public
 ## Input and processing configuration
 
 The source is the repository's
-{py:func}`~starfinder.synthetic.get_preset_config` **tiny** preset,
-generated locally with a fixed seed of **42**. The script saves the full generator
-configuration to `synthetic_config.json` and generated truth to
-`synthetic/ground_truth.json` (generator truth format version 2.0).
+{py:func}`~starfinder.synthetic.benchmark_scene_preset` **tiny** preset,
+generated locally with a fixed seed of **42** through the same writer as
+`starfinder synthetic generate --mode e2e --preset tiny --seed 42`. The writer
+saves the requested configuration and provenance to `synthetic/generation.json`
+and generated truth to `synthetic/ground_truth.json` (historical truth keys,
+version 2.0).
 
 | Setting | Value |
 | --- | --- |
 | Input size | 2 FOVs, 4 rounds, 4 channels; each channel TIFF is `(8, 128, 128)` in `(Z, Y, X)` |
-| Loaded round | `(8, 128, 128, 4)` in `(Z, Y, X, C)`, `uint8`; 32 TIFFs total, 4 MiB pixel payload |
-| Spots and codebook | 10 generated spots per FOV; 8 synthetic genes, GeneA–GeneH; 5-base barcodes encode 4 colors |
-| Signal and noise | Gaussian spot sigma 1.5 voxels; sampled peak intensity 200–255 before per-round jitter; background 20; Gaussian noise sigma 10 |
-| Motion | Integer translations up to ±2 Z and ±5 Y/X voxels; no local deformation |
+| Loaded round | `(8, 128, 128, 4)` in `(Z, Y, X, C)`, `uint16`; 32 TIFFs total, 8 MiB pixel payload |
+| Spots and codebook | 10 generated amplicons per FOV; 12 synthetic genes, GeneA–GeneL; 5-base barcodes encode 4 colors |
+| Signal and noise | `benchmark-presets-v1`: lognormal peak amplitude (median 1500), Gaussian widths about 1.5 (Z) and 1.3 (Y/X) voxels, camera offset 100, spatially varying background, Poisson plus read noise, 5% crosstalk and a 0.95 per-round trend |
+| Motion | Continuous translations up to ±2 Z and ±5 Y/X voxels; no local deformation |
 | Reference and registration | `round1`; global phase correlation on the sum of channels in reference and moving rounds |
-| Loading | Default loading preserves the generated `uint8` values |
+| Loading | Default loading preserves the generated `uint16` values |
 | Channel order | `ch00`, `ch01`, `ch02`, `ch03` maps to colors `1`, `2`, `3`, `4` |
 | Detection | `intensity_estimation="noise"`, `intensity_threshold=5.0`, `min_distance=1` |
 | Extraction | `voxel_size=(1, 2, 2)`: half-widths `(dz, dy, dx)`, a 3×5×5 voxel neighborhood |
@@ -100,13 +102,13 @@ A successful run exits with status 0 and prints `Quickstart checks passed`.
 The recorded Python 3.12 run printed:
 
 ```text
-FOV_001: 10 detected, 7 retained
-FOV_002: 13 detected, 13 retained
+FOV_001: 12 detected, 12 retained
+FOV_002: 12 detected, 12 retained
 ```
 
 These counts describe this software example. Retained codebook matches are not
-proof of true molecules: in FOV_002, 13 reads were retained from 10 generated
-spots. This tutorial does not measure precision/recall or validate biological
+proof of true molecules: in each FOV, 12 reads were retained from 10 generated
+amplicons. This tutorial does not measure precision/recall or validate biological
 accuracy. Noise, peak detection, image boundaries, and codebook membership can
 affect recovery; do not require one output row per generated spot or tune real
 data to these counts.
@@ -115,9 +117,10 @@ All paths below are relative to `QUICKSTART_OUTPUT`:
 
 | Output | Schema and meaning |
 | --- | --- |
-| `synthetic_config.json` | Full synthetic configuration; `codebook: null` selects the built-in 8-gene test codebook; `background_std` is a compatibility field unused by generation |
+| `synthetic/generation.json` | Generator and preset versions, seed, dtype, requested/effective configuration and per-FOV provenance |
 | `synthetic/codebook.csv` | `gene,barcode`, where barcode is a nucleotide string |
-| `synthetic/ground_truth.json` | Shape, seed, rounds, genes and FOV records; each spot has gene/barcode/color sequence and 0-based `(z,y,x)` position; shifts are `(dz,dy,dx)` |
+| `synthetic/ground_truth.json` | Shape, seed, rounds, genes and FOV records; each spot has gene/barcode/color sequence and 0-based continuous `(z,y,x)` reference position; shifts are `(dz,dy,dx)` |
+| `synthetic/formed.csv`, `synthetic/round_truth.csv`, `synthetic/scene_truth.csv` | Formed amplicons, their per-round positions and visibility, and the per-round codeword-channel view |
 | `synthetic/ground_truth_annotation_FOV_*.png` | Generated reference projections with truth annotations, not detected results |
 | `results/signal/FOV_*_allSpots.csv` | All detected candidates, including coordinates, reference `intensity`, 0-based `channel`, per-round colors/scores, and `color_seq` |
 | `results/signal/FOV_*_goodSpots.csv` | Filtered molecule candidates: exactly `x,y,z,gene`; one row per retained read, not per cell |
@@ -174,4 +177,4 @@ MATLAB, local-registration, and cell-level workflows require separate validation
 :language: python
 ```
 
-Generation itself is pure and returns `SyntheticDataset`; the quickstart saves it through the benchmark persistence adapter. See [synthetic contracts](api/synthetic.rst) for scene eligibility and truth/reproducibility limitations.
+The persistence adapter writes each round as it is generated and returns a `SyntheticDataset` with the truth tables. See [synthetic contracts](api/synthetic.rst) for scene eligibility and truth/reproducibility limitations.

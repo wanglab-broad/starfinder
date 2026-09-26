@@ -57,7 +57,8 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["test"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short -m 'not extended'"
+markers = ["extended: full-pipeline end-to-end comparisons on the session's synthetic data; run with -m extended"]
 
 [tool.ruff]
 line-length = 100

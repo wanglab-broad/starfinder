@@ -31,6 +31,8 @@ def matching_config():
                 reference_metadata=metadata, observed_metadata=metadata)
 
 
+pytestmark = pytest.mark.extended
+
 
 class TestE2EPipelineSmokeTest:
     """Basic sanity: pipeline runs and produces non-empty output."""

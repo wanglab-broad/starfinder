@@ -1,232 +1,262 @@
-"""Private historical preset values; dataset and registration shifts differ."""
+"""Benchmark tier of the scene preset registry; documented, uncalibrated appearance.
+
+Sizes, amplicon counts, seeds and shift ranges keep the historical benchmark
+values. Appearance defaults are engineering choices recorded under
+PRESET_VERSION; they are not calibrated against acquired images.
+"""
+from dataclasses import replace
 from itertools import product
-from typing import Literal
-from starfinder.barcode import EncodingConfig
-from ._config import SyntheticConfig
 
-_TEST_CODEBOOK = [
-    ("GeneA", "CACGC"),
-    ("GeneB", "CATGC"),
-    ("GeneC", "CGAAC"),
-    ("GeneD", "CGTAC"),
-    ("GeneE", "CTGAC"),
-    ("GeneF", "CTAGC"),
-    ("GeneG", "CCATC"),
-    ("GeneH", "CGCTC"),
-]
+import numpy as np
+import pandas as pd
 
+from starfinder.barcode import Codebook, EncodingConfig
 
-# Standard volume size presets (Z, Y, X)
-#: Registration preset names to volume shapes (Z, Y, X) in voxels.
-SIZE_PRESETS: dict[str, tuple[int, int, int]] = {
-    "tiny": (8, 128, 128),
-    "small": (16, 256, 256),
-    "medium": (32, 512, 512),
-    "large": (30, 1024, 1024),
-    "tissue": (30, 3072, 3072),        # tissue-2D size
-    "thick_medium": (100, 1024, 1024),  # thick tissue, medium XY
+from ._common import ScalarDistribution, _json
+from ._formed import FormedSceneConfig, ReadoutEffectsConfig
+from ._geometry import GeometryConfig
+from ._observation import BackgroundConfig, NoiseConfig
+
+#: Version of the benchmark appearance defaults; changing any value bumps it.
+PRESET_VERSION = "benchmark-presets-v1"
+_CHANNELS = ("ch00", "ch01", "ch02", "ch03")
+# Historical GeneA-GeneH never use color 1 in rounds 1 and 3; GeneI-GeneL add it so
+# every channel holds amplicons in every round (each color 2-4 times per round).
+_TEST_CODEBOOK = (("GeneA", "CACGC"), ("GeneB", "CATGC"), ("GeneC", "CGAAC"), ("GeneD", "CGTAC"),
+                  ("GeneE", "CTGAC"), ("GeneF", "CTAGC"), ("GeneG", "CCATC"), ("GeneH", "CGCTC"),
+                  ("GeneI", "CAAAC"), ("GeneJ", "CAACC"), ("GeneK", "CCCGC"), ("GeneL", "CCTCC"))
+
+#: Benchmark presets: historical ZYX shape, amplicons per FOV, seed, FOV count,
+#: e2e and registration translation half-ranges (z, yx) in voxels, and genes.
+BENCHMARK_PRESETS = {
+    "tiny": dict(shape_zyx=(8, 128, 128), count=10, seed=42, fovs=2,
+                 e2e_shift=(2, 5), registration_shift=(2, 10), genes=12),
+    "small": dict(shape_zyx=(16, 256, 256), count=50, seed=42, fovs=2,
+                  e2e_shift=(2, 5), registration_shift=(4, 25), genes=12),
+    "medium": dict(shape_zyx=(32, 512, 512), count=400, seed=42, fovs=2,
+                   e2e_shift=(8, 50), registration_shift=(8, 50), genes=12),
+    "large": dict(shape_zyx=(30, 1024, 1024), count=1500, seed=123, fovs=2,
+                  e2e_shift=(7, 100), registration_shift=(7, 100), genes=64),
+    "tissue": dict(shape_zyx=(30, 3072, 3072), count=14000, seed=456, fovs=2,
+                   e2e_shift=(7, 300), registration_shift=(7, 300), genes=64),
+    "thick_medium": dict(shape_zyx=(100, 1024, 1024), count=5200, seed=789, fovs=2,
+                         e2e_shift=(25, 100), registration_shift=(25, 100), genes=64),
 }
 
-# Spot density: approximately 50 spots per 10^6 voxels
-#: Registration preset names to synthetic spot counts.
-SPOT_COUNTS: dict[str, int] = {
-    "tiny": 10,
-    "small": 50,
-    "medium": 400,
-    "large": 1500,
-    "tissue": 14000,
-    "thick_medium": 5200,
+#: Registration deformations: percent of min(Y, X) with a pixel cap for YX
+#: (percent of Z for Z); RBF radius as percent of min(Y, X).
+DEFORMATION_PRESETS = {
+    "polynomial_small": dict(kind="polynomial", percent=3.0, cap_px=15.0),
+    "polynomial_large": dict(kind="polynomial", percent=6.0, cap_px=30.0),
+    "gaussian_small": dict(kind="rbf", percent=3.0, radius_percent=6.0, cap_px=15.0, points=1),
+    "gaussian_large": dict(kind="rbf", percent=6.0, radius_percent=10.0, cap_px=30.0, points=1),
+    "multi_point": dict(kind="rbf", percent=4.0, radius_percent=5.0, cap_px=20.0, points=4),
+    "linear_small": dict(kind="affine", percent=1.0, cap_px=10.0),
 }
 
-# Shift ranges for global registration testing (≤25% of each dimension)
-#: Registration presets to inclusive z and shared yx shift ranges (low, high), in voxels.
-SHIFT_RANGES: dict[str, dict[str, tuple[int, int]]] = {
-    "tiny": {"z": (-2, 2), "yx": (-10, 10)},
-    "small": {"z": (-4, 4), "yx": (-25, 25)},
-    "medium": {"z": (-8, 8), "yx": (-50, 50)},
-    "large": {"z": (-7, 7), "yx": (-100, 100)},
-    "tissue": {"z": (-7, 7), "yx": (-300, 300)},
-    "thick_medium": {"z": (-25, 25), "yx": (-100, 100)},
-}
+# Documented appearance (intensity units of the uint16 output). See docs/api/synthetic.rst.
+_APPEARANCE = dict(
+    brightness_median=1500.0, brightness_log_sd=0.4,     # lognormal peak amplitude
+    axial_width=1.5, lateral_width=1.3, width_log_sd=0.1,  # lognormal Gaussian sigmas, voxels
+    elongation_log_sd=0.1,                               # folded lognormal, uniform angle
+    trend_base=0.95,                                     # 5% signal loss per round
+    crosstalk=0.05,                                      # bleed-through into the next channel
+    baseline=100.0,                                      # camera offset per channel
+    tissue_weights=(40.0, 30.0, 30.0, 20.0),             # per-channel tissue background
+    gradient=(0.5, (0.0, 0.5, 0.5)),                     # intercept, ZYX slopes (normalized)
+    regions=(((.5, .3, .35), 1.0), ((.5, .7, .6), .8), ((.5, .45, .8), .6)),
+    alpha=1.0, read_sigma=3.0,                           # Poisson gain and read noise
+)
+# Intensity scale per output dtype: uint8 keeps spots below 255 at typical brightness.
+_INTENSITY_SCALE = {"uint16": 1.0, "uint8": 1 / 16, "float32": 1.0, "float64": 1.0}
 
 
-DEFORMATION_CONFIGS = {
-    "polynomial_small": {"type": "polynomial", "max_displacement_pct": 3.0, "cap_px": 15.0},
-    "polynomial_large": {"type": "polynomial", "max_displacement_pct": 6.0, "cap_px": 30.0},
-    "gaussian_small": {"type": "gaussian", "max_displacement_pct": 3.0, "radius_pct": 6.0, "cap_px": 15.0},
-    "gaussian_large": {"type": "gaussian", "max_displacement_pct": 6.0, "radius_pct": 10.0, "cap_px": 30.0},
-    "multi_point": {"type": "multi_point", "max_displacement_pct": 4.0, "n_points": 4, "radius_pct": 5.0, "cap_px": 20.0},
-    "linear_small": {"type": "linear", "max_displacement_pct": 1.0, "cap_px": 10.0},
-}
+def generate_codebook(n_genes: int, *, rounds: int | None = None) -> Codebook:
+    """Return a Codebook of n_genes CNNNC barcodes with distinct color sequences.
 
-
-def generate_codebook(n_genes: int) -> list[tuple[str, str]]:
-    """Generate a codebook with n_genes CNNNNC barcodes and unique color sequences.
-
-    Enumerates all 5-base barcodes of the form C-{A,C,G,T}^3-C,
-    filters to those with unique color sequences, and returns the
-    first n_genes entries.
-
-    Parameters
-    ----------
-    n_genes : int
-        Number of genes (max 64 for 4-round, 4-channel).
-
-    Returns
-    -------
-    list[tuple[str, str]]
-        List of (gene_name, barcode) tuples.
-
-    Raises
-    ------
-    ValueError
-        If n_genes exceeds the number of unique color sequences.
+    Barcodes enumerate C-{A,C,G,T}^3-C (at most 64 genes), encoded with
+    reverse_bases=True as four-color sequences. Round labels are round1..round4
+    (the color sequence length; ``rounds`` may state it explicitly) and the
+    channels are ch00..ch03 with color k in channel k-1.
     """
-    bases = "ACGT"
-    all_barcodes = [f"C{''.join(mid)}C" for mid in product(bases, repeat=3)]
+    encoding = EncodingConfig(reverse_bases=True)
+    seen, entries = set(), []
+    for middle in product("ACGT", repeat=3):
+        barcode = f"C{''.join(middle)}C"
+        colors = encoding.encode(barcode)
+        if colors not in seen:
+            seen.add(colors)
+            entries.append((f"Gene{len(entries) + 1:03d}", barcode))
+    if type(n_genes) is not int or not 1 <= n_genes <= len(entries):
+        raise ValueError(f"n_genes must be in [1, {len(entries)}] unique color sequences")
+    return _codebook(entries[:n_genes], rounds)
 
-    # Filter to unique color sequences
-    seen_colors: dict[str, str] = {}
-    unique_entries: list[tuple[str, str]] = []
-    for barcode in all_barcodes:
-        color_seq = EncodingConfig(reverse_bases=True).encode(barcode)
-        if color_seq not in seen_colors:
-            seen_colors[color_seq] = barcode
-            unique_entries.append((barcode, color_seq))
 
-    if n_genes > len(unique_entries):
-        raise ValueError(
-            f"Requested {n_genes} genes but only {len(unique_entries)} "
-            f"unique color sequences available with CNNNNC barcodes."
-        )
+def _codebook(entries, rounds=None):
+    encoding = EncodingConfig(reverse_bases=True)
+    colors = [encoding.encode(barcode) for _, barcode in entries]
+    length = len(colors[0])
+    if rounds is not None and rounds != length:
+        raise ValueError(f"codebook sequences have {length} rounds, not {rounds}")
+    table = pd.DataFrame(dict(gene_id=[g for g, _ in entries], color_sequence=colors,
+                              base_sequence=[b for _, b in entries]))
+    return Codebook(table, tuple(f"round{r + 1}" for r in range(length)), _CHANNELS, encoding=encoding)
 
-    codebook = []
-    for i, (barcode, _) in enumerate(unique_entries[:n_genes]):
-        gene_name = f"Gene{i + 1:03d}"
-        codebook.append((gene_name, barcode))
 
-    return codebook
-def _scale_deformation_config(config: dict, shape: tuple[int, int, int]) -> dict:
-    """Scale deformation config from percentages to absolute pixels.
+def _appearance(shape, rounds, dtype):
+    """Formed-scene fields shared by every benchmark preset (see PRESET_VERSION)."""
+    if dtype not in _INTENSITY_SCALE:
+        raise ValueError("dtype must be uint8, uint16, float32 or float64")
+    a, scale = _APPEARANCE, _INTENSITY_SCALE[dtype]
+    shape = np.asarray(shape, dtype=float)
+    lognormal = lambda median, sd: ScalarDistribution("lognormal", (float(np.log(median)), sd))  # noqa: E731
+    mixing = np.eye(4) + a["crosstalk"] * np.eye(4, k=-1)   # destination row s+1 from source s
+    regions = [(tuple(float(f * (n - 1)) for f, n in zip(fraction, shape)), height)
+               for fraction, height in a["regions"]]
+    sigma = tuple(float(v) for v in np.maximum(1, [shape[0] / 2, shape[1] / 5, shape[2] / 5]))
+    if shape[0] == 1:
+        regions = [((0.0, y, x), h) for (_, y, x), h in regions]
+    return dict(
+        dtype=dtype,
+        brightness=lognormal(a["brightness_median"] * scale, a["brightness_log_sd"]),
+        axial_width=lognormal(a["axial_width"], a["width_log_sd"]),
+        lateral_width=lognormal(a["lateral_width"], a["width_log_sd"]),
+        elongation=ScalarDistribution("folded_lognormal", (0.0, a["elongation_log_sd"])),
+        angle=ScalarDistribution("uniform", (0.0, float(np.pi))),
+        readout=ReadoutEffectsConfig(trend_enabled=True, trend_base=a["trend_base"],
+                                     mixing_enabled=True, mixing=np.repeat(mixing[None], rounds, axis=0)),
+        background=BackgroundConfig(
+            baseline_enabled=True, baseline=np.full((rounds, 4), a["baseline"] * scale),
+            gradient_enabled=True, gradient_intercept=a["gradient"][0], gradient_slopes_zyx=a["gradient"][1],
+            regions_enabled=True, region_centers=tuple(c for c, _ in regions),
+            region_sigma_zyx=(sigma,) * len(regions), region_heights=tuple(h for _, h in regions),
+            tissue_weights=np.tile(np.asarray(a["tissue_weights"]) * scale, (rounds, 1))),
+        noise=NoiseConfig(dependent_enabled=True, alpha=a["alpha"] * scale, model="poisson",
+                          independent_enabled=True, sigma=a["read_sigma"] * scale))
 
-    Parameters
-    ----------
-    config : dict
-        Deformation config with _pct suffix fields and optional cap_px.
-    shape : tuple[int, int, int]
-        Volume shape (Z, Y, X).
 
-    Returns
-    -------
-    dict
-        Config with absolute pixel values.
+def _preset(name):
+    if name not in BENCHMARK_PRESETS:
+        raise ValueError(f"unknown benchmark preset: {name}; choose from {list(BENCHMARK_PRESETS)}")
+    return BENCHMARK_PRESETS[name]
+
+
+def benchmark_scene_preset(name: str, *, dtype: str = "uint16") -> tuple[Codebook, FormedSceneConfig]:
+    """Return (codebook, config) for one FOV of an e2e benchmark preset.
+
+    Rounds follow the codebook (four), round1 is the reference and every other
+    round receives a uniform translation within the preset's e2e half-range.
+    Appearance follows PRESET_VERSION; uint8 scales every intensity by 1/16.
+    Pass the config to generate_dataset with the FOV IDs to generate.
     """
-    min_xy = min(shape[1], shape[2])
-    scaled = {"type": config["type"]}
+    spec = _preset(name)
+    codebook = _codebook(_TEST_CODEBOOK) if spec["genes"] == 12 else generate_codebook(spec["genes"])
+    rounds = len(codebook.round_labels)
+    z, yx = spec["e2e_shift"]
+    shape = spec["shape_zyx"]
+    geometry = GeometryConfig(translation_enabled=True, reference_round=codebook.round_labels[0],
+                              translation_max_zyx=(z if shape[0] > 1 else 0, yx, yx))
+    config = FormedSceneConfig(
+        dataset_version=f"{PRESET_VERSION}-{name}", sample_id="synthetic", scene_key=f"{PRESET_VERSION}/{name}",
+        seed=spec["seed"], split="development", shape_zyx=shape, count=spec["count"],
+        max_count=max(1024, spec["count"]), geometry=geometry, **_appearance(shape, rounds, dtype))
+    return codebook, config
 
-    if "max_displacement_pct" in config:
-        displacement = config["max_displacement_pct"] * min_xy / 100.0
-        # Apply cap if specified
-        if "cap_px" in config:
-            displacement = min(displacement, config["cap_px"])
-        scaled["max_displacement"] = displacement
 
-    if "radius_pct" in config:
-        scaled["radius"] = config["radius_pct"] * min_xy / 100.0
+def deformation_geometry(name: str, shape_zyx, *, reference_round: str | None = None,
+                         translation_max_zyx=None) -> GeometryConfig:
+    """Map a historical deformation name onto GeometryConfig for one grid shape.
 
-    if "n_points" in config:
-        scaled["n_points"] = config["n_points"]
-
-    return scaled
-def get_preset_config(
-    preset: Literal["tiny", "small", "medium", "large", "tissue", "thick_medium"],
-) -> SyntheticConfig:
-    """Get predefined configuration for a preset.
-
-    Parameters
-    ----------
-    preset : {"tiny", "small", "medium", "large", "tissue", "thick_medium"}
-
-        - "tiny": 2 FOVs, 128x128x8, 10 spots (quick tests)
-
-        - "small": 2 FOVs, 256x256x16, 50 spots (unit tests)
-
-        - "medium": 2 FOVs, 512x512x32, 400 spots (integration tests)
-
-        - "large": 2 FOVs, 1024x1024x30, 1500 spots (e2e benchmarking)
-
-        - "tissue": 2 FOVs, 3072x3072x30, 14000 spots (tissue-2D scale)
-
-        - "thick_medium": 2 FOVs, 1024x1024x100, 5200 spots (thick tissue)
-
-    Returns
-    -------
-    SyntheticConfig
-        Configuration for the specified preset.
+    YX magnitudes are percent of min(Y, X) capped at cap_px, Z magnitudes are
+    percent of Z. polynomial_* and linear_small draw bounded polynomial or
+    affine coefficients; gaussian_* and multi_point use Gaussian RBF controls
+    with fixed centres, random directions and the percent radius. RBF
+    magnitudes are reduced when needed to meet the conservative invertibility
+    bound (sum of norm(v)/(scale*sqrt(e)) <= 0.5); polynomial and affine draws
+    are reduced in the same way when their Jacobian bound would exceed it.
+    ``shift`` gives translation only.
     """
-    presets = {
-        "tiny": SyntheticConfig(
-            height=128,
-            width=128,
-            n_z=8,
-            n_fovs=2,
-            n_spots_per_fov=10,
-            max_shift_xy=5,
-            max_shift_z=2,
-            seed=42,
-        ),
-        "small": SyntheticConfig(
-            height=256,
-            width=256,
-            n_z=16,
-            n_fovs=2,
-            n_spots_per_fov=50,
-            seed=42,
-        ),
-        "medium": SyntheticConfig(
-            height=512,
-            width=512,
-            n_z=32,
-            n_fovs=2,
-            n_spots_per_fov=400,
-            max_shift_xy=50,
-            max_shift_z=8,
-            seed=42,
-        ),
-        "large": SyntheticConfig(
-            height=1024,
-            width=1024,
-            n_z=30,
-            n_fovs=2,
-            n_spots_per_fov=1500,
-            max_shift_xy=100,
-            max_shift_z=7,
-            seed=123,
-            codebook=generate_codebook(64),
-        ),
-        "tissue": SyntheticConfig(
-            height=3072,
-            width=3072,
-            n_z=30,
-            n_fovs=2,
-            n_spots_per_fov=14000,
-            max_shift_xy=300,
-            max_shift_z=7,
-            seed=456,
-            codebook=generate_codebook(64),
-        ),
-        "thick_medium": SyntheticConfig(
-            height=1024,
-            width=1024,
-            n_z=100,
-            n_fovs=2,
-            n_spots_per_fov=5200,
-            max_shift_xy=100,
-            max_shift_z=25,
-            seed=789,
-            codebook=generate_codebook(64),
-        ),
-    }
-    if preset not in presets:
-        raise ValueError(f"Unknown preset: {preset}. Choose from: {list(presets.keys())}")
-    return presets[preset]
+    shape = tuple(int(n) for n in shape_zyx)
+    translation = dict(translation_enabled=translation_max_zyx is not None,
+                       translation_max_zyx=translation_max_zyx, reference_round=reference_round)
+    if name == "shift":
+        return GeometryConfig(**translation)
+    if name not in DEFORMATION_PRESETS:
+        raise ValueError(f"unknown deformation: {name}; choose shift or {list(DEFORMATION_PRESETS)}")
+    spec = DEFORMATION_PRESETS[name]
+    lateral = min(spec["percent"] * min(shape[1:]) / 100, spec["cap_px"])
+    axial = spec["percent"] * shape[0] / 100 if shape[0] > 1 else 0.0
+    bound = (axial, lateral, lateral)
+    if spec["kind"] == "polynomial":
+        return GeometryConfig(**translation, polynomial_enabled=True, polynomial_max_zyx=bound)
+    if spec["kind"] == "affine":
+        return GeometryConfig(**translation, affine_enabled=True, affine_max_zyx=bound)
+    radius = spec["radius_percent"] * min(shape[1:]) / 100
+    fractions = ([(.5, .4, .6)] if spec["points"] == 1 else
+                 [(.5, .3, .3), (.5, .3, .7), (.5, .7, .3), (.5, .7, .7)])
+    centers = tuple(tuple(float(f * (n - 1)) for f, n in zip(fraction, shape)) for fraction in fractions)
+    # 0.999 keeps the float bound strictly inside the limit after summation.
+    magnitude = min(lateral, .999 * .5 * np.sqrt(np.e) * radius / len(centers))
+    return GeometryConfig(**translation, local_enabled=True, centers_zyx=centers,
+                          scales=(radius,) * len(centers), local_magnitude=float(magnitude))
+
+
+def registration_scene_preset(name: str, deformation: str = "shift", *,
+                              dtype: str = "uint16") -> tuple[Codebook, FormedSceneConfig]:
+    """Return (codebook, config) for a reference/moving registration pair.
+
+    The codebook has rounds (reference, <deformation>) and one gene whose
+    signal is in ch00; only the moving round is moved. Every pair of a preset
+    shares the scene key, so reference images and amplicons are identical.
+    """
+    spec = _preset(name)
+    shape = spec["shape_zyx"]
+    rounds = ("reference", deformation)
+    codebook = Codebook(pd.DataFrame(dict(gene_id=["registration"], color_sequence=["11"])),
+                        rounds, _CHANNELS)
+    z, yx = spec["registration_shift"]
+    shift = (z if shape[0] > 1 else 0, yx, yx) if deformation == "shift" else None
+    geometry = deformation_geometry(deformation, shape, reference_round="reference",
+                                    translation_max_zyx=shift)
+    config = FormedSceneConfig(
+        dataset_version=f"{PRESET_VERSION}-{name}-registration", sample_id="synthetic", FOV_id=name,
+        scene_key=_json([PRESET_VERSION, name, "registration"]), seed=spec["seed"],
+        shape_zyx=shape, count=spec["count"], max_count=max(1024, spec["count"]), geometry=geometry,
+        **_appearance(shape, len(rounds), dtype))
+    return codebook, config
+
+
+def _estimate_peak_bytes(shape_zyx, count=0, *, dtype="uint16", accumulation="float32", channels=4):
+    """Upper estimate of generation working memory for one round, in bytes.
+
+    Output round (ZYXC), the writer's contiguous copy of one output channel,
+    one accumulation plane, the sampled background plane, noise draws for one
+    chunk, one inverse-geometry block with temporaries and the round's cached
+    kernels (float64 boxes of up to 16^3 voxels).
+    """
+    from ._geometry import _BLOCK_VOXELS
+    from ._observation import _NOISE_CHUNK
+    voxels = int(np.prod(shape_zyx))
+    item = np.dtype(accumulation).itemsize
+    return (voxels * (channels + 1) * np.dtype(dtype).itemsize + 2 * voxels * item
+            + 4 * _NOISE_CHUNK * 8 + 12 * min(voxels, _BLOCK_VOXELS) * 8 + count * 16**3 * 8)
+
+
+def _with_seed(config, seed):
+    return config if seed is None else replace(config, seed=seed)
+
+
+def _registry():
+    from ._development import DEVELOPMENT_FIXTURES, DEVELOPMENT_SIZES
+    fixtures = {name: dict(tier="fixture", shape_zyx=(1 if name == "formed-z1-v1" else 8, 32, 32),
+                           count=8, seed=42, accumulation="float64", oracle="none; literal tests")
+                for name in ("formed-small-v1", "formed-z1-v1")}
+    development = {name: dict(tier="development_fixture", shape_zyx=DEVELOPMENT_SIZES[size], count=2,
+                              seed=42, accumulation="float64", condition=condition,
+                              oracle="independent full-grid oracle")
+                   for name, (condition, size) in DEVELOPMENT_FIXTURES.items()}
+    benchmark = {name: dict(tier="benchmark", version=PRESET_VERSION, accumulation="float32",
+                            dtype="uint16", peak_bytes_estimate=_estimate_peak_bytes(spec["shape_zyx"], spec["count"]),
+                            **spec)
+                 for name, spec in BENCHMARK_PRESETS.items()}
+    return {**fixtures, **development, **benchmark}

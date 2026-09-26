@@ -2,9 +2,9 @@
 from .dataset import Dataset
 from .fov import FOV
 from .types import CropWindow, RoundState, SubtileConfig
-from .config import PipelineConfig, ExecutionConfig, RecoveryConfig, RegistrationStep
+from .config import CheckpointConfig, PipelineConfig, ExecutionConfig, RecoveryConfig, RegistrationStep
 from .workflow import WorkflowConfig, from_workflow_config
 
 __all__ = ['Dataset', 'FOV', 'RoundState', 'CropWindow', 'SubtileConfig',
-           'PipelineConfig', 'ExecutionConfig', 'RecoveryConfig', 'RegistrationStep',
+           'CheckpointConfig', 'PipelineConfig', 'ExecutionConfig', 'RecoveryConfig', 'RegistrationStep',
            'WorkflowConfig', 'from_workflow_config']

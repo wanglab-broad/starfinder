@@ -10,19 +10,25 @@ from pathlib import Path
 import pytest
 
 # Synthetic images are generated per session under pytest's temporary directory,
-# so the suite never depends on git-ignored files in the checkout.
+# so the suite never depends on git-ignored files in the checkout. Command:
+#   starfinder synthetic generate --mode e2e --preset small --seed 42 --owner pytest --output <tmp>/small
+# Generator: starfinder.synthetic formed scenes, generator_version 6, benchmark-presets-v1
+# (uint16, Poisson plus read noise, spatially varying background, 12-gene codebook).
 SMALL_DATASET_ARGS = ("--mode", "e2e", "--preset", "small", "--seed", "42")
+SMALL_DATASET_GENERATOR = {"generator_version": "6", "preset_version": "benchmark-presets-v1"}
 
 
 @pytest.fixture(scope="session")
 def small_dataset(tmp_path_factory) -> Path:
-    """Small synthetic dataset (2 FOVs, 16x256x256 uint8), generated once per session."""
+    """Small synthetic dataset (2 FOVs, 16x256x256 uint16), generated once per session."""
     from starfinder.__main__ import main
 
     path = tmp_path_factory.mktemp("synthetic") / "small"
     status = main(["synthetic", "generate", *SMALL_DATASET_ARGS,
                    "--owner", "pytest", "--output", str(path)])
     assert status == 0, f"synthetic generation exited with {status}"
+    generation = json.loads((path / "generation.json").read_text())
+    assert {k: generation[k] for k in SMALL_DATASET_GENERATOR} == SMALL_DATASET_GENERATOR
     return path
 
 
@@ -31,19 +37,6 @@ def small_ground_truth(small_dataset: Path) -> dict:
     """Load ground truth metadata paired with the session's small dataset."""
     with open(small_dataset / "ground_truth.json") as f:
         return json.load(f)
-
-
-@pytest.fixture(scope="session")
-def small_codebook(small_dataset: Path) -> dict[str, str]:
-    """Load codebook for small dataset as gene->barcode dict."""
-    import csv
-
-    codebook = {}
-    with open(small_dataset / "codebook.csv") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            codebook[row["gene"]] = row["barcode"]
-    return codebook
 
 
 @pytest.fixture(scope="session")

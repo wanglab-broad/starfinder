@@ -1,226 +1,197 @@
-"""Tests for unified synthetic data generation (starfinder.synthetic)."""
-
+"""CLI generation in both modes, the saved layout and the benchmark code that reads it."""
 import json
+import re
+import subprocess
+import sys
 
 import numpy as np
+import pandas as pd
 import pytest
+import tifffile
 
-from starfinder.synthetic import (
-    SyntheticConfig, generate_displacement_field, render_spots, generate_volume,
-    generate_codebook, generate_dataset, generate_registration_pairs, get_preset_config,
-)
-from starfinder.synthetic._perturbations import _apply_deformation_to_spots, _apply_shift_to_spots
-from starfinder.synthetic._truth import _scene_table
-from starfinder.benchmark._synthetic_io import _write_dataset
+from starfinder.__main__ import main
+from starfinder.synthetic import BENCHMARK_PRESETS, DEFORMATION_PRESETS, SCENE_PRESETS
 
-
-
-class TestApplyShiftToSpots:
-    """Tests for coordinate-level global shift."""
-
-    def test_spots_shift_correctly(self):
-        shape = (10, 100, 100)
-        spots = [(5, 50, 50, 200, 1.5), (3, 30, 30, 180, 1.5)]
-        shifted = _apply_shift_to_spots(spots, (1, 2, -3), shape)
-        assert len(shifted) == 2
-        assert shifted[0][:3] == (6, 52, 47)
-        assert shifted[1][:3] == (4, 32, 27)
-
-    def test_boundary_spots_dropped(self):
-        shape = (10, 100, 100)
-        spots = [(0, 0, 0, 200, 1.5), (9, 99, 99, 180, 1.5)]
-        # Shift pushes (0,0,0) to (-1,-1,-1) — out of bounds
-        shifted = _apply_shift_to_spots(spots, (-1, -1, -1), shape)
-        assert len(shifted) == 1
-        assert shifted[0][:3] == (8, 98, 98)
-
-    def test_zero_shift_preserves_spots(self):
-        shape = (10, 100, 100)
-        spots = [(5, 50, 50, 200, 1.5)]
-        shifted = _apply_shift_to_spots(spots, (0, 0, 0), shape)
-        assert shifted == spots
-
-    def test_preserves_intensity_and_sigma(self):
-        shape = (10, 100, 100)
-        spots = [(5, 50, 50, 220, 1.8)]
-        shifted = _apply_shift_to_spots(spots, (1, 1, 1), shape)
-        assert shifted[0][3] == 220  # intensity
-        assert shifted[0][4] == 1.8  # sigma
+E2E_FILES = {'codebook.csv', 'formed.csv', 'generation.json', 'ground_truth.json',
+             'manifest.json', 'round_truth.csv', 'scene_truth.csv'}
+PAIR_FILES = {'ref.tif', 'mov_shift.tif', 'formed.csv', 'round_truth.csv', 'scene_truth.csv',
+              'ground_truth.json', 'generation.json',
+              *(f'mov_deform_{d}.tif' for d in DEFORMATION_PRESETS),
+              *(f'field_{d}.npy' for d in DEFORMATION_PRESETS)}
 
 
-class TestApplyDeformationToSpots:
-    """Tests for coordinate-level local deformation."""
-
-    def test_uniform_field(self):
-        shape = (10, 100, 100)
-        # Constant displacement: all spots shift equally
-        field = np.full((*shape, 3), [1.0, 2.0, -1.0], dtype=np.float32)
-        spots = [(5, 50, 50, 200, 1.5)]
-        deformed = _apply_deformation_to_spots(spots, field, shape)
-        assert len(deformed) == 1
-        assert deformed[0][:3] == (6, 52, 49)
-
-    def test_boundary_spots_dropped(self):
-        shape = (10, 100, 100)
-        # Push first spot out of bounds
-        field = np.zeros((*shape, 3), dtype=np.float32)
-        field[..., 0] = -20  # large negative dz pushes all z<20 out
-        spots = [(5, 50, 50, 200, 1.5), (9, 50, 50, 180, 1.5)]
-        deformed = _apply_deformation_to_spots(spots, field, shape)
-        assert len(deformed) == 0
-
-    def test_zero_field_preserves_spots(self):
-        shape = (10, 100, 100)
-        field = np.zeros((*shape, 3), dtype=np.float32)
-        spots = [(5, 50, 50, 200, 1.5)]
-        deformed = _apply_deformation_to_spots(spots, field, shape)
-        assert deformed == spots
+def generate(tmp_path, mode, preset, *extra):
+    output = tmp_path / f'{preset}-{mode}'
+    assert main(['synthetic', 'generate', '--mode', mode, '--preset', preset, '--seed', '42',
+                 '--owner', 'pytest', '--output', str(output), *extra]) == 0
+    return output
 
 
-class TestPerRoundVariation:
-    """Tests for per-round intensity/sigma jitter."""
-
-    def test_intensity_varies_across_rounds(self):
-        """Same spot at different rounds should have different intensity."""
-        seed = 42
-        spot_id = 0
-        base_intensity = 220
-        intensities = []
-        for round_idx in range(1, 5):
-            jitter_rng = np.random.default_rng(seed + spot_id * 100 + round_idx)
-            jittered = int(base_intensity * (1 + jitter_rng.normal(0, 0.1)))
-            intensities.append(jittered)
-        # At least 2 distinct values across 4 rounds
-        assert len(set(intensities)) >= 2
-
-    def test_sigma_varies_across_rounds(self):
-        """Same spot at different rounds should have different sigma."""
-        seed = 42
-        spot_id = 0
-        base_sigma = 1.5
-        sigmas = []
-        for round_idx in range(1, 5):
-            jitter_rng = np.random.default_rng(seed + spot_id * 100 + round_idx)
-            _ = jitter_rng.normal(0, 0.1)  # consume intensity jitter
-            jittered_sigma = base_sigma * (1 + jitter_rng.normal(0, 0.05))
-            sigmas.append(jittered_sigma)
-        assert len(set(sigmas)) >= 2
-
-    def test_variation_is_deterministic(self):
-        """Same seed → same jitter values."""
-        seed = 42
-        spot_id = 5
-        round_idx = 2
-        results = []
-        for _ in range(2):
-            jitter_rng = np.random.default_rng(seed + spot_id * 100 + round_idx)
-            val = int(200 * (1 + jitter_rng.normal(0, 0.1)))
-            results.append(val)
-        assert results[0] == results[1]
+def check_e2e_layout(root, preset, dtype='uint16'):
+    shape = BENCHMARK_PRESETS[preset]['shape_zyx']
+    assert {p.name for p in root.iterdir() if p.is_file()} == E2E_FILES
+    fovs = sorted(p.name for p in root.iterdir() if p.is_dir())
+    assert fovs == [f'FOV_{i + 1:03d}' for i in range(BENCHMARK_PRESETS[preset]['fovs'])]
+    for fov in fovs:
+        assert sorted(p.name for p in (root / fov).iterdir()) == ['round1', 'round2', 'round3', 'round4']
+        for r in range(1, 5):
+            names = sorted(p.name for p in (root / fov / f'round{r}').iterdir())
+            assert names == ['ch00.tif', 'ch01.tif', 'ch02.tif', 'ch03.tif']
+        image = tifffile.imread(root / fov / 'round2' / 'ch01.tif')
+        assert image.shape == shape and image.dtype == np.dtype(dtype)
+    codebook = pd.read_csv(root / 'codebook.csv')
+    assert list(codebook.columns) == ['gene', 'barcode'] and len(codebook) == BENCHMARK_PRESETS[preset]['genes']
+    truth = json.loads((root / 'ground_truth.json').read_text())
+    assert truth['version'] == '2.0' and truth['preset'] == preset
+    assert truth['image_shape'] == list(shape) and truth['n_rounds'] == 4 and truth['n_channels'] == 4
+    formed = pd.read_csv(root / 'formed.csv')
+    rounds = pd.read_csv(root / 'round_truth.csv')
+    assert len(formed) == BENCHMARK_PRESETS[preset]['count'] * len(fovs)
+    assert len(rounds) == 4 * len(formed) == len(pd.read_csv(root / 'scene_truth.csv'))
+    for fov, record in truth['fovs'].items():
+        assert record['shifts']['round1'] == [0.0, 0.0, 0.0]
+        z, yx = BENCHMARK_PRESETS[preset]['e2e_shift']
+        assert all(abs(s[0]) <= z and max(abs(s[1]), abs(s[2])) <= yx for s in record['shifts'].values())
+        positions = np.array([s['position'] for s in record['spots']])
+        ours = formed[formed.namespace.str.contains(f'"{fov}"')][['z', 'y', 'x']].to_numpy()
+        np.testing.assert_allclose(positions, ours, rtol=0, atol=1e-9)
+    generation = json.loads((root / 'generation.json').read_text())
+    assert generation['mode'] == 'e2e' and generation['seed'] == 42 and generation['molecular_truth'] is None
+    assert generation['generator_version'] == '6' and generation['preset_version'] == 'benchmark-presets-v1'
+    manifest = json.loads((root / 'manifest.json').read_text())
+    files = {p.relative_to(root).as_posix() for p in root.rglob('*') if p.is_file()} - {'manifest.json'}
+    assert {a['path'] for a in manifest['artifacts']} == files
 
 
-class TestCreateTestImageStack:
-    """Tests for per-spot sigma rendering."""
-
-    def test_per_spot_sigma(self):
-        """Different sigma values produce different spot sizes."""
-        shape = (10, 64, 64)
-        spot_narrow = [(5, 32, 20, 200, 0.8)]
-        spot_wide = [(5, 32, 44, 200, 3.0)]
-        img = render_spots(shape, _scene_table(spot_narrow + spot_wide), seed=42)
-        # Both spots should be visible
-        assert img[5, 32, 20] > 50
-        assert img[5, 32, 44] > 50
-
-    def test_empty_spots(self):
-        """No spots → only background noise."""
-        shape = (4, 32, 32)
-        img = render_spots(shape, _scene_table([]), seed=42)
-        assert img.shape == shape
-        assert img.dtype == np.uint8
-
-
-class TestGenerateSyntheticDataset:
-    """Tests for the multi-round E2E dataset generator."""
-
-    def test_tiny_preset(self, tmp_path):
-        config = get_preset_config("tiny")
-        result = generate_dataset(
-            config=config,
-            preset="tiny",
-        )
-
-        _write_dataset(result, tmp_path, annotations=False)
-        gt = result.historical_truth
-
-        # Verify structure
-        assert (tmp_path / "codebook.csv").exists()
-        assert (tmp_path / "ground_truth.json").exists()
-        assert (tmp_path / "FOV_001").exists()
-        assert (tmp_path / "FOV_002").exists()
-
-        # Verify ground truth
-        assert gt["n_rounds"] == 4
-        assert gt["n_channels"] == 4
-        assert "FOV_001" in gt["fovs"]
-        fov = gt["fovs"]["FOV_001"]
-        assert len(fov["spots"]) == 10
-        assert "shifts" in fov
-        assert "round1" in fov["shifts"]
-
-        # Verify image files
-        import tifffile
-        img = tifffile.imread(tmp_path / "FOV_001" / "round1" / "ch00.tif")
-        assert img.shape == (8, 128, 128)
-        assert img.dtype == np.uint8
-
-    def test_ground_truth_version_2(self, tmp_path):
-        """New generator produces version 2.0 ground truth."""
-        config = get_preset_config("tiny")
-        gt = generate_dataset(config=config).historical_truth
-        assert gt["version"] == "2.0"
+def check_registration_layout(output, preset):
+    root = output / 'synthetic' / preset
+    shape = BENCHMARK_PRESETS[preset]['shape_zyx']
+    assert {p.name for p in root.iterdir()} == PAIR_FILES
+    for name in ('ref', 'mov_shift', *(f'mov_deform_{d}' for d in DEFORMATION_PRESETS)):
+        image = tifffile.imread(root / f'{name}.tif')
+        assert image.shape == shape and image.dtype == np.uint16, name
+    for deformation in DEFORMATION_PRESETS:
+        field = np.load(root / f'field_{deformation}.npy', mmap_mode='r')
+        assert field.shape == (*shape, 3) and field.dtype == np.float32
+    truth = json.loads((root / 'ground_truth.json').read_text())
+    assert set(truth['pairs']) == {'shift', *DEFORMATION_PRESETS}
+    assert truth['n_spots'] == BENCHMARK_PRESETS[preset]['count'] and truth['shape'] == list(shape)
+    rounds = pd.read_csv(root / 'round_truth.csv')
+    assert rounds.groupby('round_label').size().eq(truth['n_spots']).all()
+    assert set(rounds.round_label) == {'reference', 'shift', *DEFORMATION_PRESETS}
+    summary = json.loads((output / 'synthetic' / 'summary.json').read_text())
+    assert summary['presets'][preset]['n_pairs'] == 7
+    return root, truth, rounds
 
 
-class TestPresetConfigs:
-    """Tests for preset configuration lookup."""
-
-    def test_all_presets_exist(self):
-        for name in ["tiny", "small", "medium", "large", "tissue", "thick_medium"]:
-            config = get_preset_config(name)
-            assert isinstance(config, SyntheticConfig)
-
-    def test_invalid_preset_raises(self):
-        with pytest.raises(ValueError, match="Unknown preset"):
-            get_preset_config("nonexistent")
-
-    def test_large_preset_has_64_gene_codebook(self):
-        config = get_preset_config("large")
-        assert config.codebook is not None
-        assert len(config.codebook) == 64
+def test_session_small_dataset_uses_the_new_generator(small_dataset, small_ground_truth):
+    check_e2e_layout(small_dataset, 'small')
+    assert small_ground_truth['seed'] == 42
+    assert json.loads((small_dataset / 'manifest.json').read_text())['command']['preset'] == 'small'
 
 
-class TestGenerateCodebook:
-    """Tests for codebook generation."""
-
-    def test_small_codebook(self):
-        codebook = generate_codebook(8)
-        assert len(codebook) == 8
-        assert all(len(barcode) == 5 for _, barcode in codebook)
-
-    def test_max_codebook(self):
-        codebook = generate_codebook(64)
-        assert len(codebook) == 64
-
-    def test_exceeds_max_raises(self):
-        with pytest.raises(ValueError, match="unique color sequences"):
-            generate_codebook(100)
+def test_tiny_e2e_cli_uint16_and_uint8(tmp_path):
+    root = generate(tmp_path, 'e2e', 'tiny')
+    check_e2e_layout(root, 'tiny')
+    small = generate(tmp_path / 'u8', 'e2e', 'tiny', '--dtype', 'uint8')
+    check_e2e_layout(small, 'tiny', 'uint8')
+    clipping = json.loads((small / 'generation.json').read_text())['provenance']['FOV_001']['clipping_counts']
+    assert all(c['below'] + c['above'] <= .01 * 8 * 128 * 128 * 4 for c in clipping.values())
+    quiet = generate(tmp_path / 'clean', 'e2e', 'tiny', '--no-noise')
+    noise = json.loads((quiet / 'generation.json').read_text())['provenance']['FOV_001'][
+        'effective_config']['noise']
+    assert not noise['dependent_enabled'] and not noise['independent_enabled']
 
 
-class TestCreateTestVolume:
-    """Tests for single-channel volume convenience function."""
+def test_tiny_registration_cli_layout_fields_and_benchmark_run(tmp_path):
+    from starfinder.benchmark import BenchmarkCase, evaluate_benchmark, run_benchmark
+    output = generate(tmp_path, 'registration', 'tiny')
+    root, truth, rounds = check_registration_layout(output, 'tiny')
+    reference = rounds[rounds.round_label == 'reference'].set_index('amplicon_id')
+    for deformation in DEFORMATION_PRESETS:
+        # Nearest-voxel field agrees with moved centers to first order (Lipschitz <= 0.5).
+        field = np.load(root / f'field_{deformation}.npy')
+        moved = rounds[rounds.round_label == deformation].set_index('amplicon_id')
+        for identity, row in reference.iterrows():
+            q = row[['z', 'y', 'x']].to_numpy(float)
+            voxel = tuple(np.clip(np.rint(q).astype(int), 0, np.array(field.shape[:3]) - 1))
+            offset = np.abs(q - voxel).sum()
+            expected = moved.loc[identity, ['z', 'y', 'x']].to_numpy(float) - q
+            assert np.abs(field[voxel] - expected).max() <= .5 * offset + 1e-4, deformation
+    shift = np.array(truth['pairs']['shift']['shift_zyx'])
+    (root / 'correction.json').write_text(json.dumps((-shift).tolist()))
+    case = BenchmarkCase('tiny-shift', 'registration', {'reference': 'ref.tif', 'moving': 'mov_shift.tif'},
+        {'registration': {'method': 'translation'}, 'reference_metadata': {'frame_id': 'reference'},
+         'moving_metadata': {'frame_id': 'moving'},
+         'evaluation': {'ncc': True, 'translation': {'tolerance': 1.0}}},
+        truth={'correction': 'correction.json'})
+    run = run_benchmark([case], input_root=root, output_root=tmp_path / 'runs', owner='pytest')
+    evaluation = evaluate_benchmark(run)
+    record = json.loads((evaluation / 'results.json').read_text())[0]
+    assert record['status']['processing'] == 'success'
+    assert record['metrics']['translation']['values']['passed'] is True
 
-    def test_basic_creation(self):
-        vol = generate_volume((8, 64, 64), n_spots=5, seed=42)
-        assert vol.shape == (8, 64, 64)
-        assert vol.dtype == np.uint8
-        assert vol.max() > vol.min()
+
+def test_cli_rejects_unknown_preset_and_existing_output(tmp_path, capsys):
+    with pytest.raises(SystemExit) as error:
+        main(['synthetic', 'generate', '--mode', 'e2e', '--preset', 'huge', '--seed', '1',
+              '--owner', 'pytest', '--output', str(tmp_path / 'x')])
+    assert error.value.code == 2 and 'unknown preset' in capsys.readouterr().err
+    (tmp_path / 'used').mkdir()
+    with pytest.raises(SystemExit):
+        main(['synthetic', 'generate', '--mode', 'e2e', '--preset', 'tiny', '--seed', '1',
+              '--owner', 'pytest', '--output', str(tmp_path / 'used')])
+
+
+def test_generation_json_records_stream_counts_not_descriptors(tmp_path):
+    for mode in ('e2e', 'registration'):
+        root = generate(tmp_path, mode, 'tiny')
+        path = next(root.rglob('generation.json'))
+        for key, provenance in json.loads(path.read_text())['provenance'].items():
+            scheme = provenance['stream_scheme']
+            assert 'streams' not in scheme, (mode, key)
+            assert scheme['stream_count'] > 0
+            assert sum(scheme['streams_per_component'].values()) == scheme['stream_count']
+            assert scheme['bit_generator'] == 'PCG64' and scheme['key']
+
+
+def test_small_registration_cli(tmp_path):
+    check_registration_layout(generate(tmp_path, 'registration', 'small'), 'small')
+
+
+def timed_cli(tmp_path, mode, preset):
+    """Run the CLI in a child under /usr/bin/time -v; return (output, seconds, max RSS KiB)."""
+    output = tmp_path / f'{preset}-{mode}'
+    completed = subprocess.run(
+        ['/usr/bin/time', '-v', sys.executable, '-m', 'starfinder', 'synthetic', 'generate', '--mode', mode,
+         '--preset', preset, '--seed', '42', '--owner', 'pytest', '--output', str(output)],
+        capture_output=True, text=True, timeout=1200)
+    assert completed.returncode == 0, completed.stderr[-2000:]
+    clock = re.search(r'Elapsed \(wall clock\) time \(h:mm:ss or m:ss\): ([\d:.]+)', completed.stderr).group(1)
+    seconds = sum(float(part) * 60**i for i, part in enumerate(reversed(clock.split(':'))))
+    rss = int(re.search(r'Maximum resident set size \(kbytes\): (\d+)', completed.stderr).group(1))
+    return output, seconds, rss
+
+
+@pytest.mark.extended
+def test_medium_cli_both_modes_time_and_peak_rss(tmp_path, capsys):
+    """The one medium generation check: each mode within about one minute on one thread.
+
+    Both modes must also stay far below the 4 GiB RSS stop target. Each output
+    is checked and deleted before the next mode runs; measurements for both
+    modes are printed uncaptured, so they appear in the check log.
+    """
+    import shutil
+    measured = {}
+    for mode, check in (('e2e', check_e2e_layout), ('registration', check_registration_layout)):
+        output, seconds, rss = timed_cli(tmp_path, mode, 'medium')
+        check(output, 'medium')
+        shutil.rmtree(output)
+        measured[mode] = seconds, rss
+    with capsys.disabled():
+        for mode, (seconds, rss) in measured.items():
+            print(f'\n  medium {mode}: wall {seconds:.1f} s, peak RSS {rss} KiB (target <= 60 s, < 4 GiB; '
+                  f'estimate {SCENE_PRESETS["medium"]["peak_bytes_estimate"] // 1024} KiB working memory)')
+    for mode, (seconds, rss) in measured.items():
+        assert seconds <= 60, (mode, seconds)
+        assert rss < 4 * 2**20, (mode, rss)

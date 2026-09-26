@@ -8,30 +8,25 @@ from starfinder.spot_finding import LocalMaximaConfig
 import argparse
 import json
 import shutil
-from dataclasses import asdict
 from pathlib import Path
 
 from starfinder.registration import TranslationConfig
 import numpy as np
 import pandas as pd
 
-from starfinder.synthetic import generate_dataset, get_preset_config
 from starfinder.dataset import RegistrationStep, RoundState, Dataset
 
 
 def main(output: Path) -> None:
     output = output.resolve()
     output.mkdir(parents=True, exist_ok=False)
-    config = get_preset_config("tiny")
-    config.seed = 42
-    (output / "synthetic_config.json").write_text(json.dumps(asdict(config), indent=2))
     from starfinder.benchmark._synthetic_io import _write_dataset
-    generated = generate_dataset(config=config, preset="tiny")
-    _write_dataset(generated, output / "synthetic")
+    # Same writer as `starfinder synthetic generate --mode e2e --preset tiny --seed 42`.
+    generated = _write_dataset("tiny", output / "synthetic", seed=42, annotations=True)
     truth = generated.historical_truth
 
-    rounds = [f"round{i}" for i in range(1, config.n_rounds + 1)]
-    channels = [f"ch{i:02d}" for i in range(config.n_channels)]
+    rounds = list(generated.codebook.round_labels)
+    channels = list(generated.channel_labels)
     # The generator writes FOV/round; the dataset loader expects round/FOV.
     # Copy these small inputs so both layouts are inspectable and portable.
     for fov_id in truth["fovs"]:
@@ -53,13 +48,13 @@ def main(output: Path) -> None:
     )
     dataset.rounds.validate()
     dataset.load_codebook(output / "synthetic" / "codebook.csv", reverse_bases=True)
-    summary = {"preset": "tiny", "seed": config.seed, "fovs": {}}
-    for fov_id in dataset.fov_ids(config.n_fovs, start=1):
+    summary = {"preset": "tiny", "seed": truth["seed"], "fovs": {}}
+    for fov_id in dataset.fov_ids(len(truth["fovs"]), start=1):
         fov = dataset.fov(fov_id)
         fov.load_images()
         for volume in fov.images.values():
             assert volume.shape == (8, 128, 128, 4)
-            assert volume.dtype == np.uint8
+            assert volume.dtype == np.uint16
         fov.register(RegistrationStep(TranslationConfig()))
         fov.find_spots(config=LocalMaximaConfig(threshold_mode="noise", threshold_value=5.0, min_distance_voxels=1))
         fov.extract_intensities(config=NeighborhoodSumConfig((1, 2, 2)))

@@ -6,10 +6,15 @@
 ### ==================== [ Imports ] =========================
 
 import os
+import sys
 import glob
 import random
 import pandas as pd
 from pathlib import Path
+
+# Standard-library MATLAB launcher kept next to this file so tests can import it.
+sys.path.insert(0, str(Path(workflow.basedir) / 'rules'))
+import matlab_launcher
 
 ### ==================== [ Backend Selection ] =========================
 
@@ -158,16 +163,12 @@ def yaml_to_json(yaml_file):
     return json_file
 
 def run_matlab_scripts(param_string, matlab_script_name):
-    matlab_script_path = f"{config['starfinder_path']}/workflow/scripts"
-    matlab_run_string = f"addpath('{matlab_script_path}'); {matlab_script_name}({param_string});exit;"
-    print(matlab_run_string)
-    import subprocess
+    """Run a MATLAB entry point with the configured launcher.
 
-    # Source the Broad useuse script and load MATLAB before running the command
-    # This is needed because subprocess spawns a fresh bash that doesn't have
-    # the environment from the jobscript's 'use Matlab'
-    cmd = f'source /broad/software/scripts/useuse && use Matlab && matlab -nodisplay -nosplash -nodesktop -r "{matlab_run_string}"'
-    subprocess.run(cmd, shell=True, executable='/bin/bash', check=True)
+    matlab_launcher ('path' or 'broad') and matlab_single_thread select the
+    invocation; see workflow/rules/matlab_launcher.py.
+    """
+    matlab_launcher.run_matlab_scripts(config, param_string, matlab_script_name)
 
 
 def run_fiji_macros(fiji_path, macro_path):
@@ -313,7 +314,6 @@ rule rsf_preparation:
 
 # Validate only active Python adapters; shared MATLAB configuration stays intact.
 if BACKEND == "python":
-    import sys
     sys.path.insert(0, str(Path(config["starfinder_path"]) / "src" / "python"))
     from starfinder.dataset import from_workflow_config
     for python_rule in ("rsf_single_fov", "gr_single_fov_subtile",

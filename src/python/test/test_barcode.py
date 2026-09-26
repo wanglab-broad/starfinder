@@ -36,7 +36,7 @@ def test_encoding_roundtrips_and_synthetic_reversal():
 
 def test_load_canonical_order_and_ground_truth_calls(small_dataset):
     cb = load_codebook(small_dataset / "codebook.csv", round_labels=ROUNDS, channel_labels=CHANNELS)
-    assert isinstance(cb, Codebook) and cb.n_genes == 8
+    assert isinstance(cb, Codebook) and cb.n_genes == 12
     assert cb.gene_to_seq["GeneA"] == "4422"
     assert cb.seq_to_gene["4422"] == "GeneA"
     assert cb.genes == [g for g, _ in _TEST_CODEBOOK]

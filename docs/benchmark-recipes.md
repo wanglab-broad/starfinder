@@ -144,7 +144,7 @@ is made by placing these records in a common table.
 | Hybrid Python global → MATLAB LR | Qualified Python exports and separately run licensed MATLAB local stage; never substitute for the reverse hybrid. |
 | Backend diagnostics | External backend manifest plus matching saved spots/stacks/metrics; `diagnose_lr_effects.py` pairs retain their original labels. New saved tables can use the common report helper. |
 | Aging pad balance | Qualified pad/gene annotations and segmented codebook decisions; original diagnostics remain historical, not a new validated metric. |
-| LR synthetic generation | `starfinder synthetic generate` is the common entry point; original recipe has base seed 200, linear deformation magnitude 10, XY shift 50, Z shifts 5/7/10 for large/tissue/thick_medium. Process-dependent hash-derived seeds and truth remain unqualified. Do not run/generate these large presets as routine validation. |
+| LR synthetic generation | `starfinder synthetic generate` is the common entry point; original recipe has base seed 200, linear deformation magnitude 10, XY shift 50, Z shifts 5/7/10 for large/tissue/thick_medium. The current generator uses keyed streams and its own preset seeds and shift ranges; truth remains unqualified. Do not run/generate these large presets as routine validation. |
 | Antialias/large comparison | Explicit method profile, qualified image pairs and separately authorized memory/time; old symmetric and later demons/diffeomorphic recipes remain distinct. |
 
 No optional recipe is claimed as a runnable scientific experiment merely because
