@@ -30,7 +30,9 @@ class SyntheticDataset:
     ``namespace`` column names the FOV) and ``spot_truth`` is the per-round,
     per-codeword-channel historical view. ``provenance[fov]`` is the scene
     provenance. ``historical_truth`` is the ground_truth.json payload derived
-    from ``round_truth``. No molecular (biological RNA) truth is implied.
+    from ``formed`` (reference positions) and each round's recorded transform
+    (translation and deformation kind). No molecular (biological RNA) truth is
+    implied.
     """
 
     rounds: dict[str, dict[str, np.ndarray]]
@@ -103,7 +105,10 @@ def generate_dataset(codebook: Codebook, config: FormedSceneConfig, *,
 
     Each FOV uses ``config`` with ``FOV_id`` set and its own stream namespace,
     scene key ``["<config.scene_key>", "<FOV ID>"]``; appending IDs never
-    changes the draws of earlier FOVs. Rounds follow the codebook. With
+    changes the draws of earlier FOVs. Rounds follow the codebook. The
+    reference round is ``config.geometry.reference_round``, or the first round
+    when that is None; it is held at identity, so ``formed`` positions are its
+    positions. Draws of the other rounds do not depend on this choice. With
     ``on_round(fov_id, round_label, image, metadata)``, each round image is
     handed over as soon as it is generated and not retained, so at most one
     round is held in memory. ``preset`` is recorded in the historical truth.
@@ -116,6 +121,9 @@ def generate_dataset(codebook: Codebook, config: FormedSceneConfig, *,
     for fov in fov_ids:
         _label(fov)
     reference = config.geometry.reference_round or codebook.round_labels[0]
+    if config.geometry.reference_round is None:
+        # The reference round defines the truth frame, so it never moves.
+        config = replace(config, geometry=replace(config.geometry, reference_round=reference))
     rounds, metadata, provenance, formed, truth, spots, records = {}, {}, {}, [], [], [], {}
     for fov in fov_ids:
         scene_config = replace(config, FOV_id=fov, scene_key=_json([config.scene_key, fov]))
@@ -130,7 +138,8 @@ def generate_dataset(codebook: Codebook, config: FormedSceneConfig, *,
         spots.append(_spot_truth(scene, fov))
         records[fov] = _fov_truth(scene, reference)
     historical = dict(version=HISTORICAL_TRUTH_VERSION, preset=preset, preset_version=PRESET_VERSION,
-                      source="derived from formed.csv and round_truth.csv", seed=config.seed,
+                      source="derived from formed.csv and the round transforms in generation.json",
+                      seed=config.seed,
                       image_shape=list(config.shape_zyx), n_rounds=len(codebook.round_labels),
                       n_channels=len(codebook.channel_labels), n_genes=codebook.n_genes,
                       round_labels=list(codebook.round_labels), reference_round=reference, fovs=records)

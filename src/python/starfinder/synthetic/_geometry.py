@@ -35,8 +35,9 @@ class GeometryConfig:
     the other terms, so random draws always satisfy the bound below.
 
     Supplied values and random controls are mutually exclusive. reference_round
-    names a round held at identity (no draws). Disabled controls retain
-    validated requests but apply identity. Z=1 requires zero requested Z motion,
+    names a round held at identity (no draws; its supplied rows are ignored).
+    Disabled controls retain validated requests but apply identity. Z=1
+    requires zero requested Z motion,
     centers and Z output rows; random Z terms are identically zero. The summed
     Lipschitz bound (local terms globally, polynomial terms on the grid) must be
     at most 0.5. Instances are not hashable because array-valued fields are accepted.

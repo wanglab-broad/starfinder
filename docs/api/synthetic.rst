@@ -304,7 +304,10 @@ realized amplitude, visibility and a reason when not visible), per-FOV
 ``provenance`` and ``historical_truth``. The last is the ``ground_truth.json``
 payload in the historical v2 keys (``image_shape``, ``n_rounds``, ``fovs`` with
 ``shifts`` and ``spots`` holding ``id``, ``gene``, ``barcode``, ``color_seq``,
-reference ``position`` and ``intensity``), derived from the truth tables.
+reference ``position`` and ``intensity``), derived from ``formed`` and each
+round's recorded transform. The reference round (``geometry.reference_round``,
+or the first round when unset) is held at identity: nothing is drawn for it and
+any supplied displacement rows for it are ignored.
 Positions and shifts are continuous voxel indices; no molecular truth is implied.
 
 ``generate_registration_pair(preset, deformation="shift", seed=None,

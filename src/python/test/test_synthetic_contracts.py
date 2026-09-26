@@ -411,6 +411,24 @@ def test_historical_truth_is_derived_from_round_truth():
     assert not spots.molecular_truth_eligible.any()
 
 
+def test_dataset_reference_round_never_moves_and_other_draws_are_unchanged():
+    book, config = bounded()
+    # Without a reference round in the geometry, the first round is the
+    # reference and is held at identity; every other round keeps its draws.
+    unset = replace(config, geometry=replace(config.geometry, reference_round=None))
+    implicit = generate_dataset(book, unset, fov_ids=('FOV_001',))
+    explicit = generate_dataset(book, config, fov_ids=('FOV_001',))
+    assert implicit.historical_truth['reference_round'] == 'round1'
+    assert implicit.historical_truth['fovs']['FOV_001']['shifts']['round1'] == [0.0, 0.0, 0.0]
+    truth = implicit.round_truth.set_index(['amplicon_id', 'round_label'])
+    formed = implicit.formed.set_index('amplicon_id')
+    for identity in formed.index:
+        moved = truth.loc[(identity, 'round1'), ['z', 'y', 'x']].to_numpy(dtype=float)
+        np.testing.assert_array_equal(moved, formed.loc[identity, ['z', 'y', 'x']].to_numpy(dtype=float))
+    pd.testing.assert_frame_equal(implicit.round_truth, explicit.round_truth)
+    assert digest(implicit) == digest(explicit)
+
+
 def test_generate_codebook_returns_balanced_codebook():
     book = generate_codebook(64)
     assert book.n_genes == 64 and book.round_labels == ('round1', 'round2', 'round3', 'round4')

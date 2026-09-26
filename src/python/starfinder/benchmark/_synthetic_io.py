@@ -118,8 +118,9 @@ def _write_dataset(preset, output_dir, *, seed=None, dtype='uint16', noise=True,
 
     Writes ``<FOV>/<round>/<channel>.tif`` (ZYX) as each round is generated,
     then codebook.csv (gene,barcode), ground_truth.json (historical v2 keys
-    derived from round_truth), scene_truth.csv, formed.csv, round_truth.csv and
-    generation.json. Returns the SyntheticDataset without images.
+    derived from formed and the round transforms), scene_truth.csv,
+    formed.csv, round_truth.csv and generation.json. Returns the
+    SyntheticDataset without images.
     """
     from dataclasses import replace
     import tifffile
