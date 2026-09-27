@@ -12,6 +12,7 @@ class EvaluationResult:
     Status is ok, undefined (at least one unavailable metric), missing (an
     input is absent), or failed (an explicitly supplied upstream failure).
     Details contain per-item comparisons/pairs; config records effective policy.
+    The repr is a one-line status with up to six metrics, without details.
     """
     values: dict[str, float | bool | None]
     units: dict[str, str]
@@ -20,6 +21,23 @@ class EvaluationResult:
     reasons: dict[str, str]
     config: dict[str, Any]
     details: dict[str, Any] = field(default_factory=dict)
+
+    def __repr__(self):
+        metrics = []
+        for key, value in list(self.values.items())[:6]:
+            if value is None:
+                text = "undefined"
+            elif isinstance(value, (bool, np.bool_)):
+                text = str(bool(value))
+            else:
+                text = f"{value:.3g}"
+                unit = self.units.get(key)
+                if unit not in (None, "fraction", "dimensionless", "boolean"):
+                    text += f" {unit}"
+            metrics.append(f"{key} {text}")
+        if len(self.values) > 6:
+            metrics.append(f"+{len(self.values) - 6} more")
+        return f"EvaluationResult: {self.status}" + (" — " + ", ".join(metrics) if metrics else "")
 
 
 def _result(values, units, counts, config, *, reasons=None, details=None, status=None):

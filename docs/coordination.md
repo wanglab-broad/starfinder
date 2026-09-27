@@ -43,6 +43,47 @@ carry dataset/sample/FOV, round/channel labels and subtile IDs; incompatible
 reload identities are rejected. Each rectangular axis is partitioned separately,
 including remainder pixels. These Python changes do not alter MATLAB tiling.
 
+(inspecting-results)=
+## Summaries and results by stage
+
+`repr(dataset)` and `repr(fov)` are plain-text summaries of names and
+structure. They never print array values or table rows, whatever the image
+size. The dataset summary shows its IDs, sequencing rounds (reference marked
+`*`), other rounds, channel order, codebook size and input/output roots; it
+does not count FOVs. A fully run FOV looks like this:
+
+```text
+FOV 'FOV_001' of Dataset 'test' (sample 'small')
+    images:   round1*, round2, round3, round4 — (16, 256, 256, 4) uint16 ZYXC   (* reference)
+    channels: ch00, ch01, ch02, ch03
+    results:  registration, spot_finding, extraction, decoding, filtering
+      registration  3 moving rounds, translation
+      spot_finding  68 spots × [spot_id, z, y, x, ...]
+      extraction    68 spots × 4 channels × 4 rounds
+      decoding      68 reads — assigned 66, no_signal 1, unmatched 1
+      filtering     66 accepted / 68 (97.1%), rejected 2 — call_status 2
+```
+
+Stages that have not run are omitted, and rounds whose images are not
+resident are listed as not loaded. `Codebook`, `SpotFindingResult`,
+`IntensityExtractionResult`, `BarcodeDecodingResult`, `ReadFilteringResult`,
+`RegistrationResult` and `EvaluationResult` each have a one-line summary with
+the same counts. The filtering summary shows the accepted fraction and rejection
+reasons only; precision and accuracy need truth and come from `evaluation`.
+`EvaluationResult` shows its status and up to six metrics.
+
+`fov.results` is a read-only mapping, in pipeline order, of the stages that have
+run: `registration`, `spot_finding`, `extraction`, `decoding` and `filtering`.
+Its values are the objects stored in `registration_results`, `spot_result`,
+`intensity_result`, `decoding_result` and `filtering_result`; `registration`
+maps each round label to that round's ordered `RegistrationResult` list. It
+reflects the current state, including stages restored by `load_checkpoint`.
+
+```python
+fov.results["decoding"] is fov.decoding_result  # True
+list(fov.results)  # stages that have run, in pipeline order
+```
+
 ## Breaking Python migration
 
 | Before | After |

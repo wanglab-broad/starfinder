@@ -22,6 +22,7 @@ class Dataset:
 
     Processing options belong to PipelineConfig, residency to ExecutionConfig.
     Shared workflow YAML is translated by from_workflow_config.
+    The repr summarizes IDs, round and channel labels, codebook size and roots.
     """
 
     # Paths
@@ -47,6 +48,29 @@ class Dataset:
         self.channel_order = tuple(self.channel_order)
         if len(set(self.channel_order)) != len(self.channel_order):
             raise ValueError("channel_order must be unique")
+
+    def __repr__(self):
+        ref = self.rounds.reference_round
+
+        def names(rounds):
+            return ", ".join(r + "*" if r == ref else r for r in rounds) or "none"
+
+        note = "   (* reference)" if ref is not None else ""
+        codebook = (
+            "not loaded" if self.codebook is None
+            else f"{self.codebook.n_genes} genes × {len(self.codebook.round_labels)} rounds"
+        )
+        return "\n".join([
+            f"Dataset {self.dataset_id!r} (sample {self.sample_id!r}, output {self.output_id!r})",
+            f"    sequencing rounds: {names(self.rounds.sequencing_rounds)}"
+            + (note if ref in self.rounds.sequencing_rounds else ""),
+            f"    other rounds:      {names(self.rounds.other_rounds)}"
+            + (note if ref in self.rounds.other_rounds else ""),
+            f"    channels:          {', '.join(self.channel_order) or 'none'}",
+            f"    codebook:          {codebook}",
+            f"    input root:        {self.input_root}",
+            f"    output root:       {self.output_root}",
+        ])
 
     def fov(self, fov_id: str) -> FOV:
         """Create a new FOV instance for processing.

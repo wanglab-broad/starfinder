@@ -149,7 +149,7 @@ def test_dense_transforms_and_codebook_aware_tables_round_trip(tmp_path):
     saved = resident(ds).run(config, checkpoints=CheckpointConfig())
     directory = saved.paths.checkpoint_dir
     assert sorted(p.name for p in (directory / 'registered').iterdir()) == [
-        'round1.tif', 'round2.tif', 'round2_field.npz', 'transforms.json']
+        'round1.ome.tif', 'round2.ome.tif', 'round2_field.npz', 'transforms.json']
     with np.load(directory / 'registered' / 'round2_field.npz') as fields:
         assert fields.files == ['result_0']
     loaded = read_checkpoint(directory, 'registered')
@@ -458,7 +458,7 @@ def test_run_record_fields_inputs_and_hashes(tmp_path):
     assert ('load_images', 'round2') in names and ('register', 'round2') in names
     assert ('write_checkpoint:registered', 'round2') in names and ('extract_round', 'round1') in names
     assert all(s['status'] == 'succeeded' and s['seconds'] >= 0 for s in data['steps'])
-    assert data['checkpoints']['registered'][:2] == ['registered/round1.tif', 'registered/round2.tif']
+    assert data['checkpoints']['registered'][:2] == ['registered/round1.ome.tif', 'registered/round2.ome.tif']
     fov = ds.fov('FOV').run(config, checkpoints=CheckpointConfig(hash_inputs=False, overwrite=True))
     assert {entry['sha256'] for entry in record(fov)['inputs']} == {None}
 

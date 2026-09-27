@@ -38,7 +38,7 @@ def check_readout(depth=3):
         np.testing.assert_array_equal(scene.intended[0, 0], [8, 8, 8])
         np.testing.assert_array_equal(scene.realized[0, 0], expected)
         assert len(scene.formed) == 1 and len(scene.round_truth) == 3
-        assert scene.formed.codeword.tolist() == ['222']
+        assert scene.formed.color_sequence.tolist() == ['222']
         np.testing.assert_array_equal([a[depth // 2, 3, 4, 0] for a in scene.rounds.values()], expected)
         results[name] = scene
     assert results['drop_recover'].round_truth.dropped.tolist() == [False, True, False]

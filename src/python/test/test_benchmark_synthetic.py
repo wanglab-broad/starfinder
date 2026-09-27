@@ -18,6 +18,16 @@ PAIR_FILES = {'ref.tif', 'mov_shift.tif', 'formed.csv', 'round_truth.csv', 'scen
               'ground_truth.json', 'generation.json',
               *(f'mov_deform_{d}.tif' for d in DEFORMATION_PRESETS),
               *(f'field_{d}.npy' for d in DEFORMATION_PRESETS)}
+# MATLAB-compatible names written before the Python API adopted gene_id and
+# color_sequence; the files must keep them exactly.
+SCENE_TRUTH_COLUMNS = ['spot_namespace', 'spot_id', 'round_label', 'z', 'y', 'x', 'gene', 'barcode',
+                       'color_seq', 'channel_label', 'intensity', 'sigma', 'rendered', 'eligible',
+                       'eligibility_reason', 'frame_id', 'units', 'perturbation_direction',
+                       'molecular_truth_eligible']
+GROUND_TRUTH_KEYS = ['version', 'preset', 'preset_version', 'source', 'seed', 'image_shape', 'n_rounds',
+                     'n_channels', 'n_genes', 'round_labels', 'reference_round', 'fovs']
+GROUND_TRUTH_FOV_KEYS = ['shifts', 'spots', 'reference_round']
+GROUND_TRUTH_SPOT_KEYS = ['id', 'gene', 'barcode', 'color_seq', 'position', 'intensity']
 
 
 def generate(tmp_path, mode, preset, *extra):
@@ -78,6 +88,7 @@ def check_registration_layout(output, preset):
     assert truth['n_spots'] == BENCHMARK_PRESETS[preset]['count'] and truth['shape'] == list(shape)
     rounds = pd.read_csv(root / 'round_truth.csv')
     assert rounds.groupby('round_label').size().eq(truth['n_spots']).all()
+    assert list(pd.read_csv(root / 'scene_truth.csv', nrows=0).columns) == SCENE_TRUTH_COLUMNS
     assert set(rounds.round_label) == {'reference', 'shift', *DEFORMATION_PRESETS}
     summary = json.loads((output / 'synthetic' / 'summary.json').read_text())
     assert summary['presets'][preset]['n_pairs'] == 7
@@ -88,6 +99,18 @@ def test_session_small_dataset_uses_the_new_generator(small_dataset, small_groun
     check_e2e_layout(small_dataset, 'small')
     assert small_ground_truth['seed'] == 42
     assert json.loads((small_dataset / 'manifest.json').read_text())['command']['preset'] == 'small'
+
+
+def test_matlab_compatible_truth_files_keep_their_names(small_dataset):
+    """scene_truth.csv and ground_truth.json keep the historical names; formed.csv uses the Python ones."""
+    assert list(pd.read_csv(small_dataset / 'scene_truth.csv', nrows=0).columns) == SCENE_TRUTH_COLUMNS
+    truth = json.loads((small_dataset / 'ground_truth.json').read_text())
+    assert list(truth) == GROUND_TRUTH_KEYS
+    for record in truth['fovs'].values():
+        assert list(record) == GROUND_TRUTH_FOV_KEYS
+        assert all(list(spot) == GROUND_TRUTH_SPOT_KEYS for spot in record['spots'])
+    formed = pd.read_csv(small_dataset / 'formed.csv', nrows=0).columns
+    assert {'gene_id', 'color_sequence'} <= set(formed) and not {'codeword', 'gene', 'color_seq'} & set(formed)
 
 
 def test_tiny_e2e_cli_uint16_and_uint8(tmp_path):

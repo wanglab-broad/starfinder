@@ -49,7 +49,7 @@ def test_a7_fractional_translation_boundary_and_absolute_rounds(depth):
     assert truth.support_intersects.all()
     assert len(s.formed) == 2 and len(s.round_truth) == 6
     assert not s.round_truth.query('amplicon_id == "outside"').support_intersects.any()
-    # Last round codeword 3 maps to channel 3. Out-of-frame center still contributes.
+    # Last round color 3 maps to channel 3. Out-of-frame center still contributes.
     assert s.rounds['round1'][z, 2, 0, 3] == pytest.approx(7.059975220676764, abs=1e-12)
     expected_peak = 7.059975220676764 if depth > 1 else 8
     assert s.rounds['round10'][z, 1, 5, 1] == pytest.approx(expected_peak, abs=1e-12)

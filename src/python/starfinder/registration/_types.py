@@ -123,8 +123,21 @@ class RegistrationResult:
     """Estimated transform and its matching application policy.
 
     Applied arrays have transform.reference_metadata, never moving metadata.
+    The repr is a one-line method and transform summary without field values.
     """
 
     transform: TranslationTransform | DenseDisplacementTransform
     diagnostics: RegistrationDiagnostics
     application_config: WarpConfig
+
+    def __repr__(self):
+        transform = self.transform
+        if isinstance(transform, TranslationTransform):
+            detail = "correction_zyx (" + ", ".join(f"{v + 0.0:g}" for v in transform.correction_zyx) + ")"
+        else:
+            field_ = transform.displacement_zyx
+            detail = f"dense field {tuple(field_.shape)} {field_.dtype}"
+        converged = self.diagnostics.converged
+        if converged is not None:
+            detail += ", converged" if converged else ", not converged"
+        return f"RegistrationResult: {self.diagnostics.method} ({self.diagnostics.backend}), {detail}"

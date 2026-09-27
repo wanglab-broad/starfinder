@@ -67,7 +67,7 @@ def encode_bases(sequence: str) -> str:
     return "".join(colors)
 
 
-def decode_color_sequence(color_seq: str, start_base: str) -> str:
+def decode_color_sequence(color_sequence: str, start_base: str) -> str:
     """Decode a color sequence back to a DNA barcode.
 
     Uses chain tracking: given the start base, each color digit constrains
@@ -76,7 +76,7 @@ def decode_color_sequence(color_seq: str, start_base: str) -> str:
 
     Parameters
     ----------
-    color_seq : str
+    color_sequence : str
         Color sequence (e.g., "4422"). Each character must be "1"-"4".
     start_base : str
         Known first base of the barcode (e.g., "C").
@@ -84,7 +84,7 @@ def decode_color_sequence(color_seq: str, start_base: str) -> str:
     Returns
     -------
     str
-        Decoded DNA barcode (e.g., "CGCAC"). Length = len(color_seq) + 1.
+        Decoded DNA barcode (e.g., "CGCAC"). Length = len(color_sequence) + 1.
 
     Examples
     --------
@@ -100,12 +100,12 @@ def decode_color_sequence(color_seq: str, start_base: str) -> str:
 
     Notes
     -----
-    Empty color_seq returns an empty string, not start_base.
+    An empty color sequence returns an empty string, not start_base.
     """
     barcode = ""
     ref_base = start_base
 
-    for j, color in enumerate(color_seq):
+    for j, color in enumerate(color_sequence):
         candidates = _COLOR_TO_BASE_PAIRS[color]
         for pair in candidates:
             if pair[0] == ref_base:

@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from tifffile import imread
+from tifffile import TiffFile
 
 current_fov_id = snakemake.wildcards.fovID
 
@@ -45,11 +45,11 @@ reads_df.to_csv(snakemake.output[0], index=False)
 
 # visualize reads on ref_merged
 ref_merged_img_path = os.path.join(image_path, 'ref_merged', f'{current_fov_id}.tif')
-ref_merged_img = imread(ref_merged_img_path)  
-if ref_merged_img.ndim == 4:
-    ref_merged_img = np.max(ref_merged_img, axis=(0, 3))
-elif ref_merged_img.ndim == 3:
-    ref_merged_img = np.max(ref_merged_img, axis=0)
+# project every axis except Y and X; OME-TIFF (ZCYX), tifffile ZYXC and plain stacks differ in order
+with TiffFile(ref_merged_img_path) as tif:
+    series = tif.series[0]
+    ref_merged_img = series.asarray()
+    ref_merged_img = np.max(ref_merged_img, axis=tuple(i for i, a in enumerate(series.axes) if a not in 'YX'))
 
 plt.figure(figsize=(15,15))
 plt.imshow(ref_merged_img, cmap='gray')

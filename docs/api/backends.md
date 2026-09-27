@@ -35,7 +35,7 @@ of MATLAB numerical equivalence. No MATLAB API changes are included.
 The packaging extras `ome`, `spatialdata`, and `visualization` install
 `bioio-ome-tiff`, SpatialData packages, and napari respectively. Current public
 Python functions do not switch to those packages automatically. In particular,
-`save_volume` writes TIFF through tifffile, and FOV output methods write TIFF,
+`save_volume` writes TIFF (OME-TIFF for ZYXC) through tifffile, and FOV output methods write TIFF,
 CSV, text, and NPZ; there is no public SpatialData writer in this checkout.
 
 Benchmark cases require explicit input/output roots, ownership and configuration;

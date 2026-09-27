@@ -243,8 +243,9 @@ def clear_stages(directory):
     """Remove every checkpoint file of a per-FOV directory, headers first.
 
     Only files this module writes are removed (stage headers and tables,
-    registered TIFFs and dense fields); other files are left untouched. Removing
-    headers first means an interrupted clear never leaves a loadable stale stage.
+    registered TIFFs, current ``.ome.tif`` or earlier ``.tif``, and dense
+    fields); other files are left untouched. Removing headers first means an
+    interrupted clear never leaves a loadable stale stage.
     """
     directory = Path(directory)
     registered = directory / "registered"
@@ -271,14 +272,26 @@ def read_header(directory, stage):
 
 # --- Registered stage ------------------------------------------------------------
 
+def registered_image_path(directory, round_name):
+    """Path of a registered round image; checkpoints before OME-TIFF used <round>.tif."""
+    return Path(directory) / "registered" / f"{round_name}.ome.tif"
+
+
+def _registered_image(directory, round_name):
+    """The current image of a saved round, falling back to the earlier <round>.tif name."""
+    path = registered_image_path(directory, round_name)
+    earlier = Path(directory) / "registered" / f"{round_name}.tif"
+    return earlier if not path.is_file() and earlier.is_file() else path
+
+
 def write_registered_round(directory, round_name, image, metadata):
-    """Write one registered ZYXC round as <round>.tif with its geometry."""
+    """Write one registered ZYXC round as OME-TIFF <round>.ome.tif with its geometry."""
     from starfinder.io.tiff import save_volume
     if np.asarray(image).ndim != 4:
         raise ValueError(f"registered checkpoint requires ZYXC images; {round_name} is not")
     if not round_name or Path(round_name).name != round_name:
         raise ValueError(f"round label {round_name!r} is not a plain file name")
-    path = Path(directory) / "registered" / f"{round_name}.tif"
+    path = registered_image_path(directory, round_name)
     with _atomic(path) as tmp:
         save_volume(image, tmp, metadata=metadata)
     return path
@@ -459,7 +472,7 @@ def read_checkpoint(path: Path | str, stage: str) -> dict:
         return _read_pre_qc(directory, header)
     images, metadata = {}, {}
     for name in header["image_rounds"]:
-        loaded = load_volume_zyxc(directory / "registered" / f"{name}.tif",
+        loaded = load_volume_zyxc(_registered_image(directory, name),
                                   channel_labels=tuple(header["channel_labels"]))
         images[name], metadata[name] = loaded.image, loaded.metadata
     return {"images": images, "metadata": metadata,

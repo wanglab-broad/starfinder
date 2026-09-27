@@ -43,6 +43,7 @@ class IntensityExtractionResult:
 
     valid is Boolean N×R; false marks an unavailable measurement, not zero signal.
     Signed extraction is allowed; decoding chooses reject/clip_negative explicitly.
+    The repr is a one-line N×C×R summary without values.
     """
 
     values: np.ndarray
@@ -84,6 +85,15 @@ class IntensityExtractionResult:
             self.config, NeighborhoodSumConfig
         ):
             raise TypeError("metadata/config type mismatch")
+
+    def _summary(self):
+        return (
+            f"{len(self.spot_ids)} spots × {len(self.channel_labels)} channels × "
+            f"{len(self.round_labels)} rounds"
+        )
+
+    def __repr__(self):
+        return f"IntensityExtractionResult: {self._summary()}"
 
 
 def extract_intensities(

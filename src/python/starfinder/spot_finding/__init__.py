@@ -110,6 +110,7 @@ class SpotFindingResult:
     means the original sampled pixel value. No universal detection score is
     invented. Namespace must include dataset/sample/FOV/subtile when applicable.
     Consumers must join on namespace and spot_id, never row position.
+    The repr is a one-line spot count and column names without table rows.
     """
     spots: pd.DataFrame
     metadata: ImageMetadata
@@ -138,6 +139,14 @@ class SpotFindingResult:
         for name in ('peak_intensity', 'integrated_intensity', 'detection_score'):
             if name in table and (table[name].dtype != np.dtype('float64') or not np.isfinite(table[name]).all()):
                 raise ValueError(f"{name} must be finite float64")
+
+    def _summary(self):
+        columns = [str(c) for c in self.spots.columns]
+        shown = ", ".join(columns[:4] + (["..."] if len(columns) > 4 else []))
+        return f"{len(self.spots)} spots × [{shown}]"
+
+    def __repr__(self):
+        return f"SpotFindingResult: {self._summary()}"
 
 
 def _peaks(channel, distance, threshold, border=True):

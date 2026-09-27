@@ -104,11 +104,11 @@ class TestFOVPipeline:
             .extract_intensities().decode_barcodes()
         )
 
-        assert "color_seq" in spot_table(fov).columns
+        assert "observed_color_sequence" in spot_table(fov).columns
         assert fov.decoding_result.diagnostics['wta_round_l2_nll'].shape == (len(fov.spot_result.spots), 4)
 
-        # color_seq should be 4 characters (one per round)
-        for seq in spot_table(fov)["color_seq"]:
+        # Each observed color sequence has 4 characters (one per round)
+        for seq in spot_table(fov)["observed_color_sequence"]:
             assert len(seq) == 4
 
     def test_reads_filtration(self, small_pipeline_dataset, small_dataset):
@@ -123,7 +123,7 @@ class TestFOVPipeline:
         fov.filter_reads()
 
         assert spot_table(fov, accepted=True) is not None
-        assert "gene" in spot_table(fov, accepted=True).columns
+        assert "gene_id" in spot_table(fov, accepted=True).columns
 
     def test_save_signal(self, small_pipeline_dataset, small_dataset):
         fov = small_pipeline_dataset.fov("FOV_001")

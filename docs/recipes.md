@@ -57,6 +57,17 @@ cast/clip/rescale; it is not physical-unit conversion. Plain TIFFs are ZYX by
 default. OME/ImageJ loading requires explicit selection for ambiguous T/C axes.
 `save_volume` overwrites an existing file, so use a fresh destination.
 
+`save_volume` writes a ZYX array as a plain tifffile TIFF and a ZYXC array as
+OME-TIFF: every page is one YX plane, the OME-XML declares SizeZ, SizeC, the
+pixel type and the dimension order `XYCZT`, and the
+{py:class}`~starfinder.image.ImageMetadata` is kept in an OME-XML comment
+annotation. Name ZYXC files `*.ome.tif`, which Bio-Formats uses to pick its OME
+reader. {py:func}`~starfinder.io.load_volume_zyxc` reads the whole array back,
+and it also reads ZYXC files written in the earlier tifffile layout. To open a
+ZYXC volume in Fiji, use **File › Import › Bio-Formats** and choose
+**Hyperstack** under *View stack with*; Bio-Formats opens it as a Z×C hyperstack
+in its stored dtype.
+
 For workflows, check `seq_channel_order`, path identifiers and `n_rounds` in
 [top-level configuration](workflow-configuration.md#top-level-fields).
 Python expects `input_root/round/FOV/*ch*.tif`. MATLAB's corresponding entry is

@@ -39,7 +39,7 @@ def test_four_scripts_public_diagnostics_and_saved_tensor_smoke(monkeypatch, tmp
     evaluated = modules["run_codebook_aware_benchmark"].decoded_eval_frame(
         spots, report, use_wta=False
     )
-    assert evaluated.gene.iloc[0] == "A" and len(evaluated) == 3
+    assert evaluated.gene_id.iloc[0] == "A" and len(evaluated) == 3
     # Exercise the retained report writer on three supplied tensor rows, no image pipeline.
     rows = modules["run_codebook_aware_benchmark"].run_dataset_fov(
         dataset="contract",

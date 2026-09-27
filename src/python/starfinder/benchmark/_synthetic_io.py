@@ -11,7 +11,11 @@ def _generate_annotated_visualization(
     image_shape: tuple[int, int, int],
     n_channels: int,
 ) -> None:
-    """Generate annotated max projection visualization with spot bounding boxes."""
+    """Generate annotated max projection visualization with spot bounding boxes.
+
+    ``spots`` are ground_truth.json spot records, with the historical ``gene``
+    and ``color_seq`` keys.
+    """
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -42,7 +46,7 @@ def _generate_annotated_visualization(
     for spot in spots:
         _, y, x = spot["position"]
         gene = spot["gene"]
-        color_seq = spot["color_seq"]
+        color_sequence = spot["color_seq"]
         color = gene_colors[gene]
 
         rect = patches.Rectangle(
@@ -56,7 +60,7 @@ def _generate_annotated_visualization(
         ax.add_patch(rect)
 
         if annotate:
-            label = f"{gene}\n{color_seq}"
+            label = f"{gene}\n{color_sequence}"
             ax.annotate(
                 label,
                 (x, y - box_size // 2 - 2),
@@ -100,11 +104,17 @@ def _compact_streams(provenance):
 
 
 def _write_truth(directory, result, generation):
-    """Truth tables shared by both modes; generation.json holds requested configs/provenance."""
+    """Truth tables shared by both modes; generation.json holds requested configs/provenance.
+
+    formed.csv and round_truth.csv keep the Python names. scene_truth.csv and
+    ground_truth.json are MATLAB-compatible and keep the historical ``gene``
+    and ``color_seq`` names (the synthetic ``_HISTORICAL_NAMES`` mapping).
+    """
     from dataclasses import asdict
+    from starfinder.synthetic._datasets import _HISTORICAL_NAMES
     result.formed.to_csv(directory / 'formed.csv', index=False)
     result.round_truth.to_csv(directory / 'round_truth.csv', index=False)
-    result.spot_truth.to_csv(directory / 'scene_truth.csv', index=False)
+    result.spot_truth.rename(columns=_HISTORICAL_NAMES).to_csv(directory / 'scene_truth.csv', index=False)
     _json_dump(directory / 'ground_truth.json', result.historical_truth)
     provenance = {key: _compact_streams(value) for key, value in result.provenance.items()}
     _json_dump(directory / 'generation.json', dict(generation, provenance=provenance,

@@ -31,6 +31,12 @@ def matching_config():
                 reference_metadata=metadata, observed_metadata=metadata)
 
 
+def formed_truth(small_dataset, fov_id="FOV_001"):
+    """Formed amplicons of one FOV: reference positions, gene_id and color_sequence."""
+    formed = pd.read_csv(small_dataset / "formed.csv", dtype={"gene_id": str, "color_sequence": str})
+    return formed[formed.namespace.str.contains(f'"{fov_id}"')].reset_index(drop=True)
+
+
 pytestmark = pytest.mark.extended
 
 
@@ -42,8 +48,8 @@ class TestE2EPipelineSmokeTest:
 
         assert spot_table(fov, accepted=True) is not None
         assert len(spot_table(fov, accepted=True)) > 0
-        assert "gene" in spot_table(fov, accepted=True).columns
-        assert spot_table(fov, accepted=True)["gene"].nunique() >= 1
+        assert "gene_id" in spot_table(fov, accepted=True).columns
+        assert spot_table(fov, accepted=True)["gene_id"].nunique() >= 1
 
 
 class TestE2EShiftRecovery:
@@ -141,44 +147,44 @@ class TestE2ESpotDetection:
 class TestE2EBarcodeDecoding:
     """Validate barcode decoding against ground truth gene labels."""
 
-    def test_color_seq_accuracy(self, e2e_result):
+    def test_color_sequence_accuracy(self, e2e_result, small_dataset):
         """Color sequences extracted at GT spot locations match GT."""
         fov, ds, gt = e2e_result
-        truth = pd.DataFrame(gt["fovs"]["FOV_001"]["spots"])
+        truth = formed_truth(small_dataset)
         detected = spot_table(fov)
         matches = evaluate_spots(detected[["z", "y", "x"]].to_numpy(),
-            np.array(truth["position"].tolist()), **matching_config())
+            truth[["z", "y", "x"]].to_numpy(), **matching_config())
         result = evaluate_decoding(detected, truth, matches=matches)
 
         print(
-            f"\n  Color seq accuracy: {result.values['color_seq_accuracy']:.3f} "
-            f"({result.counts['correct_color_seq']}/{result.counts['matched']} matched)"
+            f"\n  Color sequence accuracy: {result.values['color_sequence_accuracy']:.3f} "
+            f"({result.counts['correct_color_sequence']}/{result.counts['matched']} matched)"
         )
 
-    def test_gene_accuracy(self, e2e_result):
+    def test_gene_accuracy(self, e2e_result, small_dataset):
         """Decoded gene labels match ground truth for spatially matched spots."""
         fov, ds, gt = e2e_result
-        truth = pd.DataFrame(gt["fovs"]["FOV_001"]["spots"])
+        truth = formed_truth(small_dataset)
         detected = spot_table(fov, accepted=True)
         matches = evaluate_spots(detected[["z", "y", "x"]].to_numpy(),
-            np.array(truth["position"].tolist()), **matching_config())
+            truth[["z", "y", "x"]].to_numpy(), **matching_config())
         result = evaluate_decoding(detected, truth, matches=matches)
 
         print(
-            f"\n  Gene accuracy: {result.values['gene_accuracy']:.3f} "
-            f"({result.counts['correct_gene']}/{result.counts['matched']} matched)"
+            f"\n  Gene accuracy: {result.values['gene_id_accuracy']:.3f} "
+            f"({result.counts['correct_gene_id']}/{result.counts['matched']} matched)"
         )
         if result.details["gene_confusion"]:
             print(f"  Confusion: {result.details['gene_confusion']}")
 
-        assert result.values["gene_accuracy"] >= 0.5, (
-            f"Gene accuracy {result.values['gene_accuracy']:.3f} < 0.5"
+        assert result.values["gene_id_accuracy"] >= 0.5, (
+            f"Gene accuracy {result.values['gene_id_accuracy']:.3f} < 0.5"
         )
 
         # All gene labels must be valid codebook entries
-        assert spot_table(fov, accepted=True)["gene"].notna().all(), "NaN gene values found"
+        assert spot_table(fov, accepted=True)["gene_id"].notna().all(), "NaN gene values found"
         codebook_genes = set(ds.codebook.gene_to_seq.keys())
-        detected_genes = set(spot_table(fov, accepted=True)["gene"])
+        detected_genes = set(spot_table(fov, accepted=True)["gene_id"])
         assert detected_genes.issubset(codebook_genes), (
             f"Unknown genes: {detected_genes - codebook_genes}"
         )
@@ -246,8 +252,8 @@ class TestE2EStreamingMode:
 
         # Same gene assignments at same positions
         pd.testing.assert_frame_equal(
-            batch_spots[["z", "y", "x", "gene", "color_seq"]],
-            stream_spots[["z", "y", "x", "gene", "color_seq"]],
+            batch_spots[["z", "y", "x", "gene_id", "observed_color_sequence"]],
+            stream_spots[["z", "y", "x", "gene_id", "observed_color_sequence"]],
         )
 
         # Same global shifts

@@ -18,6 +18,9 @@ from ._presets import PRESET_VERSION, _with_seed, registration_scene_preset
 
 #: Version of the derived ground_truth.json layout (historical v2 keys).
 HISTORICAL_TRUTH_VERSION = "2.0"
+# Python names -> the historical names kept by the MATLAB-compatible layout
+# (scene_truth.csv columns and ground_truth.json spot keys). The only mapping.
+_HISTORICAL_NAMES = {"gene_id": "gene", "color_sequence": "color_seq"}
 
 
 @dataclass
@@ -27,12 +30,15 @@ class SyntheticDataset:
     ``rounds[fov][round_label]`` holds ZYXC arrays in codebook order, or is
     empty for every FOV when images were handed to ``on_round``. ``metadata``
     has the same keys. ``formed``/``round_truth`` concatenate every FOV (the
-    ``namespace`` column names the FOV) and ``spot_truth`` is the per-round,
-    per-codeword-channel historical view. ``provenance[fov]`` is the scene
-    provenance. ``historical_truth`` is the ground_truth.json payload derived
-    from ``formed`` (reference positions) and each round's recorded transform
-    (translation and deformation kind). No molecular (biological RNA) truth is
-    implied.
+    ``namespace`` column names the FOV) and ``spot_truth`` is the per-round
+    view with the channel each amplicon's color sequence selects; it keys rows
+    by ``spot_namespace``/``spot_id`` and names the gene and color sequence
+    ``gene_id`` and ``color_sequence``, as decoding results do.
+    ``provenance[fov]`` is the scene provenance. ``historical_truth`` is the
+    ground_truth.json payload derived from ``formed`` (reference positions)
+    and each round's recorded transform (translation and deformation kind); it
+    keeps the historical MATLAB-compatible keys (``gene``, ``color_seq``). No
+    molecular (biological RNA) truth is implied.
     """
 
     rounds: dict[str, dict[str, np.ndarray]]
@@ -51,15 +57,15 @@ class SyntheticDataset:
 
 
 def _spot_truth(scene, fov):
-    """Per-round rows with each amplicon's codeword channel (historical scene_truth)."""
-    table = scene.round_truth.merge(scene.formed[["amplicon_id", "gene_id", "codeword", "A", "sl"]],
+    """Per-round rows with the channel of each amplicon's color sequence (scene_truth)."""
+    table = scene.round_truth.merge(scene.formed[["amplicon_id", "gene_id", "color_sequence", "A", "sl"]],
                                     on="amplicon_id", how="left", validate="many_to_one")
     rounds = {label: r for r, label in enumerate(scene.round_labels)}
     index = {identity: i for i, identity in enumerate(scene.amplicon_ids)}
     channel, amplitude = [], []
     for row in table.itertuples():
         r = rounds[row.round_label]
-        c = scene.codebook.color_to_channel[row.codeword[r]]
+        c = scene.codebook.color_to_channel[row.color_sequence[r]]
         channel.append(scene.channel_labels[c])
         amplitude.append(float(scene.realized[index[row.amplicon_id], c, r]))
     base = dict(zip(scene.codebook.table.gene_id, scene.codebook.table.get(
@@ -70,8 +76,8 @@ def _spot_truth(scene, fov):
                                np.where(~table.center_in_bounds, "center_outside_image", None)))
     return pd.DataFrame(dict(
         spot_namespace=fov, spot_id=table.amplicon_id.astype(str), round_label=table.round_label.astype(str),
-        z=table.z, y=table.y, x=table.x, gene=table.gene_id.astype(str),
-        barcode=[base[g] for g in table.gene_id], color_seq=table.codeword.astype(str),
+        z=table.z, y=table.y, x=table.x, gene_id=table.gene_id.astype(str),
+        barcode=[base[g] for g in table.gene_id], color_sequence=table.color_sequence.astype(str),
         channel_label=channel, intensity=amplitude, sigma=table.sl, rendered=rendered.astype(bool),
         eligible=(rendered & table.center_in_bounds).astype(bool), eligibility_reason=reason,
         frame_id=table.frame_id.astype(str), units="voxel_index",
@@ -82,8 +88,9 @@ def _fov_truth(scene, reference):
     """Historical v2 FOV record: reference positions, genes and round translations."""
     base = dict(zip(scene.codebook.table.gene_id, scene.codebook.table.get(
         "base_sequence", pd.Series([None] * scene.codebook.n_genes))))
-    spots = [dict(id=row.amplicon_id, gene=row.gene_id, barcode=base[row.gene_id],
-                  color_seq=row.codeword, position=[row.z, row.y, row.x], intensity=row.A)
+    gene, sequence = _HISTORICAL_NAMES["gene_id"], _HISTORICAL_NAMES["color_sequence"]
+    spots = [{"id": row.amplicon_id, gene: row.gene_id, "barcode": base[row.gene_id],
+              sequence: row.color_sequence, "position": [row.z, row.y, row.x], "intensity": row.A}
              for row in scene.formed.itertuples()]
     transforms = {t["round_label"]: t for t in scene.provenance["transforms"].values()}
     shifts = {label: [float(v) for v in transforms[label]["translation_zyx"]]

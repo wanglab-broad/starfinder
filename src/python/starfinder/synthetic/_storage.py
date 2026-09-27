@@ -1,4 +1,4 @@
-"""Plain fixture files for formed scenes: TIFF images, CSV truth, JSON provenance."""
+"""Plain fixture files for formed scenes: OME-TIFF images, CSV truth, JSON provenance."""
 from __future__ import annotations
 
 import json
@@ -14,8 +14,8 @@ from ._formed import FormedScene
 def save_formed_scene(scene: FormedScene, directory: Path | str) -> Path:
     """Write one formed scene to a new or empty directory and return its path.
 
-    Files: ``images/<round_label>.tif`` (ZYXC in the scene dtype, written by
-    ``starfinder.io.save_volume`` with that round's ``round_metadata``),
+    Files: ``images/<round_label>.ome.tif`` (ZYXC OME-TIFF in the scene dtype,
+    written by ``starfinder.io.save_volume`` with that round's ``round_metadata``),
     ``formed.csv``, ``round_truth.csv``, ``signals.csv`` (one row per amplicon,
     channel and round with intended, pre_mix and realized amplitudes) and
     ``provenance.json``. Round labels must be plain file names. CSV floats use
@@ -33,7 +33,7 @@ def save_formed_scene(scene: FormedScene, directory: Path | str) -> Path:
     directory.mkdir(parents=True, exist_ok=True)
     metadata = scene.round_metadata
     for label, image in scene.rounds.items():
-        save_volume(image, directory / "images" / f"{label}.tif", metadata=metadata[label])
+        save_volume(image, directory / "images" / f"{label}.ome.tif", metadata=metadata[label])
     scene.formed.to_csv(directory / "formed.csv", index=False)
     scene.round_truth.to_csv(directory / "round_truth.csv", index=False)
     rows = [dict(amplicon_id=identity, channel_label=channel, round_label=label,

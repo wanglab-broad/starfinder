@@ -30,8 +30,9 @@ fov.run(pipeline, execution=execution, checkpoints=CheckpointConfig())
 `FileExistsError` if the FOV directory exists and `overwrite` is false, and
 `ImportError` if Parquet is requested without pyarrow. With `overwrite=True`,
 `run` first removes the existing checkpoint files of that FOV (stage headers and
-tables, registered TIFFs and dense fields; other files are left alone), so a
-stage the new run does not reach can never be loaded from an earlier run.
+tables, registered TIFFs under either name and dense fields; other files are
+left alone), so a stage the new run does not reach can never be loaded from an
+earlier run.
 
 `run` writes a stage only when it computes it. `registered` is written for each
 round inside the round loop, `candidates` after detection or extraction, and
@@ -43,7 +44,7 @@ round inside the round loop, `candidates` after detection or extraction, and
 <output_root>/checkpoints/<fov_id>/          # or <directory>/<fov_id>/
     run.json
     registered/
-        <round>.tif                           # ZYXC, dtype preserved, ImageMetadata
+        <round>.ome.tif                       # ZYXC OME-TIFF, dtype preserved, ImageMetadata
         <round>_field.npz                     # dense transforms only
         transforms.json
     candidates.csv | candidates.parquet
@@ -57,11 +58,20 @@ so subtiles of one FOV never share files. Round labels must be plain file names.
 
 ### registered
 
-`registered/<round>.tif` is each round exactly as it enters spot finding and
+`registered/<round>.ome.tif` is each round exactly as it enters spot finding and
 extraction: after preprocessing, registration and any post-registration
-reconstruction. It is written with {py:func}`~starfinder.io.save_volume` and read
-with {py:func}`~starfinder.io.load_volume_zyxc`, which keeps singleton Z and C,
-the dtype and the stored {py:class}`~starfinder.image.ImageMetadata`.
+reconstruction. It is written with {py:func}`~starfinder.io.save_volume` as
+OME-TIFF and read with {py:func}`~starfinder.io.load_volume_zyxc`, which keeps
+singleton Z and C, the dtype (float64 included) and the stored
+{py:class}`~starfinder.image.ImageMetadata`. Checkpoints written before the
+OME-TIFF change named this file `<round>.tif` and stored it in tifffile's own
+ZYXC layout; loading still accepts that name and layout when no `.ome.tif` file
+is present.
+
+To look at a registered round in Fiji, use **File › Import › Bio-Formats** and
+choose **Hyperstack** under *View stack with*. The file stores one YX plane per
+page, and its OME-XML declares SizeZ, SizeC, the pixel type and the dimension
+order `XYCZT`, so Bio-Formats opens it as a Z×C hyperstack in its stored dtype.
 
 `transforms.json` records the FOV identity, the rounds and the channel order,
 the rounds written, the registration attempts and every `RegistrationResult`:
