@@ -476,7 +476,9 @@ memory for one round (output round, the writer's contiguous copy of one
 channel, two float planes and bounded blocks): about 0.30 GiB for ``medium``,
 0.72 GiB for ``large``, 5.3 GiB for ``tissue`` and 2.1 GiB for ``thick_medium``,
 plus the interpreter. ``medium`` generation is
-tested with ``/usr/bin/time -v``; ``large``, ``tissue`` and ``thick_medium`` are
+tested with ``/usr/bin/time -v`` in the extended tier: peak RSS is asserted below
+4 GiB, while each mode's wall time is measured and reported, not enforced, because
+it depends on host load. ``large``, ``tissue`` and ``thick_medium`` are
 validated by configuration and this estimate only.
 
 Scientific limitations
