@@ -32,7 +32,13 @@ extraction, decoding and filtering. `post_registration` accepts only
 reconstruction, which legacy subtile workflows place after registration. The
 pipeline never projects; projection is an output view. Histogram matching uses
 a copy of the reference round's configured channel taken as it enters that step,
-retained until every moving round has passed it. Both execution modes use this
+retained until every moving round has passed it. Steps with `save_as` keep named
+snapshots (`FOV.snapshots`). Registration builds its signals from the recipe's
+`registration_source` snapshot, or the detection image by default, and applies
+each registration step's transform to the moving round's detection image and to
+every one of its snapshots, so they stay aligned; the reference round is not
+transformed. Extraction reads the `extraction_source` snapshot, or the detection
+image by default. Both execution modes use this
 sequence and the same operation configs; see {doc}`preprocessing-contract`.
 Batch preloads and retains rounds. Streaming releases moving images after their
 last use unless `retain_images=True`; subtile creation requires retention.

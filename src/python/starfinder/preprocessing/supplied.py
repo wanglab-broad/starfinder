@@ -47,7 +47,8 @@ def summary_stage(recipe: PreprocessingRecipe, step: str) -> tuple[Preprocessing
     at its input: after every preceding step of the recipe, each in its own
     fit mode. The returned recipe holds exactly those preceding steps (with
     the same supplied_statistics file, needed when an earlier step is itself
-    supplied, and no post_registration steps). The record lists them as
+    supplied, no post_registration steps and no extraction or registration
+    source, since the summary pass neither extracts nor registers). The record lists them as
     {"step": name, "config": {...}} for summarize_histograms.
 
     Raises
@@ -60,7 +61,8 @@ def summary_stage(recipe: PreprocessingRecipe, step: str) -> tuple[Preprocessing
     index = _supplied_index(recipe, step)
     prefix = recipe.steps[:index]
     path = recipe.supplied_statistics if any(_supplied(entry.config) for entry in prefix) else None
-    return replace(recipe, steps=prefix, post_registration=(), supplied_statistics=path), tuple(_preceding(recipe, index))
+    return (replace(recipe, steps=prefix, post_registration=(), extraction_source=None, registration_source=None,
+                    supplied_statistics=path), tuple(_preceding(recipe, index)))
 
 
 def supplied_section(config, merged: HistogramSummary, *, reference_round: str | None = None) -> dict:

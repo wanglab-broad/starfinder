@@ -8,6 +8,19 @@ orders them. See :doc:`contracts` for shape and dtype rules and
 ``PipelineConfig.preprocessing``; each step is looked up in :py:data:`~starfinder.preprocessing.STEPS` by
 its exact config type and run through :py:func:`~starfinder.preprocessing.run_step`.
 
+Snapshots and sources
+---------------------
+
+A :py:class:`~starfinder.preprocessing.RecipeStep` with ``save_as`` keeps a named snapshot of
+its output. The recipe's ``extraction_source`` names the snapshot that extraction reads,
+for example the background-corrected image before normalization (recipe 2), and
+``registration_source`` names the snapshot from which registration signals are built;
+both default to the detection image, the last step's output. ``FOV.run`` applies each
+registration step's transform to every snapshot of a moving round, so the snapshots stay
+aligned with the detection image, and records per round and snapshot the transforms
+applied. The workflow key ``preprocessing`` declares the same recipe in YAML; see
+:doc:`../workflow-configuration`.
+
 Background subtraction
 ----------------------
 

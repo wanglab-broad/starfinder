@@ -7,7 +7,7 @@ from .dataset import Dataset
 from .types import RoundState, SubtileConfig
 from starfinder.io import ImageLoadConfig
 from starfinder.preprocessing import (MinMaxNormalizationConfig, HistogramMatchingConfig,
-    ReconstructionConfig, TophatConfig, ProjectionConfig, PreprocessingRecipe, RecipeStep)
+    ReconstructionConfig, TophatConfig, ProjectionConfig, PreprocessingRecipe, RecipeStep, step_config_type)
 from starfinder.registration import (TranslationConfig, DemonsConfig, TpsConfig, CpdConfig,
     InsufficientLandmarksError, RegistrationEstimationError, WarpConfig)
 from starfinder.barcode import NeighborhoodSumConfig, ReadFilterConfig, WtaDecoderConfig
@@ -15,6 +15,8 @@ from starfinder.spot_finding import LocalMaximaConfig
 
 _RULES = ('rsf_single_fov', 'gr_single_fov_subtile', 'lrsf_single_fov_subtile',
           'deep_create_subtile', 'deep_rsf_subtile')
+# Keys replaced by the explicit preprocessing key (snr_threshold only feeds min-max).
+_LEGACY_PREPROCESSING = ('enhance_contrast', 'hist_equalize', 'morph_recon', 'tophat', 'snr_threshold')
 
 
 def _known(values, allowed, context):
@@ -111,6 +113,36 @@ def _legacy_recipe(params, norm, do_norm, hist, do_hist, morph, do_morph, top, d
     return PreprocessingRecipe(tuple(map(RecipeStep, steps)), tuple(map(RecipeStep, post)))
 
 
+def _tuples(value):
+    return tuple(_tuples(v) for v in value) if isinstance(value, list) else value
+
+
+def _explicit_recipe(values):
+    """Recipe from the preprocessing key: steps named by their STEPS names, plus the recipe fields.
+
+    A step's keys other than method and save_as are the fields of its config
+    dataclass; YAML lists become tuples.
+    """
+    if not isinstance(values, dict):
+        raise TypeError('preprocessing must be a mapping')
+    _known(values, ('steps', 'extraction_source', 'registration_source', 'supplied_statistics'), 'preprocessing')
+    if not isinstance(values.get('steps'), list):
+        raise ValueError('preprocessing.steps must be a list')
+    steps = []
+    for entry in values['steps']:
+        if not isinstance(entry, dict) or 'method' not in entry:
+            raise ValueError('each preprocessing step must be a mapping with a method')
+        entry = dict(entry)
+        config_type = step_config_type(entry.pop('method'))
+        save_as = entry.pop('save_as', None)
+        _known(entry, [f.name for f in fields(config_type) if f.init], f'preprocessing step {config_type.__name__}')
+        steps.append(RecipeStep(config_type(**{k: _tuples(v) for k, v in entry.items()}), save_as))
+    supplied = values.get('supplied_statistics')
+    return PreprocessingRecipe(tuple(steps), extraction_source=values.get('extraction_source'),
+                               registration_source=values.get('registration_source'),
+                               supplied_statistics=None if supplied is None else Path(supplied))
+
+
 @dataclass(frozen=True)
 class WorkflowConfig:
     """Translated dataset, scientific pipeline and execution/output policies.
@@ -132,6 +164,9 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
 
     Other rules/top-level acquisition/downstream keys are shared with MATLAB.
     Unknown fields in this Python rule's parameters raise instead of disappearing.
+    The Python-only preprocessing key declares an explicit recipe and is
+    mutually exclusive with the legacy keys enhance_contrast, hist_equalize,
+    morph_recon, tophat and snr_threshold, which map to recipe 1.
     Direct Python callers construct Dataset/PipelineConfig (no legacy aliases).
     """
     if rule not in _RULES:
@@ -151,8 +186,11 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
         channel_order=channels, fov_pattern=config.get('fov_id_pattern', 'Position%03d'))
     params = config.get('rules', {}).get(rule, {}).get('parameters', {})
     _known(params, ('streaming', 'snr_threshold', 'load_codebook', 'load_raw_images', 'enhance_contrast',
-        'hist_equalize', 'morph_recon', 'tophat', 'global_registration', 'local_registration',
+        'hist_equalize', 'morph_recon', 'tophat', 'preprocessing', 'global_registration', 'local_registration',
         'spot_finding', 'reads_extraction', 'reads_filtration', 'create_subtiles'), 'Python workflow parameter')
+    legacy = [key for key in _LEGACY_PREPROCESSING if key in params]
+    if 'preprocessing' in params and legacy:
+        raise ValueError(f'preprocessing is mutually exclusive with the legacy keys {legacy}')
     norm, do_norm = _operation(params, 'enhance_contrast', ('snr_threshold',))
     hist, do_hist = _operation(params, 'hist_equalize', ('reference_channel',))
     morph, do_morph = _operation(params, 'morph_recon', ('radius',))
@@ -188,7 +226,8 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
     # The adapter loads raw input unless this is a saved-subtile job or explicitly disabled.
     load_config = ImageLoadConfig(channel_labels=channels, **load) if channels and not resident and ('load_raw_images' not in params or do_load) else None
     pipeline = PipelineConfig(load=load_config, rotation_degrees=None if resident else config.get('rotate_angle'),
-        preprocessing=_legacy_recipe(params, norm, do_norm, hist, do_hist, morph, do_morph, top, do_top, resident),
+        preprocessing=(_explicit_recipe(params['preprocessing']) if 'preprocessing' in params else
+                       _legacy_recipe(params, norm, do_norm, hist, do_hist, morph, do_morph, top, do_top, resident)),
         registration=tuple(steps),
         detection=LocalMaximaConfig(threshold_mode=spot.get('intensity_estimation', 'noise'), threshold_value=spot.get('intensity_threshold', 5.0), min_distance_voxels=spot.get('min_distance_voxels', spot.get('min_distance', 1))) if do_spot else None,
         extraction=NeighborhoodSumConfig(tuple(extract.get('voxel_size', (1, 2, 2)))) if do_extract else None,

@@ -223,14 +223,28 @@ def run_step(volume: np.ndarray, config, context: StepContext) -> StepResult:
     return result
 
 
+_SNAPSHOT_NAME = re.compile(r"[a-z][a-z0-9]*(_[a-z0-9]+)*")
+
+
 @dataclass(frozen=True)
 class RecipeStep:
-    """One recipe entry: a frozen config whose exact type is registered in STEPS."""
+    """One recipe entry: a frozen config whose exact type is registered in STEPS.
+
+    save_as names a snapshot, a kept copy of this step's output. Snapshot
+    names are lowercase snake_case (they name checkpoint directories) and
+    must not be "detection", the name of the detection image.
+    """
     config: Any
+    save_as: str | None = None
 
     def __post_init__(self):
         step_spec(self.config)
         self.config.__post_init__()
+        if self.save_as is not None:
+            if not isinstance(self.save_as, str) or not _SNAPSHOT_NAME.fullmatch(self.save_as):
+                raise ValueError(f"save_as must be a lowercase snake_case snapshot name, not {self.save_as!r}")
+            if self.save_as == "detection":
+                raise ValueError('save_as must not be "detection", the name of the detection image')
 
 
 @dataclass(frozen=True)
@@ -238,14 +252,20 @@ class PreprocessingRecipe:
     """Ordered steps run on each round before registration.
 
     The output of the last step is the detection image; with no steps it is
-    the loaded image. post_registration runs after registration and may
-    contain only ReconstructionConfig (the legacy path for resident subtiles).
-    supplied_statistics is the JSON file read by steps with fit="supplied";
-    it is required when such a step is present, and a step name may occur
-    only once with fit="supplied".
+    the loaded image. Steps with save_as keep named snapshots of their
+    output; names are unique within the recipe. extraction_source and
+    registration_source name the snapshot that extraction reads and from
+    which registration signals are built; None uses the detection image.
+    post_registration runs after registration, may contain only
+    ReconstructionConfig (the legacy path for resident subtiles) and keeps no
+    snapshots. supplied_statistics is the JSON file read by steps with
+    fit="supplied"; it is required when such a step is present, and a step
+    name may occur only once with fit="supplied".
     """
     steps: tuple[RecipeStep, ...] = ()
     post_registration: tuple[RecipeStep, ...] = ()
+    extraction_source: str | None = None
+    registration_source: str | None = None
     supplied_statistics: Path | None = None
 
     def __post_init__(self):
@@ -260,6 +280,17 @@ class PreprocessingRecipe:
             if type(entry.config) is not ReconstructionConfig:
                 raise ValueError("post_registration may contain only ReconstructionConfig steps, "
                                  f"not {type(entry.config).__qualname__}")
+            if entry.save_as is not None:
+                raise ValueError("post_registration steps keep no snapshots (save_as)")
+        snapshots = self.snapshots
+        repeated = sorted({name for name in snapshots if snapshots.count(name) > 1})
+        if repeated:
+            raise ValueError(f"snapshot names {repeated} are declared more than once")
+        for name in ("extraction_source", "registration_source"):
+            source = getattr(self, name)
+            if source is not None and source not in snapshots:
+                raise ValueError(f"{name} {source!r} is not a snapshot declared by save_as in steps "
+                                 f"(declared: {snapshots})")
         supplied = [step_spec(entry.config).name for entry in self.steps if _supplied(entry.config)]
         repeated = sorted({name for name in supplied if supplied.count(name) > 1})
         if repeated:
@@ -270,3 +301,8 @@ class PreprocessingRecipe:
             object.__setattr__(self, "supplied_statistics", Path(self.supplied_statistics))
         elif supplied:
             raise ValueError(f'steps {supplied} use fit="supplied" but supplied_statistics is not set')
+
+    @property
+    def snapshots(self) -> list[str]:
+        """Snapshot names declared by save_as, in step order."""
+        return [entry.save_as for entry in self.steps if entry.save_as is not None]

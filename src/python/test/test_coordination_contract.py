@@ -246,6 +246,7 @@ def test_workflow_translation_rejects_unknowns_and_preserves_effective_settings(
 def test_maintained_workflow_examples_translate():
     root = Path(__file__).resolve().parents[3]
     for path in [root/'docs/examples/workflow-full.yaml', root/'docs/examples/workflow-minimal.yaml',
+                 root/'docs/examples/workflow-recipe-2.yaml',
                  root/'tests/minimal_config.yaml', root/'tests/tissue_2D_test.yaml']:
         config = yaml.safe_load(path.read_text())
         for rule in config['rules']:

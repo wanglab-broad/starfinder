@@ -154,6 +154,15 @@ and `tophat` are unchanged and translate to recipe 1. `run.json` and the
 `registered` checkpoint gain a `preprocessing` entry with the recipe and one
 record per round and step.
 
+Recipes can also keep named snapshots (`RecipeStep.save_as`) and name an
+`extraction_source` and a `registration_source`; the new Python-only workflow
+key `preprocessing` declares such a recipe and cannot be combined with the
+legacy keys. These additions are optional: a recipe without them gives the same
+results as before. The preprocessing record gains the two sources, `save_as` per
+step and the transforms applied per round and snapshot, and the `registered`
+checkpoint stores the extraction source under `registered/<snapshot>/`.
+Checkpoints written before these additions still load, with no snapshots.
+
 ### Reference merged image
 
 `FOV.save_reference_image` used to write the reference round's full ZYXC image

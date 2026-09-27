@@ -225,15 +225,16 @@ def test_run_record_and_checkpoint_store_per_round_step_records(tmp_path):
     directory = fov.paths.checkpoint_dir
     entry = json.loads((directory / "run.json").read_text())["preprocessing"]
     assert entry["recipe"] == {"steps": ["min_max_normalization", "histogram_matching", "reconstruction"],
-                               "post_registration": []}
+                               "post_registration": [], "extraction_source": None, "registration_source": None}
+    assert entry["transforms"] == {"round1": {"detection": []}, "round2": {"detection": []}}
     assert set(entry["rounds"]) == {"round1", "round2"}
     for records in entry["rounds"].values():
         assert [(r["index"], r["stage"], r["step"]) for r in records] == [
             (0, "steps", "min_max_normalization"), (1, "steps", "histogram_matching"), (2, "steps", "reconstruction")]
         assert [(r["input_dtype"], r["output_dtype"]) for r in records] == [
             ("uint16", "uint8"), ("uint8", "uint8"), ("uint8", "uint8")]
-        assert all(set(r) == {"index", "stage", "step", "config", "fitted", "diagnostics", "input_dtype", "output_dtype"}
-                   for r in records)
+        assert all(set(r) == {"index", "stage", "step", "config", "fitted", "diagnostics", "input_dtype", "output_dtype",
+                              "save_as"} and r["save_as"] is None for r in records)
         minmax, histogram, reconstruction = records
         assert minmax["config"]["output_range"] == [0, 255] and minmax["config"]["rounding"] == "truncate"
         assert [g["channel"] for g in minmax["fitted"]["groups"]] == [0, 1, 2, 3]

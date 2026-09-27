@@ -243,20 +243,25 @@ def clear_stages(directory):
     """Remove every checkpoint file of a per-FOV directory, headers first.
 
     Only files this module writes are removed (stage headers and tables,
-    registered TIFFs, current ``.ome.tif`` or earlier ``.tif``, and dense
-    fields); other files are left untouched. Removing headers first means an
+    registered TIFFs, current ``.ome.tif`` or earlier ``.tif``, registered
+    snapshot TIFFs in ``registered/<snapshot>/`` and dense fields); other
+    files are left untouched. Removing headers first means an
     interrupted clear never leaves a loadable stale stage.
     """
     directory = Path(directory)
     registered = directory / "registered"
     paths = [header_path(directory, stage) for stage in STAGES]
     paths += [directory / f"{stage}.{fmt}" for stage in STAGES[1:] for fmt in TABLE_FORMATS]
+    snapshots = []
     if registered.is_dir():
         paths += sorted(registered.glob("*.tif")) + sorted(registered.glob("*_field.npz"))
+        snapshots = sorted(path for path in registered.iterdir() if path.is_dir() and not path.is_symlink())
+        paths += [path for directory in snapshots for path in sorted(directory.glob("*.ome.tif"))]
     for path in paths:
         path.unlink(missing_ok=True)
-    if registered.is_dir() and not any(registered.iterdir()):
-        registered.rmdir()
+    for path in [*snapshots, registered]:
+        if path.is_dir() and not any(path.iterdir()):
+            path.rmdir()
 
 
 def read_header(directory, stage):
@@ -272,9 +277,13 @@ def read_header(directory, stage):
 
 # --- Registered stage ------------------------------------------------------------
 
-def registered_image_path(directory, round_name):
-    """Path of a registered round image; checkpoints before OME-TIFF used <round>.tif."""
-    return Path(directory) / "registered" / f"{round_name}.ome.tif"
+def registered_image_path(directory, round_name, snapshot=None):
+    """Path of a registered round image; checkpoints before OME-TIFF used <round>.tif.
+
+    A snapshot of the round is stored as registered/<snapshot>/<round>.ome.tif.
+    """
+    directory = Path(directory) / "registered"
+    return (directory if snapshot is None else directory / snapshot) / f"{round_name}.ome.tif"
 
 
 def _registered_image(directory, round_name):
@@ -284,14 +293,15 @@ def _registered_image(directory, round_name):
     return earlier if not path.is_file() and earlier.is_file() else path
 
 
-def write_registered_round(directory, round_name, image, metadata):
-    """Write one registered ZYXC round as OME-TIFF <round>.ome.tif with its geometry."""
+def write_registered_round(directory, round_name, image, metadata, snapshot=None):
+    """Write one registered ZYXC round (or its snapshot) as OME-TIFF with its geometry."""
     from starfinder.io.tiff import save_volume
     if np.asarray(image).ndim != 4:
         raise ValueError(f"registered checkpoint requires ZYXC images; {round_name} is not")
-    if not round_name or Path(round_name).name != round_name:
-        raise ValueError(f"round label {round_name!r} is not a plain file name")
-    path = registered_image_path(directory, round_name)
+    for label in (round_name, snapshot):
+        if label is not None and (not label or Path(label).name != label or label in (".", "..")):
+            raise ValueError(f"label {label!r} is not a plain file name")
+    path = registered_image_path(directory, round_name, snapshot)
     with _atomic(path) as tmp:
         save_volume(image, tmp, metadata=metadata)
     return path
@@ -448,7 +458,8 @@ def read_checkpoint(path: Path | str, stage: str) -> dict:
     -------
     dict
         Keys are the FOV attributes the stage restores. ``registered``:
-        ``images`` and ``metadata`` (per round), ``registration_results``,
+        ``images`` and ``metadata`` (per round), ``snapshots`` (per round,
+        the stored snapshots by name; empty for checkpoints without them), ``registration_results``,
         ``registration_attempts`` and ``preprocessing_record`` (the recipe and
         per-round step records; empty for checkpoints written without them). ``candidates``: ``spot_result``
         (SpotFindingResult) and ``intensity_result`` (IntensityExtractionResult,
@@ -471,12 +482,15 @@ def read_checkpoint(path: Path | str, stage: str) -> dict:
         return _read_candidates(directory, header)
     if stage == "pre_qc":
         return _read_pre_qc(directory, header)
-    images, metadata = {}, {}
+    images, metadata, snapshots = {}, {}, {}
     for name in header["image_rounds"]:
         loaded = load_volume_zyxc(_registered_image(directory, name),
                                   channel_labels=tuple(header["channel_labels"]))
         images[name], metadata[name] = loaded.image, loaded.metadata
-    return {"images": images, "metadata": metadata,
+        for snapshot in header.get("snapshots", []):
+            snapshots.setdefault(name, {})[snapshot] = load_volume_zyxc(
+                registered_image_path(directory, name, snapshot), channel_labels=tuple(header["channel_labels"])).image
+    return {"images": images, "snapshots": snapshots, "metadata": metadata,
             "registration_results": _registration_results(directory, header["transforms"]),
             "registration_attempts": {name: [_tuples(a) for a in attempts]
                                       for name, attempts in header["registration_attempts"].items()},
