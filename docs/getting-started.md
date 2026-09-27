@@ -120,7 +120,7 @@ All paths below are relative to `QUICKSTART_OUTPUT`:
 | `synthetic/generation.json` | Generator and preset versions, seed, dtype, requested/effective configuration and per-FOV provenance |
 | `synthetic/codebook.csv` | `gene,barcode`, where barcode is a nucleotide string |
 | `synthetic/ground_truth.json` | Shape, seed, rounds, genes and FOV records; each spot has gene/barcode/color sequence and 0-based continuous `(z,y,x)` reference position; shifts are `(dz,dy,dx)` |
-| `synthetic/formed.csv`, `synthetic/round_truth.csv`, `synthetic/scene_truth.csv` | Formed amplicons, their per-round positions and visibility, and the per-round codeword-channel view |
+| `synthetic/formed.csv`, `synthetic/round_truth.csv`, `synthetic/scene_truth.csv` | Formed amplicons (`gene_id`, `color_sequence`), their per-round positions and visibility, and the per-round view of the channel each color sequence selects (MATLAB-compatible `gene` and `color_seq` columns) |
 | `synthetic/ground_truth_annotation_FOV_*.png` | Generated reference projections with truth annotations, not detected results |
 | `results/signal/FOV_*_allSpots.csv` | All detected candidates, including coordinates, reference `intensity`, 0-based `channel`, per-round colors/scores, and `color_seq` |
 | `results/signal/FOV_*_goodSpots.csv` | Filtered molecule candidates: exactly `x,y,z,gene`; one row per retained read, not per cell |

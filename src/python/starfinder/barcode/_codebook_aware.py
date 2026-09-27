@@ -103,7 +103,7 @@ def _wta_color_sequences(probs: np.ndarray) -> tuple[np.ndarray, pd.DataFrame]:
 
     Returns
     -------
-    color_seq : np.ndarray
+    color_sequences : np.ndarray
         Object array of N strings. Labels are one-based channel numbers;
         ``M`` means tied maxima (absolute tolerance 1e-12), ``N`` nonfinite input.
     diagnostics : pd.DataFrame
@@ -152,11 +152,11 @@ def _wta_color_sequences(probs: np.ndarray) -> tuple[np.ndarray, pd.DataFrame]:
         diagnostics[f"round{round_idx}_second_prob"] = second_prob
         diagnostics[f"round{round_idx}_margin"] = margin
 
-    color_seq = np.array(["".join(row) for row in color_matrix], dtype=object)
+    color_sequences = np.array(["".join(row) for row in color_matrix], dtype=object)
     diagnostics["min_round_margin"] = (
         np.nanmin(margins, axis=1) if n_rounds else np.full(n_spots, np.nan)
     )
-    return color_seq, pd.DataFrame(diagnostics)
+    return color_sequences, pd.DataFrame(diagnostics)
 
 
 def _build_one_error_index(

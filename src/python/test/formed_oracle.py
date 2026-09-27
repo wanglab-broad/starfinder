@@ -180,7 +180,7 @@ def expected_case(size, condition):
                     'noise.independent', round_label=label, channel=channel).standard_normal(shape)
         images[label] = image
     formed = pd.DataFrame(dict(
-        amplicon_id=IDS, gene_id=('gene-A', 'gene-B'), codeword=('123', '214'),
+        amplicon_id=IDS, gene_id=('gene-A', 'gene-B'), color_sequence=('123', '214'),
         formed_index=(0, 1), z=centers[:, 0], y=centers[:, 1], x=centers[:, 2],
         A=[float(amplitude)] * 2, sz=[sz] * 2, sl=[sl] * 2, e=elongation, theta=THETA))
     return dict(images=images, formed=formed, intended=intended, pre_mix=pre_mix,

@@ -62,7 +62,7 @@ are absolute with respect to the reference; nothing accumulates across rounds.
    folded lognormal (elongation only: exp(μ + |τZ|)) or supplied per ID; θ is
    constant, supplied or uniform on (0, π). Defaults are A=100, sz=sl=e=1, θ=0.
 3. **Intended signal.** `intended[i, c, r] = A_i` for the channel encoded by the
-   codeword in round r, else 0. Codewords are never rewritten.
+   color sequence in round r, else 0. Color sequences are never rewritten.
 4. **Readout effects**, in this order, each with its own enable flag:
    persistent loss (one draw per ID; lost from `loss_start` onward),
    temporary dropout (per ID and round), temporary weakening (per ID and round,
@@ -120,8 +120,11 @@ requested and effective configurations are both recorded.
 
 ## Truth
 
-* `formed` has one row per amplicon: namespace, amplicon ID, gene, codeword,
-  reference frame, `formed_index`, reference z/y/x and A, sz, sl, e, theta.
+* `formed` has one row per amplicon: namespace, amplicon ID, gene ID
+  (`gene_id`), color sequence (`color_sequence`), reference frame,
+  `formed_index`, reference z/y/x and A, sz, sl, e, theta. These are the names
+  of the Python API; `formed.csv` files written before this naming carry
+  `codeword` instead of `color_sequence` and are not supported.
 * `round_truth` has N × R rows: moved z/y/x in the round's frame, transform ID,
   dropped/weakened/lost/emitting flags, `center_in_bounds` (closed bounds
   0..L−1), `support_intersects` (any voxel inside the kernel support),

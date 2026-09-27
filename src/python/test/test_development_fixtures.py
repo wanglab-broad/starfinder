@@ -61,7 +61,7 @@ def test_saved_fixture_matches_independent_oracle(fixture_root, name):
     formed = pd.read_csv(root / 'formed.csv')
     for column in ('amplicon_id', 'gene_id', 'formed_index'):
         assert formed[column].tolist() == oracle['formed'][column].tolist()
-    assert formed.codeword.astype(str).tolist() == ['123', '214']
+    assert formed.color_sequence.astype(str).tolist() == ['123', '214']
     for column in ('z', 'y', 'x', 'A', 'sz', 'sl', 'e', 'theta'):
         np.testing.assert_array_equal(formed[column], oracle['formed'][column], err_msg=column)
     assert formed.theta.iloc[1] != 0

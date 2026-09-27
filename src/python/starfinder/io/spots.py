@@ -48,8 +48,10 @@ def export_spots(detection: SpotFindingResult, reads: starfinder.barcode.Barcode
                  columns: list[str] | None = None) -> Path:
     """Join complete results by namespace/ID, then optionally select accepted reads.
 
-    Write 1-based XYZ CSV without changing source tables. Default columns are
-    x,y,z,gene when reads exist, otherwise x,y,z. Empty results write headers.
+    Write 1-based XYZ CSV without changing source tables. The file is
+    MATLAB-compatible: read ``gene_id`` and ``observed_color_sequence`` are
+    written as ``gene`` and ``color_seq``, and ``columns`` uses those names.
+    Default columns are x,y,z,gene when reads exist, otherwise x,y,z. Empty results write headers.
     Full decoding/filtering results must cover exactly the detection identities;
     reordered rows are allowed, missing/duplicate/foreign keys are errors.
     """

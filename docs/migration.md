@@ -148,6 +148,26 @@ and the 8-gene test codebook gains GeneI–GeneL so every channel is used in
 every round. Outputs add `formed.csv` and `round_truth.csv`; registration
 pairs add continuous forward fields for every deformation.
 
+### Name color sequences and gene IDs the same way
+
+The Python API names the color sequence `color_sequence` (decoded reads:
+`observed_color_sequence` and `decoded_color_sequence`) and the gene
+identifier `gene_id`. There are no aliases. MATLAB code and the
+MATLAB-compatible files keep their names: `scene_truth.csv`,
+`ground_truth.json` (and `historical_truth`), `codebook.csv` and the exported
+spot CSVs still use `gene` and `color_seq`.
+
+| Before | After |
+| --- | --- |
+| `FormedScene.formed.codeword`, `formed.csv` column `codeword` | `color_sequence` |
+| `SyntheticDataset.spot_truth` columns `gene`, `color_seq` | `gene_id`, `color_sequence` |
+| `evaluate_decoding` columns `gene`, `color_seq` | truth `gene_id`, `color_sequence`; decoded `gene_id` and `sequence_column` (default `observed_color_sequence`) |
+| `evaluate_decoding` values `gene_accuracy`, `color_seq_accuracy`; counts `*_gene`, `*_color_seq` | `gene_id_accuracy`, `color_sequence_accuracy`; `*_gene_id`, `*_color_sequence` |
+| `decode_color_sequence(color_seq=...)` | `decode_color_sequence(color_sequence=...)` |
+
+`formed.csv` files written before this change carry `codeword` and are not
+supported; regenerate them.
+
 ### Save and reload pipeline checkpoints
 
 An earlier development branch had an artifact and provenance contract with

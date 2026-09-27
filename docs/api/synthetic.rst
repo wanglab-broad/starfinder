@@ -148,7 +148,7 @@ requested values and effective identities; disabled controls draw no randomness.
 Wrong shapes, nonfinite/negative values, probabilities/factors above one and
 overflow fail explicitly. A zero mixing matrix may suppress all emission
 without marking a molecule lost. The order is survival/dropout, weakening,
-trend, source gain, then mixing. Intended amplitudes and codewords never
+trend, source gain, then mixing. Intended amplitudes and color sequences never
 change. Lost and invisible objects remain in both truth tables. These are
 processed-image development controls, not calibrated chemical rates.
 
@@ -201,7 +201,7 @@ rendered nor randomly sampled.
 
 ``effective_config["background"]["components"]`` retains the analytic
 reference-frame components, blob IDs, centers, widths and heights. Noise
-strengths do not resample molecules, codewords, masks, latents or transforms.
+strengths do not resample molecules, color sequences, masks, latents or transforms.
 These are effective processed-image approximations, not empirical tissue,
 photon statistics or detector calibration. From ``src/python``::
 
@@ -287,7 +287,9 @@ single-factor comparisons; they are neither packaged nor oracle-checked.
 ``save_formed_scene(scene, directory)`` writes ``images/<round>.tif`` with
 :py:func:`starfinder.io.save_volume` (ZYXC, round metadata), ``formed.csv``,
 ``round_truth.csv``, ``signals.csv`` and ``provenance.json`` into a new or
-empty directory.
+empty directory. ``formed.csv`` names the color sequence ``color_sequence``;
+files written before this naming carry ``codeword`` and are not supported
+(regenerate them).
 
 Benchmark datasets
 ------------------
@@ -299,9 +301,14 @@ so appending IDs never changes earlier FOVs. With ``on_round(fov, round_label,
 image, metadata)`` each round image is handed over when generated and not
 retained. The result is ``SyntheticDataset``: ``rounds``/``metadata`` per FOV,
 concatenated ``formed`` and ``round_truth`` (the namespace names the FOV),
-``spot_truth`` (one row per FOV, amplicon and round with the codeword channel,
+``spot_truth`` (one row per FOV, amplicon and round with ``gene_id``,
+``color_sequence``, the channel the color sequence selects in that round,
 realized amplitude, visibility and a reason when not visible), per-FOV
-``provenance`` and ``historical_truth``. The last is the ``ground_truth.json``
+``provenance`` and ``historical_truth``. ``spot_truth`` rows are keyed by
+``spot_namespace`` (the FOV) and ``spot_id`` (the amplicon ID), and its
+``gene_id`` and ``color_sequence`` columns are the names decoding results and
+:py:func:`starfinder.evaluation.barcode.evaluate_decoding` use, so the tables
+join and evaluate without renaming. ``historical_truth`` is the ``ground_truth.json``
 payload in the historical v2 keys (``image_shape``, ``n_rounds``, ``fovs`` with
 ``shifts`` and ``spots`` holding ``id``, ``gene``, ``barcode``, ``color_seq``,
 reference ``position`` and ``intensity``), derived from ``formed`` and each
@@ -359,6 +366,11 @@ The used magnitude is ``GeometryConfig.local_magnitude`` of
 as they are generated. E2E mode writes ``FOV_###/round#/ch##.tif`` (ZYX),
 ``codebook.csv`` (gene,barcode), ``ground_truth.json``, ``scene_truth.csv``,
 ``formed.csv``, ``round_truth.csv``, ``generation.json`` and ``manifest.json``.
+``codebook.csv``, ``ground_truth.json`` and ``scene_truth.csv`` are the
+MATLAB-compatible layout and keep the historical names: ``scene_truth.csv`` is
+``spot_truth`` with ``gene_id`` and ``color_sequence`` written as ``gene`` and
+``color_seq``, and ``ground_truth.json`` spots use the same keys; one mapping
+serves both. ``formed.csv`` and ``round_truth.csv`` use the Python names.
 Registration mode writes ``synthetic/<preset>/ref.tif``, ``mov_shift.tif``,
 ``mov_deform_<name>.tif`` (ch00, ZYX), ``field_<name>.npy`` (float32 Z×Y×X×3
 forward displacement on the reference grid) and the same truth files, plus

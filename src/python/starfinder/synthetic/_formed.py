@@ -357,11 +357,13 @@ def _prepare(codebook, config, metadata, stream_log):
     if not np.isfinite(points).all() or not np.isfinite(values).all() or (values[:, 1:3] <= 0).any():
         raise ValueError("nonfinite or out-of-domain generated properties")
     sequences = [codebook.gene_to_seq[g] for g in genes]
-    formed = pd.DataFrame(dict(namespace=[namespace]*n, amplicon_id=ids, gene_id=genes, codeword=sequences,
-                               frame_id=[metadata.frame_id]*n, formed_index=np.arange(n, dtype=np.int64),
+    formed = pd.DataFrame(dict(namespace=[namespace]*n, amplicon_id=ids, gene_id=genes,
+                               color_sequence=sequences, frame_id=[metadata.frame_id]*n,
+                               formed_index=np.arange(n, dtype=np.int64),
                                **{k: points[:, j] for j, k in enumerate(("z", "y", "x"))},
                                **{k: values[:, j] for j, k in enumerate(("A", "sz", "sl", "e", "theta"))}))
-    formed = formed.astype({k: "string" for k in ("namespace", "amplicon_id", "gene_id", "codeword", "frame_id")})
+    formed = formed.astype({k: "string" for k in
+                            ("namespace", "amplicon_id", "gene_id", "color_sequence", "frame_id")})
     channels = len(codebook.channel_labels)
     intended = np.zeros((n, channels, len(codebook.round_labels)), dtype=np.float64)
     for i, sequence in enumerate(sequences):

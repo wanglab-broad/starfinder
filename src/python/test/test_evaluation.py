@@ -83,19 +83,61 @@ def test_translation_known_missing_failed_empty():
 
 
 def test_decoding_known_missing_and_zero_denominator():
-    truth = pd.DataFrame({"gene": ["a", "b"], "color_seq": ["12", "21"]})
-    decoded = pd.DataFrame({"gene": ["a", None], "color_seq": ["12", "12"]})
+    truth = pd.DataFrame({"gene_id": ["a", "b"], "color_sequence": ["12", "21"]})
+    decoded = pd.DataFrame({"gene_id": ["a", None], "observed_color_sequence": ["12", "12"],
+                            "decoded_color_sequence": ["12", "21"]})
     coords = np.array([[0, 0, 0], [0, 0, 5.]])
     matches = match_points(coords, coords, **CONFIG)
     result = evaluate_decoding(decoded, truth, matches=matches)
-    assert result.values == {"gene_accuracy": .5, "color_seq_accuracy": .5}
-    missing = evaluate_decoding(decoded.drop(columns="gene"), truth, matches=matches)
-    assert missing.values["gene_accuracy"] is None
+    assert result.values == {"gene_id_accuracy": .5, "color_sequence_accuracy": .5}
+    assert result.counts["correct_gene_id"] == 1 and result.counts["eligible_color_sequence"] == 2
+    corrected = evaluate_decoding(decoded, truth, matches=matches, sequence_column="decoded_color_sequence")
+    assert corrected.values["color_sequence_accuracy"] == 1
+    assert corrected.config["sequence_column"] == "decoded_color_sequence"
+    missing = evaluate_decoding(decoded.drop(columns="gene_id"), truth, matches=matches)
+    assert missing.values["gene_id_accuracy"] is None
+    no_truth = evaluate_decoding(decoded, truth.drop(columns="color_sequence"), matches=matches)
+    assert no_truth.values["color_sequence_accuracy"] is None
     empty_matches = match_points(coords[:0], coords[:0], **CONFIG)
     empty = evaluate_decoding(decoded.iloc[:0], truth.iloc[:0], matches=empty_matches)
     assert all(v is None for v in empty.values.values())
     with pytest.raises(ValueError):
         evaluate_decoding(decoded.iloc[:1], truth, matches=matches)
+
+
+def test_decoding_result_evaluates_against_synthetic_spot_truth_without_renaming():
+    """Decoded reads and spot_truth share gene_id/color_sequence and the spot keys."""
+    from starfinder.barcode import (Codebook, NeighborhoodSumConfig, WtaDecoderConfig,
+                                    decode_barcodes, extract_intensities)
+    from starfinder.io import ImageLoadResult
+    from starfinder.spot_finding import LocalMaximaConfig, SpotFindingResult
+    from starfinder.synthetic import FormedSceneConfig, generate_dataset
+    genes = {"a0": "gene-A", "a1": "gene-B", "a2": "gene-C"}
+    book = Codebook(pd.DataFrame(dict(gene_id=list(genes.values()), color_sequence=["123", "241", "314"])),
+                    ("round1", "round2", "round3"), ("ch00", "ch01", "ch02", "ch03"),
+                    {"1": 0, "2": 1, "3": 2, "4": 3})
+    config = FormedSceneConfig(shape_zyx=(3, 16, 32), coordinates=((1, 8, 5), (1, 8, 16), (1, 8, 27)),
+                               amplicon_ids=tuple(genes), gene_ids=genes)
+    data = generate_dataset(book, config, fov_ids=("FOV_001",))
+    assert {"gene_id", "color_sequence"} <= set(data.formed) & set(data.spot_truth)
+    assert not {"codeword", "gene", "color_seq"} & (set(data.formed) | set(data.spot_truth))
+    truth = data.spot_truth[data.spot_truth.round_label == "round1"].reset_index(drop=True)
+    # Detections at the reference centers, keyed like the truth rows.
+    spots = SpotFindingResult(pd.DataFrame({"spot_id": truth.spot_id.astype("string"),
+                                            **{a: truth[a].astype(float) for a in "zyx"}}),
+                              META, "FOV_001", LocalMaximaConfig(), {})
+    rounds = {label: ImageLoadResult(image, META, book.channel_labels, ())
+              for label, image in data.rounds["FOV_001"].items()}
+    decoded = decode_barcodes(extract_intensities(rounds, spots, config=NeighborhoodSumConfig((0, 0, 0))),
+                              book, config=WtaDecoderConfig())
+    joined = decoded.table.merge(truth, on=["spot_namespace", "spot_id", "gene_id"], validate="one_to_one")
+    assert len(joined) == 3
+    assert joined.observed_color_sequence.tolist() == joined.color_sequence.tolist() == ["123", "241", "314"]
+    matches = evaluate_spots(spots.spots[["z", "y", "x"]].to_numpy(), truth[["z", "y", "x"]].to_numpy(),
+                             **CONFIG)
+    result = evaluate_decoding(decoded.table, truth, matches=matches)
+    assert result.values == {"gene_id_accuracy": 1, "color_sequence_accuracy": 1}
+    assert result.counts["correct_gene_id"] == result.counts["correct_color_sequence"] == 3
 
 
 def test_image_metrics_and_explicit_policies():

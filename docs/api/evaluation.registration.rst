@@ -66,7 +66,10 @@ truth and settings implicitly. Select them at the caller now::
 
 ``compare_shifts`` becomes ``evaluate_translation`` over labeled displacement
 maps; ``compare_genes`` becomes ``evaluate_decoding`` over tables and supplied
-matches. Missing truth labels are excluded from conditional accuracy denominators;
+matches. It compares the decoded ``gene_id`` and ``observed_color_sequence`` (or
+another named sequence column) with the truth ``gene_id`` and
+``color_sequence``, as in synthetic ``spot_truth`` and ``formed``, and reports
+``gene_id_accuracy`` and ``color_sequence_accuracy``. Missing truth labels are excluded from conditional accuracy denominators;
 missing predicted labels are incorrect calls. Missing columns are undefined.
 Replaced benchmark exports have no aliases. Reports remain in benchmark.
 
