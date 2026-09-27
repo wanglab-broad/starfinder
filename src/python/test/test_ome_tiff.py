@@ -171,11 +171,13 @@ def test_formed_scene_images_are_ome_tiff(tmp_path):
         assert loaded.metadata == scene.round_metadata[label]
 
 
-def test_reference_image_keeps_shared_name_with_ome_content(tmp_path):
+def test_reference_image_keeps_shared_name_with_merged_zyx_content(tmp_path):
     ds = dataset(tmp_path)
     fov = resident(ds)
     path = fov.save_reference_image()
-    assert path.name == 'FOV.tif' and pixels(path).get('SizeC') == '4'
-    loaded = load_volume_zyxc(path)
-    np.testing.assert_array_equal(loaded.image, fov.images['round1'], strict=True)
+    assert path.name == 'FOV.tif'
+    with tifffile.TiffFile(path) as tif:
+        assert not tif.is_ome and tif.series[0].axes == 'ZYX'
+    loaded = load_volume(path)
+    np.testing.assert_array_equal(loaded.image, fov.images['round1'].max(axis=-1), strict=True)
     assert loaded.metadata == fov.metadata['round1']

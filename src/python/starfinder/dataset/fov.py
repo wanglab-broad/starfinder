@@ -327,6 +327,8 @@ class FOV:
     def project_image(self, *, config=ProjectionConfig(), rounds=None):
         """Project selected rounds, retaining singleton Z and source mapping."""
         from starfinder.preprocessing import project_image
+        if config.axis != 'z':
+            raise ValueError('FOV rounds stay ZYXC; only a z projection applies to them')
         for name in list(self.images) if rounds is None else rounds:
             source_shape = self.images[name].shape[:3]
             self.images[name] = project_image(self.images[name], config=config)
@@ -787,23 +789,52 @@ class FOV:
 
     # --- Output ---
 
-    def save_reference_image(self, *, projection: ProjectionConfig | None = None) -> Path:
-        """Save reference TIFF using the unchanged shared filename.
+    def save_reference_image(self, *, projection: ProjectionConfig | None = None,
+                             reference_image: str = 'merged', reference_channel: int = 0) -> Path:
+        """Save the reference merged image under the shared ``ref_merged`` name.
 
-        The workflow rules share ``images/ref_merged/<fov_id>.tif`` with the
-        MATLAB backend, so the name keeps ``.tif``; ZYXC content is OME-TIFF
-        written by save_volume.
+        Writes the reference round's current image, which after run() is its
+        detection image (the preprocessing output before registration), as
+        the MATLAB workflow scripts write ``sdata.registration{ref}``:
+
+        * ``reference_image="merged"``: the channel maximum, ZYX;
+        * ``reference_image="single-channel"``: channel ``reference_channel``, ZYX;
+        * then, if ``projection`` (a z projection) is given, YX.
+
+        The dtype is kept. ZYX is a tifffile TIFF written by save_volume; YX is
+        one page with the same JSON axes and metadata description, so
+        load_volume reads either. The name keeps ``.tif`` for both backends.
+
+        Raises
+        ------
+        ValueError
+            An unknown reference_image, a channel outside the image or a
+            projection that is not along z.
         """
+        import tifffile
         from starfinder.io import save_volume
         from starfinder.preprocessing import project_image
+        if reference_image not in ('merged', 'single-channel'):
+            raise ValueError('reference_image must be merged or single-channel')
+        if projection is not None and projection.axis != 'z':
+            raise ValueError('the reference image projection must be along z')
         ref = self.rounds.reference_round
-        image, metadata = self.images[ref], self.metadata[ref]
-        if projection is not None:
-            image = project_image(image, config=projection)
-            metadata = metadata.projected(method=projection.method)
+        image, metadata = _validate_image(self.images[ref], ndim=(4,)), self.metadata[ref]
+        if reference_image == 'merged':
+            image = project_image(image, config=ProjectionConfig(axis='channel'))
+        else:
+            if isinstance(reference_channel, bool) or not 0 <= reference_channel < image.shape[-1]:
+                raise ValueError(f'reference_channel {reference_channel} is outside the reference image')
+            image = image[..., reference_channel]
         path = self.paths.ref_merged_tif
         path.parent.mkdir(parents=True, exist_ok=True)
-        save_volume(image, path, metadata=metadata)
+        if projection is None:
+            save_volume(image, path, metadata=metadata)
+            return path
+        image = project_image(image, config=projection)[0]
+        metadata = metadata.projected(method=projection.method)
+        tifffile.imwrite(path, image, photometric='minisblack',
+                         metadata={'axes': 'YX', 'starfinder_metadata': asdict(metadata)})
         return path
 
     def save_spots(self, slot='goodSpots', columns=None, *, path=None):

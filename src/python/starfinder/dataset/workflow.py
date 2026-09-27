@@ -113,12 +113,18 @@ def _legacy_recipe(params, norm, do_norm, hist, do_hist, morph, do_morph, top, d
 
 @dataclass(frozen=True)
 class WorkflowConfig:
-    """Translated dataset, scientific pipeline and execution/output policies."""
+    """Translated dataset, scientific pipeline and execution/output policies.
+
+    reference_projection, reference_image and reference_channel are passed to
+    FOV.save_reference_image for ``images/ref_merged``.
+    """
     dataset: Dataset
     pipeline: PipelineConfig
     execution: ExecutionConfig
     split_index: int | None = None
     reference_projection: ProjectionConfig | None = None
+    reference_image: str = 'merged'
+    reference_channel: int = 0
 
 
 def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> WorkflowConfig:
@@ -160,12 +166,20 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
     registration_keys = {f.name for cls in (TranslationConfig, DemonsConfig, TpsConfig, CpdConfig) for f in fields(cls) if f.init}
     registration_keys |= {'ref_round', 'method', 'ref_img', 'mov_img', 'ref_channel', 'boundary_mode', 'recovery',
         'detection_threshold', 'match_distance', 'tps_smoothing', 'grid_spacing', 'beta', 'lmbda', 'cpd_w', 'candidate_radius', 'k_neighbors'}
+    enabled_registration = []
     for name in ('global_registration', 'local_registration'):
         values, enabled = _operation(params, name, registration_keys)
         if values.pop('ref_round', rounds.reference_round) != rounds.reference_round:
             raise ValueError('rule reference round differs from dataset reference')
         if enabled:
             steps.append(_registration(values, local=name == 'local_registration'))
+            enabled_registration.append(name)
+    # ref_merged is what the MATLAB script saves: the reference image of its last
+    # registration. Only rsf_single_fov passes ref_img, to global registration;
+    # its local registration and the other scripts use the channel maximum.
+    reference_view = ('merged', 0)
+    if rule == 'rsf_single_fov' and enabled_registration == ['global_registration']:
+        reference_view = (steps[0].reference_image, steps[0].reference_channel)
     if spot.get('ref_round', rounds.reference_round) != rounds.reference_round:
         raise ValueError('detection reference differs from dataset reference')
     if filt.get('n_barcode_segments', 1) != 1 or filt.get('split_index') not in (None, []):
@@ -201,7 +215,7 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
         split_index = split_index[0]
     return WorkflowConfig(dataset, pipeline,
         ExecutionConfig('streaming' if streaming else 'batch', rule in ('gr_single_fov_subtile', 'deep_create_subtile')),
-        split_index, ProjectionConfig() if config.get('maximum_projection', False) else None)
+        split_index, ProjectionConfig() if config.get('maximum_projection', False) else None, *reference_view)
 
 
 def _run_workflow(snakemake, rule):
@@ -220,7 +234,8 @@ def _run_workflow(snakemake, rule):
         fov.save_spots(path=Path(snakemake.input[2]).parent / f'subtile_goodSpots_{number}.csv')
         fov.save_diagnostics(suffix=f'_{number}')
     else:
-        fov.save_reference_image(projection=adapted.reference_projection)
+        fov.save_reference_image(projection=adapted.reference_projection, reference_image=adapted.reference_image,
+                                 reference_channel=adapted.reference_channel)
         if rule == 'rsf_single_fov':
             fov.save_spots()
             fov.save_diagnostics()

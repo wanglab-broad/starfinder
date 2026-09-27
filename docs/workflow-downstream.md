@@ -23,7 +23,7 @@ rotation (inline Python in the backend registration rule file).
 | --- | --- | --- |
 | `nuclei_registration` | Config JSON and INPUT additional-round/FOV directories; script also reads reference-round `*ch04.tif` | `log/{fovID}_nr.txt`, `log/gr_shifts/{fovID}_nr.txt`; MATLAB even with Python backend |
 | `rotate_nuclei` | INPUT/`{dapi_round}/{fovID}/*ch04.tif` | `images/DAPI/{fovID}.tif`, rotated and optionally projected by top-level `maximum_projection` |
-| `create_nuclei_amplicon_overlay` | DAPI and `images/ref_merged/{fovID}.tif` | `images/overlay/{fovID}.tif`; contrast adjustment, channel maximum and optional Z projection |
+| `create_nuclei_amplicon_overlay` | DAPI and `images/ref_merged/{fovID}.tif` (the reference round's channel-merged detection image, ZYX, or YX with top-level `maximum_projection`; see [projection views](workflows.md#projection-views-and-the-reference-merged-image)) | `images/overlay/{fovID}.tif`; contrast adjustment, maximum of the DAPI and amplicon images and optional Z projection |
 | `enhance_dapi_with_flamingo` | `images/flamingo/DAPI/{fovID}.tif`, `images/flamingo/Flamingo/{fovID}.tif` | `images/flamingo/enhanced_DAPI/{fovID}.tif`; those input folders must be supplied separately |
 | `stardist_segmentation` | `images/{segmentation_input_folder}/{fovID}.tif` (default folder `overlay`) | `images/stardist_segmentation/{fovID}.tif`, uint16 labels |
 
@@ -41,9 +41,10 @@ parameters. A model name in YAML is not a bundled or downloaded model.
 Source-visible limitations require checking on real inputs:
 
 - The overlay script reduces `axis=3` after adding a channel dimension, so it
-  expects 3-D input stacks. Feeding already projected 2-D images is incompatible
-  with that operation. For this route, keep top-level projection off until the
-  overlay's own optional projection.
+  expects 3-D input stacks: a ZYX DAPI image and a ZYX `ref_merged` of the same
+  shape. Feeding already projected 2-D images is incompatible with that
+  operation. For this route, keep top-level projection off until the overlay's
+  own optional projection.
 - StarDist calls `areas.max()` after Otsu/connected-component preprocessing;
   an image with no foreground regions can fail before its zero-label fallback.
   Its `tifffile.imsave` import also requires a compatible TIFF library version.

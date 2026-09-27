@@ -154,6 +154,21 @@ and `tophat` are unchanged and translate to recipe 1. `run.json` and the
 `registered` checkpoint gain a `preprocessing` entry with the recipe and one
 record per round and step.
 
+### Reference merged image
+
+`FOV.save_reference_image` used to write the reference round's full ZYXC image
+as OME-TIFF, with channels not merged, to `images/ref_merged/{fovID}.tif`.
+The MATLAB backend writes the channel-merged image to the same file. Python now
+writes the same content as MATLAB: the reference round's detection image,
+reduced to its channel maximum (`reference_image="merged"`, the default) or to
+one channel (`reference_image="single-channel"` with `reference_channel`), as a
+ZYX TIFF. With `projection=ProjectionConfig()` (top-level
+`maximum_projection`) it is also reduced along Z and saved as YX. The filename
+and dtype are unchanged. Python outputs written before this change hold ZYXC;
+rerun the rule to replace them. `ProjectionConfig` gains `axis`, `"z"` (the
+default and earlier behavior) or `"channel"`; see
+[projection views](workflows.md#projection-views-and-the-reference-merged-image).
+
 ### Generate, evaluate and report
 
 `synthetic.generate_dataset(codebook, config, fov_ids=...)` returns arrays and
