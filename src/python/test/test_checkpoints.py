@@ -430,6 +430,7 @@ def test_json_files_are_strict_and_code_ignores_enclosing_repositories(tmp_path,
 
 def test_run_record_fields_inputs_and_hashes(tmp_path):
     import hashlib
+    from pathlib import Path
     ds = dataset(tmp_path)
     for round_name, image in images(4).items():
         for index, channel in enumerate(CHANNELS):
@@ -449,7 +450,7 @@ def test_run_record_fields_inputs_and_hashes(tmp_path):
     assert data['config']['pipeline']['registration'][0]['config']['method'] == 'translation'
     assert len(data['inputs']) == 8
     first = data['inputs'][0]
-    assert first['sha256'] == hashlib.sha256(open(first['path'], 'rb').read()).hexdigest()
+    assert first['sha256'] == hashlib.sha256(Path(first['path']).read_bytes()).hexdigest()
     assert data['counts'] == {'spots': 4, 'intensities': 4,
         'call_status': {'ambiguous': 2, 'assigned': 1, 'unmatched': 1},
         'filtering': {'total': 4, 'accepted': 1, 'rejected': 3}}

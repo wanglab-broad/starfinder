@@ -5,6 +5,8 @@ with the [canonical image-to-molecule quickstart](../docs/getting-started.md).
 It runs the maintained [quickstart script](../docs/examples/quickstart.py) and
 produces molecule-level CSVs; it does not perform segmentation or cell assignment.
 
+The [foundation tour notebook](introduction/starfinder_foundation_tour.ipynb) introduces the package design, synthetic scenes, pipeline API, checkpoints and evaluation on one small synthetic field of view.
+
 The dataset-specific and cluster examples below have separate requirements:
 
 1. ```downstream``` - Downstream demos for the dataset-specific analyses
