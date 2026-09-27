@@ -448,8 +448,9 @@ def read_checkpoint(path: Path | str, stage: str) -> dict:
     -------
     dict
         Keys are the FOV attributes the stage restores. ``registered``:
-        ``images`` and ``metadata`` (per round), ``registration_results`` and
-        ``registration_attempts``. ``candidates``: ``spot_result``
+        ``images`` and ``metadata`` (per round), ``registration_results``,
+        ``registration_attempts`` and ``preprocessing_record`` (the recipe and
+        per-round step records; empty for checkpoints written without them). ``candidates``: ``spot_result``
         (SpotFindingResult) and ``intensity_result`` (IntensityExtractionResult,
         or None when signals were not extracted). ``pre_qc``: ``decoding_result``
         (BarcodeDecodingResult without array or table diagnostics).
@@ -478,4 +479,5 @@ def read_checkpoint(path: Path | str, stage: str) -> dict:
     return {"images": images, "metadata": metadata,
             "registration_results": _registration_results(directory, header["transforms"]),
             "registration_attempts": {name: [_tuples(a) for a in attempts]
-                                      for name, attempts in header["registration_attempts"].items()}}
+                                      for name, attempts in header["registration_attempts"].items()},
+            "preprocessing_record": header.get("preprocessing") or {}}

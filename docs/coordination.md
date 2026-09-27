@@ -25,11 +25,15 @@ fov.save_spots()  # unchanged goodSpots filename, 1-based XYZ
 ```
 
 Load the dataset codebook before decoding. None disables a stage. The sequence is
-load, rotation, normalization, histogram matching, reconstruction, tophat,
-projection, ordered registration, detection, extraction, decoding and filtering.
-Legacy subtile workflows explicitly place reconstruction after registration.
-Histogram matching uses a copy of the reference channel before downstream
-processing. Both execution modes use this sequence and the same operation configs.
+load, rotation, the steps of the preprocessing recipe (`preprocessing`, a
+{py:class}`~starfinder.preprocessing.PreprocessingRecipe`) in their declared
+order, ordered registration, the recipe's `post_registration` steps, detection,
+extraction, decoding and filtering. `post_registration` accepts only
+reconstruction, which legacy subtile workflows place after registration. The
+pipeline never projects; projection is an output view. Histogram matching uses
+a copy of the reference round's configured channel taken as it enters that step,
+retained until every moving round has passed it. Both execution modes use this
+sequence and the same operation configs; see {doc}`preprocessing-contract`.
 Batch preloads and retains rounds. Streaming releases moving images after their
 last use unless `retain_images=True`; subtile creation requires retention.
 Streaming is a residency policy, not a claim that transforms or retained outputs

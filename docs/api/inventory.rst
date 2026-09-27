@@ -145,10 +145,19 @@ starfinder.preprocessing
 * :py:obj:`starfinder.preprocessing.match_histogram`
 * :py:obj:`starfinder.preprocessing.MinMaxNormalizationConfig`
 * :py:obj:`starfinder.preprocessing.normalize_intensity`
+* :py:obj:`starfinder.preprocessing.PreprocessingRecipe`
 * :py:obj:`starfinder.preprocessing.project_image`
 * :py:obj:`starfinder.preprocessing.ProjectionConfig`
+* :py:obj:`starfinder.preprocessing.RecipeStep`
 * :py:obj:`starfinder.preprocessing.reconstruct_background`
 * :py:obj:`starfinder.preprocessing.ReconstructionConfig`
+* :py:obj:`starfinder.preprocessing.run_step`
+* :py:obj:`starfinder.preprocessing.step_config_type`
+* :py:obj:`starfinder.preprocessing.step_spec`
+* :py:obj:`starfinder.preprocessing.StepContext`
+* :py:obj:`starfinder.preprocessing.StepResult`
+* :py:obj:`starfinder.preprocessing.STEPS`
+* :py:obj:`starfinder.preprocessing.StepSpec`
 * :py:obj:`starfinder.preprocessing.TophatConfig`
 
 starfinder.registration

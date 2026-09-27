@@ -81,7 +81,7 @@ class _RunRecord:
             "status": "running", "started_at": _now(), "ended_at": None, "error": None,
             "code": _code(), "environment": _environment(),
             "config": {"pipeline": config, "execution": execution, "checkpoints": checkpoints},
-            "inputs": [], "steps": [], "registration": {}, "counts": {},
+            "inputs": [], "steps": [], "preprocessing": None, "registration": {}, "counts": {},
             "checkpoint_directory": str(self.directory), "checkpoints": {},
         }
 
@@ -117,7 +117,8 @@ class _RunRecord:
             counts["call_status"] = {str(k): int(v) for k, v in fov.decoding_result.table.call_status.value_counts().items()}
         if fov.filtering_result is not None:
             counts["filtering"] = fov.filtering_result.counts
-        self.data.update(registration=fov.registration_attempts, counts=counts)
+        self.data.update(preprocessing=fov.preprocessing_record or None,
+                         registration=fov.registration_attempts, counts=counts)
         write_json(self.data, self.path)
 
     def finish(self, status, error=None, round_name=None):

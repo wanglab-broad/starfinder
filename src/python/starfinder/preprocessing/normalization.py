@@ -38,9 +38,15 @@ def normalize_intensity(volume: np.ndarray, *, config: MinMaxNormalizationConfig
     global scope). No spatial boundary operation. Constants map to the declared
     lower endpoint before SNR gating, for both global and per-channel scope.
     """
+    return _normalize(volume, config)[0]
+
+
+def _normalize(volume, config):
+    """Normalized image and, per group, the fitted data range and applied mode."""
     volume = _validate_image(volume)
     result = np.empty(volume.shape, dtype=config.output_dtype)
     groups = range(volume.shape[-1]) if volume.ndim == 4 and config.scope == "per_channel" else [None]
+    fitted = []
     for c in groups:
         key = (..., c) if c is not None else (...,)
         channel = volume[key]
@@ -52,7 +58,8 @@ def normalize_intensity(volume: np.ndarray, *, config: MinMaxNormalizationConfig
                 mode = "clip"
         conversion = ImageConversionConfig(config.output_dtype, mode, output_range=config.output_range, range_policy="data" if mode == "rescale" else "declared", rounding=config.rounding)
         result[key] = convert_image(channel, config=conversion)
-    return result
+        fitted.append({"channel": c, "min": channel.min().item(), "max": channel.max().item(), "mode": mode})
+    return result, fitted
 
 
 @dataclass(frozen=True)
@@ -61,12 +68,18 @@ class HistogramMatchingConfig:
 
     Integer values truncate by default. Out-of-range reference values raise
     rather than wrap; an explicit floating output_dtype can retain them.
+    As a recipe step, the reference is channel reference_channel of the
+    reference round's input to this step; match_histogram itself takes the
+    reference volume explicitly and does not read reference_channel.
     """
 
     output_dtype: str | None = None
     rounding: str = "truncate"
+    reference_channel: int = 0
 
     def __post_init__(self):
+        if isinstance(self.reference_channel, bool) or not isinstance(self.reference_channel, int) or self.reference_channel < 0:
+            raise ValueError("reference_channel must be a nonnegative integer")
         if self.output_dtype is not None:
             _dtype(self.output_dtype)
         if self.rounding not in ("truncate", "nearest_even"):

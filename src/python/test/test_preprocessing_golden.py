@@ -112,10 +112,11 @@ def run_legacy_sequence(tmp_path, rounds, *, radius=3, rounding="truncate"):
     for name, volume in rounds.items():
         fov.images[name] = volume.copy()
         fov.metadata[name] = ImageMetadata(f"FOV_001/{name}")
-    config = PipelineConfig(
-        normalization=MinMaxNormalizationConfig("uint8", (0, 255), rounding=rounding),
-        histogram=HistogramMatchingConfig(), histogram_reference_channel=0,
-        reconstruction=ReconstructionConfig(radius_yx=radius))
+    from starfinder.preprocessing import PreprocessingRecipe, RecipeStep
+    config = PipelineConfig(preprocessing=PreprocessingRecipe((
+        RecipeStep(MinMaxNormalizationConfig("uint8", (0, 255), rounding=rounding)),
+        RecipeStep(HistogramMatchingConfig(reference_channel=0)),
+        RecipeStep(ReconstructionConfig(radius_yx=radius)))))
     fov.run(config)
     return fov.images
 

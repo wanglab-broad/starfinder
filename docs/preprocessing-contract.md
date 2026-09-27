@@ -1,8 +1,6 @@
 # Preprocessing step and recipe contract
 
-**Status: Proposed (W-226, 2026-09-27; revised after the W-227 review notes).
-Not accepted.** Human review in W-227 accepts, amends or rejects this page.
-Until then it does not change any behavior or authorize implementation.
+**Status: Accepted (W-227, 2026-09-27, at `0d13c26`).**
 
 This contract replaces the fixed preprocessing slots of `PipelineConfig` with an
 ordered recipe of steps. It supports the two agreed recipes: min–max → histogram

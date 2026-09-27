@@ -350,6 +350,17 @@ $defs:
         minimum: 1
     additionalProperties: true
 
+  tophat_params:
+    description: "Python-only white top-hat per XY slice; maps to TophatConfig(radius_yx=radius)"
+    type: object
+    properties:
+      run:
+        type: boolean
+      radius:
+        type: integer
+        minimum: 1
+    additionalProperties: false
+
   registration_recovery_params:
     description: "Python-only opt-in recovery; validation/dependency/application errors never recover"
     type: object
@@ -498,6 +509,8 @@ $defs:
             $ref: "#/$defs/hist_equalize_params"
           morph_recon:
             $ref: "#/$defs/morph_recon_params"
+          tophat:
+            $ref: "#/$defs/tophat_params"
           global_registration:
             $ref: "#/$defs/global_registration_params"
           create_subtiles:
@@ -533,6 +546,8 @@ $defs:
             $ref: "#/$defs/hist_equalize_params"
           morph_recon:
             $ref: "#/$defs/morph_recon_params"
+          tophat:
+            $ref: "#/$defs/tophat_params"
           global_registration:
             $ref: "#/$defs/global_registration_params"
           create_subtiles:
@@ -556,6 +571,8 @@ $defs:
             $ref: "#/$defs/local_registration_params"
           morph_recon:
             $ref: "#/$defs/morph_recon_params"
+          tophat:
+            $ref: "#/$defs/tophat_params"
           spot_finding:
             $ref: "#/$defs/spot_finding_params"
           load_codebook:
@@ -581,6 +598,8 @@ $defs:
         properties:
           hist_equalize:
             $ref: "#/$defs/hist_equalize_params"
+          tophat:
+            $ref: "#/$defs/tophat_params"
           global_registration:
             $ref: "#/$defs/global_registration_params"
           create_subtiles:
@@ -602,6 +621,8 @@ $defs:
         properties:
           morph_recon:
             $ref: "#/$defs/morph_recon_params"
+          tophat:
+            $ref: "#/$defs/tophat_params"
           spot_finding:
             $ref: "#/$defs/spot_finding_params"
           load_codebook:

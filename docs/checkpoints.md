@@ -74,7 +74,8 @@ page, and its OME-XML declares SizeZ, SizeC, the pixel type and the dimension
 order `XYCZT`, so Bio-Formats opens it as a Z×C hyperstack in its stored dtype.
 
 `transforms.json` records the FOV identity, the rounds and the channel order,
-the rounds written, the registration attempts and every `RegistrationResult`:
+the rounds written, the preprocessing record (as in `run.json`, below), the
+registration attempts and every `RegistrationResult`:
 its transform, diagnostics and warp configuration. Translations are stored
 inline. Dense displacement fields go to `<round>_field.npz`, one array per
 registration result of that round (`result_0`, `result_1`, ...), with their
@@ -175,7 +176,8 @@ run starts, after each completed step and when the run ends. It contains:
 | `environment` | Python, platform and package versions (`null` when not installed). |
 | `config` | `pipeline`, `execution` and `checkpoints` configurations. |
 | `inputs` | Loaded TIFF `path` and streamed `sha256` (`null` with `hash_inputs=False`). |
-| `steps` | `name`, `round`, `seconds` and `status` of each completed or failed step. |
+| `steps` | `name`, `round`, `seconds` and `status` of each completed or failed step. A preprocessing step is named `preprocess:<step name>`. |
+| `preprocessing` | `null` without a preprocessing recipe. Otherwise `recipe` (the step names of `steps` and `post_registration`) and `rounds`: per round, one record per step with `index`, `stage` (`steps` or `post_registration`), `step`, `config`, `fitted`, `diagnostics`, `input_dtype` and `output_dtype`. |
 | `registration` | Ordered registration attempts per round. |
 | `counts` | Spots, intensities, decoding call statuses and filtering counts. |
 | `checkpoint_directory`, `checkpoints` | The FOV directory and the files written for each stage. |

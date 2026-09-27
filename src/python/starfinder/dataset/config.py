@@ -4,8 +4,7 @@ import math
 from pathlib import Path
 
 from starfinder.io import ImageLoadConfig
-from starfinder.preprocessing import (MinMaxNormalizationConfig, HistogramMatchingConfig,
-    ReconstructionConfig, TophatConfig, ProjectionConfig)
+from starfinder.preprocessing import PreprocessingRecipe
 from starfinder.registration import (TranslationConfig, DemonsConfig, TpsConfig, CpdConfig,
     RegistrationEstimationError, InsufficientLandmarksError, WarpConfig)
 from starfinder.spot_finding import LocalMaximaConfig
@@ -108,20 +107,15 @@ class CheckpointConfig:
 class PipelineConfig:
     """One processing sequence. None disables an operation, including loading.
 
-    Order: load, rotate, normalize, histogram match, reconstruct, tophat,
-    project, ordered registration, detect, extract, decode, filter.
-    Reconstruction can explicitly follow registration for legacy subtile jobs.
-    All operation parameters are passed intact to public functions.
+    Order: load, rotate, the preprocessing recipe's steps, ordered
+    registration, the recipe's post_registration steps, detect, extract,
+    decode, filter. The pipeline processes ZYX(C) volumes and never projects;
+    projection is an output view. All operation parameters are passed intact
+    to public functions.
     """
     load: ImageLoadConfig | None = None
     rotation_degrees: float | None = None
-    normalization: MinMaxNormalizationConfig | None = None
-    histogram: HistogramMatchingConfig | None = None
-    histogram_reference_channel: int = 0
-    reconstruction: ReconstructionConfig | None = None
-    reconstruction_after_registration: bool = False
-    tophat: TophatConfig | None = None
-    projection: ProjectionConfig | None = None
+    preprocessing: PreprocessingRecipe | None = None
     registration: tuple[RegistrationStep, ...] = ()
     detection: LocalMaximaConfig | None = None
     extraction: NeighborhoodSumConfig | None = None
@@ -129,9 +123,7 @@ class PipelineConfig:
     filtering: ReadFilterConfig | None = None
 
     def __post_init__(self):
-        types = {'load': ImageLoadConfig, 'normalization': MinMaxNormalizationConfig,
-            'histogram': HistogramMatchingConfig, 'reconstruction': ReconstructionConfig,
-            'tophat': TophatConfig, 'projection': ProjectionConfig, 'detection': LocalMaximaConfig,
+        types = {'load': ImageLoadConfig, 'preprocessing': PreprocessingRecipe, 'detection': LocalMaximaConfig,
             'extraction': NeighborhoodSumConfig, 'decoding': (WtaDecoderConfig, CodebookAwareDecoderConfig),
             'filtering': ReadFilterConfig}
         for name, kind in types.items():
@@ -140,12 +132,8 @@ class PipelineConfig:
                 if not isinstance(value, kind):
                     raise TypeError(f'{name} requires its typed operation config')
                 value.__post_init__()
-        if not isinstance(self.reconstruction_after_registration, bool):
-            raise ValueError('reconstruction_after_registration must be Boolean')
         if self.rotation_degrees is not None and (isinstance(self.rotation_degrees, bool) or not math.isfinite(self.rotation_degrees)):
             raise ValueError('rotation_degrees must be finite')
-        if isinstance(self.histogram_reference_channel, bool) or not isinstance(self.histogram_reference_channel, int) or self.histogram_reference_channel < 0:
-            raise ValueError('histogram_reference_channel must be a nonnegative integer')
         for step in self.registration:
             if not isinstance(step, RegistrationStep):
                 raise TypeError('registration requires RegistrationStep entries')

@@ -80,6 +80,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.evaluation.registration.normalized_cross_correlation`
 * :py:obj:`starfinder.spot_finding.PercentileCentroidConfig`
 * :py:obj:`starfinder.dataset.PipelineConfig`
+* :py:obj:`starfinder.preprocessing.PreprocessingRecipe`
 * :py:obj:`starfinder.synthetic.PRESET_VERSION`
 * :py:obj:`starfinder.preprocessing.project_image`
 * :py:obj:`starfinder.preprocessing.ProjectionConfig`
@@ -87,6 +88,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.barcode.ReadFilterConfig`
 * :py:obj:`starfinder.barcode.ReadFilteringResult`
 * :py:obj:`starfinder.synthetic.ReadoutEffectsConfig`
+* :py:obj:`starfinder.preprocessing.RecipeStep`
 * :py:obj:`starfinder.preprocessing.reconstruct_background`
 * :py:obj:`starfinder.preprocessing.ReconstructionConfig`
 * :py:obj:`starfinder.dataset.RecoveryConfig`
@@ -99,11 +101,18 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.benchmark.report_benchmark`
 * :py:obj:`starfinder.dataset.RoundState`
 * :py:obj:`starfinder.benchmark.run_benchmark`
+* :py:obj:`starfinder.preprocessing.run_step`
 * :py:obj:`starfinder.synthetic.save_formed_scene`
 * :py:obj:`starfinder.io.save_volume`
 * :py:obj:`starfinder.synthetic.ScalarDistribution`
 * :py:obj:`starfinder.synthetic.SCENE_PRESETS`
 * :py:obj:`starfinder.spot_finding.SpotFindingResult`
+* :py:obj:`starfinder.preprocessing.step_config_type`
+* :py:obj:`starfinder.preprocessing.step_spec`
+* :py:obj:`starfinder.preprocessing.StepContext`
+* :py:obj:`starfinder.preprocessing.StepResult`
+* :py:obj:`starfinder.preprocessing.STEPS`
+* :py:obj:`starfinder.preprocessing.StepSpec`
 * :py:obj:`starfinder.evaluation.registration.structural_similarity`
 * :py:obj:`starfinder.dataset.SubtileConfig`
 * :py:obj:`starfinder.synthetic.SyntheticDataset`

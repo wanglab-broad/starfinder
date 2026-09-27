@@ -1,7 +1,6 @@
 # Preprocessing algorithm specification
 
-**Status: Proposed (W-226, 2026-09-27; revised after the W-227 review notes).
-Not accepted.** Human review in W-227 accepts, amends or rejects this page.
+**Status: Accepted (W-227, 2026-09-27, at `0d13c26`).**
 Defaults and thresholds marked *provisional* are development choices to be
 evaluated; they are not recommendations.
 

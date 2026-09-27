@@ -7,7 +7,7 @@ from .dataset import Dataset
 from .types import RoundState, SubtileConfig
 from starfinder.io import ImageLoadConfig
 from starfinder.preprocessing import (MinMaxNormalizationConfig, HistogramMatchingConfig,
-    ReconstructionConfig, TophatConfig, ProjectionConfig)
+    ReconstructionConfig, TophatConfig, ProjectionConfig, PreprocessingRecipe, RecipeStep)
 from starfinder.registration import (TranslationConfig, DemonsConfig, TpsConfig, CpdConfig,
     InsufficientLandmarksError, RegistrationEstimationError, WarpConfig)
 from starfinder.barcode import NeighborhoodSumConfig, ReadFilterConfig, WtaDecoderConfig
@@ -91,6 +91,26 @@ def _registration(values, *, local=False):
     return RegistrationStep(config, reference, moving, channel, recovery, warp)
 
 
+def _legacy_recipe(params, norm, do_norm, hist, do_hist, morph, do_morph, top, do_top, resident):
+    """Recipe 1 from the legacy keys, in the legacy order; None when no key runs.
+
+    Resident subtile rules run reconstruction after registration.
+    """
+    steps, post = [], []
+    if do_norm:
+        steps.append(MinMaxNormalizationConfig('uint8', (0, 255), rounding='truncate',
+            snr_threshold=norm.get('snr_threshold', params.get('snr_threshold'))))
+    if do_hist:
+        steps.append(HistogramMatchingConfig(reference_channel=hist.get('reference_channel', 0)))
+    if do_morph:
+        (post if resident else steps).append(ReconstructionConfig(radius_yx=morph.get('radius', 3)))
+    if do_top:
+        steps.append(TophatConfig(radius_yx=top.get('radius', 3)))
+    if not steps and not post:
+        return None
+    return PreprocessingRecipe(tuple(map(RecipeStep, steps)), tuple(map(RecipeStep, post)))
+
+
 @dataclass(frozen=True)
 class WorkflowConfig:
     """Translated dataset, scientific pipeline and execution/output policies."""
@@ -154,11 +174,7 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
     # The adapter loads raw input unless this is a saved-subtile job or explicitly disabled.
     load_config = ImageLoadConfig(channel_labels=channels, **load) if channels and not resident and ('load_raw_images' not in params or do_load) else None
     pipeline = PipelineConfig(load=load_config, rotation_degrees=None if resident else config.get('rotate_angle'),
-        normalization=MinMaxNormalizationConfig('uint8', (0, 255), snr_threshold=norm.get('snr_threshold', params.get('snr_threshold'))) if do_norm else None,
-        histogram=HistogramMatchingConfig() if do_hist else None, histogram_reference_channel=hist.get('reference_channel', 0),
-        reconstruction=ReconstructionConfig(radius_yx=morph.get('radius', 3)) if do_morph else None,
-        reconstruction_after_registration=resident,
-        tophat=TophatConfig(radius_yx=top.get('radius', 3)) if do_top else None,
+        preprocessing=_legacy_recipe(params, norm, do_norm, hist, do_hist, morph, do_morph, top, do_top, resident),
         registration=tuple(steps),
         detection=LocalMaximaConfig(threshold_mode=spot.get('intensity_estimation', 'noise'), threshold_value=spot.get('intensity_threshold', 5.0), min_distance_voxels=spot.get('min_distance_voxels', spot.get('min_distance', 1))) if do_spot else None,
         extraction=NeighborhoodSumConfig(tuple(extract.get('voxel_size', (1, 2, 2)))) if do_extract else None,
