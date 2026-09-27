@@ -120,6 +120,39 @@ and `.intensity_threshold` in the
 See [threshold conventions](conventions.md#spot-finding-thresholds) for MATLAB
 {mat:func}`SpotFindingMax3D` and wrapper limitations.
 
+## Choose the 3D background radius
+
+{py:class}`~starfinder.preprocessing.Background3DConfig` subtracts a grey
+opening with an ellipsoidal footprint of semi-axes `(r_z, r_y, r_x)`. The
+opening removes every bright structure that the footprint cannot fit inside,
+so the radius sets the scale that separates puncta from background:
+
+* **Larger than the puncta along each axis.** A punctum that fits inside the
+  footprint is removed from the background estimate and kept, at full height,
+  in the output. With a radius at or below the punctum's half-width, part of
+  the punctum is counted as background and its peak is reduced.
+* **Not much larger than needed.** Background that varies over distances shorter
+  than the footprint is also kept in the output as if it were signal, and the
+  cost grows with the footprint volume (about `4/3 π r_z r_y r_x` voxels).
+* **Per axis.** Z sampling is usually coarser than XY, so `r_z` in voxels is
+  usually smaller. Give `radius_um_zyx` to convert from micrometres with the
+  image's `spacing_zyx` (rounded to whole voxels), or `radius_voxels_zyx`
+  when spacing is unknown. `2r + 1` may not exceed the volume along any axis,
+  which limits `r_z` for thin stacks.
+
+For Gaussian puncta of width σ voxels per axis, the §2.5 synthetic evaluation
+uses `r = ceil(3σ) + 1`; for example σ = (0.7, 1.0, 1.0) gives
+`radius_voxels_zyx=(4, 4, 4)`, which needs at least 9 Z planes. On real data,
+measure the puncta width first, and check a before/after line profile through
+a dim punctum. The method, its cost and the evaluation design are in
+{doc}`preprocessing-algorithms`.
+
+```python
+from starfinder.preprocessing import Background3DConfig, subtract_background_3d
+
+corrected = subtract_background_3d(volume, config=Background3DConfig(radius_voxels_zyx=(4, 4, 4)))
+```
+
 ## Decode one FOV
 
 Reuse the quickstart's prepared round/FOV layout. The direct

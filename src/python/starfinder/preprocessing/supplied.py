@@ -13,6 +13,7 @@ from typing import Any
 
 import numpy as np
 
+from starfinder.preprocessing.background import ScalarBackgroundConfig, _supplied_background
 from starfinder.preprocessing.histograms import HistogramSummary, _labels, _steps_record, histogram_percentile
 from starfinder.preprocessing.normalization import (HistogramMatchingConfig, PercentileNormalizationConfig,
     _supplied_range)
@@ -67,7 +68,8 @@ def supplied_section(config, merged: HistogramSummary, *, reference_round: str |
 
     PercentileNormalizationConfig: params {"p_low", "p_high"} and, per
     round, {"low": [...], "high": [...]} from the merged counts by the
-    inverted-CDF definition. HistogramMatchingConfig: params
+    inverted-CDF definition. ScalarBackgroundConfig: params {"percentile"}
+    and, per round, {"background": [...]} likewise. HistogramMatchingConfig: params
     {"reference_round", "reference_channel"} and, for reference_round only,
     the merged count vector of reference_channel as {"values", "counts"}
     (nonzero bins only). summarized_after is copied from merged.
@@ -91,6 +93,12 @@ def supplied_section(config, merged: HistogramSummary, *, reference_round: str |
                   for r, name in enumerate(merged.round_names)}
         return {"summarized_after": after, "params": {"p_low": float(config.p_low), "p_high": float(config.p_high)},
                 "fitted": fitted}
+    if type(config) is ScalarBackgroundConfig:
+        if reference_round is not None:
+            raise ValueError("reference_round applies only to histogram matching")
+        fitted = {name: {"background": [histogram_percentile(counts, config.percentile) for counts in merged.counts[r]]}
+                  for r, name in enumerate(merged.round_names)}
+        return {"summarized_after": after, "params": {"percentile": float(config.percentile)}, "fitted": fitted}
     if type(config) is HistogramMatchingConfig:
         if reference_round not in merged.round_names:
             raise ValueError(f"reference_round {reference_round!r} is not a summarized round {list(merged.round_names)}")
@@ -116,6 +124,18 @@ def _percentile_section(section, dtype, n_channels):
             raise ValueError(f"percentile_normalization round {name!r}: {error}") from None
 
 
+def _scalar_section(section, dtype, n_channels):
+    params = section["params"]
+    if not isinstance(params, Mapping) or set(params) != {"percentile"}:
+        raise ValueError('scalar_background params must be {"percentile"}')
+    ScalarBackgroundConfig(params["percentile"])
+    for name, entry in section["fitted"].items():
+        try:
+            _supplied_background(entry, n_channels)
+        except ValueError as error:
+            raise ValueError(f"scalar_background round {name!r}: {error}") from None
+
+
 def _histogram_section(section, dtype, n_channels):
     params = section["params"]
     if not isinstance(params, Mapping) or set(params) != {"reference_round", "reference_channel"}:
@@ -138,7 +158,8 @@ def _histogram_section(section, dtype, n_channels):
         raise ValueError("histogram_matching values must increase within the dtype range, with positive counts")
 
 
-_SECTION_VALIDATORS = {PercentileNormalizationConfig: _percentile_section, HistogramMatchingConfig: _histogram_section}
+_SECTION_VALIDATORS = {PercentileNormalizationConfig: _percentile_section, ScalarBackgroundConfig: _scalar_section,
+                       HistogramMatchingConfig: _histogram_section}
 
 
 def _validate(document):
@@ -217,8 +238,9 @@ def read_supplied_statistics(path: Path | str, recipe: PreprocessingRecipe | Non
     and channel_labels must equal the file's. With a recipe, every step with
     fit="supplied" must have a section whose summarized_after equals the
     recipe's preceding steps and whose params equal the step's config
-    (p_low and p_high; reference_channel). With rounds, a percentile
-    normalization section must give values for each of them. Missing rounds
+    (p_low and p_high; percentile; reference_channel). With rounds, a
+    percentile normalization or scalar background section must give values
+    for each of them. Missing rounds
     and channel counts are also checked when a step runs.
 
     Raises
@@ -257,10 +279,15 @@ def read_supplied_statistics(path: Path | str, recipe: PreprocessingRecipe | Non
             if (params["p_low"], params["p_high"]) != (config.p_low, config.p_high):
                 raise ValueError(f"section {name!r} was fitted with p_low={params['p_low']}, p_high={params['p_high']}, "
                                  f"not the recipe's {config.p_low}, {config.p_high}")
-            missing = [r for r in rounds or () if r not in section["fitted"]]
-            if missing:
-                raise ValueError(f"section {name!r} has no values for rounds {missing}")
+        elif type(config) is ScalarBackgroundConfig:
+            if params["percentile"] != config.percentile:
+                raise ValueError(f"section {name!r} was fitted with percentile={params['percentile']}, "
+                                 f"not the recipe's {config.percentile}")
         elif params["reference_channel"] != config.reference_channel:
             raise ValueError(f"section {name!r} summarized reference_channel {params['reference_channel']}, "
                              f"not the recipe's {config.reference_channel}")
+        if type(config) is not HistogramMatchingConfig:
+            missing = [r for r in rounds or () if r not in section["fitted"]]
+            if missing:
+                raise ValueError(f"section {name!r} has no values for rounds {missing}")
     return document

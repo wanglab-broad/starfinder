@@ -2,6 +2,7 @@ Python functions and classes A–Z
 ================================
 
 * :py:obj:`starfinder.registration.apply_transform`
+* :py:obj:`starfinder.preprocessing.Background3DConfig`
 * :py:obj:`starfinder.synthetic.BackgroundConfig`
 * :py:obj:`starfinder.barcode.BarcodeDecodingResult`
 * :py:obj:`starfinder.synthetic.BENCHMARK_PRESETS`
@@ -111,6 +112,8 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.preprocessing.run_step`
 * :py:obj:`starfinder.synthetic.save_formed_scene`
 * :py:obj:`starfinder.io.save_volume`
+* :py:obj:`starfinder.preprocessing.scalar_background_histograms`
+* :py:obj:`starfinder.preprocessing.ScalarBackgroundConfig`
 * :py:obj:`starfinder.synthetic.ScalarDistribution`
 * :py:obj:`starfinder.synthetic.SCENE_PRESETS`
 * :py:obj:`starfinder.spot_finding.SpotFindingResult`
@@ -122,6 +125,8 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.preprocessing.StepSpec`
 * :py:obj:`starfinder.evaluation.registration.structural_similarity`
 * :py:obj:`starfinder.dataset.SubtileConfig`
+* :py:obj:`starfinder.preprocessing.subtract_background_3d`
+* :py:obj:`starfinder.preprocessing.subtract_scalar_background`
 * :py:obj:`starfinder.preprocessing.summarize_histograms`
 * :py:obj:`starfinder.preprocessing.summary_stage`
 * :py:obj:`starfinder.preprocessing.supplied_section`

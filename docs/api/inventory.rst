@@ -140,6 +140,7 @@ starfinder.io
 starfinder.preprocessing
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
+* :py:obj:`starfinder.preprocessing.Background3DConfig`
 * :py:obj:`starfinder.preprocessing.filter_tophat`
 * :py:obj:`starfinder.preprocessing.histogram_percentile`
 * :py:obj:`starfinder.preprocessing.HistogramMatchingConfig`
@@ -159,12 +160,16 @@ starfinder.preprocessing
 * :py:obj:`starfinder.preprocessing.reconstruct_background`
 * :py:obj:`starfinder.preprocessing.ReconstructionConfig`
 * :py:obj:`starfinder.preprocessing.run_step`
+* :py:obj:`starfinder.preprocessing.scalar_background_histograms`
+* :py:obj:`starfinder.preprocessing.ScalarBackgroundConfig`
 * :py:obj:`starfinder.preprocessing.step_config_type`
 * :py:obj:`starfinder.preprocessing.step_spec`
 * :py:obj:`starfinder.preprocessing.StepContext`
 * :py:obj:`starfinder.preprocessing.StepResult`
 * :py:obj:`starfinder.preprocessing.STEPS`
 * :py:obj:`starfinder.preprocessing.StepSpec`
+* :py:obj:`starfinder.preprocessing.subtract_background_3d`
+* :py:obj:`starfinder.preprocessing.subtract_scalar_background`
 * :py:obj:`starfinder.preprocessing.summarize_histograms`
 * :py:obj:`starfinder.preprocessing.summary_stage`
 * :py:obj:`starfinder.preprocessing.supplied_section`

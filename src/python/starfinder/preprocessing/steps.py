@@ -15,6 +15,8 @@ from typing import Any
 import numpy as np
 
 from starfinder.image import ImageMetadata, _validate_image
+from starfinder.preprocessing.background import (Background3DConfig, ScalarBackgroundConfig, _background_3d,
+    _scalar_background)
 from starfinder.preprocessing.morphology import ReconstructionConfig, TophatConfig, filter_tophat, reconstruct_background
 from starfinder.preprocessing.normalization import (HistogramMatchingConfig, MinMaxNormalizationConfig,
     PercentileNormalizationConfig, _match_counts, _normalize, _percentile_normalize, match_histogram)
@@ -100,6 +102,17 @@ def _percentile(volume, config, context):
     return StepResult(image, fitted, diagnostics)
 
 
+def _scalar(volume, config, context):
+    fitted = _supplied_round(context, context.round_name) if config.fit == "supplied" else None
+    image, fitted, diagnostics = _scalar_background(volume, config, fitted)
+    return StepResult(image, fitted, diagnostics)
+
+
+def _volumetric(volume, config, context):
+    image, fitted, diagnostics = _background_3d(volume, config, context.metadata)
+    return StepResult(image, fitted, diagnostics)
+
+
 def _reconstruction(volume, config, context):
     return StepResult(reconstruct_background(volume, config=config), {}, {})
 
@@ -113,6 +126,8 @@ STEPS: dict[type, StepSpec] = {
     HistogramMatchingConfig: StepSpec("histogram_matching", _histogram, "intensity", "needs_reference"),
     ReconstructionConfig: StepSpec("reconstruction", _reconstruction, "background", "per_channel"),
     TophatConfig: StepSpec("white_tophat", _tophat, "background", "per_channel"),
+    ScalarBackgroundConfig: StepSpec("scalar_background", _scalar, "background", "per_channel"),
+    Background3DConfig: StepSpec("background_3d", _volumetric, "background", "per_channel"),
     PercentileNormalizationConfig: StepSpec("percentile_normalization", _percentile, "intensity", "per_channel"),
 }
 

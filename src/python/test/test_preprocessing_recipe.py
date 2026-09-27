@@ -16,8 +16,8 @@ import yaml
 from starfinder.dataset import CheckpointConfig, Dataset, ExecutionConfig, PipelineConfig, RoundState, from_workflow_config
 from starfinder.image import ImageMetadata
 from starfinder.io import ImageLoadConfig, save_volume
-from starfinder.preprocessing import (STEPS, HistogramMatchingConfig, MinMaxNormalizationConfig,
-    PercentileNormalizationConfig, PreprocessingRecipe, RecipeStep, ReconstructionConfig, StepContext, StepResult, StepSpec, TophatConfig, run_step, step_config_type,
+from starfinder.preprocessing import (STEPS, Background3DConfig, HistogramMatchingConfig, MinMaxNormalizationConfig,
+    PercentileNormalizationConfig, PreprocessingRecipe, RecipeStep, ReconstructionConfig, ScalarBackgroundConfig, StepContext, StepResult, StepSpec, TophatConfig, run_step, step_config_type,
     step_spec)
 
 from .test_preprocessing_golden import PINNED_SEQUENCE, digest, fixture_rounds
@@ -64,6 +64,8 @@ def test_registered_steps_match_the_contract_table():
         HistogramMatchingConfig: ("histogram_matching", "intensity", "needs_reference", "preserve"),
         ReconstructionConfig: ("reconstruction", "background", "per_channel", "preserve"),
         TophatConfig: ("white_tophat", "background", "per_channel", "preserve"),
+        ScalarBackgroundConfig: ("scalar_background", "background", "per_channel", "preserve"),
+        Background3DConfig: ("background_3d", "background", "per_channel", "preserve"),
         PercentileNormalizationConfig: ("percentile_normalization", "intensity", "per_channel", "preserve")}
 
 

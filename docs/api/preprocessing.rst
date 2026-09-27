@@ -8,11 +8,25 @@ orders them. See :doc:`contracts` for shape and dtype rules and
 ``PipelineConfig.preprocessing``; each step is looked up in :py:data:`~starfinder.preprocessing.STEPS` by
 its exact config type and run through :py:func:`~starfinder.preprocessing.run_step`.
 
+Background subtraction
+----------------------
+
+:py:class:`~starfinder.preprocessing.ScalarBackgroundConfig` (step ``scalar_background``)
+subtracts one level per channel and round, the inverted-CDF ``percentile`` of the
+channel's voxels, and clips at zero.
+:py:class:`~starfinder.preprocessing.Background3DConfig` (step ``background_3d``) subtracts a
+grey opening with an anisotropic ellipsoidal footprint, a volumetric white top-hat.
+Both keep the input dtype and record the shared per-channel diagnostics (zero fraction,
+median, MAD, noise threshold and ``mad_zero``). The XY methods
+(:py:class:`~starfinder.preprocessing.ReconstructionConfig`,
+:py:class:`~starfinder.preprocessing.TophatConfig`) are unchanged. Choosing the 3D radius
+relative to puncta size is described in :doc:`../recipes`.
+
 Sample-level statistics
 -----------------------
 
-Steps with ``fit="supplied"`` (percentile normalization and the histogram-matching
-reference) read their values from the recipe's ``supplied_statistics`` file, schema
+Steps with ``fit="supplied"`` (percentile normalization, scalar background and the
+histogram-matching reference) read their values from the recipe's ``supplied_statistics`` file, schema
 ``starfinder.preprocessing.supplied/1``, as specified in
 :doc:`../preprocessing-algorithms`. A summary pass runs the steps before the fitted
 step (:py:func:`~starfinder.preprocessing.summary_stage`), records the integer
@@ -25,6 +39,10 @@ full recipe; ``FOV.run`` validates the file against the recipe, the dataset
 below summarizes three FOVs after a white top-hat, merges them, writes the file and
 applies it; from ``src/python``, run
 ``uv run python ../../docs/examples/percentile_two_pass.py <new output directory>``.
+When only scalar background steps lie between two supplied steps,
+:py:func:`~starfinder.preprocessing.scalar_background_histograms` derives the later
+summary exactly from the earlier one, per FOV before merging (``fit="fov"``) or from the
+merged counts (``fit="supplied"``), without another pass over the images.
 
 .. literalinclude:: ../examples/percentile_two_pass.py
    :language: python
@@ -37,6 +55,7 @@ API
 .. autosummary::
    :toctree: generated
 
+   Background3DConfig
    filter_tophat
    histogram_percentile
    HistogramMatchingConfig
@@ -56,12 +75,16 @@ API
    reconstruct_background
    ReconstructionConfig
    run_step
+   scalar_background_histograms
+   ScalarBackgroundConfig
    step_config_type
    step_spec
    StepContext
    StepResult
    STEPS
    StepSpec
+   subtract_background_3d
+   subtract_scalar_background
    summarize_histograms
    summary_stage
    supplied_section
