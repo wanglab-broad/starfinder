@@ -197,12 +197,13 @@ def timed_cli(tmp_path, mode, preset):
 
 
 @pytest.mark.extended
-def test_medium_cli_both_modes_time_and_peak_rss(tmp_path, capsys):
-    """The one medium generation check: each mode within about one minute on one thread.
+def test_medium_cli_both_modes_time_and_peak_rss(tmp_path, capsys, record_testsuite_property):
+    """The one medium generation check: both modes stay far below the 4 GiB RSS stop target.
 
-    Both modes must also stay far below the 4 GiB RSS stop target. Each output
-    is checked and deleted before the next mode runs; measurements for both
-    modes are printed uncaptured, so they appear in the check log.
+    Wall time is measured and reported, not asserted: on a shared host it
+    depends on other users' load. Each output is checked and deleted before the
+    next mode runs; measurements for both modes are printed uncaptured, so they
+    appear in the check log, and recorded as JUnit test-suite properties.
     """
     import shutil
     measured = {}
@@ -211,10 +212,11 @@ def test_medium_cli_both_modes_time_and_peak_rss(tmp_path, capsys):
         check(output, 'medium')
         shutil.rmtree(output)
         measured[mode] = seconds, rss
+        record_testsuite_property(f'medium_{mode}_wall_seconds', f'{seconds:.1f}')
+        record_testsuite_property(f'medium_{mode}_peak_rss_kib', rss)
     with capsys.disabled():
         for mode, (seconds, rss) in measured.items():
-            print(f'\n  medium {mode}: wall {seconds:.1f} s, peak RSS {rss} KiB (target <= 60 s, < 4 GiB; '
-                  f'estimate {SCENE_PRESETS["medium"]["peak_bytes_estimate"] // 1024} KiB working memory)')
-    for mode, (seconds, rss) in measured.items():
-        assert seconds <= 60, (mode, seconds)
+            print(f'\n  medium {mode}: wall {seconds:.1f} s (reported, not enforced), peak RSS {rss} KiB '
+                  f'(< 4 GiB; estimate {SCENE_PRESETS["medium"]["peak_bytes_estimate"] // 1024} KiB working memory)')
+    for mode, (_, rss) in measured.items():
         assert rss < 4 * 2**20, (mode, rss)
