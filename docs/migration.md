@@ -183,7 +183,7 @@ checkpoints and one run record. There are no aliases.
 | `io.molecules`, final checkpoints and `MoleculeIndex` | `pre_qc` checkpoint for decoding; final outputs stay the workflow CSVs |
 | `reporting` HTML summaries | None; read `run.json` or the checkpoint tables directly |
 
-Images are TIFF through `save_volume`, tables are CSV unless Parquet is
+Images are OME-TIFF (`<round>.ome.tif`) through `save_volume`, tables are CSV unless Parquet is
 requested, and the location is `<output_root>/checkpoints/<fov_id>/`. Spot
 identity, input SHA-256 hashes, atomic writes and reruns of decoding or
 filtering without images are kept. See [checkpoints](checkpoints.md).

@@ -1,13 +1,18 @@
 """TIFF persistence with explicit selection, conversion and geometry."""
 from dataclasses import asdict, dataclass, field
+import json
 from pathlib import Path
 import warnings
+from xml.etree import ElementTree
 
 import numpy as np
 import tifffile
 
 from starfinder.image import ImageMetadata, _validate_image
 from starfinder.io.conversion import ImageConversionConfig, convert_image
+
+# Namespace of the OME-XML CommentAnnotation holding ImageMetadata as JSON.
+METADATA_NAMESPACE = "starfinder.image.ImageMetadata"
 
 
 @dataclass(frozen=True)
@@ -84,6 +89,37 @@ def _select(index, count, name):
     return index
 
 
+def _local(tag):
+    return tag.rsplit("}", 1)[-1]
+
+
+def _stored(tif, index):
+    """Saved axes/metadata: the OME-XML annotation, or tifffile's JSON description."""
+    if not tif.is_ome:
+        return (tif.shaped_metadata[index] if tif.shaped_metadata else None) or {}
+    for element in ElementTree.fromstring(tif.ome_metadata).iter():
+        if _local(element.tag) == "CommentAnnotation" and element.get("Namespace") == METADATA_NAMESPACE:
+            value = next((child.text for child in element if _local(child.tag) == "Value"), None)
+            if value:
+                return {"starfinder_metadata": json.loads(value)}
+    return {}
+
+
+def _ome_zyxc(tif, path):
+    """Read a one-image OME-TIFF as a contiguous ZYXC array; other axes must be singleton."""
+    if len(tif.series) != 1:
+        raise ValueError(f"{path} holds {len(tif.series)} OME images; expected one")
+    series = tif.series[0]
+    axes, shape = series.get_axes(False), series.get_shape(False)
+    if any(a not in "ZCYX" and n != 1 for a, n in zip(axes, shape)) or "Y" not in axes or "X" not in axes:
+        raise ValueError(f"{path} has OME axes {series.axes}; expected Z, C, Y and X only")
+    data = series.asarray().reshape(tuple(n for a, n in zip(axes, shape) if a in "ZCYX"))
+    axes = "".join(a for a in axes if a in "ZCYX")
+    missing = "".join(a for a in "ZC" if a not in axes)
+    data, axes = data.reshape(data.shape + (1,) * len(missing)), axes + missing
+    return np.ascontiguousarray(data.transpose([axes.index(a) for a in "ZYXC"]))
+
+
 def load_volume(path: Path | str, *, config: ImageLoadConfig = ImageLoadConfig()) -> ImageLoadResult:
     """Load one finite ZYX channel, preserving dtype by default.
 
@@ -101,8 +137,7 @@ def load_volume(path: Path | str, *, config: ImageLoadConfig = ImageLoadConfig()
     with tifffile.TiffFile(path) as tif:
         index = _select(config.series_index, len(tif.series), "series")
         series = tif.series[index]
-        stored = tif.shaped_metadata[index] if tif.shaped_metadata else {}
-        stored = stored or {}
+        stored = _stored(tif, index)
         data = series.asarray()
         axes = config.source_axes or series.axes
         if config.source_axes is not None and len(axes) != data.ndim:
@@ -183,18 +218,23 @@ def load_round(round_dir: Path | str, *, config: ImageLoadConfig) -> ImageLoadRe
 def load_volume_zyxc(path: Path | str, *, channel_labels: tuple[str, ...] | None = None) -> ImageLoadResult:
     """Load a whole ZYXC TIFF written by save_volume in one read, preserving dtype.
 
-    The file must declare ZYXC axes; singleton Z and C are kept. channel_labels
-    must match C; None labels channels channel0, channel1, ... Stored STARfinder
-    metadata is restored, otherwise the frame is the resolved path.
+    Reads OME-TIFF (one image; axes other than Z, C, Y and X must be singleton)
+    and the earlier tifffile layout that declares ZYXC axes in its JSON
+    description. Singleton Z and C are kept. channel_labels must match C; None
+    labels channels channel0, channel1, ... Stored STARfinder metadata is
+    restored, otherwise the frame is the resolved path.
     """
     path = Path(path)
     if not path.is_file():
         raise FileNotFoundError(f"TIFF file not found: {path}")
     with tifffile.TiffFile(path) as tif:
-        stored = (tif.shaped_metadata[0] if tif.shaped_metadata else None) or {}
-        if stored.get("axes") != "ZYXC":
+        stored = _stored(tif, 0)
+        if tif.is_ome:
+            data = _ome_zyxc(tif, path)
+        elif stored.get("axes") != "ZYXC":
             raise ValueError(f"{path} does not declare ZYXC axes")
-        data = tif.series[0].asarray()
+        else:
+            data = tif.series[0].asarray()
     data = _validate_image(data, ndim=(4,))
     labels = tuple(f"channel{i}" for i in range(data.shape[3])) if channel_labels is None else tuple(channel_labels)
     if len(labels) != data.shape[3] or len(set(labels)) != len(labels):
@@ -206,18 +246,31 @@ def load_volume_zyxc(path: Path | str, *, channel_labels: tuple[str, ...] | None
 
 
 def save_volume(image: np.ndarray, path: Path | str, compress: bool = False, *, metadata: ImageMetadata | None = None, conversion: ImageConversionConfig | None = None) -> None:
-    """Write finite ZYX/ZYXC TIFF with explicit axes and optional geometry.
+    """Write finite ZYX TIFF or ZYXC OME-TIFF with explicit axes and optional geometry.
 
-    Preserves dtype unless conversion is supplied. Overwrites an existing file;
-    creates parents. No input mutation. ZYXC can be read one channel at a time
-    using an explicit channel_index in load_volume.
+    ZYX is a tifffile TIFF with a JSON description. ZYXC is OME-TIFF: every
+    page is one YX plane (DimensionOrder XYCZT), the OME-XML declares SizeZ,
+    SizeC and the pixel type, and metadata is a JSON CommentAnnotation. Name
+    ZYXC files ``*.ome.tif`` so Bio-Formats (Fiji) opens them as a Z×C
+    hyperstack. Preserves dtype, including float64, unless conversion is
+    supplied. Overwrites an existing file; creates parents. No input mutation.
+    ZYXC can be read one channel at a time using an explicit channel_index in
+    load_volume, or whole with load_volume_zyxc.
     """
     image = _validate_image(image)
     if conversion is not None:
         image = convert_image(image, config=conversion)
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    info = {"axes": "ZYX" if image.ndim == 3 else "ZYXC"}
+    compression = "zlib" if compress else None
+    if image.ndim == 3:
+        info = {"axes": "ZYX"}
+        if metadata is not None:
+            info["starfinder_metadata"] = asdict(metadata)
+        tifffile.imwrite(path, image, compression=compression, photometric="minisblack", metadata=info)
+        return
+    info = {"axes": "ZCYX"}
     if metadata is not None:
-        info["starfinder_metadata"] = asdict(metadata)
-    tifffile.imwrite(path, image, compression="zlib" if compress else None, photometric="minisblack", metadata=info)
+        info["CommentAnnotation"] = {"Namespace": METADATA_NAMESPACE, "Value": json.dumps(asdict(metadata))}
+    tifffile.imwrite(path, np.moveaxis(image, 3, 1), ome=True, compression=compression,
+                     photometric="minisblack", metadata=info)

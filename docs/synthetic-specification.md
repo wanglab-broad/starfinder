@@ -179,7 +179,7 @@ sizes `z1` (1×32×32) and `small` (9×32×32). Four fixtures are packaged:
 `clean` and `combined` in each size. `combined` enables weakening (middle round
 0.25), trend (base 0.5), gains (0.5), mixing, baseline, gradient, regions,
 texture, both noise terms, translation and one local control, but not loss or
-dropout. Tests save these fixtures with `save_formed_scene` (TIFF images, CSV
-truth) and compare every reloaded voxel and truth value with an independent
+dropout. Tests save these fixtures with `save_formed_scene` (ZYXC OME-TIFF images
+`images/<round>.ome.tif`, CSV truth) and compare every reloaded voxel and truth value with an independent
 oracle. Single-factor conditions remain available on demand; they are
 comparisons against `clean`, not packaged or oracle-checked fixtures.

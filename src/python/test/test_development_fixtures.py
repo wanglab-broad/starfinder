@@ -1,6 +1,6 @@
 """The four packaged development fixtures against an independent full-grid oracle.
 
-Fixtures are generated once per session, saved as TIFF images and CSV truth,
+Fixtures are generated once per session, saved as OME-TIFF images and CSV truth,
 reloaded from disk and compared with formed_oracle, which imports no producer
 code. Retained edge populations use hand-built literals.
 """
@@ -47,7 +47,7 @@ def test_saved_fixture_matches_independent_oracle(fixture_root, name):
     provenance = json.loads((root / 'provenance.json').read_text())
     assert provenance['effective_config']['dataset_version'] == f'controlled-development-v1-{name}'
     for label in ROUNDS:
-        image, metadata = load_round(root / 'images' / f'{label}.tif')
+        image, metadata = load_round(root / 'images' / f'{label}.ome.tif')
         assert image.dtype == np.float32 and image.shape == oracle['images'][label].shape
         assert hashlib.sha256(image.tobytes()).hexdigest() == provenance['image_sha256'][label]
         expected_frame = [t['destination_frame'] for t in provenance['transforms'].values()
@@ -106,7 +106,7 @@ def test_save_refuses_nonempty_directory_and_unsafe_labels(tmp_path):
     assert (tmp_path / 'used' / 'keep.txt').read_text() == 'x'
     saved = save_formed_scene(scene, tmp_path / 'empty')
     assert sorted(p.name for p in saved.rglob('*') if p.is_file()) == [
-        'formed.csv', 'provenance.json', 'round1.tif', 'round10.tif', 'round2.tif',
+        'formed.csv', 'provenance.json', 'round1.ome.tif', 'round10.ome.tif', 'round2.ome.tif',
         'round_truth.csv', 'signals.csv']
     scene.round_labels = ('../escape', 'round2', 'round1')
     with pytest.raises(ValueError, match='file name'):

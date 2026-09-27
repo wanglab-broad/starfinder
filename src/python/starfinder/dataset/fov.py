@@ -672,7 +672,12 @@ class FOV:
     # --- Output ---
 
     def save_reference_image(self, *, projection: ProjectionConfig | None = None) -> Path:
-        """Save reference TIFF using the unchanged shared filename."""
+        """Save reference TIFF using the unchanged shared filename.
+
+        The workflow rules share ``images/ref_merged/<fov_id>.tif`` with the
+        MATLAB backend, so the name keeps ``.tif``; ZYXC content is OME-TIFF
+        written by save_volume.
+        """
         from starfinder.io import save_volume
         from starfinder.preprocessing import project_image
         ref = self.rounds.reference_round

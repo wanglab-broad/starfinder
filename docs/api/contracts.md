@@ -155,7 +155,9 @@ strictly positive triple (repeated positive values are valid), or `None`.
 Physical conversion requires every field:
 `world_zyx = origin_zyx + direction_zyx @ (index_zyx * spacing_zyx)`.
 TIFF resolution tags do not supply an invented origin, direction or unit.
-`save_volume(metadata=...)` persists these fields for round-trip loading.
+`save_volume(metadata=...)` persists these fields for round-trip loading: in
+the JSON description of a ZYX TIFF, or in an OME-XML comment annotation of a
+ZYXC OME-TIFF.
 
 Crop/subtile output indices map to source indices by adding the crop start;
 known origin is translated accordingly. FOV NPZ subtiles retain geometry and
