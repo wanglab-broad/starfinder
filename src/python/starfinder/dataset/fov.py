@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field, replace
 import json
 from pathlib import Path
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Literal
 
 import numpy as np
@@ -32,6 +34,8 @@ class FOV:
 
     Stores round images/metadata, structured scientific results, ordered
     registration results and attempts. One instance per job; not thread-safe.
+    The repr summarizes image geometry, channels and completed stages without
+    array values or table rows; results maps completed stages by name.
     """
 
     dataset: Dataset
@@ -66,6 +70,75 @@ class FOV:
         """Shared barcode Codebook, or None before loading.
         """
         return self.dataset.codebook
+
+    # --- Summaries ---
+
+    @property
+    def results(self) -> Mapping[str, object]:
+        """Read-only mapping of the stages that have run, in pipeline order.
+
+        Keys are ``registration``, ``spot_finding``, ``extraction``,
+        ``decoding`` and ``filtering``; a stage that has not run is absent.
+        Values are the stored result objects: ``registration`` is a read-only
+        view of registration_results (round label to that round's ordered
+        RegistrationResult list), and the others are spot_result,
+        intensity_result, decoding_result and filtering_result.
+        """
+        stages = {}
+        if self.registration_results:
+            stages["registration"] = MappingProxyType(self.registration_results)
+        for name, result in (("spot_finding", self.spot_result), ("extraction", self.intensity_result),
+                             ("decoding", self.decoding_result), ("filtering", self.filtering_result)):
+            if result is not None:
+                stages[name] = result
+        return MappingProxyType(stages)
+
+    def _images_summary(self) -> str:
+        ref = self.rounds.reference_round
+        configured = self.rounds.all_rounds
+        loaded = [r for r in configured if r in self.images] + [r for r in self.images if r not in configured]
+        missing = [r for r in configured if r not in self.images]
+
+        def mark(rounds):
+            return ", ".join(r + "*" if r == ref else r for r in rounds)
+
+        def geometry(image):
+            axes = {3: "ZYX", 4: "ZYXC"}.get(image.ndim, f"{image.ndim}D")
+            return f"{tuple(image.shape)} {image.dtype} {axes}"
+
+        if not loaded:
+            text = f"not loaded ({mark(configured)})" if configured else "not loaded"
+            shown = configured
+        else:
+            geometries = [geometry(self.images[r]) for r in loaded]
+            if len(set(geometries)) == 1:
+                text = f"{mark(loaded)} — {geometries[0]}"
+            else:
+                text = ", ".join(f"{mark([r])} {g}" for r, g in zip(loaded, geometries))
+            if missing:
+                text += f"; not loaded: {mark(missing)}"
+            shown = loaded + missing
+        return text + ("   (* reference)" if ref in shown else "")
+
+    def __repr__(self):
+        ds = self.dataset
+        subtile = "" if self.subtile_id is None else f" subtile {self.subtile_id}"
+        results = self.results
+        lines = [
+            f"FOV {self.fov_id!r}{subtile} of Dataset {ds.dataset_id!r} (sample {ds.sample_id!r})",
+            f"    images:   {self._images_summary()}",
+            f"    channels: {', '.join(ds.channel_order) or 'none'}",
+            f"    results:  {', '.join(results) or 'none'}",
+        ]
+        for name, result in results.items():
+            if name == "registration":
+                methods = dict.fromkeys(r.diagnostics.method for rs in result.values() for r in rs)
+                n = len(result)
+                summary = f"{n} moving round{'' if n == 1 else 's'}, {', '.join(methods)}"
+            else:
+                summary = result._summary()
+            lines.append(f"      {name:<14}{summary}")
+        return "\n".join(lines)
 
     # --- Path helpers ---
 

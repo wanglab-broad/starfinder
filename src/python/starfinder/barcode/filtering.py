@@ -1,5 +1,6 @@
 """Rerunnable read filtering; rejected identities remain available."""
 
+from collections import Counter
 from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
@@ -66,7 +67,11 @@ class ReadFilterConfig:
 
 @dataclass(frozen=True)
 class ReadFilteringResult:
-    """Complete annotated table, accepted view and nullable summary fractions."""
+    """Complete annotated table, accepted view and nullable summary fractions.
+
+    The repr is a one-line accepted fraction and rejection-reason count. It
+    never reports precision or accuracy, which require truth.
+    """
 
     table: pd.DataFrame
     spot_namespace: str
@@ -74,6 +79,26 @@ class ReadFilteringResult:
     counts: dict[str, int]
     fractions: dict[str, float | None]
     diagnostics: dict
+
+    def _summary(self):
+        fraction = self.fractions.get("accepted")
+        text = (
+            f"{self.counts['accepted']} accepted / {self.counts['total']} "
+            f"({'undefined' if fraction is None else f'{fraction:.1%}'}), "
+            f"rejected {self.counts['rejected']}"
+        )
+        reasons = Counter(
+            reason
+            for joined in self.table.rejection_reasons.dropna()
+            for reason in joined.split(";")
+            if reason
+        )
+        if reasons:
+            text += " — " + ", ".join(f"{r} {n}" for r, n in reasons.most_common())
+        return text
+
+    def __repr__(self):
+        return f"ReadFilteringResult: {self._summary()}"
 
     @property
     def accepted(self) -> pd.DataFrame:

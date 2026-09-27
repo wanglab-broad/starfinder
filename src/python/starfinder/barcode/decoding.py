@@ -100,6 +100,7 @@ class BarcodeDecodingResult:
     table carries observed/decoded_color_sequence, nullable gene_id, call_status,
     failure_reason, and method-specific named scores. Diagnostics expose
     probabilities (N,C,R), per_round and candidates tables only when requested.
+    The repr is a one-line read count by call_status without table rows.
     """
 
     table: pd.DataFrame
@@ -134,6 +135,18 @@ class BarcodeDecodingResult:
             ["assigned", "unmatched", "ambiguous", "no_signal"]
         ).all():
             raise ValueError("invalid call_status")
+
+    def _summary(self):
+        counts = self.table.call_status.value_counts()
+        statuses = [
+            f"{s} {int(counts[s])}"
+            for s in ("assigned", "ambiguous", "no_signal", "unmatched")
+            if s in counts.index
+        ]
+        return f"{len(self.table)} reads" + (" — " + ", ".join(statuses) if statuses else "")
+
+    def __repr__(self):
+        return f"BarcodeDecodingResult: {self._summary()}"
 
 
 def decode_barcodes(

@@ -61,6 +61,7 @@ class Codebook:
     Optional base_sequence is checked against the declared encoding. Duplicate
     genes or encoded sequences are errors, including duplicate identical rows.
     color_to_channel maps all four STARmap symbols to distinct zero-based indices.
+    The repr is a one-line size and label summary without table rows.
     """
 
     table: pd.DataFrame
@@ -124,6 +125,12 @@ class Codebook:
             ),
         )
         object.__setattr__(self, "color_to_channel", dict(mapping))
+
+    def __repr__(self):
+        return (
+            f"Codebook: {self.n_genes} genes × {len(self.round_labels)} rounds, "
+            f"channels {', '.join(self.channel_labels)}"
+        )
 
     @property
     def gene_to_seq(self):
