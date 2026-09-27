@@ -204,7 +204,8 @@ def _percentile_normalize(volume, config, fitted=None):
     for c in range(n):
         x = channels[..., c].astype(np.float64)
         constant.append(bool(x.min() == x.max()))
-        degenerate.append(bool(high[c] == low[c]))
+        # A constant channel is degenerate in every fit mode, even with supplied low != high.
+        degenerate.append(bool(high[c] == low[c]) or constant[c])
         y = np.zeros_like(x) if degenerate[c] else np.clip((x - low[c]) / (high[c] - low[c]), 0, 1)
         if volume.dtype.kind in "ui":
             y = np.rint(y * np.iinfo(volume.dtype).max)
@@ -224,7 +225,8 @@ def normalize_percentile(volume: np.ndarray, *, config: PercentileNormalizationC
     Values above high saturate. With fit="fov" the range is fitted per
     channel of this volume (uint8 and uint16 from their integer histogram);
     with fit="supplied", fitted must give {"low": [...], "high": [...]} with
-    one value per channel. A constant channel or high == low gives zeros.
+    one value per channel. A constant channel or high == low gives zeros and
+    a degenerate_range diagnostic, also with supplied low != high.
     Works in float64 one channel at a time; the input is not modified.
 
     Raises

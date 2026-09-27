@@ -143,6 +143,22 @@ def test_constant_channel_and_equal_range_give_zeros_and_degenerate_range(dtype)
     np.testing.assert_array_equal(supplied[..., 1], 0)
 
 
+@pytest.mark.parametrize("dtype", (np.uint8, np.uint16, np.float32, np.float64))
+def test_constant_channel_with_supplied_unequal_range_gives_zeros_and_degenerate_range(dtype):
+    x = np.zeros((1, 2, 3, 2), dtype=dtype)
+    x[..., 0] = 7  # constant, inside the supplied range [0, 10]
+    x[..., 1] = np.arange(6).reshape(1, 2, 3)
+    config = PercentileNormalizationConfig(fit="supplied")
+    supplied = {"fitted": {"round1": {"low": [0, 0], "high": [10, 5]}}}
+    result = run_step(x, config, StepContext("round1", "round1", ImageMetadata("frame"), supplied=supplied))
+    assert result.image.dtype == dtype
+    np.testing.assert_array_equal(result.image[..., 0], 0)
+    assert result.image[..., 1].max() > 0
+    assert result.diagnostics["constant_channel"] == [True, False]
+    assert result.diagnostics["degenerate_range"] == [True, False]
+    assert result.fitted == {"low": [0, 0], "high": [10, 5]}
+
+
 def test_diagnostics_follow_the_shared_numerical_policy():
     x = np.zeros((1, 4, 5, 2), dtype=np.uint8)
     x[..., 0] = np.arange(20).reshape(1, 4, 5)
