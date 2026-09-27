@@ -16,8 +16,8 @@ import yaml
 from starfinder.dataset import CheckpointConfig, Dataset, ExecutionConfig, PipelineConfig, RoundState, from_workflow_config
 from starfinder.image import ImageMetadata
 from starfinder.io import ImageLoadConfig, save_volume
-from starfinder.preprocessing import (STEPS, HistogramMatchingConfig, MinMaxNormalizationConfig, PreprocessingRecipe,
-    RecipeStep, ReconstructionConfig, StepContext, StepResult, StepSpec, TophatConfig, run_step, step_config_type,
+from starfinder.preprocessing import (STEPS, HistogramMatchingConfig, MinMaxNormalizationConfig,
+    PercentileNormalizationConfig, PreprocessingRecipe, RecipeStep, ReconstructionConfig, StepContext, StepResult, StepSpec, TophatConfig, run_step, step_config_type,
     step_spec)
 
 from .test_preprocessing_golden import PINNED_SEQUENCE, digest, fixture_rounds
@@ -63,7 +63,8 @@ def test_registered_steps_match_the_contract_table():
         MinMaxNormalizationConfig: ("min_max_normalization", "intensity", "per_channel", "declared"),
         HistogramMatchingConfig: ("histogram_matching", "intensity", "needs_reference", "preserve"),
         ReconstructionConfig: ("reconstruction", "background", "per_channel", "preserve"),
-        TophatConfig: ("white_tophat", "background", "per_channel", "preserve")}
+        TophatConfig: ("white_tophat", "background", "per_channel", "preserve"),
+        PercentileNormalizationConfig: ("percentile_normalization", "intensity", "per_channel", "preserve")}
 
 
 def test_step_names_are_unique_and_name_lookup_is_derived_from_steps(monkeypatch):
@@ -72,7 +73,7 @@ def test_step_names_are_unique_and_name_lookup_is_derived_from_steps(monkeypatch
     for config_type, spec in STEPS.items():
         assert step_config_type(spec.name) is config_type
     with pytest.raises(ValueError, match="unknown"):
-        step_config_type("percentile_normalization")
+        step_config_type("no_such_step")
 
     @dataclass(frozen=True)
     class NewConfig:

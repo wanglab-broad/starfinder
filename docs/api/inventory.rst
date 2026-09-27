@@ -141,13 +141,20 @@ starfinder.preprocessing
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
 * :py:obj:`starfinder.preprocessing.filter_tophat`
+* :py:obj:`starfinder.preprocessing.histogram_percentile`
 * :py:obj:`starfinder.preprocessing.HistogramMatchingConfig`
+* :py:obj:`starfinder.preprocessing.HistogramSummary`
 * :py:obj:`starfinder.preprocessing.match_histogram`
+* :py:obj:`starfinder.preprocessing.merge_histograms`
 * :py:obj:`starfinder.preprocessing.MinMaxNormalizationConfig`
 * :py:obj:`starfinder.preprocessing.normalize_intensity`
+* :py:obj:`starfinder.preprocessing.normalize_percentile`
+* :py:obj:`starfinder.preprocessing.PercentileNormalizationConfig`
 * :py:obj:`starfinder.preprocessing.PreprocessingRecipe`
 * :py:obj:`starfinder.preprocessing.project_image`
 * :py:obj:`starfinder.preprocessing.ProjectionConfig`
+* :py:obj:`starfinder.preprocessing.read_histograms`
+* :py:obj:`starfinder.preprocessing.read_supplied_statistics`
 * :py:obj:`starfinder.preprocessing.RecipeStep`
 * :py:obj:`starfinder.preprocessing.reconstruct_background`
 * :py:obj:`starfinder.preprocessing.ReconstructionConfig`
@@ -158,7 +165,13 @@ starfinder.preprocessing
 * :py:obj:`starfinder.preprocessing.StepResult`
 * :py:obj:`starfinder.preprocessing.STEPS`
 * :py:obj:`starfinder.preprocessing.StepSpec`
+* :py:obj:`starfinder.preprocessing.summarize_histograms`
+* :py:obj:`starfinder.preprocessing.summary_stage`
+* :py:obj:`starfinder.preprocessing.supplied_section`
+* :py:obj:`starfinder.preprocessing.supplied_statistics`
 * :py:obj:`starfinder.preprocessing.TophatConfig`
+* :py:obj:`starfinder.preprocessing.write_histograms`
+* :py:obj:`starfinder.preprocessing.write_supplied_statistics`
 
 starfinder.registration
 ~~~~~~~~~~~~~~~~~~~~~~~

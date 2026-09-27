@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field, replace
+import hashlib
 import json
 from pathlib import Path
 from types import MappingProxyType
@@ -16,7 +17,7 @@ from starfinder.image import ImageMetadata, _validate_image
 from starfinder.spot_finding import LocalMaximaConfig, SpotFindingResult
 from starfinder.io import ImageLoadConfig
 from starfinder.preprocessing import (MinMaxNormalizationConfig, HistogramMatchingConfig, ReconstructionConfig, TophatConfig, ProjectionConfig,
-    StepContext, run_step, step_spec)
+    StepContext, read_supplied_statistics, run_step, step_spec)
 from starfinder.dataset._logging import _log_step
 from starfinder.dataset._paths import _FovPaths
 from starfinder.dataset.config import CheckpointConfig, PipelineConfig, ExecutionConfig, RegistrationStep
@@ -339,15 +340,22 @@ class FOV:
         return self
 
     @_log_step
-    def _preprocess(self, config, *, round_name, index, phase, stage, references):
+    def _preprocess(self, config, *, round_name, index, phase, stage, references, supplied=None):
         """Run one recipe step on one round through the enforcement wrapper and record it.
 
         stage is the step name, so a failure names the step in the run record.
+        supplied is the validated supplied-statistics document; a step with
+        fit="supplied" receives its section and requires the file's dtype.
         """
         spec = step_spec(config)
         ref = self.rounds.reference_round
-        reference = None
-        if spec.scope == 'needs_reference':
+        reference = section = None
+        if getattr(config, 'fit', None) == 'supplied':
+            section = supplied['steps'][stage]
+            dtype = np.asarray(self.images[round_name]).dtype
+            if dtype.name != supplied['dtype']:
+                raise ValueError(f'step {stage!r} input is {dtype}, but the supplied statistics are for {supplied["dtype"]}')
+        elif spec.scope == 'needs_reference':
             key = (phase, index)
             if key not in references:
                 if round_name != ref:
@@ -360,7 +368,7 @@ class FOV:
             reference = references[key]
         image = self.images[round_name]
         metadata = self.metadata.get(round_name, ImageMetadata(f"{self.fov_id}/{round_name}"))
-        result = run_step(image, config, StepContext(round_name, ref, metadata, reference))
+        result = run_step(image, config, StepContext(round_name, ref, metadata, reference, section))
         self.preprocessing_record.setdefault('rounds', {}).setdefault(round_name, []).append(dict(
             index=index, stage=phase, step=stage, config=asdict(config), fitted=dict(result.fitted),
             diagnostics=dict(result.diagnostics), input_dtype=str(np.asarray(image).dtype),
@@ -515,12 +523,15 @@ class FOV:
         Reference first, then moving rounds in declared order. Each round runs
         the preprocessing recipe's steps in order, then registration, then the
         recipe's post_registration steps. For a needs_reference step (histogram
-        matching) the reference round's input to that step, restricted to the
-        configured channel, is retained until every moving round has passed
-        the step; this holds in streaming mode too. Per-round step records are
-        kept in preprocessing_record and written to run.json and the
-        registered checkpoint. The pipeline never projects. Loading may be
-        disabled for resident/subtile data. Images without registration must
+        matching) with fit="fov" the reference round's input to that step,
+        restricted to the configured channel, is retained until every moving
+        round has passed the step; this holds in streaming mode too. Steps
+        with fit="supplied" read the recipe's supplied_statistics file, which
+        is validated against the recipe, the dataset channel_order and the
+        processed rounds before any step runs. Per-round step records, and the
+        supplied file's path and SHA-256, are kept in preprocessing_record and
+        written to run.json and the registered checkpoint. The pipeline never
+        projects. Loading may be disabled for resident/subtile data. Images without registration must
         already declare the same frame/grid for extraction. Without image
         operations or resident images (after load_checkpoint), the round loop
         is skipped.
@@ -559,8 +570,18 @@ class FOV:
         if recipe is not None:
             self.preprocessing_record = {'recipe': {
                 'steps': [step_spec(s.config).name for s in steps],
-                'post_registration': [step_spec(s.config).name for s in post]}, 'rounds': {}}
+                'post_registration': [step_spec(s.config).name for s in post]}, 'rounds': {},
+                'supplied_statistics': {'path': None, 'sha256': None}}
+        supplied = None
         try:
+            if any(getattr(s.config, 'fit', None) == 'supplied' for s in steps):
+                if not self.dataset.channel_order:
+                    raise ValueError('fit="supplied" steps require the dataset channel_order')
+                path = recipe.supplied_statistics
+                supplied = read_supplied_statistics(path, recipe, channel_labels=self.dataset.channel_order,
+                                                    rounds=[ref] + self.rounds.moving_rounds)
+                self.preprocessing_record['supplied_statistics'] = {
+                    'path': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
             image_stages = any((config.load, config.rotation_degrees is not None, steps, post,
                 config.registration, config.detection, config.extraction))
             stages = checkpoints.stages if checkpoints is not None else ()
@@ -582,7 +603,7 @@ class FOV:
                     self._rotate_round(round_name=name, angle=config.rotation_degrees)
                 for index, step in enumerate(steps):
                     self._preprocess(step.config, round_name=name, index=index, phase='steps',
-                                     stage=step_spec(step.config).name, references=references)
+                                     stage=step_spec(step.config).name, references=references, supplied=supplied)
                 if name != ref:
                     processed_reference = self.images[ref]
                     if post:

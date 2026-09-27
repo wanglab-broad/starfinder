@@ -8,6 +8,7 @@ from collections.abc import Callable, Mapping
 import copy
 from dataclasses import dataclass
 import json
+from pathlib import Path
 import re
 from typing import Any
 
@@ -15,7 +16,8 @@ import numpy as np
 
 from starfinder.image import ImageMetadata, _validate_image
 from starfinder.preprocessing.morphology import ReconstructionConfig, TophatConfig, filter_tophat, reconstruct_background
-from starfinder.preprocessing.normalization import HistogramMatchingConfig, MinMaxNormalizationConfig, _normalize, match_histogram
+from starfinder.preprocessing.normalization import (HistogramMatchingConfig, MinMaxNormalizationConfig,
+    PercentileNormalizationConfig, _match_counts, _normalize, _percentile_normalize, match_histogram)
 
 _CATEGORIES = ("background", "intensity", "contrast")
 _SCOPES = ("per_channel", "per_round", "needs_reference")
@@ -27,12 +29,16 @@ class StepContext:
     """What a step may read besides its own round's image.
 
     reference is the reference round's input to this step, restricted to the
-    configured channel (ZYX); it is set only for needs_reference steps.
+    configured channel (ZYX); it is set only for needs_reference steps with
+    fit="fov". supplied is this step's section of the supplied-statistics
+    file ({"summarized_after", "params", "fitted"}); it is set only for
+    steps with fit="supplied".
     """
     round_name: str
     reference_round: str
     metadata: ImageMetadata
     reference: np.ndarray | None = None
+    supplied: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -71,10 +77,27 @@ def _min_max(volume, config, context):
     return StepResult(image, {"groups": groups}, {})
 
 
+def _supplied_round(context, round_name):
+    fitted = context.supplied["fitted"]
+    if round_name not in fitted:
+        raise ValueError(f"the supplied statistics have no values for round {round_name!r}")
+    return fitted[round_name]
+
+
 def _histogram(volume, config, context):
-    image = match_histogram(volume, context.reference, config=config)
+    if config.fit == "supplied":
+        entry = _supplied_round(context, context.reference_round)
+        image = _match_counts(volume, entry["values"], entry["counts"], config)
+    else:
+        image = match_histogram(volume, context.reference, config=config)
     return StepResult(image, {"reference_round": context.reference_round,
                               "reference_channel": config.reference_channel}, {})
+
+
+def _percentile(volume, config, context):
+    fitted = _supplied_round(context, context.round_name) if config.fit == "supplied" else None
+    image, fitted, diagnostics = _percentile_normalize(volume, config, fitted)
+    return StepResult(image, fitted, diagnostics)
 
 
 def _reconstruction(volume, config, context):
@@ -90,7 +113,12 @@ STEPS: dict[type, StepSpec] = {
     HistogramMatchingConfig: StepSpec("histogram_matching", _histogram, "intensity", "needs_reference"),
     ReconstructionConfig: StepSpec("reconstruction", _reconstruction, "background", "per_channel"),
     TophatConfig: StepSpec("white_tophat", _tophat, "background", "per_channel"),
+    PercentileNormalizationConfig: StepSpec("percentile_normalization", _percentile, "intensity", "per_channel"),
 }
+
+
+def _supplied(config) -> bool:
+    return getattr(config, "fit", None) == "supplied"
 
 
 def step_spec(config) -> StepSpec:
@@ -139,8 +167,10 @@ def run_step(volume: np.ndarray, config, context: StepContext) -> StepResult:
     input dtype ("preserve") or the config's output_dtype ("declared"), only
     finite values, that context.metadata is unchanged, and that fitted and
     diagnostics are JSON-serializable. The input is validated as a finite
-    nonempty ZYX or ZYXC array. needs_reference steps require
-    context.reference; other steps must not receive one.
+    nonempty ZYX or ZYXC array. needs_reference steps with fit="fov" require
+    context.reference; other steps must not receive one. Steps with
+    fit="supplied" require context.supplied (their validated section); other
+    steps must not receive one.
 
     Raises
     ------
@@ -154,9 +184,11 @@ def run_step(volume: np.ndarray, config, context: StepContext) -> StepResult:
     if not isinstance(context, StepContext):
         raise TypeError("context must be StepContext")
     volume = _validate_image(volume)
-    if (context.reference is not None) != (spec.scope == "needs_reference"):
-        raise ValueError(f"step {spec.name!r} {'requires' if spec.scope == 'needs_reference' else 'does not take'} "
-                         "a reference image")
+    wants_reference = spec.scope == "needs_reference" and not _supplied(config)
+    if (context.reference is not None) != wants_reference:
+        raise ValueError(f"step {spec.name!r} {'requires' if wants_reference else 'does not take'} a reference image")
+    if (context.supplied is not None) != _supplied(config):
+        raise ValueError(f"step {spec.name!r} {'requires' if _supplied(config) else 'does not take'} supplied statistics")
     metadata = copy.deepcopy(context.metadata)
     result = spec.run(volume, config, context)
     if not isinstance(result, StepResult):
@@ -193,9 +225,13 @@ class PreprocessingRecipe:
     The output of the last step is the detection image; with no steps it is
     the loaded image. post_registration runs after registration and may
     contain only ReconstructionConfig (the legacy path for resident subtiles).
+    supplied_statistics is the JSON file read by steps with fit="supplied";
+    it is required when such a step is present, and a step name may occur
+    only once with fit="supplied".
     """
     steps: tuple[RecipeStep, ...] = ()
     post_registration: tuple[RecipeStep, ...] = ()
+    supplied_statistics: Path | None = None
 
     def __post_init__(self):
         for name in ("steps", "post_registration"):
@@ -209,3 +245,13 @@ class PreprocessingRecipe:
             if type(entry.config) is not ReconstructionConfig:
                 raise ValueError("post_registration may contain only ReconstructionConfig steps, "
                                  f"not {type(entry.config).__qualname__}")
+        supplied = [step_spec(entry.config).name for entry in self.steps if _supplied(entry.config)]
+        repeated = sorted({name for name in supplied if supplied.count(name) > 1})
+        if repeated:
+            raise ValueError(f'steps {repeated} occur more than once with fit="supplied"')
+        if self.supplied_statistics is not None:
+            if not isinstance(self.supplied_statistics, (str, Path)) or not str(self.supplied_statistics):
+                raise TypeError("supplied_statistics must be a path or None")
+            object.__setattr__(self, "supplied_statistics", Path(self.supplied_statistics))
+        elif supplied:
+            raise ValueError(f'steps {supplied} use fit="supplied" but supplied_statistics is not set')
