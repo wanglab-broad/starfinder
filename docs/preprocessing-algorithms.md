@@ -404,12 +404,15 @@ The flag informs review; it does not remove a method, and the decision to stop
 discussing one stays with the chapter author. The same per-method layout is used
 for real data in E13, where only images and proxy metrics are available.
 
-## Evaluation design amendment for the calibrated rerun (Proposed, W-242)
+## Evaluation design amendment for the calibrated rerun (Accepted, W-243)
 
-**Status: Proposed (W-242), pending Jiahao's approval.** This section is a
-draft for review in W-243. It amends *Evaluation design for task groups 5 and
-6* for the calibrated rerun (W-239) only. The page's *Accepted* status (W-227)
-still applies to every other section, which this draft does not change. It
+**Status: Accepted (W-243, 2026-09-28), approved with amendments at `57656ae`.**
+Drafted in W-242. The approved resolutions of the open choices, including the
+amendment to the multi-FOV precondition (C5), are listed under *Approved
+resolutions (W-243)* and take precedence over the recommendations in *Open
+choices*. This section amends *Evaluation design for task groups 5 and 6* for
+the calibrated rerun (W-239) only. The page's *Accepted* status (W-227) still
+applies to every other section, which this amendment does not change. It
 recommends no preprocessing default.
 
 Where this section and the accepted design differ, the rerun follows this
@@ -536,6 +539,23 @@ condition `c`, dtype and mode, and applies to every method that targets `c`.
   reported and marked `fixture_gap`.
 * **Scope.** The check is not applied to `clean`, to `combined` (reported
   only) or to `clean_unbalanced` (a harm test, item 5).
+* **Multi-FOV sets: a second, set-specific check (W-243, C5).** Both checks run
+  for each multi-FOV set, dtype and mode, and both are reported.
+  * The check above uses `none` on the set against `none` on
+    `mf_density_clean`. It tests the calibrated `combined` base of the set.
+  * A second check tests the variation the set was built for. Its arm is the
+    per-FOV-fitted recipe arm of the sample-level-fitting comparison (`r1`,
+    `r2_scalar` or `r2_3d` with `fit="fov"`). Its reference FOV is the dense
+    FOV of `mf_density` or the gain-1.00 FOV of `mf_gain_drift`. Its degraded
+    FOV is the near-empty FOV or the gain-0.50 FOV.
+  * The second check uses the same formulas with the reference FOV in place
+    of `clean` and the degraded FOV in place of `c`: the endpoints of each
+    FOV on each held-out seed, `g_E`, `R_E`, the strict rule, undefined
+    endpoints and rounding. It is evaluated separately for each recipe arm.
+  * A multi-FOV set is a valid target for the sample-level-fitting flag of a
+    recipe only if the second check passes for that recipe's per-FOV-fitted
+    arm. When it fails, a fixture-gap row names the set, recipe, dtype and
+    mode, and the set is left out of that flag.
 * **Rounding.** Every mean, range and delta in items 3 and 4 is rounded to 10
   decimal places before it is compared, so that values on the `1/n` lattice of
   the fractions compare exactly.
@@ -728,3 +748,25 @@ budget. Adding `gain_strong` (choice C6) adds 188 s without reductions and
 | C6 | A stronger gain condition | None; `gain_strong` with the LN spread of 3.15 (T3) | Add `gain_strong`. The calibrated `gain` spread of 1.68 may not degrade `none`, and 3.15 is the largest measured spread |
 | C7 | Histogram matching's harm test in its flag | Reported beside the flag; counted as `clean` harm | Beside the flag. The unbalanced codebook violates the method's stated assumption; folding it into the flag would mix two questions |
 | C8 | Bright-outlier brightness | 2.5 × the brightness median (no uint8 clipping, but not above the brightest puncta); 4 ×; 8 × | 4 ×: above the puncta's p99 amplitude, with the uint16 variant as the test without clipping |
+
+### Approved resolutions (W-243)
+
+Jiahao approved this amendment with amendments on 2026-09-28 (W-243), at
+`57656ae`. These resolutions replace the recommendations above wherever they
+differ.
+
+| ID | Resolution |
+| --- | --- |
+| C1 | Saturation fraction `f = 10⁻³`. |
+| C2 | uint16 only for `clean`, `combined` and `bright_outliers` (equal to reduction R2). |
+| C3 | A 2700 s budget for W-239's full run, with R1, R2 and R3 pre-authorized in that order. |
+| C4 | `r_z` capped at 3 on the 8-plane scenes. This is a stated deviation from `ceil(3σ) + 1` for this rerun only. |
+| C5 | **Amended:** both multi-FOV precondition checks run and are reported. A set counts for a recipe's sample-level-fitting flag only if the set-specific check passes (item 3, *Multi-FOV sets*). |
+| C6 | `gain_strong` is added, with the LN channel gain spread of 3.15. |
+| C7 | Histogram matching's unbalanced-codebook harm test is reported beside its flag, not inside it. |
+| C8 | Bright outliers at 4 × the brightness median, with uint16 as the test without clipping. |
+
+The projection with these resolutions (`m = 2`, R1 then R2, `gain_strong`
+added) is 2567 s, within the 2700 s budget. The second multi-FOV check reuses
+the per-FOV endpoints that the run already computes, so it adds no generation or
+detection.
