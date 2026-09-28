@@ -42,7 +42,8 @@ def test_smoke_run_writes_tables_and_manifest(tmp_path):
     points = pd.read_csv(output / "tables" / "operating_points.csv")
     assert set(points.operating_point) == {"dev_max_f1", "default"}
     direct = pd.read_csv(output / "tables" / "direct_metrics.csv")
-    assert direct.set_index("arm").loc[["none", "scalar", "bg3d"], "bg_rmse"].notna().all()
+    assert direct.set_index("arm").loc[["none", "scalar", "bg3d", "r1", "r1_recon", "recon"], "bg_rmse"].notna().all()
+    assert pd.read_csv(output / "tables" / "recipe_per_seed.csv").auprc.notna().all()
     diagnostics = pd.read_csv(output / "tables" / "diagnostics.csv")
     assert {"zero_fraction", "median", "mad", "noise_threshold", "mad_zero"} <= set(diagnostics)
     assert json.loads((output / "manifest.json").read_text())["artifact_bytes"] == manifest["artifact_bytes"]
@@ -60,3 +61,35 @@ def test_shared_arms_equal_direct_recipe_runs(tmp_path):
         for name in book.round_labels:
             np.testing.assert_array_equal(fov.images[name], direct.images[name])
         assert fov.preprocessing_record.get("recipe", {}).get("extraction_source") is None
+
+
+def test_auprc_integrates_in_threshold_order_and_skips_undefined_precision():
+    # Hand-computed: from the highest threshold down, recall 0 (no detections), 0.5 at precision 1.0,
+    # 0.5 again at precision 0.5 (no new area), then 1.0 at precision 0.25:
+    # 0.5 * 1.0 + 0.5 * 0.25 = 0.625. Sorting equal recalls by precision would give 0.375.
+    rows = [dict(threshold=2.0, recall=1.0, precision=0.25), dict(threshold=5.0, recall=0.5, precision=0.5),
+            dict(threshold=10.0, recall=0.5, precision=1.0), dict(threshold=15.0, recall=0.0, precision=float("nan"))]
+    assert evaluation._auprc(rows) == 0.625
+    assert evaluation._auprc([dict(threshold=t, recall=0.0, precision=float("nan")) for t in (2.0, 5.0)]) == 0.0
+
+
+def test_normalized_truth_follows_the_fitted_value_map():
+    raw = np.array([0, 10, 20, 10], dtype=np.uint8).reshape(1, 1, 4, 1)
+    normalized = (raw * 2).astype(np.uint8)
+    background = np.array([5.0, 15.0, 30.0, 0.0]).reshape(1, 1, 4, 1)
+    np.testing.assert_array_equal(evaluation._normalized_truth(raw, normalized, background).ravel(), [10, 30, 40, 0])
+
+
+def test_comparison_ranges_are_across_seeds_after_channel_aggregation():
+    ends = pd.DataFrame([dict(condition=c, dtype="uint8", arm=a, seed=s, **{m: 0.5 for m in evaluation.ENDPOINTS})
+                         for c in ("baseline", "clean", "combined") for a in ("none", "scalar")
+                         for s in evaluation.EVAL_SEEDS])
+    diagnostics = pd.DataFrame([dict(condition=c, dtype="uint8", arm=a, seed=s, channel=k, zero_fraction=0.0,
+                                     median=1.0, mad=mad, noise_threshold=1.0, mad_zero=False)
+                                for c in ("baseline", "clean", "combined") for a in ("none", "scalar")
+                                for s in evaluation.EVAL_SEEDS for k, mad in enumerate((9.0, 10.0))])
+    spec = [("scalar_background", "isolated", "none", "scalar", ("baseline",))]
+    table = evaluation.comparisons_table(ends, None, diagnostics, spec, "clean", "combined")
+    row = table[(table.condition == "baseline") & (table.dtype == "uint8")].iloc[0]
+    assert (row.mad_after_mean, row.mad_after_min, row.mad_after_max) == (9.5, 9.5, 9.5)
+    assert row.reads_wrong_gene_after_mean == 0.5 and row.reads_false_detection_t5_delta_mean == 0.0

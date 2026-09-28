@@ -65,6 +65,8 @@ REGISTRATION = (RegistrationStep(TranslationConfig()),)
 #: Provisional low-benefit threshold (algorithm page): 2 percentage points.
 LOW_BENEFIT_POINTS = 0.02
 SNAPSHOT = "bg_corrected"
+#: Snapshot of recipe 1's normalized image, the input of its reconstruction step.
+NORMALIZED = "normalized"
 
 #: Each condition names, per group of FormedSceneConfig fields, the development
 #: condition whose value it takes; unnamed groups come from "clean".
@@ -85,6 +87,9 @@ CONDITIONS = {
                           "geometry": "combined"},
 }
 PRIMARY = ("clean", "background_only", "round_effect_only", "combined")
+#: The gradient condition's slopes (normalized ZYX): the preset's X slope of 2 plus a Z slope of 2,
+#: set through the existing gradient_slopes_zyx field (the page's targeted condition needs a Z slope).
+GRADIENT_SLOPES_ZYX = (2.0, 0.0, 2.0)
 
 #: Multi-FOV sets: base appearance, per-FOV amplicon counts and per-FOV gain multipliers.
 MULTI_FOV = {
@@ -113,7 +118,7 @@ def arms(radius_zyx, fit="fov", supplied=None):
     return {
         "none": None,
         "r1": recipe(RecipeStep(_minmax()), RecipeStep(HistogramMatchingConfig(fit=s))),
-        "r1_recon": recipe(RecipeStep(_minmax()), RecipeStep(HistogramMatchingConfig()),
+        "r1_recon": recipe(RecipeStep(_minmax()), RecipeStep(HistogramMatchingConfig(), save_as=NORMALIZED),
                            RecipeStep(ReconstructionConfig())),
         "r2_scalar": r2(ScalarBackgroundConfig(fit=s)),
         "r2_scalar_xsrc": r2(ScalarBackgroundConfig(), SNAPSHOT),
@@ -164,6 +169,8 @@ def scene_config(condition, *, dtype, seed, shape, count, parts=None, fov_id="FO
     book, config = development_scene_preset("clean")
     sources = {group: development_scene_preset(name)[1] for group, name in parts.items()}
     config = replace(config, **{group: getattr(source, group) for group, source in sources.items()})
+    if parts.get("background") == "gradient":
+        config = replace(config, background=replace(config.background, gradient_slopes_zyx=GRADIENT_SLOPES_ZYX))
     if gain != 1.0:
         readout = config.readout
         gains = np.ones((3, 4)) if not readout.gain_enabled else np.asarray(readout.gains, dtype=float)
@@ -345,23 +352,47 @@ def _box(shape, center, radius):
     return tuple(slice(max(0, c - r), min(n, c + r + 1)) for c, r, n in zip(center, radius, shape))
 
 
+def _normalized_truth(raw, normalized, background):
+    """Background truth mapped into recipe 1's normalized units, per channel.
+
+    Min-max and histogram matching map each channel's voxel values through one
+    monotone function fitted on the observed image. That function is read from
+    the (raw value, normalized value) pairs and applied to the float truth by
+    linear interpolation between observed raw values (constant beyond them).
+    """
+    mapped = np.empty(background.shape, dtype=np.float64)
+    for c in range(raw.shape[-1]):
+        values, first = np.unique(raw[..., c].ravel(), return_index=True)
+        mapped[..., c] = np.interp(background[..., c], values.astype(np.float64),
+                                   normalized[..., c].ravel()[first].astype(np.float64))
+    return mapped
+
+
 def direct_metrics(fov, raw, background, signal, truth, book, arm, recipe):
     """Background error, puncta contrast, true-spot intensity spread, clipped/saturated fractions."""
     ref = book.round_labels[0]
     detection = {name: fov.images[name] for name in book.round_labels}
     out = {}
     # Background estimation error on the reference round: estimate = input - output of the background step.
+    truth_background, units = background[ref], "input intensity"
     if arm == "none":
         estimate = np.zeros_like(background[ref])
     elif arm in BACKGROUND_ARMS:
         corrected = fov.snapshots.get(ref, {}).get(SNAPSHOT, detection[ref])
         estimate = raw[ref].astype(np.float64) - corrected.astype(np.float64)
+    elif arm in ("r1", "r1_recon"):
+        # Recipe 1 reconstructs after min-max and histogram matching, so its estimate is in the
+        # normalized image's units; the truth is mapped into them (see _normalized_truth).
+        normalized = detection[ref] if arm == "r1" else fov.snapshots[ref][NORMALIZED]
+        truth_background, units = _normalized_truth(raw[ref], normalized, background[ref]), "recipe 1 normalized"
+        estimate = (np.zeros_like(truth_background) if arm == "r1"
+                    else normalized.astype(np.float64) - detection[ref].astype(np.float64))
     else:
         estimate = None
     if estimate is not None:
-        error = estimate - background[ref]
+        error = estimate - truth_background
         out.update(bg_rmse=float(np.sqrt(np.mean(error ** 2))), bg_bias=float(np.mean(error)),
-                   bg_truth_mean=float(np.mean(background[ref])))
+                   bg_truth_mean=float(np.mean(truth_background)), bg_units=units)
     # Puncta contrast (peak - local background) / noise on the reference detection image.
     image, sig = detection[ref].astype(np.float64), signal[ref]
     peak_amplitude = float(sig.max()) if sig.size else 0.0
@@ -449,13 +480,29 @@ def fit_supplied(recipe, scenes, book, workdir):
 
 # --- Summaries, comparisons and flags ---------------------------------------------
 
+def _defined(value):
+    return value is not None and not (isinstance(value, float) and math.isnan(value))
+
+
 def _auprc(rows):
-    """Average precision over the threshold grid: sum of (R_i - R_(i-1)) * P_i by increasing recall."""
-    points = sorted((r["recall"], r["precision"]) for r in rows if r["recall"] is not None and r["precision"] is not None)
+    """Average precision over the threshold grid, integrated in threshold order.
+
+    Points are taken from the highest threshold to the lowest, so recall is
+    non-decreasing (detections at a higher threshold are a subset); AUPRC is
+    the sum of (R_i - R_(i-1)) * P_i with R_0 = 0. A threshold without
+    detections has undefined precision and recall 0, so it adds no area. The
+    result is None only when recall itself is undefined (no truth).
+    """
     area, previous = 0.0, 0.0
-    for recall, precision in points:
-        area += max(0.0, recall - previous) * precision
-        previous = max(previous, recall)
+    for row in sorted(rows, key=lambda r: -r["threshold"]):
+        recall, precision = row["recall"], row["precision"]
+        if not _defined(recall):
+            return None
+        if recall > previous:
+            if not _defined(precision):
+                raise ValueError("recall increased at a threshold with undefined precision")
+            area += (recall - previous) * precision
+            previous = recall
     return area
 
 
@@ -486,7 +533,7 @@ def summarize(curves, keys):
 
 
 def endpoints(curves, per_seed, selected, keys):
-    """Per evaluation seed: max-F1, AUPRC, and correct fraction/colour agreement at the dev-selected threshold."""
+    """Per evaluation seed: max-F1, AUPRC, and reads at the dev-selected threshold and at threshold_value=5."""
     rows = []
     ev = per_seed[per_seed.split == "evaluation"]
     for record in ev.to_dict("records"):
@@ -498,7 +545,9 @@ def endpoints(curves, per_seed, selected, keys):
         at = match[match.threshold == selected[key]].iloc[0]
         at5 = match[match.threshold == DEFAULT_THRESHOLD].iloc[0]
         rows.append(dict(record, correct_fraction=at.correct_fraction, color_call_agreement=at.color_call_agreement,
-                         correct_fraction_t5=at5.correct_fraction, f1_t5=at5.f1))
+                         reads_wrong_gene=at.reads_wrong_gene, reads_false_detection=at.reads_false_detection,
+                         correct_fraction_t5=at5.correct_fraction, f1_t5=at5.f1,
+                         reads_wrong_gene_t5=at5.reads_wrong_gene, reads_false_detection_t5=at5.reads_false_detection))
     return pd.DataFrame(rows)
 
 
@@ -527,7 +576,8 @@ SAMPLE_COMPARISONS = [("sample_level_fitting", f"ablation_{recipe}", recipe, rec
                        ("mf_density", "mf_gain_drift")) for recipe in ("r1", "r2_scalar", "r2_3d")]
 DIRECT = ("bg_rmse", "bg_bias", "contrast_median", "intensity_cv", "clipped_fraction", "saturated_fraction")
 DIAGNOSTIC = ("zero_fraction", "median", "mad", "noise_threshold", "mad_zero")
-ENDPOINTS = ("max_f1", "auprc", "correct_fraction", "color_call_agreement", "f1_t5", "correct_fraction_t5")
+ENDPOINTS = ("max_f1", "auprc", "correct_fraction", "color_call_agreement", "reads_wrong_gene", "reads_false_detection",
+             "f1_t5", "correct_fraction_t5", "reads_wrong_gene_t5", "reads_false_detection_t5")
 
 
 def _stats(values):
@@ -538,7 +588,13 @@ def _stats(values):
 
 
 def comparisons_table(ends, direct, diagnostics, specs, harm, combined):
-    """One row per comparison, condition role and dtype, with before/after/delta mean and range."""
+    """One row per comparison, condition role and dtype, with before/after/delta mean and range.
+
+    Means and ranges are across held-out (evaluation) seeds. Direct metrics and
+    MAD diagnostics are first averaged within each seed (over channels, and
+    over FOVs for multi-FOV sets); mad_zero becomes the fraction of channels
+    with MAD 0.
+    """
     rows = []
     for method, mode, before, after, targeted in specs:
         roles = [(c, "targeted") for c in targeted] + [(harm, "harm_check"), (combined, "combined")]
@@ -564,7 +620,10 @@ def comparisons_table(ends, direct, diagnostics, specs, harm, combined):
                         part = sel(table, arm)
                         for metric in metrics:
                             if metric in part:
-                                mean, low, high = _stats(part[metric].astype(float))
+                                # Aggregate channels (and FOVs) within each seed first, so the range
+                                # is across held-out seeds only.
+                                mean, low, high = _stats(part.assign(value=pd.to_numeric(part[metric].astype(float)))
+                                                         .groupby("seed").value.mean())
                                 row.update({f"{metric}_{label}_mean": mean, f"{metric}_{label}_min": low,
                                             f"{metric}_{label}_max": high})
                 rows.append(row)
@@ -649,9 +708,17 @@ def _revision():
         head = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
         dirty = bool(subprocess.run(["git", "-C", str(root), "status", "--porcelain"], capture_output=True,
                                     text=True).stdout.strip())
+        diff = subprocess.run(["git", "-C", str(root), "diff", "HEAD", "--binary"], capture_output=True).stdout
+        untracked = subprocess.run(["git", "-C", str(root), "ls-files", "--others", "--exclude-standard"],
+                                   capture_output=True, text=True).stdout.split()
     except OSError:
-        head, dirty = None, None
-    return {"revision": head, "dirty": dirty}
+        return {"revision": None, "dirty": None}
+    digest = hashlib.sha256(diff)
+    for name in sorted(untracked):
+        digest.update(name.encode() + b"\0" + (root / name).read_bytes())
+    return {"revision": head, "dirty": dirty, "uncommitted_diff_sha256": digest.hexdigest() if dirty else None,
+            "uncommitted_diff": "sha256 of `git diff HEAD --binary` followed by each untracked file's name and bytes",
+            "untracked_files": sorted(untracked)}
 
 
 def plan(scope):
@@ -764,15 +831,15 @@ def run(output, *, scope="full", shape=(32, 64, 64), count=80, multi_fov_dtypes=
             mf = pd.DataFrame(mf_curves)
             save(mf, "curves/multi_fov_curves.csv")
             pooled = (mf.groupby(["multi_fov", "dtype", "arm", "seed", "threshold"], sort=False)
-                      [["n_truth", "n_detected", "n_matched", "reads_correct"]].sum().reset_index())
+                      [["n_truth", "n_detected", "n_matched", "reads_accepted", "reads_correct", "reads_wrong_gene",
+                        "reads_false_detection"]].sum().reset_index())
             pooled["precision"] = pooled.n_matched / pooled.n_detected.where(pooled.n_detected > 0)
             pooled["recall"] = pooled.n_matched / pooled.n_truth.where(pooled.n_truth > 0)
             pooled["f1"] = (2 * pooled.precision * pooled.recall / (pooled.precision + pooled.recall)).fillna(0.0)
             pooled["correct_fraction"] = pooled.reads_correct / pooled.n_truth.where(pooled.n_truth > 0)
             pooled["color_call_agreement"] = np.nan
             pooled = pooled.rename(columns={"multi_fov": "condition"})
-            mf_per_seed, mf_points, mf_selected = summarize(pooled.assign(localization_error=np.nan,
-                reads_wrong_gene=np.nan, reads_false_detection=np.nan), keys)
+            mf_per_seed, mf_points, mf_selected = summarize(pooled.assign(localization_error=np.nan), keys)
             save(mf_per_seed, "tables/multi_fov_pooled_per_seed.csv")
             per_fov = multi_fov_tables(mf, mf_selected)
             save(per_fov, "tables/multi_fov_per_fov.csv")
@@ -782,7 +849,8 @@ def run(output, *, scope="full", shape=(32, 64, 64), count=80, multi_fov_dtypes=
             spread_direct = per_fov[per_fov.operating_point == "dev_max_f1"].rename(columns={"multi_fov": "condition"})
             spread_direct = (spread_direct.groupby(["condition", "dtype", "arm", "seed"]).correct_fraction
                              .agg(lambda v: v.max() - v.min()).rename("per_fov_correct_fraction_range").reset_index())
-            mf_cmp = comparisons_table(mf_ends, None, None, SAMPLE_COMPARISONS, "mf_density_clean", "mf_density")
+            mf_diag = diag_ref[diag_ref.condition.isin(selection["multi_fov"])] if "condition" in diag_ref else None
+            mf_cmp = comparisons_table(mf_ends, None, mf_diag, SAMPLE_COMPARISONS, "mf_density_clean", "mf_density")
             for record_index, record in mf_cmp.iterrows():
                 for label, arm in (("before", record["before"]), ("after", record["after"])):
                     part = spread_direct[(spread_direct["condition"] == record["condition"])
@@ -836,6 +904,16 @@ def run(output, *, scope="full", shape=(32, 64, 64), count=80, multi_fov_dtypes=
                       "and angle uniform(0, pi) replacing the two ID-keyed values, seed, dtype, FOV_id/scene_key per "
                       "multi-FOV FOV, readout gains per FOV (gain drift), and a uniform intensity scale of brightness, "
                       "baseline, tissue weights and noise strengths",
+        scene_field_changes=dict(
+            shape_zyx=list(shape), count=count, cleared=["coordinates", "amplicon_ids", "gene_ids"],
+            elongation="uniform(1, 1.5)", angle="uniform(0, pi)", seed="per scene", dtype="per scene",
+            multi_fov=["FOV_id", "scene_key", "readout gains (gain drift)"],
+            gradient_slopes_zyx=dict(conditions=["gradient"], value=list(GRADIENT_SLOPES_ZYX),
+                                     preset_value=[0, 0, 2], reason="the page's gradient target needs a Z slope"),
+            intensity_scale=dict(factors=INTENSITY_SCALE, fields=["brightness", "background.baseline",
+                                 "background.tissue_weights", "noise.alpha", "noise.sigma"],
+                                 decision="accepted as within the batch's scene rule by the owner's delegate "
+                                          "(recovery note R-20260928T011104Z-7543430d)")),
         recipes={arm: recipe_record(recipe) for arm, recipe in arms((4, 5, 5)).items()},
         multi_fov_recipes={arm: dict(recipe=r, fit=f, record=recipe_record(arms((4, 5, 5), f, Path("supplied.json"))[r]))
                            for arm, (r, f) in MULTI_FOV_ARMS.items()},
