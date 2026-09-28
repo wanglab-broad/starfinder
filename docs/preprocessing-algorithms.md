@@ -598,54 +598,77 @@ codebook's share is visible. It does not enter the flag (choice C7).
 
 *Answers F7 (W-237).*
 
-**Human summary first**, in the W-237 draft format:
+**Human summary first**, in the W-237 draft format, before any audit table:
 
-1. *Setup*: preset version, conditions with their precondition results per
-   dtype and mode, seeds, dtypes, modes and grids, reductions applied, wall time,
-   and the qualification (development evidence, no defaults, provisional flag).
-2. *One card per method or mode*, in the order of this page: problem, targeted
-   conditions and their precondition status, the flag per dtype and mode with
-   the failing clause, both endpoint deltas with seed ranges on each eligible
-   target and on `clean`, the harm test (histogram matching), and links to the
-   figures.
-3. *Anomalies*: grid-edge selections, fixture gaps, undefined endpoints,
-   MAD-zero channels, unexpected clipping and deviations from this section.
-4. *Reading order*: the order in which to read the cards and figures.
+1. *Setup.* The recipes and their steps (with page defaults); the conditions,
+   each with its noise level as the clutter and pixel SNR p50 measured with the
+   {doc}`image-statistics` tool on development seeds, as in W-241's
+   side-by-side run; the comparison types (isolated, ablation, sample-level
+   against per-FOV fitting, extraction source against detection image, the
+   harm test); what each metric measures; the precondition results per
+   condition, dtype and mode; the seeds, dtypes, modes and grids; the reductions
+   applied and the wall time; and the qualification (development evidence, no
+   defaults, provisional flag).
+2. *One card per method or mode*, in the order of this page, each giving:
+   * what the method does and the problem it addresses;
+   * the targeted conditions and their precondition status;
+   * the key before/after numbers, with seed ranges, in both threshold modes:
+     the direct metrics for its problem (background RMSE and bias, puncta
+     contrast, intensity spread across channels and rounds, clipped and
+     saturated fractions, as they apply), the downstream metrics (max-F1,
+     AUPRC, correct-decode fraction, wrong-gene and false-detection reads), and
+     the `clean` harm check;
+   * the flag verdict per dtype and mode with the failing clause, and for
+     histogram matching the harm test;
+   * caveats, such as fixture gaps, grid-edge selections or a deviation from this
+     section.
+3. *Cross-cutting findings and anomalies.* Each is labelled *finding* (shown by
+   the tables) or *hypothesis* (an explanation not tested by this run) and names
+   the table it comes from. Anomalies include grid-edge selections, fixture gaps,
+   undefined endpoints, MAD-zero channels and unexpected clipping.
+4. *Reading order*, with anchors to the cards and figures.
 
-**Audit material in an appendix**: every table, per-seed values, operating
-points, diagnostics, the manifest with checksums, and the reductions with their
-projections.
+**Appendix.** Identity, revision and checksums (the manifest), the full
+per-dtype tables, per-seed values, operating points, diagnostics, and the
+reductions with their projections.
 
-**Visualization changes** from the W-237 visualization review:
+**Visualization**, following the W-237 visualization comment of 2026-09-28:
 
-1. One display range per condition, channel and dtype, shared by the before
-   and after panels and stated on the figure, plus a difference panel
-   (after − before) with a symmetric range.
-2. Rows for the targeted conditions, `clean` and `combined` of each method.
-3. Detection overlays at each mode's development-selected operating point:
-   matched detections, false detections and missed truth with distinct markers.
-4. A colour-calling view: for matched reads, true against called colour per
-   round, before and after.
-5. For background methods, the background estimate against the truth on the
-   same slice, with their difference.
-6. Histograms of the signal channels only (the sequencing channels ch00–ch03),
-   with the selected noise and adaptive cutoffs marked.
-7. Δ dot plots per method: one dot per held-out seed for each endpoint and
-   condition, with the mean, the seed range and the `max(range, 0.02)` benefit
-   line, both modes side by side.
-8. PR curves as small multiples, one panel per condition and mode, with
-   degenerate curves (fewer than two distinct recall values, or no detections at
-   any grid value) dashed and labelled.
-9. Larger panels: every image panel at least 400 pixels on its shorter side,
-   upsampled without interpolation.
+1. One shared linear display range for the before and after panels, stated on
+   the figure, plus a difference panel (after − before) or a residual-against-truth
+   panel.
+2. For each method, a grid with rows for the targeted condition, `clean` and
+   `combined`, and columns for before, after and difference.
+3. Overlays of true positives, false positives and misses at the
+   development-selected threshold of each mode.
+4. A colour-calling view: for a few truth puncta, including the dim punctum of
+   change 9, the channel × round intensity vector before and after, as a heatmap
+   or bars, with the true colour sequence marked.
+5. For background methods, the estimated background against the truth
+   background on the same slice, and the residual.
+6. Histograms of the signal-carrying channels only, marking both the noise
+   cutoff and the detection threshold actually used at the development-selected
+   operating point.
+7. A per-method dot plot of Δ max-F1 and Δ correct-decode fraction, with
+   seed-range error bars, for the targeted conditions, `clean` and `combined` in
+   both dtypes and both modes, with the provisional flag band (±`max(range,
+   0.02)`) shaded.
+8. PR curves as small multiples that show only each method's before/after pair,
+   one panel per condition and mode. Curves that collapse to a point (MAD 0) are
+   marked or dropped, and the choice is stated.
+9. Larger panels cropped around the dim punctum, so that the XZ view is legible.
+   The dim punctum is the emitting reference-round truth punctum with the
+   lowest realized peak whose centre is in bounds, on held-out seed 100; the
+   line profile of the accepted design passes through it.
 
 ### Resource projection
 
 Scaled from W-233's measured full run, without running anything.
 
 * **A1, source.** W-233 took 2006 s wall time and 1969 s of compute: 1155 s for
-  13 conditions and 814 s for three multi-FOV sets, each over two dtypes and six
-  seeds with 14 arms, at 16×64×64 ZYX with three rounds, in noise mode only.
+  13 conditions with 14 single-FOV arms and 814 s for three multi-FOV sets of
+  three FOVs with 7 arms (`multi_fov_recipes`), each over two dtypes and six
+  seeds, at 16×64×64 ZYX with three rounds, in noise mode only.
   The remaining 37 s is fixed overhead.
 * **A2, scene size.** Cost is linear in rounds × voxels: (4 × 8) / (3 × 16) =
   2/3. This is conservative: halving Z in the W-233 pilot cut the cost per unit
@@ -661,8 +684,10 @@ Scaled from W-233's measured full run, without running anything.
   bound, treats detection as free. Generation, preprocessing, registration and
   the direct metrics are shared, so the true factor lies between.
 * **A5, matrix.** 16 conditions (13 plus `bright_outliers`, `saturation` and
-  `clean_unbalanced`) and 3 multi-FOV sets, each in 2 dtypes, with 14 arms and
-  6 seeds, and 60 s for the saturation `k` search (about 80 scene generations).
+  `clean_unbalanced`) with W-233's 14 single-FOV arms, and 3 multi-FOV sets
+  with its 7 multi-FOV arms, each in 2 dtypes with 6 seeds, and 60 s for the
+  saturation `k` search (about 80 scene generations). Each part is scaled from
+  the measured cost of the same arms, so no arm count is extrapolated.
 * **A6, exclusions.** Report rendering is not included, because W-233's run did
   not measure it. W-239's pilot times it.
 * **Budget.** 2700 s, W-233's 45 minutes (choice C3).
