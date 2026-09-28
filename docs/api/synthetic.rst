@@ -19,8 +19,11 @@ and ``starfinder synthetic generate`` writes the MATLAB-compatible layout.
    BackgroundConfig
    BENCHMARK_PRESETS
    benchmark_scene_preset
+   CALIBRATED_CONDITIONS
+   calibrated_scene_preset
    deformation_geometry
    DEFORMATION_PRESETS
+   development_codebook
    DEVELOPMENT_FACTORS
    DEVELOPMENT_FIXTURES
    development_preset_factors
@@ -290,6 +293,30 @@ single-factor comparisons; they are neither packaged nor oracle-checked.
 empty directory. ``formed.csv`` names the color sequence ``color_sequence``;
 files written before this naming carry ``codeword`` and are not supported
 (regenerate them).
+
+Calibrated development presets
+------------------------------
+
+``calibrated_scene_preset(condition="clean", dtype="uint8", seed=0,
+codebook="balanced")`` returns one 8×64×64 FOV of
+``calibrated-development-v1``: 80 amplicons with lognormal brightness and a
+development calibration against the processed-image development targets
+(:doc:`../image-statistics`, which records how each parameter follows from a
+target). Every condition, including ``clean``, carries a uniform pedestal,
+Poisson, white and spatially correlated noise (``NoiseConfig.correlated_enabled``),
+non-uniform channel gains and a mild round trend. ``CALIBRATED_CONDITIONS``
+maps each §2.5 evaluation condition name to the factors it adds on top.
+``dtype`` is ``uint8`` or ``uint16`` (every intensity × 16, unverified against
+real data). Conditions and dtypes share the scene key, so one seed gives the
+same amplicons and noise draws throughout. Integer outputs clip 10–21 % of the
+voxel values at zero, so generation warns about clipping by design; in uint8 the
+brightest lognormal puncta also saturate a few voxels at 255.
+
+``development_codebook("balanced")`` has 16 genes over four rounds and
+channels, each color exactly four times per round and any two codewords at
+least three rounds apart; ``development_codebook("unbalanced")`` is the
+deliberately unbalanced variant (colors 7, 5, 3 and 1 times per round) for the
+histogram-matching harm test. Gene IDs carry the variant name.
 
 Benchmark datasets
 ------------------

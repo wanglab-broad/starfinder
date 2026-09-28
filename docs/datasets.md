@@ -108,6 +108,26 @@ Their images differ from every historical synthetic version below, even where th
 shape, count and seed match. No register ID is assigned to them; whether D06 moves
 to `benchmark-presets-v1/small` is a register decision.
 
+### Calibrated development preset
+
+`calibrated-development-v1` (`calibrated_scene_preset`, W-241) is a development
+calibration against the W-238 processed-image statistics
+([image statistics](image-statistics.md)); it is **not D04**, not a benchmark
+calibration and qualifies no dataset. Scenes are generated on demand; nothing is
+stored in the repository.
+
+| Version | ZYX / dtype | Amplicons per FOV | Conditions | Codebooks |
+| --- | --- | --- | --- | --- |
+| `calibrated-development-v1` | `(8,64,64)`, uint8 or uint16 | 80, lognormal brightness | The 13 §2.5 evaluation conditions (`CALIBRATED_CONDITIONS`) | `balanced` (16 genes) or `unbalanced` |
+
+Every condition, including `clean`, carries the calibrated baseline: a uniform
+pedestal, Poisson, white and spatially correlated noise, non-uniform channel
+gains and a mild round trend. uint8 is the measured scale. uint16 uses the same
+calibrated shape with every intensity multiplied by 16 (the ratio of the
+benchmark presets); **the uint16 scale is unverified against real data**,
+because W-238 measured only 8-bit exports. The side-by-side comparison with the
+W-238 targets is a run record outside the repository.
+
 ## Historical synthetic sequencing inputs
 
 These are synthetic Gaussian **processed-image** scenes from the historical

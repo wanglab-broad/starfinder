@@ -9,6 +9,8 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.synthetic.benchmark_scene_preset`
 * :py:obj:`starfinder.benchmark.BenchmarkCase`
 * :py:obj:`starfinder.benchmark.BenchmarkTrialResult`
+* :py:obj:`starfinder.synthetic.CALIBRATED_CONDITIONS`
+* :py:obj:`starfinder.synthetic.calibrated_scene_preset`
 * :py:obj:`starfinder.dataset.CheckpointConfig`
 * :py:obj:`starfinder.barcode.Codebook`
 * :py:obj:`starfinder.barcode.CodebookAwareDecoderConfig`
@@ -22,6 +24,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.synthetic.DEFORMATION_PRESETS`
 * :py:obj:`starfinder.registration.DemonsConfig`
 * :py:obj:`starfinder.registration.DenseDisplacementTransform`
+* :py:obj:`starfinder.synthetic.development_codebook`
 * :py:obj:`starfinder.synthetic.DEVELOPMENT_FACTORS`
 * :py:obj:`starfinder.synthetic.DEVELOPMENT_FIXTURES`
 * :py:obj:`starfinder.synthetic.development_preset_factors`

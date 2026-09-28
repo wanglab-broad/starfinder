@@ -288,3 +288,69 @@ in cyan. Inspection on 2026-09-28:
 Two further caveats apply. Depth quarters follow the stored z order; which end
 is the sample surface is not verified. The first and last planes have only
 one neighbouring plane in the 3×5×5 footprint, so more maxima pass there.
+
+## Calibrated preset (W-241)
+
+`calibrated_scene_preset` (`calibrated-development-v1`) sets its appearance from
+the development targets above. The comparison range for each checked statistic
+is the p10–p90 (`numpy.percentile`, linear) of the four datasets' development
+values of the adaptive selection, for example 81.6–87.5 for the peak p50. All
+intensities below are uint8 grey levels; uint16 multiplies every intensity by 16
+(an unverified scale, see the limitations).
+
+### Target → parameter
+
+| Target | Parameter | Step |
+| --- | --- | --- |
+| σ_log truncated fit 0.42–0.495; bright-puncta peak p90/p10 2.6–3.6 | Lognormal brightness, σ_log 0.46 | Midpoint of the fitted range; a lognormal with σ_log 0.46 has p90/p10 = exp(2.563 × 0.46) = 3.25. |
+| Peak p50 81.6–87.5 | Brightness median 88 | The selected peak is about the amplitude A times the channel gain, the round trend and the sampled kernel peak, plus the pedestal, shifted up by the 0.2 × maximum selection. The median was set by measuring the clean condition over seeds 0–2 (peak p50 85). |
+| Peak p50 − amplitude p50 at the range centres (84.5 − 77.3 = 7.2); background / amplitude p50 0.043 (median over datasets) | Uniform pedestal 5 in every condition | The annulus median equals the pedestal when it is positive; 5 lies between 0.043 × 77 = 3.3 and 7.2. |
+| Clutter / pixel σ p50 2.19–3.12 | Correlated noise, correlation length (2, 4, 4) voxels ZYX | With L = 4 in Y and X, neighbouring pixels correlate at exp(−1/32) = 0.969, so the correlated term adds 3 % of its variance to the pixel σ² but nearly all of it to the clutter σ² over the 21×21 annulus. |
+| SNR (clutter) p50 6.05–9.96; SNR (pixel) p50 14.5–32 | Correlated σ 6.5, white σ 1.5, Poisson α 0.25 | The clutter σ follows from the amplitude target over the clutter SNR; the pixel σ from the amplitude over the pixel SNR. The white and Poisson terms set the pixel σ (α × pedestal adds variance 1.25). |
+| Clutter from crowding: the clutter σ is 2–3.3 × the pixel σ, and the overlays show neighbouring puncta in dense regions | 8 × 64 × 64 ZYX with 80 amplicons | Stationary Gaussian noise alone strong enough for a clutter SNR near 8 exceeds the 0.2 × maximum threshold often and floods the selection with background maxima. Within the 80-amplicon bound, an 8-plane stack gives about one same-channel neighbour per annulus, which supplies part of the clutter as in the real data. |
+| Channel gain spread 1.28–2.64 (1.26–1.45 in D01, D02 and aging) | Clean channel gains 1, 0.94, 0.88, 0.83 | Designed spread 1.2; the measurement reads higher (1.37) because a dimmer channel has a lower threshold and admits more near-threshold maxima. |
+| Round trend 1.06–1.78 (1.04–1.18 in D01, D02 and aging) | Clean trend base 0.963 | 0.963⁻³ = 1.12 over four rounds (measured 1.08). |
+| Gain spread and round trend up to the LN-like end of the range | `gain`: channel factors 1.08, 1.02, 0.98, 0.93 (geometric mean 1); `trend`: base × 0.96 with the geometric-mean brightness kept | Designed totals 1.39 and 1.27; measured 1.68 and 1.28. |
+| Background / amplitude p50 up to 0.095 | Offsets 0–1.5 per channel, gradient up to 3, three regions of 2–3, 8 texture blobs of 5, tissue weights 1–0.25 by channel; crosstalk 5 %; weakening 5 % per round to 0.6 | Each factor alone keeps the checked statistics in range; the strengths were halved from a first trial in which the stacked conditions fell far below the range, because a real image carries all effects at once. |
+
+Widths (axial 1.5, lateral 1.3 voxels, log SD 0.1), elongation and angle keep
+the benchmark-preset engineering choices; W-238 did not measure puncta widths.
+
+### Side-by-side result
+
+The run record `runs/W-241/20260928T203749Z-1d2c4ade/side_by_side/result/` (outside the
+repository)
+measures every condition in uint8 with this tool, seeds 0, 1 and 2 pooled as one
+dataset, and lists the development range, the W-238 min–max range and the
+held-out FOVs' range for every statistic. 87 of the 91 checked values (seven
+statistics × 13 conditions) fall in the p10–p90 range; clean and the eleven
+other conditions except `combined` and `combined_geometry` fall in range for
+every checked statistic.
+
+| Condition | Peak p50 | Amplitude p50 | SNR clutter p50 | SNR pixel p50 | Clutter / pixel | Gain spread | Round trend |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Range (p10–p90) | 81.6–87.5 | 73.5–81.1 | 6.05–9.96 | 14.5–32 | 2.19–3.12 | 1.28–2.64 | 1.06–1.78 |
+| `clean` | 85 | 78 | 9.56 | 24.7 | 2.59 | 1.37 | 1.08 |
+| `background_only` | 82 | 74 | 8.28 | 22.1 | 2.58 | 1.31 | 1.19 |
+| `round_effect_only` | 82 | 76 | 9.15 | 23.5 | 2.61 | 1.70 | 1.32 |
+| `combined` | **80** | **71** | 7.76 | 19.8 | 2.55 | 1.66 | 1.36 |
+| `combined_geometry` | **79** | **68.5** | 7.62 | 19.6 | 2.54 | 1.94 | 1.54 |
+
+The two deviations have one cause. The stacked conditions dim the dimmest
+volumes, whose adaptive threshold (0.2 × the volume maximum) then admits more
+near-threshold background maxima, and they raise the local background, so the
+pooled medians fall a few grey levels below the range (the sampling standard
+error of a median is about 2 grey levels). Both values lie within the held-out
+FOVs' range (peak 64–88, amplitude 47–80). The real 8-bit exports are scaled per
+volume, which keeps their threshold near 47; that export stage is excluded.
+`combined_geometry` also moves puncta across the z edges of the 8-plane stack.
+
+Statistics outside the checked set differ from the real data and are reported
+for information: the zero fraction p50 is 0.14–0.23 (real 0.58–0.92), because the
+noise is symmetric about a positive pedestal; the peak p10 is near 46, below the
+real 50, because background maxima pile up at the threshold; and the truncated
+lognormal fit is unidentified in most volumes (fewer than 20 puncta) or biased
+by those maxima, while the within-volume σ_log (0.45 in clean) is in range. In
+uint8 the brightest puncta saturate about 8 in 100,000 voxel values per round.
+Generating and measuring all 13 conditions with three seeds took 30 s on one CPU
+with a maximum RSS of 226 MB.

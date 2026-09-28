@@ -2,6 +2,7 @@
 from dataclasses import dataclass, field
 
 import numpy as np
+from scipy import ndimage
 
 from ._common import (ScalarDistribution, _array, _distribution, _draw, _integer,
                       _json, _placement, _position)
@@ -75,6 +76,15 @@ class NoiseConfig:
     finite nonnegative scalars (zero by default). Draws come from the
     round/channel keyed noise streams; Gaussian standardized draws persist when
     strengths change. No calibrated photon claim.
+
+    The spatially correlated residual (``correlated_enabled``, default false)
+    is added last: correlated_sigma*G, with G unit-variance white Gaussian noise
+    smoothed by a separable Gaussian kernel. correlation_length_zyx (finite,
+    nonnegative voxels per axis) is the standard deviation L of the Gaussian
+    autocorrelation exp(-d**2/(2*L**2)) of G; the kernel standard deviation is
+    L/sqrt(2), truncated at radius ceil(4*L/sqrt(2)) and scaled to unit sum of
+    squares (L=0 leaves that axis white). Its draws come from the separate
+    ``noise.correlated`` stream on the grid padded by the kernel radius.
     Instances are not hashable (see FormedSceneConfig).
     """
 
@@ -85,6 +95,9 @@ class NoiseConfig:
     independent_enabled: bool = False
     sigma: float = 0.0
     model: str = "gaussian"
+    correlated_enabled: bool = False
+    correlated_sigma: float = 0.0
+    correlation_length_zyx: tuple[float, float, float] = (1.0, 1.0, 1.0)
 
 
 def _parameter(value, name, shape, default=0, *, positive=False):
@@ -232,7 +245,40 @@ def _noise(config):
         raise ValueError('noise strengths must be nonnegative scalars')
     alpha = alpha if config.dependent_enabled else 0.0
     sigma = sigma if config.independent_enabled else 0.0
-    return dict(type='NoiseConfig', **flags, alpha=alpha, sigma=sigma, model=config.model)
+    # The correlated term is appended so the existing effective keys keep their order.
+    correlated = _flags(config, ('correlated',))
+    strength = float(_parameter(config.correlated_sigma, 'correlated_sigma', ()))
+    lengths = _parameter(config.correlation_length_zyx, 'correlation_length_zyx', (3,))
+    kernel_sigma = lengths / np.sqrt(2)
+    return dict(type='NoiseConfig', **flags, alpha=alpha, sigma=sigma, model=config.model, **correlated,
+                correlated_sigma=strength if config.correlated_enabled else 0.0,
+                correlation_length_zyx=lengths.tolist(), correlated_kernel_sigma_zyx=kernel_sigma.tolist(),
+                correlated_kernel_radius_zyx=[int(r) for r in np.ceil(4 * kernel_sigma)])
+
+
+def _correlated_kernel(length, radius):
+    """Unit-sum-of-squares Gaussian smoothing weights for one axis (see NoiseConfig).
+
+    The kernel standard deviation is length/sqrt(2); the weights cover
+    -radius..radius. A zero length (radius 0) gives the identity weight [1].
+    """
+    if radius == 0:
+        return np.ones(1)
+    offsets = np.arange(-radius, radius + 1, dtype=np.float64)
+    with np.errstate(divide='ignore', over='ignore', under='ignore'):
+        weights = np.exp(-offsets ** 2 / length ** 2)   # exp(-k^2 / (2 (L/sqrt 2)^2))
+    return weights / np.sqrt(np.sum(weights ** 2))
+
+
+def _correlated(generator, shape, noise):
+    """Unit-variance correlated field on shape: smooth a padded white draw, keep the interior."""
+    radii = noise['correlated_kernel_radius_zyx']
+    field = generator.standard_normal(tuple(n + 2 * r for n, r in zip(shape, radii)))
+    for axis, (length, radius) in enumerate(zip(noise['correlation_length_zyx'], radii)):
+        if radius:
+            field = ndimage.correlate1d(field, _correlated_kernel(length, radius), axis=axis, mode='constant')
+            field = field[(slice(None),) * axis + (slice(radius, -radius),)]
+    return field
 
 
 def evaluate_background_translated(components, shape, translation, dtype=np.float64):
@@ -283,7 +329,8 @@ def _observe(plane, tissue, background, r, c, noise, label, channel, stream):
     plane is one contiguous ZYX accumulation plane; tissue is the reference
     background sampled on this round's grid, or None without latent components.
     Draws come from the (round, channel) keyed streams in flat chunks, so
-    rounds and channels may be generated one at a time.
+    rounds and channels may be generated one at a time. The correlated field is
+    drawn whole: one padded float64 array per channel plane.
     """
     with np.errstate(over='ignore', invalid='ignore'):
         if tissue is not None:
@@ -308,3 +355,8 @@ def _observe(plane, tissue, background, r, c, noise, label, channel, stream):
                 part += np.sqrt(alpha) * np.sqrt(part) * dependent.standard_normal(part.size)
             if independent is not None:
                 part += sigma * independent.standard_normal(part.size)
+    if noise['correlated_enabled']:
+        # Added after both white residuals; its own stream leaves their draws unchanged.
+        field = _correlated(stream('noise.correlated', None, label, channel), plane.shape, noise)
+        with np.errstate(over='ignore', invalid='ignore'):
+            plane += noise['correlated_sigma'] * field

@@ -213,8 +213,11 @@ starfinder.synthetic
 * :py:obj:`starfinder.synthetic.BackgroundConfig`
 * :py:obj:`starfinder.synthetic.BENCHMARK_PRESETS`
 * :py:obj:`starfinder.synthetic.benchmark_scene_preset`
+* :py:obj:`starfinder.synthetic.CALIBRATED_CONDITIONS`
+* :py:obj:`starfinder.synthetic.calibrated_scene_preset`
 * :py:obj:`starfinder.synthetic.deformation_geometry`
 * :py:obj:`starfinder.synthetic.DEFORMATION_PRESETS`
+* :py:obj:`starfinder.synthetic.development_codebook`
 * :py:obj:`starfinder.synthetic.DEVELOPMENT_FACTORS`
 * :py:obj:`starfinder.synthetic.DEVELOPMENT_FIXTURES`
 * :py:obj:`starfinder.synthetic.development_preset_factors`
