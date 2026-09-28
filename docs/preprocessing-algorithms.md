@@ -403,3 +403,303 @@ The 2-point threshold is provisional and may be revised once results are seen.
 The flag informs review; it does not remove a method, and the decision to stop
 discussing one stays with the chapter author. The same per-method layout is used
 for real data in E13, where only images and proxy metrics are available.
+
+## Evaluation design amendment for the calibrated rerun (Proposed, W-242)
+
+**Status: Proposed (W-242), pending Jiahao's approval.** This section is a
+draft for review in W-243. It amends *Evaluation design for task groups 5 and
+6* for the calibrated rerun (W-239) only. The page's *Accepted* status (W-227)
+still applies to every other section, which this draft does not change. It
+recommends no preprocessing default.
+
+Where this section and the accepted design differ, the rerun follows this
+section. Everything it does not mention stays as accepted and as implemented for
+W-233 in `benchmarks/preprocessing_synthetic.py`: the arms and their page
+defaults, the before/after comparisons, the direct metrics, the diagnostics,
+development seeds {0, 1, 2}, held-out seeds {100, 101, 102}, and the truth
+matching.
+
+### Findings this amendment answers
+
+The W-237 review of the W-233 results (evaluation run
+`runs/W-233/20260927T234158Z-cf84b743/evaluation/`, outside the repository) and
+the W-238 measurement ({doc}`image-statistics`) found:
+
+| ID | Source | Finding |
+| --- | --- | --- |
+| F1 | W-237 | The development presets were uncalibrated. `combined` at ×12 had an SNR of about 2.3 (W-238 preliminary run), and the single-factor conditions carried no noise. |
+| F2 | W-237 | Several targeted conditions did not degrade `none`. In uint16, `none` reached the same max-F1 on `baseline`, `gain`, `trend` and `gain_baseline` as on `clean` on every held-out seed (0.904, 0.912, 0.920); in uint8, `baseline` and `trend` matched `clean`. No method could show a benefit there, so those flags carried no information. |
+| F3 | W-237 | Only the noise mode was evaluated. The operating point of `none` sat at the grid minimum 2 in 9 of 13 uint8 conditions. The historical real-data settings, `adaptive` 0.2 and 0.4, were not evaluated. |
+| F4 | W-237 | The flag counted a gain in one endpoint while the other collapsed. 3D background on `gradient` (uint8, isolated) raised the correct-decode fraction by 0.53 while max-F1 fell by 0.87, and counted as a benefit. |
+| F5 | W-237 | Fixture gaps. The texture blobs were dimmer than the puncta, so no bright-outlier fixture existed (W-233 fixture gap). No condition saturated. W-233's `gain` scaled all channels by 0.5, which leaves channel ratios unchanged. |
+| F6 | W-237 | Histogram matching lowered the `clean` correct-decode fraction by 0.84 in both dtypes. The codebook's channel balance was not controlled, so the method's balance assumption could not be tested. |
+| F7 | W-237 | The report led with audit tables. The review set a human-summary draft format and asked for nine visualization changes. |
+| T1 | W-238 | Real clutter SNR p50 5.97–11.1 and pixel SNR p50 12.9–37.7; the clutter σ is 2–3.3 times the pixel σ. |
+| T2 | W-238 | MAD is 0 in 77 % of real volumes, so the noise-mode cutoff equals the median whatever the threshold value. The adaptive cutoff (0.2 × maximum) has a p50 of 43.8–49.2 grey levels. |
+| T3 | W-238 | Nothing is saturated (at most 1.5 × 10⁻⁸ of a volume). The channel gain spread is 1.26–3.15 and the round trend 1.04–2.04. |
+
+### 1. Presets
+
+*Answers F1 and F2 (W-237) and T1 (W-238).*
+
+* **Scenes.** Every condition, including `clean`, uses
+  `calibrated_scene_preset(condition, dtype, seed=seed, codebook="balanced")`
+  (`calibrated-development-v1`, W-241; {doc}`datasets`). The scenes are
+  8×64×64 ZYX with four rounds, four channels, 80 amplicons and the balanced
+  16-gene `development_codebook`. The preset is used as returned: no intensity
+  scale or field change as in W-233. Only the multi-FOV sets and the added
+  conditions of item 5 change fields.
+* **Conditions.** The 13 names of `CALIBRATED_CONDITIONS`, the same names as in
+  W-233, plus the conditions of item 5. `clean` carries the calibrated baseline:
+  a uniform pedestal, Poisson, white and spatially correlated noise, mild
+  channel gains and a mild round trend. Each single-factor condition adds its
+  factor on top of that baseline, so no evaluation scene is noise free.
+  Noise-free scenes remain unit-test fixtures only.
+* **Multi-FOV sets.** As in W-233: `mf_density` (counts 80, 20 and 2 on
+  `combined`), `mf_gain_drift` (readout gains × 1, 0.75 and 0.5 on `combined`)
+  and `mf_density_clean` (counts 80, 20 and 2 on `clean`). Each FOV is the
+  calibrated configuration with `count`, `FOV_id`, `scene_key` and the readout
+  `gains` replaced, and with `coordinates`, `amplicon_ids` and `gene_ids`
+  cleared.
+* **Dtypes.** uint8, the measured scale, and uint16 at ×16, which is unverified
+  against real data (see choice C2 and reductions R2 and R3).
+* **Truth.** Reference round `round1`. The background and signal truths are
+  generated as in W-233; the background truth includes the pedestal.
+* **3D background radius.** The accepted rule `r = ceil(3σ) + 1` uses the
+  preset's median widths: axial 1.5 and lateral 1.3 voxels, which are the
+  exponentials of the lognormal locations, not the locations themselves. It gives
+  (6, 5, 5) ZYX. A Z footprint of 13 voxels is longer than the 8 planes, so
+  `background_3d` raises. The rerun uses (3, 5, 5):
+  `r_z = floor((8 − 1) / 2) = 3` is the largest Z radius whose footprint fits
+  (choice C4).
+
+### 2. Threshold modes
+
+*Answers F3 (W-237) and T2 (W-238).*
+
+| Mode | Cutoff per channel | Grid | Fixed operating points |
+| --- | --- | --- | --- |
+| `noise` | `median + v × 1.4826 × MAD` over the channel | {2, 3, 4, 5, 6, 8, 10, 12, 15} | 5 |
+| `adaptive` | `v ×` the channel maximum | {0.1, 0.15, 0.2, 0.25, 0.3, 0.4} | 0.2 and 0.4 |
+
+* **Detection.** `LocalMaximaConfig(threshold_mode=mode, threshold_value=v)`
+  with its other fields at their defaults, applied to the reference round after
+  the recipe, as `FOV.run` detects. A maximum is kept when its peak is strictly
+  above the cutoff. The adaptive grid brackets the historical real-data settings
+  0.2 and 0.4.
+* **Sweep.** For each mode, as in W-233's `sweep`: one `FOV.run` at the mode's
+  lowest grid value; every higher value is the subset of spots whose
+  `peak_intensity` is above that value's cutoff. For every arm on seeds 0 and
+  100, a direct run at the mode's first fixed point (5 or 0.2) must give the same
+  spots and reads, or the run stops.
+* **Per seed and mode.** Precision, recall and F1 at every grid value (F1 is 0
+  when nothing is detected), reads, the correct-decode fraction (correct accepted
+  reads divided by the number of truth amplicons) and AUPRC over the mode's own
+  grid (W-233 formula).
+* **Operating point.** For each mode, condition, dtype and arm (multi-FOV: each
+  mode, set, dtype and arm, with F1 pooled over the set's FOVs as in W-233): the
+  mean F1 over development seeds 0, 1 and 2 at each grid value, in float64 with
+  seeds in ascending order. The highest mean wins; exact ties go to the smallest
+  grid value. A selection at a grid end (2 or 15; 0.1 or 0.4) is marked
+  `at_grid_edge` in the operating-point table and on the method card. The grid
+  is not extended.
+* **Endpoints.** Per held-out seed and mode: max-F1 is the maximum F1 over the
+  mode's grid on that seed; the correct-decode fraction is taken at the mode's
+  development-selected value. Both are also reported at the fixed operating
+  points.
+* **Side by side.** Every table carries a `threshold_mode` column. The
+  precondition, the flag and every figure are computed per mode and shown next
+  to each other. Nothing is pooled across modes, and neither mode is preferred.
+
+### 3. Precondition check
+
+*Answers F2 (W-237).*
+
+The check is a property of the fixture. It is computed once for each targeted
+condition `c`, dtype and mode, and applies to every method that targets `c`.
+
+* **Inputs.** Arm `none` on `c` and on `clean` (for multi-FOV sets:
+  `mf_density_clean`, with endpoints pooled over the FOVs); held-out seeds
+  `s` ∈ {100, 101, 102}; endpoints `E` ∈ {max-F1, correct-decode fraction} as
+  defined in item 2. Seeds pair because the conditions share the scene key: one
+  seed has the same amplicons and noise draws in every condition (W-241).
+* **Degradation.** `g_E = mean_s [E(none, clean, s) − E(none, c, s)]`.
+* **Seed range.** `R_E = max(range_s E(none, clean, s), range_s E(none, c, s))`,
+  where a range is the maximum minus the minimum over the three seeds (W-233's
+  seed range).
+* **Rule.** `c` degrades `E` when `g_E > R_E`, strictly; equality does not
+  count. `c` is a valid target for this dtype and mode when it degrades at least
+  one endpoint. An undefined endpoint does not degrade.
+* **Failure.** A fixture-gap row records the condition, dtype, mode, both
+  degradations and both ranges. The condition is left out of the flag of every
+  method that targets it, for that dtype and mode. Its comparison rows are still
+  reported and marked `fixture_gap`.
+* **Scope.** The check is not applied to `clean`, to `combined` (reported
+  only) or to `clean_unbalanced` (a harm test, item 5).
+* **Rounding.** Every mean, range and delta in items 3 and 4 is rounded to 10
+  decimal places before it is compared, so that values on the `1/n` lattice of
+  the fractions compare exactly.
+
+### 4. Revised low-benefit rule (*provisional*)
+
+*Answers F4 and F2 (W-237).*
+
+For each comparison (method, comparison, before arm `b`, after arm `a`), dtype
+and mode:
+
+* **Inputs.** Held-out seeds 100, 101 and 102; the endpoints of item 2; for
+  each condition `c`, the paired delta
+  `Δ_E(c) = mean_s [E(a, c, s) − E(b, c, s)]` and the seed range
+  `R_E(c) = max(range_s E(b, c, s), range_s E(a, c, s))`.
+* **Eligible targets.** `T*` is the set of the comparison's targeted
+  conditions that pass item 3 for this dtype and mode.
+* **Benefit on `c` in `T*`.** Some endpoint `E` has
+  `Δ_E(c) ≥ max(R_E(c), 0.02)`, and the other endpoint `E′` has
+  `Δ_E′(c) ≥ −R_E′(c)`.
+* **Clean holds.** Both endpoints have `Δ_E(clean) ≥ −R_E(clean)`.
+* **Result.**
+  * *Not flagged* when some `c` in `T*` shows a benefit and `clean` holds.
+  * *Not assessable* when `T*` is empty. No flag is given; the reason lists the
+    fixture gaps, and a `clean` failure is still reported.
+  * *Low benefit* otherwise.
+* **Ties and gaps.** The benefit bound is inclusive (`≥`); a worsening exactly
+  equal to the seed range does not count as harm. When a delta or range that a
+  clause needs is undefined, that clause is not met, and the case is listed as an
+  anomaly.
+* **Multi-FOV sets.** Endpoints are pooled over the set's FOVs per seed, and
+  `clean` is `mf_density_clean`, as in W-233.
+* **Reporting.** Each targeted condition gets a row stating which clause
+  failed. `combined` is reported and does not enter the flag. The 0.02 threshold
+  stays provisional, and the flag still only informs review.
+
+For the rerun, this rule replaces the two bullets of *Low-benefit flag*.
+
+### 5. Added conditions
+
+*Answers F5 and F6 (W-237) and T3 (W-238).*
+
+Each is defined on top of the calibrated `clean` of the same dtype and seed, and
+each targeted one is subject to item 3.
+
+| Condition | Definition | Role |
+| --- | --- | --- |
+| `bright_outliers` | Texture enabled with `TextureConfig(count=4)`, fixed axial width 1.5 and lateral width 2.0 voxels, and lognormal brightness with median 4 × 88 = 352 grey levels (× 16 in uint16) and log SD 0.1; `tissue_weights` 1 for every round and channel. The median is above the puncta's p99 amplitude (about 256). In uint8 the blob cores clip at 255 | Targeted for percentile normalization, replacing bright `texture` blobs as the outlier proxy. Min–max and histogram matching are reported on it, outside their flags |
+| `saturation` | Every intensity parameter that the uint16 variant multiplies by 16 (brightness median, pedestal, Poisson α, white σ and correlated σ) is multiplied by `k`. `k` is the smallest value of `2^(j/4)`, `j` = 0…32, for which the mean clipped fraction over development seeds 0–2 reaches `f`. The clipped fraction is the generator's `above` clipping count summed over rounds and channels, divided by rounds × channels × voxels. `k` is set per dtype before any held-out scene is generated; `k` and each seed's fraction are recorded. `f` = 10⁻³ is proposed (choice C1) | Targeted for the extraction-source mode, with `gain_baseline` and `gain_texture` |
+| `gain` | W-241's calibrated `gain`: channel factors 1.08, 1.02, 0.98 and 0.93 on the clean gains 1, 0.94, 0.88 and 0.83 (measured spread 1.68). It replaces W-233's uniform gain | Targeted for min–max, histogram matching and percentile normalization, as before, and part of `gain_baseline` and `gain_texture` |
+| `clean_unbalanced` | `codebook="unbalanced"`: every round uses the four colours 7, 5, 3 and 1 times | Histogram matching's targeted harm test |
+
+**Harm test.** For each histogram-matching comparison, dtype and mode, the test
+shows harm when either endpoint has
+`Δ_E(clean_unbalanced) < −R_E(clean_unbalanced)` (item 4 notation). It is
+reported on the method card beside the balanced `clean` deltas, so that the
+codebook's share is visible. It does not enter the flag (choice C7).
+
+### 6. Report
+
+*Answers F7 (W-237).*
+
+**Human summary first**, in the W-237 draft format:
+
+1. *Setup*: preset version, conditions with their precondition results per
+   dtype and mode, seeds, dtypes, modes and grids, reductions applied, wall time,
+   and the qualification (development evidence, no defaults, provisional flag).
+2. *One card per method or mode*, in the order of this page: problem, targeted
+   conditions and their precondition status, the flag per dtype and mode with
+   the failing clause, both endpoint deltas with seed ranges on each eligible
+   target and on `clean`, the harm test (histogram matching), and links to the
+   figures.
+3. *Anomalies*: grid-edge selections, fixture gaps, undefined endpoints,
+   MAD-zero channels, unexpected clipping and deviations from this section.
+4. *Reading order*: the order in which to read the cards and figures.
+
+**Audit material in an appendix**: every table, per-seed values, operating
+points, diagnostics, the manifest with checksums, and the reductions with their
+projections.
+
+**Visualization changes** from the W-237 visualization review:
+
+1. One display range per condition, channel and dtype, shared by the before
+   and after panels and stated on the figure, plus a difference panel
+   (after − before) with a symmetric range.
+2. Rows for the targeted conditions, `clean` and `combined` of each method.
+3. Detection overlays at each mode's development-selected operating point:
+   matched detections, false detections and missed truth with distinct markers.
+4. A colour-calling view: for matched reads, true against called colour per
+   round, before and after.
+5. For background methods, the background estimate against the truth on the
+   same slice, with their difference.
+6. Histograms of the signal channels only (the sequencing channels ch00–ch03),
+   with the selected noise and adaptive cutoffs marked.
+7. Δ dot plots per method: one dot per held-out seed for each endpoint and
+   condition, with the mean, the seed range and the `max(range, 0.02)` benefit
+   line, both modes side by side.
+8. PR curves as small multiples, one panel per condition and mode, with
+   degenerate curves (fewer than two distinct recall values, or no detections at
+   any grid value) dashed and labelled.
+9. Larger panels: every image panel at least 400 pixels on its shorter side,
+   upsampled without interpolation.
+
+### Resource projection
+
+Scaled from W-233's measured full run, without running anything.
+
+* **A1, source.** W-233 took 2006 s wall time and 1969 s of compute: 1155 s for
+  13 conditions and 814 s for three multi-FOV sets, each over two dtypes and six
+  seeds with 14 arms, at 16×64×64 ZYX with three rounds, in noise mode only.
+  The remaining 37 s is fixed overhead.
+* **A2, scene size.** Cost is linear in rounds × voxels: (4 × 8) / (3 × 16) =
+  2/3. This is conservative: halving Z in the W-233 pilot cut the cost per unit
+  to 0.43, not 0.5 (34.6 s to 14.8 s), and the capped Z radius shrinks the 3D
+  footprint.
+* **A3, condition cost.** Every calibrated condition carries noise, so each
+  condition and dtype is costed at W-233's most expensive condition
+  (`combined_geometry`, 70.5 s per dtype), giving 47.0 s. Each multi-FOV set
+  and dtype is costed at W-233's `mf_density` (147.8 s per dtype), giving
+  98.5 s.
+* **A4, second mode.** Adding the adaptive mode multiplies the cost by `m`. The
+  projection uses `m = 2`, as if everything were repeated. `m = 1`, a lower
+  bound, treats detection as free. Generation, preprocessing, registration and
+  the direct metrics are shared, so the true factor lies between.
+* **A5, matrix.** 16 conditions (13 plus `bright_outliers`, `saturation` and
+  `clean_unbalanced`) and 3 multi-FOV sets, each in 2 dtypes, with 14 arms and
+  6 seeds, and 60 s for the saturation `k` search (about 80 scene generations).
+* **A6, exclusions.** Report rendering is not included, because W-233's run did
+  not measure it. W-239's pilot times it.
+* **Budget.** 2700 s, W-233's 45 minutes (choice C3).
+
+Proposed pre-authorized reductions, applied in order after W-239's own pilot
+projection, stopping as soon as the projection fits:
+
+* **R1.** Multi-FOV sets in uint8 only.
+* **R2.** uint16 only for `clean`, `combined` and `bright_outliers` (the
+  outlier test needs a scale without clipping).
+* **R3.** No uint16 at all.
+
+If the projection still exceeds the budget, W-239 returns blocked. Seeds,
+uint8 conditions, arms, threshold modes and grid values are never dropped.
+
+| Matrix | Projected wall time, `m = 2` | Lower bound, `m = 1` |
+| --- | --- | --- |
+| Full, no reduction | 4285 s (71 min) | 2191 s |
+| R1 alone | 3694 s | 1896 s |
+| R2 alone | 3064 s | 1580 s |
+| R3 alone | 2191 s | 1144 s |
+| R1 then R2 | 2473 s (41 min) | 1285 s |
+| R1, R2 and R3 | 2191 s (37 min) | 1144 s |
+
+At `m = 2` the full matrix exceeds 2700 s, and R1 then R2 brings it within
+budget. Adding `gain_strong` (choice C6) adds 188 s without reductions and
+94 s after R2 (2567 s after R1 and R2).
+
+### Open choices
+
+| ID | Choice | Options | Recommendation |
+| --- | --- | --- | --- |
+| C1 | Saturation fraction `f` | 10⁻⁴; 10⁻³; 10⁻² | 10⁻³. Calibrated `clean` already clips about 8 × 10⁻⁵ in uint8 (W-241), so 10⁻⁴ is barely different; 10⁻³ equals the fraction percentile normalization saturates by design at `p_high` 99.9; 10⁻² clips the cores of most puncta, far beyond real data (T3) |
+| C2 | uint16 in the matrix | Every condition; only `clean`, `combined` and `bright_outliers`; none | Only the three. The uint16 scale is unverified (W-238), but the numerical policy must hold for uint16, and the outlier test needs a scale without clipping. This equals reduction R2 |
+| C3 | W-239 time budget | 2700 s, as W-233; 3600 s; the full matrix at about 4300 s | 2700 s with R1–R3 pre-authorized; the projection after R1 and R2 is 2473 s |
+| C4 | 3D background radius on 8-plane scenes | Cap `r_z` at 3; generate 16 planes for every condition; `r_z = 0` (XY-only opening) | Cap at 3. Sixteen planes would change the calibrated crowding (W-241) and double the cost, and `r_z = 0` is no longer a 3D method. The cap is a stated deviation from `ceil(3σ) + 1` for this rerun |
+| C5 | Precondition reference for multi-FOV sets | `none` on the set against `none` on `mf_density_clean`, as drafted; the per-FOV-fitted recipe on the near-empty FOV against the dense FOV | As drafted, to keep one rule for every condition. It tests the `combined` base rather than the density variation, and the method card says so |
+| C6 | A stronger gain condition | None; `gain_strong` with the LN spread of 3.15 (T3) | Add `gain_strong`. The calibrated `gain` spread of 1.68 may not degrade `none`, and 3.15 is the largest measured spread |
+| C7 | Histogram matching's harm test in its flag | Reported beside the flag; counted as `clean` harm | Beside the flag. The unbalanced codebook violates the method's stated assumption; folding it into the flag would mix two questions |
+| C8 | Bright-outlier brightness | 2.5 × the brightness median (no uint8 clipping, but not above the brightest puncta); 4 ×; 8 × | 4 ×: above the puncta's p99 amplitude, with the uint16 variant as the test without clipping |
