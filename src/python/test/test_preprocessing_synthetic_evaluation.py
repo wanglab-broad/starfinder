@@ -93,3 +93,24 @@ def test_comparison_ranges_are_across_seeds_after_channel_aggregation():
     row = table[(table.condition == "baseline") & (table.dtype == "uint8")].iloc[0]
     assert (row.mad_after_mean, row.mad_after_min, row.mad_after_max) == (9.5, 9.5, 9.5)
     assert row.reads_wrong_gene_after_mean == 0.5 and row.reads_false_detection_t5_delta_mean == 0.0
+
+
+def test_background_ablation_rows_have_before_and_after_background_error(tmp_path):
+    # pct has no background step: its estimate is 0, measured in input units before normalization,
+    # the stage of r2's bg_corrected snapshot, so pct -> r2 ablations report both sides.
+    book, config = evaluation.scene_config("baseline", dtype="uint8", seed=100, shape=(10, 32, 32), count=12)
+    scene, background, signal, truth = evaluation.generate(book, config)
+    radius = evaluation.background_radius(config)
+    rows = []
+    for arm, recipe, fov in evaluation.processed_arms(scene, book, config.FOV_id, tmp_path, radius, False):
+        rows.append(dict(condition="baseline", dtype="uint8", seed=100, arm=arm,
+                         **evaluation.direct_metrics(fov, scene.rounds, background, signal, truth, book, arm, recipe)))
+    direct = pd.DataFrame(rows).set_index("arm")
+    assert direct.loc["pct", "bg_units"] == direct.loc["r2_scalar", "bg_units"] == "input intensity"
+    assert direct.loc["pct", "bg_bias"] == -direct.loc["pct", "bg_truth_mean"]
+    ends = pd.DataFrame([dict(r, **{m: 0.5 for m in evaluation.ENDPOINTS}) for r in rows])
+    specs = [c for c in evaluation.COMPARISONS if c[0] in ("scalar_background", "background_3d") and c[1] == "ablation"]
+    table = evaluation.comparisons_table(ends, pd.DataFrame(rows), None, [(m, c, b, a, ("baseline",))
+                                         for m, c, b, a, _ in specs], "baseline", "baseline")
+    assert len(table) and table[[f"bg_{m}_{side}_mean" for m in ("rmse", "bias") for side in ("before", "after")]
+                                ].notna().all().all()

@@ -352,6 +352,11 @@ def _box(shape, center, radius):
     return tuple(slice(max(0, c - r), min(n, c + r + 1)) for c, r, n in zip(center, radius, shape))
 
 
+#: Stage at which arms without a background step are measured (estimate 0).
+_BG_STAGE = {"none": "input (no background step)",
+             "pct": "before normalization, in input units (no background step); the stage of r2's bg_corrected"}
+
+
 def _normalized_truth(raw, normalized, background):
     """Background truth mapped into recipe 1's normalized units, per channel.
 
@@ -375,7 +380,9 @@ def direct_metrics(fov, raw, background, signal, truth, book, arm, recipe):
     out = {}
     # Background estimation error on the reference round: estimate = input - output of the background step.
     truth_background, units = background[ref], "input intensity"
-    if arm == "none":
+    if arm in ("none", "pct"):
+        # No background step: estimate 0. For pct this is measured before normalization, in input
+        # units, the stage of the r2 arms' bg_corrected snapshot, so the pct -> r2 ablations compare.
         estimate = np.zeros_like(background[ref])
     elif arm in BACKGROUND_ARMS:
         corrected = fov.snapshots.get(ref, {}).get(SNAPSHOT, detection[ref])
@@ -392,7 +399,9 @@ def direct_metrics(fov, raw, background, signal, truth, book, arm, recipe):
     if estimate is not None:
         error = estimate - truth_background
         out.update(bg_rmse=float(np.sqrt(np.mean(error ** 2))), bg_bias=float(np.mean(error)),
-                   bg_truth_mean=float(np.mean(truth_background)), bg_units=units)
+                   bg_truth_mean=float(np.mean(truth_background)), bg_units=units, bg_stage=_BG_STAGE.get(arm, (
+                       "recipe 1 normalized image (reconstruction input)" if arm in ("r1", "r1_recon")
+                       else "background step output (bg_corrected), before normalization")))
     # Puncta contrast (peak - local background) / noise on the reference detection image.
     image, sig = detection[ref].astype(np.float64), signal[ref]
     peak_amplitude = float(sig.max()) if sig.size else 0.0
@@ -889,6 +898,11 @@ def run(output, *, scope="full", shape=(32, 64, 64), count=80, multi_fov_dtypes=
             auprc="average precision over the threshold grid: sum of recall increments times precision",
             operating_points="max mean F1 over development seeds (first threshold among ties); reported on evaluation "
                              "seeds, and threshold_value=5.0",
+            background_error=dict(truth="float64 background truth (same config, brightness 0, no noise), reference round",
+                estimate="input minus the background step's output; 0 for arms without a background step",
+                stages={**_BG_STAGE, "background arms and r2": "background step output (bg_corrected), before "
+                        "normalization, input units", "r1, r1_recon": "recipe 1 normalized image (reconstruction "
+                        "input), truth mapped through the fitted value map"}),
             low_benefit=dict(rule="targeted: no endpoint (max-F1, correct-decode fraction) improves by max(seed range, "
                                   "2 points); or clean: an endpoint worsens by more than its seed range",
                              threshold_points=LOW_BENEFIT_POINTS, provisional=True,
