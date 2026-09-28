@@ -14,6 +14,9 @@ Maintained source-derived configuration and adapters for the common
   Git. Development evidence only, with no recommended defaults.
 - `preprocessing_report.py`: renders the standalone §2.5 inspection report (W-234) from a saved
   `preprocessing_synthetic.py` output directory, after checking its checksums and source revision.
+- `image_statistics.py`: intensity, puncta and noise statistics of one real TIFF or synthetic channel
+  volume, and the read-only real-data measurement behind the synthetic calibration targets (W-238);
+  see [image statistics](../docs/image-statistics.md).
 
 Original scripts, results and restricted reference snapshots remain external.
 These new implementations follow the Python package's declared MIT terms;

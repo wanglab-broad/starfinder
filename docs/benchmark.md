@@ -4,6 +4,7 @@
 :hidden:
 
 benchmark-recipes
+image-statistics
 ```
 
 The supported interface is `BenchmarkCase`, `BenchmarkTrialResult`,
@@ -12,6 +13,8 @@ adapters are registration (translation, demons, TPS or CPD) and the shared
 Dataset/FOV pipeline. Unsupported tasks fail explicitly. See the
 [maintained recipes](benchmark-recipes.md) for source-derived profiles, pipeline
 input/output contracts, saved reports and optional backend prerequisites.
+[Image statistics](image-statistics.md) defines the real and synthetic image
+measurements and the development calibration targets for the synthetic presets.
 No adapter silently chooses a research protocol.
 
 ## Four commands
