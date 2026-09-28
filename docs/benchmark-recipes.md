@@ -134,6 +134,22 @@ reported as an isolated FOV peak. New lifecycle timings include loading,
 processing and persistence and exclude evaluation. No speedup/equivalence claim
 is made by placing these records in a common table.
 
+## Preprocessing comparison on synthetic presets
+
+`benchmarks/preprocessing_synthetic.py` runs the bounded §2.5 comparison matrix of
+{doc}`preprocessing-algorithms` (*Evaluation design*) on development-preset scenes:
+
+```bash
+uv run python ../../benchmarks/preprocessing_synthetic.py run --output /external/w233/evaluation
+uv run python ../../benchmarks/preprocessing_synthetic.py attach-time --output /external/w233/evaluation --time-log /external/time.log
+```
+
+It processes every arm with `FOV.run` and sweeps the noise-mode `threshold_value`.
+Tables, precision–recall curves and a manifest (conditions, seeds, dtypes,
+recipe configs and output checksums) go to the output directory. The
+low-benefit flag is provisional. The results are development evidence on
+uncalibrated synthetic data, not recommended defaults.
+
 ## Optional recipes
 
 | Recipe | Prerequisites and retained distinctions |

@@ -9,6 +9,9 @@ Maintained source-derived configuration and adapters for the common
 - `configs/pipeline.json`: source-specific processing/residency profiles.
 - `configs/source-map.json`: complete bounded 56-source disposition and hash index.
 - `report_saved.py`: saved-table reporting with explicit join keys and resource scopes.
+- `preprocessing_synthetic.py`: the bounded §2.5 preprocessing comparison on synthetic
+  development presets (W-233); writes tables, curves and a manifest to a directory outside
+  Git. Development evidence only, with no recommended defaults.
 
 Original scripts, results and restricted reference snapshots remain external.
 These new implementations follow the Python package's declared MIT terms;
