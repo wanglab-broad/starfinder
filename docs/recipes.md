@@ -153,6 +153,80 @@ from starfinder.preprocessing import Background3DConfig, subtract_background_3d
 corrected = subtract_background_3d(volume, config=Background3DConfig(radius_voxels_zyx=(4, 4, 4)))
 ```
 
+## Choose a preprocessing recipe
+
+**Defaults remain unchanged pending E13.** The pipeline default is still recipe 1,
+and no recipe is recommended. The §2.5 synthetic comparison (task group 5) and
+its inspection report (task group 6) are development evidence on uncalibrated
+presets. E13 decides on real data. Until then, choose by the problem your
+images show, and check a before/after line profile through a dim punctum.
+
+| Recipe | Steps | Choose it when | Watch for |
+| --- | --- | --- | --- |
+| Recipe 1 (default, legacy) | `min_max_normalization` → `histogram_matching`, optionally `reconstruction` or `white_tophat` | You need the legacy outputs, which the golden test pins, or you are comparing with MATLAB results | The output is always uint8, and one bright voxel sets the min–max range. Histogram matching assumes balanced bases across channels. Reconstruction can drive MAD, and therefore the noise cutoff, to 0 |
+| Recipe 2, scalar background | `scalar_background` → `percentile_normalization` | The background is mainly a constant offset per channel and round, and you want the input dtype preserved | `percentile=10` and `p_high=99.9` are provisional. About 0.1 % of voxels saturate by design |
+| Recipe 2, 3D background | `background_3d` → `percentile_normalization` | The background varies in space and along Z, for example autofluorescence in thick tissue | The radius must exceed the puncta ([above](#choose-the-3d-background-radius)), and the cost grows with the footprint volume |
+
+Two recipe modes apply to recipe 2:
+
+* **Extraction source.** `extraction_source="bg_corrected"` reads intensities from
+  the background-corrected image before normalization, which keeps linear
+  channel ratios. Whether this helps depends on how the decoder handles
+  channel scale.
+* **Sample-level fitting.** `fit="supplied"` fits one set of statistics over the
+  FOVs of a sample instead of per FOV. Consider it when FOVs differ strongly in
+  content, such as near-empty fields at tissue edges; see
+  {doc}`api/preprocessing` for the two-pass procedure.
+
+The workflow key for an explicit recipe is described in
+[Explicit preprocessing recipe](workflow-configuration.md#explicit-preprocessing-recipe).
+The methods and the evaluation design are in {doc}`preprocessing-algorithms`.
+
+### Reproduce one comparison
+
+{download}`preprocessing_comparison.py <examples/preprocessing_comparison.py>`
+reproduces the scalar-background comparison of the synthetic evaluation on a
+tiny preset. The preset uses the `baseline` condition, 10×32×32 voxels, 12
+amplicons, uint8, and seeds 0 and 100. The comparisons are isolated
+(`none` → `scalar`) and ablation (`pct` → `r2_scalar`). The script reuses the
+evaluation harness `benchmarks/preprocessing_synthetic.py`, so scenes, recipes,
+detection, decoding and matching are those of the saved evaluation. It writes
+no files. From `src/python`:
+
+```bash
+uv run python ../../docs/examples/preprocessing_comparison.py
+```
+
+```{literalinclude} examples/preprocessing_comparison.py
+:language: python
+:pyobject: main
+```
+
+Recorded outcome (Python 3.12.12, one CPU, about 1 second). On held-out seed
+100, the isolated comparison leaves max-F1 unchanged at 0.909. It raises the
+correct-decode fraction at `threshold_value=5` from 0.083 to 0.833, a change of
++0.750. The ablation changes neither endpoint. One seed on a tiny scene
+illustrates the method. It is not an evaluation result, and the 2-point
+low-benefit threshold is provisional.
+
+### Render the inspection report
+
+`benchmarks/preprocessing_report.py` renders a standalone HTML report from a
+saved evaluation directory. The report is organized by method and does not
+rerun the evaluation:
+
+```bash
+uv run python ../../benchmarks/preprocessing_report.py --evaluation /external/w233/evaluation --output /external/w234/report.html
+```
+
+Before it writes anything, the renderer checks the following:
+
+* every file listed in the manifest has its recorded checksum;
+* the manifest's revision matches the checkout;
+* each regenerated panel image equals its manifest checksum.
+
+Keep the report outside the checkout.
+
 ## Decode one FOV
 
 Reuse the quickstart's prepared round/FOV layout. The direct

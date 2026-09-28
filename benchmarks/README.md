@@ -12,6 +12,8 @@ Maintained source-derived configuration and adapters for the common
 - `preprocessing_synthetic.py`: the bounded §2.5 preprocessing comparison on synthetic
   development presets (W-233); writes tables, curves and a manifest to a directory outside
   Git. Development evidence only, with no recommended defaults.
+- `preprocessing_report.py`: renders the standalone §2.5 inspection report (W-234) from a saved
+  `preprocessing_synthetic.py` output directory, after checking its checksums and source revision.
 
 Original scripts, results and restricted reference snapshots remain external.
 These new implementations follow the Python package's declared MIT terms;

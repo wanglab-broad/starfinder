@@ -150,6 +150,21 @@ recipe configs and output checksums) go to the output directory. The
 low-benefit flag is provisional. The results are development evidence on
 uncalibrated synthetic data, not recommended defaults.
 
+`benchmarks/preprocessing_report.py` renders the task group 6 inspection report
+from a saved evaluation directory as one standalone HTML file:
+
+```bash
+uv run python ../../benchmarks/preprocessing_report.py --evaluation /external/w233/evaluation --output /external/w234/report.html
+```
+
+Before rendering, it checks every manifest-listed checksum. It also checks that
+the manifest's revision matches the checkout: for a run from an uncommitted
+tree, the recorded diff checksum must equal the diff to a later commit, and the
+evaluation sources must be unchanged since that commit. Tables are copied from
+the named output files. The before/after panels regenerate only the displayed
+scenes and outputs, and each must equal its manifest checksum. See
+[Choose a preprocessing recipe](recipes.md#choose-a-preprocessing-recipe).
+
 ## Optional recipes
 
 | Recipe | Prerequisites and retained distinctions |
