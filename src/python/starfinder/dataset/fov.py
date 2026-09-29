@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field, replace
+import hashlib
 import json
 from pathlib import Path
 from types import MappingProxyType
@@ -15,7 +16,8 @@ import pandas as pd
 from starfinder.image import ImageMetadata, _validate_image
 from starfinder.spot_finding import LocalMaximaConfig, SpotFindingResult
 from starfinder.io import ImageLoadConfig
-from starfinder.preprocessing import (MinMaxNormalizationConfig, HistogramMatchingConfig, ReconstructionConfig, TophatConfig, ProjectionConfig)
+from starfinder.preprocessing import (MinMaxNormalizationConfig, HistogramMatchingConfig, ReconstructionConfig, TophatConfig, ProjectionConfig,
+    StepContext, read_supplied_statistics, run_step, step_spec)
 from starfinder.dataset._logging import _log_step
 from starfinder.dataset._paths import _FovPaths
 from starfinder.dataset.config import CheckpointConfig, PipelineConfig, ExecutionConfig, RegistrationStep
@@ -32,8 +34,12 @@ if TYPE_CHECKING:
 class FOV:
     """Mutable per-FOV coordinator. Public operations own the algorithms.
 
-    Stores round images/metadata, structured scientific results, ordered
-    registration results and attempts. One instance per job; not thread-safe.
+    Stores round images/metadata, recipe snapshots (per round, snapshot name
+    to image, in the round's current coordinates), structured scientific
+    results, ordered registration results and attempts, and
+    preprocessing_record (the recipe, per-round step records and, per round
+    and snapshot, the transforms applied, of the last run with a recipe).
+    One instance per job; not thread-safe.
     The repr summarizes image geometry, channels and completed stages without
     array values or table rows; results maps completed stages by name.
     """
@@ -43,6 +49,7 @@ class FOV:
 
     # Mutable state
     images: dict[str, np.ndarray] = field(default_factory=dict)
+    snapshots: dict[str, dict[str, np.ndarray]] = field(default_factory=dict)
     metadata: dict[str, ImageMetadata] = field(default_factory=dict)
     registration_results: dict[str, list[RegistrationResult]] = field(default_factory=dict)
     registration_attempts: dict[str, list[dict]] = field(default_factory=dict)
@@ -55,6 +62,7 @@ class FOV:
     _round_intensities: dict = field(default_factory=dict)
 
     load_diagnostics: dict[str, dict] = field(default_factory=dict)
+    preprocessing_record: dict = field(default_factory=dict)
     _run_record: object | None = field(default=None, init=False, repr=False, compare=False)
 
     # --- Delegated properties ---
@@ -295,11 +303,14 @@ class FOV:
         return self
 
     @_log_step
-    def match_histogram(self, *, config=HistogramMatchingConfig(), reference_channel=0, rounds=None, reference=None):
-        """Match selected rounds to one reference channel; retain its pre-match copy."""
+    def match_histogram(self, *, config=HistogramMatchingConfig(), rounds=None, reference=None):
+        """Match selected rounds to one reference channel; retain its pre-match copy.
+
+        None uses channel config.reference_channel of the reference round.
+        """
         from starfinder.preprocessing import match_histogram
         if reference is None:
-            reference = self.images[self.rounds.reference_round][..., reference_channel].copy()
+            reference = self.images[self.rounds.reference_round][..., config.reference_channel].copy()
         self._apply_to_rounds(lambda image: match_histogram(image, reference, config=config), rounds)
         return self
 
@@ -321,6 +332,8 @@ class FOV:
     def project_image(self, *, config=ProjectionConfig(), rounds=None):
         """Project selected rounds, retaining singleton Z and source mapping."""
         from starfinder.preprocessing import project_image
+        if config.axis != 'z':
+            raise ValueError('FOV rounds stay ZYXC; only a z projection applies to them')
         for name in list(self.images) if rounds is None else rounds:
             source_shape = self.images[name].shape[:3]
             self.images[name] = project_image(self.images[name], config=config)
@@ -330,10 +343,52 @@ class FOV:
             self.load_diagnostics[name]['projection_source_shape_zyx'] = source_shape
         return self
 
+    @_log_step
+    def _preprocess(self, config, *, round_name, index, phase, stage, references, supplied=None, save_as=None):
+        """Run one recipe step on one round through the enforcement wrapper and record it.
+
+        stage is the step name, so a failure names the step in the run record.
+        supplied is the validated supplied-statistics document; a step with
+        fit="supplied" receives its section and requires the file's dtype.
+        save_as keeps the output as that snapshot of the round.
+        """
+        spec = step_spec(config)
+        ref = self.rounds.reference_round
+        reference = section = None
+        if getattr(config, 'fit', None) == 'supplied':
+            section = supplied['steps'][stage]
+            dtype = np.asarray(self.images[round_name]).dtype
+            if dtype.name != supplied['dtype']:
+                raise ValueError(f'step {stage!r} input is {dtype}, but the supplied statistics are for {supplied["dtype"]}')
+        elif spec.scope == 'needs_reference':
+            key = (phase, index)
+            if key not in references:
+                if round_name != ref:
+                    raise ValueError(f'step {stage!r} needs the reference round {ref!r} to pass it first')
+                image = self.images[ref]
+                channel = config.reference_channel
+                if image.ndim != 4 or channel >= image.shape[-1]:
+                    raise ValueError(f'step {stage!r} reference_channel {channel} is outside the reference image')
+                references[key] = image[..., channel].copy()
+            reference = references[key]
+        image = self.images[round_name]
+        metadata = self.metadata.get(round_name, ImageMetadata(f"{self.fov_id}/{round_name}"))
+        result = run_step(image, config, StepContext(round_name, ref, metadata, reference, section))
+        self.preprocessing_record.setdefault('rounds', {}).setdefault(round_name, []).append(dict(
+            index=index, stage=phase, step=stage, config=asdict(config), fitted=dict(result.fitted),
+            diagnostics=dict(result.diagnostics), input_dtype=str(np.asarray(image).dtype),
+            output_dtype=str(result.image.dtype), save_as=save_as))
+        self.images[round_name] = np.asarray(result.image)
+        if save_as is not None:
+            # Steps never mutate their input, so the snapshot can share the array.
+            self.snapshots.setdefault(round_name, {})[save_as] = self.images[round_name]
+
     # --- Registration ---
 
-    def _registration_image(self, name, mode, channel):
-        image = _validate_image(self.images[name], ndim=(4,))
+    def _registration_image(self, name, mode, channel, source=None):
+        if source is not None and source not in self.snapshots.get(name, {}):
+            raise ValueError(f'registration source {source!r} is not a snapshot of round {name!r}')
+        image = _validate_image(self.images[name] if source is None else self.snapshots[name][source], ndim=(4,))
         if mode == 'merged':
             # Preserve signed/high-bit-depth input instead of overflowing uint16.
             return image.sum(axis=-1, dtype=np.float64)
@@ -342,18 +397,24 @@ class FOV:
         return image[..., channel]
 
     @_log_step
-    def register(self, step: RegistrationStep, *, rounds=None):
+    def register(self, step: RegistrationStep, *, rounds=None, source: str | None = None):
         """Estimate then apply; only opted-in estimation failures can recover.
 
-        Ordered attempts include requested/actual method, effective config,
-        outcome and failure. Apply errors propagate and are recorded too.
+        Signals are built from snapshot source of the reference and each
+        moving round (None: their images). The transform is applied to the
+        moving round's image and to every one of its snapshots, each resampled
+        once per call, so they stay aligned; the reference round is not
+        transformed. Ordered attempts include requested/actual method,
+        effective config, outcome and failure. Apply errors propagate and are
+        recorded too. During a recipe run, preprocessing_record lists the
+        transforms applied per round and snapshot.
         """
         from starfinder.registration import estimate_transform, apply_transform
         step.__post_init__()
         ref = self.rounds.reference_round
-        reference = self._registration_image(ref, step.reference_image, step.reference_channel)
+        reference = self._registration_image(ref, step.reference_image, step.reference_channel, source)
         for name in self.rounds.moving_rounds if rounds is None else rounds:
-            moving = self._registration_image(name, step.moving_image, step.reference_channel)
+            moving = self._registration_image(name, step.moving_image, step.reference_channel, source)
             configs = (step.config,) + (tuple(step.recovery.alternatives) if step.recovery else ())
             for index, config in enumerate(configs):
                 attempt = dict(requested_method=step.config.method, actual_method=config.method,
@@ -370,15 +431,34 @@ class FOV:
                 try:
                     warp = step.warp or result.application_config
                     registered = apply_transform(self.images[name], result.transform, config=warp)
+                    snapshots = {key: apply_transform(image, result.transform, config=warp)
+                                 for key, image in self.snapshots.get(name, {}).items()}
                 except Exception as error:
                     attempt.update(outcome='application_failed', failure={'type': type(error).__name__, 'message': str(error)})
                     raise
                 attempt.update(outcome='succeeded', application_config=asdict(warp))
                 self.images[name] = registered
+                if snapshots:
+                    self.snapshots[name] = snapshots
                 self.metadata[name] = result.transform.reference_metadata
                 self.registration_results.setdefault(name, []).append(replace(result, application_config=warp))
+                self._record_transform(name, config.method, result.transform)
                 break
         return self
+
+    def _record_transform(self, name, method, transform):
+        """Append the transform just applied to each image of round name to the recipe record.
+
+        result indexes registration_results[name] (and the round's transforms.json entries).
+        """
+        from starfinder.registration import TranslationTransform
+        if 'recipe' not in self.preprocessing_record:
+            return
+        entry = dict(result=len(self.registration_results[name]) - 1, method=method,
+                     kind='translation' if isinstance(transform, TranslationTransform) else 'dense')
+        applied = self.preprocessing_record.setdefault('transforms', {}).setdefault(name, {})
+        for key in ('detection', *self.snapshots.get(name, {})):
+            applied.setdefault(key, []).append(dict(entry))
 
     def _save_shift_log(self):
         """Preserve MATLAB detected-displacement row/col/z columns."""
@@ -414,10 +494,14 @@ class FOV:
         return self
 
     @_log_step
-    def _extract_round(self, round_name, config=NeighborhoodSumConfig()):
+    def _extract_round(self, round_name, config=NeighborhoodSumConfig(), source=None):
+        """Extract one round from its image or, when source is set, from that snapshot."""
         from starfinder.barcode import extract_intensities
         from starfinder.io import ImageLoadResult
-        loaded = ImageLoadResult(self.images[round_name],
+        if source is not None and source not in self.snapshots.get(round_name, {}):
+            raise ValueError(f'extraction source {source!r} is not a snapshot of round {round_name!r}')
+        image = self.images[round_name] if source is None else self.snapshots[round_name][source]
+        loaded = ImageLoadResult(image,
             self.metadata.get(round_name, ImageMetadata(f"{self.fov_id}/{round_name}")),
             tuple(self.dataset.channel_order), (), {})
         self._round_intensities[round_name] = extract_intensities(
@@ -475,10 +559,32 @@ class FOV:
             checkpoints: CheckpointConfig | None = None):
         """Run one scientific sequence with batch or streaming residency.
 
-        Reference first, then moving rounds in declared order. Histogram targets
-        are captured before downstream reference processing. Loading may be
-        disabled for resident/subtile data. Images without registration must
-        already declare the same frame/grid for extraction. Without image
+        Reference first, then moving rounds in declared order. Each round runs
+        the preprocessing recipe's steps in order, then registration, then the
+        recipe's post_registration steps. For a needs_reference step (histogram
+        matching) with fit="fov" the reference round's input to that step,
+        restricted to the configured channel, is retained until every moving
+        round has passed the step; this holds in streaming mode too. Steps
+        with fit="supplied" read the recipe's supplied_statistics file, which
+        is validated against the recipe, the dataset channel_order and the
+        processed rounds before any step runs. Steps with save_as keep
+        snapshots in snapshots[round]. Registration signals are built from the
+        recipe's registration_source snapshot (default: the detection image),
+        and each registration step's transform is applied to the moving
+        round's detection image and to every one of its snapshots, so they
+        stay aligned; the reference round is not transformed. Extraction reads
+        the extraction_source snapshot (default: the detection image; without
+        a recipe, the source recorded in preprocessing_record, as after
+        load_checkpoint). In streaming mode without retain_images a moving
+        round's snapshots are dropped with its image, and only the reference
+        round's registration source is kept until the moving rounds are
+        registered. Per-round step records, the transforms applied per round
+        and snapshot, and the supplied file's path and SHA-256, are kept in
+        preprocessing_record and written to run.json and the registered
+        checkpoint, which also stores the extraction source snapshot of each
+        round. The pipeline never projects. Loading may be disabled for
+        resident/subtile data. Images without registration must already
+        declare the same frame/grid for extraction. Without image
         operations or resident images (after load_checkpoint), the round loop
         is skipped.
 
@@ -510,14 +616,36 @@ class FOV:
         record = self._start_run_record(checkpoints, config, execution) if checkpoints is not None else None
         current = None
         self._run_record = record
+        recipe = config.preprocessing
+        steps = recipe.steps if recipe is not None else ()
+        post = recipe.post_registration if recipe is not None else ()
+        registration_source = recipe.registration_source if recipe is not None else None
+        if recipe is not None:
+            self.snapshots.clear()
+            self.preprocessing_record = {'recipe': {
+                'steps': [step_spec(s.config).name for s in steps],
+                'post_registration': [step_spec(s.config).name for s in post],
+                'extraction_source': recipe.extraction_source, 'registration_source': registration_source},
+                'rounds': {}, 'transforms': {}, 'supplied_statistics': {'path': None, 'sha256': None}}
+        # Without a recipe (for example after load_checkpoint) extraction keeps the recorded source.
+        extraction_source = self.preprocessing_record.get('recipe', {}).get('extraction_source')
+        supplied = None
         try:
-            image_stages = any((config.load, config.rotation_degrees is not None, config.normalization,
-                config.histogram, config.reconstruction, config.tophat, config.projection,
+            if any(getattr(s.config, 'fit', None) == 'supplied' for s in steps):
+                if not self.dataset.channel_order:
+                    raise ValueError('fit="supplied" steps require the dataset channel_order')
+                path = recipe.supplied_statistics
+                supplied = read_supplied_statistics(path, recipe, channel_labels=self.dataset.channel_order,
+                                                    rounds=[ref] + self.rounds.moving_rounds)
+                self.preprocessing_record['supplied_statistics'] = {
+                    'path': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
+            image_stages = any((config.load, config.rotation_degrees is not None, steps, post,
                 config.registration, config.detection, config.extraction))
             stages = checkpoints.stages if checkpoints is not None else ()
             if config.load and execution.mode == 'batch':
                 self.load_images(rounds=self.rounds.all_rounds, config=config.load)
-            histogram_reference = None
+            # Reference-round inputs of needs_reference steps, kept until every round passed them.
+            references = {}
             if config.extraction:
                 self._round_intensities.clear()
             # A run resumed from candidates or pre_qc has no images to process.
@@ -530,42 +658,48 @@ class FOV:
                     raise ValueError(f'missing image/metadata for {name}')
                 if config.rotation_degrees is not None:
                     self._rotate_round(round_name=name, angle=config.rotation_degrees)
-                if config.normalization:
-                    self.normalize_intensity(config=config.normalization, rounds=[name])
-                if config.histogram:
-                    if name == ref:
-                        histogram_reference = self.images[ref][..., config.histogram_reference_channel].copy()
-                    self.match_histogram(config=config.histogram, rounds=[name], reference=histogram_reference)
-                if config.reconstruction and not config.reconstruction_after_registration:
-                    self.reconstruct_background(config=config.reconstruction, rounds=[name])
-                if config.tophat:
-                    self.filter_tophat(config=config.tophat, rounds=[name])
-                if config.projection:
-                    self.project_image(config=config.projection, rounds=[name])
+                for index, step in enumerate(steps):
+                    self._preprocess(step.config, round_name=name, index=index, phase='steps',
+                                     stage=step_spec(step.config).name, references=references, supplied=supplied,
+                                     save_as=step.save_as)
+                if recipe is not None:
+                    self.preprocessing_record['transforms'][name] = {
+                        key: [] for key in ('detection', *self.snapshots.get(name, {}))}
                 if name != ref:
                     processed_reference = self.images[ref]
-                    if config.reconstruction and config.reconstruction_after_registration:
+                    if post:
                         self.images[ref] = registration_reference
                     try:
                         for step in config.registration:
-                            self.register(step, rounds=[name])
+                            self.register(step, rounds=[name], source=registration_source)
                     finally:
                         self.images[ref] = processed_reference
-                if config.reconstruction and config.reconstruction_after_registration:
+                if post:
                     # Keep the registration reference before the post-registration
-                    # operation; use its snapshot for each moving round below.
+                    # steps; use its snapshot for each moving round below.
                     if name == ref:
                         registration_reference = self.images[ref].copy()
-                    self.reconstruct_background(config=config.reconstruction, rounds=[name])
+                    for index, step in enumerate(post):
+                        self._preprocess(step.config, round_name=name, index=index, phase='post_registration',
+                                         stage=step_spec(step.config).name, references=references)
                 if 'registered' in stages:
                     self._write_checkpoint(stage='registered', directory=record.directory,
                                            table_format=checkpoints.table_format, round_name=name)
                 if name == ref and config.detection:
                     self.find_spots(config=config.detection)
                 if config.extraction and name in self.rounds.sequencing_rounds:
-                    self._extract_round(round_name=name, config=config.extraction)
-                if execution.mode == 'streaming' and not execution.retain_images and name != ref:
-                    del self.images[name]
+                    self._extract_round(round_name=name, config=config.extraction, source=extraction_source)
+                if execution.mode == 'streaming' and not execution.retain_images:
+                    if name != ref:
+                        del self.images[name]
+                        self.snapshots.pop(name, None)
+                    elif name in self.snapshots:
+                        # Only the registration source crosses rounds.
+                        self.snapshots[ref] = {key: image for key, image in self.snapshots[ref].items()
+                                               if key == registration_source}
+            references.clear()
+            if execution.mode == 'streaming' and not execution.retain_images and loop_rounds:
+                self.snapshots.pop(ref, None)
             current = None
             if 'registered' in stages and record.data['checkpoints'].get('registered'):
                 self._write_checkpoint(stage='registered', directory=record.directory,
@@ -620,6 +754,22 @@ class FOV:
         record.write()
         return record
 
+    def _checkpoint_snapshots(self) -> list[str]:
+        """Snapshots used downstream besides the detection image: the recorded extraction source."""
+        source = self.preprocessing_record.get('recipe', {}).get('extraction_source')
+        return [] if source is None else [source]
+
+    def _write_registered_round(self, directory, round_name):
+        """Write a round's image and its downstream snapshots; return their relative paths."""
+        from starfinder.io import _checkpoint as io
+        missing = [s for s in self._checkpoint_snapshots() if s not in self.snapshots.get(round_name, {})]
+        if missing:
+            raise ValueError(f'registered checkpoint requires snapshots {missing} of round {round_name!r}')
+        paths = [io.write_registered_round(directory, round_name, self.images[round_name], self.metadata[round_name])]
+        paths += [io.write_registered_round(directory, round_name, self.snapshots[round_name][s],
+                                            self.metadata[round_name], snapshot=s) for s in self._checkpoint_snapshots()]
+        return [path.relative_to(directory).as_posix() for path in paths]
+
     @_log_step
     def _write_checkpoint(self, stage, directory, table_format, *, round_name=None, image_rounds=None):
         """Write one stage (or one registered round) and record its files."""
@@ -627,19 +777,19 @@ class FOV:
         directory = Path(directory)
         header = self._checkpoint_header()
         if stage == 'registered' and round_name is not None:
-            path = io.write_registered_round(directory, round_name, self.images[round_name], self.metadata[round_name])
-            files = [path.relative_to(directory).as_posix()]
+            files = self._write_registered_round(directory, round_name)
         elif stage == 'registered':
             if image_rounds is None:
                 image_rounds = self.rounds.all_rounds
                 missing = [r for r in image_rounds if r not in self.images or r not in self.metadata]
                 if missing:
                     raise ValueError(f'registered checkpoint requires resident images for {missing}')
-                files = [io.write_registered_round(directory, r, self.images[r], self.metadata[r])
-                         .relative_to(directory).as_posix() for r in image_rounds]
+                files = [f for r in image_rounds for f in self._write_registered_round(directory, r)]
             else:
                 files = []
-            header.update(image_rounds=list(image_rounds), registration_attempts=self.registration_attempts)
+            header.update(image_rounds=list(image_rounds), snapshots=self._checkpoint_snapshots(),
+                          registration_attempts=self.registration_attempts,
+                          preprocessing=self.preprocessing_record or None)
             files += [f'registered/{name}' for name in
                       io.write_registered_header(directory, header, self.registration_results)]
         elif stage == 'candidates':
@@ -662,7 +812,8 @@ class FOV:
         Parameters
         ----------
         stage : str
-            ``registered`` (all round images must be resident), ``candidates``
+            ``registered`` (all round images, and their extraction source
+            snapshots, must be resident), ``candidates``
             (spot_result, with intensity_result when present) or ``pre_qc``
             (decoding_result).
         checkpoints : CheckpointConfig
@@ -698,9 +849,9 @@ class FOV:
     def load_checkpoint(self, stage: str, *, checkpoints: CheckpointConfig = CheckpointConfig()) -> FOV:
         """Restore one checkpoint stage so later stages can run without images.
 
-        ``registered`` restores images, metadata, registration results and
-        attempts; ``candidates`` restores spot_result and intensity_result;
-        ``pre_qc`` restores decoding_result. Continue with run() and a
+        ``registered`` restores images, the stored snapshots, metadata,
+        registration results and attempts, and the preprocessing record; ``candidates`` restores
+        spot_result and intensity_result; ``pre_qc`` restores decoding_result. Continue with run() and a
         PipelineConfig that starts after the loaded stage.
 
         Parameters
@@ -726,7 +877,7 @@ class FOV:
         from starfinder.io._checkpoint import _check_stage, _jsonable, read_checkpoint, read_header
         _check_stage(stage)
         later = ['spot_result', 'intensity_result', 'decoding_result', 'filtering_result']
-        later = {'registered': ['images', 'registration_results', 'registration_attempts'] + later,
+        later = {'registered': ['images', 'snapshots', 'registration_results', 'registration_attempts'] + later,
                  'candidates': later, 'pre_qc': later[2:]}[stage]
         occupied = [name for name in later if getattr(self, name) is not None and getattr(self, name) != {}]
         if occupied:
@@ -744,23 +895,52 @@ class FOV:
 
     # --- Output ---
 
-    def save_reference_image(self, *, projection: ProjectionConfig | None = None) -> Path:
-        """Save reference TIFF using the unchanged shared filename.
+    def save_reference_image(self, *, projection: ProjectionConfig | None = None,
+                             reference_image: str = 'merged', reference_channel: int = 0) -> Path:
+        """Save the reference merged image under the shared ``ref_merged`` name.
 
-        The workflow rules share ``images/ref_merged/<fov_id>.tif`` with the
-        MATLAB backend, so the name keeps ``.tif``; ZYXC content is OME-TIFF
-        written by save_volume.
+        Writes the reference round's current image, which after run() is its
+        detection image (the preprocessing output before registration), as
+        the MATLAB workflow scripts write ``sdata.registration{ref}``:
+
+        * ``reference_image="merged"``: the channel maximum, ZYX;
+        * ``reference_image="single-channel"``: channel ``reference_channel``, ZYX;
+        * then, if ``projection`` (a z projection) is given, YX.
+
+        The dtype is kept. ZYX is a tifffile TIFF written by save_volume; YX is
+        one page with the same JSON axes and metadata description, so
+        load_volume reads either. The name keeps ``.tif`` for both backends.
+
+        Raises
+        ------
+        ValueError
+            An unknown reference_image, a channel outside the image or a
+            projection that is not along z.
         """
+        import tifffile
         from starfinder.io import save_volume
         from starfinder.preprocessing import project_image
+        if reference_image not in ('merged', 'single-channel'):
+            raise ValueError('reference_image must be merged or single-channel')
+        if projection is not None and projection.axis != 'z':
+            raise ValueError('the reference image projection must be along z')
         ref = self.rounds.reference_round
-        image, metadata = self.images[ref], self.metadata[ref]
-        if projection is not None:
-            image = project_image(image, config=projection)
-            metadata = metadata.projected(method=projection.method)
+        image, metadata = _validate_image(self.images[ref], ndim=(4,)), self.metadata[ref]
+        if reference_image == 'merged':
+            image = project_image(image, config=ProjectionConfig(axis='channel'))
+        else:
+            if isinstance(reference_channel, bool) or not 0 <= reference_channel < image.shape[-1]:
+                raise ValueError(f'reference_channel {reference_channel} is outside the reference image')
+            image = image[..., reference_channel]
         path = self.paths.ref_merged_tif
         path.parent.mkdir(parents=True, exist_ok=True)
-        save_volume(image, path, metadata=metadata)
+        if projection is None:
+            save_volume(image, path, metadata=metadata)
+            return path
+        image = project_image(image, config=projection)[0]
+        metadata = metadata.projected(method=projection.method)
+        tifffile.imwrite(path, image, photometric='minisblack',
+                         metadata={'axes': 'YX', 'starfinder_metadata': asdict(metadata)})
         return path
 
     def save_spots(self, slot='goodSpots', columns=None, *, path=None):

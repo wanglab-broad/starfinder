@@ -9,7 +9,7 @@ units unless a function explicitly says otherwise. Unknown calibration stays unk
 | --- | --- | --- |
 | Single-channel volume | `(Z, Y, X)` | Numeric intensity array |
 | Multi-channel round | `(Z, Y, X, C)` | Channel-last, usually uint8 or uint16 |
-| Projection | `(1, Y, X)` or `(1, Y, X, C)` | Singleton Z is retained; check each registration backend’s dimensional support |
+| Projection | `(1, Y, X)` or `(1, Y, X, C)` along `"z"`; `(Z, Y, X)` along `"channel"` | Singleton Z is retained; check each registration backend’s dimensional support |
 | Spot coordinates | `(N, 3)` or DataFrame `z, y, x` | Zero-based voxel indices |
 | Raw extracted intensities | `(N, C, R)` | Float64 neighborhood sums, rounds in caller-supplied order |
 | Dense displacement field | `(Z, Y, X, 3)` | Last axis `(dz, dy, dx)`, backward sampling |
@@ -138,7 +138,8 @@ avoids signed uint16 overflow; results retain source dtype and saturate to its
 representable range, never wrap or force uint8. Float reconstruction can be
 negative. Integers wider than 32 bits are unsupported for morphology.
 
-{func}`starfinder.preprocessing.project_image` retains singleton Z. Max retains
+{func}`starfinder.preprocessing.project_image` retains singleton Z along axis
+`"z"` (the default) and reduces a ZYXC image to ZYX along axis `"channel"`. Max retains
 dtype; sum uses uint64/int64 for integers up to 32 bits and float64 for floats.
 64-bit integer sums error; explicitly convert first. Requested integer output
 errors on overflow unless an explicit clipping conversion is supplied. There is

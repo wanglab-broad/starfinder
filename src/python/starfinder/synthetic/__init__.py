@@ -15,6 +15,8 @@ from ._presets import (BENCHMARK_PRESETS as _BENCHMARK_PRESETS,
                        generate_codebook, registration_scene_preset)
 from ._datasets import (SyntheticDataset, forward_displacement, generate_dataset,
                         generate_registration_pair)
+from ._calibrated import (CALIBRATED_CONDITIONS as _CALIBRATED_CONDITIONS, calibrated_scene_preset,
+                          development_codebook)
 
 #: Named single-factor controls available on demand from development_scene_preset.
 DEVELOPMENT_FACTORS = _DEVELOPMENT_FACTORS
@@ -22,6 +24,8 @@ DEVELOPMENT_FACTORS = _DEVELOPMENT_FACTORS
 DEVELOPMENT_FIXTURES = _DEVELOPMENT_FIXTURES
 #: Development size names mapped to ZYX voxel shapes.
 DEVELOPMENT_SIZES = _DEVELOPMENT_SIZES
+#: Calibrated (calibrated-development-v1) condition names mapped to the factors added to clean.
+CALIBRATED_CONDITIONS = _CALIBRATED_CONDITIONS
 
 #: Benchmark preset names mapped to historical shape, count, seed, FOVs, shifts and genes.
 BENCHMARK_PRESETS = _BENCHMARK_PRESETS
@@ -30,8 +34,9 @@ DEFORMATION_PRESETS = _DEFORMATION_PRESETS
 #: The single scene preset registry, with fixture, development_fixture and benchmark tiers.
 SCENE_PRESETS = _registry()
 
-__all__ = ['BackgroundConfig', 'DEVELOPMENT_FACTORS', 'DEVELOPMENT_FIXTURES',
-           'DEVELOPMENT_SIZES', 'development_preset_factors', 'development_scene_preset',
+__all__ = ['BackgroundConfig', 'CALIBRATED_CONDITIONS', 'calibrated_scene_preset', 'DEVELOPMENT_FACTORS',
+           'DEVELOPMENT_FIXTURES', 'DEVELOPMENT_SIZES', 'development_codebook', 'development_preset_factors',
+           'development_scene_preset',
            'formed_scene_preset', 'FormedScene', 'FormedSceneConfig', 'generate_formed_scene',
            'GeometryConfig', 'NoiseConfig', 'ReadoutEffectsConfig', 'save_formed_scene',
            'ScalarDistribution', 'TextureConfig', 'BENCHMARK_PRESETS', 'DEFORMATION_PRESETS',

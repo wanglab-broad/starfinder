@@ -80,6 +80,36 @@ and `save_diagnostics`. MATLAB also writes preview images. Benchmarked rules wri
 `log/benchmark/{rule}/{fovID}[_{n_subtile}].txt`. A reference projection is not a
 segmentation label image, and a goodSpots CSV is not a cell-by-gene matrix.
 
+### Projection views and the reference merged image
+
+Projection is an output view, not a preprocessing step: `FOV.run` never
+projects, and 2D data are volumes with Z = 1. `ProjectionConfig(axis=...)`
+selects one of two views, each a maximum by default:
+
+| View | `axis` | Result | Consumers |
+| --- | --- | --- | --- |
+| Visualization | `"z"` (default) | ZYX(C) → singleton-Z (1, Y, X[, C]) | 2D figures such as registration overlaps and spot-finding results |
+| Inspection | `"channel"` | ZYXC → ZYX | Each FOV's reference merged image, below |
+
+`images/ref_merged/{fovID}.tif` holds the reference round's detection image,
+the preprocessing output before registration, reduced to one channel:
+
+- the channel maximum in merged-image mode, or the selected channel in
+  single-channel mode, as ZYX;
+- then its Z maximum, as YX, when top-level `maximum_projection` is true.
+
+The dtype is that of the detection image. Both backends write this content, one
+YX page per Z plane. MATLAB saves `sdata.registration{ref}`, which the last
+registration that ran sets. Only the direct rule's global registration follows
+its `ref_img`; its local registration, the subtile rule and the deep rule use
+the channel maximum, and so does the direct rule without registration. The
+Python adapter picks the same view. In single-channel mode Python selects the
+rule's zero-based `ref_channel`; the MATLAB script passes no channel, so
+`GlobalRegistration` selects its default channel name, `DAPI`. The file shows preprocessing before
+registration, and is read by `create_nuclei_amplicon_overlay`, by the stitch
+preview and, later, as stitching input. MATLAB also writes per-round,
+per-channel Z-maximum preview montages; Python does not.
+
 `rsf_preparation` is a local rule that reads `config_path` and writes the same
 name with `.yaml` replaced by `.json`; core rules depend on that JSON. It reads
 the YAML file from disk, **not** Snakemake's merged config dictionary. Python
@@ -134,7 +164,8 @@ The grid contains `sqrt_pieces ** 2` subtiles numbered from 1. Coordinates, data
 archives and subtile molecule CSVs are marked temporary. Local execution may
 remove them after consumption; the UGER profile sets `notemp: true` to retain
 them. Stitching also reads `images/ref_merged/{fovID}.tif` internally for its
-preview, although that file is not declared as an input to the stitch rule.
+preview (its Y and X axes, after a maximum over any other axis), although that
+file is not declared as an input to the stitch rule.
 Check it exists when rerunning stitching from saved CSVs alone.
 
 ## Small, reproducible dry run

@@ -16,7 +16,9 @@ loss cannot. The model produces processed images: Gaussian widths describe
 effective puncta, not an optical point-spread function; noise is a residual
 image model, not photon counts; background components are smooth mathematical
 structures, not cells or measured tissue. Defaults are clean development
-choices, not fitted ranges, and nothing on this page is a calibration claim.
+choices, not fitted ranges. The calibrated development presets (last section)
+match development target ranges only; nothing on this page is a benchmark
+calibration claim.
 
 ## Inputs and conventions
 
@@ -108,9 +110,19 @@ are absolute with respect to the reference; nothing accumulates across rounds.
 10. **Noise.** With J the pre-noise total (signal, tissue and baseline), the
     dependent residual adds `sqrt(alpha·J)·Z_dep` (`model="gaussian"`) or
     replaces J by `alpha·Poisson(J/alpha)` (`model="poisson"`, same mean and
-    variance); then read noise adds `sigma·Z_ind`. Draws come from separate
+    variance); then read noise adds `sigma·Z_ind`; then the optional spatially
+    correlated residual adds `correlated_sigma·G`. G is white standard normal
+    noise drawn on the grid padded by the kernel radius R_a on each side,
+    smoothed by the separable kernel `w_a(k) ∝ exp(−k²/L_a²)` for |k| ≤ R_a =
+    ⌈4L_a/√2⌉ (Gaussian SD L_a/√2, scaled to unit sum of squares), and cropped
+    to the grid, so every voxel has unit variance and the autocorrelation along
+    axis a is `exp(−d²/(2L_a²))` (exact up to sampling and truncation). L =
+    `correlation_length_zyx` is the correlation length in voxels; L_a = 0 leaves
+    that axis white. G is added in the destination frame, after the white terms,
+    and is not moved, mixed or clipped before the cast. Draws come from separate
     streams per round and channel in C-order ZYX (drawn in flat chunks, which
-    equals one full-plane draw).
+    equals one full-plane draw; the correlated term draws its whole padded grid
+    at once).
 11. **Cast** once to the output dtype, recording clipping counts.
 
 All readout, background, noise and geometry controls default to disabled.
@@ -156,7 +168,7 @@ exact order:
   `round.loss`, `geometry.translation`, `geometry.local`, `geometry.affine`,
   `geometry.polynomial`, `background.count`,
   `background.placement`, `background.width`, `background.brightness`,
-  `noise.dependent`, `noise.independent`.
+  `noise.dependent`, `noise.independent`, `noise.correlated`.
 * Persistent draws use the amplicon or blob ID as entity; per-round draws add
   the round label; noise uses round and channel. Texture widths use the entity
   `["blob-N","axial"]` or `["blob-N","lateral"]`; local vectors use
@@ -183,3 +195,18 @@ dropout. Tests save these fixtures with `save_formed_scene` (ZYXC OME-TIFF image
 `images/<round>.ome.tif`, CSV truth) and compare every reloaded voxel and truth value with an independent
 oracle. Single-factor conditions remain available on demand; they are
 comparisons against `clean`, not packaged or oracle-checked fixtures.
+
+## Calibrated development presets
+
+`calibrated_scene_preset(condition, dtype, seed=..., codebook=...)` builds
+`calibrated-development-v1`: one 8×64×64 FOV with 80 uniformly placed amplicons
+from `development_codebook` (16 genes, balanced or deliberately unbalanced),
+lognormal brightness, and seed and scene key `calibrated-development-v1` shared
+by every condition and dtype. Every condition carries the calibrated baseline:
+a uniform pedestal, Poisson, white and correlated noise, non-uniform channel
+gains and a mild round trend. `CALIBRATED_CONDITIONS` names the factors each
+§2.5 evaluation condition adds on top (stronger gains or trend, weakening,
+crosstalk, per-channel offsets, gradient, regions, texture, translation and a
+local deformation). The parameters are a development calibration against the
+measured development targets, derived on the {doc}`image statistics <image-statistics>` page;
+they are not a D04 or benchmark calibration.

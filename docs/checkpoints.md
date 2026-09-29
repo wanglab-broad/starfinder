@@ -30,8 +30,8 @@ fov.run(pipeline, execution=execution, checkpoints=CheckpointConfig())
 `FileExistsError` if the FOV directory exists and `overwrite` is false, and
 `ImportError` if Parquet is requested without pyarrow. With `overwrite=True`,
 `run` first removes the existing checkpoint files of that FOV (stage headers and
-tables, registered TIFFs under either name and dense fields; other files are
-left alone), so a stage the new run does not reach can never be loaded from an
+tables, registered TIFFs under either name, registered snapshot TIFFs and dense
+fields; other files are left alone), so a stage the new run does not reach can never be loaded from an
 earlier run.
 
 `run` writes a stage only when it computes it. `registered` is written for each
@@ -45,6 +45,7 @@ round inside the round loop, `candidates` after detection or extraction, and
     run.json
     registered/
         <round>.ome.tif                       # ZYXC OME-TIFF, dtype preserved, ImageMetadata
+        <snapshot>/<round>.ome.tif            # the recipe's extraction source, when set
         <round>_field.npz                     # dense transforms only
         transforms.json
     candidates.csv | candidates.parquet
@@ -68,13 +69,22 @@ OME-TIFF change named this file `<round>.tif` and stored it in tifffile's own
 ZYXC layout; loading still accepts that name and layout when no `.ome.tif` file
 is present.
 
+When the preprocessing recipe names an `extraction_source`, that snapshot of
+each round is stored as `registered/<snapshot>/<round>.ome.tif`, in the same
+format and with the round's `ImageMetadata`. It has been through the same
+registration resamplings as the round image, so the two stay aligned.
+`load_checkpoint("registered")` restores it in `FOV.snapshots`, and a later
+`run` without a recipe extracts from it, as the restored preprocessing record
+names it. A recipe without an extraction source stores one image per round.
+
 To look at a registered round in Fiji, use **File › Import › Bio-Formats** and
 choose **Hyperstack** under *View stack with*. The file stores one YX plane per
 page, and its OME-XML declares SizeZ, SizeC, the pixel type and the dimension
 order `XYCZT`, so Bio-Formats opens it as a Z×C hyperstack in its stored dtype.
 
 `transforms.json` records the FOV identity, the rounds and the channel order,
-the rounds written, the registration attempts and every `RegistrationResult`:
+the rounds written, the stored snapshot names (`snapshots`), the preprocessing record (as in `run.json`, below), the
+registration attempts and every `RegistrationResult`:
 its transform, diagnostics and warp configuration. Translations are stored
 inline. Dense displacement fields go to `<round>_field.npz`, one array per
 registration result of that round (`result_0`, `result_1`, ...), with their
@@ -175,7 +185,8 @@ run starts, after each completed step and when the run ends. It contains:
 | `environment` | Python, platform and package versions (`null` when not installed). |
 | `config` | `pipeline`, `execution` and `checkpoints` configurations. |
 | `inputs` | Loaded TIFF `path` and streamed `sha256` (`null` with `hash_inputs=False`). |
-| `steps` | `name`, `round`, `seconds` and `status` of each completed or failed step. |
+| `steps` | `name`, `round`, `seconds` and `status` of each completed or failed step. A preprocessing step is named `preprocess:<step name>`. |
+| `preprocessing` | `null` without a preprocessing recipe. Otherwise `recipe` (the step names of `steps` and `post_registration`, `extraction_source` and `registration_source`), `rounds`: per round, one record per step with `index`, `stage` (`steps` or `post_registration`), `step`, `config`, `fitted`, `diagnostics`, `input_dtype`, `output_dtype` and `save_as`; `transforms`: per round and image (`detection` and each snapshot), the transforms applied in order, each with `result` (its index in the round's registration results in `transforms.json`), `method` and `kind` (`translation` or `dense`), empty for the reference round; and `supplied_statistics`. |
 | `registration` | Ordered registration attempts per round. |
 | `counts` | Spots, intensities, decoding call statuses and filtering counts. |
 | `checkpoint_directory`, `checkpoints` | The FOV directory and the files written for each stage. |

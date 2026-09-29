@@ -79,7 +79,7 @@ def test_pipeline_shared_lifecycle_and_saved_only(tmp_path, monkeypatch):
         trial = read(root / 'fixture/0000/trial.json')
         assert trial['status']['processing'] == 'success', trial['errors']
         assert len(trial['attempts']) == 3
-        assert trial['effective_configs']['pipeline']['normalization']['output_dtype'] == 'uint8'
+        assert trial['effective_configs']['pipeline']['preprocessing']['steps'][0]['config']['output_dtype'] == 'uint8'
         transform = read(root / 'fixture/0000/transform-round2-0.json')
         assert transform['correction_zyx'] == [0.0, 0.0, 0.0]
     pd.testing.assert_frame_equal(pd.read_csv(batch/'fixture/0000/reads.csv'),

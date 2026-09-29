@@ -115,6 +115,8 @@ is specifically for the Python batch/direct wrapper.
 | `enhance_contrast` | boolean `run` | Python calls normalization only when true in both execution modes; optional top-level parameter `snr_threshold` is forwarded; MATLAB uses min-max enhancement |
 | `hist_equalize` | boolean `run`, integer `reference_channel` | Python direct/GR/deep uses channel index 0 by default; MATLAB deep passes the configured 1-based index, direct uses its method default |
 | `morph_recon` | boolean `run`, integer `radius` >=1 | Python default radius 3; used in direct/GR and subtile processing, also supported in deep creation |
+| `tophat` | boolean `run`, integer `radius` >=1 | Python rules only: white top-hat per XY slice, default radius 3, the last preprocessing step before registration; with `enhance_contrast`, `hist_equalize` and `morph_recon` it forms recipe 1 of the [preprocessing contract](preprocessing-contract.md); no MATLAB counterpart key |
+| `preprocessing` | `steps` (list; each with `method`, a step name, its config fields and optional `save_as`), optional `extraction_source`, `registration_source`, `supplied_statistics` | Python rules only (the schema rejects it unless `backend: python`): an explicit [preprocessing recipe](#explicit-preprocessing-recipe) that replaces `enhance_contrast`, `hist_equalize`, `morph_recon`, `tophat` and `snr_threshold`, which must then be absent |
 | `global_registration` | boolean `run`, string `ref_round`, `ref_img`/`mov_img` in `merged-image`,`single-channel` | Python default image modes are merged; Python requires this block's reference to match top-level `ref_round`; MATLAB wrappers pass the block reference; MATLAB deep uses scale 0.25 |
 | `create_subtiles` | boolean `run`, integer `sqrt_pieces` >=1 | Grid default 4; only GR/deep creation rules produce subtile files; Python creation scripts call splitting unconditionally |
 | `local_registration` | boolean `run`, string `ref_round`, method `demons`,`tps`,`cpd` (schema default `demons`) | Python translates supported method-specific settings; demons needs optional SimpleITK; MATLAB wrappers do not forward `method`; deep subtile does not perform local registration |
@@ -142,6 +144,35 @@ shared MATLAB keys remain unchanged. See [coordination](coordination.md).
 `from_workflow_config` chooses the relevant subtile creation settings; image
 sizes must match arrays after rotation. Rectangular and remainder dimensions
 are partitioned independently with complete edge coverage.
+
+## Explicit preprocessing recipe
+
+The Python-only `preprocessing` parameter of the five Python rules declares a
+preprocessing recipe explicitly, as specified in the
+[preprocessing contract](preprocessing-contract.md#explicit-step-list). Each
+entry of `steps` names a step by its registered name (`method`, one of
+`min_max_normalization`, `histogram_matching`, `reconstruction`,
+`white_tophat`, `scalar_background`, `background_3d` and
+`percentile_normalization`). Its other keys are the fields of that step's
+config class, and `save_as` keeps a named snapshot of the step's output.
+`extraction_source` and `registration_source` name a snapshot for extraction
+and for registration signals; each defaults to the detection image, the last
+step's output. `supplied_statistics` is the file read by steps with
+`fit: supplied`. An unknown method, field or snapshot name raises, and so does
+combining the key with a legacy preprocessing key. The steps run before
+registration in every rule; the key has no `post_registration` list. MATLAB
+keys and behaviour are unchanged, and without the key the legacy keys still
+map to recipe 1.
+
+This recipe-2 configuration subtracts a scalar background, keeps that image as
+the snapshot `bg_corrected`, then applies percentile normalization. Detection
+and registration use the normalized image; extraction reads `bg_corrected`.
+
+```{literalinclude} examples/workflow-recipe-2.yaml
+:language: yaml
+```
+
+{download}`Download the recipe-2 YAML <examples/workflow-recipe-2.yaml>`.
 
 ## Downstream parameter blocks
 

@@ -113,6 +113,71 @@ After: `dataset.fov(id).run(pipeline, execution=ExecutionConfig("streaming"))`.
 Use `from_workflow_config(config, rule)` at the shared YAML boundary. Full
 construction and recovery examples are in [coordination](coordination.md).
 
+### Preprocessing recipe
+
+`PipelineConfig` no longer has one fixed slot per preprocessing operation. An
+ordered {py:class}`~starfinder.preprocessing.PreprocessingRecipe` in
+`PipelineConfig.preprocessing` replaces them, as specified in the
+[preprocessing contract](preprocessing-contract.md). There are no aliases.
+
+| Before | After |
+| --- | --- |
+| `PipelineConfig.normalization` | `RecipeStep(MinMaxNormalizationConfig(...))` in `preprocessing.steps` |
+| `PipelineConfig.histogram` | `RecipeStep(HistogramMatchingConfig(...))` in `preprocessing.steps` |
+| `PipelineConfig.histogram_reference_channel` | `HistogramMatchingConfig.reference_channel` (default 0) |
+| `PipelineConfig.reconstruction` | `RecipeStep(ReconstructionConfig(...))` in `preprocessing.steps` |
+| `PipelineConfig.reconstruction_after_registration` | The same step in `preprocessing.post_registration`, which accepts only `ReconstructionConfig` |
+| `PipelineConfig.tophat` | `RecipeStep(TophatConfig(...))` in `preprocessing.steps` |
+| `PipelineConfig.projection` | Removed. `FOV.run` never projects; projection is an output view, and 2D data are volumes with Z = 1 |
+| `FOV.match_histogram(reference_channel=...)` | `FOV.match_histogram(config=HistogramMatchingConfig(reference_channel=...))` |
+
+Steps run in the declared order. The fixed order of the removed slots
+(normalization, histogram matching, reconstruction, top-hat) is recipe 1, which
+reproduces the earlier outputs exactly:
+
+```python
+from starfinder.dataset import PipelineConfig
+from starfinder.preprocessing import (HistogramMatchingConfig, MinMaxNormalizationConfig,
+    PreprocessingRecipe, RecipeStep, ReconstructionConfig)
+
+pipeline = PipelineConfig(preprocessing=PreprocessingRecipe((
+    RecipeStep(MinMaxNormalizationConfig("uint8", (0, 255))),
+    RecipeStep(HistogramMatchingConfig(reference_channel=0)),
+    RecipeStep(ReconstructionConfig(radius_yx=3)))))
+```
+
+Every step runs through one wrapper that checks shape, dtype, finiteness and
+metadata. A histogram-matching step therefore keeps the input dtype; a
+`HistogramMatchingConfig.output_dtype` that differs from it now raises in
+`FOV.run`. The workflow keys `enhance_contrast`, `hist_equalize`, `morph_recon`
+and `tophat` are unchanged and translate to recipe 1. `run.json` and the
+`registered` checkpoint gain a `preprocessing` entry with the recipe and one
+record per round and step.
+
+Recipes can also keep named snapshots (`RecipeStep.save_as`) and name an
+`extraction_source` and a `registration_source`; the new Python-only workflow
+key `preprocessing` declares such a recipe and cannot be combined with the
+legacy keys. These additions are optional: a recipe without them gives the same
+results as before. The preprocessing record gains the two sources, `save_as` per
+step and the transforms applied per round and snapshot, and the `registered`
+checkpoint stores the extraction source under `registered/<snapshot>/`.
+Checkpoints written before these additions still load, with no snapshots.
+
+### Reference merged image
+
+`FOV.save_reference_image` used to write the reference round's full ZYXC image
+as OME-TIFF, with channels not merged, to `images/ref_merged/{fovID}.tif`.
+The MATLAB backend writes the channel-merged image to the same file. Python now
+writes the same content as MATLAB: the reference round's detection image,
+reduced to its channel maximum (`reference_image="merged"`, the default) or to
+one channel (`reference_image="single-channel"` with `reference_channel`), as a
+ZYX TIFF. With `projection=ProjectionConfig()` (top-level
+`maximum_projection`) it is also reduced along Z and saved as YX. The filename
+and dtype are unchanged. Python outputs written before this change hold ZYXC;
+rerun the rule to replace them. `ProjectionConfig` gains `axis`, `"z"` (the
+default and earlier behavior) or `"channel"`; see
+[projection views](workflows.md#projection-views-and-the-reference-merged-image).
+
 ### Generate, evaluate and report
 
 `synthetic.generate_dataset(codebook, config, fov_ids=...)` returns arrays and

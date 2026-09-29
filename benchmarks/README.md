@@ -9,6 +9,18 @@ Maintained source-derived configuration and adapters for the common
 - `configs/pipeline.json`: source-specific processing/residency profiles.
 - `configs/source-map.json`: complete bounded 56-source disposition and hash index.
 - `report_saved.py`: saved-table reporting with explicit join keys and resource scopes.
+- `preprocessing_synthetic.py`: the bounded §2.5 preprocessing comparison on synthetic
+  development presets (W-233); writes tables, curves and a manifest to a directory outside
+  Git. `--design calibrated` runs the calibrated rerun of the accepted amendment (W-239) on
+  `calibrated_scene_preset` scenes in both threshold modes. Development evidence only, with no
+  recommended defaults.
+- `preprocessing_report.py`: renders the standalone §2.5 inspection report (W-234) from a saved
+  `preprocessing_synthetic.py` output directory, after checking its checksums and source revision.
+  A calibrated output directory gives the report of the amendment's item 6 (W-249): a human summary
+  first, then the method figures, then an appendix, with both threshold modes side by side.
+- `image_statistics.py`: intensity, puncta and noise statistics of one real TIFF or synthetic channel
+  volume, and the read-only real-data measurement behind the synthetic calibration targets (W-238);
+  see [image statistics](../docs/image-statistics.md).
 
 Original scripts, results and restricted reference snapshots remain external.
 These new implementations follow the Python package's declared MIT terms;

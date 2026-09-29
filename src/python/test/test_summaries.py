@@ -9,7 +9,7 @@ from starfinder.barcode import NeighborhoodSumConfig, ReadFilterConfig, WtaDecod
 from starfinder.dataset import CheckpointConfig, Dataset, PipelineConfig, RegistrationStep, RoundState
 from starfinder.evaluation import EvaluationResult
 from starfinder.io import ImageLoadConfig
-from starfinder.preprocessing import MinMaxNormalizationConfig
+from starfinder.preprocessing import MinMaxNormalizationConfig, PreprocessingRecipe, RecipeStep
 from starfinder.registration import DemonsConfig, TranslationConfig
 from starfinder.spot_finding import LocalMaximaConfig
 
@@ -45,7 +45,7 @@ def test_fov_and_dataset_summaries_on_small_synthetic_run(small_dataset, tmp_pat
     ds.load_codebook(small_dataset / 'codebook.csv')
     fov = ds.fov('FOV_001').run(PipelineConfig(
         load=ImageLoadConfig(channel_labels=ds.channel_order),
-        normalization=MinMaxNormalizationConfig('uint8', (0, 255), snr_threshold=5.0),
+        preprocessing=PreprocessingRecipe((RecipeStep(MinMaxNormalizationConfig('uint8', (0, 255), snr_threshold=5.0)),)),
         registration=(RegistrationStep(TranslationConfig()),), detection=LocalMaximaConfig(),
         extraction=NeighborhoodSumConfig(), decoding=WtaDecoderConfig(diagnostics=True),
         filtering=ReadFilterConfig()))

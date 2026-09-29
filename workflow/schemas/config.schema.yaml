@@ -292,6 +292,22 @@ allOf:
       required:
         - n_random_tests
 
+  # The explicit preprocessing recipe is Python-only (backend defaults to matlab)
+  - if:
+      not:
+        required: [backend]
+        properties:
+          backend:
+            const: python
+    then:
+      properties:
+        rules:
+          additionalProperties:
+            properties:
+              parameters:
+                not:
+                  required: [preprocessing]
+
 # ==================== Reusable Definitions ====================
 $defs:
   # Base resources schema
@@ -349,6 +365,156 @@ $defs:
         type: integer
         minimum: 1
     additionalProperties: true
+
+  tophat_params:
+    description: "Python-only white top-hat per XY slice; maps to TophatConfig(radius_yx=radius)"
+    type: object
+    properties:
+      run:
+        type: boolean
+      radius:
+        type: integer
+        minimum: 1
+    additionalProperties: false
+
+  # ==================== Explicit preprocessing recipe (Python only) ====================
+  # One definition per step registered in starfinder.preprocessing.STEPS. Keys other
+  # than method and save_as are the fields of the step's config dataclass; a
+  # default-tier test keeps these definitions equal to STEPS.
+  snapshot_name:
+    type: string
+    pattern: "^[a-z][a-z0-9]*(_[a-z0-9]+)*$"
+    not:
+      const: detection
+
+  preprocessing_fit:
+    type: string
+    enum: ["fov", "supplied"]
+
+  preprocessing_rounding:
+    type: string
+    enum: ["truncate", "nearest_even"]
+
+  preprocessing_step_min_max_normalization:
+    type: object
+    required: [method, output_dtype, output_range]
+    additionalProperties: false
+    properties:
+      method: {const: min_max_normalization}
+      save_as: {$ref: "#/$defs/snapshot_name"}
+      output_dtype: {type: string}
+      output_range:
+        type: array
+        items: {type: number}
+        minItems: 2
+        maxItems: 2
+      scope: {type: string, enum: ["per_channel", "global"]}
+      snr_threshold: {type: ["number", "null"], minimum: 0}
+      rounding: {$ref: "#/$defs/preprocessing_rounding"}
+
+  preprocessing_step_histogram_matching:
+    type: object
+    required: [method]
+    additionalProperties: false
+    properties:
+      method: {const: histogram_matching}
+      save_as: {$ref: "#/$defs/snapshot_name"}
+      output_dtype: {type: ["string", "null"]}
+      rounding: {$ref: "#/$defs/preprocessing_rounding"}
+      reference_channel: {type: integer, minimum: 0}
+      fit: {$ref: "#/$defs/preprocessing_fit"}
+
+  preprocessing_step_reconstruction:
+    type: object
+    required: [method]
+    additionalProperties: false
+    properties:
+      method: {const: reconstruction}
+      save_as: {$ref: "#/$defs/snapshot_name"}
+      radius_yx: {type: integer, minimum: 1}
+
+  preprocessing_step_white_tophat:
+    type: object
+    required: [method]
+    additionalProperties: false
+    properties:
+      method: {const: white_tophat}
+      save_as: {$ref: "#/$defs/snapshot_name"}
+      radius_yx: {type: integer, minimum: 1}
+
+  preprocessing_step_scalar_background:
+    type: object
+    required: [method]
+    additionalProperties: false
+    properties:
+      method: {const: scalar_background}
+      save_as: {$ref: "#/$defs/snapshot_name"}
+      percentile: {type: number, minimum: 0, exclusiveMaximum: 100}
+      fit: {$ref: "#/$defs/preprocessing_fit"}
+
+  preprocessing_step_background_3d:
+    type: object
+    required: [method]
+    additionalProperties: false
+    properties:
+      method: {const: background_3d}
+      save_as: {$ref: "#/$defs/snapshot_name"}
+      radius_um_zyx:
+        type: array
+        items: {type: number, minimum: 0}
+        minItems: 3
+        maxItems: 3
+      radius_voxels_zyx:
+        type: array
+        items: {type: integer, minimum: 0}
+        minItems: 3
+        maxItems: 3
+
+  preprocessing_step_percentile_normalization:
+    type: object
+    required: [method]
+    additionalProperties: false
+    properties:
+      method: {const: percentile_normalization}
+      save_as: {$ref: "#/$defs/snapshot_name"}
+      p_low: {type: number, minimum: 0, maximum: 100}
+      p_high: {type: number, minimum: 0, maximum: 100}
+      fit: {$ref: "#/$defs/preprocessing_fit"}
+
+  preprocessing_params:
+    description: "Python-only explicit recipe (preprocessing contract, Explicit step list); mutually exclusive with enhance_contrast, hist_equalize, morph_recon, tophat and snr_threshold"
+    type: object
+    required: [steps]
+    additionalProperties: false
+    properties:
+      steps:
+        type: array
+        items:
+          oneOf:
+            - $ref: "#/$defs/preprocessing_step_min_max_normalization"
+            - $ref: "#/$defs/preprocessing_step_histogram_matching"
+            - $ref: "#/$defs/preprocessing_step_reconstruction"
+            - $ref: "#/$defs/preprocessing_step_white_tophat"
+            - $ref: "#/$defs/preprocessing_step_scalar_background"
+            - $ref: "#/$defs/preprocessing_step_background_3d"
+            - $ref: "#/$defs/preprocessing_step_percentile_normalization"
+      extraction_source:
+        oneOf: [{$ref: "#/$defs/snapshot_name"}, {type: "null"}]
+      registration_source:
+        oneOf: [{$ref: "#/$defs/snapshot_name"}, {type: "null"}]
+      supplied_statistics: {type: ["string", "null"]}
+
+  python_rule_parameters:
+    description: "The explicit preprocessing key replaces the legacy preprocessing keys"
+    if: {required: [preprocessing]}
+    then:
+      not:
+        anyOf:
+          - required: [enhance_contrast]
+          - required: [hist_equalize]
+          - required: [morph_recon]
+          - required: [tophat]
+          - required: [snr_threshold]
 
   registration_recovery_params:
     description: "Python-only opt-in recovery; validation/dependency/application errors never recover"
@@ -491,13 +657,19 @@ $defs:
         $ref: "#/$defs/resources"
       parameters:
         type: object
+        allOf:
+          - $ref: "#/$defs/python_rule_parameters"
         properties:
+          preprocessing:
+            $ref: "#/$defs/preprocessing_params"
           enhance_contrast:
             $ref: "#/$defs/enhance_contrast_params"
           hist_equalize:
             $ref: "#/$defs/hist_equalize_params"
           morph_recon:
             $ref: "#/$defs/morph_recon_params"
+          tophat:
+            $ref: "#/$defs/tophat_params"
           global_registration:
             $ref: "#/$defs/global_registration_params"
           create_subtiles:
@@ -526,13 +698,19 @@ $defs:
         $ref: "#/$defs/resources"
       parameters:
         type: object
+        allOf:
+          - $ref: "#/$defs/python_rule_parameters"
         properties:
+          preprocessing:
+            $ref: "#/$defs/preprocessing_params"
           enhance_contrast:
             $ref: "#/$defs/enhance_contrast_params"
           hist_equalize:
             $ref: "#/$defs/hist_equalize_params"
           morph_recon:
             $ref: "#/$defs/morph_recon_params"
+          tophat:
+            $ref: "#/$defs/tophat_params"
           global_registration:
             $ref: "#/$defs/global_registration_params"
           create_subtiles:
@@ -551,11 +729,17 @@ $defs:
         $ref: "#/$defs/resources"
       parameters:
         type: object
+        allOf:
+          - $ref: "#/$defs/python_rule_parameters"
         properties:
+          preprocessing:
+            $ref: "#/$defs/preprocessing_params"
           local_registration:
             $ref: "#/$defs/local_registration_params"
           morph_recon:
             $ref: "#/$defs/morph_recon_params"
+          tophat:
+            $ref: "#/$defs/tophat_params"
           spot_finding:
             $ref: "#/$defs/spot_finding_params"
           load_codebook:
@@ -578,9 +762,15 @@ $defs:
         $ref: "#/$defs/resources"
       parameters:
         type: object
+        allOf:
+          - $ref: "#/$defs/python_rule_parameters"
         properties:
+          preprocessing:
+            $ref: "#/$defs/preprocessing_params"
           hist_equalize:
             $ref: "#/$defs/hist_equalize_params"
+          tophat:
+            $ref: "#/$defs/tophat_params"
           global_registration:
             $ref: "#/$defs/global_registration_params"
           create_subtiles:
@@ -599,9 +789,15 @@ $defs:
         $ref: "#/$defs/resources"
       parameters:
         type: object
+        allOf:
+          - $ref: "#/$defs/python_rule_parameters"
         properties:
+          preprocessing:
+            $ref: "#/$defs/preprocessing_params"
           morph_recon:
             $ref: "#/$defs/morph_recon_params"
+          tophat:
+            $ref: "#/$defs/tophat_params"
           spot_finding:
             $ref: "#/$defs/spot_finding_params"
           load_codebook:

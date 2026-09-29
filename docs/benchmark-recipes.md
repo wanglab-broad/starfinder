@@ -134,6 +134,81 @@ reported as an isolated FOV peak. New lifecycle timings include loading,
 processing and persistence and exclude evaluation. No speedup/equivalence claim
 is made by placing these records in a common table.
 
+## Preprocessing comparison on synthetic presets
+
+`benchmarks/preprocessing_synthetic.py` runs the bounded §2.5 comparison matrix of
+{doc}`preprocessing-algorithms` (*Evaluation design*) on development-preset scenes:
+
+```bash
+uv run python ../../benchmarks/preprocessing_synthetic.py run --output /external/w233/evaluation
+uv run python ../../benchmarks/preprocessing_synthetic.py attach-time --output /external/w233/evaluation --time-log /external/time.log
+```
+
+It processes every arm with `FOV.run` and sweeps the noise-mode `threshold_value`.
+Tables, precision–recall curves and a manifest (conditions, seeds, dtypes,
+recipe configs and output checksums) go to the output directory. The
+low-benefit flag is provisional. The results are development evidence on
+uncalibrated synthetic data, not recommended defaults.
+
+`--design calibrated` runs the calibrated rerun instead, as specified by the
+*Evaluation design amendment for the calibrated rerun* of
+{doc}`preprocessing-algorithms`. The default design stays W-233's:
+
+```bash
+uv run python ../../benchmarks/preprocessing_synthetic.py run --design calibrated --scope pilot --output /external/w239/pilot
+uv run python ../../benchmarks/preprocessing_synthetic.py run --design calibrated --scope full --issue W-248 --output /external/w248/evaluation
+```
+
+* **Scenes.** Every scene is `calibrated_scene_preset` with the balanced
+  codebook. The added conditions are `bright_outliers`, `saturation` (with
+  its `k` search), `gain_strong` and `clean_unbalanced`. uint16 is used only
+  for `clean`, `combined` and `bright_outliers`, and the multi-FOV sets run in
+  uint8 only. `--reduction R3` drops uint16.
+* **Detection.** Every arm is swept in the noise and adaptive threshold modes.
+* **Tables.** Besides W-233's tables, the output directory holds
+  `preconditions.csv`, `fixture_gaps.csv`, the revised `low_benefit_flags.csv`,
+  `harm_test.csv` and `image_statistics.csv`. The last compares each
+  condition's statistics, measured with the {doc}`image-statistics` tool, with
+  the W-238 development ranges. Every table of detection results has a
+  `threshold_mode` column.
+* **Projection.** The pilot scope records a projection of the full matrix
+  against the 2700 s budget, before and after R3.
+
+`benchmarks/preprocessing_report.py` renders the task group 6 inspection report
+from a saved evaluation directory as one standalone HTML file:
+
+```bash
+uv run python ../../benchmarks/preprocessing_report.py --evaluation /external/w233/evaluation --output /external/w234/report.html
+```
+
+Before rendering, it checks every manifest-listed checksum. It also checks that
+the manifest's revision matches the checkout: for a run from an uncommitted
+tree, the recorded diff checksum must equal the diff to a later commit, and the
+evaluation sources must be unchanged since that commit. Tables are copied from
+the named output files. The before/after panels regenerate only the displayed
+scenes and outputs, and each must equal its manifest checksum. See
+[Choose a preprocessing recipe](recipes.md#choose-a-preprocessing-recipe).
+
+Given a calibrated evaluation directory, the same command renders the report of
+item 6 of the amendment (W-249). `--summary` also saves the render summary as
+JSON:
+
+```bash
+uv run python ../../benchmarks/preprocessing_report.py --evaluation /external/w248/evaluation --output /external/w249/report.html --summary /external/w249/render-summary.json
+```
+
+* **Layout.** The human summary comes first: the setup, one card per method,
+  the cross-cutting findings and a reading order. The method sections with the
+  nine visualization changes follow, and the appendix holds the identity,
+  checksums and full tables.
+* **Threshold modes.** Every card and figure shows the noise and adaptive modes
+  side by side.
+* **Checks.** The checksum and revision checks above also cover
+  `benchmarks/image_statistics.py`. Each detection overlay is rerun once on its
+  verified image at the saved development-selected value. Its spot, match and
+  read counts and its cutoffs must equal the saved curve row, or nothing is
+  written.
+
 ## Optional recipes
 
 | Recipe | Prerequisites and retained distinctions |

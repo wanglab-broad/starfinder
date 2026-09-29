@@ -7,7 +7,7 @@ from .dataset import Dataset
 from .types import RoundState, SubtileConfig
 from starfinder.io import ImageLoadConfig
 from starfinder.preprocessing import (MinMaxNormalizationConfig, HistogramMatchingConfig,
-    ReconstructionConfig, TophatConfig, ProjectionConfig)
+    ReconstructionConfig, TophatConfig, ProjectionConfig, PreprocessingRecipe, RecipeStep, step_config_type)
 from starfinder.registration import (TranslationConfig, DemonsConfig, TpsConfig, CpdConfig,
     InsufficientLandmarksError, RegistrationEstimationError, WarpConfig)
 from starfinder.barcode import NeighborhoodSumConfig, ReadFilterConfig, WtaDecoderConfig
@@ -15,6 +15,8 @@ from starfinder.spot_finding import LocalMaximaConfig
 
 _RULES = ('rsf_single_fov', 'gr_single_fov_subtile', 'lrsf_single_fov_subtile',
           'deep_create_subtile', 'deep_rsf_subtile')
+# Keys replaced by the explicit preprocessing key (snr_threshold only feeds min-max).
+_LEGACY_PREPROCESSING = ('enhance_contrast', 'hist_equalize', 'morph_recon', 'tophat', 'snr_threshold')
 
 
 def _known(values, allowed, context):
@@ -91,14 +93,70 @@ def _registration(values, *, local=False):
     return RegistrationStep(config, reference, moving, channel, recovery, warp)
 
 
+def _legacy_recipe(params, norm, do_norm, hist, do_hist, morph, do_morph, top, do_top, resident):
+    """Recipe 1 from the legacy keys, in the legacy order; None when no key runs.
+
+    Resident subtile rules run reconstruction after registration.
+    """
+    steps, post = [], []
+    if do_norm:
+        steps.append(MinMaxNormalizationConfig('uint8', (0, 255), rounding='truncate',
+            snr_threshold=norm.get('snr_threshold', params.get('snr_threshold'))))
+    if do_hist:
+        steps.append(HistogramMatchingConfig(reference_channel=hist.get('reference_channel', 0)))
+    if do_morph:
+        (post if resident else steps).append(ReconstructionConfig(radius_yx=morph.get('radius', 3)))
+    if do_top:
+        steps.append(TophatConfig(radius_yx=top.get('radius', 3)))
+    if not steps and not post:
+        return None
+    return PreprocessingRecipe(tuple(map(RecipeStep, steps)), tuple(map(RecipeStep, post)))
+
+
+def _tuples(value):
+    return tuple(_tuples(v) for v in value) if isinstance(value, list) else value
+
+
+def _explicit_recipe(values):
+    """Recipe from the preprocessing key: steps named by their STEPS names, plus the recipe fields.
+
+    A step's keys other than method and save_as are the fields of its config
+    dataclass; YAML lists become tuples.
+    """
+    if not isinstance(values, dict):
+        raise TypeError('preprocessing must be a mapping')
+    _known(values, ('steps', 'extraction_source', 'registration_source', 'supplied_statistics'), 'preprocessing')
+    if not isinstance(values.get('steps'), list):
+        raise ValueError('preprocessing.steps must be a list')
+    steps = []
+    for entry in values['steps']:
+        if not isinstance(entry, dict) or 'method' not in entry:
+            raise ValueError('each preprocessing step must be a mapping with a method')
+        entry = dict(entry)
+        config_type = step_config_type(entry.pop('method'))
+        save_as = entry.pop('save_as', None)
+        _known(entry, [f.name for f in fields(config_type) if f.init], f'preprocessing step {config_type.__name__}')
+        steps.append(RecipeStep(config_type(**{k: _tuples(v) for k, v in entry.items()}), save_as))
+    supplied = values.get('supplied_statistics')
+    return PreprocessingRecipe(tuple(steps), extraction_source=values.get('extraction_source'),
+                               registration_source=values.get('registration_source'),
+                               supplied_statistics=None if supplied is None else Path(supplied))
+
+
 @dataclass(frozen=True)
 class WorkflowConfig:
-    """Translated dataset, scientific pipeline and execution/output policies."""
+    """Translated dataset, scientific pipeline and execution/output policies.
+
+    reference_projection, reference_image and reference_channel are passed to
+    FOV.save_reference_image for ``images/ref_merged``.
+    """
     dataset: Dataset
     pipeline: PipelineConfig
     execution: ExecutionConfig
     split_index: int | None = None
     reference_projection: ProjectionConfig | None = None
+    reference_image: str = 'merged'
+    reference_channel: int = 0
 
 
 def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> WorkflowConfig:
@@ -106,6 +164,9 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
 
     Other rules/top-level acquisition/downstream keys are shared with MATLAB.
     Unknown fields in this Python rule's parameters raise instead of disappearing.
+    The Python-only preprocessing key declares an explicit recipe and is
+    mutually exclusive with the legacy keys enhance_contrast, hist_equalize,
+    morph_recon, tophat and snr_threshold, which map to recipe 1.
     Direct Python callers construct Dataset/PipelineConfig (no legacy aliases).
     """
     if rule not in _RULES:
@@ -125,8 +186,11 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
         channel_order=channels, fov_pattern=config.get('fov_id_pattern', 'Position%03d'))
     params = config.get('rules', {}).get(rule, {}).get('parameters', {})
     _known(params, ('streaming', 'snr_threshold', 'load_codebook', 'load_raw_images', 'enhance_contrast',
-        'hist_equalize', 'morph_recon', 'tophat', 'global_registration', 'local_registration',
+        'hist_equalize', 'morph_recon', 'tophat', 'preprocessing', 'global_registration', 'local_registration',
         'spot_finding', 'reads_extraction', 'reads_filtration', 'create_subtiles'), 'Python workflow parameter')
+    legacy = [key for key in _LEGACY_PREPROCESSING if key in params]
+    if 'preprocessing' in params and legacy:
+        raise ValueError(f'preprocessing is mutually exclusive with the legacy keys {legacy}')
     norm, do_norm = _operation(params, 'enhance_contrast', ('snr_threshold',))
     hist, do_hist = _operation(params, 'hist_equalize', ('reference_channel',))
     morph, do_morph = _operation(params, 'morph_recon', ('radius',))
@@ -140,12 +204,20 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
     registration_keys = {f.name for cls in (TranslationConfig, DemonsConfig, TpsConfig, CpdConfig) for f in fields(cls) if f.init}
     registration_keys |= {'ref_round', 'method', 'ref_img', 'mov_img', 'ref_channel', 'boundary_mode', 'recovery',
         'detection_threshold', 'match_distance', 'tps_smoothing', 'grid_spacing', 'beta', 'lmbda', 'cpd_w', 'candidate_radius', 'k_neighbors'}
+    enabled_registration = []
     for name in ('global_registration', 'local_registration'):
         values, enabled = _operation(params, name, registration_keys)
         if values.pop('ref_round', rounds.reference_round) != rounds.reference_round:
             raise ValueError('rule reference round differs from dataset reference')
         if enabled:
             steps.append(_registration(values, local=name == 'local_registration'))
+            enabled_registration.append(name)
+    # ref_merged is what the MATLAB script saves: the reference image of its last
+    # registration. Only rsf_single_fov passes ref_img, to global registration;
+    # its local registration and the other scripts use the channel maximum.
+    reference_view = ('merged', 0)
+    if rule == 'rsf_single_fov' and enabled_registration == ['global_registration']:
+        reference_view = (steps[0].reference_image, steps[0].reference_channel)
     if spot.get('ref_round', rounds.reference_round) != rounds.reference_round:
         raise ValueError('detection reference differs from dataset reference')
     if filt.get('n_barcode_segments', 1) != 1 or filt.get('split_index') not in (None, []):
@@ -154,11 +226,8 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
     # The adapter loads raw input unless this is a saved-subtile job or explicitly disabled.
     load_config = ImageLoadConfig(channel_labels=channels, **load) if channels and not resident and ('load_raw_images' not in params or do_load) else None
     pipeline = PipelineConfig(load=load_config, rotation_degrees=None if resident else config.get('rotate_angle'),
-        normalization=MinMaxNormalizationConfig('uint8', (0, 255), snr_threshold=norm.get('snr_threshold', params.get('snr_threshold'))) if do_norm else None,
-        histogram=HistogramMatchingConfig() if do_hist else None, histogram_reference_channel=hist.get('reference_channel', 0),
-        reconstruction=ReconstructionConfig(radius_yx=morph.get('radius', 3)) if do_morph else None,
-        reconstruction_after_registration=resident,
-        tophat=TophatConfig(radius_yx=top.get('radius', 3)) if do_top else None,
+        preprocessing=(_explicit_recipe(params['preprocessing']) if 'preprocessing' in params else
+                       _legacy_recipe(params, norm, do_norm, hist, do_hist, morph, do_morph, top, do_top, resident)),
         registration=tuple(steps),
         detection=LocalMaximaConfig(threshold_mode=spot.get('intensity_estimation', 'noise'), threshold_value=spot.get('intensity_threshold', 5.0), min_distance_voxels=spot.get('min_distance_voxels', spot.get('min_distance', 1))) if do_spot else None,
         extraction=NeighborhoodSumConfig(tuple(extract.get('voxel_size', (1, 2, 2)))) if do_extract else None,
@@ -185,7 +254,7 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
         split_index = split_index[0]
     return WorkflowConfig(dataset, pipeline,
         ExecutionConfig('streaming' if streaming else 'batch', rule in ('gr_single_fov_subtile', 'deep_create_subtile')),
-        split_index, ProjectionConfig() if config.get('maximum_projection', False) else None)
+        split_index, ProjectionConfig() if config.get('maximum_projection', False) else None, *reference_view)
 
 
 def _run_workflow(snakemake, rule):
@@ -204,7 +273,8 @@ def _run_workflow(snakemake, rule):
         fov.save_spots(path=Path(snakemake.input[2]).parent / f'subtile_goodSpots_{number}.csv')
         fov.save_diagnostics(suffix=f'_{number}')
     else:
-        fov.save_reference_image(projection=adapted.reference_projection)
+        fov.save_reference_image(projection=adapted.reference_projection, reference_image=adapted.reference_image,
+                                 reference_channel=adapted.reference_channel)
         if rule == 'rsf_single_fov':
             fov.save_spots()
             fov.save_diagnostics()

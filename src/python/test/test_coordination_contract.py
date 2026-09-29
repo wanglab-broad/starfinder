@@ -15,7 +15,7 @@ from starfinder.dataset import (Dataset, FOV, RoundState, PipelineConfig, Execut
 from starfinder.image import ImageMetadata, IncompatibleGeometryError
 from starfinder.io import ImageLoadConfig, save_volume, export_spots
 from starfinder.preprocessing import (MinMaxNormalizationConfig, HistogramMatchingConfig,
-    ReconstructionConfig, TophatConfig, ProjectionConfig)
+    ReconstructionConfig, TophatConfig, PreprocessingRecipe, RecipeStep)
 from starfinder.registration import (TranslationConfig, TpsConfig, DemonsConfig, CpdConfig,
     InsufficientLandmarksError, RegistrationBackendUnavailableError, InvalidRegistrationConfigError)
 from starfinder.spot_finding import LocalMaximaConfig
@@ -46,6 +46,10 @@ def resident(ds):
     return fov
 
 
+def recipe(*steps, post=()):
+    return PreprocessingRecipe(tuple(map(RecipeStep, steps)), tuple(map(RecipeStep, post)))
+
+
 def complete(**kwargs):
     return PipelineConfig(detection=LocalMaximaConfig('adaptive', .1),
         extraction=NeighborhoodSumConfig((0, 0, 0)), decoding=WtaDecoderConfig(),
@@ -54,18 +58,16 @@ def complete(**kwargs):
 
 @pytest.mark.parametrize('options', [
     {}, {'rotation_degrees': 90},
-    {'normalization': MinMaxNormalizationConfig('uint8', (0, 255), snr_threshold=2)},
-    {'histogram': HistogramMatchingConfig(output_dtype='float32'), 'histogram_reference_channel': 0},
-    {'reconstruction': ReconstructionConfig(radius_yx=1)},
-    {'tophat': TophatConfig(radius_yx=1)},
-    {'projection': ProjectionConfig(method='sum')},
+    {'preprocessing': recipe(MinMaxNormalizationConfig('uint8', (0, 255), snr_threshold=2))},
+    {'preprocessing': recipe(HistogramMatchingConfig(reference_channel=0))},
+    {'preprocessing': recipe(ReconstructionConfig(radius_yx=1))},
+    {'preprocessing': recipe(TophatConfig(radius_yx=1))},
     {'registration': (RegistrationStep(TranslationConfig(), 'single-channel', 'single-channel'),)},
     {'registration': (RegistrationStep(DemonsConfig(iterations=(1,))),)},
-    {'reconstruction': ReconstructionConfig(radius_yx=1), 'reconstruction_after_registration': True,
+    {'preprocessing': recipe(post=(ReconstructionConfig(radius_yx=1),)),
      'registration': (RegistrationStep(TranslationConfig()),)},
-    {'normalization': MinMaxNormalizationConfig('uint8', (0, 255)),
-     'histogram': HistogramMatchingConfig(), 'reconstruction': ReconstructionConfig(radius_yx=1),
-     'tophat': TophatConfig(radius_yx=1), 'projection': ProjectionConfig(),
+    {'preprocessing': recipe(MinMaxNormalizationConfig('uint8', (0, 255)), HistogramMatchingConfig(),
+                             ReconstructionConfig(radius_yx=1), TophatConfig(radius_yx=1)),
      'registration': (RegistrationStep(TranslationConfig()),)},
 ])
 def test_scientific_parity(tmp_path, options):
@@ -224,7 +226,7 @@ def test_workflow_translation_rejects_unknowns_and_preserves_effective_settings(
     original = copy.deepcopy(config)
     adapted = from_workflow_config(config)
     assert config == original
-    assert adapted.pipeline.normalization is None
+    assert adapted.pipeline.preprocessing is None
     assert len(adapted.pipeline.registration) == 1
     cpd = adapted.pipeline.registration[0].config
     assert cpd.detection_noise_sigma == 3 and cpd.grid_spacing_voxels == 32
@@ -244,6 +246,7 @@ def test_workflow_translation_rejects_unknowns_and_preserves_effective_settings(
 def test_maintained_workflow_examples_translate():
     root = Path(__file__).resolve().parents[3]
     for path in [root/'docs/examples/workflow-full.yaml', root/'docs/examples/workflow-minimal.yaml',
+                 root/'docs/examples/workflow-recipe-2.yaml',
                  root/'tests/minimal_config.yaml', root/'tests/tissue_2D_test.yaml']:
         config = yaml.safe_load(path.read_text())
         for rule in config['rules']:

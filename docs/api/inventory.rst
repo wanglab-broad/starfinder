@@ -140,16 +140,43 @@ starfinder.io
 starfinder.preprocessing
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
+* :py:obj:`starfinder.preprocessing.Background3DConfig`
 * :py:obj:`starfinder.preprocessing.filter_tophat`
+* :py:obj:`starfinder.preprocessing.histogram_percentile`
 * :py:obj:`starfinder.preprocessing.HistogramMatchingConfig`
+* :py:obj:`starfinder.preprocessing.HistogramSummary`
 * :py:obj:`starfinder.preprocessing.match_histogram`
+* :py:obj:`starfinder.preprocessing.merge_histograms`
 * :py:obj:`starfinder.preprocessing.MinMaxNormalizationConfig`
 * :py:obj:`starfinder.preprocessing.normalize_intensity`
+* :py:obj:`starfinder.preprocessing.normalize_percentile`
+* :py:obj:`starfinder.preprocessing.PercentileNormalizationConfig`
+* :py:obj:`starfinder.preprocessing.PreprocessingRecipe`
 * :py:obj:`starfinder.preprocessing.project_image`
 * :py:obj:`starfinder.preprocessing.ProjectionConfig`
+* :py:obj:`starfinder.preprocessing.read_histograms`
+* :py:obj:`starfinder.preprocessing.read_supplied_statistics`
+* :py:obj:`starfinder.preprocessing.RecipeStep`
 * :py:obj:`starfinder.preprocessing.reconstruct_background`
 * :py:obj:`starfinder.preprocessing.ReconstructionConfig`
+* :py:obj:`starfinder.preprocessing.run_step`
+* :py:obj:`starfinder.preprocessing.scalar_background_histograms`
+* :py:obj:`starfinder.preprocessing.ScalarBackgroundConfig`
+* :py:obj:`starfinder.preprocessing.step_config_type`
+* :py:obj:`starfinder.preprocessing.step_spec`
+* :py:obj:`starfinder.preprocessing.StepContext`
+* :py:obj:`starfinder.preprocessing.StepResult`
+* :py:obj:`starfinder.preprocessing.STEPS`
+* :py:obj:`starfinder.preprocessing.StepSpec`
+* :py:obj:`starfinder.preprocessing.subtract_background_3d`
+* :py:obj:`starfinder.preprocessing.subtract_scalar_background`
+* :py:obj:`starfinder.preprocessing.summarize_histograms`
+* :py:obj:`starfinder.preprocessing.summary_stage`
+* :py:obj:`starfinder.preprocessing.supplied_section`
+* :py:obj:`starfinder.preprocessing.supplied_statistics`
 * :py:obj:`starfinder.preprocessing.TophatConfig`
+* :py:obj:`starfinder.preprocessing.write_histograms`
+* :py:obj:`starfinder.preprocessing.write_supplied_statistics`
 
 starfinder.registration
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -186,8 +213,11 @@ starfinder.synthetic
 * :py:obj:`starfinder.synthetic.BackgroundConfig`
 * :py:obj:`starfinder.synthetic.BENCHMARK_PRESETS`
 * :py:obj:`starfinder.synthetic.benchmark_scene_preset`
+* :py:obj:`starfinder.synthetic.CALIBRATED_CONDITIONS`
+* :py:obj:`starfinder.synthetic.calibrated_scene_preset`
 * :py:obj:`starfinder.synthetic.deformation_geometry`
 * :py:obj:`starfinder.synthetic.DEFORMATION_PRESETS`
+* :py:obj:`starfinder.synthetic.development_codebook`
 * :py:obj:`starfinder.synthetic.DEVELOPMENT_FACTORS`
 * :py:obj:`starfinder.synthetic.DEVELOPMENT_FIXTURES`
 * :py:obj:`starfinder.synthetic.development_preset_factors`
