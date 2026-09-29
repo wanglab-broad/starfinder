@@ -54,6 +54,28 @@ def test_four_scripts_public_diagnostics_and_saved_tensor_smoke(monkeypatch, tmp
     assert (tmp_path / "contract/codebook_aware/wta_exact/fov.csv").exists()
 
 
+def test_registered_stack_cache_round_trips_through_codebook_scripts(
+    monkeypatch, tmp_path
+):
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / "scripts"))
+    qc = importlib.import_module("qc_codebook_aware_rescues")
+    benchmark = importlib.import_module("run_codebook_aware_benchmark")
+
+    image = np.arange(3 * 8 * 11 * 4, dtype=np.uint16).reshape(3, 8, 11, 4)
+    stack_dir = tmp_path / "registered_final"
+    qc.save_registered_stack_cache({"round1": image}, stack_dir)
+
+    cache = qc.StackCache(stack_dir=stack_dir, images={})
+    try:
+        for z_idx in range(image.shape[0]):
+            np.testing.assert_array_equal(cache.get_plane(0, z_idx), image[z_idx])
+    finally:
+        cache.close()
+
+    loaded = benchmark.load_registered_real_images(tmp_path, n_rounds=1)
+    np.testing.assert_array_equal(loaded["round1"], image)
+
+
 def test_script_extraction_existing_small_fixture(monkeypatch, small_dataset):
     from starfinder.io import load_round, ImageLoadConfig
 

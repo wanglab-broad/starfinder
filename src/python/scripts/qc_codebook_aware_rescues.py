@@ -18,7 +18,6 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import tifffile
 
 from _decoding_inputs import saved_codebook
 from _decoding_inputs import tensor_diagnostics, observed_candidates, saved_decoding
@@ -66,27 +65,20 @@ RAW_REAL_DATASETS: dict[str, dict[str, Any]] = {
 @dataclass
 class StackCache:
     stack_dir: Path
-    handles: dict[int, tifffile.TiffFile]
+    images: dict[int, np.ndarray]
 
     def get_plane(self, round_idx: int, z_idx: int) -> np.ndarray:
-        if round_idx not in self.handles:
+        if round_idx not in self.images:
             path = self.stack_dir / f"round{round_idx + 1}.tif"
             if not path.exists():
                 raise FileNotFoundError(path)
-            self.handles[round_idx] = tifffile.TiffFile(path)
-        tif = self.handles[round_idx]
-        page = tif.pages[int(z_idx)]
-        plane = page.asarray()
-        if plane.ndim != 3:
-            raise ValueError(
-                f"Expected z-plane with shape (Y, X, C), got {plane.shape}"
-            )
-        return plane
+            from starfinder.io import load_volume_zyxc
+
+            self.images[round_idx] = load_volume_zyxc(path).image
+        return self.images[round_idx][int(z_idx)]
 
     def close(self) -> None:
-        for handle in self.handles.values():
-            handle.close()
-        self.handles.clear()
+        self.images.clear()
 
 
 def parse_args() -> argparse.Namespace:
@@ -235,6 +227,14 @@ def raw_registered_stack_dir(result_dir: Path, dataset: str, fov_id: str) -> Pat
     return result_dir / dataset / "registered_stacks" / fov_id
 
 
+def save_registered_stack_cache(images: dict[str, np.ndarray], stack_dir: Path) -> None:
+    from starfinder.io import save_volume
+
+    stack_dir.mkdir(parents=True, exist_ok=True)
+    for round_name, image in images.items():
+        save_volume(image, stack_dir / f"{round_name}.tif")
+
+
 def generate_raw_registered_stack_cache(
     result_dir: Path,
     dataset: str,
@@ -247,7 +247,6 @@ def generate_raw_registered_stack_cache(
     from starfinder.registration import TranslationConfig
     from starfinder.preprocessing import MinMaxNormalizationConfig
     from starfinder.dataset.types import RoundState
-    from starfinder.io import save_volume
 
     config = RAW_REAL_DATASETS[dataset]
     stack_dir = raw_registered_stack_dir(result_dir, dataset, fov_id)
@@ -278,10 +277,13 @@ def generate_raw_registered_stack_cache(
     fov.normalize_intensity(config=MinMaxNormalizationConfig("uint8", (0, 255), snr_threshold=float(config["snr_threshold"])))
     fov.register(RegistrationStep(TranslationConfig()))
 
-    stack_dir.mkdir(parents=True, exist_ok=True)
-    for round_idx in range(1, int(config["n_rounds"]) + 1):
-        round_name = f"round{round_idx}"
-        save_volume(fov.images[round_name], stack_dir / f"{round_name}.tif")
+    save_registered_stack_cache(
+        {
+            f"round{round_idx}": fov.images[f"round{round_idx}"]
+            for round_idx in range(1, int(config["n_rounds"]) + 1)
+        },
+        stack_dir,
+    )
 
     metadata = {
         "dataset": dataset,
@@ -1150,7 +1152,7 @@ def main() -> None:
 
     stack_cache = StackCache(
         stack_dir=stack_dir_for(args.dataset, args.fov, args.result_dir),
-        handles={},
+        images={},
     )
     try:
         round_paths = []
