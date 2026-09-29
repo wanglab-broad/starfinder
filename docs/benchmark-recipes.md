@@ -150,6 +150,30 @@ recipe configs and output checksums) go to the output directory. The
 low-benefit flag is provisional. The results are development evidence on
 uncalibrated synthetic data, not recommended defaults.
 
+`--design calibrated` runs the calibrated rerun instead, as specified by the
+*Evaluation design amendment for the calibrated rerun* of
+{doc}`preprocessing-algorithms`. The default design stays W-233's:
+
+```bash
+uv run python ../../benchmarks/preprocessing_synthetic.py run --design calibrated --scope pilot --output /external/w239/pilot
+uv run python ../../benchmarks/preprocessing_synthetic.py run --design calibrated --scope full --issue W-248 --output /external/w248/evaluation
+```
+
+* **Scenes.** Every scene is `calibrated_scene_preset` with the balanced
+  codebook. The added conditions are `bright_outliers`, `saturation` (with
+  its `k` search), `gain_strong` and `clean_unbalanced`. uint16 is used only
+  for `clean`, `combined` and `bright_outliers`, and the multi-FOV sets run in
+  uint8 only. `--reduction R3` drops uint16.
+* **Detection.** Every arm is swept in the noise and adaptive threshold modes.
+* **Tables.** Besides W-233's tables, the output directory holds
+  `preconditions.csv`, `fixture_gaps.csv`, the revised `low_benefit_flags.csv`,
+  `harm_test.csv` and `image_statistics.csv`. The last compares each
+  condition's statistics, measured with the {doc}`image-statistics` tool, with
+  the W-238 development ranges. Every table of detection results has a
+  `threshold_mode` column.
+* **Projection.** The pilot scope records a projection of the full matrix
+  against the 2700 s budget, before and after R3.
+
 `benchmarks/preprocessing_report.py` renders the task group 6 inspection report
 from a saved evaluation directory as one standalone HTML file:
 

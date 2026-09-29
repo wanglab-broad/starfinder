@@ -11,7 +11,9 @@ Maintained source-derived configuration and adapters for the common
 - `report_saved.py`: saved-table reporting with explicit join keys and resource scopes.
 - `preprocessing_synthetic.py`: the bounded §2.5 preprocessing comparison on synthetic
   development presets (W-233); writes tables, curves and a manifest to a directory outside
-  Git. Development evidence only, with no recommended defaults.
+  Git. `--design calibrated` runs the calibrated rerun of the accepted amendment (W-239) on
+  `calibrated_scene_preset` scenes in both threshold modes. Development evidence only, with no
+  recommended defaults.
 - `preprocessing_report.py`: renders the standalone §2.5 inspection report (W-234) from a saved
   `preprocessing_synthetic.py` output directory, after checking its checksums and source revision.
 - `image_statistics.py`: intensity, puncta and noise statistics of one real TIFF or synthetic channel
