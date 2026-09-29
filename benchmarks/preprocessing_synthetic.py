@@ -1009,11 +1009,11 @@ def _add_per_fov_spread(mf_cmp, spread_direct):
             mf_cmp.loc[record_index, f"per_fov_correct_fraction_range_{label}_max"] = high
 
 
-def multi_fov_spread(per_fov):
+def multi_fov_spread(per_fov, keys=("multi_fov", "dtype", "arm", "operating_point")):
     """Spread across FOVs (range and standard deviation), then mean and range across evaluation seeds."""
     rows = []
-    for key, group in per_fov.groupby(["multi_fov", "dtype", "arm", "operating_point"], sort=False):
-        record = dict(zip(["multi_fov", "dtype", "arm", "operating_point"], key))
+    for key, group in per_fov.groupby(list(keys), sort=False):
+        record = dict(zip(keys, key))
         for metric in ("decoding_accuracy", "correct_fraction", "false_positive_rate", "f1"):
             per_seed = group.groupby("seed")[metric].agg(lambda v: pd.to_numeric(v, errors="coerce").max()
                                                          - pd.to_numeric(v, errors="coerce").min())
@@ -1109,9 +1109,12 @@ RULE_DECIMALS = 10
 NO_PRECONDITION = ("clean", "combined", "clean_unbalanced")
 #: C5: the reference and degraded FOV roles of each multi-FOV set's set-specific check.
 SET_SPECIFIC_FOVS = {"mf_density": ("dense", "near_empty"), "mf_gain_drift": ("gain_1.00", "gain_0.50")}
-#: C5 (amended): the multi-FOV check that gates a recipe's sample-level-fitting flag. The check of
-#: none on the set against mf_density_clean runs and is reported, but tests the combined base.
-MULTI_FOV_GATES = ("set_specific",)
+#: Item 3 and C5 (amended): the multi-FOV checks that gate a recipe's sample-level-fitting flag. The
+#: general check (none on the set against mf_density_clean) follows item 3's rule, and C5 adds the
+#: set-specific check of the recipe's per-FOV-fitted arm; a set is eligible only when both pass.
+MULTI_FOV_GATES = ("fixture", "set_specific")
+#: Multi-FOV spread rows: one per operating point and threshold value (adaptive has two fixed points).
+SPREAD_KEYS = ("multi_fov", "dtype", "arm", "operating_point", "threshold")
 #: Held-out endpoints at each fixed point of a mode (fixed1 = noise 5 or adaptive 0.2; fixed2 = adaptive 0.4).
 FIXED_ENDPOINTS = ("f1", "correct_fraction", "reads_wrong_gene", "reads_false_detection")
 CALIBRATED_ENDPOINTS = (("max_f1", "auprc", "correct_fraction", "color_call_agreement", "reads_wrong_gene",
@@ -1503,6 +1506,13 @@ def pool_multi_fov(mf):
     pooled["color_call_agreement"] = np.nan
     pooled["localization_error"] = np.nan
     return pooled.rename(columns={"multi_fov": "condition"})
+
+
+def mode_multi_fov_tables(mf, selected, mode):
+    """Per-FOV rows of one mode at the set's pooled development-selected value and at each fixed point."""
+    chosen = {key[1:]: v["value"] for key, v in selected.items() if key[0] == mode}
+    return multi_fov_tables(mf[mf.threshold_mode == mode], chosen,
+                            tuple(("fixed", v) for v in THRESHOLD_MODES[mode]["fixed"]))
 
 
 def per_fov_endpoints(mf, selected):
@@ -1976,13 +1986,11 @@ def _run_calibrated(output, scope, reductions, issue, shape, count, log):
         lookups["multi_fov"] = _endpoint_lookup(mf_ends)
         mf_diag = diag_ref[diag_ref.condition.isin([s for s, _ in plan["multi_fov"]])]
         spreads = []
-        for mode, spec in THRESHOLD_MODES.items():
-            part = mf[mf.threshold_mode == mode]
-            chosen = {key[1:]: v["value"] for key, v in mf_selected.items() if key[0] == mode}
-            tables = multi_fov_tables(part, chosen, tuple(("fixed", v) for v in spec["fixed"]))
+        for mode in THRESHOLD_MODES:
+            tables = mode_multi_fov_tables(mf, mf_selected, mode)
             if not len(tables):
                 continue
-            spreads.append(multi_fov_spread(tables).assign(threshold_mode=mode))
+            spreads.append(multi_fov_spread(tables, SPREAD_KEYS).assign(threshold_mode=mode))
             spread_direct = tables[tables.operating_point == "dev_max_f1"].rename(columns={"multi_fov": "condition"})
             spread_direct = (spread_direct.groupby(["condition", "dtype", "arm", "seed"]).correct_fraction
                              .agg(lambda v: v.max() - v.min()).rename("per_fov_correct_fraction_range").reset_index())

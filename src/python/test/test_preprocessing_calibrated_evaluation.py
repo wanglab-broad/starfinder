@@ -250,40 +250,86 @@ def test_fixture_check_scope_and_fixture_gap_rows():
                                                   "range_correct_fraction"} <= set(gaps)
 
 
-def test_set_specific_check_gates_each_recipes_sample_level_flag():
+def _c5_case(general_degrades):
+    """Per-FOV and pooled endpoints of mf_density (adaptive, uint8): the set-specific check passes for r1
+    (near-empty FOV 0.2 against dense 0.9) and fails for r2_scalar; the general check (none on the set
+    against mf_density_clean) passes only when general_degrades."""
     per_fov = pd.DataFrame([dict(multi_fov="mf_density", dtype="uint8", arm=arm, threshold_mode="adaptive", seed=s,
                                  fov_id=f"Position00{i}", role=role, max_f1=f, correct_fraction=f)
                             for arm, near_empty in (("r1", 0.2), ("r2_scalar", 0.9), ("r1_sample", 0.9))
                             for s in (100, 101, 102)
                             for i, (role, f) in enumerate((("dense", 0.9), ("sparse", 0.9),
                                                            ("near_empty", near_empty)), 1)])
-    # The fixture check (none on the set against mf_density_clean) fails here, and is reported only.
-    mf_ends = _ends([(name, "uint8", arm, "adaptive", [(0.8, 0.7)] * 3)
-                     for name in ("mf_density", "mf_density_clean") for arm in ("none", "r1", "r1_sample",
-                                                                                 "r2_scalar", "r2_scalar_sample")])
+    none_on_set = [(0.5, 0.4)] * 3 if general_degrades else [(0.8, 0.7)] * 3
+    mf_ends = _ends([("mf_density", "uint8", "none", "adaptive", none_on_set)]
+                    + [(name, "uint8", arm, "adaptive", [(0.8, 0.7)] * 3)
+                       for name in ("mf_density", "mf_density_clean") for arm in ("r1", "r1_sample", "r2_scalar",
+                                                                                   "r2_scalar_sample")]
+                    + [("mf_density_clean", "uint8", "none", "adaptive", [(0.8, 0.7)] * 3)])
     table = evaluation.preconditions_table(pd.DataFrame(), mf_ends, per_fov)
-    assert sorted(zip(table.check, table.arm)) == [("fixture", "none"), ("set_specific", "r1"),
-                                                   ("set_specific", "r2_scalar")]
-    checks = table.set_index(["check", "arm"])
-    assert not checks.loc[("fixture", "none"), "valid"] and not checks.loc[("fixture", "none"), "gates_flag"]
-    assert checks.loc[("set_specific", "r1"), "valid"] and checks.loc[("set_specific", "r1"), "g_max_f1"] == 0.7
-    assert not checks.loc[("set_specific", "r2_scalar"), "valid"]
-    assert (checks.loc[("set_specific", "r1"), "reference"], checks.loc[("set_specific", "r1"), "degraded"]) == (
-        "dense", "near_empty")
     rows = pd.DataFrame([dict(method="sample_level_fitting", comparison=f"ablation_{r}", before=r, after=f"{r}_sample",
                               condition="mf_density", role="targeted", dtype="uint8", threshold_mode="adaptive")
                          for r in ("r1", "r2_scalar")])
     lookups = dict(single_fov={}, multi_fov=evaluation._endpoint_lookup(mf_ends))
     attached = evaluation.attach_rule(rows, lookups, table).set_index("before")
-    assert attached.loc["r1", "eligible"] and not attached.loc["r2_scalar", "eligible"]
-    assert "set_specific failed" in attached.loc["r2_scalar", "precondition"]
-    assert "fixture failed (reported only, C5)" in attached.loc["r1", "precondition"]
-    assert attached.loc["r1", "rule_delta_max_f1"] == 0.0
     flags = evaluation.revised_flags(attached.reset_index())
-    method = flags[flags.level == "method"].set_index("before")
+    return table, attached, flags[flags.level == "method"].set_index("before")
+
+
+def test_both_multi_fov_checks_run_and_are_reported():
+    table, _, _ = _c5_case(general_degrades=False)
+    assert sorted(zip(table.check, table.arm)) == [("fixture", "none"), ("set_specific", "r1"),
+                                                   ("set_specific", "r2_scalar")]
+    checks = table.set_index(["check", "arm"])
+    assert checks.gates_flag.all()
+    assert not checks.loc[("fixture", "none"), "valid"]
+    assert checks.loc[("fixture", "none"), "reference"] == "mf_density_clean"
+    assert checks.loc[("set_specific", "r1"), "valid"] and checks.loc[("set_specific", "r1"), "g_max_f1"] == 0.7
+    assert not checks.loc[("set_specific", "r2_scalar"), "valid"]
+    assert (checks.loc[("set_specific", "r1"), "reference"], checks.loc[("set_specific", "r1"), "degraded"]) == (
+        "dense", "near_empty")
+    gaps = evaluation.fixture_gaps(table)
+    assert sorted(zip(gaps.check, gaps.arm)) == [("fixture", "none"), ("set_specific", "r2_scalar")]
+
+
+def test_a_failed_general_check_excludes_the_set_even_when_the_set_specific_check_passes():
+    _, attached, method = _c5_case(general_degrades=False)
+    assert not attached.loc["r1", "eligible"] and attached.loc["r1", "fixture_gap"]
+    assert attached.loc["r1", "precondition"] == "fixture failed; set_specific passed"
+    assert not attached.loc["r2_scalar", "eligible"]
+    assert attached.loc["r1", "rule_delta_max_f1"] == 0.0  # deltas are still reported
+    for recipe in ("r1", "r2_scalar"):
+        assert method.loc[recipe, "result"] == "not_assessable"
+        assert "fixture gap mf_density" in method.loc[recipe, "reason"]
+
+
+def test_a_failed_set_specific_check_excludes_the_set_when_the_general_check_passes():
+    table, attached, method = _c5_case(general_degrades=True)
+    assert table.set_index(["check", "arm"]).loc[("fixture", "none"), "valid"]
+    assert attached.loc["r1", "eligible"] and attached.loc["r1", "precondition"] == "fixture passed; set_specific passed"
+    assert not attached.loc["r2_scalar", "eligible"]
+    assert attached.loc["r2_scalar", "precondition"] == "fixture passed; set_specific failed"
     assert method.loc["r2_scalar", "result"] == "not_assessable"
-    assert "fixture gap mf_density" in method.loc["r2_scalar", "reason"]
-    assert method.loc["r1", "result"] == "low_benefit"
+    assert method.loc["r1", "result"] == "low_benefit"  # eligible, but no benefit (delta 0)
+
+
+def test_multi_fov_spread_separates_each_fixed_point_and_the_selected_point():
+    # Two FOVs per seed; correct fraction per FOV at each adaptive value. The FOV range is 0.1 at 0.2,
+    # 0.5 at 0.4 and 0.3 at the selected value 0.3; W-233's grouping by label merged 0.2 and 0.4.
+    at = {0.1: (0.5, 0.5), 0.15: (0.5, 0.5), 0.2: (0.8, 0.7), 0.25: (0.5, 0.5), 0.3: (0.9, 0.6), 0.4: (0.9, 0.4)}
+    mf = pd.DataFrame([dict(multi_fov="mf_density", dtype="uint8", arm="none", threshold_mode="adaptive", seed=s,
+                            fov_id=f"Position00{i + 1}", role=role, threshold=value, n_truth=10,
+                            reads_accepted=10, reads_correct=int(round(10 * values[i])), reads_wrong_gene=0,
+                            reads_false_detection=0, correct_fraction=values[i], precision=1.0, recall=1.0, f1=1.0)
+                       for s in (100, 101, 102) for value, values in at.items()
+                       for i, role in enumerate(("dense", "near_empty"))])
+    selected = {("adaptive", "mf_density", "uint8", "none"): dict(value=0.3, dev_mean_f1=1.0, at_grid_edge=False)}
+    tables = evaluation.mode_multi_fov_tables(mf, selected, "adaptive")
+    spread = evaluation.multi_fov_spread(tables, evaluation.SPREAD_KEYS).set_index(["operating_point", "threshold"])
+    assert sorted(spread.index) == [("dev_max_f1", 0.3), ("fixed", 0.2), ("fixed", 0.4)]
+    assert spread.loc[("fixed", 0.2), "correct_fraction_fov_range_mean"] == pytest.approx(0.1)
+    assert spread.loc[("fixed", 0.4), "correct_fraction_fov_range_mean"] == pytest.approx(0.5)
+    assert spread.loc[("dev_max_f1", 0.3), "correct_fraction_fov_range_mean"] == pytest.approx(0.3)
 
 
 # --- Revised low-benefit rule (item 4) and harm test (C7) -------------------------------------------
