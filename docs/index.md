@@ -61,6 +61,13 @@ Configure Snakemake, coordinate Dataset/FOV processing, and understand downstrea
 Generate inputs, run explicit cases, evaluate saved outputs and report results with provenance.
 :::
 
+:::{grid-item-card} {fas}`magnifying-glass` Research scripts
+:link: research-scripts
+:link-type: doc
+:class-card: sf-card
+Inspect codebook-aware decoding results, image evidence and saved benchmark inputs.
+:::
+
 :::{grid-item-card} {fas}`code` API
 :link: api/index
 :link-type: doc
@@ -86,6 +93,12 @@ Workflow <workflows>
 Benchmark <benchmark>
 API <api/index>
 Wiki / Convention <wiki>
+```
+
+```{toctree}
+:hidden:
+
+Research scripts <research-scripts>
 ```
 
 ## Existing entry points
