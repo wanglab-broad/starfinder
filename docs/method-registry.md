@@ -128,7 +128,8 @@ defaults, so every existing construction stays valid.
 | `requires` | shared | Optional dependencies (above) | `SimpleITK` for `demons`; none elsewhere |
 | `min_shape_zyx` | shared | Smallest accepted size of each spatial axis; the stage wrapper rejects smaller inputs with its geometry error before running | `(4, 4, 4)` demons; `(2, 2, 2)` TPS and CPD; `(1, 1, 1)` everywhere else |
 | `category`, `scope`, `dtype_policy` | preprocessing | As in the {doc}`preprocessing-contract` | unchanged |
-| `supplied_section` | preprocessing | Validator for the step's section of a supplied-statistics file, `None` when the step cannot use one | histogram matching, scalar background, percentile normalization |
+| `post_registration` | preprocessing | Whether the step may run in a recipe's `post_registration` list | `True` only for reconstruction |
+| `supplied` | preprocessing | `None` when the step cannot use a supplied-statistics file; otherwise a `SuppliedSpec` (below) with the step's hooks for that file | set for histogram matching, scalar background and percentile normalization |
 | `transform_kind` | registration | Kind of transform the estimator returns | `translation` or `dense`; §2.6 adds kinds |
 | `application_backend` | registration | `WarpConfig.backend` used to apply its result | `translation`, `simpleitk` (demons), `scipy` (TPS, CPD) |
 | `pipeline` | spot finding | Whether `FOV.find_spots` and `PipelineConfig.detection` accept it | `True` only for `local_maxima` |
@@ -137,6 +138,23 @@ defaults, so every existing construction stays valid.
 A capability is shared only when it means the same thing in every stage and a
 generic check can use it. Anything else stays in the stage spec. A stage may add
 fields without changing the helper.
+
+`SuppliedSpec` is a preprocessing-only frozen dataclass. It holds the
+per-step code that `preprocessing/supplied.py` now selects by config type:
+
+```python
+@dataclass(frozen=True)
+class SuppliedSpec:
+    per_round: bool                               # fitted values per round; False: reference round only (histogram matching)
+    fit: Callable[[Any, HistogramSummary, str | None], dict]  # params and fitted values from merged histograms
+    validate: Callable[[Mapping, np.dtype, int], None]        # checks one section of a read file
+    check_params: Callable[[Any, Mapping, str], None]         # section params against the recipe's config
+```
+
+The hooks live next to each step's implementation (`normalization.py`,
+`background.py`, which already hold `_supplied_range` and
+`_supplied_background`), so `steps.py` never imports `supplied.py`. Each hook
+keeps the error messages of the branch it replaces.
 
 ## Stage contracts left untouched
 
@@ -225,7 +243,7 @@ implemented.
 ## Where method sets are hard-coded today
 
 Paths are relative to `src/python/starfinder/` unless they start with
-`workflow/`; line numbers are at the starting revision `1b4db5a`.
+`workflow/` or `benchmarks/`; line numbers are at the starting revision `1b4db5a`.
 
 ### Preprocessing
 
@@ -234,7 +252,13 @@ Paths are relative to `src/python/starfinder/` unless they start with
 | `preprocessing/steps.py:124-132` (`STEPS`) | the step set | This is the registry; it stays the source of truth. |
 | `preprocessing/steps.py:139-166` (`step_spec`, `step_config_type`) | lookups over `STEPS` | Already derived; they call `spec_for()` and `config_type_for()` with unchanged messages. |
 | `preprocessing/steps.py:55-74` (`StepSpec`) | the name pattern | `check_name()`; the pattern is unchanged. |
-| `preprocessing/supplied.py:163-164` (`_SECTION_VALIDATORS`) | the steps that accept supplied statistics | The `supplied_section` field of each `StepSpec`; the lookup reads `STEPS`. |
+| `preprocessing/supplied.py:90-114` (`supplied_section`) | exact-type branches for `PercentileNormalizationConfig`, `ScalarBackgroundConfig` and `HistogramMatchingConfig` that fit each section, the rule that only histogram matching takes `reference_round`, and the fallback error | `step_spec(config).supplied`: its `fit` hook builds the section; `reference_round` is accepted only when `per_round` is `False`; `supplied is None` raises the current `has no supplied statistics` error. |
+| `preprocessing/supplied.py:163-164` (`_SECTION_VALIDATORS`), used at line 195 | the steps whose file sections can be validated | The `validate` hook of `STEPS[step_config_type(name)].supplied`; a name whose spec has `supplied=None` keeps the current error. |
+| `preprocessing/supplied.py:280-294` (`read_supplied_statistics`) | exact-type branches that compare section params with the recipe's config (`p_low`/`p_high`, `percentile`, `reference_channel`) and skip the per-round check for histogram matching | The `check_params` hook of the step's `supplied`, and its `per_round` flag for the round check. |
+| `preprocessing/background.py:136`, `:167` (`scalar_background_histograms`) | a single-type check and the literal name `scalar_background` | Stays single-method (a public helper of one step); the literal becomes `step_spec(config).name`. |
+| `preprocessing/steps.py:279-282` (`PreprocessingRecipe.__post_init__`) | only `ReconstructionConfig` may run after registration | The steps whose spec has `post_registration=True`; the message is built from their config names, so with reconstruction alone it stays `post_registration may contain only ReconstructionConfig steps`. |
+| `benchmarks/preprocessing_synthetic.py:505` | passes `reference_round` to `supplied_section()` only for `HistogramMatchingConfig` | `per_round` of `step_spec(entry.config).supplied`. |
+| `preprocessing/steps.py:135-136` (`_supplied`), `dataset/fov.py:358`, `dataset/fov.py:634` | none; they read the config's `fit` field | Stay: a config field, not a method list. |
 | `dataset/workflow.py:120-143` (`_explicit_recipe`) | none; it uses `step_config_type` | Already derived. |
 | `dataset/workflow.py:96-113` (`_legacy_recipe`) | the four legacy keys and their fixed configs | Stays explicit: it is the frozen legacy translation of recipe 1, not a method list. |
 | `workflow/schemas/config.schema.yaml:381-505` | one definition per step and the `oneOf` list | Stays static; `test_preprocessing_workflow_key.py` keeps it equal to `STEPS`. |
@@ -337,17 +361,23 @@ provenance entry). No existing file changes.
 ### Move 1: preprocessing `STEPS`
 
 `step_spec`, `step_config_type` and the `StepSpec` name check call the helper;
-`StepSpec` gains keyword-only `requires`, `min_shape_zyx` and
-`supplied_section`; `_SECTION_VALIDATORS` is replaced by `supplied_section`.
+`StepSpec` gains keyword-only `requires`, `min_shape_zyx`, `post_registration`
+and `supplied`; the recipe's post-registration check reads `post_registration`. The
+type branches of `supplied_section()` and `read_supplied_statistics()` and the
+`_SECTION_VALIDATORS` table are replaced by the `SuppliedSpec` hooks of the
+three steps that have one; the public functions keep their signatures and
+messages.
 
 Tests that must pass byte-for-byte unchanged:
 `test_preprocessing_golden.py` (the exact SHA-256 digests),
 `test_preprocessing_recipe.py` (the registry table, derived name lookup,
 monkeypatched steps, exact-type lookup and messages),
 `test_preprocessing_workflow_key.py` (schema consistency with `STEPS`),
-`test_background_subtraction.py`, `test_percentile_normalization.py`,
-`test_preprocessing.py`, `test_recipe_sources.py`, `test_projection_views.py`
-and `test_checkpoints.py`.
+`test_background_subtraction.py` and `test_percentile_normalization.py`
+(supplied-statistics fitting, reading, validation and their messages),
+`test_preprocessing.py`, `test_recipe_sources.py`, `test_projection_views.py`,
+`test_checkpoints.py` and `test_preprocessing_synthetic_evaluation.py` (the
+benchmark in `benchmarks/preprocessing_synthetic.py`).
 
 ### Move 2: registration `METHODS`
 
@@ -459,19 +489,26 @@ The §2.7 specification also:
 
 ## Comparison with starfish
 
-starfish (W-225) organizes methods into component families, such as
-`Filter`, `LearnTransform`, `ApplyTransform`, `FindSpots`, `DecodeSpots`,
-`DetectPixels` and `Segment`. Each family has its own `run` signature. An
-algorithm is a class of its family, holds its parameters as constructor
-arguments and is found as an attribute of the family. A shared algorithm base
-records a log entry (method, arguments, dependency versions) on the data that
-the method returns.
+W-225 compared starfish with Starfinder in the thesis reference
+`docs/chapter-II-reference/survey-starfish-design-comparison.md` (thesis commit
+`6dc7179`), which audits starfish `main` at `1fb00cbc`. The statements below
+follow that reference and the starfish source at that revision.
+
+starfish organizes methods into component families, such as `Filter`,
+`LearnTransform`, `ApplyTransform`, `FindSpots`, `DecodeSpots`, `DetectPixels`
+and `Segment`. Each family has a base class with its own `run` signature, for
+example `FilterAlgorithm.run(stack, *args) -> Optional[ImageStack]`. An
+algorithm is a class of its family that holds its parameters as constructor
+arguments. Each family package imports its implementations and builds its
+`__all__` from the subclasses of the family base. The family bases use the
+`AlgorithmBase` metaclass (`starfish/core/pipeline/algorithmbase.py`), which
+wraps `run` to update a log. W-225 recommends mapping each Starfinder config
+type to its implementation in one place, and not copying that metaclass logging.
 
 | starfish pattern | Position here | Reason |
 | --- | --- | --- |
 | Separate component families with their own `run` signatures | Adopted | It matches decision 1: preprocessing, registration and spot finding keep their own interfaces. A single generic signature would hide the reference/moving pair of registration and the spot table of detection. |
-| One family-wide list of algorithms from which tools derive their choices | Adopted as the per-stage registry | The YAML lookup, schema tests and checkpoint readers derive from one mapping instead of repeating the list. |
-| Provenance recorded by the shared base for every algorithm run | Adopted in a different place | The helper builds one uniform entry per invocation, and it is written to the per-FOV `run.json` of W-156 and W-199, not attached to the returned arrays, which stay plain NumPy. |
-| Algorithms as classes that hold parameters, registered by subclassing | Rejected | Starfinder selects methods by frozen config types and runs plain functions. Registration by import side effect or subclassing conflicts with exact-type lookup and makes the method set depend on what happens to be imported. |
-| A shared pipeline, recipe or command-line layer over all families | Rejected | Stage order stays fixed in `FOV.run`, and recipes stay stage-specific (`PreprocessingRecipe`, `RegistrationRecipe`). The issue excludes a generic pipeline engine. |
-| Plugin discovery for external algorithms | Rejected | Entry points are excluded; see [Third-party methods](#third-party-methods). |
+| One list of implementations per family, from which documentation and tools derive their choices | Adopted as the per-stage registry, in a different form | starfish derives the list from the subclasses a package happens to import. Here the list is one explicit mapping from exact config type to spec, as W-225 recommends, and the YAML lookup, schema tests and checkpoint readers derive from it. |
+| Provenance logging in the `AlgorithmBase` metaclass | Rejected | The wrapper writes a log entry only when `run` returns a value and the class name contains `ApplyTransform`, `Filter`, `FindSpots`, `DecodeSpots` or `DetectPixels`. `LearnTransform` and `Segment` runs, and in-place filters that return `None`, are not logged, and no input identity is recorded. W-225 lists this as a pattern not to copy. Here each stage wrapper records the uniform entry explicitly for every invocation of every registered method, in the per-FOV `run.json` of W-156 and W-199, which also holds input hashes, the Git commit and package versions. Returned arrays stay plain NumPy. |
+| Algorithms as classes that hold parameters, gathered by subclassing | Rejected | Starfinder selects methods by frozen config types and runs plain functions. A method set that depends on which subclasses were imported conflicts with exact-type lookup and with a single explicit list. |
+| A recipe and command-line layer over the component families | Rejected | W-225 records that starfish removed its recipe and component command-line layer in 0.1.5, and that its remaining WDL workflow pins a 0.1.0 container. Starfinder keeps its maintained Snakemake workflow, a fixed stage order in `FOV.run` and stage-specific recipes (`PreprocessingRecipe`, `RegistrationRecipe`). The issue also excludes a generic pipeline engine. |
