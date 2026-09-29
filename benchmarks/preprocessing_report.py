@@ -39,6 +39,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -1423,6 +1424,10 @@ def card_rows(method, scenes, sources, checks):
             record_arm = "scalar" if side == "after" and card.get("snapshot") else arm
             noise5[side] = panel_cutoffs(diagnostics, key, record_arm, book)
             _check_cutoffs(images[side][ref], noise5[side], f"{method} {name} {side}")
+        if card.get("snapshot"):
+            # Change 6 companion: the xsrc arm's detection image, on which its detection cutoffs apply.
+            noise5["after_detection"] = panel_cutoffs(diagnostics, key, after, book)
+            _check_cutoffs(fovs["after"].images[ref], noise5["after_detection"], f"{method} {name} after detection")
         rows.append(dict(name=name, role=_role(method, name), fov_id=fov_id, fov_role=fov_role, book=book,
                          truth=truth, background=background[ref], signal=signal[ref], images=images,
                          detection_images={side: fov.images for side, fov in fovs.items()}, arms=arms,
@@ -1486,11 +1491,12 @@ def _is_snapshot(label):
 
 def panels_figure(rows, labels):
     """Changes 1, 2 and 9: per row, the cropped Z slice and XZ view around the dim punctum before and after in
-    one shared linear display range, after − before, and a line profile with each mode's detection cutoff."""
+    one shared linear display range, after − before, and the line profile in two adjacent panels, one per
+    threshold mode, each with that mode's detection cutoffs."""
     facts = []
     with _pyplot() as plt:
-        figure = plt.figure(figsize=(19, 3.5 * len(rows)), layout="constrained")
-        grid = figure.add_gridspec(len(rows), 7, width_ratios=(1, 1, 1, 1, 1, 1, 2.1))
+        figure = plt.figure(figsize=(22, 3.5 * len(rows)), layout="constrained")
+        grid = figure.add_gridspec(len(rows), 8, width_ratios=(1, 1, 1, 1, 1, 1, 1.7, 1.7))
         for i, row in enumerate(rows):
             book, dim = row["book"], row["dim"]
             (z0, y0, x0), c = dim["center"], dim["channel"]
@@ -1523,22 +1529,21 @@ def panels_figure(rows, labels):
                 shown = f"±{span:.3g}" if diff else f"shared [{low:.4g}, {high:.4g}]"
                 title = _lead(row, k) + f"{side}{arm}\n{plane}, {channel}; {shown}"
                 _small(axis, title, "x (crop)", "y (crop)" if view == "z" else "z")
-            axis = figure.add_subplot(grid[i, 6])
-            for side, colour in (("before", "0.35"), ("after", "tab:orange")):
-                axis.plot(row["images"][side][ref][z0, y0, :, c], color=colour, marker=".", markersize=3,
-                          label=f"{side}: {labels[side]}")
-                if _is_snapshot(labels[side]):
-                    continue
-                for mode in MODES:
+            for k, mode in enumerate(MODES):
+                axis = figure.add_subplot(grid[i, 6 + k])
+                for side, colour in (("before", "0.35"), ("after", "tab:orange")):
+                    axis.plot(row["images"][side][ref][z0, y0, :, c], color=colour, marker=".", markersize=3,
+                              label=f"{side}: {labels[side]}")
+                    if _is_snapshot(labels[side]):
+                        continue
                     found = row["detections"][(side, mode)]
-                    axis.axhline(found["cutoffs"][c], color=colour, linewidth=1,
-                                 linestyle=MODE_STYLE[mode]["linestyle"],
-                                 label=f"{side}, {mode} cutoff at {found['value']:g}")
-            axis.axvline(x0, color="red", linestyle=":", linewidth=1)
-            _small(axis, f"Line profile along X at z={z0}, y={y0}, {channel} through the dim punctum "
-                         f"{dim['amplicon_id']} (realized peak {fmt(dim['peak'])})\ndetection cutoffs of both modes at "
-                         "their development-selected values", "x (voxel)", "intensity")
-            axis.legend(fontsize=6, ncol=2)
+                    axis.axhline(found["cutoffs"][c], color=colour, linewidth=1.2, linestyle="--",
+                                 label=f"{side} detection cutoff at {found['value']:g}")
+                axis.axvline(x0, color="red", linestyle=":", linewidth=1)
+                _small(axis, f"{mode.upper()} MODE: {mode} detection cutoffs\nprofile along X at z={z0}, y={y0}, "
+                             f"{channel}\ndim punctum {dim['amplicon_id']}, realized peak {fmt(dim['peak'])}",
+                       "x (voxel)", "intensity")
+                axis.legend(fontsize=6)
             facts.append(dict(row=_row_title(row), z=z0, y=y0, x=x0, channel=channel, range=(low, high),
                               difference=span, dim=dim["amplicon_id"], peak=dim["peak"]))
         png = _png(figure)
@@ -1616,19 +1621,21 @@ def _call_text(call):
 
 
 def colour_figure(row, labels):
-    """Change 4: channel × round intensity vectors before and after at a few truth puncta, the true colour
-    sequence boxed in red, and each mode's call."""
+    """Change 4: channel × round intensity vectors before and after at a few truth puncta, with the true colour
+    sequence boxed in red (drawn once: they do not depend on the threshold mode), and each punctum's calls in two
+    adjacent panels, one per threshold mode."""
     chosen = colour_puncta(row["peaks"])
     book, truth = row["book"], row["truth"]
     with _pyplot() as plt:
-        figure, axes = plt.subplots(2, max(1, len(chosen)), figsize=(4.4 * max(1, len(chosen)), 7.6),
-                                    layout="constrained", squeeze=False)
+        figure, axes = plt.subplots(max(1, len(chosen)), 4, figsize=(17, 3.3 * max(1, len(chosen))),
+                                    layout="constrained", squeeze=False, width_ratios=(1.25, 1.25, 1, 1))
         for k, index in enumerate(chosen):
             record = truth.iloc[index]
             center = tuple(int(round(v)) for v in (record.z, record.y, record.x))
             sequence = str(record.color_sequence)
+            dim = " (dim punctum)" if index == row["dim"]["index"] else ""
             for s, side in enumerate(("before", "after")):
-                axis = axes[s, k]
+                axis = axes[k, s]
                 values = _neighbourhood(row["images"][side], book, center)
                 shown = axis.imshow(values, cmap="viridis", aspect="auto")
                 figure.colorbar(shown, ax=axis, shrink=0.8).ax.tick_params(labelsize=6)
@@ -1639,11 +1646,20 @@ def colour_figure(row, labels):
                     axis.text(r, c, f"{value:.0f}", ha="center", va="center", fontsize=6.5, color="white")
                 axis.set_xticks(range(len(book.round_labels)), book.round_labels)
                 axis.set_yticks(range(len(book.channel_labels)), book.channel_labels)
-                calls = "\n".join(f"{mode} mode: {_call_text(row['detections'][(side, mode)]['calls'].get(index))}"
-                                  for mode in MODES)
-                dim = " (dim punctum)" if index == row["dim"]["index"] else ""
                 _small(axis, f"{record.amplicon_id}{dim}, true {sequence}, realized peak {row['peaks'][index]:.3g}\n"
-                             f"{side}: {labels[side]}\n{calls}")
+                             f"{side}: {labels[side]} (same in both modes)")
+            for m, mode in enumerate(MODES):
+                axis = axes[k, 2 + m]
+                axis.axis("off")
+                lines = [f"{mode.upper()} MODE: calls of {record.amplicon_id}", f"true sequence {sequence}", ""]
+                for side in ("before", "after"):
+                    found = row["detections"][(side, mode)]
+                    lines.append(f"{side} ({row['arms'][side]}, value {found['value']:g}):")
+                    lines.append(f"  {_call_text(found['calls'].get(index))}")
+                axis.text(0.02, 0.95, "\n".join(lines), va="top", ha="left", fontsize=8.5, family="monospace",
+                          transform=axis.transAxes,
+                          bbox=dict(boxstyle="round", facecolor="#dfe8f8" if mode == "noise" else "#ece2f5",
+                                    edgecolor="0.6"))
         png = _png(figure)
     return png, [str(truth.amplicon_id.iat[i]) for i in chosen]
 
@@ -1690,35 +1706,58 @@ def signal_channels(truth, book):
     return sorted({book.color_to_channel[str(s)[0]] for s in truth.color_sequence})
 
 
+def _histogram_entries(row, labels):
+    """(label, image, noise cutoffs, detections or None) per histogram row. A snapshot is not detected on, so
+    its row keeps the noise cutoff only, and a companion row shows the detection image with the cutoffs."""
+    ref, entries = row["book"].round_labels[0], []
+    for side in ("before", "after"):
+        if _is_snapshot(labels[side]):
+            entries.append((f"{side}: {labels[side]}, extraction image", row["images"][side][ref],
+                            row["noise5"][side], None))
+            entries.append((f"{side}: {row['arms'][side]}\ndetection image", row["detection_images"][side][ref],
+                            row["noise5"]["after_detection"], {m: row["detections"][(side, m)] for m in MODES}))
+        else:
+            entries.append((f"{side}: {labels[side]}", row["images"][side][ref], row["noise5"][side],
+                            {m: row["detections"][(side, m)] for m in MODES}))
+    return entries
+
+
 def histogram_figure(rows, labels):
-    """Change 6: histograms of the signal channels only, with the noise cutoff (value 5) and each mode's
-    detection threshold at its development-selected value."""
+    """Change 6: histograms of the signal channels only. Each channel has two adjacent panels, noise mode and
+    adaptive mode, each with the noise cutoff (value 5) and that mode's detection cutoff at its
+    development-selected value; an image without detection (a snapshot) is drawn once, with the noise cutoff."""
     width = max(1, max(len(signal_channels(r["truth"], r["book"])) for r in rows))
+    entries = [(row, entry) for row in rows for entry in _histogram_entries(row, labels)]
     with _pyplot() as plt:
-        figure, axes = plt.subplots(2 * len(rows), width, figsize=(3.7 * width, 2.6 * 2 * len(rows)),
-                                    layout="constrained", squeeze=False)
-        for i, row in enumerate(rows):
+        figure = plt.figure(figsize=(2.4 * 2 * width, 2.35 * len(entries)), layout="constrained")
+        grid = figure.add_gridspec(len(entries), 2 * width)
+        previous = None
+        for i, (row, (label, image, noise5, detections)) in enumerate(entries):
             book = row["book"]
-            ref, channels = book.round_labels[0], signal_channels(row["truth"], book)
-            for s, side in enumerate(("before", "after")):
-                image, snapshot = row["images"][side][ref], _is_snapshot(labels[side])
-                for k in range(width):
-                    axis = axes[2 * i + s, k]
-                    if k >= len(channels):
-                        axis.axis("off")
-                        continue
-                    c = channels[k]
-                    bins = np.arange(0, 257) if image.dtype == np.uint8 else 128
+            channels = signal_channels(row["truth"], book)
+            first = row is not previous
+            previous = row
+            for k in range(width):
+                if k >= len(channels):
+                    figure.add_subplot(grid[i, 2 * k:2 * k + 2]).axis("off")
+                    continue
+                c = channels[k]
+                bins = np.arange(0, 257) if image.dtype == np.uint8 else 128
+                slots = [(None, grid[i, 2 * k:2 * k + 2])] if detections is None else [
+                    (mode, grid[i, 2 * k + m]) for m, mode in enumerate(MODES)]
+                for mode, slot in slots:
+                    axis = figure.add_subplot(slot)
                     axis.hist(image[..., c].ravel(), bins=bins, histtype="stepfilled", color="0.75", log=True)
-                    axis.axvline(row["noise5"][side][c], color="0.15", linestyle="--", linewidth=1.2,
-                                 label=f"noise cutoff (value 5): {row['noise5'][side][c]:.4g}")
-                    if not snapshot:
-                        for mode in MODES:
-                            found = row["detections"][(side, mode)]
-                            axis.axvline(found["cutoffs"][c], linewidth=1.4, **MODE_STYLE[mode],
-                                         label=f"{mode} detection at {found['value']:g}: {found['cutoffs'][c]:.4g}")
-                    _small(axis, _lead(row, k) + f"{side}: {labels[side]}\n{book.channel_labels[c]}"
-                           + (", extraction image" if snapshot else ""), "intensity", "voxels (log)")
+                    axis.axvline(noise5[c], color="0.15", linestyle="--", linewidth=1.2,
+                                 label=f"noise cutoff (value 5): {noise5[c]:.4g}")
+                    if mode is not None:
+                        found = detections[mode]
+                        axis.axvline(found["cutoffs"][c], linewidth=1.5, color=MODE_STYLE[mode]["color"],
+                                     label=f"detection cutoff at {found['value']:g}: {found['cutoffs'][c]:.4g}")
+                    head = _lead(row, 0) if first and k == 0 and mode != MODES[-1] else "\n\n"
+                    where = (f"{mode.upper()} MODE" if mode else "not detected on (same in both modes)")
+                    _small(axis, head + f"{label}\n{book.channel_labels[c]}: {where}", "intensity", "voxels (log)",
+                           size=7)
                     axis.legend(fontsize=5.5)
         png = _png(figure)
     return png
@@ -1860,7 +1899,13 @@ CALIBRATED_CSS = CSS + """
 .label { font-size: 10.5px; font-weight: 700; padding: 0 5px; border-radius: 3px; text-transform: uppercase; }
 .label.finding { background: #dfe9fb; color: #1a3d7c; } .label.hypothesis { background: #f6e3fb; color: #6b1a7c; }
 th.mode-noise { background: #dfe8f8; } th.mode-adaptive { background: #ece2f5; }
-table.full { font-size: 10px; } table.full td { white-space: nowrap; }
+table.full { font-size: 9.5px; line-height: 1.25; table-layout: fixed; }
+table.full th, table.full td { white-space: normal; overflow-wrap: anywhere; padding: 1px 4px; }
+table.full th { word-break: break-all; }
+table.fit { width: 100%; table-layout: fixed; }
+table.fit th, table.fit td { overflow-wrap: anywhere; }
+td code, th code { white-space: normal; word-break: normal; overflow-wrap: anywhere; } span.range { white-space: normal; }
+details { margin: 4px 0; } details summary { cursor: pointer; font-size: 12px; }
 nav.contents { font-size: 13px; } nav.contents a { margin-right: 12px; }
 ul.caveats li { margin-bottom: 3px; }
 """
@@ -1874,12 +1919,24 @@ def _modes_head(key_headers, mode_headers):
     return f"<thead><tr>{top}</tr><tr>{second}</tr></thead>"
 
 
-def mode_table(keys, by_mode, key_columns, mode_columns, source, sources, note=""):
+#: Key column widths (px) of the card tables: comparison, condition (role), dtype; wide enough that
+#: identifiers wrap only at word breaks.
+CARD_KEY_WIDTHS = (135, 130, 72)
+
+
+def _colgroup(widths):
+    """Column widths in px (None: share the rest) for a fitted table."""
+    return "<colgroup>" + "".join(f"<col style=\"width:{w}px\">" if w else "<col>" for w in widths) + "</colgroup>"
+
+
+def mode_table(keys, by_mode, key_columns, mode_columns, source, sources, note="", key_widths=None):
     """Rows keyed by keys; key_columns: (header, f(key)); mode_columns: (header, f(record)) per mode.
 
-    by_mode maps (mode, key) -> record. The modes are shown side by side and never pooled.
+    by_mode maps (mode, key) -> record. The modes are shown side by side and never pooled. The table fits the
+    page width: key_widths (px) fix the key columns and the mode columns share the rest.
     """
-    head = _modes_head([h for h, _f in key_columns], [h for h, _f in mode_columns])
+    widths = list(key_widths or [None] * len(key_columns)) + [None] * (len(mode_columns) * len(MODES))
+    head = _colgroup(widths) + _modes_head([h for h, _f in key_columns], [h for h, _f in mode_columns])
     body = []
     for key in keys:
         cells = [f"<td>{f(key)}</td>" for _h, f in key_columns]
@@ -1889,7 +1946,7 @@ def mode_table(keys, by_mode, key_columns, mode_columns, source, sources, note="
         body.append("<tr>" + "".join(cells) + "</tr>")
     names = source if isinstance(source, (list, tuple)) else [source]
     caption = "Source: " + ", ".join(f"{code(s)} (sha256 {code(sources.records[s]['sha256'][:16])}…)" for s in names)
-    return (f"<div class=\"scroll\"><table>{head}<tbody>{''.join(body)}</tbody></table></div>"
+    return (f"<div class=\"scroll\"><table class=\"fit\">{head}<tbody>{''.join(body)}</tbody></table></div>"
             f"<p class=\"caption\">{caption}. {note}</p>")
 
 
@@ -1959,22 +2016,22 @@ def card_numbers(method, sources, lookups):
     key_columns = [("comparison", lambda k: f"{code(k[0])}<br>{code(k[1])} → {code(k[2])}"),
                    ("condition (role)", lambda k: f"{code(k[3])}<br>{esc(ROLE_LABEL[k[4]])}"),
                    ("dtype", lambda k: code(k[5]))]
-    mode_columns = [("precondition", _precondition_cell),
+    mode_columns = [("precondition; selected value before / after", lambda r: (
+                        f"{_precondition_cell(r)}<br><span class=\"range\">value "
+                        f"{lookups.threshold(r['condition'], r['dtype'], r['before'], r['threshold_mode'])} / "
+                        f"{lookups.threshold(r['condition'], r['dtype'], r['after'], r['threshold_mode'])}</span>")),
                     ("max-F1", lambda r: _ba(r, "max_f1", rule=True)),
                     ("correct-decode fraction", lambda r: _ba(r, "correct_fraction", rule=True)),
                     ("AUPRC", lambda r: _ba(r, "auprc")),
-                    ("wrong-gene reads", lambda r: _ba(r, "reads_wrong_gene")),
-                    ("false-detection reads", lambda r: _ba(r, "reads_false_detection"))]
+                    ("reads: wrong-gene; false-detection", lambda r: (
+                        f"{_ba(r, 'reads_wrong_gene')}<br>; {_ba(r, 'reads_false_detection')}"))]
     mode_columns += [(DIRECT_LABEL[stem], (lambda s: lambda r: _ba(r, s))(stem)) for stem in card["mode_direct"]]
-    mode_columns.append(("selected value, before / after", lambda r: (
-        f"{lookups.threshold(r['condition'], r['dtype'], r['before'], r['threshold_mode'])} / "
-        f"{lookups.threshold(r['condition'], r['dtype'], r['after'], r['threshold_mode'])}")))
     downstream = mode_table(keys, by_mode, key_columns, mode_columns, ["tables/comparisons.csv",
                                                                        "tables/operating_points.csv"], sources,
                             "Means over held-out seeds 100–102, before → after; Δ is the mean paired difference with "
                             "[min, max] of the per-seed Δ; R_E is the flag rule's seed range. Max-F1 and AUPRC use "
                             "each mode's grid; reads and the correct-decode fraction use the value selected on the "
-                            "development seeds (last column).")
+                            "development seeds (first column of each mode).", key_widths=CARD_KEY_WIDTHS)
     direct = ""
     stems = [s for s in card["direct"] if f"{s}_before_mean" in part]
     if stems:
@@ -1988,15 +2045,18 @@ def card_numbers(method, sources, lookups):
                                      for s in stems) + "</tr>" for k in keys if ("noise", k) in by_mode)
             head = "".join(f"<th>{h}</th>" for h, _f in key_columns) + "".join(
                 f"<th>{DIRECT_LABEL[s]}</th>" for s in stems)
-            direct = (f"<h4>Direct metrics (identical in both threshold modes, checked)</h4><div class=\"scroll\">"
-                      f"<table><thead><tr>{head}</tr></thead><tbody>{rows}</tbody></table></div><p class=\"caption\">"
+            direct = (f"<h4 id=\"{method}-direct\">Direct metrics (identical in both threshold modes, checked)</h4>"
+                      f"<div class=\"scroll\"><table class=\"fit\">"
+                      f"{_colgroup(list(CARD_KEY_WIDTHS) + [None] * len(stems))}<thead><tr>{head}</tr></thead>"
+                      f"<tbody>{rows}</tbody></table></div><p class=\"caption\">"
                       f"Source: {code('tables/comparisons.csv')}. Before [min, max] → after [min, max] over the "
                       "held-out seeds; they do not depend on the threshold mode because detection is not involved."
                       "</p>")
         else:
-            direct = "<h4>Direct metrics, per mode</h4>" + mode_table(
+            direct = f"<h4 id=\"{method}-direct\">Direct metrics, per mode</h4>" + mode_table(
                 keys, by_mode, key_columns, [(DIRECT_LABEL[s], (lambda s: lambda r: _direct_cell(r, s))(s))
-                                             for s in stems], "tables/comparisons.csv", sources)
+                                             for s in stems], "tables/comparisons.csv", sources,
+                key_widths=CARD_KEY_WIDTHS)
     return downstream, direct
 
 
@@ -2027,13 +2087,15 @@ def card_flags(method, lookups, sources):
                 f"<ul style=\"margin:2px 0 0 14px;padding:0\">{''.join(f'<li>{c}</li>' for c in clauses)}</ul>"
                 f"{anomalies}")
 
-    head = _modes_head(["comparison", "dtype"], ["flag verdict (provisional 0.02) and clauses"])
+    head = _colgroup([140, 72, None, None]) + _modes_head(["comparison", "dtype"],
+                                                          ["flag verdict (provisional 0.02) and clauses"])
     body = "".join(f"<tr><td>{code(k[0])}</td><td>{code(k[1])}</td>" + "".join(
-        f"<td style=\"min-width:420px\">{verdict(by_mode[(m, k)]) if (m, k) in by_mode else '–'}</td>" for m in MODES)
+        f"<td>{verdict(by_mode[(m, k)]) if (m, k) in by_mode else '–'}</td>" for m in MODES)
         + "</tr>" for k in keys)
     digest = sources.records["tables/low_benefit_flags.csv"]["sha256"][:16]
-    return (f"<div class=\"scroll\"><table>{head}<tbody>{body}</tbody></table></div><p class=\"caption\">Source: "
-            f"{code('tables/low_benefit_flags.csv')} (sha256 {code(digest)}…). Revised rule of item 4, provisional: "
+    return (f"<div class=\"scroll\"><table class=\"fit\">{head}<tbody>{body}</tbody></table></div>"
+            f"<p class=\"caption\">Source: {code('tables/low_benefit_flags.csv')} (sha256 {code(digest)}…). "
+            "Revised rule of item 4, provisional: "
             "not flagged when an eligible targeted condition shows a benefit and clean holds; not assessable when "
             "no targeted condition is eligible (T* empty); low benefit otherwise. The flag informs review and removes "
             "no method.</p>")
@@ -2066,7 +2128,7 @@ def card_harm(sources):
             + mode_table(keys, by_mode, key_columns, columns, "tables/harm_test.csv", sources,
                          "Harm when either endpoint has Δ below −R_E on clean_unbalanced. It is reported beside the "
                          "flag with the balanced clean deltas, so the codebook's share is visible, and does not enter "
-                         "the flag."))
+                         "the flag.", key_widths=(135, 72)))
 
 
 def card_preconditions(method, sources):
@@ -2090,7 +2152,8 @@ def card_preconditions(method, sources):
     return mode_table(keys, by_mode, key_columns, [("precondition", status)], "tables/preconditions.csv", sources,
                       "A condition is a valid target when some endpoint degrades by g_E > R_E (strict), arm none "
                       "against clean; a failure is a fixture-gap row and leaves the condition out of this method's flag "
-                      "for that dtype and mode. Its comparison rows are still reported.")
+                      "for that dtype and mode. Its comparison rows are still reported.",
+                      key_widths=(100, 130, 110, 72))
 
 
 def card_caveats(method, manifest, sources, lookups):
@@ -2221,7 +2284,8 @@ def setup_section(manifest, sources):
                 f"{fmt(r['g_correct_fraction'], 2)} ≤ R {fmt(r['range_max_f1'], 2)}/"
                 f"{fmt(r['range_correct_fraction'], 2)}</span>")
 
-    matrix = ("<div class=\"scroll\"><table><thead><tr><th>check</th><th>condition</th><th>arm</th>"
+    matrix = ("<div class=\"scroll\"><table class=\"fit\">" + _colgroup([100, 130, 90] + [None] * len(columns))
+              + "<thead><tr><th>check</th><th>condition</th><th>arm</th>"
               + "".join(f"<th class=\"mode-{m}\">{d}, {m} mode</th>" for d, m in columns) + "</tr></thead><tbody>"
               + "".join(f"<tr><td>{code(c)}</td><td>{code(n)}</td><td>{code(a)}</td>"
                         + "".join(f"<td>{pre_cell(cells.get((c, n, a, d, m)))}</td>" for d, m in columns) + "</tr>"
@@ -2241,11 +2305,12 @@ W-238 development targets measured on processed uint8 exports; <strong>it is not
 <strong>no preprocessing default is recommended</strong>, and the low-benefit flag and its 0.02 threshold are
 <strong>provisional</strong>. The uint16 scale (× 16) is unverified against real data.</p>
 <h3 id="setup-recipes">Recipes and steps (page defaults)</h3>
-<div class="scroll"><table><thead><tr><th>arm</th><th>steps</th></tr></thead><tbody>{recipes}</tbody></table></div>
+<div class="scroll"><table class="fit">{_colgroup([130, None])}<thead><tr><th>arm</th><th>steps</th></tr></thead><tbody>{recipes}</tbody></table></div>
 <p class="caption">Source: {code('manifest.json')} (<code>recipes</code>, <code>multi_fov_recipes</code>). r_z is capped
 at 3 (C4). The pipeline default remains recipe 1; this report recommends none.</p>
 <h3 id="setup-conditions">Conditions and their measured SNR</h3>
-<div class="scroll"><table><thead><tr><th>condition</th><th>definition</th><th>targeted by</th>
+<div class="scroll"><table class="fit">{_colgroup([140, None, 190, 120, 120])}<thead><tr><th>condition</th>
+<th>definition</th><th>targeted by</th>
 <th>clutter SNR p50</th><th>pixel SNR p50</th></tr></thead><tbody>{conditions}</tbody></table></div>
 <p class="caption">Source: {code('tables/image_statistics.csv')} (W-238 tool on the development seeds, adaptive
 selection, pooled per condition or set). W-238 development ranges: clutter SNR p50
@@ -2479,15 +2544,16 @@ def figures_section(method, figure, sources):
     rows = figure["rows"]
     where = ", ".join(_row_title(r) for r in rows)
     common = (f"{code(DISPLAY_DTYPE)}, held-out seed {DISPLAY_SEED}, reference round; rows: {esc(where)}.")
-    identical = " The image does not depend on the threshold mode, so both modes share it; mode-specific values are "
     parts = [figure_block(method, "panels", FIGURE_ANCHORS[0][1], figure["panels"],
                           f"{code(card['comparison'])}: {code(before)} (before) → {code(figure['labels']['after'])} "
                           f"(after); {common} Each row shows the Z slice and the XZ view through its dim punctum (red "
                           f"square; lowest realized peak), cropped to ±{CROP_YX} voxels in X and Y with every Z plane, in "
                           "one linear display range shared by before and after (stated on each panel), and after − "
                           "before in a symmetric diverging range. Cyan circles are truth puncta on that channel within "
-                          "one voxel of the plane. The line profile marks the detection cutoff of each mode (noise solid, "
-                          f"adaptive dash-dot) at its development-selected value.{identical}drawn on the profile.")]
+                          "one voxel of the plane. The image panels do not depend on the threshold mode and are drawn "
+                          "once. The line profile is drawn in two adjacent panels, noise mode then adaptive mode, each "
+                          "marking that mode's detection cutoffs (dashed) at its development-selected value; an "
+                          "extraction snapshot has no detection cutoff.")]
     parts.append(figure_block(method, "overlays", FIGURE_ANCHORS[1][1], figure["overlays"],
                               f"Maximum projection over Z and channels of each arm's detection image; {common} Noise "
                               "mode (left pair) and adaptive mode (right pair) side by side, each at its own "
@@ -2501,21 +2567,27 @@ def figures_section(method, figure, sources):
                               "extraction box, radius (1, 2, 2)) at the reference-round centre of the dim punctum and of "
                               "the puncta at the 25th, 50th and 90th percentiles of the realized peak "
                               f"({esc(', '.join(figure['puncta']))}); red boxes mark the true colour of each round. Before "
-                              f"reads {code(before)}; after reads {code(figure['labels']['after'])}. The call of each "
-                              "mode (observed sequence and status, or not detected) is given for both modes."))
+                              f"reads {code(before)}; after reads {code(figure['labels']['after'])}. The intensity "
+                              "vectors do not depend on the threshold mode and are drawn once (first two columns); the "
+                              "calls depend on it and are shown in two adjacent panels per punctum, noise mode then "
+                              "adaptive mode (observed sequence and status, or not detected, before and after)."))
     if card.get("background"):
         parts.append(figure_block(method, "background", FIGURE_ANCHORS[3][1], figure["background"],
                                   f"Estimate = input − the {code(after)} bg_corrected snapshot, against the background "
                                   f"truth (including the pedestal), on the dim punctum's Z slice and channel; {common} "
                                   "Truth and estimate share one display range; the residual is estimate − truth. The "
-                                  "background estimate does not depend on the threshold mode."))
+                                  "background estimate is computed before detection, so it is identical in both "
+                                  "threshold modes and is drawn once."))
     parts.append(figure_block(method, "histograms", FIGURE_ANCHORS[4][1], figure["histograms"],
                               f"Every voxel of each signal-carrying channel (at least one truth punctum on it in the "
-                              f"reference round; {esc(figure['channels_note'])}), log scale; {common} Dashed: the noise "
-                              "cutoff at value 5 from <code>tables/diagnostics.csv</code> (checked against the image). "
-                              "Solid blue: the noise-mode detection cutoff and dash-dot purple: the adaptive-mode "
-                              "detection cutoff, each at its development-selected value (the cutoffs of the saved curve "
-                              "row)."))
+                              f"reference round; {esc(figure['channels_note'])}), log scale; {common} Each channel has "
+                              "two adjacent panels, noise mode then adaptive mode. Dashed: the noise cutoff at value 5 "
+                              "from <code>tables/diagnostics.csv</code> (checked against the image). Solid: that mode's "
+                              "detection cutoff at its development-selected value (the cutoffs of the saved curve row). "
+                              + ("The extraction snapshot is not detected on, so its row is drawn once with the noise "
+                                 "cutoff only, and a companion row shows the xsrc arm's detection image with both modes' "
+                                 "detection cutoffs, so every line sits on the intensity scale it applies to."
+                                 if card.get("snapshot") else "")))
     parts.append(figure_block(method, "dots", FIGURE_ANCHORS[5][1], figure["dots"],
                               "Every comparison of the method on its targeted conditions, clean, combined and the "
                               "reported rows, in both dtypes; noise mode (left pair) and adaptive mode (right pair). Dots: "
@@ -2537,33 +2609,97 @@ def figures_section(method, figure, sources):
             f"<p><a href=\"#card-{method}\">Back to the card</a>.</p>" + "".join(parts) + "</section>")
 
 
-def full_table(frame, source, sources, caption=""):
-    """Every column and row of a saved table (numbers rounded for display only), naming its checked source."""
-    head = "".join(f"<th>{esc(c)}</th>" for c in frame.columns)
-    body = "".join("<tr>" + "".join(f"<td>{esc(fmt(v))}</td>" for v in row) + "</tr>"
-                   for row in frame.astype(object).where(frame.notna(), None).itertuples(index=False))
+#: Appendix tables are laid out to fit one 1400 × 4000 px capture per piece: column groups within
+#: FULL_WIDTH_PX (key columns repeated) and row blocks within FULL_BLOCK_PX, estimated conservatively at the
+#: 9.5 px table font (CHAR_PX per character plus CELL_PX padding per cell, LINE_PX per text line).
+FULL_WIDTH_PX = 1300
+FULL_BLOCK_PX = 3600
+CHAR_PX = 6.3
+CELL_PX = 10
+WRAP_CHARS = 36
+LINE_PX = 16
+KEY_COLUMNS = ("method", "comparison", "check", "condition", "multi_fov", "role", "level", "dtype", "arm", "seed",
+               "fov_id", "threshold_mode", "operating_point", "round", "channel", "statistic", "plan", "item", "mode",
+               "j")
+
+
+def _lines(lengths, px):
+    """Wrapped line count of texts of the given lengths in a column of px pixels."""
+    return np.maximum(1, np.ceil(np.asarray(lengths, dtype=float) * CHAR_PX / max(px - CELL_PX, 1)))
+
+
+def full_table(frame, source, sources, caption="", anchor=None, blocks=True):
+    """Every column and row of a saved table (numbers rounded for display only), naming its checked source.
+
+    Wide tables are split into column groups that fit the page (the key columns repeat in each), and with
+    blocks, long tables into row blocks that each fit one capture; each piece gets the sub-anchor
+    <anchor>-r<i>c<j> when there is more than one.
+    """
+    frame = frame.reset_index(drop=True)
+    columns = list(frame.columns)
+    texts = {c: [fmt(v) for v in frame[c].astype(object).where(frame[c].notna(), None)] for c in columns}
+    lengths = {c: np.asarray([len(t) for t in texts[c]] or [0]) for c in columns}
+    widths = {c: int(min(max(int(lengths[c].max()), min(len(str(c)), 7)), WRAP_CHARS) * CHAR_PX + CELL_PX)
+              for c in columns}
+    keys = [c for c in columns if c in KEY_COLUMNS]
+    chunks, current, used = [], [], sum(widths[c] for c in keys)
+    for c in columns:
+        if c in keys:
+            continue
+        if current and used + widths[c] > FULL_WIDTH_PX:
+            chunks.append(current)
+            current, used = [], sum(widths[k] for k in keys)
+        current.append(c)
+        used += widths[c]
+    chunks.append(current)
+    chunks = [keys + chunk for chunk in chunks]
+    header_px = max(LINE_PX * int(_lines([len(str(c))], widths[c]).max()) for c in columns) if columns else LINE_PX
+    heights = (LINE_PX * np.max([_lines(lengths[c], widths[c]) for c in columns], axis=0)
+               if columns and len(frame) else np.zeros(len(frame)))
+    bounds, start, height = [], 0, 0.0
+    for i, h in enumerate(heights):
+        if blocks and i > start and height + h > FULL_BLOCK_PX - header_px:
+            bounds.append((start, i))
+            start, height = i, 0.0
+        height += h
+    bounds.append((start, len(frame)))
     digest = sources.records[source]["sha256"]
-    return (f"<div class=\"scroll\"><table class=\"full\"><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>"
-            f"</div><p class=\"caption\">Source: {code(source)} (sha256 {code(digest[:16])}…), {len(frame)} rows. "
-            f"{caption}</p>")
+    parts = []
+    for i, (first, last) in enumerate(bounds):
+        for j, chunk in enumerate(chunks):
+            if len(bounds) > 1 or len(chunks) > 1:
+                where = f"rows {first + 1}–{last} of {len(frame)}" + (
+                    f", column group {j + 1} of {len(chunks)} ({esc(chunk[len(keys)])} … {esc(chunk[-1])})"
+                    if len(chunks) > 1 and len(chunk) > len(keys) else "")
+                ident = f" id=\"{anchor}-r{i + 1}c{j + 1}\"" if anchor else ""
+                parts.append(f"<h4{ident}>{where}</h4>")
+            head = "".join(f"<th>{esc(c)}</th>" for c in chunk)
+            body = "".join("<tr>" + "".join(f"<td>{esc(texts[c][r])}</td>" for c in chunk) + "</tr>"
+                           for r in range(first, last))
+            width = sum(widths[c] for c in chunk)
+            parts.append(f"<div class=\"scroll\"><table class=\"full\" style=\"width:{width}px\">"
+                         f"{_colgroup([widths[c] for c in chunk])}<thead><tr>{head}</tr></thead><tbody>{body}</tbody>"
+                         "</table></div>")
+    return "".join(parts) + (f"<p class=\"caption\">Source: {code(source)} (sha256 {code(digest[:16])}…), "
+                             f"{len(frame)} rows. {caption}</p>")
 
 
 def appendix_tables(manifest, sources):
     parts = []
 
-    def per_dtype(anchor, title, source, caption="", frame=None):
-        frame = sources.table(source) if frame is None else frame
+    def per_dtype(anchor, title, source, caption=""):
+        frame = sources.table(source)
         block = f"<section id=\"{anchor}\"><h2>A. {esc(title)}</h2>"
         for dtype in harness.DTYPES:
             part = frame[frame.dtype == dtype]
             if len(part):
-                block += f"<h3 id=\"{anchor}-{dtype}\">{dtype}</h3>" + full_table(part, source, sources, caption)
+                block += (f"<h3 id=\"{anchor}-{dtype}\">{dtype}</h3>"
+                          + full_table(part, source, sources, caption, anchor=f"{anchor}-{dtype}"))
         parts.append(block + "</section>")
 
-    def whole(anchor, title, source, caption="", frame=None):
-        frame = sources.table(source) if frame is None else frame
-        parts.append(f"<section id=\"{anchor}\"><h2>A. {esc(title)}</h2>" + full_table(frame, source, sources, caption)
-                     + "</section>")
+    def whole(anchor, title, source, caption=""):
+        parts.append(f"<section id=\"{anchor}\"><h2>A. {esc(title)}</h2>"
+                     + full_table(sources.table(source), source, sources, caption, anchor=anchor) + "</section>")
 
     whole("a-preconditions", "Preconditions (full)", "tables/preconditions.csv")
     whole("a-fixture-gaps", "Fixture gaps", "tables/fixture_gaps.csv")
@@ -2580,24 +2716,35 @@ def appendix_tables(manifest, sources):
     for source in ("tables/multi_fov_endpoints.csv", "tables/multi_fov_per_fov_endpoints.csv",
                    "tables/multi_fov_spread.csv"):
         if source in sources.records:
-            block += f"<h3>{code(source)}</h3>" + full_table(sources.table(source), source, sources)
+            anchor = "a-multi-fov-" + Path(source).stem.replace("multi_fov_", "").replace("_", "-")
+            block += (f"<h3 id=\"{anchor}\">{code(source)}</h3>"
+                      + full_table(sources.table(source), source, sources, anchor=anchor))
     parts.append(block + "</section>")
     diagnostics = sources.table("tables/diagnostics.csv")
-    reference = diagnostics["round"].iloc[0]
-    whole("a-diagnostics", "Diagnostics, reference round", "tables/diagnostics.csv",
-          f"Rows of the reference round {reference} only; the other rounds are in the same checked file.",
-          frame=diagnostics[diagnostics["round"] == reference])
+    block = ("<section id=\"a-diagnostics\"><h2>A. Diagnostics, every round</h2><p>Every saved row of "
+             f"{code('tables/diagnostics.csv')} ({len(diagnostics)} rows), one table per dtype and round. Each table "
+             "is collapsed; open it to read its rows.</p>")
+    for dtype in harness.DTYPES:
+        part = diagnostics[diagnostics.dtype == dtype]
+        if not len(part):
+            continue
+        block += f"<h3 id=\"a-diagnostics-{dtype}\">{dtype}</h3>"
+        for round_label, rows in part.groupby("round", sort=True):
+            block += (f"<details><summary>{dtype}, {esc(round_label)}: {len(rows)} rows</summary>"
+                      + full_table(rows, "tables/diagnostics.csv", sources, blocks=False) + "</details>")
+    parts.append(block + "</section>")
     whole("a-statistics", "Image statistics", "tables/image_statistics.csv")
     zero = pd.DataFrame(manifest.get("mad_zero_reference_round", []))
     parts.append("<section id=\"a-mad-zero\"><h2>A. MAD-zero entries</h2>"
-                 + (full_table(zero, "manifest.json", sources, "From the manifest's mad_zero_reference_round list.")
-                    if len(zero) else "<p>None.</p>") + "</section>")
+                 + (full_table(zero, "manifest.json", sources, "From the manifest's mad_zero_reference_round list.",
+                               anchor="a-mad-zero") if len(zero) else "<p>None.</p>") + "</section>")
     verification = pd.DataFrame([dict(mode=m, **{k: (", ".join(map(str, v)) if isinstance(v, list) else v)
                                                  for k, v in r.items()})
                                  for m, r in manifest.get("threshold_subset_verification", {}).items()])
     parts.append("<section id=\"a-verification\"><h2>A. Threshold-subset verification</h2>"
                  + full_table(verification, "manifest.json", sources,
-                              "From the manifest's threshold_subset_verification record.") + "</section>")
+                              "From the manifest's threshold_subset_verification record.", anchor="a-verification")
+                 + "</section>")
     return "".join(parts)
 
 
@@ -2613,12 +2760,13 @@ def projection_section(manifest, sources):
             f"<p>Reductions applied: {esc(', '.join(manifest.get('reductions') or []) or 'none')}; selected plan "
             f"{esc(projection.get('selected_plan', '–'))}; budget {fmt(projection.get('budget_seconds'))} s. "
             f"{esc(projection.get('basis', ''))}</p>"
-            + (full_table(plans, "manifest.json", sources, "Pilot projections of the full matrix before and after R3.")
-               if len(plans) else "")
+            + (full_table(plans, "manifest.json", sources, "Pilot projections of the full matrix before and after R3.",
+                          anchor="a-projection-plans") if len(plans) else "")
             + (f"<p>Pilot record: {esc(json.dumps({k: v for k, v in pilot.items() if not isinstance(v, (dict, list))}))}"
                "</p>" if pilot else "")
-            + (full_table(timing, "manifest.json", sources, "The run's timing_seconds record.") if len(timing) else "")
-            + f"<h3>/usr/bin/time -v of the full run</h3><pre>{esc(raw)}</pre></section>")
+            + (full_table(timing, "manifest.json", sources, "The run's timing_seconds record.",
+                          anchor="a-projection-timing") if len(timing) else "")
+            + f"<h3 id=\"a-projection-time\">/usr/bin/time -v of the full run</h3><pre>{esc(raw)}</pre></section>")
 
 
 def saturation_section(manifest, sources):
@@ -2631,9 +2779,10 @@ def saturation_section(manifest, sources):
             for s in manifest["scenes"] if s["condition"] == "saturation"]
     return ("<section id=\"a-saturation\"><h2>A. Saturation k search</h2>"
             + full_table(pd.DataFrame(rows), "manifest.json", sources, "The search trace on the development seeds "
-                         "(saturation_k).") + full_table(pd.DataFrame(held), "manifest.json", sources,
-                                                         "Achieved clipped fraction of every saturation scene "
-                                                         "(scenes).") + "</section>")
+                         "(saturation_k).", anchor="a-saturation-trace")
+            + "<h3 id=\"a-saturation-scenes\">Saturation scenes</h3>"
+            + full_table(pd.DataFrame(held), "manifest.json", sources, "Achieved clipped fraction of every saturation "
+                         "scene (scenes).", anchor="a-saturation-scenes") + "</section>")
 
 
 def render_checks_section(verified, checks):
@@ -2651,12 +2800,16 @@ def render_checks_section(verified, checks):
             "manifest) and preprocessed it with the recorded recipe. Every scene's per-round image checksums and every "
             "output below equal the manifest's <code>scenes</code>, <code>multi_fov_scenes</code> and "
             "<code>runs</code> records (sha256 over the rounds in codebook order); a mismatch stops rendering before "
-            "anything is written.</p><div class=\"scroll\"><table><thead><tr><th>condition/dtype/seed/arm[/FOV]</th>"
+            "anything is written.</p><div class=\"scroll\"><table class=\"fit\">" + _colgroup([330, 330, None])
+            + "<thead><tr><th>condition/dtype/seed/arm[/FOV]</th>"
             f"<th>array</th><th>sha256 (matches the manifest)</th></tr></thead><tbody>{rows}</tbody></table></div>"
-            "<h3>Detections of the overlays</h3><p>Each overlay's detection ran once on the verified image at the saved "
+            "<h3 id=\"render-checks-detections\">Detections of the overlays</h3><p>Each overlay's detection ran once "
+            "on the verified image at the saved "
             "development-selected value; its spot, match and read counts and its per-channel cutoffs equal the saved "
             "curve row of the same condition, seed, arm, mode and value (<code>curves/pr_curves.csv</code>, "
-            "<code>curves/multi_fov_curves.csv</code>), or rendering stops.</p><div class=\"scroll\"><table><thead><tr>"
+            "<code>curves/multi_fov_curves.csv</code>), or rendering stops.</p>"
+            "<div class=\"scroll\"><table class=\"fit\">"
+            + _colgroup([330] + [None] * (len(head) - 1)) + "<thead><tr>"
             + "".join(f"<th>{h}</th>" for h in head) + f"</tr></thead><tbody>{detections}</tbody></table></div>"
             "</section>")
 
@@ -2689,6 +2842,17 @@ def identity_section(manifest, manifest_path, manifest_sha, identity, rendering,
 <h3>Commands</h3>
 <p>Evaluation (from <code>src/python</code>, as recorded in the manifest):</p><pre><code>{esc(run_command)}</code></pre>
 <p>This report (from <code>src/python</code>):</p><pre><code>{esc(render_command)}</code></pre></section>"""
+
+
+def capture_anchors(document):
+    """The ids of the report in page order, for the browser check: one capture per id, except an id whose
+    content up to the next id holds no table, figure, list or paragraph (the next capture shows it)."""
+    found = [(m.start(), m.group(1)) for m in re.finditer(r"\sid=\"([^\"]+)\"", document)]
+    anchors = []
+    for (start, name), (end, _next) in zip(found, found[1:] + [(len(document), None)]):
+        if re.search(r"<(table|img|ul|ol|dl|p|pre|details)\b", document[start:end]):
+            anchors.append(name)
+    return anchors
 
 
 def render_calibrated(evaluation, output, *, repo=ROOT, command=None):
@@ -2784,7 +2948,8 @@ every saved table in full, split by dtype where the table has one.</p></section>
                 manifest_sha256=manifest_sha, files_verified=len(records) - 1, identity=identity, rendering=rendering,
                 verified_arrays=len(verified), detection_checks=len(checks), checks=checks, verified=verified,
                 figures={m: [a for a, _t in FIGURE_ANCHORS if a != "background" or CARDS[m].get("background")]
-                         for m in CARDS}, sources_used=sorted(sources.used))
+                         for m in CARDS}, sources_used=sorted(sources.used),
+                anchors=capture_anchors(document))
 
 
 def main():

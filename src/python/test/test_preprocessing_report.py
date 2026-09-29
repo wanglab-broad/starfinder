@@ -3,6 +3,7 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
+import re
 import runpy
 import shutil
 import subprocess
@@ -249,8 +250,14 @@ def test_calibrated_report_puts_the_summary_first_and_refuses_unverified_inputs(
     positions = [text.index(f"id=\"{a}\"") for a in anchors]
     assert positions == sorted(positions)
     for phrase in ("not D04", "no preprocessing default", "provisional", "noise mode", "adaptive mode",
-                   "label finding", "label hypothesis", "fig-scalar_background-background"):
+                   "label finding", "label hypothesis", "fig-scalar_background-background",
+                   "identical in both threshold modes and is drawn once"):
         assert phrase in text
+    diagnostics = pd.read_csv(output / "tables" / "diagnostics.csv")
+    section = text[text.index("id=\"a-diagnostics\""):text.index("id=\"a-statistics\"")]
+    assert section.count("<tr>") - section.count("<thead><tr>") == len(diagnostics) and diagnostics["round"].nunique() > 1
+    assert summary["anchors"] == [a for a in summary["anchors"] if f"id=\"{a}\"" in text]
+    assert {"setup", "findings", "fig-scalar_background-histograms", "render-checks-detections"} <= set(summary["anchors"])
     assert "src=\"http" not in text and "href=\"http" not in text
     assert summary["detection_checks"] == len(cards) * 2 * 2 and summary["files_verified"] == len(manifest["files"])
     assert summary["schema"] == report.CALIBRATED_REPORT_SCHEMA
@@ -268,3 +275,22 @@ def test_calibrated_report_puts_the_summary_first_and_refuses_unverified_inputs(
     with pytest.raises(report.RevisionMismatch):
         report.render(copy, tmp_path / "refused.html")
     assert not (tmp_path / "refused.html").exists()
+
+
+def test_full_tables_keep_every_row_and_column_within_one_capture():
+    rng = np.random.default_rng(0)
+    frame = pd.DataFrame({"method": ["percentile_normalization"] * 400, "dtype": ["uint8"] * 400,
+                          "seed": np.arange(400),
+                          **{f"metric_{k:02d}_before_mean": rng.normal(size=400) for k in range(60)},
+                          "reason": ["no eligible targeted condition shows a benefit; clean does not hold"] * 400})
+    sources = report.Sources(Path("."), {"t.csv": dict(path="t.csv", bytes=1, sha256="0" * 64)})
+    text = report.full_table(frame, "t.csv", sources, anchor="a-t")
+    widths = [int(w) for w in re.findall(r"class=\"full\" style=\"width:(\d+)px\"", text)]
+    anchors = re.findall(r"id=\"(a-t-r\d+c\d+)\"", text)
+    assert len(widths) == len(anchors) > 1 and len(set(anchors)) == len(anchors)
+    assert max(widths) <= report.FULL_WIDTH_PX
+    groups = len({a.split("c")[-1] for a in anchors})
+    assert text.count("<tr>") - text.count("<thead><tr>") == len(frame) * groups
+    for column in frame.columns:
+        assert f"<th>{column}</th>" in text
+    assert text.count("<th>method</th>") == len(anchors)  # the key columns repeat in every piece
