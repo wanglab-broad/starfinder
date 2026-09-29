@@ -1,12 +1,14 @@
-"""Default-tier tests of the §2.5 report renderer and example (W-234)."""
+"""Default-tier tests of the §2.5 report renderer and example (W-234; calibrated report, W-249)."""
 import hashlib
 import importlib.util
 import json
 from pathlib import Path
 import runpy
+import shutil
 import subprocess
 
 import numpy as np
+import pandas as pd
 import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -138,3 +140,131 @@ def test_method_figure_renders_panels_for_a_tiny_scene(tmp_path):
              for r in truth.itertuples()]
     assert dim["peak"] >= min(peaks) and np.isfinite(dim["peak"])
     assert json.dumps(facts, default=str)
+
+
+# --- Calibrated rerun report (W-249) ---------------------------------------------------------------
+
+@pytest.fixture(scope="module")
+def smoke(tmp_path_factory):
+    """A calibrated smoke evaluation (clean, uint8, seeds 0 and 100, both threshold modes)."""
+    output = tmp_path_factory.mktemp("w249") / "evaluation"
+    manifest = harness.run_calibrated(output, scope="smoke", shape=(8, 32, 32), count=12, log=lambda m: None)
+    return output, manifest
+
+
+def _sources(output, manifest):
+    records = report.verify_sources(output, manifest)
+    data = (output / "manifest.json").read_bytes()
+    records["manifest.json"] = dict(path="manifest.json", bytes=len(data), sha256=hashlib.sha256(data).hexdigest())
+    return report.Sources(output, records)
+
+
+def test_calibrated_cards_follow_the_page_order_and_cover_every_method():
+    methods = {m for m, *_ in harness.CALIBRATED_COMPARISONS + harness.SAMPLE_COMPARISONS}
+    assert list(report.CARDS) == ["scalar_background", "background_3d", "percentile_normalization",
+                                  "sample_level_fitting", "extraction_source", "min_max_normalization",
+                                  "histogram_matching", "reconstruction", "white_tophat"]
+    assert set(report.CARDS) == methods
+    for method, card in report.CARDS.items():
+        _before, _after, targeted = report.comparison_spec(method, card["comparison"])
+        names = [row[0] if isinstance(row, tuple) else row for row in card["rows"]]
+        assert names[0] in targeted and report._role(method, names[0]) == "targeted"
+        roles = [report._role(method, n) for n in names]
+        assert "harm_check" in roles and set(roles) <= {"targeted", "harm_check", "combined", "harm_test"}
+        assert ("combined" in roles) == (method != "sample_level_fitting")
+    assert report._role("histogram_matching", "clean_unbalanced") == "harm_test"
+    assert set(report.CALIBRATED_TEXT) == set(harness.CALIBRATED_ALL) | set(harness.MULTI_FOV)
+    for sentence in report.CALIBRATED_TEXT.values():
+        assert sentence.endswith(".") and ". " not in sentence
+
+
+def test_calibrated_scenes_outputs_and_detections_match_the_saved_run(smoke, tmp_path):
+    output, manifest = smoke
+    sources = _sources(output, manifest)
+    scenes = report.CalibratedScenes(manifest, tmp_path)
+    fov = scenes.processed("clean", "scalar")
+    assert [v["what"] for v in scenes.verified][-1] == "output"
+    truth = scenes.single("clean")["truth"]
+    points, curves = sources.table("tables/operating_points.csv"), sources.table("curves/pr_curves.csv")
+    for mode in report.MODES:
+        value, _edge = report.selected_threshold(points, "clean", "uint8", "scalar", mode, False)
+        found = report.detect(fov, truth, mode, value)
+        selector = dict(condition="clean", dtype="uint8", seed=100, arm="scalar", threshold_mode=mode, threshold=value)
+        assert report.check_detection(curves, selector, found, "test")["n_matched"] == found["counts"]["n_matched"]
+        wrong = dict(found, counts=dict(found["counts"], n_detected=found["counts"]["n_detected"] + 1))
+        with pytest.raises(report.DetectionMismatch, match="n_detected"):
+            report.check_detection(curves, selector, wrong, "test")
+        with pytest.raises(report.DetectionMismatch, match="cutoffs"):
+            report.check_detection(curves, selector, dict(found, cutoffs=[c + 1 for c in found["cutoffs"]]), "test")
+    tampered = json.loads(json.dumps(manifest))
+    next(r for r in tampered["runs"] if r["seed"] == 100 and r["arm"] == "pct")["output_sha256"] = "0" * 64
+    with pytest.raises(report.SourceMismatch, match="output_sha256"):
+        report.CalibratedScenes(tampered, tmp_path).processed("clean", "pct")
+    scene = next(s for s in tampered["scenes"] if s["seed"] == 100)
+    scene["image_sha256"] = {k: "0" * 64 for k in scene["image_sha256"]}
+    with pytest.raises(report.SourceMismatch, match="differs from the manifest"):
+        report.CalibratedScenes(tampered, tmp_path).single("clean")
+
+
+def test_dim_punctum_is_the_lowest_realized_peak_and_leads_the_colour_view(smoke, tmp_path):
+    _output, manifest = smoke
+    data = report.CalibratedScenes(manifest, tmp_path).single("clean")
+    book, truth = data["book"], data["truth"]
+    signal = data["signal"][book.round_labels[0]]
+    peaks = report.realized_peaks(truth, signal, book)
+    dim = report.calibrated_dim_punctum(truth, signal, book)
+    assert dim["index"] == int(np.argmin(peaks)) and dim["peak"] == peaks.min()
+    row = truth.iloc[dim["index"]]
+    assert dim["channel"] == book.color_to_channel[row.color_sequence[0]]
+    center = tuple(int(round(v)) for v in (row.z, row.y, row.x))
+    box = signal[..., dim["channel"]][harness._box(signal.shape[:3], center, (1, 1, 1))]
+    assert dim["peak"] == box.max()
+    chosen = report.colour_puncta(peaks)
+    assert chosen[0] == dim["index"] and len(set(chosen)) == len(chosen) <= 4
+    assert report.signal_channels(truth, book) == sorted({book.color_to_channel[s[0]] for s in truth.color_sequence})
+
+
+def test_collapsed_pr_curves_are_detected():
+    flat = pd.DataFrame(dict(threshold=[2.0, 3.0, 4.0], precision=[0.5] * 3, recall=[0.4] * 3))
+    assert report.collapsed(flat)
+    assert not report.collapsed(flat.assign(recall=[0.4, 0.3, 0.2]))
+    assert not report.collapsed(flat.iloc[:1])
+
+
+def test_calibrated_report_puts_the_summary_first_and_refuses_unverified_inputs(smoke, tmp_path, monkeypatch):
+    output, manifest = smoke
+    real_check = report.check_revision
+    # The smoke run has only clean, so every single-FOV card shows clean; the revision check is tested above.
+    cards = {m: dict(c, rows=("clean",)) for m, c in report.CARDS.items() if m != "sample_level_fitting"}
+    monkeypatch.setattr(report, "CARDS", cards)
+    identity = dict(manifest_revision="0" * 40, dirty=False, uncommitted_diff_sha256=None, evaluated_revision="0" * 40,
+                    match="test", sources_unchanged=list(report.CALIBRATED_SOURCES))
+    monkeypatch.setattr(report, "check_revision", lambda *args, **kwargs: identity)
+    path = tmp_path / "report.html"
+    summary = report.render(output, path)
+    text = path.read_text()
+    anchors = ["summary", "setup", "cards", *(f"card-{m}" for m in cards), "findings", "reading-order",
+               "method-figures", *(f"fig-{m}" for m in cards), "appendix", "identity", "render-checks", "a-flags",
+               "a-comparisons-uint8", "sources"]
+    positions = [text.index(f"id=\"{a}\"") for a in anchors]
+    assert positions == sorted(positions)
+    for phrase in ("not D04", "no preprocessing default", "provisional", "noise mode", "adaptive mode",
+                   "label finding", "label hypothesis", "fig-scalar_background-background"):
+        assert phrase in text
+    assert "src=\"http" not in text and "href=\"http" not in text
+    assert summary["detection_checks"] == len(cards) * 2 * 2 and summary["files_verified"] == len(manifest["files"])
+    assert summary["schema"] == report.CALIBRATED_REPORT_SCHEMA
+    # Nothing is written when a saved file or the revision does not match.
+    copy = tmp_path / "copy"
+    shutil.copytree(output, copy)
+    table = copy / "tables" / "endpoints.csv"
+    table.write_bytes(table.read_bytes().replace(b"clean", b"CLEAN", 1))
+    with pytest.raises(report.SourceMismatch, match="endpoints.csv differs"):
+        report.render(copy, tmp_path / "refused.html")
+    monkeypatch.setattr(report, "check_revision", real_check)
+    stale = json.loads((output / "manifest.json").read_text())
+    stale["software"] = dict(stale["software"], revision="0" * 40)
+    (copy / "manifest.json").write_text(json.dumps(stale))
+    with pytest.raises(report.RevisionMismatch):
+        report.render(copy, tmp_path / "refused.html")
+    assert not (tmp_path / "refused.html").exists()

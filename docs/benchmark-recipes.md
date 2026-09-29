@@ -189,6 +189,26 @@ the named output files. The before/after panels regenerate only the displayed
 scenes and outputs, and each must equal its manifest checksum. See
 [Choose a preprocessing recipe](recipes.md#choose-a-preprocessing-recipe).
 
+Given a calibrated evaluation directory, the same command renders the report of
+item 6 of the amendment (W-249). `--summary` also saves the render summary as
+JSON:
+
+```bash
+uv run python ../../benchmarks/preprocessing_report.py --evaluation /external/w248/evaluation --output /external/w249/report.html --summary /external/w249/render-summary.json
+```
+
+* **Layout.** The human summary comes first: the setup, one card per method,
+  the cross-cutting findings and a reading order. The method sections with the
+  nine visualization changes follow, and the appendix holds the identity,
+  checksums and full tables.
+* **Threshold modes.** Every card and figure shows the noise and adaptive modes
+  side by side.
+* **Checks.** The checksum and revision checks above also cover
+  `benchmarks/image_statistics.py`. Each detection overlay is rerun once on its
+  verified image at the saved development-selected value. Its spot, match and
+  read counts and its cutoffs must equal the saved curve row, or nothing is
+  written.
+
 ## Optional recipes
 
 | Recipe | Prerequisites and retained distinctions |

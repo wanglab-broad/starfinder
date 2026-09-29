@@ -16,6 +16,8 @@ Maintained source-derived configuration and adapters for the common
   recommended defaults.
 - `preprocessing_report.py`: renders the standalone §2.5 inspection report (W-234) from a saved
   `preprocessing_synthetic.py` output directory, after checking its checksums and source revision.
+  A calibrated output directory gives the report of the amendment's item 6 (W-249): a human summary
+  first, then the method figures, then an appendix, with both threshold modes side by side.
 - `image_statistics.py`: intensity, puncta and noise statistics of one real TIFF or synthetic channel
   volume, and the read-only real-data measurement behind the synthetic calibration targets (W-238);
   see [image statistics](../docs/image-statistics.md).
