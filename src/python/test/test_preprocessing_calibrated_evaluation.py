@@ -464,3 +464,53 @@ def test_calibrated_smoke_run_in_both_threshold_modes(tmp_path):
     for entry in manifest["files"]:
         assert (output / entry["path"]).stat().st_size == entry["bytes"]
     assert json.loads((output / "manifest.json").read_text())["artifact_bytes"] == manifest["artifact_bytes"]
+
+
+# --- Full run: the recorded pilot projection (W-248) -----------------------------------------------
+
+def _pilot_dir(path, before, after, *, time_v=True):
+    plans = {label: dict(projected_seconds=seconds, within_budget=seconds <= evaluation.BUDGET_SECONDS)
+             for (label, _), seconds in zip(evaluation.PROJECTION_PLANS, (before, after))}
+    manifest = dict(design="calibrated", scope="pilot", issue="W-248", software=dict(revision="abc", dirty=False),
+                    projection=dict(budget_seconds=evaluation.BUDGET_SECONDS, plans=plans, wall_overhead_seconds=2.0))
+    if time_v:
+        manifest["time_v"] = dict(wall_seconds=280.0, max_rss_kib=267000)
+    path.mkdir(parents=True)
+    (path / "manifest.json").write_text(json.dumps(manifest))
+    return path
+
+
+def test_pilot_projection_applies_r3_only_when_the_plan_before_it_does_not_fit(tmp_path):
+    fits = _pilot_dir(tmp_path / "fits", 1900.0, 1700.0)
+    recorded = evaluation.pilot_projection(fits, [])
+    assert recorded["selected_plan"] == "C2 (R1 and R2), before R3"
+    assert recorded["pilot"]["sha256"] == evaluation._digest(fits / "manifest.json")
+    assert recorded["pilot"]["wall_seconds"] == 280.0
+    assert recorded["plans"] == json.loads((fits / "manifest.json").read_text())["projection"]["plans"]
+    with pytest.raises(ValueError, match="selects"):
+        evaluation.pilot_projection(fits, ["R3"])
+    exceeds = _pilot_dir(tmp_path / "exceeds", 2800.0, 2600.0)
+    assert evaluation.pilot_projection(exceeds, ["R3"])["selected_plan"] == "after R3 (no uint16)"
+    with pytest.raises(ValueError, match="selects"):
+        evaluation.pilot_projection(exceeds, [])
+    with pytest.raises(ValueError, match="after R3"):
+        evaluation.pilot_projection(_pilot_dir(tmp_path / "neither", 2800.0, 2701.0), ["R3"])
+    with pytest.raises(ValueError, match="time"):
+        evaluation.pilot_projection(_pilot_dir(tmp_path / "untimed", 1900.0, 1700.0, time_v=False), [])
+
+
+def test_attach_time_keeps_a_recorded_pilot_projection(tmp_path):
+    pilot = _pilot_dir(tmp_path / "pilot", 1900.0, 1700.0)
+    recorded = evaluation.pilot_projection(pilot, [])
+    output = tmp_path / "full"
+    output.mkdir()
+    (output / "manifest.json").write_text(json.dumps(dict(projection=recorded, compute_seconds=1000.0)))
+    log = tmp_path / "time.txt"
+    log.write_text("\tElapsed (wall clock) time (h:mm:ss or m:ss): 17:00.00\n"
+                   "\tMaximum resident set size (kbytes): 300000\n\tExit status: 0\n")
+    evaluation.attach_time(output, log)
+    manifest = json.loads((output / "manifest.json").read_text())
+    assert manifest["time_v"]["wall_seconds"] == 1020.0
+    assert manifest["projection"] == json.loads(json.dumps(recorded))
+    with pytest.raises(ValueError, match="full scope"):
+        evaluation.run_calibrated(tmp_path / "smoke", scope="smoke", pilot=pilot, log=lambda m: None)

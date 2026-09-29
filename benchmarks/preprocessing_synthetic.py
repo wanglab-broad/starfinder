@@ -1071,8 +1071,9 @@ def attach_time(output, time_log):
                               exit_status=int(record.get("Exit status", -1)), raw=text.splitlines())
     total = sum(p.stat().st_size for p in output.rglob("*") if p.is_file() and p.name != "manifest.json")
     manifest["artifact_bytes_total"] = total
-    if isinstance(manifest.get("projection"), dict) and seconds is not None:
-        # Calibrated design: add the measured start-up and shutdown time outside the timed compute.
+    if isinstance(manifest.get("projection"), dict) and "pilot" not in manifest["projection"] and seconds is not None:
+        # Calibrated pilot: add the measured start-up and shutdown time outside the timed compute. A full
+        # run's recorded pilot projection already holds the pilot's own overhead.
         manifest["projection"] = project_wall(manifest["projection"], seconds - manifest["compute_seconds"])
     manifest_path.write_text(json.dumps(manifest, indent=1) + "\n")
     return manifest["time_v"]
@@ -1830,6 +1831,37 @@ def project(units, fixed_seconds, pilot_plan, full_plans):
     return result
 
 
+#: The pilot projection's plans in the pre-authorized order (C3; C2 already equals R1 and R2) and the
+#: reductions each plan applies.
+PROJECTION_PLANS = (("C2 (R1 and R2), before R3", ()), ("after R3 (no uint16)", ("R3",)))
+
+
+def pilot_projection(pilot_output, reductions):
+    """The projection a full run records (W-248): the projection of a calibrated pilot run, with the
+    /usr/bin/time -v wall overhead attached, and the pilot manifest's identity.
+
+    The reductions must be those of the first plan in PROJECTION_PLANS whose projection fits the
+    budget, so that R3 is applied only when the plan before it does not fit; ValueError otherwise,
+    and when no plan fits.
+    """
+    path = Path(pilot_output) / "manifest.json"
+    pilot = json.loads(path.read_text())
+    projection = pilot.get("projection")
+    if pilot.get("design") != "calibrated" or pilot.get("scope") != "pilot" or not isinstance(projection, dict):
+        raise ValueError(f"{path} is not a calibrated pilot manifest with a projection")
+    if "wall_overhead_seconds" not in projection or "time_v" not in pilot:
+        raise ValueError(f"attach the pilot's /usr/bin/time -v record to {path} first")
+    fitting = [(label, planned) for label, planned in PROJECTION_PLANS if projection["plans"][label]["within_budget"]]
+    if not fitting:
+        raise ValueError(f"the pilot projection exceeds {BUDGET_SECONDS} s after R3")
+    label, planned = fitting[0]
+    if sorted(reductions) != sorted(planned):
+        raise ValueError(f"the pilot projection selects {label!r}, reductions {list(planned)}, not {list(reductions)}")
+    return dict(projection, selected_plan=label, pilot=dict(
+        manifest=str(path), sha256=_digest(path), issue=pilot.get("issue"), software=pilot.get("software"),
+        wall_seconds=pilot["time_v"]["wall_seconds"], max_rss_kib=pilot["time_v"]["max_rss_kib"]))
+
+
 def project_wall(projection, wall_overhead):
     """Add the measured wall time outside the timed compute (start-up, imports, shutdown) to each plan."""
     projection = dict(projection, wall_overhead_seconds=wall_overhead)
@@ -1850,22 +1882,30 @@ def _mode_sweeps(fov, truth, verify):
     return rows
 
 
-def run_calibrated(output, *, scope="full", reductions=(), issue="W-239", shape=None, count=None, log=print):
-    """Run the calibrated rerun matrix (or its pilot or smoke subset) and write tables and a manifest."""
+def run_calibrated(output, *, scope="full", reductions=(), issue="W-239", shape=None, count=None, pilot=None,
+                   log=print):
+    """Run the calibrated rerun matrix (or its pilot or smoke subset) and write tables and a manifest.
+
+    pilot: for the full scope, the pilot evaluation directory whose projection the manifest records
+    (see pilot_projection); it is checked before anything runs.
+    """
     output = Path(output)
     if output.exists() and any(output.iterdir()):
         raise FileExistsError(f"{output} exists and is not empty")
     if scope != "smoke" and (shape is not None or count is not None):
         raise ValueError("shape and count overrides are for the smoke scope only")
+    if pilot is not None and scope != "full":
+        raise ValueError("a pilot projection is recorded by the full scope only")
+    recorded = pilot_projection(pilot, reductions) if pilot is not None else None
     output.mkdir(parents=True, exist_ok=True)
     with warnings.catch_warnings():
         # Calibrated scenes clip their negative noise to 0 in every round (zero fraction 0.14-0.23, W-241);
         # the generator warns above 1 %, and each scene's clipping counts are recorded in the manifest.
         warnings.filterwarnings("ignore", r"round .* voxel values .* were clipped", RuntimeWarning)
-        return _run_calibrated(output, scope, reductions, issue, shape, count, log)
+        return _run_calibrated(output, scope, reductions, issue, shape, count, log, recorded)
 
 
-def _run_calibrated(output, scope, reductions, issue, shape, count, log):
+def _run_calibrated(output, scope, reductions, issue, shape, count, log, recorded=None):
     started = time.perf_counter()
     plan = calibrated_plan(scope, reductions)
     seeds = plan["seeds"]
@@ -2034,10 +2074,10 @@ def _run_calibrated(output, scope, reductions, issue, shape, count, log):
     timing["image_statistics"] = stats_seconds
     timing["units"] = sum(u["seconds"] for u in units)
     timing["overhead"] = compute_seconds - timing["units"] - sum(timing["saturation_k"].values()) - timing["post_processing"]
-    projection = None
+    projection = recorded
     if scope == "pilot":
-        projection = project(units, timing, plan, {"C2 (R1 and R2), before R3": calibrated_plan("full"),
-                                                   "after R3 (no uint16)": calibrated_plan("full", ("R3",))})
+        projection = project(units, timing, plan, {label: calibrated_plan("full", planned)
+                                                   for label, planned in PROJECTION_PLANS})
     mad_zero = sorted({(r["condition"], r["dtype"], r["arm"]) for r in diag_ref.to_dict("records") if r["mad_zero"]})
     manifest = dict(schema=CALIBRATED_SCHEMA, issue=issue, design="calibrated", scope=scope,
         specification="docs/preprocessing-algorithms.md, Evaluation design amendment for the calibrated rerun "
@@ -2094,6 +2134,7 @@ def _run_calibrated(output, scope, reductions, issue, shape, count, log):
         mad_zero_reference_round=[dict(condition=c, dtype=d, arm=a) for c, d, a in mad_zero],
         threshold_subset_verification=verification,
         preconditions_summary=dict(checks=len(preconditions), failed=len(gaps)),
+        fixture_gaps=gaps.to_dict("records"),
         flags_summary=(flags[flags.level == "method"].result.value_counts().to_dict() if len(flags) else {}),
         reductions=list(reductions), projection=projection, timing_seconds=timing, units=units,
         compute_seconds=compute_seconds)
@@ -2118,18 +2159,22 @@ def main():
                         help="w233: record an applied reduction; calibrated: apply R3 (no uint16) (repeatable)")
     runner.add_argument("--projection", action="append", default=[], help="record the pilot projection (repeatable)")
     runner.add_argument("--issue", default="W-239", help="issue recorded in a calibrated manifest")
+    runner.add_argument("--pilot", type=Path, help="calibrated full scope: the pilot evaluation directory whose "
+                                                   "projection the manifest records (W-248)")
     timer = sub.add_parser("attach-time", help="add a /usr/bin/time -v record to the manifest")
     timer.add_argument("--output", type=Path, required=True)
     timer.add_argument("--time-log", type=Path, required=True)
     args = parser.parse_args()
     if args.command == "run" and args.design == "calibrated":
-        if args.scope == "mini" or args.multi_fov_dtypes or args.projection:
+        if args.scope == "mini" or args.multi_fov_dtypes or args.projection or (args.pilot and args.scope != "full"):
             parser.error("the calibrated design has the scopes full, pilot and smoke, its own dtype plan (C2) and "
-                         "computes its projection")
+                         "computes its projection (a full run records the pilot's with --pilot)")
         # Calibrated scenes are the preset's 8x64x64 with 80 amplicons; --shape and --count are not used.
-        run_calibrated(args.output, scope=args.scope, reductions=args.reduction, issue=args.issue,
+        run_calibrated(args.output, scope=args.scope, reductions=args.reduction, issue=args.issue, pilot=args.pilot,
                        log=lambda message: print(message, flush=True))
     elif args.command == "run":
+        if args.pilot:
+            parser.error("--pilot is for the calibrated design")
         if args.count > 80 or any(n > m for n, m in zip(args.shape, (32, 64, 64))):
             parser.error("scenes are bounded to 32x64x64 voxels and 80 amplicons per FOV")
         run(args.output, scope=args.scope, shape=tuple(args.shape), count=args.count,
