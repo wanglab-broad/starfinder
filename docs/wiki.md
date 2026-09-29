@@ -17,6 +17,7 @@ Synthetic model <synthetic-specification>
 Preprocessing baseline <preprocessing-baseline>
 Preprocessing contract (proposed) <preprocessing-contract>
 Preprocessing algorithms (proposed) <preprocessing-algorithms>
+Method registry (proposed) <method-registry>
 Coordination <coordination>
 Checkpoints <checkpoints>
 Recipes <recipes>
