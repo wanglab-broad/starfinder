@@ -285,7 +285,7 @@ def main() -> None:
 
     stack_cache = StackCache(
         stack_dir=stack_dir_for(args.dataset, args.fov, args.result_dir),
-        handles={},
+        images={},
     )
     montage_paths = []
     try:

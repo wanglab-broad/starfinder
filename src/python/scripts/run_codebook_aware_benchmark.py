@@ -403,7 +403,7 @@ def prepare_synthetic_inputs(
 
 
 def load_registered_real_images(variant_dir: Path, n_rounds: int) -> dict[str, np.ndarray]:
-    from starfinder.io import load_volume
+    from starfinder.io import load_volume_zyxc
 
     stack_dir = variant_dir / "registered_final"
     if not stack_dir.exists():
@@ -412,11 +412,7 @@ def load_registered_real_images(variant_dir: Path, n_rounds: int) -> dict[str, n
     images: dict[str, np.ndarray] = {}
     for round_idx in range(1, n_rounds + 1):
         round_name = f"round{round_idx}"
-        images[round_name] = np.stack([
-            load_volume(stack_dir / f"{round_name}.tif", config=ImageLoadConfig(
-                source_axes="ZYXC", channel_index=c, channel_labels=(f"ch{c:02d}",)
-            )).image for c in range(4)
-        ], axis=-1)
+        images[round_name] = load_volume_zyxc(stack_dir / f"{round_name}.tif").image
     return images
 
 
