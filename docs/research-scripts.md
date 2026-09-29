@@ -69,6 +69,8 @@ mapping, and registered `ZYXC` round images. It reads existing backend
 `registered_final` or `registered_global` TIFFs when available; for supported
 real datasets without those directories, the shared QC helper creates the
 `registered_stacks/<fov>/roundN.tif` cache through `starfinder.io.save_volume`.
+The montage cache loads these volumes through `starfinder.io.load_volume_zyxc`
+and selects a `YXC` plane at the requested zero-based Z index.
 It works from saved synthetic or real results; cache creation for raw real
 datasets requires their real input images.
 

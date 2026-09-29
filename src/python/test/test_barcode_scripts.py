@@ -1,8 +1,11 @@
 """Bounded maintained-script imports and saved-data adapters using public diagnostics."""
 
+import ast
 import importlib
+import inspect
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 import numpy as np
 import pandas as pd
 from .barcode_cases import tensor
@@ -74,6 +77,44 @@ def test_registered_stack_cache_round_trips_through_codebook_scripts(
 
     loaded = benchmark.load_registered_real_images(tmp_path, n_rounds=1)
     np.testing.assert_array_equal(loaded["round1"], image)
+
+
+def test_montage_stack_cache_reads_saved_zyxc_plane(monkeypatch, tmp_path):
+    from starfinder import io
+
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / "scripts"))
+    montage = importlib.import_module("generate_decoding_example_montages")
+    image = np.arange(3 * 8 * 11 * 4, dtype=np.uint16).reshape(3, 8, 11, 4)
+    io.save_volume(image, tmp_path / "round1.tif")
+
+    # Execute main's actual constructor without running selection or reporting.
+    # This catches stale constructor keywords at the script's call site.
+    main = ast.parse(inspect.getsource(montage.main)).body[0]
+    construction = next(
+        node
+        for node in main.body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "stack_cache"
+            for target in node.targets
+        )
+    )
+    namespace = {
+        "StackCache": montage.StackCache,
+        "stack_dir_for": lambda dataset, fov, result_dir: tmp_path,
+        "args": SimpleNamespace(
+            dataset="synthetic", fov="FOV_001", result_dir=tmp_path
+        ),
+    }
+    cache = eval(
+        compile(ast.Expression(construction.value), montage.__file__, "eval"), namespace
+    )
+    try:
+        assert cache.stack_dir == tmp_path
+        assert cache.images == {}
+        np.testing.assert_array_equal(cache.get_plane(0, 1), image[1])
+    finally:
+        cache.close()
 
 
 def test_script_extraction_existing_small_fixture(monkeypatch, small_dataset):
