@@ -189,11 +189,14 @@ bump of up to (0, 1.5, −1.0) voxels, with other channel gains. Through
 
 The reference round and the fixture inputs are pinned too. Every configuration
 is built by one helper, `registration_config`, which is the only part of the
-test that refers to `RegistrationStep` or `PipelineConfig.registration`; the
-§2.6 refactor replaces that helper only. Two further tests show that a changed
-demons iteration count and the `single-channel` signal change the pinned
-translation → demons digests. The translation-only digests do not depend on the
+test that refers to `RegistrationStep` or `PipelineConfig.registration`. The
+pinned runs use each config's defaults, so a changed `DemonsConfig` default
+changes a digest. The §2.6 refactor replaces that helper; its one other named
+edit is the translation → demons image digest, which one final resampling
+changes ({doc}`registration-contract`, "Tests the implementation changes").
+Two further tests show that a changed demons iteration count and the
+`single-channel` signal change the pinned translation → demons digests. The translation-only digests do not depend on the
 signal on this fixture, because every signal gives the same integer peak.
 
-Three single-thread runs (ITK, OpenMP, BLAS threads 1) and one run with four
-ITK threads gave bit-identical digests, so the test uses exact equality.
+Three single-thread runs (ITK, OpenMP, BLAS threads 1) gave bit-identical
+digests, so the test uses exact equality.

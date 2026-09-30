@@ -135,7 +135,7 @@ ideal registration pull map of round r is `F_r`, and the truth pull field is
 
 | Field | Specification |
 | --- | --- |
-| Backend and version | elastix for estimation (W-244 `bspline` rows); SimpleITK 2.5.3 to evaluate the stored grid into a dense field (W-244 round-trip rows: the converted field differs from the backend's own by at most 1.2e-7 voxels). |
+| Backend and version | elastix for estimation (W-244 `bspline` rows). SimpleITK 2.5.3 evaluates the stored grid into a dense field, so reloading needs no elastix. W-244 did not validate that SimpleITK route for elastix coefficients. Its round-trip rows convert elastix B-splines with ITK's `TransformToDisplacementFieldFilter` on the elastix transform, compared with the transformix field (at most 1.2e-7 voxels apart), and SimpleITK B-splines with SimpleITK's own conversion. Task group 3 must show that the SimpleITK evaluation of stored elastix coefficients matches the transformix deformation field within 1e-6 voxels ({doc}`registration-contract`, "Physical-space estimation"). |
 | Transform | Cubic `BSplineTransform` on a physical control grid, dimension 3 or 2, stored with its fixed parameters and coefficients ({doc}`registration-contract`). |
 | Metric | `AdvancedNormalizedCorrelation` (W-244 candidate k1), with no bending-energy penalty, as in the W-244 matched setting. |
 | Optimizer | Adaptive stochastic gradient descent, 200 iterations per level, 4096 samples. |
@@ -154,7 +154,7 @@ ideal registration pull map of round r is `F_r`, and the truth pull field is
 | Backend and version | SimpleITK 2.5.3, the existing demons filters (`DemonsRegistrationFilter` and the three variants), run on 2D images. |
 | Transform | A 2D displacement field, embedded as `DenseDisplacementTransform` of shape (1, Y, X, 3) with the Z component exactly 0. |
 | Metric | The demons force of each variant (intensity difference driven), as in 3D. |
-| Optimizer | Demons iterations per level; the update field and the accumulated field are smoothed with `smoothing_sigma` (voxels), as in 3D. |
+| Optimizer | Demons iterations per level, with the variant-specific settings of `registration/_demons.py` unchanged. Every variant sets the displacement-field standard deviation to `smoothing_sigma` (voxels), and SimpleITK smooths the displacement field by default. `diffeomorphic` also sets the update-field standard deviation to `smoothing_sigma / 2` and `fast_symmetric` to `smoothing_sigma`, but the code never enables `SmoothUpdateField`, whose SimpleITK 2.5.3 default is off for all four filters (queried for this page). So only the displacement field is smoothed, in 2D as in 3D. |
 | Pyramid | The existing `antialias` pyramid applied in YX only (Butterworth low-pass and downsampling by 2 per level of Y and X; Z untouched), or `sitk` shrinking of Y and X only. The number of levels is `len(iterations)`. |
 | Initialization | Zero field at the coarsest level; each finer level starts from the upsampled, doubled field, as in 3D. |
 | Parameters (units) | The existing `DemonsConfig` fields and defaults: `variant="demons"`, `iterations=(100, 50, 25)` per level, `smoothing_sigma=1` (voxels), `pyramid_mode="antialias"`. No field is added. |
@@ -199,7 +199,7 @@ four rounds, are generated in session with `generate_registration_pair`,
 | V6 | Composition | The four analytic examples of {doc}`registration-contract`; and a chain (translation, affine, dense) on 8×32×32 | Named-point values; `TransformChain.pull_field()` compared with sequential evaluation of the step maps | 1e-12 voxels. |
 | V7 | Persistence round trip | Every transform kind on 8×32×32 and 1×32×32, saved as a version-2 registered checkpoint and reloaded | Pull field and re-applied images compared with the uninterrupted run | Bit-identical (`array_equal`). A version-1 checkpoint written by the start revision loads as `sequential`. |
 | V8 | Z=1 and small-Z rules | 1×32×32, 2×32×32, 3×32×32 for every registered method | Raised error type; Z component of the result | Methods with `2` in `dimensions` succeed on Z=1 with no Z motion; TPS and CPD raise `IncompatibleGeometryError` on Z=1; elastix methods and demons raise it on Z=2 and 3. |
-| V9 | Boundary and coverage | 1×32×32 ramp image, translation correction (0, −5, 0) | `registration_qc` coverage; fill band values | Coverage exactly 27/32; the 5 filled rows equal `fill_value` with constant boundary and the edge row with `nearest`. |
+| V9 | Boundary and coverage | 1×32×32 ramp image. Constant boundary: translation correction (0, −5, 0), a translation-only chain, which requires constant zero fill. Nearest boundary: the same shift as `AffineTransform` with `A = I` and `b = (0, 5, 0)`, a non-translation chain on the linear path. | `registration_qc` coverage; fill band values | Coverage exactly 27/32 for both; the 5 filled rows equal 0 for the translation chain and equal the edge row (y = 31) for the affine chain with `nearest`. |
 | V10 | Empty and constant input | Constant moving signal; moving round shifted beyond the grid | Raised error; `registration_qc` NCC and SSIM | Rigid, affine and B-spline raise `RegistrationEstimationError("constant registration signal")`; NCC and SSIM are `None` with a reason; coverage 0. |
 | V11 | Determinism | V2 to V5 fixtures, seed 100, run twice at one thread | Transform and image digests | Bit-identical. |
 

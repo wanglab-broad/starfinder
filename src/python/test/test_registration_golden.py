@@ -9,11 +9,12 @@ locked project environment (SimpleITK 2.5.3, NumPy 2.2.6, SciPy 1.17.0) and are
 bit-identical over repeated single-thread runs; see docs/registration-baseline.md.
 
 Every registration configuration is built by ``registration_config``, which
-also holds the only imports of registration configuration types. The §2.6
-refactor (``RegistrationRecipe``) replaces only that helper. The fixture, the
-runs, and the input, translation-only and demons-field digests stay; the
-translation -> demons image digest changes only through the reviewed change to
-one final resampling described in docs/registration-contract.md.
+also holds the only imports of registration configuration types; the pinned
+runs use each config's defaults. The §2.6 refactor (``RegistrationRecipe``)
+replaces that helper. Its one other named edit is the translation -> demons
+image digest, which changes with the reviewed one final resampling described in
+docs/registration-contract.md. The fixture, the runs, and the input,
+translation-only and demons-field digests stay.
 """
 import hashlib
 
@@ -30,22 +31,23 @@ CHANNELS = 4
 SEED = 20260929
 SHIFT_ZYX = (1.0, 3.0, -2.0)  # content displacement of the moving round, in voxels
 BUMP_ZYX = (0.0, 1.5, -1.0)  # peak of the smooth local displacement added on top
-DEMONS_ITERATIONS = (100, 50, 25)  # DemonsConfig default
 
 
-def registration_config(methods, *, signal="merged", demons_iterations=DEMONS_ITERATIONS):
+def registration_config(methods, *, signal="merged", demons_iterations=None):
     """The only place that builds registration configuration.
 
     methods is an ordered tuple of "translation" and "demons". signal is the
     current per-step image representation for both rounds: "merged" (the
     float64 channel sum) or "single-channel" (channel 0). Other settings are
-    the defaults of each config.
+    the defaults of each config; demons_iterations=None keeps the DemonsConfig
+    default, so a changed default changes the pinned digests.
     """
     from starfinder.dataset import PipelineConfig, RegistrationStep
     from starfinder.registration import DemonsConfig, TranslationConfig
 
     configs = {"translation": lambda: TranslationConfig(),
-               "demons": lambda: DemonsConfig(iterations=tuple(demons_iterations))}
+               "demons": lambda: (DemonsConfig() if demons_iterations is None
+                                  else DemonsConfig(iterations=tuple(demons_iterations)))}
     return PipelineConfig(registration=tuple(
         RegistrationStep(configs[method](), signal, signal, 0) for method in methods))
 

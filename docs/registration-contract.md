@@ -171,6 +171,12 @@ single `warp` replaces per-method application backends.
 | `tps` | `TpsConfig` (exists) | local | 3 | (2, 2, 2) | dense | index | none |
 | `cpd` | `CpdConfig` (exists) | local | 3 | (2, 2, 2) | dense | index | none |
 
+The table shows the registry after task group 3. Registry move 2 (task group
+2) registers only the four existing methods with their current capabilities,
+so it changes no behavior: `demons` then declares `dimensions={3}` and keeps
+rejecting Z=1. Task group 3 adds `2` to demons and registers `rigid`, `affine`
+and `bspline`.
+
 The names, fields and defaults of the four existing configs do not change. The
 demons variants stay one method, `demons`, with `variant` (W-240 choice 6).
 The `registration-elastix` extra is a dependency change that the
@@ -342,7 +348,14 @@ space (the B-spline additionally in its physical grid):
    transform keeps the control grid and coefficients, and
    `BSplineTransform.dense()` evaluates it on the reference grid with SimpleITK
    (`BSplineTransform` and `TransformToDisplacementField`), so reloading and
-   applying a stored B-spline never needs elastix.
+   applying a stored B-spline never needs elastix. W-244 did not validate this
+   route: it converted elastix B-splines with ITK's own
+   `TransformToDisplacementFieldFilter` on the elastix transform and compared
+   the result with the transformix deformation field (at most 1.2e-7 voxels
+   apart), and it used SimpleITK only for SimpleITK's own B-splines. Task
+   group 3 must show that the SimpleITK evaluation of stored elastix
+   coefficients matches the transformix deformation field within 1e-6 voxels
+   before relying on it.
 5. **Unknown spacing.** When `spacing_zyx` is `None` on both metadata values,
    estimation uses unit spacing and records `spacing_source="unknown_unit"`
    with a warning in `RegistrationDiagnostics.warnings`; the index-space result
@@ -571,15 +584,21 @@ The implementation adds these entries:
 
 ## Tests the implementation changes
 
-* `test/test_registration_golden.py`: task group 4 replaces only
-  `registration_config` with a builder of `RegistrationRecipe(steps=..., signal=
-  RegistrationSignalConfig(mode="sum" if signal == "merged" else "channel", ...))`.
-  The input and translation-only digests stay. The translation → demons field
-  digest stays, because step 2 still sees the integer-shifted sum signal. The
-  translation → demons image digest changes with the one final resampling;
-  the reviewed change must show that the new image equals the pinned one
-  within one intensity unit on every voxel whose pull point lies at least one
-  voxel inside the moving grid, and the new digest needs Jiahao's approval.
+* `test/test_registration_golden.py`: task group 4 makes two named edits and
+  no other. It replaces the body of `registration_config` with a builder of
+  `RegistrationRecipe(steps=..., signal=RegistrationSignalConfig(mode="sum" if
+  signal == "merged" else "channel", ...))`. It also replaces the one value
+  `PINNED_RUNS[("translation", "demons")]["images"]["round2"]`, with a comment
+  that names Jiahao's approval. The input and translation-only digests stay.
+  The translation → demons field digest stays, because step 2 still sees the
+  integer-shifted sum signal. The translation → demons image digest changes
+  with the one final resampling. The reviewed change must show that the new
+  image equals the pinned one within one intensity unit on every voxel whose
+  pull point lies at least one voxel inside the moving grid.
+* `test_declared_local_2d_rejection` (`test/test_registration_contract.py:123-126`)
+  asserts that demons, TPS and CPD reject Z=1. Task group 3 makes one named
+  edit: it removes `DemonsConfig()` from that parametrization and adds a test
+  that demons accepts Z=1 as 2D. TPS and CPD keep the rejection unchanged.
 * `test_two_registration_steps_resample_every_snapshot_in_the_same_sequence`
   (`test/test_recipe_sources.py:182`, W-232) is replaced by a test that each
   snapshot equals its pre-registration array resampled once by the round's
