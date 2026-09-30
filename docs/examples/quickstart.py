@@ -14,7 +14,7 @@ from starfinder.registration import TranslationConfig
 import numpy as np
 import pandas as pd
 
-from starfinder.dataset import RegistrationStep, RoundState, Dataset
+from starfinder.dataset import RegistrationRecipe, RegistrationStep, RoundState, Dataset
 
 
 def main(output: Path) -> None:
@@ -55,7 +55,7 @@ def main(output: Path) -> None:
         for volume in fov.images.values():
             assert volume.shape == (8, 128, 128, 4)
             assert volume.dtype == np.uint16
-        fov.register(RegistrationStep(TranslationConfig()))
+        fov.register(RegistrationRecipe((RegistrationStep(TranslationConfig()),)))
         fov.find_spots(config=LocalMaximaConfig(threshold_mode="noise", threshold_value=5.0, min_distance_voxels=1))
         fov.extract_intensities(config=NeighborhoodSumConfig((1, 2, 2)))
         fov.decode_barcodes().filter_reads()

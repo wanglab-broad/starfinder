@@ -1,5 +1,5 @@
 from starfinder.preprocessing import MinMaxNormalizationConfig
-from starfinder.dataset import RegistrationStep
+from starfinder.dataset import RegistrationRecipe, RegistrationStep
 from starfinder.registration import TranslationConfig
 """Pytest fixtures for STARfinder tests."""
 
@@ -79,7 +79,7 @@ def e2e_result(small_dataset: Path, small_ground_truth: dict, tmp_path_factory):
     (
         fov.load_images()
         .normalize_intensity(config=MinMaxNormalizationConfig('uint8', (0, 255), snr_threshold=5.0))
-        .register(RegistrationStep(TranslationConfig())).find_spots(config=LocalMaximaConfig())
+        .register(RegistrationRecipe((RegistrationStep(TranslationConfig()),))).find_spots(config=LocalMaximaConfig())
         .extract_intensities()
         .decode_barcodes().filter_reads()
     )

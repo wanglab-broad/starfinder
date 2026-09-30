@@ -17,7 +17,7 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from starfinder.dataset import Dataset, RegistrationStep, RoundState
+from starfinder.dataset import Dataset, RegistrationRecipe, RegistrationStep, RoundState
 
 from starfinder.evaluation.registration import _valid_overlap, evaluate_displacement_field, registration_qc
 from starfinder.image import ImageMetadata, IncompatibleGeometryError
@@ -195,7 +195,7 @@ def test_affine_without_the_extra_names_it(monkeypatch):
     # Through a registration step: the error propagates, is recorded and nothing is substituted.
     fov = fov_with(reference, reference)
     with pytest.raises(RegistrationBackendUnavailableError) as info:
-        fov.register(RegistrationStep(AffineConfig()))
+        fov.register(RegistrationRecipe((RegistrationStep(AffineConfig()),)))
     assert str(info.value) == MISSING_EXTRA
     assert_single_failed_attempt(fov, "affine", "RegistrationBackendUnavailableError", MISSING_EXTRA)
 
@@ -472,7 +472,7 @@ def test_constant_signal_fails_before_elastix(config, monkeypatch):
     assert type(info.value) is RegistrationEstimationError and str(info.value) == "constant registration signal"
     fov = fov_with(reference, constant)
     with pytest.raises(RegistrationEstimationError, match="^constant registration signal$"):
-        fov.register(RegistrationStep(config))
+        fov.register(RegistrationRecipe((RegistrationStep(config),)))
     assert_single_failed_attempt(fov, config.method, "RegistrationEstimationError", "constant registration signal")
     assert calls == []
 
@@ -488,7 +488,7 @@ def test_elastix_errors_become_estimation_errors(monkeypatch):
         estimate(reference, moving, RigidConfig())
     fov = fov_with(reference, moving)
     with pytest.raises(RegistrationEstimationError, match="ITK ERROR: test"):
-        fov.register(RegistrationStep(RigidConfig()))
+        fov.register(RegistrationRecipe((RegistrationStep(RigidConfig()),)))
     assert_single_failed_attempt(fov, "rigid", "RegistrationEstimationError", "ITK ERROR: test")
 
 

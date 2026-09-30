@@ -134,11 +134,11 @@ def test_every_registration_place_accepts_a_method_registered_only_in_the_regist
     assert RegistrationStep(FixtureShiftConfig()).config == FixtureShiftConfig()
     # The workflow adapter resolves its name and accepts its init fields.
     adapted = from_workflow_config(workflow_config(tmp_path, method="fixture_shift", offset=2.0))
-    assert [step.config for step in adapted.pipeline.registration] == [FixtureShiftConfig(offset=2.0)]
+    assert [step.config for step in adapted.pipeline.registration.steps] == [FixtureShiftConfig(offset=2.0)]
     # The checkpoint reader rebuilds its saved config from the saved method name.
     write_registered_header(tmp_path, {}, {"round2": [result]})
     saved = json.loads((tmp_path / "registered" / "transforms.json").read_text())
-    restored = _registration_results(tmp_path, saved["transforms"])["round2"][0]
+    restored = _registration_results(tmp_path, saved)[0]["round2"][0]
     assert restored.diagnostics.effective_config == FixtureShiftConfig(offset=0.5)
     assert restored.transform == result.transform
     # The benchmark adapter builds it from a case's method name.

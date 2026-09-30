@@ -292,7 +292,7 @@ allOf:
       required:
         - n_random_tests
 
-  # The explicit preprocessing recipe is Python-only (backend defaults to matlab)
+  # The explicit preprocessing and registration recipes are Python-only (backend defaults to matlab)
   - if:
       not:
         required: [backend]
@@ -306,7 +306,9 @@ allOf:
             properties:
               parameters:
                 not:
-                  required: [preprocessing]
+                  anyOf:
+                    - required: [preprocessing]
+                    - required: [registration]
 
 # ==================== Reusable Definitions ====================
 $defs:
@@ -504,17 +506,232 @@ $defs:
         oneOf: [{$ref: "#/$defs/snapshot_name"}, {type: "null"}]
       supplied_statistics: {type: ["string", "null"]}
 
+  # ==================== Explicit registration recipe (Python only) ====================
+  # One definition per method registered in starfinder.registration.REGISTRATION_METHODS. Keys
+  # other than method, recovery and signal are the fields of the method's config dataclass; a
+  # default-tier test keeps these definitions, and the signal, warp and qc definitions, equal to
+  # REGISTRATION_METHODS and the config dataclasses.
+  registration_channel:
+    oneOf:
+      - {type: integer, minimum: 0}
+      - {type: string, minLength: 1}
+      - {type: "null"}
+
+  registration_signal:
+    type: object
+    additionalProperties: false
+    properties:
+      mode: {type: string, enum: ["max", "sum", "channel"]}
+      reference_channel: {$ref: "#/$defs/registration_channel"}
+      moving_channel: {$ref: "#/$defs/registration_channel"}
+
+  registration_warp:
+    type: object
+    additionalProperties: false
+    properties:
+      backend: {type: string, enum: ["translation", "scipy", "simpleitk"]}
+      boundary_mode: {type: string, enum: ["constant", "nearest"]}
+      fill_value: {type: number}
+      output_dtype: {type: string, enum: ["input", "float32", "float64"]}
+      integer_rounding: {type: string, enum: ["nearest_even"]}
+      clip_to_dtype: {const: true}
+      fft_workers: {type: integer, minimum: 1}
+
+  registration_qc:
+    type: object
+    additionalProperties: false
+    properties:
+      min_coverage: {type: ["number", "null"], minimum: 0, maximum: 1}
+      min_ncc_gain: {type: ["number", "null"]}
+      max_fold_fraction: {type: ["number", "null"], minimum: 0, maximum: 1}
+      max_translation_voxels: {type: ["number", "null"], minimum: 0}
+      projections: {type: boolean}
+
+  registration_step_recovery:
+    description: "Opt-in recovery; alternatives name methods of the step's kind and configure estimators only"
+    type: object
+    required: [allowed_errors, alternatives]
+    additionalProperties: false
+    properties:
+      allowed_errors:
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items:
+          enum: [RegistrationEstimationError, InsufficientLandmarksError, RegistrationRejectedError]
+      alternatives:
+        type: array
+        minItems: 1
+        items:
+          type: object
+          required: [method]
+          not:
+            anyOf:
+              - required: [recovery]
+              - required: [signal]
+
+  registration_elastix_levels:
+    type: ["integer", "null"]
+    minimum: 1
+
+  registration_interpolation_order:
+    type: integer
+    minimum: 0
+    maximum: 5
+
+  registration_step_translation:
+    type: object
+    required: [method]
+    additionalProperties: false
+    properties:
+      method: {const: translation}
+      recovery: {$ref: "#/$defs/registration_step_recovery"}
+      signal: {$ref: "#/$defs/registration_signal"}
+      backend: {type: string, enum: ["scipy_fft", "skimage"]}
+      fft_workers: {type: integer, minimum: 1}
+
+  registration_step_rigid:
+    type: object
+    required: [method]
+    additionalProperties: false
+    properties:
+      method: {const: rigid}
+      recovery: {$ref: "#/$defs/registration_step_recovery"}
+      signal: {$ref: "#/$defs/registration_signal"}
+      metric: {type: string, enum: ["mattes", "ncc"]}
+      histogram_bins: {type: integer, minimum: 2}
+      iterations: {type: integer, minimum: 1}
+      samples: {type: integer, minimum: 1}
+      levels: {$ref: "#/$defs/registration_elastix_levels"}
+      random_seed: {type: integer, minimum: 0}
+
+  registration_step_affine:
+    type: object
+    required: [method]
+    additionalProperties: false
+    properties:
+      method: {const: affine}
+      recovery: {$ref: "#/$defs/registration_step_recovery"}
+      signal: {$ref: "#/$defs/registration_signal"}
+      metric: {type: string, enum: ["ncc", "mattes"]}
+      iterations: {type: integer, minimum: 1}
+      samples: {type: integer, minimum: 1}
+      levels: {$ref: "#/$defs/registration_elastix_levels"}
+      random_seed: {type: integer, minimum: 0}
+
+  registration_step_bspline:
+    type: object
+    required: [method]
+    additionalProperties: false
+    properties:
+      method: {const: bspline}
+      recovery: {$ref: "#/$defs/registration_step_recovery"}
+      signal: {$ref: "#/$defs/registration_signal"}
+      metric: {type: string, enum: ["ncc", "mattes"]}
+      grid_spacing_physical: {type: ["number", "null"], exclusiveMinimum: 0}
+      iterations: {type: integer, minimum: 1}
+      samples: {type: integer, minimum: 1}
+      levels: {$ref: "#/$defs/registration_elastix_levels"}
+      random_seed: {type: integer, minimum: 0}
+
+  registration_step_demons:
+    type: object
+    required: [method]
+    additionalProperties: false
+    properties:
+      method: {const: demons}
+      recovery: {$ref: "#/$defs/registration_step_recovery"}
+      signal: {$ref: "#/$defs/registration_signal"}
+      variant: {type: string, enum: ["demons", "diffeomorphic", "symmetric", "fast_symmetric"]}
+      iterations:
+        type: array
+        minItems: 1
+        items: {type: integer, minimum: 1}
+      smoothing_sigma: {type: number, minimum: 0}
+      pyramid_mode: {type: string, enum: ["antialias", "sitk"]}
+
+  registration_step_tps:
+    type: object
+    required: [method]
+    additionalProperties: false
+    properties:
+      method: {const: tps}
+      recovery: {$ref: "#/$defs/registration_step_recovery"}
+      signal: {$ref: "#/$defs/registration_signal"}
+      detection_noise_sigma: {type: number, minimum: 0}
+      match_distance_voxels: {type: number, exclusiveMinimum: 0}
+      min_matches: {type: integer, minimum: 4}
+      max_control_points: {type: integer, minimum: 4}
+      smoothing: {type: number, minimum: 0}
+      grid_spacing_voxels: {type: integer, minimum: 1}
+      interpolation_order: {$ref: "#/$defs/registration_interpolation_order"}
+      field_smoothing_sigma: {type: ["number", "null"], minimum: 0}
+      clamp_sampling_coordinates: {type: boolean}
+
+  registration_step_cpd:
+    type: object
+    required: [method]
+    additionalProperties: false
+    properties:
+      method: {const: cpd}
+      recovery: {$ref: "#/$defs/registration_step_recovery"}
+      signal: {$ref: "#/$defs/registration_signal"}
+      detection_noise_sigma: {type: number, minimum: 0}
+      max_control_points: {type: integer, minimum: 4}
+      kernel_width_voxels: {type: ["number", "null"], exclusiveMinimum: 0}
+      regularization_weight: {type: number, exclusiveMinimum: 0}
+      outlier_fraction: {type: number, minimum: 0, exclusiveMaximum: 1}
+      affine_first: {type: boolean}
+      grid_spacing_voxels: {type: integer, minimum: 1}
+      candidate_radius_voxels: {type: number, exclusiveMinimum: 0}
+      neighbors_per_anchor: {type: integer, minimum: 0}
+      interpolation_order: {$ref: "#/$defs/registration_interpolation_order"}
+      field_smoothing_sigma: {type: ["number", "null"], minimum: 0}
+      clamp_sampling_coordinates: {type: boolean}
+
+  registration_params:
+    description: "Python-only explicit RegistrationRecipe (registration contract, Python-only key); mutually exclusive with an enabled global_registration or local_registration"
+    type: object
+    required: [steps]
+    additionalProperties: false
+    properties:
+      steps:
+        type: array
+        minItems: 1
+        items:
+          oneOf:
+            - $ref: "#/$defs/registration_step_translation"
+            - $ref: "#/$defs/registration_step_rigid"
+            - $ref: "#/$defs/registration_step_affine"
+            - $ref: "#/$defs/registration_step_bspline"
+            - $ref: "#/$defs/registration_step_demons"
+            - $ref: "#/$defs/registration_step_tps"
+            - $ref: "#/$defs/registration_step_cpd"
+      signal: {$ref: "#/$defs/registration_signal"}
+      warp: {$ref: "#/$defs/registration_warp"}
+      qc: {$ref: "#/$defs/registration_qc"}
+      reference_round: {type: ["string", "null"]}
+
   python_rule_parameters:
-    description: "The explicit preprocessing key replaces the legacy preprocessing keys"
-    if: {required: [preprocessing]}
-    then:
-      not:
-        anyOf:
-          - required: [enhance_contrast]
-          - required: [hist_equalize]
-          - required: [morph_recon]
-          - required: [tophat]
-          - required: [snr_threshold]
+    description: "The explicit preprocessing and registration keys replace their legacy keys"
+    allOf:
+      - if: {required: [preprocessing]}
+        then:
+          not:
+            anyOf:
+              - required: [enhance_contrast]
+              - required: [hist_equalize]
+              - required: [morph_recon]
+              - required: [tophat]
+              - required: [snr_threshold]
+      - if: {required: [registration]}
+        then:
+          not:
+            anyOf:
+              - required: [global_registration]
+                properties: {global_registration: {required: [run], properties: {run: {const: true}}}}
+              - required: [local_registration]
+                properties: {local_registration: {required: [run], properties: {run: {const: true}}}}
 
   registration_recovery_params:
     description: "Python-only opt-in recovery; validation/dependency/application errors never recover"
@@ -527,7 +744,7 @@ $defs:
         minItems: 1
         uniqueItems: true
         items:
-          enum: [RegistrationEstimationError, InsufficientLandmarksError]
+          enum: [RegistrationEstimationError, InsufficientLandmarksError, RegistrationRejectedError]
       alternatives:
         type: array
         minItems: 1
@@ -575,8 +792,17 @@ $defs:
         type: string
       method:
         type: string
-        enum: ["demons", "tps", "cpd"]
+        description: "The registered local methods and the legacy demons variant names (a default-tier test keeps them equal to REGISTRATION_METHODS)"
+        enum: ["bspline", "cpd", "demons", "tps", "diffeomorphic", "symmetric", "fast_symmetric"]
         default: "demons"
+      ref_img:
+        type: string
+        enum: ["merged-image", "single-channel"]
+        description: "Python only: the local registration signal (merged-image, the default, is the channel maximum)"
+      mov_img:
+        type: string
+        enum: ["merged-image", "single-channel"]
+        description: "Python only: must equal ref_img"
       ref_channel:
         type: integer
         minimum: 0
@@ -662,6 +888,8 @@ $defs:
         properties:
           preprocessing:
             $ref: "#/$defs/preprocessing_params"
+          registration:
+            $ref: "#/$defs/registration_params"
           enhance_contrast:
             $ref: "#/$defs/enhance_contrast_params"
           hist_equalize:
@@ -703,6 +931,8 @@ $defs:
         properties:
           preprocessing:
             $ref: "#/$defs/preprocessing_params"
+          registration:
+            $ref: "#/$defs/registration_params"
           enhance_contrast:
             $ref: "#/$defs/enhance_contrast_params"
           hist_equalize:
@@ -734,6 +964,8 @@ $defs:
         properties:
           preprocessing:
             $ref: "#/$defs/preprocessing_params"
+          registration:
+            $ref: "#/$defs/registration_params"
           local_registration:
             $ref: "#/$defs/local_registration_params"
           morph_recon:
@@ -767,6 +999,8 @@ $defs:
         properties:
           preprocessing:
             $ref: "#/$defs/preprocessing_params"
+          registration:
+            $ref: "#/$defs/registration_params"
           hist_equalize:
             $ref: "#/$defs/hist_equalize_params"
           tophat:
@@ -794,6 +1028,8 @@ $defs:
         properties:
           preprocessing:
             $ref: "#/$defs/preprocessing_params"
+          registration:
+            $ref: "#/$defs/registration_params"
           morph_recon:
             $ref: "#/$defs/morph_recon_params"
           tophat:

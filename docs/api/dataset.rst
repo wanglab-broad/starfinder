@@ -12,6 +12,10 @@ the existing attributes remain. ``Codebook``, the spot finding, extraction,
 decoding, filtering, registration and evaluation results have one-line
 summaries. See :ref:`inspecting-results`.
 
+``PipelineConfig.registration`` is a ``RegistrationRecipe`` (or ``None``): global steps,
+at most one local step, one signal and one final resampling per moving round; see
+:doc:`../registration-contract`.
+
 .. currentmodule:: starfinder.dataset
 
 .. autosummary::
@@ -25,6 +29,7 @@ summaries. See :ref:`inspecting-results`.
    from_workflow_config
    PipelineConfig
    RecoveryConfig
+   RegistrationRecipe
    RegistrationStep
    RoundState
    SubtileConfig

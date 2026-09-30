@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from starfinder.dataset import RegistrationStep, FOV, RoundState, Dataset
+from starfinder.dataset import RegistrationRecipe, RegistrationStep, FOV, RoundState, Dataset
 from starfinder.io import load_round, load_volume, save_volume
 from starfinder.registration import TranslationConfig, estimate_transform, apply_transform, TranslationConfig
 from starfinder.spot_finding import find_spots, LocalMaximaConfig
@@ -71,7 +71,7 @@ def decode_fov(quickstart: Path, output: Path) -> FOV:
     fov = dataset.fov("FOV_001")
     fov.load_images()
     assert all(image.shape == (8, 128, 128, 4) for image in fov.images.values())
-    fov.register(RegistrationStep(TranslationConfig()))
+    fov.register(RegistrationRecipe((RegistrationStep(TranslationConfig()),)))
     fov.find_spots(config=LocalMaximaConfig(threshold_mode="noise", threshold_value=5.0))
     fov.extract_intensities(config=NeighborhoodSumConfig((1, 2, 2)))
     fov.decode_barcodes().filter_reads()

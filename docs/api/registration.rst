@@ -27,6 +27,14 @@ derive their accepted methods from it; see :doc:`../method-registry` and
 and :py:class:`~starfinder.registration.RegistrationRejectedError` are the routine QC
 criteria and their rejection error; nothing is rejected by default.
 
+A :py:class:`~starfinder.registration.TransformChain` composes the step transforms of
+one moving round into one pull map, ``T1(T2(...Tn(p)))``; its ``pull_field()`` is the
+composite float64 displacement, and ``apply_transform`` resamples an image once through
+it. :py:class:`~starfinder.registration.RegistrationSignalConfig` builds the float64 ZYX
+registration signal of a round (channel maximum by default, sum, or one channel). Both
+belong to the registration recipe of :py:class:`~starfinder.dataset.RegistrationRecipe`;
+see :doc:`../coordination`.
+
 .. currentmodule:: starfinder.registration
 
 .. autosummary::
@@ -50,9 +58,11 @@ criteria and their rejection error; nothing is rejected by default.
    RegistrationQcConfig
    RegistrationRejectedError
    RegistrationResult
+   RegistrationSignalConfig
    RegistrationSpec
    RigidConfig
    TpsConfig
+   TransformChain
    TranslationConfig
    TranslationTransform
    UnsupportedTransformOperationError

@@ -243,8 +243,8 @@ def generate_raw_registered_stack_cache(
     if dataset not in RAW_REAL_DATASETS:
         raise FileNotFoundError(f"No raw-E2E stack cache recipe for {dataset}/{fov_id}")
 
-    from starfinder.dataset import Dataset, RegistrationStep
-    from starfinder.registration import TranslationConfig
+    from starfinder.dataset import Dataset, RegistrationRecipe, RegistrationStep
+    from starfinder.registration import RegistrationSignalConfig, TranslationConfig
     from starfinder.preprocessing import MinMaxNormalizationConfig
     from starfinder.dataset.types import RoundState
 
@@ -275,7 +275,7 @@ def generate_raw_registered_stack_cache(
     fov.load_images()
     fov.rotate(angle=float(config["rotate_angle"]))
     fov.normalize_intensity(config=MinMaxNormalizationConfig("uint8", (0, 255), snr_threshold=float(config["snr_threshold"])))
-    fov.register(RegistrationStep(TranslationConfig()))
+    fov.register(RegistrationRecipe((RegistrationStep(TranslationConfig()),), signal=RegistrationSignalConfig('sum')))
 
     save_registered_stack_cache(
         {

@@ -81,6 +81,7 @@ starfinder.dataset
 * :py:obj:`starfinder.dataset.from_workflow_config`
 * :py:obj:`starfinder.dataset.PipelineConfig`
 * :py:obj:`starfinder.dataset.RecoveryConfig`
+* :py:obj:`starfinder.dataset.RegistrationRecipe`
 * :py:obj:`starfinder.dataset.RegistrationStep`
 * :py:obj:`starfinder.dataset.RoundState`
 * :py:obj:`starfinder.dataset.SubtileConfig`
@@ -201,9 +202,11 @@ starfinder.registration
 * :py:obj:`starfinder.registration.RegistrationQcConfig`
 * :py:obj:`starfinder.registration.RegistrationRejectedError`
 * :py:obj:`starfinder.registration.RegistrationResult`
+* :py:obj:`starfinder.registration.RegistrationSignalConfig`
 * :py:obj:`starfinder.registration.RegistrationSpec`
 * :py:obj:`starfinder.registration.RigidConfig`
 * :py:obj:`starfinder.registration.TpsConfig`
+* :py:obj:`starfinder.registration.TransformChain`
 * :py:obj:`starfinder.registration.TranslationConfig`
 * :py:obj:`starfinder.registration.TranslationTransform`
 * :py:obj:`starfinder.registration.UnsupportedTransformOperationError`

@@ -17,7 +17,9 @@ import uuid
 import numpy as np
 import pandas as pd
 
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
+# Header versions the reader accepts: version 1 has the pre-recipe registered layout.
+READ_VERSIONS = (1, 2)
 STAGES = ("registered", "candidates", "pre_qc")
 TABLE_FORMATS = ("csv", "parquet")
 NA_TOKEN = "<NA>"
@@ -270,8 +272,8 @@ def read_header(directory, stage):
     if not path.is_file():
         raise FileNotFoundError(f"no {stage} checkpoint at {path}")
     header = json.loads(path.read_text())
-    if header.get("format_version") != FORMAT_VERSION or header.get("stage") != stage:
-        raise ValueError(f"{path} is not a version {FORMAT_VERSION} {stage} checkpoint")
+    if header.get("format_version") not in READ_VERSIONS or header.get("stage") != stage:
+        raise ValueError(f"{path} is not a version {' or '.join(map(str, READ_VERSIONS))} {stage} checkpoint")
     return header
 
 
@@ -307,48 +309,95 @@ def write_registered_round(directory, round_name, image, metadata, snapshot=None
     return path
 
 
-def _transform_json(result, fields_name):
-    from starfinder.registration import TranslationTransform
+def _transform_json(result, index, field_name, application_config=None):
+    """One step result of transforms.json: the step index, the typed transform and its diagnostics.
+
+    application_config is kept per result only for sequential (version-1) semantics.
+    """
+    from starfinder.registration._chain import transform_kind
     transform = result.transform
     data = {name: getattr(transform, name) for name in
             ("reference_shape_zyx", "moving_shape_zyx", "reference_metadata", "moving_metadata", "direction", "units")}
-    if isinstance(transform, TranslationTransform):
-        data.update(kind="translation", correction_zyx=transform.correction_zyx)
+    kind = transform_kind(transform)
+    data.update(kind=kind)
+    if kind == "translation":
+        data.update(correction_zyx=transform.correction_zyx)
+    elif kind == "affine":
+        data.update(matrix_zyx=transform.matrix_zyx.tolist(), physical=transform.physical)
+    elif kind == "bspline":
+        data.update(bspline={name: getattr(transform, name) for name in _BSPLINE_FIELDS}, coefficients=field_name)
     else:
-        data.update(kind="dense", field=fields_name)
-    return dict(transform=data, diagnostics=result.diagnostics, application_config=result.application_config)
+        data.update(field=field_name)
+    entry = dict(step=index, transform=data, diagnostics=result.diagnostics)
+    if application_config is not None:
+        entry.update(application_config=application_config)
+    return entry
 
 
-def write_registered_header(directory, header, registration_results):
-    """Write transforms.json and a <round>_field.npz per round with dense transforms."""
-    from starfinder.registration import TranslationTransform
+# Inline B-spline parameters; the coefficients are stored in the round's field file.
+_BSPLINE_FIELDS = ("grid_size_xyz", "grid_origin_xyz", "grid_spacing_xyz", "grid_direction_xyz", "order", "spacing_zyx")
+
+
+def write_registered_header(directory, header, registration_results, registration_record=None):
+    """Write transforms.json and a <round>_field.npz per round with dense fields or B-spline coefficients.
+
+    registration_record (FOV.registration_record) gives the semantics
+    (``recipe``: one application entry per round with its WarpConfig;
+    ``sequential``: a per-result application_config, as read from version 1)
+    and the recipe summary. Without an application in the record, a round's
+    application is its last result's application_config.
+    """
+    from starfinder.registration import BSplineTransform, DenseDisplacementTransform
+    record = registration_record or {}
+    semantics = record.get("semantics", "recipe")
+    applications = record.get("application", {})
     directory = Path(directory) / "registered"
     transforms, files = {}, []
     for name, results in registration_results.items():
-        dense = {f"result_{i}": r.transform.displacement_zyx for i, r in enumerate(results)
-                 if not isinstance(r.transform, TranslationTransform)}
+        arrays = {}
+        for i, r in enumerate(results):
+            if isinstance(r.transform, DenseDisplacementTransform):
+                arrays[f"result_{i}"] = r.transform.displacement_zyx
+            elif isinstance(r.transform, BSplineTransform):
+                arrays[f"result_{i}"] = r.transform.coefficients
         field_name = f"{name}_field.npz"
-        if dense:
+        if arrays:
             with _atomic(directory / field_name) as tmp:
                 with open(tmp, "wb") as handle:
-                    np.savez(handle, **dense)
+                    np.savez(handle, **arrays)
             files.append(field_name)
-        transforms[name] = [_transform_json(r, field_name) for r in results]
-    header = dict(header, stage="registered", format_version=FORMAT_VERSION, transforms=transforms)
+        transforms[name] = [_transform_json(r, i, field_name, r.application_config if semantics == "sequential" else None)
+                            for i, r in enumerate(results)]
+    header = dict(header, stage="registered", format_version=FORMAT_VERSION, transforms=transforms,
+                  registration_semantics=semantics, registration_recipe=record.get("recipe"),
+                  applications={} if semantics == "sequential" else
+                  {name: {"application_config": applications.get(name, results[-1].application_config)}
+                   for name, results in registration_results.items() if results})
     write_json(header, directory / "transforms.json")
     return files + ["transforms.json"]
 
 
-def _registration_results(directory, transforms):
+def _registration_results(directory, header):
+    """Rebuild the results, the TransformChain per round and the registration record of a registered header.
+
+    Version 1 checkpoints hold translation and dense results with a
+    per-result application_config; they load with semantics ``sequential``
+    and without chains. Version 2 rebuilds every kind, a chain per round and
+    the round's application WarpConfig (also set on each result).
+    """
     from starfinder._registry import config_type_for, names
-    from starfinder.registration import (REGISTRATION_METHODS, DenseDisplacementTransform,
-        RegistrationDiagnostics, RegistrationResult, TranslationTransform, WarpConfig)
+    from starfinder.registration import (REGISTRATION_METHODS, AffineTransform, BSplineTransform,
+        DenseDisplacementTransform, RegistrationDiagnostics, RegistrationResult, TransformChain,
+        TranslationTransform, WarpConfig)
     # Saved method values equal the spec names (the discriminator rule).
     methods = {name: config_type_for(REGISTRATION_METHODS, name, "registration method")
                for name in names(REGISTRATION_METHODS)}
-    results = {}
-    for name, entries in transforms.items():
-        fields_data = None
+    semantics = "sequential" if header["format_version"] == 1 else header.get("registration_semantics", "recipe")
+    applications = {name: _config(entry["application_config"], WarpConfig)
+                    for name, entry in header.get("applications", {}).items()}
+    results, chains = {}, {}
+    for name, entries in header["transforms"].items():
+        arrays = None
         restored = []
         for i, entry in enumerate(entries):
             data = dict(entry["transform"])
@@ -357,15 +406,22 @@ def _registration_results(directory, transforms):
                         moving_metadata=_metadata(data["moving_metadata"]),
                         reference_shape_zyx=tuple(data["reference_shape_zyx"]),
                         moving_shape_zyx=tuple(data["moving_shape_zyx"]))
+            if kind in ("dense", "bspline"):
+                file_name = data.pop("field" if kind == "dense" else "coefficients")
+                if arrays is None:
+                    with np.load(Path(directory) / "registered" / file_name) as npz:
+                        arrays = {k: npz[k] for k in npz.files}
             if kind == "translation":
                 transform = TranslationTransform(**data)
+            elif kind == "affine" and header["format_version"] != 1:
+                transform = AffineTransform(**data)
+            elif kind == "bspline" and header["format_version"] != 1:
+                transform = BSplineTransform(**{k: _tuples(v) for k, v in data.pop("bspline").items()},
+                                             coefficients=arrays[f"result_{i}"], **data)
+            elif kind == "dense":
+                transform = DenseDisplacementTransform(displacement_zyx=arrays[f"result_{i}"], **data)
             else:
-                if fields_data is None:
-                    with np.load(Path(directory) / "registered" / data.pop("field")) as npz:
-                        fields_data = {k: npz[k] for k in npz.files}
-                else:
-                    data.pop("field")
-                transform = DenseDisplacementTransform(displacement_zyx=fields_data[f"result_{i}"], **data)
+                raise ValueError(f"unknown transform kind {kind!r} in a version {header['format_version']} checkpoint")
             diagnostics = dict(entry["diagnostics"])
             diagnostics["effective_config"] = _config(diagnostics["effective_config"], methods)
             diagnostics["warnings"] = tuple(diagnostics["warnings"])
@@ -373,10 +429,16 @@ def _registration_results(directory, transforms):
                         "final_rms_change"):
                 if isinstance(diagnostics.get(key), list):
                     diagnostics[key] = tuple(diagnostics[key])
-            restored.append(RegistrationResult(transform, RegistrationDiagnostics(**diagnostics),
-                                               _config(entry["application_config"], WarpConfig)))
+            application = (_config(entry["application_config"], WarpConfig) if semantics == "sequential"
+                           else applications[name])
+            restored.append(RegistrationResult(transform, RegistrationDiagnostics(**diagnostics), application))
         results[name] = restored
-    return results
+        if semantics == "recipe" and restored:
+            chains[name] = TransformChain(tuple(r.transform for r in restored))
+    record = {}
+    if results:
+        record = dict(semantics=semantics, recipe=header.get("registration_recipe"), application=applications)
+    return results, chains, record
 
 
 # --- Candidates stage ------------------------------------------------------------
@@ -466,6 +528,11 @@ def read_checkpoint(path: Path | str, stage: str) -> dict:
         Keys are the FOV attributes the stage restores. ``registered``:
         ``images`` and ``metadata`` (per round), ``snapshots`` (per round,
         the stored snapshots by name; empty for checkpoints without them), ``registration_results``,
+        ``registration_chains`` (a TransformChain per registered round),
+        ``registration_record`` (``semantics``: ``recipe``, or ``sequential``
+        for a version-1 checkpoint, which has no chains and keeps a
+        per-result application_config; the recipe summary; the application
+        WarpConfig per round; empty without registration),
         ``registration_attempts`` and ``preprocessing_record`` (the recipe and
         per-round step records; empty for checkpoints written without them). ``candidates``: ``spot_result``
         (SpotFindingResult) and ``intensity_result`` (IntensityExtractionResult,
@@ -496,8 +563,9 @@ def read_checkpoint(path: Path | str, stage: str) -> dict:
         for snapshot in header.get("snapshots", []):
             snapshots.setdefault(name, {})[snapshot] = load_volume_zyxc(
                 registered_image_path(directory, name, snapshot), channel_labels=tuple(header["channel_labels"])).image
+    results, chains, record = _registration_results(directory, header)
     return {"images": images, "snapshots": snapshots, "metadata": metadata,
-            "registration_results": _registration_results(directory, header["transforms"]),
+            "registration_results": results, "registration_chains": chains, "registration_record": record,
             "registration_attempts": {name: [_tuples(a) for a in attempts]
                                       for name, attempts in header["registration_attempts"].items()},
             "preprocessing_record": header.get("preprocessing") or {}}

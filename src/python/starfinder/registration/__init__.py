@@ -8,6 +8,7 @@ from ._config import (
     DemonsConfig,
     RigidConfig,
     RegistrationQcConfig,
+    RegistrationSignalConfig,
     TpsConfig,
     TranslationConfig,
     WarpConfig,
@@ -20,6 +21,7 @@ from ._errors import (
     RegistrationRejectedError,
     UnsupportedTransformOperationError,
 )
+from ._chain import TransformChain
 from ._methods import REGISTRATION_METHODS as _REGISTRATION_METHODS
 from ._methods import RegistrationSpec
 from ._types import (
@@ -48,12 +50,14 @@ __all__ = [
     "CpdConfig",
     "WarpConfig",
     "RegistrationQcConfig",
+    "RegistrationSignalConfig",
     "REGISTRATION_METHODS",
     "RegistrationSpec",
     "TranslationTransform",
     "AffineTransform",
     "BSplineTransform",
     "DenseDisplacementTransform",
+    "TransformChain",
     "RegistrationResult",
     "RegistrationDiagnostics",
     "InvalidRegistrationConfigError",

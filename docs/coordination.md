@@ -6,7 +6,7 @@ functions. `PipelineConfig` describes the scientific sequence; `ExecutionConfig`
 controls when images are loaded and released. Unknown config arguments raise.
 
 ```python
-from starfinder.dataset import PipelineConfig, ExecutionConfig, RegistrationStep
+from starfinder.dataset import PipelineConfig, ExecutionConfig, RegistrationRecipe, RegistrationStep
 from starfinder.io import ImageLoadConfig
 from starfinder.registration import TranslationConfig
 from starfinder.spot_finding import LocalMaximaConfig
@@ -14,7 +14,7 @@ from starfinder.barcode import NeighborhoodSumConfig, WtaDecoderConfig, ReadFilt
 
 config = PipelineConfig(
     load=ImageLoadConfig(channel_labels=dataset.channel_order),
-    registration=(RegistrationStep(TranslationConfig()),),
+    registration=RegistrationRecipe((RegistrationStep(TranslationConfig()),)),
     detection=LocalMaximaConfig(threshold_mode="noise", threshold_value=5),
     extraction=NeighborhoodSumConfig(neighborhood_radius_zyx=(1, 2, 2)),
     decoding=WtaDecoderConfig(),
@@ -27,18 +27,19 @@ fov.save_spots()  # unchanged goodSpots filename, 1-based XYZ
 Load the dataset codebook before decoding. None disables a stage. The sequence is
 load, rotation, the steps of the preprocessing recipe (`preprocessing`, a
 {py:class}`~starfinder.preprocessing.PreprocessingRecipe`) in their declared
-order, ordered registration, the recipe's `post_registration` steps, detection,
+order, the registration recipe (`registration`, a
+{py:class}`~starfinder.dataset.RegistrationRecipe`), the preprocessing recipe's
+`post_registration` steps, detection,
 extraction, decoding and filtering. `post_registration` accepts only
 reconstruction, which legacy subtile workflows place after registration. The
 pipeline never projects; projection is an output view. Histogram matching uses
 a copy of the reference round's configured channel taken as it enters that step,
 retained until every moving round has passed it. Steps with `save_as` keep named
-snapshots (`FOV.snapshots`). Registration builds its signals from the recipe's
-`registration_source` snapshot, or the detection image by default, and applies
-each registration step's transform to the moving round's detection image and to
-every one of its snapshots, so they stay aligned; the reference round is not
-transformed. Extraction reads the `extraction_source` snapshot, or the detection
-image by default. Both execution modes use this
+snapshots (`FOV.snapshots`). Registration builds its signals from the
+preprocessing recipe's `registration_source` snapshot, or the detection image by
+default; see "Registration recipe" below. Extraction reads the
+`extraction_source` snapshot, or the detection image by default. Both execution
+modes use this
 sequence and the same operation configs; see {doc}`preprocessing-contract`.
 Batch preloads and retains rounds. Streaming releases moving images after their
 last use unless `retain_images=True`; subtile creation requires retention.
@@ -52,6 +53,47 @@ mean alignment. Crops retain physical geometry and source mappings. Subtile file
 carry dataset/sample/FOV, round/channel labels and subtile IDs; incompatible
 reload identities are rejected. Each rectangular axis is partitioned separately,
 including remainder pixels. These Python changes do not alter MATLAB tiling.
+
+## Registration recipe
+
+A {py:class}`~starfinder.dataset.RegistrationRecipe` is zero or more global steps
+(`translation`, `rigid`, `affine`) followed by at most one local step (`demons`,
+`bspline`, `tps`, `cpd`), as specified in {doc}`registration-contract`. For
+each moving round, `FOV.register` (which `run` calls):
+
+1. builds a float64 ZYX signal per round with the recipe's
+   {py:class}`~starfinder.registration.RegistrationSignalConfig` (default: the
+   channel maximum; `sum`; or one `channel` per round, by index or label), or
+   with a step's own `signal`;
+2. estimates step k on the moving signal resampled in float64 through steps 1
+   to k−1 (the reference signal is not resampled), runs
+   `registration_qc` on the result and raises `RegistrationRejectedError` when
+   a criterion of `recipe.qc` fails (none is set by default);
+3. composes the step transforms into one
+   {py:class}`~starfinder.registration.TransformChain`
+   (`Φ(p) = T₁(T₂(…Tₙ(p)))`) and resamples the round's detection image and every
+   one of its snapshots once, each from its pre-registration array. A chain of
+   translations uses the exact translation path; any other chain is sampled
+   linearly with SciPy, plane by plane, unless `recipe.warp` selects another
+   policy. Integer outputs are rounded once.
+
+The reference round is not transformed. `registration_results[round]` keeps the
+step results (their `application_config` is the round's one `WarpConfig`),
+`registration_chains[round]` the chain, and `registration_record` the recipe
+summary, the `WarpConfig` applied per round and the semantics (`recipe`; a
+loaded version-1 checkpoint is `sequential`). A round is registered once.
+
+```python
+from starfinder.dataset import RegistrationRecipe, RegistrationStep
+from starfinder.registration import DemonsConfig, RegistrationSignalConfig, TranslationConfig
+
+recipe = RegistrationRecipe(
+    (RegistrationStep(TranslationConfig()), RegistrationStep(DemonsConfig())),
+    signal=RegistrationSignalConfig("channel", reference_channel="ch00"),
+)
+fov.register(recipe)
+fov.registration_chains["round2"].pull_field()  # composite pull displacement, float64
+```
 
 (inspecting-results)=
 ## Summaries and results by stage
@@ -103,10 +145,10 @@ list(fov.results)  # stages that have run, in pipeline order
 | `all_layers`, `to_register` | `all_rounds`, `moving_rounds` |
 | `STARMapDataset.from_config(config)` | `from_workflow_config(config, rule).dataset` |
 | `load_raw_images`, `enhance_contrast`, `hist_equalize`, `morph_recon`, `tophat` | `load_images`, `normalize_intensity`, `match_histogram`, `reconstruct_background`, `filter_tophat` |
-| `global_registration()`, `local_registration(method=...)` | `register(RegistrationStep(TranslationConfig()))`, `register(RegistrationStep(TpsConfig(), "single-channel", "single-channel"))` |
+| `global_registration()`, `local_registration(method=...)` | `register(RegistrationRecipe((RegistrationStep(TranslationConfig()),)))`, `register(RegistrationRecipe((RegistrationStep(TpsConfig()),), signal=RegistrationSignalConfig("channel", 0)))` |
 | `run_streaming(...)`, `run_streaming_gr(...)` | `run(config, execution=ExecutionConfig("streaming"))` |
 | `all_spots`, `good_spots` | `spot_result`, `intensity_result`, `decoding_result`, `filtering_result.accepted` |
-| `global_shifts`, `local_registered` | `registration_results`, `registration_attempts`, keyed by round |
+| `global_shifts`, `local_registered` | `registration_results`, `registration_chains`, `registration_attempts`, keyed by round |
 | `save_signal`, `save_ref_merged`, `save_log`, `save_score_log` | `save_spots`, `save_reference_image`, `save_processing_log`, `save_diagnostics` |
 
 FOV remains FOV. Path construction and logging helpers are private. No replaced
@@ -124,15 +166,22 @@ Recovery is disabled by default. For an explicitly recoverable landmark failure:
 
 ```python
 from starfinder.dataset import RecoveryConfig
-from starfinder.registration import TpsConfig, InsufficientLandmarksError
+from starfinder.registration import DemonsConfig, TpsConfig, InsufficientLandmarksError
 step = RegistrationStep(
     TpsConfig(),
-    recovery=RecoveryConfig((InsufficientLandmarksError,), (TranslationConfig(),)),
+    recovery=RecoveryConfig((InsufficientLandmarksError,), (DemonsConfig(),)),
 )
 ```
 
-Every attempt records requested method, actual method, effective config, outcome
-and failure. Only listed estimation errors trigger ordered alternatives. Invalid
+An alternative must have its step's kind (global or local). Every estimation
+attempt records `record="estimation"`, the step index, the attempt number,
+requested and actual method, `fallback`, the backend that ran and its versions,
+the reference round, the effective config, the outcome (`failed`, `rejected` or
+`succeeded`), the failure (with the QC criterion for `rejected`) and, once
+estimated, the step's `qc`. After the last step the round gets one
+`record="application"` entry with its outcome, `application_config`, failure
+and the whole chain's `qc`. Only listed estimation errors trigger ordered
+alternatives; `RegistrationRejectedError` is an estimation error. Invalid
 parameters, incompatible geometry, unavailable dependencies and application
 errors propagate. A recovered result is labeled with its actual method.
 
@@ -149,9 +198,10 @@ candidates with signals and pre-QC decoding per FOV, plus a `run.json` record.
 `load_checkpoint(stage)` restores a stage so that a later `run` can continue
 without earlier steps. See [checkpoints](checkpoints.md).
 
-Two intentional corrections accompany coordination: merged registration images
-sum in float64 to preserve signed/high-range values, and rectangular subtiles
-cover both axes and remainder pixels. Stage flags/parameters now apply equally
+Two intentional corrections accompany coordination: registration signals are
+float64 (the channel maximum by default, the sum with `mode="sum"`), which
+preserves signed/high-range values, and rectangular subtiles cover both axes
+and remainder pixels. Stage flags/parameters now apply equally
 to batch and streaming; this can change results from legacy streaming recipes
 that silently forced or omitted operations. Tests establish software behavior,
 not scientific validation. MATLAB execution and historical notebook reruns are

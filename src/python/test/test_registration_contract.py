@@ -1,4 +1,4 @@
-from starfinder.dataset import RegistrationStep
+from starfinder.dataset import RegistrationRecipe, RegistrationStep
 """Bounded shared registration contracts; no scientific benchmark execution."""
 
 import importlib.util
@@ -235,7 +235,7 @@ def test_fov_cpd_defaults_and_no_fallback(tmp_path, monkeypatch):
 
     monkeypatch.setattr(registration, "estimate_transform", fail)
     with pytest.raises(InsufficientLandmarksError):
-        fov.register(RegistrationStep(CpdConfig(detection_noise_sigma=3, grid_spacing_voxels=32)))
+        fov.register(RegistrationRecipe((RegistrationStep(CpdConfig(detection_noise_sigma=3, grid_spacing_voxels=32)),)))
     assert len(calls) == 1
     assert isinstance(calls[0], CpdConfig)
     assert calls[0].detection_noise_sigma == 3

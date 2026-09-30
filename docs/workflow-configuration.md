@@ -117,9 +117,10 @@ is specifically for the Python batch/direct wrapper.
 | `morph_recon` | boolean `run`, integer `radius` >=1 | Python default radius 3; used in direct/GR and subtile processing, also supported in deep creation |
 | `tophat` | boolean `run`, integer `radius` >=1 | Python rules only: white top-hat per XY slice, default radius 3, the last preprocessing step before registration; with `enhance_contrast`, `hist_equalize` and `morph_recon` it forms recipe 1 of the [preprocessing contract](preprocessing-contract.md); no MATLAB counterpart key |
 | `preprocessing` | `steps` (list; each with `method`, a step name, its config fields and optional `save_as`), optional `extraction_source`, `registration_source`, `supplied_statistics` | Python rules only (the schema rejects it unless `backend: python`): an explicit [preprocessing recipe](#explicit-preprocessing-recipe) that replaces `enhance_contrast`, `hist_equalize`, `morph_recon`, `tophat` and `snr_threshold`, which must then be absent |
-| `global_registration` | boolean `run`, string `ref_round`, `ref_img`/`mov_img` in `merged-image`,`single-channel` | Python default image modes are merged; Python requires this block's reference to match top-level `ref_round`; MATLAB wrappers pass the block reference; MATLAB deep uses scale 0.25 |
+| `registration` | `steps` (list; each with `method`, a registered method name, its config fields and optional `recovery` and `signal`), optional `signal`, `warp`, `qc`, `reference_round` | Python rules only (the schema rejects it unless `backend: python`): an explicit [registration recipe](#explicit-registration-recipe); rejected together with an enabled `global_registration` or `local_registration` |
+| `global_registration` | boolean `run`, string `ref_round`, `ref_img`/`mov_img` in `merged-image`,`single-channel` | Python: the recipe's global step (default `translation`); `merged-image` is the channel maximum, as in MATLAB; `ref_img` and `mov_img` must agree; this block's reference must match top-level `ref_round`; MATLAB wrappers pass the block reference; MATLAB deep uses scale 0.25 |
 | `create_subtiles` | boolean `run`, integer `sqrt_pieces` >=1 | Grid default 4; only GR/deep creation rules produce subtile files; Python creation scripts call splitting unconditionally |
-| `local_registration` | boolean `run`, string `ref_round`, method `demons`,`tps`,`cpd` (schema default `demons`) | Python translates supported method-specific settings; demons needs optional SimpleITK; MATLAB wrappers do not forward `method`; deep subtile does not perform local registration |
+| `local_registration` | boolean `run`, string `ref_round`, method `demons`,`bspline`,`tps`,`cpd` or the demons variants `diffeomorphic`,`symmetric`,`fast_symmetric` (schema default `demons`); Python-only `ref_img`/`mov_img` | Python: the recipe's local step, after the global one; translates supported method-specific settings; `ref_img`/`mov_img` default to `merged-image` (the channel maximum); `boundary_mode` must agree with the global block (one final resampling); demons needs optional SimpleITK, B-spline the `registration-elastix` extra; MATLAB wrappers do not forward `method`; deep subtile does not perform local registration |
 | `spot_finding` | boolean `run`, string `ref_round`, nonnegative numeric `intensity_threshold`, mode `local`,`global`,`noise`,`adaptive`,`adaptive_round` | Python wrappers default mode to `noise` but require a threshold when used; pass both explicitly. `local` is schema-accepted but unsupported by Python detector; MATLAB supports adaptive/global only |
 | `load_codebook` | boolean `run`, integer-array `split_index` | Python wrappers load unconditionally, turn missing/empty split into None; MATLAB respects `run` |
 | `reads_extraction` | boolean `run`, exactly three integers >=1 in `voxel_size` | Pixel half-widths, Python `(z,y,x)` versus MATLAB `(row,column,z)`; e.g. `[1,2,2]` versus `[2,2,1]`, not physical microns |
@@ -136,8 +137,13 @@ MATLAB configuration does not enable the Python detector.
 `FOV.run(PipelineConfig, execution=ExecutionConfig(...))` sequence as batch.
 Every enabled/disabled stage and its supported settings follow the same path.
 Creation jobs explicitly retain processed images for subtile export, so streaming
-creation does not imply bounded total resident image memory. Local registration
-settings are translated to typed method configs (including TPS/CPD controls).
+creation does not imply bounded total resident image memory. The enabled
+`global_registration` and `local_registration` blocks become one
+`RegistrationRecipe` (global step, then local step); a method whose kind does
+not match its block is rejected, and so is a recovery alternative of another
+kind. Local registration settings are translated to typed method configs
+(including TPS/CPD controls). When the two blocks name different signals, the
+global block's is the recipe signal and the local step keeps its own.
 Unknown Python rule parameters and conflicting reference rounds raise early;
 shared MATLAB keys remain unchanged. See [coordination](coordination.md).
 
@@ -173,6 +179,36 @@ and registration use the normalized image; extraction reads `bg_corrected`.
 ```
 
 {download}`Download the recipe-2 YAML <examples/workflow-recipe-2.yaml>`.
+
+## Explicit registration recipe
+
+The Python-only `registration` parameter of the five Python rules declares a
+registration recipe explicitly, as specified in the
+[registration contract](registration-contract.md#python-only-key). Each entry
+of `steps` names a method by its registered name (`translation`, `rigid`,
+`affine`, `bspline`, `demons`, `tps` or `cpd`; the demons variants are the
+`variant` field of `demons`). Its other keys are the fields of that method's
+config class, plus an optional `recovery` (`allowed_errors`, and
+`alternatives` naming methods of the step's kind) and an optional per-step
+`signal`. YAML lists become tuples. `signal` (`mode`: `max`, the default,
+`sum` or `channel` with `reference_channel` and `moving_channel`, an index or
+a channel label), `warp` (the `WarpConfig` of the one final resampling;
+omitted, it is derived from the transforms) and `qc` (the
+`RegistrationQcConfig` rejection criteria; none by default) configure the
+recipe. The steps must be zero or more global steps followed by at most one
+local step. An unknown method, field or sequence raises, and so does combining
+the key with an enabled `global_registration` or `local_registration`.
+MATLAB keys and behaviour are unchanged.
+
+```yaml
+registration:
+  signal: {mode: max}
+  steps:
+    - method: translation
+    - method: affine
+    - method: bspline
+      recovery: {allowed_errors: [RegistrationEstimationError], alternatives: [{method: demons}]}
+```
 
 ## Downstream parameter blocks
 

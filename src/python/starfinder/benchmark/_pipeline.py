@@ -70,14 +70,16 @@ def _process_pipeline(case, root, directory, trial):
         try:
             fov.run(adapted.pipeline, execution=adapted.execution)
         finally:
+            # Estimation attempts only; the per-round application entries stay in pipeline.json.
             trial.attempts = [dict(round=round_name, **attempt)
-                for round_name, attempts in fov.registration_attempts.items() for attempt in attempts]
+                for round_name, attempts in fov.registration_attempts.items() for attempt in attempts
+                if attempt.get('record') != 'application']
         for round_name, results in fov.registration_results.items():
             for index, result in enumerate(results):
                 _save_transform(root, directory, f'transform-{round_name}-{index}', result, trial.artifacts)
         trial.actual_method = 'pipeline'
         effective = asdict(adapted.pipeline)
-        for step in effective['registration']:
+        for step in (effective['registration'] or {}).get('steps', []):
             if step['recovery']:
                 step['recovery']['allowed_errors'] = [e.__name__ for e in step['recovery']['allowed_errors']]
         trial.effective_configs = {**case.config, 'pipeline': effective,
@@ -94,7 +96,8 @@ def _process_pipeline(case, root, directory, trial):
             'spot_namespace': fov.spot_result.spot_namespace,
             'retained_rounds': list(fov.images), 'registration_attempts': fov.registration_attempts})
         trial.artifacts['pipeline'] = _reference(root, directory / 'pipeline.json')
-        trial.status['processing'] = ('fallback_success' if any(a['outcome'] == 'failed' for a in trial.attempts) else 'success')
+        trial.status['processing'] = ('fallback_success' if any(a['outcome'] in ('failed', 'rejected') for a in trial.attempts)
+                                      else 'success')
 
 
 def _evaluate_pipeline(root, trial):

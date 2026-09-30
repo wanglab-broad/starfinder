@@ -178,7 +178,7 @@ def test_rsf_single_fov_script_writes_the_detection_view(tmp_path, maximum_proje
     runpy.run_path(str(ROOT / 'workflow' / 'scripts' / 'rsf_single_fov.py'), init_globals={'snakemake': snakemake})
     adapted = from_workflow_config(config)
     fov = adapted.dataset.fov('FOV')
-    fov.run(replace(adapted.pipeline, registration=(), detection=None, extraction=None, decoding=None, filtering=None))
+    fov.run(replace(adapted.pipeline, registration=None, detection=None, extraction=None, decoding=None, filtering=None))
     expected = fov.images['round1'][..., 2]
     expected = expected.max(axis=0) if maximum_projection else expected
     saved, axes = read_back(fov.paths.ref_merged_tif)

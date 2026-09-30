@@ -12,6 +12,7 @@ from ._errors import (
     RegistrationEstimationError,
     UnsupportedTransformOperationError,
 )
+from ._chain import TransformChain, resample
 from ._methods import REGISTRATION_METHODS, RegistrationConfig, _check_shape
 from ._resampling import _cast_warp_output, _output_dtype, apply_tps_deformation
 from ._types import (
@@ -75,7 +76,7 @@ def estimate_transform(
 
 def apply_transform(
     moving_image: np.ndarray,
-    transform: TranslationTransform | AffineTransform | BSplineTransform | DenseDisplacementTransform,
+    transform: TranslationTransform | AffineTransform | BSplineTransform | DenseDisplacementTransform | TransformChain,
     *,
     config: WarpConfig,
 ) -> np.ndarray:
@@ -85,11 +86,16 @@ def apply_transform(
     order and input dtype by default. Translations stay compact; SciPy uses
     slice-sized coordinate arrays; SimpleITK prepares one field/resampler.
     Affine and B-spline transforms are applied through their dense() pull
-    field with the scipy or simpleitk backend.
+    field with the scipy or simpleitk backend. A TransformChain is resampled
+    once at its composite pull points: a chain of translations with the
+    translation backend (its summed correction), any other chain with scipy
+    (linear, plane by plane) or simpleitk (its pull_field()).
     """
     if not isinstance(config, WarpConfig):
         raise InvalidRegistrationConfigError("expected WarpConfig")
     image = _validate_image(moving_image)
+    if isinstance(transform, TransformChain):
+        return resample([image], transform, config)[0]
     if not isinstance(transform, (TranslationTransform, AffineTransform, BSplineTransform,
                                   DenseDisplacementTransform)):
         raise UnsupportedTransformOperationError("unsupported transform type")

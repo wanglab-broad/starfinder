@@ -253,6 +253,37 @@ spot CSVs still use `gene` and `color_seq`.
 `formed.csv` files written before this change carry `codeword` and are not
 supported; regenerate them.
 
+### Registration recipe
+
+`PipelineConfig.registration` is a
+{py:class}`~starfinder.dataset.RegistrationRecipe` or `None` (no registration),
+not a tuple of steps, as specified in the
+[registration contract](registration-contract.md). `FOV.register` takes a
+recipe too. There are no aliases.
+
+| Before | After |
+| --- | --- |
+| `PipelineConfig(registration=(RegistrationStep(...), ...))` | `PipelineConfig(registration=RegistrationRecipe(steps=(RegistrationStep(...), ...)))` |
+| `PipelineConfig(registration=())` | `PipelineConfig(registration=None)` (the default) |
+| `fov.register(RegistrationStep(TranslationConfig()))` | `fov.register(RegistrationRecipe((RegistrationStep(TranslationConfig()),)))` |
+| `RegistrationStep(config, reference_image, moving_image, reference_channel, recovery, warp)` | `RegistrationStep(config, recovery, signal)` |
+| `reference_image`, `moving_image` = `"merged"` | `RegistrationSignalConfig(mode="max")` on the recipe (see the signal change below); `mode="sum"` keeps the earlier sum |
+| `reference_image`, `moving_image` = `"single-channel"`, `reference_channel=c` | `RegistrationSignalConfig(mode="channel", reference_channel=c)`; a channel label is accepted too |
+| `RegistrationStep.warp` | `RegistrationRecipe.warp`, one final resampling per moving round (`None` derives it) |
+| per-step `RegistrationResult.application_config` in `FOV` | the round's one `WarpConfig`, also in `FOV.registration_record["application"]` |
+
+A recipe is zero or more global steps (`translation`, `rigid`, `affine`) followed
+by at most one local step (`demons`, `bspline`, `tps`, `cpd`); a recovery
+alternative must have its step's kind, so a TPS step can no longer fall back to
+translation. `FOV.registration_chains` holds each moving round's
+{py:class}`~starfinder.registration.TransformChain`, and
+`FOV.registration_attempts[round]` gains the estimation fields (`record`,
+`step`, `attempt`, `fallback`, `backend`, `backend_versions`, `reference`,
+`qc`) and one `application` entry per round. `run.json` keeps
+`format_version` 1; its `config.pipeline.registration` holds the recipe's
+fields. In the workflow, the Python-only `registration` key declares a recipe;
+see [workflow configuration](workflow-configuration.md).
+
 ### Save and reload pipeline checkpoints
 
 An earlier development branch had an artifact and provenance contract with
@@ -273,6 +304,20 @@ requested, and the location is `<output_root>/checkpoints/<fov_id>/`. Spot
 identity, input SHA-256 hashes, atomic writes and reruns of decoding or
 filtering without images are kept. See [checkpoints](checkpoints.md).
 
+### Registered checkpoints version 2
+
+The checkpoint `FORMAT_VERSION` is 2 for the three stages. A registered
+checkpoint stores the new kinds `affine` (the 4×4 index matrix and the physical
+parameters, inline) and `bspline` (the grid inline, the coefficients in
+`<round>_field.npz`), the step index of each result, one `applications` entry
+per round with its `WarpConfig` instead of a per-result `application_config`,
+and the recipe summary. Reloading rebuilds a `TransformChain` per round;
+applying it to the pre-registration images reproduces the registered images
+bit for bit. Version-1 checkpoints still load: their translation and dense
+results keep their per-result `application_config`, no chain is built, and
+`registration_record["semantics"]` is `"sequential"`. Nothing converts them.
+See [checkpoints](checkpoints.md).
+
 ### New registration methods and Z=1 demons
 
 `RigidConfig`, `AffineConfig` and `BSplineConfig` are registered in
@@ -286,6 +331,11 @@ rejecting Z=1 with `IncompatibleGeometryError` now get a field of shape
 `RegistrationDiagnostics` gains optional fields (`final_metric_value`,
 `stop_condition`, `elapsed_iterations`, `final_rms_change`, `backend_versions`,
 `backend_parameters`, `spacing_source`), all `None` unless a method records them.
+`REGISTRATION_METHODS` maps each exact config type to its method; subclasses of
+a registered config are not accepted anywhere. A step that fails a configured
+routine QC criterion (`RegistrationRecipe.qc`, nothing by default) raises
+`RegistrationRejectedError`, a `RegistrationEstimationError` that recovery may
+allow.
 
 ## Intentional behavior changes — not mechanical equivalence
 
@@ -296,7 +346,9 @@ rejecting Z=1 with `IncompatibleGeometryError` now get a field of shape
 | Translation | Singleton axes return zero; odd-length peak wrapping is corrected. Signed fractional Fourier output uses the real inverse FFT rather than magnitude. Even half-period backend signs and Nyquist behavior are documented rather than hidden. |
 | Transform application | Integer output rounds once with nearest-even ties and saturation; floating output retains signed interpolation/overshoot. No silent method fallback; unsupported geometry/backend/dimensions fail explicitly. |
 | Barcodes | Validate codebook collisions and label alignment; neighborhoods use explicit ZYX radii and subpixel/boundary policy. Preserve ambiguous/unmatched/rejected identities instead of dropping them. Scores and endpoint filtering have explicit meanings. |
-| Coordination | Merged registration images sum in float64. Rectangular subtiles cover both axes and remainders. Batch/streaming honor the same stage flags, unlike legacy forced/omitted stages. |
+| Coordination | Rectangular subtiles cover both axes and remainders. Batch/streaming honor the same stage flags, unlike legacy forced/omitted stages. |
+| Registration signal | `merged` and `merged-image` mean the channel maximum, as in MATLAB, not the float64 channel sum; the default `RegistrationSignalConfig` is `mode="max"`, and the workflow's local `ref_img`/`mov_img` default is `merged-image`, not `single-channel`. Use `mode="sum"` for the earlier Python behavior. Different `ref_img` and `mov_img` in one block are rejected. |
+| Registration resampling | A multi-step recipe composes its steps into one pull map and resamples each image of a moving round once from its pre-registration array (linear SciPy by default). Results differ from the earlier per-step resampling at the boundary, where an intermediate image had been sampled outside its grid, and by integer rounding; an integer translation no longer rounds a later step. The registration golden test re-pins the translation → demons image for this reason. |
 | Synthetic | One formed-scene generator with keyed SHA-256/PCG64 streams: byte-repeatable across processes for a pinned NumPy build on the same CPU, but every image and truth record differs from the historical generator. Appearance defaults are uncalibrated and do not establish molecular truth. |
 | Evaluation | Centered NCC has no epsilon bias. Missing/failed shifts, zero denominators and constant images are undefined rather than zero/passing. Shift errors preserve floats; matching thresholds/policies are explicit. |
 | Benchmark / recipes | Failures retain requested/actual method identity. Evaluation/reporting reuse saved artifacts. Optional legacy experiments remain recipes with prerequisites, not validated research results. |

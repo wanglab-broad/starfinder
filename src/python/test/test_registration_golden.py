@@ -42,14 +42,16 @@ def registration_config(methods, *, signal="merged", demons_iterations=None):
     the defaults of each config; demons_iterations=None keeps the DemonsConfig
     default, so a changed default changes the pinned digests.
     """
-    from starfinder.dataset import PipelineConfig, RegistrationStep
-    from starfinder.registration import DemonsConfig, TranslationConfig
+    from starfinder.dataset import PipelineConfig, RegistrationRecipe, RegistrationStep
+    from starfinder.registration import DemonsConfig, RegistrationSignalConfig, TranslationConfig
 
     configs = {"translation": lambda: TranslationConfig(),
                "demons": lambda: (DemonsConfig() if demons_iterations is None
                                   else DemonsConfig(iterations=tuple(demons_iterations)))}
-    return PipelineConfig(registration=tuple(
-        RegistrationStep(configs[method](), signal, signal, 0) for method in methods))
+    return PipelineConfig(registration=RegistrationRecipe(
+        steps=tuple(RegistrationStep(configs[method]()) for method in methods),
+        signal=RegistrationSignalConfig(mode="sum" if signal == "merged" else "channel",
+                                        reference_channel=None if signal == "merged" else 0)))
 
 
 def _render(rng, centers, channels, amplitudes, gains):
@@ -127,7 +129,9 @@ PINNED_RUNS = {
     },
     ("translation", "demons"): {
         "images": {"round1": PINNED_INPUTS["round1"],
-                   "round2": "6abb8c28e591a5e8260bb50058b5265e45d76da8dd1833de2dd4f2c4b1e8bd06"},
+                   # One final resampling (W-256): re-pin approved by Jiahao in W-246 (2026-09-30), on the operator's
+                   # reading that both W-245 pull points lie one voxel inside their grids (pending his confirmation).
+                   "round2": "aee3f8c33c613371790fdf1e83e9f7431538c6c64b820a75eba735eb5c224697"},
         "transforms": [
             ("translation", (-1.0, -4.0, 2.0)),
             ("demons", "54ff31f9a458cc255f7b4a2d19b9703a6eb6ed9d22b1f3209734f4cb3dc04968"),

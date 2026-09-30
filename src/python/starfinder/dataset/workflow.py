@@ -2,7 +2,7 @@
 from dataclasses import dataclass, fields
 from pathlib import Path
 
-from .config import PipelineConfig, ExecutionConfig, RegistrationStep, RecoveryConfig
+from .config import PipelineConfig, ExecutionConfig, RegistrationRecipe, RegistrationStep, RecoveryConfig
 from .dataset import Dataset
 from .types import RoundState, SubtileConfig
 from starfinder.io import ImageLoadConfig
@@ -10,7 +10,7 @@ from starfinder.preprocessing import (MinMaxNormalizationConfig, HistogramMatchi
     ReconstructionConfig, TophatConfig, ProjectionConfig, PreprocessingRecipe, PreprocessingStep, step_config_type)
 from starfinder._registry import config_type_for
 from starfinder.registration import (REGISTRATION_METHODS, CpdConfig, DemonsConfig, InsufficientLandmarksError,
-    RegistrationEstimationError, WarpConfig)
+    RegistrationEstimationError, RegistrationQcConfig, RegistrationRejectedError, RegistrationSignalConfig, WarpConfig)
 from starfinder.barcode import NeighborhoodSumConfig, ReadFilterConfig, WtaDecoderConfig
 from starfinder.spot_finding import LocalMaximaConfig
 
@@ -20,9 +20,6 @@ _RULES = ('rsf_single_fov', 'gr_single_fov_subtile', 'lrsf_single_fov_subtile',
 _LEGACY_PREPROCESSING = ('enhance_contrast', 'hist_equalize', 'morph_recon', 'tophat', 'snr_threshold')
 # Legacy method names: the demons variants select method demons with that variant.
 _DEMONS_VARIANTS = ('diffeomorphic', 'symmetric', 'fast_symmetric')
-# Application backend of a legacy boundary_mode by transform kind (demons keeps SimpleITK),
-# until the recipe's single final resampling replaces per-step warps.
-_WARP_BACKENDS = {'translation': 'translation', 'dense': 'scipy'}
 
 
 def _known(values, allowed, context):
@@ -41,16 +38,37 @@ def _operation(params, name, allowed):
     return {k: v for k, v in values.items() if k != 'run'}, values.get('run', False)
 
 
+_RECOVERY_ERRORS = {'InsufficientLandmarksError': InsufficientLandmarksError,
+                    'RegistrationEstimationError': RegistrationEstimationError,
+                    'RegistrationRejectedError': RegistrationRejectedError}
+# Legacy image representations: merged (either spelling) is the channel maximum, as in MATLAB.
+_SIGNAL_MODES = {'merged-image': 'max', 'merged': 'max', 'single-channel': 'channel'}
+
+
+def _recovery(values, alternative):
+    """RecoveryConfig from a recovery mapping; alternative(entry) builds one alternative config."""
+    if not isinstance(values, dict):
+        raise TypeError('recovery must be a mapping')
+    _known(values, ('allowed_errors', 'alternatives'), 'recovery')
+    try:
+        allowed = tuple(_RECOVERY_ERRORS[e] for e in values['allowed_errors'])
+    except KeyError as error:
+        raise ValueError('invalid recovery error category') from error
+    return RecoveryConfig(allowed, tuple(alternative(entry) for entry in values['alternatives']))
+
+
 def _registration(values, *, local=False):
+    """One legacy block: (config, signal, boundary_mode, recovery) of its registration step."""
     values = dict(values)
     method = values.pop('method', 'demons' if local else 'translation')
-    mode = lambda v: {'merged-image': 'merged', 'merged': 'merged', 'single-channel': 'single-channel'}[v]
-    try:
-        reference = mode(values.pop('ref_img', 'single-channel' if local else 'merged-image'))
-        moving = mode(values.pop('mov_img', 'single-channel' if local else 'merged-image'))
-    except KeyError as error:
-        raise ValueError('unknown registration image representation') from error
+    ref_img, mov_img = values.pop('ref_img', 'merged-image'), values.pop('mov_img', 'merged-image')
+    if ref_img not in _SIGNAL_MODES or mov_img not in _SIGNAL_MODES:
+        raise ValueError('unknown registration image representation')
+    if _SIGNAL_MODES[ref_img] != _SIGNAL_MODES[mov_img]:
+        raise ValueError(f'ref_img {ref_img!r} and mov_img {mov_img!r} differ; one registration signal is used for both rounds')
     channel = values.pop('ref_channel', 0)
+    signal = (RegistrationSignalConfig('channel', channel) if _SIGNAL_MODES[ref_img] == 'channel'
+              else RegistrationSignalConfig('max'))
     boundary = values.pop('boundary_mode', None)
     recovery_values = values.pop('recovery', None)
     mapping = {'detection_threshold': 'detection_noise_sigma', 'match_distance': 'match_distance_voxels',
@@ -65,6 +83,9 @@ def _registration(values, *, local=False):
         translated[target] = value
     config_type = config_type_for(REGISTRATION_METHODS, 'demons' if method in _DEMONS_VARIANTS else method,
                                   'registration method', message=f'unknown registration method {method}')
+    block = 'local' if local else 'global'
+    if REGISTRATION_METHODS[config_type].step_kind != block:
+        raise ValueError(f'{method} is not a {block} registration method')
     if config_type is CpdConfig:
         translated.setdefault('detection_noise_sigma', 3.0)
         translated.setdefault('grid_spacing_voxels', 32)
@@ -76,25 +97,76 @@ def _registration(values, *, local=False):
         config = config_type(**translated)
     recovery = None
     if recovery_values is not None:
-        _known(recovery_values, ('allowed_errors', 'alternatives'), 'recovery')
-        errors = {'InsufficientLandmarksError': InsufficientLandmarksError, 'RegistrationEstimationError': RegistrationEstimationError}
-        try:
-            allowed = tuple(errors[e] for e in recovery_values['allowed_errors'])
-        except KeyError as error:
-            raise ValueError('invalid recovery error category') from error
-        alternatives = []
-        for alternative in recovery_values['alternatives']:
+        def alternative(entry):
             # Alternatives configure estimators only; no hidden warp/reduction policy.
-            if set(alternative) & {'recovery', 'boundary_mode', 'ref_img', 'mov_img', 'ref_channel'}:
+            if set(entry) & {'recovery', 'boundary_mode', 'ref_img', 'mov_img', 'ref_channel'}:
                 raise ValueError('recovery alternatives configure estimators only')
-            alternatives.append(_registration(alternative, local=local).config)
-        recovery = RecoveryConfig(allowed, tuple(alternatives))
-    warp = None
-    if boundary is not None:
-        kind = REGISTRATION_METHODS[config_type].transform_kind
-        backend = 'simpleitk' if config_type is DemonsConfig else _WARP_BACKENDS[kind]
-        warp = WarpConfig(backend=backend, boundary_mode=boundary)
-    return RegistrationStep(config, reference, moving, channel, recovery, warp)
+            return _registration(entry, local=local)[0]
+        recovery = _recovery(recovery_values, alternative)
+    return config, signal, boundary, recovery
+
+
+def _legacy_registration(blocks):
+    """The recipe of the enabled legacy blocks, global then local; None when neither runs.
+
+    The first block's signal is the recipe signal and a different one becomes
+    the other step's own signal. The blocks' boundary_mode is the recipe's one
+    final resampling, so different values are rejected; nearest selects the
+    SciPy backend, and constant (or none) keeps the derived default.
+    """
+    if not blocks:
+        return None
+    steps = [_registration(values, local=local) for values, local in blocks]
+    boundaries = {boundary for _, _, boundary, _ in steps if boundary is not None}
+    if len(boundaries) > 1:
+        raise ValueError(f'boundary_mode differs between the registration blocks: {sorted(boundaries)}')
+    boundary = boundaries.pop() if boundaries else None
+    signal = steps[0][1]
+    warp = None if boundary in (None, 'constant') else WarpConfig(backend='scipy', boundary_mode=boundary)
+    return RegistrationRecipe(tuple(RegistrationStep(config, recovery, None if own == signal else own)
+                                    for config, own, _, recovery in steps), signal=signal, warp=warp)
+
+
+def _registration_step(entry):
+    """One step of the Python-only registration key: a method name, its config fields, recovery and signal."""
+    if not isinstance(entry, dict) or 'method' not in entry:
+        raise ValueError('each registration step must be a mapping with a method')
+    entry = dict(entry)
+    config_type = config_type_for(REGISTRATION_METHODS, entry.pop('method'), 'registration method')
+    recovery, signal = entry.pop('recovery', None), entry.pop('signal', None)
+    _known(entry, [f.name for f in fields(config_type) if f.init], f'registration step {config_type.__name__}')
+    config = config_type(**{k: _tuples(v) for k, v in entry.items()})
+
+    def alternative(values):
+        if isinstance(values, dict) and set(values) & {'recovery', 'signal'}:
+            raise ValueError('recovery alternatives configure estimators only')
+        return _registration_step(values).config
+    return RegistrationStep(config, None if recovery is None else _recovery(recovery, alternative),
+                            None if signal is None else _typed(RegistrationSignalConfig, signal, 'registration signal'))
+
+
+def _typed(cls, values, context):
+    if not isinstance(values, dict):
+        raise TypeError(f'{context} must be a mapping')
+    _known(values, [f.name for f in fields(cls) if f.init], context)
+    return cls(**{k: _tuples(v) for k, v in values.items()})
+
+
+def _explicit_registration(values):
+    """Recipe from the Python-only registration key: steps named by their REGISTRATION_METHODS names,
+    plus the recipe's signal, warp, qc and reference_round.
+    """
+    if not isinstance(values, dict):
+        raise TypeError('registration must be a mapping')
+    _known(values, ('steps', 'signal', 'warp', 'qc', 'reference_round'), 'registration')
+    if not isinstance(values.get('steps'), list):
+        raise ValueError('registration.steps must be a list')
+    options = {}
+    for name, cls in (('signal', RegistrationSignalConfig), ('warp', WarpConfig), ('qc', RegistrationQcConfig)):
+        if values.get(name) is not None:
+            options[name] = _typed(cls, values[name], f'registration {name}')
+    return RegistrationRecipe(tuple(map(_registration_step, values['steps'])),
+                              reference_round=values.get('reference_round'), **options)
 
 
 def _legacy_recipe(params, norm, do_norm, hist, do_hist, morph, do_morph, top, do_top, resident):
@@ -170,7 +242,11 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
     Unknown fields in this Python rule's parameters raise instead of disappearing.
     The Python-only preprocessing key declares an explicit recipe and is
     mutually exclusive with the legacy keys enhance_contrast, hist_equalize,
-    morph_recon, tophat and snr_threshold, which map to recipe 1.
+    morph_recon, tophat and snr_threshold, which map to recipe 1. The
+    Python-only registration key declares a RegistrationRecipe and is
+    mutually exclusive with an enabled global_registration or
+    local_registration; those legacy blocks map to one recipe (global step,
+    then local step; merged-image is the channel maximum).
     Direct Python callers construct Dataset/PipelineConfig (no legacy aliases).
     """
     if rule not in _RULES:
@@ -190,7 +266,7 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
         channel_order=channels, fov_pattern=config.get('fov_id_pattern', 'Position%03d'))
     params = config.get('rules', {}).get(rule, {}).get('parameters', {})
     _known(params, ('streaming', 'snr_threshold', 'load_codebook', 'load_raw_images', 'enhance_contrast',
-        'hist_equalize', 'morph_recon', 'tophat', 'preprocessing', 'global_registration', 'local_registration',
+        'hist_equalize', 'morph_recon', 'tophat', 'preprocessing', 'registration', 'global_registration', 'local_registration',
         'spot_finding', 'reads_extraction', 'reads_filtration', 'create_subtiles'), 'Python workflow parameter')
     legacy = [key for key in _LEGACY_PREPROCESSING if key in params]
     if 'preprocessing' in params and legacy:
@@ -204,24 +280,30 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
     filt, do_filter = _operation(params, 'reads_filtration', ('end_base', 'start_base', 'exclude_invalid_endpoints', 'score_bounds', 'n_barcode_segments', 'split_index'))
     book, _ = _operation(params, 'load_codebook', ('split_index',))
     load, do_load = _operation(params, 'load_raw_images', ('subdir',))
-    steps = []
     registration_keys = {f.name for cls in REGISTRATION_METHODS for f in fields(cls) if f.init}
     registration_keys |= {'ref_round', 'method', 'ref_img', 'mov_img', 'ref_channel', 'boundary_mode', 'recovery',
         'detection_threshold', 'match_distance', 'tps_smoothing', 'grid_spacing', 'beta', 'lmbda', 'cpd_w', 'candidate_radius', 'k_neighbors'}
-    enabled_registration = []
+    blocks, enabled_registration = [], []
     for name in ('global_registration', 'local_registration'):
         values, enabled = _operation(params, name, registration_keys)
         if values.pop('ref_round', rounds.reference_round) != rounds.reference_round:
             raise ValueError('rule reference round differs from dataset reference')
         if enabled:
-            steps.append(_registration(values, local=name == 'local_registration'))
+            blocks.append((values, name == 'local_registration'))
             enabled_registration.append(name)
+    if 'registration' in params and enabled_registration:
+        raise ValueError(f'registration is mutually exclusive with the enabled legacy blocks {enabled_registration}')
+    registration = (_explicit_registration(params['registration']) if 'registration' in params
+                    else _legacy_registration(blocks))
+    if registration is not None and registration.reference_round not in (None, rounds.reference_round):
+        raise ValueError('registration reference round differs from dataset reference')
     # ref_merged is what the MATLAB script saves: the reference image of its last
     # registration. Only rsf_single_fov passes ref_img, to global registration;
     # its local registration and the other scripts use the channel maximum.
     reference_view = ('merged', 0)
     if rule == 'rsf_single_fov' and enabled_registration == ['global_registration']:
-        reference_view = (steps[0].reference_image, steps[0].reference_channel)
+        signal = registration.signal
+        reference_view = ('single-channel', signal.reference_channel) if signal.mode == 'channel' else ('merged', 0)
     if spot.get('ref_round', rounds.reference_round) != rounds.reference_round:
         raise ValueError('detection reference differs from dataset reference')
     if filt.get('n_barcode_segments', 1) != 1 or filt.get('split_index') not in (None, []):
@@ -232,7 +314,7 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
     pipeline = PipelineConfig(load=load_config, rotation_degrees=None if resident else config.get('rotate_angle'),
         preprocessing=(_explicit_recipe(params['preprocessing']) if 'preprocessing' in params else
                        _legacy_recipe(params, norm, do_norm, hist, do_hist, morph, do_morph, top, do_top, resident)),
-        registration=tuple(steps),
+        registration=registration,
         detection=LocalMaximaConfig(threshold_mode=spot.get('intensity_estimation', 'noise'), threshold_value=spot.get('intensity_threshold', 5.0), min_distance_voxels=spot.get('min_distance_voxels', spot.get('min_distance', 1))) if do_spot else None,
         extraction=NeighborhoodSumConfig(tuple(extract.get('voxel_size', (1, 2, 2)))) if do_extract else None,
         decoding=WtaDecoderConfig(diagnostics=True) if do_filter else None,

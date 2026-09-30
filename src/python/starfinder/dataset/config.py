@@ -7,23 +7,29 @@ from starfinder._registry import spec_for
 from starfinder.io import ImageLoadConfig
 from starfinder.preprocessing import PreprocessingRecipe
 from starfinder.registration import (REGISTRATION_METHODS, RegistrationEstimationError, InsufficientLandmarksError,
-    WarpConfig)
+    RegistrationQcConfig, RegistrationRejectedError, RegistrationSignalConfig, TranslationConfig, WarpConfig)
 from starfinder.registration._methods import RegistrationConfig
 from starfinder.spot_finding import LocalMaximaConfig
 from starfinder.barcode import (NeighborhoodSumConfig, WtaDecoderConfig,
     CodebookAwareDecoderConfig, ReadFilterConfig)
+
+# Error categories a RecoveryConfig may allow.
+_RECOVERABLE = (RegistrationEstimationError, InsufficientLandmarksError, RegistrationRejectedError)
+
 
 @dataclass(frozen=True)
 class RecoveryConfig:
     """Opt-in ordered alternatives, only for explicitly allowed estimation errors.
 
     Validation, geometry, application and dependency errors never recover.
+    RegistrationRejectedError (a configured QC criterion failed) is an
+    estimation error, so allowing RegistrationEstimationError allows it too.
     """
     allowed_errors: tuple[type[RegistrationEstimationError], ...]
     alternatives: tuple[RegistrationConfig, ...]
 
     def __post_init__(self):
-        if not self.allowed_errors or any(e not in (RegistrationEstimationError, InsufficientLandmarksError) for e in self.allowed_errors):
+        if not self.allowed_errors or any(e not in _RECOVERABLE for e in self.allowed_errors):
             raise ValueError('recovery allows only explicit estimation error categories')
         if not self.alternatives:
             raise ValueError('recovery requires ordered alternatives')
@@ -34,25 +40,83 @@ class RecoveryConfig:
 
 @dataclass(frozen=True)
 class RegistrationStep:
-    """One estimate/apply stage with explicit channel reduction and recovery."""
+    """One position of a recipe: a registered method config, optional recovery and signal.
+
+    signal None uses the recipe's signal. Recovery alternatives must have the
+    step kind of config, so recovery never changes an allowed sequence.
+    """
     config: RegistrationConfig
-    reference_image: str = 'merged'
-    moving_image: str = 'merged'
-    reference_channel: int = 0
     recovery: RecoveryConfig | None = None
-    warp: WarpConfig | None = None
+    signal: RegistrationSignalConfig | None = None
 
     def __post_init__(self):
-        spec_for(REGISTRATION_METHODS, self.config, 'registration method', TypeError, 'unsupported registration config')
+        spec = spec_for(REGISTRATION_METHODS, self.config, 'registration method', TypeError, 'unsupported registration config')
         self.config.__post_init__()
-        if self.reference_image not in ('merged', 'single-channel') or self.moving_image not in ('merged', 'single-channel'):
-            raise ValueError('registration image must be merged or single-channel')
-        if isinstance(self.reference_channel, bool) or not isinstance(self.reference_channel, int) or self.reference_channel < 0:
-            raise ValueError('reference_channel must be a nonnegative integer')
         if self.recovery is not None:
+            if not isinstance(self.recovery, RecoveryConfig):
+                raise TypeError('recovery requires RecoveryConfig')
             self.recovery.__post_init__()
+            for config in self.recovery.alternatives:
+                if REGISTRATION_METHODS[type(config)].step_kind != spec.step_kind:
+                    raise ValueError(f'recovery alternative {config.method!r} is not a {spec.step_kind} method '
+                                     f'like {spec.name!r}')
+        if self.signal is not None:
+            if not isinstance(self.signal, RegistrationSignalConfig):
+                raise TypeError('signal requires RegistrationSignalConfig')
+            self.signal.__post_init__()
+
+
+@dataclass(frozen=True)
+class RegistrationRecipe:
+    """Ordered registration steps that compose into one pull transform per moving round.
+
+    steps is zero or more global steps (translation, rigid, affine) followed
+    by at most one local step (demons, bspline, tps, cpd), at least one step;
+    the step kind is the step_kind of the method's REGISTRATION_METHODS
+    entry. Step k is estimated on the moving signal resampled in float64
+    through steps 1 to k-1; after the last step every image of the moving
+    round is resampled once through the composed TransformChain. signal
+    builds the registration signals (default: the channel maximum). warp is
+    the final resampling; None derives WarpConfig(backend="translation") for a
+    chain of translations and WarpConfig(backend="scipy") otherwise.
+    reference_round None uses the dataset reference round; when set it must
+    equal it. qc holds the routine QC rejection criteria (none by default).
+    """
+    steps: tuple[RegistrationStep, ...]
+    signal: RegistrationSignalConfig = RegistrationSignalConfig()
+    warp: WarpConfig | None = None
+    reference_round: str | None = None
+    qc: RegistrationQcConfig = RegistrationQcConfig()
+
+    def __post_init__(self):
+        if not isinstance(self.steps, (tuple, list)) or not self.steps:
+            raise ValueError('a registration recipe requires at least one step')
+        steps = tuple(self.steps)
+        for step in steps:
+            if not isinstance(step, RegistrationStep):
+                raise TypeError('registration requires RegistrationStep entries')
+            step.__post_init__()
+        object.__setattr__(self, 'steps', steps)
+        kinds = [REGISTRATION_METHODS[type(step.config)].step_kind for step in steps]
+        if 'local' in kinds[:-1]:
+            names = tuple(step.config.method for step in steps)
+            raise ValueError(f'registration steps {names} are not global steps followed by at most one local step')
+        for name, kind in (('signal', RegistrationSignalConfig), ('qc', RegistrationQcConfig)):
+            if not isinstance(getattr(self, name), kind):
+                raise TypeError(f'{name} requires {kind.__name__}')
+            getattr(self, name).__post_init__()
         if self.warp is not None:
+            if not isinstance(self.warp, WarpConfig):
+                raise TypeError('warp requires WarpConfig')
             self.warp.__post_init__()
+            configs = [c for step in steps for c in (step.config, *(step.recovery.alternatives if step.recovery else ()))]
+            translations = [type(c) is TranslationConfig for c in configs]
+            if self.warp.backend == 'translation' and not all(translations):
+                raise ValueError('warp backend "translation" applies only to recipes of translation steps')
+            if self.warp.backend != 'translation' and all(translations):
+                raise ValueError('a recipe of translation steps requires warp backend "translation"')
+        if self.reference_round is not None and (not isinstance(self.reference_round, str) or not self.reference_round):
+            raise ValueError('reference_round must be a round name or None')
 
 
 @dataclass(frozen=True)
@@ -104,23 +168,25 @@ class CheckpointConfig:
 class PipelineConfig:
     """One processing sequence. None disables an operation, including loading.
 
-    Order: load, rotate, the preprocessing recipe's steps, ordered
-    registration, the recipe's post_registration steps, detect, extract,
-    decode, filter. The pipeline processes ZYX(C) volumes and never projects;
+    Order: load, rotate, the preprocessing recipe's steps, the registration
+    recipe (None: no registration), the preprocessing recipe's
+    post_registration steps, detect, extract, decode, filter. The pipeline
+    processes ZYX(C) volumes and never projects;
     projection is an output view. All operation parameters are passed intact
     to public functions.
     """
     load: ImageLoadConfig | None = None
     rotation_degrees: float | None = None
     preprocessing: PreprocessingRecipe | None = None
-    registration: tuple[RegistrationStep, ...] = ()
+    registration: RegistrationRecipe | None = None
     detection: LocalMaximaConfig | None = None
     extraction: NeighborhoodSumConfig | None = None
     decoding: WtaDecoderConfig | CodebookAwareDecoderConfig | None = None
     filtering: ReadFilterConfig | None = None
 
     def __post_init__(self):
-        types = {'load': ImageLoadConfig, 'preprocessing': PreprocessingRecipe, 'detection': LocalMaximaConfig,
+        types = {'load': ImageLoadConfig, 'preprocessing': PreprocessingRecipe, 'registration': RegistrationRecipe,
+            'detection': LocalMaximaConfig,
             'extraction': NeighborhoodSumConfig, 'decoding': (WtaDecoderConfig, CodebookAwareDecoderConfig),
             'filtering': ReadFilterConfig}
         for name, kind in types.items():
@@ -131,7 +197,3 @@ class PipelineConfig:
                 value.__post_init__()
         if self.rotation_degrees is not None and (isinstance(self.rotation_degrees, bool) or not math.isfinite(self.rotation_degrees)):
             raise ValueError('rotation_degrees must be finite')
-        for step in self.registration:
-            if not isinstance(step, RegistrationStep):
-                raise TypeError('registration requires RegistrationStep entries')
-            step.__post_init__()

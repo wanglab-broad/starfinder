@@ -20,8 +20,10 @@ from starfinder.preprocessing import (MinMaxNormalizationConfig, HistogramMatchi
     StepContext, read_supplied_statistics, run_step, step_spec)
 from starfinder.dataset._logging import _log_step
 from starfinder.dataset._paths import _FovPaths
-from starfinder.dataset.config import CheckpointConfig, PipelineConfig, ExecutionConfig, RegistrationStep
-from starfinder.registration import RegistrationResult
+from starfinder._registry import _version
+from starfinder.dataset.config import CheckpointConfig, PipelineConfig, ExecutionConfig, RegistrationRecipe
+from starfinder.registration import (RegistrationRejectedError, RegistrationResult, TransformChain,
+    TranslationTransform, WarpConfig)
 from starfinder.barcode import (Codebook, IntensityExtractionResult, NeighborhoodSumConfig,
     WtaDecoderConfig, ReadFilterConfig, BarcodeDecodingResult, ReadFilteringResult)
 
@@ -30,15 +32,79 @@ if TYPE_CHECKING:
     from starfinder.dataset.types import RoundState
 
 
+def _recipe_record(recipe):
+    """The recorded summary of a registration recipe: step method names, signals, warp, reference and QC."""
+    from starfinder.registration import REGISTRATION_METHODS
+    return dict(steps=[REGISTRATION_METHODS[type(step.config)].name for step in recipe.steps],
+                signal=asdict(recipe.signal),
+                step_signals=[None if step.signal is None else asdict(step.signal) for step in recipe.steps],
+                warp=None if recipe.warp is None else asdict(recipe.warp), reference_round=recipe.reference_round,
+                qc=asdict(recipe.qc))
+
+
+def _default_warp(chain):
+    """The derived final resampling: translation for a chain of translations, else linear SciPy."""
+    return WarpConfig() if chain.translation() is not None else WarpConfig(backend='scipy')
+
+
+def _signal_warp(chain, warp):
+    """Float64 resampling of a step signal through chain with the recipe's interpolation and boundary.
+
+    A chain of translations under constant zero fill uses the translation
+    path; otherwise the recipe's dense backend (SciPy when warp is None or
+    the translation backend). Nothing is rounded.
+    """
+    base = warp if warp is not None and warp.backend != 'translation' else WarpConfig(backend='scipy')
+    if chain.translation() is not None and base.boundary_mode == 'constant' and base.fill_value == 0:
+        workers = warp.fft_workers if warp is not None and warp.backend == 'translation' else 1
+        return WarpConfig(fft_workers=workers, output_dtype='float64')
+    return replace(base, output_dtype='float64')
+
+
+def _qc_record(qc):
+    """A registration_qc result for the attempt records, in the form a registered checkpoint restores.
+
+    Sequences are tuples and undefined floats None; projections are not kept.
+    """
+    from starfinder.io._checkpoint import _jsonable, _tuples
+    return _tuples(_jsonable(dict(status=qc.status, values=qc.values, units=qc.units, counts=qc.counts,
+                                  reasons=qc.reasons, config=qc.config,
+                                  details={k: v for k, v in qc.details.items() if k != 'projections'})))
+
+
+def _check_qc(qc, config, transform):
+    """Raise RegistrationRejectedError for the first configured criterion the step fails.
+
+    An undefined value (for example an undefined NCC gain) rejects nothing;
+    the QC record keeps its reason.
+    """
+    checks = [('min_coverage', qc.values['coverage'], config.min_coverage, lambda v, b: v < b),
+              ('min_ncc_gain', qc.values['ncc_gain'], config.min_ncc_gain, lambda v, b: v < b),
+              ('max_fold_fraction', qc.details['transform'].get('fold_fraction'), config.max_fold_fraction,
+               lambda v, b: v > b),
+              ('max_translation_voxels',
+               float(np.linalg.norm(transform.correction_zyx)) if isinstance(transform, TranslationTransform) else None,
+               config.max_translation_voxels, lambda v, b: v > b)]
+    for criterion, value, bound, fails in checks:
+        if bound is not None and value is not None and fails(value, bound):
+            relation = 'below' if criterion.startswith('min_') else 'above'
+            error = RegistrationRejectedError(f'{criterion}: {value!r} is {relation} the bound {bound!r}')
+            error.criterion = criterion
+            raise error
+
+
 @dataclass
 class FOV:
     """Mutable per-FOV coordinator. Public operations own the algorithms.
 
     Stores round images/metadata, recipe snapshots (per round, snapshot name
     to image, in the round's current coordinates), structured scientific
-    results, ordered registration results and attempts, and
+    results, ordered registration results and attempts, the TransformChain
+    applied to each moving round, registration_record (semantics
+    ``recipe``, or ``sequential`` for a loaded version-1 checkpoint; the
+    recipe summary; the WarpConfig applied per round), and
     preprocessing_record (the recipe, per-round step records and, per round
-    and snapshot, the transforms applied, of the last run with a recipe).
+    and snapshot, the transforms composed, of the last run with a recipe).
     One instance per job; not thread-safe.
     The repr summarizes image geometry, channels and completed stages without
     array values or table rows; results maps completed stages by name.
@@ -53,6 +119,8 @@ class FOV:
     metadata: dict[str, ImageMetadata] = field(default_factory=dict)
     registration_results: dict[str, list[RegistrationResult]] = field(default_factory=dict)
     registration_attempts: dict[str, list[dict]] = field(default_factory=dict)
+    registration_chains: dict[str, TransformChain] = field(default_factory=dict)
+    registration_record: dict = field(default_factory=dict)
     spot_result: SpotFindingResult | None = None
     subtile_id: int | None = None
 
@@ -385,80 +453,166 @@ class FOV:
 
     # --- Registration ---
 
-    def _registration_image(self, name, mode, channel, source=None):
+    def _registration_image(self, name, signal, role, source=None):
+        """The float64 ZYX registration signal of round name (RegistrationSignalConfig signal).
+
+        role is "reference" or "moving" and selects the channel of mode
+        "channel"; a label is looked up in the dataset channel_order.
+        """
         if source is not None and source not in self.snapshots.get(name, {}):
             raise ValueError(f'registration source {source!r} is not a snapshot of round {name!r}')
         image = _validate_image(self.images[name] if source is None else self.snapshots[name][source], ndim=(4,))
-        if mode == 'merged':
-            # Preserve signed/high-bit-depth input instead of overflowing uint16.
+        if signal.mode == 'max':
+            return image.max(axis=-1).astype(np.float64)
+        if signal.mode == 'sum':
+            # Preserve signed/high-bit-depth input instead of overflowing the input dtype.
             return image.sum(axis=-1, dtype=np.float64)
+        channel = signal.moving_channel if role == 'moving' and signal.moving_channel is not None else signal.reference_channel
+        if isinstance(channel, str):
+            if channel not in self.dataset.channel_order:
+                raise ValueError(f'registration channel {channel!r} is not a channel label of round {name!r}')
+            channel = tuple(self.dataset.channel_order).index(channel)
         if channel >= image.shape[-1]:
-            raise ValueError('registration channel outside image')
-        return image[..., channel]
+            raise ValueError(f'registration channel {channel} is outside the image of round {name!r}')
+        return image[..., channel].astype(np.float64)
 
     @_log_step
-    def register(self, step: RegistrationStep, *, rounds=None, source: str | None = None):
-        """Estimate then apply; only opted-in estimation failures can recover.
+    def register(self, recipe: RegistrationRecipe, *, rounds=None, source: str | None = None):
+        """Estimate the recipe's steps per moving round, then resample the round once.
 
-        Signals are built from snapshot source of the reference and each
-        moving round (None: their images). The transform is applied to the
-        moving round's image and to every one of its snapshots, each resampled
-        once per call, so they stay aligned; the reference round is not
-        transformed. Ordered attempts include requested/actual method,
-        effective config, outcome and failure. Apply errors propagate and are
-        recorded too. During a recipe run, preprocessing_record lists the
-        transforms applied per round and snapshot.
+        Signals are built with the recipe's (or a step's own) signal from
+        snapshot source of the reference and each moving round (None: their
+        images). Step k is estimated on the moving signal resampled in float64
+        through steps 1 to k-1; each successful estimate is checked by
+        registration_qc against recipe.qc, and a failed criterion raises
+        RegistrationRejectedError. Only opted-in estimation failures recover.
+        The step transforms compose into one TransformChain, and the moving
+        round's image and every one of its snapshots are resampled once from
+        their pre-registration arrays with the recipe's warp (None: derived
+        from the chain), so they stay aligned; the reference round is not
+        transformed. registration_attempts gets one estimation entry per
+        attempt and one application entry per round; registration_results
+        the step results (application_config: the round's WarpConfig),
+        registration_chains the chain and registration_record the recipe and
+        the application policies. Apply errors propagate and are recorded
+        too, never recovered. A round is registered at most once. During a
+        preprocessing recipe run, preprocessing_record lists the composed
+        results per round and snapshot.
         """
-        from starfinder.registration import estimate_transform, apply_transform
-        step.__post_init__()
+        if not isinstance(recipe, RegistrationRecipe):
+            raise TypeError('register requires a RegistrationRecipe')
+        recipe.__post_init__()
         ref = self.rounds.reference_round
-        reference = self._registration_image(ref, step.reference_image, step.reference_channel, source)
-        for name in self.rounds.moving_rounds if rounds is None else rounds:
-            moving = self._registration_image(name, step.moving_image, step.reference_channel, source)
-            configs = (step.config,) + (tuple(step.recovery.alternatives) if step.recovery else ())
-            for index, config in enumerate(configs):
-                attempt = dict(requested_method=step.config.method, actual_method=config.method,
-                               config=asdict(config), failure=None, outcome='estimating')
-                self.registration_attempts.setdefault(name, []).append(attempt)
-                try:
-                    result = estimate_transform(reference, moving, config=config,
-                        reference_metadata=self.metadata[ref], moving_metadata=self.metadata[name])
-                except Exception as error:
-                    attempt.update(outcome='failed', failure={'type': type(error).__name__, 'message': str(error)})
-                    if step.recovery and isinstance(error, step.recovery.allowed_errors) and index + 1 < len(configs):
-                        continue
-                    raise
-                try:
-                    warp = step.warp or result.application_config
-                    registered = apply_transform(self.images[name], result.transform, config=warp)
-                    snapshots = {key: apply_transform(image, result.transform, config=warp)
-                                 for key, image in self.snapshots.get(name, {}).items()}
-                except Exception as error:
-                    attempt.update(outcome='application_failed', failure={'type': type(error).__name__, 'message': str(error)})
-                    raise
-                attempt.update(outcome='succeeded', application_config=asdict(warp))
-                self.images[name] = registered
-                if snapshots:
-                    self.snapshots[name] = snapshots
-                self.metadata[name] = result.transform.reference_metadata
-                self.registration_results.setdefault(name, []).append(replace(result, application_config=warp))
-                self._record_transform(name, config.method, result.transform)
-                break
+        if recipe.reference_round is not None and recipe.reference_round != ref:
+            raise ValueError(f'recipe reference round {recipe.reference_round!r} differs from the dataset reference {ref!r}')
+        summary = _recipe_record(recipe)
+        if self.registration_record.get('semantics') == 'sequential':
+            raise ValueError('this FOV holds a sequential (version-1) registration; it cannot be extended by a recipe')
+        if self.registration_record.get('recipe') not in (None, summary):
+            raise ValueError('this FOV was registered with another registration recipe')
+        rounds = self.rounds.moving_rounds if rounds is None else rounds
+        registered = [name for name in rounds if self.registration_results.get(name) or name in self.registration_chains]
+        if registered:
+            raise ValueError(f'rounds {registered} are already registered; a round is registered once')
+        signals = list(dict.fromkeys(step.signal or recipe.signal for step in recipe.steps)) + [recipe.signal]
+        references = {signal: self._registration_image(ref, signal, 'reference', source) for signal in dict.fromkeys(signals)}
+        self.registration_record = dict(self.registration_record, semantics='recipe', recipe=summary)
+        self.registration_record.setdefault('application', {})
+        for name in rounds:
+            self._register_round(recipe, name, source, references)
         return self
 
-    def _record_transform(self, name, method, transform):
-        """Append the transform just applied to each image of round name to the recipe record.
+    def _register_round(self, recipe, name, source, references):
+        """Estimate every step of recipe for round name, then resample its images once."""
+        from starfinder import registration
+        from starfinder.evaluation.registration import registration_qc
+        from starfinder.registration._chain import resample
+        ref = self.rounds.reference_round
+        originals = {signal: self._registration_image(name, signal, 'moving', source) for signal in references}
+        attempts = self.registration_attempts.setdefault(name, [])
+        results = []
+        # The moving signal of each signal config at the start of the current step.
+        current = dict(originals)
+        for index, step in enumerate(recipe.steps):
+            signal = step.signal or recipe.signal
+            reference, before = references[signal], current[signal]
+            moving_metadata = self.metadata[name] if not results else results[-1].transform.reference_metadata
+            configs = (step.config,) + (tuple(step.recovery.alternatives) if step.recovery else ())
+            for number, config in enumerate(configs):
+                spec = registration.REGISTRATION_METHODS[type(config)]
+                attempt = dict(record='estimation', step=index, attempt=number, requested_method=step.config.method,
+                               actual_method=config.method, fallback=number > 0, backend=None,
+                               backend_versions={d.distribution: _version(d.distribution) for d in spec.requires},
+                               reference=ref, config=asdict(config), outcome='estimating', failure=None, qc=None)
+                attempts.append(attempt)
+                try:
+                    result = registration.estimate_transform(reference, before, config=config,
+                        reference_metadata=self.metadata[ref], moving_metadata=moving_metadata)
+                    attempt.update(backend=result.diagnostics.backend)
+                    if result.diagnostics.backend_versions is not None:
+                        attempt.update(backend_versions=dict(result.diagnostics.backend_versions))
+                    chain = TransformChain(tuple(r.transform for r in results) + (result.transform,))
+                    after = resample([originals[signal]], chain, _signal_warp(chain, recipe.warp))[0]
+                    qc = registration_qc(reference, before, after, result.transform, config=recipe.qc,
+                                         diagnostics=result.diagnostics)
+                    attempt.update(qc=_qc_record(qc))
+                    _check_qc(qc, recipe.qc, result.transform)
+                except Exception as error:
+                    failure = {'type': type(error).__name__, 'message': str(error)}
+                    if isinstance(error, RegistrationRejectedError):
+                        failure['criterion'] = getattr(error, 'criterion', None)
+                    attempt.update(outcome='rejected' if isinstance(error, RegistrationRejectedError) else 'failed',
+                                   failure=failure)
+                    if step.recovery and isinstance(error, step.recovery.allowed_errors) and number + 1 < len(configs):
+                        continue
+                    raise
+                attempt.update(outcome='succeeded')
+                results.append(result)
+                current = {key: after if key == signal else None for key in current}
+                break
+            if index + 1 < len(recipe.steps):
+                chain = TransformChain(tuple(r.transform for r in results))
+                current = {key: value if value is not None else
+                           resample([originals[key]], chain, _signal_warp(chain, recipe.warp))[0]
+                           for key, value in current.items()}
+        chain = TransformChain(tuple(r.transform for r in results))
+        warp = recipe.warp or _default_warp(chain)
+        application = dict(record='application', outcome='applying', application_config=asdict(warp), failure=None,
+                           qc=None)
+        attempts.append(application)
+        keys = list(self.snapshots.get(name, {}))
+        try:
+            outputs = resample([self.images[name], *(self.snapshots[name][key] for key in keys)], chain, warp)
+        except Exception as error:
+            application.update(outcome='application_failed', failure={'type': type(error).__name__, 'message': str(error)})
+            raise
+        after = current[recipe.signal]
+        if after is None:
+            after = resample([originals[recipe.signal]], chain, _signal_warp(chain, recipe.warp))[0]
+        application.update(outcome='succeeded', qc=_qc_record(registration_qc(
+            references[recipe.signal], originals[recipe.signal], after, chain, config=recipe.qc)))
+        self.images[name] = outputs[0]
+        if keys:
+            self.snapshots[name] = dict(zip(keys, outputs[1:]))
+        self.metadata[name] = chain.reference_metadata
+        self.registration_results[name] = [replace(result, application_config=warp) for result in results]
+        self.registration_chains[name] = chain
+        self.registration_record['application'][name] = warp
+        self._record_transforms(name)
+
+    def _record_transforms(self, name):
+        """List the composed results of round name for each of its images in the recipe record.
 
         result indexes registration_results[name] (and the round's transforms.json entries).
         """
-        from starfinder.registration import TranslationTransform
+        from starfinder.registration._chain import transform_kind
         if 'recipe' not in self.preprocessing_record:
             return
-        entry = dict(result=len(self.registration_results[name]) - 1, method=method,
-                     kind='translation' if isinstance(transform, TranslationTransform) else 'dense')
+        entries = [dict(result=i, method=r.diagnostics.method, kind=transform_kind(r.transform))
+                   for i, r in enumerate(self.registration_results[name])]
         applied = self.preprocessing_record.setdefault('transforms', {}).setdefault(name, {})
         for key in ('detection', *self.snapshots.get(name, {})):
-            applied.setdefault(key, []).append(dict(entry))
+            applied.setdefault(key, []).extend(dict(entry) for entry in entries)
 
     def _save_shift_log(self):
         """Preserve MATLAB detected-displacement row/col/z columns."""
@@ -570,15 +724,16 @@ class FOV:
         processed rounds before any step runs. Steps with save_as keep
         snapshots in snapshots[round]. Registration signals are built from the
         recipe's registration_source snapshot (default: the detection image),
-        and each registration step's transform is applied to the moving
-        round's detection image and to every one of its snapshots, so they
-        stay aligned; the reference round is not transformed. Extraction reads
+        and the registration recipe's steps compose into one transform per
+        moving round that resamples the round's detection image and every one
+        of its snapshots once, so they stay aligned; the reference round is
+        not transformed (see register). Extraction reads
         the extraction_source snapshot (default: the detection image; without
         a recipe, the source recorded in preprocessing_record, as after
         load_checkpoint). In streaming mode without retain_images a moving
         round's snapshots are dropped with its image, and only the reference
         round's registration source is kept until the moving rounds are
-        registered. Per-round step records, the transforms applied per round
+        registered. Per-round step records, the transforms composed per round
         and snapshot, and the supplied file's path and SHA-256, are kept in
         preprocessing_record and written to run.json and the registered
         checkpoint, which also stores the extraction source snapshot of each
@@ -605,6 +760,9 @@ class FOV:
         ref = self.rounds.reference_round
         if ref is None:
             raise ValueError('reference_round is required')
+        if config.registration is not None and config.registration.reference_round not in (None, ref):
+            raise ValueError(f'registration reference round {config.registration.reference_round!r} differs '
+                             f'from the dataset reference {ref!r}')
         if config.extraction and not (config.detection or self.spot_result is not None):
             raise ValueError('extraction requires detections')
         if config.decoding and not (config.extraction or self.intensity_result is not None):
@@ -670,8 +828,8 @@ class FOV:
                     if post:
                         self.images[ref] = registration_reference
                     try:
-                        for step in config.registration:
-                            self.register(step, rounds=[name], source=registration_source)
+                        if config.registration is not None:
+                            self.register(config.registration, rounds=[name], source=registration_source)
                     finally:
                         self.images[ref] = processed_reference
                 if post:
@@ -791,7 +949,8 @@ class FOV:
                           registration_attempts=self.registration_attempts,
                           preprocessing=self.preprocessing_record or None)
             files += [f'registered/{name}' for name in
-                      io.write_registered_header(directory, header, self.registration_results)]
+                      io.write_registered_header(directory, header, self.registration_results,
+                                                 self.registration_record)]
         elif stage == 'candidates':
             if self.spot_result is None:
                 raise ValueError('candidates checkpoint requires spot_result')
@@ -850,7 +1009,9 @@ class FOV:
         """Restore one checkpoint stage so later stages can run without images.
 
         ``registered`` restores images, the stored snapshots, metadata,
-        registration results and attempts, and the preprocessing record; ``candidates`` restores
+        registration results, attempts, chains and record (a version-1
+        checkpoint: no chains, semantics ``sequential``), and the
+        preprocessing record; ``candidates`` restores
         spot_result and intensity_result; ``pre_qc`` restores decoding_result. Continue with run() and a
         PipelineConfig that starts after the loaded stage.
 
@@ -877,7 +1038,8 @@ class FOV:
         from starfinder.io._checkpoint import _check_stage, _jsonable, read_checkpoint, read_header
         _check_stage(stage)
         later = ['spot_result', 'intensity_result', 'decoding_result', 'filtering_result']
-        later = {'registered': ['images', 'snapshots', 'registration_results', 'registration_attempts'] + later,
+        later = {'registered': ['images', 'snapshots', 'registration_results', 'registration_attempts',
+                                'registration_chains', 'registration_record'] + later,
                  'candidates': later, 'pre_qc': later[2:]}[stage]
         occupied = [name for name in later if getattr(self, name) is not None and getattr(self, name) != {}]
         if occupied:

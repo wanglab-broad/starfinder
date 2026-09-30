@@ -230,13 +230,45 @@ class RegistrationQcConfig:
             raise InvalidRegistrationConfigError("projections must be bool")
 
 
+def _channel(value, name):
+    if value is not None and (isinstance(value, bool) or not isinstance(value, (int, str))
+                              or (isinstance(value, int) and value < 0) or value == ""):
+        raise InvalidRegistrationConfigError(f"{name} must be a nonnegative index, a channel label or None")
+
+
+@dataclass(frozen=True)
+class RegistrationSignalConfig:
+    """How one float64 ZYX registration signal is built from a round's ZYXC source image.
+
+    mode "max" takes the channel maximum (MATLAB merged-image), "sum" the
+    float64 channel sum (the earlier Python merged) and "channel" one channel
+    per round: reference_channel for the reference round and moving_channel
+    (None: reference_channel) for the moving round, each a zero-based index or
+    a channel label. Channels are set only for mode "channel".
+    """
+
+    mode: str = "max"
+    reference_channel: int | str | None = None
+    moving_channel: int | str | None = None
+
+    def __post_init__(self):
+        _choice(self.mode, "mode", ("max", "sum", "channel"))
+        _channel(self.reference_channel, "reference_channel")
+        _channel(self.moving_channel, "moving_channel")
+        if self.mode == "channel" and self.reference_channel is None:
+            raise InvalidRegistrationConfigError('mode="channel" requires reference_channel')
+        if self.mode != "channel" and (self.reference_channel is not None or self.moving_channel is not None):
+            raise InvalidRegistrationConfigError('channels apply only to mode="channel"')
+
+
 @dataclass(frozen=True)
 class WarpConfig:
-    """Method-specific resampling, with one final nearest-even integer cast.
+    """Resampling policy, with one final nearest-even integer cast.
 
-    Translation supports constant zero fill only. Dense backends support
-    constant fill or nearest boundary extrapolation. SciPy uses linear samples;
-    estimator interpolation_order controls coarse field expansion only.
+    Translation supports constant zero fill only and applies translations and
+    chains of translations. Dense backends support constant fill or nearest
+    boundary extrapolation. SciPy uses linear samples; estimator
+    interpolation_order controls coarse field expansion only.
     """
 
     backend: str = "translation"

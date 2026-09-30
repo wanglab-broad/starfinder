@@ -72,7 +72,7 @@ is present.
 When the preprocessing recipe names an `extraction_source`, that snapshot of
 each round is stored as `registered/<snapshot>/<round>.ome.tif`, in the same
 format and with the round's `ImageMetadata`. It has been through the same
-registration resamplings as the round image, so the two stay aligned.
+single registration resampling as the round image, so the two stay aligned.
 `load_checkpoint("registered")` restores it in `FOV.snapshots`, and a later
 `run` without a recipe extracts from it, as the restored preprocessing record
 names it. A recipe without an extraction source stores one image per round.
@@ -83,12 +83,36 @@ page, and its OME-XML declares SizeZ, SizeC, the pixel type and the dimension
 order `XYCZT`, so Bio-Formats opens it as a Z×C hyperstack in its stored dtype.
 
 `transforms.json` records the FOV identity, the rounds and the channel order,
-the rounds written, the stored snapshot names (`snapshots`), the preprocessing record (as in `run.json`, below), the
-registration attempts and every `RegistrationResult`:
-its transform, diagnostics and warp configuration. Translations are stored
-inline. Dense displacement fields go to `<round>_field.npz`, one array per
-registration result of that round (`result_0`, `result_1`, ...), with their
-float32 or float64 dtype.
+the rounds written, the stored snapshot names (`snapshots`), the preprocessing
+record (as in `run.json`, below), the registration attempts, the registration
+recipe summary (`registration_recipe`: step method names, signals, warp,
+reference round and QC config), `registration_semantics` (`recipe`) and, per
+moving round, its step results in step order and one `applications` entry with
+the `WarpConfig` of the round's one final resampling. Each result (`transforms`)
+has its `step` index, its transform and its diagnostics:
+
+| Kind | In `transform` | In `<round>_field.npz` |
+| --- | --- | --- |
+| `translation` | `correction_zyx` | none |
+| `affine` | `matrix_zyx` (4×4 index-space matrix) and `physical` (the backend's physical parameters, or null) | none |
+| `bspline` | `bspline` (grid size, origin, spacing and direction in ITK XYZ order, `order`, `spacing_zyx`) and `coefficients`, the file name | `result_<i>`: the coefficients, float64 |
+| `dense` | `field`, the file name | `result_<i>`: the displacement field, float32 or float64 |
+
+`<i>` is the result's index in the round's list. JSON floats round-trip exactly,
+so the reloaded transforms equal the saved ones. `read_checkpoint` and
+`load_checkpoint("registered")` rebuild a
+{py:class}`~starfinder.registration.TransformChain` per round
+(`registration_chains`) and the round's `WarpConfig`
+(`registration_record["application"]`, also each result's
+`application_config`); applying the chain with it to the pre-registration
+images gives the registered images bit for bit.
+
+The header `format_version` is 2 for the three stages. Version-1 headers still
+load. A version-1 registered checkpoint (before the registration recipe) holds
+translation and dense results, each with its own `application_config`, which
+were applied one after another; it loads with those configs, without chains,
+and with `registration_record["semantics"] == "sequential"`. Nothing converts
+it.
 
 ### candidates
 
@@ -186,8 +210,8 @@ run starts, after each completed step and when the run ends. It contains:
 | `config` | `pipeline`, `execution` and `checkpoints` configurations. |
 | `inputs` | Loaded TIFF `path` and streamed `sha256` (`null` with `hash_inputs=False`). |
 | `steps` | `name`, `round`, `seconds` and `status` of each completed or failed step. A preprocessing step is named `preprocess:<step name>`. |
-| `preprocessing` | `null` without a preprocessing recipe. Otherwise `recipe` (the step names of `steps` and `post_registration`, `extraction_source` and `registration_source`), `rounds`: per round, one record per step with `index`, `stage` (`steps` or `post_registration`), `step`, `config`, `fitted`, `diagnostics`, `input_dtype`, `output_dtype` and `save_as`; `transforms`: per round and image (`detection` and each snapshot), the transforms applied in order, each with `result` (its index in the round's registration results in `transforms.json`), `method` and `kind` (`translation` or `dense`), empty for the reference round; and `supplied_statistics`. |
-| `registration` | Ordered registration attempts per round. |
+| `preprocessing` | `null` without a preprocessing recipe. Otherwise `recipe` (the step names of `steps` and `post_registration`, `extraction_source` and `registration_source`), `rounds`: per round, one record per step with `index`, `stage` (`steps` or `post_registration`), `step`, `config`, `fitted`, `diagnostics`, `input_dtype`, `output_dtype` and `save_as`; `transforms`: per round and image (`detection` and each snapshot), the transforms composed in order, each with `result` (its index in the round's registration results in `transforms.json`), `method` and `kind` (`translation`, `affine`, `bspline` or `dense`), empty for the reference round; and `supplied_statistics`. |
+| `registration` | Ordered registration attempts per round: the estimation entries and one application entry per moving round (see {doc}`coordination`). |
 | `counts` | Spots, intensities, decoding call statuses and filtering counts. |
 | `checkpoint_directory`, `checkpoints` | The FOV directory and the files written for each stage. |
 

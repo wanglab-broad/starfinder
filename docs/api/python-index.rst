@@ -117,8 +117,10 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.registration.RegistrationDiagnostics`
 * :py:obj:`starfinder.registration.RegistrationEstimationError`
 * :py:obj:`starfinder.registration.RegistrationQcConfig`
+* :py:obj:`starfinder.dataset.RegistrationRecipe`
 * :py:obj:`starfinder.registration.RegistrationRejectedError`
 * :py:obj:`starfinder.registration.RegistrationResult`
+* :py:obj:`starfinder.registration.RegistrationSignalConfig`
 * :py:obj:`starfinder.registration.RegistrationSpec`
 * :py:obj:`starfinder.dataset.RegistrationStep`
 * :py:obj:`starfinder.benchmark.report_benchmark`
@@ -149,6 +151,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.synthetic.TextureConfig`
 * :py:obj:`starfinder.preprocessing.TophatConfig`
 * :py:obj:`starfinder.registration.TpsConfig`
+* :py:obj:`starfinder.registration.TransformChain`
 * :py:obj:`starfinder.registration.TranslationConfig`
 * :py:obj:`starfinder.registration.TranslationTransform`
 * :py:obj:`starfinder.registration.UnsupportedTransformOperationError`

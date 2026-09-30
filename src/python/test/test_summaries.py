@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from starfinder.barcode import NeighborhoodSumConfig, ReadFilterConfig, WtaDecoderConfig, filter_reads
-from starfinder.dataset import CheckpointConfig, Dataset, PipelineConfig, RegistrationStep, RoundState
+from starfinder.dataset import CheckpointConfig, Dataset, PipelineConfig, RegistrationRecipe, RegistrationStep, RoundState
 from starfinder.evaluation import EvaluationResult
 from starfinder.io import ImageLoadConfig
 from starfinder.preprocessing import MinMaxNormalizationConfig, PreprocessingRecipe, PreprocessingStep
@@ -46,7 +46,7 @@ def test_fov_and_dataset_summaries_on_small_synthetic_run(small_dataset, tmp_pat
     fov = ds.fov('FOV_001').run(PipelineConfig(
         load=ImageLoadConfig(channel_labels=ds.channel_order),
         preprocessing=PreprocessingRecipe((PreprocessingStep(MinMaxNormalizationConfig('uint8', (0, 255), snr_threshold=5.0)),)),
-        registration=(RegistrationStep(TranslationConfig()),), detection=LocalMaximaConfig(),
+        registration=RegistrationRecipe((RegistrationStep(TranslationConfig()),)), detection=LocalMaximaConfig(),
         extraction=NeighborhoodSumConfig(), decoding=WtaDecoderConfig(diagnostics=True),
         filtering=ReadFilterConfig()))
 
@@ -152,7 +152,7 @@ def test_result_classes_have_one_line_summaries(tmp_path):
     assert repr(empty) == "BarcodeDecodingResult: 0 reads"
     assert repr(filter_reads(empty)) == "ReadFilteringResult: 0 accepted / 0 (undefined), rejected 0"
 
-    dense = resident(ds).run(PipelineConfig(registration=(RegistrationStep(DemonsConfig(iterations=(1,))),)))
+    dense = resident(ds).run(PipelineConfig(registration=RegistrationRecipe((RegistrationStep(DemonsConfig(iterations=(1,))),))))
     text = repr(dense.registration_results['round2'][0])
     assert re.fullmatch(r'RegistrationResult: demons \(\w+\), dense field \(4, 12, 14, 3\) float(32|64)'
                         r'(, (not )?converged)?', text)
