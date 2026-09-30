@@ -223,12 +223,14 @@ def evaluate_registration(ref, before, after, *, reference_spots, before_spots, 
 
 
 def _pull_displacement(transform):
-    """Pull displacement u (ZYX3, float64) of a translation, dense or chain-like transform."""
+    """Pull displacement u (ZYX3, float64) of a translation, affine, B-spline, dense or chain-like transform."""
     if hasattr(transform, "correction_zyx"):
         shape = tuple(transform.reference_shape_zyx)
         return np.broadcast_to(-np.asarray(transform.correction_zyx, dtype=np.float64), (*shape, 3))
     if hasattr(transform, "displacement_zyx"):
         return np.asarray(transform.displacement_zyx, dtype=np.float64)
+    if hasattr(transform, "dense"):
+        return np.asarray(transform.dense().displacement_zyx, dtype=np.float64)
     if hasattr(transform, "pull_field"):
         return np.asarray(transform.pull_field().displacement_zyx, dtype=np.float64)
     raise TypeError(f"registration QC does not support {type(transform).__qualname__}")
@@ -259,10 +261,27 @@ def _fold_fraction(u):
     return float(np.mean(np.linalg.det(jacobian) <= 0))
 
 
+def _rotation_angle(physical):
+    """Rotation angle in radians of a physical rigid (Euler) matrix, else None."""
+    if not physical or physical.get("transform") != "EulerTransform":
+        return None
+    m = np.asarray(physical["matrix_xyz"], dtype=float)
+    if len(m) == 2:
+        return float(np.arctan2(m[1, 0], m[0, 0]))
+    return float(np.arccos(np.clip((np.trace(m) - 1) / 2, -1, 1)))
+
+
 def _transform_summary(transform, u):
     if hasattr(transform, "correction_zyx"):
         return {"kind": "translation", "correction_zyx": [float(v) for v in transform.correction_zyx]}
-    summary = {"kind": "dense", "displacement_voxels": _statistics(np.linalg.norm(u, axis=-1)),
+    if hasattr(transform, "matrix_zyx"):
+        a, b = transform.matrix_zyx[:3, :3], transform.matrix_zyx[:3, 3]
+        det = float(np.linalg.det(a))
+        return {"kind": "affine", "matrix": a.tolist(), "offset": b.tolist(), "det": det,
+                "reflection_or_collapse": det <= 0,
+                "max_singular_value_a_minus_i": float(np.linalg.svd(a - np.eye(3), compute_uv=False)[0]),
+                "rotation_angle": _rotation_angle(getattr(transform, "physical", None))}
+    summary = {"kind": "bspline" if hasattr(transform, "coefficients") else "dense", "displacement_voxels": _statistics(np.linalg.norm(u, axis=-1)),
                "displacement_physical": None, "fold_fraction": _fold_fraction(u)}
     spacing = getattr(getattr(transform, "reference_metadata", None), "spacing_zyx", None)
     if spacing is not None:
@@ -275,7 +294,7 @@ def _optimizer(diagnostics):
         return None
     return {name: getattr(diagnostics, name, None) for name in (
         "method", "backend", "converged", "iterations_completed", "final_metric_value", "stop_condition",
-        "final_rms_change")}
+        "elapsed_iterations", "final_rms_change")}
 
 
 def registration_qc(reference, before, after, transform, *, config=None, diagnostics=None):
@@ -292,8 +311,11 @@ def registration_qc(reference, before, after, transform, *, config=None, diagnos
     (YX positions valid in every plane) eroded by 3 pixels, with data_range
     the maximum minus the minimum of the reference projection there. Every
     undefined value is None with a reason. details holds the transform
-    summary, the optimizer diagnostics (from a RegistrationDiagnostics, None
-    when unknown) and, when config.projections is True, the three maximum
+    summary (translation: the correction; affine: A, b, det A with a
+    reflection_or_collapse flag for det A <= 0, the largest singular value of
+    A - I and, for rigid, the rotation angle in radians; B-spline and dense:
+    displacement statistics and the fold fraction), the optimizer
+    diagnostics (from a RegistrationDiagnostics, None when unknown) and, when config.projections is True, the three maximum
     projections. config is a starfinder.registration.RegistrationQcConfig
     (None: no projections); it is recorded, and nothing is rejected here.
     """

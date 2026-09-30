@@ -6,15 +6,18 @@ from dataclasses import KW_ONLY, dataclass
 from starfinder._registry import Dependency, check_shared
 from starfinder.image import IncompatibleGeometryError
 
-from ._config import CpdConfig, DemonsConfig, TpsConfig, TranslationConfig
+from ._config import AffineConfig, BSplineConfig, CpdConfig, DemonsConfig, RigidConfig, TpsConfig, TranslationConfig
 from ._cpd import estimate_cpd
 from ._demons import estimate_demons
+from ._elastix import estimate_affine, estimate_bspline, estimate_rigid
 from ._tps import estimate_tps
 from ._translation import estimate_translation
 
 _STEP_KINDS = ("global", "local")
 _TRANSFORM_KINDS = ("translation", "affine", "bspline", "dense")
 _SPACES = ("index", "physical")
+_ELASTIX = Dependency("itk", "itk-elastix", "registration-elastix")
+_SIMPLEITK = Dependency("SimpleITK", "SimpleITK", "local-registration")
 
 
 @dataclass(frozen=True)
@@ -22,7 +25,8 @@ class RegistrationSpec:
     """Registered method: stable snake_case name, private estimator and declared capabilities.
 
     run(reference, moving, config, geometry) returns the transform, the
-    backend that ran and its application WarpConfig; estimate_transform calls
+    backend that ran and its application WarpConfig, optionally followed by a
+    dict of further RegistrationDiagnostics fields; estimate_transform calls
     it after the checks below and callers never call it directly.
     step_kind is "global" or "local" (the allowed recipe sequences).
     dimensions holds 2 when a Z=1 input is estimated as 2D and 3 when Z>1 is
@@ -61,10 +65,18 @@ REGISTRATION_METHODS: dict[type, RegistrationSpec] = {
     TranslationConfig: RegistrationSpec(
         "translation", estimate_translation, step_kind="global", dimensions=frozenset({2, 3}),
         transform_kind="translation", space="index"),
+    RigidConfig: RegistrationSpec(
+        "rigid", estimate_rigid, step_kind="global", dimensions=frozenset({2, 3}), transform_kind="affine",
+        space="physical", requires=(_ELASTIX,), min_shape_zyx=(4, 16, 16)),
+    AffineConfig: RegistrationSpec(
+        "affine", estimate_affine, step_kind="global", dimensions=frozenset({2, 3}), transform_kind="affine",
+        space="physical", requires=(_ELASTIX,), min_shape_zyx=(4, 16, 16)),
+    BSplineConfig: RegistrationSpec(
+        "bspline", estimate_bspline, step_kind="local", dimensions=frozenset({2, 3}), transform_kind="bspline",
+        space="physical", requires=(_ELASTIX, _SIMPLEITK), min_shape_zyx=(4, 16, 16)),
     DemonsConfig: RegistrationSpec(
-        "demons", estimate_demons, step_kind="local", dimensions=frozenset({3}), transform_kind="dense",
-        space="index", requires=(Dependency("SimpleITK", "SimpleITK", "local-registration"),),
-        min_shape_zyx=(4, 4, 4)),
+        "demons", estimate_demons, step_kind="local", dimensions=frozenset({2, 3}), transform_kind="dense",
+        space="index", requires=(_SIMPLEITK,), min_shape_zyx=(4, 4, 4)),
     TpsConfig: RegistrationSpec(
         "tps", estimate_tps, step_kind="local", dimensions=frozenset({3}), transform_kind="dense",
         space="index", min_shape_zyx=(2, 2, 2)),
@@ -74,7 +86,8 @@ REGISTRATION_METHODS: dict[type, RegistrationSpec] = {
 }
 
 # Annotation alias for a registered config; a test keeps its members equal to the registry keys.
-RegistrationConfig = TranslationConfig | DemonsConfig | TpsConfig | CpdConfig
+RegistrationConfig = (TranslationConfig | RigidConfig | AffineConfig | BSplineConfig | DemonsConfig | TpsConfig
+                      | CpdConfig)
 
 
 def _check_shape(spec, shape):

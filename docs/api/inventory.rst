@@ -183,7 +183,11 @@ starfinder.preprocessing
 starfinder.registration
 ~~~~~~~~~~~~~~~~~~~~~~~
 
+* :py:obj:`starfinder.registration.AffineConfig`
+* :py:obj:`starfinder.registration.AffineTransform`
 * :py:obj:`starfinder.registration.apply_transform`
+* :py:obj:`starfinder.registration.BSplineConfig`
+* :py:obj:`starfinder.registration.BSplineTransform`
 * :py:obj:`starfinder.registration.CpdConfig`
 * :py:obj:`starfinder.registration.DemonsConfig`
 * :py:obj:`starfinder.registration.DenseDisplacementTransform`
@@ -198,6 +202,7 @@ starfinder.registration
 * :py:obj:`starfinder.registration.RegistrationRejectedError`
 * :py:obj:`starfinder.registration.RegistrationResult`
 * :py:obj:`starfinder.registration.RegistrationSpec`
+* :py:obj:`starfinder.registration.RigidConfig`
 * :py:obj:`starfinder.registration.TpsConfig`
 * :py:obj:`starfinder.registration.TranslationConfig`
 * :py:obj:`starfinder.registration.TranslationTransform`

@@ -23,6 +23,7 @@ dependencies = [
 [project.optional-dependencies]
 ome = ["bioio-ome-tiff>=1.0"]
 local-registration = ["SimpleITK>=2.3"]
+registration-elastix = ["itk-elastix==0.25.4", "itk==5.4.7"]
 checkpoint = ["pyarrow>=15"]
 spatialdata = ["spatialdata>=0.1", "spatialdata-io>=0.1"]
 visualization = ["napari>=0.4"]

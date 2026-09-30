@@ -14,12 +14,15 @@ from starfinder.image import ImageMetadata, IncompatibleGeometryError
 from starfinder.io._checkpoint import _registration_results, write_registered_header
 from starfinder.registration import (
     REGISTRATION_METHODS,
+    AffineConfig,
+    BSplineConfig,
     CpdConfig,
     DemonsConfig,
     InvalidRegistrationConfigError,
     RegistrationBackendUnavailableError,
     RegistrationEstimationError,
     RegistrationSpec,
+    RigidConfig,
     TpsConfig,
     TranslationConfig,
     TranslationTransform,
@@ -37,14 +40,18 @@ def estimate(shape, config):
                               moving_metadata=MOV)
 
 
-def test_registry_table_holds_the_four_current_methods():
+def test_registry_table_holds_the_registered_methods():
     table = {config_type: (spec.name, spec.step_kind, spec.dimensions, spec.min_shape_zyx, spec.transform_kind,
                            spec.space, tuple((d.module, d.distribution, d.extra) for d in spec.requires))
              for config_type, spec in REGISTRATION_METHODS.items()}
+    elastix = ("itk", "itk-elastix", "registration-elastix")
+    simpleitk = ("SimpleITK", "SimpleITK", "local-registration")
     assert table == {
         TranslationConfig: ("translation", "global", {2, 3}, (1, 1, 1), "translation", "index", ()),
-        DemonsConfig: ("demons", "local", {3}, (4, 4, 4), "dense", "index",
-                       (("SimpleITK", "SimpleITK", "local-registration"),)),
+        RigidConfig: ("rigid", "global", {2, 3}, (4, 16, 16), "affine", "physical", (elastix,)),
+        AffineConfig: ("affine", "global", {2, 3}, (4, 16, 16), "affine", "physical", (elastix,)),
+        BSplineConfig: ("bspline", "local", {2, 3}, (4, 16, 16), "bspline", "physical", (elastix, simpleitk)),
+        DemonsConfig: ("demons", "local", {2, 3}, (4, 4, 4), "dense", "index", (simpleitk,)),
         TpsConfig: ("tps", "local", {3}, (2, 2, 2), "dense", "index", ()),
         CpdConfig: ("cpd", "local", {3}, (2, 2, 2), "dense", "index", ()),
     }

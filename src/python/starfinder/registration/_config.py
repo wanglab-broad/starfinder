@@ -37,9 +37,81 @@ class TranslationConfig:
             raise InvalidRegistrationConfigError("skimage requires fft_workers=1")
 
 
+def _elastix_config(config, metrics):
+    _choice(config.metric, "metric", metrics)
+    for name in ("iterations", "samples", "random_seed"):
+        _number(getattr(config, name), name, minimum=0 if name == "random_seed" else 1, integer=True)
+    if config.levels is not None:
+        _number(config.levels, "levels", minimum=1, integer=True)
+
+
+@dataclass(frozen=True)
+class RigidConfig:
+    """elastix rigid (Euler) registration in physical space; Z=1 is estimated in 2D.
+
+    metric is "mattes" (Mattes mutual information with histogram_bins bins) or
+    "ncc"; iterations are per pyramid level, samples are the random spatial
+    samples per iteration and random_seed seeds them. levels None derives the
+    shared pyramid rule of the registration algorithm page.
+    """
+
+    metric: str = "mattes"
+    histogram_bins: int = 32
+    iterations: int = 200
+    samples: int = 4096
+    levels: int | None = None
+    random_seed: int = 1
+    method: str = field(default="rigid", init=False)
+
+    def __post_init__(self):
+        _elastix_config(self, ("mattes", "ncc"))
+        _number(self.histogram_bins, "histogram_bins", minimum=2, integer=True)
+
+
+@dataclass(frozen=True)
+class AffineConfig:
+    """elastix affine registration in physical space; Z=1 is estimated in 2D.
+
+    Fields as for RigidConfig; the default metric is normalized correlation.
+    """
+
+    metric: str = "ncc"
+    iterations: int = 200
+    samples: int = 4096
+    levels: int | None = None
+    random_seed: int = 1
+    method: str = field(default="affine", init=False)
+
+    def __post_init__(self):
+        _elastix_config(self, ("ncc", "mattes"))
+
+
+@dataclass(frozen=True)
+class BSplineConfig:
+    """elastix cubic B-spline registration on a physical control grid; Z=1 is estimated in 2D.
+
+    grid_spacing_physical is the final control-point spacing, in the spatial
+    unit of spacing_zyx and equal on every axis; None uses the physical X
+    extent divided by 8. Other fields as for AffineConfig.
+    """
+
+    metric: str = "ncc"
+    grid_spacing_physical: float | None = None
+    iterations: int = 200
+    samples: int = 4096
+    levels: int | None = None
+    random_seed: int = 1
+    method: str = field(default="bspline", init=False)
+
+    def __post_init__(self):
+        _elastix_config(self, ("ncc", "mattes"))
+        if self.grid_spacing_physical is not None:
+            _number(self.grid_spacing_physical, "grid_spacing_physical", strict=True)
+
+
 @dataclass(frozen=True)
 class DemonsConfig:
-    """SimpleITK demons; 3D only, with each axis at least four voxels."""
+    """SimpleITK demons; Z=1 is estimated in 2D (Y and X at least four), otherwise 3D with every axis at least four."""
 
     variant: str = "demons"
     iterations: tuple[int, ...] = (100, 50, 25)

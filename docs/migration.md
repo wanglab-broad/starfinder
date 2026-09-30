@@ -273,6 +273,20 @@ requested, and the location is `<output_root>/checkpoints/<fov_id>/`. Spot
 identity, input SHA-256 hashes, atomic writes and reruns of decoding or
 filtering without images are kept. See [checkpoints](checkpoints.md).
 
+### New registration methods and Z=1 demons
+
+`RigidConfig`, `AffineConfig` and `BSplineConfig` are registered in
+`REGISTRATION_METHODS` as `rigid`, `affine` and `bspline`. They need the optional
+extra `registration-elastix` (`itk-elastix` 0.25.4 and `itk` 5.4.7), imported
+only when one of them runs, and return the new `AffineTransform` or
+`BSplineTransform`. `DemonsConfig` now accepts Z=1 input and estimates it as 2D
+(its registry entry declares `dimensions={2, 3}`); calls that relied on demons
+rejecting Z=1 with `IncompatibleGeometryError` now get a field of shape
+(1, Y, X, 3) whose Z component is 0. 3D demons results are unchanged.
+`RegistrationDiagnostics` gains optional fields (`final_metric_value`,
+`stop_condition`, `elapsed_iterations`, `final_rms_change`, `backend_versions`,
+`backend_parameters`, `spacing_source`), all `None` unless a method records them.
+
 ## Intentional behavior changes — not mechanical equivalence
 
 | Area | Change and consequence |

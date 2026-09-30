@@ -120,7 +120,7 @@ def test_landmark_identity_and_insufficiency(config):
         estimate(np.zeros_like(source), np.zeros_like(source), config)
 
 
-@pytest.mark.parametrize("config", [DemonsConfig(), TpsConfig(), CpdConfig()])
+@pytest.mark.parametrize("config", [TpsConfig(), CpdConfig()])
 def test_declared_local_2d_rejection(config):
     with pytest.raises(IncompatibleGeometryError, match="3D"):
         estimate(np.ones((1, 8, 8)), np.ones((1, 8, 8)), config)

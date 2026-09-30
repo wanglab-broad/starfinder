@@ -2,8 +2,11 @@
 
 from ._api import apply_transform, estimate_transform
 from ._config import (
+    AffineConfig,
+    BSplineConfig,
     CpdConfig,
     DemonsConfig,
+    RigidConfig,
     RegistrationQcConfig,
     TpsConfig,
     TranslationConfig,
@@ -20,6 +23,8 @@ from ._errors import (
 from ._methods import REGISTRATION_METHODS as _REGISTRATION_METHODS
 from ._methods import RegistrationSpec
 from ._types import (
+    AffineTransform,
+    BSplineTransform,
     DenseDisplacementTransform,
     RegistrationDiagnostics,
     RegistrationResult,
@@ -35,6 +40,9 @@ __all__ = [
     "estimate_transform",
     "apply_transform",
     "TranslationConfig",
+    "RigidConfig",
+    "AffineConfig",
+    "BSplineConfig",
     "DemonsConfig",
     "TpsConfig",
     "CpdConfig",
@@ -43,6 +51,8 @@ __all__ = [
     "REGISTRATION_METHODS",
     "RegistrationSpec",
     "TranslationTransform",
+    "AffineTransform",
+    "BSplineTransform",
     "DenseDisplacementTransform",
     "RegistrationResult",
     "RegistrationDiagnostics",

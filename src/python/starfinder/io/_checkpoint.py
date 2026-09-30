@@ -369,6 +369,10 @@ def _registration_results(directory, transforms):
             diagnostics = dict(entry["diagnostics"])
             diagnostics["effective_config"] = _config(diagnostics["effective_config"], methods)
             diagnostics["warnings"] = tuple(diagnostics["warnings"])
+            for key in ("iterations_completed", "final_metric_value", "stop_condition", "elapsed_iterations",
+                        "final_rms_change"):
+                if isinstance(diagnostics.get(key), list):
+                    diagnostics[key] = tuple(diagnostics[key])
             restored.append(RegistrationResult(transform, RegistrationDiagnostics(**diagnostics),
                                                _config(entry["application_config"], WarpConfig)))
         results[name] = restored

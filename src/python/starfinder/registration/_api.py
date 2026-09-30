@@ -15,6 +15,8 @@ from ._errors import (
 from ._methods import REGISTRATION_METHODS, RegistrationConfig, _check_shape
 from ._resampling import _cast_warp_output, _output_dtype, apply_tps_deformation
 from ._types import (
+    AffineTransform,
+    BSplineTransform,
     DenseDisplacementTransform,
     RegistrationDiagnostics,
     RegistrationResult,
@@ -35,10 +37,13 @@ def estimate_transform(
 
     The exact config type selects the method in REGISTRATION_METHODS. Its
     declared dimensions and min_shape_zyx are checked before it runs:
-    translation supports singleton axes; current local estimators require 3D
-    (demons axes >=4, TPS and CPD >=2). Declared optional dependencies are
-    imported before the estimator runs. Unknown physical geometry is accepted
-    when explicitly unknown in both metadata values. No algorithm
+    translation supports singleton axes; rigid, affine, B-spline and demons
+    estimate Z=1 as 2D and reject 1 < Z < 4 (rigid, affine and B-spline need
+    Y and X of at least 16, demons 4); TPS and CPD require 3D with every axis
+    at least 2. Declared optional dependencies are imported before the
+    estimator runs. Unknown physical geometry is accepted when explicitly
+    unknown in both metadata values; the physical-space methods then use unit
+    spacing and record spacing_source="unknown_unit". No algorithm
     substitution occurs, including on insufficient landmarks.
     """
     spec = spec_for(REGISTRATION_METHODS, config, "registration method", InvalidRegistrationConfigError,
@@ -55,7 +60,7 @@ def estimate_transform(
     _check_shape(spec, reference_image.shape)
     require(spec, "registration method", RegistrationBackendUnavailableError)
     try:
-        transform, backend, application = spec.run(reference_image, moving_image, config, geometry)
+        transform, backend, application, *details = spec.run(reference_image, moving_image, config, geometry)
     except ImportError as exc:
         raise RegistrationBackendUnavailableError(str(exc)) from exc
     except (np.linalg.LinAlgError, RuntimeError, ValueError) as exc:
@@ -63,13 +68,14 @@ def estimate_transform(
             raise
         raise RegistrationEstimationError(f"{config.method} estimation failed: {exc}") from exc
     return RegistrationResult(
-        transform, RegistrationDiagnostics(config.method, backend, config), application
+        transform, RegistrationDiagnostics(config.method, backend, config, **(details[0] if details else {})),
+        application,
     )
 
 
 def apply_transform(
     moving_image: np.ndarray,
-    transform: TranslationTransform | DenseDisplacementTransform,
+    transform: TranslationTransform | AffineTransform | BSplineTransform | DenseDisplacementTransform,
     *,
     config: WarpConfig,
 ) -> np.ndarray:
@@ -78,16 +84,21 @@ def apply_transform(
     Returns an array on transform.reference_metadata/grid, preserving channel
     order and input dtype by default. Translations stay compact; SciPy uses
     slice-sized coordinate arrays; SimpleITK prepares one field/resampler.
+    Affine and B-spline transforms are applied through their dense() pull
+    field with the scipy or simpleitk backend.
     """
     if not isinstance(config, WarpConfig):
         raise InvalidRegistrationConfigError("expected WarpConfig")
     image = _validate_image(moving_image)
-    if not isinstance(transform, (TranslationTransform, DenseDisplacementTransform)):
+    if not isinstance(transform, (TranslationTransform, AffineTransform, BSplineTransform,
+                                  DenseDisplacementTransform)):
         raise UnsupportedTransformOperationError("unsupported transform type")
     if image.shape[:3] != transform.moving_shape_zyx:
         raise IncompatibleGeometryError("moving image does not match transform grid")
     if isinstance(transform, TranslationTransform) != (config.backend == "translation"):
         raise UnsupportedTransformOperationError("transform incompatible with application backend")
+    if isinstance(transform, (AffineTransform, BSplineTransform)):
+        transform = transform.dense()
     channels = image[..., None] if image.ndim == 3 else image
     output = np.empty(channels.shape, dtype=_output_dtype(image.dtype, config.output_dtype))
     if config.backend == "simpleitk":

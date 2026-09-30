@@ -203,6 +203,23 @@ four rounds, are generated in session with `generate_registration_pair`,
 | V10 | Empty and constant input | Constant moving signal; moving round shifted beyond the grid | Raised error; `registration_qc` NCC and SSIM | Rigid, affine and B-spline raise `RegistrationEstimationError("constant registration signal")`; NCC and SSIM are `None` with a reason; coverage 0. |
 | V11 | Determinism | V2 to V5 fixtures, seed 100, run twice at one thread | Transform and image digests | Bit-identical. |
 
+**V4 and V5 fixture density (implemented checks, W-255; open point for
+Jiahao).** The V4 and V5 scenes use the benchmark appearance with noise and
+128 amplicons per 64×64 plane: 128 on 1×64×64 and 512 on 16×64×64
+(`test/test_registration_methods.py`). This density was an operator decision of
+2026-09-30, taken under Jiahao's delegation and pending his confirmation. The
+fixture density decides pass or fail. At the W-244 development density (32 per
+64×64 plane, 128 on 16×64×64) the provisional bounds are exceeded:
+
+* B-spline 16×64×64: p95 1.05;
+* B-spline 1×64×64: p95 1.69;
+* demons on Z=1, seed 100: median 0.53 and p95 1.43;
+* worst p95 across seeds 100 to 102: 2.52 (demons on Z=1, seed 102).
+
+At the chosen density every V4 and V5 case meets its bound, with p95 at most
+0.79. The per-case values are in the W-255 run directory
+(`bound_sensitivity.csv`). Task group 6 (W-258) uses the same density.
+
 Metrics that must be added to `starfinder.evaluation` for these checks, as
 specified in {doc}`registration-contract` ("Routine QC"):
 

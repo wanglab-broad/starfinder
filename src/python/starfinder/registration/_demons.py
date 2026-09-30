@@ -58,13 +58,22 @@ def _create_demons_filter(sitk, method: str, smoothing_sigma: float):
     return demons
 
 
-def _run_sitk_pyramid(sitk, fixed, moving, demons, iterations):
+def _level_record(demons, levels):
+    """Append the elapsed iterations and final RMS change of the level just run."""
+    if levels is not None:
+        levels.append((int(demons.GetElapsedIterations()), float(demons.GetRMSChange())))
+
+
+def _run_sitk_pyramid(sitk, fixed, moving, demons, iterations, levels=None):
     """Run demons with SimpleITK's built-in (naive) multi-resolution pyramid.
 
     This is the original implementation. It uses ``sitk.Shrink`` for
     downsampling which does naive subsampling (every Nth voxel) with no
     anti-aliasing. Works acceptably for single-level registration but
     degrades quality for multi-level pyramids on sparse fluorescence images.
+    Volumes are ZYX or, for Z=1 estimation, YX; the field has one component
+    per axis in the same order. levels, when given, receives
+    (elapsed iterations, final RMS change) per level.
     """
     fixed_sitk = sitk.GetImageFromArray(fixed.astype(np.float32))
     moving_sitk = sitk.GetImageFromArray(moving.astype(np.float32))
@@ -81,8 +90,8 @@ def _run_sitk_pyramid(sitk, fixed, moving, demons, iterations):
 
     for shrink, num_iter in zip(shrink_factors, iterations):
         if shrink > 1:
-            fixed_level = sitk.Shrink(fixed_sitk, [shrink] * 3)
-            moving_level = sitk.Shrink(moving_sitk, [shrink] * 3)
+            fixed_level = sitk.Shrink(fixed_sitk, [shrink] * fixed.ndim)
+            moving_level = sitk.Shrink(moving_sitk, [shrink] * fixed.ndim)
         else:
             fixed_level = fixed_sitk
             moving_level = moving_sitk
@@ -91,6 +100,7 @@ def _run_sitk_pyramid(sitk, fixed, moving, demons, iterations):
 
         if displacement_field is None:
             displacement_field = demons.Execute(fixed_level, moving_level)
+            _level_record(demons, levels)
         else:
             current_size = fixed_level.GetSize()
             prev_size = displacement_field.GetSize()
@@ -106,19 +116,20 @@ def _run_sitk_pyramid(sitk, fixed, moving, demons, iterations):
 
             displacement_field = sitk.Compose([
                 sitk.VectorIndexSelectionCast(displacement_field, i) * scale[i]
-                for i in range(3)
+                for i in range(fixed.ndim)
             ])
 
             displacement_field = demons.Execute(
                 fixed_level, moving_level, displacement_field
             )
+            _level_record(demons, levels)
 
     field_array = sitk.GetArrayFromImage(displacement_field)
     field_array = field_array[..., ::-1]  # (dx,dy,dz) -> (dz,dy,dx)
     return field_array
 
 
-def _run_antialias_pyramid(sitk, fixed, moving, demons, iterations):
+def _run_antialias_pyramid(sitk, fixed, moving, demons, iterations, levels=None):
     """Run demons with MATLAB-matching anti-aliased multi-resolution pyramid.
 
     Replaces SimpleITK's naive ``Shrink`` with Butterworth-filtered
@@ -137,6 +148,9 @@ def _run_antialias_pyramid(sitk, fixed, moving, demons, iterations):
     - Pre-allocated buffer for field upsampling
 
     - No redundant .astype() copies
+
+    Volumes are ZYX or, for Z=1 estimation, YX (the pyramid then acts on Y
+    and X only); levels as for _run_sitk_pyramid.
     """
     from starfinder.registration._pyramid import (
         antialias_resize,
@@ -159,6 +173,7 @@ def _run_antialias_pyramid(sitk, fixed, moving, demons, iterations):
 
     # Displacement field in numpy convention (Z, Y, X, 3) with (dz, dy, dx)
     displacement_np = None
+    ndim = fixed.ndim
 
     for level_idx, num_iter in enumerate(iterations):
         # Downsample factor: coarsest level first
@@ -191,13 +206,14 @@ def _run_antialias_pyramid(sitk, fixed, moving, demons, iterations):
         if displacement_np is None:
             # First level: run demons directly
             disp_sitk = demons.Execute(fixed_sitk, moving_sitk)
+            _level_record(demons, levels)
         else:
             # Upsample displacement field from previous level
             # Scale each component by 2 (since spatial dimensions doubled)
             target_shape = fixed_level.shape
             disp_dtype = displacement_np.dtype
-            upsampled = np.empty((*target_shape, 3), dtype=disp_dtype)
-            for d in range(3):
+            upsampled = np.empty((*target_shape, ndim), dtype=disp_dtype)
+            for d in range(ndim):
                 upsampled[..., d] = antialias_resize(
                     displacement_np[..., d], 2.0
                 ) * 2.0
@@ -205,7 +221,7 @@ def _run_antialias_pyramid(sitk, fixed, moving, demons, iterations):
             # D5: Pre-allocate a single buffer, reuse across 3 components.
             # Saves 2 full-resolution array allocations.
             tmp = np.zeros(target_shape, dtype=disp_dtype)
-            for d in range(3):
+            for d in range(ndim):
                 comp = upsampled[..., d]
                 # Handle size mismatches from rounding
                 slices = tuple(
@@ -228,14 +244,15 @@ def _run_antialias_pyramid(sitk, fixed, moving, demons, iterations):
             disp_sitk.CopyInformation(fixed_sitk)
 
             disp_sitk = demons.Execute(fixed_sitk, moving_sitk, disp_sitk)
+            _level_record(demons, levels)
 
         # Convert result back to numpy (dz, dy, dx)
         displacement_np = sitk.GetArrayFromImage(disp_sitk)[..., ::-1].copy()
 
     # Crop padding from displacement field
     field_cropped = crop_padding(displacement_np[..., 0], pad_widths)
-    result = np.empty((*field_cropped.shape, 3), dtype=displacement_np.dtype)
-    for d in range(3):
+    result = np.empty((*field_cropped.shape, ndim), dtype=displacement_np.dtype)
+    for d in range(ndim):
         result[..., d] = crop_padding(displacement_np[..., d], pad_widths)
 
     return result
@@ -306,6 +323,12 @@ def demons_register(
     are float64; warped images preserve the input dtype. Do not negate these
     fields as if they were translations for ``apply_shift``.
     """
+    return _demons_field(fixed, moving, iterations, smoothing_sigma, method, pyramid_mode)
+
+
+def _demons_field(fixed, moving, iterations=None, smoothing_sigma=1.0, method="demons",
+                  pyramid_mode="antialias", levels=None):
+    """demons_register on ZYX or YX arrays; levels receives the per-level records."""
     sitk = _import_sitk()
 
     if iterations is None:
@@ -314,24 +337,34 @@ def demons_register(
     demons = _create_demons_filter(sitk, method, smoothing_sigma)
 
     if pyramid_mode == "antialias" and len(iterations) > 1:
-        return _run_antialias_pyramid(sitk, fixed, moving, demons, iterations)
+        return _run_antialias_pyramid(sitk, fixed, moving, demons, iterations, levels)
     else:
-        return _run_sitk_pyramid(sitk, fixed, moving, demons, iterations)
-
-
+        return _run_sitk_pyramid(sitk, fixed, moving, demons, iterations, levels)
 
 
 def estimate_demons(reference, moving, config, geometry):
-    """Registered estimator of DemonsConfig: transform, backend and application policy."""
+    """Registered estimator of DemonsConfig: transform, backend, application policy and diagnostics.
+
+    A Z=1 input is estimated as 2D on its YX plane (the pyramid acts on Y and
+    X only) and embedded as a (1, Y, X, 3) field whose Z component is exactly 0.
+    """
     from ._config import WarpConfig
     from ._types import DenseDisplacementTransform
 
-    field = demons_register(
-        reference,
-        moving,
+    two_d = reference.shape[0] == 1
+    levels = []
+    field = _demons_field(
+        reference[0] if two_d else reference,
+        moving[0] if two_d else moving,
         iterations=config.iterations,
         smoothing_sigma=config.smoothing_sigma,
         method=config.variant,
         pyramid_mode=config.pyramid_mode,
+        levels=levels,
     )
-    return DenseDisplacementTransform(field, **geometry), "simpleitk", WarpConfig(backend="simpleitk")
+    if two_d:
+        embedded = np.zeros((*reference.shape, 3), dtype=field.dtype)
+        embedded[0, ..., 1:] = field
+        field = embedded
+    details = dict(elapsed_iterations=tuple(n for n, _ in levels), final_rms_change=tuple(r for _, r in levels))
+    return DenseDisplacementTransform(field, **geometry), "simpleitk", WarpConfig(backend="simpleitk"), details
