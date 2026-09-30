@@ -16,17 +16,17 @@ import yaml
 from starfinder.dataset import CheckpointConfig, Dataset, ExecutionConfig, PipelineConfig, RoundState, from_workflow_config
 from starfinder.image import ImageMetadata
 from starfinder.io import ImageLoadConfig, save_volume
-from starfinder.preprocessing import (STEPS, Background3DConfig, HistogramMatchingConfig, MinMaxNormalizationConfig,
-    PercentileNormalizationConfig, PreprocessingRecipe, RecipeStep, ReconstructionConfig, ScalarBackgroundConfig, StepContext, StepResult, StepSpec, TophatConfig, run_step, step_config_type,
+from starfinder.preprocessing import (PREPROCESSING_METHODS, Background3DConfig, HistogramMatchingConfig, MinMaxNormalizationConfig,
+    PercentileNormalizationConfig, PreprocessingRecipe, PreprocessingStep, ReconstructionConfig, ScalarBackgroundConfig, StepContext, StepResult, PreprocessingSpec, TophatConfig, run_step, step_config_type,
     step_spec)
 
 from .test_preprocessing_golden import PINNED_SEQUENCE, digest, fixture_rounds
 
 ROOT = Path(__file__).resolve().parents[3]
 CHANNELS = ("ch00", "ch01", "ch02", "ch03")
-RECIPE_1 = PreprocessingRecipe((RecipeStep(MinMaxNormalizationConfig("uint8", (0, 255))),
-                                RecipeStep(HistogramMatchingConfig(reference_channel=0)),
-                                RecipeStep(ReconstructionConfig(radius_yx=3))))
+RECIPE_1 = PreprocessingRecipe((PreprocessingStep(MinMaxNormalizationConfig("uint8", (0, 255))),
+                                PreprocessingStep(HistogramMatchingConfig(reference_channel=0)),
+                                PreprocessingStep(ReconstructionConfig(radius_yx=3))))
 
 
 def golden_dataset(tmp_path):
@@ -58,7 +58,7 @@ def recipe_configs(recipe):
 # --- Registry -------------------------------------------------------------------
 
 def test_registered_steps_match_the_contract_table():
-    table = {cls: (spec.name, spec.category, spec.scope, spec.dtype_policy) for cls, spec in STEPS.items()}
+    table = {cls: (spec.name, spec.category, spec.scope, spec.dtype_policy) for cls, spec in PREPROCESSING_METHODS.items()}
     assert table == {
         MinMaxNormalizationConfig: ("min_max_normalization", "intensity", "per_channel", "declared"),
         HistogramMatchingConfig: ("histogram_matching", "intensity", "needs_reference", "preserve"),
@@ -70,9 +70,9 @@ def test_registered_steps_match_the_contract_table():
 
 
 def test_step_names_are_unique_and_name_lookup_is_derived_from_steps(monkeypatch):
-    names = [spec.name for spec in STEPS.values()]
+    names = [spec.name for spec in PREPROCESSING_METHODS.values()]
     assert len(set(names)) == len(names)
-    for config_type, spec in STEPS.items():
+    for config_type, spec in PREPROCESSING_METHODS.items():
         assert step_config_type(spec.name) is config_type
     with pytest.raises(ValueError, match="unknown"):
         step_config_type("no_such_step")
@@ -81,10 +81,10 @@ def test_step_names_are_unique_and_name_lookup_is_derived_from_steps(monkeypatch
     class NewConfig:
         pass
 
-    # A step registered only in STEPS is found by name: there is no second list.
-    monkeypatch.setitem(STEPS, NewConfig, StepSpec("new_step", lambda v, c, x: StepResult(v, {}, {}), "contrast", "per_round"))
+    # A step registered only in PREPROCESSING_METHODS is found by name: there is no second list.
+    monkeypatch.setitem(PREPROCESSING_METHODS, NewConfig, PreprocessingSpec("new_step", lambda v, c, x: StepResult(v, {}, {}), "contrast", "per_round"))
     assert step_config_type("new_step") is NewConfig
-    monkeypatch.setitem(STEPS, NewConfig, StepSpec("white_tophat", lambda v, c, x: StepResult(v, {}, {}), "contrast", "per_round"))
+    monkeypatch.setitem(PREPROCESSING_METHODS, NewConfig, PreprocessingSpec("white_tophat", lambda v, c, x: StepResult(v, {}, {}), "contrast", "per_round"))
     with pytest.raises(ValueError, match="more than once"):
         step_config_type("white_tophat")
 
@@ -93,7 +93,7 @@ def test_step_spec_validates_its_declarations():
     run = lambda v, c, x: StepResult(v, {}, {})
     for bad in (dict(name="WhiteTophat"), dict(category="colour"), dict(scope="per_fov"), dict(dtype_policy="any")):
         with pytest.raises(ValueError):
-            StepSpec(**{**dict(name="ok_step", run=run, category="background", scope="per_channel"), **bad})
+            PreprocessingSpec(**{**dict(name="ok_step", run=run, category="background", scope="per_channel"), **bad})
 
 
 def test_lookup_uses_the_exact_config_type():
@@ -105,7 +105,7 @@ def test_lookup_uses_the_exact_config_type():
     context = StepContext("round1", "round1", ImageMetadata("frame"))
     assert step_spec(TophatConfig()).name == "white_tophat"
     for call in (lambda: step_spec(SubTophat()), lambda: run_step(volume, SubTophat(), context),
-                 lambda: RecipeStep(SubTophat()), lambda: RecipeStep("white_tophat")):
+                 lambda: PreprocessingStep(SubTophat()), lambda: PreprocessingStep("white_tophat")):
         with pytest.raises(TypeError, match="exact config type"):
             call()
 
@@ -140,7 +140,7 @@ def _faulty(volume, config, context):
 
 @pytest.fixture
 def faulty_step(monkeypatch):
-    monkeypatch.setitem(STEPS, FaultyConfig, StepSpec("faulty_step", _faulty, "contrast", "per_channel"))
+    monkeypatch.setitem(PREPROCESSING_METHODS, FaultyConfig, PreprocessingSpec("faulty_step", _faulty, "contrast", "per_channel"))
 
 
 @pytest.mark.parametrize("fault, message", [
@@ -178,7 +178,7 @@ def test_wrapper_declared_dtype_and_reference_requirements():
 @pytest.mark.parametrize("fault", ["shape", "metadata"])
 def test_run_record_names_the_failing_step(tmp_path, faulty_step, fault):
     fov = resident_fov(tmp_path)
-    recipe = PreprocessingRecipe((RecipeStep(TophatConfig()), RecipeStep(FaultyConfig(fault))))
+    recipe = PreprocessingRecipe((PreprocessingStep(TophatConfig()), PreprocessingStep(FaultyConfig(fault))))
     with pytest.raises(ValueError, match="faulty_step"):
         fov.run(PipelineConfig(preprocessing=recipe), checkpoints=CheckpointConfig(stages=()))
     data = json.loads((fov.paths.checkpoint_dir / "run.json").read_text())
@@ -190,12 +190,12 @@ def test_run_record_names_the_failing_step(tmp_path, faulty_step, fault):
 # --- Recipe validation ----------------------------------------------------------
 
 def test_post_registration_accepts_only_reconstruction():
-    PreprocessingRecipe(post_registration=(RecipeStep(ReconstructionConfig()),))
+    PreprocessingRecipe(post_registration=(PreprocessingStep(ReconstructionConfig()),))
     for config in (TophatConfig(), MinMaxNormalizationConfig("uint8", (0, 255)), HistogramMatchingConfig()):
         with pytest.raises(ValueError, match="post_registration may contain only ReconstructionConfig"):
-            PreprocessingRecipe(post_registration=(RecipeStep(config),))
+            PreprocessingRecipe(post_registration=(PreprocessingStep(config),))
     with pytest.raises(ValueError, match="post_registration"):
-        PipelineConfig(preprocessing=PreprocessingRecipe(post_registration=[RecipeStep(TophatConfig())]))
+        PipelineConfig(preprocessing=PreprocessingRecipe(post_registration=[PreprocessingStep(TophatConfig())]))
     with pytest.raises(TypeError):
         PreprocessingRecipe((TophatConfig(),))
     with pytest.raises(ValueError, match="reference_channel"):
@@ -270,7 +270,7 @@ def test_batch_and_streaming_recipe_give_identical_images(tmp_path):
 
 def test_streaming_retains_the_histogram_reference_after_reference_processing(tmp_path):
     """Streaming keeps the reference round's input to the step for the moving rounds."""
-    recipe = PreprocessingRecipe((RecipeStep(HistogramMatchingConfig(reference_channel=2)), RecipeStep(TophatConfig())))
+    recipe = PreprocessingRecipe((PreprocessingStep(HistogramMatchingConfig(reference_channel=2)), PreprocessingStep(TophatConfig())))
     fov = resident_fov(tmp_path)
     reference = fov.images["round1"][..., 2].copy()
     fov.run(PipelineConfig(preprocessing=recipe), execution=ExecutionConfig("streaming"))
@@ -282,7 +282,7 @@ def test_streaming_retains_the_histogram_reference_after_reference_processing(tm
     np.testing.assert_array_equal(fov.images["round2"], expected)
     with pytest.raises(ValueError, match="reference_channel 4 is outside"):
         resident_fov(tmp_path).run(PipelineConfig(preprocessing=PreprocessingRecipe(
-            (RecipeStep(HistogramMatchingConfig(reference_channel=4)),))))
+            (PreprocessingStep(HistogramMatchingConfig(reference_channel=4)),))))
 
 
 # --- Workflow adapter -------------------------------------------------------------

@@ -1,13 +1,17 @@
 """Explicit index-space transform and result contracts."""
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 from starfinder.image import ImageMetadata, IncompatibleGeometryError
 
-from ._config import CpdConfig, DemonsConfig, TpsConfig, TranslationConfig, WarpConfig
+from ._config import WarpConfig
 from ._errors import UnsupportedTransformOperationError
+
+if TYPE_CHECKING:
+    from ._methods import RegistrationConfig
 
 
 def _geometry(reference_shape, moving_shape, reference_metadata, moving_metadata):
@@ -109,7 +113,7 @@ class RegistrationDiagnostics:
 
     method: str
     backend: str
-    effective_config: TranslationConfig | DemonsConfig | TpsConfig | CpdConfig
+    effective_config: "RegistrationConfig"
     converged: bool | None = None
     iterations_completed: int | None = None
     reference_landmark_count: int | None = None

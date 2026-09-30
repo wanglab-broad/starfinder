@@ -15,8 +15,8 @@ from skimage.exposure import match_histograms
 
 from starfinder.dataset import Dataset, PipelineConfig, RoundState
 from starfinder.image import ImageMetadata
-from starfinder.preprocessing import (STEPS, HistogramMatchingConfig, HistogramSummary, MinMaxNormalizationConfig,
-    PercentileNormalizationConfig, PreprocessingRecipe, RecipeStep, StepContext, TophatConfig, filter_tophat,
+from starfinder.preprocessing import (PREPROCESSING_METHODS, HistogramMatchingConfig, HistogramSummary, MinMaxNormalizationConfig,
+    PercentileNormalizationConfig, PreprocessingRecipe, PreprocessingStep, StepContext, TophatConfig, filter_tophat,
     histogram_percentile, match_histogram, merge_histograms, normalize_percentile, read_histograms,
     read_supplied_statistics, run_step, summarize_histograms, summary_stage, supplied_section, supplied_statistics,
     write_histograms, write_supplied_statistics)
@@ -75,7 +75,7 @@ def percentile_section(fitted, after=(), p_low=1.0, p_high=99.9):
 # --- Registration and config ------------------------------------------------------
 
 def test_percentile_normalization_is_registered_per_channel_and_preserving():
-    spec = STEPS[PercentileNormalizationConfig]
+    spec = PREPROCESSING_METHODS[PercentileNormalizationConfig]
     assert (spec.name, spec.category, spec.scope, spec.dtype_policy) == \
         ("percentile_normalization", "intensity", "per_channel", "preserve")
     assert asdict(PercentileNormalizationConfig()) == {"p_low": 1.0, "p_high": 99.9, "fit": "fov"}
@@ -293,10 +293,10 @@ def test_supplied_histogram_reference_equals_matching_the_concatenated_reference
 def test_supplied_histogram_reference_through_fov_run_matches_legacy_recipe_1(tmp_path):
     """Recipe 1 with a single-FOV supplied reference reproduces the per-FOV reference."""
     fovs = random_fovs(np.uint16, seed=5)
-    minmax = RecipeStep(MinMaxNormalizationConfig("uint8", (0, 255)))
-    fov_recipe = PreprocessingRecipe((minmax, RecipeStep(HistogramMatchingConfig())))
+    minmax = PreprocessingStep(MinMaxNormalizationConfig("uint8", (0, 255)))
+    fov_recipe = PreprocessingRecipe((minmax, PreprocessingStep(HistogramMatchingConfig())))
     path = tmp_path / "supplied.json"
-    recipe = PreprocessingRecipe((minmax, RecipeStep(HistogramMatchingConfig(fit="supplied"))), supplied_statistics=path)
+    recipe = PreprocessingRecipe((minmax, PreprocessingStep(HistogramMatchingConfig(fit="supplied"))), supplied_statistics=path)
     prefix, after = summary_stage(recipe, "histogram_matching")
     assert prefix.steps == (minmax,) and prefix.supplied_statistics is None
     assert after == ({"step": "min_max_normalization", "config": json.loads(json.dumps(asdict(minmax.config)))},)
@@ -317,13 +317,13 @@ def test_supplied_histogram_reference_through_fov_run_matches_legacy_recipe_1(tm
 def test_fov_fitted_ranges_written_as_supplied_values_give_identical_output(tmp_path):
     fovs = random_fovs(np.uint16, seed=6)
     ds = dataset(tmp_path)
-    tophat = RecipeStep(TophatConfig())
+    tophat = PreprocessingStep(TophatConfig())
     fitted_run = resident(ds, "FOV_001", fovs["FOV_001"]).run(PipelineConfig(
-        preprocessing=PreprocessingRecipe((tophat, RecipeStep(PercentileNormalizationConfig())))))
+        preprocessing=PreprocessingRecipe((tophat, PreprocessingStep(PercentileNormalizationConfig())))))
     records = fitted_run.preprocessing_record["rounds"]
     fitted = {name: records[name][1]["fitted"] for name in ROUNDS}
     path = tmp_path / "supplied.json"
-    recipe = PreprocessingRecipe((tophat, RecipeStep(PercentileNormalizationConfig(fit="supplied"))),
+    recipe = PreprocessingRecipe((tophat, PreprocessingStep(PercentileNormalizationConfig(fit="supplied"))),
                                  supplied_statistics=path)
     after = summary_stage(recipe, "percentile_normalization")[1]
     write_supplied_statistics(document({"percentile_normalization": percentile_section(fitted, after)}, "uint16"), path)
@@ -342,7 +342,7 @@ def test_supplied_range_is_fitted_after_the_preceding_step(tmp_path):
         for name in ROUNDS:
             rounds[name] = (rounds[name] // 4 + 60).astype(np.uint8)
     path = tmp_path / "supplied.json"
-    recipe = PreprocessingRecipe((RecipeStep(TophatConfig()), RecipeStep(PercentileNormalizationConfig(fit="supplied"))),
+    recipe = PreprocessingRecipe((PreprocessingStep(TophatConfig()), PreprocessingStep(PercentileNormalizationConfig(fit="supplied"))),
                                  supplied_statistics=path)
     prefix, after = summary_stage(recipe, "percentile_normalization")
     ds = dataset(tmp_path)
@@ -371,8 +371,8 @@ def test_supplied_range_is_fitted_after_the_preceding_step(tmp_path):
 
 def _supplied_setup(tmp_path):
     path = tmp_path / "supplied.json"
-    tophat = RecipeStep(TophatConfig())
-    recipe = PreprocessingRecipe((tophat, RecipeStep(PercentileNormalizationConfig(fit="supplied"))),
+    tophat = PreprocessingStep(TophatConfig())
+    recipe = PreprocessingRecipe((tophat, PreprocessingStep(PercentileNormalizationConfig(fit="supplied"))),
                                  supplied_statistics=path)
     after = summary_stage(recipe, "percentile_normalization")[1]
     fitted = {name: {"low": [0, 1], "high": [200, 150]} for name in ROUNDS}
@@ -445,7 +445,7 @@ def test_histogram_section_faults_raise(tmp_path):
     merged = merge_histograms(summaries_of(fovs))
     config = HistogramMatchingConfig(fit="supplied")
     section = supplied_section(config, merged, reference_round="round1")
-    recipe = PreprocessingRecipe((RecipeStep(config),), supplied_statistics=tmp_path / "s.json")
+    recipe = PreprocessingRecipe((PreprocessingStep(config),), supplied_statistics=tmp_path / "s.json")
     good = supplied_statistics(merged, {"histogram_matching": section})
     write_supplied_statistics(good, tmp_path / "s.json")
     assert read_supplied_statistics(tmp_path / "s.json", recipe)["steps"]["histogram_matching"] == section
@@ -457,7 +457,7 @@ def test_histogram_section_faults_raise(tmp_path):
         change(candidate["steps"]["histogram_matching"])
         with pytest.raises(ValueError):
             write_supplied_statistics(candidate, tmp_path / "bad.json")
-    other = PreprocessingRecipe((RecipeStep(HistogramMatchingConfig(reference_channel=1, fit="supplied")),),
+    other = PreprocessingRecipe((PreprocessingStep(HistogramMatchingConfig(reference_channel=1, fit="supplied")),),
                                 supplied_statistics=tmp_path / "s.json")
     with pytest.raises(ValueError, match="reference_channel"):
         read_supplied_statistics(tmp_path / "s.json", other)
@@ -469,16 +469,16 @@ def test_histogram_section_faults_raise(tmp_path):
 
 
 def test_recipe_rejects_repeated_supplied_step_names_and_a_missing_file():
-    supplied = RecipeStep(PercentileNormalizationConfig(fit="supplied"))
+    supplied = PreprocessingStep(PercentileNormalizationConfig(fit="supplied"))
     with pytest.raises(ValueError, match="more than once"):
-        PreprocessingRecipe((supplied, RecipeStep(TophatConfig()), supplied), supplied_statistics="s.json")
+        PreprocessingRecipe((supplied, PreprocessingStep(TophatConfig()), supplied), supplied_statistics="s.json")
     with pytest.raises(ValueError, match="supplied_statistics is not set"):
         PreprocessingRecipe((supplied,))
     # The same name with fit="fov" alongside one supplied step is allowed.
-    recipe = PreprocessingRecipe((RecipeStep(PercentileNormalizationConfig()), supplied), supplied_statistics="s.json")
+    recipe = PreprocessingRecipe((PreprocessingStep(PercentileNormalizationConfig()), supplied), supplied_statistics="s.json")
     assert recipe.supplied_statistics == Path("s.json")
     with pytest.raises(ValueError, match="no step"):
-        summary_stage(PreprocessingRecipe((RecipeStep(TophatConfig()),)), "percentile_normalization")
+        summary_stage(PreprocessingRecipe((PreprocessingStep(TophatConfig()),)), "percentile_normalization")
 
 
 # --- Two-pass example -----------------------------------------------------------------

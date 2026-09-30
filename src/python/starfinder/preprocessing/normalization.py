@@ -236,3 +236,75 @@ def normalize_percentile(volume: np.ndarray, *, config: PercentileNormalizationC
         fitted values given with fit="fov".
     """
     return _percentile_normalize(volume, config, fitted)[0]
+
+
+# --- Supplied-statistics hooks (SuppliedSpec in steps.py) -----------------------------
+
+def _integer(value):
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def _fit_percentile(config, merged, reference_round):
+    """params {"p_low", "p_high"} and, per round, {"low": [...], "high": [...]} from merged counts."""
+    fitted = {name: {"low": [histogram_percentile(counts, config.p_low) for counts in merged.counts[r]],
+                     "high": [histogram_percentile(counts, config.p_high) for counts in merged.counts[r]]}
+              for r, name in enumerate(merged.round_names)}
+    return {"params": {"p_low": float(config.p_low), "p_high": float(config.p_high)}, "fitted": fitted}
+
+
+def _validate_percentile(section, dtype, n_channels):
+    params = section["params"]
+    if not isinstance(params, Mapping) or set(params) != {"p_low", "p_high"}:
+        raise ValueError('percentile_normalization params must be {"p_low", "p_high"}')
+    PercentileNormalizationConfig(params["p_low"], params["p_high"])
+    for name, entry in section["fitted"].items():
+        try:
+            _supplied_range(entry, n_channels)
+        except ValueError as error:
+            raise ValueError(f"percentile_normalization round {name!r}: {error}") from None
+
+
+def _check_percentile_params(config, params, name):
+    if (params["p_low"], params["p_high"]) != (config.p_low, config.p_high):
+        raise ValueError(f"section {name!r} was fitted with p_low={params['p_low']}, p_high={params['p_high']}, "
+                         f"not the recipe's {config.p_low}, {config.p_high}")
+
+
+def _fit_histogram(config, merged, reference_round):
+    """params {"reference_round", "reference_channel"} and the reference round's nonzero merged counts."""
+    if reference_round not in merged.round_names:
+        raise ValueError(f"reference_round {reference_round!r} is not a summarized round {list(merged.round_names)}")
+    if config.reference_channel >= len(merged.channel_labels):
+        raise ValueError(f"reference_channel {config.reference_channel} is outside the summarized channels")
+    counts = merged.counts[merged.round_names.index(reference_round), config.reference_channel]
+    values = np.flatnonzero(counts)
+    return {"params": {"reference_round": reference_round, "reference_channel": config.reference_channel},
+            "fitted": {reference_round: {"values": values.tolist(), "counts": counts[values].tolist()}}}
+
+
+def _validate_histogram(section, dtype, n_channels):
+    params = section["params"]
+    if not isinstance(params, Mapping) or set(params) != {"reference_round", "reference_channel"}:
+        raise ValueError('histogram_matching params must be {"reference_round", "reference_channel"}')
+    round_name, channel = params["reference_round"], params["reference_channel"]
+    if not _integer(channel) or not 0 <= channel < n_channels:
+        raise ValueError(f"histogram_matching reference_channel {channel!r} is not one of the {n_channels} channels")
+    if dtype.kind != "u":
+        raise ValueError(f"a supplied histogram reference requires unsigned integer data, not {dtype}")
+    if set(section["fitted"]) != {round_name}:
+        raise ValueError(f"histogram_matching fitted values must be given for reference round {round_name!r} only")
+    entry = section["fitted"][round_name]
+    if not isinstance(entry, Mapping) or set(entry) != {"values", "counts"}:
+        raise ValueError('histogram_matching fitted values must be {"values", "counts"}')
+    values, counts = entry["values"], entry["counts"]
+    if not isinstance(values, list) or not isinstance(counts, list) or not values or len(values) != len(counts) \
+            or not all(map(_integer, values + counts)):
+        raise ValueError("histogram_matching values and counts must be nonempty integer lists of equal length")
+    if min(counts) <= 0 or values[0] < 0 or values[-1] > np.iinfo(dtype).max or any(np.diff(values) <= 0):
+        raise ValueError("histogram_matching values must increase within the dtype range, with positive counts")
+
+
+def _check_histogram_params(config, params, name):
+    if params["reference_channel"] != config.reference_channel:
+        raise ValueError(f"section {name!r} summarized reference_channel {params['reference_channel']}, "
+                         f"not the recipe's {config.reference_channel}")

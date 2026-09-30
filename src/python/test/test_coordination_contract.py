@@ -15,7 +15,7 @@ from starfinder.dataset import (Dataset, FOV, RoundState, PipelineConfig, Execut
 from starfinder.image import ImageMetadata, IncompatibleGeometryError
 from starfinder.io import ImageLoadConfig, save_volume, export_spots
 from starfinder.preprocessing import (MinMaxNormalizationConfig, HistogramMatchingConfig,
-    ReconstructionConfig, TophatConfig, PreprocessingRecipe, RecipeStep)
+    ReconstructionConfig, TophatConfig, PreprocessingRecipe, PreprocessingStep)
 from starfinder.registration import (TranslationConfig, TpsConfig, DemonsConfig, CpdConfig,
     InsufficientLandmarksError, RegistrationBackendUnavailableError, InvalidRegistrationConfigError)
 from starfinder.spot_finding import LocalMaximaConfig
@@ -47,7 +47,7 @@ def resident(ds):
 
 
 def recipe(*steps, post=()):
-    return PreprocessingRecipe(tuple(map(RecipeStep, steps)), tuple(map(RecipeStep, post)))
+    return PreprocessingRecipe(tuple(map(PreprocessingStep, steps)), tuple(map(PreprocessingStep, post)))
 
 
 def complete(**kwargs):

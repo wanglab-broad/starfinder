@@ -122,12 +122,12 @@ ordered {py:class}`~starfinder.preprocessing.PreprocessingRecipe` in
 
 | Before | After |
 | --- | --- |
-| `PipelineConfig.normalization` | `RecipeStep(MinMaxNormalizationConfig(...))` in `preprocessing.steps` |
-| `PipelineConfig.histogram` | `RecipeStep(HistogramMatchingConfig(...))` in `preprocessing.steps` |
+| `PipelineConfig.normalization` | `PreprocessingStep(MinMaxNormalizationConfig(...))` in `preprocessing.steps` |
+| `PipelineConfig.histogram` | `PreprocessingStep(HistogramMatchingConfig(...))` in `preprocessing.steps` |
 | `PipelineConfig.histogram_reference_channel` | `HistogramMatchingConfig.reference_channel` (default 0) |
-| `PipelineConfig.reconstruction` | `RecipeStep(ReconstructionConfig(...))` in `preprocessing.steps` |
+| `PipelineConfig.reconstruction` | `PreprocessingStep(ReconstructionConfig(...))` in `preprocessing.steps` |
 | `PipelineConfig.reconstruction_after_registration` | The same step in `preprocessing.post_registration`, which accepts only `ReconstructionConfig` |
-| `PipelineConfig.tophat` | `RecipeStep(TophatConfig(...))` in `preprocessing.steps` |
+| `PipelineConfig.tophat` | `PreprocessingStep(TophatConfig(...))` in `preprocessing.steps` |
 | `PipelineConfig.projection` | Removed. `FOV.run` never projects; projection is an output view, and 2D data are volumes with Z = 1 |
 | `FOV.match_histogram(reference_channel=...)` | `FOV.match_histogram(config=HistogramMatchingConfig(reference_channel=...))` |
 
@@ -138,12 +138,12 @@ reproduces the earlier outputs exactly:
 ```python
 from starfinder.dataset import PipelineConfig
 from starfinder.preprocessing import (HistogramMatchingConfig, MinMaxNormalizationConfig,
-    PreprocessingRecipe, RecipeStep, ReconstructionConfig)
+    PreprocessingRecipe, PreprocessingStep, ReconstructionConfig)
 
 pipeline = PipelineConfig(preprocessing=PreprocessingRecipe((
-    RecipeStep(MinMaxNormalizationConfig("uint8", (0, 255))),
-    RecipeStep(HistogramMatchingConfig(reference_channel=0)),
-    RecipeStep(ReconstructionConfig(radius_yx=3)))))
+    PreprocessingStep(MinMaxNormalizationConfig("uint8", (0, 255))),
+    PreprocessingStep(HistogramMatchingConfig(reference_channel=0)),
+    PreprocessingStep(ReconstructionConfig(radius_yx=3)))))
 ```
 
 Every step runs through one wrapper that checks shape, dtype, finiteness and
@@ -154,7 +154,7 @@ and `tophat` are unchanged and translate to recipe 1. `run.json` and the
 `registered` checkpoint gain a `preprocessing` entry with the recipe and one
 record per round and step.
 
-Recipes can also keep named snapshots (`RecipeStep.save_as`) and name an
+Recipes can also keep named snapshots (`PreprocessingStep.save_as`) and name an
 `extraction_source` and a `registration_source`; the new Python-only workflow
 key `preprocessing` declares such a recipe and cannot be combined with the
 legacy keys. These additions are optional: a recipe without them gives the same
@@ -162,6 +162,26 @@ results as before. The preprocessing record gains the two sources, `save_as` per
 step and the transforms applied per round and snapshot, and the `registered`
 checkpoint stores the extraction source under `registered/<snapshot>/`.
 Checkpoints written before these additions still load, with no snapshots.
+
+### Preprocessing registry names
+
+Three public preprocessing names follow the shared
+[method registry](method-registry.md) terms. There are no aliases; replace the
+identifiers where you import or use them.
+
+| Before | After |
+| --- | --- |
+| `starfinder.preprocessing.STEPS` | `starfinder.preprocessing.PREPROCESSING_METHODS` |
+| `starfinder.preprocessing.StepSpec` | `starfinder.preprocessing.PreprocessingSpec` |
+| `starfinder.preprocessing.RecipeStep` | `starfinder.preprocessing.PreprocessingStep` |
+
+`PreprocessingSpec` keeps the positional fields of `StepSpec` and gains the
+keyword-only fields `requires`, `min_shape_zyx`, `post_registration` and
+`supplied`, all with defaults, so existing constructions stay valid.
+`PreprocessingRecipe`, `StepContext`, `StepResult`, `run_step`, `step_spec`,
+`step_config_type`, the recipe field `steps` and every YAML key and saved field
+keep their names. The only changed message is
+`requires PreprocessingStep entries` (was `requires RecipeStep entries`).
 
 ### Reference merged image
 

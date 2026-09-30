@@ -7,9 +7,10 @@ from .dataset import Dataset
 from .types import RoundState, SubtileConfig
 from starfinder.io import ImageLoadConfig
 from starfinder.preprocessing import (MinMaxNormalizationConfig, HistogramMatchingConfig,
-    ReconstructionConfig, TophatConfig, ProjectionConfig, PreprocessingRecipe, RecipeStep, step_config_type)
-from starfinder.registration import (TranslationConfig, DemonsConfig, TpsConfig, CpdConfig,
-    InsufficientLandmarksError, RegistrationEstimationError, WarpConfig)
+    ReconstructionConfig, TophatConfig, ProjectionConfig, PreprocessingRecipe, PreprocessingStep, step_config_type)
+from starfinder._registry import config_type_for
+from starfinder.registration import (REGISTRATION_METHODS, CpdConfig, DemonsConfig, InsufficientLandmarksError,
+    RegistrationEstimationError, WarpConfig)
 from starfinder.barcode import NeighborhoodSumConfig, ReadFilterConfig, WtaDecoderConfig
 from starfinder.spot_finding import LocalMaximaConfig
 
@@ -17,6 +18,11 @@ _RULES = ('rsf_single_fov', 'gr_single_fov_subtile', 'lrsf_single_fov_subtile',
           'deep_create_subtile', 'deep_rsf_subtile')
 # Keys replaced by the explicit preprocessing key (snr_threshold only feeds min-max).
 _LEGACY_PREPROCESSING = ('enhance_contrast', 'hist_equalize', 'morph_recon', 'tophat', 'snr_threshold')
+# Legacy method names: the demons variants select method demons with that variant.
+_DEMONS_VARIANTS = ('diffeomorphic', 'symmetric', 'fast_symmetric')
+# Application backend of a legacy boundary_mode by transform kind (demons keeps SimpleITK),
+# until the recipe's single final resampling replaces per-step warps.
+_WARP_BACKENDS = {'translation': 'translation', 'dense': 'scipy'}
 
 
 def _known(values, allowed, context):
@@ -57,20 +63,17 @@ def _registration(values, *, local=False):
         if target in translated:
             raise ValueError(f'duplicate registration setting {target}')
         translated[target] = value
-    if method == 'translation':
-        config = TranslationConfig(**translated)
-    elif method == 'tps':
-        config = TpsConfig(**translated)
-    elif method == 'cpd':
+    config_type = config_type_for(REGISTRATION_METHODS, 'demons' if method in _DEMONS_VARIANTS else method,
+                                  'registration method', message=f'unknown registration method {method}')
+    if config_type is CpdConfig:
         translated.setdefault('detection_noise_sigma', 3.0)
         translated.setdefault('grid_spacing_voxels', 32)
-        config = CpdConfig(**translated)
-    elif method in ('demons', 'diffeomorphic', 'symmetric', 'fast_symmetric'):
+    if config_type is DemonsConfig:
         if 'iterations' in translated:
             translated['iterations'] = tuple(translated['iterations'])
         config = DemonsConfig(variant=method, **translated)
     else:
-        raise ValueError(f'unknown registration method {method}')
+        config = config_type(**translated)
     recovery = None
     if recovery_values is not None:
         _known(recovery_values, ('allowed_errors', 'alternatives'), 'recovery')
@@ -88,7 +91,8 @@ def _registration(values, *, local=False):
         recovery = RecoveryConfig(allowed, tuple(alternatives))
     warp = None
     if boundary is not None:
-        backend = 'translation' if method == 'translation' else 'scipy' if method in ('tps', 'cpd') else 'simpleitk'
+        kind = REGISTRATION_METHODS[config_type].transform_kind
+        backend = 'simpleitk' if config_type is DemonsConfig else _WARP_BACKENDS[kind]
         warp = WarpConfig(backend=backend, boundary_mode=boundary)
     return RegistrationStep(config, reference, moving, channel, recovery, warp)
 
@@ -110,7 +114,7 @@ def _legacy_recipe(params, norm, do_norm, hist, do_hist, morph, do_morph, top, d
         steps.append(TophatConfig(radius_yx=top.get('radius', 3)))
     if not steps and not post:
         return None
-    return PreprocessingRecipe(tuple(map(RecipeStep, steps)), tuple(map(RecipeStep, post)))
+    return PreprocessingRecipe(tuple(map(PreprocessingStep, steps)), tuple(map(PreprocessingStep, post)))
 
 
 def _tuples(value):
@@ -118,7 +122,7 @@ def _tuples(value):
 
 
 def _explicit_recipe(values):
-    """Recipe from the preprocessing key: steps named by their STEPS names, plus the recipe fields.
+    """Recipe from the preprocessing key: steps named by their PREPROCESSING_METHODS names, plus the recipe fields.
 
     A step's keys other than method and save_as are the fields of its config
     dataclass; YAML lists become tuples.
@@ -136,7 +140,7 @@ def _explicit_recipe(values):
         config_type = step_config_type(entry.pop('method'))
         save_as = entry.pop('save_as', None)
         _known(entry, [f.name for f in fields(config_type) if f.init], f'preprocessing step {config_type.__name__}')
-        steps.append(RecipeStep(config_type(**{k: _tuples(v) for k, v in entry.items()}), save_as))
+        steps.append(PreprocessingStep(config_type(**{k: _tuples(v) for k, v in entry.items()}), save_as))
     supplied = values.get('supplied_statistics')
     return PreprocessingRecipe(tuple(steps), extraction_source=values.get('extraction_source'),
                                registration_source=values.get('registration_source'),
@@ -201,7 +205,7 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
     book, _ = _operation(params, 'load_codebook', ('split_index',))
     load, do_load = _operation(params, 'load_raw_images', ('subdir',))
     steps = []
-    registration_keys = {f.name for cls in (TranslationConfig, DemonsConfig, TpsConfig, CpdConfig) for f in fields(cls) if f.init}
+    registration_keys = {f.name for cls in REGISTRATION_METHODS for f in fields(cls) if f.init}
     registration_keys |= {'ref_round', 'method', 'ref_img', 'mov_img', 'ref_channel', 'boundary_mode', 'recovery',
         'detection_threshold', 'match_distance', 'tps_smoothing', 'grid_spacing', 'beta', 'lmbda', 'cpd_w', 'candidate_radius', 'k_neighbors'}
     enabled_registration = []

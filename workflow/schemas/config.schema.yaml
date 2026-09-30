@@ -378,9 +378,9 @@ $defs:
     additionalProperties: false
 
   # ==================== Explicit preprocessing recipe (Python only) ====================
-  # One definition per step registered in starfinder.preprocessing.STEPS. Keys other
+  # One definition per step registered in starfinder.preprocessing.PREPROCESSING_METHODS. Keys other
   # than method and save_as are the fields of the step's config dataclass; a
-  # default-tier test keeps these definitions equal to STEPS.
+  # default-tier test keeps these definitions equal to PREPROCESSING_METHODS.
   snapshot_name:
     type: string
     pattern: "^[a-z][a-z0-9]*(_[a-z0-9]+)*$"

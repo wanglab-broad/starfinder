@@ -3,16 +3,15 @@ from dataclasses import dataclass
 import math
 from pathlib import Path
 
+from starfinder._registry import spec_for
 from starfinder.io import ImageLoadConfig
 from starfinder.preprocessing import PreprocessingRecipe
-from starfinder.registration import (TranslationConfig, DemonsConfig, TpsConfig, CpdConfig,
-    RegistrationEstimationError, InsufficientLandmarksError, WarpConfig)
+from starfinder.registration import (REGISTRATION_METHODS, RegistrationEstimationError, InsufficientLandmarksError,
+    WarpConfig)
+from starfinder.registration._methods import RegistrationConfig
 from starfinder.spot_finding import LocalMaximaConfig
 from starfinder.barcode import (NeighborhoodSumConfig, WtaDecoderConfig,
     CodebookAwareDecoderConfig, ReadFilterConfig)
-
-_REGISTRATION_CONFIGS = (TranslationConfig, DemonsConfig, TpsConfig, CpdConfig)
-
 
 @dataclass(frozen=True)
 class RecoveryConfig:
@@ -21,7 +20,7 @@ class RecoveryConfig:
     Validation, geometry, application and dependency errors never recover.
     """
     allowed_errors: tuple[type[RegistrationEstimationError], ...]
-    alternatives: tuple[TranslationConfig | DemonsConfig | TpsConfig | CpdConfig, ...]
+    alternatives: tuple[RegistrationConfig, ...]
 
     def __post_init__(self):
         if not self.allowed_errors or any(e not in (RegistrationEstimationError, InsufficientLandmarksError) for e in self.allowed_errors):
@@ -29,15 +28,14 @@ class RecoveryConfig:
         if not self.alternatives:
             raise ValueError('recovery requires ordered alternatives')
         for config in self.alternatives:
-            if not isinstance(config, _REGISTRATION_CONFIGS):
-                raise TypeError('invalid recovery configuration')
+            spec_for(REGISTRATION_METHODS, config, 'registration method', TypeError, 'invalid recovery configuration')
             config.__post_init__()
 
 
 @dataclass(frozen=True)
 class RegistrationStep:
     """One estimate/apply stage with explicit channel reduction and recovery."""
-    config: TranslationConfig | DemonsConfig | TpsConfig | CpdConfig
+    config: RegistrationConfig
     reference_image: str = 'merged'
     moving_image: str = 'merged'
     reference_channel: int = 0
@@ -45,8 +43,7 @@ class RegistrationStep:
     warp: WarpConfig | None = None
 
     def __post_init__(self):
-        if not isinstance(self.config, _REGISTRATION_CONFIGS):
-            raise TypeError('unsupported registration config')
+        spec_for(REGISTRATION_METHODS, self.config, 'registration method', TypeError, 'unsupported registration config')
         self.config.__post_init__()
         if self.reference_image not in ('merged', 'single-channel') or self.moving_image not in ('merged', 'single-channel'):
             raise ValueError('registration image must be merged or single-channel')

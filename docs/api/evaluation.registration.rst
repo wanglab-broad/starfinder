@@ -40,6 +40,19 @@ smaller than three along any measured axis yield undefined SSIM. NCC measures
 all supplied elements; constant images yield undefined NCC. Empty mask unions
 and empty matching denominators remain undefined.
 
+``normalized_cross_correlation`` and ``structural_similarity`` take an optional
+Boolean ``mask``: NCC over the masked elements, and the SSIM map averaged over the
+masked positions of the selected domain. Without it their results are unchanged.
+
+``registration_qc`` measures one registration step or chain on supplied signals:
+the coverage of the valid overlap (reference voxels whose pull point lies inside the
+moving grid), NCC before and after over that same overlap, and SSIM on Z maximum
+projections with a uniform 7×7 window over the valid columns eroded by 3 pixels. It
+also summarizes the transform and records optimizer diagnostics.
+``evaluate_displacement_field`` compares an estimated pull field with a supplied truth
+field (median, 95th percentile and maximum error, in voxels and physical units). See
+the routine QC section of :doc:`../registration-contract`.
+
 Combined registration evaluation checks image geometry. Supplied masks and
 landmarks represent the caller's measurement domain. Benchmark adapters retain
 volume NCC, MIP/volume SSIM, percentile 99.5 detections, and percentile 99 MIP /
@@ -104,11 +117,13 @@ scientific truth/calibration or define an E01 protocol. MATLAB is excluded.
 .. autosummary::
    :toctree: generated
 
+   evaluate_displacement_field
    evaluate_landmark_alignment
    evaluate_mask_overlap
    evaluate_registration
    evaluate_translation
    normalized_cross_correlation
+   registration_qc
    structural_similarity
 
 .. currentmodule:: starfinder.evaluation.spot_finding

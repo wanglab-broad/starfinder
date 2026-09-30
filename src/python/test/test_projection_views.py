@@ -18,7 +18,7 @@ from starfinder.dataset import Dataset, PipelineConfig, RoundState, from_workflo
 from starfinder.image import ImageMetadata, InvalidImageError
 from starfinder.io import load_volume, save_volume
 from starfinder.preprocessing import (MinMaxNormalizationConfig, PreprocessingRecipe, ProjectionConfig,
-    RecipeStep, project_image)
+    PreprocessingStep, project_image)
 
 ROOT = Path(__file__).resolve().parents[3]
 CHANNELS = ('a', 'b', 'c', 'd')
@@ -114,7 +114,7 @@ def test_ref_merged_content_axes_and_dtype(tmp_path, dtype, mode, maximum_projec
 def test_ref_merged_is_the_reference_detection_image(tmp_path):
     raw = reference_round(np.uint16)
     fov = fov_with(tmp_path, raw)
-    fov.run(PipelineConfig(preprocessing=PreprocessingRecipe((RecipeStep(MinMaxNormalizationConfig('uint8', (0, 255))),))))
+    fov.run(PipelineConfig(preprocessing=PreprocessingRecipe((PreprocessingStep(MinMaxNormalizationConfig('uint8', (0, 255))),))))
     detection = fov.images['round1']
     assert detection.dtype == np.uint8
     saved, _ = read_back(fov.save_reference_image())

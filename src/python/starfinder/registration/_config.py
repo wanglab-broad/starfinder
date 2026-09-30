@@ -126,6 +126,39 @@ def _landmark_config(config):
 
 
 @dataclass(frozen=True)
+class RegistrationQcConfig:
+    """Rejection criteria of routine registration QC; every criterion None rejects nothing.
+
+    min_coverage is the smallest valid-overlap fraction in [0, 1];
+    min_ncc_gain the smallest NCC gain (after minus before);
+    max_fold_fraction the largest fraction in [0, 1] of voxels with
+    det(I + grad u) <= 0; max_translation_voxels the largest translation
+    correction norm in voxels. projections returns the reference, before and
+    after Z maximum projections from registration_qc for overlays.
+    """
+
+    min_coverage: float | None = None
+    min_ncc_gain: float | None = None
+    max_fold_fraction: float | None = None
+    max_translation_voxels: float | None = None
+    projections: bool = False
+
+    def __post_init__(self):
+        for name in ("min_coverage", "max_fold_fraction"):
+            value = getattr(self, name)
+            if value is not None:
+                _number(value, name)
+                if value > 1:
+                    raise InvalidRegistrationConfigError(f"{name} must be in [0, 1]")
+        if self.min_ncc_gain is not None:
+            _number(self.min_ncc_gain, "min_ncc_gain", minimum=-math.inf)
+        if self.max_translation_voxels is not None:
+            _number(self.max_translation_voxels, "max_translation_voxels")
+        if type(self.projections) is not bool:
+            raise InvalidRegistrationConfigError("projections must be bool")
+
+
+@dataclass(frozen=True)
 class WarpConfig:
     """Method-specific resampling, with one final nearest-even integer cast.
 

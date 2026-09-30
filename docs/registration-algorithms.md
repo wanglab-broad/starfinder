@@ -1,6 +1,6 @@
 # Registration algorithm specification
 
-Status: Proposed
+Status: Accepted (W-246, 2026-09-30, at 47057aa)
 
 This page specifies the numerical methods that §2.6 adds: rigid, affine and
 B-spline registration, and demons on Z=1 data. It also gives the engineering

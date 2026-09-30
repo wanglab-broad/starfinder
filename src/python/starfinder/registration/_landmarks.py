@@ -124,3 +124,15 @@ def subsample_control_points(
         selected[i] = np.argmax(min_dist)
 
     return positions[selected], displacements[selected]
+
+
+def _landmark_settings(config):
+    """Keyword arguments shared by the TPS and CPD estimators."""
+    return dict(
+        detection_threshold=config.detection_noise_sigma,
+        max_control_points=config.max_control_points,
+        grid_spacing=config.grid_spacing_voxels,
+        zoom_order=config.interpolation_order,
+        field_smooth_sigma=config.field_smoothing_sigma,
+        clamp_sampling_coordinates=config.clamp_sampling_coordinates,
+    )

@@ -1,5 +1,7 @@
 # Registration baseline
 
+Status: Accepted (W-246, 2026-09-30, at 47057aa)
+
 This page records how registration behaves at revision `2e48d3f` (branch
 `runner/s26-spec-20260929`, on `dev` at `1b4db5a`; the registration source is
 unchanged since `1b4db5a`), before the Chapter II §2.6 work changes it. It is

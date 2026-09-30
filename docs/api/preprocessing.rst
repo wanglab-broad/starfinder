@@ -5,13 +5,14 @@ Intensity normalization and background removal, and the step/recipe contract tha
 orders them. See :doc:`contracts` for shape and dtype rules and
 :doc:`../preprocessing-contract` for steps, recipes and the enforcement wrapper.
 ``FOV.run`` executes a :py:class:`~starfinder.preprocessing.PreprocessingRecipe` given as
-``PipelineConfig.preprocessing``; each step is looked up in :py:data:`~starfinder.preprocessing.STEPS` by
+``PipelineConfig.preprocessing``; each step is looked up in
+:py:data:`~starfinder.preprocessing.PREPROCESSING_METHODS` by
 its exact config type and run through :py:func:`~starfinder.preprocessing.run_step`.
 
 Snapshots and sources
 ---------------------
 
-A :py:class:`~starfinder.preprocessing.RecipeStep` with ``save_as`` keeps a named snapshot of
+A :py:class:`~starfinder.preprocessing.PreprocessingStep` with ``save_as`` keeps a named snapshot of
 its output. The recipe's ``extraction_source`` names the snapshot that extraction reads,
 for example the background-corrected image before normalization (recipe 2), and
 ``registration_source`` names the snapshot from which registration signals are built;
@@ -79,12 +80,14 @@ API
    normalize_intensity
    normalize_percentile
    PercentileNormalizationConfig
+   PREPROCESSING_METHODS
    PreprocessingRecipe
+   PreprocessingSpec
+   PreprocessingStep
    project_image
    ProjectionConfig
    read_histograms
    read_supplied_statistics
-   RecipeStep
    reconstruct_background
    ReconstructionConfig
    run_step
@@ -94,8 +97,6 @@ API
    step_spec
    StepContext
    StepResult
-   STEPS
-   StepSpec
    subtract_background_3d
    subtract_scalar_background
    summarize_histograms

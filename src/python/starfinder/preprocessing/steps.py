@@ -6,7 +6,7 @@ config type is derived from it.
 """
 from collections.abc import Callable, Mapping
 import copy
-from dataclasses import dataclass
+from dataclasses import KW_ONLY, dataclass
 import json
 from pathlib import Path
 import re
@@ -14,12 +14,16 @@ from typing import Any
 
 import numpy as np
 
+from starfinder._registry import Dependency, check_shared, config_type_for, require, spec_for
 from starfinder.image import ImageMetadata, _validate_image
 from starfinder.preprocessing.background import (Background3DConfig, ScalarBackgroundConfig, _background_3d,
-    _scalar_background)
+    _check_scalar_params, _fit_scalar, _scalar_background, _validate_scalar)
+from starfinder.preprocessing.histograms import HistogramSummary
 from starfinder.preprocessing.morphology import ReconstructionConfig, TophatConfig, filter_tophat, reconstruct_background
 from starfinder.preprocessing.normalization import (HistogramMatchingConfig, MinMaxNormalizationConfig,
-    PercentileNormalizationConfig, _match_counts, _normalize, _percentile_normalize, match_histogram)
+    PercentileNormalizationConfig, _check_histogram_params, _check_percentile_params, _fit_histogram,
+    _fit_percentile, _match_counts, _normalize, _percentile_normalize, _validate_histogram, _validate_percentile,
+    match_histogram)
 
 _CATEGORIES = ("background", "intensity", "contrast")
 _SCOPES = ("per_channel", "per_round", "needs_reference")
@@ -52,26 +56,53 @@ class StepResult:
 
 
 @dataclass(frozen=True)
-class StepSpec:
+class SuppliedSpec:
+    """A step's hooks for its section of a supplied-statistics file.
+
+    per_round is False when fitted values are given for the reference round
+    only (histogram matching). fit(config, merged, reference_round) returns
+    {"params", "fitted"} from merged histograms; validate(section, dtype,
+    n_channels) checks one section of a read file; check_params(config,
+    params, name) compares the section's params with the recipe's config.
+    """
+    per_round: bool
+    fit: Callable[[Any, HistogramSummary, str | None], dict]
+    validate: Callable[[Mapping, np.dtype, int], None]
+    check_params: Callable[[Any, Mapping, str], None]
+
+
+@dataclass(frozen=True)
+class PreprocessingSpec:
     """Registered step: stable snake_case name, implementation and declared policies.
 
     run(volume, config, context) returns a StepResult. category documents
     intent and imposes no order. dtype_policy "preserve" requires the input
     dtype; "declared" requires the config's output_dtype (legacy min-max only).
+    The keyword-only fields are the shared registry fields (requires: optional
+    dependencies imported when the step runs; min_shape_zyx: smallest
+    accepted axis sizes) and post_registration (the step may run in a
+    recipe's post_registration list) and supplied (a SuppliedSpec, or None
+    when the step cannot use a supplied-statistics file).
     """
     name: str
     run: Callable[..., StepResult]
     category: str
     scope: str
     dtype_policy: str = "preserve"
+    _: KW_ONLY
+    requires: tuple[Dependency, ...] = ()
+    min_shape_zyx: tuple[int, int, int] = (1, 1, 1)
+    post_registration: bool = False
+    supplied: SuppliedSpec | None = None
 
     def __post_init__(self):
-        if not isinstance(self.name, str) or not re.fullmatch(r"[a-z][a-z0-9]*(_[a-z0-9]+)*", self.name):
-            raise ValueError("step name must be lowercase snake_case")
-        if not callable(self.run):
-            raise TypeError("step run must be callable")
+        check_shared(self, "step")
         if self.category not in _CATEGORIES or self.scope not in _SCOPES or self.dtype_policy not in _DTYPE_POLICIES:
             raise ValueError(f"invalid category, scope or dtype_policy for step {self.name!r}")
+        if not isinstance(self.post_registration, bool):
+            raise TypeError(f"post_registration of step {self.name!r} must be Boolean")
+        if self.supplied is not None and not isinstance(self.supplied, SuppliedSpec):
+            raise TypeError(f"supplied of step {self.name!r} must be a SuppliedSpec or None")
 
 
 def _min_max(volume, config, context):
@@ -121,14 +152,19 @@ def _tophat(volume, config, context):
     return StepResult(filter_tophat(volume, config=config), {}, {})
 
 
-STEPS: dict[type, StepSpec] = {
-    MinMaxNormalizationConfig: StepSpec("min_max_normalization", _min_max, "intensity", "per_channel", "declared"),
-    HistogramMatchingConfig: StepSpec("histogram_matching", _histogram, "intensity", "needs_reference"),
-    ReconstructionConfig: StepSpec("reconstruction", _reconstruction, "background", "per_channel"),
-    TophatConfig: StepSpec("white_tophat", _tophat, "background", "per_channel"),
-    ScalarBackgroundConfig: StepSpec("scalar_background", _scalar, "background", "per_channel"),
-    Background3DConfig: StepSpec("background_3d", _volumetric, "background", "per_channel"),
-    PercentileNormalizationConfig: StepSpec("percentile_normalization", _percentile, "intensity", "per_channel"),
+PREPROCESSING_METHODS: dict[type, PreprocessingSpec] = {
+    MinMaxNormalizationConfig: PreprocessingSpec("min_max_normalization", _min_max, "intensity", "per_channel",
+                                                 "declared"),
+    HistogramMatchingConfig: PreprocessingSpec("histogram_matching", _histogram, "intensity", "needs_reference",
+        supplied=SuppliedSpec(False, _fit_histogram, _validate_histogram, _check_histogram_params)),
+    ReconstructionConfig: PreprocessingSpec("reconstruction", _reconstruction, "background", "per_channel",
+                                            post_registration=True),
+    TophatConfig: PreprocessingSpec("white_tophat", _tophat, "background", "per_channel"),
+    ScalarBackgroundConfig: PreprocessingSpec("scalar_background", _scalar, "background", "per_channel",
+        supplied=SuppliedSpec(True, _fit_scalar, _validate_scalar, _check_scalar_params)),
+    Background3DConfig: PreprocessingSpec("background_3d", _volumetric, "background", "per_channel"),
+    PercentileNormalizationConfig: PreprocessingSpec("percentile_normalization", _percentile, "intensity",
+        "per_channel", supplied=SuppliedSpec(True, _fit_percentile, _validate_percentile, _check_percentile_params)),
 }
 
 
@@ -136,34 +172,26 @@ def _supplied(config) -> bool:
     return getattr(config, "fit", None) == "supplied"
 
 
-def step_spec(config) -> StepSpec:
-    """Registered StepSpec for type(config) exactly; subclasses are not matched.
+def step_spec(config) -> PreprocessingSpec:
+    """Registered PreprocessingSpec for type(config) exactly; subclasses are not matched.
 
     Raises
     ------
     TypeError
         No step is registered for this exact config type.
     """
-    spec = STEPS.get(type(config))
-    if spec is None:
-        raise TypeError(f"no preprocessing step is registered for {type(config).__qualname__} "
-                        "(lookup uses the exact config type)")
-    return spec
+    return spec_for(PREPROCESSING_METHODS, config, "preprocessing step")
 
 
 def step_config_type(name: str) -> type:
-    """Config type of the step called name, derived from STEPS.
+    """Config type of the step called name, derived from PREPROCESSING_METHODS.
 
     Raises
     ------
     ValueError
         No registered step, or more than one, has this name.
     """
-    matches = [config_type for config_type, spec in STEPS.items() if spec.name == name]
-    if len(matches) != 1:
-        raise ValueError(f"unknown preprocessing step {name!r}" if not matches else
-                         f"preprocessing step name {name!r} is registered more than once")
-    return matches[0]
+    return config_type_for(PREPROCESSING_METHODS, name, "preprocessing step")
 
 
 def _jsonable(value, what, name):
@@ -182,7 +210,9 @@ def run_step(volume: np.ndarray, config, context: StepContext) -> StepResult:
     input dtype ("preserve") or the config's output_dtype ("declared"), only
     finite values, that context.metadata is unchanged, and that fitted and
     diagnostics are JSON-serializable. The input is validated as a finite
-    nonempty ZYX or ZYXC array. needs_reference steps with fit="fov" require
+    nonempty ZYX or ZYXC array with every axis at least the spec's
+    min_shape_zyx, and the spec's optional dependencies are imported
+    before the step runs. needs_reference steps with fit="fov" require
     context.reference; other steps must not receive one. Steps with
     fit="supplied" require context.supplied (their validated section); other
     steps must not receive one.
@@ -199,6 +229,10 @@ def run_step(volume: np.ndarray, config, context: StepContext) -> StepResult:
     if not isinstance(context, StepContext):
         raise TypeError("context must be StepContext")
     volume = _validate_image(volume)
+    if any(n < m for n, m in zip(volume.shape[:3], spec.min_shape_zyx)):
+        raise ValueError(f"step {spec.name!r} requires every ZYX axis to be at least {spec.min_shape_zyx}, "
+                         f"not {volume.shape[:3]}")
+    require(spec, "preprocessing step", ImportError)
     wants_reference = spec.scope == "needs_reference" and not _supplied(config)
     if (context.reference is not None) != wants_reference:
         raise ValueError(f"step {spec.name!r} {'requires' if wants_reference else 'does not take'} a reference image")
@@ -227,8 +261,8 @@ _SNAPSHOT_NAME = re.compile(r"[a-z][a-z0-9]*(_[a-z0-9]+)*")
 
 
 @dataclass(frozen=True)
-class RecipeStep:
-    """One recipe entry: a frozen config whose exact type is registered in STEPS.
+class PreprocessingStep:
+    """One recipe entry: a frozen config whose exact type is registered in PREPROCESSING_METHODS.
 
     save_as names a snapshot, a kept copy of this step's output. Snapshot
     names are lowercase snake_case (they name checkpoint directories) and
@@ -256,14 +290,14 @@ class PreprocessingRecipe:
     output; names are unique within the recipe. extraction_source and
     registration_source name the snapshot that extraction reads and from
     which registration signals are built; None uses the detection image.
-    post_registration runs after registration, may contain only
-    ReconstructionConfig (the legacy path for resident subtiles) and keeps no
-    snapshots. supplied_statistics is the JSON file read by steps with
+    post_registration runs after registration, may contain only steps whose
+    spec declares post_registration (ReconstructionConfig, the legacy path for
+    resident subtiles) and keeps no snapshots. supplied_statistics is the JSON file read by steps with
     fit="supplied"; it is required when such a step is present, and a step
     name may occur only once with fit="supplied".
     """
-    steps: tuple[RecipeStep, ...] = ()
-    post_registration: tuple[RecipeStep, ...] = ()
+    steps: tuple[PreprocessingStep, ...] = ()
+    post_registration: tuple[PreprocessingStep, ...] = ()
     extraction_source: str | None = None
     registration_source: str | None = None
     supplied_statistics: Path | None = None
@@ -272,13 +306,15 @@ class PreprocessingRecipe:
         for name in ("steps", "post_registration"):
             entries = tuple(getattr(self, name))
             for entry in entries:
-                if not isinstance(entry, RecipeStep):
-                    raise TypeError(f"{name} requires RecipeStep entries")
+                if not isinstance(entry, PreprocessingStep):
+                    raise TypeError(f"{name} requires PreprocessingStep entries")
                 entry.__post_init__()
             object.__setattr__(self, name, entries)
         for entry in self.post_registration:
-            if type(entry.config) is not ReconstructionConfig:
-                raise ValueError("post_registration may contain only ReconstructionConfig steps, "
+            if not step_spec(entry.config).post_registration:
+                allowed = " or ".join(config_type.__qualname__ for config_type, spec in PREPROCESSING_METHODS.items()
+                                      if spec.post_registration)
+                raise ValueError(f"post_registration may contain only {allowed} steps, "
                                  f"not {type(entry.config).__qualname__}")
             if entry.save_as is not None:
                 raise ValueError("post_registration steps keep no snapshots (save_as)")

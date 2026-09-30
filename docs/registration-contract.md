@@ -1,6 +1,6 @@
 # Registration recipe contract
 
-Status: Proposed
+Status: Accepted (W-246, 2026-09-30, at 47057aa)
 
 This page proposes the §2.6 registration contract: a `RegistrationRecipe` of
 ordered `RegistrationStep`s, a configurable registration signal, typed

@@ -1,7 +1,7 @@
 from starfinder.dataset import PipelineConfig, ExecutionConfig, RegistrationStep
 from starfinder.registration import TranslationConfig
 from starfinder.io import ImageLoadConfig
-from starfinder.preprocessing import MinMaxNormalizationConfig, PreprocessingRecipe, RecipeStep
+from starfinder.preprocessing import MinMaxNormalizationConfig, PreprocessingRecipe, PreprocessingStep
 from starfinder.spot_finding import LocalMaximaConfig
 from starfinder.barcode import NeighborhoodSumConfig, WtaDecoderConfig, ReadFilterConfig
 from .coordination_helpers import spot_table, detected_shifts
@@ -226,7 +226,7 @@ class TestE2EStreamingMode:
         stream_fov = ds.fov("FOV_001")
         stream_fov.run(PipelineConfig(
             load=ImageLoadConfig(channel_labels=ds.channel_order),
-            preprocessing=PreprocessingRecipe((RecipeStep(MinMaxNormalizationConfig('uint8', (0, 255), snr_threshold=5.0)),)),
+            preprocessing=PreprocessingRecipe((PreprocessingStep(MinMaxNormalizationConfig('uint8', (0, 255), snr_threshold=5.0)),)),
             registration=(RegistrationStep(TranslationConfig()),), detection=LocalMaximaConfig(),
             extraction=NeighborhoodSumConfig(), decoding=WtaDecoderConfig(diagnostics=True), filtering=ReadFilterConfig()),
             execution=ExecutionConfig('streaming'))
@@ -297,7 +297,7 @@ class TestE2EStreamingMode:
         stream_fov = ds.fov("FOV_001")
         stream_fov.run(PipelineConfig(
             load=ImageLoadConfig(channel_labels=ds.channel_order),
-            preprocessing=PreprocessingRecipe((RecipeStep(MinMaxNormalizationConfig('uint8', (0, 255), snr_threshold=5.0)),)),
+            preprocessing=PreprocessingRecipe((PreprocessingStep(MinMaxNormalizationConfig('uint8', (0, 255), snr_threshold=5.0)),)),
             registration=(RegistrationStep(TranslationConfig()),), detection=LocalMaximaConfig(),
             extraction=NeighborhoodSumConfig(), decoding=WtaDecoderConfig(diagnostics=True), filtering=ReadFilterConfig()),
             execution=ExecutionConfig('streaming'))

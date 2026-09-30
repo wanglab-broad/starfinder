@@ -572,7 +572,7 @@ def test_load_volume_zyxc_preserves_shape_dtype_and_geometry(tmp_path, shape, dt
 def test_checkpoint_timing_on_small_synthetic_dataset(small_dataset, tmp_path, capsys):
     """Wall time of a 16x256x256, 4-round run with all checkpoints and of table build/parse."""
     from starfinder.io._checkpoint import read_header
-    from starfinder.preprocessing import MinMaxNormalizationConfig, PreprocessingRecipe, RecipeStep
+    from starfinder.preprocessing import MinMaxNormalizationConfig, PreprocessingRecipe, PreprocessingStep
     for round_dir in (small_dataset / 'FOV_001').iterdir():
         if round_dir.is_dir():
             target = tmp_path / round_dir.name / 'FOV_001'
@@ -583,7 +583,7 @@ def test_checkpoint_timing_on_small_synthetic_dataset(small_dataset, tmp_path, c
                  ('ch00', 'ch01', 'ch02', 'ch03'))
     ds.load_codebook(small_dataset / 'codebook.csv')
     config = PipelineConfig(load=ImageLoadConfig(channel_labels=ds.channel_order),
-        preprocessing=PreprocessingRecipe((RecipeStep(MinMaxNormalizationConfig('uint8', (0, 255), snr_threshold=5.0)),)),
+        preprocessing=PreprocessingRecipe((PreprocessingStep(MinMaxNormalizationConfig('uint8', (0, 255), snr_threshold=5.0)),)),
         registration=(RegistrationStep(TranslationConfig()),), detection=LocalMaximaConfig(),
         extraction=NeighborhoodSumConfig(), decoding=WtaDecoderConfig(diagnostics=True),
         filtering=ReadFilterConfig())

@@ -1,12 +1,10 @@
 """Explicit registration processing and saved-array evaluation adapters."""
 from dataclasses import asdict
 import numpy as np
+from starfinder._registry import config_type_for
 from starfinder.image import ImageMetadata
-from starfinder.registration import (TranslationConfig, DemonsConfig, TpsConfig, CpdConfig,
-    InsufficientLandmarksError, RegistrationEstimationError)
+from starfinder.registration import REGISTRATION_METHODS, InsufficientLandmarksError, RegistrationEstimationError
 
-_CONFIGS = {'translation': TranslationConfig, 'demons': DemonsConfig,
-            'tps': TpsConfig, 'cpd': CpdConfig}
 _ERRORS = {'InsufficientLandmarksError': InsufficientLandmarksError,
            'RegistrationEstimationError': RegistrationEstimationError}
 
@@ -14,9 +12,9 @@ _ERRORS = {'InsufficientLandmarksError': InsufficientLandmarksError,
 def _config(value):
     value = dict(value)
     method = value.pop('method')
-    if method not in _CONFIGS:
-        raise ValueError(f'unsupported registration method: {method}')
-    return _CONFIGS[method](**value)
+    config_type = config_type_for(REGISTRATION_METHODS, method, 'registration method',
+                                  message=f'unsupported registration method: {method}')
+    return config_type(**value)
 
 
 def _validate(case):

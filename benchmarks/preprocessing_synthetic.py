@@ -45,7 +45,7 @@ from starfinder.barcode import Codebook, NeighborhoodSumConfig, ReadFilterConfig
 from starfinder.dataset import Dataset, PipelineConfig, RegistrationStep, RoundState
 from starfinder.evaluation.matching import match_points
 from starfinder.preprocessing import (Background3DConfig, HistogramMatchingConfig, MinMaxNormalizationConfig,
-    PercentileNormalizationConfig, PreprocessingRecipe, RecipeStep, ReconstructionConfig, ScalarBackgroundConfig,
+    PercentileNormalizationConfig, PreprocessingRecipe, PreprocessingStep, ReconstructionConfig, ScalarBackgroundConfig,
     TophatConfig, merge_histograms, step_spec, summarize_histograms, summary_stage, supplied_section,
     supplied_statistics, write_supplied_statistics)
 from starfinder.preprocessing._diagnostics import channel_diagnostics
@@ -122,24 +122,24 @@ def arms(radius_zyx, fit="fov", supplied=None):
     def recipe(*steps, source=None):
         return PreprocessingRecipe(tuple(steps), extraction_source=source,
                                    supplied_statistics=supplied if fit == "supplied" else None)
-    r2 = lambda bg, source=None: recipe(RecipeStep(bg, save_as=SNAPSHOT),  # noqa: E731
-                                        RecipeStep(PercentileNormalizationConfig(fit=s)), source=source)
+    r2 = lambda bg, source=None: recipe(PreprocessingStep(bg, save_as=SNAPSHOT),  # noqa: E731
+                                        PreprocessingStep(PercentileNormalizationConfig(fit=s)), source=source)
     return {
         "none": None,
-        "r1": recipe(RecipeStep(_minmax()), RecipeStep(HistogramMatchingConfig(fit=s))),
-        "r1_recon": recipe(RecipeStep(_minmax()), RecipeStep(HistogramMatchingConfig(), save_as=NORMALIZED),
-                           RecipeStep(ReconstructionConfig())),
+        "r1": recipe(PreprocessingStep(_minmax()), PreprocessingStep(HistogramMatchingConfig(fit=s))),
+        "r1_recon": recipe(PreprocessingStep(_minmax()), PreprocessingStep(HistogramMatchingConfig(), save_as=NORMALIZED),
+                           PreprocessingStep(ReconstructionConfig())),
         "r2_scalar": r2(ScalarBackgroundConfig(fit=s)),
         "r2_scalar_xsrc": r2(ScalarBackgroundConfig(), SNAPSHOT),
         "r2_3d": r2(bg3d),
         "r2_3d_xsrc": r2(bg3d, SNAPSHOT),
-        "minmax": recipe(RecipeStep(_minmax())),
-        "hist": recipe(RecipeStep(HistogramMatchingConfig())),
-        "recon": recipe(RecipeStep(ReconstructionConfig(), save_as=SNAPSHOT)),
-        "tophat": recipe(RecipeStep(TophatConfig(), save_as=SNAPSHOT)),
-        "scalar": recipe(RecipeStep(ScalarBackgroundConfig(), save_as=SNAPSHOT)),
-        "bg3d": recipe(RecipeStep(bg3d, save_as=SNAPSHOT)),
-        "pct": recipe(RecipeStep(PercentileNormalizationConfig())),
+        "minmax": recipe(PreprocessingStep(_minmax())),
+        "hist": recipe(PreprocessingStep(HistogramMatchingConfig())),
+        "recon": recipe(PreprocessingStep(ReconstructionConfig(), save_as=SNAPSHOT)),
+        "tophat": recipe(PreprocessingStep(TophatConfig(), save_as=SNAPSHOT)),
+        "scalar": recipe(PreprocessingStep(ScalarBackgroundConfig(), save_as=SNAPSHOT)),
+        "bg3d": recipe(PreprocessingStep(bg3d, save_as=SNAPSHOT)),
+        "pct": recipe(PreprocessingStep(PercentileNormalizationConfig())),
     }
 
 
@@ -502,7 +502,7 @@ def fit_supplied(recipe, scenes, book, workdir):
                                                   channel_labels=book.channel_labels, fov_id=fov_id,
                                                   summarized_after=after))
         merged = merge_histograms(summaries)
-        kwargs = {"reference_round": ref} if type(entry.config) is HistogramMatchingConfig else {}
+        kwargs = {} if step_spec(entry.config).supplied.per_round else {"reference_round": ref}
         sections[name] = supplied_section(entry.config, merged, **kwargs)
         write_supplied_statistics(supplied_statistics(merged, sections), path)
     return sections

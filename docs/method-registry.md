@@ -1,6 +1,6 @@
 # Method registry across stages
 
-Status: Proposed
+Status: Accepted (W-246, 2026-09-30, at 47057aa)
 
 This page decides how processing methods are registered, named in workflow YAML
 and recorded in provenance, before §2.6 adds registration methods and §2.7 adds

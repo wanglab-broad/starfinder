@@ -319,3 +319,19 @@ def demons_register(
         return _run_sitk_pyramid(sitk, fixed, moving, demons, iterations)
 
 
+
+
+def estimate_demons(reference, moving, config, geometry):
+    """Registered estimator of DemonsConfig: transform, backend and application policy."""
+    from ._config import WarpConfig
+    from ._types import DenseDisplacementTransform
+
+    field = demons_register(
+        reference,
+        moving,
+        iterations=config.iterations,
+        smoothing_sigma=config.smoothing_sigma,
+        method=config.variant,
+        pyramid_mode=config.pyramid_mode,
+    )
+    return DenseDisplacementTransform(field, **geometry), "simpleitk", WarpConfig(backend="simpleitk")

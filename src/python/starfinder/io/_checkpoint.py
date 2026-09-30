@@ -340,10 +340,12 @@ def write_registered_header(directory, header, registration_results):
 
 
 def _registration_results(directory, transforms):
-    from starfinder.registration import (CpdConfig, DemonsConfig, DenseDisplacementTransform,
-        RegistrationDiagnostics, RegistrationResult, TpsConfig, TranslationConfig,
-        TranslationTransform, WarpConfig)
-    methods = dict(translation=TranslationConfig, demons=DemonsConfig, tps=TpsConfig, cpd=CpdConfig)
+    from starfinder._registry import config_type_for, names
+    from starfinder.registration import (REGISTRATION_METHODS, DenseDisplacementTransform,
+        RegistrationDiagnostics, RegistrationResult, TranslationTransform, WarpConfig)
+    # Saved method values equal the spec names (the discriminator rule).
+    methods = {name: config_type_for(REGISTRATION_METHODS, name, "registration method")
+               for name in names(REGISTRATION_METHODS)}
     results = {}
     for name, entries in transforms.items():
         fields_data = None
