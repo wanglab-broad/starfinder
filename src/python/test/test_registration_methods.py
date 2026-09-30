@@ -29,6 +29,7 @@ from starfinder.registration import (
     BSplineTransform,
     CpdConfig,
     DemonsConfig,
+    DenseDisplacementTransform,
     RegistrationBackendUnavailableError,
     RegistrationEstimationError,
     RigidConfig,
@@ -325,12 +326,26 @@ def test_demons_z1_uses_a_yx_only_pyramid(monkeypatch):
 
 
 # --------------------------------------------------------------------- geometry rules
+# TPS and CPD cases where the unchanged landmark estimators cannot estimate on any landmark fixture: their
+# noise-landmark detection excludes a one-voxel border, so Z=2 has no detectable landmarks and Z=3 has them
+# only in plane 1, where the TPS affine term is singular (fixtures tried: W-255 worker notes).
+LANDMARK_LIMITED = {("tps", 2), ("tps", 3), ("cpd", 2)}
+
+
+def landmark_fixture(z):
+    """Random background plus 60 bright spots, and the same image shifted by one voxel in X."""
+    rng = np.random.default_rng(7)
+    reference = rng.random((z, 32, 32))
+    reference[rng.integers(0, z, 60), rng.integers(3, 29, 60), rng.integers(3, 29, 60)] += 100
+    return reference, np.roll(reference, 1, axis=2)
+
+
 @pytest.mark.parametrize("z", [1, 2, 3])
 @pytest.mark.parametrize("config", [TranslationConfig(), RigidConfig(iterations=5), AffineConfig(iterations=5),
                                     BSplineConfig(iterations=5), DemonsConfig(iterations=(2,)),
                                     TpsConfig(min_matches=4, max_control_points=20),
-                                    CpdConfig(max_control_points=20)], ids=lambda c: c.method)
-def test_small_z_and_dimension_rules(config, z):
+                                    CpdConfig(max_control_points=20, affine_first=False)], ids=lambda c: c.method)
+def test_small_z_and_dimension_rules(config, z, monkeypatch):
     rng = np.random.default_rng(z)
     reference = rng.random((z, 32, 32))
     moving = np.roll(reference, 1, axis=2)
@@ -339,22 +354,32 @@ def test_small_z_and_dimension_rules(config, z):
         with pytest.raises(IncompatibleGeometryError):
             estimate(reference, moving, config)
         return
-    _check_shape(REGISTRATION_METHODS[type(config)], reference.shape)  # the dimension rule accepts the shape
     if config.method in ("tps", "cpd"):
-        # Their landmark detection finds no usable landmarks in 2 or 3 planes of random signal; that is a
-        # RegistrationEstimationError of the unchanged estimator, not a dimension rejection.
-        try:
-            estimate(reference, moving, config)
-        except RegistrationEstimationError as error:
-            assert not isinstance(error, IncompatibleGeometryError)
+        reference, moving = landmark_fixture(z)
+    if (config.method, z) in LANDMARK_LIMITED:
+        # The dimension check accepts the shape: estimate_transform reaches the registered estimator.
+        calls = []
+
+        def reached(reference, moving, config, geometry):
+            calls.append(reference.shape)
+            field = np.zeros((*reference.shape, 3), dtype=np.float32)
+            return DenseDisplacementTransform(field, **geometry), "fixture", WarpConfig(backend="scipy")
+
+        spec = REGISTRATION_METHODS[type(config)]
+        monkeypatch.setitem(REGISTRATION_METHODS, type(config), replace(spec, run=reached))
+        estimate(reference, moving, config)
+        assert calls == [(z, 32, 32)]
         return
     result = estimate(reference, moving, config)
+    transform = result.transform
+    u = (transform.dense().displacement_zyx if hasattr(transform, "dense") else
+         np.broadcast_to(-np.asarray(transform.correction_zyx), (z, 32, 32, 3))
+         if hasattr(transform, "correction_zyx") else transform.displacement_zyx)
+    assert u.shape == (z, 32, 32, 3) and np.isfinite(u).all()
     if z == 1:
-        transform = result.transform
-        u = (transform.dense().displacement_zyx if hasattr(transform, "dense") else
-             np.broadcast_to(-np.asarray(transform.correction_zyx), (1, 32, 32, 3))
-             if hasattr(transform, "correction_zyx") else transform.displacement_zyx)
         assert np.all(u[..., 0] == 0)
+    if config.method == "cpd":
+        assert abs(np.median(u[..., 2]) - 1) <= 0.1  # the one-voxel X shift of the landmark fixture
 
 
 def test_physical_rigid_to_index_matrix():
@@ -390,21 +415,32 @@ def test_two_dimensional_physical_map_is_embedded_with_no_z_motion():
 
 
 # --------------------------------------------------------------------- determinism
-def deterministic_fixtures():
-    shape = DEVELOPMENT_SIZES["small"]
-    yield "rigid", scene(shape, 100, geometry=rigid_geometry(shape, 100)), RigidConfig()
-    yield "affine", scene(shape, 100, deformation="linear_small"), AffineConfig()
-    yield "bspline", scene((16, 64, 64), 100, geometry=polynomial_geometry()), \
-        BSplineConfig()
+DETERMINISM_CASES = {
+    "rigid-small": ("rigid", DEVELOPMENT_SIZES["small"], None),
+    "rigid-z1": ("rigid", DEVELOPMENT_SIZES["z1"], None),
+    "rigid-small-spacing122": ("rigid", DEVELOPMENT_SIZES["small"], (1.0, 2.0, 2.0)),
+    "affine-small": ("affine", DEVELOPMENT_SIZES["small"], None),
+    "affine-z1": ("affine", DEVELOPMENT_SIZES["z1"], None),
+    "bspline-16x64x64": ("bspline", (16, 64, 64), None),
+    "bspline-1x64x64": ("bspline", (1, 64, 64), None),
+}
 
 
-def test_estimation_is_deterministic_at_one_thread():
+@pytest.mark.parametrize("case", DETERMINISM_CASES)
+def test_estimation_is_deterministic_at_one_thread(case):
+    """The rigid, affine and B-spline known-answer fixtures at seed 100, each estimated twice at one thread."""
     import itk
     assert itk.MultiThreaderBase.GetGlobalDefaultNumberOfThreads() == 1
-    for name, (reference, moving, _), config in deterministic_fixtures():
-        first, second = (estimate(reference, moving, config) for _ in range(2))
-        assert digest(first.transform) == digest(second.transform), name
-        assert first.diagnostics == second.diagnostics, name
+    method, shape, spacing = DETERMINISM_CASES[case]
+    if method == "rigid":
+        (reference, moving, _), config = scene(shape, 100, geometry=rigid_geometry(shape, 100)), RigidConfig()
+    elif method == "affine":
+        (reference, moving, _), config = scene(shape, 100, deformation="linear_small"), AffineConfig()
+    else:
+        (reference, moving, _), config = scene(shape, 100, geometry=polynomial_geometry()), BSplineConfig()
+    first, second = (estimate(reference, moving, config, spacing) for _ in range(2))
+    assert digest(first.transform) == digest(second.transform)
+    assert first.diagnostics == second.diagnostics
 
 
 # --------------------------------------------------------------------- failures and records
