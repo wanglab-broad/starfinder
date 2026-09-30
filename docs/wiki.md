@@ -18,6 +18,9 @@ Preprocessing baseline <preprocessing-baseline>
 Preprocessing contract (proposed) <preprocessing-contract>
 Preprocessing algorithms (proposed) <preprocessing-algorithms>
 Method registry (proposed) <method-registry>
+Registration baseline <registration-baseline>
+Registration contract (proposed) <registration-contract>
+Registration algorithms (proposed) <registration-algorithms>
 Coordination <coordination>
 Checkpoints <checkpoints>
 Recipes <recipes>
