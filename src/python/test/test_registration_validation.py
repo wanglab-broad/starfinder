@@ -141,7 +141,7 @@ def digests(fov):
 # ============================================================================ V1: known translation
 TRANSLATION_CASES = [("small", (2.0, -3.0, 4.0)), ("small", (0.0, -3.0, 4.0)), ("z1", (0.0, -3.0, 4.0))]
 # The two V1 cases the unchanged translation estimator misses by one voxel (operator decision on W-258,
-# 2026-09-30, pending Jiahao's confirmation). The bound is not loosened: the gate is still asserted, and a case
+# 2026-09-30, confirmed by Jiahao on 2026-09-30). The bound is not loosened: the gate is still asserted, and a case
 # that starts passing fails the run (strict).
 KNOWN_MISSES = {
     ("small", (2.0, -3.0, 4.0), 101): "measured correction (-1, 3, -4), expected (-2, 3, -4): Z misses by one voxel",

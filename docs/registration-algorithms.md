@@ -203,13 +203,14 @@ four rounds, are generated in session with `generate_registration_pair`,
 | V10 | Empty and constant input | Constant moving signal; moving round shifted beyond the grid | Raised error; `registration_qc` NCC and SSIM | Rigid, affine and B-spline raise `RegistrationEstimationError("constant registration signal")`; NCC and SSIM are `None` with a reason; coverage 0. |
 | V11 | Determinism | V2 to V5 fixtures, seed 100, run twice at one thread | Transform and image digests | Bit-identical. |
 
-**V4 and V5 fixture density (implemented checks, W-255; open point for
-Jiahao).** The V4 and V5 scenes use the benchmark appearance with noise and
+**V4 and V5 fixture density (implemented checks, W-255; confirmed by Jiahao on
+2026-09-30).** The V4 and V5 scenes use the benchmark appearance with noise and
 128 amplicons per 64×64 plane: 128 on 1×64×64 and 512 on 16×64×64
 (`test/test_registration_methods.py`). This density was an operator decision of
-2026-09-30, taken under Jiahao's delegation and pending his confirmation. The
-fixture density decides pass or fail. At the W-244 development density (32 per
-64×64 plane, 128 on 16×64×64) the provisional bounds are exceeded:
+2026-09-30, taken under Jiahao's delegation and confirmed by Jiahao on
+2026-09-30. The fixture density decides pass or fail. At the W-244 development
+density (32 per 64×64 plane, 128 on 16×64×64) the provisional bounds are
+exceeded:
 
 * B-spline 16×64×64: p95 1.05;
 * B-spline 1×64×64: p95 1.69;
@@ -264,4 +265,4 @@ above, unchanged.
 | V10 | `test_v10_constant_moving_signal_is_rejected`, `test_v10_constant_signal_qc_is_undefined_with_a_reason`, `test_v10_moving_round_beyond_the_grid` | a constant moving signal through `estimate_transform` and a one-step recipe; a moving round whose content lies 40 rows beyond the grid | raised error and the recorded attempt; `registration_qc` NCC, SSIM and coverage | `RegistrationEstimationError("constant registration signal")` for rigid, affine and B-spline; NCC (and SSIM beyond the grid) `None` with a reason; coverage 0 |
 | V11 | `test_v11_global_recipes_are_deterministic_at_one_thread`, `test_v11_local_recipes_are_deterministic_at_one_thread` (extended) | the V2 to V5 recipes at seed 100, each run twice | SHA-256 of every step transform, the composite pull field and the registered round | identical |
 
-V1 has two known one-voxel misses of the translation estimator (`small` with (2, −3, 4) at seed 101 and `z1` with (0, −3, 4) at seed 100), recorded as strict expected failures in both routes with the bound unchanged; the investigation is W-259.
+V1 has two known one-voxel misses of the translation estimator (`small` with (2, −3, 4) at seed 101 and `z1` with (0, −3, 4) at seed 100), recorded as strict expected failures in both routes with the bound unchanged (operator decision on W-258, confirmed by Jiahao on 2026-09-30); the investigation is W-259.

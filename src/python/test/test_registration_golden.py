@@ -130,7 +130,8 @@ PINNED_RUNS = {
     ("translation", "demons"): {
         "images": {"round1": PINNED_INPUTS["round1"],
                    # One final resampling (W-256): re-pin approved by Jiahao in W-246 (2026-09-30), on the operator's
-                   # reading that both W-245 pull points lie one voxel inside their grids (pending his confirmation).
+                   # reading that both W-245 pull points lie one voxel inside their grids; the reading was
+                   # confirmed by Jiahao on 2026-09-30.
                    "round2": "aee3f8c33c613371790fdf1e83e9f7431538c6c64b820a75eba735eb5c224697"},
         "transforms": [
             ("translation", (-1.0, -4.0, 2.0)),

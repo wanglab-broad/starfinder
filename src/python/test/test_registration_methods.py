@@ -54,7 +54,7 @@ pytestmark = [
 SEEDS = (100, 101, 102)
 # Amplicons per scene: the W-244 development presets (20 on 9x32x32, 8 on 1x32x32) for V2 and V3, and
 # 128 per 64x64 plane (512 on 16x64x64) for the V4 and V5 scenes (operator decision on W-255, 2026-09-30,
-# pending Jiahao's confirmation). At the W-244 development density (32 per plane, 128 on 16x64x64) the
+# confirmed by Jiahao on 2026-09-30). At the W-244 development density (32 per plane, 128 on 16x64x64) the
 # provisional V4 and V5 bounds are exceeded; see docs/registration-algorithms.md.
 COUNTS = {(9, 32, 32): 20, (1, 32, 32): 8, (16, 64, 64): 512, (1, 64, 64): 128}
 MISSING_EXTRA = ("registration method 'affine' requires itk; install the 'registration-elastix' extra "
