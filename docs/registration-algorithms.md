@@ -240,3 +240,28 @@ about 1 to 4 s each at these sizes (W-244) plus one 11 s import per process,
 so the task group 6 modules are expected to run in a few minutes at one
 thread. Each run records wall time and maximum RSS with `/usr/bin/time -v`
 against the 1800 s and 4 GiB stop targets.
+
+### Implemented checks (W-258)
+
+The checks are in `src/python/test/test_registration_validation.py`, one test
+function per check (parametrized by case and seed). V4, V5 and their V11 runs
+are in the extended tier (`-m extended`); every other check is in the default
+tier. The scenes use the benchmark appearance of `registration_scene_preset`
+with the W-255 densities (20 amplicons on 9×32×32, 8 on 1×32×32, 512 on
+16×64×64 and 128 on 1×64×64), generated in session, with the signal in ch00.
+ITK and SimpleITK run at one thread. The tolerances are the ones in the table
+above, unchanged.
+
+| # | Test | Route and fixture | Metric | Tolerance |
+| --- | --- | --- | --- | --- |
+| V1 | `test_v1_known_translation`, `test_v1_known_translation_benchmark_task` | `estimate_transform` (translation) and the registration benchmark task on the same pair; `small` with (2, −3, 4) and (0, −3, 4), `z1` with (0, −3, 4), seeds 100 to 102 | `evaluate_translation` against the correction −t; the benchmark `translation` metric | every axis error < 0.5 (strict) in both routes |
+| V2, V3 | `test_v2_v3_known_rigid_and_affine_maps_through_recipes` | `FOV.run` with `(translation, rigid)` on the W-244 rigid case (`small`, `z1`, `small` with spacing (1, 2, 2)) and `(translation, affine)` on `linear_small` (`small`, `z1`), seeds 100 to 102 | `evaluate_displacement_field` of the round's `pull_field()` against `forward_displacement` over its valid overlap | median ≤ 0.25, p95 ≤ 0.5 voxels per seed; Z component 0 for Z=1 |
+| V4, V5 | `test_v4_v5_known_deformations_through_recipes` (extended) | `FOV.run` with `(translation, bspline)` on 16×64×64 and 1×64×64 with the supplied quadratic term of peak 3 voxels, and `(translation, demons)` on 1×64×64 with one Gaussian control of magnitude 2 and scale 8; seed 100 | as V2, and the identity field over the same mask | median ≤ 0.5, p95 ≤ 1.0 voxels, p95 below the identity p95, Z component exactly 0 for Z=1 |
+| V6 | `test_v6_analytic_composition_examples`, `test_v6_example_4_physical_to_index_matrix`, `test_v6_translation_affine_dense_chain_equals_sequential_evaluation` | examples 1 to 4 of {doc}`registration-contract`; a (translation, affine, dense) chain on 8×32×32 | `pull_field()` at the named points, and against `T₁(T₂(T₃(p)))` evaluated step by step from the stored parameters on every voxel | 1e-12 voxels; the wrong-order values differ |
+| V7 | `test_v7_version_2_registered_checkpoint_round_trip`, `test_v7_version_1_checkpoint_loads_as_sequential` | `FOV.run` with a registered checkpoint for translation, rigid, affine, B-spline, demons and two chains, on the seeded golden fixture at 8×32×32 and its plane z=4 (1×32×32) | reloaded `pull_field()`, the reloaded images and the images re-applied through the reloaded chain and policy, against the uninterrupted run | `array_equal`; a version-1 checkpoint loads as `sequential` |
+| V8 | `test_v8_covers_every_registered_method`, `test_v8_z1_and_small_z_rules` | `estimate_transform` for every `REGISTRATION_METHODS` entry on 1×32×32, 2×32×32 and 3×32×32 | raised error type; Z component of the pull field | methods with `2` in `dimensions` succeed on Z=1 with Z motion exactly 0; TPS and CPD raise `IncompatibleGeometryError` on Z=1; rigid, affine, B-spline and demons raise it on Z=2 and 3; translation, TPS and CPD are not rejected on geometry there |
+| V9 | `test_v9_constant_boundary_of_a_translation_only_chain`, `test_v9_nearest_boundary_of_an_affine_chain` | a 1×32×32 ramp in Y and X; a translation chain with correction (0, −5, 0) and the translation backend; `AffineTransform` with `A = I`, `b = (0, 5, 0)` and `nearest` | `registration_qc` coverage; the five filled rows | coverage exactly 27/32; the band equals 0, and the edge row y = 31 for `nearest`; the translation backend rejects `nearest` |
+| V10 | `test_v10_constant_moving_signal_is_rejected`, `test_v10_constant_signal_qc_is_undefined_with_a_reason`, `test_v10_moving_round_beyond_the_grid` | a constant moving signal through `estimate_transform` and a one-step recipe; a moving round whose content lies 40 rows beyond the grid | raised error and the recorded attempt; `registration_qc` NCC, SSIM and coverage | `RegistrationEstimationError("constant registration signal")` for rigid, affine and B-spline; NCC (and SSIM beyond the grid) `None` with a reason; coverage 0 |
+| V11 | `test_v11_global_recipes_are_deterministic_at_one_thread`, `test_v11_local_recipes_are_deterministic_at_one_thread` (extended) | the V2 to V5 recipes at seed 100, each run twice | SHA-256 of every step transform, the composite pull field and the registered round | identical |
+
+V1 has two known one-voxel misses of the translation estimator (`small` with (2, −3, 4) at seed 101 and `z1` with (0, −3, 4) at seed 100), recorded as strict expected failures in both routes with the bound unchanged; the investigation is W-259.
