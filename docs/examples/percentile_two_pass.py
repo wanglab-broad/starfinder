@@ -14,7 +14,7 @@ import numpy as np
 
 from starfinder.dataset import Dataset, PipelineConfig, RoundState
 from starfinder.image import ImageMetadata
-from starfinder.preprocessing import (PercentileNormalizationConfig, PreprocessingRecipe, RecipeStep, TophatConfig,
+from starfinder.preprocessing import (PercentileNormalizationConfig, PreprocessingRecipe, PreprocessingStep, TophatConfig,
     merge_histograms, read_supplied_statistics, summarize_histograms, summary_stage, supplied_section,
     supplied_statistics, write_histograms, write_supplied_statistics)
 
@@ -53,8 +53,8 @@ def main(output):
     # Dense, sparse and near-empty FOVs.
     raw = {"FOV_001": fov_rounds(1, 200), "FOV_002": fov_rounds(2, 20), "FOV_003": fov_rounds(3, 1)}
     supplied = output / "supplied.json"
-    recipe = PreprocessingRecipe((RecipeStep(TophatConfig()),
-                                  RecipeStep(PercentileNormalizationConfig(fit="supplied"))),
+    recipe = PreprocessingRecipe((PreprocessingStep(TophatConfig()),
+                                  PreprocessingStep(PercentileNormalizationConfig(fit="supplied"))),
                                  supplied_statistics=supplied)
 
     # Pass 1: summarize at the normalization step's input, after the top-hat.

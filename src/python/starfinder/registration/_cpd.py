@@ -551,3 +551,23 @@ def cpd_register(
         zoom_order=zoom_order, field_smooth_sigma=field_smooth_sigma,
         clamp_sampling_coordinates=clamp_sampling_coordinates,
     )
+
+
+def estimate_cpd(reference, moving, config, geometry):
+    """Registered estimator of CpdConfig: transform, backend and application policy."""
+    from ._config import WarpConfig
+    from ._landmarks import _landmark_settings
+    from ._types import DenseDisplacementTransform
+
+    field = cpd_register(
+        reference,
+        moving,
+        beta=config.kernel_width_voxels,
+        lmbda=config.regularization_weight,
+        w=config.outlier_fraction,
+        affine_first=config.affine_first,
+        candidate_radius=config.candidate_radius_voxels,
+        k_neighbors=config.neighbors_per_anchor,
+        **_landmark_settings(config),
+    )
+    return DenseDisplacementTransform(field, **geometry), "scipy", WarpConfig(backend="scipy")

@@ -8,5 +8,5 @@ def spot_table(fov, accepted=False):
 
 
 def detected_shifts(fov):
-    return {name: tuple(-v for v in results[0].transform.correction_zyx)
+    return {name: results[0].transform.displacement_zyx
             for name, results in fov.registration_results.items()}

@@ -154,3 +154,18 @@ def _zero_wrapped_edges(
     elif dx < 0:
         result[:, :, nx + int(np.floor(dx)) :] = 0
 
+
+
+def estimate_translation(reference, moving, config, geometry):
+    """Registered estimator of TranslationConfig: transform, backend and application policy."""
+    from ._config import WarpConfig
+    from ._types import TranslationTransform
+
+    if config.backend == "scipy_fft":
+        shift = phase_correlate(reference, moving, workers=config.fft_workers)
+    else:
+        from ._skimage_backend import phase_correlate_skimage
+
+        shift = phase_correlate_skimage(reference, moving)
+    transform = TranslationTransform(shift, **geometry)
+    return transform, config.backend, WarpConfig(fft_workers=config.fft_workers)

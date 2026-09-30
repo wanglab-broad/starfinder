@@ -1,4 +1,4 @@
-"""The Python-only preprocessing workflow key: adapter, static schema and its consistency with STEPS (W-232)."""
+"""The Python-only preprocessing workflow key: adapter, static schema and its consistency with PREPROCESSING_METHODS (W-232)."""
 import copy
 from dataclasses import dataclass, fields
 from pathlib import Path
@@ -8,8 +8,8 @@ import pytest
 import yaml
 
 from starfinder.dataset import from_workflow_config
-from starfinder.preprocessing import (STEPS, Background3DConfig, MinMaxNormalizationConfig, PercentileNormalizationConfig,
-    PreprocessingRecipe, RecipeStep, ScalarBackgroundConfig, StepResult, StepSpec, TophatConfig)
+from starfinder.preprocessing import (PREPROCESSING_METHODS, Background3DConfig, MinMaxNormalizationConfig, PercentileNormalizationConfig,
+    PreprocessingRecipe, PreprocessingStep, ScalarBackgroundConfig, StepResult, PreprocessingSpec, TophatConfig)
 
 ROOT = Path(__file__).resolve().parents[3]
 SCHEMA = yaml.safe_load((ROOT / "workflow/schemas/config.schema.yaml").read_text())
@@ -18,8 +18,8 @@ PYTHON_RULES = ("rsf_single_fov", "gr_single_fov_subtile", "lrsf_single_fov_subt
                 "deep_rsf_subtile")
 LEGACY = {"enhance_contrast": {"run": False}, "hist_equalize": {"run": False}, "morph_recon": {"run": False},
           "tophat": {"run": False}, "snr_threshold": 3.0}
-RECIPE_2 = PreprocessingRecipe((RecipeStep(ScalarBackgroundConfig(percentile=10.0), save_as="bg_corrected"),
-                                RecipeStep(PercentileNormalizationConfig(p_low=1.0, p_high=99.9))),
+RECIPE_2 = PreprocessingRecipe((PreprocessingStep(ScalarBackgroundConfig(percentile=10.0), save_as="bg_corrected"),
+                                PreprocessingStep(PercentileNormalizationConfig(p_low=1.0, p_high=99.9))),
                                extraction_source="bg_corrected")
 
 
@@ -29,7 +29,7 @@ def with_preprocessing(preprocessing, rule="rsf_single_fov", **extra):
     return config
 
 
-# --- Schema consistency with STEPS -----------------------------------------------------
+# --- Schema consistency with PREPROCESSING_METHODS -----------------------------------------------------
 
 def schema_steps(schema):
     """Step name -> parameter names declared by the schema's preprocessing step list."""
@@ -47,7 +47,7 @@ def registered_steps(steps):
 
 
 def schema_mismatches(schema, steps):
-    """Differences between the schema's step list and STEPS; empty when they agree."""
+    """Differences between the schema's step list and PREPROCESSING_METHODS; empty when they agree."""
     declared, registered = schema_steps(schema), registered_steps(steps)
     problems = [f"step {name!r} is registered but missing from the schema" for name in sorted(set(registered) - set(declared))]
     problems += [f"step {name!r} is in the schema but not registered" for name in sorted(set(declared) - set(registered))]
@@ -57,25 +57,25 @@ def schema_mismatches(schema, steps):
 
 
 def test_schema_step_list_matches_steps_and_config_fields():
-    assert schema_mismatches(SCHEMA, STEPS) == []
+    assert schema_mismatches(SCHEMA, PREPROCESSING_METHODS) == []
 
 
 def test_consistency_check_fails_for_a_missing_step_or_different_parameters(monkeypatch):
     missing = copy.deepcopy(SCHEMA)
     missing["$defs"]["preprocessing_params"]["properties"]["steps"]["items"]["oneOf"].pop()
-    assert schema_mismatches(missing, STEPS) == ["step 'percentile_normalization' is registered but missing from the schema"]
+    assert schema_mismatches(missing, PREPROCESSING_METHODS) == ["step 'percentile_normalization' is registered but missing from the schema"]
     extra = copy.deepcopy(SCHEMA)
     extra["$defs"]["preprocessing_step_white_tophat"]["properties"]["radius_z"] = {"type": "integer"}
-    assert schema_mismatches(extra, STEPS) == [
+    assert schema_mismatches(extra, PREPROCESSING_METHODS) == [
         "step 'white_tophat' parameters differ: schema ['radius_yx', 'radius_z'], config ['radius_yx']"]
 
     @dataclass(frozen=True)
     class GammaConfig:
         gamma: float = 1.0
 
-    monkeypatch.setitem(STEPS, GammaConfig, StepSpec("gamma_correction", lambda v, c, x: StepResult(v, {}, {}),
+    monkeypatch.setitem(PREPROCESSING_METHODS, GammaConfig, PreprocessingSpec("gamma_correction", lambda v, c, x: StepResult(v, {}, {}),
                                                      "contrast", "per_channel"))
-    assert schema_mismatches(SCHEMA, STEPS) == ["step 'gamma_correction' is registered but missing from the schema"]
+    assert schema_mismatches(SCHEMA, PREPROCESSING_METHODS) == ["step 'gamma_correction' is registered but missing from the schema"]
 
 
 # --- Adapter -------------------------------------------------------------------------
@@ -97,9 +97,9 @@ def test_every_python_rule_accepts_the_key(rule):
     config = with_preprocessing(preprocessing, rule)
     jsonschema.validate(config, SCHEMA)
     recipe = from_workflow_config(config, rule).pipeline.preprocessing
-    assert recipe == PreprocessingRecipe((RecipeStep(MinMaxNormalizationConfig("uint8", (0, 255)), "scaled"),
-                                          RecipeStep(Background3DConfig(radius_voxels_zyx=(1, 3, 3)), "flat"),
-                                          RecipeStep(TophatConfig(radius_yx=2))),
+    assert recipe == PreprocessingRecipe((PreprocessingStep(MinMaxNormalizationConfig("uint8", (0, 255)), "scaled"),
+                                          PreprocessingStep(Background3DConfig(radius_voxels_zyx=(1, 3, 3)), "flat"),
+                                          PreprocessingStep(TophatConfig(radius_yx=2))),
                                          extraction_source="flat", registration_source="scaled")
     assert recipe.post_registration == ()
 
@@ -164,4 +164,4 @@ def test_legacy_keys_still_map_to_recipe_1_without_the_key():
     parameters["tophat"] = {"run": True, "radius": 2}
     jsonschema.validate(config, SCHEMA)
     recipe = from_workflow_config(config).pipeline.preprocessing
-    assert recipe == PreprocessingRecipe((RecipeStep(TophatConfig(radius_yx=2)),))
+    assert recipe == PreprocessingRecipe((PreprocessingStep(TophatConfig(radius_yx=2)),))

@@ -57,6 +57,31 @@ def _supplied_background(fitted, n_channels):
     return background
 
 
+def _fit_scalar(config, merged, reference_round):
+    """params {"percentile"} and, per round, {"background": [...]} from merged counts."""
+    fitted = {name: {"background": [histogram_percentile(counts, config.percentile) for counts in merged.counts[r]]}
+              for r, name in enumerate(merged.round_names)}
+    return {"params": {"percentile": float(config.percentile)}, "fitted": fitted}
+
+
+def _validate_scalar(section, dtype, n_channels):
+    params = section["params"]
+    if not isinstance(params, Mapping) or set(params) != {"percentile"}:
+        raise ValueError('scalar_background params must be {"percentile"}')
+    ScalarBackgroundConfig(params["percentile"])
+    for name, entry in section["fitted"].items():
+        try:
+            _supplied_background(entry, n_channels)
+        except ValueError as error:
+            raise ValueError(f"scalar_background round {name!r}: {error}") from None
+
+
+def _check_scalar_params(config, params, name):
+    if params["percentile"] != config.percentile:
+        raise ValueError(f"section {name!r} was fitted with percentile={params['percentile']}, "
+                         f"not the recipe's {config.percentile}")
+
+
 def _scalar_background(volume, config, fitted=None):
     """Subtracted image, fitted {"background"} and per-channel diagnostics."""
     volume = _validate_image(volume)
@@ -164,7 +189,8 @@ def scalar_background_histograms(summary: HistogramSummary, config: ScalarBackgr
             if not float(b).is_integer() or b < 0:
                 raise ValueError(f"the histogram shortcut requires integer backgrounds >= 0, not {b!r}")
             counts[r, c] = _subtract_counts(summary.counts[r, c], int(b))
-    after = _steps_record(list(summary.summarized_after) + [{"step": "scalar_background", "config": asdict(config)}])
+    from starfinder.preprocessing.steps import step_spec
+    after = _steps_record(list(summary.summarized_after) + [{"step": step_spec(config).name, "config": asdict(config)}])
     return HistogramSummary(counts, summary.dtype, summary.round_names, summary.channel_labels, tuple(after),
                             summary.fovs_used, summary.fovs_excluded)
 

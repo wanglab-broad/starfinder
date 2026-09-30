@@ -137,8 +137,7 @@ def test_multichannel_translation_float_output():
     images = np.stack([moving, -moving], axis=-1)
     _registration = estimate_transform(source, moving, config=TranslationConfig(), reference_metadata=ImageMetadata("test/reference"), moving_metadata=ImageMetadata("test/moving"))
     result = apply_transform(images, _registration.transform, config=WarpConfig(output_dtype="float64"))
-    shift = tuple(-x for x in _registration.transform.correction_zyx)
-    assert shift == (0, 0, 1) and result.dtype == np.float64
+    assert _registration.transform.displacement_zyx == (0, 0, 1) and result.dtype == np.float64
     np.testing.assert_array_equal(result, np.stack([source, -source], axis=-1))
 
 

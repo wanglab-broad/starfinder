@@ -1,4 +1,4 @@
-from starfinder.dataset import RegistrationStep
+from starfinder.dataset import RegistrationRecipe, RegistrationStep
 from starfinder.registration import TranslationConfig
 from .coordination_helpers import spot_table, detected_shifts
 """Tests for FOV pipeline on small synthetic dataset."""
@@ -68,7 +68,7 @@ class TestFOVPipeline:
 
     def test_global_registration(self, small_pipeline_dataset):
         fov = small_pipeline_dataset.fov("FOV_001")
-        fov.load_images().normalize_intensity().register(RegistrationStep(TranslationConfig()))
+        fov.load_images().normalize_intensity().register(RegistrationRecipe((RegistrationStep(TranslationConfig()),)))
 
         # Reference round should not be in global_shifts
         assert "round1" not in detected_shifts(fov)
@@ -87,7 +87,7 @@ class TestFOVPipeline:
 
     def test_spot_finding(self, small_pipeline_dataset):
         fov = small_pipeline_dataset.fov("FOV_001")
-        fov.load_images().normalize_intensity().register(RegistrationStep(TranslationConfig()))
+        fov.load_images().normalize_intensity().register(RegistrationRecipe((RegistrationStep(TranslationConfig()),)))
         fov.find_spots(config=LocalMaximaConfig())
 
         assert spot_table(fov) is not None
@@ -100,7 +100,7 @@ class TestFOVPipeline:
         (
             fov.load_images()
             .normalize_intensity()
-            .register(RegistrationStep(TranslationConfig())).find_spots(config=LocalMaximaConfig())
+            .register(RegistrationRecipe((RegistrationStep(TranslationConfig()),))).find_spots(config=LocalMaximaConfig())
             .extract_intensities().decode_barcodes()
         )
 
@@ -116,7 +116,7 @@ class TestFOVPipeline:
         (
             fov.load_images()
             .normalize_intensity()
-            .register(RegistrationStep(TranslationConfig())).find_spots(config=LocalMaximaConfig())
+            .register(RegistrationRecipe((RegistrationStep(TranslationConfig()),))).find_spots(config=LocalMaximaConfig())
             .extract_intensities().decode_barcodes()
         )
         small_pipeline_dataset.load_codebook(small_dataset / "codebook.csv")
@@ -130,7 +130,7 @@ class TestFOVPipeline:
         (
             fov.load_images()
             .normalize_intensity()
-            .register(RegistrationStep(TranslationConfig())).find_spots(config=LocalMaximaConfig())
+            .register(RegistrationRecipe((RegistrationStep(TranslationConfig()),))).find_spots(config=LocalMaximaConfig())
             .extract_intensities().decode_barcodes()
         )
         small_pipeline_dataset.load_codebook(small_dataset / "codebook.csv")

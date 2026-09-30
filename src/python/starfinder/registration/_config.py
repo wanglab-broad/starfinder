@@ -37,9 +37,81 @@ class TranslationConfig:
             raise InvalidRegistrationConfigError("skimage requires fft_workers=1")
 
 
+def _elastix_config(config, metrics):
+    _choice(config.metric, "metric", metrics)
+    for name in ("iterations", "samples", "random_seed"):
+        _number(getattr(config, name), name, minimum=0 if name == "random_seed" else 1, integer=True)
+    if config.levels is not None:
+        _number(config.levels, "levels", minimum=1, integer=True)
+
+
+@dataclass(frozen=True)
+class RigidConfig:
+    """elastix rigid (Euler) registration in physical space; Z=1 is estimated in 2D.
+
+    metric is "mattes" (Mattes mutual information with histogram_bins bins) or
+    "ncc"; iterations are per pyramid level, samples are the random spatial
+    samples per iteration and random_seed seeds them. levels None derives the
+    shared pyramid rule of the registration algorithm page.
+    """
+
+    metric: str = "mattes"
+    histogram_bins: int = 32
+    iterations: int = 200
+    samples: int = 4096
+    levels: int | None = None
+    random_seed: int = 1
+    method: str = field(default="rigid", init=False)
+
+    def __post_init__(self):
+        _elastix_config(self, ("mattes", "ncc"))
+        _number(self.histogram_bins, "histogram_bins", minimum=2, integer=True)
+
+
+@dataclass(frozen=True)
+class AffineConfig:
+    """elastix affine registration in physical space; Z=1 is estimated in 2D.
+
+    Fields as for RigidConfig; the default metric is normalized correlation.
+    """
+
+    metric: str = "ncc"
+    iterations: int = 200
+    samples: int = 4096
+    levels: int | None = None
+    random_seed: int = 1
+    method: str = field(default="affine", init=False)
+
+    def __post_init__(self):
+        _elastix_config(self, ("ncc", "mattes"))
+
+
+@dataclass(frozen=True)
+class BSplineConfig:
+    """elastix cubic B-spline registration on a physical control grid; Z=1 is estimated in 2D.
+
+    grid_spacing_physical is the final control-point spacing, in the spatial
+    unit of spacing_zyx and equal on every axis; None uses the physical X
+    extent divided by 8. Other fields as for AffineConfig.
+    """
+
+    metric: str = "ncc"
+    grid_spacing_physical: float | None = None
+    iterations: int = 200
+    samples: int = 4096
+    levels: int | None = None
+    random_seed: int = 1
+    method: str = field(default="bspline", init=False)
+
+    def __post_init__(self):
+        _elastix_config(self, ("ncc", "mattes"))
+        if self.grid_spacing_physical is not None:
+            _number(self.grid_spacing_physical, "grid_spacing_physical", strict=True)
+
+
 @dataclass(frozen=True)
 class DemonsConfig:
-    """SimpleITK demons; 3D only, with each axis at least four voxels."""
+    """SimpleITK demons; Z=1 is estimated in 2D (Y and X at least four), otherwise 3D with every axis at least four."""
 
     variant: str = "demons"
     iterations: tuple[int, ...] = (100, 50, 25)
@@ -126,12 +198,77 @@ def _landmark_config(config):
 
 
 @dataclass(frozen=True)
-class WarpConfig:
-    """Method-specific resampling, with one final nearest-even integer cast.
+class RegistrationQcConfig:
+    """Rejection criteria of routine registration QC; every criterion None rejects nothing.
 
-    Translation supports constant zero fill only. Dense backends support
-    constant fill or nearest boundary extrapolation. SciPy uses linear samples;
-    estimator interpolation_order controls coarse field expansion only.
+    min_coverage is the smallest valid-overlap fraction in [0, 1];
+    min_ncc_gain the smallest NCC gain (after minus before);
+    max_fold_fraction the largest fraction in [0, 1] of voxels with
+    det(I + grad u) <= 0; max_translation_voxels the largest translation
+    displacement norm in voxels. projections returns the reference, before and
+    after Z maximum projections from registration_qc for overlays.
+    """
+
+    min_coverage: float | None = None
+    min_ncc_gain: float | None = None
+    max_fold_fraction: float | None = None
+    max_translation_voxels: float | None = None
+    projections: bool = False
+
+    def __post_init__(self):
+        for name in ("min_coverage", "max_fold_fraction"):
+            value = getattr(self, name)
+            if value is not None:
+                _number(value, name)
+                if value > 1:
+                    raise InvalidRegistrationConfigError(f"{name} must be in [0, 1]")
+        if self.min_ncc_gain is not None:
+            _number(self.min_ncc_gain, "min_ncc_gain", minimum=-math.inf)
+        if self.max_translation_voxels is not None:
+            _number(self.max_translation_voxels, "max_translation_voxels")
+        if type(self.projections) is not bool:
+            raise InvalidRegistrationConfigError("projections must be bool")
+
+
+def _channel(value, name):
+    if value is not None and (isinstance(value, bool) or not isinstance(value, (int, str))
+                              or (isinstance(value, int) and value < 0) or value == ""):
+        raise InvalidRegistrationConfigError(f"{name} must be a nonnegative index, a channel label or None")
+
+
+@dataclass(frozen=True)
+class RegistrationSignalConfig:
+    """How one float64 ZYX registration signal is built from a round's ZYXC source image.
+
+    mode "max" takes the channel maximum (MATLAB merged-image), "sum" the
+    float64 channel sum (the earlier Python merged) and "channel" one channel
+    per round: reference_channel for the reference round and moving_channel
+    (None: reference_channel) for the moving round, each a zero-based index or
+    a channel label. Channels are set only for mode "channel".
+    """
+
+    mode: str = "max"
+    reference_channel: int | str | None = None
+    moving_channel: int | str | None = None
+
+    def __post_init__(self):
+        _choice(self.mode, "mode", ("max", "sum", "channel"))
+        _channel(self.reference_channel, "reference_channel")
+        _channel(self.moving_channel, "moving_channel")
+        if self.mode == "channel" and self.reference_channel is None:
+            raise InvalidRegistrationConfigError('mode="channel" requires reference_channel')
+        if self.mode != "channel" and (self.reference_channel is not None or self.moving_channel is not None):
+            raise InvalidRegistrationConfigError('channels apply only to mode="channel"')
+
+
+@dataclass(frozen=True)
+class WarpConfig:
+    """Resampling policy, with one final nearest-even integer cast.
+
+    Translation supports constant zero fill only and applies translations and
+    chains of translations. Dense backends support constant fill or nearest
+    boundary extrapolation. SciPy uses linear samples; estimator
+    interpolation_order controls coarse field expansion only.
     """
 
     backend: str = "translation"

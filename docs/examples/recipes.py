@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from starfinder.dataset import RegistrationStep, FOV, RoundState, Dataset
+from starfinder.dataset import RegistrationRecipe, RegistrationStep, FOV, RoundState, Dataset
 from starfinder.io import load_round, load_volume, save_volume
 from starfinder.registration import TranslationConfig, estimate_transform, apply_transform, TranslationConfig
 from starfinder.spot_finding import find_spots, LocalMaximaConfig
@@ -38,11 +38,11 @@ def register_volumes(fixed: np.ndarray) -> None:
     moving = np.roll(fixed, (1, -2, 3), axis=(0, 1, 2))
     assert fixed.ndim == moving.ndim == 3 and fixed.shape == moving.shape
     result = estimate_transform(fixed, moving, config=TranslationConfig(), reference_metadata=ImageMetadata("reference"), moving_metadata=ImageMetadata("moving"))
-    detected = tuple(-x for x in result.transform.correction_zyx)
+    detected = result.transform.displacement_zyx
     corrected = apply_transform(moving, result.transform, config=result.application_config)
     assert detected == (1, -2, 3)
     np.testing.assert_array_equal(corrected, fixed)
-    print("Registration: detected", detected, "; correction (-1, 2, -3)")
+    print("Registration: detected displacement", detected)
 
 
 def detect_spots(volume: np.ndarray) -> None:
@@ -71,7 +71,7 @@ def decode_fov(quickstart: Path, output: Path) -> FOV:
     fov = dataset.fov("FOV_001")
     fov.load_images()
     assert all(image.shape == (8, 128, 128, 4) for image in fov.images.values())
-    fov.register(RegistrationStep(TranslationConfig()))
+    fov.register(RegistrationRecipe((RegistrationStep(TranslationConfig()),)))
     fov.find_spots(config=LocalMaximaConfig(threshold_mode="noise", threshold_value=5.0))
     fov.extract_intensities(config=NeighborhoodSumConfig((1, 2, 2)))
     fov.decode_barcodes().filter_reads()

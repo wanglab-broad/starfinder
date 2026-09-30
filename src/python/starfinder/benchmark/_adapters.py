@@ -1,12 +1,10 @@
 """Explicit registration processing and saved-array evaluation adapters."""
 from dataclasses import asdict
 import numpy as np
+from starfinder._registry import config_type_for
 from starfinder.image import ImageMetadata
-from starfinder.registration import (TranslationConfig, DemonsConfig, TpsConfig, CpdConfig,
-    InsufficientLandmarksError, RegistrationEstimationError)
+from starfinder.registration import REGISTRATION_METHODS, InsufficientLandmarksError, RegistrationEstimationError
 
-_CONFIGS = {'translation': TranslationConfig, 'demons': DemonsConfig,
-            'tps': TpsConfig, 'cpd': CpdConfig}
 _ERRORS = {'InsufficientLandmarksError': InsufficientLandmarksError,
            'RegistrationEstimationError': RegistrationEstimationError}
 
@@ -14,9 +12,9 @@ _ERRORS = {'InsufficientLandmarksError': InsufficientLandmarksError,
 def _config(value):
     value = dict(value)
     method = value.pop('method')
-    if method not in _CONFIGS:
-        raise ValueError(f'unsupported registration method: {method}')
-    return _CONFIGS[method](**value)
+    config_type = config_type_for(REGISTRATION_METHODS, method, 'registration method',
+                                  message=f'unsupported registration method: {method}')
+    return config_type(**value)
 
 
 def _validate(case):
@@ -61,8 +59,8 @@ def _validate(case):
         elif index is not None:
             raise ValueError('SSIM slice_index requires slice policy')
     if 'translation' in evaluation:
-        if set(evaluation['translation']) != {'tolerance'} or 'correction' not in case.truth:
-            raise ValueError('translation evaluation requires tolerance and correction truth JSON')
+        if set(evaluation['translation']) != {'tolerance'} or 'displacement' not in case.truth:
+            raise ValueError('translation evaluation requires tolerance and displacement truth JSON')
         tol = evaluation['translation']['tolerance']
         if tol is not None and (not np.isfinite(tol) or tol < 0):
             raise ValueError('translation tolerance must be nonnegative or null')
@@ -107,11 +105,11 @@ def _evaluate(case, arrays, transform, truth):
             metrics['ssim_' + label] = asdict(structural_similarity(arrays['reference'], arrays[label],
                 **case.config['evaluation']['ssim']))
     if 'translation' in case.config['evaluation']:
-        if 'correction_zyx' not in transform:
+        if 'displacement_zyx' not in transform:
             raise ValueError('translation evaluation requires a translation transform')
         metadata = ImageMetadata(**case.config['reference_metadata'])
         metrics['translation'] = asdict(evaluate_translation(
-            {'moving': transform['correction_zyx']}, {'moving': truth['correction']},
+            {'moving': transform['displacement_zyx']}, {'moving': truth['displacement']},
             reference_metadata=metadata, observed_metadata=metadata, units='voxel',
             **case.config['evaluation']['translation']))
     return metrics

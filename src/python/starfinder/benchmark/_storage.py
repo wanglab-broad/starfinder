@@ -65,16 +65,22 @@ def _save_array(root, directory, name, value):
 
 
 def _save_transform(root, directory, name, result, artifacts):
-    """Persist a registration result without copying a dense field in asdict."""
+    """Persist a registration result without copying a dense field in asdict; a translation stays inline."""
     from dataclasses import asdict
+    from starfinder.registration import TranslationTransform
     transform = result.transform
-    record = {k: v for k, v in vars(transform).items() if k != 'displacement_zyx'}
+    arrays = {} if isinstance(transform, TranslationTransform) else {
+        'displacement_zyx': ('field', 'displacement_artifact'), 'coefficients': ('coefficients', 'coefficients_artifact')}
+    record = {k: v for k, v in vars(transform).items() if k not in arrays and not k.startswith('_')}
     for key in ('reference_metadata', 'moving_metadata'):
         record[key] = asdict(record[key])
-    if hasattr(transform, 'displacement_zyx'):
-        field_name = 'field' if name == 'transform' else name + '-field'
-        artifacts[field_name] = _save_array(root, directory, field_name, transform.displacement_zyx)
-        record['displacement_artifact'] = artifacts[field_name]
+    if 'matrix_zyx' in record:
+        record['matrix_zyx'] = record['matrix_zyx'].tolist()
+    for attribute, (suffix, key) in arrays.items():
+        if hasattr(transform, attribute):
+            array_name = suffix if name == 'transform' else f'{name}-{suffix}'
+            artifacts[array_name] = _save_array(root, directory, array_name, getattr(transform, attribute))
+            record[key] = artifacts[array_name]
     record['application_config'] = asdict(result.application_config)
     record['diagnostics'] = asdict(result.diagnostics)
     path = directory / (name + '.json')

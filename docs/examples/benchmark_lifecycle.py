@@ -15,13 +15,13 @@ def main(output):
     image[3, 7, 8] = 10
     np.save(inputs / 'reference.npy', image)
     np.save(inputs / 'moving.npy', np.roll(image, (1, -2, 1), axis=(0, 1, 2)))
-    (inputs / 'correction.json').write_text('[-1.0, 2.0, -1.0]')
+    (inputs / 'displacement.json').write_text('[1.0, -2.0, 1.0]')
     config = {'schema_version': 1, 'repetitions': 1,
         'provenance': {'seed': None, 'fixture': 'deterministic impulse; no RNG',
                        'limitations': 'software smoke only; no scientific qualification'},
         'cases': [{'case_id': 'tiny', 'task': 'registration',
             'inputs': {'reference': 'reference.npy', 'moving': 'moving.npy'},
-            'truth': {'correction': 'correction.json'},
+            'truth': {'displacement': 'displacement.json'},
             'config': {'registration': {'method': 'translation'},
                 'reference_metadata': {'frame_id': 'reference'},
                 'moving_metadata': {'frame_id': 'moving'},

@@ -142,12 +142,12 @@ def test_tiny_registration_cli_layout_fields_and_benchmark_run(tmp_path):
             expected = moved.loc[identity, ['z', 'y', 'x']].to_numpy(float) - q
             assert np.abs(field[voxel] - expected).max() <= .5 * offset + 1e-4, deformation
     shift = np.array(truth['pairs']['shift']['shift_zyx'])
-    (root / 'correction.json').write_text(json.dumps((-shift).tolist()))
+    (root / 'displacement.json').write_text(json.dumps(shift.tolist()))
     case = BenchmarkCase('tiny-shift', 'registration', {'reference': 'ref.tif', 'moving': 'mov_shift.tif'},
         {'registration': {'method': 'translation'}, 'reference_metadata': {'frame_id': 'reference'},
          'moving_metadata': {'frame_id': 'moving'},
          'evaluation': {'ncc': True, 'translation': {'tolerance': 1.0}}},
-        truth={'correction': 'correction.json'})
+        truth={'displacement': 'displacement.json'})
     run = run_benchmark([case], input_root=root, output_root=tmp_path / 'runs', owner='pytest')
     evaluation = evaluate_benchmark(run)
     record = json.loads((evaluation / 'results.json').read_text())[0]

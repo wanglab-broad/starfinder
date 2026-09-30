@@ -14,7 +14,7 @@ from starfinder.registration import TranslationConfig
 import numpy as np
 import pandas as pd
 
-from starfinder.dataset import RegistrationStep, RoundState, Dataset
+from starfinder.dataset import RegistrationRecipe, RegistrationStep, RoundState, Dataset
 
 
 def main(output: Path) -> None:
@@ -55,7 +55,7 @@ def main(output: Path) -> None:
         for volume in fov.images.values():
             assert volume.shape == (8, 128, 128, 4)
             assert volume.dtype == np.uint16
-        fov.register(RegistrationStep(TranslationConfig()))
+        fov.register(RegistrationRecipe((RegistrationStep(TranslationConfig()),)))
         fov.find_spots(config=LocalMaximaConfig(threshold_mode="noise", threshold_value=5.0, min_distance_voxels=1))
         fov.extract_intensities(config=NeighborhoodSumConfig((1, 2, 2)))
         fov.decode_barcodes().filter_reads()
@@ -65,7 +65,7 @@ def main(output: Path) -> None:
         assert set(fov.filtering_result.accepted["gene_id"]) <= set(dataset.codebook.genes)
         assert fov.filtering_result.accepted["observed_color_sequence"].str.fullmatch(r"[1-4]{4}").all()
         detected_shifts = {}
-        for round_name, shift in ((name, tuple(-v for v in results[0].transform.correction_zyx)) for name, results in fov.registration_results.items()):
+        for round_name, shift in ((name, results[0].transform.displacement_zyx) for name, results in fov.registration_results.items()):
             expected = truth["fovs"][fov_id]["shifts"][round_name]
             np.testing.assert_allclose(shift, expected, atol=1, rtol=0)
             detected_shifts[round_name] = [float(value) for value in shift]

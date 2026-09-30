@@ -42,19 +42,29 @@ frozen config type:
 
 ```python
 @dataclass(frozen=True)
-class StepSpec:
+class PreprocessingSpec:
     name: str            # stable identifier, e.g. "percentile_normalization"
     run: Callable[..., StepResult]
     category: str        # "background", "intensity" or "contrast"
     scope: str           # "per_channel", "per_round" or "needs_reference"
     dtype_policy: str    # "preserve" (default) or "declared"
+    # keyword-only, with defaults (method registry page):
+    requires: tuple[Dependency, ...] = ()
+    min_shape_zyx: tuple[int, int, int] = (1, 1, 1)
+    post_registration: bool = False       # True only for reconstruction
+    supplied: SuppliedSpec | None = None  # supplied-statistics hooks
 
-STEPS: dict[type, StepSpec]  # populated in starfinder.preprocessing
+PREPROCESSING_METHODS: dict[type, PreprocessingSpec]  # populated in starfinder.preprocessing
 ```
+
+`PreprocessingSpec`, `PREPROCESSING_METHODS` and `PreprocessingStep` were
+called `StepSpec`, `STEPS` and `RecipeStep` before the {doc}`method-registry`
+renames; the shared fields and lookups are specified there.
 
 * `name` is the single identifier of a step. The workflow adapter, provenance and
   the supplied-statistics file all use it. Names are unique lowercase
-  snake_case; a lookup from name to config type is derived from `STEPS`, never
+  snake_case; a lookup from name to config type is derived from
+  `PREPROCESSING_METHODS`, never
   maintained separately.
 * `category` follows the chapter's categories. It documents intent and does not
   impose an order.
@@ -90,14 +100,14 @@ The default reproduces the legacy behavior.
 
 ```python
 @dataclass(frozen=True)
-class RecipeStep:
+class PreprocessingStep:
     config: StepConfig
     save_as: str | None = None     # snapshot name for this step's output
 
 @dataclass(frozen=True)
 class PreprocessingRecipe:
-    steps: tuple[RecipeStep, ...]
-    post_registration: tuple[RecipeStep, ...] = ()
+    steps: tuple[PreprocessingStep, ...]
+    post_registration: tuple[PreprocessingStep, ...] = ()
     extraction_source: str | None = None     # snapshot name; None = detection image
     registration_source: str | None = None   # snapshot name; None = detection image
     supplied_statistics: Path | None = None  # file for fit="supplied" steps
@@ -250,13 +260,13 @@ preprocessing:
   extraction_source: bg_corrected
 ```
 
-* `method` is a step name from `STEPS`; an unknown name raises. The remaining keys
+* `method` is a step name from `PREPROCESSING_METHODS`; an unknown name raises. The remaining keys
   of a step, except `save_as`, are the fields of its config dataclass.
 * `extraction_source`, `registration_source` and `supplied_statistics` are the
   recipe fields above.
 * `workflow/schemas/config.schema.yaml` declares the `preprocessing` key as a
   static schema. A default-tier test checks that its step names and parameters
-  match `STEPS` and the config dataclass fields, so a registered step cannot be
+  match `PREPROCESSING_METHODS` and the config dataclass fields, so a registered step cannot be
   missing from the schema.
 
 The key is available only on the Python backend. MATLAB APIs and shared MATLAB

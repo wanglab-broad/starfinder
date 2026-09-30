@@ -13,8 +13,8 @@ from scipy import ndimage
 
 from starfinder.dataset import Dataset, PipelineConfig, RoundState
 from starfinder.image import ImageMetadata
-from starfinder.preprocessing import (STEPS, Background3DConfig, PercentileNormalizationConfig, PreprocessingRecipe,
-    RecipeStep, ScalarBackgroundConfig, StepContext, merge_histograms, read_supplied_statistics, run_step,
+from starfinder.preprocessing import (PREPROCESSING_METHODS, Background3DConfig, PercentileNormalizationConfig, PreprocessingRecipe,
+    PreprocessingStep, ScalarBackgroundConfig, StepContext, merge_histograms, read_supplied_statistics, run_step,
     scalar_background_histograms, subtract_background_3d, subtract_scalar_background, summarize_histograms,
     summary_stage, supplied_section, supplied_statistics, write_supplied_statistics)
 
@@ -67,7 +67,7 @@ def resident(ds, fov_id, rounds, spacing=None):
 
 def test_both_steps_are_registered_per_channel_and_preserving():
     for config_type, name in ((ScalarBackgroundConfig, "scalar_background"), (Background3DConfig, "background_3d")):
-        spec = STEPS[config_type]
+        spec = PREPROCESSING_METHODS[config_type]
         assert (spec.name, spec.category, spec.scope, spec.dtype_policy) == (name, "background", "per_channel", "preserve")
     assert asdict(ScalarBackgroundConfig()) == {"percentile": 10.0, "fit": "fov"}
     for bad in (dict(percentile=-1), dict(percentile=100), dict(percentile=float("nan")), dict(percentile=True),
@@ -200,7 +200,7 @@ def test_supplied_shortcut_on_merged_counts_equals_the_subtracted_volumes(dtype,
     fovs = random_fovs(dtype, seed=2)
     path = tmp_path / "supplied.json"
     scalar = ScalarBackgroundConfig(fit="supplied")
-    recipe = PreprocessingRecipe((RecipeStep(scalar), RecipeStep(PercentileNormalizationConfig(fit="supplied"))),
+    recipe = PreprocessingRecipe((PreprocessingStep(scalar), PreprocessingStep(PercentileNormalizationConfig(fit="supplied"))),
                                  supplied_statistics=path)
     # Pass 1: histograms of the raw volumes give the scalar background section.
     raw = merge_histograms([summarize_histograms(r, channel_labels=CHANNELS, fov_id=f) for f, r in fovs.items()])
@@ -263,7 +263,7 @@ def test_scalar_supplied_section_is_validated_against_the_recipe(tmp_path):
     assert section["params"] == {"percentile": 5.0} and section["summarized_after"] == []
     path = tmp_path / "s.json"
     write_supplied_statistics(supplied_statistics(raw, {"scalar_background": section}), path)
-    recipe = lambda p: PreprocessingRecipe((RecipeStep(ScalarBackgroundConfig(percentile=p, fit="supplied")),),
+    recipe = lambda p: PreprocessingRecipe((PreprocessingStep(ScalarBackgroundConfig(percentile=p, fit="supplied")),),
                                            supplied_statistics=path)
     assert read_supplied_statistics(path, recipe(5), rounds=ROUNDS)["steps"]["scalar_background"] == section
     with pytest.raises(ValueError, match="percentile"):
@@ -347,7 +347,7 @@ def test_um_radii_convert_with_spacing_by_rounding(tmp_path):
     assert result.fitted == {"radius_voxels_zyx": [1, 1, 3]}
     # Through FOV.run the spacing comes from the round's ImageMetadata.
     fov = resident(dataset(tmp_path), "FOV_001", {n: x for n in ROUNDS}, spacing=spacing)
-    fov.run(PipelineConfig(preprocessing=PreprocessingRecipe((RecipeStep(config),))))
+    fov.run(PipelineConfig(preprocessing=PreprocessingRecipe((PreprocessingStep(config),))))
     np.testing.assert_array_equal(fov.images["round2"], result.image)
     assert fov.preprocessing_record["rounds"]["round2"][0]["step"] == "background_3d"
     assert fov.preprocessing_record["rounds"]["round2"][0]["fitted"] == {"radius_voxels_zyx": [1, 1, 3]}

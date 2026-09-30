@@ -80,12 +80,8 @@ rule nuclei_registration:
         expand("{output_dir}/log/gr_shifts/{{fovID}}_nr.txt", output_dir=OUTPUT_DIR),
     resources:
         mem_mb=get_rule_config('nuclei_registration', 'resources.mem_mb', DEFAULT_RESOURCES['mem_mb'])
-    run:
-        param_string = (f"'{input[0]}', "
-                        f"'{wildcards.fovID}'"
-                        )
-        matlab_script_name = 'nuclei_registration'
-        run_matlab_scripts(param_string, matlab_script_name)
+    script:
+        "../scripts/nuclei_registration.py"
 
 ### ==================== [ Rotate Nuclei ] =========================
 

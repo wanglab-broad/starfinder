@@ -140,9 +140,10 @@ intensity)`, with infinity for ties/NaNs. `color_seq` concatenates colors in
 `round1`–`round4` order. Read it as a string. Filtration here uses exact codebook
 membership; scores are diagnostics, not an additional filtering threshold.
 
-Shift logs contain **detected displacement**, not the correction translation;
-the registration API applies its negative internally. For example, a detected
-`(dz,dy,dx)=(-2,3,2)` requires correction `(2,-3,-2)`. See the
+Shift logs contain the **detected displacement**, the same value as the
+translation transform's `displacement_zyx`: a moving round displaced by
+`(dz,dy,dx)=(-2,3,2)` is logged and stored as `(-2,3,2)` and registered by
+sampling it at `p + (-2,3,2)`. See the
 [API contracts](api/contracts.md) for details.
 
 The script asserts input shape/dtype, nonempty filtered outputs, valid codebook

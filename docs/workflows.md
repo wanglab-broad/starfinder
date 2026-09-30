@@ -64,7 +64,7 @@ It calls `workflow/scripts/rsf_single_fov.py` or `.m` respectively.
 | load | `from_workflow_config`, `load_codebook`, `FOV.load_images` | `STARMapDataset`, `LoadRawImages` | Round/FOV channel stacks → in-memory images; Python loads the codebook before processing |
 | rotate | `FOV.rotate` if angle is nonzero | `LoadRawImages(..., 'rotate_angle', ...)` | Rotated image arrays; no standalone stage file |
 | enhance | Optional `normalize_intensity`, `match_histogram`, `reconstruct_background` | `EnhanceContrast`, `HistEqualize`, `MorphRecon` | Preprocessed arrays |
-| registration | Ordered `register(RegistrationStep(...))` | `GlobalRegistration`, `LocalRegistration` | Aligned arrays and reference image |
+| registration | `register(RegistrationRecipe(...))`: global then local step, composed and resampled once | `GlobalRegistration`, `LocalRegistration` | Aligned arrays and reference image |
 | spot_finding | `find_spots` | `SpotFinding` | Candidate coordinates |
 | extraction | `extract_intensities` / `decode_barcodes` | `ReadsExtraction` | Per-round intensities/color calls |
 | filtration | `filter_reads` using loaded codebook | `LoadCodebook`, `ReadsFiltration` | Decoded, filtered molecules |
@@ -118,12 +118,37 @@ scripts use `snakemake.config`; MATLAB scripts read this JSON. See the
 
 ## Modes and backend selection
 
-`backend: matlab` is the default. `backend: python` selects only the Python core
-registration and spot-finding rules. It does not replace all downstream code:
-`nuclei_registration` still invokes MATLAB. `matlab_launcher: path` (the
+`backend: matlab` is the default. `backend: python` selects the Python core
+registration and spot-finding rules and the Python `nuclei_registration` rule
+(below). It does not replace all downstream code. `matlab_launcher: path` (the
 default) runs a local MATLAB executable; `matlab_launcher: broad` sources
 `/broad/software/scripts/useuse` and runs `use Matlab` first. See the
 [MATLAB launcher](workflow-configuration.md#matlab-launcher) settings.
+
+### Nuclei registration
+
+`nuclei_registration` registers the `additional_round` rounds (for example
+morphology rounds) to the reference round's DAPI stain, one job per FOV. The
+MATLAB backend runs `workflow/scripts/nuclei_registration.m`. The Python backend
+runs `workflow/scripts/nuclei_registration.py`, which calls
+`FOV.register_rounds` ({doc}`coordination`) and keeps the MATLAB inputs and
+file names:
+
+- it reads the reference round's `*ch04.tif`, rotated by `rotate_angle`, as an
+  `ExternalReference` labelled `<ref_round>:ch04`;
+- it loads each `additional_round` entry with its `channel_order` (each
+  entry's `channel` is the filename pattern and label, its `name` the output
+  folder), rotated by `rotate_angle`; the stain is the one channel whose
+  `name` contains the top-level `ref_channel`, as MATLAB matches it;
+- it registers each round by one translation step on its stain and applies the
+  transform to all of the round's channels;
+- it writes `log/<fov>_nr.txt` (the registration attempts as JSON, where MATLAB
+  writes its console log), `log/gr_shifts/<fov>_nr.txt` (`fov_id, round, row,
+  col, z`) and `images/<round>/<channel name>/<fov>.tif` (ZYX, or the Z maximum
+  as YX with top-level `maximum_projection`).
+
+Unlike MATLAB, the Python rule does not min–max stretch the other rounds before
+registering and saving them: the images keep their loaded dtype and values.
 
 | Mode | Selected core rules | Intermediate files and execution |
 | --- | --- | --- |

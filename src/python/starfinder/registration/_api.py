@@ -2,17 +2,22 @@
 
 import numpy as np
 
+from starfinder._registry import require, spec_for
 from starfinder.image import ImageMetadata, IncompatibleGeometryError, _validate_image
 
-from ._config import CpdConfig, DemonsConfig, TpsConfig, TranslationConfig, WarpConfig
+from ._config import WarpConfig
 from ._errors import (
     InvalidRegistrationConfigError,
     RegistrationBackendUnavailableError,
     RegistrationEstimationError,
     UnsupportedTransformOperationError,
 )
+from ._chain import TransformChain, resample
+from ._methods import REGISTRATION_METHODS, RegistrationConfig, _check_shape
 from ._resampling import _cast_warp_output, _output_dtype, apply_tps_deformation
 from ._types import (
+    AffineTransform,
+    BSplineTransform,
     DenseDisplacementTransform,
     RegistrationDiagnostics,
     RegistrationResult,
@@ -25,19 +30,25 @@ def estimate_transform(
     reference_image: np.ndarray,
     moving_image: np.ndarray,
     *,
-    config: TranslationConfig | DemonsConfig | TpsConfig | CpdConfig,
+    config: RegistrationConfig,
     reference_metadata: ImageMetadata,
     moving_metadata: ImageMetadata,
 ) -> RegistrationResult:
     """Estimate from finite ZYX arrays on equal grids without mutating inputs.
 
-    Configuration identity selects the method. Translation supports singleton
-    axes; current local estimators require 3D (demons axes >=4). Unknown physical
-    geometry is accepted when explicitly unknown in both metadata values.
-    No algorithm substitution occurs, including on insufficient landmarks.
+    The exact config type selects the method in REGISTRATION_METHODS. Its
+    declared dimensions and min_shape_zyx are checked before it runs:
+    translation supports singleton axes; rigid, affine, B-spline and demons
+    estimate Z=1 as 2D and reject 1 < Z < 4 (rigid, affine and B-spline need
+    Y and X of at least 16, demons 4); TPS and CPD require 3D with every axis
+    at least 2. Declared optional dependencies are imported before the
+    estimator runs. Unknown physical geometry is accepted when explicitly
+    unknown in both metadata values; the physical-space methods then use unit
+    spacing and record spacing_source="unknown_unit". No algorithm
+    substitution occurs, including on insufficient landmarks.
     """
-    if type(config) not in (TranslationConfig, DemonsConfig, TpsConfig, CpdConfig):
-        raise InvalidRegistrationConfigError("expected a typed registration config")
+    spec = spec_for(REGISTRATION_METHODS, config, "registration method", InvalidRegistrationConfigError,
+                    "expected a typed registration config")
     reference_image = _validate_image(reference_image, ndim=(3,))
     moving_image = _validate_image(moving_image, ndim=(3,))
     _geometry(reference_image.shape, moving_image.shape, reference_metadata, moving_metadata)
@@ -47,74 +58,10 @@ def estimate_transform(
         reference_metadata=reference_metadata,
         moving_metadata=moving_metadata,
     )
-    if not isinstance(config, TranslationConfig) and min(reference_image.shape) < (
-        4 if isinstance(config, DemonsConfig) else 2
-    ):
-        raise IncompatibleGeometryError("local estimator requires 3D; demons axes must be >=4")
+    _check_shape(spec, reference_image.shape)
+    require(spec, "registration method", RegistrationBackendUnavailableError)
     try:
-        if isinstance(config, TranslationConfig):
-            if config.backend == "scipy_fft":
-                from ._translation import phase_correlate
-
-                shift = phase_correlate(reference_image, moving_image, workers=config.fft_workers)
-            else:
-                from ._skimage_backend import phase_correlate_skimage
-
-                shift = phase_correlate_skimage(reference_image, moving_image)
-            transform = TranslationTransform(tuple(-s for s in shift), **geometry)
-            backend = config.backend
-            application = WarpConfig(fft_workers=config.fft_workers)
-        elif isinstance(config, DemonsConfig):
-            from ._demons import demons_register
-
-            field = demons_register(
-                reference_image,
-                moving_image,
-                iterations=config.iterations,
-                smoothing_sigma=config.smoothing_sigma,
-                method=config.variant,
-                pyramid_mode=config.pyramid_mode,
-            )
-            transform = DenseDisplacementTransform(field, **geometry)
-            backend = "simpleitk"
-            application = WarpConfig(backend=backend)
-        else:
-            common = dict(
-                detection_threshold=config.detection_noise_sigma,
-                max_control_points=config.max_control_points,
-                grid_spacing=config.grid_spacing_voxels,
-                zoom_order=config.interpolation_order,
-                field_smooth_sigma=config.field_smoothing_sigma,
-                clamp_sampling_coordinates=config.clamp_sampling_coordinates,
-            )
-            if isinstance(config, TpsConfig):
-                from ._tps import tps_register
-
-                field = tps_register(
-                    reference_image,
-                    moving_image,
-                    match_distance=config.match_distance_voxels,
-                    min_matches=config.min_matches,
-                    smoothing=config.smoothing,
-                    **common,
-                )
-            else:
-                from ._cpd import cpd_register
-
-                field = cpd_register(
-                    reference_image,
-                    moving_image,
-                    beta=config.kernel_width_voxels,
-                    lmbda=config.regularization_weight,
-                    w=config.outlier_fraction,
-                    affine_first=config.affine_first,
-                    candidate_radius=config.candidate_radius_voxels,
-                    k_neighbors=config.neighbors_per_anchor,
-                    **common,
-                )
-            transform = DenseDisplacementTransform(field, **geometry)
-            backend = "scipy"
-            application = WarpConfig(backend=backend)
+        transform, backend, application, *details = spec.run(reference_image, moving_image, config, geometry)
     except ImportError as exc:
         raise RegistrationBackendUnavailableError(str(exc)) from exc
     except (np.linalg.LinAlgError, RuntimeError, ValueError) as exc:
@@ -122,13 +69,14 @@ def estimate_transform(
             raise
         raise RegistrationEstimationError(f"{config.method} estimation failed: {exc}") from exc
     return RegistrationResult(
-        transform, RegistrationDiagnostics(config.method, backend, config), application
+        transform, RegistrationDiagnostics(config.method, backend, config, **(details[0] if details else {})),
+        application,
     )
 
 
 def apply_transform(
     moving_image: np.ndarray,
-    transform: TranslationTransform | DenseDisplacementTransform,
+    transform: TranslationTransform | AffineTransform | BSplineTransform | DenseDisplacementTransform | TransformChain,
     *,
     config: WarpConfig,
 ) -> np.ndarray:
@@ -137,16 +85,27 @@ def apply_transform(
     Returns an array on transform.reference_metadata/grid, preserving channel
     order and input dtype by default. Translations stay compact; SciPy uses
     slice-sized coordinate arrays; SimpleITK prepares one field/resampler.
+    Affine and B-spline transforms are applied through their dense() pull
+    field with the scipy or simpleitk backend. A TransformChain is resampled
+    once at its composite pull points: the translation backend applies only a
+    chain of translations (its summed displacement); scipy (linear, plane by
+    plane) or simpleitk (its pull_field()) sample any chain with their
+    boundary policy.
     """
     if not isinstance(config, WarpConfig):
         raise InvalidRegistrationConfigError("expected WarpConfig")
     image = _validate_image(moving_image)
-    if not isinstance(transform, (TranslationTransform, DenseDisplacementTransform)):
+    if isinstance(transform, TransformChain):
+        return resample([image], transform, config)[0]
+    if not isinstance(transform, (TranslationTransform, AffineTransform, BSplineTransform,
+                                  DenseDisplacementTransform)):
         raise UnsupportedTransformOperationError("unsupported transform type")
     if image.shape[:3] != transform.moving_shape_zyx:
         raise IncompatibleGeometryError("moving image does not match transform grid")
     if isinstance(transform, TranslationTransform) != (config.backend == "translation"):
         raise UnsupportedTransformOperationError("transform incompatible with application backend")
+    if isinstance(transform, (AffineTransform, BSplineTransform)):
+        transform = transform.dense()
     channels = image[..., None] if image.ndim == 3 else image
     output = np.empty(channels.shape, dtype=_output_dtype(image.dtype, config.output_dtype))
     if config.backend == "simpleitk":
@@ -169,9 +128,10 @@ def apply_transform(
         if config.backend == "translation":
             from ._translation import apply_shift
 
+            # apply_shift moves content by its shift: the negated pull displacement.
             output[..., c] = apply_shift(
                 volume,
-                transform.correction_zyx,
+                tuple(-v for v in transform.displacement_zyx),
                 workers=config.fft_workers,
                 output_dtype=config.output_dtype,
             )

@@ -22,6 +22,9 @@ class Dataset:
 
     Processing options belong to PipelineConfig, residency to ExecutionConfig.
     Shared workflow YAML is translated by from_workflow_config.
+    channel_order labels the sequencing rounds and, by default, the other
+    rounds; other_channel_order gives an other round its own labels (for
+    example a morphology round's), in its C order.
     The repr summarizes IDs, round and channel labels, codebook size and roots.
     """
 
@@ -43,11 +46,38 @@ class Dataset:
     # Processing parameters
     fov_pattern: str = "Position%03d"
 
+    # Channel labels of other rounds that have their own channels
+    other_channel_order: dict[str, tuple[str, ...]] = field(default_factory=dict)
+
     def __post_init__(self):
         self.rounds.validate()
         self.channel_order = tuple(self.channel_order)
         if len(set(self.channel_order)) != len(self.channel_order):
             raise ValueError("channel_order must be unique")
+        self.other_channel_order = {name: tuple(labels) for name, labels in dict(self.other_channel_order).items()}
+        for name, labels in self.other_channel_order.items():
+            if name not in self.rounds.other_rounds:
+                raise ValueError(f"other_channel_order round {name!r} is not an other round")
+            if not labels or len(set(labels)) != len(labels) or any(not isinstance(x, str) or not x for x in labels):
+                raise ValueError(f"channel labels of round {name!r} must be nonempty and unique")
+
+    def channel_labels(self, round_name: str) -> tuple[str, ...]:
+        """Channel labels of one round, in its C order.
+
+        Parameters
+        ----------
+        round_name : str
+            A configured round.
+
+        Returns
+        -------
+        tuple[str, ...]
+            other_channel_order[round_name] for an other round listed there,
+            else channel_order.
+        """
+        if round_name not in self.rounds.all_rounds:
+            raise ValueError(f"round {round_name!r} is not a configured round")
+        return self.other_channel_order.get(round_name, self.channel_order)
 
     def __repr__(self):
         ref = self.rounds.reference_round

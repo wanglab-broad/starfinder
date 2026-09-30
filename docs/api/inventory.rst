@@ -77,10 +77,12 @@ starfinder.dataset
 * :py:obj:`starfinder.dataset.CropWindow`
 * :py:obj:`starfinder.dataset.Dataset`
 * :py:obj:`starfinder.dataset.ExecutionConfig`
+* :py:obj:`starfinder.dataset.ExternalReference`
 * :py:obj:`starfinder.dataset.FOV`
 * :py:obj:`starfinder.dataset.from_workflow_config`
 * :py:obj:`starfinder.dataset.PipelineConfig`
 * :py:obj:`starfinder.dataset.RecoveryConfig`
+* :py:obj:`starfinder.dataset.RegistrationRecipe`
 * :py:obj:`starfinder.dataset.RegistrationStep`
 * :py:obj:`starfinder.dataset.RoundState`
 * :py:obj:`starfinder.dataset.SubtileConfig`
@@ -104,11 +106,13 @@ starfinder.evaluation.matching
 starfinder.evaluation.registration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+* :py:obj:`starfinder.evaluation.registration.evaluate_displacement_field`
 * :py:obj:`starfinder.evaluation.registration.evaluate_landmark_alignment`
 * :py:obj:`starfinder.evaluation.registration.evaluate_mask_overlap`
 * :py:obj:`starfinder.evaluation.registration.evaluate_registration`
 * :py:obj:`starfinder.evaluation.registration.evaluate_translation`
 * :py:obj:`starfinder.evaluation.registration.normalized_cross_correlation`
+* :py:obj:`starfinder.evaluation.registration.registration_qc`
 * :py:obj:`starfinder.evaluation.registration.structural_similarity`
 
 starfinder.evaluation.spot_finding
@@ -151,12 +155,14 @@ starfinder.preprocessing
 * :py:obj:`starfinder.preprocessing.normalize_intensity`
 * :py:obj:`starfinder.preprocessing.normalize_percentile`
 * :py:obj:`starfinder.preprocessing.PercentileNormalizationConfig`
+* :py:obj:`starfinder.preprocessing.PREPROCESSING_METHODS`
 * :py:obj:`starfinder.preprocessing.PreprocessingRecipe`
+* :py:obj:`starfinder.preprocessing.PreprocessingSpec`
+* :py:obj:`starfinder.preprocessing.PreprocessingStep`
 * :py:obj:`starfinder.preprocessing.project_image`
 * :py:obj:`starfinder.preprocessing.ProjectionConfig`
 * :py:obj:`starfinder.preprocessing.read_histograms`
 * :py:obj:`starfinder.preprocessing.read_supplied_statistics`
-* :py:obj:`starfinder.preprocessing.RecipeStep`
 * :py:obj:`starfinder.preprocessing.reconstruct_background`
 * :py:obj:`starfinder.preprocessing.ReconstructionConfig`
 * :py:obj:`starfinder.preprocessing.run_step`
@@ -166,8 +172,6 @@ starfinder.preprocessing
 * :py:obj:`starfinder.preprocessing.step_spec`
 * :py:obj:`starfinder.preprocessing.StepContext`
 * :py:obj:`starfinder.preprocessing.StepResult`
-* :py:obj:`starfinder.preprocessing.STEPS`
-* :py:obj:`starfinder.preprocessing.StepSpec`
 * :py:obj:`starfinder.preprocessing.subtract_background_3d`
 * :py:obj:`starfinder.preprocessing.subtract_scalar_background`
 * :py:obj:`starfinder.preprocessing.summarize_histograms`
@@ -181,18 +185,29 @@ starfinder.preprocessing
 starfinder.registration
 ~~~~~~~~~~~~~~~~~~~~~~~
 
+* :py:obj:`starfinder.registration.AffineConfig`
+* :py:obj:`starfinder.registration.AffineTransform`
 * :py:obj:`starfinder.registration.apply_transform`
+* :py:obj:`starfinder.registration.BSplineConfig`
+* :py:obj:`starfinder.registration.BSplineTransform`
 * :py:obj:`starfinder.registration.CpdConfig`
 * :py:obj:`starfinder.registration.DemonsConfig`
 * :py:obj:`starfinder.registration.DenseDisplacementTransform`
 * :py:obj:`starfinder.registration.estimate_transform`
 * :py:obj:`starfinder.registration.InsufficientLandmarksError`
 * :py:obj:`starfinder.registration.InvalidRegistrationConfigError`
+* :py:obj:`starfinder.registration.REGISTRATION_METHODS`
 * :py:obj:`starfinder.registration.RegistrationBackendUnavailableError`
 * :py:obj:`starfinder.registration.RegistrationDiagnostics`
 * :py:obj:`starfinder.registration.RegistrationEstimationError`
+* :py:obj:`starfinder.registration.RegistrationQcConfig`
+* :py:obj:`starfinder.registration.RegistrationRejectedError`
 * :py:obj:`starfinder.registration.RegistrationResult`
+* :py:obj:`starfinder.registration.RegistrationSignalConfig`
+* :py:obj:`starfinder.registration.RegistrationSpec`
+* :py:obj:`starfinder.registration.RigidConfig`
 * :py:obj:`starfinder.registration.TpsConfig`
+* :py:obj:`starfinder.registration.TransformChain`
 * :py:obj:`starfinder.registration.TranslationConfig`
 * :py:obj:`starfinder.registration.TranslationTransform`
 * :py:obj:`starfinder.registration.UnsupportedTransformOperationError`

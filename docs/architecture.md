@@ -27,7 +27,9 @@ for typed Python stage configuration and residency.
 
 Images remain NumPy arrays with separate spatial metadata. Config dataclasses
 select methods and validate parameters; structured results retain identity,
-geometry and diagnostics. Failed estimation is distinct from invalid input,
+geometry and diagnostics. How each stage registers its methods, names them in
+YAML and records them in provenance is proposed in the
+[method registry](method-registry.md). Failed estimation is distinct from invalid input,
 empty detection and undefined evaluation. Recovery is explicit in coordination.
 
 ## Where to find the contract

@@ -6,10 +6,10 @@ import numpy as np
 import pytest
 
 from starfinder.barcode import NeighborhoodSumConfig, ReadFilterConfig, WtaDecoderConfig, filter_reads
-from starfinder.dataset import CheckpointConfig, Dataset, PipelineConfig, RegistrationStep, RoundState
+from starfinder.dataset import CheckpointConfig, Dataset, PipelineConfig, RegistrationRecipe, RegistrationStep, RoundState
 from starfinder.evaluation import EvaluationResult
 from starfinder.io import ImageLoadConfig
-from starfinder.preprocessing import MinMaxNormalizationConfig, PreprocessingRecipe, RecipeStep
+from starfinder.preprocessing import MinMaxNormalizationConfig, PreprocessingRecipe, PreprocessingStep
 from starfinder.registration import DemonsConfig, TranslationConfig
 from starfinder.spot_finding import LocalMaximaConfig
 
@@ -45,8 +45,8 @@ def test_fov_and_dataset_summaries_on_small_synthetic_run(small_dataset, tmp_pat
     ds.load_codebook(small_dataset / 'codebook.csv')
     fov = ds.fov('FOV_001').run(PipelineConfig(
         load=ImageLoadConfig(channel_labels=ds.channel_order),
-        preprocessing=PreprocessingRecipe((RecipeStep(MinMaxNormalizationConfig('uint8', (0, 255), snr_threshold=5.0)),)),
-        registration=(RegistrationStep(TranslationConfig()),), detection=LocalMaximaConfig(),
+        preprocessing=PreprocessingRecipe((PreprocessingStep(MinMaxNormalizationConfig('uint8', (0, 255), snr_threshold=5.0)),)),
+        registration=RegistrationRecipe((RegistrationStep(TranslationConfig()),)), detection=LocalMaximaConfig(),
         extraction=NeighborhoodSumConfig(), decoding=WtaDecoderConfig(diagnostics=True),
         filtering=ReadFilterConfig()))
 
@@ -136,7 +136,7 @@ def test_result_classes_have_one_line_summaries(tmp_path):
         (fov.decoding_result, "BarcodeDecodingResult: 4 reads — assigned 1, ambiguous 2, unmatched 1"),
         (fov.filtering_result, "ReadFilteringResult: 1 accepted / 4 (25.0%), rejected 3 — call_status 3"),
         (fov.registration_results['round2'][0],
-         "RegistrationResult: translation (scipy_fft), correction_zyx (0, 0, 0)"),
+         "RegistrationResult: translation (scipy_fft), displacement_zyx (0, 0, 0)"),
     ]
     for result, expected in summaries:
         assert repr(result) == expected
@@ -152,7 +152,7 @@ def test_result_classes_have_one_line_summaries(tmp_path):
     assert repr(empty) == "BarcodeDecodingResult: 0 reads"
     assert repr(filter_reads(empty)) == "ReadFilteringResult: 0 accepted / 0 (undefined), rejected 0"
 
-    dense = resident(ds).run(PipelineConfig(registration=(RegistrationStep(DemonsConfig(iterations=(1,))),)))
+    dense = resident(ds).run(PipelineConfig(registration=RegistrationRecipe((RegistrationStep(DemonsConfig(iterations=(1,))),))))
     text = repr(dense.registration_results['round2'][0])
     assert re.fullmatch(r'RegistrationResult: demons \(\w+\), dense field \(4, 12, 14, 3\) float(32|64)'
                         r'(, (not )?converged)?', text)

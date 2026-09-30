@@ -12,7 +12,7 @@ import pytest
 from starfinder.barcode import (Codebook, CodebookAwareDecoderConfig, NeighborhoodSumConfig,
     ReadFilterConfig, WtaDecoderConfig)
 from starfinder.dataset import (CheckpointConfig, Dataset, ExecutionConfig, PipelineConfig,
-    RegistrationStep, RoundState)
+    RegistrationRecipe, RegistrationStep, RoundState)
 from starfinder.image import ImageMetadata
 from starfinder.io import ImageLoadConfig, load_volume_zyxc, read_checkpoint, save_volume
 from starfinder.io._checkpoint import _read_table, _write_table, candidates_frame, parse_candidates
@@ -58,7 +58,7 @@ DECODE = dict(decoding=WtaDecoderConfig(diagnostics=True), filtering=ReadFilterC
 
 
 def full(**kwargs):
-    return PipelineConfig(registration=(RegistrationStep(TranslationConfig()),), **DETECT, **DECODE, **kwargs)
+    return PipelineConfig(registration=RegistrationRecipe((RegistrationStep(TranslationConfig()),)), **DETECT, **DECODE, **kwargs)
 
 
 def assert_spots_equal(a, b):
@@ -143,23 +143,23 @@ def test_each_stage_round_trips_and_continues(tmp_path, z, mode, table_format):
 
 def test_dense_transforms_and_codebook_aware_tables_round_trip(tmp_path):
     ds = dataset(tmp_path)
-    config = PipelineConfig(registration=(RegistrationStep(DemonsConfig(iterations=(1,))),
-                                          RegistrationStep(TranslationConfig())), **DETECT,
+    config = PipelineConfig(registration=RegistrationRecipe((RegistrationStep(TranslationConfig()),
+                                                             RegistrationStep(DemonsConfig(iterations=(1,))))), **DETECT,
                             decoding=CodebookAwareDecoderConfig(diagnostics=True), filtering=ReadFilterConfig())
     saved = resident(ds).run(config, checkpoints=CheckpointConfig())
     directory = saved.paths.checkpoint_dir
     assert sorted(p.name for p in (directory / 'registered').iterdir()) == [
         'round1.ome.tif', 'round2.ome.tif', 'round2_field.npz', 'transforms.json']
     with np.load(directory / 'registered' / 'round2_field.npz') as fields:
-        assert fields.files == ['result_0']
+        assert fields.files == ['result_1']
     loaded = read_checkpoint(directory, 'registered')
     restored = loaded['registration_results']['round2']
     original = saved.registration_results['round2']
-    np.testing.assert_array_equal(restored[0].transform.displacement_zyx, original[0].transform.displacement_zyx)
-    assert restored[0].transform.displacement_zyx.dtype == original[0].transform.displacement_zyx.dtype
+    np.testing.assert_array_equal(restored[1].transform.displacement_zyx, original[1].transform.displacement_zyx)
+    assert restored[1].transform.displacement_zyx.dtype == original[1].transform.displacement_zyx.dtype
     assert [r.diagnostics for r in restored] == [r.diagnostics for r in original]
     assert [r.application_config for r in restored] == [r.application_config for r in original]
-    assert restored[1] == original[1]
+    assert restored[0] == original[0]
     fov = ds.fov('FOV').load_checkpoint('pre_qc')
     assert_decoding_equal(fov.decoding_result, saved.decoding_result)
     fov.run(PipelineConfig(filtering=ReadFilterConfig()))
@@ -447,7 +447,7 @@ def test_run_record_fields_inputs_and_hashes(tmp_path):
     assert data['environment']['packages']['numpy'] == np.__version__
     assert data['config']['execution']['mode'] == 'streaming'
     assert data['config']['checkpoints']['stages'] == ['registered', 'candidates', 'pre_qc']
-    assert data['config']['pipeline']['registration'][0]['config']['method'] == 'translation'
+    assert data['config']['pipeline']['registration']['steps'][0]['config']['method'] == 'translation'
     assert len(data['inputs']) == 8
     first = data['inputs'][0]
     assert first['sha256'] == hashlib.sha256(Path(first['path']).read_bytes()).hexdigest()
@@ -572,7 +572,7 @@ def test_load_volume_zyxc_preserves_shape_dtype_and_geometry(tmp_path, shape, dt
 def test_checkpoint_timing_on_small_synthetic_dataset(small_dataset, tmp_path, capsys):
     """Wall time of a 16x256x256, 4-round run with all checkpoints and of table build/parse."""
     from starfinder.io._checkpoint import read_header
-    from starfinder.preprocessing import MinMaxNormalizationConfig, PreprocessingRecipe, RecipeStep
+    from starfinder.preprocessing import MinMaxNormalizationConfig, PreprocessingRecipe, PreprocessingStep
     for round_dir in (small_dataset / 'FOV_001').iterdir():
         if round_dir.is_dir():
             target = tmp_path / round_dir.name / 'FOV_001'
@@ -583,8 +583,8 @@ def test_checkpoint_timing_on_small_synthetic_dataset(small_dataset, tmp_path, c
                  ('ch00', 'ch01', 'ch02', 'ch03'))
     ds.load_codebook(small_dataset / 'codebook.csv')
     config = PipelineConfig(load=ImageLoadConfig(channel_labels=ds.channel_order),
-        preprocessing=PreprocessingRecipe((RecipeStep(MinMaxNormalizationConfig('uint8', (0, 255), snr_threshold=5.0)),)),
-        registration=(RegistrationStep(TranslationConfig()),), detection=LocalMaximaConfig(),
+        preprocessing=PreprocessingRecipe((PreprocessingStep(MinMaxNormalizationConfig('uint8', (0, 255), snr_threshold=5.0)),)),
+        registration=RegistrationRecipe((RegistrationStep(TranslationConfig()),)), detection=LocalMaximaConfig(),
         extraction=NeighborhoodSumConfig(), decoding=WtaDecoderConfig(diagnostics=True),
         filtering=ReadFilterConfig())
     start = perf_counter()

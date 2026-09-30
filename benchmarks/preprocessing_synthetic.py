@@ -42,14 +42,14 @@ import numpy as np
 import pandas as pd
 
 from starfinder.barcode import Codebook, NeighborhoodSumConfig, ReadFilterConfig, WtaDecoderConfig
-from starfinder.dataset import Dataset, PipelineConfig, RegistrationStep, RoundState
+from starfinder.dataset import Dataset, PipelineConfig, RegistrationRecipe, RegistrationStep, RoundState
 from starfinder.evaluation.matching import match_points
 from starfinder.preprocessing import (Background3DConfig, HistogramMatchingConfig, MinMaxNormalizationConfig,
-    PercentileNormalizationConfig, PreprocessingRecipe, RecipeStep, ReconstructionConfig, ScalarBackgroundConfig,
+    PercentileNormalizationConfig, PreprocessingRecipe, PreprocessingStep, ReconstructionConfig, ScalarBackgroundConfig,
     TophatConfig, merge_histograms, step_spec, summarize_histograms, summary_stage, supplied_section,
     supplied_statistics, write_supplied_statistics)
 from starfinder.preprocessing._diagnostics import channel_diagnostics
-from starfinder.registration import TranslationConfig
+from starfinder.registration import RegistrationSignalConfig, TranslationConfig
 from starfinder.spot_finding import LocalMaximaConfig
 from starfinder.synthetic import (CALIBRATED_CONDITIONS, BackgroundConfig, NoiseConfig, ScalarDistribution,
     TextureConfig, calibrated_scene_preset, development_scene_preset, generate_formed_scene)
@@ -70,7 +70,8 @@ MATCHING = dict(policy="greedy", threshold=2.0, units="voxel", boundary="inclusi
 EXTRACTION = NeighborhoodSumConfig()
 DECODING = WtaDecoderConfig()
 FILTERING = ReadFilterConfig()
-REGISTRATION = (RegistrationStep(TranslationConfig()),)
+# The float64 channel sum, the registration signal these results were produced with.
+REGISTRATION = RegistrationRecipe((RegistrationStep(TranslationConfig()),), signal=RegistrationSignalConfig("sum"))
 #: Provisional low-benefit threshold (algorithm page): 2 percentage points.
 LOW_BENEFIT_POINTS = 0.02
 SNAPSHOT = "bg_corrected"
@@ -122,24 +123,24 @@ def arms(radius_zyx, fit="fov", supplied=None):
     def recipe(*steps, source=None):
         return PreprocessingRecipe(tuple(steps), extraction_source=source,
                                    supplied_statistics=supplied if fit == "supplied" else None)
-    r2 = lambda bg, source=None: recipe(RecipeStep(bg, save_as=SNAPSHOT),  # noqa: E731
-                                        RecipeStep(PercentileNormalizationConfig(fit=s)), source=source)
+    r2 = lambda bg, source=None: recipe(PreprocessingStep(bg, save_as=SNAPSHOT),  # noqa: E731
+                                        PreprocessingStep(PercentileNormalizationConfig(fit=s)), source=source)
     return {
         "none": None,
-        "r1": recipe(RecipeStep(_minmax()), RecipeStep(HistogramMatchingConfig(fit=s))),
-        "r1_recon": recipe(RecipeStep(_minmax()), RecipeStep(HistogramMatchingConfig(), save_as=NORMALIZED),
-                           RecipeStep(ReconstructionConfig())),
+        "r1": recipe(PreprocessingStep(_minmax()), PreprocessingStep(HistogramMatchingConfig(fit=s))),
+        "r1_recon": recipe(PreprocessingStep(_minmax()), PreprocessingStep(HistogramMatchingConfig(), save_as=NORMALIZED),
+                           PreprocessingStep(ReconstructionConfig())),
         "r2_scalar": r2(ScalarBackgroundConfig(fit=s)),
         "r2_scalar_xsrc": r2(ScalarBackgroundConfig(), SNAPSHOT),
         "r2_3d": r2(bg3d),
         "r2_3d_xsrc": r2(bg3d, SNAPSHOT),
-        "minmax": recipe(RecipeStep(_minmax())),
-        "hist": recipe(RecipeStep(HistogramMatchingConfig())),
-        "recon": recipe(RecipeStep(ReconstructionConfig(), save_as=SNAPSHOT)),
-        "tophat": recipe(RecipeStep(TophatConfig(), save_as=SNAPSHOT)),
-        "scalar": recipe(RecipeStep(ScalarBackgroundConfig(), save_as=SNAPSHOT)),
-        "bg3d": recipe(RecipeStep(bg3d, save_as=SNAPSHOT)),
-        "pct": recipe(RecipeStep(PercentileNormalizationConfig())),
+        "minmax": recipe(PreprocessingStep(_minmax())),
+        "hist": recipe(PreprocessingStep(HistogramMatchingConfig())),
+        "recon": recipe(PreprocessingStep(ReconstructionConfig(), save_as=SNAPSHOT)),
+        "tophat": recipe(PreprocessingStep(TophatConfig(), save_as=SNAPSHOT)),
+        "scalar": recipe(PreprocessingStep(ScalarBackgroundConfig(), save_as=SNAPSHOT)),
+        "bg3d": recipe(PreprocessingStep(bg3d, save_as=SNAPSHOT)),
+        "pct": recipe(PreprocessingStep(PercentileNormalizationConfig())),
     }
 
 
@@ -270,7 +271,7 @@ def processed_arms(scene, book, fov_id, workdir, radius, register):
 
 def preprocess(fov, recipe, register):
     if recipe is not None or register:
-        fov.run(PipelineConfig(preprocessing=recipe, registration=REGISTRATION if register else ()))
+        fov.run(PipelineConfig(preprocessing=recipe, registration=REGISTRATION if register else None))
     return fov
 
 
@@ -502,7 +503,7 @@ def fit_supplied(recipe, scenes, book, workdir):
                                                   channel_labels=book.channel_labels, fov_id=fov_id,
                                                   summarized_after=after))
         merged = merge_histograms(summaries)
-        kwargs = {"reference_round": ref} if type(entry.config) is HistogramMatchingConfig else {}
+        kwargs = {} if step_spec(entry.config).supplied.per_round else {"reference_round": ref}
         sections[name] = supplied_section(entry.config, merged, **kwargs)
         write_supplied_statistics(supplied_statistics(merged, sections), path)
     return sections
@@ -904,7 +905,7 @@ def run(output, *, scope="full", shape=(32, 64, 64), count=80, multi_fov_dtypes=
             amplicons_per_fov=count, intensity_scale=INTENSITY_SCALE,
             detection=dict(asdict(LocalMaximaConfig()), threshold_value="swept"),
             extraction=asdict(EXTRACTION), decoding=asdict(DECODING), filtering=asdict(FILTERING),
-            registration_coupled=[dict(method=s.config.method, config=asdict(s.config)) for s in REGISTRATION],
+            registration_coupled=[dict(method=s.config.method, config=asdict(s.config)) for s in REGISTRATION.steps],
             matching=dict(function="starfinder.evaluation.match_points", reference="truth", observed="detections",
                 truth="reference-round amplicons that emit and whose centre is in bounds", **MATCHING),
             reads="accepted reads (default filter) split into correct (matched, same gene), wrong-gene (matched, "
@@ -2091,7 +2092,7 @@ def _run_calibrated(output, scope, reductions, issue, shape, count, log, recorde
             development_seeds=list(DEV_SEEDS), evaluation_seeds=list(EVAL_SEEDS), seeds_run=list(seeds),
             detection=dict(asdict(LocalMaximaConfig()), threshold_mode="per mode", threshold_value="swept"),
             extraction=asdict(EXTRACTION), decoding=asdict(DECODING), filtering=asdict(FILTERING),
-            registration_coupled=[dict(method=s.config.method, config=asdict(s.config)) for s in REGISTRATION],
+            registration_coupled=[dict(method=s.config.method, config=asdict(s.config)) for s in REGISTRATION.steps],
             matching=dict(function="starfinder.evaluation.match_points", reference="truth", observed="detections",
                           truth="reference-round amplicons that emit and whose centre is in bounds", **MATCHING),
             operating_point="per mode, condition, dtype and arm (multi-FOV: set, F1 pooled over FOVs): highest mean "

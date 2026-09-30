@@ -16,10 +16,10 @@ from starfinder.barcode import (
     decode_barcodes, extract_intensities, filter_reads,
 )
 from starfinder.synthetic import formed_scene_preset, generate_formed_scene
-from starfinder.dataset import RoundState, Dataset, RegistrationStep
+from starfinder.dataset import RoundState, Dataset, RegistrationRecipe, RegistrationStep
 from starfinder.io import ImageLoadResult, load_volume, save_volume
 from starfinder.preprocessing import normalize_intensity
-from starfinder.registration import estimate_transform, apply_transform, TranslationConfig, TpsConfig, DemonsConfig, WarpConfig, DenseDisplacementTransform, InsufficientLandmarksError
+from starfinder.registration import estimate_transform, apply_transform, TranslationConfig, TpsConfig, DemonsConfig, WarpConfig, DenseDisplacementTransform, InsufficientLandmarksError, RegistrationSignalConfig
 from starfinder.spot_finding import find_spots, LocalMaximaConfig
 from starfinder.image import ImageMetadata
 from starfinder.preprocessing import project_image
@@ -32,7 +32,7 @@ def main(output: Path) -> None:
     displacement = (1, -2, 3)
     moving = np.roll(fixed, displacement, axis=(0, 1, 2))
     result = estimate_transform(fixed, moving, config=TranslationConfig(), reference_metadata=ImageMetadata("reference"), moving_metadata=ImageMetadata("moving"))
-    detected = tuple(-x for x in result.transform.correction_zyx)
+    detected = result.transform.displacement_zyx
     assert detected == displacement
     np.testing.assert_array_equal(
         apply_transform(moving, result.transform, config=result.application_config), fixed
@@ -93,7 +93,8 @@ def main(output: Path) -> None:
     fov.images = {r: np.zeros_like(image) for r in dataset.rounds.sequencing_rounds}
     fov.metadata = {r: ImageMetadata(r) for r in dataset.rounds.sequencing_rounds}
     try:
-        fov.register(RegistrationStep(TpsConfig(), "single-channel", "single-channel"))
+        fov.register(RegistrationRecipe((RegistrationStep(TpsConfig()),),
+                                        signal=RegistrationSignalConfig("channel", 0)))
     except InsufficientLandmarksError:
         pass
     else:

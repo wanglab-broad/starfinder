@@ -152,3 +152,20 @@ def tps_register(
         zoom_order=zoom_order, field_smooth_sigma=field_smooth_sigma,
         clamp_sampling_coordinates=clamp_sampling_coordinates,
     )
+
+
+def estimate_tps(reference, moving, config, geometry):
+    """Registered estimator of TpsConfig: transform, backend and application policy."""
+    from ._config import WarpConfig
+    from ._landmarks import _landmark_settings
+    from ._types import DenseDisplacementTransform
+
+    field = tps_register(
+        reference,
+        moving,
+        match_distance=config.match_distance_voxels,
+        min_matches=config.min_matches,
+        smoothing=config.smoothing,
+        **_landmark_settings(config),
+    )
+    return DenseDisplacementTransform(field, **geometry), "scipy", WarpConfig(backend="scipy")

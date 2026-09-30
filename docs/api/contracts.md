@@ -15,12 +15,13 @@ units unless a function explicitly says otherwise. Unknown calibration stays unk
 | Dense displacement field | `(Z, Y, X, 3)` | Last axis `(dz, dy, dx)`, backward sampling |
 | Signal CSV | `x, y, z[, gene]` by default | One-based coordinates, written by `FOV.save_spots` |
 
-## Displacement and correction
+## Registration transforms
 
 {func}`starfinder.registration.estimate_transform` accepts finite real ZYX
 arrays and explicit reference/moving `ImageMetadata`. Choose a frozen
-`TranslationConfig`, `DemonsConfig`, `TpsConfig` or `CpdConfig`; there is no
-independent method selector. Its `RegistrationResult` contains the transform,
+`TranslationConfig`, `RigidConfig`, `AffineConfig`, `BSplineConfig`,
+`DemonsConfig`, `TpsConfig` or `CpdConfig`; there is no independent method
+selector. Its `RegistrationResult` contains the transform,
 measured diagnostics (unknown values stay `None`) and `application_config`.
 
 ```python
@@ -32,32 +33,47 @@ result = estimate_transform(reference, moving, config=TranslationConfig(),
 registered = apply_transform(moving, result.transform, config=result.application_config)
 ```
 
-A `TranslationTransform.correction_zyx` moves content toward larger indices for
-positive components. Pull sampling is `moving[p - correction_zyx]`. A moving
-image displaced by `(1, -2, 3)` therefore gets correction `(-1, 2, -3)`.
-`FOV.registration_results` stores correction transforms. Its MATLAB-compatible
-shift CSV retains detected displacements (the negative correction).
+Every transform is a pull map from reference to moving coordinates
+(`direction="reference_to_moving"`). `TranslationTransform.displacement_zyx` is
+the detected displacement `d` of the moving content: pull sampling is
+`registered[p] = moving[p + displacement_zyx]`, so a moving image displaced by
+`(1, -2, 3)` gets displacement `(1, -2, 3)`. `FOV.registration_results` stores
+these transforms, and its MATLAB-compatible shift CSV holds the same detected
+displacements.
 
 `DenseDisplacementTransform.displacement_zyx` uses
 `registered[p] = moving[p + displacement_zyx[p]]`, in ZYX voxel-index components.
 TPS/CPD fields are float32; demons fields are float64. Do not negate dense fields.
 Direction and units are validated; inversion/composition/conversion is not implicit.
 
+`AffineTransform.matrix_zyx` is the 4×4 index-space pull matrix `[[A, b], [0, 1]]`:
+`registered[p] = moving[A p + b]`. Rigid and affine are estimated in physical
+space; with `S = diag(spacing_zyx)` and `P` the ZYX/XYZ reversal, the physical
+pull map `x -> M (x - c) + c + t` becomes `A = S⁻¹ P M P S` and
+`b = S⁻¹ P (t + c - M c)`, and `physical` keeps `matrix_xyz`, `center_xyz`,
+`translation_xyz`, the elastix parameters and their names and `spacing_zyx`.
+`BSplineTransform` keeps the ITK control grid (XYZ) and float64 coefficients;
+its pull map is `p + S⁻¹ P v(P S p)` and `dense()` evaluates it with SimpleITK.
+Unknown spacing on both metadata values is estimated with unit spacing and
+recorded as `spacing_source="unknown_unit"` with a warning.
+
 Apply accepts ZYX or ZYXC and preserves channel order. Output metadata is
 `result.transform.reference_metadata`. Equal-shaped grids with matching physical
 fields are required; frame identifiers may differ. Explicitly unknown geometry
 is allowed, but is never inferred. Unsupported conversion raises
-`image.IncompatibleGeometryError`. Translation supports singleton axes; current
-local estimation requires 3D, with demons axes at least four voxels. Dense
+`image.IncompatibleGeometryError`. Translation supports singleton axes. Rigid,
+affine, B-spline and demons estimate a Z=1 input as genuine 2D (Y and X at least
+16 for the elastix methods, 4 for demons) and embed it with no Z motion; they
+reject 1 < Z < 4. TPS and CPD require 3D with every axis at least two. Dense
 application also supports singleton axes.
 
 ### Translation edge cases and resampling precision
 
-The FFT estimator still returns integer-valued displacements; these corrections
-do not add subpixel estimation. Singleton axes return zero. For odd length `n`,
+The FFT estimator still returns integer-valued displacements; it does not add
+subpixel estimation. Singleton axes return zero. For odd length `n`,
 a correlation peak at `n//2` is not wrapped. An exact even half-period cannot
-distinguish positive from negative motion: `TranslationConfig(backend="scipy_fft")` reports correction `-n/2`,
-whereas the `skimage` backend retains correction `+n/2`. Both
+distinguish positive from negative motion: `TranslationConfig(backend="scipy_fft")` reports displacement `+n/2`,
+whereas the `skimage` backend retains displacement `-n/2`. Both
 align the periodic interior; their zero-filled boundaries can differ.
 
 Translation application uses exact integer rolling (within its existing `1e-6` voxel

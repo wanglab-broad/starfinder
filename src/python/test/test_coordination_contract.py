@@ -11,13 +11,14 @@ import pytest
 import yaml
 
 from starfinder.dataset import (Dataset, FOV, RoundState, PipelineConfig, ExecutionConfig,
-    RegistrationStep, RecoveryConfig, SubtileConfig, from_workflow_config)
+    RegistrationRecipe, RegistrationStep, RecoveryConfig, SubtileConfig, from_workflow_config)
 from starfinder.image import ImageMetadata, IncompatibleGeometryError
 from starfinder.io import ImageLoadConfig, save_volume, export_spots
 from starfinder.preprocessing import (MinMaxNormalizationConfig, HistogramMatchingConfig,
-    ReconstructionConfig, TophatConfig, PreprocessingRecipe, RecipeStep)
+    ReconstructionConfig, TophatConfig, PreprocessingRecipe, PreprocessingStep)
 from starfinder.registration import (TranslationConfig, TpsConfig, DemonsConfig, CpdConfig,
-    InsufficientLandmarksError, RegistrationBackendUnavailableError, InvalidRegistrationConfigError)
+    InsufficientLandmarksError, RegistrationBackendUnavailableError, InvalidRegistrationConfigError,
+    RegistrationSignalConfig)
 from starfinder.spot_finding import LocalMaximaConfig
 from starfinder.barcode import (Codebook, NeighborhoodSumConfig, WtaDecoderConfig,
     ReadFilterConfig, filter_reads)
@@ -47,7 +48,7 @@ def resident(ds):
 
 
 def recipe(*steps, post=()):
-    return PreprocessingRecipe(tuple(map(RecipeStep, steps)), tuple(map(RecipeStep, post)))
+    return PreprocessingRecipe(tuple(map(PreprocessingStep, steps)), tuple(map(PreprocessingStep, post)))
 
 
 def complete(**kwargs):
@@ -62,13 +63,14 @@ def complete(**kwargs):
     {'preprocessing': recipe(HistogramMatchingConfig(reference_channel=0))},
     {'preprocessing': recipe(ReconstructionConfig(radius_yx=1))},
     {'preprocessing': recipe(TophatConfig(radius_yx=1))},
-    {'registration': (RegistrationStep(TranslationConfig(), 'single-channel', 'single-channel'),)},
-    {'registration': (RegistrationStep(DemonsConfig(iterations=(1,))),)},
+    {'registration': RegistrationRecipe((RegistrationStep(TranslationConfig()),),
+                                        signal=RegistrationSignalConfig('channel', 0))},
+    {'registration': RegistrationRecipe((RegistrationStep(DemonsConfig(iterations=(1,))),))},
     {'preprocessing': recipe(post=(ReconstructionConfig(radius_yx=1),)),
-     'registration': (RegistrationStep(TranslationConfig()),)},
+     'registration': RegistrationRecipe((RegistrationStep(TranslationConfig()),))},
     {'preprocessing': recipe(MinMaxNormalizationConfig('uint8', (0, 255)), HistogramMatchingConfig(),
                              ReconstructionConfig(radius_yx=1), TophatConfig(radius_yx=1)),
-     'registration': (RegistrationStep(TranslationConfig()),)},
+     'registration': RegistrationRecipe((RegistrationStep(TranslationConfig()),))},
 ])
 def test_scientific_parity(tmp_path, options):
     ds = dataset(tmp_path)
@@ -120,18 +122,19 @@ def test_recovery_is_opt_in_and_records_order(tmp_path):
     ds = dataset(tmp_path)
     fov = resident(ds)
     with pytest.raises(InsufficientLandmarksError):
-        fov.register(RegistrationStep(TpsConfig()))
+        fov.register(RegistrationRecipe((RegistrationStep(TpsConfig()),)))
     assert len(fov.registration_attempts['round2']) == 1
     fov = resident(ds)
     step = RegistrationStep(TpsConfig(), recovery=RecoveryConfig(
-        (InsufficientLandmarksError,), (TpsConfig(min_matches=4), TranslationConfig())))
-    fov.register(step)
-    attempts = fov.registration_attempts['round2']
-    assert [a['actual_method'] for a in attempts] == ['tps', 'tps', 'translation']
+        (InsufficientLandmarksError,), (TpsConfig(min_matches=4), DemonsConfig(iterations=(1,)))))
+    fov.register(RegistrationRecipe((step,)))
+    *attempts, application = fov.registration_attempts['round2']
+    assert [a['actual_method'] for a in attempts] == ['tps', 'tps', 'demons']
     assert [a['outcome'] for a in attempts] == ['failed', 'failed', 'succeeded']
     assert all(a['requested_method'] == 'tps' for a in attempts)
     assert attempts[0]['failure']['type'] == 'InsufficientLandmarksError'
-    assert fov.registration_results['round2'][0].diagnostics.method == 'translation'
+    assert application['record'] == 'application' and application['outcome'] == 'succeeded'
+    assert fov.registration_results['round2'][0].diagnostics.method == 'demons'
 
 
 @pytest.mark.parametrize('error', [IncompatibleGeometryError('geometry'),
@@ -144,9 +147,9 @@ def test_invalid_input_and_dependency_never_recover(tmp_path, monkeypatch, error
         raise error
     monkeypatch.setattr(registration, 'estimate_transform', fail)
     fov = resident(dataset(tmp_path))
-    step = RegistrationStep(TpsConfig(), recovery=RecoveryConfig((InsufficientLandmarksError,), (TranslationConfig(),)))
+    step = RegistrationStep(TpsConfig(), recovery=RecoveryConfig((InsufficientLandmarksError,), (DemonsConfig(),)))
     with pytest.raises(type(error)):
-        fov.register(step)
+        fov.register(RegistrationRecipe((step,)))
     assert len(calls) == 1
     assert fov.registration_attempts['round2'][0]['failure']['type'] == type(error).__name__
     with pytest.raises(ValueError):
@@ -156,9 +159,9 @@ def test_invalid_input_and_dependency_never_recover(tmp_path, monkeypatch, error
 def test_signed_high_range_merged_registration(tmp_path):
     fov = resident(dataset(tmp_path))
     fov.images['round1'] = np.full((2, 3, 4, 4), 60000, dtype=np.uint16)
-    assert fov._registration_image('round1', 'merged', 0).min() == 240000
+    assert fov._registration_image('round1', RegistrationSignalConfig('sum'), 'reference').min() == 240000
     fov.images['round1'] = np.full((2, 3, 4, 4), -3.5, dtype=np.float32)
-    assert fov._registration_image('round1', 'merged', 0).min() == -14
+    assert fov._registration_image('round1', RegistrationSignalConfig('sum'), 'reference').min() == -14
 
 
 def test_export_reordered_subset_empty_and_bad_keys(tmp_path):
@@ -227,15 +230,17 @@ def test_workflow_translation_rejects_unknowns_and_preserves_effective_settings(
     adapted = from_workflow_config(config)
     assert config == original
     assert adapted.pipeline.preprocessing is None
-    assert len(adapted.pipeline.registration) == 1
-    cpd = adapted.pipeline.registration[0].config
+    assert len(adapted.pipeline.registration.steps) == 1
+    cpd = adapted.pipeline.registration.steps[0].config
     assert cpd.detection_noise_sigma == 3 and cpd.grid_spacing_voxels == 32
     assert adapted.execution.mode == 'streaming'
     params['local_registration'] = {'run': True, 'method': 'tps', 'min_matches': 4,
         'grid_spacing': 2, 'tps_smoothing': .5, 'ref_channel': 2, 'boundary_mode': 'nearest'}
-    step = from_workflow_config(config).pipeline.registration[0]
+    registration = from_workflow_config(config).pipeline.registration
+    step = registration.steps[0]
     assert step.config.min_matches == 4 and step.config.smoothing == .5
-    assert step.reference_channel == 2 and step.warp.boundary_mode == 'nearest'
+    # The local ref_img/mov_img default is merged-image (the channel maximum); ref_channel selects nothing then.
+    assert registration.signal == RegistrationSignalConfig('max') and registration.warp.boundary_mode == 'nearest'
     params['typo'] = True
     with pytest.raises(ValueError, match='unknown'):
         from_workflow_config(config)

@@ -11,13 +11,14 @@ import numpy as np
 import pytest
 
 from starfinder.barcode import NeighborhoodSumConfig, extract_intensities
-from starfinder.dataset import CheckpointConfig, Dataset, ExecutionConfig, PipelineConfig, RegistrationStep, RoundState
+from starfinder.dataset import (CheckpointConfig, Dataset, ExecutionConfig, PipelineConfig, RegistrationRecipe,
+    RegistrationStep, RoundState)
 from starfinder.image import ImageMetadata
 from starfinder.io import ImageLoadResult
 from starfinder.preprocessing import (HistogramMatchingConfig, MinMaxNormalizationConfig, PercentileNormalizationConfig,
-    PreprocessingRecipe, RecipeStep, ReconstructionConfig, ScalarBackgroundConfig, TophatConfig, normalize_percentile,
+    PreprocessingRecipe, PreprocessingStep, ReconstructionConfig, ScalarBackgroundConfig, TophatConfig, normalize_percentile,
     subtract_scalar_background, summary_stage)
-from starfinder.registration import DemonsConfig, TranslationConfig, WarpConfig, apply_transform
+from starfinder.registration import DemonsConfig, RegistrationSignalConfig, TranslationConfig, WarpConfig, apply_transform
 from starfinder.spot_finding import LocalMaximaConfig
 
 from .test_preprocessing_golden import PINNED_SEQUENCE, digest, fixture_rounds
@@ -25,9 +26,9 @@ from .test_preprocessing_golden import PINNED_SEQUENCE, digest, fixture_rounds
 CHANNELS = ("ch00", "ch01")
 SHIFT_YX = (3, -2)  # the moving round's content is displaced by this many voxels
 BACKGROUND = ScalarBackgroundConfig(percentile=10.0)
-RECIPE_2 = PreprocessingRecipe((RecipeStep(BACKGROUND, save_as="bg_corrected"),
-                                RecipeStep(PercentileNormalizationConfig())), extraction_source="bg_corrected")
-TRANSLATION = RegistrationStep(TranslationConfig())
+RECIPE_2 = PreprocessingRecipe((PreprocessingStep(BACKGROUND, save_as="bg_corrected"),
+                                PreprocessingStep(PercentileNormalizationConfig())), extraction_source="bg_corrected")
+TRANSLATION = RegistrationRecipe((RegistrationStep(TranslationConfig()),), signal=RegistrationSignalConfig("sum"))
 DETECTION = LocalMaximaConfig(threshold_value=5.0)
 EXTRACTION = NeighborhoodSumConfig((0, 1, 1))
 
@@ -66,33 +67,26 @@ def manual_intensities(fov, images):
     return extract_intensities(rounds, fov.spot_result, config=EXTRACTION)
 
 
-def reapply(fov, name, image):
-    """Apply the round's stored registration results, in order, to image."""
-    for result in fov.registration_results[name]:
-        image = apply_transform(image, result.transform, config=result.application_config)
-    return image
-
-
 # --- Recipe validation -------------------------------------------------------------
 
 def test_snapshot_names_and_sources_are_validated():
-    step = RecipeStep(BACKGROUND, save_as="bg_corrected")
+    step = PreprocessingStep(BACKGROUND, save_as="bg_corrected")
     for bad in ("detection", "Bg", "", "bg-corrected", 3):
         with pytest.raises(ValueError, match="save_as"):
-            RecipeStep(BACKGROUND, save_as=bad)
+            PreprocessingStep(BACKGROUND, save_as=bad)
     with pytest.raises(ValueError, match="more than once"):
-        PreprocessingRecipe((step, RecipeStep(TophatConfig(), save_as="bg_corrected")))
+        PreprocessingRecipe((step, PreprocessingStep(TophatConfig(), save_as="bg_corrected")))
     for field in ("extraction_source", "registration_source"):
         for name in ("missing", "detection"):
             with pytest.raises(ValueError, match=f"{field} '{name}' is not a snapshot"):
                 PreprocessingRecipe((step,), **{field: name})
     with pytest.raises(ValueError, match="keep no snapshots"):
-        PreprocessingRecipe(post_registration=(RecipeStep(ReconstructionConfig(), save_as="late"),))
+        PreprocessingRecipe(post_registration=(PreprocessingStep(ReconstructionConfig(), save_as="late"),))
     assert RECIPE_2.snapshots == ["bg_corrected"]
 
 
 def test_summary_stage_drops_the_sources():
-    recipe = replace(RECIPE_2, steps=(RECIPE_2.steps[0], RecipeStep(PercentileNormalizationConfig(fit="supplied"))),
+    recipe = replace(RECIPE_2, steps=(RECIPE_2.steps[0], PreprocessingStep(PercentileNormalizationConfig(fit="supplied"))),
                      registration_source="bg_corrected", supplied_statistics="s.json")
     prefix, _ = summary_stage(recipe, "percentile_normalization")
     assert prefix.steps == recipe.steps[:1]
@@ -103,9 +97,9 @@ def test_summary_stage_drops_the_sources():
 
 def test_snapshots_without_sources_leave_recipe_1_results_unchanged(tmp_path):
     """Declared snapshots cost memory only: the detection images keep the pinned digests."""
-    recipe = PreprocessingRecipe((RecipeStep(MinMaxNormalizationConfig("uint8", (0, 255)), save_as="normalized"),
-                                  RecipeStep(HistogramMatchingConfig(reference_channel=0), save_as="matched"),
-                                  RecipeStep(ReconstructionConfig(radius_yx=3))))
+    recipe = PreprocessingRecipe((PreprocessingStep(MinMaxNormalizationConfig("uint8", (0, 255)), save_as="normalized"),
+                                  PreprocessingStep(HistogramMatchingConfig(reference_channel=0), save_as="matched"),
+                                  PreprocessingStep(ReconstructionConfig(radius_yx=3))))
     golden = Dataset(tmp_path, tmp_path / "out", "golden", "sample", "out",
                      rounds=RoundState(sequencing_rounds=["round1", "round2"], reference_round="round1"),
                      channel_order=("ch00", "ch01", "ch02", "ch03"))
@@ -121,9 +115,9 @@ def test_snapshots_without_sources_leave_recipe_1_results_unchanged(tmp_path):
 
 def test_default_sources_register_and_extract_the_detection_image(tmp_path):
     """Without sources, run is the detection-image path: same images and intensities with or without snapshots."""
-    plain = replace(RECIPE_2, steps=(RecipeStep(BACKGROUND), RECIPE_2.steps[1]), extraction_source=None)
+    plain = replace(RECIPE_2, steps=(PreprocessingStep(BACKGROUND), RECIPE_2.steps[1]), extraction_source=None)
     tapped = replace(RECIPE_2, extraction_source=None)
-    config = PipelineConfig(preprocessing=plain, registration=(TRANSLATION,), detection=DETECTION, extraction=EXTRACTION)
+    config = PipelineConfig(preprocessing=plain, registration=TRANSLATION, detection=DETECTION, extraction=EXTRACTION)
     first = resident_fov(tmp_path).run(config)
     second = resident_fov(tmp_path).run(replace(config, preprocessing=tapped))
     for name in ("round1", "round2"):
@@ -158,9 +152,9 @@ def test_extraction_source_reads_the_background_snapshot(tmp_path, mode):
 def test_known_translation_shifts_detection_and_extraction_snapshot_identically(tmp_path):
     fov = resident_fov(tmp_path)
     raw = {name: image.copy() for name, image in fov.images.items()}
-    fov.run(PipelineConfig(preprocessing=RECIPE_2, registration=(TRANSLATION,), detection=DETECTION, extraction=EXTRACTION))
+    fov.run(PipelineConfig(preprocessing=RECIPE_2, registration=TRANSLATION, detection=DETECTION, extraction=EXTRACTION))
     (result,) = fov.registration_results["round2"]
-    assert result.transform.correction_zyx == (0, -SHIFT_YX[0], -SHIFT_YX[1])
+    assert result.transform.displacement_zyx == (0, *SHIFT_YX)
     before = {name: subtract_scalar_background(image, config=BACKGROUND) for name, image in raw.items()}
     detection_before = {name: normalize_percentile(image) for name, image in before.items()}
     # The reference round is not transformed.
@@ -179,20 +173,24 @@ def test_known_translation_shifts_detection_and_extraction_snapshot_identically(
     np.testing.assert_array_equal(fov.intensity_result.values, expected.values)
 
 
-def test_two_registration_steps_resample_every_snapshot_in_the_same_sequence(tmp_path):
-    local = RegistrationStep(DemonsConfig(iterations=(5,)), "single-channel", "single-channel", 0,
-                             warp=WarpConfig(backend="simpleitk"))
-    recipe = PreprocessingRecipe((RecipeStep(BACKGROUND, save_as="bg_corrected"),
-                                  RecipeStep(PercentileNormalizationConfig(), save_as="normalized")),
+def test_every_image_of_a_moving_round_is_resampled_once_by_its_chain(tmp_path):
+    """A (translation, demons) recipe: the detection image and each snapshot are resampled once, by the round's chain."""
+    local = RegistrationStep(DemonsConfig(iterations=(5,)), signal=RegistrationSignalConfig("channel", 0))
+    recipe = PreprocessingRecipe((PreprocessingStep(BACKGROUND, save_as="bg_corrected"),
+                                  PreprocessingStep(PercentileNormalizationConfig(), save_as="normalized")),
                                  extraction_source="bg_corrected")
     fov = resident_fov(tmp_path)
     raw = {name: image.copy() for name, image in fov.images.items()}
-    fov.run(PipelineConfig(preprocessing=recipe, registration=(TRANSLATION, local)))
+    fov.run(PipelineConfig(preprocessing=recipe, registration=replace(TRANSLATION, steps=TRANSLATION.steps + (local,))))
     methods = [r.diagnostics.method for r in fov.registration_results["round2"]]
     assert methods == ["translation", "demons"]
+    chain = fov.registration_chains["round2"]
+    assert chain.transforms == tuple(r.transform for r in fov.registration_results["round2"])
+    warp = fov.registration_record["application"]["round2"]
+    assert warp == WarpConfig(backend="scipy")
     before = subtract_scalar_background(raw["round2"], config=BACKGROUND)
-    np.testing.assert_array_equal(fov.snapshots["round2"]["bg_corrected"], reapply(fov, "round2", before))
-    np.testing.assert_array_equal(fov.images["round2"], reapply(fov, "round2", normalize_percentile(before)))
+    np.testing.assert_array_equal(fov.snapshots["round2"]["bg_corrected"], apply_transform(before, chain, config=warp))
+    np.testing.assert_array_equal(fov.images["round2"], apply_transform(normalize_percentile(before), chain, config=warp))
     # A snapshot of the last step equals the detection image before registration, and stays equal after it.
     np.testing.assert_array_equal(fov.snapshots["round2"]["normalized"], fov.images["round2"])
     applied = fov.preprocessing_record["transforms"]["round2"]
@@ -215,7 +213,7 @@ def test_registration_signals_come_from_the_registration_source(tmp_path, monkey
     recipe = replace(RECIPE_2, registration_source="bg_corrected")
     fov = resident_fov(tmp_path)
     raw = {name: image.copy() for name, image in fov.images.items()}
-    fov.run(PipelineConfig(preprocessing=recipe, registration=(TRANSLATION,)))
+    fov.run(PipelineConfig(preprocessing=recipe, registration=TRANSLATION))
     before = {name: subtract_scalar_background(image, config=BACKGROUND) for name, image in raw.items()}
     ((reference, moving),) = captured
     np.testing.assert_array_equal(reference, before["round1"].sum(axis=-1, dtype=np.float64))
@@ -224,7 +222,7 @@ def test_registration_signals_come_from_the_registration_source(tmp_path, monkey
     assert not np.array_equal(reference, detection)
     # The default source is the detection image.
     captured.clear()
-    resident_fov(tmp_path).run(PipelineConfig(preprocessing=RECIPE_2, registration=(TRANSLATION,)))
+    resident_fov(tmp_path).run(PipelineConfig(preprocessing=RECIPE_2, registration=TRANSLATION))
     np.testing.assert_array_equal(captured[0][0], detection)
     assert fov.preprocessing_record["recipe"]["registration_source"] == "bg_corrected"
 
@@ -236,11 +234,11 @@ def test_registration_source_with_post_registration_reconstruction(tmp_path, mon
     estimate = registration.estimate_transform
     monkeypatch.setattr(registration, "estimate_transform",
                         lambda reference, moving, **kw: captured.append(np.array(reference)) or estimate(reference, moving, **kw))
-    recipe = PreprocessingRecipe((RecipeStep(BACKGROUND, save_as="bg_corrected"),),
-                                 (RecipeStep(ReconstructionConfig()),), registration_source="bg_corrected")
+    recipe = PreprocessingRecipe((PreprocessingStep(BACKGROUND, save_as="bg_corrected"),),
+                                 (PreprocessingStep(ReconstructionConfig()),), registration_source="bg_corrected")
     fov = resident_fov(tmp_path)
     reference = subtract_scalar_background(fov.images["round1"], config=BACKGROUND)
-    fov.run(PipelineConfig(preprocessing=recipe, registration=(TRANSLATION,)))
+    fov.run(PipelineConfig(preprocessing=recipe, registration=TRANSLATION))
     np.testing.assert_array_equal(captured[0], reference.sum(axis=-1, dtype=np.float64))
     np.testing.assert_array_equal(fov.snapshots["round1"]["bg_corrected"], reference)
 
@@ -258,7 +256,7 @@ def test_streaming_keeps_only_the_reference_registration_source(tmp_path, monkey
     recipe = replace(RECIPE_2, registration_source="bg_corrected",
                      steps=(RECIPE_2.steps[0], replace(RECIPE_2.steps[1], save_as="normalized")))
     fov = resident_fov(tmp_path)
-    fov.run(PipelineConfig(preprocessing=recipe, registration=(TRANSLATION,)), execution=ExecutionConfig("streaming"))
+    fov.run(PipelineConfig(preprocessing=recipe, registration=TRANSLATION), execution=ExecutionConfig("streaming"))
     assert seen == [{"round1": ["bg_corrected"], "round2": ["bg_corrected", "normalized"]}]
     assert set(fov.images) == {"round1"} and fov.snapshots == {}
 
@@ -276,7 +274,7 @@ def test_missing_source_snapshot_raises(tmp_path):
 @pytest.mark.parametrize("mode", ["batch", "streaming"])
 def test_registered_checkpoint_round_trips_each_downstream_snapshot(tmp_path, mode):
     fov = resident_fov(tmp_path)
-    config = PipelineConfig(preprocessing=RECIPE_2, registration=(TRANSLATION,), detection=DETECTION, extraction=EXTRACTION)
+    config = PipelineConfig(preprocessing=RECIPE_2, registration=TRANSLATION, detection=DETECTION, extraction=EXTRACTION)
     fov.run(config, execution=ExecutionConfig(mode, retain_images=True), checkpoints=CheckpointConfig(stages=("registered",)))
     directory = fov.paths.checkpoint_dir
     files = json.loads((directory / "run.json").read_text())["checkpoints"]["registered"]
@@ -302,7 +300,7 @@ def test_registered_checkpoint_round_trips_each_downstream_snapshot(tmp_path, mo
 def test_recipe_without_extraction_source_stores_one_image_per_round(tmp_path):
     recipe = replace(RECIPE_2, extraction_source=None, registration_source="bg_corrected")
     fov = resident_fov(tmp_path)
-    fov.run(PipelineConfig(preprocessing=recipe, registration=(TRANSLATION,)), checkpoints=CheckpointConfig(stages=("registered",)))
+    fov.run(PipelineConfig(preprocessing=recipe, registration=TRANSLATION), checkpoints=CheckpointConfig(stages=("registered",)))
     registered = fov.paths.checkpoint_dir / "registered"
     assert sorted(p.name for p in registered.iterdir()) == ["round1.ome.tif", "round2.ome.tif", "transforms.json"]
     reloaded = dataset(tmp_path).fov("FOV_001").load_checkpoint("registered")
@@ -318,7 +316,7 @@ def test_recipe_without_extraction_source_stores_one_image_per_round(tmp_path):
 def test_run_json_lists_sources_and_transforms_per_snapshot(tmp_path):
     recipe = replace(RECIPE_2, registration_source="bg_corrected")
     fov = resident_fov(tmp_path)
-    fov.run(PipelineConfig(preprocessing=recipe, registration=(TRANSLATION,)), checkpoints=CheckpointConfig(stages=("registered",)))
+    fov.run(PipelineConfig(preprocessing=recipe, registration=TRANSLATION), checkpoints=CheckpointConfig(stages=("registered",)))
     entry = json.loads((fov.paths.checkpoint_dir / "run.json").read_text())["preprocessing"]
     assert entry["recipe"] == {"steps": ["scalar_background", "percentile_normalization"], "post_registration": [],
                                "extraction_source": "bg_corrected", "registration_source": "bg_corrected"}
@@ -328,4 +326,4 @@ def test_run_json_lists_sources_and_transforms_per_snapshot(tmp_path):
                                    "round2": {"detection": translation, "bg_corrected": translation}}
     header = json.loads((fov.paths.checkpoint_dir / "registered" / "transforms.json").read_text())
     assert header["preprocessing"] == entry
-    assert header["transforms"]["round2"][0]["transform"]["correction_zyx"] == [0, -SHIFT_YX[0], -SHIFT_YX[1]]
+    assert header["transforms"]["round2"][0]["transform"]["displacement_zyx"] == [0, *SHIFT_YX]

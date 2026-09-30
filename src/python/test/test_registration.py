@@ -75,7 +75,7 @@ class TestRegisterVolume:
 
         _registration = estimate_transform(ref_img, mov_img, config=TranslationConfig(), reference_metadata=ImageMetadata("test/reference"), moving_metadata=ImageMetadata("test/moving"))
         registered = apply_transform(shifted, _registration.transform, config=_registration.application_config)
-        shifts = tuple(-x for x in _registration.transform.correction_zyx)
+        shifts = _registration.transform.displacement_zyx
 
         assert registered.shape == images.shape
         assert np.allclose(shifts, (2, -3, 5), atol=0.5)

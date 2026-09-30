@@ -81,7 +81,7 @@ def test_pipeline_shared_lifecycle_and_saved_only(tmp_path, monkeypatch):
         assert len(trial['attempts']) == 3
         assert trial['effective_configs']['pipeline']['preprocessing']['steps'][0]['config']['output_dtype'] == 'uint8'
         transform = read(root / 'fixture/0000/transform-round2-0.json')
-        assert transform['correction_zyx'] == [0.0, 0.0, 0.0]
+        assert transform['displacement_zyx'] == [0.0, 0.0, 0.0]
     pd.testing.assert_frame_equal(pd.read_csv(batch/'fixture/0000/reads.csv'),
                                   pd.read_csv(stream/'fixture/0000/reads.csv'))
     assert read(stream/'fixture/0000/pipeline.json')['retained_rounds'] == ['round1']
@@ -114,18 +114,19 @@ def test_pipeline_rejects_missing_sources_and_unsafe_paths(tmp_path):
 def test_pipeline_records_explicit_recovery_and_failures(tmp_path):
     case = fixture_case(tmp_path)
     params = case.config['workflow']['rules']['rsf_single_fov']['parameters']
-    params['global_registration'] = {'run': True, 'method': 'tps', 'recovery': {
+    params['global_registration'] = {'run': False}
+    params['local_registration'] = {'run': True, 'method': 'tps', 'recovery': {
         'allowed_errors': ['InsufficientLandmarksError'],
-        'alternatives': [{'method': 'translation'}]}}
+        'alternatives': [{'method': 'demons'}]}}
     def run():
         return run_benchmark([case], input_root=tmp_path/'inputs', output_root=tmp_path/'outputs', owner='test')
     root = run()
     trial = read(root/'fixture/0000/trial.json')
     assert trial['status']['processing'] == 'fallback_success', trial['errors']
     assert len(trial['attempts']) == 6
-    assert {a['actual_method'] for a in trial['attempts']} == {'tps', 'translation'}
-    assert trial['effective_configs']['pipeline']['registration'][0]['recovery']['allowed_errors'] == ['InsufficientLandmarksError']
-    del params['global_registration']['recovery']
+    assert {a['actual_method'] for a in trial['attempts']} == {'tps', 'demons'}
+    assert trial['effective_configs']['pipeline']['registration']['steps'][0]['recovery']['allowed_errors'] == ['InsufficientLandmarksError']
+    del params['local_registration']['recovery']
     root = run()
     trial = read(root/'fixture/0000/trial.json')
     assert trial['status']['processing'] == 'failed'

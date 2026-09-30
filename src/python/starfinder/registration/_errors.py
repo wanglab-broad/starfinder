@@ -13,6 +13,14 @@ class InsufficientLandmarksError(RegistrationEstimationError):
     """Too few eligible landmarks or correspondences."""
 
 
+class RegistrationRejectedError(RegistrationEstimationError):
+    """A step failed a configured routine QC criterion (RegistrationQcConfig).
+
+    The message names the criterion, the value and the bound; recovery may
+    allow it like any other estimation error.
+    """
+
+
 class RegistrationBackendUnavailableError(ImportError):
     """An explicitly selected optional backend is unavailable."""
 

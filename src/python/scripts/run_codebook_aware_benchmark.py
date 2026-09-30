@@ -357,7 +357,7 @@ def load_and_register_synthetic_images(
         mov_merged = np.sum(images[round_name], axis=-1, dtype=np.uint16)
         _registration = estimate_transform(ref_merged, mov_merged, config=TranslationConfig(), reference_metadata=ImageMetadata("synthetic/round1"), moving_metadata=ImageMetadata(f"synthetic/{round_name}"))
         registered = apply_transform(images[round_name], _registration.transform, config=_registration.application_config)
-        _shifts = tuple(-x for x in _registration.transform.correction_zyx)
+        _shifts = _registration.transform.displacement_zyx
         images[round_name] = registered
 
     return images
@@ -480,8 +480,8 @@ def prepare_real_raw_inputs(
                 cached_raw_input_info(output_dir, dataset, fov_id),
             )
 
-    from starfinder.dataset import Dataset, RegistrationStep
-    from starfinder.registration import TranslationConfig
+    from starfinder.dataset import Dataset, RegistrationRecipe, RegistrationStep
+    from starfinder.registration import RegistrationSignalConfig, TranslationConfig
     from starfinder.preprocessing import MinMaxNormalizationConfig
     from starfinder.dataset.types import RoundState
 
@@ -518,7 +518,8 @@ def prepare_real_raw_inputs(
     )
     step_info["input_time_enhance_s"] = round(elapsed, 3)
     step_info["input_rss_after_enhance_mb"] = round(rss, 1)
-    elapsed, rss = timed_prep_step("registration", lambda: fov.register(RegistrationStep(TranslationConfig())))
+    elapsed, rss = timed_prep_step("registration", lambda: fov.register(
+        RegistrationRecipe((RegistrationStep(TranslationConfig()),), signal=RegistrationSignalConfig('sum'))))
     step_info["input_time_registration_s"] = round(elapsed, 3)
     step_info["input_rss_after_registration_mb"] = round(rss, 1)
     elapsed, rss = timed_prep_step(
@@ -562,7 +563,7 @@ def prepare_real_raw_inputs(
         "tensor_shape": list(tensor.shape),
         "global_shifts": {
             round_name: list(shift)
-            for round_name, shift in ((name, tuple(-v for v in results[0].transform.correction_zyx)) for name, results in fov.registration_results.items())
+            for round_name, shift in ((name, results[0].transform.displacement_zyx) for name, results in fov.registration_results.items())
         },
         "dataset_config": {
             key: str(value) if isinstance(value, Path) else value

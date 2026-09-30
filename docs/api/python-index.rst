@@ -1,6 +1,8 @@
 Python functions and classes A–Z
 ================================
 
+* :py:obj:`starfinder.registration.AffineConfig`
+* :py:obj:`starfinder.registration.AffineTransform`
 * :py:obj:`starfinder.registration.apply_transform`
 * :py:obj:`starfinder.preprocessing.Background3DConfig`
 * :py:obj:`starfinder.synthetic.BackgroundConfig`
@@ -9,6 +11,8 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.synthetic.benchmark_scene_preset`
 * :py:obj:`starfinder.benchmark.BenchmarkCase`
 * :py:obj:`starfinder.benchmark.BenchmarkTrialResult`
+* :py:obj:`starfinder.registration.BSplineConfig`
+* :py:obj:`starfinder.registration.BSplineTransform`
 * :py:obj:`starfinder.synthetic.CALIBRATED_CONDITIONS`
 * :py:obj:`starfinder.synthetic.calibrated_scene_preset`
 * :py:obj:`starfinder.dataset.CheckpointConfig`
@@ -35,6 +39,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.registration.estimate_transform`
 * :py:obj:`starfinder.benchmark.evaluate_benchmark`
 * :py:obj:`starfinder.evaluation.barcode.evaluate_decoding`
+* :py:obj:`starfinder.evaluation.registration.evaluate_displacement_field`
 * :py:obj:`starfinder.evaluation.registration.evaluate_landmark_alignment`
 * :py:obj:`starfinder.evaluation.registration.evaluate_mask_overlap`
 * :py:obj:`starfinder.evaluation.registration.evaluate_registration`
@@ -43,6 +48,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.evaluation.EvaluationResult`
 * :py:obj:`starfinder.dataset.ExecutionConfig`
 * :py:obj:`starfinder.io.export_spots`
+* :py:obj:`starfinder.dataset.ExternalReference`
 * :py:obj:`starfinder.barcode.extract_intensities`
 * :py:obj:`starfinder.barcode.filter_reads`
 * :py:obj:`starfinder.preprocessing.filter_tophat`
@@ -89,7 +95,10 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.spot_finding.PercentileCentroidConfig`
 * :py:obj:`starfinder.preprocessing.PercentileNormalizationConfig`
 * :py:obj:`starfinder.dataset.PipelineConfig`
+* :py:obj:`starfinder.preprocessing.PREPROCESSING_METHODS`
 * :py:obj:`starfinder.preprocessing.PreprocessingRecipe`
+* :py:obj:`starfinder.preprocessing.PreprocessingSpec`
+* :py:obj:`starfinder.preprocessing.PreprocessingStep`
 * :py:obj:`starfinder.synthetic.PRESET_VERSION`
 * :py:obj:`starfinder.preprocessing.project_image`
 * :py:obj:`starfinder.preprocessing.ProjectionConfig`
@@ -99,17 +108,24 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.barcode.ReadFilterConfig`
 * :py:obj:`starfinder.barcode.ReadFilteringResult`
 * :py:obj:`starfinder.synthetic.ReadoutEffectsConfig`
-* :py:obj:`starfinder.preprocessing.RecipeStep`
 * :py:obj:`starfinder.preprocessing.reconstruct_background`
 * :py:obj:`starfinder.preprocessing.ReconstructionConfig`
 * :py:obj:`starfinder.dataset.RecoveryConfig`
+* :py:obj:`starfinder.registration.REGISTRATION_METHODS`
+* :py:obj:`starfinder.evaluation.registration.registration_qc`
 * :py:obj:`starfinder.synthetic.registration_scene_preset`
 * :py:obj:`starfinder.registration.RegistrationBackendUnavailableError`
 * :py:obj:`starfinder.registration.RegistrationDiagnostics`
 * :py:obj:`starfinder.registration.RegistrationEstimationError`
+* :py:obj:`starfinder.registration.RegistrationQcConfig`
+* :py:obj:`starfinder.dataset.RegistrationRecipe`
+* :py:obj:`starfinder.registration.RegistrationRejectedError`
 * :py:obj:`starfinder.registration.RegistrationResult`
+* :py:obj:`starfinder.registration.RegistrationSignalConfig`
+* :py:obj:`starfinder.registration.RegistrationSpec`
 * :py:obj:`starfinder.dataset.RegistrationStep`
 * :py:obj:`starfinder.benchmark.report_benchmark`
+* :py:obj:`starfinder.registration.RigidConfig`
 * :py:obj:`starfinder.dataset.RoundState`
 * :py:obj:`starfinder.benchmark.run_benchmark`
 * :py:obj:`starfinder.preprocessing.run_step`
@@ -124,8 +140,6 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.preprocessing.step_spec`
 * :py:obj:`starfinder.preprocessing.StepContext`
 * :py:obj:`starfinder.preprocessing.StepResult`
-* :py:obj:`starfinder.preprocessing.STEPS`
-* :py:obj:`starfinder.preprocessing.StepSpec`
 * :py:obj:`starfinder.evaluation.registration.structural_similarity`
 * :py:obj:`starfinder.dataset.SubtileConfig`
 * :py:obj:`starfinder.preprocessing.subtract_background_3d`
@@ -138,6 +152,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.synthetic.TextureConfig`
 * :py:obj:`starfinder.preprocessing.TophatConfig`
 * :py:obj:`starfinder.registration.TpsConfig`
+* :py:obj:`starfinder.registration.TransformChain`
 * :py:obj:`starfinder.registration.TranslationConfig`
 * :py:obj:`starfinder.registration.TranslationTransform`
 * :py:obj:`starfinder.registration.UnsupportedTransformOperationError`
