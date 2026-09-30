@@ -321,7 +321,7 @@ def _transform_json(result, index, field_name, application_config=None):
     kind = transform_kind(transform)
     data.update(kind=kind)
     if kind == "translation":
-        data.update(correction_zyx=transform.correction_zyx)
+        data.update(displacement_zyx=transform.displacement_zyx)
     elif kind == "affine":
         data.update(matrix_zyx=transform.matrix_zyx.tolist(), physical=transform.physical)
     elif kind == "bspline":
@@ -412,6 +412,10 @@ def _registration_results(directory, header):
                     with np.load(Path(directory) / "registered" / file_name) as npz:
                         arrays = {k: npz[k] for k in npz.files}
             if kind == "translation":
+                if header["format_version"] == 1:
+                    # Version 1 stores the correction c of the pull p - c; the displacement is -c.
+                    data.update(displacement_zyx=tuple(-v for v in data.pop("correction_zyx")),
+                                direction="reference_to_moving")
                 transform = TranslationTransform(**data)
             elif kind == "affine" and header["format_version"] != 1:
                 transform = AffineTransform(**data)

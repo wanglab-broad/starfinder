@@ -42,22 +42,26 @@ def _geometry(reference_shape, moving_shape, reference_metadata, moving_metadata
 
 @dataclass(frozen=True)
 class TranslationTransform:
-    """Compact correction: pull source index = reference index - correction."""
+    """Compact pull map: moving index = reference index + displacement_zyx.
 
-    correction_zyx: tuple[float, float, float]
+    displacement_zyx is the detected displacement of the moving content, ZYX
+    in voxel indices, like every other transform's pull displacement.
+    """
+
+    displacement_zyx: tuple[float, float, float]
     reference_shape_zyx: tuple[int, int, int]
     moving_shape_zyx: tuple[int, int, int]
     reference_metadata: ImageMetadata
     moving_metadata: ImageMetadata
-    direction: str = "moving_to_reference"
+    direction: str = "reference_to_moving"
     units: str = "voxel_index"
 
     def __post_init__(self):
-        _validate_transform(self, "moving_to_reference")
-        a = np.asarray(self.correction_zyx, dtype=float)
+        _validate_transform(self, "reference_to_moving")
+        a = np.asarray(self.displacement_zyx, dtype=float)
         if a.shape != (3,) or not np.isfinite(a).all():
-            raise IncompatibleGeometryError("correction_zyx must be a finite triple")
-        object.__setattr__(self, "correction_zyx", tuple(float(x) for x in a))
+            raise IncompatibleGeometryError("displacement_zyx must be a finite triple")
+        object.__setattr__(self, "displacement_zyx", tuple(float(x) for x in a))
 
 
 @dataclass(frozen=True)
@@ -278,7 +282,7 @@ class RegistrationResult:
     def __repr__(self):
         transform = self.transform
         if isinstance(transform, TranslationTransform):
-            detail = "correction_zyx (" + ", ".join(f"{v + 0.0:g}" for v in transform.correction_zyx) + ")"
+            detail = "displacement_zyx (" + ", ".join(f"{v + 0.0:g}" for v in transform.displacement_zyx) + ")"
         elif isinstance(transform, AffineTransform):
             detail = "affine matrix_zyx"
         elif isinstance(transform, BSplineTransform):

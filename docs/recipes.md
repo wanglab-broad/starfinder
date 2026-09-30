@@ -75,7 +75,7 @@ Python expects `input_root/round/FOV/*ch*.tif`. MATLAB's corresponding entry is
 
 ## Register two volumes
 
-{py:func}`~starfinder.registration.estimate_transform` returns a correction
+{py:func}`~starfinder.registration.estimate_transform` returns a pull
 transform and matching application config. Apply that result with
 {py:func}`~starfinder.registration.apply_transform`:
 
@@ -84,11 +84,10 @@ transform and matching application config. Apply that result with
 :pyobject: register_volumes
 ```
 
-Expected: detected `(1,-2,3)`, correction `(-1,2,-3)`, exact equality after
-correction because the single spot stays away from edges. Real data may lose
+Expected: detected displacement `(1,-2,3)`, exact equality after registration
+because the single spot stays away from edges. Real data may lose
 edge content; equality is not a general quality criterion.
-{py:func}`~starfinder.registration.estimate_transform` supplies the correction
-internally. Supply equal-shaped 3D volumes; select or merge channels explicitly
+{py:func}`~starfinder.registration.apply_transform` uses the displacement as it is. Supply equal-shaped 3D volumes; select or merge channels explicitly
 before calling a single-channel function.
 
 Workflow settings: `ref_round` and `rules.<rule>.parameters.global_registration`

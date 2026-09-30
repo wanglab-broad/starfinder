@@ -55,18 +55,18 @@ See the [backend configuration caveat](workflow-configuration.md#top-level-field
 
 ## Registration signs
 
-| Interface / stored value | Meaning and correction |
+| Interface / stored value | Meaning and sign |
 | --- | --- |
-| Python {py:func}`~starfinder.registration.estimate_transform` | Correction `(dz,dy,dx)`; apply it using {py:func}`~starfinder.registration.apply_transform` |
-| Python {py:meth}`~starfinder.dataset.FOV.register` | Estimate/apply correction transforms; results retain their typed direction |
+| Python {py:func}`~starfinder.registration.estimate_transform` | Translation `displacement_zyx`: detected `(dz,dy,dx)`, a pull map from reference to moving; apply it using {py:func}`~starfinder.registration.apply_transform` |
+| Python {py:meth}`~starfinder.dataset.FOV.register` | Estimate/apply pull transforms; results retain their typed direction (`reference_to_moving`) |
 | Python `log/gr_shifts/*.txt` | Log columns `row,col,z` contain detected `(dy,dx,dz)`, with no origin offset |
 | MATLAB {mat:func}`DFTRegister3D` → {mat:func}`DFTApply3D` | Correction parameters in `(row,column,Z)` order; passed directly, without Python's negation |
 | Python dense local displacement field | Backward sampling: `registered[p] = moving[p + field[p]]`; pass directly to its warp function |
 
-For a moving volume displaced by `(1,-2,3)`, Python detects `(1,-2,3)` and applies
-`(-1,2,-3)`. The [registration recipe](recipes.md#register-two-volumes) verifies
-this with an interior spot. Positive translation correction components move content
-toward larger indices; wrapped edges are zeroed. Lost edge content cannot be
+For a moving volume displaced by `(1,-2,3)`, Python detects and stores the
+displacement `(1,-2,3)` and samples `registered[p] = moving[p + (1,-2,3)]`. The
+[registration recipe](recipes.md#register-two-volumes) verifies this with an
+interior spot. Wrapped edges are zeroed. Lost edge content cannot be
 recovered. Dense fields have shape `(Z,Y,X,3)` with components `(dz,dy,dx)`;
 they are not global translation arguments. MATLAB behavior here is source-checked,
 not runtime-validated.

@@ -126,7 +126,7 @@ def test_every_registration_place_accepts_a_method_registered_only_in_the_regist
     monkeypatch.setitem(REGISTRATION_METHODS, FixtureShiftConfig, FIXTURE_SPEC)
     # estimate_transform dispatches to the spec's estimator.
     result = estimate((1, 8, 8), FixtureShiftConfig(offset=0.5))
-    assert result.transform.correction_zyx == (0.5, 0, 0)
+    assert result.transform.displacement_zyx == (0.5, 0, 0)
     assert (result.diagnostics.method, result.diagnostics.backend) == ("fixture_shift", "fixture")
     # RegistrationStep and RecoveryConfig accept it.
     recovery = RecoveryConfig((RegistrationEstimationError,), (FixtureShiftConfig(),))

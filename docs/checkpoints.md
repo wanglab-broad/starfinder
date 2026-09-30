@@ -93,7 +93,7 @@ has its `step` index, its transform and its diagnostics:
 
 | Kind | In `transform` | In `<round>_field.npz` |
 | --- | --- | --- |
-| `translation` | `correction_zyx` | none |
+| `translation` | `displacement_zyx` | none |
 | `affine` | `matrix_zyx` (4×4 index-space matrix) and `physical` (the backend's physical parameters, or null) | none |
 | `bspline` | `bspline` (grid size, origin, spacing and direction in ITK XYZ order, `order`, `spacing_zyx`) and `coefficients`, the file name | `result_<i>`: the coefficients, float64 |
 | `dense` | `field`, the file name | `result_<i>`: the displacement field, float32 or float64 |
@@ -112,7 +112,9 @@ load. A version-1 registered checkpoint (before the registration recipe) holds
 translation and dense results, each with its own `application_config`, which
 were applied one after another; it loads with those configs, without chains,
 and with `registration_record["semantics"] == "sequential"`. Nothing converts
-it.
+it to a recipe. Its translation entries store the correction (the negated
+displacement), which the reader loads as `displacement_zyx`; see the
+[migration guide](migration.md).
 
 ### candidates
 

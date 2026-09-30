@@ -75,7 +75,9 @@ result = estimate_transform(reference, moving, config=TranslationConfig(),
 registered = apply_transform(moving, result.transform, config=result.application_config)
 ```
 
-The transform already corrects moving to reference. Do not negate it. Dense
+`apply_transform` applies the transform as it is. Do not negate it. Every
+transform, a translation included, is a pull map from reference to moving
+coordinates (see the translation displacement below). Dense
 transforms are pull fields, not forward scene perturbations. Estimation errors
 are explicit; optional recovery belongs to [coordination](coordination.md).
 
@@ -315,7 +317,8 @@ and the recipe summary. Reloading rebuilds a `TransformChain` per round;
 applying it to the pre-registration images reproduces the registered images
 bit for bit. Version-1 checkpoints still load: their translation and dense
 results keep their per-result `application_config`, no chain is built, and
-`registration_record["semantics"]` is `"sequential"`. Nothing converts them.
+`registration_record["semantics"]` is `"sequential"`. Nothing converts them to
+a recipe; only their translation corrections load as displacements (below).
 See [checkpoints](checkpoints.md).
 
 ### New registration methods and Z=1 demons
@@ -353,6 +356,31 @@ With `backend: python`, the `nuclei_registration` rule now runs the Python
 script `workflow/scripts/nuclei_registration.py` instead of MATLAB, with the
 same inputs and outputs; see [workflows](workflows.md). The MATLAB backend's
 rule and script are unchanged.
+
+### Translation displacement
+
+`TranslationTransform` stores the detected displacement `d` of the moving
+content as `displacement_zyx` and pulls from `p + d`, with
+`direction="reference_to_moving"`, like every other transform. It replaces
+`correction_zyx`, the correction `c = −d` of the pull `p − c` labelled
+`moving_to_reference`; there is no alias.
+
+| Before | After |
+| --- | --- |
+| `transform.correction_zyx` | `transform.displacement_zyx`, the negated value |
+| `tuple(-v for v in transform.correction_zyx)` (the detected displacement) | `transform.displacement_zyx` |
+| `TranslationTransform(c, ...)`, also positionally | `TranslationTransform(d, ...)` with `d = −c` |
+| `TransformChain.translation()`: the sum of the corrections | the sum of the displacements |
+| QC transform summary and `run.json` records `{"kind": "translation", "correction_zyx": c}` | `{"kind": "translation", "displacement_zyx": d}` |
+| benchmark `transform.json` field `correction_zyx` | `displacement_zyx` |
+| benchmark truth `{"correction": "correction.json"}` holding `c` | `{"displacement": "displacement.json"}` holding `d` |
+| `RegistrationResult` summary `correction_zyx (…)` | `displacement_zyx (…)` |
+
+Version-2 registered checkpoints write `displacement_zyx`. Version-1 registered
+checkpoints store `correction_zyx`; the reader loads it as
+`displacement_zyx = −correction_zyx`, and the result re-applies identically.
+Registered images, pull fields and the `log/gr_shifts` rows (which already held
+the detected displacement) are unchanged.
 
 ## Intentional behavior changes — not mechanical equivalence
 

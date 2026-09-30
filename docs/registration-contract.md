@@ -191,7 +191,7 @@ the registered image at reference index `p` is the moving image sampled at
 
 | Kind | Type | Stored parameters | Pull map `T(p)` | Direction label |
 | --- | --- | --- | --- | --- |
-| `translation` | `TranslationTransform` (exists) | `correction_zyx` | `p − c` | `moving_to_reference` (kept) |
+| `translation` | `TranslationTransform` (exists) | `displacement_zyx`, the detected displacement `d` | `p + d` | `reference_to_moving` |
 | `affine` | `AffineTransform` (new) | `matrix_zyx`, a 4×4 float64 index-space matrix `[[A, b], [0, 1]]`; `physical`, the backend's physical parameters (below) | `A p + b` | `reference_to_moving` |
 | `bspline` | `BSplineTransform` (new) | the ITK B-spline fixed parameters (dimension, grid size, origin, spacing, direction, in XYZ physical order), the coefficients (`dimension × grid` float64), `order=3`, and the `spacing_zyx` used for estimation | `p + S⁻¹ P v(P S p)` (below) | `reference_to_moving` |
 | `dense` | `DenseDisplacementTransform` (exists) | `displacement_zyx` (Z, Y, X, 3) on the reference grid | `p + u(p)` | `reference_to_moving` |
@@ -216,11 +216,11 @@ image. The composite pull map of a round with steps `T₁ … Tₙ` is therefore
 The last step is applied first to the reference point and the first step last.
 `TransformChain.pull_field()` returns `u` as a `DenseDisplacementTransform`
 (float64). It evaluates `Tₙ` at grid points (exact for a dense field) and every
-earlier step analytically at the resulting points: a translation subtracts its
-correction, an affine applies `A p + b`, and a B-spline is evaluated from its
+earlier step analytically at the resulting points: a translation adds its
+displacement, an affine applies `A p + b`, and a B-spline is evaluated from its
 coefficients. Because a local step is always last, no dense field is ever
 interpolated during composition. A chain of translations only reduces to one
-`TranslationTransform` whose correction is the sum of the corrections.
+`TranslationTransform` whose displacement is the sum of the displacements.
 
 ### Analytic composition examples
 
@@ -233,7 +233,7 @@ voxels because every value is exact in float64 up to rounding of the inputs.
 **Example 1: translation then affine**
 (`test_translation_then_affine_pull_field`). Grid 8×32×32.
 
-* Step 1: `TranslationTransform(correction_zyx=(−1, −4, 2))`, so
+* Step 1: `TranslationTransform(displacement_zyx=(1, 4, −2))`, so
   `T₁(q) = q + (1, 4, −2)`.
 * Step 2: `AffineTransform` with `A = [[1, 0, 0], [0, 1, 0.1], [0, 0, 1]]`
   (Y sheared by X) and `b = (0, 0.5, 0)`.
@@ -263,7 +263,7 @@ voxels because every value is exact in float64 up to rounding of the inputs.
 (`test_z1_translation_then_affine_pull_field`). Grid 1×32×32; the affine is a
 2D estimate embedded with an identity Z row.
 
-* Step 1: `TranslationTransform(correction_zyx=(0, −3, 1))`, so
+* Step 1: `TranslationTransform(displacement_zyx=(0, 3, −1))`, so
   `T₁(q) = q + (0, 3, −1)`.
 * Step 2: `AffineTransform` with
   `A = [[1, 0, 0], [0, 0.98, 0.05], [0, −0.05, 0.98]]` and `b = (0, 0.2, −0.4)`.
@@ -298,7 +298,7 @@ After every step of a moving round has been estimated, the round is resampled
   estimation and are discarded.
 * **Interpolation.** A chain that reduces to one translation uses the current
   translation path: an exact integer shift (`np.roll` with zero-filled wrapped
-  bands), or a Fourier shift for a fractional correction. Every other chain is
+  bands), or a Fourier shift for a fractional displacement. Every other chain is
   sampled with linear interpolation (`map_coordinates`, order 1, in float64),
   plane by plane: the composite pull points of one Z plane are computed, all
   channels of all images are sampled at them, and the plane is discarded, so
@@ -376,7 +376,7 @@ interface:
   B-spline, SimpleITK 2D demons (pyramid in YX only). A 3D estimate on a Z=1
   volume is never attempted; W-244 found that both backends fail on it;
 * the result is embedded in 3D with no Z motion: a translation with zero Z
-  correction, an affine with Z row and column `(1, 0, 0)` and `b_z = 0`, a
+  displacement, an affine with Z row and column `(1, 0, 0)` and `b_z = 0`, a
   B-spline of dimension 2, or a dense field of shape (1, Y, X, 3) whose Z
   component is exactly 0;
 * TPS and CPD declare `dimensions={3}` and keep rejecting Z=1 with
@@ -392,7 +392,7 @@ changes from 1 to 2:
 
 | Kind | `transforms.json` entry (in `transform`) | Arrays in `<round>_field.npz` |
 | --- | --- | --- |
-| `translation` | `correction_zyx` inline (unchanged) | none |
+| `translation` | `displacement_zyx` inline | none |
 | `affine` (new) | `matrix_zyx` (4×4, inline) and `physical` (inline) | none |
 | `bspline` (new) | `bspline` (dimension, grid size, origin, spacing, direction, order, `spacing_zyx`) inline | `result_<i>`: the coefficients |
 | `dense` | `field` names the file (unchanged) | `result_<i>`: the field |
@@ -416,10 +416,12 @@ signal, warp, QC config).
   `candidates` and `pre_qc` checkpoints. A
   version-1 registered checkpoint loads its `translation` and `dense` results
   with their per-result `application_config` and is marked `sequential`, the
-  pre-§2.6 semantics; nothing converts it silently.
+  pre-§2.6 semantics; nothing converts it silently to a recipe. Its translation entries
+  store the correction `c = −d`, which the reader converts to the displacement
+  `d` (see {doc}`migration`).
 * **`gr_shifts`.** `log/gr_shifts/<fov>.txt` keeps its columns
-  (`fov_id, round, row, col, z`) and its rows: the detected displacement of
-  each translation result. Other kinds are not written there.
+  (`fov_id, round, row, col, z`) and its rows: the detected displacement
+  (`displacement_zyx`) of each translation result. Other kinds are not written there.
 * **`run.json`.** Its `format_version` stays 1 (W-240 choice 3); the
   registration records gain the fields below and `config.pipeline.registration`
   becomes the recipe's fields.
@@ -479,7 +481,7 @@ for every successful step and for the round's whole chain, on signals only.
 | NCC | Pearson correlation in float64 over the valid overlap. **Matched domains:** "before" compares the reference signal with the moving signal at the start of the step and "after" with the resampled signal, both over the same valid overlap. Undefined (`None`, with a reason) when fewer than two voxels are valid or either side is constant there. `normalized_cross_correlation` gains an optional Boolean `mask` keyword; without it the result is unchanged. |
 | Z-maximum-projection SSIM | scikit-image SSIM with a uniform 7×7 window on the Z maximum projections of the signals, averaged over the valid columns (YX positions valid in every plane) eroded by 3 pixels, the same columns before and after. `data_range` is the maximum minus the minimum of the reference projection over those columns, recorded. Undefined when the range is 0, the eroded domain is empty, or Y or X is smaller than 7; for Z=1 the projection is the plane. `structural_similarity` gains the same optional `mask`. |
 | Overlays | Not computed in `FOV`: `registration_qc` returns the three maximum projections (reference, before, after) as arrays only when `RegistrationQcConfig.projections` is `True`, for callers that write overlays. |
-| Transform summary | Translation: the correction. Affine: `A`, `b`, `det A`, the largest singular value of `A − I`, and the rotation angle for rigid. B-spline and dense: median, 95th percentile and maximum of `|u|` in voxels (and in physical units when spacing is known), and the fraction of voxels with `det(I + ∇u) ≤ 0` (folds), by central differences. |
+| Transform summary | Translation: the displacement. Affine: `A`, `b`, `det A`, the largest singular value of `A − I`, and the rotation angle for rigid. B-spline and dense: median, 95th percentile and maximum of `|u|` in voxels (and in physical units when spacing is known), and the fraction of voxels with `det(I + ∇u) ≤ 0` (folds), by central differences. |
 | Optimizer diagnostics | From `RegistrationDiagnostics`: `converged`, `iterations_completed` (per level), final metric value, stop condition, and for demons the elapsed iterations and final RMS change. Unknown values stay `None`. |
 | Truth metrics | Only when the caller supplies a truth pull field (for example `forward_displacement` of a synthetic pair): `evaluate_displacement_field(estimated, truth, *, mask, spacing_zyx=None)` gives the median, 95th percentile and maximum of `|u − u*|` over the valid overlap, in voxels and, with spacing, in physical units. Never computed from images alone. |
 | Rejection | `RegistrationQcConfig(min_coverage=None, min_ncc_gain=None, max_fold_fraction=None, max_translation_voxels=None, projections=False)`. Every criterion is `None` by default, so nothing is rejected unless the recipe sets it. A step that fails a configured criterion raises `RegistrationRejectedError`, a subclass of `RegistrationEstimationError`, naming the criterion, the value and the bound; recovery may allow it. |

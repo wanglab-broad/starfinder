@@ -62,7 +62,7 @@ selected by the benchmark. For example:
     "case_id": "example",
     "task": "registration",
     "inputs": {"reference": "reference.npy", "moving": "moving.npy"},
-    "truth": {"correction": "correction.json"},
+    "truth": {"displacement": "displacement.json"},
     "artifacts": {},
     "config": {
       "registration": {"method": "translation", "backend": "scipy_fft"},
@@ -78,9 +78,11 @@ selected by the benchmark. For example:
 }
 ```
 
-`correction.json` contains a floating-point ZYX **correction** triple, for example
-`[-1.0, 2.0, -1.0]`; there is no inferred sign conversion. Omit the `translation`
-evaluation and truth entry when no correction truth is available. Evaluation
+`displacement.json` contains a floating-point ZYX **displacement** triple, the
+displacement of the moving content (the translation transform's
+`displacement_zyx`), for example `[1.0, -2.0, 1.0]`; there is no inferred sign
+conversion. Omit the `translation` evaluation and truth entry when no
+displacement truth is available. Evaluation
 must explicitly select at least one metric. SSIM requires `data_range` and a
 spatial `policy`. The pure [evaluation APIs](api/evaluation.registration.rst)
 retain units, eligible counts, undefined values and reasons.

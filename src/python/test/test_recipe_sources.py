@@ -154,7 +154,7 @@ def test_known_translation_shifts_detection_and_extraction_snapshot_identically(
     raw = {name: image.copy() for name, image in fov.images.items()}
     fov.run(PipelineConfig(preprocessing=RECIPE_2, registration=TRANSLATION, detection=DETECTION, extraction=EXTRACTION))
     (result,) = fov.registration_results["round2"]
-    assert result.transform.correction_zyx == (0, -SHIFT_YX[0], -SHIFT_YX[1])
+    assert result.transform.displacement_zyx == (0, *SHIFT_YX)
     before = {name: subtract_scalar_background(image, config=BACKGROUND) for name, image in raw.items()}
     detection_before = {name: normalize_percentile(image) for name, image in before.items()}
     # The reference round is not transformed.
@@ -326,4 +326,4 @@ def test_run_json_lists_sources_and_transforms_per_snapshot(tmp_path):
                                    "round2": {"detection": translation, "bg_corrected": translation}}
     header = json.loads((fov.paths.checkpoint_dir / "registered" / "transforms.json").read_text())
     assert header["preprocessing"] == entry
-    assert header["transforms"]["round2"][0]["transform"]["correction_zyx"] == [0, -SHIFT_YX[0], -SHIFT_YX[1]]
+    assert header["transforms"]["round2"][0]["transform"]["displacement_zyx"] == [0, *SHIFT_YX]

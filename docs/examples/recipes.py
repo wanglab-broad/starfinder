@@ -38,11 +38,11 @@ def register_volumes(fixed: np.ndarray) -> None:
     moving = np.roll(fixed, (1, -2, 3), axis=(0, 1, 2))
     assert fixed.ndim == moving.ndim == 3 and fixed.shape == moving.shape
     result = estimate_transform(fixed, moving, config=TranslationConfig(), reference_metadata=ImageMetadata("reference"), moving_metadata=ImageMetadata("moving"))
-    detected = tuple(-x for x in result.transform.correction_zyx)
+    detected = result.transform.displacement_zyx
     corrected = apply_transform(moving, result.transform, config=result.application_config)
     assert detected == (1, -2, 3)
     np.testing.assert_array_equal(corrected, fixed)
-    print("Registration: detected", detected, "; correction (-1, 2, -3)")
+    print("Registration: detected displacement", detected)
 
 
 def detect_spots(volume: np.ndarray) -> None:

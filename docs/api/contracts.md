@@ -15,7 +15,7 @@ units unless a function explicitly says otherwise. Unknown calibration stays unk
 | Dense displacement field | `(Z, Y, X, 3)` | Last axis `(dz, dy, dx)`, backward sampling |
 | Signal CSV | `x, y, z[, gene]` by default | One-based coordinates, written by `FOV.save_spots` |
 
-## Displacement and correction
+## Registration transforms
 
 {func}`starfinder.registration.estimate_transform` accepts finite real ZYX
 arrays and explicit reference/moving `ImageMetadata`. Choose a frozen
@@ -33,11 +33,13 @@ result = estimate_transform(reference, moving, config=TranslationConfig(),
 registered = apply_transform(moving, result.transform, config=result.application_config)
 ```
 
-A `TranslationTransform.correction_zyx` moves content toward larger indices for
-positive components. Pull sampling is `moving[p - correction_zyx]`. A moving
-image displaced by `(1, -2, 3)` therefore gets correction `(-1, 2, -3)`.
-`FOV.registration_results` stores correction transforms. Its MATLAB-compatible
-shift CSV retains detected displacements (the negative correction).
+Every transform is a pull map from reference to moving coordinates
+(`direction="reference_to_moving"`). `TranslationTransform.displacement_zyx` is
+the detected displacement `d` of the moving content: pull sampling is
+`registered[p] = moving[p + displacement_zyx]`, so a moving image displaced by
+`(1, -2, 3)` gets displacement `(1, -2, 3)`. `FOV.registration_results` stores
+these transforms, and its MATLAB-compatible shift CSV holds the same detected
+displacements.
 
 `DenseDisplacementTransform.displacement_zyx` uses
 `registered[p] = moving[p + displacement_zyx[p]]`, in ZYX voxel-index components.
@@ -67,11 +69,11 @@ application also supports singleton axes.
 
 ### Translation edge cases and resampling precision
 
-The FFT estimator still returns integer-valued displacements; these corrections
-do not add subpixel estimation. Singleton axes return zero. For odd length `n`,
+The FFT estimator still returns integer-valued displacements; it does not add
+subpixel estimation. Singleton axes return zero. For odd length `n`,
 a correlation peak at `n//2` is not wrapped. An exact even half-period cannot
-distinguish positive from negative motion: `TranslationConfig(backend="scipy_fft")` reports correction `-n/2`,
-whereas the `skimage` backend retains correction `+n/2`. Both
+distinguish positive from negative motion: `TranslationConfig(backend="scipy_fft")` reports displacement `+n/2`,
+whereas the `skimage` backend retains displacement `-n/2`. Both
 align the periodic interior; their zero-filled boundaries can differ.
 
 Translation application uses exact integer rolling (within its existing `1e-6` voxel

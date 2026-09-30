@@ -32,7 +32,7 @@ def main(output: Path) -> None:
     displacement = (1, -2, 3)
     moving = np.roll(fixed, displacement, axis=(0, 1, 2))
     result = estimate_transform(fixed, moving, config=TranslationConfig(), reference_metadata=ImageMetadata("reference"), moving_metadata=ImageMetadata("moving"))
-    detected = tuple(-x for x in result.transform.correction_zyx)
+    detected = result.transform.displacement_zyx
     assert detected == displacement
     np.testing.assert_array_equal(
         apply_transform(moving, result.transform, config=result.application_config), fixed

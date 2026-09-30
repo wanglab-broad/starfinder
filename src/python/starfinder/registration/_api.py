@@ -88,7 +88,7 @@ def apply_transform(
     Affine and B-spline transforms are applied through their dense() pull
     field with the scipy or simpleitk backend. A TransformChain is resampled
     once at its composite pull points: the translation backend applies only a
-    chain of translations (its summed correction); scipy (linear, plane by
+    chain of translations (its summed displacement); scipy (linear, plane by
     plane) or simpleitk (its pull_field()) sample any chain with their
     boundary policy.
     """
@@ -128,9 +128,10 @@ def apply_transform(
         if config.backend == "translation":
             from ._translation import apply_shift
 
+            # apply_shift moves content by its shift: the negated pull displacement.
             output[..., c] = apply_shift(
                 volume,
-                transform.correction_zyx,
+                tuple(-v for v in transform.displacement_zyx),
                 workers=config.fft_workers,
                 output_dtype=config.output_dtype,
             )

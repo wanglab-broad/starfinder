@@ -12,6 +12,8 @@ neither is accepted yet. Paths are relative to `src/python/starfinder/` unless
 they start with `src/matlab/`, `workflow/` or `docs/`, and line numbers are at
 `2e48d3f`.
 
+Since W-262, `TranslationTransform` stores `displacement_zyx = −correction_zyx`; see "Translation displacement" in {doc}`migration`.
+
 ## Methods
 
 Registration estimates a transform from one reference signal and one moving

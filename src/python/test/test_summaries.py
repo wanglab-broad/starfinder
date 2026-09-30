@@ -136,7 +136,7 @@ def test_result_classes_have_one_line_summaries(tmp_path):
         (fov.decoding_result, "BarcodeDecodingResult: 4 reads — assigned 1, ambiguous 2, unmatched 1"),
         (fov.filtering_result, "ReadFilteringResult: 1 accepted / 4 (25.0%), rejected 3 — call_status 3"),
         (fov.registration_results['round2'][0],
-         "RegistrationResult: translation (scipy_fft), correction_zyx (0, 0, 0)"),
+         "RegistrationResult: translation (scipy_fft), displacement_zyx (0, 0, 0)"),
     ]
     for result, expected in summaries:
         assert repr(result) == expected

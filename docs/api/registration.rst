@@ -2,8 +2,9 @@ starfinder.registration
 =======================
 
 Estimate once, then apply the returned transform with its application config.
-Translations store correction vectors; affine, B-spline and dense transforms are
-pull maps. See :doc:`contracts` and :doc:`backends` for geometry, errors and
+Every transform is a pull map from reference to moving coordinates: translations
+store the detected displacement vector; affine, B-spline and dense transforms
+their matrices, control grids and fields. See :doc:`contracts` and :doc:`backends` for geometry, errors and
 supported dimensions.
 
 :py:class:`~starfinder.registration.RigidConfig`,

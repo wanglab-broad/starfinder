@@ -25,12 +25,12 @@ def case(tmp_path):
     reference[3, 7, 8] = 10
     np.save(inputs / 'reference.npy', reference)
     np.save(inputs / 'moving.npy', np.roll(reference, (1, -2, 1), (0, 1, 2)))
-    (inputs / 'correction.json').write_text('[ -1.0, 2.0, -1.0 ]')
+    (inputs / 'displacement.json').write_text('[ 1.0, -2.0, 1.0 ]')
     return BenchmarkCase('tiny', 'registration', {'reference': 'reference.npy', 'moving': 'moving.npy'},
         {'registration': {'method': 'translation'},
          'reference_metadata': {'frame_id': 'reference'}, 'moving_metadata': {'frame_id': 'moving'},
          'evaluation': {'ncc': True, 'ssim': {'data_range': 10, 'policy': 'mip'},
-                        'translation': {'tolerance': 0.01}}}, truth={'correction': 'correction.json'})
+                        'translation': {'tolerance': 0.01}}}, truth={'displacement': 'displacement.json'})
 
 
 def run(case, tmp_path, **kwargs):
@@ -48,7 +48,7 @@ def test_saved_lifecycle_and_roundtrip(case, tmp_path, monkeypatch):
     assert original == BenchmarkTrialResult.from_dict(original).to_dict()
     assert case == BenchmarkCase.from_dict(case.to_dict())
     transform = read(root / 'tiny/0000/transform.json')
-    assert transform['correction_zyx'] == [-1.0, 2.0, -1.0]
+    assert transform['displacement_zyx'] == [1.0, -2.0, 1.0]
     assert transform['reference_metadata']['spacing_zyx'] is None
     for key in ('wall', 'cpu', 'python_peak_allocation'):
         assert original['resources'][key]['value'] >= 0
@@ -131,7 +131,7 @@ def test_failures_fallback_and_undefined(case, tmp_path):
 
 
 def test_evaluation_failure_is_distinct(case, tmp_path):
-    (tmp_path / 'inputs/correction.json').write_text('[1, 2]')
+    (tmp_path / 'inputs/displacement.json').write_text('[1, 2]')
     root = run(case, tmp_path)
     result = read(evaluate_benchmark(root) / 'results.json')[0]
     assert result['status'] == {'processing': 'success', 'evaluation': 'failed'}
@@ -146,12 +146,12 @@ def test_float_transform_and_dense_artifacts(case, tmp_path, monkeypatch):
     import starfinder.registration as registration
     metadata = ImageMetadata('reference', spacing_zyx=(2, 1, 1))
     config = TranslationConfig()
-    transform = TranslationTransform((0.125, -0.75, 1.5), (8, 16, 16), (8, 16, 16), metadata, metadata)
+    transform = TranslationTransform((-0.125, 0.75, -1.5), (8, 16, 16), (8, 16, 16), metadata, metadata)
     monkeypatch.setattr(registration, 'estimate_transform', lambda *a, **k:
         RegistrationResult(transform, RegistrationDiagnostics('translation', 'fixture', config), WarpConfig(output_dtype='float32')))
     root = run(case, tmp_path)
     saved = read(root / 'tiny/0000/transform.json')
-    assert saved['correction_zyx'] == [0.125, -0.75, 1.5]
+    assert saved['displacement_zyx'] == [-0.125, 0.75, -1.5]
     assert saved['reference_metadata']['spacing_zyx'] == [2, 1, 1]
     transform = DenseDisplacementTransform(np.full((8, 16, 16, 3), 0.25, dtype=np.float32),
         (8, 16, 16), (8, 16, 16), metadata, metadata)

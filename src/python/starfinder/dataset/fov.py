@@ -106,7 +106,7 @@ def _check_qc(qc, config, transform):
               ('max_fold_fraction', qc.details['transform'].get('fold_fraction'), config.max_fold_fraction,
                lambda v, b: v > b),
               ('max_translation_voxels',
-               float(np.linalg.norm(transform.correction_zyx)) if isinstance(transform, TranslationTransform) else None,
+               float(np.linalg.norm(transform.displacement_zyx)) if isinstance(transform, TranslationTransform) else None,
                config.max_translation_voxels, lambda v, b: v > b)]
     for criterion, value, bound, fails in checks:
         if bound is not None and value is not None and fails(value, bound):
@@ -757,7 +757,7 @@ class FOV:
                 continue
             for result in results:
                 if isinstance(result.transform, TranslationTransform):
-                    dz, dy, dx = (-v for v in result.transform.correction_zyx)
+                    dz, dy, dx = result.transform.displacement_zyx
                     rows.append(dict(fov_id=self.fov_id, round=name, row=dy, col=dx, z=dz))
         path = self.paths.shift_log(suffix)
         path.parent.mkdir(parents=True, exist_ok=True)

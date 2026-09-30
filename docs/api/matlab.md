@@ -105,7 +105,7 @@ is implied by this reference.
 | Preview | {mat:func}`MakeProjections`, {mat:func}`MakeMontage`, {mat:func}`PlotCentroids` | [FOV output and preview methods](generated/starfinder.dataset.FOV.rst); no direct exported montage helper |
 
 MATLAB passes the correction parameters from `DFTRegister3D` directly to
-`DFTApply3D` in `(row, column, Z)` order. Python `estimate_transform` returns the correction in `(dz, dy, dx)` order; `apply_transform` applies it directly to correct alignment. Never transfer a shift vector without checking
+`DFTApply3D` in `(row, column, Z)` order. Python `estimate_transform` returns the detected displacement in `(dz, dy, dx)` order, the negated MATLAB correction; `apply_transform` applies it directly to correct alignment. Never transfer a shift vector without checking
 both axis order and sign. See [Python contracts](contracts.md).
 
 ## Runtime requirements and validation limits

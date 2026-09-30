@@ -27,8 +27,8 @@ REF = ImageMetadata("reference")
 MOV = ImageMetadata("moving")
 
 
-def translation(correction, shape):
-    return TranslationTransform(correction, shape, shape, REF, MOV)
+def translation(displacement, shape):
+    return TranslationTransform(displacement, shape, shape, REF, MOV)
 
 
 def ramp_pair(shape, dy):
@@ -41,7 +41,7 @@ def ramp_pair(shape, dy):
 
 def test_translation_qc_on_matched_domains():
     reference, moving = ramp_pair((1, 32, 32), 5)
-    transform = translation((0, -5, 0), (1, 32, 32))
+    transform = translation((0, 5, 0), (1, 32, 32))
     after = apply_transform(moving, transform, config=WarpConfig())
     qc = registration_qc(reference, moving, after, transform)
     assert qc.values["coverage"] == 27 / 32
@@ -58,7 +58,7 @@ def test_translation_qc_on_matched_domains():
     assert qc.values["ssim_before"] < qc.values["ssim_after"]
     assert qc.config["data_range"] == 25.0  # X from 3 to 28 on the eroded columns
     assert qc.status == "ok" and qc.reasons == {}
-    assert qc.details["transform"] == {"kind": "translation", "correction_zyx": [0.0, -5.0, 0.0]}
+    assert qc.details["transform"] == {"kind": "translation", "displacement_zyx": [0.0, 5.0, 0.0]}
     assert qc.details["optimizer"] is None and "projections" not in qc.details
 
 
@@ -66,21 +66,21 @@ def test_undefined_qc_values_are_none_with_a_reason():
     # A constant moving signal: NCC is undefined on both sides.
     reference, _ = ramp_pair((1, 32, 32), 5)
     moving = np.full((1, 32, 32), 7.0)
-    transform = translation((0, -5, 0), (1, 32, 32))
+    transform = translation((0, 5, 0), (1, 32, 32))
     qc = registration_qc(reference, moving, apply_transform(moving, transform, config=WarpConfig()), transform)
     assert qc.values["ncc_before"] is None and qc.values["ncc_after"] is None and qc.values["ncc_gain"] is None
     assert qc.reasons["ncc_after"] == "constant signal over the valid overlap"
     assert qc.values["coverage"] == 27 / 32 and qc.status == "undefined"
     # A signal smaller than the 7x7 window: SSIM is undefined.
     reference, moving = ramp_pair((1, 6, 6), 1)
-    transform = translation((0, -1, 0), (1, 6, 6))
+    transform = translation((0, 1, 0), (1, 6, 6))
     qc = registration_qc(reference, moving, apply_transform(moving, transform, config=WarpConfig()), transform)
     assert qc.values["ssim_before"] is None and qc.values["ssim_after"] is None
     assert qc.reasons["ssim_after"] == "Y or X is smaller than the 7x7 window"
     assert qc.values["coverage"] == 5 / 6 and abs(qc.values["ncc_after"] - 1) <= 1e-12
-    # A correction larger than the grid: no valid overlap.
+    # A displacement larger than the grid: no valid overlap.
     reference, moving = ramp_pair((1, 32, 32), 5)
-    qc = registration_qc(reference, moving, np.zeros_like(moving), translation((0, -40, 0), (1, 32, 32)))
+    qc = registration_qc(reference, moving, np.zeros_like(moving), translation((0, 40, 0), (1, 32, 32)))
     assert qc.values["coverage"] == 0
     assert qc.values["ncc_before"] is None and qc.values["ncc_after"] is None
     assert qc.values["ssim_before"] is None and qc.values["ssim_after"] is None

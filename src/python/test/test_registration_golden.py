@@ -106,8 +106,8 @@ def run(tmp_path, methods, **options):
     transforms = []
     for result in fov.registration_results["round2"]:
         transform = result.transform
-        if hasattr(transform, "correction_zyx"):
-            transforms.append(("translation", transform.correction_zyx))
+        if result.diagnostics.method == "translation":
+            transforms.append(("translation", transform.displacement_zyx))
         else:
             transforms.append((result.diagnostics.method, digest(transform.displacement_zyx)))
     return {"images": {name: digest(image) for name, image in fov.images.items()},
@@ -118,14 +118,14 @@ PINNED_INPUTS = {
     "round1": "f6772a500ecc9fcbe57e983c813f58a5ce2b7264b26bff97f189f33fa6edac32",
     "round2": "ea6e8746ad03f4e958ac89ebff53b42749a4c4b8ac2357a75ab0fdb5e2d4f7a1",
 }
-# Pull source index = reference index - correction. The Y correction is -4, not
-# -3: near the centre the bump adds up to 1.5 voxels to the 3-voxel shift. The
+# Pull source index = reference index + displacement. The Y displacement is 4, not
+# 3: near the centre the bump adds up to 1.5 voxels to the 3-voxel shift. The
 # reference round is never transformed.
 PINNED_RUNS = {
     ("translation",): {
         "images": {"round1": PINNED_INPUTS["round1"],
                    "round2": "74c50550ff358c3f51f60a678ce14e7b0c8f9647966a7e7a7506f633afa47ba9"},
-        "transforms": [("translation", (-1.0, -4.0, 2.0))],
+        "transforms": [("translation", (1.0, 4.0, -2.0))],
     },
     ("translation", "demons"): {
         "images": {"round1": PINNED_INPUTS["round1"],
@@ -134,7 +134,7 @@ PINNED_RUNS = {
                    # confirmed by Jiahao on 2026-09-30.
                    "round2": "aee3f8c33c613371790fdf1e83e9f7431538c6c64b820a75eba735eb5c224697"},
         "transforms": [
-            ("translation", (-1.0, -4.0, 2.0)),
+            ("translation", (1.0, 4.0, -2.0)),
             ("demons", "54ff31f9a458cc255f7b4a2d19b9703a6eb6ed9d22b1f3209734f4cb3dc04968"),
         ],
     },

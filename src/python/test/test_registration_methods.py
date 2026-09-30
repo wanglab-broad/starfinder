@@ -373,8 +373,7 @@ def test_small_z_and_dimension_rules(config, z, monkeypatch):
     result = estimate(reference, moving, config)
     transform = result.transform
     u = (transform.dense().displacement_zyx if hasattr(transform, "dense") else
-         np.broadcast_to(-np.asarray(transform.correction_zyx), (z, 32, 32, 3))
-         if hasattr(transform, "correction_zyx") else transform.displacement_zyx)
+         np.broadcast_to(np.asarray(transform.displacement_zyx), (z, 32, 32, 3)))
     assert u.shape == (z, 32, 32, 3) and np.isfinite(u).all()
     if z == 1:
         assert np.all(u[..., 0] == 0)

@@ -426,7 +426,7 @@ def _run_nuclei_registration(snakemake):
     Loads each additional round with its channel_order and rotates it by
     rotate_angle; reads the reference round's ch04 image, rotated the same
     way, as an ExternalReference; registers each round by one translation
-    step on its shared stain and transfers the correction to all its
+    step on its shared stain and transfers the transform to all its
     channels. Writes the MATLAB names: log/<fov>_nr.txt (the attempts),
     log/gr_shifts/<fov>_nr.txt and images/<round>/<channel name>/<fov>.tif
     (ZYX, or the Z maximum YX with maximum_projection), keeping the dtype.

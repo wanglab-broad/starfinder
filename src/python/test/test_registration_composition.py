@@ -11,9 +11,9 @@ from scipy.ndimage import map_coordinates
 
 from starfinder.dataset import Dataset, PipelineConfig, RegistrationRecipe, RegistrationStep, RoundState
 from starfinder.image import ImageMetadata, IncompatibleGeometryError
-from starfinder.registration import (AffineConfig, AffineTransform, DemonsConfig, DenseDisplacementTransform,
-    TransformChain, TranslationConfig, TranslationTransform, UnsupportedTransformOperationError, WarpConfig,
-    apply_transform)
+from starfinder.registration import (AffineConfig, AffineTransform, BSplineTransform, DemonsConfig,
+    DenseDisplacementTransform, TransformChain, TranslationConfig, TranslationTransform,
+    UnsupportedTransformOperationError, WarpConfig, apply_transform)
 from starfinder.registration._elastix import _index_matrix
 
 TOLERANCE = 1e-12
@@ -31,8 +31,8 @@ def affine(a, b, shape):
     return AffineTransform(matrix, **geometry(shape))
 
 
-def translation(correction, shape):
-    return TranslationTransform(correction, **geometry(shape))
+def translation(displacement, shape):
+    return TranslationTransform(displacement, **geometry(shape))
 
 
 def assert_field_at(chain, table):
@@ -47,7 +47,7 @@ def assert_field_at(chain, table):
 
 def test_translation_then_affine_pull_field():
     shape = (8, 32, 32)
-    first = translation((-1, -4, 2), shape)
+    first = translation((1, 4, -2), shape)
     second = affine([[1, 0, 0], [0, 1, 0.1], [0, 0, 1]], (0, 0.5, 0), shape)
     field = assert_field_at(TransformChain((first, second)), {(0, 0, 0): (1, 4.5, -2), (2, 10, 20): (1, 6.5, -2)})
     z, y, x = np.indices(shape)
@@ -79,7 +79,7 @@ def test_affine_then_dense_pull_field():
 
 def test_z1_translation_then_affine_pull_field():
     shape = (1, 32, 32)
-    first = translation((0, -3, 1), shape)
+    first = translation((0, 3, -1), shape)
     second = affine([[1, 0, 0], [0, 0.98, 0.05], [0, -0.05, 0.98]], (0, 0.2, -0.4), shape)
     field = assert_field_at(TransformChain((first, second)),
                             {(0, 0, 0): (0, 3.2, -1.4), (0, 10, 20): (0, 4.0, -2.3), (0, 31, 0): (0, 2.58, -2.95)})
@@ -107,11 +107,31 @@ def test_physical_rigid_to_index_matrix():
     assert_field_at(chain, {(4, 10, 20): expected @ (4, 10, 20) - (4, 10, 20)})
 
 
+def test_every_transform_pulls_from_reference_to_moving():
+    """Every transform type reports reference_to_moving; a translation with displacement d pulls from p + d."""
+    shape, d = (4, 8, 8), (1.0, -2.0, 3.0)
+    t = translation(d, shape)
+    bspline = BSplineTransform((4, 4, 4), (0.0, 0.0, 0.0), (3.0, 3.0, 2.0), tuple(np.eye(3).ravel()),
+                               np.zeros((3, 4, 4, 4)), (1.0, 1.0, 1.0), **geometry(shape))
+    for transform in (t, affine(np.eye(3), (0, 0, 0), shape), bspline,
+                      DenseDisplacementTransform(np.zeros((*shape, 3)), **geometry(shape)), TransformChain((t,))):
+        assert transform.direction == "reference_to_moving"
+    field = TransformChain((t,)).pull_field().displacement_zyx
+    np.testing.assert_array_equal(field, np.broadcast_to(d, (*shape, 3)))
+    # A ramp that is unique per voxel: the resampled ramp is the exact shift, zero where p + d leaves the grid.
+    ramp = np.arange(np.prod(shape), dtype=np.float64).reshape(shape)
+    expected = np.zeros(shape)
+    expected[:3, 2:, :5] = ramp[1:, :6, 3:]
+    np.testing.assert_array_equal(apply_transform(ramp, t, config=WarpConfig()), expected)
+    np.testing.assert_array_equal(apply_transform(ramp, TransformChain((t,)), config=WarpConfig(backend="scipy")),
+                                  expected)
+
+
 def test_a_chain_of_translations_reduces_to_one_translation():
     shape = (4, 8, 8)
-    chain = TransformChain((translation((1, -2, 0.5), shape), translation((-1, 3, 1), shape)))
-    assert chain.translation().correction_zyx == (0.0, 1.0, 1.5)
-    assert TransformChain((translation((1, 0, 0), shape), affine(np.eye(3), (0, 0, 0), shape))).translation() is None
+    chain = TransformChain((translation((-1, 2, -0.5), shape), translation((1, -3, -1), shape)))
+    assert chain.translation().displacement_zyx == (0.0, -1.0, -1.5)
+    assert TransformChain((translation((-1, 0, 0), shape), affine(np.eye(3), (0, 0, 0), shape))).translation() is None
     with pytest.raises(IncompatibleGeometryError, match="one grid shape"):
         TransformChain((translation((0, 0, 0), shape), translation((0, 0, 0), (4, 8, 9))))
     with pytest.raises(UnsupportedTransformOperationError, match="nonempty"):
@@ -121,14 +141,14 @@ def test_a_chain_of_translations_reduces_to_one_translation():
 def test_the_translation_backend_applies_only_chains_of_translations():
     shape = (4, 8, 8)
     image = np.arange(4 * 8 * 8, dtype=np.uint16).reshape(shape)
-    shift = TransformChain((translation((1, -2, 0), shape), translation((0, 1, 1), shape)))
+    shift = TransformChain((translation((-1, 2, 0), shape), translation((0, -1, -1), shape)))
     np.testing.assert_array_equal(apply_transform(image, shift, config=WarpConfig()),
-                                  apply_transform(image, translation((1, -1, 1), shape), config=WarpConfig()))
+                                  apply_transform(image, translation((-1, 1, -1), shape), config=WarpConfig()))
     # A dense backend samples a chain of translations with its own boundary policy.
     nearest = apply_transform(image, shift, config=WarpConfig(backend="scipy", boundary_mode="nearest"))
     z, y, x = np.indices(shape)
     np.testing.assert_array_equal(nearest, image[np.clip(z - 1, 0, 3), np.clip(y + 1, 0, 7), np.clip(x - 1, 0, 7)])
-    mixed = TransformChain((translation((1, 0, 0), shape), affine(np.eye(3), (0, 0, 0), shape)))
+    mixed = TransformChain((translation((-1, 0, 0), shape), affine(np.eye(3), (0, 0, 0), shape)))
     with pytest.raises(UnsupportedTransformOperationError, match="translation backend"):
         apply_transform(image, mixed, config=WarpConfig())
 
@@ -136,7 +156,7 @@ def test_the_translation_backend_applies_only_chains_of_translations():
 # --- One final resampling -------------------------------------------------------------------
 
 SHAPE = (8, 32, 32)
-CORRECTION = (-1.0, -4.0, 2.0)
+DISPLACEMENT = (1.0, 4.0, -2.0)
 A = np.array([[1.0, 0.0, 0.0], [0.013, 0.97, 0.061], [0.0, -0.047, 1.029]])
 B = np.array([0.0, 0.37, -0.23])
 
@@ -157,7 +177,7 @@ def test_integer_translation_does_not_quantize_a_later_affine_step(tmp_path, mon
         shape = dict(reference_shape_zyx=reference.shape, moving_shape_zyx=moving.shape,
                      reference_metadata=reference_metadata, moving_metadata=moving_metadata)
         if isinstance(config, TranslationConfig):
-            transform = TranslationTransform(CORRECTION, **shape)
+            transform = TranslationTransform(DISPLACEMENT, **shape)
         else:
             matrix = np.eye(4)
             matrix[:3, :3], matrix[:3, 3] = A, B
@@ -177,9 +197,9 @@ def test_integer_translation_does_not_quantize_a_later_affine_step(tmp_path, mon
         (RegistrationStep(TranslationConfig()), RegistrationStep(AffineConfig())))))
     registered = fov.images["round2"]
     assert fov.registration_record["application"]["round2"] == WarpConfig(backend="scipy")
-    # The analytic composite pull points Phi(p) = A p + b - c, sampled once and cast once.
+    # The analytic composite pull points Phi(p) = A p + b + d, sampled once and cast once.
     z, y, x = np.indices(SHAPE, dtype=np.float64)
-    points = np.stack([A[i, 0] * z + A[i, 1] * y + A[i, 2] * x + B[i] - CORRECTION[i] for i in range(3)])
+    points = np.stack([A[i, 0] * z + A[i, 1] * y + A[i, 2] * x + B[i] + DISPLACEMENT[i] for i in range(3)])
     expected = np.stack([map_coordinates(original[..., c], points, order=1, mode="constant", cval=0,
                                          output=np.float64) for c in range(2)], axis=-1)
     expected = np.clip(np.rint(expected), 0, 65535).astype(np.uint16)

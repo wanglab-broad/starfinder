@@ -141,7 +141,7 @@ file names:
   folder), rotated by `rotate_angle`; the stain is the one channel whose
   `name` contains the top-level `ref_channel`, as MATLAB matches it;
 - it registers each round by one translation step on its stain and applies the
-  correction to all of the round's channels;
+  transform to all of the round's channels;
 - it writes `log/<fov>_nr.txt` (the registration attempts as JSON, where MATLAB
   writes its console log), `log/gr_shifts/<fov>_nr.txt` (`fov_id, round, row,
   col, z`) and `images/<round>/<channel name>/<fov>.tif` (ZYX, or the Z maximum

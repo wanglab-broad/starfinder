@@ -224,11 +224,11 @@ def evaluate_registration(ref, before, after, *, reference_spots, before_spots, 
 
 def _pull_displacement(transform):
     """Pull displacement u (ZYX3, float64) of a translation, affine, B-spline, dense or chain-like transform."""
-    if hasattr(transform, "correction_zyx"):
-        shape = tuple(transform.reference_shape_zyx)
-        return np.broadcast_to(-np.asarray(transform.correction_zyx, dtype=np.float64), (*shape, 3))
     if hasattr(transform, "displacement_zyx"):
-        return np.asarray(transform.displacement_zyx, dtype=np.float64)
+        u = np.asarray(transform.displacement_zyx, dtype=np.float64)
+        if u.shape == (3,):  # a translation: one displacement for every voxel
+            return np.broadcast_to(u, (*tuple(transform.reference_shape_zyx), 3))
+        return u
     if hasattr(transform, "dense"):
         return np.asarray(transform.dense().displacement_zyx, dtype=np.float64)
     if hasattr(transform, "pull_field"):
@@ -272,8 +272,8 @@ def _rotation_angle(physical):
 
 
 def _transform_summary(transform, u):
-    if hasattr(transform, "correction_zyx"):
-        return {"kind": "translation", "correction_zyx": [float(v) for v in transform.correction_zyx]}
+    if isinstance(getattr(transform, "displacement_zyx", None), tuple):
+        return {"kind": "translation", "displacement_zyx": [float(v) for v in transform.displacement_zyx]}
     if hasattr(transform, "matrix_zyx"):
         a, b = transform.matrix_zyx[:3, :3], transform.matrix_zyx[:3, 3]
         det = float(np.linalg.det(a))
@@ -311,7 +311,7 @@ def registration_qc(reference, before, after, transform, *, config=None, diagnos
     (YX positions valid in every plane) eroded by 3 pixels, with data_range
     the maximum minus the minimum of the reference projection there. Every
     undefined value is None with a reason. details holds the transform
-    summary (translation: the correction; affine: A, b, det A with a
+    summary (translation: the displacement; affine: A, b, det A with a
     reflection_or_collapse flag for det A <= 0, the largest singular value of
     A - I and, for rigid, the rotation angle in radians; B-spline and dense:
     displacement statistics and the fold fraction), the optimizer

@@ -65,11 +65,12 @@ def _save_array(root, directory, name, value):
 
 
 def _save_transform(root, directory, name, result, artifacts):
-    """Persist a registration result without copying a dense field in asdict."""
+    """Persist a registration result without copying a dense field in asdict; a translation stays inline."""
     from dataclasses import asdict
+    from starfinder.registration import TranslationTransform
     transform = result.transform
-    arrays = {'displacement_zyx': ('field', 'displacement_artifact'),
-              'coefficients': ('coefficients', 'coefficients_artifact')}
+    arrays = {} if isinstance(transform, TranslationTransform) else {
+        'displacement_zyx': ('field', 'displacement_artifact'), 'coefficients': ('coefficients', 'coefficients_artifact')}
     record = {k: v for k, v in vars(transform).items() if k not in arrays and not k.startswith('_')}
     for key in ('reference_metadata', 'moving_metadata'):
         record[key] = asdict(record[key])

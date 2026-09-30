@@ -22,6 +22,7 @@ from starfinder.registration import (AffineConfig, BSplineConfig, DemonsConfig, 
     RigidConfig, TpsConfig, TranslationConfig, TranslationTransform, WarpConfig, apply_transform,
     estimate_transform)
 from starfinder.registration._chain import transform_kind
+from starfinder.registration._translation import apply_shift
 
 from .test_registration_golden import fixture_rounds
 
@@ -237,7 +238,7 @@ def test_the_default_qc_config_rejects_nothing(tmp_path):
     fov = small_fov(tmp_path, *shifted_rounds())
     fov.register(RegistrationRecipe((TRANSLATION,)))
     estimation, application = fov.registration_attempts["round2"]
-    assert fov.registration_results["round2"][0].transform.correction_zyx == (0.0, 0.0, -5.0)
+    assert fov.registration_results["round2"][0].transform.displacement_zyx == (0.0, 0.0, 5.0)
     assert estimation["outcome"] == "succeeded" and estimation["qc"]["values"]["coverage"] == 27 / 32
     assert estimation["qc"]["counts"] == {"total": 4 * 32 * 32, "valid": 4 * 32 * 27, "valid_columns": 32 * 27,
                                           "ssim_columns": estimation["qc"]["counts"]["ssim_columns"]}
@@ -313,7 +314,7 @@ def fixed_estimates(monkeypatch, captured, *, fail=()):
         geometry = dict(reference_shape_zyx=reference.shape, moving_shape_zyx=moving.shape,
                         reference_metadata=reference_metadata, moving_metadata=moving_metadata)
         if config.method == "translation":
-            transform = TranslationTransform((0, -4, 0), **geometry)
+            transform = TranslationTransform((0, 4, 0), **geometry)
         else:
             matrix = np.eye(4)
             matrix[1, 2], matrix[2, 3] = 0.02, 0.3
@@ -361,7 +362,7 @@ def test_a_recovered_chain_of_translations_uses_the_recipe_warp(tmp_path, monkey
     step = RegistrationStep(AffineConfig(), recovery=RecoveryConfig((RegistrationEstimationError,), (TranslationConfig(),)))
     fov.run(PipelineConfig(registration=RegistrationRecipe((step,), warp=warp)))
     assert [a["outcome"] for a in fov.registration_attempts["round2"]] == ["failed", "succeeded", "succeeded"]
-    assert fov.registration_chains["round2"].translation().correction_zyx == (0.0, -4.0, 0.0)
+    assert fov.registration_chains["round2"].translation().displacement_zyx == (0.0, 4.0, 0.0)
     y = np.minimum(np.arange(32) + 4, 31)
     np.testing.assert_array_equal(fov.images["round2"], moving[:, y])
 
@@ -385,6 +386,7 @@ RECIPES = {
     "affine": ((AffineConfig(),), ["affine"]),
     "bspline": ((BSplineConfig(),), ["bspline"]),
     "dense": ((DemonsConfig(iterations=(20, 10)),), ["dense"]),
+    "translation-affine": ((TranslationConfig(), AffineConfig()), ["translation", "affine"]),
     "chain": ((TranslationConfig(), RigidConfig(), BSplineConfig()), ["translation", "affine", "bspline"]),
 }
 
@@ -406,6 +408,12 @@ def test_registered_checkpoint_reapplies_identically(tmp_path, kind, z1):
     reloaded = fov.dataset.fov("FOV_001").load_checkpoint("registered")
     chain, original = reloaded.registration_chains["round2"], fov.registration_chains["round2"]
     assert [transform_kind(t) for t in chain.transforms] == kinds
+    for entry, transform in zip(header["transforms"]["round2"], original.transforms):
+        assert entry["transform"]["direction"] == "reference_to_moving"
+        if isinstance(transform, TranslationTransform):
+            assert entry["transform"]["displacement_zyx"] == list(transform.displacement_zyx)
+    assert [t for t in chain.transforms if isinstance(t, TranslationTransform)] == [
+        t for t in original.transforms if isinstance(t, TranslationTransform)]
     np.testing.assert_array_equal(chain.pull_field().displacement_zyx, original.pull_field().displacement_zyx)
     warp = reloaded.registration_record["application"]["round2"]
     assert warp == fov.registration_record["application"]["round2"]
@@ -422,7 +430,10 @@ def test_registered_checkpoint_reapplies_identically(tmp_path, kind, z1):
 
 
 def write_version_1(directory, header, registration_results):
-    """The registered header writer of the start revision (5f828e2), copied: version 1, per-result application_config."""
+    """The registered header writer of the start revision (5f828e2), copied: version 1, per-result application_config.
+
+    Version 1 stores a translation as its correction c = -displacement, labelled moving_to_reference.
+    """
     directory = Path(directory) / "registered"
     transforms = {}
     for name, results in registration_results.items():
@@ -439,7 +450,8 @@ def write_version_1(directory, header, registration_results):
             data = {key: getattr(transform, key) for key in ("reference_shape_zyx", "moving_shape_zyx",
                     "reference_metadata", "moving_metadata", "direction", "units")}
             if isinstance(transform, TranslationTransform):
-                data.update(kind="translation", correction_zyx=transform.correction_zyx)
+                data.update(kind="translation", direction="moving_to_reference",
+                            correction_zyx=tuple(-v for v in transform.displacement_zyx))
             else:
                 data.update(kind="dense", field=field_name)
             entries.append(dict(transform=data, diagnostics=r.diagnostics, application_config=r.application_config))
@@ -467,6 +479,16 @@ def test_version_1_registered_checkpoints_still_load_as_sequential(tmp_path):
     loaded = read_checkpoint(directory, "registered")
     restored = loaded["registration_results"]["round2"]
     assert restored[0] == translation
+    (saved, _) = json.loads((directory / "registered" / "transforms.json").read_text())["transforms"]["round2"]
+    correction = saved["transform"]["correction_zyx"]
+    assert correction == [-1.0, -4.0, 2.0]
+    assert restored[0].transform.displacement_zyx == tuple(-c for c in correction)
+    assert restored[0].transform.direction == "reference_to_moving"
+    # The loaded translation re-applies identically, also to the start revision's shift by the stored correction.
+    reapplied = apply_transform(moving, restored[0].transform, config=restored[0].application_config)
+    np.testing.assert_array_equal(reapplied, apply_transform(moving, translation.transform,
+                                                             config=translation.application_config))
+    np.testing.assert_array_equal(reapplied, apply_shift(moving, correction))
     np.testing.assert_array_equal(restored[1].transform.displacement_zyx, dense.transform.displacement_zyx)
     assert restored[1].transform.displacement_zyx.dtype == dense.transform.displacement_zyx.dtype
     assert restored[1].diagnostics == dense.diagnostics

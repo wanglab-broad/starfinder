@@ -80,14 +80,14 @@ class TransformChain:
     def translation(self):
         """The one TranslationTransform a chain of translations reduces to, else None.
 
-        Its correction is the sum of the corrections, in step order.
+        Its displacement is the sum of the displacements, in step order.
         """
         if not all(isinstance(t, TranslationTransform) for t in self.transforms):
             return None
-        correction = np.zeros(3)
+        displacement = np.zeros(3)
         for t in self.transforms:
-            correction = correction + np.asarray(t.correction_zyx, dtype=np.float64)
-        return TranslationTransform(tuple(correction), self.reference_shape_zyx, self.moving_shape_zyx,
+            displacement = displacement + np.asarray(t.displacement_zyx, dtype=np.float64)
+        return TranslationTransform(tuple(displacement), self.reference_shape_zyx, self.moving_shape_zyx,
                                     self.reference_metadata, self.moving_metadata)
 
     def _last_field(self):
@@ -118,7 +118,7 @@ class TransformChain:
             earlier = self.transforms
         for transform in reversed(earlier):
             if isinstance(transform, TranslationTransform):
-                q = q - np.asarray(transform.correction_zyx, dtype=np.float64)[:, None, None]
+                q = q + np.asarray(transform.displacement_zyx, dtype=np.float64)[:, None, None]
             else:
                 q = _affine(transform.matrix_zyx, q)
         return q
@@ -140,7 +140,7 @@ def resample(images, chain, config):
     """Resample each ZYX(C) image once through chain with WarpConfig config; one output per image.
 
     The translation backend (exact integer shift or Fourier shift of the
-    summed correction, constant zero fill) applies only chains of
+    summed displacement, constant zero fill) applies only chains of
     translations. scipy (linear map_coordinates in float64, plane by plane:
     the pull points of one Z plane are computed once and every channel of
     every image is sampled at them) and simpleitk (linear, on the composite
@@ -160,9 +160,11 @@ def resample(images, chain, config):
     if config.backend == "translation":
         from ._translation import apply_shift
 
+        # apply_shift moves content by its shift: the negated pull displacement.
+        shift = tuple(-v for v in translation.displacement_zyx)
         for channels, output in stacks:
             for c in range(channels.shape[-1]):
-                output[..., c] = apply_shift(channels[..., c], translation.correction_zyx,
+                output[..., c] = apply_shift(channels[..., c], shift,
                                              workers=config.fft_workers, output_dtype=config.output_dtype)
     elif config.backend == "scipy":
         for z in range(chain.reference_shape_zyx[0]):

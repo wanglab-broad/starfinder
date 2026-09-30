@@ -205,7 +205,7 @@ class RegistrationQcConfig:
     min_ncc_gain the smallest NCC gain (after minus before);
     max_fold_fraction the largest fraction in [0, 1] of voxels with
     det(I + grad u) <= 0; max_translation_voxels the largest translation
-    correction norm in voxels. projections returns the reference, before and
+    displacement norm in voxels. projections returns the reference, before and
     after Z maximum projections from registration_qc for overlays.
     """
 

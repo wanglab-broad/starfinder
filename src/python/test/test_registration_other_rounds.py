@@ -5,7 +5,7 @@ textures (sums of Gaussian blobs), so every image is known analytically: the
 reference round1 with the stain in ch04, the sequencing round2, and the other
 round morph with the stain in ch00 and two further channels. morph is the
 truth displaced by d = (0, 3, -2): morph(q) = truth(q - d), so the pull map is
-p + d and the translation correction is -d = (0, -3, 2). The local fixture adds
+p + d, the translation's displacement. The local fixture adds
 a Gaussian displacement of magnitude 2 voxels to that pull map.
 """
 import hashlib
@@ -122,7 +122,7 @@ def test_a_shared_stain_registers_an_other_round_and_transfers_the_transform(tmp
     fov, truth, _ = other_round_fov(tmp_path)
     before = {name: fov.images[name].copy() for name in ("round1", "round2")}
     fov.register_rounds(TRANSLATION, rounds=["morph"])
-    assert fov.registration_results["morph"][0].transform.correction_zyx == (0.0, -3.0, 2.0)
+    assert fov.registration_results["morph"][0].transform.displacement_zyx == (0.0, 3.0, -2.0)
     registered = fov.images["morph"]
     assert registered.dtype == np.uint16 and registered.shape == SHAPE + (3,)
     for c in range(3):
@@ -139,7 +139,7 @@ def test_an_external_reference_gives_the_same_result(tmp_path):
     reference = external(fov)
     fov.register_rounds(TRANSLATION, rounds=["morph"], reference=reference)
     expected, actual = by_round.registration_chains["morph"], fov.registration_chains["morph"]
-    assert [t.correction_zyx for t in actual.transforms] == [t.correction_zyx for t in expected.transforms]
+    assert [t.displacement_zyx for t in actual.transforms] == [t.displacement_zyx for t in expected.transforms]
     assert actual.transforms == expected.transforms
     assert np.array_equal(actual.pull_field().displacement_zyx, expected.pull_field().displacement_zyx)
     assert np.array_equal(fov.images["morph"], by_round.images["morph"])

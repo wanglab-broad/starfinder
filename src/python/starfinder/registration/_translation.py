@@ -167,5 +167,5 @@ def estimate_translation(reference, moving, config, geometry):
         from ._skimage_backend import phase_correlate_skimage
 
         shift = phase_correlate_skimage(reference, moving)
-    transform = TranslationTransform(tuple(-s for s in shift), **geometry)
+    transform = TranslationTransform(shift, **geometry)
     return transform, config.backend, WarpConfig(fft_workers=config.fft_workers)

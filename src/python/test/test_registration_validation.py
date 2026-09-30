@@ -121,7 +121,7 @@ def digests(fov):
     for index, result in enumerate(fov.registration_results["moving"]):
         transform, h = result.transform, hashlib.sha256()
         if isinstance(transform, TranslationTransform):
-            h.update(np.asarray(transform.correction_zyx, dtype=np.float64).tobytes())
+            h.update(np.asarray(transform.displacement_zyx, dtype=np.float64).tobytes())
         elif isinstance(transform, AffineTransform):
             h.update(transform.matrix_zyx.tobytes())
         elif isinstance(transform, BSplineTransform):
@@ -144,8 +144,8 @@ TRANSLATION_CASES = [("small", (2.0, -3.0, 4.0)), ("small", (0.0, -3.0, 4.0)), (
 # 2026-09-30, confirmed by Jiahao on 2026-09-30). The bound is not loosened: the gate is still asserted, and a case
 # that starts passing fails the run (strict).
 KNOWN_MISSES = {
-    ("small", (2.0, -3.0, 4.0), 101): "measured correction (-1, 3, -4), expected (-2, 3, -4): Z misses by one voxel",
-    ("z1", (0.0, -3.0, 4.0), 100): "measured correction (0, 2, -4), expected (0, 3, -4): Y misses by one voxel",
+    ("small", (2.0, -3.0, 4.0), 101): "measured displacement (1, -3, 4), expected (2, -3, 4): Z misses by one voxel",
+    ("z1", (0.0, -3.0, 4.0), 100): "measured displacement (0, -2, 4), expected (0, -3, 4): Y misses by one voxel",
 }
 
 
@@ -160,22 +160,22 @@ def translation_params():
 
 
 def translation_pair(size, translation, seed):
-    """(reference ch00, moving ch00, correction) of a V1 pair; the correction -t pulls from F(p) = p + t."""
+    """(reference ch00, moving ch00, displacement) of a V1 pair; the displacement t pulls from F(p) = p + t."""
     shape = DEVELOPMENT_SIZES[size]
     reference, moving, truth = pair(shape, seed, geometry=translation_geometry(translation))
     np.testing.assert_array_equal(truth, np.broadcast_to(np.asarray(translation, np.float32), truth.shape))
     return (reference[..., 0].astype(np.float64), moving[..., 0].astype(np.float64),
-            [-t for t in translation])
+            list(translation))
 
 
 @pytest.mark.parametrize("size,translation,seed", translation_params())
 def test_v1_known_translation(size, translation, seed):
     """estimate_transform and evaluate_translation with the strict gate."""
-    reference, moving, correction = translation_pair(size, translation, seed)
+    reference, moving, displacement = translation_pair(size, translation, seed)
     metadata = ImageMetadata("reference")
     result = estimate_transform(reference, moving, config=TranslationConfig(), reference_metadata=metadata,
                                 moving_metadata=ImageMetadata("moving"))
-    direct = evaluate_translation({"moving": result.transform.correction_zyx}, {"moving": correction},
+    direct = evaluate_translation({"moving": result.transform.displacement_zyx}, {"moving": displacement},
                                   reference_metadata=metadata, observed_metadata=metadata, units="voxel",
                                   tolerance=TRANSLATION_TOLERANCE)
     assert direct.values["passed"] is True, direct
@@ -185,17 +185,17 @@ def test_v1_known_translation(size, translation, seed):
 @pytest.mark.parametrize("size,translation,seed", translation_params())
 def test_v1_known_translation_benchmark_task(size, translation, seed, tmp_path):
     """The registration benchmark task on the same pair, with evaluation {translation: {tolerance: 0.5}}."""
-    reference, moving, correction = translation_pair(size, translation, seed)
+    reference, moving, displacement = translation_pair(size, translation, seed)
     inputs = tmp_path / "inputs"
     inputs.mkdir()
     np.save(inputs / "reference.npy", reference)
     np.save(inputs / "moving.npy", moving)
-    (inputs / "correction.json").write_text(json.dumps(correction))
+    (inputs / "displacement.json").write_text(json.dumps(displacement))
     case = BenchmarkCase(f"v1-{size}-{seed}", "registration", {"reference": "reference.npy", "moving": "moving.npy"},
                          {"registration": {"method": "translation"}, "reference_metadata": {"frame_id": "reference"},
                           "moving_metadata": {"frame_id": "moving"},
                           "evaluation": {"translation": {"tolerance": TRANSLATION_TOLERANCE}}},
-                         truth={"correction": "correction.json"})
+                         truth={"displacement": "displacement.json"})
     run = run_benchmark([case], input_root=inputs, output_root=tmp_path / "runs", owner="pytest")
     (record,) = json.loads((evaluate_benchmark(run) / "results.json").read_text())
     assert record["status"]["processing"] == "success"
@@ -302,8 +302,8 @@ def dense(u, shape):
     return DenseDisplacementTransform(u, **geometry(shape))
 
 
-def translation(correction, shape):
-    return TranslationTransform(correction, **geometry(shape))
+def translation(displacement, shape):
+    return TranslationTransform(displacement, **geometry(shape))
 
 
 def u2_example_2(shape):
@@ -315,7 +315,7 @@ def u2_example_2(shape):
 # (steps, shape, {point: expected u(p)}, {point: wrong-order value}) of examples 1 to 3 of the contract.
 COMPOSITION_EXAMPLES = {
     "example-1-translation-then-affine": (
-        lambda s: (translation((-1, -4, 2), s), affine([[1, 0, 0], [0, 1, 0.1], [0, 0, 1]], (0, 0.5, 0), s)),
+        lambda s: (translation((1, 4, -2), s), affine([[1, 0, 0], [0, 1, 0.1], [0, 0, 1]], (0, 0.5, 0), s)),
         (8, 32, 32), {(0, 0, 0): (1, 4.5, -2), (2, 10, 20): (1, 6.5, -2)},
         {(0, 0, 0): (1, 4.3, -2), (2, 10, 20): (1, 6.3, -2)}),
     "example-2-affine-then-dense": (
@@ -323,7 +323,7 @@ COMPOSITION_EXAMPLES = {
         (8, 32, 32), {(0, 0, 0): (0, -2, 3), (4, 20, 10): (0, 0, 2.9), (2, 30, 31): (0, 1, 1.25)},
         {(0, 0, 0): (0, -2, 2.9), (4, 20, 10): (0, 0, 3), (2, 30, 31): (0, 1, 1.45)}),
     "example-3-z1-translation-then-affine": (
-        lambda s: (translation((0, -3, 1), s),
+        lambda s: (translation((0, 3, -1), s),
                    affine([[1, 0, 0], [0, 0.98, 0.05], [0, -0.05, 0.98]], (0, 0.2, -0.4), s)),
         (1, 32, 32), {(0, 0, 0): (0, 3.2, -1.4), (0, 10, 20): (0, 4.0, -2.3), (0, 31, 0): (0, 2.58, -2.95)},
         {(0, 0, 0): (0, 3.09, -1.53), (0, 10, 20): (0, 3.89, -2.43), (0, 31, 0): (0, 2.47, -3.08)}),
@@ -340,7 +340,7 @@ def sequential(steps, points):
         elif isinstance(step, AffineTransform):
             q = q @ step.matrix_zyx[:3, :3].T + step.matrix_zyx[:3, 3]
         else:
-            q = q - np.asarray(step.correction_zyx)
+            q = q + np.asarray(step.displacement_zyx)
     return q
 
 
@@ -387,7 +387,7 @@ def test_v6_translation_affine_dense_chain_equals_sequential_evaluation():
     rng = np.random.default_rng(258)
     a = np.eye(3) + rng.uniform(-0.05, 0.05, (3, 3))
     u3 = rng.uniform(-1.5, 1.5, (*shape, 3))
-    steps = (translation((1.0, -2.5, 3.25), shape), affine(a, rng.uniform(-2, 2, 3), shape), dense(u3, shape))
+    steps = (translation((-1.0, 2.5, -3.25), shape), affine(a, rng.uniform(-2, 2, 3), shape), dense(u3, shape))
     field = TransformChain(steps).pull_field().displacement_zyx
     points = np.moveaxis(np.indices(shape, dtype=np.float64), 0, -1).reshape(-1, 3)
     expected = (sequential(steps, points) - points).reshape(*shape, 3)
@@ -524,7 +524,7 @@ def ramp(shape=(1, 32, 32)):
 def test_v9_constant_boundary_of_a_translation_only_chain():
     shape = (1, 32, 32)
     image = ramp(shape)
-    chain = TransformChain((translation((0, -5, 0), shape),))
+    chain = TransformChain((translation((0, 5, 0), shape),))
     with pytest.raises(InvalidRegistrationConfigError, match="constant zero fill"):
         WarpConfig(boundary_mode="nearest")
     after = apply_transform(image, chain, config=WarpConfig(output_dtype="float64"))
@@ -582,7 +582,7 @@ def test_v10_moving_round_beyond_the_grid():
     reference = ramp(shape)
     # The reference content moved 40 rows down: nothing of it is left on the moving grid.
     moving = np.zeros(shape)
-    chain = TransformChain((translation((0, -40, 0), shape),))
+    chain = TransformChain((translation((0, 40, 0), shape),))
     after = apply_transform(moving, chain, config=WarpConfig(output_dtype="float64"))
     qc = registration_qc(reference, moving, after, chain)
     assert qc.values["coverage"] == 0

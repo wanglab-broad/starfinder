@@ -43,15 +43,15 @@ def test_translation_contract(backend):
     original = moving.copy()
     config = TranslationConfig(backend=backend)
     result = estimate(source, moving, config)
-    assert result.transform.correction_zyx == (0, 2, -3)
-    assert result.transform.direction == "moving_to_reference"
+    assert result.transform.displacement_zyx == (0, -2, 3)
+    assert result.transform.direction == "reference_to_moving"
     assert result.transform.units == "voxel_index"
     assert result.transform.reference_metadata == REF
     assert result.diagnostics.method == "translation"
     assert result.diagnostics.backend == backend
     assert result.diagnostics.effective_config is config
     assert result.diagnostics.converged is None
-    assert not hasattr(result.transform, "displacement_zyx")
+    assert isinstance(result.transform.displacement_zyx, tuple)  # compact, not a field
     images = np.stack([moving, -moving], axis=-1)
     actual = apply_transform(images, result.transform, config=result.application_config)
     np.testing.assert_array_equal(actual, np.stack([source, -source], axis=-1))
@@ -176,7 +176,7 @@ def test_invalid_images_geometry_and_transform():
         )
     with pytest.raises(UnsupportedTransformOperationError):
         TranslationTransform(
-            (0, 0, 0), source.shape, source.shape, REF, MOV, direction="reference_to_moving"
+            (0, 0, 0), source.shape, source.shape, REF, MOV, direction="moving_to_reference"
         )
     with pytest.raises(UnsupportedTransformOperationError):
         TranslationTransform((0, 0, 0), source.shape, source.shape, REF, MOV, units="um")
