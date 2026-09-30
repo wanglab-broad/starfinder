@@ -16,19 +16,21 @@ remain an additional entry point.
 ## Morphology and labels
 
 All paths in this table are relative to OUTPUT unless marked INPUT. Each rule
-uses `workflow/scripts/<rule>.py` except nuclei registration (`.m`) and DAPI
-rotation (inline Python in the backend registration rule file).
+uses `workflow/scripts/<rule>.py` except nuclei registration (`.m` with the
+MATLAB backend, `.py` with the Python backend) and DAPI rotation (inline Python
+in the backend registration rule file).
 
 | Rule | Inputs | Outputs / behavior |
 | --- | --- | --- |
-| `nuclei_registration` | Config JSON and INPUT additional-round/FOV directories; script also reads reference-round `*ch04.tif` | `log/{fovID}_nr.txt`, `log/gr_shifts/{fovID}_nr.txt`; MATLAB even with Python backend |
+| `nuclei_registration` | Config JSON and INPUT additional-round/FOV directories; script also reads reference-round `*ch04.tif` | `log/{fovID}_nr.txt`, `log/gr_shifts/{fovID}_nr.txt`, registered `images/<round>/<channel name>/{fovID}.tif`; MATLAB script, or with `backend: python` the Python script ([workflows](workflows.md#nuclei-registration)) |
 | `rotate_nuclei` | INPUT/`{dapi_round}/{fovID}/*ch04.tif` | `images/DAPI/{fovID}.tif`, rotated and optionally projected by top-level `maximum_projection` |
 | `create_nuclei_amplicon_overlay` | DAPI and `images/ref_merged/{fovID}.tif` (the reference round's channel-merged detection image, ZYX, or YX with top-level `maximum_projection`; see [projection views](workflows.md#projection-views-and-the-reference-merged-image)) | `images/overlay/{fovID}.tif`; contrast adjustment, maximum of the DAPI and amplicon images and optional Z projection |
 | `enhance_dapi_with_flamingo` | `images/flamingo/DAPI/{fovID}.tif`, `images/flamingo/Flamingo/{fovID}.tif` | `images/flamingo/enhanced_DAPI/{fovID}.tif`; those input folders must be supplied separately |
 | `stardist_segmentation` | `images/{segmentation_input_folder}/{fovID}.tif` (default folder `overlay`) | `images/stardist_segmentation/{fovID}.tif`, uint16 labels |
 
 Nuclei registration's additional-round objects need `channel_order` structs
-with MATLAB channel/name metadata beyond the schema-described `round_name`.
+with MATLAB channel/name metadata beyond the schema-described `round_name`;
+both backends read them.
 It is not sufficient to add a name to `additional_round`. Reference-channel
 identity, rotation and registration must match the sequencing coordinate frame.
 

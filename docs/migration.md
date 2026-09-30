@@ -337,6 +337,23 @@ routine QC criterion (`RegistrationRecipe.qc`, nothing by default) raises
 `RegistrationRejectedError`, a `RegistrationEstimationError` that recovery may
 allow.
 
+### Other rounds
+
+`FOV.register_rounds(recipe, *, rounds, reference=None)` and
+{py:class}`~starfinder.dataset.ExternalReference` are new: other rounds, such
+as morphology rounds, register to a reference round or an external reference
+image through a shared stain, and the transform is applied to every channel of
+the round. A channel label in `RegistrationSignalConfig(mode="channel")` is
+looked up in the round's own labels: `Dataset.other_channel_order` (new) gives
+an other round its channels, and `FOV.load_images` checks each round against
+`Dataset.channel_labels(round)`. Estimation attempts gain `reference_sha256`
+(`None` for a round reference). `FOV.save_processing_log` accepts `"nr"`.
+
+With `backend: python`, the `nuclei_registration` rule now runs the Python
+script `workflow/scripts/nuclei_registration.py` instead of MATLAB, with the
+same inputs and outputs; see [workflows](workflows.md). The MATLAB backend's
+rule and script are unchanged.
+
 ## Intentional behavior changes — not mechanical equivalence
 
 | Area | Change and consequence |

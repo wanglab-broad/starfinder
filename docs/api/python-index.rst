@@ -48,6 +48,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.evaluation.EvaluationResult`
 * :py:obj:`starfinder.dataset.ExecutionConfig`
 * :py:obj:`starfinder.io.export_spots`
+* :py:obj:`starfinder.dataset.ExternalReference`
 * :py:obj:`starfinder.barcode.extract_intensities`
 * :py:obj:`starfinder.barcode.filter_reads`
 * :py:obj:`starfinder.preprocessing.filter_tophat`

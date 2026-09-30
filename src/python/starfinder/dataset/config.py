@@ -3,7 +3,10 @@ from dataclasses import dataclass
 import math
 from pathlib import Path
 
+import numpy as np
+
 from starfinder._registry import spec_for
+from starfinder.image import ImageMetadata, _validate_image
 from starfinder.io import ImageLoadConfig
 from starfinder.preprocessing import PreprocessingRecipe
 from starfinder.registration import (REGISTRATION_METHODS, RegistrationEstimationError, InsufficientLandmarksError,
@@ -117,6 +120,28 @@ class RegistrationRecipe:
                 raise ValueError('a recipe of translation steps requires warp backend "translation"')
         if self.reference_round is not None and (not isinstance(self.reference_round, str) or not self.reference_round):
             raise ValueError('reference_round must be a round name or None')
+
+
+@dataclass(frozen=True, eq=False)
+class ExternalReference:
+    """A reference signal that is not a round of the dataset, for FOV.register_rounds.
+
+    image is a finite ZYX array on the grid of the rounds it registers: the
+    same shape, and metadata with the same spacing, origin, direction and
+    unit. It is the reference signal of every step as given, whatever the
+    recipe's signal mode. label names it in the attempt records (for example
+    ``"round1:ch04"``), next to the SHA-256 of the image's C-order bytes.
+    """
+    image: np.ndarray
+    metadata: ImageMetadata
+    label: str
+
+    def __post_init__(self):
+        _validate_image(self.image, ndim=(3,))
+        if not isinstance(self.metadata, ImageMetadata):
+            raise TypeError('metadata requires ImageMetadata')
+        if not isinstance(self.label, str) or not self.label:
+            raise ValueError('label must be a nonempty string')
 
 
 @dataclass(frozen=True)

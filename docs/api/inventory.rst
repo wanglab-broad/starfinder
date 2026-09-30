@@ -77,6 +77,7 @@ starfinder.dataset
 * :py:obj:`starfinder.dataset.CropWindow`
 * :py:obj:`starfinder.dataset.Dataset`
 * :py:obj:`starfinder.dataset.ExecutionConfig`
+* :py:obj:`starfinder.dataset.ExternalReference`
 * :py:obj:`starfinder.dataset.FOV`
 * :py:obj:`starfinder.dataset.from_workflow_config`
 * :py:obj:`starfinder.dataset.PipelineConfig`

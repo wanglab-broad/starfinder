@@ -75,6 +75,16 @@ class _FovPaths:
         """
         return self.output_root / "log" / f"{self.fov_id}_gr.txt"
 
+    def nr_log(self) -> Path:
+        """Return log/<fov_id>_nr.txt (nuclei_registration) without creating it.
+
+        Returns
+        -------
+        pathlib.Path
+            Path under output_root; no filesystem mutation.
+        """
+        return self.output_root / "log" / f"{self.fov_id}_nr.txt"
+
     def signal_csv(self, slot: str) -> Path:
         """Return signal/<fov_id>_<slot>.csv; slot is the caller-provided label.
 

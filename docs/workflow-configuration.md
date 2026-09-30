@@ -64,8 +64,8 @@ do not assume a Python custom list is portable to MATLAB.
 
 ## MATLAB launcher
 
-MATLAB rules (the MATLAB core backend and `nuclei_registration`, which runs
-under either backend) call
+MATLAB rules (the MATLAB core backend, including its `nuclei_registration`;
+the Python backend runs a Python `nuclei_registration`) call
 [`run_matlab_scripts`](https://github.com/wanglab-broad/starfinder/blob/dev/workflow/rules/common.smk),
 which delegates to
 [`matlab_launcher.py`](https://github.com/wanglab-broad/starfinder/blob/dev/workflow/rules/matlab_launcher.py).

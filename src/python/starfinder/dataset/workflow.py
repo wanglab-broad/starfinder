@@ -2,7 +2,7 @@
 from dataclasses import dataclass, fields
 from pathlib import Path
 
-from .config import PipelineConfig, ExecutionConfig, RegistrationRecipe, RegistrationStep, RecoveryConfig
+from .config import ExternalReference, PipelineConfig, ExecutionConfig, RegistrationRecipe, RegistrationStep, RecoveryConfig
 from .dataset import Dataset
 from .types import RoundState, SubtileConfig
 from starfinder.io import ImageLoadConfig
@@ -10,7 +10,8 @@ from starfinder.preprocessing import (MinMaxNormalizationConfig, HistogramMatchi
     ReconstructionConfig, TophatConfig, ProjectionConfig, PreprocessingRecipe, PreprocessingStep, step_config_type)
 from starfinder._registry import config_type_for
 from starfinder.registration import (REGISTRATION_METHODS, CpdConfig, DemonsConfig, InsufficientLandmarksError,
-    RegistrationEstimationError, RegistrationQcConfig, RegistrationRejectedError, RegistrationSignalConfig, WarpConfig)
+    RegistrationEstimationError, RegistrationQcConfig, RegistrationRejectedError, RegistrationSignalConfig,
+    TranslationConfig, WarpConfig)
 from starfinder.barcode import NeighborhoodSumConfig, ReadFilterConfig, WtaDecoderConfig
 from starfinder.spot_finding import LocalMaximaConfig
 
@@ -367,3 +368,103 @@ def _run_workflow(snakemake, rule):
         else:
             fov.create_subtiles()
         fov.save_processing_log('rsf' if rule == 'rsf_single_fov' else 'gr')
+
+
+# The reference stain nuclei_registration.m reads: the reference round's *ch04.tif.
+_NUCLEI_REFERENCE_CHANNEL = 'ch04'
+
+
+def _nuclei_registration(config):
+    """(dataset, stain label per other round, output folder per channel per other round) of nuclei_registration.
+
+    Reads the shared keys as workflow/scripts/nuclei_registration.m does. Each
+    additional_round entry is an other round with its channel_order: entry
+    ``channel`` is the filename pattern and the round's channel label, entry
+    ``name`` the output folder. The round's shared stain is its one channel
+    whose name contains the top-level ref_channel (MATLAB single-channel
+    matching); none or several is a ValueError.
+    """
+    n = config['n_rounds']
+    if isinstance(n, bool) or not isinstance(n, int) or n < 1:
+        raise ValueError('n_rounds must be a positive integer')
+    stain = config.get('ref_channel')
+    if not isinstance(stain, str) or not stain:
+        raise ValueError('nuclei_registration requires the top-level ref_channel naming the shared stain')
+    entries = config.get('additional_round') or []
+    if not isinstance(entries, list) or not entries:
+        raise ValueError('nuclei_registration requires additional_round entries')
+    orders, stains, folders = {}, {}, {}
+    for entry in entries:
+        name = entry.get('round_name') if isinstance(entry, dict) else None
+        order = entry.get('channel_order') if isinstance(entry, dict) else None
+        if not isinstance(name, str) or not name:
+            raise ValueError('each additional_round entry requires a round_name')
+        if (not isinstance(order, list) or not order or
+                any(not isinstance(c, dict) or not isinstance(c.get('channel'), str) or not isinstance(c.get('name'), str)
+                    for c in order)):
+            raise ValueError(f'additional round {name!r} requires a channel_order of channel and name entries')
+        matches = [c['channel'] for c in order if stain in c['name']]
+        if len(matches) != 1:
+            raise ValueError(f'expected one channel of additional round {name!r} whose name contains ref_channel '
+                             f'{stain!r}; found {len(matches)}')
+        orders[name], stains[name] = tuple(c['channel'] for c in order), matches[0]
+        folders[name] = tuple(c['name'] for c in order)
+    rounds = RoundState(sequencing_rounds=[f'round{i}' for i in range(1, n + 1)], other_rounds=list(orders),
+                        reference_round=config['ref_round'])
+    rounds.validate()
+    dataset = Dataset(Path(config['root_input_path']) / config['dataset_id'] / config['sample_id'],
+        Path(config['root_output_path']) / config['dataset_id'] / config['output_id'],
+        config['dataset_id'], config['sample_id'], config['output_id'], rounds=rounds,
+        channel_order=tuple(config.get('seq_channel_order', ())), fov_pattern=config.get('fov_id_pattern', 'Position%03d'),
+        other_channel_order=orders)
+    return dataset, stains, folders
+
+
+def _run_nuclei_registration(snakemake):
+    """Python counterpart of nuclei_registration.m for the Python backend.
+
+    Loads each additional round with its channel_order and rotates it by
+    rotate_angle; reads the reference round's ch04 image, rotated the same
+    way, as an ExternalReference; registers each round by one translation
+    step on its shared stain and transfers the correction to all its
+    channels. Writes the MATLAB names: log/<fov>_nr.txt (the attempts),
+    log/gr_shifts/<fov>_nr.txt and images/<round>/<channel name>/<fov>.tif
+    (ZYX, or the Z maximum YX with maximum_projection), keeping the dtype.
+    Unlike MATLAB, it does not min-max stretch the other rounds.
+    """
+    from dataclasses import asdict
+    import tifffile
+    from starfinder.io import load_round, save_volume
+    from starfinder.preprocessing import project_image
+    from .fov import _rotated
+    config = snakemake.config
+    dataset, stains, folders = _nuclei_registration(config)
+    fov = dataset.fov(snakemake.wildcards.fovID)
+    angle, ref = config.get('rotate_angle'), dataset.rounds.reference_round
+    for name in dataset.rounds.other_rounds:
+        fov.load_images(rounds=[name], config=ImageLoadConfig(channel_labels=dataset.channel_labels(name)))
+        if angle is not None:
+            fov._rotate_round(round_name=name, angle=angle)
+    loaded = load_round(fov.input_dir(ref), config=ImageLoadConfig(channel_labels=(_NUCLEI_REFERENCE_CHANNEL,)))
+    image, metadata = loaded.image[..., 0], loaded.metadata
+    if angle is not None:
+        image, metadata, _ = _rotated(image, metadata, angle)
+    reference = ExternalReference(image, metadata, f'{ref}:{_NUCLEI_REFERENCE_CHANNEL}')
+    for name in dataset.rounds.other_rounds:
+        signal = RegistrationSignalConfig('channel', _NUCLEI_REFERENCE_CHANNEL, stains[name])
+        fov.register_rounds(RegistrationRecipe((RegistrationStep(TranslationConfig()),), signal=signal),
+                            rounds=[name], reference=reference)
+    fov.save_processing_log('nr')
+    projection = ProjectionConfig() if config.get('maximum_projection', False) else None
+    for name in dataset.rounds.other_rounds:
+        # Channels that share a name write the same file, the last one winning, as in MATLAB.
+        for c, folder in enumerate(folders[name]):
+            path = dataset.output_root / 'images' / name / folder / f'{fov.fov_id}.tif'
+            volume, metadata = fov.images[name][..., c], fov.metadata[name]
+            if projection is None:
+                save_volume(volume, path, metadata=metadata)
+            else:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                tifffile.imwrite(path, project_image(volume, config=projection)[0], photometric='minisblack',
+                                 metadata={'axes': 'YX',
+                                           'starfinder_metadata': asdict(metadata.projected(method=projection.method))})

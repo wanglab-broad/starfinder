@@ -95,6 +95,41 @@ fov.register(recipe)
 fov.registration_chains["round2"].pull_field()  # composite pull displacement, float64
 ```
 
+### Other rounds and external references
+
+`FOV.register_rounds(recipe, *, rounds, reference=None)` registers loaded
+rounds, such as morphology rounds, through a shared stain, as specified in
+{doc}`registration-contract` ("Other-round and external-reference
+registration"). The recipe's signal is usually `mode="channel"` with
+`reference_channel` naming the stain in the reference and `moving_channel` in
+each moving round, by index or by label. Sequencing rounds use
+`Dataset.channel_order`; an other round with its own channels lists them in
+`Dataset.other_channel_order`, and `Dataset.channel_labels(round)` returns
+either. `reference=None` uses `recipe.reference_round` (default: the dataset
+reference round); any loaded round may be named. An
+{py:class}`~starfinder.dataset.ExternalReference` supplies a ZYX reference
+signal directly; it must have the moving rounds' grid.
+
+Unknown labels, channel indices outside a round and grid mismatches raise
+before any estimator runs (`ValueError`, `IncompatibleGeometryError`). Each
+round is then registered as by `register`: the chain estimated on the stain is
+applied once to every channel and snapshot of the round. Each estimation
+attempt records `reference` (the round name or the external label) and
+`reference_sha256` (the SHA-256 of the external image's C-order bytes, `None`
+for a round); `registration_record["rounds"][round]` keeps the recipe summary
+and the reference. `save_processing_log("nr")` writes `log/<fov>_nr.txt` and
+`log/gr_shifts/<fov>_nr.txt` for these rounds.
+
+```python
+from starfinder.dataset import ExternalReference
+
+stain = RegistrationSignalConfig("channel", reference_channel="ch04", moving_channel="ch00")
+recipe = RegistrationRecipe((RegistrationStep(TranslationConfig()),), signal=stain)
+fov.register_rounds(recipe, rounds=["morphology"])            # to the dataset reference round
+atlas = ExternalReference(image, metadata, label="round1:ch04")
+fov.register_rounds(recipe, rounds=["morphology2"], reference=atlas)
+```
+
 (inspecting-results)=
 ## Summaries and results by stage
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field, replace
 import hashlib
 import json
@@ -21,7 +21,8 @@ from starfinder.preprocessing import (MinMaxNormalizationConfig, HistogramMatchi
 from starfinder.dataset._logging import _log_step
 from starfinder.dataset._paths import _FovPaths
 from starfinder._registry import _version
-from starfinder.dataset.config import CheckpointConfig, PipelineConfig, ExecutionConfig, RegistrationRecipe
+from starfinder.dataset.config import (CheckpointConfig, PipelineConfig, ExecutionConfig, ExternalReference,
+    RegistrationRecipe)
 from starfinder.registration import (RegistrationRejectedError, RegistrationResult, TransformChain,
     TranslationTransform, WarpConfig)
 from starfinder.barcode import (Codebook, IntensityExtractionResult, NeighborhoodSumConfig,
@@ -40,6 +41,28 @@ def _recipe_record(recipe):
                 step_signals=[None if step.signal is None else asdict(step.signal) for step in recipe.steps],
                 warp=None if recipe.warp is None else asdict(recipe.warp), reference_round=recipe.reference_round,
                 qc=asdict(recipe.qc))
+
+
+def _rotated(volume, source, angle):
+    """(image, metadata, diagnostics) of a ZYX(C) volume rotated by angle degrees in YX.
+
+    Exact 90-degree multiples use np.rot90 and a contiguous copy; other angles
+    scipy.ndimage.rotate with bilinear interpolation, keeping the shape and dtype.
+    """
+    vol = _validate_image(volume)
+    metadata = source.rotated(vol.shape[:3], angle, frame_id=f"{source.frame_id}/rotate:{angle}")
+    k_90 = round(angle / 90)
+    if abs(angle - k_90 * 90) < 1e-6:
+        # np.rot90 and imrotate share sign convention: k=1 is CCW, k=-1 is CW
+        image = np.ascontiguousarray(np.rot90(vol, k=k_90, axes=(1, 2)))
+    else:
+        from scipy.ndimage import rotate as ndimage_rotate
+        image = ndimage_rotate(vol, angle, axes=(1, 2), reshape=False, order=1).astype(vol.dtype)
+    return image, metadata, {
+        "source_metadata": asdict(source), "source_shape_zyx": vol.shape[:3],
+        "output_shape_zyx": image.shape[:3], "angle_degrees": angle,
+        "mapping": "source = R @ (output - output_center) + source_center",
+    }
 
 
 def _default_warp(chain):
@@ -260,9 +283,12 @@ class FOV:
         rounds : list[str] | None
             Round names to load; None uses the dataset rounds selected by round_category.
         channel_order : tuple[str, ...] | None
-            Filename channel patterns in output C order; None uses dataset.channel_order.
+            Filename channel patterns in output C order; None uses each
+            round's dataset.channel_labels (dataset.channel_order, or an other
+            round's own labels). When given, it must equal them.
         config : ImageLoadConfig | None
             Explicit loading/conversion policy; None preserves source dtype.
+            Its channel_labels must equal each loaded round's labels.
         subdir : str
             Optional subdirectory beneath each round/FOV input directory.
         round_category : Literal['seq', 'other']
@@ -277,24 +303,23 @@ class FOV:
 
         if round_category not in ("sequencing", "other"):
             raise ValueError("invalid round_category")
-        if config is not None and tuple(config.channel_labels) != self.dataset.channel_order:
-            raise ValueError("load channel labels differ from dataset channel_order")
         if config is not None and (channel_order is not None or subdir):
             raise ValueError("select channels/subdir through config or arguments, not both")
         if rounds is None:
             rounds = (
                 self.rounds.sequencing_rounds if round_category == "sequencing" else self.rounds.other_rounds
             )
-        if channel_order is None:
-            channel_order = self.dataset.channel_order
-
-        if tuple(channel_order) != self.dataset.channel_order:
-            raise ValueError("channel_order differs from dataset")
         if len(set(rounds)) != len(rounds) or not set(rounds) <= set(self.rounds.all_rounds):
             raise ValueError("load rounds must be unique configured rounds")
         for round_name in rounds:
+            labels = self.dataset.channel_labels(round_name)
+            if config is not None and tuple(config.channel_labels) != labels:
+                raise ValueError("load channel labels differ from dataset channel_order")
+            if channel_order is not None and tuple(channel_order) != labels:
+                raise ValueError("channel_order differs from dataset")
+        for round_name in rounds:
             load_config = config or ImageLoadConfig(
-                channel_labels=tuple(channel_order), subdir=subdir,
+                channel_labels=self.dataset.channel_labels(round_name), subdir=subdir,
             )
             loaded = load_round(self.input_dir(round_name), config=load_config)
             self.images[round_name] = loaded.image
@@ -316,30 +341,10 @@ class FOV:
     @_log_step
     def _rotate_round(self, round_name: str, angle: float) -> None:
         """Rotate a single round's image in-place."""
-        vol = _validate_image(self.images[round_name])
         source = self.metadata.get(round_name, ImageMetadata(f"{self.fov_id}/{round_name}"))
-        rotated_metadata = source.rotated(vol.shape[:3], angle, frame_id=f"{source.frame_id}/rotate:{angle}")
-        k_90 = round(angle / 90)
-        if abs(angle - k_90 * 90) < 1e-6:
-            yx_axes = (1, 2)
-            # np.rot90 and imrotate share sign convention: k=1 is CCW, k=-1 is CW
-            self.images[round_name] = np.ascontiguousarray(
-                np.rot90(vol, k=k_90, axes=yx_axes)
-            )
-        else:
-            from scipy.ndimage import rotate as ndimage_rotate
-
-            yx_axes = (1, 2)
-            self.images[round_name] = ndimage_rotate(
-                vol, angle, axes=yx_axes, reshape=False, order=1
-            ).astype(vol.dtype)
-
-        self.metadata[round_name] = rotated_metadata
-        self.load_diagnostics.setdefault(round_name, {})["rotation"] = {
-            "source_metadata": asdict(source), "source_shape_zyx": vol.shape[:3],
-            "output_shape_zyx": self.images[round_name].shape[:3], "angle_degrees": angle,
-            "mapping": "source = R @ (output - output_center) + source_center",
-        }
+        self.images[round_name], self.metadata[round_name], diagnostics = _rotated(
+            self.images[round_name], source, angle)
+        self.load_diagnostics.setdefault(round_name, {})["rotation"] = diagnostics
 
     @_log_step
     def rotate(self, *, angle: float) -> FOV:
@@ -453,11 +458,31 @@ class FOV:
 
     # --- Registration ---
 
+    def _signal_channel(self, name, signal, role):
+        """The channel index that mode "channel" of signal selects in round name; None for other modes.
+
+        role is "reference" or "moving" (moving_channel, None: reference_channel).
+        A label is looked up in the round's channel labels: dataset.channel_order,
+        or an other round's own labels in dataset.other_channel_order. An
+        unknown label or an index outside the round's image is a ValueError.
+        """
+        if signal.mode != 'channel':
+            return None
+        channel = signal.moving_channel if role == 'moving' and signal.moving_channel is not None else signal.reference_channel
+        if isinstance(channel, str):
+            labels = self.dataset.other_channel_order.get(name, self.dataset.channel_order)
+            if channel not in labels:
+                raise ValueError(f'registration channel {channel!r} is not a channel label of round {name!r}')
+            channel = tuple(labels).index(channel)
+        if channel >= np.shape(self.images[name])[-1]:
+            raise ValueError(f'registration channel {channel} is outside the image of round {name!r}')
+        return channel
+
     def _registration_image(self, name, signal, role, source=None):
         """The float64 ZYX registration signal of round name (RegistrationSignalConfig signal).
 
         role is "reference" or "moving" and selects the channel of mode
-        "channel"; a label is looked up in the dataset channel_order.
+        "channel" (see _signal_channel).
         """
         if source is not None and source not in self.snapshots.get(name, {}):
             raise ValueError(f'registration source {source!r} is not a snapshot of round {name!r}')
@@ -467,11 +492,7 @@ class FOV:
         if signal.mode == 'sum':
             # Preserve signed/high-bit-depth input instead of overflowing the input dtype.
             return image.sum(axis=-1, dtype=np.float64)
-        channel = signal.moving_channel if role == 'moving' and signal.moving_channel is not None else signal.reference_channel
-        if isinstance(channel, str):
-            if channel not in self.dataset.channel_order:
-                raise ValueError(f'registration channel {channel!r} is not a channel label of round {name!r}')
-            channel = tuple(self.dataset.channel_order).index(channel)
+        channel = self._signal_channel(name, signal, role)
         if channel >= image.shape[-1]:
             raise ValueError(f'registration channel {channel} is outside the image of round {name!r}')
         return image[..., channel].astype(np.float64)
@@ -522,12 +543,124 @@ class FOV:
             self._register_round(recipe, name, source, references)
         return self
 
-    def _register_round(self, recipe, name, source, references):
-        """Estimate every step of recipe for round name, then resample its images once."""
+    @_log_step
+    def register_rounds(self, recipe: RegistrationRecipe, *, rounds: Sequence[str],
+                        reference: str | ExternalReference | None = None) -> FOV:
+        """Register loaded rounds, such as morphology rounds, to a reference round or an external reference.
+
+        The typical recipe signal is ``mode="channel"`` naming a shared stain
+        in each round: reference_channel in the reference round and
+        moving_channel in every moving round, by index or by the round's own
+        channel labels (dataset.channel_labels). Any allowed step sequence
+        works; MATLAB nuclei_registration corresponds to one translation step.
+        Label and grid errors are raised before any estimator runs.
+
+        Parameters
+        ----------
+        recipe : RegistrationRecipe
+            Steps, signal, warp and QC, as in register.
+        rounds : Sequence[str]
+            Loaded rounds to register, each at most once.
+        reference : str | ExternalReference | None
+            None uses recipe.reference_round (default: the dataset reference
+            round). A round name may be any loaded round, other rounds
+            included. An ExternalReference supplies the reference signal
+            directly (its image, whatever the signal mode) and must have the
+            moving rounds' grid; the SHA-256 of its image's C-order bytes is
+            recorded.
+
+        Returns
+        -------
+        FOV
+            This instance. Each round is registered as in register: the steps
+            compose into one TransformChain estimated on the stain, and the
+            round's image (every channel) and each of its snapshots are
+            resampled once through it. Every estimation attempt records the
+            reference (round name or external label) and reference_sha256
+            (None for a round); registration_record["rounds"][round] keeps the
+            recipe summary and the reference.
+
+        Raises
+        ------
+        ValueError
+            An unknown channel label or a channel index outside a round, a
+            round that is not loaded or is already registered, or a reference
+            that differs from recipe.reference_round.
+        IncompatibleGeometryError
+            A moving round and the reference are not on one grid.
+        """
+        from starfinder.registration._types import _geometry
+        if not isinstance(recipe, RegistrationRecipe):
+            raise TypeError('register_rounds requires a RegistrationRecipe')
+        recipe.__post_init__()
+        if isinstance(rounds, str) or not isinstance(rounds, Sequence) or not rounds:
+            raise ValueError('rounds must be a nonempty sequence of round names')
+        rounds = list(rounds)
+        if len(set(rounds)) != len(rounds):
+            raise ValueError('rounds must be unique')
+        missing = [name for name in rounds if name not in self.images or name not in self.metadata]
+        if missing:
+            raise ValueError(f'rounds {missing} are not loaded')
+        external = isinstance(reference, ExternalReference)
+        if external:
+            if recipe.reference_round is not None:
+                raise ValueError('an external reference replaces the recipe reference_round, which must be None')
+            reference.__post_init__()
+            reference_shape, reference_metadata = reference.image.shape, reference.metadata
+        else:
+            if reference is None:
+                reference = recipe.reference_round or self.rounds.reference_round
+            elif not isinstance(reference, str):
+                raise TypeError('reference must be a round name, an ExternalReference or None')
+            if recipe.reference_round not in (None, reference):
+                raise ValueError(f'reference {reference!r} differs from the recipe reference round {recipe.reference_round!r}')
+            if reference not in self.images or reference not in self.metadata:
+                raise ValueError(f'reference round {reference!r} is not loaded')
+            if reference in rounds:
+                raise ValueError(f'the reference round {reference!r} cannot be registered to itself')
+            reference_shape, reference_metadata = self.images[reference].shape[:3], self.metadata[reference]
+        if self.registration_record.get('semantics') == 'sequential':
+            raise ValueError('this FOV holds a sequential (version-1) registration; it cannot be extended by a recipe')
+        registered = [name for name in rounds if self.registration_results.get(name) or name in self.registration_chains]
+        if registered:
+            raise ValueError(f'rounds {registered} are already registered; a round is registered once')
+        signals = list(dict.fromkeys([step.signal or recipe.signal for step in recipe.steps] + [recipe.signal]))
+        # Every label and grid error is raised here, before any estimator runs.
+        for name in rounds:
+            _geometry(reference_shape, _validate_image(self.images[name], ndim=(4,)).shape[:3],
+                      reference_metadata, self.metadata[name])
+            for signal in signals:
+                self._signal_channel(name, signal, 'moving')
+        if external:
+            image = np.asarray(reference.image)
+            described = (reference.label, hashlib.sha256(np.ascontiguousarray(image).tobytes()).hexdigest(),
+                         reference.metadata)
+            signal_image = image.astype(np.float64)
+            references = {signal: signal_image for signal in signals}
+        else:
+            described = (reference, None, reference_metadata)
+            references = {signal: self._registration_image(reference, signal, 'reference') for signal in signals}
+        summary = _recipe_record(recipe)
+        self.registration_record = dict(self.registration_record, semantics='recipe')
+        self.registration_record.setdefault('application', {})
+        self.registration_record.setdefault('rounds', {})
+        for name in rounds:
+            self._register_round(recipe, name, None, references, described)
+            self.registration_record['rounds'][name] = dict(recipe=summary, reference=described[0],
+                                                            reference_sha256=described[1])
+        return self
+
+    def _register_round(self, recipe, name, source, references, described=None):
+        """Estimate every step of recipe for round name, then resample its images once.
+
+        described is (round name or external label, SHA-256 or None, metadata)
+        of the reference signal; None is the dataset reference round.
+        """
         from starfinder import registration
         from starfinder.evaluation.registration import registration_qc
         from starfinder.registration._chain import resample
         ref = self.rounds.reference_round
+        ref, ref_sha256, ref_metadata = described or (ref, None, self.metadata[ref])
         originals = {signal: self._registration_image(name, signal, 'moving', source) for signal in references}
         attempts = self.registration_attempts.setdefault(name, [])
         results = []
@@ -543,11 +676,12 @@ class FOV:
                 attempt = dict(record='estimation', step=index, attempt=number, requested_method=step.config.method,
                                actual_method=config.method, fallback=number > 0, backend=None,
                                backend_versions={d.distribution: _version(d.distribution) for d in spec.requires},
-                               reference=ref, config=asdict(config), outcome='estimating', failure=None, qc=None)
+                               reference=ref, reference_sha256=ref_sha256, config=asdict(config),
+                               outcome='estimating', failure=None, qc=None)
                 attempts.append(attempt)
                 try:
                     result = registration.estimate_transform(reference, before, config=config,
-                        reference_metadata=self.metadata[ref], moving_metadata=moving_metadata)
+                        reference_metadata=ref_metadata, moving_metadata=moving_metadata)
                     attempt.update(backend=result.diagnostics.backend)
                     if result.diagnostics.backend_versions is not None:
                         attempt.update(backend_versions=dict(result.diagnostics.backend_versions))
@@ -614,16 +748,18 @@ class FOV:
         for key in ('detection', *self.snapshots.get(name, {})):
             applied.setdefault(key, []).extend(dict(entry) for entry in entries)
 
-    def _save_shift_log(self):
-        """Preserve MATLAB detected-displacement row/col/z columns."""
+    def _save_shift_log(self, suffix='', rounds=None):
+        """Preserve MATLAB detected-displacement row/col/z columns (rounds None: every registered round)."""
         from starfinder.registration import TranslationTransform
         rows = []
         for name, results in self.registration_results.items():
+            if rounds is not None and name not in rounds:
+                continue
             for result in results:
                 if isinstance(result.transform, TranslationTransform):
                     dz, dy, dx = (-v for v in result.transform.correction_zyx)
                     rows.append(dict(fov_id=self.fov_id, round=name, row=dy, col=dx, z=dz))
-        path = self.paths.shift_log()
+        path = self.paths.shift_log(suffix)
         path.parent.mkdir(parents=True, exist_ok=True)
         pd.DataFrame(rows, columns=['fov_id', 'round', 'row', 'col', 'z']).to_csv(path, index=False)
 
@@ -1115,16 +1251,26 @@ class FOV:
                             accepted_only=slot == 'goodSpots', columns=columns)
 
     def save_processing_log(self, log_type='rsf'):
-        """Persist ordered registration attempts and stage counts."""
-        if log_type not in ('rsf', 'gr'):
+        """Persist ordered registration attempts and stage counts.
+
+        log_type ``rsf`` or ``gr`` writes ``log/<fov>_<log_type>.txt`` and
+        ``log/gr_shifts/<fov>.txt`` for every registered round; ``nr`` (the
+        nuclei_registration names) writes ``log/<fov>_nr.txt`` and
+        ``log/gr_shifts/<fov>_nr.txt`` for the rounds registered by
+        register_rounds, with their attempts.
+        """
+        if log_type not in ('rsf', 'gr', 'nr'):
             raise ValueError('invalid log_type')
-        path = self.paths.rsf_log() if log_type == 'rsf' else self.paths.gr_log()
+        path = {'rsf': self.paths.rsf_log, 'gr': self.paths.gr_log, 'nr': self.paths.nr_log}[log_type]()
         path.parent.mkdir(parents=True, exist_ok=True)
+        rounds = list(self.registration_record.get('rounds', {})) if log_type == 'nr' else None
+        attempts = (self.registration_attempts if rounds is None else
+                    {name: self.registration_attempts[name] for name in rounds})
         path.write_text(json.dumps(dict(fov_id=self.fov_id, backend='python',
-            rounds=asdict(self.rounds), registration_attempts=self.registration_attempts,
+            rounds=asdict(self.rounds), registration_attempts=attempts,
             detected=len(self.spot_result.spots) if self.spot_result is not None else None,
             filtering=self.filtering_result.counts if self.filtering_result is not None else None), indent=2))
-        self._save_shift_log()
+        self._save_shift_log('_nr' if log_type == 'nr' else '', rounds)
         return path
 
     def save_diagnostics(self, suffix=''):
