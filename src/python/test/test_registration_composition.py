@@ -124,8 +124,10 @@ def test_the_translation_backend_applies_only_chains_of_translations():
     shift = TransformChain((translation((1, -2, 0), shape), translation((0, 1, 1), shape)))
     np.testing.assert_array_equal(apply_transform(image, shift, config=WarpConfig()),
                                   apply_transform(image, translation((1, -1, 1), shape), config=WarpConfig()))
-    with pytest.raises(UnsupportedTransformOperationError, match="translation backend"):
-        apply_transform(image, shift, config=WarpConfig(backend="scipy"))
+    # A dense backend samples a chain of translations with its own boundary policy.
+    nearest = apply_transform(image, shift, config=WarpConfig(backend="scipy", boundary_mode="nearest"))
+    z, y, x = np.indices(shape)
+    np.testing.assert_array_equal(nearest, image[np.clip(z - 1, 0, 3), np.clip(y + 1, 0, 7), np.clip(x - 1, 0, 7)])
     mixed = TransformChain((translation((1, 0, 0), shape), affine(np.eye(3), (0, 0, 0), shape)))
     with pytest.raises(UnsupportedTransformOperationError, match="translation backend"):
         apply_transform(image, mixed, config=WarpConfig())

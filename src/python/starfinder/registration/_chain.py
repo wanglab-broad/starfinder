@@ -139,17 +139,18 @@ class TransformChain:
 def resample(images, chain, config):
     """Resample each ZYX(C) image once through chain with WarpConfig config; one output per image.
 
-    A chain of translations requires the translation backend (exact integer
-    shift or Fourier shift of the summed correction); every other chain needs
-    scipy (linear map_coordinates in float64, plane by plane: the pull points
-    of one Z plane are computed once and every channel of every image is
-    sampled at them) or simpleitk (linear, on the composite pull field).
-    Integer outputs are rounded nearest-even, clipped and cast once.
+    The translation backend (exact integer shift or Fourier shift of the
+    summed correction, constant zero fill) applies only chains of
+    translations. scipy (linear map_coordinates in float64, plane by plane:
+    the pull points of one Z plane are computed once and every channel of
+    every image is sampled at them) and simpleitk (linear, on the composite
+    pull field) sample any chain, a chain of translations included, with the
+    config's boundary policy. Integer outputs are rounded nearest-even,
+    clipped and cast once.
     """
     translation = chain.translation()
-    if (translation is not None) != (config.backend == "translation"):
-        raise UnsupportedTransformOperationError(
-            "the translation backend applies exactly the chains of translations")
+    if config.backend == "translation" and translation is None:
+        raise UnsupportedTransformOperationError("the translation backend applies only chains of translations")
     stacks = []
     for image in images:
         if image.shape[:3] != chain.moving_shape_zyx:

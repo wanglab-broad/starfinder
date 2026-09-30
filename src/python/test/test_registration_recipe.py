@@ -299,6 +299,73 @@ def test_application_failures_are_recorded_and_never_recover(tmp_path, monkeypat
     assert not fov.registration_results
 
 
+def fixed_estimates(monkeypatch, captured, *, fail=()):
+    """estimate_transform returns fixed transforms (translation (0, -4, 0), a small affine) and records the moving signal.
+
+    Methods named in fail raise RegistrationEstimationError instead.
+    """
+    import starfinder.registration as registration
+
+    def estimate(reference, moving, *, config, reference_metadata, moving_metadata):
+        captured.append((config.method, np.array(moving)))
+        if config.method in fail:
+            raise RegistrationEstimationError(f"injected {config.method} failure")
+        geometry = dict(reference_shape_zyx=reference.shape, moving_shape_zyx=moving.shape,
+                        reference_metadata=reference_metadata, moving_metadata=moving_metadata)
+        if config.method == "translation":
+            transform = TranslationTransform((0, -4, 0), **geometry)
+        else:
+            matrix = np.eye(4)
+            matrix[1, 2], matrix[2, 3] = 0.02, 0.3
+            transform = registration.AffineTransform(matrix, **geometry)
+        return registration.RegistrationResult(transform, registration.RegistrationDiagnostics(
+            config.method, "fixture", config), WarpConfig())
+
+    monkeypatch.setattr(registration, "estimate_transform", estimate)
+
+
+@pytest.mark.parametrize("warp", [
+    WarpConfig(backend="scipy", boundary_mode="nearest"), WarpConfig(backend="scipy", fill_value=5),
+    WarpConfig(backend="simpleitk", boundary_mode="nearest"), WarpConfig(backend="simpleitk", fill_value=5),
+], ids=["scipy-nearest", "scipy-fill", "simpleitk-nearest", "simpleitk-fill"])
+def test_intermediate_signals_of_a_translation_prefix_honor_the_boundary_policy(tmp_path, monkeypatch, warp):
+    """(translation, affine) with a non-zero-fill warp: the affine step's signal is the translated signal with that boundary."""
+    captured = []
+    fixed_estimates(monkeypatch, captured)
+    reference, moving = shifted_rounds()
+    fov = small_fov(tmp_path, reference, moving)
+    fov.run(PipelineConfig(registration=RegistrationRecipe(
+        (TRANSLATION, RegistrationStep(AffineConfig())), warp=warp)))
+    (_, first), (method, second) = captured
+    signal = moving.max(axis=-1).astype(np.float64)
+    np.testing.assert_array_equal(first, signal)
+    assert method == "affine" and second.dtype == np.float64
+    # The pull point of row y is y + 4: rows 0-27 are inside, rows 28-31 follow the boundary policy.
+    np.testing.assert_array_equal(second[:, :28], signal[:, 4:])
+    edge = (np.broadcast_to(signal[:, 31:32], (4, 4, 32)) if warp.boundary_mode == "nearest"
+            else np.full((4, 4, 32), 5.0))
+    np.testing.assert_array_equal(second[:, 28:], edge)
+    assert fov.registration_attempts["round2"][-1]["outcome"] == "succeeded"
+    assert fov.registration_record["application"]["round2"] == warp
+    chain = fov.registration_chains["round2"]
+    np.testing.assert_array_equal(fov.images["round2"], apply_transform(moving, chain, config=warp))
+
+
+def test_a_recovered_chain_of_translations_uses_the_recipe_warp(tmp_path, monkeypatch):
+    """An affine step that recovers to translation leaves a chain of translations; a dense warp still applies it."""
+    captured = []
+    fixed_estimates(monkeypatch, captured, fail=("affine",))
+    reference, moving = shifted_rounds()
+    fov = small_fov(tmp_path, reference, moving)
+    warp = WarpConfig(backend="scipy", boundary_mode="nearest")
+    step = RegistrationStep(AffineConfig(), recovery=RecoveryConfig((RegistrationEstimationError,), (TranslationConfig(),)))
+    fov.run(PipelineConfig(registration=RegistrationRecipe((step,), warp=warp)))
+    assert [a["outcome"] for a in fov.registration_attempts["round2"]] == ["failed", "succeeded", "succeeded"]
+    assert fov.registration_chains["round2"].translation().correction_zyx == (0.0, -4.0, 0.0)
+    y = np.minimum(np.arange(32) + 4, 31)
+    np.testing.assert_array_equal(fov.images["round2"], moving[:, y])
+
+
 def test_a_round_is_registered_once(tmp_path):
     fov = small_fov(tmp_path, *shifted_rounds())
     fov.register(RegistrationRecipe((TRANSLATION,)))

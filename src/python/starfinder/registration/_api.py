@@ -87,9 +87,10 @@ def apply_transform(
     slice-sized coordinate arrays; SimpleITK prepares one field/resampler.
     Affine and B-spline transforms are applied through their dense() pull
     field with the scipy or simpleitk backend. A TransformChain is resampled
-    once at its composite pull points: a chain of translations with the
-    translation backend (its summed correction), any other chain with scipy
-    (linear, plane by plane) or simpleitk (its pull_field()).
+    once at its composite pull points: the translation backend applies only a
+    chain of translations (its summed correction); scipy (linear, plane by
+    plane) or simpleitk (its pull_field()) sample any chain with their
+    boundary policy.
     """
     if not isinstance(config, WarpConfig):
         raise InvalidRegistrationConfigError("expected WarpConfig")
