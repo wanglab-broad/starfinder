@@ -179,18 +179,24 @@ equal the dataset reference round) and gains, as Python-only keys:
 | Key | Meaning |
 | --- | --- |
 | `method` | A `SPOT_FINDING_METHODS` name with `pipeline=True`, through `config_type_for()`; default `local_maxima`. |
-| the config's init fields | Every other key is an init field of the selected config (YAML lists become tuples), for example `exclude_border`, `merge_radius_zyx`, `model`, `prob_thresh`, `threshold`. Unknown keys raise. |
+| the config's init fields | Every other key is an init field of the selected config (YAML lists become tuples), for example `exclude_border`, `merge_radius_zyx`, `model`, `prob_thresh`, `threshold`, or one of the `local_maxima` legacy aliases below. Unknown keys raise `ValueError`. |
 | `channel_overrides` | A mapping from channel label to a mapping of config fields; each entry becomes `ChannelOverride(label, replace(config, **fields))`. |
 | `rounds` | A list of round labels; omitted means the reference round only. |
 
-The legacy keys stay valid for `local_maxima` only and keep their meaning:
-`intensity_estimation` → `threshold_mode`, `intensity_threshold` →
-`threshold_value`, `min_distance` → `min_distance_voxels`. With any other method
-they raise `ValueError`. A legacy key together with its field
-(`intensity_threshold` and `threshold_value`, or `min_distance` and
-`min_distance_voxels`) raises `ValueError` as a duplicate setting; today
-`min_distance_voxels` silently wins. A rule-level Python-only key `device` sets
-`ExecutionConfig.device`.
+The legacy keys `intensity_estimation`, `intensity_threshold` and
+`min_distance` are aliases for `local_maxima` only, and keep their meaning.
+`min_distance` is also a native init field of two other configs. The adapter
+handles each key by method, and this table is the only rule:
+
+| Key | `local_maxima` (also when `method` is omitted) | `spotiflow`, `piscis` | `starfish_log` |
+| --- | --- | --- | --- |
+| `intensity_estimation` | Alias of `threshold_mode`; `ValueError` together with `threshold_mode` | `ValueError` (not a field) | `ValueError` (not a field) |
+| `intensity_threshold` | Alias of `threshold_value`; `ValueError` together with `threshold_value` | `ValueError` (not a field) | `ValueError` (not a field) |
+| `min_distance` | Alias of `min_distance_voxels`; `ValueError` together with `min_distance_voxels` (today `min_distance_voxels` silently wins) | The native field `min_distance` of `SpotiflowConfig` and `PiscisConfig`, passed unchanged | `ValueError` (not a field) |
+| `min_distance_voxels` | The field | `ValueError` (not a field) | `ValueError` (not a field) |
+
+`channel_overrides` entries follow the same rule for the selected method. A
+rule-level Python-only key `device` sets `ExecutionConfig.device`.
 
 ```yaml
 rsf_single_fov:
@@ -293,7 +299,10 @@ a worker). The Piscis library defaults to `20251212` and the E02 proposal named
 * **Verification on every run.** Before loading, the wrapper resolves the folder,
   checks that every listed file exists and recomputes its SHA-256 (the loaded
   files are 30 to 142 MB; the cost is not measured yet and is recorded by the
-  implementation). Only then does it import the library.
+  implementation). Only then does it construct the model from those files. The
+  library has already been imported by the registry's `require()` (next
+  section); verification comes before model construction, which is the step that
+  could otherwise reach a library cache or the network.
 * **Loading route.** Spotiflow: `Spotiflow.from_folder(<folder>,
   map_location="cpu")` (W-266). Piscis: `Piscis(model_name=str(<folder> /
   <model>))`, an absolute path without `.pt`, which piscis 1.1.0 resolves to that
@@ -314,10 +323,15 @@ a worker). The Piscis library defaults to `20251212` and the E02 proposal named
 | A file's SHA-256 differs from the table | `WeightsHashMismatchError` (a `ValueError`) naming the file and both hashes |
 | The model name is unknown, or belongs to the other method | `ValueError` at config construction, listing the known names |
 
-The order at run time is: the dependency check (`require`), then weight
-resolution and hashing, then the import and load. `resolve_weights(method, model)`
-performs the second step on its own, so its errors can be tested without the
-extras. Tests skip when an extra is not installed (`pytest.importorskip`) and fail
+The order at run time keeps the registry mechanism of {doc}`method-registry`
+unchanged: (1) `require(spec, ...)` imports each declared dependency, as
+`_registry.require` does today, and raises `SpotFindingBackendUnavailableError`
+when one is missing; (2) `resolve_weights(method, model)` resolves the cache
+folder and recomputes every listed SHA-256, without using the library; (3) the
+model is constructed from the verified files (`Spotiflow.from_folder`, the
+absolute-path `Piscis`). A missing extra is therefore reported before missing or
+changed weights. `resolve_weights` performs step 2 on its own, so its errors can
+be tested without the extras. Tests skip when an extra is not installed (`pytest.importorskip`) and fail
 with `MissingWeightsError` when the extra is installed but the weights are not
 fetched (D3).
 
@@ -539,9 +553,12 @@ The implementation adds these entries:
    never downloads weights.
 3. **Workflow keys.** The `spot_finding` block's `method` key and config fields,
    `channel_overrides`, `rounds` and the rule-level `device`. The legacy keys are
-   valid for `local_maxima` only. **Intentional change:** `min_distance` together
-   with `min_distance_voxels`, or a legacy key together with its field, now raises
-   instead of silently preferring one; `local` leaves the schema enum.
+   aliases for `local_maxima` only, and `min_distance` is the native field of
+   `spotiflow` and `piscis` (the method-aware table of
+   {doc}`spot-finding-contract`). **Intentional change:** for `local_maxima`,
+   `min_distance` together with `min_distance_voxels`, or another legacy key
+   together with its field, now raises instead of silently preferring one;
+   `local` leaves the schema enum.
 4. **Detection plan.** `SpotFindingPlan` and `ChannelOverride`; `find_spots` and
    `PipelineConfig.detection` accept a plan; the `round` column of multi-round
    results; decoding a multi-round set raises until §2.8.
