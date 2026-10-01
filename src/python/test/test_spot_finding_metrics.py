@@ -46,9 +46,10 @@ def test_localization_errors_reproduce_w266(run_id):
     errors = localization_errors(evaluate(detected, truth, **W266_MATCH), detected, truth)
     assert list(errors.values) == METRICS and errors.status == "ok"
     assert set(errors.units.values()) == {"voxel"}
-    # The CSV prints each value with repr, which round-trips: equality to the printed precision is exact.
+    # The CSV prints each value with repr, which round-trips. The comparison allows 1e-12 relative,
+    # because the last bit of hypot and of the percentile interpolation depends on the CPU.
     for name in METRICS:
-        assert repr(errors.values[name]) == expected[name], name
+        assert errors.values[name] == pytest.approx(float(expected[name]), rel=1e-12, abs=1e-12), name
     assert errors.counts == {"matched": int(expected["matched"]), "n_abs_z_gt_1": int(expected["n_abs_z_gt_1"])}
 
 
