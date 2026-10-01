@@ -215,3 +215,64 @@ process. LM and LoG calls take well under 1 s each (LoG with `num_sigma=30` need
 about 40 MB). So the default-tier checks add seconds and the extended-tier checks a
 few minutes at one thread. Each run records wall time and maximum RSS with
 `/usr/bin/time -v` against the 4 GiB stop target.
+
+### Implemented checks (W-274)
+
+The checks are in `src/python/test/test_spot_finding_validation.py`, one test
+function per check (parametrized by method, model, case and seed 100 to 102).
+Local maxima and the Starfish LoG run in the default tier; every Spotiflow and
+Piscis case is in the extended tier (`-m extended`, CPU, `CUDA_VISIBLE_DEVICES=""`,
+one thread, weights from `STARFINDER_WEIGHTS_DIR`). The W-266 isolated-spot and
+seam scenes are the ports in `spot_finding_scenes.py`, `learned_detectors.py` and
+`test_spot_finding_metrics.py`; the hand-built fixtures are in
+`spot_finding_fixtures.py`, and `multiround` is the W-273 fixture of
+`test_spot_finding_rounds.py`. Every fixture is generated in session and is at
+most 32×64×64 voxels, four channels and three rounds
+(`test_fixtures_stay_within_the_resource_bounds_and_their_stated_densities`). The
+tolerances are module constants equal to the table above, unchanged; matching is
+`greedy`, 3.0 voxels, `inclusive`, except S16.
+
+| # | Test | Route and fixture | Metric | Tolerance |
+| --- | --- | --- | --- | --- |
+| S1 | `test_s1_isolated_spot_recall_and_precision` | `find_spots` at native defaults (LoG with the W-266 settings) on `iso3d` (LM, LoG, SF3, PI), `iso_z1` (LoG, SF2, PI) and `iso_z1_sparse` (LM; 5×5 grid of step 12 from 8 to 56) | `evaluate_spots` recall and precision | recall 1.0 and precision ≥ 0.98; LoG `iso_z1` recall in [0.40, 0.60] |
+| S2 | `test_s2_localization_of_the_s1_matches` | the S1 matches | `localization_errors` maxima | SF3 3D ≤ 0.5; SF2 lateral ≤ 0.5; PI plane lateral ≤ 0.15; PI stack lateral ≤ 0.15 and abs Z ≤ 2.0; LM and LoG 3D ≤ 0.9; LoG and LM Z=1 lateral ≤ 0.9 |
+| S3 | `test_s3_every_member_of_a_resolvable_pair_is_matched` | `pairs` (lateral pairs in plane z=26, axial pairs at z=4 and 12; each pair jittered as a whole) for LM, LoG, SF3, PI; its lateral pairs on 1×64×64 for SF2, PI | matched truth indices of `evaluate_spots` | pair recall 1.0 (PI lateral pairs only) |
+| S4 | `test_s4_offset_channels_and_a_channel_override` | `channels` with a `SpotFindingPlan` overriding `ch03`, and a single-channel run with the override | rows per channel; `thresholds`; `effective_settings` | LM coordinates identical, `peak_intensity` + offset, thresholds + offset within 1e-9; others same count and coordinates within 1e-5; `ch03` table equal to the single run |
+| S5 | `test_s5_coincident_spots_keep_one_row_per_channel` | `coincident`, every method | each channel's rows against its single-channel run | equal with `check_exact=True`; every spot matched in both channels |
+| S6 | `test_s6_empty_input_zero_channels_and_the_mad_diagnostics` | zeros 8×32×32×2 and a constant 8×32×32 with a spy on the registry entry; 10×32×32×2 with exactly 60 % and 40 % zeros | rows, columns, dtypes; `outcomes`; `noise`; warnings | typed empty table, outcome `constant`, backend not called; LM `zero_fraction` 0.6 and `mad` 0 with one `SpotFindingWarning`, none for 40 % |
+| S7 | `test_s7_spots_near_the_faces` | `borders` (16×64×64, 24 spots; 1×64×64, 16 spots) | matched truth indices | LM `exclude_border` True: exactly the spots at distance 0 absent; False: all present; LoG, SF, PI: every spot at ≥ 2 voxels present |
+| S8 | `test_s8_tiling_seams` | PI with `input_size=32` against the native run on `seam_z1` and `seam3d`; SF2 on `iso_z1` with `n_tiles` (2, 2) and SF3 on `iso3d` with (1, 2, 2) against the S1 run | candidates within 3 voxels; lateral shift; one-to-one nearest shift | PI exactly one candidate per spot, shift ≤ 0.2 px; SF same count, shift ≤ 0.05 |
+| S9 | `test_s9_explicit_scaling` | SF and PI configs; the S1 runs; the anisotropic parity case | `ValueError`; `effective_settings` | `scale` ≠ 1 raises, `scale` 1 recorded; LoG per-axis σ equal to starfish exactly |
+| S10 | `test_s10_multi_round_identities` | `multiround` with `rounds` = all three through `FOV.find_spots`, and the default plan | `round`, `spot_id`, joins, `decode_barcodes` | as the table above; a shared position's rows lie within 3.0 voxels |
+| S11 | `test_s11_candidates_checkpoint_round_trip`, `test_s11_a_version_2_checkpoint_from_before_the_plan_keys_loads_unchanged` | the S10 sets and the S1 `iso3d` tables of LoG, SF3, PI, CSV and Parquet; the W-273 saved version-2 checkpoint | `assert_frame_equal(check_exact=True)`; config, plan, header keys | equal; the saved checkpoint's digest equals the golden pin |
+| S12 | `test_s12_starfish_parity` | the six W-266 parity tables and the 3-tuple σ plane | column by column after `starfish_view` | exact; `IncompatibleGeometryError` |
+| S13 | `test_s13_tables_are_identical_twice_in_one_process_and_in_a_second` | S1 `iso3d` and `iso_z1`, seed 100, every method | SHA-256 of the table | identical |
+| S14 | `test_s14_dependency_and_weights_errors` | patched imports; `resolve_weights` on an empty cache and on a fixture entry with one byte changed; unknown models; one SF and one PI detection with the network patched to raise (extended) | raised error and message | as the table above |
+| S15 | `test_s15_dimensionality_rules` | W-266's single-spot probe as uint16 on the six tiny shapes, every pipeline method and LoG with a 3-tuple σ | raised error type; z | as the table above |
+| S16 | `test_s16_the_w218_option_and_exclude_border_on_formed16` | `formed16`, LM on the reference round: the merge on the uint8 variant; `exclude_border` on both variants | `evaluate_spots` (greedy, 5.0, exclusive, `center_in_bounds`); `classify_detections` by channel | same-channel duplicates 0 and matched ≥ legacy; no eligible amplicon within 1 voxel of a face missed |
+
+Four groups of cases miss their bound with a correct implementation. They are
+strict expected failures with the bound unchanged, reported to Jiahao in the W-274
+worker notes:
+
+* S4, both Piscis models, every seed: Piscis standardizes each tile after padding
+  the 64-pixel plane to 256 pixels, so a constant offset changes its input. The
+  offset channels have the same counts but lie 1.001 to 1.009 voxels from
+  channel 0 (the integer stack-mode z changes by 1; lateral up to 0.135 px).
+* S5, `smfish_3d`, seed 102: one channel-0 spot has probability 0.396, below the
+  stored `prob_thresh` 0.4 (recall 0.95); the table equals its single-channel run.
+* S7, `synth_3d` in 3D, every seed: no candidate for the spots 1 and 2 planes from
+  the low Z face, while the spots at 0 and 3 planes are found.
+* S10, both Piscis models, seeds 100 and 101: stack mode merges the `multiround`
+  fixture's two spots of one column (z 4 and 11) into one component, as specified,
+  so a shared position in such a column has no row in that round.
+
+Resources at one thread (`/usr/bin/time -v`): the default-tier cases take under a
+minute (48 s, peak RSS 0.3 GB). The extended-tier cases take about 37 minutes with a
+peak RSS of 1.7 GB: about 1064 s for Piscis `20230905`, 985 s for Piscis
+`20251212` and 165 s for Spotiflow. Piscis's native 256-pixel tile costs about
+0.73 s per 64×64 plane (24 s per `iso3d` call, not the 4 s of the resource plan
+above). Every design case is kept (W-274 decision, option A): the project checks
+run the Piscis cases of each model as a separate extended check, selected by the
+model name in the test id (`-k "test_spot_finding_validation and 20230905"`, and
+likewise `20251212`), and the rest of the extended tier excludes them.
