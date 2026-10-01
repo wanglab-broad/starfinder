@@ -1,6 +1,6 @@
 # Spot-finding algorithm specification
 
-Status: Proposed
+Status: Accepted (W-268, 2026-10-01, at b5fcb7f)
 
 This page specifies the four pipeline spot-finding methods of §2.7: Starfinder
 local maxima with the W-218 option, the native Starfish LoG, Spotiflow and Piscis.

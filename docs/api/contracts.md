@@ -230,6 +230,18 @@ and can be omitted with `measure_peak_intensity=False`. No integrated intensity
 or detection score is invented. Optional `channel_labels` must uniquely label
 all channels, and their tuple is recorded in diagnostics.
 
+The method is looked up in {data}`starfinder.spot_finding.SPOT_FINDING_METHODS` by the
+config's exact type, so a subclass of a config raises `TypeError("unsupported detection
+config")`. `config` may also be a {class}`starfinder.spot_finding.SpotFindingPlan`, whose
+channel overrides replace the whole config of named channels (it then needs
+`channel_labels`); every channel's effective config is in
+`diagnostics["effective_settings"]`. Local maxima records `diagnostics["noise"]` (per
+channel the zero fraction, median, MAD and threshold, in every threshold mode) and
+emits a {class}`starfinder.spot_finding.SpotFindingWarning`, listed in
+`diagnostics["warnings"]`, when a channel's MAD is 0 or more than half of its voxels are
+zero; the threshold and the detections are unchanged. `device` must be `"cpu"`, and
+`diagnostics["execution"]` records it with the thread settings in effect.
+
 {class}`starfinder.spot_finding.NoiseLandmarkConfig` retains registration's
 per-channel MAD peaks followed by its original radius deduplication: for each
 pair within `min_distance_voxels`, drop the higher concatenated index.

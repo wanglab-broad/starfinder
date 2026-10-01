@@ -448,9 +448,11 @@ def _registration_results(directory, header):
 # --- Candidates stage ------------------------------------------------------------
 
 def _detectors():
-    from starfinder.spot_finding import LocalMaximaConfig, NoiseLandmarkConfig, PercentileCentroidConfig
-    return dict(local_maxima=LocalMaximaConfig, noise_landmark=NoiseLandmarkConfig,
-                percentile_centroid=PercentileCentroidConfig)
+    """Saved detection method name -> config type, from SPOT_FINDING_METHODS (method values equal spec names)."""
+    from starfinder._registry import config_type_for, names
+    from starfinder.spot_finding import SPOT_FINDING_METHODS
+    return {name: config_type_for(SPOT_FINDING_METHODS, name, "spot-finding method")
+            for name in names(SPOT_FINDING_METHODS)}
 
 
 def write_candidates(directory, header, spot_result, intensity_result, table_format):

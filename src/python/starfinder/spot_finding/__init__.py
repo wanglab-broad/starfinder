@@ -4,101 +4,40 @@ Coordinates are zero-based voxel indices. IDs are stable within a result's
 namespace, including through reordering/subsetting; changing detection settings
 or the image does not promise the same identities.
 """
-from dataclasses import dataclass, field
-from numbers import Integral, Real
+from dataclasses import dataclass, replace
+import warnings
 
 import numpy as np
 import pandas as pd
-from scipy.ndimage import center_of_mass, label
-from scipy.spatial import cKDTree
-from skimage.feature import peak_local_max
 
+from starfinder._execution import check_device, execution_record
+from starfinder._registry import spec_for
 from starfinder.image import ImageMetadata, _validate_image
 
+from ._config import LocalMaximaConfig, NoiseLandmarkConfig, PercentileCentroidConfig
+from ._errors import MissingWeightsError, SpotFindingBackendUnavailableError, SpotFindingWarning, WeightsHashMismatchError
+from ._methods import SPOT_FINDING_METHODS as _SPOT_FINDING_METHODS
+from ._methods import MethodContext, SpotFindingConfig, SpotFindingSpec, check_columns, check_shape, per_channel, require_method
+from ._plan import ChannelOverride, SpotFindingPlan
+from ._weights import KNOWN_WEIGHTS as _KNOWN_WEIGHTS
+from ._weights import KnownWeights, WeightsFile, fetch_weights, resolve_weights
+
+#: The spot-finding method registry, mapping each exact frozen config type to its
+#: SpotFindingSpec. find_spots, SpotFindingResult, SpotFindingPlan, PipelineConfig.detection,
+#: FOV.find_spots, the workflow adapter and the checkpoint reader derive their method sets from it.
+SPOT_FINDING_METHODS = _SPOT_FINDING_METHODS
+
+#: The known-weights table, mapping (method, model) to its KnownWeights entry. It lists the
+#: pretrained weights Starfinder can fetch and verify, and sets no default model.
+KNOWN_WEIGHTS = _KNOWN_WEIGHTS
+
 __all__ = ["LocalMaximaConfig", "NoiseLandmarkConfig", "PercentileCentroidConfig",
-           "SpotFindingResult", "find_spots"]
+           "SpotFindingResult", "find_spots", "SPOT_FINDING_METHODS", "SpotFindingSpec",
+           "SpotFindingPlan", "ChannelOverride", "SpotFindingBackendUnavailableError", "SpotFindingWarning",
+           "KNOWN_WEIGHTS", "KnownWeights", "WeightsFile", "resolve_weights", "fetch_weights",
+           "MissingWeightsError", "WeightsHashMismatchError"]
 
-
-def _number(value, name, lower, upper=None):
-    if (isinstance(value, bool) or not isinstance(value, Real)
-            or not np.isfinite(value) or value < lower
-            or (upper is not None and value > upper)):
-        raise ValueError(f"{name} must be finite and in [{lower}, {upper or 'inf'}]")
-
-
-def _distance(value):
-    if isinstance(value, bool) or not isinstance(value, Integral) or value < 1:
-        raise ValueError("min_distance_voxels must be a positive integer")
-
-
-def _labels(labels):
-    if labels is not None and (not isinstance(labels, tuple) or not labels
-            or any(not isinstance(s, str) or not s for s in labels)
-            or len(set(labels)) != len(labels)):
-        raise ValueError("channel_labels must be a nonempty tuple of unique strings")
-
-
-@dataclass(frozen=True)
-class LocalMaximaConfig:
-    """Per-channel pipeline peaks; no spatial deduplication across channels.
-
-    noise uses median + value * MAD * 1.4826 (sigma units); adaptive uses
-    channel maximum, adaptive_round the image maximum, global the uint8/uint16
-    maximum (fraction units [0,1]). Border exclusion uses min_distance_voxels.
-    Singleton Z is treated as a 2D plane, excluding only the YX border.
-    Optional peak_intensity is the original pixel value, without normalization.
-    """
-    threshold_mode: str = "noise"
-    threshold_value: float = 5.0
-    min_distance_voxels: int = 1
-    exclude_border: bool = True
-    channel_labels: tuple[str, ...] | None = None
-    measure_peak_intensity: bool = True
-    method: str = field(default="local_maxima", init=False)
-
-    def __post_init__(self):
-        if self.threshold_mode not in ("noise", "adaptive", "adaptive_round", "global"):
-            raise ValueError("unknown threshold_mode")
-        _number(self.threshold_value, "threshold_value", 0,
-                None if self.threshold_mode == "noise" else 1)
-        _distance(self.min_distance_voxels)
-        _labels(self.channel_labels)
-        if type(self.exclude_border) is not bool or type(self.measure_peak_intensity) is not bool:
-            raise ValueError("exclude_border and measure_peak_intensity must be Boolean")
-
-
-@dataclass(frozen=True)
-class NoiseLandmarkConfig:
-    """Registration MAD peaks with the original per-channel radius deduplication.
-
-    Keep the lower concatenated index for every pair within min_distance_voxels.
-    This is intentionally distinct from pipeline channel-local detections.
-    """
-    noise_sigma: float = 5.0
-    min_distance_voxels: int = 1
-    channel_labels: tuple[str, ...] | None = None
-    method: str = field(default="noise_landmark", init=False)
-
-    def __post_init__(self):
-        _number(self.noise_sigma, "noise_sigma", 0)
-        _distance(self.min_distance_voxels)
-        _labels(self.channel_labels)
-
-
-@dataclass(frozen=True)
-class PercentileCentroidConfig:
-    """Intensity-weighted centroids of face-connected voxels above percentile.
-
-    Channels are summed before thresholding; percentile is in [0,100].
-    No channel or peak measurement is assigned to a multichannel centroid.
-    """
-    threshold_percentile: float = 99.5
-    channel_labels: tuple[str, ...] | None = None
-    method: str = field(default="percentile_centroid", init=False)
-
-    def __post_init__(self):
-        _number(self.threshold_percentile, "threshold_percentile", 0, 100)
-        _labels(self.channel_labels)
+_WHAT = "spot-finding method"
 
 
 @dataclass(frozen=True)
@@ -110,12 +49,14 @@ class SpotFindingResult:
     means the original sampled pixel value. No universal detection score is
     invented. Namespace must include dataset/sample/FOV/subtile when applicable.
     Consumers must join on namespace and spot_id, never row position.
+    config is the registered config of the method (a plan's base config; the
+    per-channel configs are in diagnostics['effective_settings']).
     The repr is a one-line spot count and column names without table rows.
     """
     spots: pd.DataFrame
     metadata: ImageMetadata
     spot_namespace: str
-    config: LocalMaximaConfig | NoiseLandmarkConfig | PercentileCentroidConfig
+    config: SpotFindingConfig
     diagnostics: dict
 
     def __post_init__(self):
@@ -123,8 +64,7 @@ class SpotFindingResult:
             raise TypeError("metadata must be ImageMetadata")
         if not isinstance(self.spot_namespace, str) or not self.spot_namespace.strip():
             raise ValueError("spot_namespace must be nonempty")
-        if not isinstance(self.config, (LocalMaximaConfig, NoiseLandmarkConfig, PercentileCentroidConfig)):
-            raise TypeError("unsupported detection config")
+        spec_for(SPOT_FINDING_METHODS, self.config, _WHAT, TypeError, "unsupported detection config")
         table = self.spots
         if not {"spot_id", "z", "y", "x"}.issubset(table.columns) or not table.columns.is_unique:
             raise ValueError("spots require unique spot_id/z/y/x columns")
@@ -149,87 +89,111 @@ class SpotFindingResult:
         return f"SpotFindingResult: {self._summary()}"
 
 
-def _peaks(channel, distance, threshold, border=True):
-    # Explicit singleton-Z support; volumetric ordering/policy is unchanged.
-    plane = channel.shape[0] == 1
-    coords = peak_local_max(channel[0] if plane else channel,
-                            min_distance=distance, threshold_abs=threshold,
-                            exclude_border=border)
-    return np.column_stack((np.zeros(len(coords), dtype=int), coords)) if plane else coords
-
-
 def find_spots(
     image: np.ndarray,
     *,
-    config: LocalMaximaConfig | NoiseLandmarkConfig | PercentileCentroidConfig,
+    config: SpotFindingConfig | SpotFindingPlan,
     metadata: ImageMetadata,
     spot_namespace: str,
+    device: str = "cpu",
 ) -> SpotFindingResult:
-    """Detect finite ZYX/ZYXC images using the exact typed detector policy.
+    """Detect finite ZYX/ZYXC images with a registered config or a SpotFindingPlan.
 
+    The method is the SPOT_FINDING_METHODS entry of the config's exact type;
+    a plan's overrides replace the whole config of their channels (a plan
+    with overrides needs config.channel_labels). device must be "cpu".
     Returns a SpotFindingResult, including typed empty success. Does not match
     landmarks or evaluate registration. Calculation uses float64 for MAD and
     centroid weighting; input pixels are never modified. Global thresholds
     require uint8/uint16. Unknown physical geometry remains unknown.
+
+    Local maxima records, per channel and in every threshold mode, the noise
+    record diagnostics['noise'] (zero fraction, median, MAD and threshold)
+    and emits a SpotFindingWarning, also listed in diagnostics['warnings'],
+    when a channel's MAD is 0 or more than half of its voxels are zero; the
+    threshold is unchanged. diagnostics['effective_settings'] holds every
+    channel's effective config, and diagnostics['execution'] the execution
+    entry (device, framework, threads).
     """
+    return _detect(image, config, metadata, spot_namespace, device)
+
+
+def _channel_configs(plan, n_channels):
+    """The effective config of every channel: the plan's config or a channel's override, with the plan's labels."""
+    configs = [plan.config] * n_channels
+    labels = plan.config.channel_labels
+    for override in plan.channel_overrides:
+        configs[labels.index(override.channel)] = replace(override.config, channel_labels=labels)
+    return configs
+
+
+def _noise_warning(record, label, round_name):
+    reasons = []
+    if record['mad'] == 0:
+        reasons.append("its noise MAD is 0")
+    if record['zero_fraction'] > 0.5:
+        reasons.append(f"{record['zero_fraction']:.1%} of its voxels are zero")
+    where = f"round {round_name!r}, " if round_name is not None else ""
+    return (f"spot finding: {where}channel {label!r}: {' and '.join(reasons)}, so its median "
+            f"({record['median']!r}) and MAD do not measure its noise; the threshold {record['threshold']!r} "
+            "is unchanged")
+
+
+def _detect(image, config, metadata, spot_namespace, device="cpu", round_name=None):
+    """find_spots; round_name (from FOV.find_spots) is named in the warnings."""
+    from starfinder.io._checkpoint import _jsonable, _tuples
     image = _validate_image(image)
-    if not isinstance(config, (LocalMaximaConfig, NoiseLandmarkConfig, PercentileCentroidConfig)):
-        raise TypeError("unsupported detection config")
+    base = config.config if isinstance(config, SpotFindingPlan) else config
+    spec = spec_for(SPOT_FINDING_METHODS, base, _WHAT, TypeError, "unsupported detection config")
     if not isinstance(metadata, ImageMetadata):
         raise TypeError("metadata must be ImageMetadata")
     if not isinstance(spot_namespace, str) or not spot_namespace.strip():
         raise ValueError("spot_namespace must be nonempty")
+    check_device(device)
+    plan = config if isinstance(config, SpotFindingPlan) else SpotFindingPlan(base)
+    plan.__post_init__()
     n_channels = image.shape[3] if image.ndim == 4 else 1
-    labels = config.channel_labels
+    labels = base.channel_labels
     if labels is not None and len(labels) != n_channels:
         raise ValueError("channel_labels must match the channel axis")
-    thresholds = []
-    if isinstance(config, PercentileCentroidConfig):
-        volume = image if image.ndim == 3 else image.sum(axis=-1)
-        threshold = np.percentile(volume, config.threshold_percentile)
-        thresholds.append(float(threshold))
-        components, count = label(volume > threshold)
-        coords = np.asarray(center_of_mass(volume, components, range(1, count + 1)), dtype=float).reshape(-1, 3) if count else np.empty((0, 3))
-        table = pd.DataFrame(coords, columns=['z', 'y', 'x'], dtype='float64')
-    else:
-        pipeline = isinstance(config, LocalMaximaConfig)
-        mode = config.threshold_mode if pipeline else 'noise'
-        value = config.threshold_value if pipeline else config.noise_sigma
-        if mode == 'global' and image.dtype not in (np.dtype('uint8'), np.dtype('uint16')):
-            raise ValueError("global thresholds require uint8/uint16")
-        rows = []
-        for c in range(n_channels):
-            channel = image[..., c] if image.ndim == 4 else image
-            if mode == 'noise':
-                values = channel.astype(np.float64)
-                median = np.median(values)
-                threshold = median + value * np.median(np.abs(values - median)) * 1.4826
-            elif mode == 'global':
-                threshold = np.iinfo(image.dtype).max * value
-            elif mode == 'adaptive_round':
-                threshold = float(image.max()) * value
-            else:
-                threshold = float(channel.max()) * value
-            thresholds.append(float(threshold))
-            if channel.max() == 0:
-                continue
-            coords = _peaks(channel, config.min_distance_voxels, threshold,
-                            config.exclude_border if pipeline else True)
-            for z, y, x in coords:
-                rows.append((z, y, x, c, float(channel[z, y, x])))
-        table = pd.DataFrame(rows, columns=['z', 'y', 'x', 'channel', 'peak_intensity']).astype(
-            {'z': 'float64', 'y': 'float64', 'x': 'float64', 'channel': 'int64', 'peak_intensity': 'float64'})
-        if not pipeline:
-            if len(table) > 1 and image.ndim == 4:
-                pairs = cKDTree(table[['z', 'y', 'x']]).query_pairs(r=config.min_distance_voxels)
-                table = table.drop(index={max(i, j) for i, j in pairs}).reset_index(drop=True)
-            table = table[['z', 'y', 'x']]
-        elif not config.measure_peak_intensity:
-            table = table.drop(columns='peak_intensity')
+    if plan.channel_overrides and labels is None:
+        raise ValueError("a plan with channel overrides needs config.channel_labels")
+    if plan.channel_overrides and not per_channel(spec):
+        raise ValueError(f"{_WHAT} {spec.name!r} combines channels and takes no channel overrides")
+    require_method(spec)
+    check_shape(spec, image.shape[:3])
+    configs = _channel_configs(plan, n_channels)
+    overridden = {labels.index(o.channel) for o in plan.channel_overrides}
+    groups = [(base, tuple(c for c in range(n_channels) if c not in overridden))]
+    groups = [g for g in groups if g[1]] + [(configs[c], (c,)) for c in sorted(overridden)]
+    tables, thresholds, noise = [], {}, {}
+    for group_config, channels in groups:
+        table, details = spec.run(image, group_config, MethodContext(channels, device))
+        check_columns(spec, table)
+        tables.append(table)
+        if per_channel(spec):
+            thresholds.update(zip(channels, details['thresholds']))
+        else:
+            thresholds = dict(enumerate(details['thresholds']))
+        noise.update(zip(channels, details.get('noise', ())))
+    table = tables[0]
+    if len(tables) > 1:
+        table = pd.concat(tables, ignore_index=True).sort_values('channel', kind='stable').reset_index(drop=True)
     table.insert(0, 'spot_id', pd.array([str(i) for i in range(len(table))], dtype='string'))
-    diagnostics = {'method': config.method, 'channel_labels': labels,
-                   'thresholds': tuple(thresholds), 'coordinate_units': 'voxel_index',
+    keys = labels if labels is not None else tuple(str(c) for c in range(n_channels))
+    diagnostics = {'method': base.method, 'channel_labels': labels,
+                   'thresholds': tuple(thresholds[k] for k in sorted(thresholds)), 'coordinate_units': 'voxel_index',
                    'singleton_z_policy': 'YX plane; Z=0',
                    'measurements': ({'peak_intensity': 'original pixel intensity at the detected channel maximum'}
                                     if 'peak_intensity' in table else {})}
-    return SpotFindingResult(table, metadata, spot_namespace, config, diagnostics)
+    messages = []
+    if noise:
+        diagnostics['noise'] = {keys[c]: noise[c] for c in sorted(noise)}
+        for c in sorted(noise):
+            if noise[c]['mad'] == 0 or noise[c]['zero_fraction'] > 0.5:
+                messages.append(_noise_warning(noise[c], keys[c], round_name))
+                warnings.warn(messages[-1], SpotFindingWarning, stacklevel=3)
+    diagnostics['effective_settings'] = {keys[c]: _tuples(_jsonable(configs[c])) for c in range(n_channels)}
+    diagnostics['warnings'] = tuple(messages)
+    diagnostics['execution'] = execution_record(device, framework=any(d.module == "torch" for d in spec.requires))
+    return SpotFindingResult(table, metadata, spot_namespace, base, diagnostics)

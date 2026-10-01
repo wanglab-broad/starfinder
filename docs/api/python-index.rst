@@ -15,7 +15,9 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.registration.BSplineTransform`
 * :py:obj:`starfinder.synthetic.CALIBRATED_CONDITIONS`
 * :py:obj:`starfinder.synthetic.calibrated_scene_preset`
+* :py:obj:`starfinder.spot_finding.ChannelOverride`
 * :py:obj:`starfinder.dataset.CheckpointConfig`
+* :py:obj:`starfinder.evaluation.spot_finding.classify_detections`
 * :py:obj:`starfinder.barcode.Codebook`
 * :py:obj:`starfinder.barcode.CodebookAwareDecoderConfig`
 * :py:obj:`starfinder.io.convert_image`
@@ -50,6 +52,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.io.export_spots`
 * :py:obj:`starfinder.dataset.ExternalReference`
 * :py:obj:`starfinder.barcode.extract_intensities`
+* :py:obj:`starfinder.spot_finding.fetch_weights`
 * :py:obj:`starfinder.barcode.filter_reads`
 * :py:obj:`starfinder.preprocessing.filter_tophat`
 * :py:obj:`starfinder.spot_finding.find_spots`
@@ -77,15 +80,19 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.image.InvalidImageError`
 * :py:obj:`starfinder.barcode.InvalidIntensityError`
 * :py:obj:`starfinder.registration.InvalidRegistrationConfigError`
+* :py:obj:`starfinder.spot_finding.KNOWN_WEIGHTS`
+* :py:obj:`starfinder.spot_finding.KnownWeights`
 * :py:obj:`starfinder.barcode.load_codebook`
 * :py:obj:`starfinder.io.load_round`
 * :py:obj:`starfinder.io.load_volume`
 * :py:obj:`starfinder.io.load_volume_zyxc`
+* :py:obj:`starfinder.evaluation.spot_finding.localization_errors`
 * :py:obj:`starfinder.spot_finding.LocalMaximaConfig`
 * :py:obj:`starfinder.preprocessing.match_histogram`
 * :py:obj:`starfinder.evaluation.matching.match_points`
 * :py:obj:`starfinder.preprocessing.merge_histograms`
 * :py:obj:`starfinder.preprocessing.MinMaxNormalizationConfig`
+* :py:obj:`starfinder.spot_finding.MissingWeightsError`
 * :py:obj:`starfinder.barcode.NeighborhoodSumConfig`
 * :py:obj:`starfinder.synthetic.NoiseConfig`
 * :py:obj:`starfinder.spot_finding.NoiseLandmarkConfig`
@@ -125,6 +132,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.registration.RegistrationSpec`
 * :py:obj:`starfinder.dataset.RegistrationStep`
 * :py:obj:`starfinder.benchmark.report_benchmark`
+* :py:obj:`starfinder.spot_finding.resolve_weights`
 * :py:obj:`starfinder.registration.RigidConfig`
 * :py:obj:`starfinder.dataset.RoundState`
 * :py:obj:`starfinder.benchmark.run_benchmark`
@@ -135,7 +143,12 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.preprocessing.ScalarBackgroundConfig`
 * :py:obj:`starfinder.synthetic.ScalarDistribution`
 * :py:obj:`starfinder.synthetic.SCENE_PRESETS`
+* :py:obj:`starfinder.spot_finding.SPOT_FINDING_METHODS`
+* :py:obj:`starfinder.spot_finding.SpotFindingBackendUnavailableError`
+* :py:obj:`starfinder.spot_finding.SpotFindingPlan`
 * :py:obj:`starfinder.spot_finding.SpotFindingResult`
+* :py:obj:`starfinder.spot_finding.SpotFindingSpec`
+* :py:obj:`starfinder.spot_finding.SpotFindingWarning`
 * :py:obj:`starfinder.preprocessing.step_config_type`
 * :py:obj:`starfinder.preprocessing.step_spec`
 * :py:obj:`starfinder.preprocessing.StepContext`
@@ -157,6 +170,8 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.registration.TranslationTransform`
 * :py:obj:`starfinder.registration.UnsupportedTransformOperationError`
 * :py:obj:`starfinder.registration.WarpConfig`
+* :py:obj:`starfinder.spot_finding.WeightsFile`
+* :py:obj:`starfinder.spot_finding.WeightsHashMismatchError`
 * :py:obj:`starfinder.dataset.WorkflowConfig`
 * :py:obj:`starfinder.preprocessing.write_histograms`
 * :py:obj:`starfinder.preprocessing.write_supplied_statistics`

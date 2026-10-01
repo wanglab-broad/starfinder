@@ -209,9 +209,9 @@ run starts, after each completed step and when the run ends. It contains:
 | `error` | `null`, or the failing `step` and `round`, the exception `type`, `message` and `traceback`. |
 | `code` | Package `version`, `git_commit` and `git_dirty`; each is `null` when unknown. The commit is recorded only when the package runs from a starfinder checkout, never from an enclosing repository. |
 | `environment` | Python, platform and package versions (`null` when not installed). |
-| `config` | `pipeline`, `execution` and `checkpoints` configurations. |
+| `config` | `pipeline`, `execution` (including the execution `device`) and `checkpoints` configurations. |
 | `inputs` | Loaded TIFF `path` and streamed `sha256` (`null` with `hash_inputs=False`). |
-| `steps` | `name`, `round`, `seconds` and `status` of each completed or failed step. A preprocessing step is named `preprocess:<step name>`. |
+| `steps` | `name`, `round`, `seconds` and `status` of each completed or failed step. A preprocessing step is named `preprocess:<step name>`. The `find_spots` record also has `methods`, a list with the detection's provenance entry ({doc}`method-registry`, "Provenance in run.json"): `stage` (`spot_finding`), `method`, `config_type`, `implementation`, `config`, `requires` (installed versions of the optional dependencies), `artifacts` (pretrained weights files; empty for methods without weights) and `execution` (device, framework and thread settings). |
 | `preprocessing` | `null` without a preprocessing recipe. Otherwise `recipe` (the step names of `steps` and `post_registration`, `extraction_source` and `registration_source`), `rounds`: per round, one record per step with `index`, `stage` (`steps` or `post_registration`), `step`, `config`, `fitted`, `diagnostics`, `input_dtype`, `output_dtype` and `save_as`; `transforms`: per round and image (`detection` and each snapshot), the transforms composed in order, each with `result` (its index in the round's registration results in `transforms.json`), `method` and `kind` (`translation`, `affine`, `bspline` or `dense`), empty for the reference round; and `supplied_statistics`. |
 | `registration` | Ordered registration attempts per round: the estimation entries and one application entry per moving round (see {doc}`coordination`). |
 | `counts` | Spots, intensities, decoding call statuses and filtering counts. |

@@ -118,7 +118,9 @@ starfinder.evaluation.registration
 starfinder.evaluation.spot_finding
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+* :py:obj:`starfinder.evaluation.spot_finding.classify_detections`
 * :py:obj:`starfinder.evaluation.spot_finding.evaluate_spots`
+* :py:obj:`starfinder.evaluation.spot_finding.localization_errors`
 
 starfinder.image
 ~~~~~~~~~~~~~~~~
@@ -216,11 +218,24 @@ starfinder.registration
 starfinder.spot_finding
 ~~~~~~~~~~~~~~~~~~~~~~~
 
+* :py:obj:`starfinder.spot_finding.ChannelOverride`
+* :py:obj:`starfinder.spot_finding.fetch_weights`
 * :py:obj:`starfinder.spot_finding.find_spots`
+* :py:obj:`starfinder.spot_finding.KNOWN_WEIGHTS`
+* :py:obj:`starfinder.spot_finding.KnownWeights`
 * :py:obj:`starfinder.spot_finding.LocalMaximaConfig`
+* :py:obj:`starfinder.spot_finding.MissingWeightsError`
 * :py:obj:`starfinder.spot_finding.NoiseLandmarkConfig`
 * :py:obj:`starfinder.spot_finding.PercentileCentroidConfig`
+* :py:obj:`starfinder.spot_finding.resolve_weights`
+* :py:obj:`starfinder.spot_finding.SPOT_FINDING_METHODS`
+* :py:obj:`starfinder.spot_finding.SpotFindingBackendUnavailableError`
+* :py:obj:`starfinder.spot_finding.SpotFindingPlan`
 * :py:obj:`starfinder.spot_finding.SpotFindingResult`
+* :py:obj:`starfinder.spot_finding.SpotFindingSpec`
+* :py:obj:`starfinder.spot_finding.SpotFindingWarning`
+* :py:obj:`starfinder.spot_finding.WeightsFile`
+* :py:obj:`starfinder.spot_finding.WeightsHashMismatchError`
 
 starfinder.synthetic
 ~~~~~~~~~~~~~~~~~~~~

@@ -1,4 +1,4 @@
-"""Command line adapters for synthetic generation and benchmark lifecycle."""
+"""Command line adapters for synthetic generation, benchmark lifecycle and pretrained weights."""
 import argparse
 from pathlib import Path
 import sys
@@ -31,8 +31,22 @@ def main(argv=None):
     evaluate.add_argument('--run-dir', type=Path, required=True)
     report = commands.add_parser('report')
     report.add_argument('--evaluation-dir', type=Path, required=True)
+    weights = groups.add_parser('weights', help='Fetch, list and verify the known pretrained weights')
+    weight_commands = weights.add_subparsers(dest='command', required=True)
+    fetch = weight_commands.add_parser('fetch', help='Download, verify and install one known model (uses the network)')
+    fetch.add_argument('method')
+    fetch.add_argument('model')
+    listing = weight_commands.add_parser('list', help='Print the known-weights table and the local state')
+    verify = weight_commands.add_parser('verify', help='Re-hash the local copies (all, or one method and model)')
+    verify.add_argument('method', nargs='?')
+    verify.add_argument('model', nargs='?')
+    for command in (fetch, listing, verify):
+        command.add_argument('--dir', type=Path, help='Weights cache; default STARFINDER_WEIGHTS_DIR, '
+                             'else $XDG_CACHE_HOME/starfinder/weights (~/.cache/starfinder/weights)')
     args = parser.parse_args(argv)
     try:
+        if args.group == 'weights':
+            return _weights(args)
         from starfinder.benchmark._storage import _read, _write, _reference, SCHEMA_VERSION
         if args.group == 'synthetic':
             from starfinder.synthetic import BENCHMARK_PRESETS
@@ -75,6 +89,39 @@ def main(argv=None):
         return int(failed)
     except (OSError, ValueError, TypeError, KeyError) as exc:
         parser.error(str(exc))
+
+
+def _weights(args):
+    """starfinder weights fetch|list|verify; verify exits 1 when a local copy is missing or changed."""
+    from starfinder.spot_finding import KNOWN_WEIGHTS, MissingWeightsError, WeightsHashMismatchError
+    from starfinder.spot_finding import fetch_weights, resolve_weights
+    from starfinder.spot_finding._weights import RECORD_NAME, model_folder, weights_directory
+    if args.command == 'fetch':
+        print(fetch_weights(args.method, args.model, directory=args.dir))
+        return 0
+    if args.command == 'list':
+        print(f'weights directory: {weights_directory(args.dir)}')
+        for (method, model), entry in KNOWN_WEIGHTS.items():
+            folder = model_folder(method, model, args.dir)
+            state = ('fetched' if (folder / RECORD_NAME).is_file() else 'incomplete' if folder.exists()
+                     else 'not fetched')
+            print(f'{method}\t{model}\t{entry.dimensionality}\t{entry.bytes} bytes\tsha256 {entry.sha256}\t'
+                  f'{entry.revision}\t{state}')
+        return 0
+    if (args.method is None) != (args.model is None):
+        raise ValueError('verify takes a method and a model, or neither')
+    keys = ([(args.method, args.model)] if args.method is not None else
+            [key for key in KNOWN_WEIGHTS if model_folder(*key, args.dir).exists()])
+    if not keys:
+        print(f'no local weights in {weights_directory(args.dir)}')
+    failed = False
+    for method, model in keys:
+        try:
+            print(f'{method}\t{model}\tverified\t{resolve_weights(method, model, directory=args.dir)}')
+        except (MissingWeightsError, WeightsHashMismatchError) as error:
+            failed = True
+            print(f'{method}\t{model}\tfailed\t{error}')
+    return int(failed)
 
 
 if __name__ == '__main__':

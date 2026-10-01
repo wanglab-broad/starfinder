@@ -14,7 +14,8 @@ import numpy as np
 import pandas as pd
 
 from starfinder.image import ImageMetadata, _validate_image
-from starfinder.spot_finding import LocalMaximaConfig, SpotFindingResult
+from starfinder.spot_finding import LocalMaximaConfig, SpotFindingPlan, SpotFindingResult
+from starfinder.spot_finding._methods import SpotFindingConfig
 from starfinder.io import ImageLoadConfig
 from starfinder.preprocessing import (MinMaxNormalizationConfig, HistogramMatchingConfig, ReconstructionConfig, TophatConfig, ProjectionConfig,
     StepContext, read_supplied_statistics, run_step, step_spec)
@@ -764,23 +765,39 @@ class FOV:
         pd.DataFrame(rows, columns=['fov_id', 'round', 'row', 'col', 'z']).to_csv(path, index=False)
 
     @_log_step
-    def find_spots(self, *, config: LocalMaximaConfig = LocalMaximaConfig()) -> FOV:
+    def find_spots(self, *, config: SpotFindingConfig | SpotFindingPlan = LocalMaximaConfig(),
+                   device: str = "cpu") -> FOV:
         """Detect reference-round spots with explicit config and FOV identity.
 
-        The namespace encodes dataset/sample/FOV and, for saved subtiles, the
-        one-based subtile ID. IDs are retained in extraction/filtering tables.
+        config is a config of a SPOT_FINDING_METHODS method with
+        pipeline=True, or a SpotFindingPlan of one; channel_labels None is
+        filled from dataset.channel_order, and override channels must be
+        among them. The namespace encodes dataset/sample/FOV and, for saved
+        subtiles, the one-based subtile ID. IDs are retained in
+        extraction/filtering tables. While FOV.run records run.json, the
+        step record gets the detection's provenance entry under methods.
         """
-        from starfinder.spot_finding import find_spots
+        from starfinder._registry import provenance
+        from starfinder.spot_finding import SPOT_FINDING_METHODS, _detect
 
-        if not isinstance(config, LocalMaximaConfig):
-            raise TypeError("FOV detection requires LocalMaximaConfig")
-        if config.channel_labels is None and self.dataset.channel_order:
-            config = replace(config, channel_labels=tuple(self.dataset.channel_order))
+        plan = config if type(config) is SpotFindingPlan else None
+        base = plan.config if plan is not None else config
+        spec = SPOT_FINDING_METHODS.get(type(base))
+        if spec is None or not spec.pipeline:
+            accepted = " or ".join(t.__name__ for t, s in SPOT_FINDING_METHODS.items() if s.pipeline)
+            raise TypeError(f"FOV detection requires {accepted}")
+        if base.channel_labels is None and self.dataset.channel_order:
+            base = replace(base, channel_labels=tuple(self.dataset.channel_order))
+        config = base if plan is None else SpotFindingPlan(base, plan.channel_overrides)
         namespace = json.dumps([self.dataset.dataset_id, self.dataset.sample_id,
                                 self.fov_id, self.subtile_id], separators=(",", ":"))
-        metadata = self.metadata.get(self.rounds.reference_round, ImageMetadata(f"{self.fov_id}/{self.rounds.reference_round}"))
-        self.spot_result = find_spots(self.images[self.rounds.reference_round], config=config,
-                                     metadata=metadata, spot_namespace=namespace)
+        reference = self.rounds.reference_round
+        metadata = self.metadata.get(reference, ImageMetadata(f"{self.fov_id}/{reference}"))
+        self.spot_result = _detect(self.images[reference], config, metadata, namespace, device, reference)
+        if self._run_record is not None:
+            entry = provenance(spec, base, "spot_finding")
+            entry["execution"] = self.spot_result.diagnostics["execution"]
+            self._run_record.add_methods([entry])
         return self
 
     @_log_step
@@ -980,7 +997,7 @@ class FOV:
                     self._write_checkpoint(stage='registered', directory=record.directory,
                                            table_format=checkpoints.table_format, round_name=name)
                 if name == ref and config.detection:
-                    self.find_spots(config=config.detection)
+                    self.find_spots(config=config.detection, device=execution.device)
                 if config.extraction and name in self.rounds.sequencing_rounds:
                     self._extract_round(round_name=name, config=config.extraction, source=extraction_source)
                 if execution.mode == 'streaming' and not execution.retain_images:

@@ -1,6 +1,6 @@
 # Spot-finding baseline
 
-Status: Proposed
+Status: Accepted (W-268, 2026-10-01, at b5fcb7f)
 
 This page records how spot finding behaves at revision `42f652d` (branch
 `runner/s27-spec-20260930`, on `dev` after the §2.6 work), before the Chapter II

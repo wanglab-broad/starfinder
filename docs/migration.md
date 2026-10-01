@@ -382,12 +382,86 @@ checkpoints store `correction_zyx`; the reader loads it as
 Registered images, pull fields and the `log/gr_shifts` rows (which already held
 the detected displacement) are unchanged.
 
+### Spot-finding registry
+
+`SPOT_FINDING_METHODS` in `starfinder.spot_finding` maps each exact config type
+(`LocalMaximaConfig`, `NoiseLandmarkConfig`, `PercentileCentroidConfig`) to its
+`SpotFindingSpec` (`local_maxima`, `noise_landmark`, `percentile_centroid`).
+`find_spots`, `SpotFindingResult`, `PipelineConfig.detection`, `FOV.find_spots`,
+the workflow adapter and the `candidates` checkpoint reader look methods up
+through it by exact type, so a subclass of a detection config, which
+`isinstance` accepted before, now raises `TypeError` (`unsupported detection
+config` from `find_spots`). A missing optional dependency of a method raises
+`SpotFindingBackendUnavailableError`, an `ImportError` naming the module and
+the extra. Detection results are unchanged; see {doc}`spot-finding-contract`.
+
+### Spot-finding workflow keys
+
+The `spot_finding` block of a Python rule accepts the Python-only key `method`
+(a pipeline method of `SPOT_FINDING_METHODS`, default `local_maxima`), every
+init field of the selected config (for example `exclude_border` and
+`measure_peak_intensity`, which YAML could not set before) and
+`channel_overrides`, a mapping from channel label to config fields. A
+rule-level Python-only `device` key sets `ExecutionConfig.device`. The legacy
+keys `intensity_estimation`, `intensity_threshold` and `min_distance` stay
+aliases of `threshold_mode`, `threshold_value` and `min_distance_voxels` for
+`local_maxima` only; for another method `min_distance` is that config's own
+field. The schema drops `local` from `intensity_estimation`, which neither
+Python nor MATLAB accepts.
+
+| Before | After |
+| --- | --- |
+| `min_distance` and `min_distance_voxels` together: `min_distance_voxels` silently wins | `ValueError` |
+| `intensity_threshold` with `threshold_value`, or `intensity_estimation` with `threshold_mode` | `ValueError` (the field names were unknown keys before) |
+| `exclude_border` in YAML: unknown key | the `LocalMaximaConfig` field |
+
+### Detection plan and execution device
+
+`find_spots`, `FOV.find_spots` and `PipelineConfig.detection` accept a
+`SpotFindingPlan(config, channel_overrides=())`: one method for every channel,
+and `ChannelOverride(channel, config)` entries that replace the whole config of
+one channel (same exact config type; `channel_labels` `None` or the plan's).
+A bare config means a plan without overrides, and `PipelineConfig` keeps what it
+is given. `ExecutionConfig` gains `device="cpu"`, the only accepted value
+(`ValueError` otherwise), and `find_spots` takes the same `device` keyword.
+`run.json` records `config.execution.device`, and the `find_spots` step record
+gains `methods`, a list with the detection's provenance entry (`stage`,
+`method`, `config_type`, `implementation`, `config`, `requires`, `artifacts`,
+`execution`); see {doc}`checkpoints`.
+
+### Spot-finding diagnostics
+
+`SpotFindingResult.diagnostics` keeps its keys and adds `effective_settings`
+(the config of every channel, serialized as `run.json` serializes dataclasses),
+`warnings` and `execution` (device, torch build when a method uses it, and the
+thread settings in effect). Local maxima adds `noise`: per channel the zero
+fraction, median, MAD and threshold, in every threshold mode.
+
+### Spot evaluation metrics
+
+`starfinder.evaluation.spot_finding` gains `localization_errors` (per-axis,
+lateral and 3D error maxima and 95th percentiles of the matched pairs) and
+`classify_detections` (matched, duplicate and spurious counts, with duplicates
+split by group, such as the channel). Both read an `evaluate_spots` result and
+return an `EvaluationResult`.
+
+### Pretrained weights
+
+`KNOWN_WEIGHTS` lists the pretrained weights Starfinder can fetch and verify
+(two Spotiflow 3D, two Spotiflow 2D and two Piscis models, with full SHA-256
+values) and sets no default. `starfinder weights fetch <method> <model>`
+(`fetch_weights`) downloads, verifies and installs a model under
+`STARFINDER_WEIGHTS_DIR` (else `$XDG_CACHE_HOME/starfinder/weights`);
+`starfinder weights list` and `starfinder weights verify` show and re-hash the
+local copies. `resolve_weights` raises `MissingWeightsError` or
+`WeightsHashMismatchError`. Detection never downloads.
+
 ## Intentional behavior changes — not mechanical equivalence
 
 | Area | Change and consequence |
 | --- | --- |
 | I/O / preprocessing | Preserve loaded dtype; conversion, cropping and channel selection are explicit. Constant normalization groups map to the lower endpoint even with SNR gating. Float64 computation can change quantization boundaries. Slice morphology avoids uint16 signed overflow; projection preserves singleton Z and uses wider sums without display scaling. |
-| Detection | Singleton-Z local maxima operate in YX. Empty tables are typed, identities/geometry explicit. Distinct landmark and pipeline detector policies remain distinct. |
+| Detection | Singleton-Z local maxima operate in YX. Empty tables are typed, identities/geometry explicit. Distinct landmark and pipeline detector policies remain distinct. Local maxima now emits a `SpotFindingWarning` when a channel's noise MAD is 0 or more than half of its voxels are zero, where nothing was reported before; thresholds and detections are unchanged. Subclasses of the detection configs are rejected (exact-type lookup), and for `local_maxima` a legacy YAML key together with its field raises instead of one silently winning. |
 | Translation | Singleton axes return zero; odd-length peak wrapping is corrected. Signed fractional Fourier output uses the real inverse FFT rather than magnitude. Even half-period backend signs and Nyquist behavior are documented rather than hidden. |
 | Transform application | Integer output rounds once with nearest-even ties and saturation; floating output retains signed interpolation/overshoot. No silent method fallback; unsupported geometry/backend/dimensions fail explicitly. |
 | Barcodes | Validate codebook collisions and label alignment; neighborhoods use explicit ZYX radii and subpixel/boundary policy. Preserve ambiguous/unmatched/rejected identities instead of dropping them. Scores and endpoint filtering have explicit meanings. |

@@ -1,6 +1,6 @@
 # Spot-finding contract
 
-Status: Proposed
+Status: Accepted (W-268, 2026-10-01, at b5fcb7f)
 
 This page proposes the §2.7 spot-finding contract: four selectable pipeline
 methods (Starfinder local maxima, the native Starfish LoG, native-3D Spotiflow

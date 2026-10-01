@@ -314,15 +314,17 @@ def test_find_spots_tables_and_diagnostics_are_pinned(case):
 
 
 @pytest.mark.parametrize("dims", ["3d", "z1"])
-def test_noise_mode_mad_zero_passes_silently(dims):
-    # Legacy behavior that the §2.7 diagnostics change replaces with a warning: channel 2
-    # has MAD 0, so its noise threshold equals its median, 0, and every positive local
-    # maximum is kept without notice.
+def test_noise_mode_mad_zero_keeps_threshold_and_warns(dims):
+    # The §2.7 diagnostics change (W-270): channel 2 has MAD 0, so its noise threshold still
+    # equals its median, 0, and every positive local maximum is kept; one SpotFindingWarning
+    # now reports the channel.
+    from starfinder.spot_finding import SpotFindingWarning
+
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         result = detect("noise", dims)
     assert result.diagnostics["thresholds"][2] == 0.0
-    assert caught == []
+    assert [w.category for w in caught] == [SpotFindingWarning]
 
 
 def test_saturated_plateau_gives_tied_maxima():
