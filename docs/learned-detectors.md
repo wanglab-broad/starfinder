@@ -81,17 +81,32 @@ uv run starfinder weights verify piscis 20251212
   size and SHA-256, plus the library's MD5 for a Spotiflow archive. Only then
   does it extract the archive (Spotiflow) or move the file (Piscis) into
   `<root>/<method>/<model>/`, next to a `starfinder-weights.json` record of the
-  per-file hashes. It prints the model folder. A verified copy is never
-  overwritten: fetching it again checks it and returns it.
+  per-file hashes. It prints the model folder.
+* When the model folder already exists, `fetch` downloads nothing and never
+  overwrites it. It checks only the file the library loads (`best.pt` for a
+  Spotiflow model, the `.pt` file for Piscis) and that `starfinder-weights.json`
+  exists, then returns the folder. It does not check or restore the other four
+  files of a Spotiflow folder, so it can succeed for a folder that is missing
+  `config.yaml`, for example. Run `starfinder weights verify` after a fetch to check
+  every file.
 * `starfinder weights list` prints the cache root and one line per model: method,
-  model, dimensionality, size, SHA-256, revision and the local state (`fetched`,
-  `incomplete` or `not fetched`).
-* `starfinder weights verify` re-hashes every file of each known model that has a
-  folder in the cache. `starfinder weights verify <method> <model>` re-hashes one
-  model. Each model prints `verified` or `failed` with the error, and the command
-  exits with status 1 when any copy is missing or changed.
-* The Python equivalents are `fetch_weights(method, model, *, directory=None)` and
-  `resolve_weights(method, model, *, directory=None, extracted=())`.
+  model, dimensionality, size, SHA-256, revision and the local state. The state
+  `fetched` means the folder holds `starfinder-weights.json`, `incomplete` means
+  the folder exists without it, and `not fetched` means there is no folder. `list`
+  hashes nothing, so `fetched` does not mean verified.
+* `starfinder weights verify` re-hashes every file `KNOWN_WEIGHTS` lists for each
+  known model that has a folder in the cache: five files for a Spotiflow model,
+  the `.pt` file for Piscis. `starfinder weights verify <method> <model>` re-hashes
+  one model. Each model prints `verified` or `failed` with the error, and the
+  command exits with status 1 when any listed file is missing or changed.
+  Detection runs the same full check.
+* The Python equivalent of `fetch` is `fetch_weights(method, model, *,
+  directory=None)`, with the same checks. `resolve_weights(method, model, *,
+  directory=None, extracted=())` checks by default only the loaded file, as `fetch`
+  does for an existing folder. For the full check of `verify` and of detection,
+  also pass every other listed file:
+  `extracted=tuple(f.path for f in KNOWN_WEIGHTS[(method, model)].extracted)`
+  (empty for Piscis, whose `.pt` file is already checked).
 
 ### Cache location
 
@@ -118,10 +133,10 @@ A loaded model is reused within the same process.
 | Error | When | What to do |
 | --- | --- | --- |
 | `SpotFindingBackendUnavailableError` (an `ImportError`) | The method's extra is not installed. It is reported before any weights error. | Install the extra (see "Install"). |
-| `MissingWeightsError` (a `FileNotFoundError`) | The model folder, or a file it lists, is missing. The message names the method, model, expected path and the fetch command. | Run the fetch command it names, into the same root. If the model folder exists but is incomplete, remove it first: `fetch` checks an existing folder and raises the same error. |
-| `WeightsHashMismatchError` (a `ValueError`) | A local file's SHA-256 differs from the table. The message names the file and both hashes. `fetch` raises it too when a download's size, SHA-256 or MD5 differs, and then installs nothing. | Remove the model folder and fetch again. `fetch` does not replace an existing copy. |
-| `FileExistsError` | `fetch` finds a model folder whose files verify but that has no `starfinder-weights.json`. | Remove the folder and fetch again. |
-| `ValueError` | The config names an unknown model, or a model of the other method. It is raised when the config is constructed, and the message lists the known names. | Use a model from the table. |
+| `MissingWeightsError` (a `FileNotFoundError`) | The model folder, or a file it lists, is missing. The message names the method, model, expected path and the fetch command. | If the model folder does not exist, run the fetch command it names, into the same root. If the folder exists, remove it first and then fetch: `fetch` keeps an existing folder whose loaded file verifies and does not restore missing files. Then run `starfinder weights verify`. |
+| `WeightsHashMismatchError` (a `ValueError`) | A local file's SHA-256 differs from the table. The message names the file and both hashes. `fetch` raises it too when a download's size, SHA-256 or MD5 differs, or the download lacks the loaded file, and then installs nothing. | Remove the model folder and fetch again. `fetch` does not replace an existing copy. |
+| `FileExistsError` | `fetch` finds a model folder whose loaded file verifies but that has no `starfinder-weights.json`. | Remove the folder and fetch again. |
+| `ValueError` | The config names an unknown model, or a model of the other method. It is raised when the config is constructed, and the message lists the method's known models. A model that is empty or not a string gets "model must name a <method> model of KNOWN_WEIGHTS" instead. | Use a model from the table. |
 
 ## Run
 
