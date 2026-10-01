@@ -1,6 +1,6 @@
 """The spot-finding method registry: exact config type -> SpotFindingSpec, and the private method functions."""
-from collections.abc import Callable
-from dataclasses import KW_ONLY, dataclass
+from collections.abc import Callable, Mapping
+from dataclasses import KW_ONLY, dataclass, field
 import re
 import sys
 
@@ -47,7 +47,9 @@ class SpotFindingSpec:
     PipelineConfig.detection accept the method. dimensions holds 2 when a
     Z=1 input is detected as a YX plane and 3 when Z>1 is detected in 3D.
     output_columns are the spot-table columns besides spot_id, in order; a
-    trailing ``?`` marks an optional column. weights is True when the config
+    trailing ``?`` marks an optional column. column_fields maps each
+    optional column to the Boolean config field that adds it, so the columns
+    a config produces follow from the spec. weights is True when the config
     names pretrained weights from KNOWN_WEIGHTS. requires lists optional
     dependencies, imported when the method runs; min_shape_zyx is the
     smallest accepted size of each axis (a Z=1 input is checked against its
@@ -60,6 +62,7 @@ class SpotFindingSpec:
     pipeline: bool
     dimensions: frozenset[int]
     output_columns: tuple[str, ...]
+    column_fields: Mapping[str, str] = field(default_factory=dict)
     weights: bool = False
     requires: tuple[Dependency, ...] = ()
     min_shape_zyx: tuple[int, int, int] = (1, 1, 1)
@@ -79,6 +82,10 @@ class SpotFindingSpec:
                 or [c.rstrip("?") for c in columns[:3]] != ["z", "y", "x"]):
             raise ValueError(f"output_columns of {self.name!r} must be unique names starting with z, y, x, "
                              "without spot_id")
+        optional = {c.rstrip("?") for c in columns if c.endswith("?")}
+        if (not isinstance(self.column_fields, Mapping) or set(self.column_fields) != optional
+                or not all(isinstance(f, str) and f for f in self.column_fields.values())):
+            raise ValueError(f"column_fields of {self.name!r} must map each optional column to a config field")
 
 
 def _peaks(channel, distance, threshold, border=True):
@@ -157,7 +164,8 @@ def _percentile_centroid(image, config, context):
 SPOT_FINDING_METHODS: dict[type, SpotFindingSpec] = {
     LocalMaximaConfig: SpotFindingSpec(
         "local_maxima", _local_maxima, pipeline=True, dimensions=frozenset({2, 3}),
-        output_columns=("z", "y", "x", "channel", "peak_intensity?")),
+        output_columns=("z", "y", "x", "channel", "peak_intensity?"),
+        column_fields={"peak_intensity": "measure_peak_intensity"}),
     NoiseLandmarkConfig: SpotFindingSpec(
         "noise_landmark", _noise_landmark, pipeline=False, dimensions=frozenset({2, 3}),
         output_columns=("z", "y", "x")),

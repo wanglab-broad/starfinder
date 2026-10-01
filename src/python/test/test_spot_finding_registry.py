@@ -84,6 +84,9 @@ def test_registry_holds_the_three_existing_methods_with_the_contract_fields():
                                    (), False),
     }
     assert names(SPOT_FINDING_METHODS) == ("local_maxima", "noise_landmark", "percentile_centroid")
+    assert {spec.name: dict(spec.column_fields) for spec in SPOT_FINDING_METHODS.values()} == {
+        "local_maxima": {"peak_intensity": "measure_peak_intensity"}, "noise_landmark": {},
+        "percentile_centroid": {}}
 
 
 def test_discriminators_equal_spec_names_and_the_alias_matches_the_registry():
@@ -96,7 +99,9 @@ def test_discriminators_equal_spec_names_and_the_alias_matches_the_registry():
     (dict(name="Bad-Name"), "snake_case"), (dict(dimensions=frozenset({1})), "dimensions"),
     (dict(output_columns=("y", "z", "x")), "output_columns"), (dict(output_columns=("z", "y", "x", "spot_id")),
                                                                "output_columns"),
-    (dict(min_shape_zyx=(0, 1, 1)), "min_shape_zyx")])
+    (dict(min_shape_zyx=(0, 1, 1)), "min_shape_zyx"),
+    (dict(output_columns=("z", "y", "x", "channel", "score?")), "column_fields"),
+    (dict(column_fields={"channel": "level"}), "column_fields")])
 def test_spec_validation(change, message):
     with pytest.raises(ValueError, match=message):
         replace(FIXTURE_SPEC, **change)

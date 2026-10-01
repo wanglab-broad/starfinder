@@ -164,7 +164,10 @@ class SpotFindingPlan:
   `None` or equal to the plan's. Channels must be unique and must be labels of
   `Dataset.channel_order` (checked by `FOV.run` and `FOV.find_spots`, which fill
   `channel_labels` from it as today). Direct `find_spots` accepts a plan without
-  `rounds` and needs `config.channel_labels` when it has overrides.
+  `rounds` and needs `config.channel_labels` when it has overrides. An override
+  may change any setting except one that changes the output columns (for
+  `local_maxima`, `measure_peak_intensity` must equal the plan's), and plan
+  validation raises `ValueError` naming the channel and the field otherwise.
 * The effective settings are recorded for every channel, overridden or not:
   `diagnostics["effective_settings"][<label>]` is the effective config serialized
   as `run.json` serializes dataclasses, including native defaults that `None`

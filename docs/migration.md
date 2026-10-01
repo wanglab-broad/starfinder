@@ -421,6 +421,8 @@ Python nor MATLAB accepts.
 `SpotFindingPlan(config, channel_overrides=())`: one method for every channel,
 and `ChannelOverride(channel, config)` entries that replace the whole config of
 one channel (same exact config type; `channel_labels` `None` or the plan's).
+An override may change any setting except one that changes the output columns,
+such as `measure_peak_intensity`, which raises `ValueError` at plan validation.
 A bare config means a plan without overrides, and `PipelineConfig` keeps what it
 is given. `ExecutionConfig` gains `device="cpu"`, the only accepted value
 (`ValueError` otherwise), and `find_spots` takes the same `device` keyword.

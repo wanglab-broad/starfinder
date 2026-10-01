@@ -146,6 +146,30 @@ def test_an_override_changes_only_its_channel(dims):
     assert result.config == BASE
 
 
+@pytest.mark.parametrize("override_measures", [True, False])
+@pytest.mark.parametrize("plan_measures", [True, False])
+@pytest.mark.parametrize("dims", ["3d", "z1"])
+def test_an_override_keeps_the_output_columns(dims, plan_measures, override_measures):
+    # An override may change any setting except one that changes the output columns (W-270 review).
+    image = fixture_image(dims)
+    base_config = replace(BASE, measure_peak_intensity=plan_measures)
+    override = replace(OVERRIDE, measure_peak_intensity=override_measures)
+    if plan_measures != override_measures:
+        with pytest.raises(ValueError, match="'ch02'.*measure_peak_intensity"):
+            SpotFindingPlan(base_config, (ChannelOverride("ch02", override),))
+        return
+    result = detect(image, SpotFindingPlan(base_config, (ChannelOverride("ch02", override),)))
+    base = detect(image, base_config)
+    columns = ["z", "y", "x", "channel"] + (["peak_intensity"] if plan_measures else [])
+    assert list(result.spots.columns) == ["spot_id", *columns]
+    pd.testing.assert_frame_equal(result.spots[result.spots.channel != 2][columns].reset_index(drop=True),
+                                  base.spots[base.spots.channel != 2][columns].reset_index(drop=True),
+                                  check_exact=True)
+    single = detect(image[..., 2:3], replace(override, channel_labels=("ch02",)))
+    pd.testing.assert_frame_equal(result.spots[result.spots.channel == 2][columns].reset_index(drop=True),
+                                  single.spots[columns].assign(channel=np.int64(2)), check_exact=True)
+
+
 def test_without_overrides_every_channel_has_the_config():
     result = detect(fixture_image("3d"), BASE)
     assert result.diagnostics["effective_settings"] == {label: settings(BASE) for label in CHANNELS}

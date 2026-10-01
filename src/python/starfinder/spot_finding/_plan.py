@@ -6,6 +6,16 @@ from starfinder._registry import spec_for
 from ._methods import SPOT_FINDING_METHODS, SpotFindingConfig
 
 
+def _check_columns(spec, plan_config, override):
+    """Raise ValueError when an override changes a field that adds an optional output column."""
+    for column, name in spec.column_fields.items():
+        if getattr(override.config, name) != getattr(plan_config, name):
+            raise ValueError(f"the override of channel {override.channel!r} sets {name}="
+                             f"{getattr(override.config, name)!r}, unlike the plan's config, which would change the "
+                             f"output column {column!r}; an override may change any setting except one that "
+                             "changes the output columns")
+
+
 def _check_config(config):
     spec = spec_for(SPOT_FINDING_METHODS, config, "spot-finding method", TypeError, "unsupported detection config")
     config.__post_init__()
@@ -17,7 +27,9 @@ class ChannelOverride:
     """The whole config of one channel, named by its channel label.
 
     config must have the exact type of the plan's config (one method per
-    run); its channel_labels must be None or equal to the plan's.
+    run); its channel_labels must be None or equal to the plan's. It may
+    change any setting except one that changes the output columns (the
+    fields in the method's column_fields, such as measure_peak_intensity).
     """
     channel: str
     config: SpotFindingConfig
@@ -41,7 +53,7 @@ class SpotFindingPlan:
     channel_overrides: tuple[ChannelOverride, ...] = ()
 
     def __post_init__(self):
-        _check_config(self.config)
+        spec = _check_config(self.config)
         if not isinstance(self.channel_overrides, (tuple, list)):
             raise TypeError("channel_overrides must be a tuple of ChannelOverride")
         overrides = tuple(self.channel_overrides)
@@ -55,6 +67,7 @@ class SpotFindingPlan:
             if type(override.config) is not type(self.config):
                 raise TypeError(f"the override of channel {override.channel!r} is a "
                                 f"{type(override.config).__name__}, not the plan's {type(self.config).__name__}")
+            _check_columns(spec, self.config, override)
             if override.config.channel_labels not in (None, labels):
                 raise ValueError(f"the override of channel {override.channel!r} has other channel_labels "
                                  "than the plan's config")
