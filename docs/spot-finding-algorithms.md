@@ -1,0 +1,212 @@
+# Spot-finding algorithm specification
+
+Status: Proposed
+
+This page specifies the four pipeline spot-finding methods of §2.7: Starfinder
+local maxima with the W-218 option, the native Starfish LoG, Spotiflow and Piscis.
+It also gives the engineering validation design of task group 6. The registry
+entries, configs, weights handling, rounds and records they plug into are in
+{doc}`spot-finding-contract`; the current behavior is in
+{doc}`spot-finding-baseline`. Nothing here is implemented yet, and nothing here
+selects a default method, model or operating point: the parameter values below are
+each method's native defaults or the values a check uses.
+
+## Evidence
+
+Versions, weights, behavior and costs come from W-266, run directory
+`/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-266/20260930T225252Z-967e52bd`
+(handoff `worker-notes.md`). It is dependency selection, not a comparison, and it
+ranks no detector. The tables cited below are:
+
+* `detectors.csv`: one row per call (283 rows), with outcomes, detections,
+  isolated-scene recall, precision and biases, wall and CPU time and peak RSS;
+* `localization-per-axis.csv`: per-axis absolute localization errors on the
+  isolated-spot scenes;
+* `known-weights.csv`: the six models, hashes, sizes, minimum shapes, training
+  pixel sizes and loading routes;
+* `piscis-seams.csv`: the Piscis seam probe;
+* `parity/`: the Starfish `BlobDetector` parity fixtures, prototype and tables,
+  copied unchanged into `src/python/test/data/starfish_blob_parity/`;
+* `scripts/w266_common.py`: the isolated-spot and seam scene generators
+  (`isolated_positions`, `make_case`, `seam_layout`) and the per-axis localization
+  (`localization`).
+
+All W-266 runs were on CPU (`CUDA_VISIBLE_DEVICES=""`), mostly at one thread, on
+synthetic scenes only.
+
+## What each method addresses
+
+The §2.12 image-formation model ({doc}`synthetic-specification`) renders each
+amplicon as an anisotropic Gaussian with lognormal brightness (median 1500) and
+widths (axial σ 1.5, lateral σ 1.3 voxels), a small elongation and a random
+orientation. It adds a camera baseline, a smooth gradient, broad regional and
+tissue background, a per-round signal trend, 5 % crosstalk from each channel into
+the next, and Poisson and read noise, and writes uint16.
+
+| Method | Problem addressed | Cause in the image-formation model |
+| --- | --- | --- |
+| Local maxima | Fast integer-voxel candidates for bright, separated amplicons, one channel at a time, with thresholds tied to the channel's noise floor or maximum. | The amplicon PSF peak is a regional maximum above Poisson and read noise and the baseline. Crosstalk makes a weaker copy of each amplicon in the next channel, which local maxima detects there correctly; quantization and saturation flatten tops into plateaus of tied maxima (W-218 re-measurement). |
+| Starfish LoG | Blob-shaped spots on a slowly varying background, across a range of spot sizes, as in starfish pipelines (parity with starfish results). | The scale-normalized Laplacian of Gaussian responds to a Gaussian of matching σ and cancels constant and linear background (baseline, gradient, broad regions); the range of σ covers the lognormal widths. |
+| Spotiflow | Sub-pixel localization and detection at low signal-to-noise and for close spots, from a learned heatmap and stereographic flow. | Poisson and read noise and PSF blur hide the sub-pixel truth position; a model trained on spots predicts the position directly. |
+| Piscis | Detection that holds across varying intensities and backgrounds, from a learned label map and sub-pixel displacement field, in 2D planes linked through Z. | Background heterogeneity (tissue, regions) and per-spot brightness variation defeat a single global threshold; the network sees each plane standardized (`standardize`). |
+
+## Local maxima
+
+| Field | Specification |
+| --- | --- |
+| Library and version | scikit-image 0.26.0 `peak_local_max` (locked), as at `42f652d` ({doc}`spot-finding-baseline`). No weights. |
+| Parameters (units, defaults) | Unchanged: `threshold_mode` (`noise`), `threshold_value` (5.0; robust σ for `noise`, otherwise a fraction in [0, 1]), `min_distance_voxels` (1), `exclude_border` (True), `measure_peak_intensity` (True). New: `merge_radius_zyx` (None). |
+| W-218 option `merge_radius_zyx` | Opt-in within-channel merge of maxima of one channel. After border exclusion, a channel's maxima are sorted by decreasing pixel value, then by increasing z, y, x. A maximum is kept unless an earlier kept maximum of the same channel lies within the ellipsoid Σ (Δᵢ / rᵢ)² ≤ 1 with radii `merge_radius_zyx` in voxels (Δz is 0 for Z=1). Kept maxima keep their coordinates and `peak_intensity`; nothing is averaged. Identities are assigned after the merge. `diagnostics["merged"]` records the number removed per channel. With `None` the result is exactly today's. |
+| What the option resolves | Tied maxima of a plateau and split maxima of one amplicon in one channel. The W-218 re-measurement found such ties after legacy uint8 normalization: 2 exact ties at neighbouring voxels, which a radius of (2, 2, 2) removed in a post-hoc check without removing any matched candidate. A radius of at least √3 ≈ 1.73 voxels covers every 26-connected tie. |
+| What it does not resolve | The 22 W-218 duplicates on the `small` scene are crosstalk copies in the next channel. Removing them needs a decision across channels: deduplication by position and channel ratio, merging decoded reads with the same color sequence within a radius, or crosstalk compensation before detection. This issue excludes cross-channel deduplication and assigns it to §2.8. The open choice for Jiahao is whether W-218 closes with this within-channel option plus `exclude_border` in YAML, or stays open for §2.8. |
+| Border misses | The 5 W-218 misses are border exclusion; `exclude_border` becomes settable in YAML. Its default stays True. |
+| Default | `merge_radius_zyx=None` (legacy) until W-268 decides; the golden test pins the legacy behavior. Whether the option becomes the default, and with which radius, is for Jiahao. The radius should then follow the spot size, about 2 σ: (3.0, 2.6, 2.6) voxels for the §2.12 widths. |
+| Z handling | Z=1 is a YX plane (z=0). For 1 < Z ≤ 2 × `min_distance_voxels` with border exclusion the result is empty, as today, and a `SpotFindingWarning` says so. |
+| Tiling | None. |
+| Thresholds and density | The noise threshold uses the whole channel, so at high spot density it rises above the peaks. W-266 found an empty result on the 1×64×64 isolated-spot plane (0.024 spots per voxel); recall was 1.0 at the 3D density (7.6e-4). This is flagged, not changed (W-266 choice 8); the `noise` diagnostics make it visible. |
+| Failure | Invalid configs raise at construction; `global` mode on non-integer data raises `ValueError`. There is no iteration and nothing to converge. |
+| Resources (W-266, one thread) | Inference 0.6 s and 0.37 GB peak RSS on `medium` (32×512×512), 0.01 s and 0.16 GB on 1×512×512, 6.1 s and 0.95 GB on `large` (30×1024×1024). The merge adds a KD-tree query per channel. |
+
+## Starfish LoG
+
+| Field | Specification |
+| --- | --- |
+| Semantics (D1) | Native reimplementation of starfish `BlobDetector` at `1fb00cbc`. W-266 found `starfish/core/spots/FindSpots/blob.py` identical at 0.4.0 (`d9a305f`) and `1fb00cbc` (git blob `1e65b215`), with the whole `FindSpots/` and `types/` trees unchanged. starfish is not a dependency (its `docutils<0.20` pin conflicts with the lock). |
+| Mode reproduced | `is_volume=True`, `detector_method="blob_log"`, no reference image, one round and channel at a time, `measurement_type="max"`. |
+| Modes excluded | The reference-image mode, which detects on a reference image and measures spots on every round and channel; the per-slice 2D mode (`is_volume=False`); and the `blob_dog` and `blob_doh` detector methods. |
+| Library and version | scikit-image 0.26.0 `skimage.feature.blob_log` (locked). No weights, no extra. |
+| Algorithm | `blob_log(image, min_sigma, max_sigma, num_sigma, threshold, overlap, exclude_border)` on the scaled image, then starfish's four post-processing steps: (1) a single Z plane is squeezed to 2D and gets z=0; (2) coordinates are truncated to integers (`astype(int)`), not rounded; (3) `radius = round(σ × √ndim)`, using the mean of the per-axis σ when they differ; (4) the intensity is read at the truncated position. Starfinder's table holds `z, y, x` (the truncated integers as float64), `channel`, `peak_intensity` (the original pixel value at that position) and `radius`, in `blob_log`'s row order per channel. A parity view maps them back to starfish's columns (`intensity` = the scaled pixel value) for the parity test. |
+| Intensity scaling | Integer images are divided by their dtype maximum into float32 [0, 1] (`img_as_float32`, as a starfish `ImageStack` holds them); float images must already lie in [0, 1] (`ValueError` otherwise). |
+| Parameters (units) | `min_sigma`, `max_sigma`: σ in voxels, a number or a ZYX 3-tuple; `num_sigma`: number of scales; `threshold`: absolute; `overlap` (0.5): blobs overlapping by more than this fraction are pruned to the larger; `exclude_border` (False). starfish has no defaults for the first four, so they are required. The starfish ISS tutorial values used by W-266 are `min_sigma=1, max_sigma=10, num_sigma=30, threshold=0.01`; they are an example, not a default. |
+| Threshold units | The threshold applies to the scale-normalized LoG response of the [0, 1]-scaled image. For a Gaussian spot of amplitude A at matched σ this response is about 0.5 A in 2D and 0.53 A in 3D. A brightness-1500 spot in uint16 (A = 0.0229) responds at about 0.011 to 0.012, just above 0.01, so on the 1×64×64 isolated-spot plane about half of the spots fell below 0.01 (W-266 recall 0.45 to 0.51), while the 3D scene kept all of them. The value is not transferable to other methods or other scalings. |
+| σ and spacing | σ is in voxels. W-266 suggested physical units converted with the spacing, and a floor of about one voxel per axis: a 0.5-voxel lateral σ gave hundreds to thousands of noise detections. This contract keeps voxels, matching starfish and D5's rule of no automatic scaling from voxel size; physical units are an open choice. |
+| Z handling | Z=1: the squeezed plane, z=0; a 3-tuple σ with Z=1 raises `IncompatibleGeometryError`. Z>1: 3D. |
+| Tiling | None. The whole channel is processed, so results equal starfish's. |
+| Scale-space memory | W-266 measured a peak minus pre-inference RSS of 10.0 to 10.4 bytes × `num_sigma` × voxels (float32 input; about 2.5 copies of the float32 scale-space cube). D1's planning note says float64; the measurement governs. `diagnostics["geometry"]` records the estimate 10.4 × `num_sigma` × voxels before the call. On `large` (31.5 M voxels) `num_sigma=30` stopped at the 4 GiB target (projected about 10 GB), and `num_sigma=10` used 3.41 GB. Time grows with `num_sigma` and `max_sigma`: 198 s at 30 and 91 s at 10 on `medium`. `max_sigma=10` far exceeds the §2.12 spot σ of 1.3 to 1.5. |
+| Parity outputs | W-266 `parity/`: fixtures `volume-2ch` (1 round × 2 channels × 16×64×64, seed 266001, with a close pair 2.5 voxels apart), `plane` (1×64×64, seed 266002) and `empty` (8×32×32 zeros); cases with the ISS settings, with anisotropic σ (2, 1, 1) to (6, 3, 3) and `num_sigma=10`, on the plane and on the empty image; six tables of 9, 8, 9, 8, 11 and 0 rows. The prototype equals every table with `check_exact=True`, and the plane with a 3-tuple σ raises in both implementations. These are the expectations of check S12. |
+| Failure | Invalid configs raise at construction. `blob_log` does not iterate. A channel that is constant yields no candidates (outcome `constant`). |
+| Resources (W-266, one thread) | `num_sigma=30`: 197 s and 2.66 GB on `medium`, 1.0 s and 0.23 GB on 1×512×512, resource stop on `large`. `num_sigma=10`: 90 s and 1.02 GB on `medium`, 340 s and 3.41 GB on `large`. Four threads did not parallelize it (CPU time equal to wall time). On the validation fixtures (at most 32×64×64) a call needs about 40 MB. |
+
+## Spotiflow
+
+| Field | Specification |
+| --- | --- |
+| Library and version | spotiflow 0.6.5 (`b4f4645`) with torch 2.7.1+cpu and torchvision 0.22.1+cpu; extra `spotiflow` ({doc}`spot-finding-contract`, "Dependency plan"). |
+| Weights | `spotiflow-models` release 0.6.0: `synth_3d` and `smfish_3d` (3D), `general` and `hybiss` (2D), with the SHA-256 values of W-266 `known-weights.csv` ({doc}`spot-finding-contract`, "Known-weights table"); loaded with `Spotiflow.from_folder(<folder>, map_location="cpu")`. Training pixel sizes (operator-retrieved): `synth_3d` 0.2 µm voxels (synthetic), `smfish_3d` 0.13 µm YX and 0.48 µm Z, `general` 0.04 to 0.34 µm (mixed), `hybiss` 0.15, 0.32 and 0.34 µm. |
+| Algorithm | `model.predict(image, prob_thresh, n_tiles, min_distance, exclude_border, scale=1, subpix, peak_mode="fast", normalizer="auto", verbose=False, device="cpu")`: the image is normalized by its 1st and 99.8th percentiles, the network predicts a probability heatmap and a stereographic flow, peaks of the heatmap above `prob_thresh` are local maxima (`min_distance`), and the flow refines them to sub-pixel positions. Output: points (ZYX or YX) and `details.prob`. |
+| Parameters (units, native defaults) | `prob_thresh`: probability on the sigmoid heatmap in [0, 1]; `None` uses the value stored with the weights: `synth_3d` 0.3, `smfish_3d` 0.4, `general` 0.5, `hybiss` 0.532. `min_distance` 1 (pixels or voxels); `exclude_border` False; `subpix` from the model configuration; `n_tiles` from `max_tile_size`; `scale` 1 (fixed). |
+| Threshold range | On the isolated-spot scenes, heatmap maxima at truth were 0.57 to 0.995 and the background maximum 0.07 to 0.16, so the useful range is roughly 0.1 to 0.55 (3D) and 0.16 to 0.78 (2D); every stored value lies inside it. |
+| Z handling | Z>1 needs a 3D model; Z=1 needs a 2D model on the squeezed plane; z=0. A 3D model on Z=1 or on Z < 7 returns nothing without error, so the wrapper raises `IncompatibleGeometryError`; the minimum shapes are 3D models Z ≥ 7 with Y, X ≥ 8, and 2D models Y, X ≥ 6 (W-266 probes). A 2D model on a volume raises a channel-count error in torch, which the wrapper preempts with `IncompatibleGeometryError`. |
+| Tiling | `n_tiles` (CPU fallback tiles 2048×2048 in 2D and 128×256×256 in 3D; `medium` ran as (1, 2, 2)); tile overlap 4 blocks of 16 px (2D) or 2 blocks of 32 voxels (3D); peaks are kept only in each tile's destination slice. Forced (4, 4) on 1×512×512 and (1, 4, 4) on `medium` gave the same detections as the native run: none lost or repeated, matched shift at most 0.018 px (2D) and below 5e-4 voxels (3D). On 64-pixel images forcing tiles forms no seam, because the overlap covers the tile. |
+| Scale | Fixed at 1. W-266: `scale` ≠ 1 raises for 3D models and with sub-pixel refinement; 2D without sub-pixel refinement finds 32 to 79 % of the spots at scale 2 and none at 0.5. |
+| Convergence and failure | A feed-forward network: nothing iterates. Library exceptions are re-raised with their message; MKL needed no workaround (82 calls at one and four threads). |
+| Repeatability | Two one-thread runs bit-identical; one against four threads: same counts, coordinates within 3.1e-6 voxels (largest nearest-neighbour distance 4.2e-6). |
+| Resources (W-266, one thread) | Inference 19 s and 1.3 GB on `medium`, 1.5 s and 0.9 GB on 1×512×512 (2D models), 78 s and 1.76 GB on `large` (`smfish_3d`); imports 3.3 to 5.5 s, model load 0.19 to 0.52 s per process; four threads gave 6.2 s on `medium` (about 3.1× on a shared host). |
+
+## Piscis
+
+| Field | Specification |
+| --- | --- |
+| Library and version | piscis 1.1.0 (`0f70419`) with torch 2.7.1+cpu; extra `piscis`. The `Piscis` class (max-pooled label map) is used; `PiscisLegacy` (sum-pooled, native threshold 1.0, "the minimum number of fully confident pixels") is not. W-265's empty result came from threshold 1.0 on the `Piscis` class, whose labels never exceed 1. |
+| Weights | Hugging Face `wniu/Piscis` at revision `9bdefc72cb`: `20230905` and `20251212` (one 2D network each, used in both modes), SHA-256 equal to the Hugging Face LFS values; loaded through the hash-checked absolute-path wrapper. Training pixel size: not published by the authors for either model. The library default is `20251212`; E02 proposed `20230905`; every run names one, and this page does not choose. |
+| Algorithm | `Piscis(model_name=<absolute path without .pt>, input_size=...)` then `predict(image, stack, scale=1, threshold, min_distance)`: each plane is standardized (metadata `adjustment: standardize`) and tiled; the network predicts a label map and a sub-pixel displacement field; the label map is max-pooled over a 3×3 deformable window; spots are positions where labels exceed `threshold`. In plane mode they are `peak_local_max` peaks with `min_distance` pixels; in stack mode they are connected components of `labels > threshold` across planes, at their `regionprops` centroid. |
+| Parameters (units, native defaults) | `threshold` 0.5 (label value in [0, 1], kept when strictly above); `min_distance` 1 pixel (plane mode); `input_size` the model's 256 (tile side in pixels, a multiple of 8); `scale` 1 (fixed). |
+| Threshold range | Labels at truth were 1.0; the background more than 3 pixels away was at most 1.8e-5 (`20251212`) and up to 0.9994 (`20230905`, one out-of-focus column) in 3D, so the useful range is about 0.001 to 0.99. |
+| Z handling | Z=1: plane mode on the squeezed plane, z=0. Z ≥ 2: stack mode. Stack-mode Z is an integer: the component centroid is cast to `int`, and only Y and X receive the sub-pixel displacement. This gives a Z bias of −0.32 to −0.43 and absolute Z errors up to 1.76 voxels on the isolated-spot scene (3 to 14 matches per run above 1 voxel). Spots aligned vertically 8 planes apart merge into one component (recall 0.35 to 0.38 on the aligned probe). Both are specified as Piscis's behavior (W-266 choice 4, accepted); Z linking by Starfinder is not part of §2.7. |
+| Tiling | Tile side T = `round(input_size / scale)`; overlap `rint(0.1 × T)` on axes longer than T; tile k starts at k(T − O); each overlap is cut at one keep-boundary b − 0.5, with no merging across tiles (`piscis/core.py:139-188`, `deeptile`). A spot whose prediction lies within a fraction of a pixel of a keep-boundary may be lost or repeated once per adjoining tile: in the seam probe, edge spots had 0 to 2 candidates and corner spots 1 to 4. Spots 0.5 px or more from a boundary had exactly one candidate, and the lateral shift against the untiled run was at most 0.147 px. With the native 256 on a 512-pixel axis the boundaries are 242.5 and 472.5. The keep-boundaries are recorded; seam repeats are not merged (open choice). |
+| Scale | Fixed at 1. W-266: `scale` 0.5 shifts Y and X by −0.40 to −0.51 px; at scale 2 `20230905` found nothing in 2D and `20251212` shifted by up to +0.19 px. |
+| Convergence and failure | Feed-forward: nothing iterates. Stack mode on Z=1 would raise `AttributeError` inside piscis and plane mode on a volume would treat Z as a batch; the dispatch by Z prevents both. Library exceptions are re-raised with their message. |
+| Repeatability | Two one-thread runs bit-identical; one against four threads within 1.8e-7 voxels. |
+| Resources (W-266, one thread) | Inference 231 s (`20230905`) and 226 s (`20251212`) with about 1.0 GB on `medium`; 7.1 to 7.4 s and 0.85 GB on 1×512×512; 629 s and 1.19 GB on `large` (`20230905`); four threads 74 to 84 s on `medium` (2.7 to 3.1× on a shared host). |
+
+## Engineering validation design (task group 6)
+
+Task group 6 is engineering validation only (W-152 §2.14 decision, 2026-09-29):
+known-answer synthetic fixtures with pass/fail tolerances fixed before the run, in
+default-tier pytest modules for local maxima and LoG and extended-tier modules
+(`-m extended`, CPU only, `CUDA_VISIBLE_DEVICES=""`, one thread) for Spotiflow and
+Piscis. It has no method comparison matrix, no threshold or parameter sweep, no
+benefit flag, no default selection from comparative data, and no run framework or
+report engine; comparisons belong to E02. The checks follow the §2.6 V-table
+({doc}`registration-algorithms`).
+
+Rules:
+
+* Fixtures are hand-built known answers, with their density stated, except S16,
+  which uses the §2.12 generator. Every fixture is at most 32×64×64 voxels, four
+  channels and four rounds, generated in session; seeds are 100, 101 and 102.
+* Each tolerance cites the W-266 reference it is derived from, or the W-218
+  re-measurement of this issue, or is marked **provisional**. Tolerances are fixed
+  before the run; a correct implementation that cannot meet one goes to Jiahao, and
+  the bound is not adjusted in the run.
+* Metrics come from `evaluate_spots` and `match_points` with the policy stated.
+  Unless noted: policy `greedy`, threshold 3.0 voxels, boundary `inclusive`, units
+  `voxel`, truth = the rendered centres (W-266's policy).
+* Methods: LM = `local_maxima`, LoG = `starfish_log` with the W-266 settings
+  (`min_sigma=1, max_sigma=10, num_sigma=30, threshold=0.01`), SF3 = Spotiflow
+  `synth_3d` and `smfish_3d`, SF2 = Spotiflow `general` and `hybiss`, PI = Piscis
+  `20230905` and `20251212`, each at its native defaults. Each check runs every
+  method it names; the results are compared with the check's tolerance only, never
+  with each other.
+
+Fixtures:
+
+| Fixture | Construction | Density |
+| --- | --- | --- |
+| `iso3d` | W-266 isolated-spot scene: 32×64×64, 100 spots, one per column of a 10×10 YX grid (step 6), Z layers 8, 16 and 24 alternating, every axis jittered in [−0.5, 0.5) from the seed (minimum 3D separation 7.7 voxels); brightness 1500, σ Z 1.5 and YX 1.3, baseline 100, Poisson (α 1) plus read noise 3, uint16 (`w266_common.isolated_positions` and `make_case`) | 7.6e-4 spots per voxel |
+| `iso_z1` | The same 100 YX positions on 1×64×64 | 0.024 per voxel |
+| `iso_z1_sparse` | 25 spots on a 5×5 grid of step 12 on 1×64×64, otherwise as `iso_z1` | 0.0061 per voxel |
+| `pairs` | 32×64×64, `iso3d` appearance: 12 lateral pairs 6 px apart in the same plane, and 8 axial pairs 8 planes apart in the same column, all pairs at least 12 voxels from each other | 3.1e-4 |
+| `channels` | 16×64×64 × 4 channels: 25 spots (`iso3d` appearance) in channel 0; channels 1 and 2 equal channel 0 plus constant offsets 300 and 1500 (the same noise realization); channel 3 is an independent noise draw with the same spots | 3.8e-4 per channel |
+| `coincident` | 16×64×64 × 2 channels: 20 spots at the same positions and amplitude in both channels | 3.1e-4 per channel |
+| `empty` | All zeros (8×32×32×2); a constant 100 (8×32×32); a channel zero in 60 % of its voxels (MAD 0) and one zero in 40 % (MAD > 0), with 10 spots each | — |
+| `borders` | 16×64×64 and 1×64×64: spots with integer centres at 0, 1, 2 and 3 voxels from each face (Y and X faces only for Z=1), brightness 1500 | 24 spots |
+| `seams` | W-266 seam scenes `seam_z1` (1×64×64) and `seam3d` (32×64×64, spots at Z 16 ± 0.5), keeping only the spots 0.5, 1 and 2 px from the keep-boundaries 30.5 and 59.5 of 32-pixel tiles and the controls (`w266_common.seam_layout`) | 18 spots |
+| `multiround` | 3 rounds × 16×64×64 × 2 channels on one grid: 15 spots per round and channel, 5 of them at the same positions in every round | 2.3e-4 per round and channel |
+| `parity` | `src/python/test/data/starfish_blob_parity/fixtures.py` (W-266) | as W-266 |
+| `formed16` | §2.12 `formed_scene_preset("small")` appearance and codebook at 16×64×64 with 24 amplicons, four rounds; once as generated and once after the legacy recipe-1 uint8 min–max normalization | 3.7e-4 |
+
+Checks:
+
+| # | Check | Fixture and methods | Metric (source) | Pass/fail tolerance |
+| --- | --- | --- | --- | --- |
+| S1 | Isolated-spot recall and precision | `iso3d`: LM, LoG, SF3, PI; `iso_z1`: LoG, SF2, PI; `iso_z1_sparse`: LM. Seeds 100–102 | `evaluate_spots`, default policy | Recall 1.0 and precision ≥ 0.98 per seed (W-266: recall 1.0 for all; precision 0.98 to 1.0 in 3D and 1.0 on Z=1). LoG on `iso_z1`: recall in [0.40, 0.60] and precision ≥ 0.98 (W-266: 0.45, 0.51, 0.48 and 1.0; threshold near the median-spot response). LM on `iso_z1_sparse`: recall 1.0, precision ≥ 0.98, **provisional** (W-266 has no row; on `iso_z1` LM is empty at that density, which is flagged, not gated). |
+| S2 | Localization | The matched pairs of S1 | `localization_errors` (new): per-axis absolute error, lateral and 3D distance, maxima | SF3: 3D distance ≤ 0.5 voxels (W-266 max 0.432). SF2: lateral ≤ 0.5 px (max 0.404). PI plane: lateral ≤ 0.15 px (max 0.098). PI stack: lateral ≤ 0.15 px (max 0.119) and absolute Z ≤ 2.0 voxels, **provisional** (max 1.763; W-266 withdrew 1.0). LM and LoG 3D: distance ≤ 0.9 voxels (max 0.818). LoG Z=1: lateral ≤ 0.9 px (max 0.546). LM Z=1: lateral ≤ 0.9 px, **provisional**. |
+| S3 | Resolvable pairs (no near-limit gates) | `pairs`: LM, LoG, SF3, PI (lateral pairs only for PI); `pairs` plane z of the lateral pairs as 1×64×64: SF2, PI | `evaluate_spots`; each pair member matched to its own detection | Every pair member matched (pair recall 1.0). Z=1 lateral pairs for SF2 and PI derive from W-266 `iso_z1` (all 100 spots at 6-px spacing resolved); axial pairs for SF3 from the W-266 aligned probe (`smfish_3d` found all 147 spots stacked 8 planes apart). The other 3D cases are **provisional**. PI axial pairs are not gated: stack mode merges them by specification (W-266 recall 0.35 to 0.38). |
+| S4 | Per-channel backgrounds and overrides | `channels`: every method; one plan with an override for channel 3 (LM `threshold_value` 6.0, LoG `threshold` 0.02, SF `prob_thresh` 0.5, PI `threshold` 0.6) | Table equality; `diagnostics["effective_settings"]`; thresholds | Channels 1 and 2 give the detections of channel 0. For LM the coordinates are identical (an offset cancels in the median, the MAD and the maximum filter; `peak_intensity` differs by the offset), and its noise thresholds exceed channel 0's by the offset within 1e-9. For LoG, SF and PI the count is the same and the coordinates agree within 1e-5 voxels, the scale of floating-point differences after scaling or normalization (W-266 one- against four-thread maximum 4.2e-6). The effective settings equal the override config for channel 3 and the plan config elsewhere. Channel 3's table equals a single-channel run with the override config (exact). |
+| S5 | Coincident cross-channel candidates | `coincident`: every method | Rows per channel | Each channel's table equals its single-channel run (exact): every coincident spot keeps one row per channel, nothing is merged across channels (analytic: channels are independent). |
+| S6 | Empty input and zero channels, with the MAD diagnostics | `empty`: every method | Rows, columns and dtypes; `outcomes`; `noise`; warnings | Zero rows with exactly the declared `output_columns` and dtypes; outcome `constant` for the zero and constant channels without calling the backend; for the 60 %-zero channel (constructed with exactly 60 % zeros) `zero_fraction` 0.6 and `mad` 0 recorded and one `SpotFindingWarning`; for the 40 %-zero channel no warning. Exact. |
+| S7 | Borders | `borders`: LM with `exclude_border` True and False; LoG, SF, PI | Presence of each planted spot | LM True: exactly the spots at distance 0 are absent (`min_distance_voxels=1`); LM False: all present (analytic). LoG, SF, PI: every spot at 2 or more voxels from every face detected, **provisional**; spots on a face are reported, not gated. |
+| S8 | Tiling seams | `seams`: PI with `input_size=32` (keep-boundaries 30.5 and 59.5) against the untiled run; `iso_z1` and `iso3d`: SF with forced `n_tiles` (2, 2) and (1, 2, 2) | Candidates within 3 voxels of each truth spot; lateral shift against the untiled run | PI: exactly one candidate per spot and lateral shift ≤ 0.2 px (W-266 `piscis-seams.csv`: all 84 off-boundary and 24 control spots single; maximum shift 0.147 px). SF: same detections as the untiled run within 0.05 px (W-266 medium and 1×512×512: at most 0.018 px). This only shows that `n_tiles` is passed and recorded, since 64-pixel images form no seam; Spotiflow's seam evidence is W-266's realistic-tier runs. LM and LoG do not tile. |
+| S9 | Explicit scaling | SF and PI configs; LoG anisotropic σ | Raised error; effective settings | `scale` ≠ 1 raises `ValueError` at construction; `scale` 1 appears in the effective settings; LoG per-axis σ is honored (S12's anisotropic case). Exact. |
+| S10 | Multi-round identities | `multiround`: LM and LoG (default tier), SF3 and PI (extended); plan `rounds` = all three, and the default | `round` column; identities; joins | Every row has its round; `spot_id` unique, `"0"`…`"N-1"`; a `(spot_namespace, spot_id)` merge is one-to-one; each of the 5 shared positions gives one row per round (never merged); the reference-round rows without `round` equal the default run's table exactly; decoding the set raises `ValueError`. Exact. |
+| S11 | Checkpoint round trip | S10's multi-round sets and S1's `iso3d` tables of LoG, SF3 and PI; CSV and Parquet | `pd.testing.assert_frame_equal(check_exact=True)`; config, plan and header keys | Reloaded table, config and plan equal the originals; a version-2 checkpoint from `42f652d` (written by the golden test's helper) loads unchanged. Exact. |
+| S12 | Starfish parity | `parity`: LoG | Starfish tables, column by column after the parity mapping | All six tables equal with `check_exact=True`; the plane with a 3-tuple σ raises `IncompatibleGeometryError`. Exact (W-266 parity). |
+| S13 | Determinism | S1 `iso3d` and `iso_z1`, seed 100: every method, run twice in one process and once in a second process, one thread | SHA-256 of the table | Identical (W-266: Spotiflow and Piscis bit-identical at one thread; LM and LoG have no randomness). |
+| S14 | Dependency and weights errors | Monkeypatched imports; `resolve_weights` on an empty directory and on a tiny fixture entry inserted into `KNOWN_WEIGHTS` with one byte changed; an unknown model name; one SF and one PI detection with network access patched to raise (extended) | Raised error and its message | `SpotFindingBackendUnavailableError` naming the module and extra; `MissingWeightsError` naming the path and the fetch command; `WeightsHashMismatchError` with both hashes; `ValueError` listing the known models; the detections complete without any network call. Exact. |
+| S15 | Dimensionality rules | Tiny inputs (1×32×32, 2×32×32, 6×32×32, 7×8×8, 1×5×5, 1×8×8) for every pipeline method | Raised error type; z of the result | LM, LoG and PI succeed on Z=1 with z=0; SF 3D models raise `IncompatibleGeometryError` on Z=1 and Z=6 and run on 7×8×8; SF 2D models raise on Z>1 and on 1×5×5; LoG with a 3-tuple σ raises on Z=1. Exact (W-266 minimum-shape and dimensionality probes). |
+| S16 | The W-218 resolution on the §2.12 formed-amplicon scene | `formed16`, seeds 100–102: LM on the reference round with `merge_radius_zyx` None and (2, 2, 2), and with `exclude_border` True and False; the uint8 variant for the merge | `evaluate_spots` with policy `greedy`, 5.0 voxels, `exclusive`, eligible truth = `center_in_bounds` (the W-218 notebook policy); `classify_detections` (new) with channels as groups | With the merge: same-channel duplicates 0, and matched count ≥ the count without the merge. With `exclude_border=False`: no eligible amplicon within 1 voxel of a face missed. Cross-channel duplicates are reported, not gated (§2.8). Derived from the W-218 re-measurement of this issue (`small`, uint8: 2 same-channel ties removed and no matched candidate lost at radius (2, 2, 2); border misses 5 → 0), and **provisional**, because `formed16` is smaller and denser than `small`. |
+
+Metrics that must be added to `starfinder.evaluation.spot_finding`:
+
+* `localization_errors(match_result, detected, truth)`: from the matched pairs, the
+  maximum and 95th percentile of the absolute Z, Y and X errors, the lateral and 3D
+  distances, and the number of matches with absolute Z error above 1, in the
+  matching units (W-266 `localization-per-axis.csv` columns);
+* `classify_detections(match_result, detected, truth, *, radius, groups=None)`:
+  counts of matched, duplicate (an unmatched detection within `radius` of a matched
+  truth point) and spurious detections, with duplicates split into the same group
+  as the truth point's matched detection or another group when `groups` (for
+  example the channel) is given (the W-218 classification by position and
+  channel).
+
+`evaluate_spots`, `match_points` and the W-266 scene generators (ported into the
+test helpers) are used as they are.
+
+Resource plan: every fixture is at most 32×64×64 voxels. Scaling W-266's
+per-voxel inference cost from `medium` gives about 0.3 s per Spotiflow call and
+about 4 s per Piscis stack-mode call on `iso3d`, plus one import of 3 to 6 s per
+process. LM and LoG calls take well under 1 s each (LoG with `num_sigma=30` needs
+about 40 MB). So the default-tier checks add seconds and the extended-tier checks a
+few minutes at one thread. Each run records wall time and maximum RSS with
+`/usr/bin/time -v` against the 4 GiB stop target.
