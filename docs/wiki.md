@@ -21,6 +21,9 @@ Method registry (proposed) <method-registry>
 Registration baseline <registration-baseline>
 Registration contract (proposed) <registration-contract>
 Registration algorithms (proposed) <registration-algorithms>
+Spot-finding baseline (proposed) <spot-finding-baseline>
+Spot-finding contract (proposed) <spot-finding-contract>
+Spot-finding algorithms (proposed) <spot-finding-algorithms>
 Coordination <coordination>
 Checkpoints <checkpoints>
 Recipes <recipes>

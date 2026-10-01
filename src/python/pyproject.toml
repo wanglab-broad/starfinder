@@ -24,6 +24,18 @@ dependencies = [
 ome = ["bioio-ome-tiff>=1.0"]
 local-registration = ["SimpleITK>=2.3"]
 registration-elastix = ["itk-elastix==0.25.4", "itk==5.4.7"]
+# Learned spot detectors (§2.7). torch has no cp314 wheel at 2.7.1, so the extras
+# are empty on Python 3.14 and later.
+spotiflow = [
+    "spotiflow==0.6.5; python_version < '3.14'",
+    "torch==2.7.1; python_version < '3.14'",
+    "torchvision==0.22.1; python_version < '3.14'",
+]
+piscis = [
+    "piscis==1.1.0; python_version < '3.14'",
+    "torch==2.7.1; python_version < '3.14'",
+    "torchvision==0.22.1; python_version < '3.14'",
+]
 checkpoint = ["pyarrow>=15"]
 spatialdata = ["spatialdata>=0.1", "spatialdata-io>=0.1"]
 visualization = ["napari>=0.4"]
@@ -55,6 +67,20 @@ dev = [
     "pytest-cov>=4.0",
     "ruff>=0.1",
 ]
+
+[tool.uv]
+# huggingface-hub (pulled in by piscis) is held at the version W-266 measured;
+# newer releases would also move the locked click and idna.
+constraint-dependencies = ["torch==2.7.1", "torchvision==0.22.1", "huggingface-hub==1.16.1"]
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+torchvision = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [tool.pytest.ini_options]
 testpaths = ["test"]

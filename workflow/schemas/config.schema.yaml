@@ -292,7 +292,8 @@ allOf:
       required:
         - n_random_tests
 
-  # The explicit preprocessing and registration recipes are Python-only (backend defaults to matlab)
+  # The explicit preprocessing and registration recipes, the spot-finding method, channel
+  # overrides and rounds and the execution device are Python-only (backend defaults to matlab)
   - if:
       not:
         required: [backend]
@@ -309,6 +310,14 @@ allOf:
                   anyOf:
                     - required: [preprocessing]
                     - required: [registration]
+                    - required: [device]
+                    - required: [spot_finding]
+                      properties:
+                        spot_finding:
+                          anyOf:
+                            - required: [method]
+                            - required: [channel_overrides]
+                            - required: [rounds]
 
 # ==================== Reusable Definitions ====================
 $defs:
@@ -713,7 +722,12 @@ $defs:
       reference_round: {type: ["string", "null"]}
 
   python_rule_parameters:
-    description: "The explicit preprocessing and registration keys replace their legacy keys"
+    description: >-
+      The explicit preprocessing and registration keys replace their legacy keys. device
+      (Python only) is the execution device of the methods; §2.7 accepts only cpu.
+    properties:
+      device:
+        enum: ["cpu"]
     allOf:
       - if: {required: [preprocessing]}
         then:
@@ -812,6 +826,14 @@ $defs:
     additionalProperties: true
 
   spot_finding_params:
+    description: >-
+      Shared keys run, ref_round, intensity_threshold and intensity_estimation. Python-only:
+      method (a SPOT_FINDING_METHODS name with pipeline=True, default local_maxima) and the
+      fields of its config; intensity_estimation, intensity_threshold and min_distance are
+      aliases for local_maxima only (each raises together with its field); channel_overrides
+      maps a channel label to fields that replace the block's for that channel; rounds lists
+      the rounds to detect in. The Python
+      adapter validates the fields of the selected method.
     type: object
     properties:
       run:
@@ -823,7 +845,99 @@ $defs:
         minimum: 0
       intensity_estimation:
         type: string
-        enum: ["local", "global", "noise", "adaptive", "adaptive_round"]
+        enum: ["global", "noise", "adaptive", "adaptive_round"]
+      method:
+        description: "Python only; kept equal to the pipeline SPOT_FINDING_METHODS names by a test"
+        enum: ["local_maxima", "starfish_log", "spotiflow", "piscis"]
+      min_distance:
+        description: "Python only; local_maxima alias of min_distance_voxels, and the native field of spotiflow and piscis"
+        type: integer
+        minimum: 1
+      threshold_mode:
+        description: "Python only; local_maxima"
+        enum: ["noise", "adaptive", "adaptive_round", "global"]
+      threshold_value:
+        description: "Python only; local_maxima"
+        type: number
+        minimum: 0
+      min_distance_voxels:
+        description: "Python only; local_maxima"
+        type: integer
+        minimum: 1
+      exclude_border:
+        description: "Python only; local_maxima and spotiflow (boolean) and starfish_log (boolean or border width)"
+        type: [boolean, integer]
+      measure_peak_intensity:
+        description: "Python only; local_maxima"
+        type: boolean
+      merge_radius_zyx:
+        description: "Python only; local_maxima opt-in W-218 within-channel merge radii (ZYX voxels), null: off"
+        type: [array, "null"]
+        items:
+          type: number
+          exclusiveMinimum: 0
+        minItems: 3
+        maxItems: 3
+      min_sigma:
+        description: "Python only; starfish_log (required): sigma in voxels, a number or a ZYX list"
+        type: [number, array]
+      max_sigma:
+        description: "Python only; starfish_log (required): sigma in voxels, a number or a ZYX list"
+        type: [number, array]
+      num_sigma:
+        description: "Python only; starfish_log (required)"
+        type: integer
+        minimum: 1
+      threshold:
+        description: >-
+          Python only; starfish_log (required): absolute LoG response of the [0, 1]-scaled image;
+          piscis: label value in [0, 1] (default 0.5)
+        type: number
+        minimum: 0
+      overlap:
+        description: "Python only; starfish_log"
+        type: number
+        minimum: 0
+        maximum: 1
+      model:
+        description: "Python only; spotiflow and piscis (required): a model of KNOWN_WEIGHTS, fetched with 'starfinder weights fetch'"
+        type: string
+      prob_thresh:
+        description: "Python only; spotiflow: heatmap probability in [0, 1]; null: the value stored with the weights"
+        type: [number, "null"]
+        minimum: 0
+        maximum: 1
+      subpix:
+        description: "Python only; spotiflow: sub-pixel refinement; null: the model configuration's choice"
+        type: [boolean, "null"]
+      n_tiles:
+        description: "Python only; spotiflow: tiles per model axis (ZYX for 3D models, YX for 2D); null: Spotiflow's choice"
+        type: [array, "null"]
+        items:
+          type: integer
+          minimum: 1
+        minItems: 2
+        maxItems: 3
+      input_size:
+        description: "Python only; piscis: tile side in pixels, rounded up to a multiple of 8; null: the model's 256"
+        type: [integer, "null"]
+        minimum: 1
+      scale:
+        description: "Python only; spotiflow and piscis: must be 1 (resampling is an explicit preprocessing step)"
+        const: 1
+      channel_overrides:
+        description: "Python only; channel label -> config fields of the selected method"
+        type: object
+        additionalProperties:
+          type: object
+      rounds:
+        description: "Python only; the round labels to detect in (omitted: the reference round only); decoding such a candidate set needs a readout mode (§2.8)"
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items:
+          type: string
+          minLength: 1
     additionalProperties: true
 
   load_codebook_params:

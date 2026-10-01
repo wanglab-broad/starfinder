@@ -509,7 +509,7 @@ def test_version_1_candidates_and_pre_qc_headers_still_load(tmp_path):
     fov.dataset.codebook = Codebook(pd.DataFrame({"gene_id": ["gene"], "color_sequence": ["11"]}),
                                     ("round1", "round2"), CHANNELS)
     fov.run(PipelineConfig(registration=RegistrationRecipe((TRANSLATION,)),
-                           detection=LocalMaximaConfig("adaptive", .1), extraction=NeighborhoodSumConfig((0, 1, 1)),
+                           spot_finding=LocalMaximaConfig("adaptive", .1), extraction=NeighborhoodSumConfig((0, 1, 1)),
                            decoding=WtaDecoderConfig(), filtering=ReadFilterConfig()),
             checkpoints=CheckpointConfig())
     directory = fov.paths.checkpoint_dir

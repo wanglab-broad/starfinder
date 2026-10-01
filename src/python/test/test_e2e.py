@@ -227,7 +227,7 @@ class TestE2EStreamingMode:
         stream_fov.run(PipelineConfig(
             load=ImageLoadConfig(channel_labels=ds.channel_order),
             preprocessing=PreprocessingRecipe((PreprocessingStep(MinMaxNormalizationConfig('uint8', (0, 255), snr_threshold=5.0)),)),
-            registration=RegistrationRecipe((RegistrationStep(TranslationConfig()),)), detection=LocalMaximaConfig(),
+            registration=RegistrationRecipe((RegistrationStep(TranslationConfig()),)), spot_finding=LocalMaximaConfig(),
             extraction=NeighborhoodSumConfig(), decoding=WtaDecoderConfig(diagnostics=True), filtering=ReadFilterConfig()),
             execution=ExecutionConfig('streaming'))
 
@@ -298,7 +298,7 @@ class TestE2EStreamingMode:
         stream_fov.run(PipelineConfig(
             load=ImageLoadConfig(channel_labels=ds.channel_order),
             preprocessing=PreprocessingRecipe((PreprocessingStep(MinMaxNormalizationConfig('uint8', (0, 255), snr_threshold=5.0)),)),
-            registration=RegistrationRecipe((RegistrationStep(TranslationConfig()),)), detection=LocalMaximaConfig(),
+            registration=RegistrationRecipe((RegistrationStep(TranslationConfig()),)), spot_finding=LocalMaximaConfig(),
             extraction=NeighborhoodSumConfig(), decoding=WtaDecoderConfig(diagnostics=True), filtering=ReadFilterConfig()),
             execution=ExecutionConfig('streaming'))
 

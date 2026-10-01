@@ -121,7 +121,7 @@ is specifically for the Python batch/direct wrapper.
 | `global_registration` | boolean `run`, string `ref_round`, `ref_img`/`mov_img` in `merged-image`,`single-channel` | Python: the recipe's global step (default `translation`); `merged-image` is the channel maximum, as in MATLAB; `ref_img` and `mov_img` must agree; this block's reference must match top-level `ref_round`; MATLAB wrappers pass the block reference; MATLAB deep uses scale 0.25 |
 | `create_subtiles` | boolean `run`, integer `sqrt_pieces` >=1 | Grid default 4; only GR/deep creation rules produce subtile files; Python creation scripts call splitting unconditionally |
 | `local_registration` | boolean `run`, string `ref_round`, method `demons`,`bspline`,`tps`,`cpd` or the demons variants `diffeomorphic`,`symmetric`,`fast_symmetric` (schema default `demons`); Python-only `ref_img`/`mov_img` | Python: the recipe's local step, after the global one; translates supported method-specific settings; `ref_img`/`mov_img` default to `merged-image` (the channel maximum); `boundary_mode` must agree with the global block (one final resampling); demons needs optional SimpleITK, B-spline the `registration-elastix` extra; MATLAB wrappers do not forward `method`; deep subtile does not perform local registration |
-| `spot_finding` | boolean `run`, string `ref_round`, nonnegative numeric `intensity_threshold`, mode `local`,`global`,`noise`,`adaptive`,`adaptive_round` | Python wrappers default mode to `noise` but require a threshold when used; pass both explicitly. `local` is schema-accepted but unsupported by Python detector; MATLAB supports adaptive/global only |
+| `spot_finding` | boolean `run`, string `ref_round`, nonnegative numeric `intensity_threshold`, mode `global`,`noise`,`adaptive`,`adaptive_round`; Python-only `method`, the selected config's fields, `channel_overrides` and `rounds` | Python wrappers default mode to `noise` but require a threshold when used; pass both explicitly. Python rules: see [the method key](#spot-finding-method-key); MATLAB supports adaptive/global only |
 | `load_codebook` | boolean `run`, integer-array `split_index` | Python wrappers load unconditionally, turn missing/empty split into None; MATLAB respects `run` |
 | `reads_extraction` | boolean `run`, exactly three integers >=1 in `voxel_size` | Pixel half-widths, Python `(z,y,x)` versus MATLAB `(row,column,z)`; e.g. `[1,2,2]` versus `[2,2,1]`, not physical microns |
 | `reads_filtration` | boolean `run`, string or string-array `end_base`, integer `n_barcode_segments` >=1, integer-array `split_index` | Python wrappers forward `end_base` and extra `start_base` (default `C`), not `n_barcode_segments` or this block's split; MATLAB forwards segment count and split |
@@ -208,6 +208,45 @@ registration:
     - method: affine
     - method: bspline
       recovery: {allowed_errors: [RegistrationEstimationError], alternatives: [{method: demons}]}
+```
+
+## Spot-finding method key
+
+The `spot_finding` block of the five Python rules accepts the Python-only key
+`method`, a `SPOT_FINDING_METHODS` method that the pipeline accepts
+(`local_maxima`, the default, `starfish_log`, `spotiflow` or `piscis`), and every
+other key is an init field of that method's config (YAML lists become tuples), for
+example `exclude_border`, `measure_peak_intensity` or the opt-in W-218 merge
+`merge_radius_zyx: [2, 2, 2]`. A config field without a default must be given:
+`starfish_log` requires `min_sigma`, `max_sigma`, `num_sigma` and `threshold`, and
+`spotiflow` and `piscis` require `model`, a pretrained model fetched beforehand with
+`starfinder weights fetch <method> <model>` (detection never downloads).
+The legacy keys are aliases for `local_maxima` only:
+`intensity_estimation` of `threshold_mode`, `intensity_threshold` of
+`threshold_value` and `min_distance` of `min_distance_voxels`; a legacy key
+together with its field raises an error. For another method, `min_distance` is
+that config's own field and the other legacy keys are errors.
+`channel_overrides` maps a channel label of `seq_channel_order` to fields that
+replace the block's for that channel (a `SpotFindingPlan`), and `rounds` lists the
+round labels to detect in (omitted: the reference round only); a candidate set of several
+rounds cannot be decoded until §2.8 defines a readout mode. The rule-level
+Python-only key `device` sets `ExecutionConfig.device`; `cpu` is the only value.
+The method-aware rules are in the
+[spot-finding contract](spot-finding-contract.md#workflow-configuration).
+
+```yaml
+rsf_single_fov:
+  parameters:
+    device: cpu
+    spot_finding:
+      run: true
+      ref_round: round1
+      method: local_maxima
+      threshold_mode: noise
+      threshold_value: 5.0
+      exclude_border: false
+      channel_overrides:
+        ch03: {threshold_value: 6.0}
 ```
 
 ## Downstream parameter blocks

@@ -74,6 +74,7 @@ class _RunRecord:
         self.directory = Path(directory)
         self.checkpoints = checkpoints
         self.failure = None
+        self._methods = None
         dataset = fov.dataset
         self.data = {
             "format_version": FORMAT_VERSION, "dataset_id": dataset.dataset_id,
@@ -98,8 +99,15 @@ class _RunRecord:
     def add_checkpoint(self, stage, files):
         self.data["checkpoints"].setdefault(stage, []).extend(files)
 
+    def add_methods(self, entries):
+        """Provenance entries of the methods the current step ran; the step's record gets them as methods."""
+        self._methods = list(entries)
+
     def add_step(self, name, round_name, seconds, status):
-        self.data["steps"].append({"name": name, "round": round_name, "seconds": seconds, "status": status})
+        step = {"name": name, "round": round_name, "seconds": seconds, "status": status}
+        if self._methods is not None:
+            step["methods"], self._methods = self._methods, None
+        self.data["steps"].append(step)
 
     def fail_step(self, name, round_name):
         # The innermost failing step is reported; enclosing steps keep it.

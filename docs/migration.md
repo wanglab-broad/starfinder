@@ -382,12 +382,217 @@ checkpoints store `correction_zyx`; the reader loads it as
 Registered images, pull fields and the `log/gr_shifts` rows (which already held
 the detected displacement) are unchanged.
 
+### Spot-finding registry
+
+`SPOT_FINDING_METHODS` in `starfinder.spot_finding` maps each exact config type
+(`LocalMaximaConfig`, `NoiseLandmarkConfig`, `PercentileCentroidConfig`) to its
+`SpotFindingSpec` (`local_maxima`, `noise_landmark`, `percentile_centroid`).
+`find_spots`, `SpotFindingResult`, `PipelineConfig.spot_finding`, `FOV.find_spots`,
+the workflow adapter and the `candidates` checkpoint reader look methods up
+through it by exact type, so a subclass of a detection config, which
+`isinstance` accepted before, now raises `TypeError` (`unsupported detection
+config` from `find_spots`). A missing optional dependency of a method raises
+`SpotFindingBackendUnavailableError`, an `ImportError` naming the module and
+the extra. Detection results are unchanged; see {doc}`spot-finding-contract`.
+
+### Spot-finding workflow keys
+
+The `spot_finding` block of a Python rule accepts the Python-only key `method`
+(a pipeline method of `SPOT_FINDING_METHODS`, default `local_maxima`), every
+init field of the selected config (for example `exclude_border` and
+`measure_peak_intensity`, which YAML could not set before) and
+`channel_overrides`, a mapping from channel label to config fields. A
+rule-level Python-only `device` key sets `ExecutionConfig.device`. The legacy
+keys `intensity_estimation`, `intensity_threshold` and `min_distance` stay
+aliases of `threshold_mode`, `threshold_value` and `min_distance_voxels` for
+`local_maxima` only; for another method `min_distance` is that config's own
+field. The schema drops `local` from `intensity_estimation`, which neither
+Python nor MATLAB accepts.
+
+| Before | After |
+| --- | --- |
+| `min_distance` and `min_distance_voxels` together: `min_distance_voxels` silently wins | `ValueError` |
+| `intensity_threshold` with `threshold_value`, or `intensity_estimation` with `threshold_mode` | `ValueError` (the field names were unknown keys before) |
+| `exclude_border` in YAML: unknown key | the `LocalMaximaConfig` field |
+
+### Detection plan and execution device
+
+`find_spots`, `FOV.find_spots` and `PipelineConfig.spot_finding` accept a
+`SpotFindingPlan(config, channel_overrides=())`: one method for every channel,
+and `ChannelOverride(channel, config)` entries that replace the whole config of
+one channel (same exact config type; `channel_labels` `None` or the plan's).
+An override may change any setting except one that changes the output columns,
+such as `measure_peak_intensity`, which raises `ValueError` at plan validation.
+A bare config means a plan without overrides, and `PipelineConfig` keeps what it
+is given. `ExecutionConfig` gains `device="cpu"`, the only accepted value
+(`ValueError` otherwise), and `find_spots` takes the same `device` keyword.
+`run.json` records `config.execution.device`, and the `find_spots` step record
+gains `methods`, a list with the detection's provenance entry (`stage`,
+`method`, `config_type`, `implementation`, `config`, `requires`, `artifacts`,
+`execution`); see {doc}`checkpoints`.
+
+`SpotFindingPlan` also takes `rounds`, the round labels to detect in (the workflow
+`spot_finding` block's Python-only `rounds` key). `None`, the default, is the reference
+round only, and every result, identity, column, checkpoint and golden digest stays as
+before. With `rounds`, `FOV.run` detects each listed round after its registration and
+post-registration steps and `FOV.find_spots` detects the listed rounds' resident images;
+a listed round whose metadata or shape differs from the reference round's raises
+`IncompatibleGeometryError`. The result is one table with a `round` column (pandas
+string), the rounds in `FOV.run` order (reference first) and `spot_id` running
+`"0"`…`"N-1"` over the combined table, so the reference round's identities are
+unchanged; coincident candidates are never merged. The new `SpotFindingResult.plan`
+holds the plan (`None` on construction means `SpotFindingPlan(config)`). Direct
+`find_spots` detects one image and raises `ValueError` for a plan with `rounds`.
+**Intentional change:** decoding a candidate set of several rounds raises
+`ValueError("decoding candidates from several detection rounds needs a readout mode
+(§2.8)")`, from `FOV.run` before any processing and from `FOV.decode_barcodes` for a
+spot table with a `round` column. Extraction reads every candidate in every sequencing
+round, as before; in `FOV.run` it then runs after the last detected round, which needs
+batch mode or `retain_images=True`.
+
+### Spot-finding diagnostics
+
+`SpotFindingResult.diagnostics` keeps its keys and adds `effective_settings`
+(the config of every channel, serialized as `run.json` serializes dataclasses),
+`warnings` and `execution` (device, torch build when a method uses it, and the
+thread settings in effect). Local maxima adds `noise`: per channel the zero
+fraction, median, MAD and threshold, in every threshold mode. Every method with a
+`channel` column adds `counts` (candidates per channel), `outcomes` (`ok`, `empty`, or
+`constant`: the pipeline methods never run on a constant channel, which yields no
+candidates; its thresholds and local-maxima noise record are still recorded, and
+Spotiflow and Piscis still verify their weights), `native` (per channel the minimum,
+median and maximum of `radius` or `probability`, when the method has them); every
+method adds `software` (the versions of starfinder, NumPy, SciPy, scikit-image and the
+method's optional dependencies). A result of several rounds keeps `thresholds`,
+`counts`, `outcomes`, `noise` and `merged` per round under `rounds`. A method that
+finds nothing returns its declared columns with their dtypes.
+`plot_detections(image, result, *, channel, z, yx_window=None, round=None, ax=None)`
+draws one channel's detections on one slice or crop and returns the matplotlib axes;
+`FOV.run` never plots.
+
+### Candidates checkpoint plan keys
+
+`candidates.json` adds the optional keys `detection_rounds` (`null` or the plan's
+rounds), `detection_plan` (the channel overrides as `{channel, config}` entries),
+`execution` and `weights` (the provenance `artifacts` entries of the loaded weights),
+and the table may carry the spot columns `round` (string), `radius` and `probability`
+(float64). `FORMAT_VERSION` stays 2. `read_checkpoint(..., "candidates")` rebuilds the
+plan, so the reloaded `spot_result.plan` equals the original; a checkpoint written
+before these keys loads unchanged, with no overrides and `rounds` `None`. See
+{doc}`checkpoints`.
+
+### Spot evaluation metrics
+
+`starfinder.evaluation.spot_finding` gains `localization_errors` (per-axis,
+lateral and 3D error maxima and 95th percentiles of the matched pairs) and
+`classify_detections` (matched, duplicate and spurious counts, with duplicates
+split by group, such as the channel). Both read an `evaluate_spots` result and
+return an `EvaluationResult`.
+
+### Pretrained weights
+
+`KNOWN_WEIGHTS` lists the pretrained weights Starfinder can fetch and verify
+(two Spotiflow 3D, two Spotiflow 2D and two Piscis models, with full SHA-256
+values) and sets no default. `starfinder weights fetch <method> <model>`
+(`fetch_weights`) downloads, verifies and installs a model under
+`STARFINDER_WEIGHTS_DIR` (else `$XDG_CACHE_HOME/starfinder/weights`);
+`starfinder weights list` and `starfinder weights verify` show and re-hash the
+local copies. `resolve_weights` raises `MissingWeightsError` or
+`WeightsHashMismatchError`. Detection never downloads.
+
+### Starfish LoG
+
+`StarfishLogConfig` selects the pipeline method `starfish_log`, a native
+reimplementation of starfish `BlobDetector` (`blob_log`, `is_volume=True`, no
+reference image, one round and channel at a time; starfish `1fb00cbc`) that needs
+no extra and does not depend on starfish. Its tables equal starfish's exactly
+(the W-266 parity tables in `test/data/starfish_blob_parity`). `min_sigma`,
+`max_sigma` (σ in voxels, a number or a ZYX 3-tuple), `num_sigma` and `threshold`
+are required, because starfish has no defaults for them; `overlap` (0.5) and
+`exclude_border` (False) keep starfish's defaults. Integer images are scaled by
+their dtype maximum to float32 [0, 1] (`img_as_float32`) and a float image outside
+[0, 1] raises `ValueError`; the threshold applies to that scaled image. The table
+holds the truncated integer coordinates as float64, `channel`, `peak_intensity`
+(the original pixel value) and `radius` (`round(σ·√ndim)`). A Z=1 image is
+detected as a plane (z=0), where a 3-tuple σ raises `IncompatibleGeometryError`.
+There is no tiling and no memory guard: `diagnostics["geometry"]` records the
+estimate 10.4 bytes × `num_sigma` × voxels. In YAML, `method: starfish_log`
+requires the four settings.
+
+### Spotiflow and Piscis
+
+`SpotiflowConfig` and `PiscisConfig` select the pipeline methods `spotiflow`
+(spotiflow 0.6.5) and `piscis` (piscis 1.1.0, the `Piscis` class), which need the
+extras `spotiflow` and `piscis` (`pip install starfinder[spotiflow]`; CPU torch
+2.7.1; not available on Python 3.14 and later). Without the extra a run raises
+`SpotFindingBackendUnavailableError` naming the module and the extra. Every config
+names its weights (`model`, a row of `KNOWN_WEIGHTS`; there is no default), and an
+unknown model or one of the other method raises `ValueError` listing the known
+names. Detection loads only the copy fetched with `starfinder weights fetch`: each
+call re-hashes every file `KNOWN_WEIGHTS` lists for the model before the model is
+built, passes the libraries absolute paths only (a relative
+`STARFINDER_WEIGHTS_DIR` is resolved), never downloads and never reads
+`~/.spotiflow`, `~/.piscis/models` or the Hugging Face cache; a loaded model is
+reused within the process. A 3D Spotiflow model (`synth_3d`,
+`smfish_3d`) detects Z>1 images in 3D and a 2D model (`general`, `hybiss`) detects
+Z=1 images as a plane; another pairing, or a shape below the model's minimum,
+raises `IncompatibleGeometryError` where Spotiflow would return nothing. Piscis
+uses plane mode for Z=1 and stack mode for Z>1, where `z` is an integer and
+vertically aligned spots merge. `scale` must be 1. The tables hold fractional
+coordinates, `channel`, `peak_intensity` (the original pixel value at the rounded
+coordinate) and, for Spotiflow, `probability`. `diagnostics["effective_settings"]`
+records the resolved native defaults (Spotiflow's stored `prob_thresh`, `subpix`
+and `n_tiles`; Piscis's tile size), `diagnostics["model"]` and the `run.json`
+provenance `artifacts` record the path, SHA-256, source and revision of every
+verified file, and `diagnostics["geometry"]` records Spotiflow's `n_tiles` or Piscis's
+tile size and keep-boundaries, near which Piscis can repeat a spot (not merged).
+`KNOWN_WEIGHTS` entries gain `extracted`, every file of a Spotiflow archive with
+its SHA-256; `resolve_weights(..., extracted=...)` also checks the named files, and
+detection and `starfinder weights verify` re-hash all of them. The weights root is
+always an absolute path (`~` expanded, relative paths resolved).
+
+### Local-maxima W-218 merge
+
+`LocalMaximaConfig.merge_radius_zyx` (default `None`) is the opt-in W-218
+within-channel merge: after border exclusion, a channel's maxima are visited by
+decreasing pixel value, then increasing z, y, x, and a maximum is dropped when an
+earlier kept maximum of the same channel lies within the ellipsoid
+Σ (Δᵢ / rᵢ)² ≤ 1 (radii in voxels; the Z radius is unused for Z=1). It removes
+tied maxima of a plateau and split maxima of one amplicon; kept maxima are
+unchanged, identities are assigned after the merge, and `diagnostics["merged"]`
+records the number removed per channel. W-268 kept `None` as the default, so
+detections are unchanged unless the option is set; channels are never merged with
+each other (cross-channel duplicates are §2.8's). `exclude_border` is settable in
+YAML for the border misses W-218 reported.
+
+### Spot-finding pipeline field
+
+The spot-finding field of {py:class}`~starfinder.dataset.PipelineConfig` is
+`spot_finding`, the stage name that the module, the YAML block, the registry and
+the provenance `stage` already use; it was `detection`. There is no alias, so
+`PipelineConfig(detection=...)` raises `TypeError`. The accepted types, the
+validation and the results are unchanged, and the error message for a wrong type
+names the new field. YAML already used the `spot_finding` block and is unchanged.
+
+| Before | After |
+| --- | --- |
+| `PipelineConfig(detection=LocalMaximaConfig())` | `PipelineConfig(spot_finding=LocalMaximaConfig())` |
+| `config.detection`, `replace(config, detection=None)` | `config.spot_finding`, `replace(config, spot_finding=None)` |
+| `run.json`: `config.pipeline.detection` | `run.json`: `config.pipeline.spot_finding` |
+| `TypeError("detection requires its typed operation config")` | `TypeError("spot_finding requires its typed operation config")` |
+
+`run.json` keeps `format_version` 1. Starfinder does not read `config.pipeline`
+back from `run.json`, so records written before the rename stay valid as they
+are; a script that reads them should accept either key. The `candidates.json`
+keys `detection_config`, `detection_rounds`, `detection_plan` and
+`detection_diagnostics` and the preprocessing `detection` image keep their names.
+
 ## Intentional behavior changes — not mechanical equivalence
 
 | Area | Change and consequence |
 | --- | --- |
 | I/O / preprocessing | Preserve loaded dtype; conversion, cropping and channel selection are explicit. Constant normalization groups map to the lower endpoint even with SNR gating. Float64 computation can change quantization boundaries. Slice morphology avoids uint16 signed overflow; projection preserves singleton Z and uses wider sums without display scaling. |
-| Detection | Singleton-Z local maxima operate in YX. Empty tables are typed, identities/geometry explicit. Distinct landmark and pipeline detector policies remain distinct. |
+| Detection | Singleton-Z local maxima operate in YX. Empty tables are typed, identities/geometry explicit. Distinct landmark and pipeline detector policies remain distinct. Local maxima now emits a `SpotFindingWarning` when a channel's noise MAD is 0 or more than half of its voxels are zero, where nothing was reported before; thresholds and detections are unchanged. Subclasses of the detection configs are rejected (exact-type lookup), and for `local_maxima` a legacy YAML key together with its field raises instead of one silently winning. |
 | Translation | Singleton axes return zero; odd-length peak wrapping is corrected. Signed fractional Fourier output uses the real inverse FFT rather than magnitude. Even half-period backend signs and Nyquist behavior are documented rather than hidden. |
 | Transform application | Integer output rounds once with nearest-even ties and saturation; floating output retains signed interpolation/overshoot. No silent method fallback; unsupported geometry/backend/dimensions fail explicitly. |
 | Barcodes | Validate codebook collisions and label alignment; neighborhoods use explicit ZYX radii and subpixel/boundary policy. Preserve ambiguous/unmatched/rejected identities instead of dropping them. Scores and endpoint filtering have explicit meanings. |

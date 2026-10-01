@@ -1,0 +1,243 @@
+{
+ "starfish_version": "0.4.0+38.g1fb00cb",
+ "skimage": "0.26.0",
+ "numpy": "2.2.6",
+ "pandas": "3.0.0",
+ "python": "3.12.12 | packaged by conda-forge | (main, Oct 22 2025, 23:25:55) [GCC 14.3.0]",
+ "compared_columns": [
+  "intensity",
+  "z",
+  "y",
+  "x",
+  "radius",
+  "spot_id"
+ ],
+ "cases": {
+  "volume-2ch-isotropic": {
+   "fixture": "volume-2ch",
+   "shape_rczyx": [
+    1,
+    2,
+    16,
+    64,
+    64
+   ],
+   "array_sha256": "236dc0ee9b76a47c12b4fdd69e12b4e78e1766c77c026907fe5f6e1056f97196",
+   "settings": {
+    "min_sigma": 1,
+    "max_sigma": 10,
+    "num_sigma": 30,
+    "threshold": 0.01
+   },
+   "tables": {
+    "r0_c0": {
+     "csv": "volume-2ch-isotropic_r0_c0.csv",
+     "rows": 9,
+     "columns": [
+      "intensity",
+      "z",
+      "y",
+      "x",
+      "radius",
+      "spot_id"
+     ],
+     "dtypes": {
+      "intensity": "float32",
+      "z": "int64",
+      "y": "int64",
+      "x": "int64",
+      "radius": "float64",
+      "spot_id": "int64"
+     }
+    },
+    "r0_c1": {
+     "csv": "volume-2ch-isotropic_r0_c1.csv",
+     "rows": 8,
+     "columns": [
+      "intensity",
+      "z",
+      "y",
+      "x",
+      "radius",
+      "spot_id"
+     ],
+     "dtypes": {
+      "intensity": "float32",
+      "z": "int64",
+      "y": "int64",
+      "x": "int64",
+      "radius": "float64",
+      "spot_id": "int64"
+     }
+    }
+   }
+  },
+  "volume-2ch-anisotropic": {
+   "fixture": "volume-2ch",
+   "shape_rczyx": [
+    1,
+    2,
+    16,
+    64,
+    64
+   ],
+   "array_sha256": "236dc0ee9b76a47c12b4fdd69e12b4e78e1766c77c026907fe5f6e1056f97196",
+   "settings": {
+    "min_sigma": [
+     2.0,
+     1.0,
+     1.0
+    ],
+    "max_sigma": [
+     6.0,
+     3.0,
+     3.0
+    ],
+    "num_sigma": 10,
+    "threshold": 0.01
+   },
+   "tables": {
+    "r0_c0": {
+     "csv": "volume-2ch-anisotropic_r0_c0.csv",
+     "rows": 9,
+     "columns": [
+      "intensity",
+      "z",
+      "y",
+      "x",
+      "radius",
+      "spot_id"
+     ],
+     "dtypes": {
+      "intensity": "float32",
+      "z": "int64",
+      "y": "int64",
+      "x": "int64",
+      "radius": "float64",
+      "spot_id": "int64"
+     }
+    },
+    "r0_c1": {
+     "csv": "volume-2ch-anisotropic_r0_c1.csv",
+     "rows": 8,
+     "columns": [
+      "intensity",
+      "z",
+      "y",
+      "x",
+      "radius",
+      "spot_id"
+     ],
+     "dtypes": {
+      "intensity": "float32",
+      "z": "int64",
+      "y": "int64",
+      "x": "int64",
+      "radius": "float64",
+      "spot_id": "int64"
+     }
+    }
+   }
+  },
+  "plane-isotropic": {
+   "fixture": "plane",
+   "shape_rczyx": [
+    1,
+    1,
+    1,
+    64,
+    64
+   ],
+   "array_sha256": "dda2471fcfde198d0308cfe695513537d0a01e2ee1cf43439260412ea0e38e24",
+   "settings": {
+    "min_sigma": 1,
+    "max_sigma": 10,
+    "num_sigma": 30,
+    "threshold": 0.01
+   },
+   "tables": {
+    "r0_c0": {
+     "csv": "plane-isotropic_r0_c0.csv",
+     "rows": 11,
+     "columns": [
+      "intensity",
+      "z",
+      "y",
+      "x",
+      "radius",
+      "spot_id"
+     ],
+     "dtypes": {
+      "intensity": "float32",
+      "z": "int64",
+      "y": "int64",
+      "x": "int64",
+      "radius": "float64",
+      "spot_id": "int64"
+     }
+    }
+   }
+  },
+  "empty-isotropic": {
+   "fixture": "empty",
+   "shape_rczyx": [
+    1,
+    1,
+    8,
+    32,
+    32
+   ],
+   "array_sha256": "c35020473aed1b4642cd726cad727b63fff2824ad68cedd7ffb73c7cbd890479",
+   "settings": {
+    "min_sigma": 1,
+    "max_sigma": 10,
+    "num_sigma": 30,
+    "threshold": 0.01
+   },
+   "tables": {
+    "r0_c0": {
+     "csv": "empty-isotropic_r0_c0.csv",
+     "rows": 0,
+     "columns": [
+      "x",
+      "y",
+      "z",
+      "radius",
+      "intensity",
+      "spot_id"
+     ],
+     "dtypes": {
+      "x": "int64",
+      "y": "int64",
+      "z": "int64",
+      "radius": "float64",
+      "intensity": "object",
+      "spot_id": "object"
+     }
+    }
+   }
+  }
+ },
+ "error_cases": {
+  "plane-anisotropic-3tuple": {
+   "fixture": "plane",
+   "settings": {
+    "min_sigma": [
+     1.0,
+     0.5,
+     0.5
+    ],
+    "max_sigma": [
+     10.0,
+     5.0,
+     5.0
+    ],
+    "num_sigma": 30,
+    "threshold": 0.01
+   },
+   "starfish": "RuntimeError: sequence argument must have length equal to input rank",
+   "prototype": "RuntimeError: sequence argument must have length equal to input rank",
+   "same_exception_type": true
+  }
+ }
+}

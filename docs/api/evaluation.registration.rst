@@ -31,6 +31,16 @@ inclusive/exclusive boundary is recorded. Historical spot-truth comparisons
 used exclusive distance 5; registration quality used inclusive distance 2.
 These are retained caller choices, not new scientific thresholds.
 
+Two spot metrics read the matched pairs of an ``evaluate_spots`` result together with
+the same detected and truth points. ``localization_errors`` gives the maximum and 95th
+percentile of the absolute Z, Y and X errors, of the lateral distance and of the 3D
+matched distance, plus the number of matches whose absolute Z error is above 1, in the
+matching units. ``classify_detections`` counts matched, duplicate (an unmatched
+detection within ``radius`` of a matched truth point) and spurious detections; with
+``groups`` (for example the channel of each detection) it splits the duplicates into
+those in the group of the truth point's matched detection and those in another group,
+the W-218 classification of :doc:`../spot-finding-baseline`.
+
 Image policies
 --------------
 
@@ -131,4 +141,6 @@ scientific truth/calibration or define an E01 protocol. MATLAB is excluded.
 .. autosummary::
    :toctree: generated
 
+   classify_detections
    evaluate_spots
+   localization_errors

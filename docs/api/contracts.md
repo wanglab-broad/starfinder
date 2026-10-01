@@ -230,6 +230,25 @@ and can be omitted with `measure_peak_intensity=False`. No integrated intensity
 or detection score is invented. Optional `channel_labels` must uniquely label
 all channels, and their tuple is recorded in diagnostics.
 
+The method is looked up in {data}`starfinder.spot_finding.SPOT_FINDING_METHODS` by the
+config's exact type, so a subclass of a config raises `TypeError("unsupported detection
+config")`. `config` may also be a {class}`starfinder.spot_finding.SpotFindingPlan`, whose
+channel overrides replace the whole config of named channels (it then needs
+`channel_labels`); every channel's effective config is in
+`diagnostics["effective_settings"]`. Local maxima records `diagnostics["noise"]` (per
+channel the zero fraction, median, MAD and threshold, in every threshold mode) and
+emits a {class}`starfinder.spot_finding.SpotFindingWarning`, listed in
+`diagnostics["warnings"]`, when a channel's MAD is 0 or more than half of its voxels are
+zero; the threshold and the detections are unchanged. `device` must be `"cpu"`, and
+`diagnostics["execution"]` records it with the thread settings in effect. Per-channel
+methods record `counts`, `outcomes` (`ok`, `empty` or `constant`; a constant channel is
+never passed to the method), `native` and `software`, and a method that finds nothing
+returns its declared columns with their dtypes. A plan's `rounds` is detected by
+`FOV.find_spots` and `FOV.run` only: one table with a `round` column, `spot_id` over the
+combined table (the reference round first, so its identities are unchanged) and the
+per-round diagnostics under `diagnostics["rounds"]`; such a set is never decoded as
+barcodes until §2.8 defines a readout mode.
+
 {class}`starfinder.spot_finding.NoiseLandmarkConfig` retains registration's
 per-channel MAD peaks followed by its original radius deduplication: for each
 pair within `min_distance_voxels`, drop the higher concatenated index.

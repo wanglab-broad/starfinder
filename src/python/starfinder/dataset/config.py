@@ -12,7 +12,9 @@ from starfinder.preprocessing import PreprocessingRecipe
 from starfinder.registration import (REGISTRATION_METHODS, RegistrationEstimationError, InsufficientLandmarksError,
     RegistrationQcConfig, RegistrationRejectedError, RegistrationSignalConfig, TranslationConfig, WarpConfig)
 from starfinder.registration._methods import RegistrationConfig
-from starfinder.spot_finding import LocalMaximaConfig
+from starfinder._execution import check_device
+from starfinder.spot_finding import SPOT_FINDING_METHODS, SpotFindingPlan
+from starfinder.spot_finding._methods import SpotFindingConfig
 from starfinder.barcode import (NeighborhoodSumConfig, WtaDecoderConfig,
     CodebookAwareDecoderConfig, ReadFilterConfig)
 
@@ -149,14 +151,18 @@ class ExecutionConfig:
     """Batch preloads rounds; streaming loads one at a time.
 
     retain_images keeps processed rounds (required for subtile creation).
-    Otherwise only the reference image remains after streaming.
+    Otherwise only the reference image remains after streaming. device is
+    the cross-stage execution device of the methods; §2.7 accepts only
+    "cpu" (any other value raises ValueError).
     """
     mode: str = 'batch'
     retain_images: bool = False
+    device: str = 'cpu'
 
     def __post_init__(self):
         if self.mode not in ('batch', 'streaming') or not isinstance(self.retain_images, bool):
             raise ValueError('invalid execution policy')
+        check_device(self.device)
 
 
 @dataclass(frozen=True)
@@ -189,14 +195,25 @@ class CheckpointConfig:
             raise ValueError('hash_inputs and overwrite must be Boolean')
 
 
+def _pipeline_spot_finding(value):
+    """Whether value is a config, or a SpotFindingPlan of a config, of a method with pipeline=True.
+
+    The lookup uses the exact type, so a subclass of a detection config is not accepted.
+    """
+    config = value.config if type(value) is SpotFindingPlan else value
+    spec = SPOT_FINDING_METHODS.get(type(config))
+    return spec is not None and spec.pipeline
+
+
 @dataclass(frozen=True)
 class PipelineConfig:
     """One processing sequence. None disables an operation, including loading.
 
     Order: load, rotate, the preprocessing recipe's steps, the registration
     recipe (None: no registration), the preprocessing recipe's
-    post_registration steps, detect, extract, decode, filter. The pipeline
-    processes ZYX(C) volumes and never projects;
+    post_registration steps, detect, extract, decode, filter. spot_finding is a
+    config of a SPOT_FINDING_METHODS method with pipeline=True, or a
+    SpotFindingPlan of one. The pipeline processes ZYX(C) volumes and never projects;
     projection is an output view. All operation parameters are passed intact
     to public functions.
     """
@@ -204,20 +221,20 @@ class PipelineConfig:
     rotation_degrees: float | None = None
     preprocessing: PreprocessingRecipe | None = None
     registration: RegistrationRecipe | None = None
-    detection: LocalMaximaConfig | None = None
+    spot_finding: SpotFindingConfig | SpotFindingPlan | None = None
     extraction: NeighborhoodSumConfig | None = None
     decoding: WtaDecoderConfig | CodebookAwareDecoderConfig | None = None
     filtering: ReadFilterConfig | None = None
 
     def __post_init__(self):
         types = {'load': ImageLoadConfig, 'preprocessing': PreprocessingRecipe, 'registration': RegistrationRecipe,
-            'detection': LocalMaximaConfig,
+            'spot_finding': None,
             'extraction': NeighborhoodSumConfig, 'decoding': (WtaDecoderConfig, CodebookAwareDecoderConfig),
             'filtering': ReadFilterConfig}
         for name, kind in types.items():
             value = getattr(self, name)
             if value is not None:
-                if not isinstance(value, kind):
+                if not (_pipeline_spot_finding(value) if name == 'spot_finding' else isinstance(value, kind)):
                     raise TypeError(f'{name} requires its typed operation config')
                 value.__post_init__()
         if self.rotation_degrees is not None and (isinstance(self.rotation_degrees, bool) or not math.isfinite(self.rotation_degrees)):

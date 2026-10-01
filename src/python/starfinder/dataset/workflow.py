@@ -1,5 +1,5 @@
 """Single translation boundary for shared MATLAB/Snakemake configuration."""
-from dataclasses import dataclass, fields
+from dataclasses import MISSING, dataclass, fields, replace
 from pathlib import Path
 
 from .config import ExternalReference, PipelineConfig, ExecutionConfig, RegistrationRecipe, RegistrationStep, RecoveryConfig
@@ -13,7 +13,7 @@ from starfinder.registration import (REGISTRATION_METHODS, CpdConfig, DemonsConf
     RegistrationEstimationError, RegistrationQcConfig, RegistrationRejectedError, RegistrationSignalConfig,
     TranslationConfig, WarpConfig)
 from starfinder.barcode import NeighborhoodSumConfig, ReadFilterConfig, WtaDecoderConfig
-from starfinder.spot_finding import LocalMaximaConfig
+from starfinder.spot_finding import SPOT_FINDING_METHODS, ChannelOverride, LocalMaximaConfig, SpotFindingPlan
 
 _RULES = ('rsf_single_fov', 'gr_single_fov_subtile', 'lrsf_single_fov_subtile',
           'deep_create_subtile', 'deep_rsf_subtile')
@@ -21,6 +21,9 @@ _RULES = ('rsf_single_fov', 'gr_single_fov_subtile', 'lrsf_single_fov_subtile',
 _LEGACY_PREPROCESSING = ('enhance_contrast', 'hist_equalize', 'morph_recon', 'tophat', 'snr_threshold')
 # Legacy method names: the demons variants select method demons with that variant.
 _DEMONS_VARIANTS = ('diffeomorphic', 'symmetric', 'fast_symmetric')
+# Legacy spot_finding keys: aliases of LocalMaximaConfig fields, for local_maxima only.
+_SPOT_ALIASES = {'intensity_estimation': 'threshold_mode', 'intensity_threshold': 'threshold_value',
+                 'min_distance': 'min_distance_voxels'}
 
 
 def _known(values, allowed, context):
@@ -170,6 +173,65 @@ def _explicit_registration(values):
                               reference_round=values.get('reference_round'), **options)
 
 
+def _spot_fields(values, config_type, context):
+    """Init fields of config_type from one spot_finding mapping (YAML lists become tuples).
+
+    The legacy keys are aliases of LocalMaximaConfig fields for local_maxima
+    only, and raise together with their field; for any other method a key
+    must be an init field of its config (min_distance is then that config's
+    native field, passed unchanged). Unknown keys raise ValueError.
+    """
+    if not isinstance(values, dict):
+        raise TypeError(f'{context} must be a mapping')
+    names = {f.name for f in fields(config_type) if f.init}
+    aliases = _SPOT_ALIASES if config_type is LocalMaximaConfig else {}
+    _known(values, names | set(aliases), context)
+    for key, field_name in aliases.items():
+        if key in values and field_name in values:
+            raise ValueError(f'{context}: {key} and {field_name} set the same field; give one of them')
+    return {aliases.get(key, key): _tuples(value) for key, value in values.items()}
+
+
+def _detection(values, channels):
+    """The detection config of the spot_finding block, or a SpotFindingPlan when it has channel_overrides or rounds.
+
+    method names a SPOT_FINDING_METHODS method with pipeline=True (default
+    local_maxima); the other keys are its config's fields (_spot_fields),
+    and a config field without a default (such as the four starfish_log
+    scale and threshold settings) must be given, else ValueError.
+    channel_overrides maps a channel label to config fields that replace the
+    block's for that channel. rounds lists the round labels to detect in
+    (omitted: the reference round only); FOV.run checks them.
+    """
+    values = dict(values)
+    values.pop('ref_round', None)
+    method = values.pop('method', 'local_maxima')
+    overrides = values.pop('channel_overrides', None)
+    rounds = values.pop('rounds', None)
+    config_type = config_type_for(SPOT_FINDING_METHODS, method, 'spot-finding method')
+    if not SPOT_FINDING_METHODS[config_type].pipeline:
+        raise ValueError(f'spot-finding method {method!r} is not a pipeline method')
+    values = _spot_fields(values, config_type, 'spot_finding')
+    missing = [f.name for f in fields(config_type)
+               if f.init and f.default is MISSING and f.default_factory is MISSING and f.name not in values]
+    if missing:
+        raise ValueError(f'spot_finding: method {method!r} requires {", ".join(missing)}')
+    config = config_type(**values)
+    if rounds is not None and (not isinstance(rounds, (list, tuple)) or not all(isinstance(r, str) for r in rounds)):
+        raise TypeError('spot_finding.rounds must be a list of round labels')
+    if overrides is None:
+        return config if rounds is None else SpotFindingPlan(config, rounds=tuple(rounds))
+    if not isinstance(overrides, dict):
+        raise TypeError('spot_finding.channel_overrides must be a mapping from channel label to settings')
+    unknown = [label for label in overrides if label not in channels]
+    if channels and unknown:
+        raise ValueError(f'spot_finding.channel_overrides names unknown channels {unknown}; '
+                         f'seq_channel_order is {list(channels)}')
+    return SpotFindingPlan(config, tuple(
+        ChannelOverride(label, replace(config, **_spot_fields(entry, config_type, f'spot_finding.channel_overrides.{label}')))
+        for label, entry in overrides.items()), None if rounds is None else tuple(rounds))
+
+
 def _legacy_recipe(params, norm, do_norm, hist, do_hist, morph, do_morph, top, do_top, resident):
     """Recipe 1 from the legacy keys, in the legacy order; None when no key runs.
 
@@ -247,7 +309,13 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
     Python-only registration key declares a RegistrationRecipe and is
     mutually exclusive with an enabled global_registration or
     local_registration; those legacy blocks map to one recipe (global step,
-    then local step; merged-image is the channel maximum).
+    then local step; merged-image is the channel maximum). The spot_finding
+    block's Python-only method key names a pipeline SPOT_FINDING_METHODS
+    method (default local_maxima) whose config fields are the other keys;
+    the legacy keys intensity_estimation, intensity_threshold and
+    min_distance are aliases for local_maxima only, channel_overrides
+    gives per-channel settings and rounds the rounds to detect in. The rule-level Python-only device key sets
+    ExecutionConfig.device.
     Direct Python callers construct Dataset/PipelineConfig (no legacy aliases).
     """
     if rule not in _RULES:
@@ -268,7 +336,7 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
     params = config.get('rules', {}).get(rule, {}).get('parameters', {})
     _known(params, ('streaming', 'snr_threshold', 'load_codebook', 'load_raw_images', 'enhance_contrast',
         'hist_equalize', 'morph_recon', 'tophat', 'preprocessing', 'registration', 'global_registration', 'local_registration',
-        'spot_finding', 'reads_extraction', 'reads_filtration', 'create_subtiles'), 'Python workflow parameter')
+        'spot_finding', 'reads_extraction', 'reads_filtration', 'create_subtiles', 'device'), 'Python workflow parameter')
     legacy = [key for key in _LEGACY_PREPROCESSING if key in params]
     if 'preprocessing' in params and legacy:
         raise ValueError(f'preprocessing is mutually exclusive with the legacy keys {legacy}')
@@ -276,7 +344,9 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
     hist, do_hist = _operation(params, 'hist_equalize', ('reference_channel',))
     morph, do_morph = _operation(params, 'morph_recon', ('radius',))
     top, do_top = _operation(params, 'tophat', ('radius',))
-    spot, do_spot = _operation(params, 'spot_finding', ('ref_round', 'intensity_estimation', 'intensity_threshold', 'min_distance', 'min_distance_voxels'))
+    spot_keys = {f.name for cls, spec in SPOT_FINDING_METHODS.items() if spec.pipeline for f in fields(cls) if f.init}
+    spot, do_spot = _operation(params, 'spot_finding', {'ref_round', 'method', 'channel_overrides', 'rounds', *_SPOT_ALIASES,
+                                                        *spot_keys})
     extract, do_extract = _operation(params, 'reads_extraction', ('voxel_size',))
     filt, do_filter = _operation(params, 'reads_filtration', ('end_base', 'start_base', 'exclude_invalid_endpoints', 'score_bounds', 'n_barcode_segments', 'split_index'))
     book, _ = _operation(params, 'load_codebook', ('split_index',))
@@ -316,7 +386,7 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
         preprocessing=(_explicit_recipe(params['preprocessing']) if 'preprocessing' in params else
                        _legacy_recipe(params, norm, do_norm, hist, do_hist, morph, do_morph, top, do_top, resident)),
         registration=registration,
-        detection=LocalMaximaConfig(threshold_mode=spot.get('intensity_estimation', 'noise'), threshold_value=spot.get('intensity_threshold', 5.0), min_distance_voxels=spot.get('min_distance_voxels', spot.get('min_distance', 1))) if do_spot else None,
+        spot_finding=_detection(spot, channels) if do_spot else None,
         extraction=NeighborhoodSumConfig(tuple(extract.get('voxel_size', (1, 2, 2)))) if do_extract else None,
         decoding=WtaDecoderConfig(diagnostics=True) if do_filter else None,
         filtering=ReadFilterConfig(end_bases=filt.get('end_base'), start_base=filt.get('start_base', 'C'), exclude_invalid_endpoints=filt.get('exclude_invalid_endpoints', False), score_bounds=filt.get('score_bounds', {})) if do_filter else None)
@@ -340,7 +410,8 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
             raise ValueError('split_index requires one two-segment boundary')
         split_index = split_index[0]
     return WorkflowConfig(dataset, pipeline,
-        ExecutionConfig('streaming' if streaming else 'batch', rule in ('gr_single_fov_subtile', 'deep_create_subtile')),
+        ExecutionConfig('streaming' if streaming else 'batch', rule in ('gr_single_fov_subtile', 'deep_create_subtile'),
+                        params.get('device', 'cpu')),
         split_index, ProjectionConfig() if config.get('maximum_projection', False) else None, *reference_view)
 
 
