@@ -10,8 +10,8 @@ from dataclasses import replace
 
 import numpy as np
 
-from ._learned import cached_model, channels_of, frame, is_constant, model_record, table
-from ._weights import known_weights, resolve_weights
+from ._learned import absolute, cached_model, channels_of, frame, is_constant, model_record, table, verified_folder
+from ._weights import known_weights
 
 COLUMNS = ('z', 'y', 'x', 'channel', 'peak_intensity')
 # Piscis tiles axes longer than the tile with this overlap fraction (piscis/core.py, _Piscis._predict).
@@ -44,12 +44,12 @@ def piscis(image, config, context):
     tiling (tile size, overlap and keep-boundaries per axis).
     """
     entry = known_weights("piscis", config.model)
-    folder = resolve_weights("piscis", config.model)
+    folder = verified_folder("piscis", config.model)
     from piscis import Piscis
     from piscis.models.spots import round_input_size
     path = folder / entry.files[0].path
     loaded = cached_model("piscis", config.model,
-                          lambda: Piscis(model_name=str(path.with_suffix("")), device=context.device))
+                          lambda: Piscis(model_name=absolute(path.with_suffix(""), "Piscis"), device=context.device))
     detector = copy.copy(loaded)   # input_size is a per-call setting; the network is shared
     if config.input_size is not None:
         detector.input_size = round_input_size((config.input_size, config.input_size))

@@ -95,7 +95,7 @@ def _weights(args):
     """starfinder weights fetch|list|verify; verify exits 1 when a local copy is missing or changed."""
     from starfinder.spot_finding import KNOWN_WEIGHTS, MissingWeightsError, WeightsHashMismatchError
     from starfinder.spot_finding import fetch_weights, resolve_weights
-    from starfinder.spot_finding._weights import RECORD_NAME, known_weights, model_folder, weights_directory
+    from starfinder.spot_finding._weights import RECORD_NAME, listed_files, model_folder, weights_directory
     if args.command == 'fetch':
         print(fetch_weights(args.method, args.model, directory=args.dir))
         return 0
@@ -117,9 +117,8 @@ def _weights(args):
     failed = False
     for method, model in keys:
         try:
-            # Every extracted file of an archive is re-hashed, not only the files a detection checks.
-            extracted = tuple(item.path for item in known_weights(method, model).extracted)
-            folder = resolve_weights(method, model, directory=args.dir, extracted=extracted)
+            # Every file KNOWN_WEIGHTS lists for the model is re-hashed, as every detection does.
+            folder = resolve_weights(method, model, directory=args.dir, extracted=listed_files(method, model))
             print(f'{method}\t{model}\tverified\t{folder}')
         except (MissingWeightsError, WeightsHashMismatchError) as error:
             failed = True

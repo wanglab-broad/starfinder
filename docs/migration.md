@@ -487,9 +487,11 @@ extras `spotiflow` and `piscis` (`pip install starfinder[spotiflow]`; CPU torch
 names its weights (`model`, a row of `KNOWN_WEIGHTS`; there is no default), and an
 unknown model or one of the other method raises `ValueError` listing the known
 names. Detection loads only the copy fetched with `starfinder weights fetch`: each
-call re-hashes the files it loads before the model is built, never downloads and
-never reads `~/.spotiflow`, `~/.piscis/models` or the Hugging Face cache; a loaded
-model is reused within the process. A 3D Spotiflow model (`synth_3d`,
+call re-hashes every file `KNOWN_WEIGHTS` lists for the model before the model is
+built, passes the libraries absolute paths only (a relative
+`STARFINDER_WEIGHTS_DIR` is resolved), never downloads and never reads
+`~/.spotiflow`, `~/.piscis/models` or the Hugging Face cache; a loaded model is
+reused within the process. A 3D Spotiflow model (`synth_3d`,
 `smfish_3d`) detects Z>1 images in 3D and a 2D model (`general`, `hybiss`) detects
 Z=1 images as a plane; another pairing, or a shape below the model's minimum,
 raises `IncompatibleGeometryError` where Spotiflow would return nothing. Piscis
@@ -500,11 +502,12 @@ coordinate) and, for Spotiflow, `probability`. `diagnostics["effective_settings"
 records the resolved native defaults (Spotiflow's stored `prob_thresh`, `subpix`
 and `n_tiles`; Piscis's tile size), `diagnostics["model"]` and the `run.json`
 provenance `artifacts` record the path, SHA-256, source and revision of every
-loaded file, and `diagnostics["geometry"]` records Spotiflow's `n_tiles` or Piscis's
+verified file, and `diagnostics["geometry"]` records Spotiflow's `n_tiles` or Piscis's
 tile size and keep-boundaries, near which Piscis can repeat a spot (not merged).
 `KNOWN_WEIGHTS` entries gain `extracted`, every file of a Spotiflow archive with
 its SHA-256; `resolve_weights(..., extracted=...)` also checks the named files, and
-`starfinder weights verify` re-hashes all of them.
+detection and `starfinder weights verify` re-hash all of them. The weights root is
+always an absolute path (`~` expanded, relative paths resolved).
 
 ### Local-maxima W-218 merge
 

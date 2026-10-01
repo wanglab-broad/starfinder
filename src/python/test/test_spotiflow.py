@@ -13,13 +13,16 @@ STARFINDER_WEIGHTS_DIR. Bounds and their sources:
 * S15: a 3D model raises IncompatibleGeometryError on Z=1 and Z=6 and runs on 7x8x8; a 2D model raises on
   Z>1 and on 1x5x5 (W-266 minimum-shape and dimensionality probes).
 * S14, provisional (a contract rule; W-266 showed only that the models load from explicit local paths):
-  the weights are re-hashed before Spotiflow.from_folder is called, and a detection needs neither the
-  network nor ~/.spotiflow or the Hugging Face cache.
+  every listed weights file is re-hashed before Spotiflow.from_folder is called, the library receives an
+  absolute folder even when STARFINDER_WEIGHTS_DIR is relative, and a detection needs neither the network
+  nor ~/.spotiflow or the Hugging Face cache.
 """
 from dataclasses import replace
 from functools import cache
 import json
 import os
+from pathlib import Path
+import shutil
 import socket
 import urllib.request
 
@@ -44,7 +47,9 @@ MODELS_3D, MODELS_2D = ("synth_3d", "smfish_3d"), ("general", "hybiss")
 SCENE = {**{m: "iso3d" for m in MODELS_3D}, **{m: "iso_z1" for m in MODELS_2D}}
 # The prob_thresh stored with each model (thresholds.yaml prob_thresh_best; W-266 known-weights.csv).
 STORED = {"synth_3d": 0.3, "smfish_3d": 0.4, "general": 0.49999999999999994, "hybiss": 0.5319999999999999}
-READS = ("best.pt", "config.yaml", "thresholds.yaml")
+# Every file KNOWN_WEIGHTS lists for a Spotiflow model, in the order of the artifacts: each is verified on
+# every detection (Spotiflow.from_folder itself reads best.pt, config.yaml and thresholds.yaml).
+LISTED = ("best.pt", "config.yaml", "last.pt", "thresholds.yaml", "train_config.yaml")
 
 
 @pytest.fixture(scope="module")
@@ -161,7 +166,7 @@ def test_s15_a_3d_model_runs_on_7x8x8_and_a_2d_model_on_a_6x6_plane():
 
 # --- S14: hash checks before the model, no network, no library caches ---------------------------------------
 
-@pytest.mark.parametrize("changed", ["best.pt", "config.yaml", "thresholds.yaml"])
+@pytest.mark.parametrize("changed", LISTED)
 def test_s14_a_changed_hash_raises_before_spotiflow_from_folder(changed, no_loaded_models, monkeypatch):
     from spotiflow.model import Spotiflow
     calls = []
@@ -197,6 +202,35 @@ def test_s14_a_detection_completes_with_the_network_patched_to_raise(no_loaded_m
     image, truth = isolated_scene("iso3d", 100)
     match, _ = evaluate(detect(image, SpotiflowConfig("smfish_3d")).spots, truth)
     assert match.values["recall"] == 1.0
+
+
+def test_s14_a_relative_weights_root_reaches_spotiflow_as_an_absolute_path(tmp_path, no_loaded_models, monkeypatch):
+    """STARFINDER_WEIGHTS_DIR=weights, relative to a working directory that holds a copy of the cache."""
+    from spotiflow.model import Spotiflow
+    work, home = tmp_path / "work", tmp_path / "home"
+    home.mkdir()
+    shutil.copytree(weights_directory() / "spotiflow" / "general", work / "weights" / "spotiflow" / "general")
+    original, calls = Spotiflow.from_folder.__func__, []
+
+    def spy(cls, *args, **kwargs):
+        calls.append((args, kwargs))
+        return original(cls, *args, **kwargs)
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("a detection tried to use the network")
+    monkeypatch.setattr(Spotiflow, "from_folder", classmethod(spy))
+    monkeypatch.setattr(socket, "socket", refuse)
+    monkeypatch.setattr(urllib.request, "urlopen", refuse)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.chdir(work)
+    monkeypatch.setenv("STARFINDER_WEIGHTS_DIR", "weights")
+    image, truth = isolated_scene("iso_z1", 100)
+    result = detect(image, SpotiflowConfig("general"))
+    folder = work.resolve() / "weights" / "spotiflow" / "general"
+    assert calls == [((str(folder),), {"map_location": "cpu"})] and Path(calls[0][0][0]).is_absolute()
+    assert [a["path"] for a in result.diagnostics["model"]["artifacts"]] == [str(folder / n) for n in LISTED]
+    assert evaluate(result.spots, truth)[0].values["recall"] == 1.0
+    assert list(home.iterdir()) == []
 
 
 def test_s14_no_library_cache_is_read_or_written_with_an_empty_home(tmp_path):
@@ -241,7 +275,7 @@ def test_records_effective_settings_model_execution_and_columns(model):
         "training_pixel_size_provenance": entry.training_pixel_size_provenance,
         "artifacts": [{"name": f"spotiflow/{model}", "path": str((folder / name).resolve()),
                        "sha256": files[name].sha256, "source": entry.url, "revision": "spotiflow-models release 0.6.0"}
-                      for name in READS]}
+                      for name in LISTED]}
     execution = diagnostics["execution"]
     assert (execution["device"], execution["framework"]["version"], execution["framework"]["cuda"]) == (
         "cpu", "2.7.1+cpu", None)
@@ -273,4 +307,4 @@ def test_the_pipeline_records_the_loaded_files_in_run_json(tmp_path):
     (entry,) = [step for step in data["steps"] if step["name"] == "find_spots"][0]["methods"]
     assert entry["method"] == "spotiflow" and entry["requires"] == {"spotiflow": "0.6.5", "torch": "2.7.1+cpu"}
     assert entry["artifacts"] == direct.diagnostics["model"]["artifacts"]
-    assert [a["path"].rsplit("/", 1)[1] for a in entry["artifacts"]] == list(READS)
+    assert [a["path"].rsplit("/", 1)[1] for a in entry["artifacts"]] == list(LISTED)

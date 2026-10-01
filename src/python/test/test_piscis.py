@@ -17,13 +17,16 @@ every check; the contract does not choose between them. Bounds and their sources
   (W-266: two one-thread runs bit-identical).
 * S15: plane mode runs on 1x8x8 (z=0) and stack mode on 2x8x8 (W-266 minimum-shape probes).
 * S14, provisional (a contract rule; W-266 showed only that the absolute-path wrapper loads the file):
-  the weights are re-hashed before the Piscis constructor is called, and a detection needs neither the
-  network nor ~/.piscis/models or the Hugging Face cache.
+  the weights are re-hashed before the Piscis constructor is called, the constructor receives an absolute
+  model path even when STARFINDER_WEIGHTS_DIR is relative, and a detection needs neither the network nor
+  ~/.piscis/models or the Hugging Face cache.
 """
 from dataclasses import replace
 from functools import cache
 import json
 import os
+from pathlib import Path
+import shutil
 import socket
 import urllib.request
 
@@ -233,6 +236,31 @@ def test_s14_a_detection_completes_with_the_network_patched_to_raise(no_loaded_m
     image, truth = isolated_scene("iso_z1", 100)
     match, _ = evaluate(detect(image, PiscisConfig("20251212")).spots, truth)
     assert match.values["recall"] == 1.0
+
+
+def test_s14_a_relative_weights_root_reaches_piscis_as_an_absolute_path(tmp_path, no_loaded_models,
+                                                                         constructor_calls, monkeypatch):
+    """STARFINDER_WEIGHTS_DIR=weights, relative to a working directory that holds a copy of the cache; Piscis
+    would otherwise prefix the relative name with its MODELS_DIR (~/.piscis/models) and could download."""
+    work, home = tmp_path / "work", tmp_path / "home"
+    home.mkdir()
+    shutil.copytree(weights_directory() / "piscis" / "20251212", work / "weights" / "piscis" / "20251212")
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("a detection tried to use the network")
+    monkeypatch.setattr(socket, "socket", refuse)
+    monkeypatch.setattr(urllib.request, "urlopen", refuse)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.chdir(work)
+    monkeypatch.setenv("STARFINDER_WEIGHTS_DIR", "weights")
+    image, truth = isolated_scene("iso_z1", 100)
+    result = detect(image, PiscisConfig("20251212"))
+    path = work.resolve() / "weights" / "piscis" / "20251212" / "20251212"
+    assert constructor_calls == [((), {"model_name": str(path), "device": "cpu"})]
+    assert Path(constructor_calls[0][1]["model_name"]).is_absolute()
+    assert [a["path"] for a in result.diagnostics["model"]["artifacts"]] == [f"{path}.pt"]
+    assert evaluate(result.spots, truth)[0].values["recall"] == 1.0
+    assert list(home.iterdir()) == []
 
 
 def test_s14_no_library_cache_is_read_or_written_with_an_empty_home(tmp_path):

@@ -9,6 +9,7 @@ order and scale fixed at 1 are provisional contract rules without a W-266 refere
 from dataclasses import dataclass, field, replace
 import hashlib
 import json
+from pathlib import Path
 import sys
 import types
 
@@ -23,8 +24,8 @@ from starfinder.image import ImageMetadata
 from starfinder.spot_finding import (KNOWN_WEIGHTS, SPOT_FINDING_METHODS, ChannelOverride, MissingWeightsError,
     PiscisConfig, SpotFindingBackendUnavailableError, SpotFindingPlan, SpotFindingSpec, SpotiflowConfig, WeightsFile,
     WeightsHashMismatchError, find_spots, resolve_weights)
-from starfinder.spot_finding import _methods
-from starfinder.spot_finding._weights import weights_artifacts
+from starfinder.spot_finding import _learned, _methods
+from starfinder.spot_finding._weights import weights_artifacts, weights_directory
 
 from .learned_detectors import one_thread_environment, run_python
 from .test_spot_finding_golden import CHANNELS, fov_with_fixture, golden_dataset
@@ -238,6 +239,32 @@ def test_resolve_weights_checks_the_named_extracted_files(folder_fixture):
         resolve_weights("spotiflow", "fixture", extracted=("thresholds.yaml",))
     with pytest.raises(ValueError, match="extracts no"):
         resolve_weights("spotiflow", "fixture", extracted=("model.yaml",))
+
+
+@pytest.mark.parametrize("changed", ["best.pt", "config.yaml", "last.pt", "thresholds.yaml"])
+def test_a_detection_verifies_every_listed_file_before_any_model(changed, folder_fixture, monkeypatch):
+    stand_ins(monkeypatch, "spotiflow", "torch")   # the stand-ins have no model class: building one would fail
+    monkeypatch.setattr(_learned, "_MODELS", {})
+    (folder_fixture / changed).write_bytes(b"changed\n")
+    with pytest.raises(WeightsHashMismatchError, match=f"{changed} has SHA-256"):
+        detect(np.ones((8, 16, 16), np.uint16), SpotiflowConfig("fixture"))
+    (folder_fixture / changed).unlink()
+    with pytest.raises(MissingWeightsError, match=changed):
+        detect(np.ones((8, 16, 16), np.uint16), SpotiflowConfig("fixture"))
+
+
+def test_the_weights_root_is_always_absolute(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("STARFINDER_WEIGHTS_DIR", "relative/weights")
+    assert weights_directory() == tmp_path.resolve() / "relative" / "weights"
+    assert weights_directory("explicit") == tmp_path.resolve() / "explicit"
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    assert weights_directory("~/weights") == (tmp_path / "home" / "weights").resolve()
+    monkeypatch.delenv("STARFINDER_WEIGHTS_DIR")
+    monkeypatch.setenv("XDG_CACHE_HOME", "cache")
+    assert weights_directory() == tmp_path.resolve() / "cache" / "starfinder" / "weights"
+    with pytest.raises(ValueError, match="relative weights path"):
+        _learned.absolute(Path("weights/piscis/20251212/20251212"), "Piscis")
 
 
 def test_the_verify_command_rehashes_every_extracted_file(folder_fixture, capsys):

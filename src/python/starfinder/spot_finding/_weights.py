@@ -137,18 +137,21 @@ def known_weights(method: str, model: str) -> KnownWeights:
 
 
 def weights_directory(directory=None) -> Path:
-    """Root of the weights cache.
+    """Root of the weights cache, as an absolute path.
 
     directory when given; otherwise STARFINDER_WEIGHTS_DIR when set, else
     $XDG_CACHE_HOME/starfinder/weights (default ~/.cache/starfinder/weights).
-    A model lives in <root>/<method>/<model>/.
+    A relative or ~ root is expanded and resolved here, so no library ever
+    receives a relative path (Piscis would prefix one with its own model
+    cache). A model lives in <root>/<method>/<model>/.
     """
     if directory is not None:
-        return Path(directory)
-    if os.environ.get("STARFINDER_WEIGHTS_DIR"):
-        return Path(os.environ["STARFINDER_WEIGHTS_DIR"])
-    cache = os.environ.get("XDG_CACHE_HOME") or str(Path.home() / ".cache")
-    return Path(cache) / "starfinder" / "weights"
+        root = Path(directory)
+    elif os.environ.get("STARFINDER_WEIGHTS_DIR"):
+        root = Path(os.environ["STARFINDER_WEIGHTS_DIR"])
+    else:
+        root = Path(os.environ.get("XDG_CACHE_HOME") or str(Path.home() / ".cache")) / "starfinder" / "weights"
+    return root.expanduser().resolve()
 
 
 def model_folder(method: str, model: str, directory=None) -> Path:
@@ -179,13 +182,19 @@ def _listed(entry, extracted):
     return entry.files + tuple(known[name] for name in extracted if name not in loaded)
 
 
+def listed_files(method: str, model: str) -> tuple[str, ...]:
+    """Every file KNOWN_WEIGHTS lists for a model: its files and every extracted file, as extracted= names."""
+    return tuple(item.path for item in known_weights(method, model).extracted)
+
+
 def resolve_weights(method: str, model: str, *, directory=None, extracted: tuple[str, ...] = ()) -> Path:
     """Verified local folder of a known model, without using the network or the library.
 
     Checks that the folder and every file the table lists exist, and
     recomputes each file's SHA-256; extracted names further files of the
-    entry's extracted list (paths in the folder) to check the same way, such
-    as the configuration files Spotiflow reads next to best.pt. Raises
+    entry's extracted list (paths in the folder) to check the same way;
+    detection and ``starfinder weights verify`` name all of them
+    (listed_files). Raises
     ValueError for an unknown model or extracted file, MissingWeightsError
     (naming the method, model, expected path and fetch command) when
     something is missing, and WeightsHashMismatchError (naming the file and

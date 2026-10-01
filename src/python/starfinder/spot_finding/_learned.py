@@ -1,18 +1,32 @@
 """Shared parts of the learned detectors (Spotiflow, Piscis): the model cache, the model record and the table.
 
 The run order is the contract's: find_spots has already imported the
-library through require(); each method then verifies its weights with
-resolve_weights and only then constructs the model from the verified files.
+library through require(); each method then verifies every listed weights
+file with resolve_weights (verified_folder) and only then constructs the
+model from the verified files, through an absolute path.
 Nothing here uses the network or the libraries' own caches.
 """
 import numpy as np
 import pandas as pd
 
-from ._weights import known_weights, weights_artifacts
+from ._weights import known_weights, listed_files, resolve_weights, weights_artifacts
 
 # Loaded models of this process, keyed by (method, model, SHA-256 of the loaded weights file), so the
 # channels and rounds of a run load a model once. Verification still runs on every call, before the lookup.
 _MODELS: dict[tuple[str, str, str], object] = {}
+
+
+def verified_folder(method, model):
+    """The model's cache folder after resolve_weights has recomputed the SHA-256 of every file KNOWN_WEIGHTS
+    lists for it (its files and all extracted files); the same for every method, with nothing skipped."""
+    return resolve_weights(method, model, extracted=listed_files(method, model))
+
+
+def absolute(path, library):
+    """path as a string, after checking that it is absolute: a library never receives a relative path."""
+    if not path.is_absolute():
+        raise ValueError(f"{library} would receive the relative weights path {str(path)!r}; it must be absolute")
+    return str(path)
 
 
 def cached_model(method, model, build):
@@ -23,10 +37,12 @@ def cached_model(method, model, build):
     return _MODELS[key]
 
 
-def model_record(method, model, folder, extracted=()):
-    """diagnostics['model']: method, model, the provenance artifacts entries and the training pixel size."""
+def model_record(method, model, folder):
+    """diagnostics['model']: method, model, the provenance artifacts entries (one per verified file) and the
+    training pixel size."""
     entry = known_weights(method, model)
-    return {'method': method, 'model': model, 'artifacts': weights_artifacts(method, model, folder, extracted),
+    return {'method': method, 'model': model,
+            'artifacts': weights_artifacts(method, model, folder, listed_files(method, model)),
             'training_pixel_size': entry.training_pixel_size,
             'training_pixel_size_provenance': entry.training_pixel_size_provenance}
 

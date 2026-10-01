@@ -8,12 +8,10 @@ from dataclasses import replace
 
 from starfinder.image import IncompatibleGeometryError
 
-from ._learned import cached_model, channels_of, frame, is_constant, model_record, table
-from ._weights import KNOWN_WEIGHTS, known_weights, resolve_weights
+from ._learned import absolute, cached_model, channels_of, frame, is_constant, model_record, table, verified_folder
+from ._weights import KNOWN_WEIGHTS, known_weights
 
 COLUMNS = ('z', 'y', 'x', 'channel', 'peak_intensity', 'probability')
-# The files Spotiflow.from_folder reads besides best.pt; they are verified with it.
-READS = ('config.yaml', 'thresholds.yaml')
 
 
 def _models(dimensionality):
@@ -57,12 +55,13 @@ def spotiflow(image, config, context):
     """
     entry = known_weights("spotiflow", config.model)
     check_geometry(entry, image.shape[:3])
-    folder = resolve_weights("spotiflow", config.model, extracted=READS)
+    folder = verified_folder("spotiflow", config.model)
     import torch
     from spotiflow.model import Spotiflow
     from spotiflow.model.spotiflow import infer_n_tiles
     model = cached_model("spotiflow", config.model,
-                         lambda: Spotiflow.from_folder(str(folder), map_location=context.device))
+                         lambda: Spotiflow.from_folder(absolute(folder, "Spotiflow.from_folder"),
+                                                       map_location=context.device))
     plane = image.shape[0] == 1
     n_tiles = config.n_tiles or tuple(int(n) for n in infer_n_tiles(
         image.shape[1:3] if plane else image.shape[:3], None, device=torch.device(context.device)))
@@ -82,7 +81,7 @@ def spotiflow(image, config, context):
     return table(frames, COLUMNS), {
         'thresholds': tuple(effective.prob_thresh for _ in context.channels),
         'effective': tuple(effective for _ in context.channels),
-        'model': model_record("spotiflow", config.model, folder, READS),
+        'model': model_record("spotiflow", config.model, folder),
         'geometry': {'n_tiles': n_tiles},
         'measurements': {'peak_intensity': 'original pixel intensity at the coordinate rounded half to even',
                          'probability': "Spotiflow's spot-wise heatmap probability (details.prob)"}}
