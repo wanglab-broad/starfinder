@@ -1,6 +1,6 @@
 # Method registry across stages
 
-Status: Accepted (W-246, 2026-09-30, at 47057aa)
+Status: Accepted (W-246, 2026-09-30, at 47057aa); amended at the W-276 review, 2026-10-01
 
 This page decides how processing methods are registered, named in workflow YAML
 and recorded in provenance, before §2.6 adds registration methods and §2.7 adds
@@ -21,6 +21,14 @@ throughout:
 * a **step** is one position in a recipe and names a method. Recipe positions
   are never called stages.
 
+Spot finding has a plan, not a recipe. A recipe is an ordered chain of method
+steps; spot finding has no such chain, since it runs one method per run, with
+per-channel overrides and a set of rounds, so its stage configuration is a
+`SpotFindingPlan` ({doc}`spot-finding-contract`, "Detection plan"). Its pipeline
+field is `PipelineConfig.spot_finding`, named after the stage like the module, the
+YAML block and the registry; it was named `detection` until the W-276 review
+(2026-10-01).
+
 ## Scope
 
 The registry covers the stages whose method is chosen by the exact type of a
@@ -30,7 +38,7 @@ frozen config:
 | --- | --- | --- | --- | --- |
 | Preprocessing | `starfinder.preprocessing.PREPROCESSING_METHODS` (renamed from `STEPS`) | `PreprocessingSpec` (renamed from `StepSpec`) | `PreprocessingRecipe` with `PreprocessingStep` (renamed from `RecipeStep`) | seven preprocessing configs |
 | Registration | `starfinder.registration.REGISTRATION_METHODS` (new) | `RegistrationSpec` (new) | `RegistrationRecipe` (new) with `RegistrationStep` (exists, not renamed) | `TranslationConfig`, `DemonsConfig`, `TpsConfig`, `CpdConfig` |
-| Spot finding | `starfinder.spot_finding.SPOT_FINDING_METHODS` (new) | `SpotFindingSpec` (new) | none (one method per run) | `LocalMaximaConfig`, `NoiseLandmarkConfig`, `PercentileCentroidConfig` |
+| Spot finding | `starfinder.spot_finding.SPOT_FINDING_METHODS` (new) | `SpotFindingSpec` (new) | none: a `SpotFindingPlan`, not a recipe (one method per run, per-channel overrides, rounds) | `LocalMaximaConfig`, `NoiseLandmarkConfig`, `PercentileCentroidConfig` |
 
 The three registries are public module-level constants. The module stays
 `starfinder.spot_finding`.
@@ -169,7 +177,7 @@ stays valid after the rename.
 | `step_kind` | registration | `global` or `local`; decides the allowed step sequences of a `RegistrationRecipe` | `global` for translation; `local` for demons, TPS and CPD |
 | `dimensions` | registration | Whether Z=1 is estimated as 2D (`2`) and Z>1 in 3D (`3`) | `{2, 3}` translation; `{3}` demons, TPS and CPD today; §2.6 adds `2` for demons |
 | `space` | registration | `index` or `physical` estimation coordinates | `index` for the four current methods; `physical` for the §2.6 methods |
-| `pipeline` | spot finding | Whether `FOV.find_spots` and `PipelineConfig.detection` accept it | `True` only for `local_maxima` |
+| `pipeline` | spot finding | Whether `FOV.find_spots` and `PipelineConfig.spot_finding` accept it | `True` only for `local_maxima` |
 | `output_columns` | spot finding | Columns of the spot table besides `spot_id` | `z, y, x, channel[, peak_intensity]` or `z, y, x` |
 
 A capability is shared only when it means the same thing in every stage and a
@@ -335,7 +343,7 @@ Paths are relative to `src/python/starfinder/` unless they start with
 | `spot_finding/__init__.py:163-177` (`find_spots`) | the config union and the accepted types | `spec_for(SPOT_FINDING_METHODS, config, ...)` keeping `TypeError("unsupported detection config")`; the annotation uses one alias. |
 | `spot_finding/__init__.py:187-228` | the `isinstance` dispatch | `spec.run` per method; the shared table and diagnostics assembly stay in `find_spots`. |
 | `io/_checkpoint.py:378-381` (`_detectors`) | name-to-type map for saved detection configs | The name-to-type map from `SPOT_FINDING_METHODS`. |
-| `dataset/config.py:120`, `dataset/config.py:126` | `PipelineConfig.detection` accepts only `LocalMaximaConfig` | Types whose spec has `pipeline=True`. |
+| `dataset/config.py:120`, `dataset/config.py:126` | `PipelineConfig.spot_finding` accepts only `LocalMaximaConfig` | Types whose spec has `pipeline=True`. |
 | `dataset/fov.py:477-486` (`FOV.find_spots`) | only `LocalMaximaConfig` | The same `pipeline` capability, keeping the current message for other types. |
 | `dataset/workflow.py:232` | the YAML block always builds `LocalMaximaConfig` | The optional `method` key through `config_type_for(SPOT_FINDING_METHODS, ...)`, default `local_maxima`. |
 | `benchmark/_legacy_evaluation.py:19`, `:35` | fixed `PercentileCentroidConfig` and the literal `percentile_centroid` | Stay: one fixed legacy evaluation, not a list. |
@@ -486,7 +494,7 @@ changes ("Tests the implementation changes"). The tests that construct
 
 Add `SpotFindingSpec` and `SPOT_FINDING_METHODS` with the three current
 methods, split the dispatch into private method functions and derive every
-spot-finding place listed above. `PipelineConfig.detection` and
+spot-finding place listed above. `PipelineConfig.spot_finding` and
 `FOV.find_spots` still accept only `local_maxima`, the one method with
 `pipeline=True`.
 
@@ -544,7 +552,7 @@ The §2.6 specification ({doc}`registration-contract`) also:
 The §2.7 specification also:
 
 * registers its four methods in `SPOT_FINDING_METHODS` and sets
-  `pipeline=True` for those that `PipelineConfig.detection` and
+  `pipeline=True` for those that `PipelineConfig.spot_finding` and
   `FOV.find_spots` accept;
 * adds the optional `method` key of the `spot_finding` block and keeps the
   legacy keys for `local_maxima`;

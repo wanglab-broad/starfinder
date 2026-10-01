@@ -299,7 +299,7 @@ def test_n_tiles_is_passed_and_recorded():
 def test_the_pipeline_records_the_loaded_files_in_run_json(tmp_path):
     config = SpotiflowConfig("smfish_3d")
     checkpoints = CheckpointConfig(stages=("candidates",), directory=tmp_path / "checkpoints")
-    fov = fov_with_fixture(golden_dataset(tmp_path), "3d").run(PipelineConfig(detection=config),
+    fov = fov_with_fixture(golden_dataset(tmp_path), "3d").run(PipelineConfig(spot_finding=config),
                                                                checkpoints=checkpoints)
     direct = detect(fixture_image("3d"), replace(config, channel_labels=CHANNELS))
     assert fov.spot_result.spots.equals(direct.spots) and len(direct.spots) > 0

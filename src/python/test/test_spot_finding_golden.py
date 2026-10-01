@@ -20,7 +20,7 @@ over repeated single-thread runs; see docs/spot-finding-baseline.md.
 
 Every detection configuration is built by ``detection_config``, which also holds the
 only imports of detection configuration types and the only construction of
-``PipelineConfig(detection=...)``. The §2.7 registry move and the YAML ``method`` key
+``PipelineConfig(spot_finding=...)``. The §2.7 registry move and the YAML ``method`` key
 replace that helper's body only; every pinned digest stays. Learned methods and LoG are
 not part of this test.
 """
@@ -82,7 +82,7 @@ def detection_config(mode, *, form="config", threshold_value=None, min_distance_
     if form == "config":
         return config
     if form == "pipeline":
-        return PipelineConfig(detection=config)
+        return PipelineConfig(spot_finding=config)
     raise ValueError(f"unknown form {form!r}")
 
 

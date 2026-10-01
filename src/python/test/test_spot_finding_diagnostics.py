@@ -224,7 +224,7 @@ def test_plot_detections_selects_a_round_and_a_channel_index(tmp_path):
 def test_fov_run_writes_no_figure(tmp_path):
     before = plt.get_fignums()
     fov = fov_with_fixture(golden_dataset(tmp_path), "3d")
-    fov.run(PipelineConfig(detection=LocalMaximaConfig()), checkpoints=CheckpointConfig(directory=tmp_path / "ck"))
+    fov.run(PipelineConfig(spot_finding=LocalMaximaConfig()), checkpoints=CheckpointConfig(directory=tmp_path / "ck"))
     assert plt.get_fignums() == before
     written = {p.suffix for p in (tmp_path / "ck").rglob("*") if p.is_file()}
     assert not written & {".png", ".pdf", ".svg", ".jpg"}

@@ -319,7 +319,7 @@ def test_records_effective_settings_model_execution_and_columns(scene, model):
 def test_the_pipeline_records_the_loaded_file_in_run_json(tmp_path):
     config = PiscisConfig("20251212", input_size=48)
     checkpoints = CheckpointConfig(stages=("candidates",), directory=tmp_path / "checkpoints")
-    fov = fov_with_fixture(golden_dataset(tmp_path), "3d").run(PipelineConfig(detection=config),
+    fov = fov_with_fixture(golden_dataset(tmp_path), "3d").run(PipelineConfig(spot_finding=config),
                                                                checkpoints=checkpoints)
     direct = detect(fixture_image("3d"), replace(config, channel_labels=CHANNELS))
     assert fov.spot_result.spots.equals(direct.spots) and len(direct.spots) > 0

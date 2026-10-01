@@ -15,7 +15,7 @@ from starfinder.barcode import NeighborhoodSumConfig, WtaDecoderConfig, ReadFilt
 config = PipelineConfig(
     load=ImageLoadConfig(channel_labels=dataset.channel_order),
     registration=RegistrationRecipe((RegistrationStep(TranslationConfig()),)),
-    detection=LocalMaximaConfig(threshold_mode="noise", threshold_value=5),
+    spot_finding=LocalMaximaConfig(threshold_mode="noise", threshold_value=5),
     extraction=NeighborhoodSumConfig(neighborhood_radius_zyx=(1, 2, 2)),
     decoding=WtaDecoderConfig(),
     filtering=ReadFilterConfig(),

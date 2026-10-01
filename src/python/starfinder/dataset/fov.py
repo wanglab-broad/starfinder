@@ -1014,11 +1014,11 @@ class FOV:
             raise ValueError(f'registration reference round {config.registration.reference_round!r} differs '
                              f'from the dataset reference {ref!r}')
         # A plan with rounds detects each listed round in the loop; the rounds are combined after it.
-        single, detection_plan = self._detection_plan(config.detection) if config.detection else (None, None)
+        single, detection_plan = self._detection_plan(config.spot_finding) if config.spot_finding else (None, None)
         if config.decoding and (detection_plan is not None or (
-                not config.detection and self.spot_result is not None and 'round' in self.spot_result.spots)):
+                not config.spot_finding and self.spot_result is not None and 'round' in self.spot_result.spots)):
             raise ValueError(MULTI_ROUND_DECODING)
-        if config.extraction and not (config.detection or self.spot_result is not None):
+        if config.extraction and not (config.spot_finding or self.spot_result is not None):
             raise ValueError('extraction requires detections')
         if config.decoding and not (config.extraction or self.intensity_result is not None):
             raise ValueError('decoding requires intensities')
@@ -1059,7 +1059,7 @@ class FOV:
                 self.preprocessing_record['supplied_statistics'] = {
                     'path': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
             image_stages = any((config.load, config.rotation_degrees is not None, steps, post,
-                config.registration, config.detection, config.extraction))
+                config.registration, config.spot_finding, config.extraction))
             stages = checkpoints.stages if checkpoints is not None else ()
             if config.load and execution.mode == 'batch':
                 self.load_images(rounds=self.rounds.all_rounds, config=config.load)
@@ -1104,8 +1104,8 @@ class FOV:
                 if 'registered' in stages:
                     self._write_checkpoint(stage='registered', directory=record.directory,
                                            table_format=checkpoints.table_format, round_name=name)
-                if name == ref and config.detection and detection_plan is None:
-                    self.find_spots(config=config.detection, device=execution.device)
+                if name == ref and config.spot_finding and detection_plan is None:
+                    self.find_spots(config=config.spot_finding, device=execution.device)
                 if name in detection_rounds:
                     round_detections[name] = self._find_round_spots(single, round_name=name, device=execution.device)
                 if config.extraction and name in self.rounds.sequencing_rounds and detection_plan is None:
@@ -1136,7 +1136,7 @@ class FOV:
                 current = None
             if config.extraction:
                 self._assemble_intensities()
-            if 'candidates' in stages and (config.detection or config.extraction):
+            if 'candidates' in stages and (config.spot_finding or config.extraction):
                 self._write_checkpoint(stage='candidates', directory=record.directory,
                                        table_format=checkpoints.table_format)
             if config.decoding:

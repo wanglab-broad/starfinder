@@ -207,7 +207,7 @@ fov.run(PipelineConfig(filtering=other_filter))
 
 # Detect and extract again from registered images.
 fov = dataset.fov("Position001").load_checkpoint("registered")
-fov.run(PipelineConfig(detection=detector, extraction=extraction,
+fov.run(PipelineConfig(spot_finding=detector, extraction=extraction,
                        decoding=decoder, filtering=read_filter))
 ```
 

@@ -195,7 +195,7 @@ class CheckpointConfig:
             raise ValueError('hash_inputs and overwrite must be Boolean')
 
 
-def _pipeline_detection(value):
+def _pipeline_spot_finding(value):
     """Whether value is a config, or a SpotFindingPlan of a config, of a method with pipeline=True.
 
     The lookup uses the exact type, so a subclass of a detection config is not accepted.
@@ -211,7 +211,7 @@ class PipelineConfig:
 
     Order: load, rotate, the preprocessing recipe's steps, the registration
     recipe (None: no registration), the preprocessing recipe's
-    post_registration steps, detect, extract, decode, filter. detection is a
+    post_registration steps, detect, extract, decode, filter. spot_finding is a
     config of a SPOT_FINDING_METHODS method with pipeline=True, or a
     SpotFindingPlan of one. The pipeline processes ZYX(C) volumes and never projects;
     projection is an output view. All operation parameters are passed intact
@@ -221,20 +221,20 @@ class PipelineConfig:
     rotation_degrees: float | None = None
     preprocessing: PreprocessingRecipe | None = None
     registration: RegistrationRecipe | None = None
-    detection: SpotFindingConfig | SpotFindingPlan | None = None
+    spot_finding: SpotFindingConfig | SpotFindingPlan | None = None
     extraction: NeighborhoodSumConfig | None = None
     decoding: WtaDecoderConfig | CodebookAwareDecoderConfig | None = None
     filtering: ReadFilterConfig | None = None
 
     def __post_init__(self):
         types = {'load': ImageLoadConfig, 'preprocessing': PreprocessingRecipe, 'registration': RegistrationRecipe,
-            'detection': None,
+            'spot_finding': None,
             'extraction': NeighborhoodSumConfig, 'decoding': (WtaDecoderConfig, CodebookAwareDecoderConfig),
             'filtering': ReadFilterConfig}
         for name, kind in types.items():
             value = getattr(self, name)
             if value is not None:
-                if not (_pipeline_detection(value) if name == 'detection' else isinstance(value, kind)):
+                if not (_pipeline_spot_finding(value) if name == 'spot_finding' else isinstance(value, kind)):
                     raise TypeError(f'{name} requires its typed operation config')
                 value.__post_init__()
         if self.rotation_degrees is not None and (isinstance(self.rotation_degrees, bool) or not math.isfinite(self.rotation_degrees)):

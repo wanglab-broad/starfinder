@@ -387,7 +387,7 @@ the detected displacement) are unchanged.
 `SPOT_FINDING_METHODS` in `starfinder.spot_finding` maps each exact config type
 (`LocalMaximaConfig`, `NoiseLandmarkConfig`, `PercentileCentroidConfig`) to its
 `SpotFindingSpec` (`local_maxima`, `noise_landmark`, `percentile_centroid`).
-`find_spots`, `SpotFindingResult`, `PipelineConfig.detection`, `FOV.find_spots`,
+`find_spots`, `SpotFindingResult`, `PipelineConfig.spot_finding`, `FOV.find_spots`,
 the workflow adapter and the `candidates` checkpoint reader look methods up
 through it by exact type, so a subclass of a detection config, which
 `isinstance` accepted before, now raises `TypeError` (`unsupported detection
@@ -417,7 +417,7 @@ Python nor MATLAB accepts.
 
 ### Detection plan and execution device
 
-`find_spots`, `FOV.find_spots` and `PipelineConfig.detection` accept a
+`find_spots`, `FOV.find_spots` and `PipelineConfig.spot_finding` accept a
 `SpotFindingPlan(config, channel_overrides=())`: one method for every channel,
 and `ChannelOverride(channel, config)` entries that replace the whole config of
 one channel (same exact config type; `channel_labels` `None` or the plan's).
@@ -564,6 +564,28 @@ records the number removed per channel. W-268 kept `None` as the default, so
 detections are unchanged unless the option is set; channels are never merged with
 each other (cross-channel duplicates are §2.8's). `exclude_border` is settable in
 YAML for the border misses W-218 reported.
+
+### Spot-finding pipeline field
+
+The spot-finding field of {py:class}`~starfinder.dataset.PipelineConfig` is
+`spot_finding`, the stage name that the module, the YAML block, the registry and
+the provenance `stage` already use; it was `detection`. There is no alias, so
+`PipelineConfig(detection=...)` raises `TypeError`. The accepted types, the
+validation and the results are unchanged, and the error message for a wrong type
+names the new field. YAML already used the `spot_finding` block and is unchanged.
+
+| Before | After |
+| --- | --- |
+| `PipelineConfig(detection=LocalMaximaConfig())` | `PipelineConfig(spot_finding=LocalMaximaConfig())` |
+| `config.detection`, `replace(config, detection=None)` | `config.spot_finding`, `replace(config, spot_finding=None)` |
+| `run.json`: `config.pipeline.detection` | `run.json`: `config.pipeline.spot_finding` |
+| `TypeError("detection requires its typed operation config")` | `TypeError("spot_finding requires its typed operation config")` |
+
+`run.json` keeps `format_version` 1. Starfinder does not read `config.pipeline`
+back from `run.json`, so records written before the rename stay valid as they
+are; a script that reads them should accept either key. The `candidates.json`
+keys `detection_config`, `detection_rounds`, `detection_plan` and
+`detection_diagnostics` and the preprocessing `detection` image keep their names.
 
 ## Intentional behavior changes — not mechanical equivalence
 

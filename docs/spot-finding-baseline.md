@@ -1,6 +1,6 @@
 # Spot-finding baseline
 
-Status: Accepted (W-268, 2026-10-01, at b5fcb7f)
+Status: Accepted (W-268, 2026-10-01, at b5fcb7f); amended at the W-276 review, 2026-10-01
 
 This page records how spot finding behaves at revision `42f652d` (branch
 `runner/s27-spec-20260930`, on `dev` after the §2.6 work), before the Chapter II
@@ -10,6 +10,10 @@ described in {doc}`spot-finding-contract` and {doc}`spot-finding-algorithms`;
 neither is accepted yet. Paths are relative to `src/python/starfinder/` unless
 they start with `src/matlab/`, `workflow/` or `docs/`, and line numbers are at
 `42f652d`.
+
+Note: this page keeps the field name of `42f652d`. The W-276 review (2026-10-01)
+renamed `PipelineConfig.detection` to `PipelineConfig.spot_finding`, and
+`run.json` now records `config.pipeline.spot_finding`; see {doc}`migration`.
 
 ## Local maxima
 

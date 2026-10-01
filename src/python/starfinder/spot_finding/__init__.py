@@ -26,7 +26,7 @@ from ._weights import KNOWN_WEIGHTS as _KNOWN_WEIGHTS
 from ._weights import KnownWeights, WeightsFile, fetch_weights, resolve_weights
 
 #: The spot-finding method registry, mapping each exact frozen config type to its
-#: SpotFindingSpec. find_spots, SpotFindingResult, SpotFindingPlan, PipelineConfig.detection,
+#: SpotFindingSpec. find_spots, SpotFindingResult, SpotFindingPlan, PipelineConfig.spot_finding,
 #: FOV.find_spots, the workflow adapter and the checkpoint reader derive their method sets from it.
 SPOT_FINDING_METHODS = _SPOT_FINDING_METHODS
 

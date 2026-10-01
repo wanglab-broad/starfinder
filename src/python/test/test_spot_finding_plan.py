@@ -181,10 +181,10 @@ def test_without_overrides_every_channel_has_the_config():
 
 def test_a_plan_runs_through_the_pipeline_and_the_fov(tmp_path):
     plan = SpotFindingPlan(LocalMaximaConfig(), (ChannelOverride("ch02", OVERRIDE),))
-    assert PipelineConfig(detection=plan).detection == plan
+    assert PipelineConfig(spot_finding=plan).spot_finding == plan
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", SpotFindingWarning)
-        fov = fov_with_fixture(golden_dataset(tmp_path), "3d").run(PipelineConfig(detection=plan))
+        fov = fov_with_fixture(golden_dataset(tmp_path), "3d").run(PipelineConfig(spot_finding=plan))
     direct = detect(fixture_image("3d"), SpotFindingPlan(BASE, plan.channel_overrides))
     pd.testing.assert_frame_equal(fov.spot_result.spots, direct.spots, check_exact=True)
     assert fov.spot_result.config == BASE

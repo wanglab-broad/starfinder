@@ -276,7 +276,7 @@ def preprocess(fov, recipe, register):
 
 
 def _pipeline(fov, threshold, mode="noise"):
-    fov.run(PipelineConfig(detection=LocalMaximaConfig(threshold_mode=mode, threshold_value=threshold),
+    fov.run(PipelineConfig(spot_finding=LocalMaximaConfig(threshold_mode=mode, threshold_value=threshold),
                            extraction=EXTRACTION, decoding=DECODING, filtering=FILTERING))
     spots = fov.spot_result.spots.reset_index(drop=True)
     reads = fov.filtering_result.table.set_index("spot_id").loc[spots.spot_id]

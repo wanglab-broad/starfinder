@@ -52,7 +52,7 @@ class SpotFindingSpec:
     detected channel with the native defaults that None resolved) and
     ``model`` (the weights record of a learned method). find_spots calls it
     after the checks below; callers never call it directly. pipeline is True when FOV.find_spots and
-    PipelineConfig.detection accept the method. dimensions holds 2 when a
+    PipelineConfig.spot_finding accept the method. dimensions holds 2 when a
     Z=1 input is detected as a YX plane and 3 when Z>1 is detected in 3D.
     output_columns are the spot-table columns besides spot_id, in order; a
     trailing ``?`` marks an optional column. column_fields maps each

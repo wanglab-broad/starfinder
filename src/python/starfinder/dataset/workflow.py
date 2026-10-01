@@ -386,7 +386,7 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
         preprocessing=(_explicit_recipe(params['preprocessing']) if 'preprocessing' in params else
                        _legacy_recipe(params, norm, do_norm, hist, do_hist, morph, do_morph, top, do_top, resident)),
         registration=registration,
-        detection=_detection(spot, channels) if do_spot else None,
+        spot_finding=_detection(spot, channels) if do_spot else None,
         extraction=NeighborhoodSumConfig(tuple(extract.get('voxel_size', (1, 2, 2)))) if do_extract else None,
         decoding=WtaDecoderConfig(diagnostics=True) if do_filter else None,
         filtering=ReadFilterConfig(end_bases=filt.get('end_base'), start_base=filt.get('start_base', 'C'), exclude_invalid_endpoints=filt.get('exclude_invalid_endpoints', False), score_bounds=filt.get('score_bounds', {})) if do_filter else None)

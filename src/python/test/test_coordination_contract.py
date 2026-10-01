@@ -52,7 +52,7 @@ def recipe(*steps, post=()):
 
 
 def complete(**kwargs):
-    return PipelineConfig(detection=LocalMaximaConfig('adaptive', .1),
+    return PipelineConfig(spot_finding=LocalMaximaConfig('adaptive', .1),
         extraction=NeighborhoodSumConfig((0, 0, 0)), decoding=WtaDecoderConfig(),
         filtering=ReadFilterConfig(), **kwargs)
 
@@ -87,16 +87,16 @@ def test_scientific_parity(tmp_path, options):
     assert set(batch.images) == {'round1', 'round2'}
 
 
-@pytest.mark.parametrize('config', [PipelineConfig(), PipelineConfig(detection=LocalMaximaConfig()),
-    PipelineConfig(detection=LocalMaximaConfig(), extraction=NeighborhoodSumConfig()),
-    PipelineConfig(detection=LocalMaximaConfig(), extraction=NeighborhoodSumConfig(), decoding=WtaDecoderConfig())])
+@pytest.mark.parametrize('config', [PipelineConfig(), PipelineConfig(spot_finding=LocalMaximaConfig()),
+    PipelineConfig(spot_finding=LocalMaximaConfig(), extraction=NeighborhoodSumConfig()),
+    PipelineConfig(spot_finding=LocalMaximaConfig(), extraction=NeighborhoodSumConfig(), decoding=WtaDecoderConfig())])
 def test_disabled_stages(tmp_path, config):
     ds = dataset(tmp_path)
     batch = resident(ds).run(config)
     stream = resident(ds).run(config, execution=ExecutionConfig('streaming', retain_images=True))
     for name in ds.rounds.all_rounds:
         np.testing.assert_array_equal(batch.images[name], stream.images[name])
-    for name, enabled in [('spot_result', config.detection), ('intensity_result', config.extraction),
+    for name, enabled in [('spot_result', config.spot_finding), ('intensity_result', config.extraction),
                           ('decoding_result', config.decoding), ('filtering_result', config.filtering)]:
         assert (getattr(batch, name) is not None) == (enabled is not None)
         assert (getattr(stream, name) is not None) == (enabled is not None)

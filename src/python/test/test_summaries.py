@@ -46,7 +46,7 @@ def test_fov_and_dataset_summaries_on_small_synthetic_run(small_dataset, tmp_pat
     fov = ds.fov('FOV_001').run(PipelineConfig(
         load=ImageLoadConfig(channel_labels=ds.channel_order),
         preprocessing=PreprocessingRecipe((PreprocessingStep(MinMaxNormalizationConfig('uint8', (0, 255), snr_threshold=5.0)),)),
-        registration=RegistrationRecipe((RegistrationStep(TranslationConfig()),)), detection=LocalMaximaConfig(),
+        registration=RegistrationRecipe((RegistrationStep(TranslationConfig()),)), spot_finding=LocalMaximaConfig(),
         extraction=NeighborhoodSumConfig(), decoding=WtaDecoderConfig(diagnostics=True),
         filtering=ReadFilterConfig()))
 

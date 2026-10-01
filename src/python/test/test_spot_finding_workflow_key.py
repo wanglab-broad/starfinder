@@ -31,7 +31,7 @@ def workflow(spot_finding, **parameters):
 
 
 def detection(spot_finding, **parameters):
-    return from_workflow_config(workflow(spot_finding, **parameters)).pipeline.detection
+    return from_workflow_config(workflow(spot_finding, **parameters)).pipeline.spot_finding
 
 
 @dataclass(frozen=True)
@@ -59,7 +59,7 @@ def test_method_and_config_fields_give_the_python_pipeline():
     block = {"method": "local_maxima", "threshold_mode": "adaptive", "threshold_value": 0.2,
              "min_distance_voxels": 2, "exclude_border": False, "measure_peak_intensity": False}
     adapted = from_workflow_config(workflow(block)).pipeline
-    assert adapted == PipelineConfig(detection=LocalMaximaConfig(threshold_mode="adaptive", threshold_value=0.2,
+    assert adapted == PipelineConfig(spot_finding=LocalMaximaConfig(threshold_mode="adaptive", threshold_value=0.2,
         min_distance_voxels=2, exclude_border=False, measure_peak_intensity=False))
     assert detection({"exclude_border": False}) == LocalMaximaConfig(exclude_border=False)
     assert detection({}) == LocalMaximaConfig()

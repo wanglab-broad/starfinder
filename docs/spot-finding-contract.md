@@ -1,6 +1,6 @@
 # Spot-finding contract
 
-Status: Accepted (W-268, 2026-10-01, at b5fcb7f)
+Status: Accepted (W-268, 2026-10-01, at b5fcb7f); amended at the W-276 review, 2026-10-01
 
 This page proposes the §2.7 spot-finding contract: four selectable pipeline
 methods (Starfinder local maxima, the native Starfish LoG, native-3D Spotiflow
@@ -76,7 +76,7 @@ Each config's `method` discriminator equals its spec name. `SpotFindingSpec` add
 
 | Field | Meaning |
 | --- | --- |
-| `pipeline` | `True` when `FOV.find_spots` and `PipelineConfig.detection` accept the method. |
+| `pipeline` | `True` when `FOV.find_spots` and `PipelineConfig.spot_finding` accept the method. |
 | `dimensions` | `frozenset` of `2` and/or `3`: `2` means a Z=1 input is detected as a YX plane; `3` means Z>1 is detected in 3D. |
 | `output_columns` | The spot-table columns besides `spot_id`, in order; a trailing `?` marks an optional column. |
 | `weights` | `True` when the config names pretrained weights from the known-weights table. |
@@ -141,8 +141,15 @@ model: every run names its weights.
 
 ## Detection plan: per-channel overrides and rounds
 
-`PipelineConfig.detection` accepts a registered config with `pipeline=True` (as
-today for `LocalMaximaConfig`) or a `SpotFindingPlan`:
+`PipelineConfig.spot_finding` accepts a registered config with `pipeline=True` (as
+today for `LocalMaximaConfig`) or a `SpotFindingPlan`. The field was named
+`detection` until the W-276 review (2026-10-01), which renamed it to the stage name
+({doc}`migration`).
+
+Spot finding has a plan, not a recipe. A recipe is a stage's ordered chain of
+method steps, as in `PreprocessingRecipe` and `RegistrationRecipe`; spot finding
+has no such chain, since it runs one method per run, with per-channel overrides
+and a set of rounds, so its stage configuration is a `SpotFindingPlan`.
 
 ```python
 @dataclass(frozen=True)
@@ -456,7 +463,7 @@ The `candidates` stage keeps its files, table layout, dtype map and
   A version-2 checkpoint written at `42f652d` loads as before, with
   `detection_rounds` taken as `null`.
 
-`run.json` keeps `format_version` 1. Its `config.pipeline.detection` holds the
+`run.json` keeps `format_version` 1. Its `config.pipeline.spot_finding` holds the
 config or plan, `config.execution` holds `device`, and the detection step record
 gains the `methods` list of provenance entries (registry move 5).
 
@@ -563,7 +570,7 @@ The implementation adds these entries:
    together with its field, now raises instead of silently preferring one;
    `local` leaves the schema enum.
 4. **Detection plan.** `SpotFindingPlan` and `ChannelOverride`; `find_spots` and
-   `PipelineConfig.detection` accept a plan; the `round` column of multi-round
+   `PipelineConfig.spot_finding` accept a plan; the `round` column of multi-round
    results; decoding a multi-round set raises until §2.8.
 5. **Execution.** `ExecutionConfig.device` (only `"cpu"`) and the execution
    record.

@@ -53,7 +53,7 @@ def resident(ds, z=4):
     return fov
 
 
-DETECT = dict(detection=LocalMaximaConfig('adaptive', .1), extraction=NeighborhoodSumConfig((0, 1, 1)))
+DETECT = dict(spot_finding=LocalMaximaConfig('adaptive', .1), extraction=NeighborhoodSumConfig((0, 1, 1)))
 DECODE = dict(decoding=WtaDecoderConfig(diagnostics=True), filtering=ReadFilterConfig())
 
 
@@ -463,6 +463,14 @@ def test_run_record_fields_inputs_and_hashes(tmp_path):
     assert {entry['sha256'] for entry in record(fov)['inputs']} == {None}
 
 
+def test_run_record_keeps_the_spot_finding_config_under_its_field_name(tmp_path):
+    fov = resident(dataset(tmp_path)).run(PipelineConfig(**DETECT), checkpoints=CheckpointConfig(stages=()))
+    data = record(fov)
+    assert data['format_version'] == 1
+    assert data['config']['pipeline']['spot_finding']['method'] == 'local_maxima'
+    assert 'detection' not in data['config']['pipeline']
+
+
 def test_disabled_checkpoints_write_nothing_and_existing_directory_is_protected(tmp_path, monkeypatch):
     import starfinder.io as io
     ds = dataset(tmp_path)
@@ -584,7 +592,7 @@ def test_checkpoint_timing_on_small_synthetic_dataset(small_dataset, tmp_path, c
     ds.load_codebook(small_dataset / 'codebook.csv')
     config = PipelineConfig(load=ImageLoadConfig(channel_labels=ds.channel_order),
         preprocessing=PreprocessingRecipe((PreprocessingStep(MinMaxNormalizationConfig('uint8', (0, 255), snr_threshold=5.0)),)),
-        registration=RegistrationRecipe((RegistrationStep(TranslationConfig()),)), detection=LocalMaximaConfig(),
+        registration=RegistrationRecipe((RegistrationStep(TranslationConfig()),)), spot_finding=LocalMaximaConfig(),
         extraction=NeighborhoodSumConfig(), decoding=WtaDecoderConfig(diagnostics=True),
         filtering=ReadFilterConfig())
     start = perf_counter()

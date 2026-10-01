@@ -266,7 +266,7 @@ def test_the_pipeline_detects_and_checkpoints_with_starfish_log(tmp_path):
     config = StarfishLogConfig(1, 10, 10, 0.01)
     dataset = golden_dataset(tmp_path)
     checkpoints = CheckpointConfig(stages=("candidates",), directory=tmp_path / "checkpoints")
-    fov = fov_with_fixture(dataset, "3d").run(PipelineConfig(detection=config), checkpoints=checkpoints)
+    fov = fov_with_fixture(dataset, "3d").run(PipelineConfig(spot_finding=config), checkpoints=checkpoints)
     direct = detect(fixture_image("3d"), replace(config, channel_labels=CHANNELS))
     assert len(direct.spots) > 0
     pd.testing.assert_frame_equal(fov.spot_result.spots, direct.spots, check_exact=True)

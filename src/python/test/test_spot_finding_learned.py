@@ -324,7 +324,7 @@ def test_effective_settings_and_the_model_record_follow_the_method(recording):
 
 def test_run_json_records_the_loaded_files_as_artifacts(recording, tmp_path):
     checkpoints = CheckpointConfig(stages=("candidates",), directory=tmp_path / "checkpoints")
-    fov = fov_with_fixture(golden_dataset(tmp_path), "3d").run(PipelineConfig(detection=RecordingConfig()),
+    fov = fov_with_fixture(golden_dataset(tmp_path), "3d").run(PipelineConfig(spot_finding=RecordingConfig()),
                                                                checkpoints=checkpoints)
     data = json.loads((tmp_path / "checkpoints" / "FOV_001" / "run.json").read_text())
     (entry,) = [step for step in data["steps"] if step["name"] == "find_spots"][0]["methods"]

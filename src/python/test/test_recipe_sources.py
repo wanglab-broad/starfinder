@@ -117,7 +117,7 @@ def test_default_sources_register_and_extract_the_detection_image(tmp_path):
     """Without sources, run is the detection-image path: same images and intensities with or without snapshots."""
     plain = replace(RECIPE_2, steps=(PreprocessingStep(BACKGROUND), RECIPE_2.steps[1]), extraction_source=None)
     tapped = replace(RECIPE_2, extraction_source=None)
-    config = PipelineConfig(preprocessing=plain, registration=TRANSLATION, detection=DETECTION, extraction=EXTRACTION)
+    config = PipelineConfig(preprocessing=plain, registration=TRANSLATION, spot_finding=DETECTION, extraction=EXTRACTION)
     first = resident_fov(tmp_path).run(config)
     second = resident_fov(tmp_path).run(replace(config, preprocessing=tapped))
     for name in ("round1", "round2"):
@@ -133,7 +133,7 @@ def test_default_sources_register_and_extract_the_detection_image(tmp_path):
 def test_extraction_source_reads_the_background_snapshot(tmp_path, mode):
     fov = resident_fov(tmp_path)
     raw = {name: image.copy() for name, image in fov.images.items()}
-    fov.run(PipelineConfig(preprocessing=RECIPE_2, detection=DETECTION, extraction=EXTRACTION),
+    fov.run(PipelineConfig(preprocessing=RECIPE_2, spot_finding=DETECTION, extraction=EXTRACTION),
             execution=ExecutionConfig(mode, retain_images=True))
     assert len(fov.spot_result.spots) > 0
     snapshots = {name: subtract_scalar_background(image, config=BACKGROUND) for name, image in raw.items()}
@@ -152,7 +152,7 @@ def test_extraction_source_reads_the_background_snapshot(tmp_path, mode):
 def test_known_translation_shifts_detection_and_extraction_snapshot_identically(tmp_path):
     fov = resident_fov(tmp_path)
     raw = {name: image.copy() for name, image in fov.images.items()}
-    fov.run(PipelineConfig(preprocessing=RECIPE_2, registration=TRANSLATION, detection=DETECTION, extraction=EXTRACTION))
+    fov.run(PipelineConfig(preprocessing=RECIPE_2, registration=TRANSLATION, spot_finding=DETECTION, extraction=EXTRACTION))
     (result,) = fov.registration_results["round2"]
     assert result.transform.displacement_zyx == (0, *SHIFT_YX)
     before = {name: subtract_scalar_background(image, config=BACKGROUND) for name, image in raw.items()}
@@ -274,7 +274,7 @@ def test_missing_source_snapshot_raises(tmp_path):
 @pytest.mark.parametrize("mode", ["batch", "streaming"])
 def test_registered_checkpoint_round_trips_each_downstream_snapshot(tmp_path, mode):
     fov = resident_fov(tmp_path)
-    config = PipelineConfig(preprocessing=RECIPE_2, registration=TRANSLATION, detection=DETECTION, extraction=EXTRACTION)
+    config = PipelineConfig(preprocessing=RECIPE_2, registration=TRANSLATION, spot_finding=DETECTION, extraction=EXTRACTION)
     fov.run(config, execution=ExecutionConfig(mode, retain_images=True), checkpoints=CheckpointConfig(stages=("registered",)))
     directory = fov.paths.checkpoint_dir
     files = json.loads((directory / "run.json").read_text())["checkpoints"]["registered"]
@@ -291,7 +291,7 @@ def test_registered_checkpoint_round_trips_each_downstream_snapshot(tmp_path, mo
             np.testing.assert_array_equal(restored, original)
         assert list(reloaded.snapshots[name]) == ["bg_corrected"]
     # A run resumed from the checkpoint extracts from the restored snapshot.
-    reloaded.run(PipelineConfig(detection=DETECTION, extraction=EXTRACTION))
+    reloaded.run(PipelineConfig(spot_finding=DETECTION, extraction=EXTRACTION))
     np.testing.assert_array_equal(reloaded.intensity_result.values, fov.intensity_result.values)
     with pytest.raises(ValueError, match="without images, snapshots"):
         reloaded.load_checkpoint("registered")

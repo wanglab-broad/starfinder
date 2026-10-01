@@ -137,8 +137,8 @@ def test_an_inserted_method_is_seen_by_every_lookup(fixture_method, tmp_path):
     assert result.spots[["z", "y", "x", "channel"]].values.tolist() == [[2, 4, 4, 0], [1, 3, 5, 1]]
     assert result.diagnostics["method"] == "fixture_detector"
     assert SpotFindingResult(result.spots, META, NAMESPACE, config, {}).config == config
-    assert PipelineConfig(detection=config).detection == config
-    assert PipelineConfig(detection=SpotFindingPlan(config)).detection.config == config
+    assert PipelineConfig(spot_finding=config).spot_finding == config
+    assert PipelineConfig(spot_finding=SpotFindingPlan(config)).spot_finding.config == config
     assert _detectors()["fixture_detector"] is FixtureConfig
     assert config_type_for(SPOT_FINDING_METHODS, "fixture_detector", "spot-finding method") is FixtureConfig
     fov = fov_with_fixture(golden_dataset(tmp_path), "3d")
@@ -149,7 +149,7 @@ def test_an_inserted_method_is_seen_by_every_lookup(fixture_method, tmp_path):
                 "root_input_path": "in", "root_output_path": "out", "seq_channel_order": list(CHANNELS),
                 "rules": {"rsf_single_fov": {"parameters": {"load_raw_images": {"run": False}, "spot_finding": {
                     "run": True, "method": "fixture_detector", "level": 3.0}}}}}
-    assert from_workflow_config(workflow).pipeline.detection == FixtureConfig(level=3.0)
+    assert from_workflow_config(workflow).pipeline.spot_finding == FixtureConfig(level=3.0)
 
 
 def test_a_method_removed_from_the_registry_is_rejected_everywhere(registry_order, monkeypatch, tmp_path):
@@ -157,7 +157,7 @@ def test_a_method_removed_from_the_registry_is_rejected_everywhere(registry_orde
     with pytest.raises(TypeError, match="unsupported detection config"):
         find_spots(image(), config=LocalMaximaConfig(), metadata=META, spot_namespace=NAMESPACE)
     with pytest.raises(TypeError):
-        PipelineConfig(detection=LocalMaximaConfig())
+        PipelineConfig(spot_finding=LocalMaximaConfig())
     with pytest.raises(TypeError):
         fov_with_fixture(golden_dataset(tmp_path), "3d").find_spots(config=LocalMaximaConfig())
     assert "local_maxima" not in _detectors()
@@ -172,20 +172,27 @@ def test_a_subclass_of_a_detection_config_is_rejected(tmp_path):
         SpotFindingResult(table, META, NAMESPACE, config, {})
     with pytest.raises(TypeError, match="^unsupported detection config$"):
         SpotFindingPlan(config)
-    with pytest.raises(TypeError, match="detection requires its typed operation config"):
-        PipelineConfig(detection=config)
+    with pytest.raises(TypeError, match="spot_finding requires its typed operation config"):
+        PipelineConfig(spot_finding=config)
     with pytest.raises(TypeError, match="FOV detection requires LocalMaximaConfig"):
         fov_with_fixture(golden_dataset(tmp_path), "3d").find_spots(config=config)
 
 
 def test_only_pipeline_methods_are_accepted_by_the_pipeline(tmp_path):
     for config in (NoiseLandmarkConfig(), PercentileCentroidConfig()):
-        with pytest.raises(TypeError, match="detection requires its typed operation config"):
-            PipelineConfig(detection=config)
-        with pytest.raises(TypeError, match="detection requires its typed operation config"):
-            PipelineConfig(detection=SpotFindingPlan(config))
+        with pytest.raises(TypeError, match="spot_finding requires its typed operation config"):
+            PipelineConfig(spot_finding=config)
+        with pytest.raises(TypeError, match="spot_finding requires its typed operation config"):
+            PipelineConfig(spot_finding=SpotFindingPlan(config))
         with pytest.raises(TypeError, match="FOV detection requires LocalMaximaConfig"):
             fov_with_fixture(golden_dataset(tmp_path), "3d").find_spots(config=config)
+
+
+def test_the_pipeline_field_is_spot_finding_without_an_alias():
+    assert "spot_finding" in PipelineConfig.__dataclass_fields__
+    assert "detection" not in PipelineConfig.__dataclass_fields__ and not hasattr(PipelineConfig(), "detection")
+    with pytest.raises(TypeError, match="detection"):
+        PipelineConfig(detection=LocalMaximaConfig())
 
 
 # --- Dependency error, geometry and columns ----------------------------------------------------------
@@ -261,7 +268,7 @@ def test_run_json_records_the_device_and_the_detection_provenance(tmp_path):
     dataset = golden_dataset(tmp_path)
     config = LocalMaximaConfig(threshold_mode="adaptive", threshold_value=0.2)
     checkpoints = CheckpointConfig(stages=("candidates",), directory=tmp_path / "checkpoints")
-    fov = fov_with_fixture(dataset, "3d").run(PipelineConfig(detection=config), execution=ExecutionConfig(),
+    fov = fov_with_fixture(dataset, "3d").run(PipelineConfig(spot_finding=config), execution=ExecutionConfig(),
                                              checkpoints=checkpoints)
     data = json.loads((tmp_path / "checkpoints" / "FOV_001" / "run.json").read_text())
     assert data["config"]["execution"] == {"mode": "batch", "retain_images": False, "device": "cpu"}

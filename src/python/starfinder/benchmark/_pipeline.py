@@ -47,9 +47,9 @@ def _validate_pipeline(case):
         raise ValueError('pipeline adapter requires raw sequencing-round loading')
     if adapted.pipeline.load.subdir:
         raise ValueError('pipeline sources replace load subdir selection')
-    if not all((adapted.pipeline.detection, adapted.pipeline.extraction,
+    if not all((adapted.pipeline.spot_finding, adapted.pipeline.extraction,
                 adapted.pipeline.decoding, adapted.pipeline.filtering)):
-        raise ValueError('pipeline count recipe requires detection, extraction, decoding and filtering')
+        raise ValueError('pipeline count recipe requires spot_finding, extraction, decoding and filtering')
     if set(case.artifacts) != {'codebook'}:
         raise ValueError('pipeline requires an explicit codebook artifact')
 

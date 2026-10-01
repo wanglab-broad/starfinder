@@ -148,7 +148,7 @@ def test_rounds_follow_the_run_order_and_fov_run_equals_find_spots(tmp_path):
     fov.find_spots(config=plan)
     assert list(dict.fromkeys(fov.spot_result.spots["round"])) == ["round1", "round3"]
     run = multiround_fov(tmp_path / "run", images)
-    run.run(PipelineConfig(detection=plan), checkpoints=CheckpointConfig(stages=(), directory=tmp_path / "ck"))
+    run.run(PipelineConfig(spot_finding=plan), checkpoints=CheckpointConfig(stages=(), directory=tmp_path / "ck"))
     pd.testing.assert_frame_equal(run.spot_result.spots, fov.spot_result.spots, check_exact=True)
     assert run.spot_result.plan == fov.spot_result.plan == replace_plan(plan)
     record = json.loads((tmp_path / "ck" / "FOV_001" / "run.json").read_text())
@@ -197,7 +197,7 @@ def test_a_plan_with_overrides_and_rounds(tmp_path):
 def test_decoding_a_multi_round_set_raises_naming_the_readout_mode(tmp_path):
     images, _ = multiround(100)
     fov = multiround_fov(tmp_path, images)
-    pipeline = PipelineConfig(detection=SpotFindingPlan(LocalMaximaConfig(), rounds=ROUNDS),
+    pipeline = PipelineConfig(spot_finding=SpotFindingPlan(LocalMaximaConfig(), rounds=ROUNDS),
                               extraction=NeighborhoodSumConfig(), decoding=WtaDecoderConfig())
     with pytest.raises(ValueError, match="§2.8"):
         fov.run(pipeline)
@@ -220,7 +220,7 @@ def test_a_round_off_the_reference_grid_raises(tmp_path, change):
     with pytest.raises(IncompatibleGeometryError, match="round2"):
         fov.find_spots(config=plan)
     with pytest.raises(IncompatibleGeometryError, match="round2"):
-        fov.run(PipelineConfig(detection=plan))
+        fov.run(PipelineConfig(spot_finding=plan))
     # Only the listed rounds are checked.
     fov.find_spots(config=SpotFindingPlan(LocalMaximaConfig(), rounds=("round1", "round3")))
 
@@ -240,12 +240,12 @@ def test_extraction_of_a_multi_round_set_equals_extraction_without_the_round_col
     assert fov.intensity_result.spot_ids == tuple(result.spots.spot_id)
     # FOV.run extracts every sequencing round at every candidate after the last detected round.
     run = multiround_fov(tmp_path / "run", images)
-    run.run(PipelineConfig(detection=SpotFindingPlan(LocalMaximaConfig(), rounds=ROUNDS),
+    run.run(PipelineConfig(spot_finding=SpotFindingPlan(LocalMaximaConfig(), rounds=ROUNDS),
                            extraction=NeighborhoodSumConfig()))
     np.testing.assert_array_equal(run.intensity_result.values, fov.intensity_result.values)
     with pytest.raises(ValueError, match="retain_images"):
         multiround_fov(tmp_path / "stream", images).run(
-            PipelineConfig(detection=SpotFindingPlan(LocalMaximaConfig(), rounds=ROUNDS),
+            PipelineConfig(spot_finding=SpotFindingPlan(LocalMaximaConfig(), rounds=ROUNDS),
                            extraction=NeighborhoodSumConfig()), execution=ExecutionConfig(mode="streaming"))
 
 
@@ -271,10 +271,10 @@ def test_the_workflow_rounds_key_builds_a_plan():
                 "root_input_path": "in", "root_output_path": "out", "seq_channel_order": list(CHANNELS),
                 "rules": {"rsf_single_fov": {"parameters": {"load_raw_images": {"run": False},
                                                             "spot_finding": {"run": True, **block}}}}}
-    detection = from_workflow_config(workflow({"rounds": ["round1", "round3"]})).pipeline.detection
+    detection = from_workflow_config(workflow({"rounds": ["round1", "round3"]})).pipeline.spot_finding
     assert detection == SpotFindingPlan(LocalMaximaConfig(), rounds=("round1", "round3"))
     detection = from_workflow_config(workflow({"rounds": ["round2"], "channel_overrides": {
-        "ch01": {"threshold_value": 6.0}}})).pipeline.detection
+        "ch01": {"threshold_value": 6.0}}})).pipeline.spot_finding
     assert detection.rounds == ("round2",) and detection.channel_overrides[0].channel == "ch01"
 
 
@@ -301,7 +301,7 @@ def test_multi_round_sets_round_trip_through_the_candidates_checkpoint(tmp_path,
                 "starfish_log": StarfishLogConfig(min_sigma=1, max_sigma=10, num_sigma=30, threshold=0.02)}[method]
     plan = SpotFindingPlan(config, (ChannelOverride("ch01", override),), ROUNDS)
     fov = multiround_fov(tmp_path, images)
-    fov.run(PipelineConfig(detection=plan),
+    fov.run(PipelineConfig(spot_finding=plan),
             checkpoints=CheckpointConfig(stages=("candidates",), directory=tmp_path / "ck", table_format=table_format))
     header = json.loads((tmp_path / "ck" / "FOV_001" / "candidates.json").read_text())
     assert header["format_version"] == 2
