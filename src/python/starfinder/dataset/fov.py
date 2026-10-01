@@ -29,6 +29,9 @@ from starfinder.registration import (RegistrationRejectedError, RegistrationResu
 from starfinder.barcode import (Codebook, IntensityExtractionResult, NeighborhoodSumConfig,
     WtaDecoderConfig, ReadFilterConfig, BarcodeDecodingResult, ReadFilteringResult)
 
+# Raised when a candidate set of several detection rounds would be decoded as barcodes.
+MULTI_ROUND_DECODING = "decoding candidates from several detection rounds needs a readout mode (§2.8)"
+
 if TYPE_CHECKING:
     from starfinder.dataset.dataset import Dataset
     from starfinder.dataset.types import RoundState
@@ -764,21 +767,15 @@ class FOV:
         path.parent.mkdir(parents=True, exist_ok=True)
         pd.DataFrame(rows, columns=['fov_id', 'round', 'row', 'col', 'z']).to_csv(path, index=False)
 
-    @_log_step
-    def find_spots(self, *, config: SpotFindingConfig | SpotFindingPlan = LocalMaximaConfig(),
-                   device: str = "cpu") -> FOV:
-        """Detect reference-round spots with explicit config and FOV identity.
+    def _detection_plan(self, config):
+        """(config for one round, the plan with its rounds or None) of a FOV detection.
 
-        config is a config of a SPOT_FINDING_METHODS method with
-        pipeline=True, or a SpotFindingPlan of one; channel_labels None is
-        filled from dataset.channel_order, and override channels must be
-        among them. The namespace encodes dataset/sample/FOV and, for saved
-        subtiles, the one-based subtile ID. IDs are retained in
-        extraction/filtering tables. While FOV.run records run.json, the
-        step record gets the detection's provenance entry under methods.
+        The method must be a pipeline method; channel_labels None is filled
+        from dataset.channel_order; the rounds of a plan must be labels of
+        RoundState.all_rounds. The first item is the bare config, or the plan
+        without rounds, so a detection without rounds runs as before.
         """
-        from starfinder._registry import provenance
-        from starfinder.spot_finding import SPOT_FINDING_METHODS, _detect, _model_artifacts
+        from starfinder.spot_finding import SPOT_FINDING_METHODS
 
         plan = config if type(config) is SpotFindingPlan else None
         base = plan.config if plan is not None else config
@@ -788,18 +785,103 @@ class FOV:
             raise TypeError(f"FOV detection requires {accepted}")
         if base.channel_labels is None and self.dataset.channel_order:
             base = replace(base, channel_labels=tuple(self.dataset.channel_order))
-        config = base if plan is None else SpotFindingPlan(base, plan.channel_overrides)
+        single = base if plan is None else SpotFindingPlan(base, plan.channel_overrides)
+        if plan is None or plan.rounds is None:
+            return single, None
+        unknown = [r for r in plan.rounds if r not in self.rounds.all_rounds]
+        if unknown:
+            raise ValueError(f"detection rounds {unknown} are not rounds of this FOV ({self.rounds.all_rounds})")
+        return single, SpotFindingPlan(base, plan.channel_overrides, plan.rounds)
+
+    def _detection_order(self, rounds):
+        """The listed rounds in FOV.run order: the reference first, then the moving rounds in declared order."""
+        return [r for r in [self.rounds.reference_round] + self.rounds.moving_rounds if r in rounds]
+
+    def _detect_round(self, config, round_name, device):
+        """Detect one round's image with a config or a plan without rounds; return its SpotFindingResult.
+
+        A round other than the reference must have the reference round's
+        metadata (and ZYX shape when the reference image is resident), so
+        its coordinates are on the reference grid; otherwise
+        IncompatibleGeometryError.
+        """
+        from starfinder.image import IncompatibleGeometryError
+        from starfinder.spot_finding import _detect
+
+        reference = self.rounds.reference_round
+        metadata = self.metadata.get(round_name, ImageMetadata(f"{self.fov_id}/{round_name}"))
+        if round_name != reference:
+            expected = self.metadata.get(reference, ImageMetadata(f"{self.fov_id}/{reference}"))
+            if metadata != expected:
+                raise IncompatibleGeometryError(
+                    f"detection round {round_name!r} has metadata {metadata}, unlike the reference round "
+                    f"{reference!r} ({expected}); a round is detected on the reference grid, after its registration")
+            shape = np.shape(self.images[round_name])[:3]
+            reference_shape = np.shape(self.images[reference])[:3] if reference in self.images else None
+            if reference_shape is not None and shape != reference_shape:
+                raise IncompatibleGeometryError(f"detection round {round_name!r} has ZYX shape {shape}, unlike the "
+                                                f"reference round {reference!r} ({reference_shape})")
         namespace = json.dumps([self.dataset.dataset_id, self.dataset.sample_id,
                                 self.fov_id, self.subtile_id], separators=(",", ":"))
-        reference = self.rounds.reference_round
-        metadata = self.metadata.get(reference, ImageMetadata(f"{self.fov_id}/{reference}"))
-        self.spot_result = _detect(self.images[reference], config, metadata, namespace, device, reference)
+        return _detect(self.images[round_name], config, metadata, namespace, device, round_name)
+
+    @staticmethod
+    def _detection_entry(config, result):
+        """The provenance entry of one detection: the registry's entry, the weights artifacts and execution."""
+        from starfinder._registry import provenance
+        from starfinder.spot_finding import SPOT_FINDING_METHODS, _model_artifacts
+
+        base = config.config if type(config) is SpotFindingPlan else config
+        entry = provenance(SPOT_FINDING_METHODS[type(base)], base, "spot_finding")
+        if "model" in result.diagnostics:
+            entry["artifacts"] = _model_artifacts(result.diagnostics["model"])
+        entry["execution"] = result.diagnostics["execution"]
+        return entry
+
+    @_log_step
+    def _find_round_spots(self, config, round_name, device="cpu"):
+        """FOV.run's detection of one listed round of a plan with rounds; returns the round's SpotFindingResult.
+
+        While FOV.run records run.json, the step record gets the detection's
+        provenance entry under methods.
+        """
+        result = self._detect_round(config, round_name, device)
         if self._run_record is not None:
-            entry = provenance(spec, base, "spot_finding")
-            if "model" in self.spot_result.diagnostics:
-                entry["artifacts"] = _model_artifacts(self.spot_result.diagnostics["model"])
-            entry["execution"] = self.spot_result.diagnostics["execution"]
-            self._run_record.add_methods([entry])
+            self._run_record.add_methods([self._detection_entry(config, result)])
+        return result
+
+    @_log_step
+    def find_spots(self, *, config: SpotFindingConfig | SpotFindingPlan = LocalMaximaConfig(),
+                   device: str = "cpu") -> FOV:
+        """Detect reference-round spots, or the spots of a plan's rounds, with explicit config and FOV identity.
+
+        config is a config of a SPOT_FINDING_METHODS method with
+        pipeline=True, or a SpotFindingPlan of one; channel_labels None is
+        filled from dataset.channel_order, and override channels must be
+        among them. A plan with rounds detects each listed round's resident
+        image (registered to the reference grid: a round whose metadata or
+        shape differs from the reference round's raises
+        IncompatibleGeometryError) and gives one result with a ``round``
+        column, the rounds in FOV.run order (reference first), spot_id
+        running over the combined table and the per-round diagnostics under
+        diagnostics['rounds']. The namespace encodes dataset/sample/FOV and,
+        for saved subtiles, the one-based subtile ID. IDs are retained in
+        extraction/filtering tables. While FOV.run records run.json, the
+        step record gets the detection's provenance entry under methods (one
+        per detected round, with its ``round``, for a plan with rounds).
+        """
+        from starfinder.spot_finding import _combine_rounds
+
+        single, plan = self._detection_plan(config)
+        if plan is None:
+            self.spot_result = self._detect_round(single, self.rounds.reference_round, device)
+            entries = [self._detection_entry(single, self.spot_result)]
+        else:
+            results = {name: self._detect_round(single, name, device) for name in self._detection_order(plan.rounds)}
+            self.spot_result = _combine_rounds(results, plan)
+            entries = [dict(self._detection_entry(single, result), round=name) for name, result in results.items()]
+        if self._run_record is not None:
+            self._run_record.add_methods(entries)
         return self
 
     @_log_step
@@ -849,8 +931,14 @@ class FOV:
 
     @_log_step
     def decode_barcodes(self, *, config=WtaDecoderConfig(diagnostics=True)):
-        """Decode the stored intensity result and retain every spot identity."""
+        """Decode the stored intensity result and retain every spot identity.
+
+        A spot table with a ``round`` column (detection in several rounds)
+        raises ValueError: decoding it needs a readout mode (§2.8).
+        """
         from starfinder.barcode import decode_barcodes
+        if self.spot_result is not None and 'round' in self.spot_result.spots:
+            raise ValueError(MULTI_ROUND_DECODING)
         if self.codebook is None:
             raise ValueError("Codebook not loaded. Call dataset.load_codebook() first.")
         self.decoding_result = decode_barcodes(self.intensity_result, self.codebook, config=config)
@@ -882,7 +970,14 @@ class FOV:
         and the registration recipe's steps compose into one transform per
         moving round that resamples the round's detection image and every one
         of its snapshots once, so they stay aligned; the reference round is
-        not transformed (see register). Extraction reads
+        not transformed (see register). Detection runs on the reference
+        round; a SpotFindingPlan with rounds detects each listed round after
+        its registration and post-registration steps (a step record per
+        round), combines them as FOV.find_spots does, and then extracts
+        every sequencing round at every candidate (batch mode or
+        retain_images is then required for extraction); decoding such a
+        candidate set raises ValueError until §2.8 defines a readout mode.
+        Extraction reads
         the extraction_source snapshot (default: the detection image; without
         a recipe, the source recorded in preprocessing_record, as after
         load_checkpoint). In streaming mode without retain_images a moving
@@ -918,6 +1013,11 @@ class FOV:
         if config.registration is not None and config.registration.reference_round not in (None, ref):
             raise ValueError(f'registration reference round {config.registration.reference_round!r} differs '
                              f'from the dataset reference {ref!r}')
+        # A plan with rounds detects each listed round in the loop; the rounds are combined after it.
+        single, detection_plan = self._detection_plan(config.detection) if config.detection else (None, None)
+        if config.decoding and (detection_plan is not None or (
+                not config.detection and self.spot_result is not None and 'round' in self.spot_result.spots)):
+            raise ValueError(MULTI_ROUND_DECODING)
         if config.extraction and not (config.detection or self.spot_result is not None):
             raise ValueError('extraction requires detections')
         if config.decoding and not (config.extraction or self.intensity_result is not None):
@@ -926,6 +1026,12 @@ class FOV:
             raise ValueError('filtering requires decoding')
         if config.decoding and self.codebook is None:
             raise ValueError('decoding requires a loaded codebook')
+        if (detection_plan is not None and config.extraction and execution.mode == 'streaming'
+                and not execution.retain_images):
+            raise ValueError('extraction of candidates from several detection rounds runs after the last detected '
+                             'round and reads every round; use batch mode or retain_images=True')
+        detection_rounds = self._detection_order(detection_plan.rounds) if detection_plan is not None else []
+        round_detections = {}
         record = self._start_run_record(checkpoints, config, execution) if checkpoints is not None else None
         current = None
         self._run_record = record
@@ -998,9 +1104,11 @@ class FOV:
                 if 'registered' in stages:
                     self._write_checkpoint(stage='registered', directory=record.directory,
                                            table_format=checkpoints.table_format, round_name=name)
-                if name == ref and config.detection:
+                if name == ref and config.detection and detection_plan is None:
                     self.find_spots(config=config.detection, device=execution.device)
-                if config.extraction and name in self.rounds.sequencing_rounds:
+                if name in detection_rounds:
+                    round_detections[name] = self._find_round_spots(single, round_name=name, device=execution.device)
+                if config.extraction and name in self.rounds.sequencing_rounds and detection_plan is None:
                     self._extract_round(round_name=name, config=config.extraction, source=extraction_source)
                 if execution.mode == 'streaming' and not execution.retain_images:
                     if name != ref:
@@ -1017,6 +1125,15 @@ class FOV:
             if 'registered' in stages and record.data['checkpoints'].get('registered'):
                 self._write_checkpoint(stage='registered', directory=record.directory,
                                        table_format=checkpoints.table_format, image_rounds=[ref] + self.rounds.moving_rounds)
+            if detection_plan is not None:
+                from starfinder.spot_finding import _combine_rounds
+                self.spot_result = _combine_rounds(round_detections, detection_plan)
+                # Every round is extracted at every candidate, which needs the candidates of all rounds.
+                for name in loop_rounds if config.extraction else ():
+                    if name in self.rounds.sequencing_rounds:
+                        current = name
+                        self._extract_round(round_name=name, config=config.extraction, source=extraction_source)
+                current = None
             if config.extraction:
                 self._assemble_intensities()
             if 'candidates' in stages and (config.detection or config.extraction):

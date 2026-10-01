@@ -50,6 +50,26 @@ def _blobs(image, config):
     return coords, np.round(sigma * np.sqrt(ndim))
 
 
+# What the table's measured columns mean (diagnostics['measurements']).
+MEASUREMENTS = {'peak_intensity': 'original pixel intensity at the truncated blob position',
+                'radius': 'starfish blob radius round(sigma * sqrt(ndim)) in voxels'}
+
+
+def check_plane(image, config):
+    """Raise IncompatibleGeometryError for a ZYX 3-tuple sigma on a Z=1 image, which is detected as a YX plane."""
+    if image.shape[0] == 1 and (isinstance(config.min_sigma, tuple) or isinstance(config.max_sigma, tuple)):
+        raise IncompatibleGeometryError("starfish_log detects a Z=1 image as a YX plane, so min_sigma and max_sigma "
+                                        "must be numbers, not ZYX 3-tuples")
+
+
+def memory_geometry(image, config):
+    """diagnostics['geometry']: the scale-space memory estimate of one channel (recorded, not enforced)."""
+    voxels = int(np.prod(image.shape[:3]))
+    return {'voxels': voxels, 'num_sigma': config.num_sigma,
+            'bytes_per_voxel_and_sigma': SCALE_SPACE_BYTES_PER_VOXEL_AND_SIGMA,
+            'scale_space_bytes_estimate': SCALE_SPACE_BYTES_PER_VOXEL_AND_SIGMA * config.num_sigma * voxels}
+
+
 def starfish_log(image, config, context):
     """Blobs of each channel in context.channels; rows by channel, in blob_log's order.
 
@@ -60,11 +80,8 @@ def starfish_log(image, config, context):
     table and the thresholds and the scale-space memory estimate
     (10.4 bytes x num_sigma x voxels of one channel, recorded, not enforced).
     """
+    check_plane(image, config)
     plane = image.shape[0] == 1
-    if plane and (isinstance(config.min_sigma, tuple) or isinstance(config.max_sigma, tuple)):
-        raise IncompatibleGeometryError("starfish_log detects a Z=1 image as a YX plane, so min_sigma and max_sigma "
-                                        "must be numbers, not ZYX 3-tuples")
-    voxels = int(np.prod(image.shape[:3]))
     channels = [image[..., c] if image.ndim == 4 else image for c in context.channels]
     for channel in channels:
         check_range(channel)
@@ -81,12 +98,8 @@ def starfish_log(image, config, context):
         frames.append(pd.DataFrame({'z': z, 'y': y, 'x': x, 'channel': c,
                                     'peak_intensity': channel[z, y, x], 'radius': radius}))
     table = (pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=list(_COLUMNS))).astype(_COLUMNS)
-    geometry = {'voxels': voxels, 'num_sigma': config.num_sigma,
-                'bytes_per_voxel_and_sigma': SCALE_SPACE_BYTES_PER_VOXEL_AND_SIGMA,
-                'scale_space_bytes_estimate': SCALE_SPACE_BYTES_PER_VOXEL_AND_SIGMA * config.num_sigma * voxels}
-    return table, {'thresholds': tuple(float(config.threshold) for _ in context.channels), 'geometry': geometry,
-                   'measurements': {'peak_intensity': 'original pixel intensity at the truncated blob position',
-                                    'radius': 'starfish blob radius round(sigma * sqrt(ndim)) in voxels'}}
+    return table, {'thresholds': tuple(float(config.threshold) for _ in context.channels),
+                   'geometry': memory_geometry(image, config), 'measurements': MEASUREMENTS}
 
 
 def starfish_view(spots, channel):

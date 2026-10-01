@@ -292,8 +292,8 @@ allOf:
       required:
         - n_random_tests
 
-  # The explicit preprocessing and registration recipes, the spot-finding method and channel
-  # overrides and the execution device are Python-only (backend defaults to matlab)
+  # The explicit preprocessing and registration recipes, the spot-finding method, channel
+  # overrides and rounds and the execution device are Python-only (backend defaults to matlab)
   - if:
       not:
         required: [backend]
@@ -317,6 +317,7 @@ allOf:
                           anyOf:
                             - required: [method]
                             - required: [channel_overrides]
+                            - required: [rounds]
 
 # ==================== Reusable Definitions ====================
 $defs:
@@ -830,7 +831,8 @@ $defs:
       method (a SPOT_FINDING_METHODS name with pipeline=True, default local_maxima) and the
       fields of its config; intensity_estimation, intensity_threshold and min_distance are
       aliases for local_maxima only (each raises together with its field); channel_overrides
-      maps a channel label to fields that replace the block's for that channel. The Python
+      maps a channel label to fields that replace the block's for that channel; rounds lists
+      the rounds to detect in. The Python
       adapter validates the fields of the selected method.
     type: object
     properties:
@@ -928,6 +930,14 @@ $defs:
         type: object
         additionalProperties:
           type: object
+      rounds:
+        description: "Python only; the round labels to detect in (omitted: the reference round only); decoding such a candidate set needs a readout mode (§2.8)"
+        type: array
+        minItems: 1
+        uniqueItems: true
+        items:
+          type: string
+          minLength: 1
     additionalProperties: true
 
   load_codebook_params:

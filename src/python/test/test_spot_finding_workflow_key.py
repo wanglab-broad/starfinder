@@ -155,7 +155,7 @@ def test_schema_declares_the_python_only_keys_and_drops_local():
     # channel_labels comes from seq_channel_order, so the schema does not declare it.
     fields_ = {f.name for config_type, spec in SPOT_FINDING_METHODS.items() if spec.pipeline
                for f in fields(config_type) if f.init and f.name != "channel_labels"}
-    assert set(properties) == {"run", "ref_round", "method", "channel_overrides", *ALIASES, *fields_}
+    assert set(properties) == {"run", "ref_round", "method", "channel_overrides", "rounds", *ALIASES, *fields_}
     assert SCHEMA["$defs"]["python_rule_parameters"]["properties"]["device"]["enum"] == ["cpu"]
 
 

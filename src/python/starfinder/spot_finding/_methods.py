@@ -105,6 +105,23 @@ def _peaks(channel, distance, threshold, border=True):
     return np.column_stack((np.zeros(len(coords), dtype=int), coords)) if plane else coords
 
 
+def _noise_record(image, channel, mode, value):
+    """One channel's noise record: zero fraction, median, MAD (unscaled) and threshold, in float64."""
+    values = channel.astype(np.float64)
+    median = np.median(values)
+    mad = np.median(np.abs(values - median))
+    if mode == 'noise':
+        threshold = median + value * mad * 1.4826
+    elif mode == 'global':
+        threshold = np.iinfo(image.dtype).max * value
+    elif mode == 'adaptive_round':
+        threshold = float(image.max()) * value
+    else:
+        threshold = float(channel.max()) * value
+    return {'zero_fraction': float(np.mean(values == 0)), 'median': float(median), 'mad': float(mad),
+            'threshold': float(threshold)}
+
+
 def _maxima(image, config, context, mode, value, border):
     """Per-channel maxima above each channel's threshold; rows ordered by channel, then intensity.
 
@@ -116,23 +133,12 @@ def _maxima(image, config, context, mode, value, border):
     rows, thresholds, noise = [], [], []
     for c in context.channels:
         channel = image[..., c] if image.ndim == 4 else image
-        values = channel.astype(np.float64)
-        median = np.median(values)
-        mad = np.median(np.abs(values - median))
-        if mode == 'noise':
-            threshold = median + value * mad * 1.4826
-        elif mode == 'global':
-            threshold = np.iinfo(image.dtype).max * value
-        elif mode == 'adaptive_round':
-            threshold = float(image.max()) * value
-        else:
-            threshold = float(channel.max()) * value
-        thresholds.append(float(threshold))
-        noise.append({'zero_fraction': float(np.mean(values == 0)), 'median': float(median), 'mad': float(mad),
-                      'threshold': float(threshold)})
+        record = _noise_record(image, channel, mode, value)
+        thresholds.append(record['threshold'])
+        noise.append(record)
         if channel.max() == 0:
             continue
-        coords = _peaks(channel, config.min_distance_voxels, threshold, border)
+        coords = _peaks(channel, config.min_distance_voxels, record['threshold'], border)
         for z, y, x in coords:
             rows.append((z, y, x, c, float(channel[z, y, x])))
     table = pd.DataFrame(rows, columns=['z', 'y', 'x', 'channel', 'peak_intensity']).astype(
@@ -234,6 +240,87 @@ SpotFindingConfig = (LocalMaximaConfig | NoiseLandmarkConfig | PercentileCentroi
 def per_channel(spec) -> bool:
     """Whether the method detects each channel on its own (its table has a channel column)."""
     return "channel" in [c.rstrip("?") for c in spec.output_columns]
+
+
+def output_columns(spec, config) -> list[str]:
+    """The columns (besides spot_id) a config of the method produces: its required and enabled optional columns."""
+    return [c.rstrip("?") for c in spec.output_columns
+            if not c.endswith("?") or getattr(config, spec.column_fields[c.rstrip("?")])]
+
+
+def empty_table(spec, config) -> pd.DataFrame:
+    """The typed empty table of a config: its output columns, channel int64 and the others float64."""
+    return pd.DataFrame({c: pd.Series(dtype="int64" if c == "channel" else "float64")
+                         for c in output_columns(spec, config)})
+
+
+def _local_maxima_constant(image, config, channels, verified):
+    if config.threshold_mode == 'global' and image.dtype not in (np.dtype('uint8'), np.dtype('uint16')):
+        raise ValueError("global thresholds require uint8/uint16")
+    noise = [_noise_record(image, image[..., c] if image.ndim == 4 else image, config.threshold_mode,
+                           config.threshold_value) for c in channels]
+    details = {'thresholds': tuple(r['threshold'] for r in noise), 'noise': noise}
+    if config.merge_radius_zyx is not None:
+        details['merged'] = [0] * len(channels)
+    return details
+
+
+def _starfish_log_constant(image, config, channels, verified):
+    from ._starfish_log import MEASUREMENTS, check_plane, check_range, memory_geometry
+    check_plane(image, config)
+    for c in channels:
+        check_range(image[..., c] if image.ndim == 4 else image)
+    return {'thresholds': tuple(float(config.threshold) for _ in channels),
+            'geometry': memory_geometry(image, config), 'measurements': MEASUREMENTS}
+
+
+def _learned_constant(method, image, config, verified, threshold):
+    """Thresholds and, unless this call has verified the weights already, the geometry check, the weights
+    verification and the model record, which a run reports even when no channel reaches the model."""
+    from ._learned import model_record, verified_folder
+    from ._spotiflow import check_geometry
+    from ._weights import known_weights
+    details = {'thresholds': threshold}
+    if not verified:
+        if method == "spotiflow":
+            check_geometry(known_weights(method, config.model), image.shape[:3])
+        details['model'] = model_record(method, config.model, verified_folder(method, config.model))
+    return details
+
+
+def _spotiflow_constant(image, config, channels, verified):
+    from ._weights import known_weights
+    threshold = (config.prob_thresh if config.prob_thresh is not None
+                 else known_weights("spotiflow", config.model).native_threshold)
+    return _learned_constant("spotiflow", image, config, verified, tuple(float(threshold) for _ in channels))
+
+
+def _piscis_constant(image, config, channels, verified):
+    return _learned_constant("piscis", image, config, verified, tuple(float(config.threshold) for _ in channels))
+
+
+# What find_spots records for a constant channel, which it never passes to the method function. A
+# per-channel method without an entry receives its constant channels like any other channel.
+_CONSTANT = {LocalMaximaConfig: _local_maxima_constant, StarfishLogConfig: _starfish_log_constant,
+             SpotiflowConfig: _spotiflow_constant, PiscisConfig: _piscis_constant}
+
+
+def skips_constant(config) -> bool:
+    """Whether find_spots records the config's constant channels without passing them to the method."""
+    return type(config) in _CONSTANT
+
+
+def constant_details(image, config, channels, verified) -> dict:
+    """The thresholds of constant channels, without running the method (a method with an entry in _CONSTANT).
+
+    Local maxima adds the noise records (and merged counts 0) and the LoG its
+    memory estimate (geometry) and measurements, which need no detection.
+    Spotiflow and Piscis still check the geometry and verify the weights
+    and add the model record, unless verified (the method function has
+    verified them in this call), so a missing or changed weights file raises
+    as on any other image.
+    """
+    return _CONSTANT[type(config)](image, config, channels, verified)
 
 
 def require_method(spec) -> None:

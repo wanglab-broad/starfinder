@@ -228,6 +228,7 @@ starfinder.spot_finding
 * :py:obj:`starfinder.spot_finding.NoiseLandmarkConfig`
 * :py:obj:`starfinder.spot_finding.PercentileCentroidConfig`
 * :py:obj:`starfinder.spot_finding.PiscisConfig`
+* :py:obj:`starfinder.spot_finding.plot_detections`
 * :py:obj:`starfinder.spot_finding.resolve_weights`
 * :py:obj:`starfinder.spot_finding.SPOT_FINDING_METHODS`
 * :py:obj:`starfinder.spot_finding.SpotFindingBackendUnavailableError`

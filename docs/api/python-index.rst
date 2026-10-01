@@ -103,6 +103,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.preprocessing.PercentileNormalizationConfig`
 * :py:obj:`starfinder.dataset.PipelineConfig`
 * :py:obj:`starfinder.spot_finding.PiscisConfig`
+* :py:obj:`starfinder.spot_finding.plot_detections`
 * :py:obj:`starfinder.preprocessing.PREPROCESSING_METHODS`
 * :py:obj:`starfinder.preprocessing.PreprocessingRecipe`
 * :py:obj:`starfinder.preprocessing.PreprocessingSpec`

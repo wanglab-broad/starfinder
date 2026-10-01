@@ -431,13 +431,55 @@ gains `methods`, a list with the detection's provenance entry (`stage`,
 `method`, `config_type`, `implementation`, `config`, `requires`, `artifacts`,
 `execution`); see {doc}`checkpoints`.
 
+`SpotFindingPlan` also takes `rounds`, the round labels to detect in (the workflow
+`spot_finding` block's Python-only `rounds` key). `None`, the default, is the reference
+round only, and every result, identity, column, checkpoint and golden digest stays as
+before. With `rounds`, `FOV.run` detects each listed round after its registration and
+post-registration steps and `FOV.find_spots` detects the listed rounds' resident images;
+a listed round whose metadata or shape differs from the reference round's raises
+`IncompatibleGeometryError`. The result is one table with a `round` column (pandas
+string), the rounds in `FOV.run` order (reference first) and `spot_id` running
+`"0"`…`"N-1"` over the combined table, so the reference round's identities are
+unchanged; coincident candidates are never merged. The new `SpotFindingResult.plan`
+holds the plan (`None` on construction means `SpotFindingPlan(config)`). Direct
+`find_spots` detects one image and raises `ValueError` for a plan with `rounds`.
+**Intentional change:** decoding a candidate set of several rounds raises
+`ValueError("decoding candidates from several detection rounds needs a readout mode
+(§2.8)")`, from `FOV.run` before any processing and from `FOV.decode_barcodes` for a
+spot table with a `round` column. Extraction reads every candidate in every sequencing
+round, as before; in `FOV.run` it then runs after the last detected round, which needs
+batch mode or `retain_images=True`.
+
 ### Spot-finding diagnostics
 
 `SpotFindingResult.diagnostics` keeps its keys and adds `effective_settings`
 (the config of every channel, serialized as `run.json` serializes dataclasses),
 `warnings` and `execution` (device, torch build when a method uses it, and the
 thread settings in effect). Local maxima adds `noise`: per channel the zero
-fraction, median, MAD and threshold, in every threshold mode.
+fraction, median, MAD and threshold, in every threshold mode. Every method with a
+`channel` column adds `counts` (candidates per channel), `outcomes` (`ok`, `empty`, or
+`constant`: the pipeline methods never run on a constant channel, which yields no
+candidates; its thresholds and local-maxima noise record are still recorded, and
+Spotiflow and Piscis still verify their weights), `native` (per channel the minimum,
+median and maximum of `radius` or `probability`, when the method has them); every
+method adds `software` (the versions of starfinder, NumPy, SciPy, scikit-image and the
+method's optional dependencies). A result of several rounds keeps `thresholds`,
+`counts`, `outcomes`, `noise` and `merged` per round under `rounds`. A method that
+finds nothing returns its declared columns with their dtypes.
+`plot_detections(image, result, *, channel, z, yx_window=None, round=None, ax=None)`
+draws one channel's detections on one slice or crop and returns the matplotlib axes;
+`FOV.run` never plots.
+
+### Candidates checkpoint plan keys
+
+`candidates.json` adds the optional keys `detection_rounds` (`null` or the plan's
+rounds), `detection_plan` (the channel overrides as `{channel, config}` entries),
+`execution` and `weights` (the provenance `artifacts` entries of the loaded weights),
+and the table may carry the spot columns `round` (string), `radius` and `probability`
+(float64). `FORMAT_VERSION` stays 2. `read_checkpoint(..., "candidates")` rebuilds the
+plan, so the reloaded `spot_result.plan` equals the original; a checkpoint written
+before these keys loads unchanged, with no overrides and `rounds` `None`. See
+{doc}`checkpoints`.
 
 ### Spot evaluation metrics
 

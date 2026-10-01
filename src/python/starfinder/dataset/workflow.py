@@ -193,19 +193,21 @@ def _spot_fields(values, config_type, context):
 
 
 def _detection(values, channels):
-    """The detection config of the spot_finding block, or a SpotFindingPlan when it has channel_overrides.
+    """The detection config of the spot_finding block, or a SpotFindingPlan when it has channel_overrides or rounds.
 
     method names a SPOT_FINDING_METHODS method with pipeline=True (default
     local_maxima); the other keys are its config's fields (_spot_fields),
     and a config field without a default (such as the four starfish_log
     scale and threshold settings) must be given, else ValueError.
     channel_overrides maps a channel label to config fields that replace the
-    block's for that channel.
+    block's for that channel. rounds lists the round labels to detect in
+    (omitted: the reference round only); FOV.run checks them.
     """
     values = dict(values)
     values.pop('ref_round', None)
     method = values.pop('method', 'local_maxima')
     overrides = values.pop('channel_overrides', None)
+    rounds = values.pop('rounds', None)
     config_type = config_type_for(SPOT_FINDING_METHODS, method, 'spot-finding method')
     if not SPOT_FINDING_METHODS[config_type].pipeline:
         raise ValueError(f'spot-finding method {method!r} is not a pipeline method')
@@ -215,8 +217,10 @@ def _detection(values, channels):
     if missing:
         raise ValueError(f'spot_finding: method {method!r} requires {", ".join(missing)}')
     config = config_type(**values)
+    if rounds is not None and (not isinstance(rounds, (list, tuple)) or not all(isinstance(r, str) for r in rounds)):
+        raise TypeError('spot_finding.rounds must be a list of round labels')
     if overrides is None:
-        return config
+        return config if rounds is None else SpotFindingPlan(config, rounds=tuple(rounds))
     if not isinstance(overrides, dict):
         raise TypeError('spot_finding.channel_overrides must be a mapping from channel label to settings')
     unknown = [label for label in overrides if label not in channels]
@@ -225,7 +229,7 @@ def _detection(values, channels):
                          f'seq_channel_order is {list(channels)}')
     return SpotFindingPlan(config, tuple(
         ChannelOverride(label, replace(config, **_spot_fields(entry, config_type, f'spot_finding.channel_overrides.{label}')))
-        for label, entry in overrides.items()))
+        for label, entry in overrides.items()), None if rounds is None else tuple(rounds))
 
 
 def _legacy_recipe(params, norm, do_norm, hist, do_hist, morph, do_morph, top, do_top, resident):
@@ -309,8 +313,8 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
     block's Python-only method key names a pipeline SPOT_FINDING_METHODS
     method (default local_maxima) whose config fields are the other keys;
     the legacy keys intensity_estimation, intensity_threshold and
-    min_distance are aliases for local_maxima only, and channel_overrides
-    gives per-channel settings. The rule-level Python-only device key sets
+    min_distance are aliases for local_maxima only, channel_overrides
+    gives per-channel settings and rounds the rounds to detect in. The rule-level Python-only device key sets
     ExecutionConfig.device.
     Direct Python callers construct Dataset/PipelineConfig (no legacy aliases).
     """
@@ -341,7 +345,7 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
     morph, do_morph = _operation(params, 'morph_recon', ('radius',))
     top, do_top = _operation(params, 'tophat', ('radius',))
     spot_keys = {f.name for cls, spec in SPOT_FINDING_METHODS.items() if spec.pipeline for f in fields(cls) if f.init}
-    spot, do_spot = _operation(params, 'spot_finding', {'ref_round', 'method', 'channel_overrides', *_SPOT_ALIASES,
+    spot, do_spot = _operation(params, 'spot_finding', {'ref_round', 'method', 'channel_overrides', 'rounds', *_SPOT_ALIASES,
                                                         *spot_keys})
     extract, do_extract = _operation(params, 'reads_extraction', ('voxel_size',))
     filt, do_filter = _operation(params, 'reads_filtration', ('end_base', 'start_base', 'exclude_invalid_endpoints', 'score_bounds', 'n_barcode_segments', 'split_index'))

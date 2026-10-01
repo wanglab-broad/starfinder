@@ -22,7 +22,15 @@ records the noise median, MAD, zero fraction and threshold of each channel in
 ``diagnostics["noise"]`` and emits a :py:class:`~starfinder.spot_finding.SpotFindingWarning`
 when a channel's MAD is 0 or more than half of its voxels are zero; the threshold does not
 change. ``diagnostics["execution"]`` records the device (only ``"cpu"``) and the thread
-settings in effect.
+settings in effect. ``counts`` and ``outcomes`` give each channel's candidates and
+``ok``, ``empty`` or ``constant`` (a constant channel never reaches the method),
+``native`` the minimum, median and maximum of ``radius`` or ``probability``, and
+``software`` the library versions. A plan's ``rounds`` (used by ``FOV.find_spots`` and
+``FOV.run``) gives one table of several rounds with a ``round`` column and identities over
+the combined table, with the per-round diagnostics under ``diagnostics["rounds"]``;
+decoding it raises until §2.8 defines a readout mode.
+:py:func:`~starfinder.spot_finding.plot_detections` draws one channel's detections on one
+slice or crop; nothing plots unless a caller asks.
 
 :py:class:`~starfinder.spot_finding.LocalMaximaConfig` has the opt-in W-218 within-channel
 merge ``merge_radius_zyx`` (default ``None``, the legacy result): of the maxima of one channel
@@ -70,6 +78,7 @@ raises :py:class:`~starfinder.spot_finding.MissingWeightsError` or
    NoiseLandmarkConfig
    PercentileCentroidConfig
    PiscisConfig
+   plot_detections
    resolve_weights
    SPOT_FINDING_METHODS
    SpotFindingBackendUnavailableError

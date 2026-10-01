@@ -456,19 +456,41 @@ def _detectors():
 
 
 def write_candidates(directory, header, spot_result, intensity_result, table_format):
-    """Write candidates.<format> and candidates.json; return written file names."""
+    """Write candidates.<format> and candidates.json; return written file names.
+
+    Besides the base config, candidates.json records the detection plan:
+    detection_rounds (null, or the plan's rounds), detection_plan (the
+    channel overrides as {channel, config} entries), execution (the
+    execution entry) and weights (the provenance artifacts entries of the
+    loaded weights; empty without weights).
+    """
+    from starfinder.spot_finding import _model_artifacts
     frame = candidates_frame(spot_result, intensity_result)
     table, dtypes = _write_table(frame, directory, "candidates", table_format)
+    plan, diagnostics = spot_result.plan, spot_result.diagnostics
     header = dict(header, stage="candidates", format_version=FORMAT_VERSION, table=table, dtypes=dtypes,
         spot_namespace=spot_result.spot_namespace, spot_columns=list(spot_result.spots.columns),
         metadata=spot_result.metadata, detection_config=spot_result.config,
-        detection_diagnostics=_json_diagnostics(spot_result.diagnostics),
+        detection_rounds=None if plan.rounds is None else list(plan.rounds),
+        detection_plan=[{"channel": o.channel, "config": o.config} for o in plan.channel_overrides],
+        execution=diagnostics.get("execution"),
+        weights=_model_artifacts(diagnostics["model"]) if "model" in diagnostics else [],
+        detection_diagnostics=_json_diagnostics(diagnostics),
         signals=None if intensity_result is None else dict(
             round_labels=intensity_result.round_labels, channel_labels=intensity_result.channel_labels,
             metadata=intensity_result.metadata, extraction_config=intensity_result.config,
             diagnostics=_json_diagnostics(intensity_result.diagnostics)))
     write_json(header, Path(directory) / "candidates.json")
     return [table, "candidates.json"]
+
+
+def _detection_plan(header, config, detectors):
+    """The SpotFindingPlan of a candidates header; a header without the plan keys (before §2.7) gives the bare plan."""
+    from starfinder.spot_finding import ChannelOverride, SpotFindingPlan
+    overrides = tuple(ChannelOverride(entry["channel"], _config(entry["config"], detectors))
+                      for entry in header.get("detection_plan") or ())
+    rounds = header.get("detection_rounds")
+    return SpotFindingPlan(config, overrides, None if rounds is None else tuple(rounds))
 
 
 def _read_candidates(directory, header):
@@ -484,8 +506,10 @@ def _read_candidates(directory, header):
     else:
         spots, values, valid = parse_candidates(frame, signals["round_labels"], signals["channel_labels"])
     spots = spots[header["spot_columns"]]
-    spot_result = SpotFindingResult(spots, _metadata(header["metadata"]), namespace,
-        _config(header["detection_config"], _detectors()), _tuples(header["detection_diagnostics"]))
+    detectors = _detectors()
+    config = _config(header["detection_config"], detectors)
+    spot_result = SpotFindingResult(spots, _metadata(header["metadata"]), namespace, config,
+        _tuples(header["detection_diagnostics"]), _detection_plan(header, config, detectors))
     if signals is None:
         return {"spot_result": spot_result, "intensity_result": None}
     intensity = IntensityExtractionResult(values, tuple(spots.spot_id), namespace,
@@ -542,7 +566,9 @@ def read_checkpoint(path: Path | str, stage: str) -> dict:
         ``registration_attempts`` and ``preprocessing_record`` (the recipe and
         per-round step records; empty for checkpoints written without them). ``candidates``: ``spot_result``
         (SpotFindingResult) and ``intensity_result`` (IntensityExtractionResult,
-        or None when signals were not extracted). ``pre_qc``: ``decoding_result``
+        or None when signals were not extracted); the spot result's plan is
+        rebuilt from ``detection_plan`` and ``detection_rounds`` (absent in
+        earlier checkpoints: no overrides and rounds None). ``pre_qc``: ``decoding_result``
         (BarcodeDecodingResult without array or table diagnostics).
 
     Raises

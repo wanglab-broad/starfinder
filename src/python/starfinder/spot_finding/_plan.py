@@ -48,9 +48,15 @@ class SpotFindingPlan:
     unique; when config.channel_labels is set they must be among them
     (FOV.find_spots and FOV.run fill the labels from Dataset.channel_order).
     Direct find_spots with overrides needs config.channel_labels.
+    rounds names the rounds to detect in: None (the default) is the
+    reference round only, with every result unchanged; a tuple of unique
+    round labels (labels of RoundState.all_rounds, checked by FOV.find_spots
+    and FOV.run) gives one table with a ``round`` column. Direct find_spots
+    detects one image and accepts only rounds=None.
     """
     config: SpotFindingConfig
     channel_overrides: tuple[ChannelOverride, ...] = ()
+    rounds: tuple[str, ...] | None = None
 
     def __post_init__(self):
         spec = _check_config(self.config)
@@ -58,6 +64,13 @@ class SpotFindingPlan:
             raise TypeError("channel_overrides must be a tuple of ChannelOverride")
         overrides = tuple(self.channel_overrides)
         object.__setattr__(self, "channel_overrides", overrides)
+        if self.rounds is not None:
+            if not isinstance(self.rounds, (tuple, list)):
+                raise TypeError("rounds must be None or a tuple of round labels")
+            rounds = tuple(self.rounds)
+            if not rounds or any(not isinstance(r, str) or not r for r in rounds) or len(set(rounds)) != len(rounds):
+                raise ValueError(f"rounds must be None or nonempty unique round labels, not {rounds!r}")
+            object.__setattr__(self, "rounds", rounds)
         labels = self.config.channel_labels
         seen = set()
         for override in overrides:

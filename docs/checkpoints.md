@@ -124,7 +124,8 @@ This is a wide table with one row per spot, in the spot table's order:
 | --- | --- | --- |
 | `spot_namespace`, `spot_id` | string | Identity; joins use both, never row position. |
 | `z`, `y`, `x` | float64 | Zero-based voxel coordinates. |
-| `channel`, `peak_intensity`, ... | int64 or float64 | Detector columns, when present. |
+| `channel`, `peak_intensity`, ... | int64 or float64 | Detector columns, when present: `radius` (Starfish LoG) and `probability` (Spotiflow) are float64. |
+| `round` | string | The detection round of each row, present only when the detection plan names `rounds`. |
 | `sig_<round>_<channel>` | float64 | Extracted sum for each round, then each channel in channel order. |
 | `valid_<round>` | bool | False marks an unavailable measurement, not zero signal. |
 
@@ -135,7 +136,28 @@ names are rejected. When detection ran without extraction, the table has no
 signal columns and reloads with `intensity_result=None`.
 
 `candidates.json` holds the detector and extraction configurations, the image
-metadata, the JSON-representable diagnostics and the column dtype map.
+metadata, the JSON-representable diagnostics and the column dtype map. Since §2.7 it
+also records the detection plan in four keys:
+
+| Key | Content |
+| --- | --- |
+| `detection_rounds` | `null` (the reference round only) or the plan's list of rounds. |
+| `detection_plan` | The channel overrides, as `{channel, config}` entries (empty without overrides). |
+| `execution` | The execution entry: device, framework and thread settings. |
+| `weights` | The provenance `artifacts` entries of the loaded pretrained weights (empty for methods without weights). |
+
+`detection_config` stays the plan's base config. Reloading gives a
+`SpotFindingResult` whose table equals the written one exactly (CSV and Parquet) and
+whose `config` and `plan` equal the original. A checkpoint written before these keys
+existed loads as before, with no overrides and `rounds` `None`. `format_version`
+stays 2: a reader without the keys still loads every row, with `round` as an ordinary
+spot column.
+
+With a plan that names several rounds (see {doc}`spot-finding-contract`, "Detection in
+several rounds"), the table holds every round's candidates, reference round first,
+with `spot_id` running over the whole table and the round in `round`; coincident
+candidates of different rounds stay separate rows. The signal columns are still read
+at every candidate in every sequencing round.
 
 ### pre_qc
 
@@ -211,7 +233,7 @@ run starts, after each completed step and when the run ends. It contains:
 | `environment` | Python, platform and package versions (`null` when not installed). |
 | `config` | `pipeline`, `execution` (including the execution `device`) and `checkpoints` configurations. |
 | `inputs` | Loaded TIFF `path` and streamed `sha256` (`null` with `hash_inputs=False`). |
-| `steps` | `name`, `round`, `seconds` and `status` of each completed or failed step. A preprocessing step is named `preprocess:<step name>`. The `find_spots` record also has `methods`, a list with the detection's provenance entry ({doc}`method-registry`, "Provenance in run.json"): `stage` (`spot_finding`), `method`, `config_type`, `implementation`, `config`, `requires` (installed versions of the optional dependencies), `artifacts` (pretrained weights files; empty for methods without weights) and `execution` (device, framework and thread settings). |
+| `steps` | `name`, `round`, `seconds` and `status` of each completed or failed step. A preprocessing step is named `preprocess:<step name>`. The `find_spots` record also has `methods`, a list with the detection's provenance entry ({doc}`method-registry`, "Provenance in run.json"): `stage` (`spot_finding`), `method`, `config_type`, `implementation`, `config`, `requires` (installed versions of the optional dependencies), `artifacts` (pretrained weights files; empty for methods without weights) and `execution` (device, framework and thread settings). For a plan that names rounds, `run` records one `find_round_spots` step per detected round, each with its own entry, and `FOV.find_spots` called inside a recorded step lists one entry per round, each with its `round`. |
 | `preprocessing` | `null` without a preprocessing recipe. Otherwise `recipe` (the step names of `steps` and `post_registration`, `extraction_source` and `registration_source`), `rounds`: per round, one record per step with `index`, `stage` (`steps` or `post_registration`), `step`, `config`, `fitted`, `diagnostics`, `input_dtype`, `output_dtype` and `save_as`; `transforms`: per round and image (`detection` and each snapshot), the transforms composed in order, each with `result` (its index in the round's registration results in `transforms.json`), `method` and `kind` (`translation`, `affine`, `bspline` or `dense`), empty for the reference round; and `supplied_statistics`. |
 | `registration` | Ordered registration attempts per round: the estimation entries and one application entry per moving round (see {doc}`coordination`). |
 | `counts` | Spots, intensities, decoding call statuses and filtering counts. |

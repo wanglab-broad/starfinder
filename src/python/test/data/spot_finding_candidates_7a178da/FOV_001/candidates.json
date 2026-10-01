@@ -1,0 +1,187 @@
+{
+  "dataset_id": "golden",
+  "sample_id": "sample",
+  "fov_id": "FOV_001",
+  "subtile_id": null,
+  "rounds": {
+    "sequencing_rounds": [
+      "round1"
+    ],
+    "other_rounds": [],
+    "reference_round": "round1"
+  },
+  "channel_labels": [
+    "ch00",
+    "ch01",
+    "ch02",
+    "ch03"
+  ],
+  "stage": "candidates",
+  "format_version": 2,
+  "table": "candidates.csv",
+  "dtypes": {
+    "spot_namespace": "string",
+    "spot_id": "string",
+    "z": "float64",
+    "y": "float64",
+    "x": "float64",
+    "channel": "int64",
+    "peak_intensity": "float64"
+  },
+  "spot_namespace": "[\"golden\",\"sample\",\"FOV_001\",null]",
+  "spot_columns": [
+    "spot_id",
+    "z",
+    "y",
+    "x",
+    "channel",
+    "peak_intensity"
+  ],
+  "metadata": {
+    "frame_id": "FOV_001/round1",
+    "spacing_zyx": null,
+    "origin_zyx": null,
+    "direction_zyx": null,
+    "spatial_unit": null
+  },
+  "detection_config": {
+    "threshold_mode": "global",
+    "threshold_value": 0.01,
+    "min_distance_voxels": 1,
+    "exclude_border": true,
+    "channel_labels": [
+      "ch00",
+      "ch01",
+      "ch02",
+      "ch03"
+    ],
+    "measure_peak_intensity": true,
+    "merge_radius_zyx": null,
+    "method": "local_maxima"
+  },
+  "detection_diagnostics": {
+    "method": "local_maxima",
+    "channel_labels": [
+      "ch00",
+      "ch01",
+      "ch02",
+      "ch03"
+    ],
+    "thresholds": [
+      655.35,
+      655.35,
+      655.35,
+      655.35
+    ],
+    "coordinate_units": "voxel_index",
+    "singleton_z_policy": "YX plane; Z=0",
+    "measurements": {
+      "peak_intensity": "original pixel intensity at the detected channel maximum"
+    },
+    "noise": {
+      "ch00": {
+        "zero_fraction": 0.0,
+        "median": 101.0,
+        "mad": 6.0,
+        "threshold": 655.35
+      },
+      "ch01": {
+        "zero_fraction": 0.0,
+        "median": 152.0,
+        "mad": 6.0,
+        "threshold": 655.35
+      },
+      "ch02": {
+        "zero_fraction": 0.6145833333333334,
+        "median": 0.0,
+        "mad": 0.0,
+        "threshold": 655.35
+      },
+      "ch03": {
+        "zero_fraction": 0.0,
+        "median": 121.0,
+        "mad": 6.0,
+        "threshold": 655.35
+      }
+    },
+    "effective_settings": {
+      "ch00": {
+        "threshold_mode": "global",
+        "threshold_value": 0.01,
+        "min_distance_voxels": 1,
+        "exclude_border": true,
+        "channel_labels": [
+          "ch00",
+          "ch01",
+          "ch02",
+          "ch03"
+        ],
+        "measure_peak_intensity": true,
+        "merge_radius_zyx": null,
+        "method": "local_maxima"
+      },
+      "ch01": {
+        "threshold_mode": "global",
+        "threshold_value": 0.01,
+        "min_distance_voxels": 1,
+        "exclude_border": true,
+        "channel_labels": [
+          "ch00",
+          "ch01",
+          "ch02",
+          "ch03"
+        ],
+        "measure_peak_intensity": true,
+        "merge_radius_zyx": null,
+        "method": "local_maxima"
+      },
+      "ch02": {
+        "threshold_mode": "global",
+        "threshold_value": 0.01,
+        "min_distance_voxels": 1,
+        "exclude_border": true,
+        "channel_labels": [
+          "ch00",
+          "ch01",
+          "ch02",
+          "ch03"
+        ],
+        "measure_peak_intensity": true,
+        "merge_radius_zyx": null,
+        "method": "local_maxima"
+      },
+      "ch03": {
+        "threshold_mode": "global",
+        "threshold_value": 0.01,
+        "min_distance_voxels": 1,
+        "exclude_border": true,
+        "channel_labels": [
+          "ch00",
+          "ch01",
+          "ch02",
+          "ch03"
+        ],
+        "measure_peak_intensity": true,
+        "merge_radius_zyx": null,
+        "method": "local_maxima"
+      }
+    },
+    "warnings": [
+      "spot finding: round 'round1', channel 'ch02': its noise MAD is 0 and 61.5% of its voxels are zero, so its median (0.0) and MAD do not measure its noise; the threshold 655.35 is unchanged"
+    ],
+    "execution": {
+      "device": "cpu",
+      "framework": null,
+      "threads": {
+        "torch_num_threads": null,
+        "torch_num_interop_threads": null,
+        "OMP_NUM_THREADS": "1",
+        "MKL_NUM_THREADS": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "NUMEXPR_NUM_THREADS": "1",
+        "NUMBA_NUM_THREADS": "1"
+      }
+    }
+  },
+  "signals": null
+}
