@@ -63,8 +63,9 @@ Starfinder knows six pretrained models, listed in `KNOWN_WEIGHTS`
 | `piscis` | `20251212` | 2D | Z=1 in plane mode, Z>1 in stack mode | 30,143,014 | Hugging Face `wniu/Piscis` at `9bdefc72cb` |
 
 A Spotiflow model with the other dimensionality, or a shape below the model's
-minimum, raises `IncompatibleGeometryError`. The full SHA-256 values are in
-`starfinder weights list` and in the contract's known-weights table.
+minimum, raises `IncompatibleGeometryError`. `starfinder weights list` prints the
+full SHA-256 values, and `KNOWN_WEIGHTS` (`starfinder.spot_finding`) holds them;
+the contract's known-weights table shows abbreviated hashes.
 
 ### Commands
 
