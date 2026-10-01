@@ -251,7 +251,10 @@ two run its Piscis cases, one model at a time. Starfinder does not change thread
 settings: the exports give one numerical thread and no GPU, as in the recorded
 runs, and the extended tests also set them in the test process. Some validation
 cases are strict expected failures recorded
-in W-274, and pytest reports them as `xfailed`.
+in W-274, and pytest reports them as `xfailed`. The
+[Known limits](spot-finding-algorithms.md#known-limits) section of
+{doc}`spot-finding-algorithms` lists them, with the provisional tolerances and the
+limits of each method.
 
 Approximate run times:
 

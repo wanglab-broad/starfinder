@@ -253,7 +253,7 @@ tolerances are module constants equal to the table above, unchanged; matching is
 
 Four groups of cases miss their bound with a correct implementation. They are
 strict expected failures with the bound unchanged, reported to Jiahao in the W-274
-worker notes:
+worker notes ([Known limits](#known-limits) gives their bounds, values and evidence):
 
 * S4, both Piscis models, every seed: Piscis standardizes each tile after padding
   the 64-pixel plane to 256 pixels, so a constant offset changes its input. The
@@ -276,3 +276,110 @@ above). Every design case is kept (W-274 decision, option A): the project checks
 run the Piscis cases of each model as a separate extended check, selected by the
 model name in the test id (`-k "test_spot_finding_validation and 20230905"`, and
 likewise `20251212`), and the rest of the extended tier excludes them.
+
+## Known limits
+
+This section collects what the W-274 validation left open: the strict expected
+failures, the provisional tolerances and the limits of each method. It states
+recorded values only; nothing here was measured again. The sources are:
+
+* **W-274 notes**: `worker-notes.md` of the W-274 run directory
+  `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-274/20261001T102622Z-fbb76669`,
+  section "Strict expected failures";
+* **W-274 values**: `logs/w274-extended-values.json` in the same directory, the
+  values each extended case recorded, and `logs/w274-xfail.log`, the rerun of the
+  fourteen cases (14 xfailed);
+* **tour notebook**: the executed `example/introduction/starfinder_spot_finding_tour.ipynb`,
+  section 9, which lists the expected failures from the marks of the test module
+  and recomputes one case of each kind;
+* **the test module**: the tolerance constants and the `strict_xfail` marks of
+  `src/python/test/test_spot_finding_validation.py`;
+* this page's method tables, whose values come from W-266 ([Evidence](#evidence)).
+
+### Expected failures
+
+Fourteen cases of `test_spot_finding_validation.py` miss their bound with a correct
+implementation. Each is a strict expected failure with the bound unchanged: pytest
+reports it as `xfailed`, and a case that starts to pass fails the run. They are
+reported to Jiahao in the W-274 notes and are not decided here.
+
+| Check | Method and model | Cases and seeds | Bound missed | Measured value | Cause | Evidence |
+| --- | --- | --- | --- | --- | --- | --- |
+| S4 | Piscis `20230905` and `20251212` | 6: both models, seeds 100, 101 and 102 | Channels 1 and 2 (offsets 300 and 1500) within `S4_COORDINATES` = 1e-5 voxels of channel 0 | Same counts as channel 0, but a largest paired shift of 1.001 to 1.009 voxels: the integer stack-mode z changes by 1, and lateral positions move by up to 0.135 px | Piscis pads each 64-pixel plane into its 256-pixel tile and standardizes the padded tile, so a constant offset changes the network input. | W-274 notes, item 1; W-274 values (`shifts`); tour notebook (`20251212`, seed 100: 1.0035 and 1.0091) |
+| S5 | Spotiflow `smfish_3d` | 1: seed 102 | Recall 1.0 in each channel (the assertion `recalls == [1.0, 1.0]`; no named constant) | Channel 0 recall 0.95 (19 of 20 spots); channel 1 finds all 20, and each channel's table equals its single-channel run | The missed spot (z 11.69) has a heatmap probability of 0.396, below the `prob_thresh` 0.4 stored with the weights. | W-274 notes, item 2; W-274 values (`recalls`); tour notebook (probability 0.3963) |
+| S7 | Spotiflow `synth_3d`, in 3D | 3: seeds 100, 101 and 102 | Every spot at least `S7_GATED_DISTANCE` = 2 voxels from every face matched | Present by distance 0, 1, 2 and 3 voxels: 6, 5, 5 and 6 of 6 for each seed; the missed spots are 1 and 2 planes from the low Z face, and the one at 2 planes is gated | Not established by the recorded evidence: the model returns no candidate within 16 voxels of these two spots, so it is the model's output near the low Z face, not the matching. | W-274 notes, item 3; W-274 values (`present_by_distance`); tour notebook (seed 100) |
+| S10 | Piscis `20230905` and `20251212` | 4: both models, seeds 100 and 101 | Every shared position has a row in every round within `S10_RADIUS` = 3.0 voxels | A shared position has no row in one round, for example (4, 42, 28) of channel 1 in round 1 at seed 100 and (11, 21, 56) of channel 1 in round 2 at seed 101; seed 102 passes | The `multiround` fixture puts sites at z 4 and 11 in the same columns, and Piscis stack mode merges the two into one component near z 8, as specified ([Piscis](#piscis), Z handling). | W-274 notes, item 4; tour notebook (`20251212`, seed 100: two such positions in round 1) |
+
+The counts add up to 6 + 1 + 3 + 4 = 14, the number of `strict_xfail` marks the tour
+notebook reads from the module.
+
+### Provisional tolerances
+
+These checks have bounds marked **provisional** in the
+[design table](#engineering-validation-design-task-group-6) and in the comments of the
+test module: no W-266 measurement stands behind them. Each bound is the module constant
+named, or the test's own assertion where the module has no constant.
+
+| Check | Cases | Provisional bound | Why there is no W-266 reference | Evidence |
+| --- | --- | --- | --- | --- |
+| S1 | LM on `iso_z1_sparse` | `S1_LM_SPARSE_RECALL` = 1.0, `S1_LM_SPARSE_PRECISION` = 0.98 | W-266 has no local-maxima row at this density; on `iso_z1` local maxima is empty, which is flagged, not gated. | Design table, S1; module constants |
+| S2 | PI in stack mode, absolute Z error | `S2_PI_STACK_ABS_Z` = 2.0 voxels | W-266 measured a maximum of 1.763 voxels on one scene and withdrew its own bound of 1.0. | Design table, S2; module constant |
+| S2 | LM on `iso_z1_sparse`, lateral error | `S2_LM_Z1_LATERAL` = 0.9 px | W-266 has no local-maxima row on a plane. | Design table, S2; module constant |
+| S3 | LM, LoG and PI on `pairs`, and the lateral pairs of SF3 in 3D | `S3_PAIR_RECALL` = 1.0 | W-266 has no pair rows for LM, LoG or PI in 3D, nor for lateral pairs in 3D (the Z=1 lateral pairs of SF2 and PI and the axial pairs of SF3 are derived). | Design table, S3; module constant |
+| S4 | Every method on `channels` | `S4_LM_THRESHOLD_OFFSET` = 1e-9 (LM thresholds); `S4_COORDINATES` = 1e-5 voxels (the other methods) | W-266 did not measure background offsets; the 1e-5 bound is about twice W-266's one- against four-thread differences (at most 4.2e-6), a different perturbation. | Design table, S4; module constants |
+| S5 | Every method on `coincident` | Each channel's table equals its single-channel run, and recall 1.0 in each channel | W-266 measured no coincident channels; the bound is the contract rule that channels are detected independently (D6). | Design table, S5; `test_s5_coincident_spots_keep_one_row_per_channel` |
+| S6 | Every method on `empty` | Typed empty tables, outcome `constant`, and for local maxima `zero_fraction` 0.6, `mad` 0 and one warning | These diagnostics and outcomes are new; W-266's empty parity case supports only LoG's typed empty table. | Design table, S6; `test_s6_empty_input_zero_channels_and_the_mad_diagnostics` |
+| S7 | LM, LoG, SF and PI on `borders` | `S7_GATED_DISTANCE` = 2 voxels; LM: exactly the spots at distance 0 absent with border exclusion | W-266 placed no truth spot near a face. | Design table, S7; module constant |
+| S9 | SF and PI configs | `scale` other than 1 raises `ValueError`, and `scale` 1 is recorded | A contract rule that W-266's `scale` probes motivate but do not measure. | Design table, S9; `test_s9_explicit_scaling` |
+| S10 | Every method on `multiround` | `S10_RADIUS` = 3.0 voxels, and the identity and join rules | A new interface (option A of the contract) without a W-266 reference. | Design table, S10; module constant |
+| S11 | Every checkpoint round trip | Exact equality (`check_exact=True`) | New checkpoint content without a W-266 reference. | Design table, S11; `test_s11_candidates_checkpoint_round_trip` |
+| S13 | LM and LoG | Identical table digests | W-266 repeated only the learned methods. | Design table, S13; `test_s13_tables_are_identical_twice_in_one_process_and_in_a_second` |
+| S14 | Every case | The error types and messages | Contract rules; W-266 showed only that both learned methods load from explicit local paths. | Design table, S14; `test_s14_dependency_and_weights_errors` |
+| S16 | LM on `formed16` | `S16_SAME_CHANNEL_DUPLICATES` = 0, `S16_FACE_DISTANCE` = 1 voxel | Derived from the W-218 re-measurement on `small`, not from W-266, and provisional because `formed16` is smaller and denser than `small`. | Design table, S16; module constants |
+
+### Limits by method
+
+* **Local maxima.** Crosstalk copies of an amplicon in the next channel are correct
+  detections in that channel and are kept; removing them across channels is left to
+  the readout stage (§2.8). The within-channel merge does not remove them: on
+  `formed16` with the merge, 5, 8 and 9 cross-channel duplicates remained at seeds
+  100, 101 and 102, reported and not gated (W-274 notes, S16), and 23 remained on the
+  uint8 `small` formed scene of the tour notebook (section 4, printed in section 9). See
+  [Local maxima](#local-maxima), "What it does not resolve".
+* **Starfish LoG.** `blob_log` holds the whole scale space: W-266 measured 10.0 to
+  10.4 bytes × `num_sigma` × voxels of peak memory. The method does not tile, so the
+  cost grows with the whole channel: on `large` (31.5 M voxels) `num_sigma=30`
+  stopped at the 4 GiB target (projected about 10 GB), and `num_sigma=10` used
+  3.41 GB. See [Starfish LoG](#starfish-log), "Scale-space memory" and "Tiling".
+* **Spotiflow.** Each model has a minimum shape: 3D models need Z ≥ 7 with Y and X ≥ 8,
+  and 2D models need Y and X ≥ 6 on a single plane. Below it the library returns
+  nothing without an error, so the wrapper raises `IncompatibleGeometryError`.
+  These are W-266 probes ([Spotiflow](#spotiflow), "Z handling"), checked by S15,
+  which passes (W-274 notes, "Other checks").
+* **Piscis.**
+  * *Integer Z in stack mode.* The component centroid is cast to an integer, and only
+    Y and X receive the sub-pixel displacement. W-274 recorded absolute Z errors of
+    1.218 to 1.763 voxels on `iso3d` under the provisional bound of 2.0 (W-274 notes,
+    S1 and S2). Spots aligned in Z merge into one component: S3 axial-pair recall
+    was 0 to 0.06 and is not gated (W-274 notes, "Other checks"), and S10 fails for
+    this reason (above). See [Piscis](#piscis), "Z handling".
+  * *Candidates on a tile boundary.* Each tile overlap is cut at one keep-boundary
+    with no merging across tiles, so a spot whose prediction lies within a fraction
+    of a pixel of a keep-boundary may be lost or repeated: W-266's seam probe gave
+    edge spots 0 to 2 candidates and corner spots 1 to 4. S8 gates only spots 0.5 px
+    or more from a boundary. See [Piscis](#piscis), "Tiling".
+  * *The native 256-pixel tile on small images.* A 64×64 plane is padded into one
+    256-pixel tile, which costs about 0.73 s per plane, 24 s per 32-plane `iso3d`
+    call against the 4 s of the resource plan above; Piscis took 2048 s of the
+    2217 s extended tier (W-274 notes, "Extended-tier time"). The padding is also
+    the cause of the S4 failures (above).
+  * *Training pixel sizes.* The authors have not published the training pixel size
+    of either model (W-266 `known-weights.csv`; [Piscis](#piscis), "Weights"), so
+    the pixel size an image should have for these models is unknown.
+
+### What this does not say
+
+This section ranks no method or model and recommends no default method, model or
+operating point. Each value is compared only with its own check's bound, never with
+another method's value. The expected failures and provisional bounds are open items
+for Jiahao, not accepted limits, and method comparisons belong to E02.
