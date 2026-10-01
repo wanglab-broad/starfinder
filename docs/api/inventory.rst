@@ -234,6 +234,7 @@ starfinder.spot_finding
 * :py:obj:`starfinder.spot_finding.SpotFindingResult`
 * :py:obj:`starfinder.spot_finding.SpotFindingSpec`
 * :py:obj:`starfinder.spot_finding.SpotFindingWarning`
+* :py:obj:`starfinder.spot_finding.StarfishLogConfig`
 * :py:obj:`starfinder.spot_finding.WeightsFile`
 * :py:obj:`starfinder.spot_finding.WeightsHashMismatchError`
 

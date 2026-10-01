@@ -458,6 +458,39 @@ values) and sets no default. `starfinder weights fetch <method> <model>`
 local copies. `resolve_weights` raises `MissingWeightsError` or
 `WeightsHashMismatchError`. Detection never downloads.
 
+### Starfish LoG
+
+`StarfishLogConfig` selects the pipeline method `starfish_log`, a native
+reimplementation of starfish `BlobDetector` (`blob_log`, `is_volume=True`, no
+reference image, one round and channel at a time; starfish `1fb00cbc`) that needs
+no extra and does not depend on starfish. Its tables equal starfish's exactly
+(the W-266 parity tables in `test/data/starfish_blob_parity`). `min_sigma`,
+`max_sigma` (σ in voxels, a number or a ZYX 3-tuple), `num_sigma` and `threshold`
+are required, because starfish has no defaults for them; `overlap` (0.5) and
+`exclude_border` (False) keep starfish's defaults. Integer images are scaled by
+their dtype maximum to float32 [0, 1] (`img_as_float32`) and a float image outside
+[0, 1] raises `ValueError`; the threshold applies to that scaled image. The table
+holds the truncated integer coordinates as float64, `channel`, `peak_intensity`
+(the original pixel value) and `radius` (`round(σ·√ndim)`). A Z=1 image is
+detected as a plane (z=0), where a 3-tuple σ raises `IncompatibleGeometryError`.
+There is no tiling and no memory guard: `diagnostics["geometry"]` records the
+estimate 10.4 bytes × `num_sigma` × voxels. In YAML, `method: starfish_log`
+requires the four settings.
+
+### Local-maxima W-218 merge
+
+`LocalMaximaConfig.merge_radius_zyx` (default `None`) is the opt-in W-218
+within-channel merge: after border exclusion, a channel's maxima are visited by
+decreasing pixel value, then increasing z, y, x, and a maximum is dropped when an
+earlier kept maximum of the same channel lies within the ellipsoid
+Σ (Δᵢ / rᵢ)² ≤ 1 (radii in voxels; the Z radius is unused for Z=1). It removes
+tied maxima of a plateau and split maxima of one amplicon; kept maxima are
+unchanged, identities are assigned after the merge, and `diagnostics["merged"]`
+records the number removed per channel. W-268 kept `None` as the default, so
+detections are unchanged unless the option is set; channels are never merged with
+each other (cross-channel duplicates are §2.8's). `exclude_border` is settable in
+YAML for the border misses W-218 reported.
+
 ## Intentional behavior changes — not mechanical equivalence
 
 | Area | Change and consequence |

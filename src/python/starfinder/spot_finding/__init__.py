@@ -14,7 +14,7 @@ from starfinder._execution import check_device, execution_record
 from starfinder._registry import spec_for
 from starfinder.image import ImageMetadata, _validate_image
 
-from ._config import LocalMaximaConfig, NoiseLandmarkConfig, PercentileCentroidConfig
+from ._config import LocalMaximaConfig, NoiseLandmarkConfig, PercentileCentroidConfig, StarfishLogConfig
 from ._errors import MissingWeightsError, SpotFindingBackendUnavailableError, SpotFindingWarning, WeightsHashMismatchError
 from ._methods import SPOT_FINDING_METHODS as _SPOT_FINDING_METHODS
 from ._methods import MethodContext, SpotFindingConfig, SpotFindingSpec, check_columns, check_shape, per_channel, require_method
@@ -31,7 +31,7 @@ SPOT_FINDING_METHODS = _SPOT_FINDING_METHODS
 #: pretrained weights Starfinder can fetch and verify, and sets no default model.
 KNOWN_WEIGHTS = _KNOWN_WEIGHTS
 
-__all__ = ["LocalMaximaConfig", "NoiseLandmarkConfig", "PercentileCentroidConfig",
+__all__ = ["LocalMaximaConfig", "NoiseLandmarkConfig", "PercentileCentroidConfig", "StarfishLogConfig",
            "SpotFindingResult", "find_spots", "SPOT_FINDING_METHODS", "SpotFindingSpec",
            "SpotFindingPlan", "ChannelOverride", "SpotFindingBackendUnavailableError", "SpotFindingWarning",
            "KNOWN_WEIGHTS", "KnownWeights", "WeightsFile", "resolve_weights", "fetch_weights",
@@ -111,7 +111,11 @@ def find_spots(
     record diagnostics['noise'] (zero fraction, median, MAD and threshold)
     and emits a SpotFindingWarning, also listed in diagnostics['warnings'],
     when a channel's MAD is 0 or more than half of its voxels are zero; the
-    threshold is unchanged. diagnostics['effective_settings'] holds every
+    threshold is unchanged. With merge_radius_zyx set, diagnostics['merged']
+    holds the number of maxima the within-channel merge removed per channel.
+    The Starfish LoG records its scale-space memory estimate in
+    diagnostics['geometry'] (scale_space_bytes_estimate, 10.4 bytes x
+    num_sigma x voxels). diagnostics['effective_settings'] holds every
     channel's effective config, and diagnostics['execution'] the execution
     entry (device, framework, threads).
     """
@@ -166,7 +170,7 @@ def _detect(image, config, metadata, spot_namespace, device="cpu", round_name=No
     overridden = {labels.index(o.channel) for o in plan.channel_overrides}
     groups = [(base, tuple(c for c in range(n_channels) if c not in overridden))]
     groups = [g for g in groups if g[1]] + [(configs[c], (c,)) for c in sorted(overridden)]
-    tables, thresholds, noise = [], {}, {}
+    tables, thresholds, noise, merged, geometry, measurements = [], {}, {}, {}, [], None
     for group_config, channels in groups:
         table, details = spec.run(image, group_config, MethodContext(channels, device))
         check_columns(spec, table)
@@ -176,6 +180,10 @@ def _detect(image, config, metadata, spot_namespace, device="cpu", round_name=No
         else:
             thresholds = dict(enumerate(details['thresholds']))
         noise.update(zip(channels, details.get('noise', ())))
+        merged.update(zip(channels, details.get('merged', ())))
+        if 'geometry' in details:
+            geometry.append(details['geometry'])
+        measurements = details.get('measurements', measurements)
     table = tables[0]
     if len(tables) > 1:
         table = pd.concat(tables, ignore_index=True).sort_values('channel', kind='stable').reset_index(drop=True)
@@ -184,8 +192,14 @@ def _detect(image, config, metadata, spot_namespace, device="cpu", round_name=No
     diagnostics = {'method': base.method, 'channel_labels': labels,
                    'thresholds': tuple(thresholds[k] for k in sorted(thresholds)), 'coordinate_units': 'voxel_index',
                    'singleton_z_policy': 'YX plane; Z=0',
-                   'measurements': ({'peak_intensity': 'original pixel intensity at the detected channel maximum'}
+                   'measurements': (measurements if measurements is not None else
+                                    {'peak_intensity': 'original pixel intensity at the detected channel maximum'}
                                     if 'peak_intensity' in table else {})}
+    if merged:
+        diagnostics['merged'] = {keys[c]: merged[c] for c in sorted(merged)}
+    if geometry:
+        # Channels are detected one at a time, so the largest estimate of the channels' configs is the peak.
+        diagnostics['geometry'] = max(geometry, key=lambda g: g.get('scale_space_bytes_estimate', 0))
     messages = []
     if noise:
         diagnostics['noise'] = {keys[c]: noise[c] for c in sorted(noise)}

@@ -24,6 +24,16 @@ when a channel's MAD is 0 or more than half of its voxels are zero; the threshol
 change. ``diagnostics["execution"]`` records the device (only ``"cpu"``) and the thread
 settings in effect.
 
+:py:class:`~starfinder.spot_finding.LocalMaximaConfig` has the opt-in W-218 within-channel
+merge ``merge_radius_zyx`` (default ``None``, the legacy result): of the maxima of one channel
+within the given ZYX ellipsoid only the brightest is kept (ties broken by z, y, x), and
+``diagnostics["merged"]`` records the number removed per channel. Channels are never merged
+with each other. :py:class:`~starfinder.spot_finding.StarfishLogConfig` selects
+``starfish_log``, a native reimplementation of starfish ``BlobDetector`` (``blob_log``,
+``is_volume=True``, no reference image) that reproduces starfish's tables exactly; it scales
+integer images by their dtype maximum, adds the ``radius`` column and records its scale-space
+memory estimate in ``diagnostics["geometry"]``. See :doc:`../spot-finding-algorithms`.
+
 :py:data:`~starfinder.spot_finding.KNOWN_WEIGHTS` lists the pretrained weights Starfinder
 can fetch and verify, with their SHA-256 values; it sets no default model.
 :py:func:`~starfinder.spot_finding.fetch_weights` (``starfinder weights fetch <method>
@@ -55,5 +65,6 @@ raises :py:class:`~starfinder.spot_finding.MissingWeightsError` or
    SpotFindingResult
    SpotFindingSpec
    SpotFindingWarning
+   StarfishLogConfig
    WeightsFile
    WeightsHashMismatchError

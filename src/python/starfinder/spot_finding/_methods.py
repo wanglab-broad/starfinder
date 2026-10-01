@@ -13,8 +13,9 @@ from skimage.feature import peak_local_max
 from starfinder._registry import Dependency, check_shared, require
 from starfinder.image import IncompatibleGeometryError
 
-from ._config import LocalMaximaConfig, NoiseLandmarkConfig, PercentileCentroidConfig
+from ._config import LocalMaximaConfig, NoiseLandmarkConfig, PercentileCentroidConfig, StarfishLogConfig
 from ._errors import SpotFindingBackendUnavailableError
+from ._starfish_log import starfish_log
 
 _COLUMN = r"[a-z][a-z0-9_]*\??"
 # The learned-detector extras install nothing on Python 3.14 and later (torch 2.7.1 has no cp314 wheel).
@@ -42,7 +43,9 @@ class SpotFindingSpec:
     without spot_id) and its diagnostics: ``thresholds``, one value per
     detected channel in context.channels order (one value for a method that
     combines channels), and for local maxima ``noise``, one record per
-    detected channel. find_spots calls it after the checks below; callers
+    detected channel, and ``merged``, the removed count per detected channel
+    when the merge is on. A method may add ``geometry`` (a mapping) and
+    ``measurements`` (column -> meaning). find_spots calls it after the checks below; callers
     never call it directly. pipeline is True when FOV.find_spots and
     PipelineConfig.detection accept the method. dimensions holds 2 when a
     Z=1 input is detected as a YX plane and 3 when Z>1 is detected in 3D.
@@ -132,13 +135,44 @@ def _maxima(image, config, context, mode, value, border):
     return table, tuple(thresholds), noise
 
 
+def _merge(table, radius, channels):
+    """The W-218 within-channel merge of the maxima rows; returns the kept rows (in their order) and removed counts.
+
+    Per channel, maxima are visited by decreasing pixel value (peak_intensity),
+    then increasing z, y, x; one is dropped when an earlier kept maximum lies
+    within the ellipsoid sum((d_i / r_i) ** 2) <= 1. A KD-tree on the
+    radius-scaled coordinates proposes neighbours, which the ellipsoid test
+    then decides. Z=1 maxima all have z=0, so the Z radius has no effect.
+    """
+    keep = np.ones(len(table), dtype=bool)
+    removed = []
+    for c in channels:
+        rows = np.flatnonzero(table['channel'].to_numpy() == c)
+        if len(rows) < 2:
+            removed.append(0)
+            continue
+        zyx = table[['z', 'y', 'x']].to_numpy()[rows]
+        value = table['peak_intensity'].to_numpy()[rows]
+        order = np.lexsort((zyx[:, 2], zyx[:, 1], zyx[:, 0], -value))
+        near = cKDTree(zyx / radius).query_ball_point(zyx / radius, r=1.0 + 1e-9)
+        kept = np.zeros(len(rows), dtype=bool)
+        for i in order:
+            kept[i] = not any(kept[j] and (((zyx[i] - zyx[j]) / radius) ** 2).sum() <= 1 for j in near[i] if j != i)
+        keep[rows[~kept]] = False
+        removed.append(int((~kept).sum()))
+    return table[keep].reset_index(drop=True), removed
+
+
 def _local_maxima(image, config, context):
     """Pipeline peaks per channel; see LocalMaximaConfig."""
     table, thresholds, noise = _maxima(image, config, context, config.threshold_mode, config.threshold_value,
                                        config.exclude_border)
+    details = {'thresholds': thresholds, 'noise': noise}
+    if config.merge_radius_zyx is not None:
+        table, details['merged'] = _merge(table, np.asarray(config.merge_radius_zyx, dtype=float), context.channels)
     if not config.measure_peak_intensity:
         table = table.drop(columns='peak_intensity')
-    return table, {'thresholds': thresholds, 'noise': noise}
+    return table, details
 
 
 def _noise_landmark(image, config, context):
@@ -172,10 +206,13 @@ SPOT_FINDING_METHODS: dict[type, SpotFindingSpec] = {
     PercentileCentroidConfig: SpotFindingSpec(
         "percentile_centroid", _percentile_centroid, pipeline=False, dimensions=frozenset({2, 3}),
         output_columns=("z", "y", "x")),
+    StarfishLogConfig: SpotFindingSpec(
+        "starfish_log", starfish_log, pipeline=True, dimensions=frozenset({2, 3}),
+        output_columns=("z", "y", "x", "channel", "peak_intensity", "radius")),
 }
 
 # Annotation alias for a registered config; a test keeps its members equal to the registry keys.
-SpotFindingConfig = LocalMaximaConfig | NoiseLandmarkConfig | PercentileCentroidConfig
+SpotFindingConfig = LocalMaximaConfig | NoiseLandmarkConfig | PercentileCentroidConfig | StarfishLogConfig
 
 
 def per_channel(spec) -> bool:

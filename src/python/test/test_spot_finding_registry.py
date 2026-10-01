@@ -16,7 +16,7 @@ from starfinder.image import ImageMetadata, IncompatibleGeometryError
 from starfinder.io._checkpoint import _detectors, _jsonable
 from starfinder.spot_finding import (SPOT_FINDING_METHODS, LocalMaximaConfig, NoiseLandmarkConfig,
     PercentileCentroidConfig, SpotFindingBackendUnavailableError, SpotFindingPlan, SpotFindingResult, SpotFindingSpec,
-    find_spots)
+    StarfishLogConfig, find_spots)
 from starfinder.spot_finding import _methods
 from starfinder.spot_finding._methods import SpotFindingConfig
 
@@ -60,6 +60,15 @@ def fixture_method(monkeypatch):
     return FixtureConfig
 
 
+@pytest.fixture
+def registry_order():
+    """Restore the registry's order after a test (monkeypatch.delitem re-inserts the entry at the end)."""
+    saved = dict(SPOT_FINDING_METHODS)
+    yield
+    SPOT_FINDING_METHODS.clear()
+    SPOT_FINDING_METHODS.update(saved)
+
+
 class SubLocalMaxima(LocalMaximaConfig):
     pass
 
@@ -72,7 +81,7 @@ def image():
 
 # --- The registry table -----------------------------------------------------------------------------
 
-def test_registry_holds_the_three_existing_methods_with_the_contract_fields():
+def test_registry_holds_the_registered_methods_with_the_contract_fields():
     table = {config_type: (spec.name, spec.pipeline, spec.dimensions, spec.min_shape_zyx, spec.output_columns,
                            spec.requires, spec.weights)
              for config_type, spec in SPOT_FINDING_METHODS.items()}
@@ -82,16 +91,19 @@ def test_registry_holds_the_three_existing_methods_with_the_contract_fields():
         NoiseLandmarkConfig: ("noise_landmark", False, frozenset({2, 3}), (1, 1, 1), ("z", "y", "x"), (), False),
         PercentileCentroidConfig: ("percentile_centroid", False, frozenset({2, 3}), (1, 1, 1), ("z", "y", "x"),
                                    (), False),
+        StarfishLogConfig: ("starfish_log", True, frozenset({2, 3}), (1, 1, 1),
+                            ("z", "y", "x", "channel", "peak_intensity", "radius"), (), False),
     }
-    assert names(SPOT_FINDING_METHODS) == ("local_maxima", "noise_landmark", "percentile_centroid")
+    assert names(SPOT_FINDING_METHODS) == ("local_maxima", "noise_landmark", "percentile_centroid", "starfish_log")
     assert {spec.name: dict(spec.column_fields) for spec in SPOT_FINDING_METHODS.values()} == {
         "local_maxima": {"peak_intensity": "measure_peak_intensity"}, "noise_landmark": {},
-        "percentile_centroid": {}}
+        "percentile_centroid": {}, "starfish_log": {}}
 
 
 def test_discriminators_equal_spec_names_and_the_alias_matches_the_registry():
+    required = {StarfishLogConfig: (1, 10, 30, 0.01)}   # starfish has no defaults for these four
     for config_type, spec in SPOT_FINDING_METHODS.items():
-        assert config_type().method == spec.name
+        assert config_type(*required.get(config_type, ())).method == spec.name
     assert set(SpotFindingConfig.__args__) == set(SPOT_FINDING_METHODS)
 
 
@@ -132,7 +144,7 @@ def test_an_inserted_method_is_seen_by_every_lookup(fixture_method, tmp_path):
     assert from_workflow_config(workflow).pipeline.detection == FixtureConfig(level=3.0)
 
 
-def test_a_method_removed_from_the_registry_is_rejected_everywhere(monkeypatch, tmp_path):
+def test_a_method_removed_from_the_registry_is_rejected_everywhere(registry_order, monkeypatch, tmp_path):
     monkeypatch.delitem(SPOT_FINDING_METHODS, LocalMaximaConfig)
     with pytest.raises(TypeError, match="unsupported detection config"):
         find_spots(image(), config=LocalMaximaConfig(), metadata=META, spot_namespace=NAMESPACE)

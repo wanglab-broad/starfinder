@@ -213,10 +213,13 @@ registration:
 ## Spot-finding method key
 
 The `spot_finding` block of the five Python rules accepts the Python-only key
-`method`, a `SPOT_FINDING_METHODS` method that the pipeline accepts (today only
-`local_maxima`, the default), and every other key is an init field of that
-method's config (YAML lists become tuples), for example `exclude_border` or
-`measure_peak_intensity`. The legacy keys are aliases for `local_maxima` only:
+`method`, a `SPOT_FINDING_METHODS` method that the pipeline accepts
+(`local_maxima`, the default, or `starfish_log`), and every other key is an init
+field of that method's config (YAML lists become tuples), for example
+`exclude_border`, `measure_peak_intensity` or the opt-in W-218 merge
+`merge_radius_zyx: [2, 2, 2]`. A config field without a default must be given:
+`starfish_log` requires `min_sigma`, `max_sigma`, `num_sigma` and `threshold`.
+The legacy keys are aliases for `local_maxima` only:
 `intensity_estimation` of `threshold_mode`, `intensity_threshold` of
 `threshold_value` and `min_distance` of `min_distance_voxels`; a legacy key
 together with its field raises an error. For another method, `min_distance` is

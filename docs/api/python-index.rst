@@ -149,6 +149,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.spot_finding.SpotFindingResult`
 * :py:obj:`starfinder.spot_finding.SpotFindingSpec`
 * :py:obj:`starfinder.spot_finding.SpotFindingWarning`
+* :py:obj:`starfinder.spot_finding.StarfishLogConfig`
 * :py:obj:`starfinder.preprocessing.step_config_type`
 * :py:obj:`starfinder.preprocessing.step_spec`
 * :py:obj:`starfinder.preprocessing.StepContext`

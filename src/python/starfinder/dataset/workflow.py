@@ -1,5 +1,5 @@
 """Single translation boundary for shared MATLAB/Snakemake configuration."""
-from dataclasses import dataclass, fields, replace
+from dataclasses import MISSING, dataclass, fields, replace
 from pathlib import Path
 
 from .config import ExternalReference, PipelineConfig, ExecutionConfig, RegistrationRecipe, RegistrationStep, RecoveryConfig
@@ -196,7 +196,9 @@ def _detection(values, channels):
     """The detection config of the spot_finding block, or a SpotFindingPlan when it has channel_overrides.
 
     method names a SPOT_FINDING_METHODS method with pipeline=True (default
-    local_maxima); the other keys are its config's fields (_spot_fields).
+    local_maxima); the other keys are its config's fields (_spot_fields),
+    and a config field without a default (such as the four starfish_log
+    scale and threshold settings) must be given, else ValueError.
     channel_overrides maps a channel label to config fields that replace the
     block's for that channel.
     """
@@ -207,7 +209,12 @@ def _detection(values, channels):
     config_type = config_type_for(SPOT_FINDING_METHODS, method, 'spot-finding method')
     if not SPOT_FINDING_METHODS[config_type].pipeline:
         raise ValueError(f'spot-finding method {method!r} is not a pipeline method')
-    config = config_type(**_spot_fields(values, config_type, 'spot_finding'))
+    values = _spot_fields(values, config_type, 'spot_finding')
+    missing = [f.name for f in fields(config_type)
+               if f.init and f.default is MISSING and f.default_factory is MISSING and f.name not in values]
+    if missing:
+        raise ValueError(f'spot_finding: method {method!r} requires {", ".join(missing)}')
+    config = config_type(**values)
     if overrides is None:
         return config
     if not isinstance(overrides, dict):

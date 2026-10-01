@@ -846,7 +846,7 @@ $defs:
         enum: ["global", "noise", "adaptive", "adaptive_round"]
       method:
         description: "Python only; kept equal to the pipeline SPOT_FINDING_METHODS names by a test"
-        enum: ["local_maxima"]
+        enum: ["local_maxima", "starfish_log"]
       min_distance:
         description: "Python only; local_maxima alias of min_distance_voxels"
         type: integer
@@ -863,11 +863,38 @@ $defs:
         type: integer
         minimum: 1
       exclude_border:
-        description: "Python only; local_maxima"
-        type: boolean
+        description: "Python only; local_maxima (boolean) and starfish_log (boolean or border width)"
+        type: [boolean, integer]
       measure_peak_intensity:
         description: "Python only; local_maxima"
         type: boolean
+      merge_radius_zyx:
+        description: "Python only; local_maxima opt-in W-218 within-channel merge radii (ZYX voxels), null: off"
+        type: [array, "null"]
+        items:
+          type: number
+          exclusiveMinimum: 0
+        minItems: 3
+        maxItems: 3
+      min_sigma:
+        description: "Python only; starfish_log (required): sigma in voxels, a number or a ZYX list"
+        type: [number, array]
+      max_sigma:
+        description: "Python only; starfish_log (required): sigma in voxels, a number or a ZYX list"
+        type: [number, array]
+      num_sigma:
+        description: "Python only; starfish_log (required)"
+        type: integer
+        minimum: 1
+      threshold:
+        description: "Python only; starfish_log (required): absolute LoG response of the [0, 1]-scaled image"
+        type: number
+        minimum: 0
+      overlap:
+        description: "Python only; starfish_log"
+        type: number
+        minimum: 0
+        maximum: 1
       channel_overrides:
         description: "Python only; channel label -> config fields of the selected method"
         type: object
