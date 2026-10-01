@@ -15,8 +15,8 @@ from starfinder.dataset.workflow import from_workflow_config
 from starfinder.image import ImageMetadata, IncompatibleGeometryError
 from starfinder.io._checkpoint import _detectors, _jsonable
 from starfinder.spot_finding import (SPOT_FINDING_METHODS, LocalMaximaConfig, NoiseLandmarkConfig,
-    PercentileCentroidConfig, SpotFindingBackendUnavailableError, SpotFindingPlan, SpotFindingResult, SpotFindingSpec,
-    StarfishLogConfig, find_spots)
+    PercentileCentroidConfig, PiscisConfig, SpotFindingBackendUnavailableError, SpotFindingPlan, SpotFindingResult,
+    SpotFindingSpec, SpotiflowConfig, StarfishLogConfig, find_spots)
 from starfinder.spot_finding import _methods
 from starfinder.spot_finding._methods import SpotFindingConfig
 
@@ -93,15 +93,23 @@ def test_registry_holds_the_registered_methods_with_the_contract_fields():
                                    (), False),
         StarfishLogConfig: ("starfish_log", True, frozenset({2, 3}), (1, 1, 1),
                             ("z", "y", "x", "channel", "peak_intensity", "radius"), (), False),
+        SpotiflowConfig: ("spotiflow", True, frozenset({2, 3}), (7, 6, 6),
+                          ("z", "y", "x", "channel", "peak_intensity", "probability"),
+                          (Dependency("spotiflow", "spotiflow", "spotiflow"), Dependency("torch", "torch", "spotiflow")),
+                          True),
+        PiscisConfig: ("piscis", True, frozenset({2, 3}), (2, 1, 1), ("z", "y", "x", "channel", "peak_intensity"),
+                       (Dependency("piscis", "piscis", "piscis"), Dependency("torch", "torch", "piscis")), True),
     }
-    assert names(SPOT_FINDING_METHODS) == ("local_maxima", "noise_landmark", "percentile_centroid", "starfish_log")
+    assert names(SPOT_FINDING_METHODS) == ("local_maxima", "noise_landmark", "percentile_centroid", "starfish_log",
+                                           "spotiflow", "piscis")
     assert {spec.name: dict(spec.column_fields) for spec in SPOT_FINDING_METHODS.values()} == {
         "local_maxima": {"peak_intensity": "measure_peak_intensity"}, "noise_landmark": {},
-        "percentile_centroid": {}, "starfish_log": {}}
+        "percentile_centroid": {}, "starfish_log": {}, "spotiflow": {}, "piscis": {}}
 
 
 def test_discriminators_equal_spec_names_and_the_alias_matches_the_registry():
-    required = {StarfishLogConfig: (1, 10, 30, 0.01)}   # starfish has no defaults for these four
+    required = {StarfishLogConfig: (1, 10, 30, 0.01),   # starfish has no defaults for these four
+                SpotiflowConfig: ("smfish_3d",), PiscisConfig: ("20251212",)}   # every run names its weights
     for config_type, spec in SPOT_FINDING_METHODS.items():
         assert config_type(*required.get(config_type, ())).method == spec.name
     assert set(SpotFindingConfig.__args__) == set(SPOT_FINDING_METHODS)

@@ -227,6 +227,7 @@ starfinder.spot_finding
 * :py:obj:`starfinder.spot_finding.MissingWeightsError`
 * :py:obj:`starfinder.spot_finding.NoiseLandmarkConfig`
 * :py:obj:`starfinder.spot_finding.PercentileCentroidConfig`
+* :py:obj:`starfinder.spot_finding.PiscisConfig`
 * :py:obj:`starfinder.spot_finding.resolve_weights`
 * :py:obj:`starfinder.spot_finding.SPOT_FINDING_METHODS`
 * :py:obj:`starfinder.spot_finding.SpotFindingBackendUnavailableError`
@@ -234,6 +235,7 @@ starfinder.spot_finding
 * :py:obj:`starfinder.spot_finding.SpotFindingResult`
 * :py:obj:`starfinder.spot_finding.SpotFindingSpec`
 * :py:obj:`starfinder.spot_finding.SpotFindingWarning`
+* :py:obj:`starfinder.spot_finding.SpotiflowConfig`
 * :py:obj:`starfinder.spot_finding.StarfishLogConfig`
 * :py:obj:`starfinder.spot_finding.WeightsFile`
 * :py:obj:`starfinder.spot_finding.WeightsHashMismatchError`

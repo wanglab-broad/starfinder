@@ -13,8 +13,11 @@ from skimage.feature import peak_local_max
 from starfinder._registry import Dependency, check_shared, require
 from starfinder.image import IncompatibleGeometryError
 
-from ._config import LocalMaximaConfig, NoiseLandmarkConfig, PercentileCentroidConfig, StarfishLogConfig
+from ._config import (LocalMaximaConfig, NoiseLandmarkConfig, PercentileCentroidConfig, PiscisConfig, SpotiflowConfig,
+    StarfishLogConfig)
 from ._errors import SpotFindingBackendUnavailableError
+from ._piscis import piscis
+from ._spotiflow import spotiflow
 from ._starfish_log import starfish_log
 
 _COLUMN = r"[a-z][a-z0-9_]*\??"
@@ -44,9 +47,11 @@ class SpotFindingSpec:
     detected channel in context.channels order (one value for a method that
     combines channels), and for local maxima ``noise``, one record per
     detected channel, and ``merged``, the removed count per detected channel
-    when the merge is on. A method may add ``geometry`` (a mapping) and
-    ``measurements`` (column -> meaning). find_spots calls it after the checks below; callers
-    never call it directly. pipeline is True when FOV.find_spots and
+    when the merge is on. A method may add ``geometry`` (a mapping),
+    ``measurements`` (column -> meaning), ``effective`` (one config per
+    detected channel with the native defaults that None resolved) and
+    ``model`` (the weights record of a learned method). find_spots calls it
+    after the checks below; callers never call it directly. pipeline is True when FOV.find_spots and
     PipelineConfig.detection accept the method. dimensions holds 2 when a
     Z=1 input is detected as a YX plane and 3 when Z>1 is detected in 3D.
     output_columns are the spot-table columns besides spot_id, in order; a
@@ -209,10 +214,21 @@ SPOT_FINDING_METHODS: dict[type, SpotFindingSpec] = {
     StarfishLogConfig: SpotFindingSpec(
         "starfish_log", starfish_log, pipeline=True, dimensions=frozenset({2, 3}),
         output_columns=("z", "y", "x", "channel", "peak_intensity", "radius")),
+    SpotiflowConfig: SpotFindingSpec(
+        "spotiflow", spotiflow, pipeline=True, dimensions=frozenset({2, 3}),
+        output_columns=("z", "y", "x", "channel", "peak_intensity", "probability"), weights=True,
+        requires=(Dependency("spotiflow", "spotiflow", "spotiflow"), Dependency("torch", "torch", "spotiflow")),
+        min_shape_zyx=(7, 6, 6)),
+    PiscisConfig: SpotFindingSpec(
+        "piscis", piscis, pipeline=True, dimensions=frozenset({2, 3}),
+        output_columns=("z", "y", "x", "channel", "peak_intensity"), weights=True,
+        requires=(Dependency("piscis", "piscis", "piscis"), Dependency("torch", "torch", "piscis")),
+        min_shape_zyx=(2, 1, 1)),
 }
 
 # Annotation alias for a registered config; a test keeps its members equal to the registry keys.
-SpotFindingConfig = LocalMaximaConfig | NoiseLandmarkConfig | PercentileCentroidConfig | StarfishLogConfig
+SpotFindingConfig = (LocalMaximaConfig | NoiseLandmarkConfig | PercentileCentroidConfig | StarfishLogConfig
+                     | SpotiflowConfig | PiscisConfig)
 
 
 def per_channel(spec) -> bool:

@@ -778,7 +778,7 @@ class FOV:
         step record gets the detection's provenance entry under methods.
         """
         from starfinder._registry import provenance
-        from starfinder.spot_finding import SPOT_FINDING_METHODS, _detect
+        from starfinder.spot_finding import SPOT_FINDING_METHODS, _detect, _model_artifacts
 
         plan = config if type(config) is SpotFindingPlan else None
         base = plan.config if plan is not None else config
@@ -796,6 +796,8 @@ class FOV:
         self.spot_result = _detect(self.images[reference], config, metadata, namespace, device, reference)
         if self._run_record is not None:
             entry = provenance(spec, base, "spot_finding")
+            if "model" in self.spot_result.diagnostics:
+                entry["artifacts"] = _model_artifacts(self.spot_result.diagnostics["model"])
             entry["execution"] = self.spot_result.diagnostics["execution"]
             self._run_record.add_methods([entry])
         return self

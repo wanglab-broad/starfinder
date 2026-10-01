@@ -34,6 +34,17 @@ with each other. :py:class:`~starfinder.spot_finding.StarfishLogConfig` selects
 integer images by their dtype maximum, adds the ``radius`` column and records its scale-space
 memory estimate in ``diagnostics["geometry"]``. See :doc:`../spot-finding-algorithms`.
 
+:py:class:`~starfinder.spot_finding.SpotiflowConfig` and
+:py:class:`~starfinder.spot_finding.PiscisConfig` select the learned detectors ``spotiflow``
+and ``piscis`` (extras ``spotiflow`` and ``piscis``, CPU only). Each names its pretrained
+weights, which are re-hashed from the Starfinder cache before the model is built and are
+never downloaded by a detection. A 3D Spotiflow model detects Z>1 images and a 2D model a
+Z=1 plane; Piscis runs plane mode for Z=1 and stack mode (integer ``z``) otherwise.
+``scale`` must be 1. ``diagnostics["model"]`` records the loaded files with their SHA-256,
+``diagnostics["effective_settings"]`` the resolved native defaults and
+``diagnostics["geometry"]`` the tiling (Spotiflow ``n_tiles``; Piscis tile size and
+keep-boundaries).
+
 :py:data:`~starfinder.spot_finding.KNOWN_WEIGHTS` lists the pretrained weights Starfinder
 can fetch and verify, with their SHA-256 values; it sets no default model.
 :py:func:`~starfinder.spot_finding.fetch_weights` (``starfinder weights fetch <method>
@@ -58,6 +69,7 @@ raises :py:class:`~starfinder.spot_finding.MissingWeightsError` or
    MissingWeightsError
    NoiseLandmarkConfig
    PercentileCentroidConfig
+   PiscisConfig
    resolve_weights
    SPOT_FINDING_METHODS
    SpotFindingBackendUnavailableError
@@ -65,6 +77,7 @@ raises :py:class:`~starfinder.spot_finding.MissingWeightsError` or
    SpotFindingResult
    SpotFindingSpec
    SpotFindingWarning
+   SpotiflowConfig
    StarfishLogConfig
    WeightsFile
    WeightsHashMismatchError

@@ -41,7 +41,10 @@ class KnownWeights:
     files are the files the library loads, relative to the model folder.
     min_shape_zyx is the observed minimum input shape (a Z of 1 means plane
     input). native_threshold is the threshold stored with the weights or the
-    library default.
+    library default. extracted is every file a Spotiflow archive extracts to,
+    with its SHA-256 and size, recorded from the verified archives (empty for
+    Piscis, whose download is the loaded file); resolve_weights checks the ones
+    a caller names.
     """
     method: str
     model: str
@@ -57,13 +60,15 @@ class KnownWeights:
     training_pixel_size: str
     training_pixel_size_provenance: str
     native_threshold: float
+    extracted: tuple[WeightsFile, ...] = ()
 
 
-def _spotiflow(model, dimensionality, sha256, size, md5, best, best_bytes, minimum, pixels, threshold):
+def _spotiflow(model, dimensionality, sha256, size, md5, best, best_bytes, minimum, pixels, threshold, extracted):
+    best = WeightsFile("best.pt", best, best_bytes)
+    extracted = tuple(sorted((best, *(WeightsFile(*item) for item in extracted)), key=lambda f: f.path))
     return KnownWeights(
         "spotiflow", model, dimensionality, f"{_SPOTIFLOW_RELEASE}/{model}.zip", "spotiflow-models release 0.6.0",
-        sha256, size, md5, True, (WeightsFile("best.pt", best, best_bytes),), minimum, pixels,
-        f"{_SPOTIFLOW_PIXELS}; {_OPERATOR}", threshold)
+        sha256, size, md5, True, (best,), minimum, pixels, f"{_SPOTIFLOW_PIXELS}; {_OPERATOR}", threshold, extracted)
 
 
 def _piscis(model, sha256, size):
@@ -73,25 +78,47 @@ def _piscis(model, sha256, size):
         (2, 1, 1), "not published by the authors", _OPERATOR, 0.5)
 
 
-# The known-weights table: (method, model) -> KnownWeights. It sets no default model.
+# The known-weights table: (method, model) -> KnownWeights. It sets no default model. The extracted files of
+# the Spotiflow archives besides best.pt were hashed from the archives that matched the table's SHA-256 and the
+# library's MD5 (W-272; the operator's fetched copies and the W-266 spike copies agree).
 KNOWN_WEIGHTS: dict[tuple[str, str], KnownWeights] = {
     (entry.method, entry.model): entry for entry in (
         _spotiflow("synth_3d", "3D", "2468125c8c1a8bb6f6364f439d50ff08e24a15e6fa4c0c2cf43b26667393038b", 263107693,
                    "a031f1284590886fbae37dc583c0270d",
                    "846d1ef438f872d50f160ad6cfb8be5b99f3f837600c52843a1391ca4eae7d4c", 142064642, (7, 8, 8),
-                   "0.2 um voxels (synthetic)", 0.3),
+                   "0.2 um voxels (synthetic)", 0.3, (
+                       ("config.yaml", "09bd576178014753853c4dab7066fd300b3ed539e053ddaa1b4192f89a00131d", 475),
+                       ("last.pt", "11a0ef1b3dc11c9d0a9a497bed301cef24f2e43c740b02f8db74fadd75cd9227", 142064642),
+                       ("thresholds.yaml", "f63b656f20f5c45143686c34d04f20a08c078f6e5b88ad2e0f40aab0de24f04f", 48),
+                       ("train_config.yaml", "37909c8acf90b827b33a27daf9d0c08ea2af2ce297e0b7ad4d494a04a20234c0",
+                        276))),
         _spotiflow("smfish_3d", "3D", "a6c79f767eaddff7e4c85ba370b370ffdb752829ea0a06d7ca71e5556b554775", 263106200,
                    "c5ab30ba3b9ccb07b4c34442d1b5b615",
                    "1fdfd62c89a007094870782c27da163052ed72952a72d29f12e6730514d3ad6d", 142064642, (7, 8, 8),
-                   "0.13 um YX, 0.48 um Z", 0.4),
+                   "0.13 um YX, 0.48 um Z", 0.4, (
+                       ("config.yaml", "09bd576178014753853c4dab7066fd300b3ed539e053ddaa1b4192f89a00131d", 475),
+                       ("last.pt", "bf1d5f13928c09a4b03c80fed41fd292a150183c28f4926a810688bd82dc4a18", 142064642),
+                       ("thresholds.yaml", "daa3d82d9bc79141e904bcab6ea2f24057b966b7ad43b8053383d4d7f7c4e6e5", 48),
+                       ("train_config.yaml", "37909c8acf90b827b33a27daf9d0c08ea2af2ce297e0b7ad4d494a04a20234c0",
+                        276))),
         _spotiflow("general", "2D", "1da93a8282fedab697dbb9f5c24f623e452063b296ffaad9becd0afdc7bd2797", 87885382,
                    "9dd31a36b737204e91b040515e3d899e",
                    "1c3575464d621924b27f4deb66495b807f175a0ccd995d3533403f00daf806f2", 47408604, (1, 6, 6),
-                   "0.04, 0.1, 0.11, 0.15, 0.32 and 0.34 um (mixed training data)", 0.49999999999999994),
+                   "0.04, 0.1, 0.11, 0.15, 0.32 and 0.34 um (mixed training data)", 0.49999999999999994, (
+                       ("config.yaml", "507b60fab22c08e8819da3f7c84d8a85b3fdce4caca14c18d101b502109b0649", 389),
+                       ("last.pt", "2d1c04545f2205de46d7002c460d492cebe0a5c76840b494668b3ede904651fc", 47408604),
+                       ("thresholds.yaml", "4c054d3cbb2825df7a4672a63ef454fbc25a7a01e53faefc431793068ac6367e", 76),
+                       ("train_config.yaml", "fa805d53d763da34b68ddbaf6fd6876ff0d83d7565c4280f8b87ee14b7cd9777",
+                        257))),
         _spotiflow("hybiss", "2D", "d6221339a104cddfac77b3b8a1014bd316a7060934d69bc078f5a653cb72658b", 87945684,
                    "254afa97c137d0bd74fd9c1827f0e323",
                    "fa5d5cb313bcfd75527f3d0962ccc3654bc7aa33359097d16f3b0835b0103bd1", 47408604, (1, 6, 6),
-                   "0.15, 0.32 and 0.34 um", 0.5319999999999999),
+                   "0.15, 0.32 and 0.34 um", 0.5319999999999999, (
+                       ("config.yaml", "10253c542bcc21348a1a5b3810de1950be7250be51147f96a8c679eef3cc583a", 368),
+                       ("last.pt", "2b309de99caf9a948b922fa88e99b5599b335b77b246fd0f5d4ea2ec55f89632", 47408604),
+                       ("thresholds.yaml", "62dee75197686a9ea85fe0bf493f8ec2bcefbea20ef2748948d437b627e44045", 74),
+                       ("train_config.yaml", "480f56279201137dc1ec74681dfd160b2d98af12d7569b8fdaad667e45bbc7cd",
+                        244))),
         _piscis("20230905", "57177963f50af929d68c8a2e5797bb966cb7bc43806f8c1efe9f7131b6449f19", 30077822),
         _piscis("20251212", "e4ec9fe68e43fe955001e3bf2317badfc4c418027910e7762a37f52d7e64d06f", 30143014),
     )
@@ -142,18 +169,31 @@ def fetch_command(method, model, directory=None):
     return f"starfinder weights fetch {method} {model}" + (f" --dir {directory}" if directory is not None else "")
 
 
-def resolve_weights(method: str, model: str, *, directory=None) -> Path:
+def _listed(entry, extracted):
+    """The files of entry to verify: its files, then the named extracted files that are not among them."""
+    known = {item.path: item for item in entry.extracted}
+    unknown = [name for name in extracted if name not in known]
+    if unknown:
+        raise ValueError(f"{entry.method} model {entry.model!r} extracts no {unknown}; its files are {sorted(known)}")
+    loaded = {item.path for item in entry.files}
+    return entry.files + tuple(known[name] for name in extracted if name not in loaded)
+
+
+def resolve_weights(method: str, model: str, *, directory=None, extracted: tuple[str, ...] = ()) -> Path:
     """Verified local folder of a known model, without using the network or the library.
 
     Checks that the folder and every file the table lists exist, and
-    recomputes each file's SHA-256. Raises ValueError for an unknown model,
-    MissingWeightsError (naming the method, model, expected path and fetch
-    command) when something is missing, and WeightsHashMismatchError (naming
-    the file and both hashes) when a hash differs.
+    recomputes each file's SHA-256; extracted names further files of the
+    entry's extracted list (paths in the folder) to check the same way, such
+    as the configuration files Spotiflow reads next to best.pt. Raises
+    ValueError for an unknown model or extracted file, MissingWeightsError
+    (naming the method, model, expected path and fetch command) when
+    something is missing, and WeightsHashMismatchError (naming the file and
+    both hashes) when a hash differs.
     """
     entry = known_weights(method, model)
     folder = model_folder(method, model, directory)
-    for item in entry.files:
+    for item in _listed(entry, extracted):
         path = folder / item.path
         if not path.is_file():
             raise MissingWeightsError(
@@ -166,11 +206,11 @@ def resolve_weights(method: str, model: str, *, directory=None) -> Path:
     return folder
 
 
-def weights_artifacts(method: str, model: str, folder) -> list[dict]:
-    """The provenance artifacts entries of a resolved model: one per verified file."""
+def weights_artifacts(method: str, model: str, folder, extracted: tuple[str, ...] = ()) -> list[dict]:
+    """The provenance artifacts entries of a resolved model: one per verified file (see resolve_weights)."""
     entry = known_weights(method, model)
     return [{"name": f"{method}/{model}", "path": str((Path(folder) / item.path).resolve()), "sha256": item.sha256,
-             "source": entry.url, "revision": entry.revision} for item in entry.files]
+             "source": entry.url, "revision": entry.revision} for item in _listed(entry, extracted)]
 
 
 def fetch_weights(method: str, model: str, *, directory=None) -> Path:

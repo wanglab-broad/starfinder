@@ -846,9 +846,9 @@ $defs:
         enum: ["global", "noise", "adaptive", "adaptive_round"]
       method:
         description: "Python only; kept equal to the pipeline SPOT_FINDING_METHODS names by a test"
-        enum: ["local_maxima", "starfish_log"]
+        enum: ["local_maxima", "starfish_log", "spotiflow", "piscis"]
       min_distance:
-        description: "Python only; local_maxima alias of min_distance_voxels"
+        description: "Python only; local_maxima alias of min_distance_voxels, and the native field of spotiflow and piscis"
         type: integer
         minimum: 1
       threshold_mode:
@@ -863,7 +863,7 @@ $defs:
         type: integer
         minimum: 1
       exclude_border:
-        description: "Python only; local_maxima (boolean) and starfish_log (boolean or border width)"
+        description: "Python only; local_maxima and spotiflow (boolean) and starfish_log (boolean or border width)"
         type: [boolean, integer]
       measure_peak_intensity:
         description: "Python only; local_maxima"
@@ -887,7 +887,9 @@ $defs:
         type: integer
         minimum: 1
       threshold:
-        description: "Python only; starfish_log (required): absolute LoG response of the [0, 1]-scaled image"
+        description: >-
+          Python only; starfish_log (required): absolute LoG response of the [0, 1]-scaled image;
+          piscis: label value in [0, 1] (default 0.5)
         type: number
         minimum: 0
       overlap:
@@ -895,6 +897,32 @@ $defs:
         type: number
         minimum: 0
         maximum: 1
+      model:
+        description: "Python only; spotiflow and piscis (required): a model of KNOWN_WEIGHTS, fetched with 'starfinder weights fetch'"
+        type: string
+      prob_thresh:
+        description: "Python only; spotiflow: heatmap probability in [0, 1]; null: the value stored with the weights"
+        type: [number, "null"]
+        minimum: 0
+        maximum: 1
+      subpix:
+        description: "Python only; spotiflow: sub-pixel refinement; null: the model configuration's choice"
+        type: [boolean, "null"]
+      n_tiles:
+        description: "Python only; spotiflow: tiles per model axis (ZYX for 3D models, YX for 2D); null: Spotiflow's choice"
+        type: [array, "null"]
+        items:
+          type: integer
+          minimum: 1
+        minItems: 2
+        maxItems: 3
+      input_size:
+        description: "Python only; piscis: tile side in pixels, rounded up to a multiple of 8; null: the model's 256"
+        type: [integer, "null"]
+        minimum: 1
+      scale:
+        description: "Python only; spotiflow and piscis: must be 1 (resampling is an explicit preprocessing step)"
+        const: 1
       channel_overrides:
         description: "Python only; channel label -> config fields of the selected method"
         type: object

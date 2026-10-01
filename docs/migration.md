@@ -477,6 +477,35 @@ There is no tiling and no memory guard: `diagnostics["geometry"]` records the
 estimate 10.4 bytes × `num_sigma` × voxels. In YAML, `method: starfish_log`
 requires the four settings.
 
+### Spotiflow and Piscis
+
+`SpotiflowConfig` and `PiscisConfig` select the pipeline methods `spotiflow`
+(spotiflow 0.6.5) and `piscis` (piscis 1.1.0, the `Piscis` class), which need the
+extras `spotiflow` and `piscis` (`pip install starfinder[spotiflow]`; CPU torch
+2.7.1; not available on Python 3.14 and later). Without the extra a run raises
+`SpotFindingBackendUnavailableError` naming the module and the extra. Every config
+names its weights (`model`, a row of `KNOWN_WEIGHTS`; there is no default), and an
+unknown model or one of the other method raises `ValueError` listing the known
+names. Detection loads only the copy fetched with `starfinder weights fetch`: each
+call re-hashes the files it loads before the model is built, never downloads and
+never reads `~/.spotiflow`, `~/.piscis/models` or the Hugging Face cache; a loaded
+model is reused within the process. A 3D Spotiflow model (`synth_3d`,
+`smfish_3d`) detects Z>1 images in 3D and a 2D model (`general`, `hybiss`) detects
+Z=1 images as a plane; another pairing, or a shape below the model's minimum,
+raises `IncompatibleGeometryError` where Spotiflow would return nothing. Piscis
+uses plane mode for Z=1 and stack mode for Z>1, where `z` is an integer and
+vertically aligned spots merge. `scale` must be 1. The tables hold fractional
+coordinates, `channel`, `peak_intensity` (the original pixel value at the rounded
+coordinate) and, for Spotiflow, `probability`. `diagnostics["effective_settings"]`
+records the resolved native defaults (Spotiflow's stored `prob_thresh`, `subpix`
+and `n_tiles`; Piscis's tile size), `diagnostics["model"]` and the `run.json`
+provenance `artifacts` record the path, SHA-256, source and revision of every
+loaded file, and `diagnostics["geometry"]` records Spotiflow's `n_tiles` or Piscis's
+tile size and keep-boundaries, near which Piscis can repeat a spot (not merged).
+`KNOWN_WEIGHTS` entries gain `extracted`, every file of a Spotiflow archive with
+its SHA-256; `resolve_weights(..., extracted=...)` also checks the named files, and
+`starfinder weights verify` re-hashes all of them.
+
 ### Local-maxima W-218 merge
 
 `LocalMaximaConfig.merge_radius_zyx` (default `None`) is the opt-in W-218

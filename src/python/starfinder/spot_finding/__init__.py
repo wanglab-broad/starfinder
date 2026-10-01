@@ -14,7 +14,8 @@ from starfinder._execution import check_device, execution_record
 from starfinder._registry import spec_for
 from starfinder.image import ImageMetadata, _validate_image
 
-from ._config import LocalMaximaConfig, NoiseLandmarkConfig, PercentileCentroidConfig, StarfishLogConfig
+from ._config import (LocalMaximaConfig, NoiseLandmarkConfig, PercentileCentroidConfig, PiscisConfig, SpotiflowConfig,
+    StarfishLogConfig)
 from ._errors import MissingWeightsError, SpotFindingBackendUnavailableError, SpotFindingWarning, WeightsHashMismatchError
 from ._methods import SPOT_FINDING_METHODS as _SPOT_FINDING_METHODS
 from ._methods import MethodContext, SpotFindingConfig, SpotFindingSpec, check_columns, check_shape, per_channel, require_method
@@ -32,6 +33,7 @@ SPOT_FINDING_METHODS = _SPOT_FINDING_METHODS
 KNOWN_WEIGHTS = _KNOWN_WEIGHTS
 
 __all__ = ["LocalMaximaConfig", "NoiseLandmarkConfig", "PercentileCentroidConfig", "StarfishLogConfig",
+           "SpotiflowConfig", "PiscisConfig",
            "SpotFindingResult", "find_spots", "SPOT_FINDING_METHODS", "SpotFindingSpec",
            "SpotFindingPlan", "ChannelOverride", "SpotFindingBackendUnavailableError", "SpotFindingWarning",
            "KNOWN_WEIGHTS", "KnownWeights", "WeightsFile", "resolve_weights", "fetch_weights",
@@ -115,9 +117,17 @@ def find_spots(
     holds the number of maxima the within-channel merge removed per channel.
     The Starfish LoG records its scale-space memory estimate in
     diagnostics['geometry'] (scale_space_bytes_estimate, 10.4 bytes x
-    num_sigma x voxels). diagnostics['effective_settings'] holds every
-    channel's effective config, and diagnostics['execution'] the execution
-    entry (device, framework, threads).
+    num_sigma x voxels). Spotiflow and Piscis need their extras and named
+    weights from the Starfinder cache, which every call re-hashes before the
+    model is built (nothing is downloaded); they record the loaded files in
+    diagnostics['model'] (method, model, artifacts with path, SHA-256, source
+    and revision, and the training pixel size) and their tiling in
+    diagnostics['geometry'] (Spotiflow n_tiles; Piscis mode, tile size,
+    overlap and keep-boundaries per lateral axis).
+    diagnostics['effective_settings'] holds every channel's effective config,
+    with the native defaults that None resolved (such as Spotiflow's stored
+    prob_thresh), and diagnostics['execution'] the execution entry (device,
+    framework, threads).
     """
     return _detect(image, config, metadata, spot_namespace, device)
 
@@ -141,6 +151,25 @@ def _noise_warning(record, label, round_name):
     return (f"spot finding: {where}channel {label!r}: {' and '.join(reasons)}, so its median "
             f"({record['median']!r}) and MAD do not measure its noise; the threshold {record['threshold']!r} "
             "is unchanged")
+
+
+def _model_record(models, keys):
+    """diagnostics['model']: the first group's record; overridden channels with another model add theirs."""
+    (_, record), *others = models
+    record = dict(record)
+    overrides = {keys[c]: other for channels, other in others for c in channels
+                 if other['model'] != record['model']}
+    if overrides:
+        record['channel_overrides'] = overrides
+    return record
+
+
+def _model_artifacts(record):
+    """The provenance artifacts entries of a diagnostics['model'] record, each loaded file once."""
+    entries = list(record['artifacts'])
+    for other in record.get('channel_overrides', {}).values():
+        entries += [a for a in other['artifacts'] if a not in entries]
+    return entries
 
 
 def _detect(image, config, metadata, spot_namespace, device="cpu", round_name=None):
@@ -171,6 +200,7 @@ def _detect(image, config, metadata, spot_namespace, device="cpu", round_name=No
     groups = [(base, tuple(c for c in range(n_channels) if c not in overridden))]
     groups = [g for g in groups if g[1]] + [(configs[c], (c,)) for c in sorted(overridden)]
     tables, thresholds, noise, merged, geometry, measurements = [], {}, {}, {}, [], None
+    effective, models = {}, []
     for group_config, channels in groups:
         table, details = spec.run(image, group_config, MethodContext(channels, device))
         check_columns(spec, table)
@@ -181,6 +211,9 @@ def _detect(image, config, metadata, spot_namespace, device="cpu", round_name=No
             thresholds = dict(enumerate(details['thresholds']))
         noise.update(zip(channels, details.get('noise', ())))
         merged.update(zip(channels, details.get('merged', ())))
+        effective.update(zip(channels, details.get('effective', ())))
+        if 'model' in details:
+            models.append((channels, details['model']))
         if 'geometry' in details:
             geometry.append(details['geometry'])
         measurements = details.get('measurements', measurements)
@@ -207,7 +240,10 @@ def _detect(image, config, metadata, spot_namespace, device="cpu", round_name=No
             if noise[c]['mad'] == 0 or noise[c]['zero_fraction'] > 0.5:
                 messages.append(_noise_warning(noise[c], keys[c], round_name))
                 warnings.warn(messages[-1], SpotFindingWarning, stacklevel=3)
-    diagnostics['effective_settings'] = {keys[c]: _tuples(_jsonable(configs[c])) for c in range(n_channels)}
+    if models:
+        diagnostics['model'] = _model_record(models, keys)
+    diagnostics['effective_settings'] = {keys[c]: _tuples(_jsonable(effective.get(c, configs[c])))
+                                         for c in range(n_channels)}
     diagnostics['warnings'] = tuple(messages)
     diagnostics['execution'] = execution_record(device, framework=any(d.module == "torch" for d in spec.requires))
     return SpotFindingResult(table, metadata, spot_namespace, base, diagnostics)

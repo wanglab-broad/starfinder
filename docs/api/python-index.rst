@@ -102,6 +102,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.spot_finding.PercentileCentroidConfig`
 * :py:obj:`starfinder.preprocessing.PercentileNormalizationConfig`
 * :py:obj:`starfinder.dataset.PipelineConfig`
+* :py:obj:`starfinder.spot_finding.PiscisConfig`
 * :py:obj:`starfinder.preprocessing.PREPROCESSING_METHODS`
 * :py:obj:`starfinder.preprocessing.PreprocessingRecipe`
 * :py:obj:`starfinder.preprocessing.PreprocessingSpec`
@@ -149,6 +150,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.spot_finding.SpotFindingResult`
 * :py:obj:`starfinder.spot_finding.SpotFindingSpec`
 * :py:obj:`starfinder.spot_finding.SpotFindingWarning`
+* :py:obj:`starfinder.spot_finding.SpotiflowConfig`
 * :py:obj:`starfinder.spot_finding.StarfishLogConfig`
 * :py:obj:`starfinder.preprocessing.step_config_type`
 * :py:obj:`starfinder.preprocessing.step_spec`

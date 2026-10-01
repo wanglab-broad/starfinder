@@ -7,6 +7,8 @@ from numbers import Integral, Real
 
 import numpy as np
 
+from ._weights import known_weights
+
 
 def _number(value, name, lower, upper=None):
     if (isinstance(value, bool) or not isinstance(value, Real)
@@ -29,6 +31,19 @@ def _labels(labels):
 
 def _positive(value):
     return not isinstance(value, bool) and isinstance(value, Real) and bool(np.isfinite(value)) and value > 0
+
+
+def _model(method, model):
+    """The known-weights entry of a named model; ValueError lists the method's known models."""
+    if not isinstance(model, str) or not model:
+        raise ValueError(f"model must name a {method} model of KNOWN_WEIGHTS")
+    return known_weights(method, model)
+
+
+def _scale(value):
+    if isinstance(value, bool) or not isinstance(value, Real) or value != 1:
+        raise ValueError(f"scale must be 1, not {value!r}: resampling is an explicit preprocessing step, with "
+                         "coordinates mapped back by the caller")
 
 
 def _sigma(value, name):
@@ -115,6 +130,82 @@ class StarfishLogConfig:
         _number(self.overlap, "overlap", 0, 1)
         if not isinstance(self.exclude_border, Integral) or self.exclude_border < 0:
             raise ValueError("exclude_border must be Boolean or a nonnegative integer")
+        _labels(self.channel_labels)
+
+
+@dataclass(frozen=True)
+class SpotiflowConfig:
+    """Spotiflow 0.6.5 with named pretrained weights, one channel at a time (extra ``spotiflow``).
+
+    model names a spotiflow row of KNOWN_WEIGHTS (there is no default): a 3D
+    model (synth_3d, smfish_3d) detects Z>1 images in 3D and a 2D model
+    (general, hybiss) detects Z=1 images as a YX plane (z=0); any other
+    pairing raises IncompatibleGeometryError. prob_thresh is the probability
+    threshold on the heatmap in [0, 1] (None: the value stored with the
+    weights); min_distance (pixels or voxels), exclude_border and subpix (None:
+    the model configuration's choice) are Spotiflow's predict arguments;
+    n_tiles (None: Spotiflow's choice) has one entry per model axis. scale
+    must be 1. The resolved values are recorded in
+    diagnostics['effective_settings'] and the tiling in diagnostics['geometry'].
+    """
+    model: str
+    prob_thresh: float | None = None
+    min_distance: int = 1
+    exclude_border: bool = False
+    subpix: bool | None = None
+    n_tiles: tuple[int, ...] | None = None
+    scale: float = 1.0
+    channel_labels: tuple[str, ...] | None = None
+    method: str = field(default="spotiflow", init=False)
+
+    def __post_init__(self):
+        entry = _model("spotiflow", self.model)
+        if self.prob_thresh is not None:
+            _number(self.prob_thresh, "prob_thresh", 0, 1)
+        if isinstance(self.min_distance, bool) or not isinstance(self.min_distance, Integral) or self.min_distance < 1:
+            raise ValueError("min_distance must be a positive integer")
+        if type(self.exclude_border) is not bool or (self.subpix is not None and type(self.subpix) is not bool):
+            raise ValueError("exclude_border must be Boolean and subpix Boolean or None")
+        axes = 3 if entry.dimensionality == "3D" else 2
+        if self.n_tiles is not None and not (
+                isinstance(self.n_tiles, tuple) and len(self.n_tiles) == axes
+                and all(isinstance(n, Integral) and not isinstance(n, bool) and n >= 1 for n in self.n_tiles)):
+            raise ValueError(f"n_tiles must be None or {axes} positive integers for the {entry.dimensionality} "
+                             f"model {self.model!r}")
+        _scale(self.scale)
+        _labels(self.channel_labels)
+
+
+@dataclass(frozen=True)
+class PiscisConfig:
+    """Piscis 1.1.0 (the Piscis class) with named pretrained weights, one channel at a time (extra ``piscis``).
+
+    model names a piscis row of KNOWN_WEIGHTS (there is no default, and
+    Starfinder does not choose between them). A Z=1 image is detected in
+    plane mode (z=0) and a Z>1 image in stack mode, where z is an integer and
+    vertically aligned spots merge across planes. threshold is the max-pooled
+    label value in [0, 1], kept when strictly above; min_distance is in pixels;
+    input_size is the tile side in pixels, rounded up by Piscis to a multiple
+    of 8 (None: the model's 256). scale must be 1. Seam candidates near the
+    tile keep-boundaries recorded in diagnostics['geometry'] are not merged.
+    """
+    model: str
+    threshold: float = 0.5
+    min_distance: int = 1
+    input_size: int | None = None
+    scale: float = 1.0
+    channel_labels: tuple[str, ...] | None = None
+    method: str = field(default="piscis", init=False)
+
+    def __post_init__(self):
+        _model("piscis", self.model)
+        _number(self.threshold, "threshold", 0, 1)
+        if isinstance(self.min_distance, bool) or not isinstance(self.min_distance, Integral) or self.min_distance < 1:
+            raise ValueError("min_distance must be a positive integer")
+        if self.input_size is not None and (
+                isinstance(self.input_size, bool) or not isinstance(self.input_size, Integral) or self.input_size < 1):
+            raise ValueError("input_size must be None or a positive integer (pixels)")
+        _scale(self.scale)
         _labels(self.channel_labels)
 
 
