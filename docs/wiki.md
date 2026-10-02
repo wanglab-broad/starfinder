@@ -24,6 +24,9 @@ Registration algorithms (proposed) <registration-algorithms>
 Spot-finding baseline (proposed) <spot-finding-baseline>
 Spot-finding contract (proposed) <spot-finding-contract>
 Spot-finding algorithms (proposed) <spot-finding-algorithms>
+Readout baseline (proposed) <readout-baseline>
+Readout contract (proposed) <readout-contract>
+Readout algorithms (proposed) <readout-algorithms>
 Learned detectors <learned-detectors>
 Coordination <coordination>
 Checkpoints <checkpoints>
