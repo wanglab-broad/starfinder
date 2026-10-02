@@ -41,6 +41,8 @@ from starfinder.image import ImageMetadata
 from starfinder.io import ImageLoadResult
 from starfinder.spot_finding import SpotFindingResult
 
+pytestmark = [pytest.mark.barcode, pytest.mark.golden]
+
 SHAPE_ZYX = (12, 48, 48)
 CHANNELS = ("ch00", "ch01", "ch02", "ch03")
 ROUNDS = ("round1", "round2", "round3", "round4")

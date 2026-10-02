@@ -21,6 +21,8 @@ from starfinder.spot_finding import LocalMaximaConfig, SpotFindingPlan
 
 from .barcode_cases import intensity, tensor
 
+pytestmark = pytest.mark.barcode
+
 CHANNELS = ("ch00", "ch01", "ch02", "ch03")
 
 
