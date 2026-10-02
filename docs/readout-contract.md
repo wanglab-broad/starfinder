@@ -24,27 +24,48 @@ The measured evidence comes from W-278, run directory
 
 ## Settled decisions this page follows
 
-The decisions are recorded in the W-152 comment "§2.8 planning decisions
-(2026-10-01)" and in the W-152 comments of 2026-09-27 on §2.8. As stated in W-279,
-they are:
+Decided by Jiahao in the §2.8 planning session (W-152 comment "§2.8 planning
+decisions (2026-10-01)"):
 
-* two readout modes, `multiplexed` and `direct`, set by one explicit setting of the
-  dataset or pipeline configuration, in the existing package (no new package);
-* registered barcode encodings on the W-240 mechanism, `two_base` (today's
-  behavior) and `one_base`, with an extension point for other code types but no
-  binary or MERFISH-style entry;
-* one- and two-segment codebooks, with `split_index` kept as the shared
-  MATLAB-facing key;
-* local background and noise measurements kept with the traces; one shared read-QC
-  score that ranks and never changes identities; optional cross-channel
-  deduplication, off by default;
-* complete retained outputs with three kinds of diagnostics: read inspection,
-  population summaries and decision inspection;
-* the runtime order extract → decode or assign → score → deduplicate → filter, with
-  the defaults WTA, rescue off, deduplication off, and assigned calls kept with no
-  score cutoff;
-* bounded engineering validation only, with no score cutoff, calibrated probability
-  or recommended default filter (W-152 §2.14 decision, 2026-09-29).
+1. **D1** Two readout modes at the top level, `multiplexed` (sequencing with a
+   codebook) and `direct` (a round and channel identify a gene), in the existing
+   package. One- and two-segment barcodes are layouts within `multiplexed`. This page
+   proposes the names of results and configuration keys; W-280 decides any rename.
+2. **D2** Barcode encodings are registered on the W-240 mechanism: `two_base` (the
+   current behavior) and `one_base`, which §2.8 implements and validates on
+   hand-built known answers, with no real one-base data.
+3. **D3** The segment layout is a typed description, not a registry: the number of
+   segments, each segment's length, the acquisition order, the junction treatment and
+   the allowed end bases, with several first/last pairs per segment. `split_index`
+   stays the shared MATLAB-facing key and is translated at the workflow boundary.
+4. **D4** The `split_index` index-base defect is fixed by an implementation issue;
+   W-279 demonstrates it and drafts the fix.
+5. **D5** A codebook entry is not a gene: the entry identifier is separate from the
+   gene identifier (aging: 14,242 entries for 2,044 genes).
+6. **D6** MATLAB's two-segment path matches the complete concatenated color string;
+   its per-segment end-base checks are diagnostic ({doc}`readout-baseline`).
+7. **D7** Direct readout: each round is detected (option A of the §2.7 multi-round
+   candidate set), each candidate is extracted in its own round, the other rounds are
+   unavailable in `valid`, and the barcode rules (codeword competition, rescue,
+   required rounds) do not apply.
+8. **D8** A binary on/off code is not a segment layout; §2.8 states the extension
+   point and delivers no binary entry, decoder or example.
+9. **D9** Every encoding and layout has a worked example checked by a test, the
+   two-segment one on the 11-base 5 + 4 design, and direct readout a mapping example
+   ({doc}`readout-algorithms`, "Worked examples").
+10. **D10** Left to this specification, with evidence, and decided at W-280: the
+    background and noise estimator; the score components and ranking design; the
+    duplicate distance, signal compatibility, grouping and representative ranking;
+    the `pre_qc` content and any `FORMAT_VERSION` change; the golden-test scope; and
+    whether extraction must be vectorized. This page proposes each of them.
+
+The W-279 issue and the W-152 scope comments of 2026-09-27 add the rest of the
+agreed scope: complete retained outputs with three kinds of diagnostics (read
+inspection, population summaries, decision inspection); the runtime order extract →
+decode or assign → score → deduplicate → filter, with the defaults WTA, rescue off,
+deduplication off, and assigned calls kept with no score cutoff; and bounded
+engineering validation only, with no score cutoff, calibrated probability or
+recommended default filter (W-152 §2.14 decision, 2026-09-29).
 
 Facts about the two-segment assay (Jiahao, 2026-10-01): the two segments are
 separate barcodes in the experiment and are stored joined in the codebook; the
@@ -311,6 +332,10 @@ box.
   latent background; its MAD underestimates the analytic noise by about 12 % on
   clipped uint8 data; synthetic data only. The row-level citations are in
   {doc}`readout-algorithms` ("Background and noise").
+* **Vectorization (D10).** Not required. W-278 measured the current per-spot loop on
+  `medium` (32×512×512, 587 candidates) at a median of 0.0586 s, 25 µs per spot and
+  round, while a full-image box-filter prototype took 3.26 s for the same sums
+  (`extraction-cost.csv`). The `large` and `tissue` tiers were not measured.
 * **Failure values.** With fewer than `min_voxels` ring voxels inside the image,
   `background` and `noise` are NaN for that (spot, round), and the score of a read
   that uses that round is NaN with reason `background_unavailable`. `values` stay
@@ -326,7 +351,7 @@ added; every row is kept and no identity column changes.
 | --- | --- |
 | Inputs | The read table (any mode and decoder); the extraction result with `values`, `background`, `box_voxels` and `valid`; the reference (codebook or panel) for the assigned channels. |
 | Ranking score `qc_score` | W-278 design D1: the decoder's probability NLL of the assigned entry recomputed on background-subtracted sums. Per used round r: `v'_c = max(v_c − box_voxels × background_c, 0)`, `p = (v'_a + 1e-6) / Σ_c (v'_c + 1e-6)` for the assigned channel `a`; `qc_score = Σ_r −log max(p, 1e-12)`. Lower ranks as more reliable. |
-| Components kept | `qc_ambiguity_max` (the largest, over used rounds, of the strongest other channel's background-subtracted sum over the assigned channel's, both clipped at 0), `qc_signal_to_background` (mean over used rounds of `v'_a / (box_voxels × background_a)`), `qc_rounds` (rounds used). |
+| Components kept | `qc_ambiguity_max` (the largest, over used rounds, of the strongest other channel's background-subtracted sum over the assigned channel's, both clipped at 0), `qc_signal_to_background` (mean over used rounds of `(v_a − box_voxels × background_a) / (box_voxels × background_a)`, with the **signed**, unclipped numerator, as W-278 measured `sbr_mean__local_ring`), `qc_rounds` (rounds used). The ambiguity component and `qc_score` use the clipped `v'`, also as W-278 measured them. |
 | Used rounds | `multiplexed`: every sequencing round. `direct`: the own round only. The weakest-round and codeword-support components do not apply in `direct` mode and are not computed (W-278 `direct.csv`, `not_applicable`). |
 | Decoders and call types | One score for `wta`, `codebook_aware` and `direct`, and for exact and rescued calls. It is computed on the assigned entry's channels, so a rescued round is scored at the codeword's channel. Exact and rescued calls are distinguished by `call_type` (`exact`, `rescued_unknown`, `rescued_h<k>`), which the score keeps; summaries report scores per `call_type`. |
 | Reads without an identity | `qc_score` and the components are NaN with `qc_reason` `no_assignment` (`unmatched`, `ambiguous`, `no_signal`), or `background_unavailable`. |
@@ -356,9 +381,9 @@ citations are in {doc}`readout-algorithms` ("Shared read-QC score").
 | Pairs | Candidates of the same detection round in different channels (`channel` column). Same-channel pairs are never grouped here (that is the §2.7 within-channel `merge_radius_zyx`). |
 | Distance | Euclidean distance between candidate coordinates in zero-based voxel index space, inclusive: `≤ distance_voxels`, default 1.0 voxel (W-278 design choice). At the repository example voxel size (0.094 µm in XY, 0.35 µm in Z) 1 voxel is 0.094 µm laterally or 0.35 µm along Z; the rule uses index space, not microns. |
 | Signal compatibility | `compatibility="same_sequence"`: both reads have identical WTA observed color sequences without `M` or `N` (W-278 rule). |
-| Grouping | Connected components of the graph of compatible pairs. |
-| Representative | One original candidate per group, never a new or averaged one: among the members with an `assigned` call (all members if none is assigned), the one with the largest extracted sum in its own detection channel in the detection round; ties go to the earliest row of the spot table. Its coordinates, values and identity are unchanged. |
-| Conflicting or ambiguous calls | A group whose assigned members do not all share one `entry_id` is not merged: every member stays a representative, with reason `conflicting_calls`. Reads with `M` or `N` in their sequence are never compatible. Unassigned members of a merged group are marked duplicates of its assigned representative. |
+| Grouping | Connected components of the graph of compatible pairs. **Not measured by W-278**, which scored pairs only (below). |
+| Representative | One original candidate per group, never a new or averaged one: among the members with an `assigned` call (all members if none is assigned), the one with the largest extracted sum in its own detection channel in the detection round; ties go to the earliest row of the spot table. Its coordinates, values and identity are unchanged. {doc}`readout-algorithms` states the same rule. **Not measured by W-278.** |
+| Conflicting or ambiguous calls | A group whose assigned members do not all share one `entry_id` is not merged: every member stays a representative, with reason `conflicting_calls`. Reads with `M` or `N` in their sequence are never compatible. Unassigned members of a merged group are marked duplicates of its assigned representative. **Not measured by W-278.** |
 | Direct mode | Not available: `deduplicate_reads` raises `ValueError` in `direct` mode, because different channels and rounds are different genes there and no direct-mode read is merged or reassigned automatically. The population summary still counts cross-channel candidate pairs within `distance_voxels` in one round. |
 | Retained | Every row, with `duplicate_group` (the representative's `spot_id`, or missing when not grouped), `duplicate_of` (the representative's `spot_id` for a merged member), `is_representative` (true for representatives and for ungrouped reads) and `duplicate_reason` (`""`, `same_sequence_within_distance`, `conflicting_calls`); `counts` holds groups, merged reads and conflicting groups. |
 | Filter | `ReadFilterConfig.exclude_duplicates=True` (default) rejects reads with `is_representative` false, with reason `duplicate`; it has no effect on a result that was not deduplicated. |
@@ -372,6 +397,14 @@ held-out missed-duplicate evidence; outside the split, d = 1 misses 9 of the 22
 W-218 copies and d = 2 none (`reference_case`). The distance is an open choice
 recorded with W-279. Row-level citations are in {doc}`readout-algorithms`
 ("Deduplication").
+
+What W-278 measured is the pairwise rule only: for each pair of candidates in
+different channels, whether `same_sequence` within d links them (W-278
+`scripts/w278_lib.py`, `rule_merges`), with missed duplicates and false merges
+counted over pairs. The grouping into connected components, the representative
+choice and the conflicting-call rule above are additions that W-278 did not measure;
+on scenes where every group is a single pair they give the same merges as the pairwise
+rule, and the validation design marks the checks that depend on them as provisional.
 
 ## Runtime order and defaults
 
@@ -397,13 +430,37 @@ codebook-aware golden digests (b) and (d).
 
 | Option | Layout | Effect on the golden digests | Effect on the checkpoints | Effect on the MATLAB-facing keys |
 | --- | --- | --- | --- | --- |
-| **C1. Extend the existing stages (recommended)** | `candidates` adds `bg_<round>_<channel>`, `noise_<round>_<channel>`, `bgvox_<round>`, `boxvox_<round>` and `candidates.json` adds `background_config`, `image_background`, `image_noise` and `readout_mode`. `pre_qc` holds the read table after scoring and deduplication, before filtering, and `pre_qc.json` adds `scoring_config`, `deduplication_config`, `layout`, `readout_mode` and `stages_applied`. | `candidates.csv` and `pre_qc.csv` gain columns. Named edit: the tables without the new columns, written by the same writer, have today's digests; new pins cover the new files. | Same stages and files; `FORMAT_VERSION` stays 2. A reader at `141c093` loads the new `pre_qc` with the extra columns kept, and the new `candidates` with the background columns dropped (they are not in `spot_columns`). A checkpoint written at `141c093` loads with `background=None` and no score. | None. |
+| **C1. Extend the existing stages (recommended)** | `candidates` adds `bg_<round>_<channel>`, `noise_<round>_<channel>`, `bgvox_<round>`, `boxvox_<round>` and `candidates.json` adds `background_config`, `image_background`, `image_noise` and `readout_mode`. `pre_qc` holds the read table after scoring and deduplication, before filtering, and `pre_qc.json` adds `scoring_config`, `deduplication_config`, `layout`, `readout_mode` and `stages_applied`. | `candidates.csv` and `pre_qc.csv` gain columns. Named edit: the tables without the new columns, written by the same writer, have today's digests; new pins cover the new files. | Same stages and files; `FORMAT_VERSION` stays 2, under the wire layout below. A reader at `141c093` then loads a new `multiplexed` checkpoint: the new `candidates` with the background columns dropped (they are not in `spot_columns`) and the new `pre_qc` with the extra columns kept. It cannot load a `direct` `pre_qc`: its reader maps only `wta` and `codebook_aware` (`io/_checkpoint.py:537`) and raises on `direct`. A checkpoint written at `141c093` loads with the new reader, with `background=None` and no score. | None. |
 | C2. New stages, version 3 | New stages `measurements` (background) and `scored` (score and deduplication) beside the unchanged `candidates` and `pre_qc`; `FORMAT_VERSION` 3. | None for the existing files. | Two more stages for `CheckpointConfig.stages`, `clear_stages` and `load_checkpoint`; version 3 makes `test_registration_recipe.py:520-525` and `test_registration_validation.py:433` need named edits. | None. |
 | C3. A separate `qc` stage, version 2 | `pre_qc` unchanged (decoding only); a new `qc` stage holds the score and deduplication columns, joined by identity. | None for `pre_qc`; `candidates.csv` still gains the background columns unless they also move to `qc`. | A fourth stage name; the read table is split across two files. | None. |
 
 **Recommendation: C1.** `pre_qc` then means what its name says, everything before
-the QC filter, no format version changes, and an older reader loses nothing it
-could use.
+the QC filter, and no format version changes. An older reader loses nothing it could
+use from a `multiplexed` checkpoint; `direct` checkpoints need the new reader.
+
+**Wire layout of C1.** Today's loader rebuilds a config by passing every serialized
+field to its constructor (`_config`, `io/_checkpoint.py:104-109`), so a field added to
+a saved config would make a `141c093` reader raise `TypeError`. C1 therefore keeps
+every saved config at its `141c093` fields and stores the new settings as separate
+header keys:
+
+* `candidates.json`: `signals.extraction_config` holds exactly
+  `neighborhood_radius_zyx`, `sampling` and `boundary` (the writer leaves out
+  `NeighborhoodSumConfig.background`); the new top-level keys are `background_config`
+  (the `LocalBackgroundConfig` fields, or `null` when off), `image_background` and
+  `image_noise` (per round and channel) and `readout_mode`. The table adds
+  `bg_<round>_<channel>`, `noise_<round>_<channel>` (float64), `bgvox_<round>` and
+  `boxvox_<round>` (int64) after the `valid_<round>` columns.
+* `pre_qc.json`: `decoding_config` holds the decoder's fields as today (`direct`
+  configs carry only `method`); the new top-level keys are `scoring_config`,
+  `deduplication_config` (`null` when the stage did not run), `layout`,
+  `readout_mode` and `stages_applied`. The table adds `entry_id`, the score columns
+  and, after deduplication, `duplicate_group`, `duplicate_of` (string),
+  `is_representative` (bool) and `duplicate_reason` (string).
+* The new reader rebuilds the decoder config through `DECODING_METHODS` and treats a
+  missing key as its `141c093` meaning: no `background_config` is `background=None`,
+  no `layout` is one segment, no `readout_mode` is `multiplexed`, and no
+  `scoring_config` or `deduplication_config` means the stage did not run.
 
 **Reruns without images.**
 
@@ -460,9 +517,10 @@ The implementation adds these entries:
    `split_index` from MATLAB's one-based position; a configuration that worked
    around the defect by giving the Python value (for example 4 for aging) must give
    the MATLAB value (5).
-4. **Codebook entries.** `entry_id`; repeated genes allowed; `n_entries`;
+4. **Codebook entries.** `entry_id`; repeated genes allowed (D5); `n_entries`;
    `gene_to_seq` raises for codebooks with repeated genes. **Intentional change:**
-   the decoding table gains `entry_id`.
+   two barcodes for one gene, which raised before, now load as two entries, and the
+   decoding table gains `entry_id`.
 5. **Background measurements.** `LocalBackgroundConfig`,
    `NeighborhoodSumConfig.background` (on by default), the new result fields and the
    candidate columns.
@@ -490,10 +548,15 @@ The implementation adds these entries:
 * `test/test_readout_examples.py`: the reference functions of the expected `one_base`
   and direct-readout behavior are replaced by calls to `ENCODINGS` and
   `assign_direct`; every asserted value stays.
+* `test/test_barcode.py`: one named edit. The case `"A,CACGC\nA,CATGC\n"` of
+  `test_invalid_csv_has_row_context` (`test_barcode.py:59-74`) requires two different
+  barcodes for one gene to raise, which D5 reverses. The task-group-2 issue removes
+  that case and adds a test that the same rows load as two entries of gene `A`. The
+  other cases of that test still raise (the identical-row case as a repeated
+  `entry_id`), and the rest of the file is unchanged.
 * `test/test_spot_finding_rounds.py:196-208` stays unchanged: the `multiplexed`
   message keeps "readout mode (§2.8)".
-* Every other existing test passes unchanged, in particular `test_barcode.py`,
-  `test_encoding.py`, `test_extraction.py`, `test_codebook_aware_decoder.py`,
+* Every other existing test passes unchanged, in particular `test_encoding.py`, `test_extraction.py`, `test_codebook_aware_decoder.py`,
   `test_checkpoints.py`, `test_fov.py`, `test_e2e.py`,
   `test_coordination_contract.py`, `test_spot_finding_golden.py` and the
   registration checkpoint-version tests. Each draft implementation issue names its

@@ -21,8 +21,9 @@ encoding and reversed bases, one segment. The digests were produced with the loc
 project environment (NumPy 2.2.6, pandas 3.0.0) and are bit-identical over repeated
 single-thread runs; see docs/readout-baseline.md.
 
-Every extraction, decoding, filtering, encoding, detection and pipeline configuration is
-built by ``readout_config``, which holds the only imports of those config types. The
+Every extraction, decoding, filtering, encoding, detection, pipeline and checkpoint
+configuration is built by ``readout_config``, which holds the only imports of those
+config types. The
 §2.8 work may change that helper's body only; every pinned digest stays, except where
 docs/readout-contract.md names an edit.
 """
@@ -34,7 +35,7 @@ import pandas as pd
 import pytest
 
 from starfinder.barcode import decode_barcodes, extract_intensities, filter_reads, load_codebook
-from starfinder.dataset import CheckpointConfig, Dataset, RoundState
+from starfinder.dataset import Dataset, RoundState
 from starfinder.dataset.workflow import from_workflow_config
 from starfinder.image import ImageMetadata
 from starfinder.io import ImageLoadResult
@@ -79,8 +80,8 @@ CODEBOOK_AWARE_BOUND, CODEBOOK_AWARE_CHANGED_BOUND = 1.105, 1.05  # probability_
 
 
 def readout_config(kind, *, radius=(1, 2, 2), decoder="wta", score_bound=None, end_bases=None,
-                   **decoder_options):
-    """The only place that builds extraction, decoding, filtering, encoding and pipeline configs.
+                   directory=None, **decoder_options):
+    """The only place that builds every configuration of this test.
 
     kind "extraction": NeighborhoodSumConfig(radius); "decoding": the decoder config
     ("wta" or "codebook_aware", with decoder_options for the codebook-aware gates);
@@ -89,13 +90,15 @@ def readout_config(kind, *, radius=(1, 2, 2), decoder="wta", score_bound=None, e
     "encoding": the codebook EncodingConfig (two-base, reversed, one segment);
     "detection": the LocalMaximaConfig recorded on the hand-built candidates;
     "pipeline": a PipelineConfig of extraction, decoding and filtering;
+    "checkpoints": the CheckpointConfig of the CSV candidates and pre_qc stages under
+    directory;
     "yaml": the WorkflowConfig that from_workflow_config translates from the legacy
     keys (rule rsf_single_fov, raw loading and spot finding off). The legacy keys
     always select WtaDecoderConfig(diagnostics=True), so "yaml" requires decoder "wta".
     """
     from starfinder.barcode import (CodebookAwareDecoderConfig, EncodingConfig, NeighborhoodSumConfig,
                                     ReadFilterConfig, WtaDecoderConfig)
-    from starfinder.dataset import PipelineConfig
+    from starfinder.dataset import CheckpointConfig, PipelineConfig
     from starfinder.spot_finding import LocalMaximaConfig
 
     score = {"wta": "wta_l2_nll", "codebook_aware": "probability_nll"}[decoder]
@@ -132,6 +135,8 @@ def readout_config(kind, *, radius=(1, 2, 2), decoder="wta", score_bound=None, e
                               decoding=readout_config("decoding", decoder=decoder, **decoder_options),
                               filtering=readout_config("filtering", decoder=decoder, score_bound=score_bound,
                                                        end_bases=end_bases))
+    if kind == "checkpoints":
+        return CheckpointConfig(stages=("candidates", "pre_qc"), directory=directory)
     raise ValueError(f"unknown kind {kind!r}")
 
 
@@ -251,7 +256,7 @@ def golden_dataset(root):
 def run_and_reload(root, dataset, pipeline, execution=None):
     """FOV.run on resident rounds and the hand-built candidates, with CSV candidates and
     pre_qc checkpoints; digests of the written files and of the reloaded pre_qc table."""
-    checkpoints = CheckpointConfig(stages=("candidates", "pre_qc"), directory=root / "checkpoints")
+    checkpoints = readout_config("checkpoints", directory=root / "checkpoints")
     fov = dataset.fov("FOV_001")
     fov.images = fixture_rounds()
     fov.metadata = {label: METADATA for label in ROUNDS}

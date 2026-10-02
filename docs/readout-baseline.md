@@ -249,7 +249,7 @@ radius, a codebook-aware gate (`allow_rescue`, `max_corrected_round_margin`,
 legacy behavior that §2.8 changes: `valid` is all true, and a candidate table with a
 `round` column raises on decoding. Every configuration is built by one helper,
 `readout_config`, which holds the only imports of extraction, decoding, filtering,
-encoding, detection and pipeline config types.
+encoding, detection, pipeline and checkpoint config types.
 
 Three separate single-thread processes (`taskset -c 0`, every thread variable 1)
 recomputed every pinned value with byte-identical output
