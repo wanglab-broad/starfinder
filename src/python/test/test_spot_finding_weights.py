@@ -6,6 +6,7 @@ from a temporary directory through a file:// URL, and socket connections are blo
 """
 import hashlib
 import json
+import os
 import socket
 import zipfile
 from dataclasses import replace
@@ -16,7 +17,7 @@ import pytest
 from starfinder.__main__ import main
 from starfinder.spot_finding import (KNOWN_WEIGHTS, KnownWeights, MissingWeightsError, WeightsFile,
     WeightsHashMismatchError, fetch_weights, resolve_weights)
-from starfinder.spot_finding._weights import RECORD_NAME, weights_artifacts, weights_directory
+from starfinder.spot_finding._weights import RECORD_NAME, listed_files, weights_artifacts, weights_directory
 
 # W-266 known-weights.csv: (method, model) -> (downloaded file SHA-256, bytes, library MD5,
 # loaded file, its SHA-256, its bytes), copied from the run directory
@@ -92,9 +93,67 @@ def archive_fixture(tmp_path, monkeypatch):
     data = archive.read_bytes()
     entry = replace(KNOWN_WEIGHTS[("spotiflow", "smfish_3d")], model="fixture_3d", url=archive.as_uri(),
                     revision="fixture", sha256=sha256(data), bytes=len(data), md5=hashlib.md5(data).hexdigest(),
-                    files=(WeightsFile("best.pt", sha256(PAYLOAD), len(PAYLOAD)),))
+                    files=(WeightsFile("best.pt", sha256(PAYLOAD), len(PAYLOAD)),),
+                    extracted=(WeightsFile("best.pt", sha256(PAYLOAD), len(PAYLOAD)),
+                               WeightsFile("config.yaml", sha256(b"is_3d: true\n"), len(b"is_3d: true\n"))))
     monkeypatch.setitem(KNOWN_WEIGHTS, ("spotiflow", "fixture_3d"), entry)
     return entry
+
+
+# The files of a Spotiflow-like fixture archive; best.pt is the loaded file, the others are listed only.
+LISTED = {"best.pt": PAYLOAD, "config.yaml": b"is_3d: true\n", "last.pt": b"last fixture weights\n",
+          "thresholds.yaml": b"prob: 0.4\n"}
+
+
+def write_zip(path, files):
+    with zipfile.ZipFile(path, "w") as handle:
+        for name, data in files.items():
+            handle.writestr(f"fixture_listed/{name}", data)
+    return path.read_bytes()
+
+
+def listed_entry(url, data):
+    return replace(KNOWN_WEIGHTS[("spotiflow", "smfish_3d")], model="fixture_listed", url=url, revision="fixture",
+                   sha256=sha256(data), bytes=len(data), md5=hashlib.md5(data).hexdigest(),
+                   files=(WeightsFile("best.pt", sha256(PAYLOAD), len(PAYLOAD)),),
+                   extracted=tuple(WeightsFile(n, sha256(d), len(d)) for n, d in sorted(LISTED.items())))
+
+
+@pytest.fixture
+def listed_fixture(tmp_path, monkeypatch):
+    """A zip fixture model with several listed files, as the Spotiflow entries list five."""
+    archive = tmp_path / "source" / "fixture_listed.zip"
+    archive.parent.mkdir(exist_ok=True)
+    entry = listed_entry(archive.as_uri(), write_zip(archive, LISTED))
+    monkeypatch.setitem(KNOWN_WEIGHTS, ("spotiflow", "fixture_listed"), entry)
+    return entry
+
+
+@pytest.fixture
+def downloads(monkeypatch):
+    """The URLs fetch downloads, in order."""
+    from starfinder.spot_finding import _fetch
+    urls, download = [], _fetch._download
+
+    def counted(url, target, *args, **kwargs):
+        urls.append(url)
+        return download(url, target, *args, **kwargs)
+    monkeypatch.setattr(_fetch, "_download", counted)
+    return urls
+
+
+def snapshot(folder):
+    """Bytes and modification time of every file in folder, by name."""
+    return {p.name: (p.read_bytes(), p.stat().st_mtime_ns) for p in sorted(folder.iterdir())}
+
+
+def fetched_listed(downloads):
+    """fetch_weights of the listed fixture with old modification times, so any rewrite shows."""
+    folder = fetch_weights("spotiflow", "fixture_listed")
+    for path in folder.iterdir():
+        os.utime(path, ns=(10**18, 10**18))
+    downloads.clear()
+    return folder
 
 
 # --- The table ------------------------------------------------------------------------------------------
@@ -212,6 +271,81 @@ def test_the_directory_argument_overrides_the_environment(cache, piscis_fixture,
     assert not cache.exists()
     with pytest.raises(MissingWeightsError, match="--dir"):
         resolve_weights("piscis", "fixture", directory=tmp_path / "elsewhere")
+
+
+# --- Fetch checks every listed file (W-286) -------------------------------------------------------------
+
+def full_check(directory=None):
+    return resolve_weights("spotiflow", "fixture_listed", directory=directory,
+                           extracted=listed_files("spotiflow", "fixture_listed"))
+
+
+@pytest.mark.parametrize("name", ["config.yaml", "last.pt", "thresholds.yaml"])
+def test_fetch_restores_only_a_missing_listed_file(cache, listed_fixture, downloads, name):
+    folder = fetched_listed(downloads)
+    record = json.loads((folder / RECORD_NAME).read_text())
+    (folder / name).unlink()
+    kept = {n: v for n, v in snapshot(folder).items() if n != RECORD_NAME}
+    with pytest.raises(MissingWeightsError, match="'starfinder weights fetch spotiflow fixture_listed'"):
+        full_check()
+    # The remedy MissingWeightsError names: fetch again into the same root.
+    assert fetch_weights("spotiflow", "fixture_listed") == folder
+    assert downloads == [listed_fixture.url]
+    after = snapshot(folder)
+    assert after[name][0] == LISTED[name]
+    assert {n: v for n, v in after.items() if n not in (name, RECORD_NAME)} == kept
+    assert full_check() == folder
+    restored = json.loads((folder / RECORD_NAME).read_text())
+    assert restored["files"] == record["files"] == {n: sha256(d) for n, d in LISTED.items()}
+    assert restored["fetched_at"] >= record["fetched_at"]
+    assert sorted(p.name for p in folder.parent.iterdir()) == ["fixture_listed"]  # no temporary files remain
+
+
+@pytest.mark.parametrize("missing", [(), ("last.pt",)])
+def test_fetch_refuses_a_changed_listed_file(cache, listed_fixture, downloads, missing):
+    folder = fetched_listed(downloads)
+    (folder / "config.yaml").write_bytes(b"is_3d: false\n")
+    for name in missing:
+        (folder / name).unlink()
+    before = snapshot(folder)
+    with pytest.raises(WeightsHashMismatchError) as raised:
+        fetch_weights("spotiflow", "fixture_listed")
+    assert str(folder / "config.yaml") in str(raised.value)
+    assert sha256(b"is_3d: false\n") in str(raised.value) and sha256(LISTED["config.yaml"]) in str(raised.value)
+    assert downloads == [] and snapshot(folder) == before
+
+
+def test_fetch_keeps_a_complete_verified_folder(cache, listed_fixture, downloads):
+    folder = fetched_listed(downloads)
+    before = snapshot(folder)
+    assert fetch_weights("spotiflow", "fixture_listed") == folder
+    assert downloads == [] and snapshot(folder) == before
+
+
+@pytest.mark.parametrize("missing", [(), ("config.yaml",)])
+def test_fetch_refuses_a_folder_without_its_record(cache, listed_fixture, downloads, missing):
+    folder = fetched_listed(downloads)
+    for name in (RECORD_NAME, *missing):
+        (folder / name).unlink()
+    before = snapshot(folder)
+    with pytest.raises(FileExistsError, match=RECORD_NAME):
+        fetch_weights("spotiflow", "fixture_listed")
+    assert downloads == [] and snapshot(folder) == before
+
+
+@pytest.mark.parametrize("change", ["lacks", "differs"])
+@pytest.mark.parametrize("name", sorted(LISTED))
+def test_a_fresh_fetch_checks_every_listed_file(cache, tmp_path, monkeypatch, downloads, name, change):
+    # The download itself matches its entry, so only the check of the listed files can refuse it.
+    archive = tmp_path / "broken.zip"
+    files = {n: d for n, d in LISTED.items() if n != name} if change == "lacks" else {**LISTED, name: b"other\n"}
+    entry = listed_entry(archive.as_uri(), write_zip(archive, files))
+    monkeypatch.setitem(KNOWN_WEIGHTS, ("spotiflow", "fixture_listed"), entry)
+    with pytest.raises(WeightsHashMismatchError, match=name) as raised:
+        fetch_weights("spotiflow", "fixture_listed")
+    assert ("has no" if change == "lacks" else sha256(b"other\n")) in str(raised.value)
+    assert downloads == [entry.url]
+    assert list((cache / "spotiflow").iterdir()) == []
 
 
 # --- Command line -------------------------------------------------------------------------------------
