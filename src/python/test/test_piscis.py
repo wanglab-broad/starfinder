@@ -44,10 +44,13 @@ from .learned_detectors import (SEAM_SHAPES, THREAD_VARIABLES, detect, evaluate,
 from .spot_finding_scenes import SEEDS, isolated_scene
 from .test_spot_finding_golden import CHANNELS, fixture_image, fov_with_fixture, golden_dataset
 
-pytestmark = pytest.mark.extended
+pytestmark = [pytest.mark.extended, pytest.mark.spot_finding, pytest.mark.learned]
 
 MODELS = ("20230905", "20251212")
 SCENES = ("iso3d", "iso_z1")
+# Stack mode on a 3D scene takes 12 s or more per detection on one CPU; plane mode on Z=1 does not.
+SCENE_PARAMS = [pytest.param("iso3d", marks=pytest.mark.slow), "iso_z1"]
+SEAM_PARAMS = [pytest.param(case, marks=pytest.mark.slow) if shape[0] > 1 else case for case, shape in SEAM_SHAPES.items()]
 
 
 @pytest.fixture(scope="module")
@@ -101,6 +104,8 @@ def test_the_cached_weights_pass_starfinder_weights_verify(model, capsys):
 
 # --- S1 and S2 -------------------------------------------------------------------------------------------
 
+@pytest.mark.validation
+@pytest.mark.slow
 @pytest.mark.parametrize("seed", SEEDS)
 @pytest.mark.parametrize("model", MODELS)
 def test_s1_s2_stack_mode_on_iso3d(model, seed):
@@ -113,6 +118,7 @@ def test_s1_s2_stack_mode_on_iso3d(model, seed):
     assert errors.values["abs_z_max"] <= 2.0
 
 
+@pytest.mark.validation
 @pytest.mark.parametrize("seed", SEEDS)
 @pytest.mark.parametrize("model", MODELS)
 def test_s1_s2_plane_mode_on_iso_z1(model, seed):
@@ -138,9 +144,10 @@ def near(spots, point, radius=3.0):
     return coords[np.linalg.norm(coords - point, axis=1) <= radius]
 
 
+@pytest.mark.validation
 @pytest.mark.parametrize("seed", SEEDS)
 @pytest.mark.parametrize("model", MODELS)
-@pytest.mark.parametrize("case", list(SEAM_SHAPES))
+@pytest.mark.parametrize("case", SEAM_PARAMS)
 def test_s8_one_candidate_per_spot_near_the_keep_boundaries(case, model, seed):
     truth, layout, tiled, untiled = seams(case, model, seed)
     assert len(truth) == 18
@@ -151,7 +158,8 @@ def test_s8_one_candidate_per_spot_near_the_keep_boundaries(case, model, seed):
         assert np.linalg.norm(found[0, 1:] - reference[0, 1:]) <= 0.2, (kind, offset)
 
 
-@pytest.mark.parametrize("case", list(SEAM_SHAPES))
+@pytest.mark.validation
+@pytest.mark.parametrize("case", SEAM_PARAMS)
 def test_s8_the_keep_boundaries_are_recorded(case):
     _, _, tiled, untiled = seams(case, "20251212", SEEDS[0])
     mode = "plane" if case == "seam_z1" else "stack"
@@ -177,7 +185,9 @@ def second_process_digests(torch):
     return json.loads(run_python(code))
 
 
+@pytest.mark.validation
 @pytest.mark.parametrize("model", MODELS)
+@pytest.mark.slow
 @pytest.mark.parametrize("scene", SCENES)
 def test_s13_tables_are_identical_in_one_process_and_in_a_second(scene, model, second_process_digests):
     image, _, first = isolated(scene, model, 100)
@@ -196,6 +206,7 @@ def spot(shape):
     return (100 + 1500 * np.exp(-0.5 * r2)).astype(np.float32)
 
 
+@pytest.mark.validation
 @pytest.mark.parametrize("model", MODELS)
 def test_s15_plane_mode_runs_on_1x8x8_and_stack_mode_on_2x8x8(model):
     plane = detect(spot((1, 8, 8)), PiscisConfig(model))
@@ -209,6 +220,7 @@ def test_s15_plane_mode_runs_on_1x8x8_and_stack_mode_on_2x8x8(model):
 
 # --- S14: hash checks before the model, no network, no library caches ---------------------------------------
 
+@pytest.mark.validation
 def test_s14_a_changed_hash_raises_before_the_piscis_constructor(no_loaded_models, constructor_calls, monkeypatch):
     entry = KNOWN_WEIGHTS[("piscis", "20251212")]
     monkeypatch.setitem(KNOWN_WEIGHTS, ("piscis", "20251212"),
@@ -228,6 +240,7 @@ def test_the_model_is_built_once_per_process_from_the_absolute_path(no_loaded_mo
     assert constructor_calls == [((), {"model_name": str(path), "device": "cpu"})]
 
 
+@pytest.mark.validation
 def test_s14_a_detection_completes_with_the_network_patched_to_raise(no_loaded_models, monkeypatch):
     def refuse(*args, **kwargs):
         raise AssertionError("a detection tried to use the network")
@@ -238,6 +251,7 @@ def test_s14_a_detection_completes_with_the_network_patched_to_raise(no_loaded_m
     assert match.values["recall"] == 1.0
 
 
+@pytest.mark.validation
 def test_s14_a_relative_weights_root_reaches_piscis_as_an_absolute_path(tmp_path, no_loaded_models,
                                                                          constructor_calls, monkeypatch):
     """STARFINDER_WEIGHTS_DIR=weights, relative to a working directory that holds a copy of the cache; Piscis
@@ -263,6 +277,8 @@ def test_s14_a_relative_weights_root_reaches_piscis_as_an_absolute_path(tmp_path
     assert list(home.iterdir()) == []
 
 
+@pytest.mark.validation
+@pytest.mark.slow
 def test_s14_no_library_cache_is_read_or_written_with_an_empty_home(tmp_path):
     home = tmp_path / "home"
     home.mkdir()
@@ -289,7 +305,7 @@ def test_s14_no_library_cache_is_read_or_written_with_an_empty_home(tmp_path):
 # --- Records ---------------------------------------------------------------------------------------------
 
 @pytest.mark.parametrize("model", MODELS)
-@pytest.mark.parametrize("scene", SCENES)
+@pytest.mark.parametrize("scene", SCENE_PARAMS)
 def test_records_effective_settings_model_execution_and_columns(scene, model):
     image, _, result = isolated(scene, model, 100)
     entry = KNOWN_WEIGHTS[("piscis", model)]

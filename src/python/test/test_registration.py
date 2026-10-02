@@ -12,6 +12,8 @@ from starfinder.registration._translation import apply_shift
 pass
 from starfinder.registration._skimage_backend import phase_correlate_skimage
 
+pytestmark = pytest.mark.registration
+
 
 class TestPhaseCorrelate:
     """Tests for phase_correlate function."""

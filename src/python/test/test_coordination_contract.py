@@ -23,6 +23,8 @@ from starfinder.spot_finding import LocalMaximaConfig
 from starfinder.barcode import (Codebook, NeighborhoodSumConfig, WtaDecoderConfig,
     ReadFilterConfig, filter_reads)
 
+pytestmark = [pytest.mark.integration, pytest.mark.contract]
+
 
 def dataset(tmp_path):
     ds = Dataset(tmp_path, tmp_path/'out', 'data', 'sample', 'run',

@@ -11,6 +11,8 @@ from starfinder.dataset import from_workflow_config
 from starfinder.preprocessing import (PREPROCESSING_METHODS, Background3DConfig, MinMaxNormalizationConfig, PercentileNormalizationConfig,
     PreprocessingRecipe, PreprocessingStep, ScalarBackgroundConfig, StepResult, PreprocessingSpec, TophatConfig)
 
+pytestmark = [pytest.mark.preprocessing, pytest.mark.contract]
+
 ROOT = Path(__file__).resolve().parents[3]
 SCHEMA = yaml.safe_load((ROOT / "workflow/schemas/config.schema.yaml").read_text())
 EXAMPLE = yaml.safe_load((ROOT / "docs/examples/workflow-recipe-2.yaml").read_text())

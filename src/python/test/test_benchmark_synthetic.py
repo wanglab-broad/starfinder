@@ -12,6 +12,8 @@ import tifffile
 from starfinder.__main__ import main
 from starfinder.synthetic import BENCHMARK_PRESETS, DEFORMATION_PRESETS, SCENE_PRESETS
 
+pytestmark = [pytest.mark.synthetic, pytest.mark.benchmark]
+
 E2E_FILES = {'codebook.csv', 'formed.csv', 'generation.json', 'ground_truth.json',
              'manifest.json', 'round_truth.csv', 'scene_truth.csv'}
 PAIR_FILES = {'ref.tif', 'mov_shift.tif', 'formed.csv', 'round_truth.csv', 'scene_truth.csv',
@@ -178,6 +180,7 @@ def test_generation_json_records_stream_counts_not_descriptors(tmp_path):
             assert scheme['bit_generator'] == 'PCG64' and scheme['key']
 
 
+@pytest.mark.slow
 def test_small_registration_cli(tmp_path):
     check_registration_layout(generate(tmp_path, 'registration', 'small'), 'small')
 
@@ -197,6 +200,7 @@ def timed_cli(tmp_path, mode, preset):
 
 
 @pytest.mark.extended
+@pytest.mark.slow
 def test_medium_cli_both_modes_time_and_peak_rss(tmp_path, capsys, record_testsuite_property):
     """The one medium generation check: both modes stay far below the 4 GiB RSS stop target.
 

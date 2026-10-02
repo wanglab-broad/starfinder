@@ -11,6 +11,8 @@ import pytest
 
 from starfinder.io import save_volume
 
+pytestmark = pytest.mark.workflow
+
 matplotlib.use("Agg")
 
 REPO_ROOT = Path(__file__).resolve().parents[3]

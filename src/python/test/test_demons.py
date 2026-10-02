@@ -7,6 +7,8 @@ from starfinder.io import ImageLoadConfig
 import numpy as np
 import pytest
 
+pytestmark = pytest.mark.registration
+
 # Skip all tests if SimpleITK not installed
 sitk = pytest.importorskip("SimpleITK", reason="SimpleITK required for local registration")
 

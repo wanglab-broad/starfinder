@@ -54,6 +54,8 @@ from .test_spot_finding_rounds import (CHANNELS as ROUND_CHANNELS, DATA as VERSI
 from .test_starfish_log import FIXTURES as PARITY, RECORD as PARITY_RECORD, TABLES as PARITY_TABLES
 from .test_starfish_log import parity_image, starfish_table
 
+pytestmark = [pytest.mark.spot_finding, pytest.mark.validation]
+
 META = ImageMetadata("validation")
 NAMESPACE = "validation/test"
 
@@ -142,6 +144,14 @@ def family(method):
     return method.split("-")[0]
 
 
+def piscis(row):
+    return family(row[0]) == "piscis"
+
+
+def learned(row):
+    return family(row[0]) in LEARNED
+
+
 def strict_xfail(reason):
     """A correct implementation that misses its bound: the bound is unchanged and the case goes to Jiahao."""
     return pytest.mark.xfail(strict=True, raises=AssertionError, reason=reason)
@@ -166,14 +176,17 @@ S10_PISCIS_COLUMNS = strict_xfail(
     "row within 3 voxels in that round (W-274, reported to Jiahao)")
 
 
-def params(*rows, marks=None):
-    """pytest.param for each row (a tuple whose first item is the method), extended-tier when it runs a
-    Spotiflow or Piscis model of METHODS; marks maps a row to extra marks (strict expected failures)."""
+def params(*rows, marks=None, slow=None):
+    """pytest.param for each row (a tuple whose first item is the method), extended-tier and learned when it
+    runs a Spotiflow or Piscis model of METHODS; marks maps a row to extra marks (strict expected failures);
+    slow is a predicate on the row for the slow marker (5 s or more, or sharing a cached detection that is)."""
     out = []
     for row in rows:
         extra = list((marks or {}).get(row, ()))
         if row[0] in METHODS and family(row[0]) in LEARNED:
-            extra.append(pytest.mark.extended)
+            extra += [pytest.mark.extended, pytest.mark.learned]
+        if slow is not None and slow(row):
+            extra.append(pytest.mark.slow)
         out.append(pytest.param(*row, id="-".join(str(v) for v in row), marks=extra))
     return out
 
@@ -304,7 +317,8 @@ S1_CASES = ([(m, "iso3d") for m in LM + LOG_ + SF3 + PI] + [(m, "iso_z1") for m 
             + [("local_maxima", "iso_z1_sparse")])
 
 
-@pytest.mark.parametrize("method, name, seed", params(*[(m, n, s) for m, n in S1_CASES for s in SEEDS]))
+@pytest.mark.parametrize("method, name, seed", params(*[(m, n, s) for m, n in S1_CASES for s in SEEDS],
+                                                    slow=lambda row: piscis(row) and row[1] == "iso3d"))
 def test_s1_isolated_spot_recall_and_precision(method, name, seed, record_property):
     _, truth, result = isolated(method, name, seed)
     match, _ = evaluate(result.spots, truth)
@@ -336,7 +350,8 @@ def s2_bounds(method, name):
     return {"lateral_max": S2_LOG_Z1_LATERAL if kind == "starfish_log" else S2_LM_Z1_LATERAL}
 
 
-@pytest.mark.parametrize("method, name, seed", params(*[(m, n, s) for m, n in S1_CASES for s in SEEDS]))
+@pytest.mark.parametrize("method, name, seed", params(*[(m, n, s) for m, n in S1_CASES for s in SEEDS],
+                                                    slow=lambda row: piscis(row) and row[1] == "iso3d"))
 def test_s2_localization_of_the_s1_matches(method, name, seed, record_property):
     _, truth, result = isolated(method, name, seed)
     match, errors = evaluate(result.spots, truth)
@@ -363,7 +378,8 @@ def pair_run(method, case, seed):
     return truth, kinds, detect(image, METHODS[method])
 
 
-@pytest.mark.parametrize("method, case, seed", params(*[(m, c, s) for m, c in S3_CASES for s in SEEDS]))
+@pytest.mark.parametrize("method, case, seed", params(*[(m, c, s) for m, c in S3_CASES for s in SEEDS],
+                                                    slow=lambda row: piscis(row) and row[1] == "pairs"))
 def test_s3_every_member_of_a_resolvable_pair_is_matched(method, case, seed, record_property):
     truth, kinds, result = pair_run(method, case, seed)
     match, _ = evaluate(result.spots, truth)
@@ -381,7 +397,8 @@ CHANNEL_LABELS = ("ch00", "ch01", "ch02", "ch03")
 
 
 @pytest.mark.parametrize("method, seed", params(*[(m, s) for m in LM + LOG_ + SF3 + PI for s in SEEDS],
-                                                marks={(m, s): [S4_PISCIS_OFFSETS] for m in PI for s in SEEDS}))
+                                                marks={(m, s): [S4_PISCIS_OFFSETS] for m in PI for s in SEEDS},
+                                                slow=learned))
 def test_s4_offset_channels_and_a_channel_override(method, seed, record_property):
     image, _ = fixtures.channels(seed)
     config = METHODS[method]
@@ -417,7 +434,7 @@ def test_s4_offset_channels_and_a_channel_override(method, seed, record_property
 # --- S5: coincident cross-channel candidates --------------------------------------------------------------
 
 @pytest.mark.parametrize("method, seed", params(*[(m, s) for m in LM + LOG_ + SF3 + PI for s in SEEDS],
-                                                marks={("spotiflow-smfish_3d", 102): [S5_SMFISH_102]}))
+                                                marks={("spotiflow-smfish_3d", 102): [S5_SMFISH_102]}, slow=piscis))
 def test_s5_coincident_spots_keep_one_row_per_channel(method, seed, record_property):
     image, truth = fixtures.coincident(seed)
     config = METHODS[method]
@@ -454,7 +471,8 @@ def spy(monkeypatch):
     return install
 
 
-@pytest.mark.parametrize("method, seed", params(*[(m, s) for m in LM + LOG_ + SF3 + PI for s in SEEDS]))
+@pytest.mark.parametrize("method, seed", params(*[(m, s) for m in LM + LOG_ + SF3 + PI for s in SEEDS],
+                                                slow=piscis))
 def test_s6_empty_input_zero_channels_and_the_mad_diagnostics(method, seed, spy, record_property):
     config = METHODS[method]
     calls = spy(type(config))
@@ -494,7 +512,8 @@ S7_CASES = ([("local_maxima", True, "3d"), ("local_maxima", False, "3d")] + [(m,
 
 @pytest.mark.parametrize("method, exclude_border, dims, seed",
                          params(*[(m, b, d, s) for m, b, d in S7_CASES for s in SEEDS],
-                                marks={("spotiflow-synth_3d", None, "3d", s): [S7_SYNTH_3D] for s in SEEDS}))
+                                marks={("spotiflow-synth_3d", None, "3d", s): [S7_SYNTH_3D] for s in SEEDS},
+                                slow=lambda row: piscis(row) and row[2] == "3d"))
 def test_s7_spots_near_the_faces(method, exclude_border, dims, seed, record_property):
     image, truth, distances = fixtures.borders(seed, z1=dims == "z1")
     config = METHODS[method] if exclude_border is None else replace(METHODS[method], exclude_border=exclude_border)
@@ -522,7 +541,8 @@ S8_CASES = ([(m, c) for m in PI for c in ("seam_z1", "seam3d")] + [(m, "iso_z1")
             + [(m, "iso3d") for m in SF3])
 
 
-@pytest.mark.parametrize("method, case, seed", params(*[(m, c, s) for m, c in S8_CASES for s in SEEDS]))
+@pytest.mark.parametrize("method, case, seed", params(*[(m, c, s) for m, c in S8_CASES for s in SEEDS],
+                                                    slow=lambda row: piscis(row) and row[1] == "seam3d"))
 def test_s8_tiling_seams(method, case, seed, record_property):
     config = METHODS[method]
     if family(method) == "piscis":
@@ -559,7 +579,7 @@ S9_CASES = [("spotiflow", "construction"), ("piscis", "construction"), ("starfis
 SCENE_OF = {**{m: "iso3d" for m in SF3}, **{m: "iso_z1" for m in SF2}}
 
 
-@pytest.mark.parametrize("method, case", params(*S9_CASES))
+@pytest.mark.parametrize("method, case", params(*S9_CASES, slow=lambda row: row[0] in PI))
 def test_s9_explicit_scaling(method, case):
     if case == "construction":
         config = SpotiflowConfig("smfish_3d") if method == "spotiflow" else PiscisConfig("20251212")
@@ -582,7 +602,8 @@ def test_s9_explicit_scaling(method, case):
 # --- S10: multi-round identities -------------------------------------------------------------------------
 
 @pytest.mark.parametrize("method, seed", params(*[(m, s) for m in LM + LOG_ + SF3 + PI for s in SEEDS],
-                                                marks={(m, s): [S10_PISCIS_COLUMNS] for m in PI for s in (100, 101)}))
+                                                marks={(m, s): [S10_PISCIS_COLUMNS] for m in PI for s in (100, 101)},
+                                                slow=learned))
 def test_s10_multi_round_identities(method, seed, record_property):
     shared, fov, default = multiround_run(method, seed)
     result = fov.spot_result
@@ -613,7 +634,8 @@ S11_CASES = ([("multiround", m, s, f) for m in LM + LOG_ + SF3 + PI for s in SEE
              + [("iso3d", m, s, f) for m in LOG_ + SF3 + PI for s in SEEDS for f in ("csv", "parquet")])
 
 
-@pytest.mark.parametrize("method, source, seed, table_format", params(*[(m, src, s, f) for src, m, s, f in S11_CASES]))
+@pytest.mark.parametrize("method, source, seed, table_format", params(*[(m, src, s, f) for src, m, s, f in S11_CASES],
+           slow=lambda row: piscis(row) or (learned(row) and row[1] == "multiround")))
 def test_s11_candidates_checkpoint_round_trip(method, source, seed, table_format, tmp_path):
     if source == "multiround":
         result = multiround_run(method, seed)[1].spot_result
@@ -692,6 +714,7 @@ def second_process_digests(group):
     return json.loads(run_python(code))
 
 
+@pytest.mark.slow  # every row shares the second process of its group, 5 s or more
 @pytest.mark.parametrize("method, name", params(*S13_CASES))
 def test_s13_tables_are_identical_twice_in_one_process_and_in_a_second(method, name, record_property):
     image, _, first = isolated(method, name, SEEDS[0])
@@ -789,7 +812,8 @@ def s15_expected(method, shape):
 
 
 @pytest.mark.parametrize("method, shape", params(*[(m, s) for m in LM + LOG_ + SF3 + SF2 + PI + [LOG_ANISOTROPIC]
-                                                   for s in S15_SHAPES]))
+                                                   for s in S15_SHAPES],
+                                                slow=lambda row: piscis(row) and row[1] == (7, 8, 8)))
 def test_s15_dimensionality_rules(method, shape, record_property):
     config = (StarfishLogConfig(**PARITY.LOG_SETTINGS_ANISOTROPIC) if method == LOG_ANISOTROPIC
               else METHODS[method])

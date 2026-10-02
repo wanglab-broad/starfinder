@@ -31,6 +31,8 @@ from .learned_detectors import one_thread_environment, run_python
 from .test_spot_finding_golden import CHANNELS, fov_with_fixture, golden_dataset
 from .test_spot_finding_workflow_key import SCHEMA, detection
 
+pytestmark = pytest.mark.spot_finding
+
 META = ImageMetadata("learned")
 NAMESPACE = "learned/test"
 EXTRAS = {SpotiflowConfig: ("spotiflow", SpotiflowConfig("smfish_3d"), np.ones((8, 16, 16), np.uint16)),
@@ -163,6 +165,7 @@ def test_every_run_names_its_weights():
             config_type(None)
 
 
+@pytest.mark.validation
 @pytest.mark.parametrize("config", [SpotiflowConfig("smfish_3d"), PiscisConfig("20230905")])
 @pytest.mark.parametrize("scale", [2, 0.5, 2.0, True, float("nan")])
 def test_s9_a_scale_other_than_one_raises_at_construction(config, scale):

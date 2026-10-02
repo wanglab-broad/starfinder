@@ -37,6 +37,8 @@ from starfinder.dataset.workflow import from_workflow_config
 from starfinder.image import ImageMetadata
 from starfinder.spot_finding import find_spots
 
+pytestmark = [pytest.mark.spot_finding, pytest.mark.golden]
+
 SHAPE_ZYX = (12, 48, 48)
 CHANNELS = ("ch00", "ch01", "ch02", "ch03")
 SEED = 20261001

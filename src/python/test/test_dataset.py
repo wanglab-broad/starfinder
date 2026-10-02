@@ -7,6 +7,8 @@ import pytest
 
 from starfinder.dataset import CropWindow, Dataset
 
+pytestmark = pytest.mark.dataset
+
 
 @pytest.fixture
 def sample_config():

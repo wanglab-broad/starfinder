@@ -14,6 +14,8 @@ from starfinder.synthetic import (BackgroundConfig, GeometryConfig, NoiseConfig,
     ReadoutEffectsConfig, ScalarDistribution, formed_scene_preset, generate_formed_scene)
 from starfinder.synthetic._geometry import _forward, _inverse
 
+pytestmark = pytest.mark.synthetic
+
 
 def payload(scene):
     return scene.provenance

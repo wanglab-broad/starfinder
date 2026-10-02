@@ -37,7 +37,7 @@ def formed_truth(small_dataset, fov_id="FOV_001"):
     return formed[formed.namespace.str.contains(f'"{fov_id}"')].reset_index(drop=True)
 
 
-pytestmark = pytest.mark.extended
+pytestmark = [pytest.mark.extended, pytest.mark.integration, pytest.mark.e2e]
 
 
 class TestE2EPipelineSmokeTest:

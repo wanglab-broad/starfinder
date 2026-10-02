@@ -16,6 +16,8 @@ from starfinder.synthetic import (BackgroundConfig, GeometryConfig, NoiseConfig,
 
 from .formed_oracle import COMPONENTS, generator, stream_descriptor, stream_digest
 
+pytestmark = pytest.mark.synthetic
+
 PACKAGE = Path(__file__).resolve().parents[1] / 'starfinder/synthetic'
 DOCS = Path(__file__).resolve().parents[3] / 'docs'
 
@@ -93,6 +95,7 @@ def test_unrelated_changes_preserve_other_streams():
     assert not base.formed[['z', 'y', 'x']].equals(moved.formed[['z', 'y', 'x']])
 
 
+@pytest.mark.slow
 def test_cross_process_repeatability_with_hash_seeds():
     code = '''
 import hashlib, json, sys

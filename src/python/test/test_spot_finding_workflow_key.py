@@ -15,6 +15,8 @@ from starfinder.dataset.workflow import from_workflow_config
 from starfinder.spot_finding import (SPOT_FINDING_METHODS, ChannelOverride, LocalMaximaConfig, SpotFindingPlan,
     SpotFindingSpec)
 
+pytestmark = [pytest.mark.spot_finding, pytest.mark.contract]
+
 ROOT = Path(__file__).resolve().parents[3]
 SCHEMA = yaml.safe_load((ROOT / "workflow/schemas/config.schema.yaml").read_text())
 CHANNELS = ("ch00", "ch01", "ch02", "ch03")

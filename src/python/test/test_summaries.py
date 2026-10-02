@@ -15,6 +15,8 @@ from starfinder.spot_finding import LocalMaximaConfig
 
 from .test_checkpoints import DECODE, DETECT, dataset, full, resident
 
+pytestmark = pytest.mark.integration
+
 STAGES = ['registration', 'spot_finding', 'extraction', 'decoding', 'filtering']
 
 

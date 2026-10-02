@@ -5,6 +5,8 @@ import pytest
 from starfinder.barcode import encode_bases
 from starfinder.barcode import EncodingConfig
 
+pytestmark = pytest.mark.barcode
+
 
 class TestTwoBaseEncoding:
     """Tests for the two-base color-space encoding scheme."""

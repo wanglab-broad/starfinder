@@ -10,6 +10,8 @@ from starfinder.registration._translation import phase_correlate
 from starfinder.registration._skimage_backend import phase_correlate_skimage
 from starfinder.registration._resampling import apply_tps_deformation
 
+pytestmark = pytest.mark.registration
+
 
 @pytest.mark.parametrize("shape,displacement", [
     ((1, 5, 7), (0, -2, 3)),  # odd correlation peak exactly n//2

@@ -10,6 +10,8 @@ import pytest
 from starfinder.evaluation.spot_finding import classify_detections, evaluate_spots, localization_errors
 from starfinder.image import ImageMetadata
 
+pytestmark = [pytest.mark.spot_finding, pytest.mark.evaluation]
+
 DATA = Path(__file__).parent / "data" / "spot_finding_metrics"
 W266_RUNS = ["0076-isolated-iso3d-100-spotiflow-smfish_3d", "0078-isolated-iso3d-100-piscis-20251212"]
 # W-266's matching on the isolated-spot scenes and W-267's on the W-218 scene.

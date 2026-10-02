@@ -8,6 +8,8 @@ import numpy as np
 import pytest
 from scipy.ndimage import map_coordinates
 
+pytestmark = pytest.mark.registration
+
 
 class TestTPSIdentity:
     """Identical images should produce near-zero displacement."""

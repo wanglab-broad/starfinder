@@ -27,6 +27,8 @@ from starfinder.registration import (DemonsConfig, RegistrationSignalConfig, Tra
                                      apply_transform)
 from starfinder import registration
 
+pytestmark = pytest.mark.registration
+
 ROOT = Path(__file__).resolve().parents[3]
 SHAPE = (8, 32, 32)
 SHIFT = np.array([0.0, 3.0, -2.0])

@@ -7,6 +7,8 @@ import pytest
 
 from starfinder.preprocessing import project_image
 
+pytestmark = pytest.mark.preprocessing
+
 
 class TestMakeProjection:
     """Tests for project_image."""

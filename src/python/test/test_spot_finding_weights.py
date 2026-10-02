@@ -19,6 +19,8 @@ from starfinder.spot_finding import (KNOWN_WEIGHTS, KnownWeights, MissingWeights
     WeightsHashMismatchError, fetch_weights, resolve_weights)
 from starfinder.spot_finding._weights import RECORD_NAME, listed_files, weights_artifacts, weights_directory
 
+pytestmark = pytest.mark.spot_finding
+
 # W-266 known-weights.csv: (method, model) -> (downloaded file SHA-256, bytes, library MD5,
 # loaded file, its SHA-256, its bytes), copied from the run directory
 # /home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-266/20260930T225252Z-967e52bd.

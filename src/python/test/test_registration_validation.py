@@ -46,6 +46,8 @@ requires_elastix = pytest.mark.skipif(not HAS_ELASTIX,
                                       reason="requires the registration-elastix and local-registration extras")
 
 pytestmark = [
+    pytest.mark.registration,
+    pytest.mark.validation,
     # SWIG wrappers of itk warn when pytest inspects their builtin types.
     pytest.mark.filterwarnings("ignore:builtin type .* has no __module__ attribute:DeprecationWarning"),
 ]
@@ -267,6 +269,7 @@ def local_runs():
 
 @pytest.mark.extended
 @requires_elastix
+@pytest.mark.slow
 @pytest.mark.parametrize("case", LOCAL_CASES)
 def test_v4_v5_known_deformations_through_recipes(case, local_runs):
     (fov, truth), _ = local_runs[case]
@@ -604,6 +607,7 @@ def test_v11_global_recipes_are_deterministic_at_one_thread(case):
 
 @pytest.mark.extended
 @requires_elastix
+@pytest.mark.slow
 @pytest.mark.parametrize("case", LOCAL_CASES)
 def test_v11_local_recipes_are_deterministic_at_one_thread(case, local_runs):
     import SimpleITK as sitk

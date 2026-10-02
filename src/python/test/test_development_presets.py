@@ -6,6 +6,8 @@ import pytest
 from starfinder.synthetic import (DEVELOPMENT_FACTORS, DEVELOPMENT_FIXTURES, DEVELOPMENT_SIZES,
     development_preset_factors, development_scene_preset, generate_formed_scene)
 
+pytestmark = pytest.mark.synthetic
+
 
 def scene(condition='clean', size='small'):
     book, config = development_scene_preset(condition, size=size)

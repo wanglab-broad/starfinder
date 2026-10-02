@@ -22,6 +22,8 @@ from starfinder.preprocessing import (PREPROCESSING_METHODS, Background3DConfig,
 
 from .test_preprocessing_golden import PINNED_SEQUENCE, digest, fixture_rounds
 
+pytestmark = [pytest.mark.preprocessing, pytest.mark.contract]
+
 ROOT = Path(__file__).resolve().parents[3]
 CHANNELS = ("ch00", "ch01", "ch02", "ch03")
 RECIPE_1 = PreprocessingRecipe((PreprocessingStep(MinMaxNormalizationConfig("uint8", (0, 255))),

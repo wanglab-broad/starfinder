@@ -84,8 +84,31 @@ explicit = true
 
 [tool.pytest.ini_options]
 testpaths = ["test"]
-addopts = "-v --tb=short -m 'not extended'"
-markers = ["extended: full-pipeline end-to-end comparisons on the session's synthetic data; run with -m extended"]
+addopts = "-v --tb=short --strict-markers -m 'not extended'"
+markers = [
+    "extended: full-pipeline end-to-end comparisons on the session's synthetic data; run with -m extended",
+    # Subsystem: the package whose behavior the test asserts. Every test has at least one (test/conftest.py).
+    "core: starfinder.image, the method registry helper and execution settings",
+    "io: starfinder.io readers, writers and OME-TIFF",
+    "dataset: starfinder.dataset (Dataset, FOV, types, checkpoints)",
+    "preprocessing: starfinder.preprocessing and its recipes",
+    "registration: starfinder.registration and its recipes",
+    "spot_finding: starfinder.spot_finding and its detectors",
+    "barcode: starfinder.barcode (codebook, extraction, decoding, filtering)",
+    "synthetic: starfinder.synthetic generation",
+    "evaluation: starfinder.evaluation metrics",
+    "benchmark: starfinder.benchmark and the scripts under benchmarks/",
+    "workflow: workflow/ scripts and the MATLAB launcher",
+    "integration: asserts behavior across three or more subsystems",
+    # Cost and requirement.
+    "slow: 5 s or more on one CPU and one thread, or shares a cached result that takes as long",
+    "learned: needs torch and the downloaded detector weights (STARFINDER_WEIGHTS_DIR)",
+    # Kind. A test without a kind marker is an ordinary unit test.
+    "contract: interface, dtype, error, registry and workflow-key behavior",
+    "golden: regression against pinned outputs",
+    "validation: an engineering validation check of a design table in the docs (S and V series)",
+    "e2e: full pipeline",
+]
 filterwarnings = [
     "error::ResourceWarning",
     "error::pytest.PytestUnraisableExceptionWarning",

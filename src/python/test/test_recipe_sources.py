@@ -23,6 +23,8 @@ from starfinder.spot_finding import LocalMaximaConfig
 
 from .test_preprocessing_golden import PINNED_SEQUENCE, digest, fixture_rounds
 
+pytestmark = pytest.mark.integration
+
 CHANNELS = ("ch00", "ch01")
 SHIFT_YX = (3, -2)  # the moving round's content is displaced by this many voxels
 BACKGROUND = ScalarBackgroundConfig(percentile=10.0)

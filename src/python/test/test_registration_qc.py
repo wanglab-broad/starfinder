@@ -23,6 +23,8 @@ from starfinder.registration import (
     apply_transform,
 )
 
+pytestmark = [pytest.mark.registration, pytest.mark.evaluation]
+
 REF = ImageMetadata("reference")
 MOV = ImageMetadata("moving")
 

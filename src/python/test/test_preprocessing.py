@@ -14,6 +14,8 @@ from starfinder.preprocessing import (
     filter_tophat,
 )
 
+pytestmark = pytest.mark.preprocessing
+
 
 class TestMinMaxNormalize:
     """Tests for normalize_intensity."""

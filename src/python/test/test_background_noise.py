@@ -13,6 +13,8 @@ from starfinder.synthetic import (BackgroundConfig, NoiseConfig, TextureConfig, 
                                   ReadoutEffectsConfig, formed_scene_preset, generate_formed_scene)
 from starfinder.synthetic._observation import _noise, _observe, evaluate_background
 
+pytestmark = pytest.mark.synthetic
+
 
 def generate(background=BackgroundConfig(), noise=NoiseConfig(), **kwargs):
     book, config = formed_scene_preset()

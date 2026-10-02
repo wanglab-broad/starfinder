@@ -15,6 +15,8 @@ from starfinder.evaluation.registration import (
     evaluate_mask_overlap, evaluate_registration,
 )
 
+pytestmark = [pytest.mark.evaluation, pytest.mark.contract]
+
 META = ImageMetadata("test/reference")
 CONFIG = dict(policy="greedy", threshold=2., units="voxel",
               reference_metadata=META, observed_metadata=META)

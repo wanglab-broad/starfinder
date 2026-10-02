@@ -8,6 +8,8 @@ from unittest.mock import patch
 import pytest
 import yaml
 
+pytestmark = pytest.mark.workflow
+
 ROOT = Path(__file__).resolve().parents[3]
 SPEC = importlib.util.spec_from_file_location('matlab_launcher', ROOT / 'workflow/rules/matlab_launcher.py')
 launcher = importlib.util.module_from_spec(SPEC)

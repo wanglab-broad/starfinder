@@ -16,6 +16,8 @@ import pytest
 
 from starfinder.synthetic import CALIBRATED_CONDITIONS, calibrated_scene_preset, development_codebook
 
+pytestmark = [pytest.mark.preprocessing, pytest.mark.benchmark]
+
 ROOT = Path(__file__).resolve().parents[3]
 
 
@@ -437,6 +439,7 @@ def test_extra_roles_add_reported_and_harm_test_rows():
 
 # --- Default-tier smoke test ------------------------------------------------------------------------
 
+@pytest.mark.slow
 def test_calibrated_smoke_run_in_both_threshold_modes(tmp_path):
     output = tmp_path / "evaluation"
     manifest = evaluation.run_calibrated(output, scope="smoke", shape=(8, 32, 32), count=12, log=lambda m: None)

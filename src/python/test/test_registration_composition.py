@@ -16,6 +16,8 @@ from starfinder.registration import (AffineConfig, AffineTransform, BSplineTrans
     UnsupportedTransformOperationError, WarpConfig, apply_transform)
 from starfinder.registration._elastix import _index_matrix
 
+pytestmark = pytest.mark.registration
+
 TOLERANCE = 1e-12
 REFERENCE, MOVING = ImageMetadata("test/reference"), ImageMetadata("test/moving")
 

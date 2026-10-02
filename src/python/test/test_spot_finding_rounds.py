@@ -28,6 +28,8 @@ from starfinder.spot_finding import (ChannelOverride, LocalMaximaConfig, PiscisC
 from .spot_finding_scenes import SEEDS, isolated_scene
 from .test_spot_finding_golden import PINNED_FIND_SPOTS, golden_dataset, table_digest
 
+pytestmark = pytest.mark.spot_finding
+
 SHAPE_ZYX = (16, 64, 64)
 ROUNDS = ("round1", "round2", "round3")
 CHANNELS = ("ch00", "ch01")
@@ -99,7 +101,8 @@ def test_the_fixture_stays_within_the_resource_bounds(scene):
     assert shared.shape == (2, N_SHARED, 3)
 
 
-@pytest.mark.parametrize("method", METHODS)
+@pytest.mark.parametrize("method", [pytest.param(method, marks=pytest.mark.slow) if method == "starfish_log" else method
+                                    for method in METHODS])
 def test_every_row_has_its_round_and_the_identities_are_unique(tmp_path, scene, method):
     images, _ = scene
     result = detected(tmp_path, images, METHODS[method])
@@ -358,8 +361,11 @@ def one_thread(monkeypatch):
 
 
 @pytest.mark.extended
-@pytest.mark.parametrize("config", [SpotiflowConfig("synth_3d"), SpotiflowConfig("smfish_3d"), PiscisConfig("20230905"),
-                                    PiscisConfig("20251212")], ids=lambda c: f"{c.method}-{c.model}")
+@pytest.mark.learned
+@pytest.mark.parametrize("config", [SpotiflowConfig("synth_3d"), SpotiflowConfig("smfish_3d"),
+                                    pytest.param(PiscisConfig("20230905"), marks=pytest.mark.slow),
+                                    pytest.param(PiscisConfig("20251212"), marks=pytest.mark.slow)],
+                         ids=lambda c: f"{c.method}-{c.model}")
 def test_iso3d_learned_tables_round_trip(tmp_path, one_thread, config):
     pytest.importorskip(config.method)
     from starfinder.spot_finding import _model_artifacts

@@ -12,6 +12,8 @@ import pytest
 from starfinder.benchmark import (BenchmarkCase, BenchmarkTrialResult, run_benchmark,
                                  evaluate_benchmark, report_benchmark)
 
+pytestmark = [pytest.mark.benchmark, pytest.mark.contract]
+
 
 def read(path):
     return json.loads(path.read_text())
@@ -162,6 +164,7 @@ def test_float_transform_and_dense_artifacts(case, tmp_path, monkeypatch):
     np.testing.assert_array_equal(np.load(root / 'tiny/0000/field.npy'), transform.displacement_zyx)
 
 
+@pytest.mark.slow
 def test_cli_lifecycle_and_help(case, tmp_path):
     config = tmp_path / 'config.json'
     config.write_text(json.dumps({'schema_version': 1, 'cases': [case.to_dict()], 'repetitions': 1}))

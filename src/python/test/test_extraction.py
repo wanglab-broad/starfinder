@@ -15,6 +15,8 @@ from starfinder.spot_finding import SpotFindingResult, LocalMaximaConfig
 from starfinder.image import ImageMetadata
 from .barcode_cases import CHANNELS, META, codebook
 
+pytestmark = [pytest.mark.barcode, pytest.mark.contract]
+
 
 def spots(points, ids=None):
     table = pd.DataFrame(points, columns=["z", "y", "x"], dtype="float64")

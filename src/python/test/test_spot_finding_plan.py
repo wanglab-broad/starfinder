@@ -19,6 +19,8 @@ from starfinder.spot_finding import (ChannelOverride, LocalMaximaConfig, NoiseLa
 
 from .test_spot_finding_golden import CHANNELS, fixture_image, fov_with_fixture, golden_dataset
 
+pytestmark = pytest.mark.spot_finding
+
 META = ImageMetadata("golden/round1")
 NAMESPACE = "golden/sample/FOV_001"
 BASE = LocalMaximaConfig(channel_labels=CHANNELS)
