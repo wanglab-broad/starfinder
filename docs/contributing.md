@@ -250,20 +250,62 @@ exclusion needs a specific URL pattern and documented reason.
 
 ### Python regression tests
 
-When Python behavior changes, follow the repository test guidance from `src/python`:
+When Python behavior changes, run the tests from `src/python`. The explicit `dev`
+group is needed with `UV_NO_DEFAULT_GROUPS=true` above.
 
 ```bash
-uv run --group dev pytest test/ -v
+uv run --group dev pytest test/ -v -m "not slow and not learned"   # routine: about 5 minutes on one CPU
+uv run --group dev pytest test/ -v -m "registration"                # one subsystem, slow tests included
+uv run --group dev pytest test/ -v                                  # default run
+uv run --group dev pytest test/ -v -m extended                      # extended run
 ```
 
-The explicit `dev` group is needed with `UV_NO_DEFAULT_GROUPS=true` above.
-The default run excludes tests marked `extended` (the full-pipeline end-to-end
-comparisons in `test_e2e.py`). Run them with
-`uv run --group dev pytest test/ -v -m extended` when changing the pipeline.
-The `Tests` GitHub Actions workflow installs the locked `dev` and
-`local-registration` extras, then runs the default and extended suites on
-pushes and pull requests to `dev` and `main`. MATLAB is never executed there;
-the launcher tests mock `subprocess`.
+The default run excludes tests marked `extended`. The complete suite (default
+and extended) takes about an hour on one CPU, most of it the learned detectors,
+so select by marker while developing and leave the complete suite to the batch
+gate described in `AGENTS.md`.
+
+#### Test markers
+
+Markers are registered in `src/python/pyproject.toml` and checked with
+`--strict-markers`; an unregistered marker is an error.
+
+| Group | Markers | Set on |
+| --- | --- | --- |
+| Subsystem | `core`, `io`, `dataset`, `preprocessing`, `registration`, `spot_finding`, `barcode`, `synthetic`, `evaluation`, `benchmark`, `workflow`, `integration` | the file, with `pytestmark` |
+| Cost and requirement | `slow`, `learned` | the test or the parameter |
+| Kind | `contract`, `golden`, `validation`, `e2e` | the file or the test |
+
+Rules for a new or changed test:
+
+1. Every test file sets at least one subsystem marker. The subsystem is the
+   package whose behavior the test asserts, not every package it imports. A
+   test that asserts behavior across three or more subsystems is `integration`.
+   Collection stops with an error that names each file without one.
+2. Put a new test in the existing file of its subsystem where one fits. A new
+   file is named `test_<subsystem>_<topic>.py`.
+3. Kind: `contract` for interface, dtype, error, registry and workflow-key
+   behavior; `golden` for comparison with pinned outputs; `validation` for a
+   check named in a design table of these pages (the S and V series); `e2e` for
+   the full pipeline. A test without a kind marker is an ordinary unit test.
+4. `learned` for a test that loads a detector model or needs
+   `STARFINDER_WEIGHTS_DIR`.
+5. `slow` by measurement: 5 s or more on one CPU and one thread in the locked
+   environment, not counting the one-time import of a library. Time a new test
+   with `--durations=0` and report the time in the handoff. A test that uses a
+   cached or module-scoped result which takes that long is `slow` as well,
+   because it pays the cost when the first user is deselected. For a
+   parametrized test, mark the slow parameters with `pytest.param(...,
+   marks=pytest.mark.slow)` when only some are slow.
+6. Reviewers check the markers of new and changed tests.
+
+The `Tests` GitHub Actions workflow installs the locked `dev`,
+`local-registration` and `checkpoint` extras, then runs the default and
+extended runs on pushes and pull requests to `dev` and `main`. It installs
+neither the `spotiflow` and `piscis` extras with their weights nor the
+`registration-elastix` extra, so the `learned` tests and the elastix
+registration tests are skipped there. MATLAB is never executed; the launcher
+tests mock `subprocess`.
 The full Python suite is separate from bounded documentation CI. Local build
 success does not establish a successful Actions run, deployment, optional-backend
 execution or external link availability.
