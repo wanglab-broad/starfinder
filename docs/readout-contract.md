@@ -109,7 +109,7 @@ New names under N1:
 | Readout mode | `Dataset.readout_mode`, `"multiplexed"` (default) or `"direct"`; YAML top-level `readout_mode` | Dataset field |
 | Encoding registry | `ENCODINGS: dict[type, EncodingSpec]` in `starfinder.barcode`; entries `two_base` (`EncodingConfig`, which gains `method="two_base"`) and `one_base` (`OneBaseEncodingConfig`) | registry |
 | Decoding registry | `DECODING_METHODS: dict[type, DecodingSpec]` in `starfinder.barcode`; entries `wta`, `codebook_aware`, `direct` | registry (the "Decoding" row of {doc}`method-registry` names it `DECODERS`; this page uses the `*_METHODS` pattern of decision 2 there) |
-| Segment layout | `SegmentLayout`, `Segment`; `Codebook.layout` | frozen dataclasses |
+| Segment layout | `BarcodeLayout`, `Segment`; `Codebook.layout` | frozen dataclasses |
 | Codebook entries | `Codebook.table` column `entry_id`; `n_entries`, `seq_to_entry`, `entry_to_seq` | codebook |
 | Direct mapping | `DirectPanel`, `load_direct_panel`; `Dataset.direct_panel`, `Dataset.load_direct_panel` | dataset |
 | Direct assignment | `DirectAssignmentConfig`, `assign_direct` | config, function |
@@ -201,7 +201,7 @@ class Segment:
     ends: tuple[tuple[str, str], ...] = ()      # allowed (first, last) bases, read orientation; () = unchecked
 
 @dataclass(frozen=True)
-class SegmentLayout:
+class BarcodeLayout:
     segments: tuple[Segment, ...]               # in barcode order, as written in the codebook file
     acquisition_order: tuple[str, ...] | None = None   # segment names in round order; None = barcode order
 ```
@@ -220,10 +220,10 @@ class SegmentLayout:
 (`load_codebook.split_index`, `reads_filtration.split_index`). Its value `s` is
 MATLAB's **one-based** position, in the encoded color string, of the junction color
 that is removed. For a `two_base` barcode of `n` bases with `reverse_bases=True`,
-the workflow boundary translates `s` into `SegmentLayout((Segment("A", n − s),
+the workflow boundary translates `s` into `BarcodeLayout((Segment("A", n − s),
 Segment("B", s)), acquisition_order=("A", "B"))`, which equals today's
 `EncodingConfig(split_index=s − 1)` (zero-based). With `reverse_bases=False` the
-same `s` gives `SegmentLayout((Segment("A", s), Segment("B", n − s)),
+same `s` gives `BarcodeLayout((Segment("A", s), Segment("B", n − s)),
 acquisition_order=("B", "A"))`, again equal to `EncodingConfig(split_index=s − 1)`:
 the legacy split always acquires first the colors that follow the removed color.
 The translation lives only in `dataset/workflow.py`; Python callers state the layout
@@ -233,7 +233,7 @@ the 5 + 4 order of {doc}`readout-baseline`.
 
 | Option | Representation | Effect on the golden digests | Effect on the checkpoints | Effect on the MATLAB-facing keys |
 | --- | --- | --- | --- | --- |
-| **S1. Typed `SegmentLayout` on the codebook (recommended)** | As above; `EncodingConfig.split_index` kept as a legacy field and translated; per-segment `ends` on the layout; `ReadFilterConfig.end_bases` kept as the one-segment shortcut. | None: the golden codebook has one segment, the default. | `pre_qc.json` records the layout; a checkpoint without it loads with the one-segment layout. | Unchanged keys (`split_index`, `end_base`, `n_barcode_segments`), translated at the workflow boundary with the index base stated. |
+| **S1. Typed `BarcodeLayout` on the codebook (recommended)** | As above; `EncodingConfig.split_index` kept as a legacy field and translated; per-segment `ends` on the layout; `ReadFilterConfig.end_bases` kept as the one-segment shortcut. | None: the golden codebook has one segment, the default. | `pre_qc.json` records the layout; a checkpoint without it loads with the one-segment layout. | Unchanged keys (`split_index`, `end_base`, `n_barcode_segments`), translated at the workflow boundary with the index base stated. |
 | S2. MATLAB-style flat keys in Python | `EncodingConfig.split_index` with its index base fixed, `ReadFilterConfig.end_bases` as one pair per segment, and a segment count. | None. | Config fields only. | A one-to-one mirror of the MATLAB keys. Lengths, acquisition order and several pairs per segment cannot be stated; the order stays "the part after the split first", which depends on `reverse_bases`. |
 | S3. Segment columns in the codebook file | Each `genes.csv` row carries its segments. | None for one segment. | A wider codebook record. | Changes `genes.csv`, which MATLAB reads; rejected. |
 
@@ -512,7 +512,7 @@ The implementation adds these entries:
 2. **Encodings and decoders.** `ENCODINGS` with `two_base` (`EncodingConfig`, now
    with `method`) and `one_base` (`OneBaseEncodingConfig`); `DECODING_METHODS`;
    exact-type lookup.
-3. **Segment layout.** `SegmentLayout`, `Segment`, `Codebook.layout`; per-segment
+3. **Segment layout.** `BarcodeLayout`, `Segment`, `Codebook.layout`; per-segment
    end bases. **Intentional change:** the workflow adapter converts the shared
    `split_index` from MATLAB's one-based position; a configuration that worked
    around the defect by giving the Python value (for example 4 for aging) must give
