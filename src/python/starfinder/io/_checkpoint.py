@@ -266,6 +266,11 @@ def clear_stages(directory):
             path.rmdir()
 
 
+def readout_mode(header):
+    """The readout mode of a candidates or pre_qc header; a header without the key (before §2.8) is multiplexed."""
+    return header.get("readout_mode", "multiplexed")
+
+
 def read_header(directory, stage):
     """Load a stage header; missing checkpoints raise FileNotFoundError."""
     path = header_path(directory, stage)
@@ -462,7 +467,8 @@ def write_candidates(directory, header, spot_result, intensity_result, table_for
     detection_rounds (null, or the plan's rounds), detection_plan (the
     channel overrides as {channel, config} entries), execution (the
     execution entry) and weights (the provenance artifacts entries of the
-    loaded weights; empty without weights).
+    loaded weights; empty without weights). The readout_mode key comes from
+    the caller's header (FOV writes the dataset's); box_voxels is not stored.
     """
     from starfinder.spot_finding import _model_artifacts
     frame = candidates_frame(spot_result, intensity_result)
@@ -521,12 +527,17 @@ def _read_candidates(directory, header):
 # --- Pre-QC stage ----------------------------------------------------------------
 
 def write_pre_qc(directory, header, decoding_result, table_format):
-    """Write the unchanged decoding table and pre_qc.json; probabilities are not saved."""
+    """Write the unchanged decoding table and pre_qc.json; probabilities are not saved.
+
+    pre_qc.json records the result's readout_mode; a direct decoding_config
+    carries only its method.
+    """
     table, dtypes = _write_table(decoding_result.table.reset_index(drop=True), directory, "pre_qc", table_format)
     header = dict(header, stage="pre_qc", format_version=FORMAT_VERSION, table=table, dtypes=dtypes,
         spot_namespace=decoding_result.spot_namespace, channel_labels_decoded=decoding_result.channel_labels,
         round_labels=decoding_result.round_labels, decoding_config=decoding_result.config,
-        decoding_diagnostics=_json_diagnostics(decoding_result.diagnostics))
+        decoding_diagnostics=_json_diagnostics(decoding_result.diagnostics),
+        readout_mode=decoding_result.readout_mode)
     write_json(header, Path(directory) / "pre_qc.json")
     return [table, "pre_qc.json"]
 
@@ -537,7 +548,7 @@ def _read_pre_qc(directory, header):
     config = _config(header["decoding_config"], {spec.name: t for t, spec in DECODING_METHODS.items()})
     return {"decoding_result": BarcodeDecodingResult(table, header["spot_namespace"],
         tuple(header["channel_labels_decoded"]), tuple(header["round_labels"]), config,
-        _tuples(header["decoding_diagnostics"]))}
+        _tuples(header["decoding_diagnostics"]), readout_mode(header))}
 
 
 # --- Public reader ---------------------------------------------------------------
@@ -568,8 +579,10 @@ def read_checkpoint(path: Path | str, stage: str) -> dict:
         (SpotFindingResult) and ``intensity_result`` (IntensityExtractionResult,
         or None when signals were not extracted); the spot result's plan is
         rebuilt from ``detection_plan`` and ``detection_rounds`` (absent in
-        earlier checkpoints: no overrides and rounds None). ``pre_qc``: ``decoding_result``
-        (BarcodeDecodingResult without array or table diagnostics).
+        earlier checkpoints: no overrides and rounds None); its box_voxels is
+        None (not stored). ``pre_qc``: ``decoding_result``
+        (BarcodeDecodingResult without array or table diagnostics; its
+        readout_mode is the header's, ``multiplexed`` when absent).
 
     Raises
     ------

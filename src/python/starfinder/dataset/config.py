@@ -16,7 +16,7 @@ from starfinder._execution import check_device
 from starfinder.spot_finding import SPOT_FINDING_METHODS, SpotFindingPlan
 from starfinder.spot_finding._methods import SpotFindingConfig
 from starfinder.barcode import (DECODING_METHODS, NeighborhoodSumConfig, WtaDecoderConfig,
-    CodebookAwareDecoderConfig, ReadFilterConfig)
+    CodebookAwareDecoderConfig, DirectAssignmentConfig, ReadFilterConfig)
 
 # Error categories a RecoveryConfig may allow.
 _RECOVERABLE = (RegistrationEstimationError, InsufficientLandmarksError, RegistrationRejectedError)
@@ -213,7 +213,9 @@ class PipelineConfig:
     recipe (None: no registration), the preprocessing recipe's
     post_registration steps, detect, extract, decode, filter. spot_finding is a
     config of a SPOT_FINDING_METHODS method with pipeline=True, or a
-    SpotFindingPlan of one. The pipeline processes ZYX(C) volumes and never projects;
+    SpotFindingPlan of one. decoding is a DECODING_METHODS config of the
+    dataset's readout mode: wta or codebook_aware (multiplexed), or
+    DirectAssignmentConfig (direct). The pipeline processes ZYX(C) volumes and never projects;
     projection is an output view. All operation parameters are passed intact
     to public functions.
     """
@@ -223,7 +225,7 @@ class PipelineConfig:
     registration: RegistrationRecipe | None = None
     spot_finding: SpotFindingConfig | SpotFindingPlan | None = None
     extraction: NeighborhoodSumConfig | None = None
-    decoding: WtaDecoderConfig | CodebookAwareDecoderConfig | None = None
+    decoding: WtaDecoderConfig | CodebookAwareDecoderConfig | DirectAssignmentConfig | None = None
     filtering: ReadFilterConfig | None = None
 
     def __post_init__(self):

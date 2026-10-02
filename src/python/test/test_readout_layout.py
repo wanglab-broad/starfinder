@@ -165,6 +165,9 @@ def test_encoding_and_decoding_keys():
     adapted = from_workflow_config(workflow(4, decoding={"method": "codebook_aware", "allow_rescue": True}))
     assert adapted.pipeline.decoding.allow_rescue is True
     with pytest.raises(ValueError, match="unknown decoding method"):
+        from_workflow_config(workflow(4, decoding={"method": "viterbi"}))
+    # W-293 registers direct, which readout mode multiplexed (the default) does not support.
+    with pytest.raises(TypeError, match="readout mode 'multiplexed' does not support decoder 'direct'"):
         from_workflow_config(workflow(4, decoding={"method": "direct"}))
     with pytest.raises(ValueError, match="unknown decoding keys"):
         from_workflow_config(workflow(4, decoding={"method": "wta", "max_hamming": 1}))

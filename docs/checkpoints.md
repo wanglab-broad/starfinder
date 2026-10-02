@@ -146,6 +146,10 @@ also records the detection plan in four keys:
 | `execution` | The execution entry: device, framework and thread settings. |
 | `weights` | The provenance `artifacts` entries of the loaded pretrained weights (empty for methods without weights). |
 
+Since §2.8 (W-293) `candidates.json` also records `readout_mode`, the dataset's
+readout mode (`multiplexed` or `direct`, {doc}`readout-contract`). A header without
+it is `multiplexed`.
+
 `detection_config` stays the plan's base config. Reloading gives a
 `SpotFindingResult` whose table equals the written one exactly (CSV and Parquet) and
 whose `config` and `plan` equal the original. A checkpoint written before these keys
@@ -156,8 +160,11 @@ spot column.
 With a plan that names several rounds (see {doc}`spot-finding-contract`, "Detection in
 several rounds"), the table holds every round's candidates, reference round first,
 with `spot_id` running over the whole table and the round in `round`; coincident
-candidates of different rounds stay separate rows. The signal columns are still read
-at every candidate in every sequencing round.
+candidates of different rounds stay separate rows. In readout mode `multiplexed` the
+signal columns are read at every candidate in every sequencing round. In readout mode
+`direct` each candidate is read in its own round only: the signals of its other
+rounds are `0.0` and their `valid_<round>` is false. `IntensityExtractionResult.box_voxels`
+is not stored yet, so a reloaded result has `box_voxels=None`.
 
 ### pre_qc
 
@@ -166,7 +173,12 @@ the table holds the string column `entry_id`, the codebook entry of the decoded
 color sequence, after `gene_id`; `FORMAT_VERSION` stays 2, an older reader keeps
 it as an ordinary column, and a `pre_qc` written without it still loads.
 `pre_qc.json` holds the decoder configuration, labels and diagnostics; the reader
-rebuilds the configuration through `DECODING_METHODS` from its `method`. Array
+rebuilds the configuration through `DECODING_METHODS` from its `method` (a `direct`
+configuration holds only its `method`). Since W-293 it also records `readout_mode`,
+which becomes `BarcodeDecodingResult.readout_mode` on reloading; a header without it
+loads as `multiplexed`. A `direct` table adds `round`, `channel`,
+`own_channel_rank` and `own_channel_fraction`, and its color sequences are missing
+values. Array
 and table diagnostics are not saved: decoder probabilities, per-round and
 candidate tables, and WTA per-round scores. A reloaded result therefore lacks
 those keys.
@@ -195,8 +207,9 @@ identical typed results. Empty tables keep their columns and dtypes.
 
 {py:meth}`~starfinder.dataset.FOV.load_checkpoint` restores one stage into an FOV
 that has no results at or after that stage. It checks the FOV id (and subtile
-id), the round labels and the channel order against the dataset, and raises
-`ValueError` on a mismatch. Then call `run` with a `PipelineConfig` that starts
+id), the round labels and the channel order against the dataset, and, for
+`candidates` and `pre_qc`, the readout mode (`multiplexed` when the header has
+none) against `Dataset.readout_mode`; it raises `ValueError` on a mismatch. Then call `run` with a `PipelineConfig` that starts
 after the loaded stage:
 
 ```python
@@ -236,7 +249,7 @@ run starts, after each completed step and when the run ends. It contains:
 | `error` | `null`, or the failing `step` and `round`, the exception `type`, `message` and `traceback`. |
 | `code` | Package `version`, `git_commit` and `git_dirty`; each is `null` when unknown. The commit is recorded only when the package runs from a starfinder checkout, never from an enclosing repository. |
 | `environment` | Python, platform and package versions (`null` when not installed). |
-| `config` | `pipeline`, `execution` (including the execution `device`) and `checkpoints` configurations. |
+| `config` | `pipeline`, `execution` (including the execution `device`) and `checkpoints` configurations, and `readout_mode`, the dataset's readout mode (since W-293). |
 | `inputs` | Loaded TIFF `path` and streamed `sha256` (`null` with `hash_inputs=False`). |
 | `steps` | `name`, `round`, `seconds` and `status` of each completed or failed step. A preprocessing step is named `preprocess:<step name>`. The `find_spots` record also has `methods`, a list with the detection's provenance entry ({doc}`method-registry`, "Provenance in run.json"): `stage` (`spot_finding`), `method`, `config_type`, `implementation`, `config`, `requires` (installed versions of the optional dependencies), `artifacts` (pretrained weights files; empty for methods without weights) and `execution` (device, framework and thread settings). For a plan that names rounds, `run` records one `find_round_spots` step per detected round, each with its own entry, and `FOV.find_spots` called inside a recorded step lists one entry per round, each with its `round`. |
 | `preprocessing` | `null` without a preprocessing recipe. Otherwise `recipe` (the step names of `steps` and `post_registration`, `extraction_source` and `registration_source`), `rounds`: per round, one record per step with `index`, `stage` (`steps` or `post_registration`), `step`, `config`, `fitted`, `diagnostics`, `input_dtype`, `output_dtype` and `save_as`; `transforms`: per round and image (`detection` and each snapshot), the transforms composed in order, each with `result` (its index in the round's registration results in `transforms.json`), `method` and `kind` (`translation`, `affine`, `bspline` or `dense`), empty for the reference round; and `supplied_statistics`. |

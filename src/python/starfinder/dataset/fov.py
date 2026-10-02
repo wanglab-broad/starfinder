@@ -26,11 +26,16 @@ from starfinder.dataset.config import (CheckpointConfig, PipelineConfig, Executi
     RegistrationRecipe)
 from starfinder.registration import (RegistrationRejectedError, RegistrationResult, TransformChain,
     TranslationTransform, WarpConfig)
-from starfinder.barcode import (Codebook, IntensityExtractionResult, NeighborhoodSumConfig,
+from starfinder.barcode import (DECODING_METHODS, Codebook, IntensityExtractionResult, NeighborhoodSumConfig,
     WtaDecoderConfig, ReadFilterConfig, BarcodeDecodingResult, ReadFilteringResult)
+from starfinder.barcode.decoding import _mode_mismatch
 
-# Raised when a candidate set of several detection rounds would be decoded as barcodes.
-MULTI_ROUND_DECODING = "decoding candidates from several detection rounds needs a readout mode (§2.8)"
+# Raised in readout mode multiplexed when a candidate set with a round column would be decoded as barcodes.
+MULTI_ROUND_DECODING = ("decoding candidates from several detection rounds needs a readout mode (§2.8): "
+                        "set readout_mode='direct' on the dataset for direct readout")
+# Raised in readout mode direct when the candidates have no round column.
+DIRECT_NEEDS_ROUNDS = ("readout_mode='direct' assigns each candidate from its own round and needs candidates "
+                       "with a round column: detect with a SpotFindingPlan with explicit rounds")
 
 if TYPE_CHECKING:
     from starfinder.dataset.dataset import Dataset
@@ -897,7 +902,7 @@ class FOV:
             tuple(self.dataset.channel_order), (), {})
         self._round_intensities[round_name] = extract_intensities(
             {round_name: loaded}, self.spot_result,
-            config=config)
+            config=config, readout_mode=self.dataset.readout_mode)
 
     def _assemble_intensities(self, rounds=None):
         rounds = self.rounds.sequencing_rounds if rounds is None else rounds
@@ -907,16 +912,22 @@ class FOV:
                r.channel_labels != first.channel_labels or r.config != first.config or
                r.diagnostics['source_shape_zyx'] != first.diagnostics['source_shape_zyx'] for r in results):
             raise ValueError("inconsistent round extraction results")
+        boxes = [r.box_voxels for r in results]
         self.intensity_result = IntensityExtractionResult(
             np.concatenate([r.values for r in results], axis=2), first.spot_ids,
             first.spot_namespace, first.channel_labels, tuple(rounds), first.metadata,
             first.config, np.concatenate([r.valid for r in results], axis=1),
-            {'rounds': {r: self._round_intensities[r].diagnostics for r in rounds}})
+            {'rounds': {r: self._round_intensities[r].diagnostics for r in rounds}},
+            None if any(b is None for b in boxes) else np.concatenate(boxes, axis=1))
         self._round_intensities.clear()
 
     @_log_step
     def extract_intensities(self, *, config=NeighborhoodSumConfig(), rounds=None):
-        """Extract labeled intensities; decoding is a separate reusable stage."""
+        """Extract labeled intensities; decoding is a separate reusable stage.
+
+        In readout mode direct each candidate is read in its own round only
+        (see :func:`starfinder.barcode.extract_intensities`).
+        """
         if not isinstance(config, NeighborhoodSumConfig):
             raise TypeError("config must be NeighborhoodSumConfig")
         config.__post_init__()
@@ -929,29 +940,63 @@ class FOV:
         self._assemble_intensities(rounds)
         return self
 
+    def _check_readout(self, decoder, has_round):
+        """Mode checks of decoding in dataset.readout_mode (docs/readout-contract.md, "Readout modes").
+
+        multiplexed: a round column raises ValueError (MULTI_ROUND_DECODING);
+        a decoder without the mode raises TypeError naming both; direct: no
+        round column raises ValueError (DIRECT_NEEDS_ROUNDS).
+        """
+        from starfinder._registry import spec_for
+        mode = self.dataset.readout_mode
+        spec = spec_for(DECODING_METHODS, decoder, 'decoding method', TypeError, 'unsupported decoder config')
+        if mode == 'multiplexed' and has_round:
+            raise ValueError(MULTI_ROUND_DECODING)
+        if mode not in spec.modes:
+            raise TypeError(_mode_mismatch(mode, spec))
+        if mode == 'direct' and not has_round:
+            raise ValueError(DIRECT_NEEDS_ROUNDS)
+
+    def _check_reference(self):
+        """The readout mode's reference must be loaded: the codebook, or the direct panel."""
+        if self.dataset.readout_mode == 'direct':
+            if self.dataset.direct_panel is None:
+                raise ValueError("readout_mode='direct' requires a loaded direct panel. "
+                                 "Call dataset.load_direct_panel() first.")
+        elif self.codebook is None:
+            raise ValueError("Codebook not loaded. Call dataset.load_codebook() first.")
+
     @_log_step
     def decode_barcodes(self, *, config=WtaDecoderConfig(diagnostics=True)):
-        """Decode the stored intensity result and retain every spot identity.
+        """Decode (multiplexed) or assign (direct) the stored intensities; retain every spot identity.
 
-        A spot table with a ``round`` column (detection in several rounds)
-        raises ValueError: decoding it needs a readout mode (§2.8).
+        In readout mode multiplexed a spot table with a ``round`` column
+        (detection in several rounds) raises ValueError naming the readout
+        mode (§2.8). In readout mode direct, config must be a
+        DirectAssignmentConfig and the candidates must have a ``round``
+        column; reads come from assign_direct with dataset.direct_panel. A
+        decoder that does not support the dataset's mode raises TypeError.
         """
-        from starfinder.barcode import decode_barcodes
-        if self.spot_result is not None and 'round' in self.spot_result.spots:
-            raise ValueError(MULTI_ROUND_DECODING)
-        if self.codebook is None:
-            raise ValueError("Codebook not loaded. Call dataset.load_codebook() first.")
-        self.decoding_result = decode_barcodes(self.intensity_result, self.codebook, config=config)
+        from starfinder.barcode import assign_direct, decode_barcodes
+        self._check_readout(config, self.spot_result is not None and 'round' in self.spot_result.spots)
+        self._check_reference()
+        if self.dataset.readout_mode == 'direct':
+            self.decoding_result = assign_direct(self.intensity_result, self.spot_result,
+                                                 self.dataset.direct_panel, config=config)
+        else:
+            self.decoding_result = decode_barcodes(self.intensity_result, self.codebook, config=config)
         return self
 
     @_log_step
     def filter_reads(self, *, config=ReadFilterConfig()):
         """Rerun explicit read predicates without decoding or image access.
 
-        The dataset codebook, when loaded, supplies the segment ends of its layout.
+        The dataset codebook, when loaded, supplies the segment ends of its layout;
+        it is not used for reads of readout mode direct.
         """
         from starfinder.barcode import filter_reads
-        self.filtering_result = filter_reads(self.decoding_result, config=config, codebook=self.codebook)
+        codebook = self.codebook if getattr(self.decoding_result, 'readout_mode', None) != 'direct' else None
+        self.filtering_result = filter_reads(self.decoding_result, config=config, codebook=codebook)
         return self
 
     @_log_step
@@ -978,9 +1023,14 @@ class FOV:
         its registration and post-registration steps (a step record per
         round), combines them as FOV.find_spots does, and then extracts
         every sequencing round at every candidate (batch mode or
-        retain_images is then required for extraction); decoding such a
-        candidate set raises ValueError until §2.8 defines a readout mode.
-        Extraction reads
+        retain_images is then required for extraction). The dataset's
+        readout_mode decides the readout (docs/readout-contract.md): in
+        ``multiplexed`` mode decoding such a candidate set raises ValueError
+        naming the readout mode; in ``direct`` mode each candidate is
+        extracted in its own round only, its other rounds are valid=False,
+        and decoding is DirectAssignmentConfig, which needs such a candidate
+        set and dataset.direct_panel. A decoder that does not support the
+        mode raises TypeError naming the mode and the decoder. Extraction reads
         the extraction_source snapshot (default: the detection image; without
         a recipe, the source recorded in preprocessing_record, as after
         load_checkpoint). In streaming mode without retain_images a moving
@@ -1018,16 +1068,21 @@ class FOV:
                              f'from the dataset reference {ref!r}')
         # A plan with rounds detects each listed round in the loop; the rounds are combined after it.
         single, detection_plan = self._detection_plan(config.spot_finding) if config.spot_finding else (None, None)
-        if config.decoding and (detection_plan is not None or (
-                not config.spot_finding and self.spot_result is not None and 'round' in self.spot_result.spots)):
-            raise ValueError(MULTI_ROUND_DECODING)
+        has_round = detection_plan is not None or (
+            not config.spot_finding and self.spot_result is not None and 'round' in self.spot_result.spots)
+        if config.decoding:
+            self._check_readout(config.decoding, has_round)
+        if config.extraction and self.dataset.readout_mode == 'direct' and not has_round:
+            raise ValueError(DIRECT_NEEDS_ROUNDS)
         if config.extraction and not (config.spot_finding or self.spot_result is not None):
             raise ValueError('extraction requires detections')
         if config.decoding and not (config.extraction or self.intensity_result is not None):
             raise ValueError('decoding requires intensities')
         if config.filtering and not (config.decoding or self.decoding_result is not None):
             raise ValueError('filtering requires decoding')
-        if config.decoding and self.codebook is None:
+        if config.decoding and self.dataset.readout_mode == 'direct' and self.dataset.direct_panel is None:
+            raise ValueError("readout_mode='direct' requires a loaded direct panel (dataset.load_direct_panel)")
+        if config.decoding and self.dataset.readout_mode == 'multiplexed' and self.codebook is None:
             raise ValueError('decoding requires a loaded codebook')
         if (detection_plan is not None and config.extraction and execution.mode == 'streaming'
                 and not execution.retain_images):
@@ -1131,7 +1186,8 @@ class FOV:
             if detection_plan is not None:
                 from starfinder.spot_finding import _combine_rounds
                 self.spot_result = _combine_rounds(round_detections, detection_plan)
-                # Every round is extracted at every candidate, which needs the candidates of all rounds.
+                # Every round is extracted at every candidate (multiplexed) or at the candidates
+                # detected in it (direct); either needs the candidates of all rounds.
                 for name in loop_rounds if config.extraction else ():
                     if name in self.rounds.sequencing_rounds:
                         current = name
@@ -1229,6 +1285,7 @@ class FOV:
         elif stage == 'candidates':
             if self.spot_result is None:
                 raise ValueError('candidates checkpoint requires spot_result')
+            header.update(readout_mode=self.dataset.readout_mode)
             files = io.write_candidates(directory, header, self.spot_result, self.intensity_result, table_format)
         elif stage == 'pre_qc':
             if self.decoding_result is None:
@@ -1306,11 +1363,14 @@ class FOV:
         ------
         ValueError
             This FOV already has results at or after the stage, or the saved
-            FOV id, round labels or channel order differ from this FOV.
+            FOV id, round labels or channel order differ from this FOV, or a
+            candidates or pre_qc checkpoint's readout mode (multiplexed when
+            the header has none) differs from the dataset's.
         FileNotFoundError
             The stage was not written.
         """
         from starfinder.io._checkpoint import _check_stage, _jsonable, read_checkpoint, read_header
+        from starfinder.io._checkpoint import readout_mode as io_readout_mode
         _check_stage(stage)
         later = ['spot_result', 'intensity_result', 'decoding_result', 'filtering_result']
         later = {'registered': ['images', 'snapshots', 'registration_results', 'registration_attempts',
@@ -1326,6 +1386,9 @@ class FOV:
                            ('rounds', 'round labels'), ('channel_labels', 'channel order')):
             if header.get(key) != expected[key]:
                 raise ValueError(f'{stage} checkpoint {label} {header.get(key)!r} differs from this FOV ({expected[key]!r})')
+        if stage != 'registered' and io_readout_mode(header) != self.dataset.readout_mode:
+            raise ValueError(f'{stage} checkpoint readout mode {io_readout_mode(header)!r} differs from the '
+                             f'dataset ({self.dataset.readout_mode!r})')
         for name, value in read_checkpoint(directory, stage).items():
             setattr(self, name, value)
         return self

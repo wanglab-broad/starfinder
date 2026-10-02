@@ -28,7 +28,8 @@ settings in effect. ``counts`` and ``outcomes`` give each channel's candidates a
 ``software`` the library versions. A plan's ``rounds`` (used by ``FOV.find_spots`` and
 ``FOV.run``) gives one table of several rounds with a ``round`` column and identities over
 the combined table, with the per-round diagnostics under ``diagnostics["rounds"]``;
-decoding it raises until §2.8 defines a readout mode.
+decoding it raises in readout mode ``multiplexed`` and is direct readout in readout
+mode ``direct`` (:doc:`../readout-contract`).
 :py:func:`~starfinder.spot_finding.plot_detections` draws one channel's detections on one
 slice or crop; nothing plots unless a caller asks.
 

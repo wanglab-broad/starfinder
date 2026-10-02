@@ -92,10 +92,14 @@ def test_encoding_registry_names_and_capabilities():
 
 @pytest.mark.contract
 def test_decoding_registry_names_and_capabilities():
-    assert names(DECODING_METHODS) == ("wta", "codebook_aware")
+    # W-293 adds the direct entry, which supports readout mode direct and no encoding.
+    assert names(DECODING_METHODS) == ("wta", "codebook_aware", "direct")
     for config_type, spec in DECODING_METHODS.items():
         assert config_type().method == spec.name
-        assert spec.modes == frozenset({"multiplexed"}) and spec.encodings == frozenset({"color"})
+        if spec.name == "direct":
+            assert spec.modes == frozenset({"direct"}) and spec.encodings == frozenset() and not spec.rescue
+        else:
+            assert spec.modes == frozenset({"multiplexed"}) and spec.encodings == frozenset({"color"})
     assert DECODING_METHODS[WtaDecoderConfig].rescue is False
     assert DECODING_METHODS[CodebookAwareDecoderConfig].rescue is True
     assert DECODING_METHODS[WtaDecoderConfig].score_columns == ("wta_l2_nll",)

@@ -41,7 +41,11 @@ class NeighborhoodSumConfig:
 class IntensityExtractionResult:
     """Finite float64 N×C×R sums, stable identities and explicit acquisition axes.
 
-    valid is Boolean N×R; false marks an unavailable measurement, not zero signal.
+    valid is Boolean N×R; false marks an unavailable measurement, not zero signal
+    (in readout mode direct, every round but a candidate's own). box_voxels is
+    int64 N×R, the number of voxels each box summed (fewer where the box is
+    clipped by a face, 0 where a round was not extracted), or None when not
+    recorded (a candidates checkpoint does not store it yet).
     Signed extraction is allowed; decoding chooses reject/clip_negative explicitly.
     The repr is a one-line N×C×R summary without values.
     """
@@ -55,6 +59,7 @@ class IntensityExtractionResult:
     config: NeighborhoodSumConfig
     valid: np.ndarray
     diagnostics: dict
+    box_voxels: np.ndarray | None = None
 
     def __post_init__(self):
         _labels(self.channel_labels, "channel_labels")
@@ -81,6 +86,13 @@ class IntensityExtractionResult:
             or self.valid.shape != (shape[0], shape[2])
         ):
             raise ValueError("valid must be Boolean (N,R)")
+        if self.box_voxels is not None and (
+            not isinstance(self.box_voxels, np.ndarray)
+            or self.box_voxels.dtype != np.int64
+            or self.box_voxels.shape != (shape[0], shape[2])
+            or (self.box_voxels < 0).any()
+        ):
+            raise ValueError("box_voxels must be nonnegative int64 (N,R) or None")
         if not isinstance(self.metadata, ImageMetadata) or not isinstance(
             self.config, NeighborhoodSumConfig
         ):
@@ -101,16 +113,28 @@ def extract_intensities(
     spots: SpotFindingResult,
     *,
     config: NeighborhoodSumConfig = NeighborhoodSumConfig(),
+    readout_mode: str = "multiplexed",
 ) -> IntensityExtractionResult:
     """Sum ordered, labeled ZYXC rounds at spot coordinates on their common grid.
 
     Mapping insertion order defines R. Every round must have exactly the same
     shape, metadata and channel order. Coordinates must lie within voxel-center
     bounds [0, size-1] before rounding. Empty spots retain shape (0,C,R).
+
+    readout_mode ``multiplexed`` (default) sums every round at every spot, and
+    valid is all true. ``direct`` needs a ``round`` column in the spot table and
+    sums each spot in its own round only; its other rounds (and every round of
+    a spot whose round is not in the mapping) are 0.0 with valid false and
+    box_voxels 0 (docs/readout-contract.md, "Direct readout").
     """
     if not isinstance(config, NeighborhoodSumConfig) or not isinstance(spots, SpotFindingResult):
         raise TypeError("expected NeighborhoodSumConfig and SpotFindingResult")
+    if readout_mode not in ("multiplexed", "direct"):
+        raise ValueError(f"readout_mode must be multiplexed or direct; got {readout_mode!r}")
     spots.__post_init__()
+    if readout_mode == "direct" and "round" not in spots.spots:
+        raise ValueError("readout mode direct extracts each candidate in its own round and needs a round "
+                         "column: detect with a SpotFindingPlan with explicit rounds")
     labels = tuple(rounds)
     _labels(labels, "round_labels")
     first = rounds[labels[0]]
@@ -141,15 +165,23 @@ def extract_intensities(
     if (coords < 0).any() or (coords > np.asarray(shape[:3]) - 1).any():
         raise ValueError("coordinates outside voxel-center bounds")
     centers = np.floor(coords + 0.5).astype(np.int64)
-    values = np.empty((len(coords), len(channel_labels), len(labels)), dtype=np.float64)
     radius = np.asarray(config.neighborhood_radius_zyx)
+    lows = np.maximum(centers - radius, 0)
+    highs = np.minimum(centers + radius + 1, np.asarray(shape[:3]))
+    if readout_mode == "direct":
+        own = spots.spots["round"]
+        read = np.stack([own.eq(label).fillna(False).to_numpy(dtype=bool) for label in labels],
+                        axis=1).reshape(len(coords), len(labels))
+        values = np.zeros((len(coords), len(channel_labels), len(labels)), dtype=np.float64)
+    else:
+        read = np.ones((len(coords), len(labels)), dtype=bool)
+        values = np.empty((len(coords), len(channel_labels), len(labels)), dtype=np.float64)
     for r, image in enumerate(images):
-        for n, center in enumerate(centers):
-            lo = np.maximum(center - radius, 0)
-            hi = np.minimum(center + radius + 1, shape[:3])
-            values[n, :, r] = image[tuple(slice(a, b) for a, b in zip(lo, hi))].sum(
+        for n in np.flatnonzero(read[:, r]):
+            values[n, :, r] = image[tuple(slice(a, b) for a, b in zip(lows[n], highs[n]))].sum(
                 axis=(0, 1, 2), dtype=np.float64
             )
+    box_voxels = np.where(read, np.prod(highs - lows, axis=1)[:, None], 0).astype(np.int64)
     return IntensityExtractionResult(
         values,
         tuple(spots.spots.spot_id),
@@ -158,10 +190,11 @@ def extract_intensities(
         labels,
         spots.metadata,
         config,
-        np.ones((len(coords), len(labels)), dtype=bool),
+        read,
         {
             "source_shape_zyx": shape[:3],
             "calculation_dtype": "float64",
             "sampling": "floor(coord+.5)",
         },
+        box_voxels,
     )

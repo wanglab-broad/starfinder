@@ -2,19 +2,19 @@
 
 Each test follows one example of the page, step by step. The ``two_base`` examples run
 against the current code. The ``one_base`` and direct-readout examples describe behavior
-that §2.8 adds: the parts the current code can check (codebook validation and decoding of
+that §2.8 adds: the parts the current code could check (codebook validation and decoding of
 explicit color sequences, multi-round detection with its ``round`` and ``channel``
-columns, single-round extraction) are checked against it; the rest is written here as
-small reference functions of the expected behavior, which the implementation issues'
-tests check against the real functions.
+columns, single-round extraction) are checked against it; the expected behavior that was
+written here as small reference functions is now checked against the real functions
+(ENCODINGS for one_base, load_direct_panel and assign_direct for direct readout).
 """
 import numpy as np
 import pandas as pd
 import pytest
 
 from starfinder.barcode import (ENCODINGS, Codebook, EncodingConfig, OneBaseEncodingConfig, WtaDecoderConfig,
-                                decode_barcodes, decode_color_sequence, encode_bases, extract_intensities,
-                                load_codebook)
+                                assign_direct, decode_barcodes, decode_color_sequence, encode_bases,
+                                extract_intensities, load_codebook, load_direct_panel)
 from starfinder.dataset import Dataset, RoundState
 from starfinder.image import ImageMetadata
 from starfinder.io import ImageLoadResult
@@ -147,12 +147,10 @@ DIRECT_MAPPING = pd.DataFrame({
 DIRECT_SPOTS = [("round1", 0, 3, 8, 8), ("round1", 2, 3, 16, 16), ("round2", 1, 3, 8, 16), ("round2", 3, 3, 8, 8)]
 
 
-def check_direct_mapping(mapping):
-    """Expected validation: every (round, channel) once and every gene once."""
-    if mapping.duplicated(["round", "channel"]).any():
-        raise ValueError("a (round, channel) appears more than once")
-    if mapping.gene_id.duplicated().any():
-        raise ValueError(f"genes {sorted(set(mapping.gene_id[mapping.gene_id.duplicated()]))} appear more than once")
+def check_direct_mapping(mapping, path):
+    """Panel validation by load_direct_panel: every (round, channel) once and every gene once."""
+    mapping.to_csv(path, index=False)
+    return load_direct_panel(path, round_labels=rounds(2), channel_labels=CHANNELS)
 
 
 def direct_images():
@@ -168,9 +166,9 @@ def direct_images():
 
 
 def test_direct_readout_two_rounds(tmp_path):
-    check_direct_mapping(DIRECT_MAPPING)
+    panel = check_direct_mapping(DIRECT_MAPPING, tmp_path / "panel.csv")
     with pytest.raises(ValueError, match="Gfap"):
-        check_direct_mapping(DIRECT_MAPPING.replace({"gene_id": {"Vip": "Gfap"}}))
+        check_direct_mapping(DIRECT_MAPPING.replace({"gene_id": {"Vip": "Gfap"}}), tmp_path / "invalid.csv")
     # Checked against current code: detection in both rounds gives one candidate table with
     # its round and channel; coincident candidates of different rounds stay separate rows.
     dataset = Dataset(tmp_path, tmp_path / "out", "example", "sample", "out",
@@ -183,9 +181,10 @@ def test_direct_readout_two_rounds(tmp_path):
     spots = fov.spot_result.spots
     assert list(zip(spots["round"], spots.channel, spots.y, spots.x)) == [
         (name, channel, float(cy), float(cx)) for name, channel, _, cy, cx in DIRECT_SPOTS]
-    # Expected behavior: identity from the candidate's own round and channel, one read each.
-    calls = spots.assign(channel=[CHANNELS[c] for c in spots.channel]).merge(
-        DIRECT_MAPPING, on=["round", "channel"], how="left", validate="many_to_one")
+    # assign_direct: identity from the candidate's own round and channel, one read each.
+    loaded = {name: ImageLoadResult(fov.images[name], fov.metadata[name], CHANNELS, (), {}) for name in rounds(2)}
+    own_rounds = extract_intensities(loaded, fov.spot_result, readout_mode="direct")
+    calls = assign_direct(own_rounds, fov.spot_result, panel).table
     assert list(calls.gene_id) == ["Gfap", "Gad1", "Sst", "Aqp4"]
     assert list(calls.spot_id) == list(spots.spot_id)
     # Checked against current code: extracting only each candidate's own round gives its

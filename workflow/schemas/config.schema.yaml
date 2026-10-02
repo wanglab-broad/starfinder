@@ -138,6 +138,17 @@ properties:
           type: string
     description: "Additional imaging rounds beyond sequencing"
 
+  # ==================== Readout Mode ====================
+  readout_mode:
+    type: string
+    enum: ["multiplexed", "direct"]
+    default: "multiplexed"
+    description: >-
+      Python only (Dataset.readout_mode). multiplexed decodes color sequences with the
+      codebook; direct assigns each candidate the gene of its own round and channel from
+      the panel CSV (round,channel,gene_id), which is then the rule's codebook input, and
+      needs spot_finding.rounds. direct requires backend python.
+
   # ==================== Backend Selection ====================
   backend:
     type: string
@@ -293,7 +304,8 @@ allOf:
         - n_random_tests
 
   # The explicit preprocessing and registration recipes, the spot-finding method, channel
-  # overrides and rounds and the execution device are Python-only (backend defaults to matlab)
+  # overrides and rounds, the execution device and readout_mode direct are Python-only
+  # (backend defaults to matlab)
   - if:
       not:
         required: [backend]
@@ -302,6 +314,8 @@ allOf:
             const: python
     then:
       properties:
+        readout_mode:
+          const: multiplexed
         rules:
           additionalProperties:
             properties:
@@ -1024,14 +1038,15 @@ $defs:
 
   decoding_params:
     description: >-
-      Python only; method (a DECODING_METHODS name, default wta) and the fields of its config.
-      Decoding runs with reads_filtration.run. The adapter sets diagnostics true and
-      allow_rescue false unless given. The method list is kept equal to DECODING_METHODS by a
-      test.
+      Python only; method (a DECODING_METHODS name, default wta, or direct with
+      readout_mode direct) and the fields of its config. wta and codebook_aware need
+      readout_mode multiplexed and direct needs readout_mode direct. Decoding runs with
+      reads_filtration.run. The adapter sets diagnostics true and allow_rescue false unless
+      given. The method list is kept equal to DECODING_METHODS by a test.
     type: object
     properties:
       method:
-        enum: ["wta", "codebook_aware"]
+        enum: ["wta", "codebook_aware", "direct"]
       negative_policy:
         enum: ["reject", "clip_negative"]
       diagnostics:

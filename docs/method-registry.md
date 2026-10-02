@@ -365,7 +365,10 @@ pattern of decision 2 ({doc}`readout-contract`, "Encoding registry"; W-292).
 | `dataset/workflow.py` | always `WtaDecoderConfig(diagnostics=True)` | The Python-only `decoding` key names a `DECODING_METHODS` method (default `wta`); the schema list is kept equal to the registry by a test. |
 
 `DecodingSpec` declares `modes` (readout modes), `encodings` (encoding symbol
-kinds), `rescue` and `score_columns`. The barcode encodings are registered the same
+kinds), `rescue` and `score_columns`. W-293 registers `direct`
+(`DirectAssignmentConfig`, mode `direct`, no encoding), which `assign_direct` runs;
+`FOV.run`, `FOV.decode_barcodes`, `decode_barcodes`, `assign_direct` and the
+workflow adapter check the dataset's readout mode against `modes`. The barcode encodings are registered the same
 way in `ENCODINGS` (`EncodingSpec`), whose stage-specific fields are listed in
 {doc}`readout-contract`. Neither registry has `min_shape_zyx`: decoders and
 encodings take no image.

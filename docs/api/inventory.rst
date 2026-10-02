@@ -44,6 +44,7 @@ Owning namespaces (alphabetical)
 starfinder.barcode
 ~~~~~~~~~~~~~~~~~~
 
+* :py:obj:`starfinder.barcode.assign_direct`
 * :py:obj:`starfinder.barcode.BarcodeDecodingResult`
 * :py:obj:`starfinder.barcode.BarcodeLayout`
 * :py:obj:`starfinder.barcode.Codebook`
@@ -52,6 +53,8 @@ starfinder.barcode
 * :py:obj:`starfinder.barcode.decode_color_sequence`
 * :py:obj:`starfinder.barcode.DECODING_METHODS`
 * :py:obj:`starfinder.barcode.DecodingSpec`
+* :py:obj:`starfinder.barcode.DirectAssignmentConfig`
+* :py:obj:`starfinder.barcode.DirectPanel`
 * :py:obj:`starfinder.barcode.encode_bases`
 * :py:obj:`starfinder.barcode.EncodingConfig`
 * :py:obj:`starfinder.barcode.ENCODINGS`
@@ -61,6 +64,7 @@ starfinder.barcode
 * :py:obj:`starfinder.barcode.IntensityExtractionResult`
 * :py:obj:`starfinder.barcode.InvalidIntensityError`
 * :py:obj:`starfinder.barcode.load_codebook`
+* :py:obj:`starfinder.barcode.load_direct_panel`
 * :py:obj:`starfinder.barcode.NeighborhoodSumConfig`
 * :py:obj:`starfinder.barcode.OneBaseEncodingConfig`
 * :py:obj:`starfinder.barcode.ReadFilterConfig`

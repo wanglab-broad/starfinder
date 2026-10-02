@@ -4,6 +4,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.registration.AffineConfig`
 * :py:obj:`starfinder.registration.AffineTransform`
 * :py:obj:`starfinder.registration.apply_transform`
+* :py:obj:`starfinder.barcode.assign_direct`
 * :py:obj:`starfinder.preprocessing.Background3DConfig`
 * :py:obj:`starfinder.synthetic.BackgroundConfig`
 * :py:obj:`starfinder.barcode.BarcodeDecodingResult`
@@ -39,6 +40,8 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.synthetic.development_preset_factors`
 * :py:obj:`starfinder.synthetic.development_scene_preset`
 * :py:obj:`starfinder.synthetic.DEVELOPMENT_SIZES`
+* :py:obj:`starfinder.barcode.DirectAssignmentConfig`
+* :py:obj:`starfinder.barcode.DirectPanel`
 * :py:obj:`starfinder.barcode.encode_bases`
 * :py:obj:`starfinder.barcode.EncodingConfig`
 * :py:obj:`starfinder.barcode.ENCODINGS`
@@ -89,6 +92,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.spot_finding.KNOWN_WEIGHTS`
 * :py:obj:`starfinder.spot_finding.KnownWeights`
 * :py:obj:`starfinder.barcode.load_codebook`
+* :py:obj:`starfinder.barcode.load_direct_panel`
 * :py:obj:`starfinder.io.load_round`
 * :py:obj:`starfinder.io.load_volume`
 * :py:obj:`starfinder.io.load_volume_zyxc`

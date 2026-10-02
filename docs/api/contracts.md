@@ -247,7 +247,8 @@ returns its declared columns with their dtypes. A plan's `rounds` is detected by
 `FOV.find_spots` and `FOV.run` only: one table with a `round` column, `spot_id` over the
 combined table (the reference round first, so its identities are unchanged) and the
 per-round diagnostics under `diagnostics["rounds"]`; such a set is never decoded as
-barcodes until §2.8 defines a readout mode.
+barcodes: in readout mode `multiplexed` decoding it raises, and readout mode `direct`
+assigns it with `assign_direct` (below).
 
 {class}`starfinder.spot_finding.NoiseLandmarkConfig` retains registration's
 per-channel MAD peaks followed by its original radius deduplication: for each
@@ -313,7 +314,13 @@ extraction and decoder interfaces have been removed.
 
 `decode_barcodes(extracted, codebook, config=...)` requires exact label order and
 a config registered in `DECODING_METHODS` whose declared encoding kinds include
-the codebook's (else `TypeError`).
+the codebook's and whose modes include `multiplexed` (else `TypeError`).
+Direct readout (`Dataset.readout_mode="direct"`) is
+`assign_direct(extracted, spots, panel)`: each candidate is read from its own
+round (`extract_intensities(..., readout_mode="direct")` leaves the other rounds
+at 0.0 with `valid=False`) and assigned the `DirectPanel` gene of its own
+(round, channel), with no competition, rescue or reassignment
+({doc}`../readout-contract`, "Direct readout").
 Every input identity retains one row with `assigned`, `unmatched`, `ambiguous`
 or `no_signal` status, reason, observed/decoded sequence and nullable gene and
 entry IDs; competition and rescue are between entries.

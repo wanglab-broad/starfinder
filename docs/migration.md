@@ -448,7 +448,8 @@ holds the plan (`None` on construction means `SpotFindingPlan(config)`). Direct
 (§2.8)")`, from `FOV.run` before any processing and from `FOV.decode_barcodes` for a
 spot table with a `round` column. Extraction reads every candidate in every sequencing
 round, as before; in `FOV.run` it then runs after the last detected round, which needs
-batch mode or `retain_images=True`.
+batch mode or `retain_images=True`. Since W-293 this holds in readout mode
+`multiplexed`; readout mode `direct` reads such a set ([Readout mode](#readout-mode)).
 
 ### Spot-finding diagnostics
 
@@ -586,6 +587,54 @@ back from `run.json`, so records written before the rename stay valid as they
 are; a script that reads them should accept either key. The `candidates.json`
 keys `detection_config`, `detection_rounds`, `detection_plan` and
 `detection_diagnostics` and the preprocessing `detection` image keep their names.
+
+### Readout mode
+
+§2.8 adds two readout modes as one dataset setting ({doc}`readout-contract`,
+"Readout modes" and "Direct readout"). `Dataset.readout_mode` is `"multiplexed"`
+(the default: every earlier result, identity and digest is unchanged) or
+`"direct"`, where a round and channel identify a gene.
+{py:class}`~starfinder.barcode.DirectPanel` holds the gene of each (round, channel),
+{py:func}`~starfinder.barcode.load_direct_panel` reads it from a
+`round,channel,gene_id` CSV, and `Dataset.load_direct_panel` stores it as
+`Dataset.direct_panel`; a repeated gene or (round, channel) raises `ValueError`
+naming it. {py:class}`~starfinder.barcode.DirectAssignmentConfig` (`direct` in
+`DECODING_METHODS`, no parameters) and
+{py:func}`~starfinder.barcode.assign_direct` assign each candidate the gene of its
+own round and channel: one read per candidate with `round`, `channel`, `entry_id`
+`"<round>/<channel>"`, `call_type` `direct`, and the diagnostic columns
+`own_channel_rank` and `own_channel_fraction`; a (round, channel) without a gene is
+`unmatched` with `unmapped_channel`, and a zero own round `no_signal`. Nothing is
+merged or reassigned. `BarcodeDecodingResult` gains `readout_mode`.
+
+In `direct` mode, `extract_intensities(..., readout_mode="direct")` (which
+`FOV.run` and `FOV.extract_intensities` pass from the dataset) reads each candidate
+in its own round only; the other rounds are `0.0` with `valid=False`.
+`IntensityExtractionResult` gains `box_voxels` (N×R int64, the voxels each box
+summed, 0 for a round that was not read; `None` after loading a candidates
+checkpoint, which does not store it yet). `FOV.run` and `FOV.decode_barcodes`
+assign with `DirectAssignmentConfig` and `Dataset.direct_panel`.
+
+Decoding a multi-round candidate set (a `round` column) needs
+`readout_mode="direct"`: in `multiplexed` mode it still raises `ValueError`, whose
+message keeps "needs a readout mode (§2.8)" and adds "set readout_mode='direct'".
+A decoder that does not support the dataset's mode (`wta` or `codebook_aware` in
+`direct` mode, `direct` in `multiplexed` mode) raises `TypeError` naming the mode
+and the decoder, in `FOV.run`, `FOV.decode_barcodes`, `decode_barcodes` and
+`assign_direct`; `direct` mode without a `round` column, or without a loaded panel,
+raises `ValueError`.
+
+The YAML top-level key `readout_mode` (Python only; the schema accepts `direct`
+only with `backend: python`) sets the mode. In `direct` mode the Python-only
+`decoding` block defaults to and may only name `method: direct`, the rule's
+codebook input is the panel CSV, and the barcode keys `load_codebook.split_index`
+and `encoding` and `reads_filtration.end_base`, `split_index`, `n_barcode_segments`
+and `exclude_invalid_endpoints` raise. In `multiplexed` mode `decoding: {method:
+direct}` now raises `TypeError` instead of "unknown decoding method". The
+`candidates.json` and `pre_qc.json` headers and the `config` record of `run.json`
+gain `readout_mode`; a checkpoint without it loads as `multiplexed`, and
+`FOV.load_checkpoint` raises when it differs from the dataset's mode
+({doc}`checkpoints`).
 
 ### Readout encodings and decoders
 

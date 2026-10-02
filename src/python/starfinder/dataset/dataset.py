@@ -6,7 +6,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from starfinder.barcode import BarcodeLayout, Codebook, EncodingConfig, OneBaseEncodingConfig, load_codebook
+from starfinder.barcode import (BarcodeLayout, Codebook, DirectPanel, EncodingConfig, OneBaseEncodingConfig,
+    load_codebook, load_direct_panel)
+from starfinder.barcode.decoding import READOUT_MODES
 from starfinder.dataset.types import (
     RoundState,
     SubtileConfig,
@@ -25,7 +27,12 @@ class Dataset:
     channel_order labels the sequencing rounds and, by default, the other
     rounds; other_channel_order gives an other round its own labels (for
     example a morphology round's), in its C order.
-    The repr summarizes IDs, round and channel labels, codebook size and roots.
+    readout_mode is how reads get their identity (docs/readout-contract.md,
+    "Readout modes"): ``multiplexed`` (default) decodes color sequences with
+    the codebook; ``direct`` assigns each candidate the direct_panel gene of its
+    own round and channel.
+    The repr summarizes IDs, round and channel labels, the reference (codebook,
+    or the panel in direct mode) and roots.
     """
 
     # Paths
@@ -49,7 +56,15 @@ class Dataset:
     # Channel labels of other rounds that have their own channels
     other_channel_order: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
+    # Readout mode and the direct-readout reference
+    readout_mode: str = "multiplexed"
+    direct_panel: DirectPanel | None = None
+
     def __post_init__(self):
+        if self.readout_mode not in READOUT_MODES:
+            raise ValueError(f"readout_mode must be one of {READOUT_MODES}; got {self.readout_mode!r}")
+        if self.direct_panel is not None and not isinstance(self.direct_panel, DirectPanel):
+            raise TypeError("direct_panel must be a DirectPanel or None")
         self.rounds.validate()
         self.channel_order = tuple(self.channel_order)
         if len(set(self.channel_order)) != len(self.channel_order):
@@ -90,6 +105,11 @@ class Dataset:
             "not loaded" if self.codebook is None
             else f"{self.codebook.n_genes} genes × {len(self.codebook.round_labels)} rounds"
         )
+        reference = [f"    codebook:          {codebook}"]
+        if self.readout_mode == "direct":
+            panel = ("not loaded" if self.direct_panel is None else
+                     f"{self.direct_panel.n_genes} genes over {len(self.direct_panel.round_labels)} rounds")
+            reference = ["    readout mode:      direct", f"    direct panel:      {panel}"]
         return "\n".join([
             f"Dataset {self.dataset_id!r} (sample {self.sample_id!r}, output {self.output_id!r})",
             f"    sequencing rounds: {names(self.rounds.sequencing_rounds)}"
@@ -97,7 +117,7 @@ class Dataset:
             f"    other rounds:      {names(self.rounds.other_rounds)}"
             + (note if ref in self.rounds.other_rounds else ""),
             f"    channels:          {', '.join(self.channel_order) or 'none'}",
-            f"    codebook:          {codebook}",
+            *reference,
             f"    input root:        {self.input_root}",
             f"    output root:       {self.output_root}",
         ])
@@ -176,3 +196,22 @@ class Dataset:
             raise ValueError("give encoding, or split_index and reverse_bases, not both")
         self.codebook = load_codebook(path, round_labels=tuple(self.rounds.sequencing_rounds),
             channel_labels=tuple(self.channel_order), encoding=encoding, layout=layout)
+
+    def load_direct_panel(self, path: Path | str) -> None:
+        """Load the direct-readout panel from CSV and store it on self.direct_panel.
+
+        Parameters
+        ----------
+        path : pathlib.Path or str
+            CSV with the header round,channel,gene_id: the gene of each
+            (round, channel). Rounds must be sequencing rounds and channels
+            labels of channel_order.
+
+        Returns
+        -------
+        None
+            Stores the DirectPanel. Errors propagate from
+            :func:`starfinder.barcode.load_direct_panel`.
+        """
+        self.direct_panel = load_direct_panel(path, round_labels=tuple(self.rounds.sequencing_rounds),
+                                              channel_labels=tuple(self.channel_order))

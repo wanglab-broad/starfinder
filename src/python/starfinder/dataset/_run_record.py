@@ -81,7 +81,9 @@ class _RunRecord:
             "sample_id": dataset.sample_id, "fov_id": fov.fov_id, "subtile_id": fov.subtile_id,
             "status": "running", "started_at": _now(), "ended_at": None, "error": None,
             "code": _code(), "environment": _environment(),
-            "config": {"pipeline": config, "execution": execution, "checkpoints": checkpoints},
+            # The dataset's readout mode (docs/readout-contract.md) is recorded with the configs.
+            "config": {"pipeline": config, "execution": execution, "checkpoints": checkpoints,
+                       "readout_mode": dataset.readout_mode},
             "inputs": [], "steps": [], "preprocessing": None, "registration": {}, "counts": {},
             "checkpoint_directory": str(self.directory), "checkpoints": {},
         }

@@ -29,6 +29,7 @@ An em dash in the default column means the schema defines no default.
 | `seq_channel_order` | array of strings | No | —; set explicit patterns for Python, e.g. `[ch00, ch02, ch01, ch03]` |
 | `additional_round` | array of objects with string `round_name` | No | —; supply `[]` when unused; accessed at parse time |
 | `backend` | `python` or `matlab` | No | `matlab` |
+| `readout_mode` | `multiplexed` or `direct` | No | `multiplexed`; Python only (`Dataset.readout_mode`), and `direct` only with `backend: python`; see [readout mode](#readout-mode) |
 | `matlab_launcher` | `path` or `broad` | No | `path`; how MATLAB rules start MATLAB, see [MATLAB launcher](#matlab-launcher) |
 | `matlab_single_thread` | boolean | No | `false`; `true` adds `-singleCompThread` to every MATLAB call |
 | `workflow_mode` | `free`, `direct`, `subtile`, `deep` | No | `free`; preset selection described in [workflows](workflows.md#modes-and-backend-selection) |
@@ -125,7 +126,7 @@ is specifically for the Python batch/direct wrapper.
 | `load_codebook` | boolean `run`, integer-array `split_index`; Python-only `encoding` (`method` `two_base` or `one_base` and that config's fields) | `split_index` is **one-based**: MATLAB's position in the encoded color string of the junction color that is removed (aging `[5]`). Python wrappers load unconditionally, turn missing/empty split into None and translate `[s]` into the two-segment layout, equal to the zero-based `EncodingConfig(split_index=s - 1)` ([segment layout](#codebook-segment-layout)); MATLAB respects `run` |
 | `reads_extraction` | boolean `run`, exactly three integers >=1 in `voxel_size` | Pixel half-widths, Python `(z,y,x)` versus MATLAB `(row,column,z)`; e.g. `[1,2,2]` versus `[2,2,1]`, not physical microns |
 | `reads_filtration` | boolean `run`, string or string-array `end_base`, integer `n_barcode_segments` >=1, integer-array `split_index` | Python wrappers forward a string `end_base` and extra `start_base` (default `C`) to `ReadFilterConfig`; a list `end_base` becomes the allowed ends of the layout's segments; `n_barcode_segments` and this block's `split_index`, when given, must agree with the layout ([segment layout](#codebook-segment-layout)); MATLAB forwards segment count and split |
-| `decoding` | Python-only `method` (`wta` or `codebook_aware`) and that config's fields | Python rules only: the decoder used with `reads_filtration.run`; default `WtaDecoderConfig(diagnostics=True)`; the adapter sets `diagnostics` true and `allow_rescue` false unless given |
+| `decoding` | Python-only `method` (`wta`, `codebook_aware` or `direct`) and that config's fields | Python rules only: the decoder used with `reads_filtration.run`; default `WtaDecoderConfig(diagnostics=True)`, or `DirectAssignmentConfig()` with `readout_mode: direct`; the adapter sets `diagnostics` true and `allow_rescue` false unless given; a method that does not support the readout mode raises `TypeError` |
 
 Always pair `intensity_estimation` with `intensity_threshold`. Python `noise`
 uses a k-sigma threshold (e.g. 5), whereas `adaptive` is a fraction of channel
@@ -180,6 +181,37 @@ raises when the codebook is loaded; reads are checked per segment by
 ```yaml
 load_codebook: {run: true, split_index: [5]}
 reads_filtration: {run: true, n_barcode_segments: 2, split_index: [5], end_base: ["CC", "TT"]}
+```
+
+## Readout mode
+
+The Python-only top-level `readout_mode` ({doc}`readout-contract`, "Readout modes")
+is `multiplexed` (the default: reads are decoded from color sequences with the
+codebook) or `direct`: each candidate is assigned the gene of its own round and
+channel. The schema accepts `direct` only with `backend: python`. In `direct` mode:
+
+* the rule's codebook input is the panel CSV, with the header `round,channel,gene_id`
+  (one gene per (round, channel); a repeated gene or (round, channel) is an error);
+* `spot_finding.rounds` must list the rounds to detect in, so that every candidate
+  has its round (listing only the reference round is allowed);
+* each candidate is extracted in its own round only, and the `decoding` block
+  defaults to, and may only name, `method: direct`;
+* the barcode keys `load_codebook.split_index` and `encoding` and
+  `reads_filtration.end_base`, `split_index`, `n_barcode_segments` and
+  `exclude_invalid_endpoints` have no meaning and raise.
+
+`goodSpots` keeps the columns `x, y, z, gene`.
+
+```yaml
+backend: python
+readout_mode: direct
+rules:
+  rsf_single_fov:
+    run: true
+    parameters:
+      spot_finding: {run: true, intensity_estimation: noise, intensity_threshold: 10, rounds: [round1, round2]}
+      reads_extraction: {run: true}
+      reads_filtration: {run: true}
 ```
 
 ## Explicit preprocessing recipe
@@ -260,7 +292,7 @@ that config's own field and the other legacy keys are errors.
 `channel_overrides` maps a channel label of `seq_channel_order` to fields that
 replace the block's for that channel (a `SpotFindingPlan`), and `rounds` lists the
 round labels to detect in (omitted: the reference round only); a candidate set of several
-rounds cannot be decoded until §2.8 defines a readout mode. The rule-level
+rounds is decoded only with `readout_mode: direct` ([readout mode](#readout-mode)). The rule-level
 Python-only key `device` sets `ExecutionConfig.device`; `cpu` is the only value.
 The method-aware rules are in the
 [spot-finding contract](spot-finding-contract.md#workflow-configuration).

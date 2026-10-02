@@ -14,6 +14,7 @@ from starfinder.registration import (REGISTRATION_METHODS, CpdConfig, DemonsConf
     TranslationConfig, WarpConfig)
 from starfinder.barcode import (DECODING_METHODS, ENCODINGS, BarcodeLayout, EncodingConfig, NeighborhoodSumConfig,
     OneBaseEncodingConfig, ReadFilterConfig, Segment, WtaDecoderConfig)
+from starfinder.barcode.decoding import READOUT_MODES, _mode_mismatch
 from starfinder.spot_finding import SPOT_FINDING_METHODS, ChannelOverride, LocalMaximaConfig, SpotFindingPlan
 
 _RULES = ('rsf_single_fov', 'gr_single_fov_subtile', 'lrsf_single_fov_subtile',
@@ -322,20 +323,43 @@ def _encoding(values):
     return config_type(**values)
 
 
-def _decoding(values):
-    """Decoder config of the Python-only decoding mapping (method default wta).
+def _decoding(values, mode='multiplexed'):
+    """Decoder config of the Python-only decoding mapping (method default wta, or direct in direct mode).
 
     The adapter's defaults are diagnostics=True and, for a decoder that can
-    rescue, allow_rescue=False unless the block sets them.
+    rescue, allow_rescue=False unless the block sets them. A decoder that does
+    not support the readout mode raises TypeError naming both.
     """
     if not isinstance(values, dict):
         raise TypeError('decoding must be a mapping')
     values = dict(values)
-    config_type = config_type_for(DECODING_METHODS, values.pop('method', 'wta'), 'decoding method')
+    config_type = config_type_for(DECODING_METHODS, values.pop('method', 'wta' if mode == 'multiplexed' else 'direct'),
+                                  'decoding method')
+    if mode not in DECODING_METHODS[config_type].modes:
+        raise TypeError(_mode_mismatch(mode, DECODING_METHODS[config_type]))
     names = {f.name for f in fields(config_type) if f.init}
     _known(values, names, 'decoding')
     defaults = {'diagnostics': True, 'allow_rescue': False}
     return config_type(**{**{k: v for k, v in defaults.items() if k in names}, **values})
+
+
+# Barcode keys that have no meaning in readout mode direct (no encoding, layout or end-base check).
+_BARCODE_KEYS = (('load_codebook', ('split_index', 'encoding')),
+                 ('reads_filtration', ('end_base', 'split_index', 'n_barcode_segments', 'exclude_invalid_endpoints')))
+
+
+def _readout_mode(config, params):
+    """The top-level readout_mode (default multiplexed); direct rejects the barcode keys of _BARCODE_KEYS."""
+    mode = config.get('readout_mode', 'multiplexed')
+    if mode not in READOUT_MODES:
+        raise ValueError(f'readout_mode must be one of {list(READOUT_MODES)}; got {mode!r}')
+    if mode == 'direct':
+        given = [f'{block}.{key}' for block, keys in _BARCODE_KEYS for key in keys
+                 if isinstance(params.get(block), dict) and key in params[block]]
+        if given:
+            raise ValueError(f'readout_mode direct has no barcode encoding, segment layout or end-base check; '
+                             f'remove {given}')
+    return mode
 
 
 def _one_split(value, key):
@@ -440,7 +464,13 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
     ENCODINGS method (default two_base) with its config fields, and the
     Python-only decoding key a DECODING_METHODS method (default wta) with its
     config fields; the adapter decodes with diagnostics and without rescue
-    unless that key sets them.
+    unless that key sets them. The Python-only top-level readout_mode
+    (multiplexed, the default, or direct) becomes Dataset.readout_mode; in
+    direct mode decoding is the direct method (DirectAssignmentConfig), the
+    rule's codebook input is the panel CSV (round,channel,gene_id), the
+    candidates need spot_finding.rounds, and the barcode keys
+    load_codebook.split_index and encoding and reads_filtration.end_base,
+    split_index, n_barcode_segments and exclude_invalid_endpoints raise.
     Direct Python callers construct Dataset/PipelineConfig (no legacy aliases).
     """
     if rule not in _RULES:
@@ -454,11 +484,12 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
     if set(config) & {'channel_order', 'fov_pattern'}:
         raise ValueError('direct Python field names belong to Dataset; use shared seq_channel_order/fov_id_pattern here')
     channels = tuple(config.get('seq_channel_order', ()))
+    params = config.get('rules', {}).get(rule, {}).get('parameters', {})
+    mode = _readout_mode(config, params)
     dataset = Dataset(Path(config['root_input_path']) / config['dataset_id'] / config['sample_id'],
         Path(config['root_output_path']) / config['dataset_id'] / config['output_id'],
         config['dataset_id'], config['sample_id'], config['output_id'], rounds=rounds,
-        channel_order=channels, fov_pattern=config.get('fov_id_pattern', 'Position%03d'))
-    params = config.get('rules', {}).get(rule, {}).get('parameters', {})
+        channel_order=channels, fov_pattern=config.get('fov_id_pattern', 'Position%03d'), readout_mode=mode)
     _known(params, ('streaming', 'snr_threshold', 'load_codebook', 'load_raw_images', 'enhance_contrast',
         'hist_equalize', 'morph_recon', 'tophat', 'preprocessing', 'registration', 'global_registration', 'local_registration',
         'spot_finding', 'reads_extraction', 'reads_filtration', 'decoding', 'create_subtiles', 'device'),
@@ -476,10 +507,14 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
     extract, do_extract = _operation(params, 'reads_extraction', ('voxel_size',))
     filt, do_filter = _operation(params, 'reads_filtration', ('end_base', 'start_base', 'exclude_invalid_endpoints', 'score_bounds', 'n_barcode_segments', 'split_index'))
     book, _ = _operation(params, 'load_codebook', ('split_index', 'encoding'))
-    encoding, layout, split_index, end_base = _codebook_layout(book, filt, n)
+    if mode == 'direct':
+        encoding, layout, split_index, end_base = EncodingConfig(), None, None, None
+    else:
+        encoding, layout, split_index, end_base = _codebook_layout(book, filt, n)
     if 'decoding' in params and not do_filter:
         raise ValueError('decoding requires reads_filtration.run')
-    decoding = _decoding(params['decoding']) if 'decoding' in params else WtaDecoderConfig(diagnostics=True)
+    decoding = (_decoding(params['decoding'], mode) if 'decoding' in params else
+                WtaDecoderConfig(diagnostics=True) if mode == 'multiplexed' else _decoding({}, mode))
     load, do_load = _operation(params, 'load_raw_images', ('subdir',))
     registration_keys = {f.name for cls in REGISTRATION_METHODS for f in fields(cls) if f.init}
     registration_keys |= {'ref_round', 'method', 'ref_img', 'mov_img', 'ref_channel', 'boundary_mode', 'recovery',
@@ -546,7 +581,10 @@ def _run_workflow(snakemake, rule):
     dataset = adapted.dataset
     fov_id = snakemake.wildcards.fovID
     resident = rule in ('lrsf_single_fov_subtile', 'deep_rsf_subtile')
-    if adapted.pipeline.decoding:
+    if adapted.pipeline.decoding and dataset.readout_mode == 'direct':
+        # In direct mode the rule's codebook input is the panel CSV.
+        dataset.load_direct_panel(Path(snakemake.input[1]))
+    elif adapted.pipeline.decoding:
         dataset.load_codebook(Path(snakemake.input[1]), encoding=adapted.encoding, layout=adapted.layout)
     fov = FOV.from_subtile(Path(snakemake.input[2]), dataset, fov_id) if resident else dataset.fov(fov_id)
     fov.run(adapted.pipeline, execution=adapted.execution)

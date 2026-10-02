@@ -7,8 +7,10 @@ import numpy as np
 import pandas as pd
 
 from starfinder._registry import Dependency, check_name, spec_for
+from starfinder.spot_finding import SpotFindingResult
 from .codebook import Codebook, encoding_spec
 from .extraction import IntensityExtractionResult
+from ._direct import DirectAssignmentConfig, DirectPanel, _run_direct
 from ._codebook_aware import (
     _decode_codebook_aware,
     _channel_probabilities,
@@ -102,6 +104,9 @@ class BarcodeDecodingResult:
     table carries observed/decoded_color_sequence, nullable gene_id, call_status,
     failure_reason, and method-specific named scores. Diagnostics expose
     probabilities (N,C,R), per_round and candidates tables only when requested.
+    readout_mode is the mode that produced the reads: ``multiplexed`` (a decoder
+    over the color sequence) or ``direct`` (assign_direct; the table adds round and
+    channel, and its color sequences are missing).
     The repr is a one-line read count by call_status without table rows.
     """
 
@@ -109,10 +114,16 @@ class BarcodeDecodingResult:
     spot_namespace: str
     channel_labels: tuple[str, ...]
     round_labels: tuple[str, ...]
-    config: WtaDecoderConfig | CodebookAwareDecoderConfig
+    config: WtaDecoderConfig | CodebookAwareDecoderConfig | DirectAssignmentConfig
     diagnostics: dict
+    readout_mode: str = "multiplexed"
 
     def __post_init__(self):
+        if self.readout_mode not in READOUT_MODES:
+            raise ValueError(f"readout_mode must be one of {READOUT_MODES}; got {self.readout_mode!r}")
+        spec = DECODING_METHODS.get(type(self.config))
+        if spec is not None and self.readout_mode not in spec.modes:
+            raise ValueError(_mode_mismatch(self.readout_mode, spec))
         required = {
             "spot_id",
             "spot_namespace",
@@ -222,10 +233,12 @@ def _run_wta(values, codebook, config, spot_ids, diagnostics):
 class DecodingSpec:
     """Registered decoder: stable name, private implementation and declared capabilities.
 
-    run(values, codebook, config, spot_ids, diagnostics) receives the clipped
-    (N, 4, R) sums in color order 1-4 and returns the decoder's table before the
-    shared required-round rules; decode_barcodes calls it after the checks below,
-    callers never call it directly. modes are the readout modes the decoder
+    run is called by the entry point of the decoder's mode, never by callers. For
+    a multiplexed decoder, decode_barcodes calls run(values, codebook, config,
+    spot_ids, diagnostics) with the clipped (N, 4, R) sums in color order 1-4,
+    after the checks below, and gets the table before the shared required-round
+    rules. For direct, assign_direct calls run(intensity_result, spots, panel,
+    config) and gets (table, diagnostics). modes are the readout modes the decoder
     supports; encodings the encoding symbol kinds (EncodingSpec.symbols) it
     decodes; rescue whether it can change an observed color; score_columns the
     numeric columns it writes. requires lists optional dependencies.
@@ -259,6 +272,15 @@ class DecodingSpec:
             raise TypeError(f"decoding method {self.name!r} requires must be a tuple of Dependency")
 
 
+#: Readout modes (docs/readout-contract.md, "Readout modes"); the first is the default.
+READOUT_MODES = ("multiplexed", "direct")
+
+
+def _mode_mismatch(mode, spec):
+    return (f"readout mode {mode!r} does not support decoder {spec.name!r}, which supports "
+            f"{' and '.join(sorted(spec.modes))}")
+
+
 #: Decoders by exact config type (docs/readout-contract.md, "What a decoder declares").
 DECODING_METHODS: dict[type, DecodingSpec] = {
     WtaDecoderConfig: DecodingSpec(
@@ -269,6 +291,9 @@ DECODING_METHODS: dict[type, DecodingSpec] = {
         encodings=frozenset({"color"}), rescue=True,
         score_columns=("probability_nll", "score_delta", "geomean_probability", "min_round_margin",
                        "corrected_round_margin", "mean_total_intensity", "hamming_to_wta")),
+    DirectAssignmentConfig: DecodingSpec(
+        "direct", _run_direct, modes=frozenset({"direct"}), encodings=frozenset(), rescue=False,
+        score_columns=("own_channel_rank", "own_channel_fraction")),
 }
 
 
@@ -287,12 +312,21 @@ def decode_barcodes(
     the two methods' historical tie detection. A uniquely supported codebook
     rescue may resolve an observed tie; equally scored candidates never assign a
     gene. The table reports the decoded entry_id beside its gene_id.
+
+    decode_barcodes reads readout mode ``multiplexed``: a DirectPanel or a decoder
+    that does not support that mode (``direct``) raises TypeError naming the mode
+    and the decoder; direct readout is assign_direct.
     """
+    if isinstance(codebook, DirectPanel):
+        raise TypeError("decode_barcodes decodes readout mode 'multiplexed' with a Codebook; a DirectPanel is "
+                        "the reference of readout mode 'direct': use assign_direct")
     if not isinstance(intensity_result, IntensityExtractionResult) or not isinstance(
         codebook, Codebook
     ):
         raise TypeError("expected IntensityExtractionResult and Codebook")
     spec = spec_for(DECODING_METHODS, config, "decoding method", TypeError, "unsupported decoder config")
+    if "multiplexed" not in spec.modes:
+        raise TypeError(_mode_mismatch("multiplexed", spec) + "; direct readout is assign_direct")
     intensity_result.__post_init__()
     codebook.__post_init__()
     config.__post_init__()
@@ -455,3 +489,49 @@ def decode_barcodes(
         config,
         diagnostics,
     )
+
+
+def assign_direct(
+    intensity_result: IntensityExtractionResult,
+    spots: SpotFindingResult,
+    panel: DirectPanel,
+    *,
+    config: DirectAssignmentConfig = DirectAssignmentConfig(),
+) -> BarcodeDecodingResult:
+    """Direct readout: each candidate's gene from its own round and channel.
+
+    spots is the SpotFindingResult the intensities were extracted from, with its
+    round and channel columns (a SpotFindingPlan with explicit rounds); its
+    identities must match intensity_result in order. The read table has one row
+    per candidate with round and channel (the channel label); a read is assigned
+    the panel gene of its own (round, channel) (call_type direct, entry_id
+    "<round>/<channel>"). Otherwise it is unmatched with unmapped_channel (no
+    gene for that (round, channel), including rounds the panel or the
+    extraction does not name), unmatched with invalid_measurement (the own round
+    is not valid) or no_signal with zero_signal_round (every channel of the own
+    round sums to 0), in that precedence. own_channel_rank (1 = brightest of its
+    round) and own_channel_fraction (own channel over the round's total) record
+    when another channel is brighter; they are NaN when the own round is invalid
+    or sums to 0. The brightest channel never changes the identity, and nothing
+    is merged or reassigned. Negative sums count as 0. Color sequences are
+    missing values.
+
+    Raises
+    ------
+    TypeError
+        Wrong argument types, or a config of a decoder without readout mode direct.
+    ValueError
+        Candidates without round and channel columns, mismatched identities, or
+        panel labels outside the extraction's rounds and channels.
+    """
+    if not isinstance(intensity_result, IntensityExtractionResult) or not isinstance(panel, DirectPanel):
+        raise TypeError("expected IntensityExtractionResult and DirectPanel")
+    spec = spec_for(DECODING_METHODS, config, "decoding method", TypeError, "unsupported decoder config")
+    if "direct" not in spec.modes:
+        raise TypeError(_mode_mismatch("direct", spec))
+    intensity_result.__post_init__()
+    panel.__post_init__()
+    config.__post_init__()
+    table, diagnostics = spec.run(intensity_result, spots, panel, config)
+    return BarcodeDecodingResult(table, intensity_result.spot_namespace, intensity_result.channel_labels,
+                                 intensity_result.round_labels, config, diagnostics, readout_mode="direct")
