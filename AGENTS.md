@@ -58,10 +58,17 @@ If editable metadata requires reinstalling, record
 Run focused checks, then the required gates before committing:
 
 ```bash
-uv run pytest test/ -v
+uv run pytest test/ -v -m "not slow and not learned"
 uv run --group docs sphinx-build -n -W --keep-going -b html ../../docs /external/new-run/html
 uv run python ../../docs/check_reference.py
 ```
+
+Also run the `slow` tests of each subsystem the change touches, and the `learned`
+tests when it touches spot finding. Run the complete suite (`pytest test/ -v`
+and `pytest test/ -v -m extended`) for a change to a shared path (`image`, `io`,
+`dataset`, `conftest.py`, `pyproject.toml`, `uv.lock`), for the canary issue of
+a batch and once at the end of each batch. Every test file carries a subsystem
+marker; mark new tests as [contributing](docs/contributing.md) specifies.
 
 Run affected bounded examples from [contributing](docs/contributing.md). Generated
 API stubs are ignored/disposable; edit authored lists/docstrings. Never weaken
