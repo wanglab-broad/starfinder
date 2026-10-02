@@ -294,9 +294,16 @@ a worker). The Piscis library defaults to `20251212` and the E02 proposal named
 * **Explicit fetch.** `starfinder weights fetch <method> <model> [--dir DIR]`
   (and `fetch_weights(method, model, *, directory=None)`) downloads the source file
   to a temporary name in the target directory and checks its SHA-256 and, for
-  Spotiflow archives, the library-registered MD5. Only then does it extract (Spotiflow)
+  Spotiflow archives, the library-registered MD5, and it checks every file the table
+  lists for the model, as `verify` and detection do. Only then does it extract (Spotiflow)
   or move (Piscis) the file into place, and it writes a small `starfinder-weights.json`
-  with the entry and the per-file hashes. A verified copy is never overwritten.
+  with the entry and the per-file hashes. An existing model folder gets the same full
+  check, and a present file is never overwritten: a folder whose listed files all verify
+  is returned without a download; when listed files are missing and every present one
+  verifies, only the missing files are restored from one verified download and the
+  record is rewritten; a changed present file raises `WeightsHashMismatchError` and a
+  folder without the record raises `FileExistsError`, and neither downloads or changes
+  anything.
   `starfinder weights list` prints the table and the local state;
   `starfinder weights verify [<method> <model>]` re-hashes local copies. Only these
   commands use the network.
