@@ -114,6 +114,8 @@ scientific truth/calibration or define an E01 protocol. MATLAB is excluded.
    :toctree: generated
 
    evaluate_decoding
+   evaluate_deduplication
+   ranking_quality
 
 .. currentmodule:: starfinder.evaluation.matching
 

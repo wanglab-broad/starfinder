@@ -297,18 +297,26 @@ not physical spacing. Clipped slices implement zero-padded boundaries without a
 padded-volume allocation. Sums accumulate in float64 and inputs are not mutated.
 
 `load_codebook` returns `barcode.Codebook`; explicit `round_labels` and
-`channel_labels` are required. Its ordered table has `gene_id`, `color_sequence`
-and optional `base_sequence`. Duplicate IDs/rows, encoded collisions, invalid
-symbols/lengths/mapping/splits raise errors with row context. Colors `'1'`–`'4'`
-are symbols: `color_to_channel` maps them to four distinct zero-based channels.
-`EncodingConfig(reverse_bases=True)` preserves STARmap/synthetic reversal;
-`encode_bases` alone does not reverse. A split removes that encoded character
-and swaps the remaining segments. Lookup constants and numerical helpers are
-private; the old combined extraction and decoder interfaces have been removed.
+`channel_labels` are required. Its ordered table has one row per entry:
+`entry_id` (unique), `gene_id` (may repeat), `color_sequence` (unique) and optional
+`base_sequence` (unique). Repeated entry IDs, base sequences or encoded sequences
+raise naming both rows; invalid symbols/lengths/mapping/splits raise with row
+context. Colors `'1'`–`'4'` are symbols: `color_to_channel` maps them to four
+distinct zero-based channels. Encodings are registered in `ENCODINGS`:
+`EncodingConfig(reverse_bases=True)` (`two_base`) preserves STARmap/synthetic
+reversal, `OneBaseEncodingConfig` (`one_base`) maps each base through
+`base_to_color`; `encode_bases` alone does not reverse. A legacy split removes
+that encoded character and swaps the remaining segments; `Codebook.layout`
+(`BarcodeLayout`) states segments, acquisition order and allowed segment ends
+explicitly. Lookup constants and numerical helpers are private; the old combined
+extraction and decoder interfaces have been removed.
 
-`decode_barcodes(extracted, codebook, config=...)` requires exact label order.
+`decode_barcodes(extracted, codebook, config=...)` requires exact label order and
+a config registered in `DECODING_METHODS` whose declared encoding kinds include
+the codebook's (else `TypeError`).
 Every input identity retains one row with `assigned`, `unmatched`, `ambiguous`
-or `no_signal` status, reason, observed/decoded sequence and nullable gene ID.
+or `no_signal` status, reason, observed/decoded sequence and nullable gene and
+entry IDs; competition and rescue are between entries.
 Nonfinite inputs fail. Negative values fail with `InvalidIntensityError` unless
 `negative_policy="clip_negative"` is explicit; diagnostics record clipped count
 and range. An unavailable measurement prevents assignment, and any zero-total
@@ -335,7 +343,9 @@ access or decoding. It retains a complete table with acceptance/rejection reason
 an `accepted` view and counts/fractions. Predicates name allowed call statuses and
 inclusive method-specific score bounds; unavailable score columns error, and NaN
 fails a requested bound. Endpoint checks are diagnostic-only unless
-`exclude_invalid_endpoints=True`. Empty counts are zero and undefined fractions
+`exclude_invalid_endpoints=True`: `end_bases` checks the whole sequence from
+`start_base`, and with `codebook=` the segment ends of its layout are checked per
+segment. Empty counts are zero and undefined fractions
 are `None` with a reason. IDs and typed columns survive all-rejected results.
 
 Before: combined extraction returned channel calls and scores; codebook loading

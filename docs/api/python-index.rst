@@ -7,6 +7,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.preprocessing.Background3DConfig`
 * :py:obj:`starfinder.synthetic.BackgroundConfig`
 * :py:obj:`starfinder.barcode.BarcodeDecodingResult`
+* :py:obj:`starfinder.barcode.BarcodeLayout`
 * :py:obj:`starfinder.synthetic.BENCHMARK_PRESETS`
 * :py:obj:`starfinder.synthetic.benchmark_scene_preset`
 * :py:obj:`starfinder.benchmark.BenchmarkCase`
@@ -26,6 +27,8 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.dataset.Dataset`
 * :py:obj:`starfinder.barcode.decode_barcodes`
 * :py:obj:`starfinder.barcode.decode_color_sequence`
+* :py:obj:`starfinder.barcode.DECODING_METHODS`
+* :py:obj:`starfinder.barcode.DecodingSpec`
 * :py:obj:`starfinder.synthetic.deformation_geometry`
 * :py:obj:`starfinder.synthetic.DEFORMATION_PRESETS`
 * :py:obj:`starfinder.registration.DemonsConfig`
@@ -38,9 +41,12 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.synthetic.DEVELOPMENT_SIZES`
 * :py:obj:`starfinder.barcode.encode_bases`
 * :py:obj:`starfinder.barcode.EncodingConfig`
+* :py:obj:`starfinder.barcode.ENCODINGS`
+* :py:obj:`starfinder.barcode.EncodingSpec`
 * :py:obj:`starfinder.registration.estimate_transform`
 * :py:obj:`starfinder.benchmark.evaluate_benchmark`
 * :py:obj:`starfinder.evaluation.barcode.evaluate_decoding`
+* :py:obj:`starfinder.evaluation.barcode.evaluate_deduplication`
 * :py:obj:`starfinder.evaluation.registration.evaluate_displacement_field`
 * :py:obj:`starfinder.evaluation.registration.evaluate_landmark_alignment`
 * :py:obj:`starfinder.evaluation.registration.evaluate_mask_overlap`
@@ -99,6 +105,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.preprocessing.normalize_intensity`
 * :py:obj:`starfinder.preprocessing.normalize_percentile`
 * :py:obj:`starfinder.evaluation.registration.normalized_cross_correlation`
+* :py:obj:`starfinder.barcode.OneBaseEncodingConfig`
 * :py:obj:`starfinder.spot_finding.PercentileCentroidConfig`
 * :py:obj:`starfinder.preprocessing.PercentileNormalizationConfig`
 * :py:obj:`starfinder.dataset.PipelineConfig`
@@ -111,6 +118,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.synthetic.PRESET_VERSION`
 * :py:obj:`starfinder.preprocessing.project_image`
 * :py:obj:`starfinder.preprocessing.ProjectionConfig`
+* :py:obj:`starfinder.evaluation.barcode.ranking_quality`
 * :py:obj:`starfinder.io.read_checkpoint`
 * :py:obj:`starfinder.preprocessing.read_histograms`
 * :py:obj:`starfinder.preprocessing.read_supplied_statistics`
@@ -145,6 +153,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.preprocessing.ScalarBackgroundConfig`
 * :py:obj:`starfinder.synthetic.ScalarDistribution`
 * :py:obj:`starfinder.synthetic.SCENE_PRESETS`
+* :py:obj:`starfinder.barcode.Segment`
 * :py:obj:`starfinder.spot_finding.SPOT_FINDING_METHODS`
 * :py:obj:`starfinder.spot_finding.SpotFindingBackendUnavailableError`
 * :py:obj:`starfinder.spot_finding.SpotFindingPlan`

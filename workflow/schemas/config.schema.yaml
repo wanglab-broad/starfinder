@@ -946,9 +946,35 @@ $defs:
       run:
         type: boolean
       split_index:
+        description: >-
+          Shared; MATLAB's one-based position, in the encoded color string, of the junction color
+          that is removed (aging: [5]). The Python adapter translates it into the two-segment
+          layout, equal to the zero-based EncodingConfig.split_index s - 1.
         type: array
         items:
           type: integer
+      encoding:
+        description: >-
+          Python only; method (an ENCODINGS name, default two_base) and the fields of its config
+          (two_base: reverse_bases; one_base: base_to_color, reverse_bases). The method list is kept
+          equal to ENCODINGS by a test.
+        type: object
+        properties:
+          method:
+            enum: ["two_base", "one_base"]
+          reverse_bases:
+            type: boolean
+          base_to_color:
+            description: "one_base: A, C, G and T mapped one-to-one onto the colors 1-4"
+            type: object
+            required: [A, C, G, T]
+            additionalProperties: false
+            properties:
+              A: {enum: [1, 2, 3, 4, "1", "2", "3", "4"]}
+              C: {enum: [1, 2, 3, 4, "1", "2", "3", "4"]}
+              G: {enum: [1, 2, 3, 4, "1", "2", "3", "4"]}
+              T: {enum: [1, 2, 3, 4, "1", "2", "3", "4"]}
+        additionalProperties: false
     additionalProperties: true
 
   reads_extraction_params:
@@ -971,19 +997,67 @@ $defs:
       run:
         type: boolean
       end_base:
+        description: >-
+          Shared. A string is one (first, last) pair checked over the whole sequence from
+          start_base (one segment). A list gives the allowed ends of the layout's segments: with
+          one segment every listed pair, with two segments item k (a pair or a list of pairs) for
+          segment k in acquisition order.
         oneOf:
           - type: string
           - type: array
             items:
-              type: string
+              oneOf:
+                - type: string
+                - type: array
+                  items:
+                    type: string
       n_barcode_segments:
+        description: "Shared; when given, must equal the number of segments of the codebook layout"
         type: integer
         minimum: 1
       split_index:
+        description: "Shared; when given, must equal load_codebook.split_index"
         type: array
         items:
           type: integer
     additionalProperties: true
+
+  decoding_params:
+    description: >-
+      Python only; method (a DECODING_METHODS name, default wta) and the fields of its config.
+      Decoding runs with reads_filtration.run. The adapter sets diagnostics true and
+      allow_rescue false unless given. The method list is kept equal to DECODING_METHODS by a
+      test.
+    type: object
+    properties:
+      method:
+        enum: ["wta", "codebook_aware"]
+      negative_policy:
+        enum: ["reject", "clip_negative"]
+      diagnostics:
+        type: boolean
+      max_hamming:
+        type: integer
+        minimum: 0
+      max_corrected_round_margin:
+        type: [number, "null"]
+        minimum: 0
+        maximum: 1
+      min_score_delta:
+        type: number
+        minimum: 0
+      min_geomean_probability:
+        type: number
+        minimum: 0
+        maximum: 1
+      max_correction_penalty:
+        type: number
+        minimum: 0
+      allow_exact:
+        type: boolean
+      allow_rescue:
+        type: boolean
+    additionalProperties: false
 
   # ==================== Rule-Specific Configurations ====================
   rsf_single_fov_config:
@@ -1026,6 +1100,8 @@ $defs:
             $ref: "#/$defs/reads_extraction_params"
           reads_filtration:
             $ref: "#/$defs/reads_filtration_params"
+          decoding:
+            $ref: "#/$defs/decoding_params"
         additionalProperties: true
     additionalProperties: true
 
@@ -1094,6 +1170,8 @@ $defs:
             $ref: "#/$defs/reads_extraction_params"
           reads_filtration:
             $ref: "#/$defs/reads_filtration_params"
+          decoding:
+            $ref: "#/$defs/decoding_params"
         additionalProperties: true
     additionalProperties: true
 
@@ -1156,6 +1234,8 @@ $defs:
             $ref: "#/$defs/reads_extraction_params"
           reads_filtration:
             $ref: "#/$defs/reads_filtration_params"
+          decoding:
+            $ref: "#/$defs/decoding_params"
         additionalProperties: true
     additionalProperties: true
 

@@ -587,6 +587,78 @@ are; a script that reads them should accept either key. The `candidates.json`
 keys `detection_config`, `detection_rounds`, `detection_plan` and
 `detection_diagnostics` and the preprocessing `detection` image keep their names.
 
+### Readout encodings and decoders
+
+§2.8 registers the barcode encodings and the decoders on the shared registry
+mechanism ({doc}`method-registry`, {doc}`readout-contract`, "Encoding registry").
+`starfinder.barcode.ENCODINGS` maps each encoding config type to its
+`EncodingSpec`: `two_base` is {py:class}`~starfinder.barcode.EncodingConfig`, which
+gains the discriminator `method="two_base"` (its positional constructor is
+unchanged), and `one_base` is the new
+{py:class}`~starfinder.barcode.OneBaseEncodingConfig`, whose `base_to_color` maps A,
+C, G and T one-to-one onto the colors 1–4 and has no default.
+`starfinder.barcode.DECODING_METHODS` maps `WtaDecoderConfig` (`wta`) and
+`CodebookAwareDecoderConfig` (`codebook_aware`) to their `DecodingSpec`, with the
+readout modes, encoding kinds, rescue and score columns each declares. Lookups use
+the exact config type, so `decode_barcodes` rejects a subclass of a decoder config
+with `TypeError("unsupported decoder config")`, and it raises `TypeError` when the
+codebook's encoding kind is not one the decoder declares. The decoders' numerical
+behavior is unchanged. `Codebook(encoding=...)` accepts any registered encoding
+config; `Dataset.load_codebook` gains keyword-only `encoding` and `layout`.
+
+### Segment layout
+
+{py:class}`~starfinder.barcode.BarcodeLayout` and
+{py:class}`~starfinder.barcode.Segment` describe how a barcode is cut into
+separately read segments: lengths in bases, acquisition order and allowed
+(first, last) end bases per segment, several pairs allowed. `Codebook.layout` holds
+the effective layout: one segment by default, or the two segments that a legacy
+`EncodingConfig.split_index` describes (the two are mutually exclusive). A codebook
+entry whose segment ends are not declared raises `ValueError` naming the entry and
+segment. `filter_reads(..., codebook=...)` checks the observed colors per segment
+(`endpoint_valid_<segment>` and `endpoint_valid`); `FOV.filter_reads` passes the
+dataset codebook. `ReadFilterConfig.end_bases` stays the one-segment shortcut and
+cannot be combined with layout ends, and `exclude_invalid_endpoints=True` without
+`end_bases` now raises when the reads are filtered without layout ends, instead of
+when the config is built.
+
+**Intentional change:** the workflow adapter converts the shared
+`load_codebook.split_index` from MATLAB's one-based position; `WorkflowConfig.split_index`
+holds the zero-based Python value and `WorkflowConfig.layout` the translated layout.
+A configuration that worked around the defect by giving the Python value (for
+example 4 for aging) must give the MATLAB value (5). On the 11-base barcode
+`CAGTACTGCAT`, `[5]` now gives `242324242`; before, it gave `423242423`
+({doc}`readout-baseline`). The adapter also accepts the MATLAB two-segment keys:
+`reads_filtration.n_barcode_segments` and `reads_filtration.split_index`, when given,
+must agree with the layout, and a list `end_base` gives the allowed segment ends
+({doc}`workflow-configuration`). The benchmark pipeline profiles record the
+zero-based split and pass the shared one-based value.
+
+### Codebook entries
+
+A codebook row is an entry, not a gene (D5). `Codebook.table` gains `entry_id`
+(unique) before `gene_id`, which may now repeat; `color_sequence` and
+`base_sequence` stay unique. A `gene,barcode` row has `entry_id` equal to the
+barcode as written; a canonical file may state `entry_id` and otherwise gets the
+color sequence. Repeated `entry_id`, `base_sequence` or `color_sequence` raise
+naming both source rows. `n_entries`, `seq_to_entry` and `entry_to_seq` are new;
+`n_genes` counts distinct genes and `genes` lists them once each; `gene_to_seq`
+raises `ValueError` for a codebook with repeated genes.
+
+**Intentional change:** two barcodes for one gene, which raised before, now load
+as two entries of that gene, and the decoding table (and so `pre_qc`) gains
+`entry_id`, the entry of the decoded color sequence, next to `gene_id`.
+
+### Readout evaluation metrics
+
+`starfinder.evaluation.barcode` adds `ranking_quality(score, correct, *,
+orientation, retention=(0.5, 0.8, 0.9, 1.0))`: the AUROC of a score with its
+Hanley–McNeil standard error and the error at fixed retention, and
+`evaluate_deduplication(groups, source, *, pairs)`: missed duplicates, false
+merges and their rates over a stated pair population. Both report an undefined
+value with a reason when a class is empty. They rank and count; they set no
+cutoff.
+
 ## Intentional behavior changes — not mechanical equivalence
 
 | Area | Change and consequence |

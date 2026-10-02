@@ -1,11 +1,13 @@
 """Independent WTA and codebook-aware decoding with retained identities."""
 
-from dataclasses import dataclass, field
+from dataclasses import KW_ONLY, dataclass, field
 from numbers import Integral
+from typing import Callable
 import numpy as np
 import pandas as pd
 
-from .codebook import Codebook
+from starfinder._registry import Dependency, check_name, spec_for
+from .codebook import Codebook, encoding_spec
 from .extraction import IntensityExtractionResult
 from ._codebook_aware import (
     _decode_codebook_aware,
@@ -149,6 +151,127 @@ class BarcodeDecodingResult:
         return f"BarcodeDecodingResult: {self._summary()}"
 
 
+def _run_codebook_aware(values, codebook, config, spot_ids, diagnostics):
+    """Codebook-aware decoding table (before the shared required-round rules)."""
+    table = _decode_codebook_aware(
+        values,
+        codebook.seq_to_gene,
+        spot_ids=spot_ids,
+        max_hamming=config.max_hamming,
+        min_corrected_round_margin=config.max_corrected_round_margin,
+        min_score_delta=config.min_score_delta,
+        min_geomean_prob=config.min_geomean_probability,
+        max_correction_penalty=config.max_correction_penalty,
+        allow_exact=config.allow_exact,
+        allow_rescue=config.allow_rescue,
+    )
+    table = table.rename(
+        columns={
+            "color_seq_wta": "observed_color_sequence",
+            "decoded_seq": "decoded_color_sequence",
+            "gene": "gene_id",
+            "reject_reason": "failure_reason",
+            "score": "probability_nll",
+            "geomean_prob": "geomean_probability",
+        }
+    )
+    table["call_status"] = np.where(table.gene_id.notna(), "assigned", "unmatched")
+    table.loc[table.failure_reason.eq("ambiguous_candidate"), "call_status"] = "ambiguous"
+    # Tied observed rounds that cannot be uniquely rescued stay ambiguous.
+    tied = table.observed_color_sequence.str.contains("M", na=False) & table.gene_id.isna()
+    table.loc[tied, "call_status"] = "ambiguous"
+    return table
+
+
+def _run_wta(values, codebook, config, spot_ids, diagnostics):
+    """WTA decoding table (before the shared required-round rules)."""
+    norm = np.sqrt((values**2).sum(axis=1)) + 1e-6
+    maximum = values.max(axis=1)
+    ties = (values == maximum[:, None, :]).sum(axis=1) > 1
+    colors = np.asarray(list("1234"), dtype=object)[values.argmax(axis=1)]
+    colors[ties] = "M"
+    observed = np.array(["".join(row) for row in colors], dtype=object)
+    with np.errstate(divide="ignore"):
+        scores = -np.log(maximum / norm)
+    scores[ties] = np.inf
+    genes = [codebook.seq_to_gene.get(seq) for seq in observed]
+    table = pd.DataFrame(
+        {
+            "spot_id": spot_ids,
+            "observed_color_sequence": observed,
+            "decoded_color_sequence": [
+                s if g is not None else None for s, g in zip(observed, genes)
+            ],
+            "gene_id": genes,
+            "call_status": ["assigned" if g is not None else "unmatched" for g in genes],
+            "failure_reason": ["" if g is not None else "not_in_codebook" for g in genes],
+            "wta_l2_nll": scores.sum(axis=1),
+            "call_type": ["exact" if g is not None else "no_call" for g in genes],
+        }
+    )
+    table.loc[ties.any(axis=1), ["call_status", "failure_reason"]] = [
+        "ambiguous",
+        "tied_channels",
+    ]
+    if config.diagnostics:
+        diagnostics["wta_round_l2_nll"] = scores
+    return table
+
+
+@dataclass(frozen=True)
+class DecodingSpec:
+    """Registered decoder: stable name, private implementation and declared capabilities.
+
+    run(values, codebook, config, spot_ids, diagnostics) receives the clipped
+    (N, 4, R) sums in color order 1-4 and returns the decoder's table before the
+    shared required-round rules; decode_barcodes calls it after the checks below,
+    callers never call it directly. modes are the readout modes the decoder
+    supports; encodings the encoding symbol kinds (EncodingSpec.symbols) it
+    decodes; rescue whether it can change an observed color; score_columns the
+    numeric columns it writes. requires lists optional dependencies.
+    """
+
+    name: str
+    run: Callable[..., pd.DataFrame]
+    _: KW_ONLY
+    modes: frozenset[str]
+    encodings: frozenset[str]
+    rescue: bool
+    score_columns: tuple[str, ...]
+    requires: tuple[Dependency, ...] = ()
+
+    def __post_init__(self):
+        check_name(self.name, "decoding method")
+        if not callable(self.run):
+            raise TypeError(f"decoding method {self.name!r} run must be callable")
+        for name in ("modes", "encodings"):
+            value = getattr(self, name)
+            if not isinstance(value, frozenset) or any(not isinstance(v, str) or not v for v in value):
+                raise TypeError(f"{name} of {self.name!r} must be a frozenset of nonempty strings")
+        if not self.modes:
+            raise ValueError(f"modes of {self.name!r} must not be empty")
+        if not isinstance(self.rescue, bool):
+            raise TypeError(f"rescue of {self.name!r} must be Boolean")
+        if not isinstance(self.score_columns, tuple) or any(
+                not isinstance(c, str) or not c for c in self.score_columns):
+            raise TypeError(f"score_columns of {self.name!r} must be a tuple of column names")
+        if not isinstance(self.requires, tuple) or not all(isinstance(d, Dependency) for d in self.requires):
+            raise TypeError(f"decoding method {self.name!r} requires must be a tuple of Dependency")
+
+
+#: Decoders by exact config type (docs/readout-contract.md, "What a decoder declares").
+DECODING_METHODS: dict[type, DecodingSpec] = {
+    WtaDecoderConfig: DecodingSpec(
+        "wta", _run_wta, modes=frozenset({"multiplexed"}), encodings=frozenset({"color"}),
+        rescue=False, score_columns=("wta_l2_nll",)),
+    CodebookAwareDecoderConfig: DecodingSpec(
+        "codebook_aware", _run_codebook_aware, modes=frozenset({"multiplexed"}),
+        encodings=frozenset({"color"}), rescue=True,
+        score_columns=("probability_nll", "score_delta", "geomean_probability", "min_round_margin",
+                       "corrected_round_margin", "mean_total_intensity", "hamming_to_wta")),
+}
+
+
 def decode_barcodes(
     intensity_result: IntensityExtractionResult,
     codebook: Codebook,
@@ -157,20 +280,28 @@ def decode_barcodes(
 ) -> BarcodeDecodingResult:
     """Decode without changing extraction; reject invalid labels/values explicitly.
 
-    Any unavailable or zero-total round prevents assignment. WTA ties use exact
-    equality; probability ties use absolute tolerance 1e-12, preserving the two
-    methods' historical tie detection. A uniquely supported codebook rescue may
-    resolve an observed tie; equally scored candidates never assign a gene.
+    The decoder is looked up in DECODING_METHODS by exact config type; a codebook
+    whose encoding kind (EncodingSpec.symbols) the decoder does not declare raises
+    TypeError. Any unavailable or zero-total round prevents assignment. WTA ties
+    use exact equality; probability ties use absolute tolerance 1e-12, preserving
+    the two methods' historical tie detection. A uniquely supported codebook
+    rescue may resolve an observed tie; equally scored candidates never assign a
+    gene. The table reports the decoded entry_id beside its gene_id.
     """
     if not isinstance(intensity_result, IntensityExtractionResult) or not isinstance(
         codebook, Codebook
     ):
         raise TypeError("expected IntensityExtractionResult and Codebook")
-    if not isinstance(config, (WtaDecoderConfig, CodebookAwareDecoderConfig)):
-        raise TypeError("unsupported decoder config")
+    spec = spec_for(DECODING_METHODS, config, "decoding method", TypeError, "unsupported decoder config")
     intensity_result.__post_init__()
     codebook.__post_init__()
     config.__post_init__()
+    encoding = encoding_spec(codebook.encoding)
+    if encoding.symbols not in spec.encodings:
+        raise TypeError(
+            f"decoder {spec.name!r} does not decode {encoding.symbols!r} encodings "
+            f"(codebook encoding {encoding.name!r}; it decodes {sorted(spec.encodings)})"
+        )
     result = intensity_result
     if (
         result.channel_labels != codebook.channel_labels
@@ -199,70 +330,13 @@ def decode_barcodes(
         "observed_color_sequence",
         "decoded_color_sequence",
         "gene_id",
+        "entry_id",
         "call_status",
         "failure_reason",
         "call_type",
         "corrected_rounds",
     ]
-    if isinstance(config, CodebookAwareDecoderConfig):
-        table = _decode_codebook_aware(
-            values,
-            codebook.seq_to_gene,
-            spot_ids=result.spot_ids,
-            max_hamming=config.max_hamming,
-            min_corrected_round_margin=config.max_corrected_round_margin,
-            min_score_delta=config.min_score_delta,
-            min_geomean_prob=config.min_geomean_probability,
-            max_correction_penalty=config.max_correction_penalty,
-            allow_exact=config.allow_exact,
-            allow_rescue=config.allow_rescue,
-        )
-        table = table.rename(
-            columns={
-                "color_seq_wta": "observed_color_sequence",
-                "decoded_seq": "decoded_color_sequence",
-                "gene": "gene_id",
-                "reject_reason": "failure_reason",
-                "score": "probability_nll",
-                "geomean_prob": "geomean_probability",
-            }
-        )
-        table["call_status"] = np.where(table.gene_id.notna(), "assigned", "unmatched")
-        table.loc[table.failure_reason.eq("ambiguous_candidate"), "call_status"] = "ambiguous"
-        # Tied observed rounds that cannot be uniquely rescued stay ambiguous.
-        tied = table.observed_color_sequence.str.contains("M", na=False) & table.gene_id.isna()
-        table.loc[tied, "call_status"] = "ambiguous"
-    else:
-        norm = np.sqrt((values**2).sum(axis=1)) + 1e-6
-        maximum = values.max(axis=1)
-        ties = (values == maximum[:, None, :]).sum(axis=1) > 1
-        colors = np.asarray(list("1234"), dtype=object)[values.argmax(axis=1)]
-        colors[ties] = "M"
-        observed = np.array(["".join(row) for row in colors], dtype=object)
-        with np.errstate(divide="ignore"):
-            scores = -np.log(maximum / norm)
-        scores[ties] = np.inf
-        genes = [codebook.seq_to_gene.get(seq) for seq in observed]
-        table = pd.DataFrame(
-            {
-                "spot_id": result.spot_ids,
-                "observed_color_sequence": observed,
-                "decoded_color_sequence": [
-                    s if g is not None else None for s, g in zip(observed, genes)
-                ],
-                "gene_id": genes,
-                "call_status": ["assigned" if g is not None else "unmatched" for g in genes],
-                "failure_reason": ["" if g is not None else "not_in_codebook" for g in genes],
-                "wta_l2_nll": scores.sum(axis=1),
-                "call_type": ["exact" if g is not None else "no_call" for g in genes],
-            }
-        )
-        table.loc[ties.any(axis=1), ["call_status", "failure_reason"]] = [
-            "ambiguous",
-            "tied_channels",
-        ]
-        if config.diagnostics:
-            diagnostics["wta_round_l2_nll"] = scores
+    table = spec.run(values, codebook, config, result.spot_ids, diagnostics)
     table["spot_namespace"] = result.spot_namespace
     for mask, status, reason in [
         (no_signal, "no_signal", "zero_signal_round"),
@@ -274,6 +348,9 @@ def decode_barcodes(
             "no_call",
         ]
         table.loc[mask, ["gene_id", "decoded_color_sequence"]] = None
+    # Competition and rescue are between entries (color sequences); report the decoded one.
+    table.insert(int(table.columns.get_loc("gene_id")) + 1, "entry_id",
+                 table.decoded_color_sequence.map(codebook.seq_to_entry))
     for col in strings:
         if col in table:
             table[col] = table[col].astype("string")

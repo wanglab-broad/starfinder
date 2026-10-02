@@ -43,7 +43,8 @@ def pipeline_case(name, *, case_id, fov_id, sources, codebook, n_rounds=None):
     params = {
         'streaming': recipe['execution'] == 'streaming',
         'load_raw_images': {'run': True},
-        'load_codebook': {'run': True, 'split_index': p['split_index']},
+        # Profiles record the encoded zero-based split; the shared key is MATLAB's one-based position.
+        'load_codebook': {'run': True, 'split_index': [] if p['split_index'] is None else [p['split_index'] + 1]},
         'enhance_contrast': {'run': True, 'snr_threshold': p['snr_threshold']},
         'spot_finding': {'run': True, 'intensity_estimation': p['threshold_mode'],
                          'intensity_threshold': p['threshold_value']},

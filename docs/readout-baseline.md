@@ -1,6 +1,6 @@
 # Readout baseline: extraction, decoding and read QC
 
-Status: Proposed
+Status: Accepted (W-280, 2026-10-02, at b1c7261)
 
 This page records how intensity extraction, barcode decoding and read filtering
 behave at revision `141c093` (branch `runner/s28-spec-20261001`, on `dev` after

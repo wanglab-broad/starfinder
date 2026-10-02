@@ -946,9 +946,12 @@ class FOV:
 
     @_log_step
     def filter_reads(self, *, config=ReadFilterConfig()):
-        """Rerun explicit read predicates without decoding or image access."""
+        """Rerun explicit read predicates without decoding or image access.
+
+        The dataset codebook, when loaded, supplies the segment ends of its layout.
+        """
         from starfinder.barcode import filter_reads
-        self.filtering_result = filter_reads(self.decoding_result, config=config)
+        self.filtering_result = filter_reads(self.decoding_result, config=config, codebook=self.codebook)
         return self
 
     @_log_step

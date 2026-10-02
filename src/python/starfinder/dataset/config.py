@@ -15,7 +15,7 @@ from starfinder.registration._methods import RegistrationConfig
 from starfinder._execution import check_device
 from starfinder.spot_finding import SPOT_FINDING_METHODS, SpotFindingPlan
 from starfinder.spot_finding._methods import SpotFindingConfig
-from starfinder.barcode import (NeighborhoodSumConfig, WtaDecoderConfig,
+from starfinder.barcode import (DECODING_METHODS, NeighborhoodSumConfig, WtaDecoderConfig,
     CodebookAwareDecoderConfig, ReadFilterConfig)
 
 # Error categories a RecoveryConfig may allow.
@@ -229,7 +229,7 @@ class PipelineConfig:
     def __post_init__(self):
         types = {'load': ImageLoadConfig, 'preprocessing': PreprocessingRecipe, 'registration': RegistrationRecipe,
             'spot_finding': None,
-            'extraction': NeighborhoodSumConfig, 'decoding': (WtaDecoderConfig, CodebookAwareDecoderConfig),
+            'extraction': NeighborhoodSumConfig, 'decoding': tuple(DECODING_METHODS),
             'filtering': ReadFilterConfig}
         for name, kind in types.items():
             value = getattr(self, name)

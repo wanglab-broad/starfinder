@@ -532,9 +532,9 @@ def write_pre_qc(directory, header, decoding_result, table_format):
 
 
 def _read_pre_qc(directory, header):
-    from starfinder.barcode import BarcodeDecodingResult, CodebookAwareDecoderConfig, WtaDecoderConfig
+    from starfinder.barcode import DECODING_METHODS, BarcodeDecodingResult
     table = _read_table(Path(directory) / header["table"], header["dtypes"])
-    config = _config(header["decoding_config"], dict(wta=WtaDecoderConfig, codebook_aware=CodebookAwareDecoderConfig))
+    config = _config(header["decoding_config"], {spec.name: t for t, spec in DECODING_METHODS.items()})
     return {"decoding_result": BarcodeDecodingResult(table, header["spot_namespace"],
         tuple(header["channel_labels_decoded"]), tuple(header["round_labels"]), config,
         _tuples(header["decoding_diagnostics"]))}

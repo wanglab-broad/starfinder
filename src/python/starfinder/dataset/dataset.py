@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from starfinder.barcode import Codebook, EncodingConfig, load_codebook
+from starfinder.barcode import BarcodeLayout, Codebook, EncodingConfig, OneBaseEncodingConfig, load_codebook
 from starfinder.dataset.types import (
     RoundState,
     SubtileConfig,
@@ -141,17 +141,27 @@ class Dataset:
         path: Path | str,
         split_index: int | None = None,
         reverse_bases: bool = True,
+        *,
+        encoding: EncodingConfig | OneBaseEncodingConfig | None = None,
+        layout: BarcodeLayout | None = None,
     ) -> None:
         """Load codebook from CSV and store on self.codebook.
 
         Parameters
         ----------
         path : pathlib.Path or str
-            Two-column gene,barcode CSV, with or without a header.
+            Two-column gene,barcode CSV, with or without a header, or a
+            canonical entry_id,gene_id,color_sequence[,base_sequence] CSV.
+        split_index : int or None
+            Optional zero-based two-segment split of the two_base encoding,
+            default None. MATLAB's one-based split_index s is s - 1 here.
         reverse_bases : bool
             Reverse bases before encoding, default True.
-        split_index : int or None
-            Optional two-segment split, default None.
+        encoding : EncodingConfig, OneBaseEncodingConfig or None
+            The encoding config; replaces split_index and reverse_bases, which
+            must then keep their defaults.
+        layout : BarcodeLayout or None
+            Segment layout; None is one segment (or the legacy split).
 
         Returns
         -------
@@ -160,6 +170,9 @@ class Dataset:
             channel_order must be configured explicitly. Errors propagate from
             :func:`starfinder.barcode.load_codebook`.
         """
+        if encoding is None:
+            encoding = EncodingConfig(reverse_bases=reverse_bases, split_index=split_index)
+        elif split_index is not None or reverse_bases is not True:
+            raise ValueError("give encoding, or split_index and reverse_bases, not both")
         self.codebook = load_codebook(path, round_labels=tuple(self.rounds.sequencing_rounds),
-            channel_labels=tuple(self.channel_order),
-            encoding=EncodingConfig(reverse_bases=reverse_bases, split_index=split_index))
+            channel_labels=tuple(self.channel_order), encoding=encoding, layout=layout)

@@ -161,10 +161,15 @@ at every candidate in every sequencing round.
 
 ### pre_qc
 
-`pre_qc.<format>` is `BarcodeDecodingResult.table`, unchanged. `pre_qc.json`
-holds the decoder configuration, labels and diagnostics. Array and table
-diagnostics are not saved: decoder probabilities, per-round and candidate tables,
-and WTA per-round scores. A reloaded result therefore lacks those keys.
+`pre_qc.<format>` is `BarcodeDecodingResult.table`, unchanged. Since §2.8 (W-292)
+the table holds the string column `entry_id`, the codebook entry of the decoded
+color sequence, after `gene_id`; `FORMAT_VERSION` stays 2, an older reader keeps
+it as an ordinary column, and a `pre_qc` written without it still loads.
+`pre_qc.json` holds the decoder configuration, labels and diagnostics; the reader
+rebuilds the configuration through `DECODING_METHODS` from its `method`. Array
+and table diagnostics are not saved: decoder probabilities, per-round and
+candidate tables, and WTA per-round scores. A reloaded result therefore lacks
+those keys.
 
 All JSON files are strict JSON: a non-finite diagnostic or configuration value
 (NaN or infinity) is written as `null`.

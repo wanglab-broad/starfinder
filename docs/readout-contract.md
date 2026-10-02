@@ -1,6 +1,6 @@
 # Readout contract: extraction, decoding and read QC
 
-Status: Proposed
+Status: Accepted (W-280, 2026-10-02, at b1c7261)
 
 This page proposes the §2.8 readout contract: two readout modes (multiplexed
 sequencing and direct readout) as one explicit setting, registered barcode

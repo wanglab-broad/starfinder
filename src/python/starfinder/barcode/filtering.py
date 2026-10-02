@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 from ._encoding import decode_color_sequence
+from ._layout import colors_have_ends, segment_colors
+from .codebook import Codebook, encoding_spec
 from .decoding import BarcodeDecodingResult
 
 
@@ -14,7 +16,10 @@ class ReadFilterConfig:
 
     score_bounds maps a score column to (lower, upper), with None for no bound.
     NaN fails a requested score predicate. Endpoint checks are diagnostic-only
-    unless exclude_invalid_endpoints is True. end_bases means first/last base.
+    unless exclude_invalid_endpoints is True. end_bases means first/last base of
+    the whole sequence decoded from start_base: the one-segment shortcut. Segment
+    ends declared on the codebook layout are checked per segment instead (see
+    filter_reads); exclusion needs one of the two.
     """
 
     call_statuses: tuple[str, ...] = ("assigned",)
@@ -59,10 +64,8 @@ class ReadFilterConfig:
             and (len(self.end_bases) != 2 or any(c not in "ACGT" for c in self.end_bases))
         ):
             raise ValueError("invalid endpoint bases")
-        if type(self.exclude_invalid_endpoints) is not bool or (
-            self.exclude_invalid_endpoints and self.end_bases is None
-        ):
-            raise ValueError("endpoint exclusion requires end_bases")
+        if type(self.exclude_invalid_endpoints) is not bool:
+            raise ValueError("exclude_invalid_endpoints must be Boolean")
 
 
 @dataclass(frozen=True)
@@ -107,15 +110,39 @@ class ReadFilteringResult:
 
 
 def filter_reads(
-    decoding_result: BarcodeDecodingResult, *, config: ReadFilterConfig = ReadFilterConfig()
+    decoding_result: BarcodeDecodingResult,
+    *,
+    config: ReadFilterConfig = ReadFilterConfig(),
+    codebook: Codebook | None = None,
 ) -> ReadFilteringResult:
-    """Apply independent predicates without extracting or decoding again."""
+    """Apply independent predicates without extracting or decoding again.
+
+    With a codebook whose layout declares segment ends, each read's observed
+    colors are cut into the layout's segments and each segment with ends is
+    checked on its own: decoded from each allowed first base, it must end in the
+    paired last base (endpoint_valid_<segment>; endpoint_valid when all pass).
+    Reads with M or N colors fail. config.end_bases (the one-segment shortcut)
+    cannot be combined with layout ends. Membership never depends on the check.
+    """
     if not isinstance(decoding_result, BarcodeDecodingResult) or not isinstance(
         config, ReadFilterConfig
     ):
         raise TypeError("expected BarcodeDecodingResult and ReadFilterConfig")
+    if codebook is not None and not isinstance(codebook, Codebook):
+        raise TypeError("codebook must be Codebook or None")
     decoding_result.__post_init__()
     config.__post_init__()
+    segments = ()
+    if codebook is not None:
+        codebook.__post_init__()
+        if codebook.round_labels != decoding_result.round_labels:
+            raise ValueError("codebook and decoding round labels must match exactly")
+        segments = tuple(s for s in codebook.layout.segments if s.ends)
+    if segments and config.end_bases is not None:
+        raise ValueError("end_bases is the one-segment shortcut; the codebook layout already declares "
+                         "segment ends")
+    if config.exclude_invalid_endpoints and config.end_bases is None and not segments:
+        raise ValueError("endpoint exclusion requires end_bases or segment ends on the codebook layout")
     table = decoding_result.table.copy()
     reasons = [[] for _ in range(len(table))]
 
@@ -144,6 +171,26 @@ def filter_reads(
             return bool(bases and bases[0] + bases[-1] == config.end_bases)
 
         table["endpoint_valid"] = table.observed_color_sequence.map(endpoint).astype(bool)
+    elif segments:
+        spec = encoding_spec(codebook.encoding)
+        rounds = len(codebook.round_labels)
+
+        def segment_valid(seq, segment):
+            if pd.isna(seq) or len(seq) != rounds:
+                return False
+            colors = segment_colors(seq, codebook.layout, spec)[segment.name]
+            return colors_have_ends(colors, segment.ends, spec, codebook.encoding)
+
+        valid = pd.Series(True, index=table.index)
+        diagnostics["endpoint_valid_segment_counts"] = {}
+        for segment in segments:
+            column = f"endpoint_valid_{segment.name}"
+            table[column] = table.observed_color_sequence.map(
+                lambda seq: segment_valid(seq, segment)).astype(bool)
+            diagnostics["endpoint_valid_segment_counts"][segment.name] = int(table[column].sum())
+            valid &= table[column]
+        table["endpoint_valid"] = valid.astype(bool)
+    if "endpoint_valid" in table:
         diagnostics["endpoint_valid_count"] = int(table.endpoint_valid.sum())
         if config.exclude_invalid_endpoints:
             reject(~table.endpoint_valid, "endpoint")
@@ -154,7 +201,7 @@ def filter_reads(
     total, accepted = len(table), int(table.accepted.sum())
     fractions = {"accepted": accepted / total if total else None}
     diagnostics["undefined_fraction_reasons"] = {} if total else {"accepted": "empty_population"}
-    if config.end_bases is not None:
+    if "endpoint_valid" in table:
         fractions["endpoint_valid"] = diagnostics["endpoint_valid_count"] / total if total else None
         if not total:
             diagnostics["undefined_fraction_reasons"]["endpoint_valid"] = "empty_population"

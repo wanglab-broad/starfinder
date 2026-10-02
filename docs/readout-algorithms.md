@@ -1,6 +1,6 @@
 # Readout algorithm specification
 
-Status: Proposed
+Status: Accepted (W-280, 2026-10-02, at b1c7261)
 
 This page specifies the numerical methods of §2.8: the `two_base` and `one_base`
 encodings, the WTA and codebook-aware decoders, direct assignment, the local

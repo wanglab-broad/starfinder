@@ -122,9 +122,10 @@ is specifically for the Python batch/direct wrapper.
 | `create_subtiles` | boolean `run`, integer `sqrt_pieces` >=1 | Grid default 4; only GR/deep creation rules produce subtile files; Python creation scripts call splitting unconditionally |
 | `local_registration` | boolean `run`, string `ref_round`, method `demons`,`bspline`,`tps`,`cpd` or the demons variants `diffeomorphic`,`symmetric`,`fast_symmetric` (schema default `demons`); Python-only `ref_img`/`mov_img` | Python: the recipe's local step, after the global one; translates supported method-specific settings; `ref_img`/`mov_img` default to `merged-image` (the channel maximum); `boundary_mode` must agree with the global block (one final resampling); demons needs optional SimpleITK, B-spline the `registration-elastix` extra; MATLAB wrappers do not forward `method`; deep subtile does not perform local registration |
 | `spot_finding` | boolean `run`, string `ref_round`, nonnegative numeric `intensity_threshold`, mode `global`,`noise`,`adaptive`,`adaptive_round`; Python-only `method`, the selected config's fields, `channel_overrides` and `rounds` | Python wrappers default mode to `noise` but require a threshold when used; pass both explicitly. Python rules: see [the method key](#spot-finding-method-key); MATLAB supports adaptive/global only |
-| `load_codebook` | boolean `run`, integer-array `split_index` | Python wrappers load unconditionally, turn missing/empty split into None; MATLAB respects `run` |
+| `load_codebook` | boolean `run`, integer-array `split_index`; Python-only `encoding` (`method` `two_base` or `one_base` and that config's fields) | `split_index` is **one-based**: MATLAB's position in the encoded color string of the junction color that is removed (aging `[5]`). Python wrappers load unconditionally, turn missing/empty split into None and translate `[s]` into the two-segment layout, equal to the zero-based `EncodingConfig(split_index=s - 1)` ([segment layout](#codebook-segment-layout)); MATLAB respects `run` |
 | `reads_extraction` | boolean `run`, exactly three integers >=1 in `voxel_size` | Pixel half-widths, Python `(z,y,x)` versus MATLAB `(row,column,z)`; e.g. `[1,2,2]` versus `[2,2,1]`, not physical microns |
-| `reads_filtration` | boolean `run`, string or string-array `end_base`, integer `n_barcode_segments` >=1, integer-array `split_index` | Python wrappers forward `end_base` and extra `start_base` (default `C`), not `n_barcode_segments` or this block's split; MATLAB forwards segment count and split |
+| `reads_filtration` | boolean `run`, string or string-array `end_base`, integer `n_barcode_segments` >=1, integer-array `split_index` | Python wrappers forward a string `end_base` and extra `start_base` (default `C`) to `ReadFilterConfig`; a list `end_base` becomes the allowed ends of the layout's segments; `n_barcode_segments` and this block's `split_index`, when given, must agree with the layout ([segment layout](#codebook-segment-layout)); MATLAB forwards segment count and split |
+| `decoding` | Python-only `method` (`wta` or `codebook_aware`) and that config's fields | Python rules only: the decoder used with `reads_filtration.run`; default `WtaDecoderConfig(diagnostics=True)`; the adapter sets `diagnostics` true and `allow_rescue` false unless given |
 
 Always pair `intensity_estimation` with `intensity_threshold`. Python `noise`
 uses a k-sigma threshold (e.g. 5), whereas `adaptive` is a fraction of channel
@@ -150,6 +151,36 @@ shared MATLAB keys remain unchanged. See [coordination](coordination.md).
 `from_workflow_config` chooses the relevant subtile creation settings; image
 sizes must match arrays after rotation. Rectangular and remainder dimensions
 are partitioned independently with complete edge coverage.
+
+## Codebook segment layout
+
+The shared `split_index` is MATLAB's one-based position `s` (`LoadCodebook.m`
+erases color `s` and puts the colors after it first). For a `two_base` barcode of
+`n = n_rounds + 2` bases, the adapter translates `load_codebook.split_index: [s]`
+into `BarcodeLayout((Segment("A", n - s), Segment("B", s)), ("A", "B"))`, or with
+`load_codebook.encoding.reverse_bases: false` into
+`BarcodeLayout((Segment("A", s), Segment("B", n - s)), ("B", "A"))`; both equal the
+zero-based `EncodingConfig(split_index=s - 1)`, which `WorkflowConfig.split_index`
+holds. For aging (`s = 5`, 11 bases, 9 rounds) segment A has 6 bases (5 colors,
+rounds 1–5) and segment B 5 bases (4 colors, rounds 6–9). Before W-292 the adapter
+passed `s` unchanged as the zero-based index, so `[5]` dropped the wrong color; a
+configuration that gave the Python value (4) must give the MATLAB value (5).
+
+`reads_filtration.n_barcode_segments` must equal the number of segments (2 with a
+split, 1 without) and `reads_filtration.split_index` must equal
+`load_codebook.split_index`, when they are given; otherwise the adapter raises
+`ValueError`. A list `end_base` gives the allowed (first, last) bases of the
+segments in read orientation: with one segment every listed pair, with two
+segments item k (a pair or a list of pairs) for segment k in acquisition order, as
+`FilterReadsMultiSegment.m` reads it. A codebook entry whose ends are not listed
+raises when the codebook is loaded; reads are checked per segment by
+`filter_reads` and rejected only with `exclude_invalid_endpoints: true`. A string
+`end_base` keeps its one-segment meaning with `start_base`.
+
+```yaml
+load_codebook: {run: true, split_index: [5]}
+reads_filtration: {run: true, n_barcode_segments: 2, split_index: [5], end_base: ["CC", "TT"]}
+```
 
 ## Explicit preprocessing recipe
 

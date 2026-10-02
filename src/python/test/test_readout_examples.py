@@ -12,8 +12,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from starfinder.barcode import (Codebook, EncodingConfig, WtaDecoderConfig, decode_barcodes,
-                                decode_color_sequence, encode_bases, extract_intensities, load_codebook)
+from starfinder.barcode import (ENCODINGS, Codebook, EncodingConfig, OneBaseEncodingConfig, WtaDecoderConfig,
+                                decode_barcodes, decode_color_sequence, encode_bases, extract_intensities,
+                                load_codebook)
 from starfinder.dataset import Dataset, RoundState
 from starfinder.image import ImageMetadata
 from starfinder.io import ImageLoadResult
@@ -119,28 +120,15 @@ def test_split_index_translation_equals_the_segment_layout(matlab_split, reverse
 ONE_BASE_COLORS = {"A": "1", "C": "2", "G": "3", "T": "4"}  # the example's explicit mapping
 
 
-def one_base_encode(bases, base_to_color, reverse_bases=False):
-    """Expected one_base encoding: one color per base through the explicit mapping."""
-    bases = bases[::-1] if reverse_bases else bases
-    return "".join(base_to_color[b] for b in bases)
-
-
-def one_base_decode(colors, base_to_color, reverse_bases=False):
-    """Expected one_base decoding: the inverse mapping, which must be one-to-one."""
-    inverse = {c: b for b, c in base_to_color.items()}
-    assert len(inverse) == len(base_to_color)
-    bases = "".join(inverse[c] for c in colors)
-    return bases[::-1] if reverse_bases else bases
-
-
 def test_one_base():
     barcode = "GATC"
-    # Expected behavior (the one_base registry entry): each base is one round's color.
-    assert one_base_encode(barcode, ONE_BASE_COLORS) == "3142"
-    assert one_base_decode("3142", ONE_BASE_COLORS) == barcode
+    # The one_base registry entry: each base is one round's color.
+    one_base, config = ENCODINGS[OneBaseEncodingConfig], OneBaseEncodingConfig(ONE_BASE_COLORS)
+    assert one_base.encode(barcode, config) == "3142"
+    assert one_base.decode("3142", config, None) == barcode
     # Checked against current code: a codebook of explicit color sequences validates, and
     # WTA assigns the gene from the observed colors.
-    book = Codebook(pd.DataFrame({"gene_id": ["Mbp"], "color_sequence": [one_base_encode(barcode, ONE_BASE_COLORS)]}),
+    book = Codebook(pd.DataFrame({"gene_id": ["Mbp"], "color_sequence": [one_base.encode(barcode, config)]}),
                     rounds(4), CHANNELS)
     read = assign(book, "3142")
     assert (read.gene_id, read.call_status, read.call_type) == ("Mbp", "assigned", "exact")
