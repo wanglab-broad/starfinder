@@ -11,6 +11,8 @@ import tifffile
 
 from starfinder.synthetic import ScalarDistribution, development_scene_preset, generate_formed_scene
 
+pytestmark = pytest.mark.benchmark
+
 ROOT = Path(__file__).resolve().parents[3]
 
 

@@ -21,6 +21,8 @@ from starfinder.spot_finding import LocalMaximaConfig, find_spots
 from .spot_finding_scenes import FORMED16_SHAPE, SEEDS, formed16
 from .test_spot_finding_workflow_key import detection
 
+pytestmark = pytest.mark.spot_finding
+
 META = ImageMetadata("local-maxima")
 NAMESPACE = "local-maxima/test"
 # The hand-built fixture is thresholded at 0.3 of each channel's maximum, above its background.
@@ -155,6 +157,7 @@ def s16(image, metadata, truth, eligible, config):
     return result, counts, matched
 
 
+@pytest.mark.validation
 @pytest.mark.parametrize("seed", SEEDS)
 def test_s16_the_merge_removes_same_channel_duplicates_without_losing_a_match(seed):
     image, metadata, truth, eligible = formed16(seed)
@@ -166,6 +169,7 @@ def test_s16_the_merge_removes_same_channel_duplicates_without_losing_a_match(se
     # Cross-channel duplicates (crosstalk copies, §2.8) are reported in the worker notes, not gated.
 
 
+@pytest.mark.validation
 @pytest.mark.parametrize("variant", ["uint16", "uint8"])
 @pytest.mark.parametrize("seed", SEEDS)
 def test_s16_no_eligible_amplicon_near_a_face_is_missed_without_border_exclusion(seed, variant):

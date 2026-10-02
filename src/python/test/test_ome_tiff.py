@@ -14,6 +14,8 @@ from starfinder.io.tiff import METADATA_NAMESPACE
 
 from .test_checkpoints import ROUNDS, dataset, full, resident
 
+pytestmark = pytest.mark.io
+
 OME = '{http://www.openmicroscopy.org/Schemas/OME/2016-06}'
 OME_TYPES = {np.uint8: 'uint8', np.uint16: 'uint16', np.float32: 'float', np.float64: 'double'}
 METADATA = ImageMetadata('frame', spacing_zyx=(1.5, .25, .125), origin_zyx=(-2.0, 0.1, 3.0),

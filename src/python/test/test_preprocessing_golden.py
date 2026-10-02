@@ -30,6 +30,8 @@ from starfinder.preprocessing import (
     reconstruct_background,
 )
 
+pytestmark = [pytest.mark.preprocessing, pytest.mark.golden]
+
 SHAPE_ZYX = (4, 32, 32)
 CHANNELS = 4
 SEED = 20260927

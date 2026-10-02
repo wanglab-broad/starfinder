@@ -15,6 +15,8 @@ import pytest
 from starfinder.synthetic import (ReadoutEffectsConfig, ScalarDistribution,
                                   formed_scene_preset, generate_formed_scene)
 
+pytestmark = pytest.mark.synthetic
+
 EXAMPLE = Path(__file__).resolve().parents[3] / 'docs/examples/readout_effects.py'
 
 

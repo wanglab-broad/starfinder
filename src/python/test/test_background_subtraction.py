@@ -20,6 +20,8 @@ from starfinder.preprocessing import (PREPROCESSING_METHODS, Background3DConfig,
 
 from .test_preprocessing_golden import fixture_rounds
 
+pytestmark = pytest.mark.preprocessing
+
 CHANNELS = ("ch00", "ch01")
 ROUNDS = ("round1", "round2")
 DTYPES = (np.uint8, np.uint16)

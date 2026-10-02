@@ -19,6 +19,8 @@ from starfinder.synthetic import (DEVELOPMENT_FIXTURES, ReadoutEffectsConfig, Sc
 
 from .formed_oracle import CHANNELS, FIXTURES, ROUNDS, expected_case
 
+pytestmark = pytest.mark.synthetic
+
 
 @pytest.fixture(scope='module')
 def fixture_root(tmp_path_factory):

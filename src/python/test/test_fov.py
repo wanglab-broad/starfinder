@@ -12,6 +12,8 @@ import pytest
 
 from starfinder.dataset import FOV, Dataset, SubtileConfig
 
+pytestmark = pytest.mark.dataset
+
 
 @pytest.fixture
 def small_pipeline_dataset(small_dataset, tmp_path):

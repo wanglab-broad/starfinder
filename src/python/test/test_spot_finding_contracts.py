@@ -11,6 +11,8 @@ from starfinder.spot_finding import (
     LocalMaximaConfig, NoiseLandmarkConfig, PercentileCentroidConfig, find_spots,
 )
 
+pytestmark = [pytest.mark.spot_finding, pytest.mark.contract]
+
 
 def detect(image, config, namespace='dataset/sample/FOV'):
     return find_spots(image, config=config, metadata=ImageMetadata('frame'),

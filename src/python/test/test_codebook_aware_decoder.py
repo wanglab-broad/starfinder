@@ -14,6 +14,8 @@ from starfinder.barcode import (
 )
 from .barcode_cases import codebook, intensity, tensor
 
+pytestmark = pytest.mark.barcode
+
 
 def decode(values, mapping, **options):
     return decode_barcodes(

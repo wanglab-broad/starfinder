@@ -24,6 +24,8 @@ import pytest
 from starfinder.dataset import Dataset, RoundState
 from starfinder.image import ImageMetadata
 
+pytestmark = [pytest.mark.registration, pytest.mark.golden]
+
 pytest.importorskip("SimpleITK")
 
 SHAPE_ZYX = (8, 32, 32)

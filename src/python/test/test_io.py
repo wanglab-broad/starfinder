@@ -9,6 +9,8 @@ from pathlib import Path
 
 from starfinder.io import load_volume, load_round, save_volume
 
+pytestmark = pytest.mark.io
+
 
 class TestLoadMultipageTiff:
     """Tests for load_volume function."""

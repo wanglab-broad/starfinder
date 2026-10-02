@@ -17,6 +17,25 @@ import pytest
 SMALL_DATASET_ARGS = ("--mode", "e2e", "--preset", "small", "--seed", "42")
 SMALL_DATASET_GENERATOR = {"generator_version": "6", "preset_version": "benchmark-presets-v1"}
 
+# Every test carries at least one of these (registered in pyproject.toml), so `pytest -m` can select
+# the tests of a subsystem.
+SUBSYSTEM_MARKERS = frozenset({"core", "io", "dataset", "preprocessing", "registration", "spot_finding", "barcode",
+                               "synthetic", "evaluation", "benchmark", "workflow", "integration"})
+
+
+def files_without_subsystem_marker(items):
+    """Test files holding a collected test that carries no subsystem marker."""
+    return sorted({item.location[0] for item in items
+                   if not SUBSYSTEM_MARKERS & {mark.name for mark in item.iter_markers()}})
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_collection_modifyitems(items):
+    missing = files_without_subsystem_marker(items)
+    if missing:
+        raise pytest.UsageError("every test needs a subsystem marker (" + ", ".join(sorted(SUBSYSTEM_MARKERS))
+                                + "); set pytestmark in: " + ", ".join(missing))
+
 
 @pytest.fixture(scope="session")
 def small_dataset(tmp_path_factory) -> Path:

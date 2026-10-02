@@ -22,6 +22,8 @@ from starfinder.spot_finding._methods import SpotFindingConfig
 
 from .test_spot_finding_golden import CHANNELS, fixture_image, fov_with_fixture, golden_dataset
 
+pytestmark = [pytest.mark.spot_finding, pytest.mark.contract]
+
 META = ImageMetadata("registry")
 NAMESPACE = "registry/test"
 

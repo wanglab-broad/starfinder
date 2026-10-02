@@ -34,6 +34,8 @@ from .spot_finding_scenes import SEEDS, isolated_scene
 from .test_spot_finding_golden import CHANNELS, fixture_image, fov_with_fixture, golden_dataset
 from .test_spot_finding_workflow_key import detection
 
+pytestmark = pytest.mark.spot_finding
+
 PARITY = Path(__file__).parent / "data" / "starfish_blob_parity"
 META = ImageMetadata("starfish-log")
 NAMESPACE = "starfish-log/test"
@@ -83,6 +85,7 @@ def test_the_six_parity_tables_and_their_fixtures_are_the_w266_ones():
         assert json.loads(json.dumps(settings)) == RECORD["cases"][case]["settings"]
 
 
+@pytest.mark.validation
 @pytest.mark.parametrize("case, key", TABLES)
 def test_s12_the_table_equals_starfish_blob_detector(case, key):
     name, settings = FIXTURES.CASES[case]
@@ -94,6 +97,7 @@ def test_s12_the_table_equals_starfish_blob_detector(case, key):
                                   starfish_table(RECORD["cases"][case]["tables"][key]), check_exact=True)
 
 
+@pytest.mark.validation
 def test_s12_a_three_tuple_sigma_on_a_plane_raises():
     name, settings = FIXTURES.ERROR_CASES["plane-anisotropic-3tuple"]
     with pytest.raises(IncompatibleGeometryError, match="Z=1"):
@@ -129,6 +133,7 @@ def isolated(case, seed):
     return match, localization_errors(match, detected, truth)
 
 
+@pytest.mark.validation
 @pytest.mark.parametrize("seed", SEEDS)
 def test_s1_s2_iso3d_recall_precision_and_distance(seed):
     match, errors = isolated("iso3d", seed)
@@ -137,6 +142,7 @@ def test_s1_s2_iso3d_recall_precision_and_distance(seed):
     assert errors.values["dist_max"] <= 0.9
 
 
+@pytest.mark.validation
 @pytest.mark.parametrize("seed", SEEDS)
 def test_s1_s2_iso_z1_recall_precision_and_lateral_distance(seed):
     match, errors = isolated("iso_z1", seed)

@@ -18,6 +18,8 @@ from starfinder.synthetic._presets import _TEST_CODEBOOK
 from starfinder.barcode import EncodingConfig
 from .barcode_cases import CHANNELS, intensity, tensor
 
+pytestmark = pytest.mark.barcode
+
 ROUNDS = tuple(f"r{i}" for i in range(4))
 
 

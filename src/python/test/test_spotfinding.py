@@ -8,6 +8,9 @@ import pytest
 
 from starfinder.spot_finding import find_spots, LocalMaximaConfig
 from starfinder.image import ImageMetadata
+
+pytestmark = pytest.mark.spot_finding
+
 SPOT_COLUMNS = ["spot_id", "z", "y", "x", "channel", "peak_intensity"]
 
 

@@ -19,6 +19,8 @@ from starfinder.synthetic import (BackgroundConfig, CALIBRATED_CONDITIONS, Noise
                                   TextureConfig, calibrated_scene_preset, development_codebook,
                                   development_scene_preset, formed_scene_preset, generate_formed_scene)
 
+pytestmark = pytest.mark.synthetic
+
 LENGTHS = (1.0, 3.0, 2.0)
 
 

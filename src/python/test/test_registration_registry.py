@@ -31,6 +31,8 @@ from starfinder.registration import (
 )
 from starfinder.registration._methods import RegistrationConfig
 
+pytestmark = [pytest.mark.registration, pytest.mark.contract]
+
 REF = ImageMetadata("reference")
 MOV = ImageMetadata("moving")
 

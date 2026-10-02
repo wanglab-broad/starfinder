@@ -17,6 +17,8 @@ from starfinder.synthetic import (BackgroundConfig, FormedSceneConfig, GeometryC
                                   NoiseConfig, ReadoutEffectsConfig, ScalarDistribution,
                                   TextureConfig, formed_scene_preset, generate_formed_scene)
 
+pytestmark = pytest.mark.synthetic
+
 
 def book():
     return Codebook(pd.DataFrame(dict(gene_id=['a', 'b'], color_sequence=['123', '214'])),

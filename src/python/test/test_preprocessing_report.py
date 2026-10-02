@@ -12,6 +12,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+pytestmark = [pytest.mark.preprocessing, pytest.mark.benchmark]
+
 ROOT = Path(__file__).resolve().parents[3]
 
 
@@ -179,6 +181,7 @@ def test_calibrated_cards_follow_the_page_order_and_cover_every_method():
         assert sentence.endswith(".") and ". " not in sentence
 
 
+@pytest.mark.slow
 def test_calibrated_scenes_outputs_and_detections_match_the_saved_run(smoke, tmp_path):
     output, manifest = smoke
     sources = _sources(output, manifest)
@@ -207,6 +210,7 @@ def test_calibrated_scenes_outputs_and_detections_match_the_saved_run(smoke, tmp
         report.CalibratedScenes(tampered, tmp_path).single("clean")
 
 
+@pytest.mark.slow
 def test_dim_punctum_is_the_lowest_realized_peak_and_leads_the_colour_view(smoke, tmp_path):
     _output, manifest = smoke
     data = report.CalibratedScenes(manifest, tmp_path).single("clean")
@@ -232,6 +236,7 @@ def test_collapsed_pr_curves_are_detected():
     assert not report.collapsed(flat.iloc[:1])
 
 
+@pytest.mark.slow
 def test_calibrated_report_puts_the_summary_first_and_refuses_unverified_inputs(smoke, tmp_path, monkeypatch):
     output, manifest = smoke
     real_check = report.check_revision

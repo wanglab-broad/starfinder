@@ -16,6 +16,8 @@ from starfinder._registry import (
     spec_for,
 )
 
+pytestmark = [pytest.mark.core, pytest.mark.contract]
+
 
 @dataclass(frozen=True)
 class AlphaConfig:

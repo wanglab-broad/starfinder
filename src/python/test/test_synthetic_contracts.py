@@ -27,6 +27,8 @@ from starfinder.synthetic._presets import _estimate_peak_bytes, registration_sce
 
 from .formed_oracle import generator
 
+pytestmark = [pytest.mark.synthetic, pytest.mark.contract]
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -95,7 +97,8 @@ def test_benchmark_presets_keep_historical_sizes_counts_and_shifts(name, shape, 
         assert set(book.table.color_sequence.str[r]) == set('1234')
 
 
-@pytest.mark.parametrize('name', ['large', 'tissue', 'thick_medium'])
+@pytest.mark.parametrize('name', ['large', pytest.param('tissue', marks=pytest.mark.slow),
+                                  pytest.param('thick_medium', marks=pytest.mark.slow)])
 def test_large_presets_validate_by_configuration_and_memory_estimate(name):
     """Configuration and memory estimate only; these presets are never rendered here."""
     for book, config in (benchmark_scene_preset(name), registration_scene_preset(name, 'multi_point')):
@@ -152,6 +155,7 @@ def test_toggling_one_control_changes_no_other_draw():
     assert not np.array_equal(other['round2'], base['round2'])
 
 
+@pytest.mark.slow
 def test_cross_process_byte_repeatability():
     code = '''
 import sys

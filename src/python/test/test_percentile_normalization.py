@@ -22,6 +22,8 @@ from starfinder.preprocessing import (PREPROCESSING_METHODS, HistogramMatchingCo
     write_histograms, write_supplied_statistics)
 from starfinder.preprocessing.normalization import _match_counts
 
+pytestmark = pytest.mark.preprocessing
+
 ROOT = Path(__file__).resolve().parents[3]
 CHANNELS = ("ch00", "ch01")
 ROUNDS = ("round1", "round2")

@@ -11,6 +11,8 @@ from starfinder.image import ImageMetadata
 from starfinder.io import ImageConversionConfig, ImageLoadConfig, convert_image, load_round, load_volume, save_volume
 from starfinder.preprocessing import (HistogramMatchingConfig, MinMaxNormalizationConfig, ProjectionConfig, ReconstructionConfig, TophatConfig, filter_tophat, match_histogram, normalize_intensity, project_image, reconstruct_background)
 
+pytestmark = [pytest.mark.core, pytest.mark.contract]
+
 
 def geometry():
     return ImageMetadata("source", (2, 3, 3), (10, 20, 30), ((0, 0, 1), (0, 1, 0), (-1, 0, 0)), "um")

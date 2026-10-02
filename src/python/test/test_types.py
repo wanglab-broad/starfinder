@@ -8,6 +8,8 @@ from starfinder.dataset.types import (
     SubtileConfig,
 )
 
+pytestmark = pytest.mark.dataset
+
 
 class TestLayerState:
     """Tests for RoundState dataclass."""

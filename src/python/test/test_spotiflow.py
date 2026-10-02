@@ -41,7 +41,7 @@ from .learned_detectors import (THREAD_VARIABLES, detect, evaluate, one_thread_e
 from .spot_finding_scenes import SEEDS, isolated_scene
 from .test_spot_finding_golden import CHANNELS, fixture_image, fov_with_fixture, golden_dataset
 
-pytestmark = pytest.mark.extended
+pytestmark = [pytest.mark.extended, pytest.mark.spot_finding, pytest.mark.learned]
 
 MODELS_3D, MODELS_2D = ("synth_3d", "smfish_3d"), ("general", "hybiss")
 SCENE = {**{m: "iso3d" for m in MODELS_3D}, **{m: "iso_z1" for m in MODELS_2D}}
@@ -90,6 +90,7 @@ def test_the_cached_weights_pass_starfinder_weights_verify(model, capsys):
 
 # --- S1 and S2 -------------------------------------------------------------------------------------------
 
+@pytest.mark.validation
 @pytest.mark.parametrize("seed", SEEDS)
 @pytest.mark.parametrize("model", MODELS_3D)
 def test_s1_s2_3d_models_on_iso3d(model, seed):
@@ -100,6 +101,7 @@ def test_s1_s2_3d_models_on_iso3d(model, seed):
     assert errors.values["dist_max"] <= 0.5
 
 
+@pytest.mark.validation
 @pytest.mark.parametrize("seed", SEEDS)
 @pytest.mark.parametrize("model", MODELS_2D)
 def test_s1_s2_2d_models_on_iso_z1(model, seed):
@@ -125,6 +127,8 @@ def second_process_digests(torch):
     return json.loads(run_python(code))
 
 
+@pytest.mark.validation
+@pytest.mark.slow
 @pytest.mark.parametrize("model", MODELS_3D + MODELS_2D)
 def test_s13_tables_are_identical_in_one_process_and_in_a_second(model, second_process_digests):
     image, _, first = isolated(model, 100)
@@ -143,6 +147,7 @@ def spot(shape):
     return (100 + 1500 * np.exp(-0.5 * r2)).astype(np.float32)
 
 
+@pytest.mark.validation
 @pytest.mark.parametrize("model, shape", [("smfish_3d", (1, 32, 32)), ("smfish_3d", (6, 32, 32)),
                                           ("synth_3d", (8, 7, 7)), ("general", (2, 32, 32)),
                                           ("general", (1, 5, 5)), ("hybiss", (8, 32, 32))])
@@ -155,6 +160,7 @@ def test_s15_shapes_where_spotiflow_returns_nothing_or_fails_raise(model, shape,
     assert calls == []
 
 
+@pytest.mark.validation
 def test_s15_a_3d_model_runs_on_7x8x8_and_a_2d_model_on_a_6x6_plane():
     volume = detect(spot((7, 8, 8)), SpotiflowConfig("smfish_3d"))
     plane = detect(spot((1, 6, 6)), SpotiflowConfig("general")).spots
@@ -166,6 +172,7 @@ def test_s15_a_3d_model_runs_on_7x8x8_and_a_2d_model_on_a_6x6_plane():
 
 # --- S14: hash checks before the model, no network, no library caches ---------------------------------------
 
+@pytest.mark.validation
 @pytest.mark.parametrize("changed", LISTED)
 def test_s14_a_changed_hash_raises_before_spotiflow_from_folder(changed, no_loaded_models, monkeypatch):
     from spotiflow.model import Spotiflow
@@ -194,6 +201,7 @@ def test_the_model_is_built_once_per_process_from_the_verified_folder(no_loaded_
     assert calls == [((str(weights_directory() / "spotiflow" / "general"),), {"map_location": "cpu"})]
 
 
+@pytest.mark.validation
 def test_s14_a_detection_completes_with_the_network_patched_to_raise(no_loaded_models, monkeypatch):
     def refuse(*args, **kwargs):
         raise AssertionError("a detection tried to use the network")
@@ -204,6 +212,7 @@ def test_s14_a_detection_completes_with_the_network_patched_to_raise(no_loaded_m
     assert match.values["recall"] == 1.0
 
 
+@pytest.mark.validation
 def test_s14_a_relative_weights_root_reaches_spotiflow_as_an_absolute_path(tmp_path, no_loaded_models, monkeypatch):
     """STARFINDER_WEIGHTS_DIR=weights, relative to a working directory that holds a copy of the cache."""
     from spotiflow.model import Spotiflow
@@ -233,6 +242,8 @@ def test_s14_a_relative_weights_root_reaches_spotiflow_as_an_absolute_path(tmp_p
     assert list(home.iterdir()) == []
 
 
+@pytest.mark.validation
+@pytest.mark.slow
 def test_s14_no_library_cache_is_read_or_written_with_an_empty_home(tmp_path):
     home = tmp_path / "home"
     home.mkdir()
@@ -296,6 +307,7 @@ def test_n_tiles_is_passed_and_recorded():
     assert len(result.spots) == len(isolated("general", 100)[2].spots)
 
 
+@pytest.mark.slow
 def test_the_pipeline_records_the_loaded_files_in_run_json(tmp_path):
     config = SpotiflowConfig("smfish_3d")
     checkpoints = CheckpointConfig(stages=("candidates",), directory=tmp_path / "checkpoints")

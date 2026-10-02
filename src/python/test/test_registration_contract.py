@@ -25,6 +25,8 @@ from starfinder.registration import (
     estimate_transform,
 )
 
+pytestmark = [pytest.mark.registration, pytest.mark.contract]
+
 REF = ImageMetadata("reference")
 MOV = ImageMetadata("moving")
 

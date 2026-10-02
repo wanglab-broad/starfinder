@@ -19,6 +19,8 @@ from starfinder.io._checkpoint import _read_table, _write_table, candidates_fram
 from starfinder.registration import DemonsConfig, TranslationConfig
 from starfinder.spot_finding import LocalMaximaConfig
 
+pytestmark = [pytest.mark.dataset, pytest.mark.io]
+
 ROUNDS = ('round1', 'round2')
 CHANNELS = ('a', 'b', 'c', 'd')
 

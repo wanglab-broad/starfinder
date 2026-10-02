@@ -12,6 +12,8 @@ from starfinder.registration import (REGISTRATION_METHODS, AffineConfig, BSpline
     InsufficientLandmarksError, RegistrationEstimationError, RegistrationQcConfig, RegistrationSignalConfig,
     RegistrationSpec, RigidConfig, TranslationConfig, WarpConfig)
 
+pytestmark = [pytest.mark.registration, pytest.mark.contract]
+
 ROOT = Path(__file__).resolve().parents[3]
 SCHEMA = yaml.safe_load((ROOT / "workflow/schemas/config.schema.yaml").read_text())
 EXAMPLE = yaml.safe_load((ROOT / "docs/examples/workflow-recipe-2.yaml").read_text())

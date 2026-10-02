@@ -20,6 +20,8 @@ from starfinder.io import load_volume, save_volume
 from starfinder.preprocessing import (MinMaxNormalizationConfig, PreprocessingRecipe, ProjectionConfig,
     PreprocessingStep, project_image)
 
+pytestmark = pytest.mark.preprocessing
+
 ROOT = Path(__file__).resolve().parents[3]
 CHANNELS = ('a', 'b', 'c', 'd')
 METADATA = ImageMetadata('common', spacing_zyx=(2, .5, .5))

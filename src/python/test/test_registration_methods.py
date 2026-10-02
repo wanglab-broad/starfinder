@@ -45,6 +45,7 @@ from starfinder.synthetic import (BENCHMARK_PRESETS, DEVELOPMENT_SIZES, Geometry
                                   generate_formed_scene, registration_scene_preset)
 
 pytestmark = [
+    pytest.mark.registration,
     pytest.mark.skipif(importlib.util.find_spec("itk") is None or importlib.util.find_spec("SimpleITK") is None,
                        reason="requires the registration-elastix and local-registration extras"),
     # SWIG wrappers of itk warn when pytest inspects their builtin types.
@@ -262,6 +263,7 @@ def bspline_runs():
     return runs
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("shape", [(16, 64, 64), (1, 64, 64)])
 def test_bspline_recovers_a_known_deformation(shape, bspline_runs):
     run = bspline_runs[shape]
@@ -275,6 +277,7 @@ def test_bspline_recovers_a_known_deformation(shape, bspline_runs):
     assert values["p95_error"] < identity["p95_error"], (values, identity)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("shape", [(16, 64, 64), (1, 64, 64)])
 def test_bspline_grid_evaluation_equals_the_transformix_field(shape, bspline_runs, tmp_path):
     """BSplineTransform.dense() (SimpleITK on the stored coefficients) against transformix on the same result."""
@@ -425,7 +428,8 @@ DETERMINISM_CASES = {
 }
 
 
-@pytest.mark.parametrize("case", DETERMINISM_CASES)
+@pytest.mark.parametrize("case", [pytest.param(case, marks=pytest.mark.slow) if case == "bspline-16x64x64" else case
+                                  for case in DETERMINISM_CASES])
 def test_estimation_is_deterministic_at_one_thread(case):
     """The rigid, affine and B-spline known-answer fixtures at seed 100, each estimated twice at one thread."""
     import itk

@@ -12,6 +12,8 @@ import tifffile
 from starfinder.benchmark import run_benchmark, evaluate_benchmark, report_benchmark
 from starfinder.benchmark._adapters import _validate
 
+pytestmark = [pytest.mark.benchmark, pytest.mark.contract]
+
 ROOT = Path(__file__).resolve().parents[3]
 
 

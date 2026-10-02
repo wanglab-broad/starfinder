@@ -8,7 +8,10 @@ from pathlib import Path
 from types import SimpleNamespace
 import numpy as np
 import pandas as pd
+import pytest
 from .barcode_cases import tensor
+
+pytestmark = [pytest.mark.workflow, pytest.mark.barcode]
 
 
 def test_four_scripts_public_diagnostics_and_saved_tensor_smoke(monkeypatch, tmp_path):

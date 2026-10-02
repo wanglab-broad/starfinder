@@ -27,6 +27,8 @@ from starfinder.spot_finding import (SPOT_FINDING_METHODS, LocalMaximaConfig, Pi
 from .test_spot_finding_golden import CHANNELS, fixture_image, fov_with_fixture, golden_dataset  # noqa: E402
 from .test_spot_finding_rounds import ROUNDS, multiround, multiround_fov, one_thread  # noqa: E402,F401
 
+pytestmark = pytest.mark.spot_finding
+
 META = ImageMetadata("diagnostics")
 NAMESPACE = "diagnostics/test"
 LOG = StarfishLogConfig(min_sigma=1, max_sigma=10, num_sigma=30, threshold=0.01)
@@ -233,6 +235,7 @@ def test_fov_run_writes_no_figure(tmp_path):
 # --- learned methods (extended tier) --------------------------------------------------------------------
 
 @pytest.mark.extended
+@pytest.mark.learned
 @pytest.mark.parametrize("config", [SpotiflowConfig("smfish_3d"), PiscisConfig("20251212")],
                          ids=["spotiflow", "piscis"])
 def test_learned_methods_skip_constant_channels_with_typed_empty_tables(config, spy, one_thread):
@@ -247,6 +250,8 @@ def test_learned_methods_skip_constant_channels_with_typed_empty_tables(config, 
 
 
 @pytest.mark.extended
+@pytest.mark.learned
+@pytest.mark.slow
 def test_spotiflow_native_probability_summary(one_thread):
     pytest.importorskip("spotiflow")
     from .spot_finding_scenes import isolated_scene
