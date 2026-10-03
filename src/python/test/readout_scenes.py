@@ -1,4 +1,4 @@
-"""Calibrated readout scenes of W-278 for the §2.8 background and score checks (R10 to R12).
+"""Calibrated readout scenes of W-278 for the §2.8 background, score and duplicate checks (R10 to R12, R14).
 
 The scenes, conditions, pipeline and matching follow W-278 (run directory
 /home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-278/20261002T011718Z-0cfc7de7,
@@ -6,7 +6,10 @@ scripts/w278_lib.py): calibrated_scene_preset (8x64x64, four rounds and channels
 80 amplicons; dense: 160) under nine conditions, LocalMaximaConfig() on round 1,
 NeighborhoodSumConfig((1, 2, 2)), both decoders at their defaults, and match_points
 (greedy, 3 voxels, inclusive) against the amplicon centres with center_in_bounds in the
-detection round. Generated scenes are cached per process.
+detection round. The duplicate population (R14) follows W-278 attribute and
+duplicate_pairs: each round-1 candidate's source is the amplicon with the largest
+noise-free contribution in its channel at the candidate voxel, if at least 2 analytic
+noise sd. Generated scenes are cached per process.
 """
 from dataclasses import replace
 from functools import lru_cache
@@ -175,3 +178,76 @@ def assigned_channels(table, codebook, rounds):
         if status == "assigned":
             a[i] = [codebook.color_to_channel[c] for c in seq]
     return a
+
+
+# --- Duplicate population (W-278 scripts/w278_lib.py: attribute, duplicate_pairs) --------------
+
+DUP_POOL_DISTANCE = 5.0
+DUP_ATTRIBUTION_SIGMA = 2.0
+
+
+def noise_parameters(the_scene):
+    """W-278 noise_parameters: the analytic noise model of a scene."""
+    effective = the_scene.provenance["effective_config"]
+    noise = effective["noise"]
+    return dict(alpha=float(noise["alpha"]), sigma=float(noise["sigma"]),
+                correlated_sigma=float(noise["correlated_sigma"]),
+                quantization_variance=1.0 / 12.0 if effective["dtype"].startswith("uint") else 0.0)
+
+
+def _kernel_value(delta, sz, sl, e, theta):
+    c, s = np.cos(theta), np.sin(theta)
+    dz, dy, dx = delta[..., 0], delta[..., 1], delta[..., 2]
+    radius = (dz / sz) ** 2 + ((c * dy + s * dx) / (sl * e)) ** 2 + ((-s * dy + c * dx) / sl) ** 2
+    return np.where(radius <= 16, np.exp(-.5 * radius), 0.0)
+
+
+def attribute(the_scene, latent_round, points, channels):
+    """W-278 attribute: the source amplicon of each round-1 candidate, or None when unattributed."""
+    label = the_scene.round_labels[0]
+    position = truth(the_scene, label)[["z", "y", "x"]].to_numpy(float)
+    formed = the_scene.formed.set_index("amplicon_id").loc[list(the_scene.amplicon_ids)]
+    if len(points) == 0 or len(position) == 0:
+        return np.full(len(points), None, dtype=object)
+    kernel = _kernel_value(points[:, None, :] - position[None, :, :], formed.sz.to_numpy()[None],
+                           formed.sl.to_numpy()[None], formed.e.to_numpy()[None], formed.theta.to_numpy()[None])
+    contribution = the_scene.realized[:, :, 0].T[channels] * kernel
+    best = contribution.argmax(axis=1)
+    value = contribution[np.arange(len(points)), best]
+    centers = np.clip(np.floor(points + 0.5).astype(np.int64), 0, np.asarray(latent_round.shape[:3]) - 1)
+    background = latent_round[centers[:, 0], centers[:, 1], centers[:, 2], channels].astype(float)
+    params = noise_parameters(the_scene)
+    floor = DUP_ATTRIBUTION_SIGMA * np.sqrt(params["alpha"] * np.maximum(background, 0) + params["sigma"] ** 2
+                                            + params["correlated_sigma"] ** 2 + params["quantization_variance"])
+    return np.array([the_scene.amplicon_ids[b] if v >= f and v > 0 else None
+                     for b, v, f in zip(best, value, floor)], dtype=object)
+
+
+@lru_cache(maxsize=None)
+def duplicate_population(condition, seed):
+    """(sources, pairs) of the round-1 candidates of one scene (W-278 duplicate_pairs).
+
+    pairs holds every cross-channel candidate pair (i, j) within DUP_POOL_DISTANCE voxels and
+    every cross-channel pair of one source at any distance, with its distance and pair_class
+    (true_duplicate, distinct or involves_unattributed).
+    """
+    _, the_scene = scene(condition, seed)
+    spots, _, _, _ = pipeline(condition, seed)
+    points = spots.spots[["z", "y", "x"]].to_numpy(float)
+    channels = spots.spots.channel.to_numpy()
+    source = attribute(the_scene, twins(condition, seed)[1].rounds[the_scene.round_labels[0]], points, channels)
+    rows = []
+    for i in range(len(points)):
+        for j in range(i + 1, len(points)):
+            if channels[i] == channels[j]:
+                continue
+            distance = float(np.linalg.norm(points[i] - points[j]))
+            if source[i] is None or source[j] is None:
+                kind = "involves_unattributed"
+            else:
+                kind = "true_duplicate" if source[i] == source[j] else "distinct"
+            if distance > DUP_POOL_DISTANCE and kind != "true_duplicate":
+                continue
+            rows.append(dict(i=i, j=j, distance=distance, pair_class=kind))
+    return source, pd.DataFrame(rows, columns=["i", "j", "distance", "pair_class"])
+

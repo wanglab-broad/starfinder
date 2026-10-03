@@ -1,4 +1,4 @@
-"""Validated codebooks and independent intensity extraction, decoding and filtering."""
+"""Validated codebooks and independent intensity extraction, decoding, scoring, deduplication and filtering."""
 
 from ._encoding import encode_bases, decode_color_sequence
 from ._layout import BarcodeLayout, Segment
@@ -28,7 +28,9 @@ from .decoding import (
     decode_barcodes,
 )
 from .scoring import ReadScoreConfig, ReadScoringResult, score_reads
+from .deduplication import DeduplicationConfig, ReadDeduplicationResult, deduplicate_reads
 from .filtering import ReadFilterConfig, ReadFilteringResult, filter_reads
+from .diagnostics import explain_read, inspect_read, plot_read, summarize_reads
 
 #: The barcode encoding registry, mapping each exact frozen encoding config type to its
 #: EncodingSpec (two_base, one_base). Codebook, load_codebook, decode_barcodes and the
@@ -48,6 +50,7 @@ __all__ = [
     "CodebookAwareDecoderConfig",
     "DECODING_METHODS",
     "DecodingSpec",
+    "DeduplicationConfig",
     "DirectAssignmentConfig",
     "DirectPanel",
     "ENCODINGS",
@@ -58,6 +61,7 @@ __all__ = [
     "LocalBackgroundConfig",
     "NeighborhoodSumConfig",
     "OneBaseEncodingConfig",
+    "ReadDeduplicationResult",
     "ReadFilterConfig",
     "ReadFilteringResult",
     "ReadScoreConfig",
@@ -67,10 +71,15 @@ __all__ = [
     "assign_direct",
     "decode_barcodes",
     "decode_color_sequence",
+    "deduplicate_reads",
     "encode_bases",
+    "explain_read",
     "extract_intensities",
     "filter_reads",
+    "inspect_read",
     "load_codebook",
     "load_direct_panel",
+    "plot_read",
     "score_reads",
+    "summarize_reads",
 ]

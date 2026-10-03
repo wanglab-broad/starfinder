@@ -618,18 +618,20 @@ def _read_candidates(directory, header):
 
 # --- Pre-QC stage ----------------------------------------------------------------
 
-def write_pre_qc(directory, header, decoding_result, table_format, *, scoring_result=None):
+def write_pre_qc(directory, header, decoding_result, table_format, *, scoring_result=None,
+                 deduplication_result=None):
     """Write the read table before the QC filter and pre_qc.json; probabilities are not saved.
 
-    The table is the decoding table, or with scoring_result the scored table
-    (the decoding columns, then the score columns). pre_qc.json records the
-    result's readout_mode; a direct decoding_config carries only its method.
-    The keys scoring_config and deduplication_config are the stages' configs
-    (null when the stage did not run), stages_applied lists the stages that
-    made the table, and layout is the caller's (FOV writes the codebook's
+    The table is the decoding table, or the scored table (the decoding columns,
+    then the score columns) with scoring_result, then the deduplication columns
+    with deduplication_result (whose table is the latest one). pre_qc.json
+    records the result's readout_mode; a direct decoding_config carries only its
+    method. The keys scoring_config and deduplication_config are the stages'
+    configs (null when the stage did not run), stages_applied lists the stages
+    that made the table, and layout is the caller's (FOV writes the codebook's
     segment layout, null in readout mode direct).
     """
-    reads = decoding_result if scoring_result is None else scoring_result
+    reads = next(r for r in (deduplication_result, scoring_result, decoding_result) if r is not None)
     table, dtypes = _write_table(reads.table.reset_index(drop=True), directory, "pre_qc", table_format)
     header = dict(header, stage="pre_qc", format_version=FORMAT_VERSION, table=table, dtypes=dtypes,
         spot_namespace=decoding_result.spot_namespace, channel_labels_decoded=decoding_result.channel_labels,
@@ -637,19 +639,29 @@ def write_pre_qc(directory, header, decoding_result, table_format, *, scoring_re
         decoding_diagnostics=_json_diagnostics(decoding_result.diagnostics),
         readout_mode=decoding_result.readout_mode,
         scoring_config=None if scoring_result is None else scoring_result.config,
-        deduplication_config=None, layout=header.get("layout"),
-        stages_applied=["decoding"] + ([] if scoring_result is None else ["scoring"]))
+        deduplication_config=None if deduplication_result is None else deduplication_result.config,
+        layout=header.get("layout"),
+        stages_applied=["decoding"] + ([] if scoring_result is None else ["scoring"])
+        + ([] if deduplication_result is None else ["deduplication"]))
     write_json(header, Path(directory) / "pre_qc.json")
     return [table, "pre_qc.json"]
 
 
 def _read_pre_qc(directory, header):
-    from starfinder.barcode import DECODING_METHODS, BarcodeDecodingResult, ReadScoreConfig, ReadScoringResult
+    from starfinder.barcode import (DECODING_METHODS, BarcodeDecodingResult, DeduplicationConfig,
+                                    ReadDeduplicationResult, ReadScoreConfig, ReadScoringResult)
+    from starfinder.barcode.deduplication import DEDUPLICATION_COLUMNS, deduplication_counts
     from starfinder.barcode.scoring import SCORE_COLUMNS
     table = _read_table(Path(directory) / header["table"], header["dtypes"])
     config = _config(header["decoding_config"], {spec.name: t for t, spec in DECODING_METHODS.items()})
     labels = tuple(header["channel_labels_decoded"]), tuple(header["round_labels"])
-    scoring = None
+    scoring = deduplication = None
+    if header.get("deduplication_config") is not None:
+        # The deduplication columns come last; the counts are recomputed from them.
+        deduplication = ReadDeduplicationResult(
+            table, header["spot_namespace"], *labels, _config(header["deduplication_config"], DeduplicationConfig),
+            deduplication_counts(table), readout_mode(header))
+        table = table.drop(columns=list(DEDUPLICATION_COLUMNS))
     if header.get("scoring_config") is not None:
         # The decoding table is the scored table without the score columns, which come last.
         reasons = table.qc_reason
@@ -660,7 +672,8 @@ def _read_pre_qc(directory, header):
                                     _config(header["scoring_config"], ReadScoreConfig), counts, readout_mode(header))
         table = table.drop(columns=list(SCORE_COLUMNS))
     return {"decoding_result": BarcodeDecodingResult(table, header["spot_namespace"], *labels, config,
-        _tuples(header["decoding_diagnostics"]), readout_mode(header)), "scoring_result": scoring}
+        _tuples(header["decoding_diagnostics"]), readout_mode(header)), "scoring_result": scoring,
+        "deduplication_result": deduplication}
 
 
 # --- Public reader ---------------------------------------------------------------
@@ -698,7 +711,10 @@ def read_checkpoint(path: Path | str, stage: str) -> dict:
         (BarcodeDecodingResult without array or table diagnostics; its
         readout_mode is the header's, ``multiplexed`` when absent) and
         ``scoring_result`` (ReadScoringResult of the scored table, or None
-        when the checkpoint has no ``scoring_config``).
+        when the checkpoint has no ``scoring_config``) and
+        ``deduplication_result`` (ReadDeduplicationResult of the deduplicated
+        table, without the pair diagnostics, or None when the checkpoint has no
+        ``deduplication_config``).
 
     Raises
     ------

@@ -750,6 +750,36 @@ Python-only `scoring: {run: false}` turns it off. The filtering table and the
 exported reads of a workflow run therefore carry the score columns; the shared
 spot CSV columns are unchanged.
 
+### Optional deduplication
+
+{py:func}`~starfinder.barcode.deduplicate_reads` (`DeduplicationConfig`,
+`ReadDeduplicationResult`; {doc}`readout-contract`, "Optional deduplication") groups
+the reads of one amplicon that was detected in two channels. Candidates of one
+detection round in different detection channels are linked when they lie within
+`distance_voxels` (default 1.0, inclusive, voxel index space) and have identical WTA
+observed sequences without `M` or `N`; a group keeps one original read as its
+representative, and a group whose assigned reads name different entries keeps every
+read (`conflicting_calls`). The read table gains `duplicate_group`, `duplicate_of`,
+`is_representative` and `duplicate_reason`; nothing is removed or changed. It is off
+by default: `PipelineConfig.deduplication` is `None`, and the workflow adapter runs
+it only with the Python-only `deduplication: {run: true}` block. `FOV.run` runs it
+after scoring and before filtering, `FOV.deduplicate_reads` runs it on the stored
+reads, and `FOV.deduplication_result` and `FOV.results["deduplication"]` hold the
+result. It raises `ValueError` in readout mode `direct`.
+
+### Read filter
+
+`ReadFilterConfig.score_bounds` accepts any declared score column: the
+`DecodingSpec.score_columns` of every decoder (`own_channel_rank` and
+`own_channel_fraction` of `direct` are new) and the shared score's `qc_score`,
+`qc_ambiguity_max`, `qc_signal_to_background` and `qc_rounds`. The new
+`ReadFilterConfig.exclude_duplicates` (default true) rejects the reads that
+deduplication made duplicates, with reason `duplicate`; reads that were not
+deduplicated are unaffected, so every earlier filter result is unchanged.
+`filter_reads` also accepts a `ReadDeduplicationResult`. End bases are checked per
+segment from the codebook's segment layout (see "Segment layout" above);
+`end_bases` stays the one-segment shortcut. No score cutoff is set by default.
+
 (readout-checkpoints)=
 ### Checkpoints
 
@@ -759,9 +789,10 @@ adds the background columns after `valid_<round>` and `candidates.json` the top-
 keys `background_config`, `image_background` and `image_noise`; the saved
 `signals.extraction_config` keeps only its earlier fields, so a reader at `141c093`
 still loads the stage and drops the new columns. `pre_qc` holds the read table after
-scoring, before filtering, and `pre_qc.json` adds `scoring_config`,
-`deduplication_config` (`null`), `layout` and `stages_applied`. Loading `pre_qc` sets
-`FOV.scoring_result` as well as `decoding_result`. A checkpoint written before these
+scoring and deduplication, before filtering, and `pre_qc.json` adds `scoring_config`,
+`deduplication_config` (`null` when deduplication did not run), `layout` and
+`stages_applied`. Loading `pre_qc` sets `FOV.scoring_result` and
+`FOV.deduplication_result` as well as `decoding_result`. A checkpoint written before these
 keys loads with `background=None` and no score; `load_checkpoint("candidates")` then
 `run` with decoding, scoring and filtering reruns the readout without images when the
 background was stored, and raises `ValueError` naming extraction when it was not.
@@ -775,6 +806,24 @@ Hanley–McNeil standard error and the error at fixed retention, and
 merges and their rates over a stated pair population. Both report an undefined
 value with a reason when a class is empty. They rank and count; they set no
 cutoff.
+
+### Read diagnostics
+
+`starfinder.barcode` adds the three diagnostics of {doc}`readout-contract`
+("Diagnostics"), which read retained results only.
+{py:func}`~starfinder.barcode.inspect_read` returns one read's sums, background,
+background-subtracted sums, channel probabilities, noise, observed and assigned
+colors and per-segment bases, one row per round and channel, and
+{py:func}`~starfinder.barcode.plot_read` draws it.
+{py:func}`~starfinder.barcode.summarize_reads` returns the population summary (counts
+by status, reason and call type, per gene and per entry, `qc_score` quantiles per call
+type, deduplication and filtering counts, per round and channel medians, valid and
+background-unavailable counts, cross-channel pairs).
+{py:func}`~starfinder.barcode.explain_read` returns a read's ordered decisions with
+their values and limits. They accept a read result or `FOV.results`. `FOV.run` never
+calls `inspect_read`, `plot_read` or `explain_read`; when it scores or deduplicates,
+`run.json` records the summary under `counts["summary"]`, and
+`FOV.save_diagnostics` now writes it as `summary` beside the filtering counts.
 
 ## Intentional behavior changes — not mechanical equivalence
 

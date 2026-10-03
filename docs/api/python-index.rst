@@ -30,6 +30,8 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.barcode.decode_color_sequence`
 * :py:obj:`starfinder.barcode.DECODING_METHODS`
 * :py:obj:`starfinder.barcode.DecodingSpec`
+* :py:obj:`starfinder.barcode.deduplicate_reads`
+* :py:obj:`starfinder.barcode.DeduplicationConfig`
 * :py:obj:`starfinder.synthetic.deformation_geometry`
 * :py:obj:`starfinder.synthetic.DEFORMATION_PRESETS`
 * :py:obj:`starfinder.registration.DemonsConfig`
@@ -58,6 +60,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.evaluation.registration.evaluate_translation`
 * :py:obj:`starfinder.evaluation.EvaluationResult`
 * :py:obj:`starfinder.dataset.ExecutionConfig`
+* :py:obj:`starfinder.barcode.explain_read`
 * :py:obj:`starfinder.io.export_spots`
 * :py:obj:`starfinder.dataset.ExternalReference`
 * :py:obj:`starfinder.barcode.extract_intensities`
@@ -84,6 +87,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.io.ImageLoadResult`
 * :py:obj:`starfinder.image.ImageMetadata`
 * :py:obj:`starfinder.image.IncompatibleGeometryError`
+* :py:obj:`starfinder.barcode.inspect_read`
 * :py:obj:`starfinder.registration.InsufficientLandmarksError`
 * :py:obj:`starfinder.barcode.IntensityExtractionResult`
 * :py:obj:`starfinder.image.InvalidImageError`
@@ -116,6 +120,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.dataset.PipelineConfig`
 * :py:obj:`starfinder.spot_finding.PiscisConfig`
 * :py:obj:`starfinder.spot_finding.plot_detections`
+* :py:obj:`starfinder.barcode.plot_read`
 * :py:obj:`starfinder.preprocessing.PREPROCESSING_METHODS`
 * :py:obj:`starfinder.preprocessing.PreprocessingRecipe`
 * :py:obj:`starfinder.preprocessing.PreprocessingSpec`
@@ -127,6 +132,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.io.read_checkpoint`
 * :py:obj:`starfinder.preprocessing.read_histograms`
 * :py:obj:`starfinder.preprocessing.read_supplied_statistics`
+* :py:obj:`starfinder.barcode.ReadDeduplicationResult`
 * :py:obj:`starfinder.barcode.ReadFilterConfig`
 * :py:obj:`starfinder.barcode.ReadFilteringResult`
 * :py:obj:`starfinder.synthetic.ReadoutEffectsConfig`
@@ -179,6 +185,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.preprocessing.subtract_background_3d`
 * :py:obj:`starfinder.preprocessing.subtract_scalar_background`
 * :py:obj:`starfinder.preprocessing.summarize_histograms`
+* :py:obj:`starfinder.barcode.summarize_reads`
 * :py:obj:`starfinder.preprocessing.summary_stage`
 * :py:obj:`starfinder.preprocessing.supplied_section`
 * :py:obj:`starfinder.preprocessing.supplied_statistics`

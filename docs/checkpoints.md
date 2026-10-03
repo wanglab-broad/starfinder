@@ -36,7 +36,7 @@ earlier run.
 
 `run` writes a stage only when it computes it. `registered` is written for each
 round inside the round loop, `candidates` after detection or extraction, and
-`pre_qc` after decoding.
+`pre_qc` after decoding, scoring and deduplication, before filtering.
 
 ## Layout
 
@@ -215,14 +215,23 @@ decoder configuration stays in `decoding_config`, and `pre_qc.json` adds:
 | Key | Content |
 | --- | --- |
 | `scoring_config` | The `ReadScoreConfig` (`{"method": "bgcorr_probability"}`), or `null` when the reads were not scored. |
-| `deduplication_config` | `null`: deduplication is a later stage of §2.8 and did not run. |
+| `deduplication_config` | The `DeduplicationConfig` (`distance_voxels`, `compatibility`) since W-295, or `null` when deduplication did not run. |
 | `layout` | The codebook's segment layout (`segments` with `name`, `bases` and `ends`, and `acquisition_order`); `null` in readout mode `direct`. A header without it is one segment. |
-| `stages_applied` | The stages that made the table: `["decoding"]` or `["decoding", "scoring"]`. |
+| `stages_applied` | The stages that made the table, in order: `"decoding"`, then `"scoring"` and `"deduplication"` when they ran. |
 
 On reloading, a scored checkpoint gives `decoding_result` (the table without the
 score columns, which come last) and `scoring_result` (the whole table); an unscored
 one, or one written before W-294, gives `scoring_result=None`. A reader at `141c093`
 loads a scored `multiplexed` `pre_qc` with the score columns as ordinary columns.
+
+Since W-295 a run with `PipelineConfig.deduplication` writes the reads after
+deduplication: the table ends with `duplicate_group`, `duplicate_of` (string,
+missing when not set), `is_representative` (bool) and `duplicate_reason` (string),
+after the score columns when the reads were scored. On reloading, a deduplicated
+checkpoint also gives `deduplication_result` (the whole table, its counts
+recomputed from these columns, without the pair diagnostics), and `scoring_result`
+and `decoding_result` are the table without the columns of the later stages.
+Without `deduplication_config` it is `None`.
 
 All JSON files are strict JSON: a non-finite diagnostic or configuration value
 (NaN or infinity) is written as `null`.
@@ -254,7 +263,7 @@ none) against `Dataset.readout_mode`; it raises `ValueError` on a mismatch. Then
 after the loaded stage:
 
 ```python
-from starfinder.barcode import ReadScoreConfig
+from starfinder.barcode import DeduplicationConfig, ReadScoreConfig
 from starfinder.dataset import PipelineConfig
 
 # Decode and filter again, without images.
@@ -268,6 +277,10 @@ fov.run(PipelineConfig(decoding=decoder, scoring=ReadScoreConfig(), filtering=re
 # Score again without decoding: load candidates (values, background) and pre_qc (reads).
 fov = dataset.fov("Position001").load_checkpoint("candidates").load_checkpoint("pre_qc")
 fov.run(PipelineConfig(scoring=ReadScoreConfig(), filtering=read_filter))
+
+# Deduplicate again: load candidates (coordinates, channels, sums) and pre_qc (reads).
+fov = dataset.fov("Position001").load_checkpoint("candidates").load_checkpoint("pre_qc")
+fov.run(PipelineConfig(deduplication=DeduplicationConfig(), filtering=read_filter))
 
 # Only filter again, with a different predicate.
 fov = dataset.fov("Position001").load_checkpoint("pre_qc")
@@ -308,7 +321,7 @@ run starts, after each completed step and when the run ends. It contains:
 | `steps` | `name`, `round`, `seconds` and `status` of each completed or failed step. A preprocessing step is named `preprocess:<step name>`. The `find_spots` record also has `methods`, a list with the detection's provenance entry ({doc}`method-registry`, "Provenance in run.json"): `stage` (`spot_finding`), `method`, `config_type`, `implementation`, `config`, `requires` (installed versions of the optional dependencies), `artifacts` (pretrained weights files; empty for methods without weights) and `execution` (device, framework and thread settings). For a plan that names rounds, `run` records one `find_round_spots` step per detected round, each with its own entry, and `FOV.find_spots` called inside a recorded step lists one entry per round, each with its `round`. |
 | `preprocessing` | `null` without a preprocessing recipe. Otherwise `recipe` (the step names of `steps` and `post_registration`, `extraction_source` and `registration_source`), `rounds`: per round, one record per step with `index`, `stage` (`steps` or `post_registration`), `step`, `config`, `fitted`, `diagnostics`, `input_dtype`, `output_dtype` and `save_as`; `transforms`: per round and image (`detection` and each snapshot), the transforms composed in order, each with `result` (its index in the round's registration results in `transforms.json`), `method` and `kind` (`translation`, `affine`, `bspline` or `dense`), empty for the reference round; and `supplied_statistics`. |
 | `registration` | Ordered registration attempts per round: the estimation entries and one application entry per moving round (see {doc}`coordination`). |
-| `counts` | Spots, intensities, decoding call statuses, scoring counts (`scoring`: total, scored, `no_assignment` and `background_unavailable`, since W-294, when the reads were scored) and filtering counts. |
+| `counts` | Spots, intensities, decoding call statuses, scoring counts (`scoring`: total, scored, `no_assignment` and `background_unavailable`, since W-294, when the reads were scored), deduplication counts (`deduplication`: total, groups, `merged_reads` and `conflicting_groups`, since W-295, when the reads were deduplicated) and filtering counts. When the reads were scored or deduplicated, `summary` holds the population summary of {py:func}`~starfinder.barcode.summarize_reads` (since W-295). |
 | `checkpoint_directory`, `checkpoints` | The FOV directory and the files written for each stage. |
 
 If a step raises, `run` records `failed` (or `interrupted` for

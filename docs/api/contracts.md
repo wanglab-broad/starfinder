@@ -363,16 +363,52 @@ round without background, are NaN with `no_assignment` or `background_unavailabl
 and intensities without background raise `ValueError` naming extraction
 ({doc}`../readout-contract`, "Shared read-QC score").
 
+`deduplicate_reads(decoded, spots, extracted, config=DeduplicationConfig())`
+returns a `ReadDeduplicationResult` whose table is the read table with
+`duplicate_group`, `duplicate_of`, `is_representative` and `duplicate_reason`
+appended. It is off unless called (`PipelineConfig.deduplication=None`) and raises
+`ValueError` in readout mode `direct`. Candidates of one detection round in
+different detection channels (the spot table's `channel` column) are linked when
+they lie within `distance_voxels` (inclusive, Euclidean, voxel index space,
+default 1.0) and their WTA observed sequences are identical and contain no `M` or
+`N`; groups are the connected components. A group whose assigned members have
+different `entry_id` keeps every member (`conflicting_calls`); otherwise one
+original candidate represents it, the assigned member (any member when none is
+assigned) with the largest sum in its own detection channel in the detection round,
+ties to the earliest row, and the others are its duplicates. No read is removed,
+averaged or changed ({doc}`../readout-contract`, "Optional deduplication").
+
 `filter_reads(decoded, config=ReadFilterConfig(...))` can rerun without image
-access or decoding; `decoded` may also be a `ReadScoringResult`, whose score
-columns are kept. It retains a complete table with acceptance/rejection reasons,
-an `accepted` view and counts/fractions. Predicates name allowed call statuses and
-inclusive method-specific score bounds; unavailable score columns error, and NaN
-fails a requested bound. Endpoint checks are diagnostic-only unless
+access or decoding; `decoded` may also be a `ReadScoringResult` or a
+`ReadDeduplicationResult`, whose score and deduplication columns are kept. It
+retains a complete table with acceptance/rejection reasons, an `accepted` view and
+counts/fractions. Predicates name allowed call statuses and inclusive bounds on any
+declared score column (a decoder's `DecodingSpec.score_columns`, or `qc_score`,
+`qc_ambiguity_max`, `qc_signal_to_background` and `qc_rounds`); unavailable score
+columns error, and NaN fails a requested bound. `exclude_duplicates=True` (the
+default) rejects deduplicated reads that are not representatives with reason
+`duplicate` and does nothing to reads that were not deduplicated. Endpoint checks are diagnostic-only unless
 `exclude_invalid_endpoints=True`: `end_bases` checks the whole sequence from
 `start_base`, and with `codebook=` the segment ends of its layout are checked per
 segment. Empty counts are zero and undefined fractions
 are `None` with a reason. IDs and typed columns survive all-rejected results.
+
+Three diagnostics read retained results only ({doc}`../readout-contract`,
+"Diagnostics"). `inspect_read(extracted, reads, spot_id, reference=...)` returns one
+row per round and channel of a read: the sum, background × `box_voxels`, the
+background-subtracted sum, the channel probability on the sums and on the
+background-subtracted sums, the noise, the observed and assigned color, and for each
+segment the bases in read orientation; `plot_read` draws it. `summarize_reads(reads)`
+returns a JSON-safe dict of counts by `call_status`, `failure_reason` and
+`call_type`, per gene and per entry, `qc_score` quantiles per `call_type`, the
+deduplication and filtering counts, per round the valid and background-unavailable
+measurements and per round and channel the medians of sums, background and noise, and
+the number of cross-channel candidate pairs within the duplicate distance.
+`explain_read(reads, spot_id)` returns the ordered decisions of a read with their
+values and limits. `reads` is a read result or a mapping of stage names to them, such
+as `FOV.results`. `FOV.run` never calls `inspect_read`, `plot_read` or
+`explain_read`; it stores the summary in `run.json` under `counts` when it scores or
+deduplicates, and `FOV.save_diagnostics` writes it beside the filtering counts.
 
 Before: combined extraction returned channel calls and scores; codebook loading
 returned two dictionaries, and filtering dropped rejected rows. After:

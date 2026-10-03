@@ -304,8 +304,8 @@ allOf:
         - n_random_tests
 
   # The explicit preprocessing and registration recipes, the spot-finding method, channel
-  # overrides and rounds, the execution device, readout_mode direct, scoring and
-  # reads_extraction.background are Python-only (backend defaults to matlab)
+  # overrides and rounds, the execution device, readout_mode direct, scoring,
+  # deduplication and reads_extraction.background are Python-only (backend defaults to matlab)
   - if:
       not:
         required: [backend]
@@ -326,6 +326,7 @@ allOf:
                     - required: [registration]
                     - required: [device]
                     - required: [scoring]
+                    - required: [deduplication]
                     - required: [reads_extraction]
                       properties:
                         reads_extraction:
@@ -1077,6 +1078,25 @@ $defs:
         enum: ["bgcorr_probability"]
     additionalProperties: false
 
+  deduplication_params:
+    description: >-
+      Python only. Optional cross-channel deduplication (DeduplicationConfig), off unless run
+      is true: reads of one detection round in different channels within distance_voxels
+      (inclusive, voxel index space, default 1.0) with identical WTA observed sequences
+      without M or N are grouped, and one original read represents each group. Needs
+      reads_filtration.run; not available with readout_mode direct. The filter rejects the
+      duplicates by default.
+    type: object
+    properties:
+      run:
+        type: boolean
+      distance_voxels:
+        type: number
+        minimum: 0
+      compatibility:
+        enum: ["same_sequence"]
+    additionalProperties: false
+
   decoding_params:
     description: >-
       Python only; method (a DECODING_METHODS name, default wta, or direct with
@@ -1160,6 +1180,8 @@ $defs:
             $ref: "#/$defs/decoding_params"
           scoring:
             $ref: "#/$defs/scoring_params"
+          deduplication:
+            $ref: "#/$defs/deduplication_params"
         additionalProperties: true
     additionalProperties: true
 
@@ -1232,6 +1254,8 @@ $defs:
             $ref: "#/$defs/decoding_params"
           scoring:
             $ref: "#/$defs/scoring_params"
+          deduplication:
+            $ref: "#/$defs/deduplication_params"
         additionalProperties: true
     additionalProperties: true
 
@@ -1298,6 +1322,8 @@ $defs:
             $ref: "#/$defs/decoding_params"
           scoring:
             $ref: "#/$defs/scoring_params"
+          deduplication:
+            $ref: "#/$defs/deduplication_params"
         additionalProperties: true
     additionalProperties: true
 

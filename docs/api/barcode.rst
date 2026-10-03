@@ -17,7 +17,14 @@ A codebook row is an entry (``entry_id``) of a gene, and
 measures a local background and noise next to the sums
 (:py:class:`~starfinder.barcode.LocalBackgroundConfig`, on by default), and
 :py:func:`~starfinder.barcode.score_reads` adds the shared read-QC score, a ranking
-that never changes a call. See :doc:`../readout-contract`.
+that never changes a call. Optional deduplication
+(:py:func:`~starfinder.barcode.deduplicate_reads`, off by default) marks cross-channel
+reads of one amplicon as duplicates of one representative, which
+:py:func:`~starfinder.barcode.filter_reads` then rejects, and
+:py:func:`~starfinder.barcode.inspect_read`,
+:py:func:`~starfinder.barcode.summarize_reads` and
+:py:func:`~starfinder.barcode.explain_read` are the read inspection, population
+summary and decision inspection diagnostics. See :doc:`../readout-contract`.
 
 .. currentmodule:: starfinder.barcode
 
@@ -33,14 +40,18 @@ that never changes a call. See :doc:`../readout-contract`.
    decode_color_sequence
    DECODING_METHODS
    DecodingSpec
+   deduplicate_reads
+   DeduplicationConfig
    DirectAssignmentConfig
    DirectPanel
    encode_bases
    EncodingConfig
    ENCODINGS
    EncodingSpec
+   explain_read
    extract_intensities
    filter_reads
+   inspect_read
    IntensityExtractionResult
    InvalidIntensityError
    load_codebook
@@ -48,10 +59,13 @@ that never changes a call. See :doc:`../readout-contract`.
    LocalBackgroundConfig
    NeighborhoodSumConfig
    OneBaseEncodingConfig
+   plot_read
+   ReadDeduplicationResult
    ReadFilterConfig
    ReadFilteringResult
    ReadScoreConfig
    ReadScoringResult
    score_reads
    Segment
+   summarize_reads
    WtaDecoderConfig

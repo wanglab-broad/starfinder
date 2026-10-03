@@ -13,7 +13,8 @@ from starfinder.registration import (REGISTRATION_METHODS, CpdConfig, DemonsConf
     RegistrationEstimationError, RegistrationQcConfig, RegistrationRejectedError, RegistrationSignalConfig,
     TranslationConfig, WarpConfig)
 from starfinder.barcode import (DECODING_METHODS, ENCODINGS, BarcodeLayout, EncodingConfig, LocalBackgroundConfig,
-    NeighborhoodSumConfig, OneBaseEncodingConfig, ReadFilterConfig, ReadScoreConfig, Segment, WtaDecoderConfig)
+    NeighborhoodSumConfig, OneBaseEncodingConfig, ReadFilterConfig, ReadScoreConfig, Segment, WtaDecoderConfig,
+    DeduplicationConfig)
 from starfinder.barcode.decoding import READOUT_MODES, _mode_mismatch
 from starfinder.spot_finding import SPOT_FINDING_METHODS, ChannelOverride, LocalMaximaConfig, SpotFindingPlan
 
@@ -392,6 +393,31 @@ def _scoring(params, decoding, extraction):
     return ReadScoreConfig()
 
 
+def _deduplication(params, decoding, mode):
+    """DeduplicationConfig of the Python-only deduplication block; off unless it sets run true.
+
+    The block holds run and the DeduplicationConfig fields (distance_voxels,
+    compatibility). It needs reads_filtration.run and readout mode multiplexed.
+    """
+    if 'deduplication' not in params:
+        return None
+    values = params['deduplication']
+    if not isinstance(values, dict):
+        raise TypeError('deduplication must be a mapping')
+    names = {f.name for f in fields(DeduplicationConfig) if f.init}
+    _known(values, ('run', *names), 'deduplication')
+    run = values.get('run', False)
+    if not isinstance(run, bool):
+        raise ValueError('deduplication.run must be Boolean')
+    if not run:
+        return None
+    if mode == 'direct':
+        raise ValueError("deduplication is not available with readout_mode direct")
+    if decoding is None:
+        raise ValueError('deduplication requires reads_filtration.run')
+    return DeduplicationConfig(**{k: v for k, v in values.items() if k != 'run'})
+
+
 # Barcode keys that have no meaning in readout mode direct (no encoding, layout or end-base check).
 _BARCODE_KEYS = (('load_codebook', ('split_index', 'encoding')),
                  ('reads_filtration', ('end_base', 'split_index', 'n_barcode_segments', 'exclude_invalid_endpoints')))
@@ -514,7 +540,9 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
     Python-only decoding key a DECODING_METHODS method (default wta) with its
     config fields; the adapter decodes with diagnostics and without rescue
     unless that key sets them. Whenever it decodes, the adapter also scores
-    (ReadScoreConfig) unless the Python-only scoring key sets run false, and
+    (ReadScoreConfig) unless the Python-only scoring key sets run false; the
+    Python-only deduplication key (run and the DeduplicationConfig fields)
+    turns on deduplication, which is off otherwise and raises in direct mode; and
     extraction measures the local background unless the Python-only
     reads_extraction.background is false (or a mapping of LocalBackgroundConfig
     fields). The Python-only top-level readout_mode
@@ -545,7 +573,8 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
         channel_order=channels, fov_pattern=config.get('fov_id_pattern', 'Position%03d'), readout_mode=mode)
     _known(params, ('streaming', 'snr_threshold', 'load_codebook', 'load_raw_images', 'enhance_contrast',
         'hist_equalize', 'morph_recon', 'tophat', 'preprocessing', 'registration', 'global_registration', 'local_registration',
-        'spot_finding', 'reads_extraction', 'reads_filtration', 'decoding', 'scoring', 'create_subtiles', 'device'),
+        'spot_finding', 'reads_extraction', 'reads_filtration', 'decoding', 'scoring', 'deduplication',
+        'create_subtiles', 'device'),
         'Python workflow parameter')
     legacy = [key for key in _LEGACY_PREPROCESSING if key in params]
     if 'preprocessing' in params and legacy:
@@ -570,6 +599,7 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
                 WtaDecoderConfig(diagnostics=True) if mode == 'multiplexed' else _decoding({}, mode))
     extraction = _extraction(extract) if do_extract else None
     scoring = _scoring(params, decoding if do_filter else None, extraction)
+    deduplication = _deduplication(params, decoding if do_filter else None, mode)
     load, do_load = _operation(params, 'load_raw_images', ('subdir',))
     registration_keys = {f.name for cls in REGISTRATION_METHODS for f in fields(cls) if f.init}
     registration_keys |= {'ref_round', 'method', 'ref_img', 'mov_img', 'ref_channel', 'boundary_mode', 'recovery',
@@ -606,7 +636,7 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
         registration=registration,
         spot_finding=_detection(spot, channels) if do_spot else None,
         extraction=extraction,
-        decoding=decoding if do_filter else None, scoring=scoring,
+        decoding=decoding if do_filter else None, scoring=scoring, deduplication=deduplication,
         filtering=ReadFilterConfig(end_bases=end_base, start_base=filt.get('start_base', 'C'), exclude_invalid_endpoints=filt.get('exclude_invalid_endpoints', False), score_bounds=filt.get('score_bounds', {})) if do_filter else None)
     creation_rules = (('deep_create_subtile',) if rule.startswith('deep_') else
                       ('gr_single_fov_subtile',) if rule == 'lrsf_single_fov_subtile' else
