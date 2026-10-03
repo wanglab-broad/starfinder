@@ -13,8 +13,11 @@ the exact config type. In readout mode ``direct``, a
 :py:class:`~starfinder.barcode.DirectPanel` gives the gene of each (round, channel) and
 :py:func:`~starfinder.barcode.assign_direct` assigns each candidate from its own round.
 A codebook row is an entry (``entry_id``) of a gene, and
-:py:class:`~starfinder.barcode.BarcodeLayout` describes its segments. See
-:doc:`../readout-contract`.
+:py:class:`~starfinder.barcode.BarcodeLayout` describes its segments. Extraction
+measures a local background and noise next to the sums
+(:py:class:`~starfinder.barcode.LocalBackgroundConfig`, on by default), and
+:py:func:`~starfinder.barcode.score_reads` adds the shared read-QC score, a ranking
+that never changes a call. See :doc:`../readout-contract`.
 
 .. currentmodule:: starfinder.barcode
 
@@ -42,9 +45,13 @@ A codebook row is an entry (``entry_id``) of a gene, and
    InvalidIntensityError
    load_codebook
    load_direct_panel
+   LocalBackgroundConfig
    NeighborhoodSumConfig
    OneBaseEncodingConfig
    ReadFilterConfig
    ReadFilteringResult
+   ReadScoreConfig
+   ReadScoringResult
+   score_reads
    Segment
    WtaDecoderConfig

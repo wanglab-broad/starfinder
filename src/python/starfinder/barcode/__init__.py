@@ -10,7 +10,12 @@ from .codebook import (
     OneBaseEncodingConfig,
     load_codebook,
 )
-from .extraction import NeighborhoodSumConfig, IntensityExtractionResult, extract_intensities
+from .extraction import (
+    LocalBackgroundConfig,
+    NeighborhoodSumConfig,
+    IntensityExtractionResult,
+    extract_intensities,
+)
 from ._direct import DirectAssignmentConfig, DirectPanel, load_direct_panel
 from .decoding import DECODING_METHODS as _DECODING_METHODS
 from .decoding import (
@@ -22,6 +27,7 @@ from .decoding import (
     assign_direct,
     decode_barcodes,
 )
+from .scoring import ReadScoreConfig, ReadScoringResult, score_reads
 from .filtering import ReadFilterConfig, ReadFilteringResult, filter_reads
 
 #: The barcode encoding registry, mapping each exact frozen encoding config type to its
@@ -49,10 +55,13 @@ __all__ = [
     "EncodingSpec",
     "IntensityExtractionResult",
     "InvalidIntensityError",
+    "LocalBackgroundConfig",
     "NeighborhoodSumConfig",
     "OneBaseEncodingConfig",
     "ReadFilterConfig",
     "ReadFilteringResult",
+    "ReadScoreConfig",
+    "ReadScoringResult",
     "Segment",
     "WtaDecoderConfig",
     "assign_direct",
@@ -63,4 +72,5 @@ __all__ = [
     "filter_reads",
     "load_codebook",
     "load_direct_panel",
+    "score_reads",
 ]

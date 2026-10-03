@@ -65,10 +65,14 @@ starfinder.barcode
 * :py:obj:`starfinder.barcode.InvalidIntensityError`
 * :py:obj:`starfinder.barcode.load_codebook`
 * :py:obj:`starfinder.barcode.load_direct_panel`
+* :py:obj:`starfinder.barcode.LocalBackgroundConfig`
 * :py:obj:`starfinder.barcode.NeighborhoodSumConfig`
 * :py:obj:`starfinder.barcode.OneBaseEncodingConfig`
 * :py:obj:`starfinder.barcode.ReadFilterConfig`
 * :py:obj:`starfinder.barcode.ReadFilteringResult`
+* :py:obj:`starfinder.barcode.ReadScoreConfig`
+* :py:obj:`starfinder.barcode.ReadScoringResult`
+* :py:obj:`starfinder.barcode.score_reads`
 * :py:obj:`starfinder.barcode.Segment`
 * :py:obj:`starfinder.barcode.WtaDecoderConfig`
 

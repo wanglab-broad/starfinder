@@ -304,8 +304,8 @@ allOf:
         - n_random_tests
 
   # The explicit preprocessing and registration recipes, the spot-finding method, channel
-  # overrides and rounds, the execution device and readout_mode direct are Python-only
-  # (backend defaults to matlab)
+  # overrides and rounds, the execution device, readout_mode direct, scoring and
+  # reads_extraction.background are Python-only (backend defaults to matlab)
   - if:
       not:
         required: [backend]
@@ -325,6 +325,11 @@ allOf:
                     - required: [preprocessing]
                     - required: [registration]
                     - required: [device]
+                    - required: [scoring]
+                    - required: [reads_extraction]
+                      properties:
+                        reads_extraction:
+                          required: [background]
                     - required: [spot_finding]
                       properties:
                         spot_finding:
@@ -1003,6 +1008,30 @@ $defs:
           minimum: 1
         minItems: 3
         maxItems: 3
+      background:
+        description: >-
+          Python only. The local background and noise measured next to the sums
+          (NeighborhoodSumConfig.background, on by default): false turns it off, or a mapping
+          of LocalBackgroundConfig fields. Without the key the default ring is used, grown
+          along any axis where voxel_size exceeds its inner box.
+        oneOf:
+          - const: false
+          - type: object
+            properties:
+              inner_radius_zyx:
+                type: array
+                items: {type: integer, minimum: 0}
+                minItems: 3
+                maxItems: 3
+              outer_radius_zyx:
+                type: array
+                items: {type: integer, minimum: 0}
+                minItems: 3
+                maxItems: 3
+              min_voxels:
+                type: integer
+                minimum: 1
+            additionalProperties: false
     additionalProperties: true
 
   reads_filtration_params:
@@ -1035,6 +1064,18 @@ $defs:
         items:
           type: integer
     additionalProperties: true
+
+  scoring_params:
+    description: >-
+      Python only. The adapter adds the shared read-QC score (ReadScoreConfig) whenever it
+      decodes; run false turns it off. It ranks calls and sets no cutoff.
+    type: object
+    properties:
+      run:
+        type: boolean
+      method:
+        enum: ["bgcorr_probability"]
+    additionalProperties: false
 
   decoding_params:
     description: >-
@@ -1117,6 +1158,8 @@ $defs:
             $ref: "#/$defs/reads_filtration_params"
           decoding:
             $ref: "#/$defs/decoding_params"
+          scoring:
+            $ref: "#/$defs/scoring_params"
         additionalProperties: true
     additionalProperties: true
 
@@ -1187,6 +1230,8 @@ $defs:
             $ref: "#/$defs/reads_filtration_params"
           decoding:
             $ref: "#/$defs/decoding_params"
+          scoring:
+            $ref: "#/$defs/scoring_params"
         additionalProperties: true
     additionalProperties: true
 
@@ -1251,6 +1296,8 @@ $defs:
             $ref: "#/$defs/reads_filtration_params"
           decoding:
             $ref: "#/$defs/decoding_params"
+          scoring:
+            $ref: "#/$defs/scoring_params"
         additionalProperties: true
     additionalProperties: true
 

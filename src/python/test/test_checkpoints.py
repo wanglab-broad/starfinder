@@ -173,7 +173,9 @@ def test_wide_table_layout_and_vectorized_parse(tmp_path):
     fov = resident(ds).run(full())
     frame = candidates_frame(fov.spot_result, fov.intensity_result)
     assert list(frame.columns) == (['spot_namespace', 'spot_id', 'z', 'y', 'x', 'channel', 'peak_intensity']
-        + [f'sig_{r}_{c}' for r in ROUNDS for c in CHANNELS] + ['valid_round1', 'valid_round2'])
+        + [f'sig_{r}_{c}' for r in ROUNDS for c in CHANNELS] + ['valid_round1', 'valid_round2']
+        + [f'bg_{r}_{c}' for r in ROUNDS for c in CHANNELS] + [f'noise_{r}_{c}' for r in ROUNDS for c in CHANNELS]
+        + ['bgvox_round1', 'bgvox_round2', 'boxvox_round1', 'boxvox_round2'])
     values = fov.intensity_result.values
     np.testing.assert_array_equal(frame['sig_round2_d'], values[:, 3, 1])
     spots, parsed, valid = parse_candidates(frame, ROUNDS, CHANNELS)

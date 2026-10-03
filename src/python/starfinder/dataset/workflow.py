@@ -12,8 +12,8 @@ from starfinder._registry import config_type_for
 from starfinder.registration import (REGISTRATION_METHODS, CpdConfig, DemonsConfig, InsufficientLandmarksError,
     RegistrationEstimationError, RegistrationQcConfig, RegistrationRejectedError, RegistrationSignalConfig,
     TranslationConfig, WarpConfig)
-from starfinder.barcode import (DECODING_METHODS, ENCODINGS, BarcodeLayout, EncodingConfig, NeighborhoodSumConfig,
-    OneBaseEncodingConfig, ReadFilterConfig, Segment, WtaDecoderConfig)
+from starfinder.barcode import (DECODING_METHODS, ENCODINGS, BarcodeLayout, EncodingConfig, LocalBackgroundConfig,
+    NeighborhoodSumConfig, OneBaseEncodingConfig, ReadFilterConfig, ReadScoreConfig, Segment, WtaDecoderConfig)
 from starfinder.barcode.decoding import READOUT_MODES, _mode_mismatch
 from starfinder.spot_finding import SPOT_FINDING_METHODS, ChannelOverride, LocalMaximaConfig, SpotFindingPlan
 
@@ -343,6 +343,55 @@ def _decoding(values, mode='multiplexed'):
     return config_type(**{**{k: v for k, v in defaults.items() if k in names}, **values})
 
 
+def _extraction(values):
+    """NeighborhoodSumConfig of the reads_extraction keys voxel_size and the Python-only background.
+
+    background is false (off) or a mapping of LocalBackgroundConfig fields. When
+    it is not given, the background is on with the default ring, whose inner and
+    outer boxes grow by the same number of voxels along any axis where the
+    extraction box is larger than the default inner box (so the inner box
+    contains it and the ring keeps its width).
+    """
+    radius = tuple(values.get('voxel_size', (1, 2, 2)))
+    background = values.get('background')
+    if background is False:
+        return NeighborhoodSumConfig(radius, background=None)
+    if background is None:
+        default = LocalBackgroundConfig()
+        grow = tuple(max(r - i, 0) if isinstance(r, int) and not isinstance(r, bool) else 0
+                     for r, i in zip(radius, default.inner_radius_zyx)) if len(radius) == 3 else (0, 0, 0)
+        return NeighborhoodSumConfig(radius, background=LocalBackgroundConfig(
+            tuple(i + g for i, g in zip(default.inner_radius_zyx, grow)),
+            tuple(o + g for o, g in zip(default.outer_radius_zyx, grow))))
+    if not isinstance(background, dict):
+        raise TypeError('reads_extraction.background must be false or a mapping')
+    names = {f.name for f in fields(LocalBackgroundConfig) if f.init}
+    _known(background, names, 'reads_extraction.background')
+    return NeighborhoodSumConfig(radius, background=LocalBackgroundConfig(
+        **{k: tuple(v) if isinstance(v, list) else v for k, v in background.items()}))
+
+
+def _scoring(params, decoding, extraction):
+    """ReadScoreConfig whenever the adapter decodes, unless the Python-only scoring block sets run false."""
+    values = params.get('scoring', {})
+    if not isinstance(values, dict):
+        raise TypeError('scoring must be a mapping')
+    _known(values, ('run', 'method'), 'scoring')
+    run = values.get('run', True)
+    if not isinstance(run, bool):
+        raise ValueError('scoring.run must be Boolean')
+    if values.get('method', 'bgcorr_probability') != 'bgcorr_probability':
+        raise ValueError("scoring.method must be 'bgcorr_probability'")
+    if 'scoring' in params and run and decoding is None:
+        raise ValueError('scoring requires reads_filtration.run')
+    if not run or decoding is None:
+        return None
+    if extraction is not None and extraction.background is None:
+        raise ValueError('scoring needs the local background: remove reads_extraction.background: false '
+                         'or set scoring: {run: false}')
+    return ReadScoreConfig()
+
+
 # Barcode keys that have no meaning in readout mode direct (no encoding, layout or end-base check).
 _BARCODE_KEYS = (('load_codebook', ('split_index', 'encoding')),
                  ('reads_filtration', ('end_base', 'split_index', 'n_barcode_segments', 'exclude_invalid_endpoints')))
@@ -464,7 +513,11 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
     ENCODINGS method (default two_base) with its config fields, and the
     Python-only decoding key a DECODING_METHODS method (default wta) with its
     config fields; the adapter decodes with diagnostics and without rescue
-    unless that key sets them. The Python-only top-level readout_mode
+    unless that key sets them. Whenever it decodes, the adapter also scores
+    (ReadScoreConfig) unless the Python-only scoring key sets run false, and
+    extraction measures the local background unless the Python-only
+    reads_extraction.background is false (or a mapping of LocalBackgroundConfig
+    fields). The Python-only top-level readout_mode
     (multiplexed, the default, or direct) becomes Dataset.readout_mode; in
     direct mode decoding is the direct method (DirectAssignmentConfig), the
     rule's codebook input is the panel CSV (round,channel,gene_id), the
@@ -492,7 +545,7 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
         channel_order=channels, fov_pattern=config.get('fov_id_pattern', 'Position%03d'), readout_mode=mode)
     _known(params, ('streaming', 'snr_threshold', 'load_codebook', 'load_raw_images', 'enhance_contrast',
         'hist_equalize', 'morph_recon', 'tophat', 'preprocessing', 'registration', 'global_registration', 'local_registration',
-        'spot_finding', 'reads_extraction', 'reads_filtration', 'decoding', 'create_subtiles', 'device'),
+        'spot_finding', 'reads_extraction', 'reads_filtration', 'decoding', 'scoring', 'create_subtiles', 'device'),
         'Python workflow parameter')
     legacy = [key for key in _LEGACY_PREPROCESSING if key in params]
     if 'preprocessing' in params and legacy:
@@ -504,7 +557,7 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
     spot_keys = {f.name for cls, spec in SPOT_FINDING_METHODS.items() if spec.pipeline for f in fields(cls) if f.init}
     spot, do_spot = _operation(params, 'spot_finding', {'ref_round', 'method', 'channel_overrides', 'rounds', *_SPOT_ALIASES,
                                                         *spot_keys})
-    extract, do_extract = _operation(params, 'reads_extraction', ('voxel_size',))
+    extract, do_extract = _operation(params, 'reads_extraction', ('voxel_size', 'background'))
     filt, do_filter = _operation(params, 'reads_filtration', ('end_base', 'start_base', 'exclude_invalid_endpoints', 'score_bounds', 'n_barcode_segments', 'split_index'))
     book, _ = _operation(params, 'load_codebook', ('split_index', 'encoding'))
     if mode == 'direct':
@@ -515,6 +568,8 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
         raise ValueError('decoding requires reads_filtration.run')
     decoding = (_decoding(params['decoding'], mode) if 'decoding' in params else
                 WtaDecoderConfig(diagnostics=True) if mode == 'multiplexed' else _decoding({}, mode))
+    extraction = _extraction(extract) if do_extract else None
+    scoring = _scoring(params, decoding if do_filter else None, extraction)
     load, do_load = _operation(params, 'load_raw_images', ('subdir',))
     registration_keys = {f.name for cls in REGISTRATION_METHODS for f in fields(cls) if f.init}
     registration_keys |= {'ref_round', 'method', 'ref_img', 'mov_img', 'ref_channel', 'boundary_mode', 'recovery',
@@ -550,8 +605,8 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
                        _legacy_recipe(params, norm, do_norm, hist, do_hist, morph, do_morph, top, do_top, resident)),
         registration=registration,
         spot_finding=_detection(spot, channels) if do_spot else None,
-        extraction=NeighborhoodSumConfig(tuple(extract.get('voxel_size', (1, 2, 2)))) if do_extract else None,
-        decoding=decoding if do_filter else None,
+        extraction=extraction,
+        decoding=decoding if do_filter else None, scoring=scoring,
         filtering=ReadFilterConfig(end_bases=end_base, start_base=filt.get('start_base', 'C'), exclude_invalid_endpoints=filt.get('exclude_invalid_endpoints', False), score_bounds=filt.get('score_bounds', {})) if do_filter else None)
     creation_rules = (('deep_create_subtile',) if rule.startswith('deep_') else
                       ('gr_single_fov_subtile',) if rule == 'lrsf_single_fov_subtile' else

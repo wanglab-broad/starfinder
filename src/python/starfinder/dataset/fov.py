@@ -27,7 +27,8 @@ from starfinder.dataset.config import (CheckpointConfig, PipelineConfig, Executi
 from starfinder.registration import (RegistrationRejectedError, RegistrationResult, TransformChain,
     TranslationTransform, WarpConfig)
 from starfinder.barcode import (DECODING_METHODS, Codebook, IntensityExtractionResult, NeighborhoodSumConfig,
-    WtaDecoderConfig, ReadFilterConfig, BarcodeDecodingResult, ReadFilteringResult)
+    WtaDecoderConfig, ReadFilterConfig, BarcodeDecodingResult, ReadFilteringResult, ReadScoreConfig,
+    ReadScoringResult)
 from starfinder.barcode.decoding import _mode_mismatch
 
 # Raised in readout mode multiplexed when a candidate set with a round column would be decoded as barcodes.
@@ -159,6 +160,7 @@ class FOV:
     intensity_result: IntensityExtractionResult | None = None
     decoding_result: BarcodeDecodingResult | None = None
     filtering_result: ReadFilteringResult | None = None
+    scoring_result: ReadScoringResult | None = None
     _round_intensities: dict = field(default_factory=dict)
 
     load_diagnostics: dict[str, dict] = field(default_factory=dict)
@@ -186,17 +188,18 @@ class FOV:
         """Read-only mapping of the stages that have run, in pipeline order.
 
         Keys are ``registration``, ``spot_finding``, ``extraction``,
-        ``decoding`` and ``filtering``; a stage that has not run is absent.
+        ``decoding``, ``scoring`` and ``filtering``; a stage that has not run is absent.
         Values are the stored result objects: ``registration`` is a read-only
         view of registration_results (round label to that round's ordered
         RegistrationResult list), and the others are spot_result,
-        intensity_result, decoding_result and filtering_result.
+        intensity_result, decoding_result, scoring_result and filtering_result.
         """
         stages = {}
         if self.registration_results:
             stages["registration"] = MappingProxyType(self.registration_results)
         for name, result in (("spot_finding", self.spot_result), ("extraction", self.intensity_result),
-                             ("decoding", self.decoding_result), ("filtering", self.filtering_result)):
+                             ("decoding", self.decoding_result), ("scoring", self.scoring_result),
+                             ("filtering", self.filtering_result)):
             if result is not None:
                 stages[name] = result
         return MappingProxyType(stages)
@@ -913,12 +916,17 @@ class FOV:
                r.diagnostics['source_shape_zyx'] != first.diagnostics['source_shape_zyx'] for r in results):
             raise ValueError("inconsistent round extraction results")
         boxes = [r.box_voxels for r in results]
+        # Local background measurements per (spot, channel, round), and per (channel, round) for the image.
+        measured = {}
+        if all(r.background is not None for r in results):
+            measured = {name: np.concatenate([getattr(r, name) for r in results], axis=getattr(first, name).ndim - 1)
+                        for name in ('background', 'noise', 'background_voxels', 'image_background', 'image_noise')}
         self.intensity_result = IntensityExtractionResult(
             np.concatenate([r.values for r in results], axis=2), first.spot_ids,
             first.spot_namespace, first.channel_labels, tuple(rounds), first.metadata,
             first.config, np.concatenate([r.valid for r in results], axis=1),
             {'rounds': {r: self._round_intensities[r].diagnostics for r in rounds}},
-            None if any(b is None for b in boxes) else np.concatenate(boxes, axis=1))
+            None if any(b is None for b in boxes) else np.concatenate(boxes, axis=1), **measured)
         self._round_intensities.clear()
 
     @_log_step
@@ -980,6 +988,8 @@ class FOV:
         from starfinder.barcode import assign_direct, decode_barcodes
         self._check_readout(config, self.spot_result is not None and 'round' in self.spot_result.spots)
         self._check_reference()
+        # A score belongs to the reads it was computed on.
+        self.scoring_result = None
         if self.dataset.readout_mode == 'direct':
             self.decoding_result = assign_direct(self.intensity_result, self.spot_result,
                                                  self.dataset.direct_panel, config=config)
@@ -988,15 +998,39 @@ class FOV:
         return self
 
     @_log_step
+    def score_reads(self, *, config=ReadScoreConfig()):
+        """Add the shared read-QC score to the stored reads, from the stored intensities and background.
+
+        The reference is the dataset codebook (multiplexed) or direct panel
+        (direct). Identities are never changed (see
+        :func:`starfinder.barcode.score_reads`). Intensities without background
+        measurements raise ValueError naming extraction, the stage to rerun.
+        """
+        from starfinder.barcode import score_reads
+        from starfinder.barcode.scoring import NO_BACKGROUND
+        if self.decoding_result is None:
+            raise ValueError('scoring requires decoding')
+        if self.intensity_result is None or self.intensity_result.background is None:
+            raise ValueError(NO_BACKGROUND)
+        self._check_reference()
+        reference = self.dataset.direct_panel if self.dataset.readout_mode == 'direct' else self.codebook
+        self.scoring_result = score_reads(self.decoding_result, self.intensity_result, reference=reference,
+                                          config=config)
+        return self
+
+    @_log_step
     def filter_reads(self, *, config=ReadFilterConfig()):
         """Rerun explicit read predicates without decoding or image access.
 
-        The dataset codebook, when loaded, supplies the segment ends of its layout;
-        it is not used for reads of readout mode direct.
+        The reads are the scored reads when scoring ran (their score columns are
+        kept), otherwise the decoded reads. The dataset codebook, when loaded,
+        supplies the segment ends of its layout; it is not used for reads of
+        readout mode direct.
         """
         from starfinder.barcode import filter_reads
-        codebook = self.codebook if getattr(self.decoding_result, 'readout_mode', None) != 'direct' else None
-        self.filtering_result = filter_reads(self.decoding_result, config=config, codebook=codebook)
+        reads = self.scoring_result if self.scoring_result is not None else self.decoding_result
+        codebook = self.codebook if getattr(reads, 'readout_mode', None) != 'direct' else None
+        self.filtering_result = filter_reads(reads, config=config, codebook=codebook)
         return self
 
     @_log_step
@@ -1046,6 +1080,13 @@ class FOV:
         operations or resident images (after load_checkpoint), the round loop
         is skipped.
 
+        After decoding (or assignment), scoring adds the shared read-QC score
+        from the retained values and background (scoring_result), and
+        filtering then reads the scored reads. Scoring intensities without
+        background measurements raises ValueError naming extraction before
+        any processing. A run that neither decodes nor holds decoded reads
+        skips scoring.
+
         checkpoints=None writes nothing. Otherwise the selected stages and
         run.json are written to the FOV checkpoint directory; see
         :doc:`/checkpoints`. The directory, overwrite policy and Parquet support
@@ -1080,6 +1121,16 @@ class FOV:
             raise ValueError('decoding requires intensities')
         if config.filtering and not (config.decoding or self.decoding_result is not None):
             raise ValueError('filtering requires decoding')
+        # Scoring scores the reads of this run (decoded now, or resident): without reads it has
+        # nothing to score and is skipped, as when the workflow's downstream stages are disabled.
+        scoring = config.scoring if (config.decoding or self.decoding_result is not None) else None
+        if scoring:
+            from starfinder.barcode.scoring import NO_BACKGROUND
+            # Scoring reads the background of this run's extraction, or of the resident intensities.
+            background = (config.extraction.background is not None if config.extraction else
+                          self.intensity_result is not None and self.intensity_result.background is not None)
+            if not background:
+                raise ValueError(NO_BACKGROUND)
         if config.decoding and self.dataset.readout_mode == 'direct' and self.dataset.direct_panel is None:
             raise ValueError("readout_mode='direct' requires a loaded direct panel (dataset.load_direct_panel)")
         if config.decoding and self.dataset.readout_mode == 'multiplexed' and self.codebook is None:
@@ -1200,9 +1251,11 @@ class FOV:
                                        table_format=checkpoints.table_format)
             if config.decoding:
                 self.decode_barcodes(config=config.decoding)
-                if 'pre_qc' in stages:
-                    self._write_checkpoint(stage='pre_qc', directory=record.directory,
-                                           table_format=checkpoints.table_format)
+            if scoring:
+                self.score_reads(config=scoring)
+            if 'pre_qc' in stages and (config.decoding or scoring):
+                self._write_checkpoint(stage='pre_qc', directory=record.directory,
+                                       table_format=checkpoints.table_format)
             if config.filtering:
                 self.filter_reads(config=config.filtering)
             if record is not None:
@@ -1290,7 +1343,11 @@ class FOV:
         elif stage == 'pre_qc':
             if self.decoding_result is None:
                 raise ValueError('pre_qc checkpoint requires decoding_result')
-            files = io.write_pre_qc(directory, header, self.decoding_result, table_format)
+            layout = (self.codebook.layout if self.decoding_result.readout_mode == 'multiplexed'
+                      and self.codebook is not None else None)
+            header.update(layout=layout)
+            files = io.write_pre_qc(directory, header, self.decoding_result, table_format,
+                                    scoring_result=self.scoring_result)
         else:
             io._check_stage(stage)
         if self._run_record is not None:
@@ -1306,7 +1363,8 @@ class FOV:
             ``registered`` (all round images, and their extraction source
             snapshots, must be resident), ``candidates``
             (spot_result, with intensity_result when present) or ``pre_qc``
-            (decoding_result).
+            (decoding_result, or the scored reads of scoring_result when
+            scoring ran).
         checkpoints : CheckpointConfig
             Directory, table_format and overwrite policy; stages and
             hash_inputs are not used here.
@@ -1344,8 +1402,12 @@ class FOV:
         registration results, attempts, chains and record (a version-1
         checkpoint: no chains, semantics ``sequential``), and the
         preprocessing record; ``candidates`` restores
-        spot_result and intensity_result; ``pre_qc`` restores decoding_result. Continue with run() and a
-        PipelineConfig that starts after the loaded stage.
+        spot_result and intensity_result (with its background measurements when
+        they were stored); ``pre_qc`` restores decoding_result and, when the
+        checkpoint was scored, scoring_result. Continue with run() and a
+        PipelineConfig that starts after the loaded stage: for example decoding,
+        scoring and filtering after ``candidates``, or rescoring after
+        ``candidates`` and ``pre_qc``.
 
         Parameters
         ----------
@@ -1372,7 +1434,7 @@ class FOV:
         from starfinder.io._checkpoint import _check_stage, _jsonable, read_checkpoint, read_header
         from starfinder.io._checkpoint import readout_mode as io_readout_mode
         _check_stage(stage)
-        later = ['spot_result', 'intensity_result', 'decoding_result', 'filtering_result']
+        later = ['spot_result', 'intensity_result', 'decoding_result', 'scoring_result', 'filtering_result']
         later = {'registered': ['images', 'snapshots', 'registration_results', 'registration_attempts',
                                 'registration_chains', 'registration_record'] + later,
                  'candidates': later, 'pre_qc': later[2:]}[stage]

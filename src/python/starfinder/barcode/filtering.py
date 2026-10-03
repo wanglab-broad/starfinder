@@ -8,6 +8,7 @@ from ._encoding import decode_color_sequence
 from ._layout import colors_have_ends, segment_colors
 from .codebook import Codebook, encoding_spec
 from .decoding import BarcodeDecodingResult
+from .scoring import ReadScoringResult
 
 
 @dataclass(frozen=True)
@@ -110,7 +111,7 @@ class ReadFilteringResult:
 
 
 def filter_reads(
-    decoding_result: BarcodeDecodingResult,
+    decoding_result: BarcodeDecodingResult | ReadScoringResult,
     *,
     config: ReadFilterConfig = ReadFilterConfig(),
     codebook: Codebook | None = None,
@@ -123,11 +124,13 @@ def filter_reads(
     paired last base (endpoint_valid_<segment>; endpoint_valid when all pass).
     Reads with M or N colors fail. config.end_bases (the one-segment shortcut)
     cannot be combined with layout ends. Membership never depends on the check.
+    A ReadScoringResult (score_reads) is filtered like its decoding result, and
+    its score columns are kept in the table.
     """
-    if not isinstance(decoding_result, BarcodeDecodingResult) or not isinstance(
+    if not isinstance(decoding_result, (BarcodeDecodingResult, ReadScoringResult)) or not isinstance(
         config, ReadFilterConfig
     ):
-        raise TypeError("expected BarcodeDecodingResult and ReadFilterConfig")
+        raise TypeError("expected BarcodeDecodingResult or ReadScoringResult and ReadFilterConfig")
     if codebook is not None and not isinstance(codebook, Codebook):
         raise TypeError("codebook must be Codebook or None")
     decoding_result.__post_init__()

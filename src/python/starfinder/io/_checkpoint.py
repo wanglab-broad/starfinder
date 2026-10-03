@@ -193,10 +193,25 @@ def _signal_columns(round_labels, channel_labels):
     return signals, valid
 
 
+def _background_columns(round_labels, channel_labels):
+    """bg_<round>_<channel>, noise_<round>_<channel>, bgvox_<round> and boxvox_<round> (option C1)."""
+    return ([f"bg_{r}_{c}" for r in round_labels for c in channel_labels],
+            [f"noise_{r}_{c}" for r in round_labels for c in channel_labels],
+            [f"bgvox_{r}" for r in round_labels], [f"boxvox_{r}" for r in round_labels])
+
+
+def _wide(array, n):
+    """(N, C, R) -> (N, R*C), round-major as the signal columns."""
+    return array.transpose(0, 2, 1).reshape(n, array.shape[1] * array.shape[2])
+
+
 def candidates_frame(spot_result, intensity_result=None):
     """Wide table: identity, spot columns, then sig_<round>_<channel> and valid_<round>.
 
     Signals are round-major in round-label order, channels in channel order.
+    With background measurements (§2.8, option C1) the table continues with
+    bg_<round>_<channel> and noise_<round>_<channel> (float64, the same order),
+    bgvox_<round> (ring voxels) and boxvox_<round> (box voxels, int64).
     Built with array reshapes; no per-row work.
     """
     spots = spot_result.spots
@@ -211,13 +226,23 @@ def candidates_frame(spot_result, intensity_result=None):
         raise ValueError("intensity identities must match the spot table in order")
     rounds, channels = intensity_result.round_labels, intensity_result.channel_labels
     signals, valid = _signal_columns(rounds, channels)
-    if len(set(signals + valid) | set(frame.columns)) != len(signals) + len(valid) + frame.shape[1]:
+    measured = intensity_result.background is not None
+    background = _background_columns(rounds, channels) if measured else ([], [], [], [])
+    names = signals + valid + [c for group in background for c in group]
+    if len(set(names) | set(frame.columns)) != len(names) + frame.shape[1]:
         raise ValueError("round/channel labels produce duplicate candidate column names")
     n = len(spots)
-    values = intensity_result.values.transpose(0, 2, 1).reshape(n, len(rounds) * len(channels))
-    return pd.concat([frame.reset_index(drop=True),
-                      pd.DataFrame(values, columns=signals, dtype="float64"),
-                      pd.DataFrame(intensity_result.valid, columns=valid, dtype=bool)], axis=1)
+    values = _wide(intensity_result.values, n)
+    parts = [frame.reset_index(drop=True),
+             pd.DataFrame(values, columns=signals, dtype="float64"),
+             pd.DataFrame(intensity_result.valid, columns=valid, dtype=bool)]
+    if measured:
+        bg, noise, bgvox, boxvox = background
+        parts += [pd.DataFrame(_wide(intensity_result.background, n), columns=bg, dtype="float64"),
+                  pd.DataFrame(_wide(intensity_result.noise, n), columns=noise, dtype="float64"),
+                  pd.DataFrame(intensity_result.background_voxels, columns=bgvox, dtype="int64"),
+                  pd.DataFrame(intensity_result.box_voxels, columns=boxvox, dtype="int64")]
+    return pd.concat(parts, axis=1)
 
 
 def parse_candidates(frame, round_labels, channel_labels):
@@ -230,6 +255,37 @@ def parse_candidates(frame, round_labels, channel_labels):
     values = (frame[signals].to_numpy(dtype=np.float64)
               .reshape(n, len(round_labels), len(channel_labels)).transpose(0, 2, 1).copy())
     return frame.drop(columns=signals + valid), values, frame[valid].to_numpy(dtype=bool)
+
+
+def parse_background(frame, round_labels, channel_labels):
+    """(background N×C×R, noise N×C×R, background_voxels N×R, box_voxels N×R) of a wide table.
+
+    None when the table has no background columns (written without them, or before §2.8).
+    """
+    bg, noise, bgvox, boxvox = _background_columns(round_labels, channel_labels)
+    if not any(c in frame for c in bg + noise + bgvox + boxvox):
+        return None
+    missing = [c for c in bg + noise + bgvox + boxvox if c not in frame]
+    if missing:
+        raise ValueError(f"candidate table lacks background columns {missing[:3]}")
+    n, shape = len(frame), (len(frame), len(round_labels), len(channel_labels))
+
+    def cube(columns):
+        return frame[columns].to_numpy(dtype=np.float64).reshape(shape).transpose(0, 2, 1).copy()
+
+    return (cube(bg), cube(noise), frame[bgvox].to_numpy(dtype=np.int64).reshape(n, len(round_labels)),
+            frame[boxvox].to_numpy(dtype=np.int64).reshape(n, len(round_labels)))
+
+
+def _per_round_channel(array, round_labels, channel_labels):
+    """C×R array -> {round: {channel: value}} for a JSON header."""
+    return {r: {c: array[i, j] for i, c in enumerate(channel_labels)} for j, r in enumerate(round_labels)}
+
+
+def _from_round_channel(data, round_labels, channel_labels):
+    """{round: {channel: value or null}} -> C×R float64 (null is NaN)."""
+    return np.array([[np.nan if data[r][c] is None else data[r][c] for r in round_labels] for c in channel_labels],
+                    dtype=np.float64).reshape(len(channel_labels), len(round_labels))
 
 
 # --- Headers --------------------------------------------------------------------
@@ -468,7 +524,12 @@ def write_candidates(directory, header, spot_result, intensity_result, table_for
     channel overrides as {channel, config} entries), execution (the
     execution entry) and weights (the provenance artifacts entries of the
     loaded weights; empty without weights). The readout_mode key comes from
-    the caller's header (FOV writes the dataset's); box_voxels is not stored.
+    the caller's header (FOV writes the dataset's). signals.extraction_config
+    keeps exactly the fields neighborhood_radius_zyx, sampling and boundary;
+    the background settings are the top-level background_config (the
+    LocalBackgroundConfig fields, or null when off), and, when measured, the
+    top-level image_background and image_noise ({round: {channel: value}}) and
+    the table's background columns (candidates_frame) hold the measurements.
     """
     from starfinder.spot_finding import _model_artifacts
     frame = candidates_frame(spot_result, intensity_result)
@@ -484,10 +545,33 @@ def write_candidates(directory, header, spot_result, intensity_result, table_for
         detection_diagnostics=_json_diagnostics(diagnostics),
         signals=None if intensity_result is None else dict(
             round_labels=intensity_result.round_labels, channel_labels=intensity_result.channel_labels,
-            metadata=intensity_result.metadata, extraction_config=intensity_result.config,
+            metadata=intensity_result.metadata, extraction_config=_extraction_fields(intensity_result.config),
             diagnostics=_json_diagnostics(intensity_result.diagnostics)))
+    if intensity_result is not None:
+        # New keys beside the 141c093 ones, so an older reader still loads the stage.
+        measured = intensity_result.image_background is not None
+        rounds, channels = intensity_result.round_labels, intensity_result.channel_labels
+        header.update(background_config=intensity_result.config.background,
+                      image_background=_per_round_channel(intensity_result.image_background, rounds, channels)
+                      if measured else None,
+                      image_noise=_per_round_channel(intensity_result.image_noise, rounds, channels)
+                      if measured else None)
     write_json(header, Path(directory) / "candidates.json")
     return [table, "candidates.json"]
+
+
+def _extraction_fields(config):
+    """The NeighborhoodSumConfig fields a 141c093 reader rebuilds (background is a separate header key)."""
+    return {name: getattr(config, name) for name in ("neighborhood_radius_zyx", "sampling", "boundary")}
+
+
+def _extraction_config(header):
+    """The NeighborhoodSumConfig of a candidates header; no background_config (before §2.8) is background=None."""
+    from starfinder.barcode import LocalBackgroundConfig, NeighborhoodSumConfig
+    background = header.get("background_config")
+    fields_ = {k: _tuples(v) for k, v in header["signals"]["extraction_config"].items() if k != "method"}
+    return NeighborhoodSumConfig(**fields_, background=None if background is None else LocalBackgroundConfig(
+        **{k: _tuples(v) for k, v in background.items()}))
 
 
 def _detection_plan(header, config, detectors):
@@ -508,9 +592,10 @@ def _read_candidates(directory, header):
         raise ValueError("candidate namespace differs from the checkpoint header")
     signals = header["signals"]
     if signals is None:
-        spots, values, valid = frame, None, None
+        spots, values, valid, background = frame, None, None, None
     else:
         spots, values, valid = parse_candidates(frame, signals["round_labels"], signals["channel_labels"])
+        background = parse_background(frame, signals["round_labels"], signals["channel_labels"])
     spots = spots[header["spot_columns"]]
     detectors = _detectors()
     config = _config(header["detection_config"], detectors)
@@ -518,37 +603,64 @@ def _read_candidates(directory, header):
         _tuples(header["detection_diagnostics"]), _detection_plan(header, config, detectors))
     if signals is None:
         return {"spot_result": spot_result, "intensity_result": None}
+    rounds, channels = tuple(signals["round_labels"]), tuple(signals["channel_labels"])
+    measured = {}
+    if background is not None:
+        bg, noise, bgvox, boxvox = background
+        measured = dict(box_voxels=boxvox, background=bg, noise=noise, background_voxels=bgvox,
+                        image_background=_from_round_channel(header["image_background"], rounds, channels),
+                        image_noise=_from_round_channel(header["image_noise"], rounds, channels))
     intensity = IntensityExtractionResult(values, tuple(spots.spot_id), namespace,
-        tuple(signals["channel_labels"]), tuple(signals["round_labels"]), _metadata(signals["metadata"]),
-        _config(signals["extraction_config"], NeighborhoodSumConfig), valid, _tuples(signals["diagnostics"]))
+        channels, rounds, _metadata(signals["metadata"]),
+        _extraction_config(header), valid, _tuples(signals["diagnostics"]), **measured)
     return {"spot_result": spot_result, "intensity_result": intensity}
 
 
 # --- Pre-QC stage ----------------------------------------------------------------
 
-def write_pre_qc(directory, header, decoding_result, table_format):
-    """Write the unchanged decoding table and pre_qc.json; probabilities are not saved.
+def write_pre_qc(directory, header, decoding_result, table_format, *, scoring_result=None):
+    """Write the read table before the QC filter and pre_qc.json; probabilities are not saved.
 
-    pre_qc.json records the result's readout_mode; a direct decoding_config
-    carries only its method.
+    The table is the decoding table, or with scoring_result the scored table
+    (the decoding columns, then the score columns). pre_qc.json records the
+    result's readout_mode; a direct decoding_config carries only its method.
+    The keys scoring_config and deduplication_config are the stages' configs
+    (null when the stage did not run), stages_applied lists the stages that
+    made the table, and layout is the caller's (FOV writes the codebook's
+    segment layout, null in readout mode direct).
     """
-    table, dtypes = _write_table(decoding_result.table.reset_index(drop=True), directory, "pre_qc", table_format)
+    reads = decoding_result if scoring_result is None else scoring_result
+    table, dtypes = _write_table(reads.table.reset_index(drop=True), directory, "pre_qc", table_format)
     header = dict(header, stage="pre_qc", format_version=FORMAT_VERSION, table=table, dtypes=dtypes,
         spot_namespace=decoding_result.spot_namespace, channel_labels_decoded=decoding_result.channel_labels,
         round_labels=decoding_result.round_labels, decoding_config=decoding_result.config,
         decoding_diagnostics=_json_diagnostics(decoding_result.diagnostics),
-        readout_mode=decoding_result.readout_mode)
+        readout_mode=decoding_result.readout_mode,
+        scoring_config=None if scoring_result is None else scoring_result.config,
+        deduplication_config=None, layout=header.get("layout"),
+        stages_applied=["decoding"] + ([] if scoring_result is None else ["scoring"]))
     write_json(header, Path(directory) / "pre_qc.json")
     return [table, "pre_qc.json"]
 
 
 def _read_pre_qc(directory, header):
-    from starfinder.barcode import DECODING_METHODS, BarcodeDecodingResult
+    from starfinder.barcode import DECODING_METHODS, BarcodeDecodingResult, ReadScoreConfig, ReadScoringResult
+    from starfinder.barcode.scoring import SCORE_COLUMNS
     table = _read_table(Path(directory) / header["table"], header["dtypes"])
     config = _config(header["decoding_config"], {spec.name: t for t, spec in DECODING_METHODS.items()})
-    return {"decoding_result": BarcodeDecodingResult(table, header["spot_namespace"],
-        tuple(header["channel_labels_decoded"]), tuple(header["round_labels"]), config,
-        _tuples(header["decoding_diagnostics"]), readout_mode(header))}
+    labels = tuple(header["channel_labels_decoded"]), tuple(header["round_labels"])
+    scoring = None
+    if header.get("scoring_config") is not None:
+        # The decoding table is the scored table without the score columns, which come last.
+        reasons = table.qc_reason
+        counts = {"total": len(table), "scored": int(reasons.eq("").sum()),
+                  "no_assignment": int(reasons.eq("no_assignment").sum()),
+                  "background_unavailable": int(reasons.eq("background_unavailable").sum())}
+        scoring = ReadScoringResult(table, header["spot_namespace"], *labels,
+                                    _config(header["scoring_config"], ReadScoreConfig), counts, readout_mode(header))
+        table = table.drop(columns=list(SCORE_COLUMNS))
+    return {"decoding_result": BarcodeDecodingResult(table, header["spot_namespace"], *labels, config,
+        _tuples(header["decoding_diagnostics"]), readout_mode(header)), "scoring_result": scoring}
 
 
 # --- Public reader ---------------------------------------------------------------
@@ -579,10 +691,14 @@ def read_checkpoint(path: Path | str, stage: str) -> dict:
         (SpotFindingResult) and ``intensity_result`` (IntensityExtractionResult,
         or None when signals were not extracted); the spot result's plan is
         rebuilt from ``detection_plan`` and ``detection_rounds`` (absent in
-        earlier checkpoints: no overrides and rounds None); its box_voxels is
-        None (not stored). ``pre_qc``: ``decoding_result``
+        earlier checkpoints: no overrides and rounds None); its background
+        measurements and box_voxels come from the background columns, and
+        are None (with ``background=None`` in its config) for a checkpoint
+        written without them. ``pre_qc``: ``decoding_result``
         (BarcodeDecodingResult without array or table diagnostics; its
-        readout_mode is the header's, ``multiplexed`` when absent).
+        readout_mode is the header's, ``multiplexed`` when absent) and
+        ``scoring_result`` (ReadScoringResult of the scored table, or None
+        when the checkpoint has no ``scoring_config``).
 
     Raises
     ------

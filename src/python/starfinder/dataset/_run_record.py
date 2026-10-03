@@ -125,6 +125,8 @@ class _RunRecord:
             counts["intensities"] = len(fov.intensity_result.spot_ids)
         if fov.decoding_result is not None:
             counts["call_status"] = {str(k): int(v) for k, v in fov.decoding_result.table.call_status.value_counts().items()}
+        if fov.scoring_result is not None:
+            counts["scoring"] = fov.scoring_result.counts
         if fov.filtering_result is not None:
             counts["filtering"] = fov.filtering_result.counts
         self.data.update(preprocessing=fov.preprocessing_record or None,

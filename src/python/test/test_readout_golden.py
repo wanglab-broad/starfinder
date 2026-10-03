@@ -91,7 +91,9 @@ def readout_config(kind, *, radius=(1, 2, 2), decoder="wta", score_bound=None, e
     score (wta_l2_nll or probability_nll) and optional end_bases (start base C);
     "encoding": the codebook EncodingConfig (two-base, reversed, one segment);
     "detection": the LocalMaximaConfig recorded on the hand-built candidates;
-    "pipeline": a PipelineConfig of extraction, decoding and filtering;
+    "scoring": the shared read-QC score ReadScoreConfig (§2.8);
+    "pipeline": a PipelineConfig of extraction, decoding, scoring and filtering, as the
+    workflow adapter scores whenever it decodes;
     "checkpoints": the CheckpointConfig of the CSV candidates and pre_qc stages under
     directory;
     "yaml": the WorkflowConfig that from_workflow_config translates from the legacy
@@ -99,7 +101,7 @@ def readout_config(kind, *, radius=(1, 2, 2), decoder="wta", score_bound=None, e
     always select WtaDecoderConfig(diagnostics=True), so "yaml" requires decoder "wta".
     """
     from starfinder._registry import config_type_for
-    from starfinder.barcode import DECODING_METHODS, ENCODINGS, NeighborhoodSumConfig, ReadFilterConfig
+    from starfinder.barcode import DECODING_METHODS, ENCODINGS, NeighborhoodSumConfig, ReadFilterConfig, ReadScoreConfig
     from starfinder.dataset import CheckpointConfig, PipelineConfig
     from starfinder.spot_finding import LocalMaximaConfig
 
@@ -131,11 +133,14 @@ def readout_config(kind, *, radius=(1, 2, 2), decoder="wta", score_bound=None, e
         return config_type_for(ENCODINGS, "two_base", "encoding")(reverse_bases=True, split_index=None)
     if kind == "detection":
         return LocalMaximaConfig()
+    if kind == "scoring":
+        return ReadScoreConfig()
     if kind == "pipeline":
         return PipelineConfig(extraction=readout_config("extraction", radius=radius),
                               decoding=readout_config("decoding", decoder=decoder, **decoder_options),
                               filtering=readout_config("filtering", decoder=decoder, score_bound=score_bound,
-                                                       end_bases=end_bases))
+                                                       end_bases=end_bases),
+                              scoring=readout_config("scoring"))
     if kind == "checkpoints":
         return CheckpointConfig(stages=("candidates", "pre_qc"), directory=directory)
     raise ValueError(f"unknown kind {kind!r}")
@@ -231,6 +236,20 @@ def without_entry(table):
     return table.drop(columns="entry_id")
 
 
+# §2.8 (option C1): the score columns that scoring adds to pre_qc and filtering, and the
+# background columns that extraction adds to candidates.csv.
+SCORE_COLUMNS = ["qc_score", "qc_ambiguity_max", "qc_signal_to_background", "qc_rounds", "qc_reason"]
+
+
+def without_score(table):
+    return table.drop(columns=SCORE_COLUMNS)
+
+
+def without_background(table):
+    prefixes = ("bg_", "noise_", "bgvox_", "boxvox_")
+    return table.drop(columns=[c for c in table.columns if c.startswith(prefixes)])
+
+
 def extract(radius=(1, 2, 2)):
     loaded = {label: ImageLoadResult(image, METADATA, CHANNELS, (), {})
               for label, image in fixture_rounds().items()}
@@ -274,19 +293,31 @@ def run_and_reload(root, dataset, pipeline, execution=None):
     reloaded = dataset.fov("FOV_001").load_checkpoint("pre_qc", checkpoints=checkpoints)
     pd.testing.assert_frame_equal(reloaded.decoding_result.table, fov.decoding_result.table)
     assert reloaded.decoding_result.config == fov.decoding_result.config
+    pd.testing.assert_frame_equal(reloaded.scoring_result.table, fov.scoring_result.table)
+    reads = reloaded.scoring_result.table
     directory = root / "checkpoints" / "FOV_001"
-    # The pre_qc table without entry_id, written by the same writer.
-    from starfinder.io._checkpoint import _write_table
-    (root / "without_entry").mkdir()
-    _write_table(without_entry(reloaded.decoding_result.table), root / "without_entry", "pre_qc", "csv")
+    # The pre_qc table without entry_id (and without the score columns), the pre_qc table without
+    # the score columns and the candidates table without the background columns, written by the
+    # same writer.
+    from starfinder.io._checkpoint import _read_table, _write_table
+    for name, table in (("without_entry", without_entry(without_score(reads))), ("without_score", without_score(reads))):
+        (root / name).mkdir()
+        _write_table(table, root / name, "pre_qc", "csv")
+    written = _read_table(directory / "candidates.csv", json.loads((directory / "candidates.json").read_text())["dtypes"])
+    (root / "without_background").mkdir()
+    _write_table(without_background(written), root / "without_background", "candidates", "csv")
     return {"values": digest(fov.intensity_result.values), "valid": digest(fov.intensity_result.valid),
-            "pre_qc": table_digest(without_entry(reloaded.decoding_result.table)),
-            "pre_qc_entries": table_digest(reloaded.decoding_result.table),
-            "filtering": table_digest(without_entry(fov.filtering_result.table)),
-            "filtering_entries": table_digest(fov.filtering_result.table),
-            "candidates_csv": file_digest(directory / "candidates.csv"),
+            "pre_qc": table_digest(without_entry(without_score(reads))),
+            "pre_qc_entries": table_digest(without_score(reads)),
+            "pre_qc_scored": table_digest(reads),
+            "filtering": table_digest(without_entry(without_score(fov.filtering_result.table))),
+            "filtering_entries": table_digest(without_score(fov.filtering_result.table)),
+            "filtering_scored": table_digest(fov.filtering_result.table),
+            "candidates_csv": file_digest(root / "without_background" / "candidates.csv"),
+            "candidates_csv_background": file_digest(directory / "candidates.csv"),
             "pre_qc_csv": file_digest(root / "without_entry" / "pre_qc.csv"),
-            "pre_qc_csv_entries": file_digest(directory / "pre_qc.csv")}
+            "pre_qc_csv_entries": file_digest(root / "without_score" / "pre_qc.csv"),
+            "pre_qc_csv_scored": file_digest(directory / "pre_qc.csv")}
 
 
 PINNED_INPUT = {
@@ -366,8 +397,8 @@ PINNED_FILTERING_ENTRIES = {
     ("codebook_aware", "bound"): "b015c4f41158abef80c844007cef549248ee9a41acc06de882ba35bcf60f6326",
     ("codebook_aware", "end_bases"): "9e0e168bd9f0dab0bd8db2ce5d9eef5c26403068b58413478cc157b670c21607",
 }
-# decoder -> (sha256 of candidates.csv, sha256 of pre_qc.csv without entry_id, written by the
-# checkpoint writer) written by FOV.run
+# decoder -> (sha256 of candidates.csv without the background columns, sha256 of pre_qc.csv without
+# entry_id and the score columns, each written by the checkpoint writer) written by FOV.run
 PINNED_RUN_FILES = {
     "wta": (
         "285e412fecc9c50060f375ecbda9d9c8b2c6c554c1dcf3126cc2162383fa8ee8",
@@ -376,10 +407,31 @@ PINNED_RUN_FILES = {
         "285e412fecc9c50060f375ecbda9d9c8b2c6c554c1dcf3126cc2162383fa8ee8",
         "b80e7beef0da52ffeb166833992ddedd57ab599c21a8965e650db22d9b2d47a9"),
 }
-# decoder -> sha256 of the pre_qc.csv (with entry_id) written by FOV.run
+# decoder -> sha256 of the pre_qc.csv (with entry_id, without the score columns, written by the
+# checkpoint writer) written by FOV.run
 PINNED_PRE_QC_CSV_ENTRIES = {
     "wta": "29c269cfe57a6d39d671f76c388c3ba3ea0c586f755bc8d405577e93c75449ce",
     "codebook_aware": "13041598a0b3df5a406481186641d1f822074223c23375fcc174dc3f6f28dc64",
+}
+# §2.8 (option C1): candidates.csv gains the background columns and pre_qc and the filtering
+# tables gain the score columns. The pins above are of the tables without them; these pin the
+# extended tables and files written by FOV.run.
+PINNED_CANDIDATES_CSV_BACKGROUND = "8feb7c6c11a41bfaf5f6b9af24bee72f1584ff46539d571928a6144a8dd09dcc"
+# decoder -> (digest of the scored pre_qc table, sha256 of the scored pre_qc.csv)
+PINNED_PRE_QC_SCORED = {
+    "wta": ("ef206100aec530fa6dc814386c3b58b022e541d6d052041767622a5fe13f1088",
+            "338e0976f483009f09fbad7ac1f620f11f8e4a7c5e09d4e74f58b3681af0b760"),
+    "codebook_aware": ("37f16de3b4801b532543f11499dd8cfb5176f5cf2fde338ba349d1fcc2f4891b",
+                       "92516655cdbcc913d4fd56bef0e1175500ffab78a780783cd4fbbc772826cd4c"),
+}
+# (decoder, filter) -> digest of the filtering table of the scored reads after FOV.run
+PINNED_FILTERING_SCORED = {
+    ("wta", "default"): "4f979dc0ce24efb871e5d3889b81470799d5d140625eb182afce6f72e99501f6",
+    ("wta", "bound"): "58cada2233abf4d6f0ddcb67c2b34d4147ec7ae33a0706bbe117e7c05dd5b500",
+    ("wta", "end_bases"): "9d5764981750684ff355eb319b8b322c7984cfb5165bb71c48207217fa85a9d3",
+    ("codebook_aware", "default"): "b5d31351e6cef812410c591d073cbcc372935bebdd9c5709df6efefc49e884b4",
+    ("codebook_aware", "bound"): "40dba301c24a6c7a943179017029f245615749b602cc906f62d2ecba36439dd4",
+    ("codebook_aware", "end_bases"): "75d02f3b610385062d1e4b2e0b39af0b670d6aebfd619252ad3788c17c2433d8",
 }
 
 
@@ -448,6 +500,9 @@ def test_pre_qc_after_run_save_and_reload_is_pinned(tmp_path, decoder, name):
     assert digests["pre_qc_entries"] == PINNED_DECODING_ENTRIES[decoder]
     assert digests["filtering_entries"] == PINNED_FILTERING_ENTRIES[(decoder, name)]
     assert digests["pre_qc_csv_entries"] == PINNED_PRE_QC_CSV_ENTRIES[decoder]
+    assert digests["candidates_csv_background"] == PINNED_CANDIDATES_CSV_BACKGROUND
+    assert (digests["pre_qc_scored"], digests["pre_qc_csv_scored"]) == PINNED_PRE_QC_SCORED[decoder]
+    assert digests["filtering_scored"] == PINNED_FILTERING_SCORED[(decoder, name)]
 
 
 @pytest.mark.parametrize("name", list(FILTERS))
@@ -464,6 +519,9 @@ def test_legacy_yaml_keys_give_the_same_digests(tmp_path, name):
     assert digests["pre_qc_entries"] == PINNED_DECODING_ENTRIES["wta"]
     assert digests["filtering_entries"] == PINNED_FILTERING_ENTRIES[("wta", name)]
     assert digests["pre_qc_csv_entries"] == PINNED_PRE_QC_CSV_ENTRIES["wta"]
+    assert digests["candidates_csv_background"] == PINNED_CANDIDATES_CSV_BACKGROUND
+    assert (digests["pre_qc_scored"], digests["pre_qc_csv_scored"]) == PINNED_PRE_QC_SCORED["wta"]
+    assert digests["filtering_scored"] == PINNED_FILTERING_SCORED[("wta", name)]
 
 
 def test_a_changed_neighborhood_radius_changes_the_tensor_digest():

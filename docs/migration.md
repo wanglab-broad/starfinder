@@ -611,8 +611,9 @@ In `direct` mode, `extract_intensities(..., readout_mode="direct")` (which
 `FOV.run` and `FOV.extract_intensities` pass from the dataset) reads each candidate
 in its own round only; the other rounds are `0.0` with `valid=False`.
 `IntensityExtractionResult` gains `box_voxels` (N×R int64, the voxels each box
-summed, 0 for a round that was not read; `None` after loading a candidates
-checkpoint, which does not store it yet). `FOV.run` and `FOV.decode_barcodes`
+summed, 0 for a round that was not read; since W-294 a candidates checkpoint
+stores it with the background measurements, and a checkpoint without them reloads
+it as `None`). `FOV.run` and `FOV.decode_barcodes`
 assign with `DirectAssignmentConfig` and `Dataset.direct_panel`.
 
 Decoding a multi-round candidate set (a `round` column) needs
@@ -697,6 +698,73 @@ raises `ValueError` for a codebook with repeated genes.
 **Intentional change:** two barcodes for one gene, which raised before, now load
 as two entries of that gene, and the decoding table (and so `pre_qc`) gains
 `entry_id`, the entry of the decoded color sequence, next to `gene_id`.
+
+### Background measurements
+
+Extraction now measures a local background and noise next to the sums, on by
+default ({doc}`readout-contract`, "Extraction"; {doc}`readout-algorithms`,
+"Background and noise"). {py:class}`~starfinder.barcode.LocalBackgroundConfig`
+(`inner_radius_zyx=(1, 3, 3)`, `outer_radius_zyx=(1, 6, 6)`, `min_voxels=16`,
+provisional) is the new field `NeighborhoodSumConfig.background`; `background=None`
+turns it off, and the inner box must contain the extraction box, so a radius
+beyond `(1, 3, 3)` (for example `NeighborhoodSumConfig((2, 2, 2))`) now raises
+`ValueError` unless it states a wider ring or `background=None`. For each candidate,
+channel and extracted round, `IntensityExtractionResult.background` is the median and
+`noise` 1.4826 × the median absolute deviation of the ring (the voxels of the outer box
+outside the inner box, clipped to the image; 360 unclipped), in grey levels per voxel;
+`background_voxels` counts the ring voxels, and `image_background` and `image_noise`
+(per channel and round) are the median and 1.4826 × MAD of the whole image. Below
+`min_voxels` ring voxels, and in rounds that readout mode `direct` does not read, the
+background and noise are NaN. The ring is not masked for neighboring spots. The sums,
+`valid` and `box_voxels` are unchanged. The `candidates` checkpoint gains the
+`bg_<round>_<channel>`, `noise_<round>_<channel>`, `bgvox_<round>` and
+`boxvox_<round>` columns (see {ref}`readout-checkpoints`). In the workflow
+adapter the background is on; the Python-only `reads_extraction.background` is
+`false` or a mapping of `LocalBackgroundConfig` fields, and without it the default
+ring grows along the axes where `voxel_size` exceeds its inner box
+({doc}`workflow-configuration`).
+
+### Shared read-QC score
+
+{py:func}`~starfinder.barcode.score_reads` (`reference` is the codebook, or the
+direct panel in readout mode `direct`) returns a
+{py:class}`~starfinder.barcode.ReadScoringResult`: the read table with the columns
+`qc_score`, `qc_ambiguity_max`, `qc_signal_to_background`, `qc_rounds` and
+`qc_reason` appended ({doc}`readout-contract`, "Shared read-QC score"). `qc_score`
+(W-278 design D1) is the probability NLL of the assigned entry recomputed on
+background-subtracted sums; lower ranks as more reliable. It is a ranking, not a
+calibrated probability; it sets no cutoff and never changes `gene_id`, `entry_id`,
+`call_status` or `call_type`. Reads without an assignment have NaN with
+`no_assignment`, and reads with a round without background NaN with
+`background_unavailable`; scoring intensities that have no background raises
+`ValueError` naming extraction. {py:class}`~starfinder.barcode.ReadScoreConfig`
+(`method="bgcorr_probability"`, no parameter) is `PipelineConfig.scoring`, `None` by
+default in the Python API; `FOV.run` scores after decoding or assignment and before
+filtering, `FOV.score_reads` scores the stored reads, `FOV.scoring_result` holds the
+result and `FOV.results` lists it as `scoring`. `filter_reads` accepts a
+`ReadScoringResult` and keeps its score columns; `FOV.filter_reads` filters the scored
+reads when scoring ran.
+
+**Intentional change:** the workflow adapter scores whenever it decodes; the
+Python-only `scoring: {run: false}` turns it off. The filtering table and the
+exported reads of a workflow run therefore carry the score columns; the shared
+spot CSV columns are unchanged.
+
+(readout-checkpoints)=
+### Checkpoints
+
+The checkpoint stages and files stay, and `FORMAT_VERSION` stays 2 (option C1 of
+{doc}`readout-contract`, "Checkpoints and reruns"; {doc}`checkpoints`). `candidates`
+adds the background columns after `valid_<round>` and `candidates.json` the top-level
+keys `background_config`, `image_background` and `image_noise`; the saved
+`signals.extraction_config` keeps only its earlier fields, so a reader at `141c093`
+still loads the stage and drops the new columns. `pre_qc` holds the read table after
+scoring, before filtering, and `pre_qc.json` adds `scoring_config`,
+`deduplication_config` (`null`), `layout` and `stages_applied`. Loading `pre_qc` sets
+`FOV.scoring_result` as well as `decoding_result`. A checkpoint written before these
+keys loads with `background=None` and no score; `load_checkpoint("candidates")` then
+`run` with decoding, scoring and filtering reruns the readout without images when the
+background was stored, and raises `ValueError` naming extraction when it was not.
 
 ### Readout evaluation metrics
 

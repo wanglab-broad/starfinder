@@ -296,6 +296,14 @@ sampling with `floor(coord+.5)`; subpixel coordinates are not truncated. Integer
 `neighborhood_radius_zyx=(1,2,2)` means half-widths of a 3×5×5 neighborhood,
 not physical spacing. Clipped slices implement zero-padded boundaries without a
 padded-volume allocation. Sums accumulate in float64 and inputs are not mutated.
+`box_voxels` (int64 `(N,R)`) counts the voxels each box summed. With
+`NeighborhoodSumConfig.background` (`LocalBackgroundConfig`, on by default) the
+result also holds the local `background` and `noise` (float64 `(N,C,R)`, grey levels
+per voxel: median and 1.4826 × MAD of the ring between the outer box `(1,6,6)` and
+the inner box `(1,3,3)`, clipped to the image; NaN below `min_voxels` ring voxels),
+`background_voxels` (`(N,R)`) and the image `image_background` and `image_noise`
+(`(C,R)`). These measurements never change `values` or `valid`
+({doc}`../readout-contract`, "Extraction").
 
 `load_codebook` returns `barcode.Codebook`; explicit `round_labels` and
 `channel_labels` are required. Its ordered table has one row per entry:
@@ -345,8 +353,19 @@ identity-labeled `per_round` margins and `candidates` scores/ranks. Candidate
 ordering is score then color sequence; deterministic order does not resolve
 ambiguity into a gene assignment. WTA also exposes `wta_round_l2_nll`.
 
+`score_reads(decoded, extracted, reference=..., config=ReadScoreConfig())` returns
+a `ReadScoringResult` whose table is the read table with `qc_score`,
+`qc_ambiguity_max`, `qc_signal_to_background`, `qc_rounds` and `qc_reason` appended:
+the probability NLL of the assigned entry on background-subtracted sums (lower ranks
+as more reliable), over every round (`multiplexed`) or the own round (`direct`). It
+ranks calls and never changes an identity; reads without an assignment, or with a
+round without background, are NaN with `no_assignment` or `background_unavailable`,
+and intensities without background raise `ValueError` naming extraction
+({doc}`../readout-contract`, "Shared read-QC score").
+
 `filter_reads(decoded, config=ReadFilterConfig(...))` can rerun without image
-access or decoding. It retains a complete table with acceptance/rejection reasons,
+access or decoding; `decoded` may also be a `ReadScoringResult`, whose score
+columns are kept. It retains a complete table with acceptance/rejection reasons,
 an `accepted` view and counts/fractions. Predicates name allowed call statuses and
 inclusive method-specific score bounds; unavailable score columns error, and NaN
 fails a requested bound. Endpoint checks are diagnostic-only unless

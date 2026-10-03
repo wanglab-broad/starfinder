@@ -96,6 +96,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.io.load_round`
 * :py:obj:`starfinder.io.load_volume`
 * :py:obj:`starfinder.io.load_volume_zyxc`
+* :py:obj:`starfinder.barcode.LocalBackgroundConfig`
 * :py:obj:`starfinder.evaluation.spot_finding.localization_errors`
 * :py:obj:`starfinder.spot_finding.LocalMaximaConfig`
 * :py:obj:`starfinder.preprocessing.match_histogram`
@@ -129,6 +130,8 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.barcode.ReadFilterConfig`
 * :py:obj:`starfinder.barcode.ReadFilteringResult`
 * :py:obj:`starfinder.synthetic.ReadoutEffectsConfig`
+* :py:obj:`starfinder.barcode.ReadScoreConfig`
+* :py:obj:`starfinder.barcode.ReadScoringResult`
 * :py:obj:`starfinder.preprocessing.reconstruct_background`
 * :py:obj:`starfinder.preprocessing.ReconstructionConfig`
 * :py:obj:`starfinder.dataset.RecoveryConfig`
@@ -157,6 +160,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.preprocessing.ScalarBackgroundConfig`
 * :py:obj:`starfinder.synthetic.ScalarDistribution`
 * :py:obj:`starfinder.synthetic.SCENE_PRESETS`
+* :py:obj:`starfinder.barcode.score_reads`
 * :py:obj:`starfinder.barcode.Segment`
 * :py:obj:`starfinder.spot_finding.SPOT_FINDING_METHODS`
 * :py:obj:`starfinder.spot_finding.SpotFindingBackendUnavailableError`
