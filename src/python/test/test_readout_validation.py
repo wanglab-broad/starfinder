@@ -34,7 +34,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from unittest import mock
 import warnings
 
 import numpy as np
@@ -68,10 +67,7 @@ THREAD_VARIABLES = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"
                     "NUMBA_NUM_THREADS")
 
 
-def golden_rounds(seed):
-    """The golden fixture's images with seed in place of its SEED (the same spots and features)."""
-    with mock.patch.object(golden, "SEED", seed):
-        return golden.fixture_rounds()
+golden_rounds = fx.golden_rounds
 
 
 def loaded(rounds, channels=golden.CHANNELS):

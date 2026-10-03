@@ -2,8 +2,8 @@
 "Direct readout").
 
 Fixture ``direct2`` is worked example 4 of docs/readout-algorithms.md: two rounds of 6×24×24
-voxels (seed 100; R7 also runs it with seeds 101 and 102, docs/readout-algorithms.md, "Engineering
-validation design") with four planted spots and the eight-gene panel. Check R7: the reads are
+voxels (seed 100; the R7 and R16 checks run it with seeds 100 to 102, docs/readout-algorithms.md,
+"Engineering validation design") with four planted spots and the eight-gene panel. Check R7: the reads are
 Gfap, Gad1, Sst and Aqp4; the other round of each candidate is valid=False with values 0; an
 unmapped (round, channel) is unmatched with unmapped_channel; a zero own round is no_signal; a
 repeated gene or (round, channel) raises naming it. Check R16 (direct part): the candidates and
@@ -162,8 +162,9 @@ def test_r7_repeated_gene_or_round_channel_raises_naming_it(tmp_path, change, na
 
 
 @pytest.mark.contract
-def test_r7_invalid_own_round_is_invalid_measurement(tmp_path):
-    fov = direct_fov(direct_dataset(tmp_path)).run(pipeline(filtering=None))
+@pytest.mark.parametrize("seed", HAND_SEEDS)
+def test_r7_invalid_own_round_is_invalid_measurement(tmp_path, seed):
+    fov = direct_fov(direct_dataset(tmp_path), seed).run(pipeline(filtering=None))
     valid = fov.intensity_result.valid.copy()
     valid[1, 0] = False
     reads = assign_direct(replace(fov.intensity_result, valid=valid), fov.spot_result, fov.dataset.direct_panel)
@@ -283,11 +284,12 @@ def test_direct_mode_needs_its_panel_and_a_known_mode(tmp_path):
 
 @pytest.mark.validation
 @pytest.mark.parametrize("table_format", ["csv", "parquet"])
-def test_r16_direct_checkpoints_round_trip_exactly(tmp_path, table_format):
+@pytest.mark.parametrize("seed", HAND_SEEDS)
+def test_r16_direct_checkpoints_round_trip_exactly(tmp_path, seed, table_format):
     dataset = direct_dataset(tmp_path)
     checkpoints = CheckpointConfig(stages=("candidates", "pre_qc"), directory=tmp_path / "checkpoints",
                                    table_format=table_format, hash_inputs=False)
-    fov = direct_fov(dataset).run(pipeline(), checkpoints=checkpoints)
+    fov = direct_fov(dataset, seed).run(pipeline(), checkpoints=checkpoints)
     directory = tmp_path / "checkpoints" / "FOV_001"
     for stage in ("candidates", "pre_qc"):
         assert read_header(directory, stage)["readout_mode"] == "direct"
@@ -310,13 +312,14 @@ def test_r16_direct_checkpoints_round_trip_exactly(tmp_path, table_format):
 
 
 @pytest.mark.validation
-def test_r16_a_checkpoint_without_the_key_loads_as_multiplexed(tmp_path):
+@pytest.mark.parametrize("seed", HAND_SEEDS)
+def test_r16_a_checkpoint_without_the_key_loads_as_multiplexed(tmp_path, seed):
     dataset = direct_dataset(tmp_path, mode="multiplexed", panel=None)
     dataset.codebook = Codebook(pd.DataFrame({"gene_id": ["A", "B"], "color_sequence": ["11", "33"]}),
                                 ROUNDS, CHANNELS)
     checkpoints = CheckpointConfig(stages=("candidates", "pre_qc"), directory=tmp_path / "checkpoints",
                                    hash_inputs=False)
-    fov = direct_fov(dataset).run(pipeline(spot_finding=DETECTION, decoding=WtaDecoderConfig()),
+    fov = direct_fov(dataset, seed).run(pipeline(spot_finding=DETECTION, decoding=WtaDecoderConfig()),
                                   checkpoints=checkpoints)
     directory = tmp_path / "checkpoints" / "FOV_001"
     for stage in ("candidates", "pre_qc"):

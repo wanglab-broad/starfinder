@@ -7,7 +7,9 @@ test, on the golden fixture of test_readout_golden.py and on the calibrated scen
 seed 103. R12 (extended tier) checks the ranking on the W-278 held-out scenes (seeds 103
 to 105) with the tolerances of W-278 scores.csv (heldout, all_calibrated). R16 and R17
 check the candidates and pre_qc checkpoints with background and score columns, reruns
-from them, and a checkpoint written before §2.8 (as at 141c093).
+from them, and a checkpoint written before §2.8 (as at 141c093). The golden fixture runs with its
+pinned seed and with seeds 100 to 102, direct2 with seeds 100 to 102 (readout_fixtures.golden_seed,
+test_readout_direct.direct_fov).
 """
 from dataclasses import replace
 import json
@@ -27,11 +29,12 @@ from starfinder.evaluation.barcode import ranking_quality
 from starfinder.io import read_checkpoint
 from starfinder.io._checkpoint import candidates_frame
 
+from . import readout_fixtures as fx
 from . import readout_scenes as scenes
-from .test_readout_direct import direct_dataset, direct_fov
+from .test_readout_direct import HAND_SEEDS, direct_dataset, direct_fov
 from .test_readout_direct import pipeline as direct_pipeline
-from .test_readout_golden import (ROUNDS, candidates, extract, fixture_rounds, golden_codebook, golden_dataset,
-                                  readout_config, METADATA)
+from .test_readout_golden import (ROUNDS, SEED, candidates, extract, fixture_rounds, golden_codebook,
+                                  golden_dataset, readout_config, METADATA)
 
 pytestmark = [pytest.mark.barcode]
 
@@ -60,9 +63,11 @@ def assert_formula(table, reference):
 
 @pytest.mark.validation
 @pytest.mark.parametrize("decoder", ["wta", "codebook_aware"])
-def test_r11_golden_score_equals_the_w278_formula(tmp_path, decoder):
+@pytest.mark.parametrize("seed", fx.GOLDEN_SEEDS)
+def test_r11_golden_score_equals_the_w278_formula(tmp_path, seed, decoder):
     book = golden_codebook(tmp_path)
-    intensities = extract()
+    with fx.golden_seed(seed):
+        intensities, rounds = extract(), fixture_rounds()
     decoded = decode_barcodes(intensities, book, config=readout_config("decoding", decoder=decoder))
     scored = score_reads(decoded, intensities, reference=book)
     table = scored.table
@@ -81,7 +86,7 @@ def test_r11_golden_score_equals_the_w278_formula(tmp_path, decoder):
                              "background_unavailable": 0}
     # The local background of the golden fixture is the W-278 ring estimate.
     centers = np.floor(candidates().spots[["z", "y", "x"]].to_numpy(float) + 0.5).astype(np.int64)
-    for j, image in enumerate(fixture_rounds().values()):
+    for j, image in enumerate(rounds.values()):
         median, mad, voxels = scenes.ring_estimate(image, centers)
         np.testing.assert_array_equal(intensities.background[:, :, j], median)
         np.testing.assert_array_equal(intensities.noise[:, :, j], mad)
@@ -110,8 +115,9 @@ def test_r11_calibrated_seed_103_score_equals_the_w278_formula():
 
 
 @pytest.mark.validation
-def test_r11_direct_reads_score_their_own_round(tmp_path):
-    fov = direct_fov(direct_dataset(tmp_path)).run(direct_pipeline(scoring=ReadScoreConfig()))
+@pytest.mark.parametrize("seed", HAND_SEEDS)
+def test_r11_direct_reads_score_their_own_round(tmp_path, seed):
+    fov = direct_fov(direct_dataset(tmp_path), seed).run(direct_pipeline(scoring=ReadScoreConfig()))
     table, intensities = fov.scoring_result.table, fov.intensity_result
     assert fov.scoring_result.readout_mode == "direct" and table.qc_reason.eq("").all()
     assert (table.qc_rounds == 1).all()
@@ -249,12 +255,13 @@ def test_r12_qc_score_ranks_above_the_decoder_scores(r12_calls):
 
 # --- R16 and R17: checkpoints and reruns --------------------------------------------------------
 
-def golden_run(root, table_format="csv", decoder="wta", **changes):
-    """FOV.run of the golden fixture with extraction, decoding, scoring and filtering, and checkpoints."""
+def golden_run(root, table_format="csv", decoder="wta", seed=SEED, **changes):
+    """FOV.run of the golden fixture (with the noise of seed, by default its pinned SEED) with extraction,
+    decoding, scoring and filtering, and checkpoints."""
     dataset = golden_dataset(root)
     dataset.codebook = golden_codebook(root)
     fov = dataset.fov("FOV_001")
-    fov.images = fixture_rounds()
+    fov.images = fx.golden_rounds(seed)
     fov.metadata = {label: METADATA for label in ROUNDS}
     fov.spot_result = candidates()
     checkpoints = CheckpointConfig(stages=("candidates", "pre_qc"), directory=root / "checkpoints",
@@ -274,8 +281,9 @@ def assert_reads_equal(a, b):
 
 @pytest.mark.validation
 @pytest.mark.parametrize("table_format", ["csv", "parquet"])
-def test_r16_background_and_score_columns_round_trip_exactly(tmp_path, table_format):
-    dataset, fov, checkpoints = golden_run(tmp_path, table_format)
+@pytest.mark.parametrize("seed", fx.GOLDEN_SEEDS)
+def test_r16_background_and_score_columns_round_trip_exactly(tmp_path, seed, table_format):
+    dataset, fov, checkpoints = golden_run(tmp_path, table_format, seed=seed)
     directory = tmp_path / "checkpoints" / "FOV_001"
     loaded = read_checkpoint(directory, "candidates")
     a, b = loaded["intensity_result"], fov.intensity_result
@@ -310,10 +318,11 @@ def test_r16_background_and_score_columns_round_trip_exactly(tmp_path, table_for
 
 @pytest.mark.validation
 @pytest.mark.parametrize("table_format", ["csv", "parquet"])
-def test_r16_direct_background_and_score_round_trip_exactly(tmp_path, table_format):
+@pytest.mark.parametrize("seed", HAND_SEEDS)
+def test_r16_direct_background_and_score_round_trip_exactly(tmp_path, seed, table_format):
     dataset = direct_dataset(tmp_path)
     checkpoints = CheckpointConfig(stages=("candidates", "pre_qc"), directory=tmp_path / "ck", table_format=table_format)
-    fov = direct_fov(dataset).run(direct_pipeline(scoring=ReadScoreConfig()), checkpoints=checkpoints)
+    fov = direct_fov(dataset, seed).run(direct_pipeline(scoring=ReadScoreConfig()), checkpoints=checkpoints)
     reloaded = dataset.fov("FOV_001").load_checkpoint("candidates", checkpoints=checkpoints)
     for name in ("background", "noise", "background_voxels", "box_voxels"):
         np.testing.assert_array_equal(getattr(reloaded.intensity_result, name), getattr(fov.intensity_result, name))
@@ -325,8 +334,9 @@ def test_r16_direct_background_and_score_round_trip_exactly(tmp_path, table_form
 
 @pytest.mark.validation
 @pytest.mark.parametrize("decoder", ["wta", "codebook_aware"])
-def test_r17_reruns_from_retained_measurements_equal_the_full_run(tmp_path, decoder):
-    dataset, full, checkpoints = golden_run(tmp_path, decoder=decoder)
+@pytest.mark.parametrize("seed", fx.GOLDEN_SEEDS)
+def test_r17_reruns_from_retained_measurements_equal_the_full_run(tmp_path, seed, decoder):
+    dataset, full, checkpoints = golden_run(tmp_path, decoder=decoder, seed=seed)
     stages = readout_config("pipeline", decoder=decoder)
     # From candidates: decode, score and filter without images.
     rerun = dataset.fov("FOV_001").load_checkpoint("candidates", checkpoints=checkpoints)
@@ -357,9 +367,10 @@ def _as_141c093(directory):
 
 
 @pytest.mark.validation
-def test_r16_a_141c093_checkpoint_loads_without_background_or_score_and_scoring_raises(tmp_path):
+@pytest.mark.parametrize("seed", fx.GOLDEN_SEEDS)
+def test_r16_a_141c093_checkpoint_loads_without_background_or_score_and_scoring_raises(tmp_path, seed):
     no_background = NeighborhoodSumConfig(background=None)
-    dataset, fov, checkpoints = golden_run(tmp_path, extraction=no_background, scoring=None)
+    dataset, fov, checkpoints = golden_run(tmp_path, extraction=no_background, scoring=None, seed=seed)
     directory = tmp_path / "checkpoints" / "FOV_001"
     _as_141c093(directory)
     loaded = dataset.fov("FOV_001").load_checkpoint("candidates", checkpoints=checkpoints)

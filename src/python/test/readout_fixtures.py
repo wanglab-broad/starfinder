@@ -22,7 +22,14 @@ load_codebook.split_index [3], 2 + 2 colors) with allowed ends CC (segment A) an
 (segment B); 24 amplicons (three of each entry), 4 reads one color from an entry, and
 4 reads whose segment A colors are an entry's and whose segment B colors decode from T
 to ends outside TT.
+
+golden_seed and golden_rounds give the golden fixture of test_readout_golden.py (unchanged)
+with a seed in place of its pinned SEED: the same spots and features, other noise.
+GOLDEN_SEEDS is the pinned seed followed by the hand-built seeds 100 to 102.
 """
+from contextlib import contextmanager
+from unittest import mock
+
 import numpy as np
 import pandas as pd
 
@@ -31,14 +38,31 @@ from starfinder.dataset import Dataset, RoundState
 from starfinder.image import ImageMetadata
 from starfinder.spot_finding import LocalMaximaConfig, SpotFindingResult
 
+from . import test_readout_golden as golden
+
 SHAPE_ZYX = (16, 64, 64)
 CHANNELS = ("ch00", "ch01", "ch02", "ch03")
 ROUNDS = ("round1", "round2", "round3", "round4")
 SEEDS = (100, 101, 102)
+GOLDEN_SEEDS = (golden.SEED,) + SEEDS
 AMPLITUDE = 800.0
 COPY_FRACTION = 0.05
 # Candidate slots, 12 voxels apart laterally and 6 along Z.
 SLOTS = [(z, y, x) for z in (5.0, 11.0) for y in (8.0, 20.0, 32.0, 44.0, 56.0) for x in (8.0, 20.0, 32.0, 44.0, 56.0)]
+
+
+@contextmanager
+def golden_seed(seed):
+    """Within the block, the golden helpers (fixture_rounds, extract) draw their noise from seed."""
+    with mock.patch.object(golden, "SEED", seed):
+        yield
+
+
+def golden_rounds(seed):
+    """The golden fixture's images with seed in place of its SEED."""
+    with golden_seed(seed):
+        return golden.fixture_rounds()
+
 
 # --- crosstalk ------------------------------------------------------------------------------------
 
