@@ -39,17 +39,21 @@ ROOT = Path(__file__).resolve().parents[3]
 
 IDENTITY = ["spot_id", "gene_id", "entry_id", "call_status", "call_type"]
 COMPONENTS = ("qc_score", "qc_ambiguity_max", "qc_signal_to_background")
+# R11 tolerance, provisional: no W-278 row applies; it is floating-point agreement between the
+# implementation and the W-278 formula computed in the test (a formula identity, exact up to rounding).
+FORMULA_TOLERANCE = 1e-12
 
 
 def assert_formula(table, reference):
-    """Each score column equals the W-278 reference within 1e-12, with infinities and NaN at the same rows."""
+    """Each score column equals the W-278 reference within FORMULA_TOLERANCE, with infinities and NaN at the
+    same rows."""
     for column, expected in zip(COMPONENTS, reference):
         actual = table[column].to_numpy(dtype=float)
         assert np.array_equal(np.isnan(actual), np.isnan(expected)), column
         assert np.array_equal(np.isinf(actual), np.isinf(expected)), column
         finite = np.isfinite(actual)
         assert np.array_equal(actual[~finite & ~np.isnan(actual)], expected[~finite & ~np.isnan(expected)]), column
-        assert np.max(np.abs(actual[finite] - expected[finite]), initial=0.0) <= 1e-12, column
+        assert np.max(np.abs(actual[finite] - expected[finite]), initial=0.0) <= FORMULA_TOLERANCE, column
 
 
 # --- R11: the score definition ----------------------------------------------------------------
@@ -151,7 +155,11 @@ def test_score_reads_checks_its_inputs(tmp_path):
 
 @pytest.fixture(scope="module")
 def r12_calls():
-    """Exact and rescued assigned calls matched to truth, per decoder and condition, seeds 103 to 105."""
+    """Exact and rescued assigned calls per decoder and condition, seeds 103 to 105.
+
+    matched calls have a matched amplicon (correct when its gene is the call's); the others are
+    unmatched detections, which W-278 kept as a separate population.
+    """
     rows = []
     for condition in scenes.CONDITIONS:
         for seed in scenes.HELDOUT_SEEDS:
@@ -159,26 +167,44 @@ def r12_calls():
             matched = np.array([g is not None for g in truth_gene])
             for decoder, table in tables.items():
                 correct = np.array([t is not None and t == g for t, g in zip(truth_gene, table.gene_id.fillna(""))])
-                keep = table.call_status.eq("assigned").to_numpy() & matched
+                keep = table.call_status.eq("assigned").to_numpy()
                 rows.append(pd.DataFrame({
                     "condition": condition, "decoder": decoder,
                     "call_class": np.where(table.call_type.eq("exact"), "exact", "rescued")[keep],
+                    "matched": matched[keep],
                     "correct": correct[keep],
                     "qc_score": table.qc_score.to_numpy()[keep],
                     "decoder_score": table[scenes.DECODER_SCORE[decoder]].to_numpy()[keep]}))
     return pd.concat(rows, ignore_index=True)
 
 
+RETENTION_KEYS = ("error_at_50", "error_at_80", "error_at_90", "error_at_100")
+
+
+def _quality(calls, column):
+    """ranking_quality of one score on calls (correct ranked above the others), lower is more reliable."""
+    return ranking_quality(calls[column].to_numpy(), calls.correct.to_numpy(dtype=bool), orientation="lower")
+
+
 def _auroc(calls, column):
-    result = ranking_quality(calls[column].to_numpy(), calls.correct.to_numpy(dtype=bool), orientation="lower")
-    return result.values["auroc"]
+    return _quality(calls, column).values["auroc"]
+
+
+def _report(label, calls):
+    """One printed line per score: AUROC, its Hanley-McNeil SE and the error at each retention level."""
+    for column in ("qc_score", "decoder_score"):
+        result = _quality(calls, column)
+        values = result.values
+        errors = " ".join(f"{key[9:]}% {values[key]}" for key in RETENTION_KEYS)
+        print(f"  {label} {column}: AUROC {values['auroc']} SE {values['auroc_se']}; error at {errors}; "
+              f"calls {result.counts['scored']}, incorrect {result.counts['incorrect']}")
 
 
 @pytest.mark.extended
 @pytest.mark.slow
 @pytest.mark.validation
 def test_r12_qc_score_ranks_above_the_decoder_scores(r12_calls):
-    calls = r12_calls
+    calls = r12_calls[r12_calls.matched]
     print("\nR12 pooled AUROC (qc_score, decoder score, calls, incorrect):")
     # W-278 scores.csv (heldout, all_calibrated) pools the nine conditions; "cal" is the eight
     # without dense. Both pools are gated.
@@ -196,12 +222,29 @@ def test_r12_qc_score_ranks_above_the_decoder_scores(r12_calls):
               f"{int((~rescued.correct).sum())}")
         # call_class=rescued: 0.851 against 0.670 (12 incorrect); ordering only.
         assert qc > reference, pool
-    print("R12 per condition, exact calls (reported, not gated):")
-    for (condition, decoder), group in calls[calls.call_class == "exact"].groupby(["condition", "decoder"],
-                                                                                  sort=False):
-        qc, reference = _auroc(group, "qc_score"), _auroc(group, "decoder_score")
-        print(f"  {condition} {decoder}: qc_score {qc} decoder {reference} incorrect "
-              f"{int((~group.correct).sum())}")
+    # Reported, not gated: the full ranking_quality of each score per call_type (AUROC, Hanley-McNeil
+    # SE, error at 50, 80, 90 and 100 % retention), per condition for exact and rescued calls, and
+    # the unmatched detections (correct calls against unmatched detections, as W-278
+    # auroc_correct_vs_unmatched).
+    print("R12 ranking_quality per call_type, pooled (reported, not gated):")
+    for pool, conditions in (("all_calibrated", scenes.CONDITIONS), ("cal", scenes.CAL_CONDITIONS)):
+        population = calls[calls.condition.isin(conditions)]
+        for (decoder, call_class), group in population.groupby(["decoder", "call_class"], sort=False):
+            _report(f"{pool} {decoder} {call_class}", group)
+    for call_class in ("exact", "rescued"):
+        print(f"R12 per condition, {call_class} calls (reported, not gated):")
+        for (condition, decoder), group in calls[calls.call_class == call_class].groupby(
+                ["condition", "decoder"], sort=False):
+            qc, reference = _auroc(group, "qc_score"), _auroc(group, "decoder_score")
+            print(f"  {condition} {decoder}: qc_score {qc} decoder {reference} calls {len(group)} incorrect "
+                  f"{int((~group.correct).sum())}")
+    print("R12 unmatched detections, correct calls against unmatched detections (reported, not gated):")
+    detections = r12_calls[r12_calls.correct | ~r12_calls.matched]
+    for pool, conditions in (("all_calibrated", scenes.CONDITIONS), ("cal", scenes.CAL_CONDITIONS)):
+        population = detections[detections.condition.isin(conditions)]
+        for (decoder, call_class), group in population.groupby(["decoder", "call_class"], sort=False):
+            print(f"  {pool} {decoder} {call_class}: unmatched {int((~group.matched).sum())}")
+            _report(f"{pool} {decoder} {call_class} vs unmatched", group)
 
 
 # --- R16 and R17: checkpoints and reruns --------------------------------------------------------

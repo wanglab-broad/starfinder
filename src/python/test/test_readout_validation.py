@@ -422,10 +422,11 @@ def test_r8_direct_qc_score_ranks_above_the_decoder_score(r8_calls):
 
 @pytest.mark.validation
 @pytest.mark.parametrize("table_format", ["csv", "parquet"])
-def test_r16_two_seg_checkpoints_round_trip_exactly(tmp_path, table_format):
+@pytest.mark.parametrize("seed", HAND_SEEDS)
+def test_r16_two_seg_checkpoints_round_trip_exactly(tmp_path, seed, table_format):
     checkpoints = CheckpointConfig(stages=("candidates", "pre_qc"), directory=tmp_path / "checkpoints",
                                    table_format=table_format)
-    fov = fx.two_seg_fov(tmp_path).run(PipelineConfig(
+    fov = fx.two_seg_fov(tmp_path, seed).run(PipelineConfig(
         extraction=NeighborhoodSumConfig(), decoding=CodebookAwareDecoderConfig(), scoring=ReadScoreConfig(),
         deduplication=DeduplicationConfig(), filtering=ReadFilterConfig()), checkpoints=checkpoints)
     directory = tmp_path / "checkpoints" / "FOV_001"

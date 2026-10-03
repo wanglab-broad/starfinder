@@ -2,7 +2,8 @@
 "Direct readout").
 
 Fixture ``direct2`` is worked example 4 of docs/readout-algorithms.md: two rounds of 6×24×24
-voxels (seed 100) with four planted spots and the eight-gene panel. Check R7: the reads are
+voxels (seed 100; R7 also runs it with seeds 101 and 102, docs/readout-algorithms.md, "Engineering
+validation design") with four planted spots and the eight-gene panel. Check R7: the reads are
 Gfap, Gad1, Sst and Aqp4; the other round of each candidate is valid=False with values 0; an
 unmapped (round, channel) is unmatched with unmapped_channel; a zero own round is no_signal; a
 repeated gene or (round, channel) raises naming it. Check R16 (direct part): the candidates and
@@ -33,7 +34,7 @@ from starfinder.io import ImageLoadResult, save_volume
 from starfinder.io._checkpoint import candidates_frame, read_checkpoint, read_header, readout_mode
 from starfinder.spot_finding import LocalMaximaConfig, SpotFindingPlan
 
-from .test_readout_examples import CHANNELS, DIRECT_MAPPING, DIRECT_SPOTS, direct_images
+from .test_readout_examples import CHANNELS, DIRECT_MAPPING, DIRECT_SPOTS, direct_images, rounds
 
 pytestmark = pytest.mark.barcode
 
@@ -45,6 +46,7 @@ DETECTION = LocalMaximaConfig("noise", 10.0)
 PLAN = SpotFindingPlan(DETECTION, rounds=ROUNDS)
 GENES = ["Gfap", "Gad1", "Sst", "Aqp4"]
 OWN = [0, 0, 1, 1]  # own round index of each direct2 candidate, in DIRECT_SPOTS order
+HAND_SEEDS = (100, 101, 102)
 
 
 def direct_dataset(root, *, mode="direct", panel=DIRECT_MAPPING):
@@ -59,9 +61,20 @@ def direct_dataset(root, *, mode="direct", panel=DIRECT_MAPPING):
     return dataset
 
 
-def direct_fov(dataset):
+def seeded_images(seed):
+    """The direct2 images of test_readout_examples.direct_images with the noise of seed (100 there)."""
+    shape = (6, 24, 24)
+    rng = np.random.RandomState(seed)
+    z, y, x = np.meshgrid(*(np.arange(n, dtype=np.float64) for n in shape), indexing="ij")
+    images = {name: 100 + rng.normal(0, 3, shape + (4,)) for name in rounds(2)}
+    for name, channel, cz, cy, cx in DIRECT_SPOTS:
+        images[name][..., channel] += 1000 * np.exp(-((z - cz) ** 2 + (y - cy) ** 2 + (x - cx) ** 2) / 2)
+    return {name: np.rint(image).astype(np.uint16) for name, image in images.items()}
+
+
+def direct_fov(dataset, seed=100):
     fov = dataset.fov("FOV_001")
-    fov.images = direct_images()
+    fov.images = direct_images() if seed == 100 else seeded_images(seed)
     fov.metadata = {name: METADATA for name in ROUNDS}
     return fov
 
@@ -77,9 +90,15 @@ def loaded(fov):
 
 # --- R7: direct assignment, known answer -------------------------------------------------
 
+def test_seeded_images_equal_the_worked_example_at_seed_100():
+    for name, image in seeded_images(100).items():
+        np.testing.assert_array_equal(image, direct_images()[name], strict=True)
+
+
 @pytest.mark.validation
-def test_r7_direct2_reads_and_unavailable_other_rounds(tmp_path):
-    fov = direct_fov(direct_dataset(tmp_path)).run(pipeline())
+@pytest.mark.parametrize("seed", HAND_SEEDS)
+def test_r7_direct2_reads_and_unavailable_other_rounds(tmp_path, seed):
+    fov = direct_fov(direct_dataset(tmp_path), seed).run(pipeline())
     table = fov.decoding_result.table
     assert fov.decoding_result.readout_mode == "direct"
     assert table.gene_id.tolist() == GENES
@@ -105,17 +124,18 @@ def test_r7_direct2_reads_and_unavailable_other_rounds(tmp_path):
 
 
 @pytest.mark.validation
-def test_r7_unmapped_channel_and_zero_own_round(tmp_path):
+@pytest.mark.parametrize("seed", HAND_SEEDS)
+def test_r7_unmapped_channel_and_zero_own_round(tmp_path, seed):
     # (round2, ch01) is absent from the panel: its candidate is unmatched, the others unchanged.
     without = DIRECT_MAPPING[DIRECT_MAPPING.gene_id != "Sst"]
-    table = direct_fov(direct_dataset(tmp_path, panel=without)).run(pipeline()).decoding_result.table
+    table = direct_fov(direct_dataset(tmp_path, panel=without), seed).run(pipeline()).decoding_result.table
     assert table.call_status.tolist() == ["assigned", "assigned", "unmatched", "assigned"]
     assert table.failure_reason.tolist() == ["", "", "unmapped_channel", ""]
     assert table.gene_id.tolist()[:2] + table.gene_id.tolist()[3:] == ["Gfap", "Gad1", "Aqp4"]
     assert table.gene_id.isna().tolist() == [False, False, True, False] and table.entry_id.isna()[2]
     assert table.call_type.tolist() == ["direct", "direct", "no_call", "direct"]
     # A zero own round: round2 set to 0 after detection gives no_signal for its two candidates.
-    fov = direct_fov(direct_dataset(tmp_path / "zero"))
+    fov = direct_fov(direct_dataset(tmp_path / "zero"), seed)
     fov.find_spots(config=PLAN)
     fov.images["round2"][:] = 0
     fov.extract_intensities().decode_barcodes(config=DirectAssignmentConfig())

@@ -231,17 +231,18 @@ def test_r15_deduplication_raises_in_direct_mode(tmp_path):
 
 # --- R17: reruns with deduplication -------------------------------------------------------------
 
-def crosstalk_checkpointed(root, table_format):
+def crosstalk_checkpointed(root, table_format, seed=100):
     checkpoints = CheckpointConfig(stages=("candidates", "pre_qc"), directory=root / "checkpoints",
                                    table_format=table_format)
-    fov = fx.crosstalk_fov(root).run(crosstalk_pipeline(), checkpoints=checkpoints)
+    fov = fx.crosstalk_fov(root, seed).run(crosstalk_pipeline(), checkpoints=checkpoints)
     return fov, checkpoints
 
 
 @pytest.mark.validation
 @pytest.mark.parametrize("table_format", ["csv", "parquet"])
-def test_r17_reruns_with_deduplication_equal_the_full_run(tmp_path, table_format):
-    full, checkpoints = crosstalk_checkpointed(tmp_path, table_format)
+@pytest.mark.parametrize("seed", fx.SEEDS)
+def test_r17_reruns_with_deduplication_equal_the_full_run(tmp_path, seed, table_format):
+    full, checkpoints = crosstalk_checkpointed(tmp_path, table_format, seed)
     dataset = full.dataset
     stages = crosstalk_pipeline()
     header = json.loads((tmp_path / "checkpoints" / "FOV_001" / "pre_qc.json").read_text())
@@ -377,9 +378,10 @@ def test_r18_crosstalk_exclude_duplicates(tmp_path, seed):
 
 
 @pytest.mark.validation
-def test_r18_two_seg_per_segment_end_bases(tmp_path):
+@pytest.mark.parametrize("seed", fx.SEEDS)
+def test_r18_two_seg_per_segment_end_bases(tmp_path, seed):
     truth = fx.two_seg_truth()
-    fov = fx.two_seg_fov(tmp_path).run(PipelineConfig(
+    fov = fx.two_seg_fov(tmp_path, seed).run(PipelineConfig(
         extraction=NeighborhoodSumConfig(), decoding=WtaDecoderConfig(), scoring=ReadScoreConfig(),
         filtering=ReadFilterConfig()))
     table = fov.filtering_result.table

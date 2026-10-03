@@ -366,10 +366,14 @@ default-tier checks seconds. Each run records wall time and maximum RSS with
 The checks are in the modules of `src/python/test/` listed below, each marked
 `validation` (subsystem `barcode`). The task groups added most of them with the code
 they check; `test_readout_validation.py` adds R3, R5, R8 and R19, R6 on `cal`, and the
-`two_seg` parts of R2 and R16. Hand-built fixtures run with seeds 100 to 102 (`dropout`
-and `one_base` are the golden geometry with each of these seeds; R6 and R19 use the
-pinned golden fixture itself); the W-278-derived checks use seeds 103 to 105 with
-W-278's conditions, pipeline and matching (`readout_scenes.py`). R8, R10, R12 and R14
+`two_seg` parts of R2 and R16. Seeds of the hand-built fixtures: `two_seg` (R2, R16,
+R18), `crosstalk` (R13, R17, R18), `dropout` and `one_base` (R3, R5; the golden
+geometry with each seed) and `direct2` in R7 run with seeds 100, 101 and 102; `direct2`
+in R11, R15 and R16 runs with seed 100, the worked example's. `golden` keeps its own
+pinned seed in every check that uses it (R6, R11, R15 to R19), because its digests are
+pinned, and `bg_const` and `bg_neighbor` (R9) have no noise. The W-278-derived checks
+use seeds 103 to 105 with W-278's conditions, pipeline and matching
+(`readout_scenes.py`); R4 (`entries`), R6 and R11 on `cal`, and R19 use seed 103. R8, R10, R12 and R14
 are in the extended tier (`-m extended`; also `slow`), and R19 is `slow` in the
 default tier. Every tolerance is the one in the table above, unchanged. No check is
 skipped or marked as an expected failure. The values were measured at one thread on
@@ -380,21 +384,21 @@ one CPU.
 | R1 | `test_readout_encodings.py`, `test_r1_*` | 3,000 barcodes × 5 encoding configs round-trip exactly; the 16 pairs equal `EncodeBases.m`; 5 invalid mappings raise | exact (provisional) |
 | R2 | `test_readout_layout.py`, `test_r2_*` (16 splits × `reverse_bases`, worked example 2); `test_the_shared_split_index_is_one_based`; `test_readout_validation.py`, `test_r2_two_seg_*` | layout codebooks equal the zero-based split in all 16 cases; `[5]` gives `242324242`; on `two_seg` (both decoders) the decoding table equals the one-segment run, the 24 entry reads pass both segments, the 4 wrong-end reads pass A and fail B | exact (provisional) |
 | R3 | `test_readout_validation.py`, `test_r3_*` | gene accuracy 1.0 on the 6 clean reads; every column but `entry_id` equals the two-base run; statuses equal the golden pins (both decoders) | exact (provisional) |
-| R4 | `test_readout_entries.py`, `test_r4_*` | per-entry rows equal the unique-gene run; each of the 6 genes' counts equals its entries' sum; repeated identifiers raise naming both rows | exact (provisional) |
+| R4 | `test_readout_entries.py`, `test_r4_*` | per-entry rows equal the unique-gene run; in `summarize_reads` each of the 6 genes' counts equals its entries' sum, and the per-entry counts equal the unique-gene run's; repeated identifiers raise naming both rows | exact (provisional) |
 | R5 | `test_readout_validation.py`, `test_r5_*` | (i) candidates 0, 3 and 9 `no_signal` / `zero_signal_round`; (ii) 1 and 8 `unmatched` / `invalid_measurement`, `no_call`; (iii) no golden box reaches the band, so it changes no read, and an added candidate in the band is `no_signal`; the other 5 rows equal the unperturbed run; the score is NaN / `no_assignment` | exact (provisional) |
 | R6 | `test_readout_validation.py`, `test_r6_*`; `test_readout_golden.py` | golden extraction, decoding and filtering digests equal the pins; on `cal` seed 103, the spots, sums, `valid` and both decoding tables (without `entry_id` and score columns) equal the `141c093` digests in all 8 conditions | equal (provisional) |
-| R7 | `test_readout_direct.py`, `test_r7_*`; `test_readout_deduplication.py`, `test_r15_deduplication_raises_in_direct_mode` | `Gfap`, `Gad1`, `Sst`, `Aqp4`; other round 0 and `valid=False`; `unmapped_channel`; `no_signal`; repeated gene and (round, channel) raise; deduplication raises | exact (provisional) |
+| R7 | `test_readout_direct.py`, `test_r7_*` (seeds 100 to 102); `test_readout_deduplication.py`, `test_r15_deduplication_raises_in_direct_mode` | `Gfap`, `Gad1`, `Sst`, `Aqp4` at every seed; other round 0 and `valid=False`; `unmapped_channel`; `no_signal`; repeated gene and (round, channel) raise; deduplication raises | exact (provisional) |
 | R8 | `test_readout_validation.py`, `test_r8_*` (extended) | `qc_score` AUROC 0.790 (SE 0.029) against `probability_nll` 0.731 over the nine conditions (7,158 calls, 34 incorrect); 0.730 against 0.651 over the eight `cal` conditions (5,847, 13) | above (provisional) |
 | R9 | `test_readout_background.py`, `test_r9_*` | background 37 and noise 0; ring voxels 360 (interior), 240, 189 (faces), 66 (corner); NaN / `background_unavailable` below `min_voxels`; ring neighbor background 87, centre neighbor 37 | exact (provisional) |
 | R10 | `test_readout_background.py`, `test_r10_*` (extended) | realized-error median 2.16 to 2.48; latent bias 0.87 to 1.0, `dense` 2.0; noise relative error −13.05 % (no neighbor), −13.80 % (border); shell contamination median ≤ 2 (p90 ≤ 5), `dense` 3 (p90 6) | W-278 `estimators.csv` |
 | R11 | `test_readout_scoring.py`, `test_r11_*` | maximum absolute difference 0 on golden and the 8 `cal` conditions of seed 103, both decoders; NaN / `no_assignment`; identity columns equal | ≤ 1e-12 (provisional) |
-| R12 | `test_readout_scoring.py`, `test_r12_*` (extended) | exact, nine conditions: 0.897 against 0.782 (WTA) and 0.743 (codebook-aware), 1,589 calls, 46 incorrect; rescued 0.851 against 0.670 (97, 12); the eight `cal` conditions 0.897 against 0.795 and 0.758, rescued 0.866 against 0.749 | W-278 `scores.csv` |
+| R12 | `test_readout_scoring.py`, `test_r12_*` (extended) | exact, nine conditions: 0.897 against 0.782 (WTA) and 0.743 (codebook-aware), 1,589 calls, 46 incorrect; rescued 0.851 against 0.670 (97, 12); the eight `cal` conditions 0.897 against 0.795 and 0.758, rescued 0.866 against 0.749. Reported, not gated: SE 0.015 (`qc_score`) against 0.027 (WTA) and 0.030 (codebook-aware) on exact calls; error at 50, 80, 90 and 100 % retention 0.003, 0.006, 0.013, 0.029 (`qc_score`), 0.005, 0.016, 0.021, 0.029 (WTA); rescued SE 0.046 against 0.075, error at 90 % 0.091 against 0.114; per-condition rescued cells with 0 to 6 incorrect calls; 120 unmatched exact detections, correct against unmatched AUROC 0.473 (`qc_score`), 0.466 (WTA) and 0.460 (codebook-aware) | W-278 `scores.csv` |
 | R13 | `test_readout_deduplication.py`, `test_r13_*` | 12 copies at ≤ 1 voxel merged; 8 at √2 and 2 voxels not merged; 0 false merges of 6 pairs; the conflicting group kept; every representative is the source | exact (provisional) |
 | R14 | `test_readout_deduplication.py`, `test_r14_*` (extended) | (a) 5 of 763 distinct pairs linked (0.655 %); (b) 5 of 763 false merges for each decoder (0.655 %); 0 true duplicate pairs, so missed duplicates are undefined | (a) W-278 `duplicates.csv`; (b) provisional |
 | R15 | `test_readout_deduplication.py`, `test_r15_*` | tables equal the golden pins without the stage; direct mode raises `ValueError` | exact (provisional) |
-| R16 | `test_readout_scoring.py`, `test_r16_*`; `test_readout_direct.py`, `test_r16_*`; `test_readout_validation.py`, `test_r16_two_seg_*` | golden, `direct2` and `two_seg` (with deduplication and two segments) round-trip exactly in CSV and Parquet; the emulated `141c093` checkpoint loads without background or score | exact (provisional) |
-| R17 | `test_readout_scoring.py`, `test_r17_*`; `test_readout_deduplication.py`, `test_r17_*` | every rerun from `candidates`, `candidates` + `pre_qc` and `pre_qc` equals the full run (golden, `crosstalk`) | exact (provisional) |
-| R18 | `test_readout_deduplication.py`, `test_r18_*` | score bounds on `qc_score` and every declared column; `exclude_duplicates` rejects the 12 copies; per-segment ends on `two_seg`; the default keeps every assigned read | exact (provisional) |
+| R16 | `test_readout_scoring.py`, `test_r16_*`; `test_readout_direct.py`, `test_r16_*`; `test_readout_validation.py`, `test_r16_two_seg_*` | golden, `direct2` and `two_seg` (with deduplication and two segments, seeds 100 to 102) round-trip exactly in CSV and Parquet; the emulated `141c093` checkpoint loads without background or score | exact (provisional) |
+| R17 | `test_readout_scoring.py`, `test_r17_*`; `test_readout_deduplication.py`, `test_r17_*` | every rerun from `candidates`, `candidates` + `pre_qc` and `pre_qc` equals the full run (golden, `crosstalk` at seeds 100 to 102) | exact (provisional) |
+| R18 | `test_readout_deduplication.py`, `test_r18_*` | score bounds on `qc_score` and every declared column; `exclude_duplicates` rejects the 12 copies; per-segment ends on `two_seg`; the default keeps every assigned read (`crosstalk` and `two_seg` at seeds 100 to 102) | exact (provisional) |
 | R19 | `test_readout_validation.py`, `test_r19_*` | 164 table digests (golden, both decoders; 8 `cal` conditions of seed 103 through deduplication and filtering) identical in three single-thread processes | identical (provisional) |
 
 The W-278 limitations bound these values: synthetic data only, one 8×64×64 uint8

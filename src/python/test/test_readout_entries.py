@@ -4,7 +4,7 @@ Check R4 of docs/readout-algorithms.md on the ``entries`` fixture: the W-278 ``c
 of seed 103 (condition ``mixing``: calibrated_scene_preset("clean") with the preset's own
 crosstalk switched on, as W-278 built it) with its 16-entry codebook relabeled to 6 genes
 (entries e1-e16, genes g1-g6, 2 to 3 entries each). Per-entry decoding rows equal the run
-with unique genes, each gene's count is the sum of its entries' counts, and a repeated
+with unique genes, each gene's count in summarize_reads is the sum of its entries' counts, and a repeated
 color_sequence, entry_id or base_sequence raises naming both source rows.
 """
 import warnings
@@ -14,7 +14,7 @@ import pandas as pd
 import pytest
 
 from starfinder.barcode import (Codebook, CodebookAwareDecoderConfig, NeighborhoodSumConfig, WtaDecoderConfig,
-                                decode_barcodes, extract_intensities, load_codebook)
+                                decode_barcodes, extract_intensities, load_codebook, summarize_reads)
 from starfinder.io import ImageLoadResult
 from starfinder.spot_finding import LocalMaximaConfig, find_spots
 from starfinder.synthetic import calibrated_scene_preset, generate_formed_scene
@@ -61,7 +61,8 @@ def test_r4_entries_sharing_a_gene_decode_as_with_unique_genes(cal_103, config):
     with pytest.raises(ValueError, match="one entry per gene"):
         shared.gene_to_seq
     by_entry = decode_barcodes(intensities, unique, config=config).table
-    by_gene = decode_barcodes(intensities, shared, config=config).table
+    shared_reads = decode_barcodes(intensities, shared, config=config)
+    by_gene = shared_reads.table
     assert by_entry.call_status.eq("assigned").sum() > 0
     # Per-entry rows: status, entry, sequences and scores equal; the gene is the entry's gene.
     gene_columns = [c for c in ("gene_id", "gene_wta") if c in by_entry]
@@ -70,12 +71,15 @@ def test_r4_entries_sharing_a_gene_decode_as_with_unique_genes(cal_103, config):
     expected = by_entry.entry_id.map(GENE_OF, na_action="ignore").astype("string")
     pd.testing.assert_series_equal(by_gene.gene_id, expected, check_names=False)
     assert by_gene.entry_id.notna().eq(by_gene.call_status.eq("assigned")).all()
-    # Each gene's count is the sum of its entries' counts.
-    assigned = by_gene[by_gene.call_status.eq("assigned")]
-    per_entry = assigned.entry_id.value_counts()
-    per_gene = assigned.gene_id.value_counts()
+    # summarize_reads per gene: each gene's count is the sum of its entries' counts.
+    summary = summarize_reads(shared_reads)
+    per_entry, per_gene = summary["entries"], summary["genes"]
+    assert sum(per_gene.values()) == sum(per_entry.values()) == summary["call_status"]["assigned"]
+    assert set(per_gene) <= set(GENE_OF.values()) and set(per_entry) <= set(GENE_OF)
     for gene in set(GENE_OF.values()):
         assert per_gene.get(gene, 0) == sum(per_entry.get(e, 0) for e, g in GENE_OF.items() if g == gene)
+    # The run with unique genes reports the same per-entry counts.
+    assert summarize_reads(decode_barcodes(intensities, unique, config=config))["entries"] == per_entry
 
 
 @pytest.mark.validation
