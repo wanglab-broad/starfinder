@@ -32,7 +32,6 @@ import json
 import math
 from pathlib import Path
 import platform
-import subprocess
 import sys
 import tempfile
 import time
@@ -734,23 +733,15 @@ def _write_csv(frame, path):
     path.write_bytes(data)
 
 
-def _revision():
-    root = Path(__file__).resolve().parents[1]
-    try:
-        head = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
-        dirty = bool(subprocess.run(["git", "-C", str(root), "status", "--porcelain"], capture_output=True,
-                                    text=True).stdout.strip())
-        diff = subprocess.run(["git", "-C", str(root), "diff", "HEAD", "--binary"], capture_output=True).stdout
-        untracked = subprocess.run(["git", "-C", str(root), "ls-files", "--others", "--exclude-standard"],
-                                   capture_output=True, text=True).stdout.split()
-    except OSError:
-        return {"revision": None, "dirty": None}
-    digest = hashlib.sha256(diff)
-    for name in sorted(untracked):
-        digest.update(name.encode() + b"\0" + (root / name).read_bytes())
-    return {"revision": head, "dirty": dirty, "uncommitted_diff_sha256": digest.hexdigest() if dirty else None,
-            "uncommitted_diff": "sha256 of `git diff HEAD --binary` followed by each untracked file's name and bytes",
-            "untracked_files": sorted(untracked)}
+def _load_revision():
+    spec = importlib.util.spec_from_file_location("benchmark_revision", Path(__file__).resolve().parent / "revision.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+#: The shared revision record (benchmarks/revision.py) of this checkout.
+_revision = _load_revision().revision
 
 
 def plan(scope):

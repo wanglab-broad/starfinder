@@ -250,7 +250,8 @@ def check_revision(software, repo=ROOT, sources=EVALUATION_SOURCES):
         how = (f"sha256 of git diff {revision[:7]} {evaluated[:7]} --binary equals the manifest's "
                "uncommitted_diff_sha256")
     changed = _git(repo, "diff", "--name-only", evaluated, "--", *sources).split()
-    changed += _git(repo, "ls-files", "--others", "--exclude-standard", "--", *sources).split()
+    untracked = _git(repo, "ls-files", "-z", "--others", "--exclude-standard", "--", *sources, binary=True)
+    changed += [os.fsdecode(name) for name in untracked.split(b"\0") if name]
     if changed:
         raise RevisionMismatch(f"evaluation sources changed since {evaluated}: {', '.join(sorted(changed))}")
     return dict(manifest_revision=revision, dirty=bool(software.get("dirty")),
