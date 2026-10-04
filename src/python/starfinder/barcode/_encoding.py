@@ -7,7 +7,8 @@ transition between two consecutive DNA bases. A sliding 2-base window
 maps base pairs to colors 1-4.
 """
 
-# Forward lookup: base pair -> color
+# Forward lookup: base pair -> color. The default of EncodingConfig.pair_to_color,
+# equal to the active table of src/matlab/EncodeBases.m.
 #: Ordered nucleotide pair to STARmap color string (1..4).
 _BASE_PAIR_TO_COLOR = {
     "AA": "1", "CC": "1", "GG": "1", "TT": "1",
@@ -117,3 +118,21 @@ def decode_color_sequence(color_sequence: str, start_base: str) -> str:
         ref_base = barcode[-1]
 
     return barcode
+
+
+def encode_pairs(sequence: str, pair_to_color: dict[str, str]) -> str:
+    """encode_bases with an explicit validated pair table (EncodingConfig.pair_to_color)."""
+    return "".join(pair_to_color[sequence[i : i + 2]] for i in range(len(sequence) - 1))
+
+
+def decode_pairs(color_sequence: str, start_base: str, pair_to_color: dict[str, str]) -> str:
+    """decode_color_sequence with an explicit validated pair table.
+
+    The table gives each first base four different colors, so every step has
+    exactly one next base.
+    """
+    following = {(pair[0], color): pair[1] for pair, color in pair_to_color.items()}
+    bases = start_base
+    for color in color_sequence:
+        bases += following[bases[-1], color]
+    return bases if color_sequence else ""

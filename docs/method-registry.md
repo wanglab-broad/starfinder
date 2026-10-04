@@ -370,7 +370,9 @@ kinds), `rescue` and `score_columns`. W-293 registers `direct`
 `FOV.run`, `FOV.decode_barcodes`, `decode_barcodes`, `assign_direct` and the
 workflow adapter check the dataset's readout mode against `modes`. The barcode encodings are registered the same
 way in `ENCODINGS` (`EncodingSpec`), whose stage-specific fields are listed in
-{doc}`readout-contract`. Neither registry has `min_shape_zyx`: decoders and
+{doc}`readout-contract`; since W-304 they include `table(config)`, the encoding's
+table (`two_base`: the configurable `EncodingConfig.pair_to_color`; `one_base`:
+`base_to_color`). Neither registry has `min_shape_zyx`: decoders and
 encodings take no image.
 
 ## The preprocessing renames

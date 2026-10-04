@@ -628,8 +628,9 @@ def write_pre_qc(directory, header, decoding_result, table_format, *, scoring_re
     records the result's readout_mode; a direct decoding_config carries only its
     method. The keys scoring_config and deduplication_config are the stages'
     configs (null when the stage did not run), stages_applied lists the stages
-    that made the table, and layout is the caller's (FOV writes the codebook's
-    segment layout, null in readout mode direct).
+    that made the table, and layout and encoding are the caller's (FOV writes
+    the codebook's segment layout and its encoding: method, reverse_bases and
+    pair_to_color or base_to_color; both null in readout mode direct).
     """
     reads = next(r for r in (deduplication_result, scoring_result, decoding_result) if r is not None)
     table, dtypes = _write_table(reads.table.reset_index(drop=True), directory, "pre_qc", table_format)
@@ -640,7 +641,7 @@ def write_pre_qc(directory, header, decoding_result, table_format, *, scoring_re
         readout_mode=decoding_result.readout_mode,
         scoring_config=None if scoring_result is None else scoring_result.config,
         deduplication_config=None if deduplication_result is None else deduplication_result.config,
-        layout=header.get("layout"),
+        layout=header.get("layout"), encoding=header.get("encoding"),
         stages_applied=["decoding"] + ([] if scoring_result is None else ["scoring"])
         + ([] if deduplication_result is None else ["deduplication"]))
     write_json(header, Path(directory) / "pre_qc.json")

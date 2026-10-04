@@ -314,7 +314,17 @@ context. Colors `'1'`–`'4'` are symbols: `color_to_channel` maps them to four
 distinct zero-based channels. Encodings are registered in `ENCODINGS`:
 `EncodingConfig(reverse_bases=True)` (`two_base`) preserves STARmap/synthetic
 reversal, `OneBaseEncodingConfig` (`one_base`) maps each base through
-`base_to_color`; `encode_bases` alone does not reverse. A legacy split removes
+`base_to_color`; `encode_bases` alone does not reverse. The `two_base` table is
+`EncodingConfig.pair_to_color` (the 16 ordered base pairs to colors 1–4, default the
+active table of `EncodeBases.m`; the four pairs of one first base need four
+different colors), and every encode and decode path follows the codebook's table
+while `encode_bases` and `decode_color_sequence` keep the default.
+`EncodingSpec.table(config)` returns either encoding's table;
+{py:meth}`~starfinder.barcode.Codebook.encoding_table`,
+{py:meth}`~starfinder.dataset.Dataset.encoding_table` and
+{py:meth}`~starfinder.dataset.FOV.encoding_table` show it with the columns `bases`,
+`color` and `channel` (the latter two raise `ValueError` without a codebook or in
+readout mode `direct`). A legacy split removes
 that encoded character and swaps the remaining segments; `Codebook.layout`
 (`BarcodeLayout`) states segments, acquisition order and allowed segment ends
 explicitly. Lookup constants and numerical helpers are private; the old combined

@@ -305,7 +305,8 @@ allOf:
 
   # The explicit preprocessing and registration recipes, the spot-finding method, channel
   # overrides and rounds, the execution device, readout_mode direct, scoring,
-  # deduplication and reads_extraction.background are Python-only (backend defaults to matlab)
+  # deduplication, reads_extraction.background and load_codebook.encoding.pair_to_color are
+  # Python-only (backend defaults to matlab)
   - if:
       not:
         required: [backend]
@@ -331,6 +332,13 @@ allOf:
                       properties:
                         reads_extraction:
                           required: [background]
+                    - required: [load_codebook]
+                      properties:
+                        load_codebook:
+                          required: [encoding]
+                          properties:
+                            encoding:
+                              required: [pair_to_color]
                     - required: [spot_finding]
                       properties:
                         spot_finding:
@@ -976,14 +984,41 @@ $defs:
       encoding:
         description: >-
           Python only; method (an ENCODINGS name, default two_base) and the fields of its config
-          (two_base: reverse_bases; one_base: base_to_color, reverse_bases). The method list is kept
-          equal to ENCODINGS by a test.
+          (two_base: reverse_bases, pair_to_color; one_base: base_to_color, reverse_bases). The method
+          list is kept equal to ENCODINGS by a test.
         type: object
         properties:
           method:
             enum: ["two_base", "one_base"]
           reverse_bases:
             type: boolean
+          pair_to_color:
+            description: >-
+              Python only (MATLAB's EncodeBases.m keeps its own table; the schema rejects the key
+              unless backend: python); two_base: the 16 ordered base pairs mapped to the colors 1-4,
+              the four pairs with one first base to four different colors (checked by the adapter).
+              Without it, the default table (AA, CC, GG, TT 1; AC, CA, GT, TG 2; AG, CT, GA, TC 3;
+              AT, CG, GC, TA 4).
+            type: object
+            required: [AA, AC, AG, AT, CA, CC, CG, CT, GA, GC, GG, GT, TA, TC, TG, TT]
+            additionalProperties: false
+            properties:
+              AA: {enum: [1, 2, 3, 4, "1", "2", "3", "4"]}
+              AC: {enum: [1, 2, 3, 4, "1", "2", "3", "4"]}
+              AG: {enum: [1, 2, 3, 4, "1", "2", "3", "4"]}
+              AT: {enum: [1, 2, 3, 4, "1", "2", "3", "4"]}
+              CA: {enum: [1, 2, 3, 4, "1", "2", "3", "4"]}
+              CC: {enum: [1, 2, 3, 4, "1", "2", "3", "4"]}
+              CG: {enum: [1, 2, 3, 4, "1", "2", "3", "4"]}
+              CT: {enum: [1, 2, 3, 4, "1", "2", "3", "4"]}
+              GA: {enum: [1, 2, 3, 4, "1", "2", "3", "4"]}
+              GC: {enum: [1, 2, 3, 4, "1", "2", "3", "4"]}
+              GG: {enum: [1, 2, 3, 4, "1", "2", "3", "4"]}
+              GT: {enum: [1, 2, 3, 4, "1", "2", "3", "4"]}
+              TA: {enum: [1, 2, 3, 4, "1", "2", "3", "4"]}
+              TC: {enum: [1, 2, 3, 4, "1", "2", "3", "4"]}
+              TG: {enum: [1, 2, 3, 4, "1", "2", "3", "4"]}
+              TT: {enum: [1, 2, 3, 4, "1", "2", "3", "4"]}
           base_to_color:
             description: "one_base: A, C, G and T mapped one-to-one onto the colors 1-4"
             type: object

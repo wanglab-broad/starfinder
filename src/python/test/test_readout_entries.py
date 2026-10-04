@@ -112,7 +112,8 @@ def test_entry_lookups_and_canonical_files(tmp_path):
     assert book.entry_to_seq == {"Gfap_probe1": "1234", "Gfap_probe2": "4321", "Mbp_probe1": "2222"}
     assert book.seq_to_gene == {"1234": "Gfap", "4321": "Gfap", "2222": "Mbp"}
     assert (book.genes, book.n_genes, book.n_entries) == (["Gfap", "Mbp"], 2, 3)
-    assert repr(book) == "Codebook: 3 entries of 2 genes × 4 rounds, channels a, b, c, d"
+    assert repr(book) == ("Codebook: 3 entries of 2 genes × 4 rounds, channels a, b, c, d; "
+                          "encoding two_base, one segment of 4 colors")
     # Without entry_id, entry_id is the color_sequence.
     path.write_text("gene_id,color_sequence\nGfap,1234\n")
     book = load_codebook(path, round_labels=("r1", "r2", "r3", "r4"), channel_labels=("a", "b", "c", "d"))

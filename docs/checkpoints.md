@@ -217,12 +217,15 @@ decoder configuration stays in `decoding_config`, and `pre_qc.json` adds:
 | `scoring_config` | The `ReadScoreConfig` (`{"method": "bgcorr_probability"}`), or `null` when the reads were not scored. |
 | `deduplication_config` | The `DeduplicationConfig` (`distance_voxels`, `compatibility`) since W-295, or `null` when deduplication did not run. |
 | `layout` | The codebook's segment layout (`segments` with `name`, `bases` and `ends`, and `acquisition_order`); `null` in readout mode `direct`. A header without it is one segment. |
+| `encoding` | Since W-304, the codebook's encoding that decoded the reads: `method`, `reverse_bases` and the table, `pair_to_color` (`two_base`, the 16 ordered pairs) or `base_to_color` (`one_base`); `split_index` is left out because `layout` records it. `null` in readout mode `direct`. A header without it (written before W-304) is not checked. |
 | `stages_applied` | The stages that made the table, in order: `"decoding"`, then `"scoring"` and `"deduplication"` when they ran. |
 
 On reloading, a scored checkpoint gives `decoding_result` (the table without the
 score columns, which come last) and `scoring_result` (the whole table); an unscored
 one, or one written before W-294, gives `scoring_result=None`. A reader at `141c093`
-loads a scored `multiplexed` `pre_qc` with the score columns as ordinary columns.
+loads a scored `multiplexed` `pre_qc` with the score columns as ordinary columns,
+and it ignores the `encoding` key, as the reader at `9aeb220` does (checked by
+loading W-304 checkpoints with both readers).
 
 Since W-295 a run with `PipelineConfig.deduplication` writes the reads after
 deduplication: the table ends with `duplicate_group`, `duplicate_of` (string,
@@ -259,7 +262,9 @@ identical typed results. Empty tables keep their columns and dtypes.
 that has no results at or after that stage. It checks the FOV id (and subtile
 id), the round labels and the channel order against the dataset, and, for
 `candidates` and `pre_qc`, the readout mode (`multiplexed` when the header has
-none) against `Dataset.readout_mode`; it raises `ValueError` on a mismatch. Then call `run` with a `PipelineConfig` that starts
+none) against `Dataset.readout_mode`, and, for `pre_qc`, the recorded `encoding`
+against the loaded codebook's (since W-304; not checked when the header has none
+or no codebook is loaded); it raises `ValueError` on a mismatch, naming both values. Then call `run` with a `PipelineConfig` that starts
 after the loaded stage:
 
 ```python
@@ -316,7 +321,7 @@ run starts, after each completed step and when the run ends. It contains:
 | `error` | `null`, or the failing `step` and `round`, the exception `type`, `message` and `traceback`. |
 | `code` | Package `version`, `git_commit` and `git_dirty`; each is `null` when unknown. The commit is recorded only when the package runs from a starfinder checkout, never from an enclosing repository. |
 | `environment` | Python, platform and package versions (`null` when not installed). |
-| `config` | `pipeline`, `execution` (including the execution `device`) and `checkpoints` configurations, and `readout_mode`, the dataset's readout mode (since W-293). |
+| `config` | `pipeline`, `execution` (including the execution `device`) and `checkpoints` configurations, `readout_mode`, the dataset's readout mode (since W-293), and `encoding`, the codebook's encoding as in `pre_qc.json` (`null` without a codebook or in readout mode `direct`; since W-304). |
 | `inputs` | Loaded TIFF `path` and streamed `sha256` (`null` with `hash_inputs=False`). |
 | `steps` | `name`, `round`, `seconds` and `status` of each completed or failed step. A preprocessing step is named `preprocess:<step name>`. The `find_spots` record also has `methods`, a list with the detection's provenance entry ({doc}`method-registry`, "Provenance in run.json"): `stage` (`spot_finding`), `method`, `config_type`, `implementation`, `config`, `requires` (installed versions of the optional dependencies), `artifacts` (pretrained weights files; empty for methods without weights) and `execution` (device, framework and thread settings). For a plan that names rounds, `run` records one `find_round_spots` step per detected round, each with its own entry, and `FOV.find_spots` called inside a recorded step lists one entry per round, each with its `round`. |
 | `preprocessing` | `null` without a preprocessing recipe. Otherwise `recipe` (the step names of `steps` and `post_registration`, `extraction_source` and `registration_source`), `rounds`: per round, one record per step with `index`, `stage` (`steps` or `post_registration`), `step`, `config`, `fitted`, `diagnostics`, `input_dtype`, `output_dtype` and `save_as`; `transforms`: per round and image (`detection` and each snapshot), the transforms composed in order, each with `result` (its index in the round's registration results in `transforms.json`), `method` and `kind` (`translation`, `affine`, `bspline` or `dense`), empty for the reference round; and `supplied_statistics`. |

@@ -6,8 +6,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import pandas as pd
+
 from starfinder.barcode import (BarcodeLayout, Codebook, DirectPanel, EncodingConfig, OneBaseEncodingConfig,
     load_codebook, load_direct_panel)
+from starfinder.barcode.codebook import _encoding_summary
 from starfinder.barcode.decoding import READOUT_MODES
 from starfinder.dataset.types import (
     RoundState,
@@ -31,8 +34,9 @@ class Dataset:
     "Readout modes"): ``multiplexed`` (default) decodes color sequences with
     the codebook; ``direct`` assigns each candidate the direct_panel gene of its
     own round and channel.
-    The repr summarizes IDs, round and channel labels, the reference (codebook,
-    or the panel in direct mode) and roots.
+    The repr summarizes IDs, round and channel labels, the reference (codebook
+    with its encoding method and segment layout, or the panel in direct mode)
+    and roots.
     """
 
     # Paths
@@ -106,6 +110,8 @@ class Dataset:
             else f"{self.codebook.n_genes} genes × {len(self.codebook.round_labels)} rounds"
         )
         reference = [f"    codebook:          {codebook}"]
+        if self.codebook is not None:
+            reference.append(f"    encoding:          {_encoding_summary(self.codebook)}")
         if self.readout_mode == "direct":
             panel = ("not loaded" if self.direct_panel is None else
                      f"{self.direct_panel.n_genes} genes over {len(self.direct_panel.round_labels)} rounds")
@@ -121,6 +127,29 @@ class Dataset:
             f"    input root:        {self.input_root}",
             f"    output root:       {self.output_root}",
         ])
+
+    def encoding_table(self) -> pd.DataFrame:
+        """The barcode encoding table of the loaded codebook.
+
+        Returns
+        -------
+        pandas.DataFrame
+            :meth:`starfinder.barcode.Codebook.encoding_table`: columns bases,
+            color and channel (the channel label of the color).
+
+        Raises
+        ------
+        ValueError
+            readout_mode is ``direct`` (no barcode encoding) or no codebook is
+            loaded.
+        """
+        if self.readout_mode == "direct":
+            raise ValueError("readout_mode='direct' has no barcode encoding: reads are assigned from the "
+                             "direct panel, so there is no encoding table")
+        if self.codebook is None:
+            raise ValueError("no codebook is loaded, so there is no encoding table; call "
+                             "dataset.load_codebook() first")
+        return self.codebook.encoding_table()
 
     def fov(self, fov_id: str) -> FOV:
         """Create a new FOV instance for processing.

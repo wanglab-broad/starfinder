@@ -6,7 +6,9 @@ Encodings are registered in ENCODINGS by exact config type; the segment layout
 is a typed description on the codebook.
 """
 
-from dataclasses import KW_ONLY, dataclass, field
+from collections.abc import Mapping
+from dataclasses import KW_ONLY, dataclass, field, fields
+from itertools import product
 from numbers import Integral
 from pathlib import Path
 from typing import Any, Callable
@@ -15,7 +17,7 @@ import csv
 import pandas as pd
 
 from starfinder._registry import Dependency, check_name, spec_for
-from ._encoding import decode_color_sequence, encode_bases
+from ._encoding import _BASE_PAIR_TO_COLOR, decode_pairs, encode_pairs
 from ._layout import (
     BarcodeLayout,
     Segment,
@@ -28,6 +30,31 @@ from ._layout import (
 )
 
 _BASES = "ACGT"
+# The 16 ordered base pairs in table order (AA, AC, ..., TT).
+_PAIRS = tuple(a + b for a, b in product(_BASES, repeat=2))
+
+
+def _pair_table(mapping):
+    """Validated copy of a two_base pair_to_color table, in _PAIRS order; ValueError naming the problem."""
+    if not isinstance(mapping, Mapping):
+        raise ValueError("pair_to_color must be a mapping of the 16 ordered base pairs to the colors 1-4")
+    missing = [p for p in _PAIRS if p not in mapping]
+    unexpected = [k for k in mapping if k not in _PAIRS]
+    if missing or unexpected:
+        problems = ([f"missing {', '.join(missing)}"] if missing else []) + (
+            [f"unexpected {', '.join(map(repr, unexpected))}"] if unexpected else [])
+        raise ValueError("pair_to_color keys must be exactly the 16 ordered pairs of A, C, G and T; "
+                         + "; ".join(problems))
+    bad = {p: mapping[p] for p in _PAIRS if not isinstance(mapping[p], str) or mapping[p] not in tuple("1234")}
+    if bad:
+        raise ValueError(f"pair_to_color colors must be the strings '1' to '4'; got {bad}")
+    for first in _BASES:
+        colors = [mapping[first + second] for second in _BASES]
+        if len(set(colors)) != 4:
+            given = ", ".join(f"{first}{second} {color}" for second, color in zip(_BASES, colors))
+            raise ValueError(f"pair_to_color must give the four pairs that start with {first} four different "
+                             f"colors (else decoding from {first} is ambiguous); got {given}")
+    return {p: mapping[p] for p in _PAIRS}
 
 
 def _labels(labels, name):
@@ -44,6 +71,13 @@ def _labels(labels, name):
 class EncodingConfig:
     """two_base encoding: reverse bases before encoding; optionally remove/swap at split_index.
 
+    pair_to_color maps each of the 16 ordered base pairs (in read orientation) to
+    a color "1" to "4"; the default is the active table of src/matlab/EncodeBases.m
+    (AA, CC, GG, TT 1; AC, CA, GT, TG 2; AG, CT, GA, TC 3; AT, CG, GC, TA 4). The
+    four pairs that start with one base must have four different colors, so a
+    color sequence decodes from its first base. The table may be given in any key
+    order and is stored as a copy in AA, AC, ..., TT order; it can relabel the
+    colors or pair the bases differently.
     The split indexes the encoded sequence (zero-based), removes that color, then
     moves the trailing segment before the leading segment. Both segments must be
     nonempty. split_index is the legacy two-segment form: a codebook translates it
@@ -53,6 +87,7 @@ class EncodingConfig:
 
     reverse_bases: bool = True
     split_index: int | None = None
+    pair_to_color: dict[str, str] = field(default_factory=lambda: dict(_BASE_PAIR_TO_COLOR))
     method: str = field(default="two_base", init=False)
 
     def __post_init__(self):
@@ -64,12 +99,17 @@ class EncodingConfig:
             or self.split_index < 1
         ):
             raise ValueError("split_index must be a positive integer")
+        object.__setattr__(self, "pair_to_color", _pair_table(self.pair_to_color))
+
+    def __hash__(self):
+        # The table is a dict; hash its items so the config stays hashable.
+        return hash((self.reverse_bases, self.split_index, tuple(self.pair_to_color.items()), self.method))
 
     def encode(self, bases: str) -> str:
         """Encode one validated base sequence with this declared policy."""
         if not isinstance(bases, str) or len(bases) < 2 or any(b not in "ACGT" for b in bases):
             raise ValueError("base_sequence must contain at least two uppercase A/C/G/T bases")
-        seq = encode_bases(bases[::-1] if self.reverse_bases else bases)
+        seq = encode_pairs(bases[::-1] if self.reverse_bases else bases, self.pair_to_color)
         if self.split_index is not None:
             i = self.split_index
             if i >= len(seq) - 1:
@@ -116,6 +156,8 @@ class EncodingSpec:
     adjacent segments that are never acquired. alphabet holds the color symbols,
     which map to channels through Codebook.color_to_channel; symbols is the kind a
     decoder declares in DecodingSpec.encodings ("color": one color per round).
+    table(config) is the config's encoding table, a new dict from bases to color
+    (two_base: pair_to_color, the 16 ordered pairs; one_base: base_to_color).
     requires lists optional dependencies.
     """
 
@@ -126,13 +168,14 @@ class EncodingSpec:
     _: KW_ONLY
     needs_first_base: bool
     junction_colors: int
+    table: Callable[[Any], dict[str, str]]
     alphabet: str = "1234"
     symbols: str = "color"
     requires: tuple[Dependency, ...] = ()
 
     def __post_init__(self):
         check_name(self.name, "encoding")
-        for name in ("encode", "decode", "colors_for"):
+        for name in ("encode", "decode", "colors_for", "table"):
             if not callable(getattr(self, name)):
                 raise TypeError(f"encoding {self.name!r} {name} must be callable")
         if not isinstance(self.needs_first_base, bool):
@@ -162,14 +205,14 @@ def _colors(colors, alphabet="1234"):
 
 def _two_base_encode(bases, config):
     _segment(bases, 2)
-    return encode_bases(read_orientation(bases, config))
+    return encode_pairs(read_orientation(bases, config), config.pair_to_color)
 
 
 def _two_base_decode(colors, config, first_base):
     _colors(colors)
     if first_base not in tuple(_BASES):
         raise ValueError("two_base decoding needs the first base (A/C/G/T) in read orientation")
-    return read_orientation(decode_color_sequence(colors, first_base), config)
+    return read_orientation(decode_pairs(colors, first_base, config.pair_to_color), config)
 
 
 def _one_base_encode(bases, config):
@@ -187,10 +230,10 @@ def _one_base_decode(colors, config, first_base=None):
 ENCODINGS: dict[type, EncodingSpec] = {
     EncodingConfig: EncodingSpec(
         "two_base", _two_base_encode, _two_base_decode, lambda n: n - 1,
-        needs_first_base=True, junction_colors=1),
+        needs_first_base=True, junction_colors=1, table=lambda config: dict(config.pair_to_color)),
     OneBaseEncodingConfig: EncodingSpec(
         "one_base", _one_base_encode, _one_base_decode, lambda n: n,
-        needs_first_base=False, junction_colors=0),
+        needs_first_base=False, junction_colors=0, table=lambda config: dict(config.base_to_color)),
 }
 
 
@@ -198,6 +241,33 @@ def encoding_spec(config) -> EncodingSpec:
     """Spec registered for type(config) exactly; TypeError otherwise."""
     return spec_for(ENCODINGS, config, "encoding", TypeError,
                     "encoding must be a config registered in ENCODINGS (exact type)")
+
+
+def _encoding_record(config) -> dict:
+    """The recorded encoding of checkpoints and run.json: method and the config fields but split_index.
+
+    two_base gives method, reverse_bases and pair_to_color; one_base method,
+    base_to_color and reverse_bases. split_index is left out: the effective
+    segment layout is recorded beside it (header key layout).
+    """
+    return {"method": config.method, **{f.name: getattr(config, f.name) for f in fields(config)
+                                        if f.init and f.name != "split_index"}}
+
+
+_COUNTS = ("one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten")
+
+
+def _encoding_summary(codebook) -> str:
+    """The encoding method and segment layout in words, for example "two_base, two segments of 5 and 4 colors"."""
+    spec = encoding_spec(codebook.encoding)
+    colors = [str(spec.colors_for(s.bases)) for s in codebook.layout.acquired]
+    n = len(colors)
+    count = _COUNTS[n - 1] if n <= len(_COUNTS) else str(n)
+    sizes = colors[0] if n == 1 else ", ".join(colors[:-1]) + " and " + colors[-1]
+    text = f"{spec.name}, {count} segment{'s' if n > 1 else ''} of {sizes} colors"
+    if type(codebook.encoding) is EncodingConfig and codebook.encoding.pair_to_color != _BASE_PAIR_TO_COLOR:
+        text += ", non-default pair_to_color table"
+    return text
 
 
 def _layout(encoding, spec, layout, n_rounds):
@@ -268,7 +338,10 @@ class Codebook:
     layout None means one segment over the whole barcode, or the two segments of
     a legacy EncodingConfig.split_index; after validation it holds the effective
     layout. A segment with declared ends rejects an entry whose ends differ.
-    The repr is a one-line size and label summary without table rows.
+    The repr is a one-line size and label summary without table rows, ending
+    with the encoding method and the segment layout (and a note when a two_base
+    pair_to_color table is not the default). encoding_table() shows the
+    encoding's table with the channel of each color.
     """
 
     table: pd.DataFrame
@@ -349,8 +422,26 @@ class Codebook:
         )
         return (
             f"Codebook: {size} × {len(self.round_labels)} rounds, "
-            f"channels {', '.join(self.channel_labels)}"
+            f"channels {', '.join(self.channel_labels)}; encoding {_encoding_summary(self)}"
         )
+
+    def encoding_table(self) -> pd.DataFrame:
+        """The encoding's table with the channel label of each color.
+
+        Returns
+        -------
+        pandas.DataFrame
+            Columns bases, color and channel (the channel label of the color
+            through color_to_channel), all strings, one row per table key in
+            table order: the 16 ordered base pairs (in read orientation) of
+            two_base's pair_to_color, or the four bases of one_base's
+            base_to_color.
+        """
+        table = encoding_spec(self.encoding).table(self.encoding)
+        return pd.DataFrame({
+            "bases": list(table), "color": list(table.values()),
+            "channel": [self.channel_labels[self.color_to_channel[c]] for c in table.values()],
+        }).astype("string")
 
     @property
     def gene_to_seq(self):

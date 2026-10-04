@@ -123,7 +123,7 @@ is specifically for the Python batch/direct wrapper.
 | `create_subtiles` | boolean `run`, integer `sqrt_pieces` >=1 | Grid default 4; only GR/deep creation rules produce subtile files; Python creation scripts call splitting unconditionally |
 | `local_registration` | boolean `run`, string `ref_round`, method `demons`,`bspline`,`tps`,`cpd` or the demons variants `diffeomorphic`,`symmetric`,`fast_symmetric` (schema default `demons`); Python-only `ref_img`/`mov_img` | Python: the recipe's local step, after the global one; translates supported method-specific settings; `ref_img`/`mov_img` default to `merged-image` (the channel maximum); `boundary_mode` must agree with the global block (one final resampling); demons needs optional SimpleITK, B-spline the `registration-elastix` extra; MATLAB wrappers do not forward `method`; deep subtile does not perform local registration |
 | `spot_finding` | boolean `run`, string `ref_round`, nonnegative numeric `intensity_threshold`, mode `global`,`noise`,`adaptive`,`adaptive_round`; Python-only `method`, the selected config's fields, `channel_overrides` and `rounds` | Python wrappers default mode to `noise` but require a threshold when used; pass both explicitly. Python rules: see [the method key](#spot-finding-method-key); MATLAB supports adaptive/global only |
-| `load_codebook` | boolean `run`, integer-array `split_index`; Python-only `encoding` (`method` `two_base` or `one_base` and that config's fields) | `split_index` is **one-based**: MATLAB's position in the encoded color string of the junction color that is removed (aging `[5]`). Python wrappers load unconditionally, turn missing/empty split into None and translate `[s]` into the two-segment layout, equal to the zero-based `EncodingConfig(split_index=s - 1)` ([segment layout](#codebook-segment-layout)); MATLAB respects `run` |
+| `load_codebook` | boolean `run`, integer-array `split_index`; Python-only `encoding` (`method` `two_base` or `one_base` and that config's fields; `two_base`: `reverse_bases` and `pair_to_color`, see [encoding table](#codebook-encoding-table)) | `split_index` is **one-based**: MATLAB's position in the encoded color string of the junction color that is removed (aging `[5]`). Python wrappers load unconditionally, turn missing/empty split into None and translate `[s]` into the two-segment layout, equal to the zero-based `EncodingConfig(split_index=s - 1)` ([segment layout](#codebook-segment-layout)); MATLAB respects `run` |
 | `reads_extraction` | boolean `run`, exactly three integers >=1 in `voxel_size`; Python-only `background` (`false` or `inner_radius_zyx`, `outer_radius_zyx`, `min_voxels`) | Pixel half-widths, Python `(z,y,x)` versus MATLAB `(row,column,z)`; e.g. `[1,2,2]` versus `[2,2,1]`, not physical microns. Python rules measure the local background and noise next to the sums (`LocalBackgroundConfig`, on by default; {doc}`readout-contract`, "Extraction"); `background: false` turns it off. Without the key, the default ring (inner box `(1,3,3)`, outer box `(1,6,6)`, `min_voxels` 16) grows by the same number of voxels in both boxes along any axis where `voxel_size` exceeds the inner box, so the inner box contains the extraction box |
 | `reads_filtration` | boolean `run`, string or string-array `end_base`, integer `n_barcode_segments` >=1, integer-array `split_index` | Python wrappers forward a string `end_base` and extra `start_base` (default `C`) to `ReadFilterConfig`; a list `end_base` becomes the allowed ends of the layout's segments; `n_barcode_segments` and this block's `split_index`, when given, must agree with the layout ([segment layout](#codebook-segment-layout)); MATLAB forwards segment count and split |
 | `decoding` | Python-only `method` (`wta`, `codebook_aware` or `direct`) and that config's fields | Python rules only: the decoder used with `reads_filtration.run`; default `WtaDecoderConfig(diagnostics=True)`, or `DirectAssignmentConfig()` with `readout_mode: direct`; the adapter sets `diagnostics` true and `allow_rescue` false unless given; a method that does not support the readout mode raises `TypeError` |
@@ -184,6 +184,32 @@ raises when the codebook is loaded; reads are checked per segment by
 load_codebook: {run: true, split_index: [5]}
 reads_filtration: {run: true, n_barcode_segments: 2, split_index: [5], end_base: ["CC", "TT"]}
 ```
+
+## Codebook encoding table
+
+The Python-only `load_codebook.encoding.pair_to_color` sets the `two_base` table of
+`EncodingConfig.pair_to_color` ({doc}`readout-contract`, "Encoding registry"): the
+16 ordered base pairs, in read orientation, each mapped to a color 1–4 (integers
+or strings), where the four pairs that start with one base have four different
+colors. The adapter gives the same codebook as the Python call and raises the same
+`ValueError` for an invalid table; without the key the table is the default, the
+active table of `EncodeBases.m`. The schema accepts the key only with
+`backend: python`: MATLAB keeps its own table. For example, the second table kept
+as comments in `EncodeBases.m`:
+
+```yaml
+backend: python
+# under rules.<rule>.parameters:
+load_codebook:
+  run: true
+  encoding:
+    method: two_base
+    pair_to_color: {AT: 1, TA: 1, GC: 1, CG: 1, AC: 2, CA: 2, GT: 2, TG: 2,
+                    AA: 3, TT: 3, GG: 3, CC: 3, AG: 4, GA: 4, CT: 4, TC: 4}
+```
+
+`Dataset.encoding_table()` shows the loaded table with the channel of each color,
+and `pre_qc.json` and `run.json` record it ({doc}`checkpoints`).
 
 ## Readout mode
 

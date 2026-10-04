@@ -656,6 +656,32 @@ codebook's encoding kind is not one the decoder declares. The decoders' numerica
 behavior is unchanged. `Codebook(encoding=...)` accepts any registered encoding
 config; `Dataset.load_codebook` gains keyword-only `encoding` and `layout`.
 
+### Encoding table
+
+W-304 makes the `two_base` pair-to-color table visible, configurable and recorded
+({doc}`readout-contract`, "Encoding registry"). {py:class}`~starfinder.barcode.EncodingConfig`
+gains `pair_to_color`, the 16 ordered base pairs mapped to the colors `"1"` to `"4"`,
+whose default is the active table of `src/matlab/EncodeBases.m`; `EncodingConfig()`
+and every default result are unchanged, the positional constructor is unchanged,
+and the module functions `encode_bases` and `decode_color_sequence` keep the default
+table. A table whose keys are not the 16 pairs, whose values are not `"1"` to `"4"`,
+or in which the four pairs of one first base do not have four different colors
+raises `ValueError`. Every encode and decode path follows the codebook's table,
+including the `end_bases` shortcut of `filter_reads` when the codebook is given.
+`EncodingSpec` gains the required keyword field `table`;
+{py:meth}`~starfinder.barcode.Codebook.encoding_table`,
+{py:meth}`~starfinder.dataset.Dataset.encoding_table` and
+{py:meth}`~starfinder.dataset.FOV.encoding_table` show the table with the channel of
+each color. `repr(codebook)` ends with the encoding method and segment layout, and
+`repr(dataset)` gains an `encoding:` line after `codebook:` when a codebook is
+loaded. The Python-only YAML key `load_codebook.encoding.pair_to_color` sets the
+table (the schema rejects it unless `backend: python`; MATLAB is unchanged).
+`pre_qc.json` and `run.json` (`config.encoding`) record the encoding (`method`,
+`reverse_bases`, and `pair_to_color` or `base_to_color`) under a new key beside
+`layout`, with `FORMAT_VERSION` 2; loading a `pre_qc` checkpoint into a dataset
+whose codebook has another encoding raises `ValueError` naming both, and a
+checkpoint without the key loads as before.
+
 ### Segment layout
 
 {py:class}`~starfinder.barcode.BarcodeLayout` and

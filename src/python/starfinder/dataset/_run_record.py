@@ -76,6 +76,10 @@ class _RunRecord:
         self.failure = None
         self._methods = None
         dataset = fov.dataset
+        from starfinder.barcode.codebook import _encoding_record
+        # The codebook's encoding (null without a codebook or in readout mode direct).
+        encoding = (_encoding_record(dataset.codebook.encoding)
+                    if dataset.codebook is not None and dataset.readout_mode == "multiplexed" else None)
         self.data = {
             "format_version": FORMAT_VERSION, "dataset_id": dataset.dataset_id,
             "sample_id": dataset.sample_id, "fov_id": fov.fov_id, "subtile_id": fov.subtile_id,
@@ -83,7 +87,7 @@ class _RunRecord:
             "code": _code(), "environment": _environment(),
             # The dataset's readout mode (docs/readout-contract.md) is recorded with the configs.
             "config": {"pipeline": config, "execution": execution, "checkpoints": checkpoints,
-                       "readout_mode": dataset.readout_mode},
+                       "readout_mode": dataset.readout_mode, "encoding": encoding},
             "inputs": [], "steps": [], "preprocessing": None, "registration": {}, "counts": {},
             "checkpoint_directory": str(self.directory), "checkpoints": {},
         }

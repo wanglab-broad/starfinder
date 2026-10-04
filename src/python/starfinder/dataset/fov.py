@@ -182,6 +182,16 @@ class FOV:
         """
         return self.dataset.codebook
 
+    def encoding_table(self) -> pd.DataFrame:
+        """The barcode encoding table of the dataset codebook (:meth:`Dataset.encoding_table`).
+
+        Raises
+        ------
+        ValueError
+            readout_mode is ``direct`` or no codebook is loaded.
+        """
+        return self.dataset.encoding_table()
+
     # --- Summaries ---
 
     @property
@@ -1393,9 +1403,11 @@ class FOV:
         elif stage == 'pre_qc':
             if self.decoding_result is None:
                 raise ValueError('pre_qc checkpoint requires decoding_result')
-            layout = (self.codebook.layout if self.decoding_result.readout_mode == 'multiplexed'
-                      and self.codebook is not None else None)
-            header.update(layout=layout)
+            from starfinder.barcode.codebook import _encoding_record
+            recorded = self.decoding_result.readout_mode == 'multiplexed' and self.codebook is not None
+            # The encoding that decoded the reads is recorded beside the layout (null in direct mode).
+            header.update(layout=self.codebook.layout if recorded else None,
+                          encoding=_encoding_record(self.codebook.encoding) if recorded else None)
             files = io.write_pre_qc(directory, header, self.decoding_result, table_format,
                                     scoring_result=self.scoring_result,
                                     deduplication_result=self.deduplication_result)
@@ -1479,7 +1491,10 @@ class FOV:
             This FOV already has results at or after the stage, or the saved
             FOV id, round labels or channel order differ from this FOV, or a
             candidates or pre_qc checkpoint's readout mode (multiplexed when
-            the header has none) differs from the dataset's.
+            the header has none) differs from the dataset's, or a pre_qc
+            checkpoint's recorded encoding (method, reverse_bases and table)
+            differs from the loaded codebook's. A checkpoint without the
+            encoding key, or a dataset without a codebook, is not checked.
         FileNotFoundError
             The stage was not written.
         """
@@ -1504,6 +1519,12 @@ class FOV:
         if stage != 'registered' and io_readout_mode(header) != self.dataset.readout_mode:
             raise ValueError(f'{stage} checkpoint readout mode {io_readout_mode(header)!r} differs from the '
                              f'dataset ({self.dataset.readout_mode!r})')
+        if header.get('encoding') is not None and self.codebook is not None:
+            from starfinder.barcode.codebook import _encoding_record
+            current = _jsonable(_encoding_record(self.codebook.encoding))
+            if header['encoding'] != current:
+                raise ValueError(f"{stage} checkpoint encoding {header['encoding']} differs from the dataset "
+                                 f"codebook's encoding ({current}); load the codebook with the recorded encoding")
         for name, value in read_checkpoint(directory, stage).items():
             setattr(self, name, value)
         return self

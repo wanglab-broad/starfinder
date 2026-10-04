@@ -4,9 +4,9 @@ from collections import Counter
 from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
-from ._encoding import decode_color_sequence
+from ._encoding import _BASE_PAIR_TO_COLOR, decode_pairs
 from ._layout import colors_have_ends, segment_colors
-from .codebook import Codebook, encoding_spec
+from .codebook import Codebook, EncodingConfig, encoding_spec
 from .decoding import DECODING_METHODS, BarcodeDecodingResult
 from .deduplication import ReadDeduplicationResult
 from .scoring import SCORE_COLUMNS, ReadScoringResult
@@ -32,7 +32,9 @@ class ReadFilterConfig:
     duplicates (is_representative false) with reason duplicate; it has no effect
     on reads that were not deduplicated. Endpoint checks are diagnostic-only
     unless exclude_invalid_endpoints is True. end_bases means first/last base of
-    the whole sequence decoded from start_base: the one-segment shortcut. Segment
+    the whole sequence decoded from start_base (with the pair_to_color table of a
+    two_base codebook given to filter_reads, else the default two_base table):
+    the one-segment shortcut. Segment
     ends declared on the codebook layout are checked per segment instead (see
     filter_reads); exclusion needs one of the two.
     """
@@ -183,11 +185,14 @@ def filter_reads(
         if config.exclude_duplicates:
             reject(duplicate, "duplicate")
     if config.end_bases is not None:
+        # The codebook's two_base table when it has one, so no read is decoded with another table.
+        pairs = (codebook.encoding.pair_to_color if codebook is not None
+                 and type(codebook.encoding) is EncodingConfig else _BASE_PAIR_TO_COLOR)
 
         def endpoint(seq):
             if pd.isna(seq) or not seq or any(c not in "1234" for c in seq):
                 return False
-            bases = decode_color_sequence(seq, config.start_base)
+            bases = decode_pairs(seq, config.start_base, pairs)
             return bool(bases and bases[0] + bases[-1] == config.end_bases)
 
         table["endpoint_valid"] = table.observed_color_sequence.map(endpoint).astype(bool)

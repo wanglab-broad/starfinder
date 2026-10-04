@@ -312,15 +312,21 @@ def _split_layout(split_index, n_bases, *, reverse_bases=True, ends=((), ())):
 
 
 def _encoding(values):
-    """Encoding config of the Python-only load_codebook.encoding mapping (method default two_base)."""
+    """Encoding config of the Python-only load_codebook.encoding mapping (method default two_base).
+
+    two_base takes reverse_bases and pair_to_color (the 16 ordered base pairs to
+    colors 1-4; without it the default table), one_base base_to_color and
+    reverse_bases. YAML integer colors are read as the color strings.
+    """
     if not isinstance(values, dict):
         raise TypeError('load_codebook.encoding must be a mapping')
     values = dict(values)
     config_type = config_type_for(ENCODINGS, values.pop('method', 'two_base'), 'encoding')
     # split_index stays the shared load_codebook key; it is translated into the layout.
     _known(values, {f.name for f in fields(config_type) if f.init} - {'split_index'}, 'load_codebook.encoding')
-    if isinstance(values.get('base_to_color'), dict):
-        values['base_to_color'] = {str(k): str(v) for k, v in values['base_to_color'].items()}
+    for key in ('base_to_color', 'pair_to_color'):
+        if isinstance(values.get(key), dict):
+            values[key] = {str(k): str(v) for k, v in values[key].items()}
     return config_type(**values)
 
 
@@ -536,7 +542,8 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
     EncodingConfig.split_index s - 1); reads_filtration.n_barcode_segments,
     reads_filtration.split_index and a list end_base are checked against and
     translated into that layout. The Python-only load_codebook.encoding names an
-    ENCODINGS method (default two_base) with its config fields, and the
+    ENCODINGS method (default two_base) with its config fields (two_base:
+    reverse_bases and pair_to_color, the default table when absent), and the
     Python-only decoding key a DECODING_METHODS method (default wta) with its
     config fields; the adapter decodes with diagnostics and without rescue
     unless that key sets them. Whenever it decodes, the adapter also scores

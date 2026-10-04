@@ -92,6 +92,7 @@ def test_fov_and_dataset_summaries_on_small_synthetic_run(small_dataset, tmp_pat
         "    other rounds:      none",
         "    channels:          ch00, ch01, ch02, ch03",
         f"    codebook:          {ds.codebook.n_genes} genes × 4 rounds",
+        "    encoding:          two_base, one segment of 4 colors",
         f"    input root:        {tmp_path}",
         f"    output root:       {tmp_path / 'output'}",
     ]
@@ -132,7 +133,7 @@ def test_result_classes_have_one_line_summaries(tmp_path):
     ds = dataset(tmp_path)
     fov = resident(ds).run(full())
     summaries = [
-        (ds.codebook, "Codebook: 2 genes × 2 rounds, channels a, b, c, d"),
+        (ds.codebook, "Codebook: 2 genes × 2 rounds, channels a, b, c, d; encoding two_base, one segment of 2 colors"),
         (fov.spot_result, "SpotFindingResult: 4 spots × [spot_id, z, y, x, ...]"),
         (fov.intensity_result, "IntensityExtractionResult: 4 spots × 4 channels × 2 rounds"),
         (fov.decoding_result, "BarcodeDecodingResult: 4 reads — assigned 1, ambiguous 2, unmatched 1"),
