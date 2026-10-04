@@ -10,7 +10,8 @@ This module adds:
   and the per-segment end checks of entry reads and of the planted wrong-end reads;
 * R3 on ``one_base``: the golden geometry with a one_base codebook;
 * R5 on ``dropout``: required rounds and acquisition-local failures on the golden geometry;
-* R6: the golden pins and the 141c093 output on ``cal`` seed 103, without the new columns;
+* R6: the golden pins and the 141c093 output on ``cal`` seed 103, without the new columns (on
+  ``cal`` the float columns of the decoding tables within 1e-12, every other column exact);
 * R8 (extended tier) on ``cal_direct``: the ranking of direct calls;
 * R16 on ``two_seg``: checkpoints with background, score, deduplication and two segments;
 * R19: SHA-256 of every table of ``golden`` and ``cal`` seed 103 in three single-thread
@@ -307,12 +308,45 @@ PINNED_CAL_141C093 = {
 }
 
 
-def cal_digests(condition):
-    """(spots, values, valid, WTA, codebook-aware) digests of the pipeline without the §2.8 columns."""
+#: R6 on ``cal`` compares the float columns of the decoding tables numerically. Provisional: no
+#: W-278 row covers it. The last bit of np.log and np.sqrt depends on the CPU, so the %.17g digest
+#: of a float column holds on the host that wrote the pins and not on every host; 1e-12 is far
+#: below any digit a decoding decision or a printed score depends on.
+R6_FLOAT_TOLERANCE = 1e-12
+R6_DECODERS = ("wta", "codebook_aware")
+#: The float columns of the 141c093 decoding tables on ``cal`` seed 103 (written by write_r6_reference).
+R6_REFERENCE = Path(__file__).parent / "data" / "readout_r6_cal_141c093"
+
+
+def cal_tables(condition):
+    """(spots, intensities, decoding tables without the §2.8 columns) of the W-278 pipeline at seed 103."""
     spots, intensities, tables, _ = scenes.pipeline(condition, 103)
-    return ((golden.table_digest(spots.spots), golden.digest(intensities.values), golden.digest(intensities.valid))
-            + tuple(golden.table_digest(without(tables[name], ["entry_id", *SCORE_COLUMNS]))
-                    for name in ("wta", "codebook_aware")))
+    return spots, intensities, {name: without(tables[name], ["entry_id", *SCORE_COLUMNS]) for name in R6_DECODERS}
+
+
+def float_columns(table):
+    return list(table.select_dtypes(include="floating").columns)
+
+
+def r6_reference(condition, decoder):
+    """The 141c093 float columns of one decoding table; %.17g text round-trips float64 exactly."""
+    return pd.read_csv(R6_REFERENCE / f"{condition}_{decoder}.csv", dtype=np.float64, float_precision="round_trip")
+
+
+def write_r6_reference(directory=R6_REFERENCE):
+    """Write the float columns of the ``cal`` decoding tables as the R6 reference.
+
+    Run from src/python on a host where the %.17g table digests equal PINNED_CAL_141C093, which
+    this function checks first: there the tables are the 141c093 output bit for bit.
+    """
+    directory.mkdir(parents=True, exist_ok=True)
+    for condition in scenes.CAL_CONDITIONS:
+        _, _, tables = cal_tables(condition)
+        for name, pin in zip(R6_DECODERS, PINNED_CAL_141C093[condition][3:]):
+            if golden.table_digest(tables[name]) != pin:
+                raise RuntimeError(f"{condition} {name}: this host does not reproduce the 141c093 digest")
+            tables[name][float_columns(tables[name])].to_csv(
+                directory / f"{condition}_{name}.csv", index=False, float_format="%.17g", na_rep="nan")
 
 
 @pytest.mark.validation
@@ -334,7 +368,21 @@ def test_r6_golden_tables_without_the_new_columns_equal_the_pins(tmp_path, decod
 @pytest.mark.validation
 @pytest.mark.parametrize("condition", scenes.CAL_CONDITIONS)
 def test_r6_cal_seed_103_without_the_new_columns_equals_141c093(condition):
-    assert cal_digests(condition) == PINNED_CAL_141C093[condition]
+    spots, intensities, tables = cal_tables(condition)
+    pinned = PINNED_CAL_141C093[condition]
+    assert (golden.table_digest(spots.spots), golden.digest(intensities.values),
+            golden.digest(intensities.valid)) == pinned[:3]
+    for name, pin in zip(R6_DECODERS, pinned[3:]):
+        table, reference = tables[name], r6_reference(condition, name)
+        columns = float_columns(table)
+        assert list(reference.columns) == columns and len(reference) == len(table)
+        # Every other column is exact: with the 141c093 float columns in place of the computed
+        # ones, the table has the 141c093 digest.
+        with_reference = table.copy()
+        with_reference[columns] = reference.to_numpy()
+        assert golden.table_digest(with_reference) == pin, name
+        np.testing.assert_allclose(table[columns].to_numpy(), reference.to_numpy(), rtol=R6_FLOAT_TOLERANCE,
+                                   atol=R6_FLOAT_TOLERANCE, equal_nan=True, err_msg=name)
 
 
 # --- R8: direct assignment on the calibrated scenes (extended tier) --------------------------------------
