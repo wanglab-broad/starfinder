@@ -21,6 +21,10 @@ Maintained source-derived configuration and adapters for the common
 - `image_statistics.py`: intensity, puncta and noise statistics of one real TIFF or synthetic channel
   volume, and the read-only real-data measurement behind the synthetic calibration targets (W-238);
   see [image statistics](../docs/image-statistics.md).
+- `revision.py`: the source revision record that `preprocessing_synthetic.py` and `image_statistics.py`
+  write into their manifests (W-288): HEAD, dirty state, the untracked paths and the sha256 of
+  `git diff HEAD --binary` followed by each untracked path's name and bytes; an untracked directory
+  entry, such as a nested Git repository, contributes its name only.
 
 Original scripts, results and restricted reference snapshots remain external.
 These new implementations follow the Python package's declared MIT terms;
