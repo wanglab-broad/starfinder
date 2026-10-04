@@ -29,6 +29,7 @@ An em dash in the default column means the schema defines no default.
 | `seq_channel_order` | array of strings | No | —; set explicit patterns for Python, e.g. `[ch00, ch02, ch01, ch03]` |
 | `additional_round` | array of objects with string `round_name` | No | —; supply `[]` when unused; accessed at parse time |
 | `backend` | `python` or `matlab` | No | `matlab` |
+| `readout_mode` | `multiplexed` or `direct` | No | `multiplexed`; Python only (`Dataset.readout_mode`), and `direct` only with `backend: python`; see [readout mode](#readout-mode) |
 | `matlab_launcher` | `path` or `broad` | No | `path`; how MATLAB rules start MATLAB, see [MATLAB launcher](#matlab-launcher) |
 | `matlab_single_thread` | boolean | No | `false`; `true` adds `-singleCompThread` to every MATLAB call |
 | `workflow_mode` | `free`, `direct`, `subtile`, `deep` | No | `free`; preset selection described in [workflows](workflows.md#modes-and-backend-selection) |
@@ -122,9 +123,12 @@ is specifically for the Python batch/direct wrapper.
 | `create_subtiles` | boolean `run`, integer `sqrt_pieces` >=1 | Grid default 4; only GR/deep creation rules produce subtile files; Python creation scripts call splitting unconditionally |
 | `local_registration` | boolean `run`, string `ref_round`, method `demons`,`bspline`,`tps`,`cpd` or the demons variants `diffeomorphic`,`symmetric`,`fast_symmetric` (schema default `demons`); Python-only `ref_img`/`mov_img` | Python: the recipe's local step, after the global one; translates supported method-specific settings; `ref_img`/`mov_img` default to `merged-image` (the channel maximum); `boundary_mode` must agree with the global block (one final resampling); demons needs optional SimpleITK, B-spline the `registration-elastix` extra; MATLAB wrappers do not forward `method`; deep subtile does not perform local registration |
 | `spot_finding` | boolean `run`, string `ref_round`, nonnegative numeric `intensity_threshold`, mode `global`,`noise`,`adaptive`,`adaptive_round`; Python-only `method`, the selected config's fields, `channel_overrides` and `rounds` | Python wrappers default mode to `noise` but require a threshold when used; pass both explicitly. Python rules: see [the method key](#spot-finding-method-key); MATLAB supports adaptive/global only |
-| `load_codebook` | boolean `run`, integer-array `split_index` | Python wrappers load unconditionally, turn missing/empty split into None; MATLAB respects `run` |
-| `reads_extraction` | boolean `run`, exactly three integers >=1 in `voxel_size` | Pixel half-widths, Python `(z,y,x)` versus MATLAB `(row,column,z)`; e.g. `[1,2,2]` versus `[2,2,1]`, not physical microns |
-| `reads_filtration` | boolean `run`, string or string-array `end_base`, integer `n_barcode_segments` >=1, integer-array `split_index` | Python wrappers forward `end_base` and extra `start_base` (default `C`), not `n_barcode_segments` or this block's split; MATLAB forwards segment count and split |
+| `load_codebook` | boolean `run`, integer-array `split_index`; Python-only `encoding` (`method` `two_base` or `one_base` and that config's fields; `two_base`: `reverse_bases` and `pair_to_color`, see [encoding table](#codebook-encoding-table)) | `split_index` is **one-based**: MATLAB's position in the encoded color string of the junction color that is removed (aging `[5]`). Python wrappers load unconditionally, turn missing/empty split into None and translate `[s]` into the two-segment layout, equal to the zero-based `EncodingConfig(split_index=s - 1)` ([segment layout](#codebook-segment-layout)); MATLAB respects `run` |
+| `reads_extraction` | boolean `run`, exactly three integers >=1 in `voxel_size`; Python-only `background` (`false` or `inner_radius_zyx`, `outer_radius_zyx`, `min_voxels`) | Pixel half-widths, Python `(z,y,x)` versus MATLAB `(row,column,z)`; e.g. `[1,2,2]` versus `[2,2,1]`, not physical microns. Python rules measure the local background and noise next to the sums (`LocalBackgroundConfig`, on by default; {doc}`readout-contract`, "Extraction"); `background: false` turns it off. Without the key, the default ring (inner box `(1,3,3)`, outer box `(1,6,6)`, `min_voxels` 16) grows by the same number of voxels in both boxes along any axis where `voxel_size` exceeds the inner box, so the inner box contains the extraction box |
+| `reads_filtration` | boolean `run`, string or string-array `end_base`, integer `n_barcode_segments` >=1, integer-array `split_index` | Python wrappers forward a string `end_base` and extra `start_base` (default `C`) to `ReadFilterConfig`; a list `end_base` becomes the allowed ends of the layout's segments; `n_barcode_segments` and this block's `split_index`, when given, must agree with the layout ([segment layout](#codebook-segment-layout)); MATLAB forwards segment count and split |
+| `decoding` | Python-only `method` (`wta`, `codebook_aware` or `direct`) and that config's fields | Python rules only: the decoder used with `reads_filtration.run`; default `WtaDecoderConfig(diagnostics=True)`, or `DirectAssignmentConfig()` with `readout_mode: direct`; the adapter sets `diagnostics` true and `allow_rescue` false unless given; a method that does not support the readout mode raises `TypeError` |
+| `scoring` | Python-only boolean `run` (default true) and `method` (`bgcorr_probability`) | Python rules only (the schema rejects it unless `backend: python`): the adapter adds the shared read-QC score (`ReadScoreConfig`, {doc}`readout-contract`, "Shared read-QC score") whenever it decodes; `run: false` turns it off. It ranks calls, sets no cutoff and never changes a call. Giving the block without `reads_filtration.run`, or scoring with `reads_extraction.background: false`, raises `ValueError` |
+| `deduplication` | Python-only boolean `run` (default false), `distance_voxels` (default 1.0, voxel index space) and `compatibility` (`same_sequence`) | Python rules only (the schema rejects it unless `backend: python`): with `run: true` the adapter sets `PipelineConfig.deduplication` ({doc}`readout-contract`, "Optional deduplication"), which marks cross-channel reads of one amplicon within the distance with the same WTA sequence as duplicates of one representative; the read filter then rejects them (`ReadFilterConfig.exclude_duplicates`, default true). Off without the block. It needs `reads_filtration.run` and raises `ValueError` with `readout_mode: direct` |
 
 Always pair `intensity_estimation` with `intensity_threshold`. Python `noise`
 uses a k-sigma threshold (e.g. 5), whereas `adaptive` is a fraction of channel
@@ -150,6 +154,93 @@ shared MATLAB keys remain unchanged. See [coordination](coordination.md).
 `from_workflow_config` chooses the relevant subtile creation settings; image
 sizes must match arrays after rotation. Rectangular and remainder dimensions
 are partitioned independently with complete edge coverage.
+
+## Codebook segment layout
+
+The shared `split_index` is MATLAB's one-based position `s` (`LoadCodebook.m`
+erases color `s` and puts the colors after it first). For a `two_base` barcode of
+`n = n_rounds + 2` bases, the adapter translates `load_codebook.split_index: [s]`
+into `BarcodeLayout((Segment("A", n - s), Segment("B", s)), ("A", "B"))`, or with
+`load_codebook.encoding.reverse_bases: false` into
+`BarcodeLayout((Segment("A", s), Segment("B", n - s)), ("B", "A"))`; both equal the
+zero-based `EncodingConfig(split_index=s - 1)`, which `WorkflowConfig.split_index`
+holds. For aging (`s = 5`, 11 bases, 9 rounds) segment A has 6 bases (5 colors,
+rounds 1–5) and segment B 5 bases (4 colors, rounds 6–9). Before W-292 the adapter
+passed `s` unchanged as the zero-based index, so `[5]` dropped the wrong color; a
+configuration that gave the Python value (4) must give the MATLAB value (5).
+
+`reads_filtration.n_barcode_segments` must equal the number of segments (2 with a
+split, 1 without) and `reads_filtration.split_index` must equal
+`load_codebook.split_index`, when they are given; otherwise the adapter raises
+`ValueError`. A list `end_base` gives the allowed (first, last) bases of the
+segments in read orientation: with one segment every listed pair, with two
+segments item k (a pair or a list of pairs) for segment k in acquisition order, as
+`FilterReadsMultiSegment.m` reads it. A codebook entry whose ends are not listed
+raises when the codebook is loaded; reads are checked per segment by
+`filter_reads` and rejected only with `exclude_invalid_endpoints: true`. A string
+`end_base` keeps its one-segment meaning with `start_base`.
+
+```yaml
+load_codebook: {run: true, split_index: [5]}
+reads_filtration: {run: true, n_barcode_segments: 2, split_index: [5], end_base: ["CC", "TT"]}
+```
+
+## Codebook encoding table
+
+The Python-only `load_codebook.encoding.pair_to_color` sets the `two_base` table of
+`EncodingConfig.pair_to_color` ({doc}`readout-contract`, "Encoding registry"): the
+16 ordered base pairs, in read orientation, each mapped to a color 1–4 (integers
+or strings), where the four pairs that start with one base have four different
+colors. The adapter gives the same codebook as the Python call and raises the same
+`ValueError` for an invalid table; without the key the table is the default, the
+active table of `EncodeBases.m`. The schema accepts the key only with
+`backend: python`: MATLAB keeps its own table. For example, the second table kept
+as comments in `EncodeBases.m`:
+
+```yaml
+backend: python
+# under rules.<rule>.parameters:
+load_codebook:
+  run: true
+  encoding:
+    method: two_base
+    pair_to_color: {AT: 1, TA: 1, GC: 1, CG: 1, AC: 2, CA: 2, GT: 2, TG: 2,
+                    AA: 3, TT: 3, GG: 3, CC: 3, AG: 4, GA: 4, CT: 4, TC: 4}
+```
+
+`Dataset.encoding_table()` shows the loaded table with the channel of each color,
+and `pre_qc.json` and `run.json` record it ({doc}`checkpoints`).
+
+## Readout mode
+
+The Python-only top-level `readout_mode` ({doc}`readout-contract`, "Readout modes")
+is `multiplexed` (the default: reads are decoded from color sequences with the
+codebook) or `direct`: each candidate is assigned the gene of its own round and
+channel. The schema accepts `direct` only with `backend: python`. In `direct` mode:
+
+* the rule's codebook input is the panel CSV, with the header `round,channel,gene_id`
+  (one gene per (round, channel); a repeated gene or (round, channel) is an error);
+* `spot_finding.rounds` must list the rounds to detect in, so that every candidate
+  has its round (listing only the reference round is allowed);
+* each candidate is extracted in its own round only, and the `decoding` block
+  defaults to, and may only name, `method: direct`;
+* the barcode keys `load_codebook.split_index` and `encoding` and
+  `reads_filtration.end_base`, `split_index`, `n_barcode_segments` and
+  `exclude_invalid_endpoints` have no meaning and raise.
+
+`goodSpots` keeps the columns `x, y, z, gene`.
+
+```yaml
+backend: python
+readout_mode: direct
+rules:
+  rsf_single_fov:
+    run: true
+    parameters:
+      spot_finding: {run: true, intensity_estimation: noise, intensity_threshold: 10, rounds: [round1, round2]}
+      reads_extraction: {run: true}
+      reads_filtration: {run: true}
+```
 
 ## Explicit preprocessing recipe
 
@@ -229,7 +320,7 @@ that config's own field and the other legacy keys are errors.
 `channel_overrides` maps a channel label of `seq_channel_order` to fields that
 replace the block's for that channel (a `SpotFindingPlan`), and `rounds` lists the
 round labels to detect in (omitted: the reference round only); a candidate set of several
-rounds cannot be decoded until §2.8 defines a readout mode. The rule-level
+rounds is decoded only with `readout_mode: direct` ([readout mode](#readout-mode)). The rule-level
 Python-only key `device` sets `ExecutionConfig.device`; `cpu` is the only value.
 The method-aware rules are in the
 [spot-finding contract](spot-finding-contract.md#workflow-configuration).

@@ -138,6 +138,17 @@ properties:
           type: string
     description: "Additional imaging rounds beyond sequencing"
 
+  # ==================== Readout Mode ====================
+  readout_mode:
+    type: string
+    enum: ["multiplexed", "direct"]
+    default: "multiplexed"
+    description: >-
+      Python only (Dataset.readout_mode). multiplexed decodes color sequences with the
+      codebook; direct assigns each candidate the gene of its own round and channel from
+      the panel CSV (round,channel,gene_id), which is then the rule's codebook input, and
+      needs spot_finding.rounds. direct requires backend python.
+
   # ==================== Backend Selection ====================
   backend:
     type: string
@@ -293,7 +304,9 @@ allOf:
         - n_random_tests
 
   # The explicit preprocessing and registration recipes, the spot-finding method, channel
-  # overrides and rounds and the execution device are Python-only (backend defaults to matlab)
+  # overrides and rounds, the execution device, readout_mode direct, scoring,
+  # deduplication, reads_extraction.background and load_codebook.encoding.pair_to_color are
+  # Python-only (backend defaults to matlab)
   - if:
       not:
         required: [backend]
@@ -302,6 +315,8 @@ allOf:
             const: python
     then:
       properties:
+        readout_mode:
+          const: multiplexed
         rules:
           additionalProperties:
             properties:
@@ -311,6 +326,19 @@ allOf:
                     - required: [preprocessing]
                     - required: [registration]
                     - required: [device]
+                    - required: [scoring]
+                    - required: [deduplication]
+                    - required: [reads_extraction]
+                      properties:
+                        reads_extraction:
+                          required: [background]
+                    - required: [load_codebook]
+                      properties:
+                        load_codebook:
+                          required: [encoding]
+                          properties:
+                            encoding:
+                              required: [pair_to_color]
                     - required: [spot_finding]
                       properties:
                         spot_finding:
@@ -946,9 +974,62 @@ $defs:
       run:
         type: boolean
       split_index:
+        description: >-
+          Shared; MATLAB's one-based position, in the encoded color string, of the junction color
+          that is removed (aging: [5]). The Python adapter translates it into the two-segment
+          layout, equal to the zero-based EncodingConfig.split_index s - 1.
         type: array
         items:
           type: integer
+      encoding:
+        description: >-
+          Python only; method (an ENCODINGS name, default two_base) and the fields of its config
+          (two_base: reverse_bases, pair_to_color; one_base: base_to_color, reverse_bases). The method
+          list is kept equal to ENCODINGS by a test.
+        type: object
+        properties:
+          method:
+            enum: ["two_base", "one_base"]
+          reverse_bases:
+            type: boolean
+          pair_to_color:
+            description: >-
+              Python only (MATLAB's EncodeBases.m keeps its own table; the schema rejects the key
+              unless backend: python); two_base: the 16 ordered base pairs mapped to the colors 1-4,
+              the four pairs with one first base to four different colors (checked by the adapter).
+              Without it, the default table (AA, CC, GG, TT 1; AC, CA, GT, TG 2; AG, CT, GA, TC 3;
+              AT, CG, GC, TA 4).
+            type: object
+            required: [AA, AC, AG, AT, CA, CC, CG, CT, GA, GC, GG, GT, TA, TC, TG, TT]
+            additionalProperties: false
+            properties:
+              AA: {enum: [1, 2, 3, 4, "1", "2", "3", "4"]}
+              AC: {enum: [1, 2, 3, 4, "1", "2", "3", "4"]}
+              AG: {enum: [1, 2, 3, 4, "1", "2", "3", "4"]}
+              AT: {enum: [1, 2, 3, 4, "1", "2", "3", "4"]}
+              CA: {enum: [1, 2, 3, 4, "1", "2", "3", "4"]}
+              CC: {enum: [1, 2, 3, 4, "1", "2", "3", "4"]}
+              CG: {enum: [1, 2, 3, 4, "1", "2", "3", "4"]}
+              CT: {enum: [1, 2, 3, 4, "1", "2", "3", "4"]}
+              GA: {enum: [1, 2, 3, 4, "1", "2", "3", "4"]}
+              GC: {enum: [1, 2, 3, 4, "1", "2", "3", "4"]}
+              GG: {enum: [1, 2, 3, 4, "1", "2", "3", "4"]}
+              GT: {enum: [1, 2, 3, 4, "1", "2", "3", "4"]}
+              TA: {enum: [1, 2, 3, 4, "1", "2", "3", "4"]}
+              TC: {enum: [1, 2, 3, 4, "1", "2", "3", "4"]}
+              TG: {enum: [1, 2, 3, 4, "1", "2", "3", "4"]}
+              TT: {enum: [1, 2, 3, 4, "1", "2", "3", "4"]}
+          base_to_color:
+            description: "one_base: A, C, G and T mapped one-to-one onto the colors 1-4"
+            type: object
+            required: [A, C, G, T]
+            additionalProperties: false
+            properties:
+              A: {enum: [1, 2, 3, 4, "1", "2", "3", "4"]}
+              C: {enum: [1, 2, 3, 4, "1", "2", "3", "4"]}
+              G: {enum: [1, 2, 3, 4, "1", "2", "3", "4"]}
+              T: {enum: [1, 2, 3, 4, "1", "2", "3", "4"]}
+        additionalProperties: false
     additionalProperties: true
 
   reads_extraction_params:
@@ -963,6 +1044,30 @@ $defs:
           minimum: 1
         minItems: 3
         maxItems: 3
+      background:
+        description: >-
+          Python only. The local background and noise measured next to the sums
+          (NeighborhoodSumConfig.background, on by default): false turns it off, or a mapping
+          of LocalBackgroundConfig fields. Without the key the default ring is used, grown
+          along any axis where voxel_size exceeds its inner box.
+        oneOf:
+          - const: false
+          - type: object
+            properties:
+              inner_radius_zyx:
+                type: array
+                items: {type: integer, minimum: 0}
+                minItems: 3
+                maxItems: 3
+              outer_radius_zyx:
+                type: array
+                items: {type: integer, minimum: 0}
+                minItems: 3
+                maxItems: 3
+              min_voxels:
+                type: integer
+                minimum: 1
+            additionalProperties: false
     additionalProperties: true
 
   reads_filtration_params:
@@ -971,19 +1076,99 @@ $defs:
       run:
         type: boolean
       end_base:
+        description: >-
+          Shared. A string is one (first, last) pair checked over the whole sequence from
+          start_base (one segment). A list gives the allowed ends of the layout's segments: with
+          one segment every listed pair, with two segments item k (a pair or a list of pairs) for
+          segment k in acquisition order.
         oneOf:
           - type: string
           - type: array
             items:
-              type: string
+              oneOf:
+                - type: string
+                - type: array
+                  items:
+                    type: string
       n_barcode_segments:
+        description: "Shared; when given, must equal the number of segments of the codebook layout"
         type: integer
         minimum: 1
       split_index:
+        description: "Shared; when given, must equal load_codebook.split_index"
         type: array
         items:
           type: integer
     additionalProperties: true
+
+  scoring_params:
+    description: >-
+      Python only. The adapter adds the shared read-QC score (ReadScoreConfig) whenever it
+      decodes; run false turns it off. It ranks calls and sets no cutoff.
+    type: object
+    properties:
+      run:
+        type: boolean
+      method:
+        enum: ["bgcorr_probability"]
+    additionalProperties: false
+
+  deduplication_params:
+    description: >-
+      Python only. Optional cross-channel deduplication (DeduplicationConfig), off unless run
+      is true: reads of one detection round in different channels within distance_voxels
+      (inclusive, voxel index space, default 1.0) with identical WTA observed sequences
+      without M or N are grouped, and one original read represents each group. Needs
+      reads_filtration.run; not available with readout_mode direct. The filter rejects the
+      duplicates by default.
+    type: object
+    properties:
+      run:
+        type: boolean
+      distance_voxels:
+        type: number
+        minimum: 0
+      compatibility:
+        enum: ["same_sequence"]
+    additionalProperties: false
+
+  decoding_params:
+    description: >-
+      Python only; method (a DECODING_METHODS name, default wta, or direct with
+      readout_mode direct) and the fields of its config. wta and codebook_aware need
+      readout_mode multiplexed and direct needs readout_mode direct. Decoding runs with
+      reads_filtration.run. The adapter sets diagnostics true and allow_rescue false unless
+      given. The method list is kept equal to DECODING_METHODS by a test.
+    type: object
+    properties:
+      method:
+        enum: ["wta", "codebook_aware", "direct"]
+      negative_policy:
+        enum: ["reject", "clip_negative"]
+      diagnostics:
+        type: boolean
+      max_hamming:
+        type: integer
+        minimum: 0
+      max_corrected_round_margin:
+        type: [number, "null"]
+        minimum: 0
+        maximum: 1
+      min_score_delta:
+        type: number
+        minimum: 0
+      min_geomean_probability:
+        type: number
+        minimum: 0
+        maximum: 1
+      max_correction_penalty:
+        type: number
+        minimum: 0
+      allow_exact:
+        type: boolean
+      allow_rescue:
+        type: boolean
+    additionalProperties: false
 
   # ==================== Rule-Specific Configurations ====================
   rsf_single_fov_config:
@@ -1026,6 +1211,12 @@ $defs:
             $ref: "#/$defs/reads_extraction_params"
           reads_filtration:
             $ref: "#/$defs/reads_filtration_params"
+          decoding:
+            $ref: "#/$defs/decoding_params"
+          scoring:
+            $ref: "#/$defs/scoring_params"
+          deduplication:
+            $ref: "#/$defs/deduplication_params"
         additionalProperties: true
     additionalProperties: true
 
@@ -1094,6 +1285,12 @@ $defs:
             $ref: "#/$defs/reads_extraction_params"
           reads_filtration:
             $ref: "#/$defs/reads_filtration_params"
+          decoding:
+            $ref: "#/$defs/decoding_params"
+          scoring:
+            $ref: "#/$defs/scoring_params"
+          deduplication:
+            $ref: "#/$defs/deduplication_params"
         additionalProperties: true
     additionalProperties: true
 
@@ -1156,6 +1353,12 @@ $defs:
             $ref: "#/$defs/reads_extraction_params"
           reads_filtration:
             $ref: "#/$defs/reads_filtration_params"
+          decoding:
+            $ref: "#/$defs/decoding_params"
+          scoring:
+            $ref: "#/$defs/scoring_params"
+          deduplication:
+            $ref: "#/$defs/deduplication_params"
         additionalProperties: true
     additionalProperties: true
 

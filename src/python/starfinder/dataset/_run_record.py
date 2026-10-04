@@ -76,12 +76,18 @@ class _RunRecord:
         self.failure = None
         self._methods = None
         dataset = fov.dataset
+        from starfinder.barcode.codebook import _encoding_record
+        # The codebook's encoding (null without a codebook or in readout mode direct).
+        encoding = (_encoding_record(dataset.codebook.encoding)
+                    if dataset.codebook is not None and dataset.readout_mode == "multiplexed" else None)
         self.data = {
             "format_version": FORMAT_VERSION, "dataset_id": dataset.dataset_id,
             "sample_id": dataset.sample_id, "fov_id": fov.fov_id, "subtile_id": fov.subtile_id,
             "status": "running", "started_at": _now(), "ended_at": None, "error": None,
             "code": _code(), "environment": _environment(),
-            "config": {"pipeline": config, "execution": execution, "checkpoints": checkpoints},
+            # The dataset's readout mode (docs/readout-contract.md) is recorded with the configs.
+            "config": {"pipeline": config, "execution": execution, "checkpoints": checkpoints,
+                       "readout_mode": dataset.readout_mode, "encoding": encoding},
             "inputs": [], "steps": [], "preprocessing": None, "registration": {}, "counts": {},
             "checkpoint_directory": str(self.directory), "checkpoints": {},
         }
@@ -123,8 +129,17 @@ class _RunRecord:
             counts["intensities"] = len(fov.intensity_result.spot_ids)
         if fov.decoding_result is not None:
             counts["call_status"] = {str(k): int(v) for k, v in fov.decoding_result.table.call_status.value_counts().items()}
+        if fov.scoring_result is not None:
+            counts["scoring"] = fov.scoring_result.counts
+        if fov.deduplication_result is not None:
+            counts["deduplication"] = fov.deduplication_result.counts
         if fov.filtering_result is not None:
             counts["filtering"] = fov.filtering_result.counts
+        if fov.scoring_result is not None or fov.deduplication_result is not None:
+            # The §2.8 population summary (docs/readout-contract.md, "Diagnostics") of the scored or
+            # deduplicated reads; runs without those stages keep the earlier counts only.
+            from starfinder.barcode import summarize_reads
+            counts["summary"] = summarize_reads(fov.results)
         self.data.update(preprocessing=fov.preprocessing_record or None,
                          registration=fov.registration_attempts, counts=counts)
         write_json(self.data, self.path)

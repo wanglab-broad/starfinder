@@ -93,7 +93,9 @@ threshold, extraction radius and codebook split. Geometry remains as stored in
 TIFF or explicitly unknown; extraction radii are not physical voxel spacing.
 
 The 20 pipeline profiles distinguish batch, streaming and global-plus-local
-settings. Source aging profiles use encoded `split_index=4` and `end_bases="CC"`;
+settings. Source aging profiles use encoded `split_index=4` and `end_bases="CC"`
+(the recipe passes the shared one-based `load_codebook.split_index: [5]`, which
+the adapter converts back to 4; see {doc}`workflow-configuration`);
 the LR source has radius `(2,2,1)`. These are historical script choices, not a
 correction to the separately owned nine-round, segmented scientific protocol.
 Likewise tissue-2D's historical radius `(1,2,2)` is preserved. Do not replace

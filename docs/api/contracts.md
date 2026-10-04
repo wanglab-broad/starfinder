@@ -247,7 +247,8 @@ returns its declared columns with their dtypes. A plan's `rounds` is detected by
 `FOV.find_spots` and `FOV.run` only: one table with a `round` column, `spot_id` over the
 combined table (the reference round first, so its identities are unchanged) and the
 per-round diagnostics under `diagnostics["rounds"]`; such a set is never decoded as
-barcodes until §2.8 defines a readout mode.
+barcodes: in readout mode `multiplexed` decoding it raises, and readout mode `direct`
+assigns it with `assign_direct` (below).
 
 {class}`starfinder.spot_finding.NoiseLandmarkConfig` retains registration's
 per-channel MAD peaks followed by its original radius deduplication: for each
@@ -295,20 +296,52 @@ sampling with `floor(coord+.5)`; subpixel coordinates are not truncated. Integer
 `neighborhood_radius_zyx=(1,2,2)` means half-widths of a 3×5×5 neighborhood,
 not physical spacing. Clipped slices implement zero-padded boundaries without a
 padded-volume allocation. Sums accumulate in float64 and inputs are not mutated.
+`box_voxels` (int64 `(N,R)`) counts the voxels each box summed. With
+`NeighborhoodSumConfig.background` (`LocalBackgroundConfig`, on by default) the
+result also holds the local `background` and `noise` (float64 `(N,C,R)`, grey levels
+per voxel: median and 1.4826 × MAD of the ring between the outer box `(1,6,6)` and
+the inner box `(1,3,3)`, clipped to the image; NaN below `min_voxels` ring voxels),
+`background_voxels` (`(N,R)`) and the image `image_background` and `image_noise`
+(`(C,R)`). These measurements never change `values` or `valid`
+({doc}`../readout-contract`, "Extraction").
 
 `load_codebook` returns `barcode.Codebook`; explicit `round_labels` and
-`channel_labels` are required. Its ordered table has `gene_id`, `color_sequence`
-and optional `base_sequence`. Duplicate IDs/rows, encoded collisions, invalid
-symbols/lengths/mapping/splits raise errors with row context. Colors `'1'`–`'4'`
-are symbols: `color_to_channel` maps them to four distinct zero-based channels.
-`EncodingConfig(reverse_bases=True)` preserves STARmap/synthetic reversal;
-`encode_bases` alone does not reverse. A split removes that encoded character
-and swaps the remaining segments. Lookup constants and numerical helpers are
-private; the old combined extraction and decoder interfaces have been removed.
+`channel_labels` are required. Its ordered table has one row per entry:
+`entry_id` (unique), `gene_id` (may repeat), `color_sequence` (unique) and optional
+`base_sequence` (unique). Repeated entry IDs, base sequences or encoded sequences
+raise naming both rows; invalid symbols/lengths/mapping/splits raise with row
+context. Colors `'1'`–`'4'` are symbols: `color_to_channel` maps them to four
+distinct zero-based channels. Encodings are registered in `ENCODINGS`:
+`EncodingConfig(reverse_bases=True)` (`two_base`) preserves STARmap/synthetic
+reversal, `OneBaseEncodingConfig` (`one_base`) maps each base through
+`base_to_color`; `encode_bases` alone does not reverse. The `two_base` table is
+`EncodingConfig.pair_to_color` (the 16 ordered base pairs to colors 1–4, default the
+active table of `EncodeBases.m`; the four pairs of one first base need four
+different colors), and every encode and decode path follows the codebook's table
+while `encode_bases` and `decode_color_sequence` keep the default.
+`EncodingSpec.table(config)` returns either encoding's table;
+{py:meth}`~starfinder.barcode.Codebook.encoding_table`,
+{py:meth}`~starfinder.dataset.Dataset.encoding_table` and
+{py:meth}`~starfinder.dataset.FOV.encoding_table` show it with the columns `bases`,
+`color` and `channel` (the latter two raise `ValueError` without a codebook or in
+readout mode `direct`). A legacy split removes
+that encoded character and swaps the remaining segments; `Codebook.layout`
+(`BarcodeLayout`) states segments, acquisition order and allowed segment ends
+explicitly. Lookup constants and numerical helpers are private; the old combined
+extraction and decoder interfaces have been removed.
 
-`decode_barcodes(extracted, codebook, config=...)` requires exact label order.
+`decode_barcodes(extracted, codebook, config=...)` requires exact label order and
+a config registered in `DECODING_METHODS` whose declared encoding kinds include
+the codebook's and whose modes include `multiplexed` (else `TypeError`).
+Direct readout (`Dataset.readout_mode="direct"`) is
+`assign_direct(extracted, spots, panel)`: each candidate is read from its own
+round (`extract_intensities(..., readout_mode="direct")` leaves the other rounds
+at 0.0 with `valid=False`) and assigned the `DirectPanel` gene of its own
+(round, channel), with no competition, rescue or reassignment
+({doc}`../readout-contract`, "Direct readout").
 Every input identity retains one row with `assigned`, `unmatched`, `ambiguous`
-or `no_signal` status, reason, observed/decoded sequence and nullable gene ID.
+or `no_signal` status, reason, observed/decoded sequence and nullable gene and
+entry IDs; competition and rescue are between entries.
 Nonfinite inputs fail. Negative values fail with `InvalidIntensityError` unless
 `negative_policy="clip_negative"` is explicit; diagnostics record clipped count
 and range. An unavailable measurement prevents assignment, and any zero-total
@@ -330,13 +363,62 @@ identity-labeled `per_round` margins and `candidates` scores/ranks. Candidate
 ordering is score then color sequence; deterministic order does not resolve
 ambiguity into a gene assignment. WTA also exposes `wta_round_l2_nll`.
 
+`score_reads(decoded, extracted, reference=..., config=ReadScoreConfig())` returns
+a `ReadScoringResult` whose table is the read table with `qc_score`,
+`qc_ambiguity_max`, `qc_signal_to_background`, `qc_rounds` and `qc_reason` appended:
+the probability NLL of the assigned entry on background-subtracted sums (lower ranks
+as more reliable), over every round (`multiplexed`) or the own round (`direct`). It
+ranks calls and never changes an identity; reads without an assignment, or with a
+round without background, are NaN with `no_assignment` or `background_unavailable`,
+and intensities without background raise `ValueError` naming extraction
+({doc}`../readout-contract`, "Shared read-QC score").
+
+`deduplicate_reads(decoded, spots, extracted, config=DeduplicationConfig())`
+returns a `ReadDeduplicationResult` whose table is the read table with
+`duplicate_group`, `duplicate_of`, `is_representative` and `duplicate_reason`
+appended. It is off unless called (`PipelineConfig.deduplication=None`) and raises
+`ValueError` in readout mode `direct`. Candidates of one detection round in
+different detection channels (the spot table's `channel` column) are linked when
+they lie within `distance_voxels` (inclusive, Euclidean, voxel index space,
+default 1.0) and their WTA observed sequences are identical and contain no `M` or
+`N`; groups are the connected components. A group whose assigned members have
+different `entry_id` keeps every member (`conflicting_calls`); otherwise one
+original candidate represents it, the assigned member (any member when none is
+assigned) with the largest sum in its own detection channel in the detection round,
+ties to the earliest row, and the others are its duplicates. No read is removed,
+averaged or changed ({doc}`../readout-contract`, "Optional deduplication").
+
 `filter_reads(decoded, config=ReadFilterConfig(...))` can rerun without image
-access or decoding. It retains a complete table with acceptance/rejection reasons,
-an `accepted` view and counts/fractions. Predicates name allowed call statuses and
-inclusive method-specific score bounds; unavailable score columns error, and NaN
-fails a requested bound. Endpoint checks are diagnostic-only unless
-`exclude_invalid_endpoints=True`. Empty counts are zero and undefined fractions
+access or decoding; `decoded` may also be a `ReadScoringResult` or a
+`ReadDeduplicationResult`, whose score and deduplication columns are kept. It
+retains a complete table with acceptance/rejection reasons, an `accepted` view and
+counts/fractions. Predicates name allowed call statuses and inclusive bounds on any
+declared score column (a decoder's `DecodingSpec.score_columns`, or `qc_score`,
+`qc_ambiguity_max`, `qc_signal_to_background` and `qc_rounds`); unavailable score
+columns error, and NaN fails a requested bound. `exclude_duplicates=True` (the
+default) rejects deduplicated reads that are not representatives with reason
+`duplicate` and does nothing to reads that were not deduplicated. Endpoint checks are diagnostic-only unless
+`exclude_invalid_endpoints=True`: `end_bases` checks the whole sequence from
+`start_base`, and with `codebook=` the segment ends of its layout are checked per
+segment. Empty counts are zero and undefined fractions
 are `None` with a reason. IDs and typed columns survive all-rejected results.
+
+Three diagnostics read retained results only ({doc}`../readout-contract`,
+"Diagnostics"). `inspect_read(extracted, reads, spot_id, reference=...)` returns one
+row per round and channel of a read: the sum, background × `box_voxels`, the
+background-subtracted sum, the channel probability on the sums and on the
+background-subtracted sums, the noise, the observed and assigned color, and for each
+segment the bases in read orientation; `plot_read` draws it. `summarize_reads(reads)`
+returns a JSON-safe dict of counts by `call_status`, `failure_reason` and
+`call_type`, per gene and per entry, `qc_score` quantiles per `call_type`, the
+deduplication and filtering counts, per round the valid and background-unavailable
+measurements and per round and channel the medians of sums, background and noise, and
+the number of cross-channel candidate pairs within the duplicate distance.
+`explain_read(reads, spot_id)` returns the ordered decisions of a read with their
+values and limits. `reads` is a read result or a mapping of stage names to them, such
+as `FOV.results`. `FOV.run` never calls `inspect_read`, `plot_read` or
+`explain_read`; it stores the summary in `run.json` under `counts` when it scores or
+deduplicates, and `FOV.save_diagnostics` writes it beside the filtering counts.
 
 Before: combined extraction returned channel calls and scores; codebook loading
 returned two dictionaries, and filtering dropped rejected rows. After:

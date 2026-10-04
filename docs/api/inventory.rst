@@ -44,21 +44,43 @@ Owning namespaces (alphabetical)
 starfinder.barcode
 ~~~~~~~~~~~~~~~~~~
 
+* :py:obj:`starfinder.barcode.assign_direct`
 * :py:obj:`starfinder.barcode.BarcodeDecodingResult`
+* :py:obj:`starfinder.barcode.BarcodeLayout`
 * :py:obj:`starfinder.barcode.Codebook`
 * :py:obj:`starfinder.barcode.CodebookAwareDecoderConfig`
 * :py:obj:`starfinder.barcode.decode_barcodes`
 * :py:obj:`starfinder.barcode.decode_color_sequence`
+* :py:obj:`starfinder.barcode.DECODING_METHODS`
+* :py:obj:`starfinder.barcode.DecodingSpec`
+* :py:obj:`starfinder.barcode.deduplicate_reads`
+* :py:obj:`starfinder.barcode.DeduplicationConfig`
+* :py:obj:`starfinder.barcode.DirectAssignmentConfig`
+* :py:obj:`starfinder.barcode.DirectPanel`
 * :py:obj:`starfinder.barcode.encode_bases`
 * :py:obj:`starfinder.barcode.EncodingConfig`
+* :py:obj:`starfinder.barcode.ENCODINGS`
+* :py:obj:`starfinder.barcode.EncodingSpec`
+* :py:obj:`starfinder.barcode.explain_read`
 * :py:obj:`starfinder.barcode.extract_intensities`
 * :py:obj:`starfinder.barcode.filter_reads`
+* :py:obj:`starfinder.barcode.inspect_read`
 * :py:obj:`starfinder.barcode.IntensityExtractionResult`
 * :py:obj:`starfinder.barcode.InvalidIntensityError`
 * :py:obj:`starfinder.barcode.load_codebook`
+* :py:obj:`starfinder.barcode.load_direct_panel`
+* :py:obj:`starfinder.barcode.LocalBackgroundConfig`
 * :py:obj:`starfinder.barcode.NeighborhoodSumConfig`
+* :py:obj:`starfinder.barcode.OneBaseEncodingConfig`
+* :py:obj:`starfinder.barcode.plot_read`
+* :py:obj:`starfinder.barcode.ReadDeduplicationResult`
 * :py:obj:`starfinder.barcode.ReadFilterConfig`
 * :py:obj:`starfinder.barcode.ReadFilteringResult`
+* :py:obj:`starfinder.barcode.ReadScoreConfig`
+* :py:obj:`starfinder.barcode.ReadScoringResult`
+* :py:obj:`starfinder.barcode.score_reads`
+* :py:obj:`starfinder.barcode.Segment`
+* :py:obj:`starfinder.barcode.summarize_reads`
 * :py:obj:`starfinder.barcode.WtaDecoderConfig`
 
 starfinder.benchmark
@@ -97,6 +119,8 @@ starfinder.evaluation.barcode
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 * :py:obj:`starfinder.evaluation.barcode.evaluate_decoding`
+* :py:obj:`starfinder.evaluation.barcode.evaluate_deduplication`
+* :py:obj:`starfinder.evaluation.barcode.ranking_quality`
 
 starfinder.evaluation.matching
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

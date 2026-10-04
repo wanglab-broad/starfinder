@@ -65,7 +65,7 @@ def _process_pipeline(case, root, directory, trial):
             for channel, name in channels.items():
                 (folder / (channel + '.tif')).symlink_to(_verified(root, trial.artifacts[name]))
         ds.load_codebook(_verified(root, trial.artifacts['artifacts:codebook']),
-                         split_index=adapted.split_index)
+                         encoding=adapted.encoding, layout=adapted.layout)
         fov = ds.fov(case.config['fov_id'])
         try:
             fov.run(adapted.pipeline, execution=adapted.execution)

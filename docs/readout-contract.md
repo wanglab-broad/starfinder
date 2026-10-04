@@ -1,6 +1,11 @@
 # Readout contract: extraction, decoding and read QC
 
-Status: Proposed
+Status: Accepted (W-280, 2026-10-02, at b1c7261)
+
+Amendment W-304, on the authority of the W-299 review comment (2026-10-04): the
+`two_base` pair-to-color table is visible, configurable and recorded
+(`EncodingConfig.pair_to_color`; "Encoding registry", "Names", "Checkpoints and
+reruns", "Workflow configuration").
 
 This page proposes the §2.8 readout contract: two readout modes (multiplexed
 sequencing and direct readout) as one explicit setting, registered barcode
@@ -108,6 +113,7 @@ New names under N1:
 | --- | --- | --- |
 | Readout mode | `Dataset.readout_mode`, `"multiplexed"` (default) or `"direct"`; YAML top-level `readout_mode` | Dataset field |
 | Encoding registry | `ENCODINGS: dict[type, EncodingSpec]` in `starfinder.barcode`; entries `two_base` (`EncodingConfig`, which gains `method="two_base"`) and `one_base` (`OneBaseEncodingConfig`) | registry |
+| Encoding table (W-304) | `EncodingConfig.pair_to_color`; `EncodingSpec.table`; `Codebook.encoding_table()`, `Dataset.encoding_table()`, `FOV.encoding_table()`; YAML `load_codebook.encoding.pair_to_color` | config field, spec field, methods |
 | Decoding registry | `DECODING_METHODS: dict[type, DecodingSpec]` in `starfinder.barcode`; entries `wta`, `codebook_aware`, `direct` | registry (the "Decoding" row of {doc}`method-registry` names it `DECODERS`; this page uses the `*_METHODS` pattern of decision 2 there) |
 | Segment layout | `BarcodeLayout`, `Segment`; `Codebook.layout` | frozen dataclasses |
 | Codebook entries | `Codebook.table` column `entry_id`; `n_entries`, `seq_to_entry`, `entry_to_seq` | codebook |
@@ -161,6 +167,7 @@ discriminator equal to its spec name. `EncodingSpec` adds:
 | `encode(bases, config) -> str` | The color sequence of one segment's bases, in acquisition order. |
 | `decode(colors, config, first_base) -> str` | The bases of one segment from its colors; `first_base` is `None` for encodings that do not need it. |
 | `colors_for(n_bases) -> int` | Colors produced by a segment of `n_bases` bases. |
+| `table(config) -> dict` | The config's encoding table as a new dict from bases to color: `two_base` gives `pair_to_color` (16 ordered pairs), `one_base` gives `base_to_color` (4 bases). |
 | `needs_first_base` | `True` when decoding needs the segment's first base in read orientation. |
 | `junction_colors` | Colors that span two adjacent segments of the barcode and are never acquired. |
 | `alphabet` | The color symbols, `"1234"` for both entries; colors map to channels through `Codebook.color_to_channel`. |
@@ -168,8 +175,34 @@ discriminator equal to its spec name. `EncodingSpec` adds:
 
 | Name | Config (parameters, defaults) | `encode` | `decode` | `colors_for(n)` | `needs_first_base` | `junction_colors` |
 | --- | --- | --- | --- | --- | --- | --- |
-| `two_base` | `EncodingConfig(reverse_bases=True)`; the legacy `split_index` stays as a field, translated into a two-segment layout and mutually exclusive with `Codebook.layout` | `encode_bases(bases[::-1] if reverse_bases else bases)` | `decode_color_sequence(colors, first_base)`, reversed back when `reverse_bases` | `n − 1` | yes | 1 |
+| `two_base` | `EncodingConfig(reverse_bases=True, pair_to_color=<default table>)`; the legacy `split_index` stays as a field, translated into a two-segment layout and mutually exclusive with `Codebook.layout` | `pair_to_color` of each adjacent pair of `bases[::-1] if reverse_bases else bases` (with the default table, `encode_bases`) | from `first_base`, each color gives the one next base through `pair_to_color` (with the default table, `decode_color_sequence(colors, first_base)`), reversed back when `reverse_bases` | `n − 1` | yes | 1 |
 | `one_base` | `OneBaseEncodingConfig(base_to_color, reverse_bases=False)`: `base_to_color` maps `A`, `C`, `G`, `T` to distinct colors `1`–`4` and has no default | `"".join(base_to_color[b] for b in bases)`, reversed first when `reverse_bases` | the inverse mapping | `n` | no | 0 |
+
+**The `two_base` table (W-304).** `EncodingConfig.pair_to_color` maps each of the
+16 ordered base pairs, in read orientation, to a color `"1"` to `"4"`. Its default is
+the active table of `src/matlab/EncodeBases.m`: `AA`, `CC`, `GG`, `TT` → 1; `AC`,
+`CA`, `GT`, `TG` → 2; `AG`, `CT`, `GA`, `TC` → 3; `AT`, `CG`, `GC`, `TA` → 4, so
+`EncodingConfig()` equals `EncodingConfig(pair_to_color=<that table>)` and every
+default result is unchanged. Validation raises `ValueError` naming the problem when
+the keys are not exactly the 16 ordered pairs of `A`, `C`, `G`, `T`, when a value is
+not one of the strings `"1"` to `"4"`, or when the four pairs that start with one
+base do not have four different colors (decoding from that base would be
+ambiguous). The table may be given in any key order; it is stored as a copy in
+`AA`, `AC`, …, `TT` order. Within that rule a table may relabel the four colors (for
+example the second table kept as comments in `EncodeBases.m`) or pair the bases
+differently. Every encode and decode path uses the codebook's table: the codebook's
+color sequences, the per-segment end-base checks and the `end_bases` shortcut of
+`filter_reads` (given the codebook), `inspect_read` and `explain_read`; the module
+functions `encode_bases` and `decode_color_sequence` keep the default table and
+their signatures. `EncodingSpec.table(config)` returns the table of either encoding;
+`Codebook.encoding_table()` shows it as a table with the columns `bases`, `color`
+and `channel` (the channel label of the color through `color_to_channel`): 16 rows
+for `two_base`, 4 for `one_base`. `Dataset.encoding_table()` and
+`FOV.encoding_table()` return the loaded codebook's and raise `ValueError` without
+a codebook or in readout mode `direct`. `repr(codebook)` and `repr(dataset)` name the
+encoding method and the segment layout (for example `two_base, two segments of 5
+and 4 colors`) and say when the table is not the default. MATLAB is unchanged:
+`EncodeBases.m` keeps its active table, and a changed table is Python-only.
 
 **What a decoder declares.** `DecodingSpec` (registry `DECODING_METHODS`, same
 shared fields) adds `modes` (above), `encodings` (the encoding `symbols` kinds it
@@ -454,13 +487,18 @@ header keys:
 * `pre_qc.json`: `decoding_config` holds the decoder's fields as today (`direct`
   configs carry only `method`); the new top-level keys are `scoring_config`,
   `deduplication_config` (`null` when the stage did not run), `layout`,
-  `readout_mode` and `stages_applied`. The table adds `entry_id`, the score columns
+  `readout_mode` and `stages_applied`, and, since W-304, `encoding` beside `layout`:
+  the codebook's encoding config as `method`, `reverse_bases` and the table
+  (`pair_to_color` for `two_base`, `base_to_color` for `one_base`; `split_index` is
+  left out, the layout records it), `null` in readout mode `direct`. No saved config
+  gains a field, so a reader at `141c093` still loads the stage. The table adds `entry_id`, the score columns
   and, after deduplication, `duplicate_group`, `duplicate_of` (string),
   `is_representative` (bool) and `duplicate_reason` (string).
 * The new reader rebuilds the decoder config through `DECODING_METHODS` and treats a
   missing key as its `141c093` meaning: no `background_config` is `background=None`,
-  no `layout` is one segment, no `readout_mode` is `multiplexed`, and no
-  `scoring_config` or `deduplication_config` means the stage did not run.
+  no `layout` is one segment, no `readout_mode` is `multiplexed`, no `encoding`
+  (a checkpoint written before W-304) is not checked, and no `scoring_config` or
+  `deduplication_config` means the stage did not run.
 
 **Reruns without images.**
 
@@ -473,9 +511,13 @@ header keys:
 * `load_checkpoint("pre_qc")`, then `run(PipelineConfig(filtering=...))`: filter only.
 * Scoring a checkpoint without background raises `ValueError` naming the stage to
   rerun (extraction).
+* Loading a `pre_qc` checkpoint whose recorded `encoding` differs from the loaded
+  codebook's (method, `reverse_bases` or table) raises `ValueError` naming both
+  (W-304); without a loaded codebook or without the key nothing is checked.
 
-`run.json` keeps `format_version` 1 and records the mode, each stage's config and
-the population summary under `counts`.
+`run.json` keeps `format_version` 1 and records the mode, each stage's config, the
+codebook's encoding (`config.encoding`, as in `pre_qc.json`, since W-304) and the
+population summary under `counts`.
 
 ## Diagnostics
 
@@ -490,6 +532,7 @@ the population summary under `counts`.
 | Key | Rule |
 | --- | --- |
 | `readout_mode` (top level) | Python-only, `multiplexed` (default) or `direct`; the schema accepts `direct` only with `backend: python`. |
+| `load_codebook.encoding` | Python-only; `method` (an `ENCODINGS` name, default `two_base`) and that config's fields. `pair_to_color` (`two_base`, W-304) maps the 16 ordered pairs to colors 1–4 and gives the same codebook and the same `ValueError` as the Python call; without it the default table. The schema accepts `pair_to_color` only with `backend: python`; MATLAB keeps its own table. |
 | `load_codebook.split_index` | Shared; MATLAB's one-based position `s`; translated into the two-segment layout (equal to zero-based `EncodingConfig.split_index = s − 1`). |
 | `reads_filtration.n_barcode_segments`, `reads_filtration.split_index` | Shared; accepted. `n_barcode_segments` must equal the number of segments of the layout and `reads_filtration.split_index` must equal `load_codebook.split_index`, else `ValueError`. |
 | `reads_filtration.end_base` | Shared; a string or a list. With one segment, every listed pair is an allowed end of that segment. With two segments, item k gives the allowed ends of segment k in acquisition order, as `FilterReadsMultiSegment.m` reads it. `start_base` is no longer needed when the ends are given and is kept for one-segment compatibility. |
@@ -533,6 +576,11 @@ The implementation adds these entries:
    `FORMAT_VERSION` stays 2.
 10. **Diagnostics and evaluation.** `inspect_read`, `summarize_reads`, `explain_read`;
     `ranking_quality`, `evaluate_deduplication`.
+11. **Encoding table (W-304).** `EncodingConfig.pair_to_color` (default unchanged),
+    `EncodingSpec.table`, `Codebook.encoding_table()`, `Dataset.encoding_table()`,
+    `FOV.encoding_table()`, the summary line, the YAML key
+    `load_codebook.encoding.pair_to_color`, and the recorded `encoding` of
+    `pre_qc.json` and `run.json` with its rerun check.
 
 ## Tests the implementation changes
 

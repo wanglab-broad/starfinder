@@ -15,8 +15,8 @@ from starfinder.registration._methods import RegistrationConfig
 from starfinder._execution import check_device
 from starfinder.spot_finding import SPOT_FINDING_METHODS, SpotFindingPlan
 from starfinder.spot_finding._methods import SpotFindingConfig
-from starfinder.barcode import (NeighborhoodSumConfig, WtaDecoderConfig,
-    CodebookAwareDecoderConfig, ReadFilterConfig)
+from starfinder.barcode import (DECODING_METHODS, NeighborhoodSumConfig, WtaDecoderConfig,
+    CodebookAwareDecoderConfig, DirectAssignmentConfig, ReadFilterConfig, ReadScoreConfig, DeduplicationConfig)
 
 # Error categories a RecoveryConfig may allow.
 _RECOVERABLE = (RegistrationEstimationError, InsufficientLandmarksError, RegistrationRejectedError)
@@ -211,9 +211,16 @@ class PipelineConfig:
 
     Order: load, rotate, the preprocessing recipe's steps, the registration
     recipe (None: no registration), the preprocessing recipe's
-    post_registration steps, detect, extract, decode, filter. spot_finding is a
+    post_registration steps, detect, extract, decode, score, deduplicate, filter. spot_finding is a
     config of a SPOT_FINDING_METHODS method with pipeline=True, or a
-    SpotFindingPlan of one. The pipeline processes ZYX(C) volumes and never projects;
+    SpotFindingPlan of one. decoding is a DECODING_METHODS config of the
+    dataset's readout mode: wta or codebook_aware (multiplexed), or
+    DirectAssignmentConfig (direct). scoring (ReadScoreConfig, opt-in) adds
+    the shared read-QC score to the reads after decoding; it needs the local
+    background of the extraction. deduplication (DeduplicationConfig, off by
+    default) marks cross-channel reads of one amplicon as duplicates of one
+    representative after scoring; it is not available in readout mode direct.
+    The pipeline processes ZYX(C) volumes and never projects;
     projection is an output view. All operation parameters are passed intact
     to public functions.
     """
@@ -223,14 +230,17 @@ class PipelineConfig:
     registration: RegistrationRecipe | None = None
     spot_finding: SpotFindingConfig | SpotFindingPlan | None = None
     extraction: NeighborhoodSumConfig | None = None
-    decoding: WtaDecoderConfig | CodebookAwareDecoderConfig | None = None
+    decoding: WtaDecoderConfig | CodebookAwareDecoderConfig | DirectAssignmentConfig | None = None
     filtering: ReadFilterConfig | None = None
+    scoring: ReadScoreConfig | None = None
+    deduplication: DeduplicationConfig | None = None
 
     def __post_init__(self):
         types = {'load': ImageLoadConfig, 'preprocessing': PreprocessingRecipe, 'registration': RegistrationRecipe,
             'spot_finding': None,
-            'extraction': NeighborhoodSumConfig, 'decoding': (WtaDecoderConfig, CodebookAwareDecoderConfig),
-            'filtering': ReadFilterConfig}
+            'extraction': NeighborhoodSumConfig, 'decoding': tuple(DECODING_METHODS),
+            'filtering': ReadFilterConfig, 'scoring': ReadScoreConfig,
+            'deduplication': DeduplicationConfig}
         for name, kind in types.items():
             value = getattr(self, name)
             if value is not None:

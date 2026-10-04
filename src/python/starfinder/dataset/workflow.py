@@ -12,7 +12,10 @@ from starfinder._registry import config_type_for
 from starfinder.registration import (REGISTRATION_METHODS, CpdConfig, DemonsConfig, InsufficientLandmarksError,
     RegistrationEstimationError, RegistrationQcConfig, RegistrationRejectedError, RegistrationSignalConfig,
     TranslationConfig, WarpConfig)
-from starfinder.barcode import NeighborhoodSumConfig, ReadFilterConfig, WtaDecoderConfig
+from starfinder.barcode import (DECODING_METHODS, ENCODINGS, BarcodeLayout, EncodingConfig, LocalBackgroundConfig,
+    NeighborhoodSumConfig, OneBaseEncodingConfig, ReadFilterConfig, ReadScoreConfig, Segment, WtaDecoderConfig,
+    DeduplicationConfig)
+from starfinder.barcode.decoding import READOUT_MODES, _mode_mismatch
 from starfinder.spot_finding import SPOT_FINDING_METHODS, ChannelOverride, LocalMaximaConfig, SpotFindingPlan
 
 _RULES = ('rsf_single_fov', 'gr_single_fov_subtile', 'lrsf_single_fov_subtile',
@@ -282,12 +285,229 @@ def _explicit_recipe(values):
                                supplied_statistics=None if supplied is None else Path(supplied))
 
 
+def _ends(value, context):
+    """Allowed (first, last) pairs from one end_base item: a pair string or a list of them."""
+    items = [value] if isinstance(value, str) else value
+    if (not isinstance(items, list) or not items
+            or any(not isinstance(v, str) or len(v) != 2 or any(b not in 'ACGT' for b in v) for v in items)):
+        raise ValueError(f'invalid endpoint bases in {context}: {value!r}')
+    return tuple(dict.fromkeys((v[0], v[1]) for v in items))
+
+
+def _split_layout(split_index, n_bases, *, reverse_bases=True, ends=((), ())):
+    """Two-segment BarcodeLayout of the shared split_index (docs/readout-contract.md, "Segment layout").
+
+    split_index is MATLAB's one-based position s, in the encoded color string, of
+    the junction color that LoadCodebook.m removes; the colors after it are acquired
+    first. ends holds the allowed end pairs of each segment in acquisition order.
+    The layout equals the zero-based EncodingConfig(split_index=s - 1).
+    """
+    s = split_index
+    if not 2 <= s <= n_bases - 2:
+        raise ValueError(f'load_codebook.split_index {s} must leave two segments of at least 2 bases '
+                         f'in a {n_bases}-base barcode')
+    if reverse_bases:
+        return BarcodeLayout((Segment('A', n_bases - s, ends[0]), Segment('B', s, ends[1])), ('A', 'B'))
+    return BarcodeLayout((Segment('A', s, ends[1]), Segment('B', n_bases - s, ends[0])), ('B', 'A'))
+
+
+def _encoding(values):
+    """Encoding config of the Python-only load_codebook.encoding mapping (method default two_base).
+
+    two_base takes reverse_bases and pair_to_color (the 16 ordered base pairs to
+    colors 1-4; without it the default table), one_base base_to_color and
+    reverse_bases. YAML integer colors are read as the color strings.
+    """
+    if not isinstance(values, dict):
+        raise TypeError('load_codebook.encoding must be a mapping')
+    values = dict(values)
+    config_type = config_type_for(ENCODINGS, values.pop('method', 'two_base'), 'encoding')
+    # split_index stays the shared load_codebook key; it is translated into the layout.
+    _known(values, {f.name for f in fields(config_type) if f.init} - {'split_index'}, 'load_codebook.encoding')
+    for key in ('base_to_color', 'pair_to_color'):
+        if isinstance(values.get(key), dict):
+            values[key] = {str(k): str(v) for k, v in values[key].items()}
+    return config_type(**values)
+
+
+def _decoding(values, mode='multiplexed'):
+    """Decoder config of the Python-only decoding mapping (method default wta, or direct in direct mode).
+
+    The adapter's defaults are diagnostics=True and, for a decoder that can
+    rescue, allow_rescue=False unless the block sets them. A decoder that does
+    not support the readout mode raises TypeError naming both.
+    """
+    if not isinstance(values, dict):
+        raise TypeError('decoding must be a mapping')
+    values = dict(values)
+    config_type = config_type_for(DECODING_METHODS, values.pop('method', 'wta' if mode == 'multiplexed' else 'direct'),
+                                  'decoding method')
+    if mode not in DECODING_METHODS[config_type].modes:
+        raise TypeError(_mode_mismatch(mode, DECODING_METHODS[config_type]))
+    names = {f.name for f in fields(config_type) if f.init}
+    _known(values, names, 'decoding')
+    defaults = {'diagnostics': True, 'allow_rescue': False}
+    return config_type(**{**{k: v for k, v in defaults.items() if k in names}, **values})
+
+
+def _extraction(values):
+    """NeighborhoodSumConfig of the reads_extraction keys voxel_size and the Python-only background.
+
+    background is false (off) or a mapping of LocalBackgroundConfig fields. When
+    it is not given, the background is on with the default ring, whose inner and
+    outer boxes grow by the same number of voxels along any axis where the
+    extraction box is larger than the default inner box (so the inner box
+    contains it and the ring keeps its width).
+    """
+    radius = tuple(values.get('voxel_size', (1, 2, 2)))
+    background = values.get('background')
+    if background is False:
+        return NeighborhoodSumConfig(radius, background=None)
+    if background is None:
+        default = LocalBackgroundConfig()
+        grow = tuple(max(r - i, 0) if isinstance(r, int) and not isinstance(r, bool) else 0
+                     for r, i in zip(radius, default.inner_radius_zyx)) if len(radius) == 3 else (0, 0, 0)
+        return NeighborhoodSumConfig(radius, background=LocalBackgroundConfig(
+            tuple(i + g for i, g in zip(default.inner_radius_zyx, grow)),
+            tuple(o + g for o, g in zip(default.outer_radius_zyx, grow))))
+    if not isinstance(background, dict):
+        raise TypeError('reads_extraction.background must be false or a mapping')
+    names = {f.name for f in fields(LocalBackgroundConfig) if f.init}
+    _known(background, names, 'reads_extraction.background')
+    return NeighborhoodSumConfig(radius, background=LocalBackgroundConfig(
+        **{k: tuple(v) if isinstance(v, list) else v for k, v in background.items()}))
+
+
+def _scoring(params, decoding, extraction):
+    """ReadScoreConfig whenever the adapter decodes, unless the Python-only scoring block sets run false."""
+    values = params.get('scoring', {})
+    if not isinstance(values, dict):
+        raise TypeError('scoring must be a mapping')
+    _known(values, ('run', 'method'), 'scoring')
+    run = values.get('run', True)
+    if not isinstance(run, bool):
+        raise ValueError('scoring.run must be Boolean')
+    if values.get('method', 'bgcorr_probability') != 'bgcorr_probability':
+        raise ValueError("scoring.method must be 'bgcorr_probability'")
+    if 'scoring' in params and run and decoding is None:
+        raise ValueError('scoring requires reads_filtration.run')
+    if not run or decoding is None:
+        return None
+    if extraction is not None and extraction.background is None:
+        raise ValueError('scoring needs the local background: remove reads_extraction.background: false '
+                         'or set scoring: {run: false}')
+    return ReadScoreConfig()
+
+
+def _deduplication(params, decoding, mode):
+    """DeduplicationConfig of the Python-only deduplication block; off unless it sets run true.
+
+    The block holds run and the DeduplicationConfig fields (distance_voxels,
+    compatibility). It needs reads_filtration.run and readout mode multiplexed.
+    """
+    if 'deduplication' not in params:
+        return None
+    values = params['deduplication']
+    if not isinstance(values, dict):
+        raise TypeError('deduplication must be a mapping')
+    names = {f.name for f in fields(DeduplicationConfig) if f.init}
+    _known(values, ('run', *names), 'deduplication')
+    run = values.get('run', False)
+    if not isinstance(run, bool):
+        raise ValueError('deduplication.run must be Boolean')
+    if not run:
+        return None
+    if mode == 'direct':
+        raise ValueError("deduplication is not available with readout_mode direct")
+    if decoding is None:
+        raise ValueError('deduplication requires reads_filtration.run')
+    return DeduplicationConfig(**{k: v for k, v in values.items() if k != 'run'})
+
+
+# Barcode keys that have no meaning in readout mode direct (no encoding, layout or end-base check).
+_BARCODE_KEYS = (('load_codebook', ('split_index', 'encoding')),
+                 ('reads_filtration', ('end_base', 'split_index', 'n_barcode_segments', 'exclude_invalid_endpoints')))
+
+
+def _readout_mode(config, params):
+    """The top-level readout_mode (default multiplexed); direct rejects the barcode keys of _BARCODE_KEYS."""
+    mode = config.get('readout_mode', 'multiplexed')
+    if mode not in READOUT_MODES:
+        raise ValueError(f'readout_mode must be one of {list(READOUT_MODES)}; got {mode!r}')
+    if mode == 'direct':
+        given = [f'{block}.{key}' for block, keys in _BARCODE_KEYS for key in keys
+                 if isinstance(params.get(block), dict) and key in params[block]]
+        if given:
+            raise ValueError(f'readout_mode direct has no barcode encoding, segment layout or end-base check; '
+                             f'remove {given}')
+    return mode
+
+
+def _one_split(value, key):
+    """One shared split_index from an integer list (empty or missing: None) or an integer."""
+    value = value or None
+    if isinstance(value, list):
+        if len(value) != 1:
+            raise ValueError('split_index requires one two-segment boundary')
+        value = value[0]
+    if value is not None and (isinstance(value, bool) or not isinstance(value, int)):
+        raise ValueError(f'{key} must be an integer list')
+    return value
+
+
+def _codebook_layout(book, filt, n_rounds):
+    """(encoding, layout, zero-based split_index, filter end_bases) from the shared keys.
+
+    load_codebook.split_index is MATLAB's one-based position s, translated into a
+    two-segment layout equal to EncodingConfig(split_index=s - 1). The stated
+    reads_filtration.n_barcode_segments and reads_filtration.split_index must agree
+    with it. A string end_base is the one-segment shortcut of ReadFilterConfig; a
+    list gives the allowed ends of the layout's segments: with one segment every
+    listed pair, with two segments item k for segment k in acquisition order.
+    """
+    encoding = _encoding(book.get('encoding', {}))
+    split = _one_split(book.get('split_index'), 'load_codebook.split_index')
+    if split is not None and type(encoding) is not EncodingConfig:
+        raise ValueError('load_codebook.split_index applies to the two_base encoding only')
+    segments = 1 if split is None else 2
+    count = filt.get('n_barcode_segments')
+    if count is not None and count != segments:
+        raise ValueError(f'reads_filtration.n_barcode_segments {count} differs from the {segments} segment(s) '
+                         'of the codebook layout (load_codebook.split_index)')
+    if 'split_index' in filt and _one_split(filt['split_index'], 'reads_filtration.split_index') != split:
+        raise ValueError('reads_filtration.split_index must equal load_codebook.split_index')
+    end_base = filt.get('end_base')
+    ends = None
+    if isinstance(end_base, list):
+        if segments == 1:
+            ends = (_ends(end_base, 'reads_filtration.end_base'),)
+        elif len(end_base) != 2:
+            raise ValueError('with two segments reads_filtration.end_base lists one item per segment')
+        else:
+            ends = tuple(_ends(item, 'reads_filtration.end_base') for item in end_base)
+        end_base = None
+    spec = ENCODINGS[type(encoding)]
+    if split is not None:
+        # n bases give n - 2 colors with the junction color removed.
+        layout = _split_layout(split, n_rounds + 2 * spec.junction_colors, reverse_bases=encoding.reverse_bases,
+                               ends=ends or ((), ()))
+    elif ends is not None:
+        layout = BarcodeLayout((Segment('A', n_rounds + spec.junction_colors, ends[0]),))
+    else:
+        layout = None
+    return encoding, layout, None if split is None else split - 1, end_base
+
+
 @dataclass(frozen=True)
 class WorkflowConfig:
     """Translated dataset, scientific pipeline and execution/output policies.
 
     reference_projection, reference_image and reference_channel are passed to
-    FOV.save_reference_image for ``images/ref_merged``.
+    FOV.save_reference_image for ``images/ref_merged``. split_index is the
+    zero-based EncodingConfig.split_index converted from the shared one-based
+    load_codebook.split_index (None without a split); encoding and layout are
+    the codebook's encoding config and segment layout (None: one segment), which
+    Dataset.load_codebook(path, encoding=..., layout=...) takes.
     """
     dataset: Dataset
     pipeline: PipelineConfig
@@ -296,6 +516,8 @@ class WorkflowConfig:
     reference_projection: ProjectionConfig | None = None
     reference_image: str = 'merged'
     reference_channel: int = 0
+    encoding: EncodingConfig | OneBaseEncodingConfig = EncodingConfig()
+    layout: BarcodeLayout | None = None
 
 
 def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> WorkflowConfig:
@@ -315,7 +537,28 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
     the legacy keys intensity_estimation, intensity_threshold and
     min_distance are aliases for local_maxima only, channel_overrides
     gives per-channel settings and rounds the rounds to detect in. The rule-level Python-only device key sets
-    ExecutionConfig.device.
+    ExecutionConfig.device. The shared load_codebook.split_index is MATLAB's
+    one-based position and becomes the two-segment layout (zero-based
+    EncodingConfig.split_index s - 1); reads_filtration.n_barcode_segments,
+    reads_filtration.split_index and a list end_base are checked against and
+    translated into that layout. The Python-only load_codebook.encoding names an
+    ENCODINGS method (default two_base) with its config fields (two_base:
+    reverse_bases and pair_to_color, the default table when absent), and the
+    Python-only decoding key a DECODING_METHODS method (default wta) with its
+    config fields; the adapter decodes with diagnostics and without rescue
+    unless that key sets them. Whenever it decodes, the adapter also scores
+    (ReadScoreConfig) unless the Python-only scoring key sets run false; the
+    Python-only deduplication key (run and the DeduplicationConfig fields)
+    turns on deduplication, which is off otherwise and raises in direct mode; and
+    extraction measures the local background unless the Python-only
+    reads_extraction.background is false (or a mapping of LocalBackgroundConfig
+    fields). The Python-only top-level readout_mode
+    (multiplexed, the default, or direct) becomes Dataset.readout_mode; in
+    direct mode decoding is the direct method (DirectAssignmentConfig), the
+    rule's codebook input is the panel CSV (round,channel,gene_id), the
+    candidates need spot_finding.rounds, and the barcode keys
+    load_codebook.split_index and encoding and reads_filtration.end_base,
+    split_index, n_barcode_segments and exclude_invalid_endpoints raise.
     Direct Python callers construct Dataset/PipelineConfig (no legacy aliases).
     """
     if rule not in _RULES:
@@ -329,14 +572,17 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
     if set(config) & {'channel_order', 'fov_pattern'}:
         raise ValueError('direct Python field names belong to Dataset; use shared seq_channel_order/fov_id_pattern here')
     channels = tuple(config.get('seq_channel_order', ()))
+    params = config.get('rules', {}).get(rule, {}).get('parameters', {})
+    mode = _readout_mode(config, params)
     dataset = Dataset(Path(config['root_input_path']) / config['dataset_id'] / config['sample_id'],
         Path(config['root_output_path']) / config['dataset_id'] / config['output_id'],
         config['dataset_id'], config['sample_id'], config['output_id'], rounds=rounds,
-        channel_order=channels, fov_pattern=config.get('fov_id_pattern', 'Position%03d'))
-    params = config.get('rules', {}).get(rule, {}).get('parameters', {})
+        channel_order=channels, fov_pattern=config.get('fov_id_pattern', 'Position%03d'), readout_mode=mode)
     _known(params, ('streaming', 'snr_threshold', 'load_codebook', 'load_raw_images', 'enhance_contrast',
         'hist_equalize', 'morph_recon', 'tophat', 'preprocessing', 'registration', 'global_registration', 'local_registration',
-        'spot_finding', 'reads_extraction', 'reads_filtration', 'create_subtiles', 'device'), 'Python workflow parameter')
+        'spot_finding', 'reads_extraction', 'reads_filtration', 'decoding', 'scoring', 'deduplication',
+        'create_subtiles', 'device'),
+        'Python workflow parameter')
     legacy = [key for key in _LEGACY_PREPROCESSING if key in params]
     if 'preprocessing' in params and legacy:
         raise ValueError(f'preprocessing is mutually exclusive with the legacy keys {legacy}')
@@ -347,9 +593,20 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
     spot_keys = {f.name for cls, spec in SPOT_FINDING_METHODS.items() if spec.pipeline for f in fields(cls) if f.init}
     spot, do_spot = _operation(params, 'spot_finding', {'ref_round', 'method', 'channel_overrides', 'rounds', *_SPOT_ALIASES,
                                                         *spot_keys})
-    extract, do_extract = _operation(params, 'reads_extraction', ('voxel_size',))
+    extract, do_extract = _operation(params, 'reads_extraction', ('voxel_size', 'background'))
     filt, do_filter = _operation(params, 'reads_filtration', ('end_base', 'start_base', 'exclude_invalid_endpoints', 'score_bounds', 'n_barcode_segments', 'split_index'))
-    book, _ = _operation(params, 'load_codebook', ('split_index',))
+    book, _ = _operation(params, 'load_codebook', ('split_index', 'encoding'))
+    if mode == 'direct':
+        encoding, layout, split_index, end_base = EncodingConfig(), None, None, None
+    else:
+        encoding, layout, split_index, end_base = _codebook_layout(book, filt, n)
+    if 'decoding' in params and not do_filter:
+        raise ValueError('decoding requires reads_filtration.run')
+    decoding = (_decoding(params['decoding'], mode) if 'decoding' in params else
+                WtaDecoderConfig(diagnostics=True) if mode == 'multiplexed' else _decoding({}, mode))
+    extraction = _extraction(extract) if do_extract else None
+    scoring = _scoring(params, decoding if do_filter else None, extraction)
+    deduplication = _deduplication(params, decoding if do_filter else None, mode)
     load, do_load = _operation(params, 'load_raw_images', ('subdir',))
     registration_keys = {f.name for cls in REGISTRATION_METHODS for f in fields(cls) if f.init}
     registration_keys |= {'ref_round', 'method', 'ref_img', 'mov_img', 'ref_channel', 'boundary_mode', 'recovery',
@@ -377,8 +634,6 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
         reference_view = ('single-channel', signal.reference_channel) if signal.mode == 'channel' else ('merged', 0)
     if spot.get('ref_round', rounds.reference_round) != rounds.reference_round:
         raise ValueError('detection reference differs from dataset reference')
-    if filt.get('n_barcode_segments', 1) != 1 or filt.get('split_index') not in (None, []):
-        raise ValueError('segmented endpoint filtering is not supported by ReadFilterConfig')
     resident = rule in ('lrsf_single_fov_subtile', 'deep_rsf_subtile')
     # The adapter loads raw input unless this is a saved-subtile job or explicitly disabled.
     load_config = ImageLoadConfig(channel_labels=channels, **load) if channels and not resident and ('load_raw_images' not in params or do_load) else None
@@ -387,9 +642,9 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
                        _legacy_recipe(params, norm, do_norm, hist, do_hist, morph, do_morph, top, do_top, resident)),
         registration=registration,
         spot_finding=_detection(spot, channels) if do_spot else None,
-        extraction=NeighborhoodSumConfig(tuple(extract.get('voxel_size', (1, 2, 2)))) if do_extract else None,
-        decoding=WtaDecoderConfig(diagnostics=True) if do_filter else None,
-        filtering=ReadFilterConfig(end_bases=filt.get('end_base'), start_base=filt.get('start_base', 'C'), exclude_invalid_endpoints=filt.get('exclude_invalid_endpoints', False), score_bounds=filt.get('score_bounds', {})) if do_filter else None)
+        extraction=extraction,
+        decoding=decoding if do_filter else None, scoring=scoring, deduplication=deduplication,
+        filtering=ReadFilterConfig(end_bases=end_base, start_base=filt.get('start_base', 'C'), exclude_invalid_endpoints=filt.get('exclude_invalid_endpoints', False), score_bounds=filt.get('score_bounds', {})) if do_filter else None)
     creation_rules = (('deep_create_subtile',) if rule.startswith('deep_') else
                       ('gr_single_fov_subtile',) if rule == 'lrsf_single_fov_subtile' else
                       (rule,) if rule == 'gr_single_fov_subtile' else
@@ -404,15 +659,11 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
     streaming = params.get('streaming', False)
     if not isinstance(streaming, bool):
         raise ValueError('streaming must be Boolean')
-    split_index = book.get('split_index') or None
-    if isinstance(split_index, list):
-        if len(split_index) != 1:
-            raise ValueError('split_index requires one two-segment boundary')
-        split_index = split_index[0]
     return WorkflowConfig(dataset, pipeline,
         ExecutionConfig('streaming' if streaming else 'batch', rule in ('gr_single_fov_subtile', 'deep_create_subtile'),
                         params.get('device', 'cpu')),
-        split_index, ProjectionConfig() if config.get('maximum_projection', False) else None, *reference_view)
+        split_index, ProjectionConfig() if config.get('maximum_projection', False) else None, *reference_view,
+        encoding=encoding, layout=layout)
 
 
 def _run_workflow(snakemake, rule):
@@ -422,8 +673,11 @@ def _run_workflow(snakemake, rule):
     dataset = adapted.dataset
     fov_id = snakemake.wildcards.fovID
     resident = rule in ('lrsf_single_fov_subtile', 'deep_rsf_subtile')
-    if adapted.pipeline.decoding:
-        dataset.load_codebook(Path(snakemake.input[1]), split_index=adapted.split_index)
+    if adapted.pipeline.decoding and dataset.readout_mode == 'direct':
+        # In direct mode the rule's codebook input is the panel CSV.
+        dataset.load_direct_panel(Path(snakemake.input[1]))
+    elif adapted.pipeline.decoding:
+        dataset.load_codebook(Path(snakemake.input[1]), encoding=adapted.encoding, layout=adapted.layout)
     fov = FOV.from_subtile(Path(snakemake.input[2]), dataset, fov_id) if resident else dataset.fov(fov_id)
     fov.run(adapted.pipeline, execution=adapted.execution)
     if resident:

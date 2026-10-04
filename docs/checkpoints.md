@@ -36,7 +36,7 @@ earlier run.
 
 `run` writes a stage only when it computes it. `registered` is written for each
 round inside the round loop, `candidates` after detection or extraction, and
-`pre_qc` after decoding.
+`pre_qc` after decoding, scoring and deduplication, before filtering.
 
 ## Layout
 
@@ -128,6 +128,10 @@ This is a wide table with one row per spot, in the spot table's order:
 | `round` | string | The detection round of each row, present only when the detection plan names `rounds`. |
 | `sig_<round>_<channel>` | float64 | Extracted sum for each round, then each channel in channel order. |
 | `valid_<round>` | bool | False marks an unavailable measurement, not zero signal. |
+| `bg_<round>_<channel>` | float64 | Since §2.8 (W-294), when the background was measured: the local background, grey levels per voxel (ring median); NaN below `min_voxels` or in a round that was not read. |
+| `noise_<round>_<channel>` | float64 | The local noise, 1.4826 × the ring's median absolute deviation; NaN as `bg_`. |
+| `bgvox_<round>` | int64 | Ring voxels inside the image (0 in a round that was not read). |
+| `boxvox_<round>` | int64 | Voxels the extraction box summed (`IntensityExtractionResult.box_voxels`). |
 
 The rounds follow the extraction round labels, which are the `RoundState`
 sequencing rounds in a pipeline run. The table is built and split with array
@@ -146,6 +150,27 @@ also records the detection plan in four keys:
 | `execution` | The execution entry: device, framework and thread settings. |
 | `weights` | The provenance `artifacts` entries of the loaded pretrained weights (empty for methods without weights). |
 
+Since §2.8 (W-293) `candidates.json` also records `readout_mode`, the dataset's
+readout mode (`multiplexed` or `direct`, {doc}`readout-contract`). A header without
+it is `multiplexed`.
+
+Since W-294 extraction measures the local background and noise by default
+({doc}`readout-contract`, "Extraction"; option C1 of "Checkpoints and reruns"). The
+saved extraction configuration `signals.extraction_config` keeps exactly the fields
+`neighborhood_radius_zyx`, `sampling` and `boundary`, so a reader at `141c093`
+still rebuilds it; the background settings are new top-level keys:
+
+| Key | Content |
+| --- | --- |
+| `background_config` | The `LocalBackgroundConfig` fields (`inner_radius_zyx`, `outer_radius_zyx`, `min_voxels`), or `null` when the background was off. |
+| `image_background`, `image_noise` | Per round and channel (`{round: {channel: value}}`), the median and 1.4826 × MAD of the whole extraction image; `null` when not measured. |
+
+The table then adds the four background column groups after the `valid_<round>`
+columns. A reader at `141c093` loads such a checkpoint and drops those columns,
+because they are not spot columns. A checkpoint written without the keys (before
+W-294, or with `background=None`) loads with `background=None` in the reloaded
+`NeighborhoodSumConfig`, no background measurements and `box_voxels=None`.
+
 `detection_config` stays the plan's base config. Reloading gives a
 `SpotFindingResult` whose table equals the written one exactly (CSV and Parquet) and
 whose `config` and `plan` equal the original. A checkpoint written before these keys
@@ -156,15 +181,60 @@ spot column.
 With a plan that names several rounds (see {doc}`spot-finding-contract`, "Detection in
 several rounds"), the table holds every round's candidates, reference round first,
 with `spot_id` running over the whole table and the round in `round`; coincident
-candidates of different rounds stay separate rows. The signal columns are still read
-at every candidate in every sequencing round.
+candidates of different rounds stay separate rows. In readout mode `multiplexed` the
+signal columns are read at every candidate in every sequencing round. In readout mode
+`direct` each candidate is read in its own round only: the signals of its other
+rounds are `0.0` and their `valid_<round>` is false, and their background and
+noise are NaN with 0 ring voxels. `IntensityExtractionResult.box_voxels` is stored in
+the `boxvox_<round>` columns, so it is reloaded only from a checkpoint with background
+measurements; otherwise a reloaded result has `box_voxels=None`.
 
 ### pre_qc
 
-`pre_qc.<format>` is `BarcodeDecodingResult.table`, unchanged. `pre_qc.json`
-holds the decoder configuration, labels and diagnostics. Array and table
-diagnostics are not saved: decoder probabilities, per-round and candidate tables,
-and WTA per-round scores. A reloaded result therefore lacks those keys.
+`pre_qc.<format>` is `BarcodeDecodingResult.table`, unchanged. Since §2.8 (W-292)
+the table holds the string column `entry_id`, the codebook entry of the decoded
+color sequence, after `gene_id`; `FORMAT_VERSION` stays 2, an older reader keeps
+it as an ordinary column, and a `pre_qc` written without it still loads.
+`pre_qc.json` holds the decoder configuration, labels and diagnostics; the reader
+rebuilds the configuration through `DECODING_METHODS` from its `method` (a `direct`
+configuration holds only its `method`). Since W-293 it also records `readout_mode`,
+which becomes `BarcodeDecodingResult.readout_mode` on reloading; a header without it
+loads as `multiplexed`. A `direct` table adds `round`, `channel`,
+`own_channel_rank` and `own_channel_fraction`, and its color sequences are missing
+values. Array
+and table diagnostics are not saved: decoder probabilities, per-round and
+candidate tables, and WTA per-round scores. A reloaded result therefore lacks
+those keys.
+
+Since W-294 `pre_qc` holds the read table after scoring, before filtering (option
+C1): when the run scored the reads, the table is `ReadScoringResult.table`, the
+decoding table followed by the score columns `qc_score`, `qc_ambiguity_max`,
+`qc_signal_to_background`, `qc_rounds` (float64) and `qc_reason` (string). The
+decoder configuration stays in `decoding_config`, and `pre_qc.json` adds:
+
+| Key | Content |
+| --- | --- |
+| `scoring_config` | The `ReadScoreConfig` (`{"method": "bgcorr_probability"}`), or `null` when the reads were not scored. |
+| `deduplication_config` | The `DeduplicationConfig` (`distance_voxels`, `compatibility`) since W-295, or `null` when deduplication did not run. |
+| `layout` | The codebook's segment layout (`segments` with `name`, `bases` and `ends`, and `acquisition_order`); `null` in readout mode `direct`. A header without it is one segment. |
+| `encoding` | Since W-304, the codebook's encoding that decoded the reads: `method`, `reverse_bases` and the table, `pair_to_color` (`two_base`, the 16 ordered pairs) or `base_to_color` (`one_base`); `split_index` is left out because `layout` records it. `null` in readout mode `direct`. A header without it (written before W-304) is not checked. |
+| `stages_applied` | The stages that made the table, in order: `"decoding"`, then `"scoring"` and `"deduplication"` when they ran. |
+
+On reloading, a scored checkpoint gives `decoding_result` (the table without the
+score columns, which come last) and `scoring_result` (the whole table); an unscored
+one, or one written before W-294, gives `scoring_result=None`. A reader at `141c093`
+loads a scored `multiplexed` `pre_qc` with the score columns as ordinary columns,
+and it ignores the `encoding` key, as the reader at `9aeb220` does (checked by
+loading W-304 checkpoints with both readers).
+
+Since W-295 a run with `PipelineConfig.deduplication` writes the reads after
+deduplication: the table ends with `duplicate_group`, `duplicate_of` (string,
+missing when not set), `is_representative` (bool) and `duplicate_reason` (string),
+after the score columns when the reads were scored. On reloading, a deduplicated
+checkpoint also gives `deduplication_result` (the whole table, its counts
+recomputed from these columns, without the pair diagnostics), and `scoring_result`
+and `decoding_result` are the table without the columns of the later stages.
+Without `deduplication_config` it is `None`.
 
 All JSON files are strict JSON: a non-finite diagnostic or configuration value
 (NaN or infinity) is written as `null`.
@@ -190,16 +260,32 @@ identical typed results. Empty tables keep their columns and dtypes.
 
 {py:meth}`~starfinder.dataset.FOV.load_checkpoint` restores one stage into an FOV
 that has no results at or after that stage. It checks the FOV id (and subtile
-id), the round labels and the channel order against the dataset, and raises
-`ValueError` on a mismatch. Then call `run` with a `PipelineConfig` that starts
+id), the round labels and the channel order against the dataset, and, for
+`candidates` and `pre_qc`, the readout mode (`multiplexed` when the header has
+none) against `Dataset.readout_mode`, and, for `pre_qc`, the recorded `encoding`
+against the loaded codebook's (since W-304; not checked when the header has none
+or no codebook is loaded); it raises `ValueError` on a mismatch, naming both values. Then call `run` with a `PipelineConfig` that starts
 after the loaded stage:
 
 ```python
+from starfinder.barcode import DeduplicationConfig, ReadScoreConfig
 from starfinder.dataset import PipelineConfig
 
 # Decode and filter again, without images.
 fov = dataset.fov("Position001").load_checkpoint("candidates")
 fov.run(PipelineConfig(decoding=decoder, filtering=read_filter))
+
+# Decode, score and filter from the retained values and background.
+fov = dataset.fov("Position001").load_checkpoint("candidates")
+fov.run(PipelineConfig(decoding=decoder, scoring=ReadScoreConfig(), filtering=read_filter))
+
+# Score again without decoding: load candidates (values, background) and pre_qc (reads).
+fov = dataset.fov("Position001").load_checkpoint("candidates").load_checkpoint("pre_qc")
+fov.run(PipelineConfig(scoring=ReadScoreConfig(), filtering=read_filter))
+
+# Deduplicate again: load candidates (coordinates, channels, sums) and pre_qc (reads).
+fov = dataset.fov("Position001").load_checkpoint("candidates").load_checkpoint("pre_qc")
+fov.run(PipelineConfig(deduplication=DeduplicationConfig(), filtering=read_filter))
 
 # Only filter again, with a different predicate.
 fov = dataset.fov("Position001").load_checkpoint("pre_qc")
@@ -210,6 +296,10 @@ fov = dataset.fov("Position001").load_checkpoint("registered")
 fov.run(PipelineConfig(spot_finding=detector, extraction=extraction,
                        decoding=decoder, filtering=read_filter))
 ```
+
+Scoring needs the background of the loaded `candidates`: scoring a checkpoint
+without it (written before W-294, or with `background=None`) raises `ValueError`
+naming extraction, the stage to rerun.
 
 When no image operation is configured and no images are resident, `run` skips
 the round loop. Resuming is always an explicit call; there is no scheduler.
@@ -231,12 +321,12 @@ run starts, after each completed step and when the run ends. It contains:
 | `error` | `null`, or the failing `step` and `round`, the exception `type`, `message` and `traceback`. |
 | `code` | Package `version`, `git_commit` and `git_dirty`; each is `null` when unknown. The commit is recorded only when the package runs from a starfinder checkout, never from an enclosing repository. |
 | `environment` | Python, platform and package versions (`null` when not installed). |
-| `config` | `pipeline`, `execution` (including the execution `device`) and `checkpoints` configurations. |
+| `config` | `pipeline`, `execution` (including the execution `device`) and `checkpoints` configurations, `readout_mode`, the dataset's readout mode (since W-293), and `encoding`, the codebook's encoding as in `pre_qc.json` (`null` without a codebook or in readout mode `direct`; since W-304). |
 | `inputs` | Loaded TIFF `path` and streamed `sha256` (`null` with `hash_inputs=False`). |
 | `steps` | `name`, `round`, `seconds` and `status` of each completed or failed step. A preprocessing step is named `preprocess:<step name>`. The `find_spots` record also has `methods`, a list with the detection's provenance entry ({doc}`method-registry`, "Provenance in run.json"): `stage` (`spot_finding`), `method`, `config_type`, `implementation`, `config`, `requires` (installed versions of the optional dependencies), `artifacts` (pretrained weights files; empty for methods without weights) and `execution` (device, framework and thread settings). For a plan that names rounds, `run` records one `find_round_spots` step per detected round, each with its own entry, and `FOV.find_spots` called inside a recorded step lists one entry per round, each with its `round`. |
 | `preprocessing` | `null` without a preprocessing recipe. Otherwise `recipe` (the step names of `steps` and `post_registration`, `extraction_source` and `registration_source`), `rounds`: per round, one record per step with `index`, `stage` (`steps` or `post_registration`), `step`, `config`, `fitted`, `diagnostics`, `input_dtype`, `output_dtype` and `save_as`; `transforms`: per round and image (`detection` and each snapshot), the transforms composed in order, each with `result` (its index in the round's registration results in `transforms.json`), `method` and `kind` (`translation`, `affine`, `bspline` or `dense`), empty for the reference round; and `supplied_statistics`. |
 | `registration` | Ordered registration attempts per round: the estimation entries and one application entry per moving round (see {doc}`coordination`). |
-| `counts` | Spots, intensities, decoding call statuses and filtering counts. |
+| `counts` | Spots, intensities, decoding call statuses, scoring counts (`scoring`: total, scored, `no_assignment` and `background_unavailable`, since W-294, when the reads were scored), deduplication counts (`deduplication`: total, groups, `merged_reads` and `conflicting_groups`, since W-295, when the reads were deduplicated) and filtering counts. When the reads were scored or deduplicated, `summary` holds the population summary of {py:func}`~starfinder.barcode.summarize_reads` (since W-295). |
 | `checkpoint_directory`, `checkpoints` | The FOV directory and the files written for each stage. |
 
 If a step raises, `run` records `failed` (or `interrupted` for

@@ -448,7 +448,8 @@ holds the plan (`None` on construction means `SpotFindingPlan(config)`). Direct
 (§2.8)")`, from `FOV.run` before any processing and from `FOV.decode_barcodes` for a
 spot table with a `round` column. Extraction reads every candidate in every sequencing
 round, as before; in `FOV.run` it then runs after the last detected round, which needs
-batch mode or `retain_images=True`.
+batch mode or `retain_images=True`. Since W-293 this holds in readout mode
+`multiplexed`; readout mode `direct` reads such a set ([Readout mode](#readout-mode)).
 
 ### Spot-finding diagnostics
 
@@ -586,6 +587,269 @@ back from `run.json`, so records written before the rename stay valid as they
 are; a script that reads them should accept either key. The `candidates.json`
 keys `detection_config`, `detection_rounds`, `detection_plan` and
 `detection_diagnostics` and the preprocessing `detection` image keep their names.
+
+### Readout mode
+
+§2.8 adds two readout modes as one dataset setting ({doc}`readout-contract`,
+"Readout modes" and "Direct readout"). `Dataset.readout_mode` is `"multiplexed"`
+(the default: every earlier result, identity and digest is unchanged) or
+`"direct"`, where a round and channel identify a gene.
+{py:class}`~starfinder.barcode.DirectPanel` holds the gene of each (round, channel),
+{py:func}`~starfinder.barcode.load_direct_panel` reads it from a
+`round,channel,gene_id` CSV, and `Dataset.load_direct_panel` stores it as
+`Dataset.direct_panel`; a repeated gene or (round, channel) raises `ValueError`
+naming it. {py:class}`~starfinder.barcode.DirectAssignmentConfig` (`direct` in
+`DECODING_METHODS`, no parameters) and
+{py:func}`~starfinder.barcode.assign_direct` assign each candidate the gene of its
+own round and channel: one read per candidate with `round`, `channel`, `entry_id`
+`"<round>/<channel>"`, `call_type` `direct`, and the diagnostic columns
+`own_channel_rank` and `own_channel_fraction`; a (round, channel) without a gene is
+`unmatched` with `unmapped_channel`, and a zero own round `no_signal`. Nothing is
+merged or reassigned. `BarcodeDecodingResult` gains `readout_mode`.
+
+In `direct` mode, `extract_intensities(..., readout_mode="direct")` (which
+`FOV.run` and `FOV.extract_intensities` pass from the dataset) reads each candidate
+in its own round only; the other rounds are `0.0` with `valid=False`.
+`IntensityExtractionResult` gains `box_voxels` (N×R int64, the voxels each box
+summed, 0 for a round that was not read; since W-294 a candidates checkpoint
+stores it with the background measurements, and a checkpoint without them reloads
+it as `None`). `FOV.run` and `FOV.decode_barcodes`
+assign with `DirectAssignmentConfig` and `Dataset.direct_panel`.
+
+Decoding a multi-round candidate set (a `round` column) needs
+`readout_mode="direct"`: in `multiplexed` mode it still raises `ValueError`, whose
+message keeps "needs a readout mode (§2.8)" and adds "set readout_mode='direct'".
+A decoder that does not support the dataset's mode (`wta` or `codebook_aware` in
+`direct` mode, `direct` in `multiplexed` mode) raises `TypeError` naming the mode
+and the decoder, in `FOV.run`, `FOV.decode_barcodes`, `decode_barcodes` and
+`assign_direct`; `direct` mode without a `round` column, or without a loaded panel,
+raises `ValueError`.
+
+The YAML top-level key `readout_mode` (Python only; the schema accepts `direct`
+only with `backend: python`) sets the mode. In `direct` mode the Python-only
+`decoding` block defaults to and may only name `method: direct`, the rule's
+codebook input is the panel CSV, and the barcode keys `load_codebook.split_index`
+and `encoding` and `reads_filtration.end_base`, `split_index`, `n_barcode_segments`
+and `exclude_invalid_endpoints` raise. In `multiplexed` mode `decoding: {method:
+direct}` now raises `TypeError` instead of "unknown decoding method". The
+`candidates.json` and `pre_qc.json` headers and the `config` record of `run.json`
+gain `readout_mode`; a checkpoint without it loads as `multiplexed`, and
+`FOV.load_checkpoint` raises when it differs from the dataset's mode
+({doc}`checkpoints`).
+
+### Readout encodings and decoders
+
+§2.8 registers the barcode encodings and the decoders on the shared registry
+mechanism ({doc}`method-registry`, {doc}`readout-contract`, "Encoding registry").
+`starfinder.barcode.ENCODINGS` maps each encoding config type to its
+`EncodingSpec`: `two_base` is {py:class}`~starfinder.barcode.EncodingConfig`, which
+gains the discriminator `method="two_base"` (its positional constructor is
+unchanged), and `one_base` is the new
+{py:class}`~starfinder.barcode.OneBaseEncodingConfig`, whose `base_to_color` maps A,
+C, G and T one-to-one onto the colors 1–4 and has no default.
+`starfinder.barcode.DECODING_METHODS` maps `WtaDecoderConfig` (`wta`) and
+`CodebookAwareDecoderConfig` (`codebook_aware`) to their `DecodingSpec`, with the
+readout modes, encoding kinds, rescue and score columns each declares. Lookups use
+the exact config type, so `decode_barcodes` rejects a subclass of a decoder config
+with `TypeError("unsupported decoder config")`, and it raises `TypeError` when the
+codebook's encoding kind is not one the decoder declares. The decoders' numerical
+behavior is unchanged. `Codebook(encoding=...)` accepts any registered encoding
+config; `Dataset.load_codebook` gains keyword-only `encoding` and `layout`.
+
+### Encoding table
+
+W-304 makes the `two_base` pair-to-color table visible, configurable and recorded
+({doc}`readout-contract`, "Encoding registry"). {py:class}`~starfinder.barcode.EncodingConfig`
+gains `pair_to_color`, the 16 ordered base pairs mapped to the colors `"1"` to `"4"`,
+whose default is the active table of `src/matlab/EncodeBases.m`; `EncodingConfig()`
+and every default result are unchanged, the positional constructor is unchanged,
+and the module functions `encode_bases` and `decode_color_sequence` keep the default
+table. A table whose keys are not the 16 pairs, whose values are not `"1"` to `"4"`,
+or in which the four pairs of one first base do not have four different colors
+raises `ValueError`. Every encode and decode path follows the codebook's table,
+including the `end_bases` shortcut of `filter_reads` when the codebook is given.
+`EncodingSpec` gains the required keyword field `table`;
+{py:meth}`~starfinder.barcode.Codebook.encoding_table`,
+{py:meth}`~starfinder.dataset.Dataset.encoding_table` and
+{py:meth}`~starfinder.dataset.FOV.encoding_table` show the table with the channel of
+each color. `repr(codebook)` ends with the encoding method and segment layout, and
+`repr(dataset)` gains an `encoding:` line after `codebook:` when a codebook is
+loaded. The Python-only YAML key `load_codebook.encoding.pair_to_color` sets the
+table (the schema rejects it unless `backend: python`; MATLAB is unchanged).
+`pre_qc.json` and `run.json` (`config.encoding`) record the encoding (`method`,
+`reverse_bases`, and `pair_to_color` or `base_to_color`) under a new key beside
+`layout`, with `FORMAT_VERSION` 2; loading a `pre_qc` checkpoint into a dataset
+whose codebook has another encoding raises `ValueError` naming both, and a
+checkpoint without the key loads as before.
+
+### Segment layout
+
+{py:class}`~starfinder.barcode.BarcodeLayout` and
+{py:class}`~starfinder.barcode.Segment` describe how a barcode is cut into
+separately read segments: lengths in bases, acquisition order and allowed
+(first, last) end bases per segment, several pairs allowed. `Codebook.layout` holds
+the effective layout: one segment by default, or the two segments that a legacy
+`EncodingConfig.split_index` describes (the two are mutually exclusive). A codebook
+entry whose segment ends are not declared raises `ValueError` naming the entry and
+segment. `filter_reads(..., codebook=...)` checks the observed colors per segment
+(`endpoint_valid_<segment>` and `endpoint_valid`); `FOV.filter_reads` passes the
+dataset codebook. `ReadFilterConfig.end_bases` stays the one-segment shortcut and
+cannot be combined with layout ends, and `exclude_invalid_endpoints=True` without
+`end_bases` now raises when the reads are filtered without layout ends, instead of
+when the config is built.
+
+**Intentional change:** the workflow adapter converts the shared
+`load_codebook.split_index` from MATLAB's one-based position; `WorkflowConfig.split_index`
+holds the zero-based Python value and `WorkflowConfig.layout` the translated layout.
+A configuration that worked around the defect by giving the Python value (for
+example 4 for aging) must give the MATLAB value (5). On the 11-base barcode
+`CAGTACTGCAT`, `[5]` now gives `242324242`; before, it gave `423242423`
+({doc}`readout-baseline`). The adapter also accepts the MATLAB two-segment keys:
+`reads_filtration.n_barcode_segments` and `reads_filtration.split_index`, when given,
+must agree with the layout, and a list `end_base` gives the allowed segment ends
+({doc}`workflow-configuration`). The benchmark pipeline profiles record the
+zero-based split and pass the shared one-based value.
+
+### Codebook entries
+
+A codebook row is an entry, not a gene (D5). `Codebook.table` gains `entry_id`
+(unique) before `gene_id`, which may now repeat; `color_sequence` and
+`base_sequence` stay unique. A `gene,barcode` row has `entry_id` equal to the
+barcode as written; a canonical file may state `entry_id` and otherwise gets the
+color sequence. Repeated `entry_id`, `base_sequence` or `color_sequence` raise
+naming both source rows. `n_entries`, `seq_to_entry` and `entry_to_seq` are new;
+`n_genes` counts distinct genes and `genes` lists them once each; `gene_to_seq`
+raises `ValueError` for a codebook with repeated genes.
+
+**Intentional change:** two barcodes for one gene, which raised before, now load
+as two entries of that gene, and the decoding table (and so `pre_qc`) gains
+`entry_id`, the entry of the decoded color sequence, next to `gene_id`.
+
+### Background measurements
+
+Extraction now measures a local background and noise next to the sums, on by
+default ({doc}`readout-contract`, "Extraction"; {doc}`readout-algorithms`,
+"Background and noise"). {py:class}`~starfinder.barcode.LocalBackgroundConfig`
+(`inner_radius_zyx=(1, 3, 3)`, `outer_radius_zyx=(1, 6, 6)`, `min_voxels=16`,
+provisional) is the new field `NeighborhoodSumConfig.background`; `background=None`
+turns it off, and the inner box must contain the extraction box, so a radius
+beyond `(1, 3, 3)` (for example `NeighborhoodSumConfig((2, 2, 2))`) now raises
+`ValueError` unless it states a wider ring or `background=None`. For each candidate,
+channel and extracted round, `IntensityExtractionResult.background` is the median and
+`noise` 1.4826 × the median absolute deviation of the ring (the voxels of the outer box
+outside the inner box, clipped to the image; 360 unclipped), in grey levels per voxel;
+`background_voxels` counts the ring voxels, and `image_background` and `image_noise`
+(per channel and round) are the median and 1.4826 × MAD of the whole image. Below
+`min_voxels` ring voxels, and in rounds that readout mode `direct` does not read, the
+background and noise are NaN. The ring is not masked for neighboring spots. The sums,
+`valid` and `box_voxels` are unchanged. The `candidates` checkpoint gains the
+`bg_<round>_<channel>`, `noise_<round>_<channel>`, `bgvox_<round>` and
+`boxvox_<round>` columns (see {ref}`readout-checkpoints`). In the workflow
+adapter the background is on; the Python-only `reads_extraction.background` is
+`false` or a mapping of `LocalBackgroundConfig` fields, and without it the default
+ring grows along the axes where `voxel_size` exceeds its inner box
+({doc}`workflow-configuration`).
+
+### Shared read-QC score
+
+{py:func}`~starfinder.barcode.score_reads` (`reference` is the codebook, or the
+direct panel in readout mode `direct`) returns a
+{py:class}`~starfinder.barcode.ReadScoringResult`: the read table with the columns
+`qc_score`, `qc_ambiguity_max`, `qc_signal_to_background`, `qc_rounds` and
+`qc_reason` appended ({doc}`readout-contract`, "Shared read-QC score"). `qc_score`
+(W-278 design D1) is the probability NLL of the assigned entry recomputed on
+background-subtracted sums; lower ranks as more reliable. It is a ranking, not a
+calibrated probability; it sets no cutoff and never changes `gene_id`, `entry_id`,
+`call_status` or `call_type`. Reads without an assignment have NaN with
+`no_assignment`, and reads with a round without background NaN with
+`background_unavailable`; scoring intensities that have no background raises
+`ValueError` naming extraction. {py:class}`~starfinder.barcode.ReadScoreConfig`
+(`method="bgcorr_probability"`, no parameter) is `PipelineConfig.scoring`, `None` by
+default in the Python API; `FOV.run` scores after decoding or assignment and before
+filtering, `FOV.score_reads` scores the stored reads, `FOV.scoring_result` holds the
+result and `FOV.results` lists it as `scoring`. `filter_reads` accepts a
+`ReadScoringResult` and keeps its score columns; `FOV.filter_reads` filters the scored
+reads when scoring ran.
+
+**Intentional change:** the workflow adapter scores whenever it decodes; the
+Python-only `scoring: {run: false}` turns it off. The filtering table and the
+exported reads of a workflow run therefore carry the score columns; the shared
+spot CSV columns are unchanged.
+
+### Optional deduplication
+
+{py:func}`~starfinder.barcode.deduplicate_reads` (`DeduplicationConfig`,
+`ReadDeduplicationResult`; {doc}`readout-contract`, "Optional deduplication") groups
+the reads of one amplicon that was detected in two channels. Candidates of one
+detection round in different detection channels are linked when they lie within
+`distance_voxels` (default 1.0, inclusive, voxel index space) and have identical WTA
+observed sequences without `M` or `N`; a group keeps one original read as its
+representative, and a group whose assigned reads name different entries keeps every
+read (`conflicting_calls`). The read table gains `duplicate_group`, `duplicate_of`,
+`is_representative` and `duplicate_reason`; nothing is removed or changed. It is off
+by default: `PipelineConfig.deduplication` is `None`, and the workflow adapter runs
+it only with the Python-only `deduplication: {run: true}` block. `FOV.run` runs it
+after scoring and before filtering, `FOV.deduplicate_reads` runs it on the stored
+reads, and `FOV.deduplication_result` and `FOV.results["deduplication"]` hold the
+result. It raises `ValueError` in readout mode `direct`.
+
+### Read filter
+
+`ReadFilterConfig.score_bounds` accepts any declared score column: the
+`DecodingSpec.score_columns` of every decoder (`own_channel_rank` and
+`own_channel_fraction` of `direct` are new) and the shared score's `qc_score`,
+`qc_ambiguity_max`, `qc_signal_to_background` and `qc_rounds`. The new
+`ReadFilterConfig.exclude_duplicates` (default true) rejects the reads that
+deduplication made duplicates, with reason `duplicate`; reads that were not
+deduplicated are unaffected, so every earlier filter result is unchanged.
+`filter_reads` also accepts a `ReadDeduplicationResult`. End bases are checked per
+segment from the codebook's segment layout (see "Segment layout" above);
+`end_bases` stays the one-segment shortcut. No score cutoff is set by default.
+
+(readout-checkpoints)=
+### Checkpoints
+
+The checkpoint stages and files stay, and `FORMAT_VERSION` stays 2 (option C1 of
+{doc}`readout-contract`, "Checkpoints and reruns"; {doc}`checkpoints`). `candidates`
+adds the background columns after `valid_<round>` and `candidates.json` the top-level
+keys `background_config`, `image_background` and `image_noise`; the saved
+`signals.extraction_config` keeps only its earlier fields, so a reader at `141c093`
+still loads the stage and drops the new columns. `pre_qc` holds the read table after
+scoring and deduplication, before filtering, and `pre_qc.json` adds `scoring_config`,
+`deduplication_config` (`null` when deduplication did not run), `layout` and
+`stages_applied`. Loading `pre_qc` sets `FOV.scoring_result` and
+`FOV.deduplication_result` as well as `decoding_result`. A checkpoint written before these
+keys loads with `background=None` and no score; `load_checkpoint("candidates")` then
+`run` with decoding, scoring and filtering reruns the readout without images when the
+background was stored, and raises `ValueError` naming extraction when it was not.
+
+### Readout evaluation metrics
+
+`starfinder.evaluation.barcode` adds `ranking_quality(score, correct, *,
+orientation, retention=(0.5, 0.8, 0.9, 1.0))`: the AUROC of a score with its
+Hanley–McNeil standard error and the error at fixed retention, and
+`evaluate_deduplication(groups, source, *, pairs)`: missed duplicates, false
+merges and their rates over a stated pair population. Both report an undefined
+value with a reason when a class is empty. They rank and count; they set no
+cutoff.
+
+### Read diagnostics
+
+`starfinder.barcode` adds the three diagnostics of {doc}`readout-contract`
+("Diagnostics"), which read retained results only.
+{py:func}`~starfinder.barcode.inspect_read` returns one read's sums, background,
+background-subtracted sums, channel probabilities, noise, observed and assigned
+colors and per-segment bases, one row per round and channel, and
+{py:func}`~starfinder.barcode.plot_read` draws it.
+{py:func}`~starfinder.barcode.summarize_reads` returns the population summary (counts
+by status, reason and call type, per gene and per entry, `qc_score` quantiles per call
+type, deduplication and filtering counts, per round and channel medians, valid and
+background-unavailable counts, cross-channel pairs).
+{py:func}`~starfinder.barcode.explain_read` returns a read's ordered decisions with
+their values and limits. They accept a read result or `FOV.results`. `FOV.run` never
+calls `inspect_read`, `plot_read` or `explain_read`; when it scores or deduplicates,
+`run.json` records the summary under `counts["summary"]`, and
+`FOV.save_diagnostics` now writes it as `summary` beside the filtering counts.
 
 ## Intentional behavior changes — not mechanical equivalence
 

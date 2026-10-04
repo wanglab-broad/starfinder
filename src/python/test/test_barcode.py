@@ -61,7 +61,6 @@ def test_csv_headers_and_bom(tmp_path, header):
 @pytest.mark.parametrize(
     "rows",
     [
-        "A,CACGC\nA,CATGC\n",
         "A,CACGC\nB,CACGC\n",
         "A,CACGC\nA,CACGC\n",
         "A,ACNTG\n",
@@ -74,6 +73,16 @@ def test_invalid_csv_has_row_context(tmp_path, rows):
     path.write_text("gene,barcode\n" + rows)
     with pytest.raises(ValueError, match="row [23]"):
         load_codebook(path, round_labels=ROUNDS, channel_labels=CHANNELS)
+
+
+def test_two_barcodes_of_one_gene_load_as_two_entries(tmp_path):
+    # D5 (docs/readout-contract.md): a codebook entry is not a gene.
+    path = tmp_path / "entries.csv"
+    path.write_text("gene,barcode\nA,CACGC\nA,CATGC\n")
+    cb = load_codebook(path, round_labels=ROUNDS, channel_labels=CHANNELS)
+    assert cb.table.entry_id.tolist() == ["CACGC", "CATGC"]
+    assert cb.table.gene_id.tolist() == ["A", "A"]
+    assert (cb.n_entries, cb.n_genes, cb.genes) == (2, 1, ["A"])
 
 
 @pytest.mark.parametrize("split", [-1, 0, True, 1.5])

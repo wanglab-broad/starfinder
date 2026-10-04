@@ -406,7 +406,9 @@ original pixel value.
 
 This section is the interface proposed to §2.8. §2.8 owns the readout mode, gene
 mapping, direct-mode wiring in `FOV.run` and direct-mode extraction semantics, and
-may amend this interface through its own gate.
+may amend this interface through its own gate. It did so in {doc}`readout-contract`
+("Amendments to the option-A interface"), accepted at W-280 and implemented in
+W-293: the rules below carry the three amendments.
 
 `SpotFindingPlan.rounds` names the rounds to detect in. `None`, the default, means
 the reference round only: every current result, identity, column, checkpoint and
@@ -437,15 +439,23 @@ cost of a format version and a second result container.
 
 * Coincident candidates of different rounds, or of different channels, are never
   merged; each keeps its own row, round and channel.
-* With `rounds` beyond the reference, `FOV.run` raises `ValueError("decoding
-  candidates from several detection rounds needs a readout mode (§2.8)")` when
+* **Amended by §2.8 (a mode check).** A `round` column requires
+  `Dataset.readout_mode="direct"`, and `direct` mode requires a `round` column (a
+  plan with explicit `rounds`; listing only the reference round is allowed). In
+  `multiplexed` mode, with a plan that names `rounds`, `FOV.run` raises
+  `ValueError("decoding candidates from several detection rounds needs a readout
+  mode (§2.8): set readout_mode='direct' on the dataset for direct readout")` when
   decoding is enabled, and `FOV.decode_barcodes` raises the same error for a spot
-  table with a `round` column. §2.7 therefore never decodes a multi-round set as
-  barcodes.
-* Extraction accepts a multi-round candidate set unchanged: it reads neighbourhood
-  sums at every candidate's coordinates in every sequencing round, as today. The
-  `round` column rides along. §2.8 decides whether direct readout reads only each
-  candidate's own round.
+  table with a `round` column, so a multi-round set is never decoded as barcodes.
+  In `direct` mode a spot table without a `round` column raises `ValueError`.
+* **Amended by §2.8 (extraction).** In `multiplexed` mode extraction accepts a
+  multi-round candidate set unchanged: it reads neighbourhood sums at every
+  candidate's coordinates in every sequencing round, and the `round` column rides
+  along. In `direct` mode each candidate is extracted in its own round only; the
+  values of its other rounds are `0.0` with `valid=False`.
+* **Amended by §2.8 (unmapped rounds).** In `direct` mode a candidate detected in a
+  round, or a channel, that the panel does not name is `unmatched` with
+  `unmapped_channel`, not an error.
 * In a multi-round result the per-channel diagnostics (`thresholds`, `counts`,
   `outcomes`, `noise`) move under `diagnostics["rounds"][<round>]`. A single-round
   result keeps them at the top level, as today.
@@ -578,7 +588,8 @@ The implementation adds these entries:
    `local` leaves the schema enum.
 4. **Detection plan.** `SpotFindingPlan` and `ChannelOverride`; `find_spots` and
    `PipelineConfig.spot_finding` accept a plan; the `round` column of multi-round
-   results; decoding a multi-round set raises until §2.8.
+   results; decoding a multi-round set raises in readout mode `multiplexed` and is
+   direct readout in readout mode `direct` (§2.8, W-293).
 5. **Execution.** `ExecutionConfig.device` (only `"cpu"`) and the execution
    record.
 6. **Diagnostics.** The new keys. **Intentional change:** `SpotFindingWarning` when

@@ -2,18 +2,19 @@
 
 Each test follows one example of the page, step by step. The ``two_base`` examples run
 against the current code. The ``one_base`` and direct-readout examples describe behavior
-that §2.8 adds: the parts the current code can check (codebook validation and decoding of
+that §2.8 adds: the parts the current code could check (codebook validation and decoding of
 explicit color sequences, multi-round detection with its ``round`` and ``channel``
-columns, single-round extraction) are checked against it; the rest is written here as
-small reference functions of the expected behavior, which the implementation issues'
-tests check against the real functions.
+columns, single-round extraction) are checked against it; the expected behavior that was
+written here as small reference functions is now checked against the real functions
+(ENCODINGS for one_base, load_direct_panel and assign_direct for direct readout).
 """
 import numpy as np
 import pandas as pd
 import pytest
 
-from starfinder.barcode import (Codebook, EncodingConfig, WtaDecoderConfig, decode_barcodes,
-                                decode_color_sequence, encode_bases, extract_intensities, load_codebook)
+from starfinder.barcode import (ENCODINGS, Codebook, EncodingConfig, OneBaseEncodingConfig, WtaDecoderConfig,
+                                assign_direct, decode_barcodes, decode_color_sequence, encode_bases,
+                                extract_intensities, load_codebook, load_direct_panel)
 from starfinder.dataset import Dataset, RoundState
 from starfinder.image import ImageMetadata
 from starfinder.io import ImageLoadResult
@@ -119,28 +120,15 @@ def test_split_index_translation_equals_the_segment_layout(matlab_split, reverse
 ONE_BASE_COLORS = {"A": "1", "C": "2", "G": "3", "T": "4"}  # the example's explicit mapping
 
 
-def one_base_encode(bases, base_to_color, reverse_bases=False):
-    """Expected one_base encoding: one color per base through the explicit mapping."""
-    bases = bases[::-1] if reverse_bases else bases
-    return "".join(base_to_color[b] for b in bases)
-
-
-def one_base_decode(colors, base_to_color, reverse_bases=False):
-    """Expected one_base decoding: the inverse mapping, which must be one-to-one."""
-    inverse = {c: b for b, c in base_to_color.items()}
-    assert len(inverse) == len(base_to_color)
-    bases = "".join(inverse[c] for c in colors)
-    return bases[::-1] if reverse_bases else bases
-
-
 def test_one_base():
     barcode = "GATC"
-    # Expected behavior (the one_base registry entry): each base is one round's color.
-    assert one_base_encode(barcode, ONE_BASE_COLORS) == "3142"
-    assert one_base_decode("3142", ONE_BASE_COLORS) == barcode
+    # The one_base registry entry: each base is one round's color.
+    one_base, config = ENCODINGS[OneBaseEncodingConfig], OneBaseEncodingConfig(ONE_BASE_COLORS)
+    assert one_base.encode(barcode, config) == "3142"
+    assert one_base.decode("3142", config, None) == barcode
     # Checked against current code: a codebook of explicit color sequences validates, and
     # WTA assigns the gene from the observed colors.
-    book = Codebook(pd.DataFrame({"gene_id": ["Mbp"], "color_sequence": [one_base_encode(barcode, ONE_BASE_COLORS)]}),
+    book = Codebook(pd.DataFrame({"gene_id": ["Mbp"], "color_sequence": [one_base.encode(barcode, config)]}),
                     rounds(4), CHANNELS)
     read = assign(book, "3142")
     assert (read.gene_id, read.call_status, read.call_type) == ("Mbp", "assigned", "exact")
@@ -159,12 +147,10 @@ DIRECT_MAPPING = pd.DataFrame({
 DIRECT_SPOTS = [("round1", 0, 3, 8, 8), ("round1", 2, 3, 16, 16), ("round2", 1, 3, 8, 16), ("round2", 3, 3, 8, 8)]
 
 
-def check_direct_mapping(mapping):
-    """Expected validation: every (round, channel) once and every gene once."""
-    if mapping.duplicated(["round", "channel"]).any():
-        raise ValueError("a (round, channel) appears more than once")
-    if mapping.gene_id.duplicated().any():
-        raise ValueError(f"genes {sorted(set(mapping.gene_id[mapping.gene_id.duplicated()]))} appear more than once")
+def check_direct_mapping(mapping, path):
+    """Panel validation by load_direct_panel: every (round, channel) once and every gene once."""
+    mapping.to_csv(path, index=False)
+    return load_direct_panel(path, round_labels=rounds(2), channel_labels=CHANNELS)
 
 
 def direct_images():
@@ -180,9 +166,9 @@ def direct_images():
 
 
 def test_direct_readout_two_rounds(tmp_path):
-    check_direct_mapping(DIRECT_MAPPING)
+    panel = check_direct_mapping(DIRECT_MAPPING, tmp_path / "panel.csv")
     with pytest.raises(ValueError, match="Gfap"):
-        check_direct_mapping(DIRECT_MAPPING.replace({"gene_id": {"Vip": "Gfap"}}))
+        check_direct_mapping(DIRECT_MAPPING.replace({"gene_id": {"Vip": "Gfap"}}), tmp_path / "invalid.csv")
     # Checked against current code: detection in both rounds gives one candidate table with
     # its round and channel; coincident candidates of different rounds stay separate rows.
     dataset = Dataset(tmp_path, tmp_path / "out", "example", "sample", "out",
@@ -195,9 +181,10 @@ def test_direct_readout_two_rounds(tmp_path):
     spots = fov.spot_result.spots
     assert list(zip(spots["round"], spots.channel, spots.y, spots.x)) == [
         (name, channel, float(cy), float(cx)) for name, channel, _, cy, cx in DIRECT_SPOTS]
-    # Expected behavior: identity from the candidate's own round and channel, one read each.
-    calls = spots.assign(channel=[CHANNELS[c] for c in spots.channel]).merge(
-        DIRECT_MAPPING, on=["round", "channel"], how="left", validate="many_to_one")
+    # assign_direct: identity from the candidate's own round and channel, one read each.
+    loaded = {name: ImageLoadResult(fov.images[name], fov.metadata[name], CHANNELS, (), {}) for name in rounds(2)}
+    own_rounds = extract_intensities(loaded, fov.spot_result, readout_mode="direct")
+    calls = assign_direct(own_rounds, fov.spot_result, panel).table
     assert list(calls.gene_id) == ["Gfap", "Gad1", "Sst", "Aqp4"]
     assert list(calls.spot_id) == list(spots.spot_id)
     # Checked against current code: extracting only each candidate's own round gives its
