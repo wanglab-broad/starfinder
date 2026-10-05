@@ -36,6 +36,15 @@ def array_sha256(array) -> str:
     return digest.hexdigest()
 
 
+def grid_sha256(image) -> str:
+    """SHA-256 of an image's C-order bytes alone, the ``ReferenceGrid.sha256`` convention.
+
+    No dtype or shape prefix, as ``reference_sha256`` of ``FOV.register_rounds``
+    (docs/segmentation-contract.md, "The reference grid").
+    """
+    return hashlib.sha256(np.ascontiguousarray(image).tobytes()).hexdigest()
+
+
 def _json(value):
     """A JSON-native copy (tuples become lists), as the record reads back from segmentation.json."""
     return json.loads(json.dumps(value))
@@ -103,8 +112,8 @@ class ReferenceGrid:
     ``"fov:<reference round>"`` (:meth:`starfinder.dataset.FOV.reference_grid`),
     ``"file:<path>"`` (:func:`reference_grid_from_file`) or ``"declared"`` (built by
     the caller when no molecule run exists; assign checks it later). ``sha256`` is
-    the SHA-256 of the dtype, shape and C-order bytes of the image the grid was
-    read from (``None`` for a declared grid).
+    the SHA-256 of the C-order bytes of the image the grid was read from, without
+    a dtype or shape prefix (``None`` for a declared grid).
 
     Raises
     ------
@@ -158,7 +167,8 @@ def reference_grid_from_file(path: Path | str, *, metadata: ImageMetadata | None
     file's ``starfinder_metadata`` description, or ``metadata`` when the file has
     none. The natural file is ``images/ref_merged/{fovID}.tif``, which
     ``FOV.save_reference_image`` writes with the reference metadata. The source is
-    ``"file:<resolved path>"`` and the hash the array's SHA-256.
+    ``"file:<resolved path>"`` and the hash the SHA-256 of the array's C-order
+    bytes.
 
     Raises
     ------
@@ -182,7 +192,7 @@ def reference_grid_from_file(path: Path | str, *, metadata: ImageMetadata | None
     elif metadata is None:
         raise ValueError(f"{path} has no starfinder_metadata description; pass metadata")
     return ReferenceGrid(loaded.image.shape, metadata, f"file:{Path(path).resolve()}",
-                         array_sha256(loaded.image))
+                         grid_sha256(loaded.image))
 
 
 @dataclass(frozen=True, eq=False)

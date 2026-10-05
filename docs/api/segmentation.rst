@@ -18,9 +18,9 @@ boolean array.
 
 A :py:class:`~starfinder.segmentation.ReferenceGrid` is a shape, an
 :py:class:`~starfinder.image.ImageMetadata`, a source and the SHA-256 of the image it was
-read from (its dtype, shape and C-order bytes). ``FOV.reference_grid()`` returns the
-grid of the resident reference round after ``FOV.run`` or after
-``FOV.load_checkpoint("registered")``;
+read from (its C-order bytes alone, without a dtype or shape prefix).
+``FOV.reference_grid()`` returns the grid of the resident reference round after
+``FOV.run`` or after ``FOV.load_checkpoint("registered")``;
 :py:func:`~starfinder.segmentation.reference_grid_from_file` reads it from a TIFF such as
 ``images/ref_merged/{fovID}.tif``; a caller without a molecule run declares one with
 ``source="declared"``. ``ReferenceGrid.projected()`` is the Z=1 grid of a projection.

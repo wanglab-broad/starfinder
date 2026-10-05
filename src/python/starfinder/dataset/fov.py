@@ -1537,8 +1537,8 @@ class FOV:
 
         A :class:`~starfinder.segmentation.ReferenceGrid` with
         ``images[reference_round].shape[:3]``, ``metadata[reference_round]``, source
-        ``"fov:<reference round>"`` and the SHA-256 of the reference image (its
-        dtype, shape and C-order bytes). It is available after run() (whose
+        ``"fov:<reference round>"`` and the SHA-256 of the reference image's C-order
+        bytes (as ``reference_sha256`` of register_rounds). It is available after run() (whose
         streaming mode keeps the reference round) or after
         ``load_checkpoint("registered")``. See docs/segmentation-contract.md.
 
@@ -1548,13 +1548,13 @@ class FOV:
             The reference round's image or metadata is not resident.
         """
         from starfinder.segmentation import ReferenceGrid
-        from starfinder.segmentation._labels import array_sha256
+        from starfinder.segmentation._labels import grid_sha256
         ref = self.rounds.reference_round
         if not ref or ref not in self.images or ref not in self.metadata:
             raise ValueError(f'the reference round {ref!r} is not resident; call run() or '
                              'load_checkpoint("registered") first')
         image = self.images[ref]
-        return ReferenceGrid(np.shape(image)[:3], self.metadata[ref], f'fov:{ref}', array_sha256(image))
+        return ReferenceGrid(np.shape(image)[:3], self.metadata[ref], f'fov:{ref}', grid_sha256(image))
 
     # --- Output ---
 

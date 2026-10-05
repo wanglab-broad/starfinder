@@ -193,6 +193,11 @@ def values_4_9_30(shape=GRID_SHAPE):
     return labels
 
 
+def bytes_sha256(image):
+    """The ReferenceGrid hash: SHA-256 of the image's C-order bytes, no dtype or shape prefix."""
+    return hashlib.sha256(np.ascontiguousarray(image).tobytes()).hexdigest()
+
+
 def file_sha256(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -351,7 +356,8 @@ def test_reference_grid_from_file(tmp_path):
     save_volume(image, stored, metadata=FRAME)
     grid = reference_grid_from_file(stored)
     assert (grid.shape_zyx, grid.metadata, grid.source, grid.sha256) == (
-        GRID_SHAPE, FRAME, f"file:{stored.resolve()}", digest(image))
+        GRID_SHAPE, FRAME, f"file:{stored.resolve()}", bytes_sha256(image))
+    assert grid.sha256 != digest(image)  # not the dtype-and-shape convention of the label hashes
     with pytest.raises(ValueError, match="differs"):
         reference_grid_from_file(stored, metadata=ImageMetadata("other"))
     plain = write(tmp_path / "plain.tif", image[0])
@@ -558,7 +564,7 @@ def test_fov_reference_grid_after_run(development_fov_root, mode):
     assert grid.shape_zyx == fov.images[ref].shape[:3] == (9, 32, 32)
     assert grid.metadata == fov.metadata[ref]
     assert grid.source == f"fov:{ref}"
-    assert grid.sha256 == digest(fov.images[ref])
+    assert grid.sha256 == bytes_sha256(fov.images[ref]) != digest(fov.images[ref])
 
 
 @pytest.mark.dataset
@@ -571,4 +577,7 @@ def test_fov_reference_grid_after_loading_the_registered_checkpoint(development_
     with pytest.raises(ValueError, match="not resident"):
         loaded.reference_grid()
     loaded.load_checkpoint("registered", checkpoints=CheckpointConfig(directory=tmp_path))
-    assert loaded.reference_grid() == fov.reference_grid()
+    ref = loaded.rounds.reference_round
+    grid = loaded.reference_grid()
+    assert grid == fov.reference_grid()
+    assert grid.sha256 == hashlib.sha256(np.ascontiguousarray(loaded.images[ref]).tobytes()).hexdigest()
