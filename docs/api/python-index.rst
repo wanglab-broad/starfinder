@@ -22,6 +22,8 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.evaluation.spot_finding.classify_detections`
 * :py:obj:`starfinder.barcode.Codebook`
 * :py:obj:`starfinder.barcode.CodebookAwareDecoderConfig`
+* :py:obj:`starfinder.segmentation.composite_nuclei_amplicon`
+* :py:obj:`starfinder.segmentation.CompositeConfig`
 * :py:obj:`starfinder.io.convert_image`
 * :py:obj:`starfinder.registration.CpdConfig`
 * :py:obj:`starfinder.dataset.CropWindow`
@@ -48,6 +50,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.barcode.EncodingConfig`
 * :py:obj:`starfinder.barcode.ENCODINGS`
 * :py:obj:`starfinder.barcode.EncodingSpec`
+* :py:obj:`starfinder.segmentation.enhance_with_flamingo`
 * :py:obj:`starfinder.registration.estimate_transform`
 * :py:obj:`starfinder.benchmark.evaluate_benchmark`
 * :py:obj:`starfinder.evaluation.barcode.evaluate_decoding`
@@ -69,6 +72,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.barcode.filter_reads`
 * :py:obj:`starfinder.preprocessing.filter_tophat`
 * :py:obj:`starfinder.spot_finding.find_spots`
+* :py:obj:`starfinder.segmentation.FlamingoEnhancementConfig`
 * :py:obj:`starfinder.synthetic.formed_scene_preset`
 * :py:obj:`starfinder.synthetic.FormedScene`
 * :py:obj:`starfinder.synthetic.FormedSceneConfig`
@@ -119,6 +123,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.spot_finding.NoiseLandmarkConfig`
 * :py:obj:`starfinder.preprocessing.normalize_intensity`
 * :py:obj:`starfinder.preprocessing.normalize_percentile`
+* :py:obj:`starfinder.segmentation.normalize_percentiles`
 * :py:obj:`starfinder.evaluation.registration.normalized_cross_correlation`
 * :py:obj:`starfinder.barcode.OneBaseEncodingConfig`
 * :py:obj:`starfinder.spot_finding.PercentileCentroidConfig`
@@ -163,6 +168,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.registration.RegistrationSpec`
 * :py:obj:`starfinder.dataset.RegistrationStep`
 * :py:obj:`starfinder.benchmark.report_benchmark`
+* :py:obj:`starfinder.segmentation.rescale_input`
 * :py:obj:`starfinder.spot_finding.resolve_weights`
 * :py:obj:`starfinder.registration.RigidConfig`
 * :py:obj:`starfinder.dataset.RoundState`

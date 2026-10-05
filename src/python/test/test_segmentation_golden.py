@@ -44,6 +44,9 @@ from skimage.measure import label, regionprops
 from skimage.segmentation import expand_labels
 from skimage.transform import rescale
 
+from starfinder.preprocessing import ProjectionConfig, project_image
+from starfinder.segmentation import composite_nuclei_amplicon, enhance_with_flamingo
+
 pytestmark = [pytest.mark.workflow, pytest.mark.segmentation, pytest.mark.golden]
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -276,6 +279,23 @@ def test_composite_needs_3d_inputs(tmp_path, images):
 
 def test_flamingo_enhancement(tmp_path, images):
     result = flamingo_enhancement(tmp_path, images["dapi"], images["flamingo"])
+    assert result.dtype == np.uint8 and result.shape == SHAPE_ZYX
+    assert digest(result) == FLAMINGO_DIGEST
+
+
+@pytest.mark.parametrize("maximum_projection", [False, True])
+def test_composite_function(images, maximum_projection):
+    """composite_nuclei_amplicon gives the script's composite; the projection is a run's z maximum."""
+    result, _ = composite_nuclei_amplicon(images["dapi"], images["amplicon"])
+    if maximum_projection:
+        result = project_image(result, config=ProjectionConfig())[0]
+    assert result.dtype == np.uint8
+    assert result.shape == (SHAPE_ZYX[1:] if maximum_projection else SHAPE_ZYX)
+    assert digest(result) == COMPOSITE_DIGESTS[maximum_projection]
+
+
+def test_flamingo_enhancement_function(images):
+    result, _ = enhance_with_flamingo(images["dapi"], images["flamingo"])
     assert result.dtype == np.uint8 and result.shape == SHAPE_ZYX
     assert digest(result) == FLAMINGO_DIGEST
 

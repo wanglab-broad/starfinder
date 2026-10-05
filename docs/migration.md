@@ -880,6 +880,35 @@ exact map onto the target shape.
 the [0, 1] scale of the stain's dtype range, and `Cyto = Cell − Nuclei` is not
 reproduced. MATLAB was not run, so there is no parity with the example.
 
+### Segmentation input functions
+
+The morphology preprocessing of the workflow scripts is now a set of plain functions in
+`starfinder.segmentation` that return their result and a record mapping (the config,
+the values reached and the SHA-256 of every input and of the output) and never change
+their inputs. {py:func}`~starfinder.segmentation.composite_nuclei_amplicon` with
+{py:class}`~starfinder.segmentation.CompositeConfig` is the composite of
+`create_nuclei_amplicon_overlay.py`, and
+{py:func}`~starfinder.segmentation.enhance_with_flamingo` with
+{py:class}`~starfinder.segmentation.FlamingoEnhancementConfig` the enhancement of
+`enhance_dapi_with_flamingo.py`; both give the scripts' output bit for bit (the W-307
+golden digests), including on constant and all-zero images. Two edge cases change: two
+images of different shapes raise `IncompatibleGeometryError` instead of a broadcasting
+error, and a plane is accepted as 1×Y×X where the scripts raised on YX inputs. The
+composite's `maximum_projection` is no longer part of the composite; it is the z
+maximum of the result (`project_image` with `ProjectionConfig()`), which gives the same
+image. The inputs come from the reference frame: a morphology round's DAPI after
+`FOV.register_rounds` and the reference round's channel maximum, the image
+`FOV.save_reference_image` writes. The workflow scripts are unchanged for now.
+
+{py:func}`~starfinder.segmentation.normalize_percentiles` is csbdeep's `normalize` as
+`stardist_segmentation.py` calls it (percentiles 1 and 99.8, float32, unclipped), with
+its values recorded. {py:func}`~starfinder.segmentation.rescale_input` performs the
+script's `rescale(image, [1, .5, .5])` shrink for any factors and also returns
+metadata whose spacing is divided by the factors and whose `frame_id` records the
+rescale; {py:func}`~starfinder.segmentation.labels_to_grid` maps labels detected on the
+shrunk image back onto the exact input grid. None of these is registered in
+`PREPROCESSING_METHODS`.
+
 ## Intentional behavior changes — not mechanical equivalence
 
 | Area | Change and consequence |

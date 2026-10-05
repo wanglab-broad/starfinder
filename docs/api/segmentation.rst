@@ -34,6 +34,24 @@ method entry and an ``import`` entry with the file's and the array's SHA-256.
 :py:class:`~starfinder.segmentation.LabelImportConfig` names an import as a run of a
 plan; import is not a segmentation method.
 
+The input functions prepare a segmentation input from images and leave their inputs
+unchanged; each returns its result and a record mapping (``function``, ``config``,
+``inputs`` and ``output`` as array SHA-256 values, and the values it reached).
+:py:func:`~starfinder.segmentation.composite_nuclei_amplicon` (with
+:py:class:`~starfinder.segmentation.CompositeConfig`) and
+:py:func:`~starfinder.segmentation.enhance_with_flamingo` (with
+:py:class:`~starfinder.segmentation.FlamingoEnhancementConfig`) are the DAPI–amplicon
+composite and the Flamingo-assisted DAPI enhancement of the workflow scripts, bit for
+bit, on two ZYX arrays of one shape (a plane is 1×Y×X; other shapes raise
+:py:class:`~starfinder.image.IncompatibleGeometryError`), with a ``uint8`` output; the
+script's maximum projection is a run's projection, not part of the function.
+:py:func:`~starfinder.segmentation.normalize_percentiles` is csbdeep's percentile
+normalization (float32, unclipped; a constant image gives zeros), and
+:py:func:`~starfinder.segmentation.rescale_input` resamples an image by per-axis factors
+and returns metadata whose spacing is divided by the factors and whose ``frame_id``
+records the rescale. None of them is a preprocessing method: they combine two images,
+change the dtype or change the grid.
+
 :py:func:`~starfinder.segmentation.labels_to_grid` (nearest neighbour at pixel centres
 onto exactly the target shape) and
 :py:func:`~starfinder.segmentation.extend_labels_through_z` (plane labels kept where a
@@ -51,14 +69,20 @@ for the segmentation methods.
 .. autosummary::
    :toctree: generated
 
+   composite_nuclei_amplicon
+   CompositeConfig
+   enhance_with_flamingo
    extend_labels_through_z
+   FlamingoEnhancementConfig
    import_labels
    LabelImportConfig
    labels_to_grid
    MissingModelError
    ModelHashMismatchError
+   normalize_percentiles
    reference_grid_from_file
    ReferenceGrid
+   rescale_input
    SegmentationBackendUnavailableError
    SegmentationResult
    to_label_dtype
