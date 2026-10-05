@@ -40,8 +40,8 @@ each molecule records ``in_expansion`` and ``original_cell_id``.
 
 With nuclei, :py:func:`~starfinder.assignment.match_nuclei` relates each nucleus to the
 cell holding more than ``match_fraction`` of its voxels
-(:py:class:`~starfinder.assignment.CorrespondenceConfig`, 0.5 and exact containment by
-default) and flags ``several_nuclei``, ``ambiguous_nucleus``, ``nucleus_outside_cell`` and
+(:py:class:`~starfinder.assignment.CorrespondenceConfig`; by default ``match_fraction`` 0.5
+and ``outside_tolerance`` 0.1, a provisional value) and flags ``several_nuclei``, ``ambiguous_nucleus``, ``nucleus_outside_cell`` and
 ``foreign_nucleus``; nothing is repaired. A cell's correspondence is one of
 ``CELL_CORRESPONDENCE`` and its compartments one of ``COMPARTMENT_STATES``: nuclear and
 cytoplasmic counts exist only for ``available`` cells and sum to the whole-cell counts;

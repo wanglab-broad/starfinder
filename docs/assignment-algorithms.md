@@ -113,10 +113,13 @@ otherwise, as in step 4. Steps 1, 2, the `outside` test, 5 and 6 are unchanged, 
 equal to the derived matches reproduces the derived result.
 
 **Parameters.** `match_fraction` (dimensionless share of the nucleus's voxels, default
-0.5, allowed [0.5, 1); strict `>`); `outside_tolerance` (dimensionless share, default 0.0,
-allowed [0, 1)). Neither is tuned: 0.5 is the smallest value that makes a match unique, 0.0
-is exact containment (contract option C1). Shares are voxel counts, so anisotropic spacing
-does not change them.
+0.5, allowed [0.5, 1); strict `>`); `outside_tolerance` (dimensionless share, default 0.1,
+allowed [0, 1); strict `>`, so a nucleus with exactly a tenth outside its cell is not
+flagged). 0.5 is the smallest value that makes a match unique. 0.1 is contract option C2,
+chosen on 2026-10-05 as a provisional value from one culture crop of W-320 (largest outside
+share of a matched nucleus 0.073), not fitted and not an accuracy statement; 0.0 is exact
+containment (option C1). Shares are voxel counts, so anisotropic spacing does not change
+them.
 
 **Failure behavior.** No nucleus image: no correspondence, every cell `unavailable`. A
 nucleus image with no object: every cell is `no_nucleus` (all excluded by default, and the
@@ -253,7 +256,7 @@ Rules:
 | A5 | Correspondence, one nucleus | `boxes` cell 1 | Nucleus and cell rows | Nucleus `matched`, `share_in_cell` 1.0; cell `n_nuclei` 1, correspondence `matched`, no flag, `available`. Exact. |
 | A6 | Correspondence, several nuclei | `boxes` cell 2 | Cell row | `n_nuclei` 2, flag `several_nuclei` only, `available`; its nuclear count is the sum over both nuclei. Exact. |
 | A7 | Correspondence, ambiguous | `boxes` cells 3, 4; `boxes_51_49` | Nucleus status and flags | 50/50: nucleus 31 `ambiguous` (0.5 is not more than 0.5); cells 3 and 4 have correspondence `ambiguous`, flag `ambiguous_nucleus`, compartments `withheld`, and are kept by default (ambiguous is not absence of a nucleus). 51/49: nucleus 31 matched to cell 3 and flagged `outside`; cell 3 `matched`, `nucleus_outside_cell`, `withheld`; cell 4 `no_nucleus` with `foreign_nucleus`, excluded by default. Exact. |
-| A8 | Correspondence, nucleus outside its cell | `boxes` cell 5 | Flags | With `outside_tolerance` 0.0, nucleus 51 is `matched`, `outside`, cell 5 `withheld`; with 0.5, not `outside` and cell 5 `available`; the molecule in its background part is `unassigned` with `nucleus_id` 51. Exact. |
+| A8 | Correspondence, nucleus outside its cell | `boxes` cell 5 | Flags | With `outside_tolerance` 0.0 (passed explicitly) and with the default 0.1, nucleus 51 (outside share 0.4) is `matched`, `outside`, cell 5 `withheld`; with 0.5, not `outside` and cell 5 `available`; the molecule in its background part is `unassigned` with `nucleus_id` 51. The default at its boundary, on a hand-built pair on the `boxes` grid: a 30-voxel nucleus with exactly 3 voxels outside its cell (0.1) is not `outside` and its cell `available`; with one voxel more (4 / 30), `outside` and `withheld`; when the outside part lies in a neighbouring cell, that cell has `foreign_nucleus` at 0.1 and at 0.5. Exact. |
 | A9 | Foreign nucleus | `boxes` cells 6, 7, with `exclude_cells_without_nucleus=False` | Flags | Nucleus 61 matched to cell 6 (share 0.8), `outside`; cell 6 `matched`, `nucleus_outside_cell`, compartments `withheld`; cell 7 correspondence `no_nucleus`, flag `foreign_nucleus`, compartments `no_nucleus`; both keep their whole-cell counts and have no nuclear or cytoplasmic rows. Exact. |
 | A10 | Compartment partition | `boxes` | Molecule compartments; counts | The available cells are 1 and 2; in each, the nuclear molecules are exactly those placed in its nuclei and `nucleus + cytoplasm = whole` per gene; withheld cells (3, 4, 5, 6) have no compartment rows (absent, not zero); with the exclusion off, cells 7 and 8 have no compartment rows and their molecules are `no_nucleus`, none `cytoplasm`; without nuclei every assigned molecule is `unavailable`. Exact. |
 | A11 | Exclusion and its statuses | `boxes` with nuclei (default), with `exclude_cells_without_nucleus=False`, without nuclei | Cell status, molecule status, counts, totals | Default: cells 7 and 8 (correspondence `no_nucleus`) are `excluded_no_nucleus` with reason `no_matched_nucleus`, their molecules `excluded_cell` with their `cell_id`, no count rows, `exclusion_source` `default`; cells 3 and 4 (`ambiguous`) stay kept; the complete cell table keeps cells 7 and 8, and the totals before and after differ by exactly those cells and molecules. `False`: all kept; cells 7 and 8 have compartments `no_nucleus` with whole-cell counts only. Without nuclei: nothing excluded, every cell `unavailable`. Exact. |
@@ -343,7 +346,7 @@ models (L10's P1 and L12 also `STARFINDER_STARDIST_3D_SPLEEN`) and skip without 
 | A5 | `test_assignment.py`, `test_a5_to_a7_nucleus_table_and_cell_rows` | default |
 | A6 | `test_assignment.py`, `test_a5_to_a7_nucleus_table_and_cell_rows`, `test_a6_several_nuclei_count_both` | default |
 | A7 | `test_assignment.py`, `test_a5_to_a7_nucleus_table_and_cell_rows`, `test_a7_a_nucleus_split_51_49` | default |
-| A8 | `test_assignment.py`, `test_a8_a_nucleus_outside_its_cell` | default |
+| A8 | `test_assignment.py`, `test_a8_a_nucleus_outside_its_cell`, `test_the_default_correspondence_is_option_c2`, `test_the_default_tolerance_at_its_boundary` | default |
 | A9 | `test_assignment.py`, `test_a9_a_foreign_nucleus` | default |
 | A10 | `test_assignment.py`, `test_a10_compartment_partition` | default |
 | A11 | `test_assignment.py`, `test_a11_exclusion_and_its_statuses` | default |
@@ -419,8 +422,10 @@ accuracy statement.
 ## Limitations
 
 * Every assignment resource figure is code-derived; nothing was measured on a whole FOV.
-* The correspondence thresholds are rules, not values fitted to data; whether exact
-  containment withholds too many cells on real masks is what the bounded examples report.
+* The correspondence thresholds are not fitted to data. Exact containment (0.0) withheld
+  the compartments of nearly every cell of the W-320 culture crop; the default 0.1 (option
+  C2) is provisional, from that one crop without annotation, and is not claimed to suit
+  other samples.
 * The validation design checks that rules are implemented as written; it measures no
   segmentation or assignment quality, which needs annotation (W-123) and E04.
 * The bounded examples need molecule tables that W-305 did not stage.

@@ -34,13 +34,14 @@ def _share(value, name, low, *, low_open=False):
 
 @dataclass(frozen=True)
 class CorrespondenceConfig:
-    """The overlap rule that relates nuclei to cells (option C1 of docs/assignment-contract.md).
+    """The overlap rule that relates nuclei to cells (option C2 of docs/assignment-contract.md).
 
     A nucleus is matched to the cell holding the largest share of its voxels when
     that share is strictly greater than ``match_fraction`` (in [0.5, 1); 0.5 is the
     smallest value that makes the match unique). A matched nucleus whose share
-    outside its cell is greater than ``outside_tolerance`` (in [0, 1); 0.0 is exact
-    containment) is flagged ``outside``. Shares are voxel counts.
+    outside its cell is strictly greater than ``outside_tolerance`` (in [0, 1);
+    0.0 is exact containment) is flagged ``outside``. The default 0.1 is
+    provisional, from one culture crop (W-320). Shares are voxel counts.
 
     Raises
     ------
@@ -49,7 +50,7 @@ class CorrespondenceConfig:
     """
 
     match_fraction: float = 0.5
-    outside_tolerance: float = 0.0
+    outside_tolerance: float = 0.1
 
     def __post_init__(self):
         object.__setattr__(self, "match_fraction", _share(self.match_fraction, "match_fraction", 0.5))

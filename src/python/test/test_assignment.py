@@ -389,14 +389,66 @@ def test_a7_a_nucleus_split_51_49():
 
 
 def test_a8_a_nucleus_outside_its_cell():
-    strict, loose = assign_boxes(), assign_boxes(correspondence=CorrespondenceConfig(outside_tolerance=0.5))
-    for result, outside, compartments in ((strict, True, "withheld"), (loose, False, "available")):
+    # 4 of nucleus 51's 10 voxels lie in the background: a share of 0.4, above 0.0 and the default 0.1, not above 0.5.
+    strict, default = assign_boxes(correspondence=CorrespondenceConfig(outside_tolerance=0.0)), assign_boxes()
+    loose = assign_boxes(correspondence=CorrespondenceConfig(outside_tolerance=0.5))
+    assert default.record["config"]["correspondence"]["outside_tolerance"] == 0.1
+    for result, outside, compartments in ((strict, True, "withheld"), (default, True, "withheld"),
+                                          (loose, False, "available")):
         row = result.nuclei[result.nuclei.nucleus_id.eq(51).to_numpy(bool)].iloc[0]
         assert (row.status, row.cell_id, bool(row.outside)) == ("matched", 5, outside)
         assert by_cell(result)[5].compartments == compartments
         background = result.molecules.iloc[34]
         assert (background.assignment_status, background.nucleus_id) == ("unassigned", 51)
         assert pd.isna(background.cell_id)
+
+
+def test_the_default_correspondence_is_option_c2():
+    """W-334: match_fraction 0.5 and outside_tolerance 0.1 (option C2, provisional), in the config and the record."""
+    assert (CorrespondenceConfig().match_fraction, CorrespondenceConfig().outside_tolerance) == (0.5, 0.1)
+    assert AssignmentConfig().correspondence == CorrespondenceConfig(0.5, 0.1)
+    record = assign_boxes().record
+    assert record["config"]["correspondence"] == {"match_fraction": 0.5, "outside_tolerance": 0.1}
+    assert record["inputs"]["correspondence"] == {"source": "overlap", "sha256": None}
+
+
+def tenth_outside(*, extra, neighbour):
+    """A 30-voxel nucleus (z 4, y 2-4, x 2-11) whose column x 11 (3 voxels, a share of 3 / 30 = 0.1) lies outside
+    cell 1 (x 1-10): in the background, or in cell 2 (x 11-20) with ``neighbour``. ``extra`` moves one more voxel,
+    (4, 2, 10), out of cell 1 (4 / 30). One molecule in the nucleus and one in the rest of cell 1."""
+    cells, nuclei = np.zeros(BOXES_SHAPE, np.uint32), np.zeros(BOXES_SHAPE, np.uint32)
+    cells[1:7, 1:7, 1:11] = 1
+    if neighbour:
+        cells[1:7, 1:7, 11:21] = 2
+    nuclei[4, 2:5, 2:12] = 1
+    if extra:
+        cells[4, 2, 10] = 2 if neighbour else 0
+    return (molecules([((4, 3, 5), "A"), ((4, 5, 5), "B")]), label_run(cells, "cell", "cell"),
+            label_run(nuclei, "nucleus", "nucleus"))
+
+
+@pytest.mark.parametrize("neighbour", [False, True], ids=["background", "cell_2"])
+@pytest.mark.parametrize("extra", [False, True], ids=["exactly_a_tenth", "one_voxel_more"])
+def test_the_default_tolerance_at_its_boundary(extra, neighbour):
+    mols, cells, nuclei = tenth_outside(extra=extra, neighbour=neighbour)
+    result = assign_molecules(mols, cells, grid=GRID, nuclei=nuclei,
+                              config=AssignmentConfig(exclude_cells_without_nucleus=False))
+    row = result.nuclei.iloc[0]
+    assert (row.status, int(row.cell_id), row.size_voxels, row.share_in_cell, bool(row.outside)) == \
+        ("matched", 1, 30, (26 if extra else 27) / 30, extra)
+    rows = by_cell(result)
+    assert (rows[1].correspondence_flags, rows[1].compartments) == \
+        (("nucleus_outside_cell", "withheld") if extra else ("", "available"))
+    nuclear = result.counts[result.counts.compartment.eq("nucleus").to_numpy(bool)]
+    assert nuclear.cell_id.astype(int).tolist() == ([] if extra else [1])
+    if neighbour:  # a part inside another cell flags that cell whatever the tolerance
+        for tolerance in (0.1, 0.5):
+            flagged = result if tolerance == 0.1 else assign_molecules(
+                mols, cells, grid=GRID, nuclei=nuclei, config=AssignmentConfig(
+                    correspondence=CorrespondenceConfig(outside_tolerance=tolerance),
+                    exclude_cells_without_nucleus=False))
+            assert (by_cell(flagged)[2].correspondence_flags, by_cell(flagged)[2].compartments) == \
+                ("foreign_nucleus", "no_nucleus")
 
 
 def test_a9_a_foreign_nucleus():

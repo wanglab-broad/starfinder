@@ -141,7 +141,7 @@ class AssignmentConfig:
 @dataclass(frozen=True)
 class CorrespondenceConfig:
     match_fraction: float = 0.5        # a nucleus is matched when one cell holds more than this share
-    outside_tolerance: float = 0.0     # share of a matched nucleus allowed outside its cell
+    outside_tolerance: float = 0.1     # share of a matched nucleus allowed outside its cell (option C2, provisional)
 ```
 
 `assign_molecules` applies the checks below, samples every molecule, derives or validates
@@ -259,7 +259,7 @@ no path):
     "correspondence": {"source": "overlap", "sha256": null}
   },
   "config": {"expansion": {"distance": 0.7776, "unit": "um", "mode": "planar"}, "legacy_pixel_expansion": false,
-             "correspondence": {"match_fraction": 0.5, "outside_tolerance": 0.0},
+             "correspondence": {"match_fraction": 0.5, "outside_tolerance": 0.1},
              "exclude_cells_without_nucleus": true, "exclusion_source": "default",
              "exclusion_rationale": "possible cell residue; not a biological identity"},
   "sampling": {"rule": "floor(c + 0.5)", "sampled_axes": "zyx"},
@@ -513,16 +513,25 @@ and always carries `ambiguous_nucleus`, so its compartments are withheld.
 
 | Option | `match_fraction`, `outside_tolerance` | Effect on the golden digests | Effect on the existing outputs |
 | --- | --- | --- | --- |
-| **C1. Majority and containment (recommended)** | 0.5 (strict majority), 0.0 (any voxel outside flags) | None: the golden test has no nuclei, and the legacy path has no correspondence. | None of today's files has correspondence. In a new two-run plan, compartment counts are withheld for every cell touched by a nucleus that leaves its cell, even by one voxel; the bounded real examples report how many. |
-| C2. Majority with a tolerance | 0.5, 0.1 (provisional) | None. | As C1, with fewer withheld cells: up to a tenth of a nucleus may lie in the background without flagging its own cell. A part inside another cell still raises `foreign_nucleus` on that cell. The tolerance has no measured basis yet. |
+| C1. Majority and containment | 0.5 (strict majority), 0.0 (any voxel outside flags) | None: the golden test has no nuclei, and the legacy path has no correspondence. | None of today's files has correspondence. In a new two-run plan, compartment counts are withheld for every cell touched by a nucleus that leaves its cell, even by one voxel; the bounded real examples report how many. |
+| **C2. Majority with a tolerance (chosen, 2026-10-05; provisional)** | 0.5, 0.1 (a share strictly greater than 0.1 outside flags) | None. | As C1, with fewer withheld cells: up to a tenth of a nucleus may lie in the background without flagging its own cell. A part inside another cell still raises `foreign_nucleus` on that cell. Its basis is one culture crop of W-320, below. |
 | C3. By label value for seeded runs | none: when the cell run's record shows a seeded method whose label rule gives each cell its seed's value, nucleus `k` is matched to cell `k`. | None. | Cheaper and exact for `seeded_watershed`; it says nothing for imported or independently segmented masks, so overlap would still be needed for them, and a seed masked out of the foreground gives a cell without its nucleus silently. |
 
-**Recommendation: C1.** Neither number is tuned: 0.5 is the smallest share that makes the
-match unique, and 0 is exact containment, so every departure is flagged rather than
-absorbed. The bounded real examples ({doc}`assignment-algorithms`) report the distribution
-of outside shares, which is the evidence a tolerance (C2) would need; the choice of a
-tolerance belongs to Jiahao at the W-309 gate. With C1, the value agreement of a seeded run
-(C3) is recorded as a diagnostic (`seed_value_agrees`), not used.
+**Decision: C2, provisional (Jiahao, W-321 review, 2026-10-05).** The default
+`outside_tolerance` was raised from 0.0 (C1, the option this page recommended at W-309) to
+0.1; `match_fraction` stays 0.5, the strict rule and the flags are unchanged. A matched
+nucleus is flagged `outside` only when its share outside its cell is strictly greater
+than 0.1, and a part of a nucleus inside another cell still raises `foreign_nucleus` on
+that cell, whatever the tolerance. The evidence is the bounded culture example of W-320
+(one crop, 18 matched nuclei, cells and nuclei segmented independently): with 0.0, 10 of
+the 11 matched nuclei of the reference labels and 7 of the 8 of the Cellpose labels were
+flagged `nucleus_outside_cell`, so the compartment counts of nearly every cell were
+withheld, while the largest share of a nucleus outside its cell was 0.073. A tolerance of
+0.05 would still have flagged 2 of 10 and 2 of 7; 0.1 flags none. The value is
+provisional: it rests on one crop without annotation, is not an accuracy statement and
+is not claimed to suit other samples. 0.5 remains the smallest share that makes the match
+unique. With C2, the value agreement of a seeded run (C3) is recorded as a diagnostic
+(`seed_value_agrees`), not used.
 
 **Supplied.** A table with columns `nucleus_id` and `cell_id` (unsigned integers):
 every value must exist in its image (`ValueError` naming the missing values), a nucleus
@@ -792,7 +801,7 @@ assignment:
   nuclei: nucleus          # a segmentation run name, or null
   population: final        # final (accepted reads) or called
   expansion: null          # or {distance: 0.78, unit: um, mode: planar}
-  correspondence: {match_fraction: 0.5, outside_tolerance: 0.0}
+  correspondence: {match_fraction: 0.5, outside_tolerance: 0.1}
   exclude_cells_without_nucleus: null   # null: on when nuclei is set
 ```
 

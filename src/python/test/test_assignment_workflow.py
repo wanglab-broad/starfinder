@@ -4,7 +4,7 @@ assignment block and the static schema (W-317; docs/assignment-contract.md, "Wor
 import inspect
 import io
 import json
-from dataclasses import fields
+from dataclasses import asdict, fields
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -255,20 +255,29 @@ assignment:
   nuclei: nucleus          # a segmentation run name, or null
   population: final        # final (accepted reads) or called
   expansion: null          # or {distance: 0.78, unit: um, mode: planar}
-  correspondence: {match_fraction: 0.5, outside_tolerance: 0.0}
+  correspondence: {match_fraction: 0.5, outside_tolerance: 0.1}
   exclude_cells_without_nucleus: null   # null: on when nuclei is set
 """)
 
 
 def test_the_block_of_the_contract_gives_the_assign_call():
     config, call = _assignment_block({"backend": "python", **BLOCK})
-    assert config == AssignmentConfig(correspondence=CorrespondenceConfig(0.5, 0.0))
+    assert config == AssignmentConfig(correspondence=CorrespondenceConfig(0.5, 0.1)) == AssignmentConfig()
     assert call == {"cells": "cell", "nuclei": "nucleus", "population": "final"}
     block = dict(BLOCK["assignment"], expansion={"distance": 0.78, "unit": "um", "mode": "planar"}, name="main",
                  checkpoints={"table_format": "parquet"}, exclude_cells_without_nucleus=False)
     config, call = _assignment_block({"backend": "python", "assignment": block})
     assert config.expansion == ExpandLabelsConfig(0.78, "um", "planar") and not config.exclude_cells_without_nucleus
     assert call["name"] == "main" and call["checkpoints"] == CheckpointConfig(table_format="parquet")
+
+
+def test_an_omitted_or_partial_correspondence_translates_to_the_default():
+    for block in ({k: v for k, v in BLOCK["assignment"].items() if k != "correspondence"},
+                  dict(BLOCK["assignment"], correspondence={"match_fraction": 0.5})):
+        config, _ = _assignment_block({"backend": "python", "assignment": block})
+        assert config.correspondence == CorrespondenceConfig() == CorrespondenceConfig(0.5, 0.1)
+    declared = SCHEMA["$defs"]["assignment_block"]["properties"]["correspondence"]["properties"]
+    assert {key: value["default"] for key, value in declared.items()} == asdict(CorrespondenceConfig())
 
 
 @pytest.mark.parametrize("change, error, match", [

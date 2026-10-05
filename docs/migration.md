@@ -1074,6 +1074,23 @@ The legacy `obs` columns keep their meaning, computed on the territories assign 
 and the tile configuration, global coordinates and overlap filter are applied outside the
 package as before (§2.10).
 
+### Default correspondence tolerance
+
+The default `CorrespondenceConfig.outside_tolerance` is 0.1 instead of 0.0 (option C2 of
+{doc}`assignment-contract`, chosen on 2026-10-05 in the W-321 review); `match_fraction`
+stays 0.5. A matched nucleus is flagged `outside`, and its cell's compartments withheld
+with `nucleus_outside_cell`, only when its share outside its cell is strictly greater than
+0.1, so a nucleus with up to a tenth of its voxels outside its cell no longer withholds the
+nuclear and cytoplasmic counts of its cell. A part of a nucleus inside another cell still
+raises `foreign_nucleus` on that cell. The default applies to `assign_molecules`,
+`match_nuclei`, `FOV.assign` and the `assignment` block when `correspondence` or its
+`outside_tolerance` is omitted, and the record's `config.correspondence` shows it. The
+value is provisional, from one culture crop of W-320 (largest outside share of a matched
+nucleus 0.073). To keep exact containment, pass
+`CorrespondenceConfig(outside_tolerance=0.0)`, or `correspondence: {outside_tolerance: 0.0}`
+in the block. The golden digests and the outputs of `reads_assignment`, which has no
+nuclei, do not change.
+
 ## Intentional behavior changes — not mechanical equivalence
 
 | Area | Change and consequence |

@@ -365,7 +365,8 @@ or `ProjectionConfig` fields) and `operations` (`expand_labels` or
 `SEGMENTATION_METHODS` name whose config fields are the run's other keys, or `import`
 with the `LabelImportConfig` fields. The `assignment` block holds the `AssignmentConfig`
 fields and the `FOV.assign` arguments (`cells`, `nuclei`, `name`, `population`,
-`checkpoints`); `correspondence` holds the `CorrespondenceConfig` fields. Default-tier
+`checkpoints`); `correspondence` holds the `CorrespondenceConfig` fields (by default
+`match_fraction` 0.5 and `outside_tolerance` 0.1, a provisional value). Default-tier
 tests keep the schema's method list equal to the registry and the assignment keys equal
 to those fields and arguments.
 
@@ -392,7 +393,7 @@ assignment:
   nuclei: nucleus
   population: final
   expansion: {distance: 0.78, unit: um, mode: planar}
-  correspondence: {match_fraction: 0.5, outside_tolerance: 0.0}
+  correspondence: {match_fraction: 0.5, outside_tolerance: 0.1}
   exclude_cells_without_nucleus: null
 ```
 

@@ -1577,8 +1577,11 @@ $defs:
         properties:
           match_fraction:
             type: number
+            default: 0.5
           outside_tolerance:
+            description: "Share of a matched nucleus allowed outside its cell (option C2, provisional)"
             type: number
+            default: 0.1
         additionalProperties: false
       exclude_cells_without_nucleus:
         type: [boolean, "null"]
