@@ -93,12 +93,50 @@ model artifacts, its execution entry and its effective parameters, the input's S
 and channel sources, and the seed run with its labels' SHA-256. A result without objects
 has outcome ``empty``; there is no foreground gate.
 
-The registry holds ``seeded_watershed``
+The registry holds ``stardist``, ``cellpose`` and ``seeded_watershed``. ``seeded_watershed``
 (:py:class:`~starfinder.segmentation.SeededWatershedConfig`): cells grown from the nuclei
 of a seed run on one stain channel, smoothed by a Gaussian of ``sigma_um`` converted with
 the input's spacing (required), thresholded (Otsu by default), with the mask united with
 every seed voxel. Every seed keeps its value, so cell k contains nucleus k, also for a
 nucleus outside the stained foreground. It runs on the CPU.
+
+``stardist`` (:py:class:`~starfinder.segmentation.StarDistConfig`, the ``stardist``
+extra) segments one ``nuclear`` or ``composite`` channel with a StarDist model: a 2D model
+on a plane (Z=1), a 3D model on a volume, decided by the model's ``n_dim``; the other
+combination is rejected before the model is built. ``scale`` is required (a number scales
+Y and X, a 3-tuple is per axis ZYX), the stored ``thresholds.json`` is used unless a
+threshold is given as an override, and the input is normalized by csbdeep's percentiles
+(1, 99.8). With ``block_size``, ``min_overlap`` and ``context`` all given (never some of
+them, never with a scale other than 1, and with ``min_overlap + 2 × context <
+block_size`` on every axis) the method predicts block by block with
+``predict_instances_big``; the record keeps the requested values and the effective
+values, which the library rounds up to multiples of the model's grid. Objects must be
+smaller than ``min_overlap``; there is no default block size. ``cellpose``
+(:py:class:`~starfinder.segmentation.CellposeConfig`, the ``cellpose`` extra) segments a
+``cytoplasm`` or ``nuclear`` channel, optionally with ``nuclear`` beside ``cytoplasm``;
+``diameter`` is required, 3D mode (``do_3d`` with ``anisotropy``) runs on a volume, and the
+library defaults it keeps (``tile_overlap``, ``bfloat16``, the thresholds) are recorded. Both
+run on ``"cpu"`` or ``"cuda"``; the execution entry records the framework, its CUDA
+build and thread counts, and on ``"cuda"`` the GPU and TensorFlow's memory growth. A
+library result in int32, uint16 or uint32 becomes ``uint32``; a Z axis Cellpose drops for
+one plane is restored.
+
+No segmentation entry downloads a model.
+:py:data:`~starfinder.segmentation.KNOWN_MODELS` maps ``(method, model)`` to a
+:py:class:`~starfinder.segmentation.KnownModel` (its download, the
+:py:class:`~starfinder.segmentation.ModelFile` entries the library loads with their
+SHA-256, and the documented properties) for the pretrained models Starfinder can verify,
+``("stardist", "2D_versatile_fluo")`` and ``("cellpose", "cpsam_v2")``; it sets no default
+model. :py:func:`~starfinder.segmentation.resolve_model` finds a known model in the
+weights cache (``<root>/<method>/<model>/``, the §2.7 cache) or a user-trained model by
+path (a StarDist folder with ``config.json``, ``thresholds.json`` and ``weights_best.h5``,
+such as ``3D_spleen``; a Cellpose model file), recomputes each file's SHA-256 and returns
+the path with the provenance artifacts; a missing file raises
+:py:class:`~starfinder.segmentation.MissingModelError` naming the fetch command, a changed
+one :py:class:`~starfinder.segmentation.ModelHashMismatchError` naming both hashes.
+``segment`` calls it before any library call. ``starfinder weights fetch stardist
+2D_versatile_fluo`` (or ``cellpose cpsam_v2``) is the explicit download, and ``starfinder
+weights list`` and ``verify`` cover the segmentation models with the detector weights.
 
 ``FOV.segment(plan, device="cpu")`` runs a
 :py:class:`~starfinder.segmentation.SegmentationPlan` of
@@ -125,6 +163,7 @@ checking the recorded SHA-256 values (see :doc:`../checkpoints`).
 .. autosummary::
    :toctree: generated
 
+   CellposeConfig
    composite_nuclei_amplicon
    CompositeConfig
    enhance_with_flamingo
@@ -134,15 +173,19 @@ checking the recorded SHA-256 values (see :doc:`../checkpoints`).
    FlamingoEnhancementConfig
    import_labels
    InputChannel
+   KNOWN_MODELS
+   KnownModel
    LabelImportConfig
    labels_to_grid
    MethodContext
    MissingModelError
+   ModelFile
    ModelHashMismatchError
    normalize_percentiles
    reference_grid_from_file
    ReferenceGrid
    rescale_input
+   resolve_model
    SeededWatershedConfig
    segment
    SEGMENTATION_METHODS
@@ -152,5 +195,6 @@ checking the recorded SHA-256 values (see :doc:`../checkpoints`).
    SegmentationResult
    SegmentationRun
    SegmentationSpec
+   StarDistConfig
    to_label_dtype
    ZExtensionConfig

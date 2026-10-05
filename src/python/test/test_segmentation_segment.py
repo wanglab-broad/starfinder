@@ -386,9 +386,10 @@ def test_spec_validation(change, error):
 # --- The registry list ------------------------------------------------------------------------------
 
 def test_the_registry_holds_seeded_watershed_with_the_contract_fields():
-    assert set(names(SEGMENTATION_METHODS)) == {"seeded_watershed"}
+    # stardist and cellpose (W-316) are checked in test_segmentation_models.py.
+    assert set(names(SEGMENTATION_METHODS)) == {"stardist", "cellpose", "seeded_watershed"}
     for config_type, spec in SEGMENTATION_METHODS.items():
-        assert config_type().method == spec.name
+        assert config_type.__dataclass_fields__["method"].default == spec.name
         assert config_type_for(SEGMENTATION_METHODS, spec.name, "segmentation method") is config_type
     spec = SEGMENTATION_METHODS[SeededWatershedConfig]
     stains = frozenset({"cytoplasm", "membrane", "amplicon", "composite"})

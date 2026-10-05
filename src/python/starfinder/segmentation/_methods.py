@@ -16,6 +16,7 @@ import numpy as np
 from starfinder._registry import Dependency, check_shared
 
 from ._labels import TARGETS, ReferenceGrid
+from ._learned import CellposeConfig, StarDistConfig, _cellpose, _stardist
 
 ROLES = ("nuclear", "cytoplasm", "membrane", "amplicon", "composite")
 SEEDS = ("none", "optional", "required")
@@ -167,9 +168,22 @@ def _seeded_watershed(image, config: SeededWatershedConfig,
     return cells, details
 
 
-#: The segmentation registry (docs/segmentation-contract.md, "Registered methods"). The learned
-#: methods stardist and cellpose are added with their backends.
+#: The segmentation registry (docs/segmentation-contract.md, "Registered methods"). The backends of
+#: stardist and cellpose are imported by segment (check 5) and inside the method functions only.
 SEGMENTATION_METHODS: dict[type, SegmentationSpec] = {
+    StarDistConfig: SegmentationSpec(
+        "stardist", _stardist,
+        requires=(Dependency("stardist", "stardist", "stardist"), Dependency("csbdeep", "csbdeep", "stardist"),
+                  Dependency("tensorflow", "tensorflow", "stardist")),
+        targets=frozenset({"nucleus", "cell"}), roles=frozenset({"nuclear", "composite"}),
+        required_roles=(frozenset({"nuclear", "composite"}),), seeds="none", dimensions=frozenset({2, 3}),
+        models=True, devices=frozenset({"cpu", "cuda"})),
+    CellposeConfig: SegmentationSpec(
+        "cellpose", _cellpose,
+        requires=(Dependency("cellpose", "cellpose", "cellpose"), Dependency("torch", "torch", "cellpose")),
+        targets=frozenset({"nucleus", "cell"}), roles=frozenset({"cytoplasm", "nuclear"}),
+        required_roles=(frozenset({"cytoplasm", "nuclear"}),), seeds="none", dimensions=frozenset({2, 3}),
+        models=True, devices=frozenset({"cpu", "cuda"})),
     SeededWatershedConfig: SegmentationSpec(
         "seeded_watershed", _seeded_watershed, targets=frozenset({"cell"}),
         roles=frozenset({"cytoplasm", "membrane", "amplicon", "composite"}),

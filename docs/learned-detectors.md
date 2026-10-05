@@ -115,6 +115,16 @@ uv run starfinder weights verify piscis 20251212
   file:
   `extracted=tuple(f.path for f in KNOWN_WEIGHTS[(method, model)].extracted)`
   (empty for Piscis, whose `.pt` file is already checked).
+* The segmentation models of `KNOWN_MODELS` (`starfinder.segmentation`, §2.9;
+  {doc}`segmentation-contract`, "Models") share the cache and the three commands:
+  `starfinder weights fetch stardist 2D_versatile_fluo` downloads the StarDist
+  archive and `starfinder weights fetch cellpose cpsam_v2` the Cellpose file, with
+  the same size and SHA-256 checks of the download and of each listed file. A
+  present listed file is never overwritten: a changed one raises
+  `ModelHashMismatchError`, and missing ones are restored from one verified
+  download. A model folder staged without `starfinder-weights.json` is kept when
+  its files verify, so `list` shows it as `present`. `verify` re-hashes the
+  listed files with `resolve_model`, the check every segmentation call runs.
 
 ### Cache location
 

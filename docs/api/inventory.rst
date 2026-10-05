@@ -262,6 +262,7 @@ starfinder.registration
 starfinder.segmentation
 ~~~~~~~~~~~~~~~~~~~~~~~
 
+* :py:obj:`starfinder.segmentation.CellposeConfig`
 * :py:obj:`starfinder.segmentation.composite_nuclei_amplicon`
 * :py:obj:`starfinder.segmentation.CompositeConfig`
 * :py:obj:`starfinder.segmentation.enhance_with_flamingo`
@@ -271,15 +272,19 @@ starfinder.segmentation
 * :py:obj:`starfinder.segmentation.FlamingoEnhancementConfig`
 * :py:obj:`starfinder.segmentation.import_labels`
 * :py:obj:`starfinder.segmentation.InputChannel`
+* :py:obj:`starfinder.segmentation.KNOWN_MODELS`
+* :py:obj:`starfinder.segmentation.KnownModel`
 * :py:obj:`starfinder.segmentation.LabelImportConfig`
 * :py:obj:`starfinder.segmentation.labels_to_grid`
 * :py:obj:`starfinder.segmentation.MethodContext`
 * :py:obj:`starfinder.segmentation.MissingModelError`
+* :py:obj:`starfinder.segmentation.ModelFile`
 * :py:obj:`starfinder.segmentation.ModelHashMismatchError`
 * :py:obj:`starfinder.segmentation.normalize_percentiles`
 * :py:obj:`starfinder.segmentation.reference_grid_from_file`
 * :py:obj:`starfinder.segmentation.ReferenceGrid`
 * :py:obj:`starfinder.segmentation.rescale_input`
+* :py:obj:`starfinder.segmentation.resolve_model`
 * :py:obj:`starfinder.segmentation.SeededWatershedConfig`
 * :py:obj:`starfinder.segmentation.segment`
 * :py:obj:`starfinder.segmentation.SEGMENTATION_METHODS`
@@ -289,6 +294,7 @@ starfinder.segmentation
 * :py:obj:`starfinder.segmentation.SegmentationResult`
 * :py:obj:`starfinder.segmentation.SegmentationRun`
 * :py:obj:`starfinder.segmentation.SegmentationSpec`
+* :py:obj:`starfinder.segmentation.StarDistConfig`
 * :py:obj:`starfinder.segmentation.to_label_dtype`
 * :py:obj:`starfinder.segmentation.ZExtensionConfig`
 

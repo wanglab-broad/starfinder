@@ -11,7 +11,9 @@ its target (``nucleus`` or ``cell``), geometry (``volume``, ``plane`` or
 record mapping and leaves its inputs unchanged. :func:`expand_labels` is the one
 label expansion; the assignment entry (``starfinder.assignment``) applies it to the
 cell territories and keeps both masks. :func:`segment` runs one method of
-``SEGMENTATION_METHODS`` on a :class:`SegmentationInput` behind the stage checks;
+``SEGMENTATION_METHODS`` (``stardist``, ``cellpose``, ``seeded_watershed``) on a
+:class:`SegmentationInput` behind the stage checks; :func:`resolve_model` verifies a
+model of ``KNOWN_MODELS`` or a user-trained model by path without downloading;
 ``FOV.segment`` runs a :class:`SegmentationPlan` of named runs on one FOV. See
 docs/segmentation-contract.md and docs/segmentation-algorithms.md.
 """
@@ -20,8 +22,11 @@ from ._import import LabelImportConfig, import_labels
 from ._inputs import (CompositeConfig, FlamingoEnhancementConfig, composite_nuclei_amplicon, enhance_with_flamingo,
                       normalize_percentiles, rescale_input)
 from ._labels import ReferenceGrid, SegmentationResult, reference_grid_from_file, to_label_dtype
+from ._learned import CellposeConfig, StarDistConfig
 from ._methods import SEGMENTATION_METHODS as _SEGMENTATION_METHODS
 from ._methods import MethodContext, SeededWatershedConfig, SegmentationSpec
+from ._models import KNOWN_MODELS as _KNOWN_MODELS
+from ._models import KnownModel, ModelFile, resolve_model
 from ._operations import ExpandLabelsConfig, ZExtensionConfig, expand_labels, extend_labels_through_z, labels_to_grid
 from ._plan import InputChannel, SegmentationPlan, SegmentationRun
 from ._segment import SegmentationInput, segment
@@ -30,11 +35,17 @@ from ._segment import SegmentationInput, segment
 #: SegmentationSpec. segment, SegmentationRun and FOV.segment derive their method sets from it.
 SEGMENTATION_METHODS = _SEGMENTATION_METHODS
 
+#: The known-models table, mapping each (method, model) pair to its KnownModel. It lists the pretrained
+#: models Starfinder can verify (2D_versatile_fluo, cpsam_v2), sets no default model, and leaves
+#: user-trained models to model_path.
+KNOWN_MODELS = _KNOWN_MODELS
+
 __all__ = ["ReferenceGrid", "reference_grid_from_file", "SegmentationResult", "to_label_dtype",
            "LabelImportConfig", "import_labels", "labels_to_grid", "ExpandLabelsConfig", "expand_labels",
            "ZExtensionConfig", "extend_labels_through_z",
            "CompositeConfig", "composite_nuclei_amplicon", "FlamingoEnhancementConfig", "enhance_with_flamingo",
            "normalize_percentiles", "rescale_input",
            "segment", "SegmentationInput", "SEGMENTATION_METHODS", "SegmentationSpec", "MethodContext",
-           "SeededWatershedConfig", "SegmentationPlan", "SegmentationRun", "InputChannel",
+           "SeededWatershedConfig", "StarDistConfig", "CellposeConfig", "SegmentationPlan", "SegmentationRun",
+           "InputChannel", "KNOWN_MODELS", "KnownModel", "ModelFile", "resolve_model",
            "SegmentationBackendUnavailableError", "MissingModelError", "ModelHashMismatchError"]

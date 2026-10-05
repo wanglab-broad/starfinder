@@ -23,6 +23,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.synthetic.calibrated_scene_preset`
 * :py:obj:`starfinder.assignment.CELL_CORRESPONDENCE`
 * :py:obj:`starfinder.assignment.CELL_STATUSES`
+* :py:obj:`starfinder.segmentation.CellposeConfig`
 * :py:obj:`starfinder.spot_finding.ChannelOverride`
 * :py:obj:`starfinder.dataset.CheckpointConfig`
 * :py:obj:`starfinder.evaluation.spot_finding.classify_detections`
@@ -110,7 +111,9 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.image.InvalidImageError`
 * :py:obj:`starfinder.barcode.InvalidIntensityError`
 * :py:obj:`starfinder.registration.InvalidRegistrationConfigError`
+* :py:obj:`starfinder.segmentation.KNOWN_MODELS`
 * :py:obj:`starfinder.spot_finding.KNOWN_WEIGHTS`
+* :py:obj:`starfinder.segmentation.KnownModel`
 * :py:obj:`starfinder.spot_finding.KnownWeights`
 * :py:obj:`starfinder.segmentation.LabelImportConfig`
 * :py:obj:`starfinder.segmentation.labels_to_grid`
@@ -130,6 +133,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.preprocessing.MinMaxNormalizationConfig`
 * :py:obj:`starfinder.segmentation.MissingModelError`
 * :py:obj:`starfinder.spot_finding.MissingWeightsError`
+* :py:obj:`starfinder.segmentation.ModelFile`
 * :py:obj:`starfinder.segmentation.ModelHashMismatchError`
 * :py:obj:`starfinder.assignment.molecule_table`
 * :py:obj:`starfinder.assignment.molecule_table_from_csv`
@@ -187,6 +191,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.dataset.RegistrationStep`
 * :py:obj:`starfinder.benchmark.report_benchmark`
 * :py:obj:`starfinder.segmentation.rescale_input`
+* :py:obj:`starfinder.segmentation.resolve_model`
 * :py:obj:`starfinder.spot_finding.resolve_weights`
 * :py:obj:`starfinder.registration.RigidConfig`
 * :py:obj:`starfinder.dataset.RoundState`
@@ -217,6 +222,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.spot_finding.SpotFindingSpec`
 * :py:obj:`starfinder.spot_finding.SpotFindingWarning`
 * :py:obj:`starfinder.spot_finding.SpotiflowConfig`
+* :py:obj:`starfinder.segmentation.StarDistConfig`
 * :py:obj:`starfinder.spot_finding.StarfishLogConfig`
 * :py:obj:`starfinder.preprocessing.step_config_type`
 * :py:obj:`starfinder.preprocessing.step_spec`

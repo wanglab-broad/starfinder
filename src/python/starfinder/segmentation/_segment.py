@@ -1,13 +1,11 @@
 """The segment entry and the checks the stage wrapper applies to every method (docs/segmentation-contract.md)."""
 from __future__ import annotations
 
-import json
 import os
 import sys
 import time
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
-from pathlib import Path
 
 import numpy as np
 
@@ -15,11 +13,12 @@ from starfinder._execution import THREAD_VARIABLES
 from starfinder._registry import provenance, require, spec_for
 from starfinder.image import IncompatibleGeometryError, _validate_image
 
-from ._errors import MissingModelError, ModelHashMismatchError, SegmentationBackendUnavailableError
+from ._errors import MissingModelError, SegmentationBackendUnavailableError
 from ._import import LabelImportConfig, _software
 from ._labels import (FORMAT_VERSION, ReferenceGrid, SegmentationResult, _check_namespace, _check_target,
     _grid_record, _json, _namespace_ids, array_sha256, to_label_dtype)
 from ._methods import DEVICES, ROLES, SEGMENTATION_METHODS, MethodContext
+from ._models import model_dimensions, resolve_model
 
 _WHAT = "segmentation method"
 
@@ -104,45 +103,21 @@ def _check_device(device, spec):
 
 
 def _resolve_model(spec, config):
-    """Check 6 for a method with a model: the files exist and match their recorded SHA-256, before any library call.
+    """Check 6 for a method with a model: the files exist and match their SHA-256, before any library call.
 
-    ``config.model_path`` names a folder or a file given by path; ``config.model``
-    a known model in the weights cache (``<root>/<method>/<model>/``). Returns
-    the path, the artifacts entry of each file and the model's dimensionality
-    read from a ``config.json`` (``n_dim``) when the folder has one, else None.
-    Nothing is downloaded.
+    ``config.model`` names a known model of ``KNOWN_MODELS`` in the weights cache
+    (``<root>/<method>/<model>/``), ``config.model_path`` a folder or file given by
+    path (see :func:`resolve_model`). Returns the model path, the artifacts entry of
+    each file and the model's dimensionality read without the library (a config's
+    ``do_3d``, else ``n_dim`` of ``config.json``; None when neither exists). Nothing
+    is downloaded.
     """
-    from starfinder.spot_finding._weights import sha256_file, weights_directory
     model_path, model = getattr(config, "model_path", None), getattr(config, "model", None)
-    if model_path is not None:
-        path, source, name = Path(model_path).expanduser().resolve(), "path", f"{spec.name}/{Path(model_path).name}"
-        if not path.exists():
-            raise MissingModelError(f"{_WHAT} {spec.name!r}: model path {path} does not exist; segmentation never "
-                                    "downloads a model")
-    elif model is not None:
-        path, source, name = weights_directory() / spec.name / model, "cache", f"{spec.name}/{model}"
-        if not path.exists():
-            raise MissingModelError(f"{_WHAT} {spec.name!r}: model {model!r} is not in the weights cache ({path}); "
-                                    f"fetch it with: starfinder weights fetch {spec.name} {model}")
-    else:
+    if model_path is None and model is None:
         raise MissingModelError(f"{_WHAT} {spec.name!r} needs a model: set model or model_path")
-    files = sorted(p for p in path.iterdir() if p.is_file()) if path.is_dir() else [path]
-    expected = dict(getattr(config, "model_sha256", None) or {})
-    missing = [f for f in expected if not (path / f if path.is_dir() else path.parent / f).is_file()]
-    if missing:
-        raise MissingModelError(f"{_WHAT} {spec.name!r}: model {path} has no {missing}")
-    artifacts = []
-    for file in files:
-        digest = sha256_file(file)
-        if file.name in expected and expected[file.name] != digest:
-            raise ModelHashMismatchError(f"{file}: SHA-256 {digest} differs from the expected "
-                                         f"{expected[file.name]}")
-        artifacts.append({"name": f"{name}/{file.name}" if path.is_dir() else name, "path": str(file),
-                          "sha256": digest, "source": source})
-    n_dim = None
-    if path.is_dir() and (path / "config.json").is_file():
-        n_dim = json.loads((path / "config.json").read_text()).get("n_dim")
-    return path, artifacts, n_dim
+    path, artifacts = resolve_model(spec.name, model=model, model_path=model_path,
+                                    model_sha256=getattr(config, "model_sha256", None))
+    return path, artifacts, model_dimensions(path, config)
 
 
 def _check_dimensions(shape, spec, n_dim):
@@ -190,15 +165,21 @@ def _check_output(labels, shape, spec):
     return to_label_dtype(labels)
 
 
-def _execution(spec, device):
-    """The execution entry: device, the framework of a method that runs on torch or TensorFlow, thread settings."""
+def _execution(spec, device, framework=None):
+    """The execution entry: device, the framework of a method that runs on torch or TensorFlow, thread settings.
+
+    framework is the entry the method reported (version, CUDA build, GPU, thread counts); without one, the
+    framework among the method's dependencies that is imported is recorded by name and version.
+    """
+    threads = {name: os.environ.get(name) for name in THREAD_VARIABLES}
+    if framework is not None:
+        return {"device": device, "framework": _json(dict(framework)), "threads": threads}
     entry = None
     for module in ("torch", "tensorflow"):
         library = sys.modules.get(module)
         if library is not None and any(d.module == module for d in spec.requires):
             entry = {"name": module, "version": str(library.__version__),
                      "cuda": library.version.cuda if module == "torch" else None}
-    threads = {name: os.environ.get(name) for name in THREAD_VARIABLES}
     return {"device": device, "framework": entry, "threads": threads}
 
 
@@ -296,7 +277,8 @@ def segment(segmentation_input: SegmentationInput, *, config, target: str, seeds
 
     geometry = "plane" if shape[0] == 1 else "volume"
     entry = provenance(spec, config, "segmentation")
-    entry.update(artifacts=artifacts, execution=_execution(spec, device), effective=_json(details.get("effective", {})))
+    entry.update(artifacts=artifacts, execution=_execution(spec, device, details.get("framework")),
+                 effective=_json(details.get("effective", {})))
     n_labels, max_label = int(np.count_nonzero(np.unique(labels))), int(labels.max())
     record = {
         "format_version": FORMAT_VERSION, "stage": "segmentation", **_namespace_ids(label_namespace),
@@ -315,7 +297,7 @@ def segment(segmentation_input: SegmentationInput, *, config, target: str, seeds
                    "max_label": max_label},
         "software": _software(),
     }
-    diagnostics = {"details": _json({k: v for k, v in details.items() if k != "effective"}),
+    diagnostics = {"details": _json({k: v for k, v in details.items() if k not in ("effective", "framework")}),
                    "wall_seconds": seconds}
     return SegmentationResult(labels, grid, target, geometry, label_namespace, record, diagnostics)
 
