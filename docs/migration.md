@@ -918,8 +918,8 @@ Segmentation is its own entry, separate from `FOV.run` (decision D1 of
 {py:class}`~starfinder.segmentation.SegmentationInput` (a ZYXC image on its grid, with one
 role per channel) behind the stage checks, and `FOV.segment(plan)` runs a
 {py:class}`~starfinder.segmentation.SegmentationPlan` of named runs on the FOV's resident
-reference-frame images, keeping the results in `FOV.segmentation_results`. Saved label
-files come later; `FOV.segment` takes `checkpoints=None` only.
+reference-frame images, keeping the results in `FOV.segmentation_results`. With
+`checkpoints` it also saves each run (see "Saved segmentation runs and assignments" below).
 
 `segment` and `FOV.segment` take a `device` keyword, `"cpu"` (default) or `"cuda"`, which
 each method accepts only for its own devices. `ExecutionConfig.device` and the §2.7
@@ -944,8 +944,8 @@ Assignment is the third call per FOV, after `FOV.run` and `FOV.segment` (decisio
 {py:class}`~starfinder.segmentation.SegmentationResult` and returns an
 {py:class}`~starfinder.assignment.AssignmentResult` with the molecule, cell, count and
 nucleus tables. `FOV.assign(config, cells=…, nuclei=…)` runs it on the FOV's results and
-keeps the result in `FOV.assignment_results`; `PipelineConfig` gains no field, and saved
-assignment files come later (`checkpoints=None` only). The workflow's `reads_assignment`
+keeps the result in `FOV.assignment_results`; `PipelineConfig` gains no field, and with
+`checkpoints` it also saves the assignment (see the next section). The workflow's `reads_assignment`
 rule still runs `reads_assignment.py` unchanged; the `assignment` YAML block and the
 adapter translation of the legacy keys follow with the workflow change.
 
@@ -979,6 +979,30 @@ purpose:
 A µm expansion compares physical distances in floating point, so a distance that is an
 exact multiple of the spacing (0.3 µm at 0.1 µm) may leave out the outermost ring of
 voxels; the legacy pixel distance has no such rounding.
+
+### Saved segmentation runs and assignments
+
+`FOV.segment(plan, checkpoints=CheckpointConfig(…))` and `FOV.assign(…, checkpoints=…)`
+save their results beside the `FOV.run` checkpoints, in two new folders of the per-FOV
+checkpoint directory ({doc}`checkpoints`, "Segmentation runs" and "Assignments"):
+`segmentation/<run>/` holds `labels.tif` (ZYX `uint32`, zlib, with the grid's
+`ImageMetadata`), `input.ome.tif` (the segmentation input; not for an imported mask) and
+`segmentation.json` (the run record); `assignment/<name>/` holds the `molecules`, `cells`
+(kept and excluded), `counts` and `nuclei` tables as CSV or Parquet, `assignment.json`,
+and the label images the assignment used that are not already saved under their run.
+`FOV.load_segmentation(name)` and `FOV.load_assignment(name)` read them back and check
+every recorded SHA-256. The legacy workflow keeps writing
+`images/stardist_segmentation/{fovID}.tif`, `expr/{fovID}/raw.h5ad` and
+`expr/{fovID}/reads_assignment.csv`; nothing reads the new folders yet.
+
+Nothing changes for `FOV.run`: its stages (`registered`, `candidates`, `pre_qc`), its
+checkpoint `FORMAT_VERSION` 2 and `run.json` (`format_version` 1) stay as they are, and
+`FOV.assign` never rewrites a file of `FOV.run` or of segmentation (a saved label image is
+linked by its relative path). The new records carry their own `format_version` 1.
+`checkpoints` other than `None` or a `CheckpointConfig` now raises `TypeError` in
+`FOV.segment` and `FOV.assign`, as in `FOV.run`, where these two calls raised
+`ValueError` for any value other than `None` before. The checkpoint tables also accept
+`UInt32` columns (the cell and nucleus identifiers).
 
 ## Intentional behavior changes — not mechanical equivalence
 

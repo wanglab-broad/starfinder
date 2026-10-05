@@ -27,7 +27,8 @@ ESCAPE = "\\"
 _CONTROL = "[\x00-\x1f\x7f]"
 # In-memory dtype -> dtype used to parse CSV text; the header restores the former.
 _CSV_DTYPES = {"string": "string", "str": "string", "float64": "float64",
-               "int64": "Int64", "Int64": "Int64", "bool": "boolean", "boolean": "boolean"}
+               "int64": "Int64", "Int64": "Int64", "bool": "boolean", "boolean": "boolean",
+               "UInt32": "UInt32"}
 
 
 def _check_stage(stage):

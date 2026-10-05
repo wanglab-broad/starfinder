@@ -674,7 +674,7 @@ def test_coordination_errors(fov, tmp_path):
 @pytest.mark.dataset
 def test_fov_segment_arguments(fov, tmp_path):
     path, _ = write_mask(fov, tmp_path)
-    with pytest.raises(ValueError, match="checkpoints must be None"):
+    with pytest.raises(TypeError, match="checkpoints must be a CheckpointConfig or None"):
         fov.segment(two_run_plan(path), checkpoints=object())
     with pytest.raises(ValueError, match="device must be"):
         fov.segment(two_run_plan(path), device="gpu")

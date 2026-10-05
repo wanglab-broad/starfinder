@@ -64,8 +64,11 @@ molecules by status and three histograms.
 ``FOV.assign(config, cells="cell", nuclei=None, name="default", population="final")``
 builds the molecule table from the FOV's spot and read results and the codebook's genes,
 calls the entry on ``FOV.reference_grid()`` and stores the result in
-``FOV.assignment_results[name]``. Results stay in memory (``checkpoints`` must be
-``None`` for now).
+``FOV.assignment_results[name]``. With ``checkpoints=CheckpointConfig(…)`` it also
+writes ``<checkpoint dir>/<fov_id>/assignment/<name>/``: the four tables, ``assignment.json``
+and every label image it used that is not saved under its run, linking the saved ones;
+``FOV.load_assignment(name)`` reads the folder and the linked files back, checking every
+recorded SHA-256 (see :doc:`../checkpoints`).
 
 .. currentmodule:: starfinder.assignment
 

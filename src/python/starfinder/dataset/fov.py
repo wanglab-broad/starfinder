@@ -173,6 +173,9 @@ class FOV:
     segmentation_results: dict[str, SegmentationResult] = field(default_factory=dict)
     assignment_results: dict[str, AssignmentResult] = field(default_factory=dict)
     _run_record: object | None = field(default=None, init=False, repr=False, compare=False)
+    # Run name -> (SegmentationResult, resolved labels.tif) of runs written by segment() or read by
+    # load_segmentation(); assign() links such a result instead of copying it.
+    _segmentation_files: dict = field(default_factory=dict, init=False, repr=False, compare=False)
 
     # --- Delegated properties ---
 
@@ -1580,14 +1583,24 @@ class FOV:
         It never runs registration, detection or decoding (docs/segmentation-contract.md,
         "Coordination per FOV").
 
+        With ``checkpoints``, each run is also written to
+        ``<checkpoint dir>/<fov_id>/segmentation/<run>/`` (option F1 of
+        docs/segmentation-contract.md, "Saved format"): ``labels.tif`` (ZYX
+        ``uint32``, zlib, with the grid's ImageMetadata), ``input.ome.tif`` (the
+        segmentation input, ZYXC OME-TIFF; not for an import) and
+        ``segmentation.json`` (the run record, with each file's path and SHA-256).
+        The stored results carry that saved record. ``run.json`` and the ``FOV.run``
+        stages are not touched; ``stages`` and ``hash_inputs`` are not used.
+
         Parameters
         ----------
         plan : SegmentationPlan
             The runs; a run's seeds name an earlier run of the plan.
         device : str
             ``"cpu"`` (default) or ``"cuda"``, passed to every method.
-        checkpoints : None
-            Only None: results stay in memory (the saved format comes later).
+        checkpoints : CheckpointConfig, optional
+            None (default) keeps the results in memory only; otherwise its
+            ``directory`` and ``overwrite`` place the run folders.
 
         Returns
         -------
@@ -1600,17 +1613,101 @@ class FOV:
             An input round that is not loaded, a morphology round without an entry
             in registration_record["rounds"] (or a sequencing round without a
             registration), a round with metadata other than the reference round's,
-            an unknown channel, an unknown device, or checkpoints other than None;
-            and every error of segment and import_labels.
+            an unknown channel or an unknown device; and every error of segment and
+            import_labels.
+        TypeError
+            checkpoints is neither None nor a CheckpointConfig.
+        FileExistsError
+            A run folder holds saved files and overwrite is False (checked before
+            any run).
         IncompatibleGeometryError
             An input round whose ZYX shape differs from the reference grid, or seeds
             on another grid.
         """
+        from starfinder.segmentation import SegmentationPlan
+        from starfinder.segmentation._persist import check_writable, run_directory, write_run
         from starfinder.segmentation._plan import segment_fov
-        if checkpoints is not None:
-            raise ValueError('FOV.segment keeps its results in memory; checkpoints must be None')
-        self.segmentation_results.update(segment_fov(self, plan, device=device))
+        if checkpoints is not None and not isinstance(checkpoints, CheckpointConfig):
+            raise TypeError('checkpoints must be a CheckpointConfig or None')
+        if checkpoints is None:
+            self.segmentation_results.update(segment_fov(self, plan, device=device))
+            return self
+        checkpoints.__post_init__()
+        root = self._checkpoint_dir(checkpoints)
+        if isinstance(plan, SegmentationPlan):
+            for run in plan.runs:
+                check_writable(run_directory(root, run.name), checkpoints.overwrite)
+        inputs = {}
+        results = segment_fov(self, plan, device=device, inputs=inputs)
+        for name, result in results.items():
+            directory = run_directory(root, name)
+            results[name] = write_run(directory, result, inputs.get(name))
+            self._segmentation_files[name] = (results[name], (directory / 'labels.tif').resolve())
+        self.segmentation_results.update(results)
         return self
+
+    def load_segmentation(self, name: str, *, checkpoints: CheckpointConfig = CheckpointConfig()) -> SegmentationResult:
+        """Read a segmentation run saved by :meth:`segment` with checkpoints.
+
+        Reads ``<checkpoint dir>/<fov_id>/segmentation/<name>/``: ``segmentation.json``
+        and ``labels.tif``, checking the label file's SHA-256 and its array's
+        SHA-256 against the record, the stored metadata against the recorded
+        grid, the input file's SHA-256 when the run has one, and the record's
+        FOV identity against this FOV. The result (its record is the saved
+        record; diagnostics are not saved) is stored in
+        ``segmentation_results[name]`` and counts as saved under its run for
+        :meth:`assign` with the same checkpoint root.
+
+        Parameters
+        ----------
+        name : str
+            The run name.
+        checkpoints : CheckpointConfig
+            Only directory is used.
+
+        Returns
+        -------
+        SegmentationResult
+
+        Raises
+        ------
+        FileNotFoundError
+            The run has no ``segmentation.json``.
+        ValueError
+            A file that is missing or whose SHA-256 differs from the record
+            (naming the path and both hashes), a record of another version, run
+            or FOV, or stored metadata other than the recorded grid's.
+        """
+        from starfinder.io._checkpoint import _jsonable
+        from starfinder.segmentation._persist import read_run, run_directory
+        directory = run_directory(self._checkpoint_dir(checkpoints), name)
+        result = read_run(directory, name)
+        expected = _jsonable(self._checkpoint_header())
+        for key in ('dataset_id', 'sample_id', 'fov_id', 'subtile_id'):
+            if result.record.get(key) != expected[key]:
+                raise ValueError(f'segmentation run {name!r} has {key} {result.record.get(key)!r}, this FOV '
+                                 f'{expected[key]!r}')
+        self.segmentation_results[name] = result
+        self._segmentation_files[name] = (result, (directory / 'labels.tif').resolve())
+        return result
+
+    def _saved_labels(self, result, root):
+        """The labels.tif of a result saved under its run in this checkpoint root, else None.
+
+        Saved means written by segment(checkpoints=...) or read by
+        load_segmentation() from ``<root>/segmentation/<run>/labels.tif``, with
+        that file's array SHA-256 still equal to the labels' SHA-256.
+        """
+        from starfinder.segmentation._labels import array_sha256
+        from starfinder.segmentation._persist import read_labels, run_directory
+        for name, (stored, path) in self._segmentation_files.items():
+            if stored is not result:
+                continue
+            if path != (run_directory(root, name) / 'labels.tif').resolve() or not path.is_file():
+                return None
+            labels, _ = read_labels(path)
+            return path if array_sha256(labels) == array_sha256(result.labels) else None
+        return None
 
     def _label_run(self, value, what):
         from starfinder.segmentation import SegmentationResult
@@ -1655,8 +1752,16 @@ class FOV:
             ``final`` (default) or ``called``.
         correspondence : pandas.DataFrame, optional
             Supplied ``nucleus_id``, ``cell_id`` pairs.
-        checkpoints : None
-            Only None: results stay in memory (the saved files come later).
+        checkpoints : CheckpointConfig, optional
+            None (default) writes nothing. Otherwise the result is also written to
+            ``<checkpoint dir>/<fov_id>/assignment/<name>/`` (option L1 of
+            docs/assignment-contract.md, "Persistence"): ``molecules``, ``cells``,
+            ``counts`` and, with nuclei, ``nuclei`` in ``table_format``,
+            ``assignment.json``, ``territories.tif`` with an expansion, and
+            ``cell_labels.tif`` and ``nucleus_labels.tif`` for inputs that are not
+            saved under their run in this root (a saved input's
+            ``segmentation/<run>/labels.tif`` is linked, not copied). The stored
+            result carries the saved record. Nothing else is written.
 
         Returns
         -------
@@ -1666,19 +1771,32 @@ class FOV:
         Raises
         ------
         ValueError
-            checkpoints other than None, a name that is not snake_case, a run
-            that is not in segmentation_results, no spot or read result, no gene
-            list, and every error of assign_molecules and molecule_table.
+            A name that is not snake_case, a run that is not in
+            segmentation_results, no spot or read result, no gene list, and every
+            error of assign_molecules and molecule_table.
         TypeError
-            cells or nuclei of another type, and the type errors of assign_molecules.
+            checkpoints is neither None nor a CheckpointConfig, cells or nuclei of
+            another type, and the type errors of assign_molecules.
+        FileExistsError
+            The assignment folder holds saved files and overwrite is False
+            (checked before assigning).
+        ImportError
+            Parquet was requested without pyarrow.
         IncompatibleGeometryError
             The grid errors of assign_molecules.
         """
         from starfinder._registry import check_name
         from starfinder.assignment import AssignmentConfig, assign_molecules, molecule_table, summarize_assignment
-        if checkpoints is not None:
-            raise ValueError('FOV.assign keeps its results in memory; checkpoints must be None')
+        if checkpoints is not None and not isinstance(checkpoints, CheckpointConfig):
+            raise TypeError('checkpoints must be a CheckpointConfig or None')
         check_name(name, 'assignment')
+        if checkpoints is not None:
+            from starfinder.assignment._persist import assignment_directory, check_writable
+            from starfinder.io._checkpoint import _require_parquet
+            checkpoints.__post_init__()
+            check_writable(assignment_directory(self._checkpoint_dir(checkpoints), name), checkpoints.overwrite)
+            if checkpoints.table_format == 'parquet':
+                _require_parquet()
         config = AssignmentConfig() if config is None else config
         cell_run = self._label_run(cells, 'cells')
         nucleus_run = None if nuclei is None else self._label_run(nuclei, 'nuclei')
@@ -1699,8 +1817,59 @@ class FOV:
         result = assign_molecules(molecules, cell_run, grid=self.reference_grid(), nuclei=nucleus_run,
                                   correspondence=correspondence, config=config)
         record = dict(result.record, name=name, counts=summarize_assignment(result))
-        self.assignment_results[name] = replace(result, record=record)
+        result = replace(result, record=record)
+        if checkpoints is not None:
+            from starfinder.assignment._persist import assignment_directory, write_assignment
+            root = self._checkpoint_dir(checkpoints)
+            result = write_assignment(assignment_directory(root, name), result, metadata=cell_run.grid.metadata,
+                                      cells_saved=self._saved_labels(cell_run, root),
+                                      nuclei_saved=None if nucleus_run is None else self._saved_labels(nucleus_run, root),
+                                      same_run=nucleus_run is cell_run, table_format=checkpoints.table_format)
+        self.assignment_results[name] = result
         return self
+
+    def load_assignment(self, name: str, *, checkpoints: CheckpointConfig = CheckpointConfig()) -> AssignmentResult:
+        """Read an assignment saved by :meth:`assign` with checkpoints.
+
+        Reads ``<checkpoint dir>/<fov_id>/assignment/<name>/`` and the linked
+        ``segmentation/<run>/labels.tif`` files, checks every recorded SHA-256
+        (each file's, and each label array's against the record) and the
+        record's FOV identity, rebuilds the tables with their recorded dtypes
+        (CSV or Parquet), stores the result in ``assignment_results[name]`` and
+        returns it. Its record is the saved record.
+
+        Parameters
+        ----------
+        name : str
+            The assignment name.
+        checkpoints : CheckpointConfig
+            Only directory is used.
+
+        Returns
+        -------
+        AssignmentResult
+
+        Raises
+        ------
+        FileNotFoundError
+            The assignment has no ``assignment.json``.
+        ValueError
+            A written or linked file that is missing or whose SHA-256 differs
+            from the record (naming the path and both hashes), a record of
+            another version, name or FOV.
+        ImportError
+            A Parquet table is read without pyarrow.
+        """
+        from starfinder.assignment._persist import assignment_directory, read_assignment
+        from starfinder.io._checkpoint import _jsonable
+        result = read_assignment(assignment_directory(self._checkpoint_dir(checkpoints), name), name)
+        expected = _jsonable(self._checkpoint_header())
+        for key in ('dataset_id', 'sample_id', 'fov_id', 'subtile_id'):
+            if result.record.get(key) != expected[key]:
+                raise ValueError(f'assignment {name!r} has {key} {result.record.get(key)!r}, this FOV '
+                                 f'{expected[key]!r}')
+        self.assignment_results[name] = result
+        return result
 
     # --- Output ---
 

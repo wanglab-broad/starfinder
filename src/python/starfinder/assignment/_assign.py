@@ -573,7 +573,7 @@ def assign_molecules(molecules: MoleculeTable, cells: SegmentationResult, *, gri
         "grid": {**_grid_record(grid), "check": check},
         "inputs": {
             "molecules": {"population": molecules.population, "n": len(table), "sha256": molecules.sha256,
-                          "source": _record_json(molecules.source)},
+                          "genes": list(molecules.genes), "source": _record_json(molecules.source)},
             "cells": _label_input(cells),
             "nuclei": None if nuclei is None else _label_input(nuclei),
             "correspondence": None if nuclei is None else {

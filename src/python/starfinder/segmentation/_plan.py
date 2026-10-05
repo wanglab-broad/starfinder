@@ -315,8 +315,12 @@ def _expand(result, config):
                               run_record, result.diagnostics)
 
 
-def segment_fov(fov, plan, *, device="cpu"):
-    """Run a plan on one FOV; return the results by run name (FOV.segment stores them)."""
+def segment_fov(fov, plan, *, device="cpu", inputs=None):
+    """Run a plan on one FOV; return the results by run name (FOV.segment stores them).
+
+    ``inputs``, when a dict, receives each computed run's SegmentationInput by name
+    (the saved format writes it); an import has none.
+    """
     if not isinstance(plan, SegmentationPlan):
         raise TypeError("plan must be a SegmentationPlan")
     plan.__post_init__()
@@ -338,6 +342,8 @@ def segment_fov(fov, plan, *, device="cpu"):
             record = dict(result.record)
         else:
             segmentation_input, stack = assemble_input(fov, run, grid)
+            if inputs is not None:
+                inputs[run.name] = segmentation_input
             seeds = None if run.seeds is None else results[run.seeds]
             result = segment(segmentation_input, config=run.method, target=run.target, seeds=seeds, device=device,
                              label_namespace=namespace)

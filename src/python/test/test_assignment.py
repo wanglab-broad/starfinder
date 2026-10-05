@@ -929,7 +929,7 @@ def test_fov_assign_runs_the_entry_on_the_fov_results(decoded_fov, tmp_path):
                population="called")
     assert set(fov.assignment_results) == {"default", "all_cells"}
     assert fov.assignment_results["all_cells"].record["inputs"]["molecules"]["population"] == "called"
-    errors = [(dict(checkpoints=object()), ValueError, "checkpoints"), (dict(name="Default"), ValueError, "snake_case"),
+    errors = [(dict(checkpoints=object()), TypeError, "checkpoints"), (dict(name="Default"), ValueError, "snake_case"),
               (dict(cells="membrane"), ValueError, "membrane"), (dict(cells=3), TypeError, "segmentation run"),
               (dict(population="all"), ValueError, "population")]
     for kwargs, error, message in errors:

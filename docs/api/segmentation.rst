@@ -114,8 +114,11 @@ seeds, an optional Z projection, and label operations in order: ``expand_labels`
 run is on ``FOV.reference_grid()``, or on its projection. An input round that is not
 loaded, a morphology round without an entry in ``registration_record["rounds"]`` or with
 other metadata raises ``ValueError``; a round of another shape, or seeds on another grid,
-raises :py:class:`~starfinder.image.IncompatibleGeometryError`. Results stay in memory
-(``checkpoints`` must be ``None`` for now).
+raises :py:class:`~starfinder.image.IncompatibleGeometryError`. With
+``checkpoints=CheckpointConfig(…)``, each run is also written to
+``<checkpoint dir>/<fov_id>/segmentation/<run>/`` (``labels.tif``, ``input.ome.tif`` for a
+computed run, ``segmentation.json``), and ``FOV.load_segmentation(name)`` reads it back,
+checking the recorded SHA-256 values (see :doc:`../checkpoints`).
 
 .. currentmodule:: starfinder.segmentation
 

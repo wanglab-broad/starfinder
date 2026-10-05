@@ -52,10 +52,28 @@ round inside the round loop, `candidates` after detection or extraction, and
     candidates.json
     pre_qc.csv | pre_qc.parquet
     pre_qc.json
+    segmentation/<run>/                       # FOV.segment(checkpoints=…), one folder per run
+        labels.tif
+        input.ome.tif                         # computed runs only
+        segmentation.json
+    assignment/<name>/                        # FOV.assign(checkpoints=…), one folder per assignment
+        molecules.csv | molecules.parquet
+        cells.csv | cells.parquet
+        counts.csv | counts.parquet
+        nuclei.csv | nuclei.parquet           # with nuclei
+        territories.tif                       # with an expansion
+        cell_labels.tif                       # only when the cell run is not saved under its run
+        nucleus_labels.tif                    # only when the nucleus run is not saved under its run
+        assignment.json
 ```
 
 An FOV loaded from a subtile writes to `subtile_<n>/` inside its FOV directory,
 so subtiles of one FOV never share files. Round labels must be plain file names.
+
+The `segmentation/` and `assignment/` folders are written by `FOV.segment` and
+`FOV.assign`, not by `FOV.run`: they are not checkpoint stages, `CheckpointConfig.stages`
+does not name them, and they do not change the stage format version or `run.json`
+(see "Segmentation runs" and "Assignments" below).
 
 ### registered
 
@@ -239,11 +257,65 @@ Without `deduplication_config` it is `None`.
 All JSON files are strict JSON: a non-finite diagnostic or configuration value
 (NaN or infinity) is written as `null`.
 
+## Segmentation runs
+
+`fov.segment(plan, checkpoints=CheckpointConfig(…))` writes each run of the plan to
+`segmentation/<run>/` (option F1 of {doc}`segmentation-contract`, "Saved format"). Only
+`directory` and `overwrite` are used. A run folder that already holds these files raises
+`FileExistsError` before any run when `overwrite` is false; with `overwrite=True` the
+run's files are replaced. Other runs and the `FOV.run` files are never touched.
+
+| File | Content |
+| --- | --- |
+| `labels.tif` | The label image: ZYX `uint32` (a plane is 1×Y×X), zlib, written by `save_volume` with the grid's `ImageMetadata` in its description. |
+| `input.ome.tif` | The segmentation input the labels were computed from: ZYXC OME-TIFF by `save_volume`, with its grid's metadata (the projected grid for a projected run). An imported mask has no segmentation input and no such file. |
+| `segmentation.json` | The run record of {doc}`segmentation-contract` ("Run record"), with `labels.path` and `labels.file_sha256`, and for a computed run `input.path` and `input.file_sha256`. `format_version` is 1. |
+
+`fov.load_segmentation(name, checkpoints=CheckpointConfig(directory=…))` reads the folder
+back into a `SegmentationResult`, stores it in `fov.segmentation_results[name]` and
+returns it. It raises `ValueError` naming the path and both hashes when a file is missing
+or its SHA-256, or the label array's SHA-256, differs from the record, and when the
+record names another run or FOV. The record of the returned result equals the record of
+the result `FOV.segment` stored.
+
+## Assignments
+
+`fov.assign(…, name="default", checkpoints=CheckpointConfig(…))` writes
+`assignment/<name>/` (option L1 of {doc}`assignment-contract`, "Persistence"). `directory`,
+`table_format` and `overwrite` are used, with the same `FileExistsError` and `ImportError`
+rules as `run`, checked before the assignment runs.
+
+* `molecules`, `cells` (every cell, kept and excluded), `counts` and, with nuclei, `nuclei`
+  are written in `table_format` with the table writer below; `assignment.json` records
+  each file's path, SHA-256 and dtype map under `files`.
+* Label images follow the one rule of {doc}`assignment-contract` ("Label images of a
+  checkpointed assignment"): a cell or nucleus run saved under its run in the same
+  checkpoint root (written by `FOV.segment(checkpoints=…)` or read by
+  `FOV.load_segmentation` there, with an unchanged `labels.tif`) is linked by its relative
+  path, `../../segmentation/<run>/labels.tif`, and never copied; any other input, among them
+  a run saved under another root, an `import_labels` result or a run kept in memory, is
+  written as `cell_labels.tif` or `nucleus_labels.tif`. With an expansion the expanded
+  territories are `territories.tif`. Label images are ZYX `uint32` with the grid's
+  `ImageMetadata`.
+* `assignment.json` is the run record of {doc}`assignment-contract` with every `file`
+  entry filled in: `inputs.cells.file` and `inputs.nuclei.file` (path and file SHA-256 of
+  the label file that holds each run, with `saved_under_run`), `expansion.original` and
+  `expansion.expanded` (their paths and `file_sha256`, beside the label arrays'
+  `sha256`), and `files`. `inputs.molecules.genes` holds the gene order of the counts.
+
+`fov.load_assignment(name, checkpoints=CheckpointConfig(directory=…))` reads the folder
+and the linked label files, checks every recorded SHA-256, rebuilds the tables with their
+recorded dtypes, stores the `AssignmentResult` in `fov.assignment_results[name]` and
+returns it. A written or linked file that is missing or changed raises `ValueError` naming
+the path and both hashes; a linked `segmentation/<run>/labels.tif` is therefore a
+prerequisite of the reload.
+
 ## Table formats
 
 CSV is written with floats as `%.17g` and missing values as `<NA>`. It is read
 back with an explicit dtype map from the stage header: pandas `string`, nullable
-`Int64` or `boolean`, and float64. It is then cast to the recorded in-memory
+`Int64`, `UInt32` (the assignment tables' cell and nucleus identifiers) or `boolean`, and
+float64. It is then cast to the recorded in-memory
 dtypes. String columns are read verbatim, without pandas' default missing-value
 parsing. A literal string equal to `<NA>`, or one that starts with a backslash,
 is written with one extra leading backslash, which is removed on reading.
