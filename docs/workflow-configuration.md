@@ -60,9 +60,10 @@ expects every FOV in each annotation range, even when sequencing is subsetted.
 Python arrays are `(Z,Y,X,C)`. Explicit channel patterns must match the files
 and codebook ordering. The Python factory leaves an empty channel list empty;
 it does not supply MATLAB's default. MATLAB's default order is
-`ch00,ch02,ch01,ch03`, but its nonempty custom channel setting is passed to a
-loader expecting a struct array with `channel`/`name`, incompatible with this
-schema's string array. Use `seq_channel_order: []` for default MATLAB loading;
+`ch00,ch02,ch01,ch03`, and its nonempty custom channel setting is passed to a
+loader expecting a struct array with `channel`/`name`: the object form of
+`seq_channel_order` ([channels](#channels)) has those fields, the list of
+patterns does not. Use `seq_channel_order: []` for default MATLAB loading;
 do not assume a Python custom list is portable to MATLAB.
 
 ### Channels
