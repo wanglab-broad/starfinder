@@ -898,7 +898,8 @@ composite's `maximum_projection` is no longer part of the composite; it is the z
 maximum of the result (`project_image` with `ProjectionConfig()`), which gives the same
 image. The inputs come from the reference frame: a morphology round's DAPI after
 `FOV.register_rounds` and the reference round's channel maximum, the image
-`FOV.save_reference_image` writes. The workflow scripts are unchanged for now.
+`FOV.save_reference_image` writes. The workflow scripts call these functions (see
+"Segmentation and assignment workflow rules" below).
 
 {py:func}`~starfinder.segmentation.normalize_percentiles` is csbdeep's `normalize` as
 `stardist_segmentation.py` calls it (percentiles 1 and 99.8, float32, unclipped), with
@@ -946,8 +947,7 @@ Assignment is the third call per FOV, after `FOV.run` and `FOV.segment` (decisio
 nucleus tables. `FOV.assign(config, cells=…, nuclei=…)` runs it on the FOV's results and
 keeps the result in `FOV.assignment_results`; `PipelineConfig` gains no field, and with
 `checkpoints` it also saves the assignment (see the next section). The workflow's `reads_assignment`
-rule still runs `reads_assignment.py` unchanged; the `assignment` YAML block and the
-adapter translation of the legacy keys follow with the workflow change.
+rule calls it too (see "Segmentation and assignment workflow rules" below).
 
 Compared with the per-FOV steps of `reads_assignment.py`, the package changes these on
 purpose:
@@ -991,7 +991,7 @@ checkpoint directory ({doc}`checkpoints`, "Segmentation runs" and "Assignments")
 (kept and excluded), `counts` and `nuclei` tables as CSV or Parquet, `assignment.json`,
 and the label images the assignment used that are not already saved under their run.
 `FOV.load_segmentation(name)` and `FOV.load_assignment(name)` read them back and check
-every recorded SHA-256. The legacy workflow keeps writing
+every recorded SHA-256. The workflow rules keep writing
 `images/stardist_segmentation/{fovID}.tif`, `expr/{fovID}/raw.h5ad` and
 `expr/{fovID}/reads_assignment.csv`; nothing reads the new folders yet.
 
@@ -1003,6 +1003,74 @@ linked by its relative path). The new records carry their own `format_version` 1
 `FOV.segment` and `FOV.assign`, as in `FOV.run`, where these two calls raised
 `ValueError` for any value other than `None` before. The checkpoint tables also accept
 `UInt32` columns (the cell and nucleus identifiers).
+
+### Segmentation and assignment workflow rules
+
+The scripts of `enhance_dapi_with_flamingo`, `create_nuclei_amplicon_overlay`,
+`stardist_segmentation` and `reads_assignment` are now adapter calls into the package
+(`dataset/workflow.py`), like `nuclei_registration.py`. The rules keep their names,
+inputs, outputs and file names, and the composite and the Flamingo enhancement keep the
+scripts' output bit for bit.
+
+**New requirement of MATLAB-backend runs.** `rules/segmentation.smk` and
+`rules/reads-assignment.smk` are included for both backends, so a run with
+`backend: matlab` that enables these rules now needs the Starfinder package in the
+environment that runs Snakemake: with the `stardist` extra for `stardist_segmentation`
+(StarDist, CSBDeep and TensorFlow; Python 3.11 to 3.13), and the `anndata` extra for
+`reads_assignment`. `stardist_segmentation` no longer runs in the conda environment
+`{envs_path}/stardist`, and no rule reads `envs_path`; the key stays in the schema until
+§2.13. The legacy keys are translated the same way under both backends, and the
+Python-only keys below are rejected without `backend: python`, so a MATLAB-backend run
+has the legacy target and the CPU.
+
+New configuration: the Python-only top-level `segmentation` and `assignment` blocks
+({doc}`workflow-configuration`, "Segmentation and assignment"), which the §2.13 rule
+runs with `FOV.segment` and `FOV.assign` (the legacy rules raise when a block is
+present), and the Python-only `target` and `device` keys of
+`rules.stardist_segmentation.parameters`. The `stardist` and `cellpose` extras supply
+the learned methods.
+
+Intentional changes of the outputs of `stardist_segmentation`:
+
+* `images/stardist_segmentation/{fovID}.tif` holds `uint32` labels instead of `uint16`,
+  so label 65,536 no longer wraps to 0; the run record is written beside it as
+  `{fovID}.json`.
+* `rescale: true` is StarDist's `scale` 0.5 in Y and X, and the labels come back on the
+  input grid; the legacy shrink, prediction and nearest-neighbour restore turned an odd
+  grid such as 61×63 into 60×64.
+* There is no foreground gate: an image without objects gives an empty label image
+  (outcome `empty`) instead of an error.
+* Thresholds equal to the model's `thresholds.json` are recorded as its stored
+  thresholds; a known model in the weights cache is checked against `KNOWN_MODELS`.
+* Unknown parameter keys raise; `rotate_nuclei` raises unless exactly one DAPI file
+  matches, naming the matches.
+
+Intentional changes of the outputs of `reads_assignment`:
+
+* Cells are kept when no molecule lands in them: they have zero rows in `X`, where the
+  script wrote a FOV without any cell.
+* Float goodSpots coordinates (`8.0`, as `export_spots` writes them) are accepted.
+* Molecules outside the label grid are `outside_grid` instead of reading the far edge
+  (one-based 0) or raising `IndexError` (beyond the grid); they are counted in the
+  record and, lying outside the tile box, not written to `reads_assignment.csv`.
+* A goodSpots gene outside the codebook raises `ValueError` naming it before
+  assignment, where the script silently left it out of the counts; `documents/genes.csv`
+  must list the codebook's genes.
+* A label file expanded by `stardist_segmentation` (`expand_labels: true` there) raises,
+  naming the key: give the distance as `reads_assignment.parameters.dilation_distance`
+  with `expand_labels: true`, so assign expands once and keeps both masks.
+* `raw.h5ad` gains the obs columns `size_voxels`, `expanded_size_voxels`,
+  `size_physical`, `centroid_z/y/x`, `n_molecules`, `n_nuclei`, `correspondence`,
+  `correspondence_flags` and `compartments`, the record in `uns["assignment"]` (JSON
+  text), and, with nuclei, the `nucleus` and `cytoplasm` layers (NaN where compartments
+  are not available). `reads_assignment.csv` gains `spot_id`, `assignment_status`,
+  `cell_id`, `in_expansion`, `original_cell_id`, `nucleus_id` and `compartment`.
+* `assignment.png` (`plot_assignment`) and a new `log.txt` replace the four diagnostic
+  PNGs and the coverage log.
+
+The legacy `obs` columns keep their meaning, computed on the territories assign samples,
+and the tile configuration, global coordinates and overlap filter are applied outside the
+package as before (§2.10).
 
 ## Intentional behavior changes — not mechanical equivalence
 
@@ -1019,6 +1087,7 @@ linked by its relative path). The new records carry their own `format_version` 1
 | Synthetic | One formed-scene generator with keyed SHA-256/PCG64 streams: byte-repeatable across processes for a pinned NumPy build on the same CPU, but every image and truth record differs from the historical generator. Appearance defaults are uncalibrated and do not establish molecular truth. |
 | Evaluation | Centered NCC has no epsilon bias. Missing/failed shifts, zero denominators and constant images are undefined rather than zero/passing. Shift errors preserve floats; matching thresholds/policies are explicit. |
 | Benchmark / recipes | Failures retain requested/actual method identity. Evaluation/reporting reuse saved artifacts. Optional legacy experiments remain recipes with prerequisites, not validated research results. |
+| Segmentation / assignment workflow | The shared rules call the package under both backends: `uint32` labels, `rescale` on the input grid, no foreground gate, cells kept without molecules, `outside_grid` molecules, unknown genes and a double expansion raise, new `raw.h5ad` and `reads_assignment.csv` columns; MATLAB-backend runs need the package and its `stardist` and `anndata` extras. |
 
 Detailed numerical policies, tolerances and edge cases remain canonical in
 [contracts](api/contracts.md), [evaluation](api/evaluation.registration.rst),

@@ -149,6 +149,13 @@ properties:
       the panel CSV (round,channel,gene_id), which is then the rule's codebook input, and
       needs spot_finding.rounds. direct requires backend python.
 
+  # ==================== Segmentation and assignment (Python only) ====================
+  segmentation:
+    $ref: "#/$defs/segmentation_block"
+
+  assignment:
+    $ref: "#/$defs/assignment_block"
+
   # ==================== Backend Selection ====================
   backend:
     type: string
@@ -305,7 +312,8 @@ allOf:
 
   # The explicit preprocessing and registration recipes, the spot-finding method, channel
   # overrides and rounds, the execution device, readout_mode direct, scoring,
-  # deduplication, reads_extraction.background and load_codebook.encoding.pair_to_color are
+  # deduplication, reads_extraction.background, load_codebook.encoding.pair_to_color, the
+  # segmentation and assignment blocks and the stardist_segmentation target are
   # Python-only (backend defaults to matlab)
   - if:
       not:
@@ -314,6 +322,10 @@ allOf:
           backend:
             const: python
     then:
+      not:
+        anyOf:
+          - required: [segmentation]
+          - required: [assignment]
       properties:
         readout_mode:
           const: multiplexed
@@ -326,6 +338,7 @@ allOf:
                     - required: [preprocessing]
                     - required: [registration]
                     - required: [device]
+                    - required: [target]
                     - required: [scoring]
                     - required: [deduplication]
                     - required: [reads_extraction]
@@ -1412,6 +1425,14 @@ $defs:
           distance:
             type: integer
             minimum: 0
+          target:
+            description: >-
+              Python only. The target of the label image (nucleus or cell); without it, cell
+              for the overlay input folder and nucleus otherwise (legacy_default)
+            enum: ["nucleus", "cell"]
+          device:
+            description: "Python only. The device of the StarDist call: cpu (default) or cuda"
+            enum: ["cpu", "cuda"]
         additionalProperties: true
     additionalProperties: true
 
@@ -1434,3 +1455,134 @@ $defs:
             minimum: 0
         additionalProperties: true
     additionalProperties: true
+
+  # ==================== Segmentation and assignment blocks (Python only) ====================
+  # docs/segmentation-contract.md and docs/assignment-contract.md, "Workflow configuration".
+  segmentation_block:
+    description: >-
+      Python only. A segmentation plan of named runs for FOV.segment, run by the §2.13 rule;
+      the stardist_segmentation rule translates its own legacy keys instead and raises when
+      this block is present.
+    type: object
+    required: [runs]
+    properties:
+      device:
+        description: "The device of the segment calls: cpu (default) or cuda"
+        enum: ["cpu", "cuda"]
+      runs:
+        type: array
+        minItems: 1
+        items:
+          $ref: "#/$defs/segmentation_run"
+    additionalProperties: false
+
+  segmentation_run:
+    description: >-
+      One run. Keys besides name, target, inputs, seeds, projection, operations and method are
+      the init fields of the method's config (or of LabelImportConfig with method import); the
+      Python adapter validates them.
+    type: object
+    required: [name, target, method]
+    properties:
+      name:
+        type: string
+      target:
+        enum: ["nucleus", "cell"]
+      inputs:
+        type: array
+        items:
+          $ref: "#/$defs/segmentation_input"
+      seeds:
+        description: "The name of an earlier nucleus run whose labels seed this one"
+        type: string
+      projection:
+        description: "true (ProjectionConfig()) or a mapping of ProjectionConfig fields; a Z projection of the input"
+        type: [boolean, object]
+      operations:
+        type: array
+        items:
+          type: object
+          required: [operation]
+          properties:
+            operation:
+              enum: ["expand_labels", "extend_labels_through_z"]
+          additionalProperties: true
+      method:
+        description: "A SEGMENTATION_METHODS name (the first list, kept equal to the registry by a test), or import"
+        anyOf:
+          - enum: ["stardist", "cellpose", "seeded_watershed"]
+          - const: import
+    additionalProperties: true
+
+  segmentation_input:
+    description: "InputChannel fields; prepare names composite_nuclei_amplicon or enhance_with_flamingo with its config fields"
+    type: object
+    required: [role]
+    properties:
+      role:
+        enum: ["nuclear", "cytoplasm", "membrane", "amplicon", "composite"]
+      round:
+        type: string
+      channel:
+        type: [string, integer]
+      reference_merged:
+        type: boolean
+      prepare:
+        type: object
+        required: [function]
+        properties:
+          function:
+            enum: ["composite_nuclei_amplicon", "enhance_with_flamingo"]
+        additionalProperties: true
+      prepare_channel:
+        type: [string, integer]
+    additionalProperties: false
+
+  assignment_block:
+    description: >-
+      Python only. The assign call of FOV.assign, run by the §2.13 rule: the AssignmentConfig
+      fields and the FOV.assign arguments (keys kept equal to them by a test); the
+      reads_assignment rule translates its own legacy keys instead and raises when this block
+      is present.
+    type: object
+    properties:
+      cells:
+        description: "The segmentation run whose labels are the cell territories"
+        type: string
+      nuclei:
+        description: "The nucleus run, or null"
+        type: [string, "null"]
+      name:
+        type: string
+      population:
+        enum: ["final", "called"]
+      expansion:
+        description: "ExpandLabelsConfig fields, or null for no expansion"
+        type: [object, "null"]
+        required: [distance, unit, mode]
+        properties:
+          distance:
+            type: number
+            minimum: 0
+          unit:
+            enum: ["pixel", "um"]
+          mode:
+            enum: ["planar", "volumetric"]
+        additionalProperties: false
+      legacy_pixel_expansion:
+        type: boolean
+      correspondence:
+        description: "CorrespondenceConfig fields (a supplied correspondence table is not a YAML value)"
+        type: object
+        properties:
+          match_fraction:
+            type: number
+          outside_tolerance:
+            type: number
+        additionalProperties: false
+      exclude_cells_without_nucleus:
+        type: [boolean, "null"]
+      checkpoints:
+        description: "CheckpointConfig fields, or null"
+        type: [object, "null"]
+    additionalProperties: false

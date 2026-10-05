@@ -23,8 +23,6 @@ rule stardist_segmentation:
         expand("{seg_input_dir}/{{fovID}}.tif", seg_input_dir=SEG_INPUT_DIR)
     output:
         expand("{output_dir}/images/stardist_segmentation/{{fovID}}.tif", output_dir=OUTPUT_DIR)
-    conda:
-        f"{config['envs_path']}/stardist"
     threads: 2
     resources:
         mem_mb=get_rule_config('stardist_segmentation', 'resources.mem_mb', DEFAULT_RESOURCES['mem_mb']),

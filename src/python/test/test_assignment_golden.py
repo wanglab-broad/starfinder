@@ -19,9 +19,8 @@ its Z maximum as the 2D case, a molecule table of 19 rows written as a one-based
     expansion by 4 followed by one by 2 (segmentation, then assignment) is not one
     expansion by 6.
 
-The script cannot run in the locked environment (it imports ``parse`` and ``anndata``,
-neither of which is installed there), so ``legacy_assignment`` follows its lines, which
-are cited, and a test checks that those lines are still in the script. The tile
+``legacy_assignment`` follows the script at 6b384cd line by line, with the cited lines;
+since the script became an adapter call (W-317) it is the frozen legacy reference. The tile
 configuration, the global coordinates, the overlap filter (lines 39-42, 78-80, 141-165),
 the plots and the H5AD and CSV writing are §2.10 or output plumbing and are not pinned;
 see docs/assignment-baseline.md.
@@ -34,7 +33,6 @@ names an edit.
 """
 import hashlib
 import json
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -49,8 +47,6 @@ from starfinder.segmentation import ExpandLabelsConfig, ReferenceGrid, Segmentat
 pytestmark = [pytest.mark.workflow, pytest.mark.golden]
 pytestmark += [pytest.mark.segmentation]  # the §2.9 package calls (docs/assignment-contract.md)
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-SCRIPT = REPO_ROOT / "workflow" / "scripts" / "reads_assignment.py"
 SHAPE_ZYX = (16, 64, 64)
 DISTANCE = 4  # dilation_distance
 # label value -> (z, y, x) centre and (z, y, x) semi-axes in voxels. Cells 3 and 7 lie
@@ -184,7 +180,7 @@ def legacy_assignment(label_img, reads_csv, genes_csv, *, expand, distance=DISTA
     return reads_df, cell_by_gene, meta
 
 
-# The lines of reads_assignment.py that legacy_assignment follows.
+# The lines of reads_assignment.py at 6b384cd that legacy_assignment follows.
 _PARAMETERS = "snakemake.config['rules']['reads_assignment']['parameters']"
 SCRIPT_LINES = {
     52: "if len(current_label_img.shape) == 3:",
@@ -277,11 +273,6 @@ def inputs(tmp_path):
 
 def _case(labels, dimensions):
     return labels if dimensions == "3d" else labels.max(axis=0)
-
-
-def test_the_helper_follows_the_script():
-    lines = SCRIPT.read_text().splitlines()
-    assert {n: lines[n - 1].strip() for n in SCRIPT_LINES} == SCRIPT_LINES
 
 
 def test_fixture(labels):

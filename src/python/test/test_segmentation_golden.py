@@ -3,9 +3,10 @@
 Pins, with exact SHA-256 digests, on one small seeded fixture (16×64×64 uint8 DAPI,
 merged amplicon and Flamingo images):
 
-(a) the DAPI–amplicon composite of ``workflow/scripts/create_nuclei_amplicon_overlay.py``
-    with and without its maximum projection, and the Flamingo enhancement of
-    ``workflow/scripts/enhance_dapi_with_flamingo.py``, both run unchanged through a stub
+(a) the DAPI–amplicon composite of the rule ``create_nuclei_amplicon_overlay`` with and
+    without its maximum projection, and the Flamingo enhancement of the rule
+    ``enhance_dapi_with_flamingo``, both computed by the workflow adapter functions their
+    scripts call (``composite_nuclei_amplicon`` and ``enhance_with_flamingo``) through a stub
     ``snakemake`` object, and both on constant and all-zero inputs (a constant image passes
     through their quantile stretch unchanged);
 (b) the foreground gate decision of ``workflow/scripts/stardist_segmentation.py`` (Otsu
@@ -14,10 +15,10 @@ merged amplicon and Flamingo images):
     fixed 0.5 shrink in Y and X;
 (d) the script's per-slice label expansion and its final ``uint16`` cast.
 
-The StarDist script cannot be imported in the locked environment (it imports StarDist
-and ``tifffile.imsave``, which tifffile 2026.1.28 no longer has), so (b) to (d) run
-``legacy_stardist_steps``, whose lines are cited against the script; a test checks that
-those lines are still in the script. The model call is replaced by a stand-in
+(b) to (d) run ``legacy_stardist_steps``, which follows ``stardist_segmentation.py`` at
+6b384cd line by line, with the cited lines; since the scripts became adapter calls (W-317)
+it is the frozen legacy reference, as ``legacy_overlay_combination`` is for the composite's
+3D-only combination. The model call is replaced by a stand-in
 (``stand_in_model``: Otsu threshold and connected components), so nothing here pins
 model inference; the W-306 parity outputs pin it (docs/segmentation-baseline.md).
 Four tests document legacy behavior that §2.9 changes: the gate raises on an image with
@@ -32,8 +33,6 @@ replace the body of ``legacy_stardist_steps``, ``composite`` and
 stays, except where docs/segmentation-contract.md names an edit.
 """
 import hashlib
-import runpy
-from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
@@ -43,15 +42,15 @@ from skimage.filters import threshold_otsu
 from skimage.measure import label, regionprops
 from skimage.segmentation import expand_labels
 from skimage.transform import rescale
+from skimage.util import img_as_float
 
+from starfinder.dataset.workflow import _run_enhance_dapi_with_flamingo, _run_nuclei_amplicon_overlay
 from starfinder.preprocessing import ProjectionConfig, project_image
 from starfinder.segmentation import composite_nuclei_amplicon, enhance_with_flamingo
 from starfinder.segmentation import ExpandLabelsConfig, expand_labels as package_expand_labels
 
 pytestmark = [pytest.mark.workflow, pytest.mark.segmentation, pytest.mark.golden]
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-SCRIPTS = REPO_ROOT / "workflow" / "scripts"
 SHAPE_ZYX = (16, 64, 64)
 SEED = 20261005
 DISTANCE = 4  # the expansion distance of the W-306 parity runs
@@ -104,30 +103,42 @@ def digest(array):
     return h.hexdigest()
 
 
-def run_script(name, tmp_path, inputs, config):
-    """Run workflow/scripts/<name> unchanged with a stub snakemake object; return its output."""
+def run_adapter(adapter, tmp_path, inputs, config):
+    """Run a workflow adapter function with a stub snakemake object; return its output image."""
     paths = {}
     for key, image in inputs.items():
         paths[key] = str(tmp_path / f"{key}.tif")
         tifffile.imwrite(paths[key], image)
     output = tmp_path / "output.tif"
-    snakemake = SimpleNamespace(input=paths, output=[str(output)], config=config)
-    runpy.run_path(str(SCRIPTS / name), init_globals={"snakemake": snakemake})
+    adapter(SimpleNamespace(input=paths, output=[str(output)], config=config))
     return tifffile.imread(output)
 
 
 def composite(tmp_path, dapi, amplicon, maximum_projection):
-    """create_nuclei_amplicon_overlay.py (rule create_nuclei_amplicon_overlay)."""
+    """The rule create_nuclei_amplicon_overlay: composite_nuclei_amplicon, then the optional Z maximum."""
     parameters = {"maximum_projection": maximum_projection}
     config = {"rules": {"create_nuclei_amplicon_overlay": {"parameters": parameters}}}
-    return run_script("create_nuclei_amplicon_overlay.py", tmp_path,
-                      {"dapi_img": dapi, "amplicon_img": amplicon}, config)
+    return run_adapter(_run_nuclei_amplicon_overlay, tmp_path, {"dapi_img": dapi, "amplicon_img": amplicon},
+                       config)
 
 
 def flamingo_enhancement(tmp_path, dapi, flamingo):
-    """enhance_dapi_with_flamingo.py (rule enhance_dapi_with_flamingo)."""
-    return run_script("enhance_dapi_with_flamingo.py", tmp_path,
-                      {"dapi_img": dapi, "flamingo_img": flamingo}, {})
+    """The rule enhance_dapi_with_flamingo: enhance_with_flamingo."""
+    return run_adapter(_run_enhance_dapi_with_flamingo, tmp_path, {"dapi_img": dapi, "flamingo_img": flamingo}, {})
+
+
+def legacy_overlay_combination(nuclear, amplicon):
+    """create_nuclei_amplicon_overlay.py at 6b384cd, lines 28-33, on the stretched images (frozen legacy reference).
+
+    The script stretched both images (lines 13-25), which keeps their shapes, then
+    combined them on a new last axis and reduced the hard-coded axis 3.
+    """
+    current_dapi_img_eh = img_as_float(nuclear)                           # :28
+    current_amplicon_img_eh = img_as_float(amplicon)                      # :29
+    current_overlay_img = np.zeros(current_dapi_img_eh.shape + (2,))      # :30
+    current_overlay_img[..., 0] = current_dapi_img_eh                     # :31
+    current_overlay_img[..., 1] = current_amplicon_img_eh                 # :32
+    return current_overlay_img.max(axis=3)                                # :33
 
 
 def stand_in_model(image):
@@ -177,7 +188,7 @@ def legacy_stardist_steps(image, *, rescale_labels, expand, distance=DISTANCE, m
     return np.zeros(image.shape, dtype="uint16")                                # :65
 
 
-# The lines of stardist_segmentation.py that legacy_stardist_steps follows.
+# The lines of stardist_segmentation.py at 6b384cd that legacy_stardist_steps follows.
 _PARAMETERS = "snakemake.config['rules']['stardist_segmentation']['parameters']"
 SCRIPT_LINES = {
     17: "threshold = threshold_otsu(current_img)",
@@ -254,11 +265,6 @@ def images():
     return fixture()
 
 
-def test_the_helper_follows_the_script():
-    lines = (SCRIPTS / "stardist_segmentation.py").read_text().splitlines()
-    assert {n: lines[n - 1].strip() for n in SCRIPT_LINES} == SCRIPT_LINES
-
-
 def test_fixture_digests(images):
     assert all(image.shape == SHAPE_ZYX and image.dtype == np.uint8 for image in images.values())
     assert {name: digest(image) for name, image in images.items()} == INPUT_DIGESTS
@@ -275,7 +281,7 @@ def test_composite(tmp_path, images, maximum_projection):
 def test_composite_needs_3d_inputs(tmp_path, images):
     """Legacy: the channel maximum is over axis 3, so projected 2D inputs raise (script line 33)."""
     with pytest.raises(np.exceptions.AxisError):
-        composite(tmp_path, images["dapi"].max(axis=0), images["amplicon"].max(axis=0), False)
+        legacy_overlay_combination(images["dapi"].max(axis=0), images["amplicon"].max(axis=0))
 
 
 def test_flamingo_enhancement(tmp_path, images):
