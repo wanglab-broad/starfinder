@@ -137,31 +137,77 @@ def expected_status(cell, excluded):
     return "excluded_cell" if cell in excluded else "assigned"
 
 
-def check_accounting(result):
-    """Identities 1-5 of docs/assignment-contract.md, recomputed from the tables (row A2)."""
+def as_list(column):
+    """A column as a list, with None for missing values."""
+    return [None if pd.isna(v) else v for v in column.astype(object)]
+
+
+def check_accounting(result, given):
+    """Identities 1-5 of docs/assignment-contract.md ("Count accounting"), sentence by sentence (row A2).
+
+    Every expected number is recomputed from the input molecules ``given`` and the result's
+    ``molecules`` table; ``counts``, the cell table and ``record["counts"]`` must equal them exactly.
+    """
     mols, cells, counts = result.molecules, result.cells, result.counts
-    status = mols.assignment_status.astype(object)
-    n = {s: int(status.eq(s).sum()) for s in ASSIGNMENT_STATUSES}
-    assert sum(n.values()) == len(mols) and status.isin(ASSIGNMENT_STATUSES).all()
-    whole = counts[counts.compartment.eq("whole").to_numpy(bool)]
-    assert int(whole["count"].sum()) == n["assigned"]
-    kept = cells[cells.status.eq("kept").to_numpy(bool)]
-    for row in kept.itertuples():
-        assert int(whole.loc[whole.cell_id.eq(row.cell_id).to_numpy(bool), "count"].sum()) == row.n_molecules
-    for row in kept[kept.compartments.eq("available").to_numpy(bool)].itertuples():
-        mine = counts[counts.cell_id.eq(row.cell_id).to_numpy(bool)]
-        for gene in result.genes:
-            part = {c: int(mine.loc[(mine.gene_id.eq(gene) & mine.compartment.eq(c)).to_numpy(bool), "count"].sum())
-                    for c in ("whole", "nucleus", "cytoplasm")}
-            assert part["whole"] == part["nucleus"] + part["cytoplasm"]
-    unavailable = set(cells.cell_id[~cells.compartments.eq("available").to_numpy(bool)].astype(int))
-    parts = counts[counts.compartment.isin(("nucleus", "cytoplasm")).to_numpy(bool)]
-    assert not set(parts.cell_id.astype(int)) & unavailable
-    assert int(mols.compartment.notna().sum()) == n["assigned"]
-    excluded = cells[cells.status.eq("excluded_no_nucleus").to_numpy(bool)]
-    assert int(excluded.n_molecules.sum()) == n["excluded_cell"]
-    assert not counts.cell_id.isin(excluded.cell_id).any()
-    assert counts.gene_id.isin(result.genes).all() and (counts["count"] > 0).all()
+    status = as_list(mols.assignment_status)
+    cell_of, gene_of, compartment_of = as_list(mols.cell_id), as_list(mols.gene_id), as_list(mols.compartment)
+    # 1. One status each: every molecule of M appears once in molecules, with exactly one status.
+    keys = list(zip(as_list(mols.spot_namespace), as_list(mols.spot_id)))
+    given_keys = list(zip(as_list(given.table.spot_namespace), as_list(given.table.spot_id)))
+    assert len(keys) == len(set(keys)) == len(given_keys) and set(keys) == set(given_keys)
+    assert all(s in ASSIGNMENT_STATUSES for s in status)
+    n = {s: status.count(s) for s in ASSIGNMENT_STATUSES}
+    assert sum(n.values()) == len(given_keys)
+    assert {s: result.record["counts"][s] for s in ASSIGNMENT_STATUSES} == n
+    assert result.record["counts"]["molecules"] == len(given_keys)
+    # The cell table: a kept cell holds its assigned molecules, an excluded cell its excluded_cell molecules.
+    row_of = {int(row.cell_id): row for row in cells.itertuples()}
+    kept = {c for c, row in row_of.items() if row.status == "kept"}
+    excluded = {c for c, row in row_of.items() if row.status == "excluded_no_nucleus"}
+    assert kept | excluded == set(row_of) and not kept & excluded
+    for s, c in zip(status, cell_of):
+        assert (c in kept) if s == "assigned" else (c in excluded) if s == "excluded_cell" else c is None
+    # 2, 3 and 5. The count rows each sentence states, recomputed from the assigned molecules: whole per kept
+    # cell and gene; nucleus and cytoplasm per available cell and gene; nonzero entries only.
+    expected = {}
+    for s, c, g, part in zip(status, cell_of, gene_of, compartment_of):
+        if s != "assigned":
+            continue
+        available = row_of[c].compartments == "available"
+        # 3, per molecule: nucleus or cytoplasm in an available cell, else the cell's compartment state.
+        assert part in ("nucleus", "cytoplasm") if available else part == row_of[c].compartments
+        for compartment in ("whole", part) if available else ("whole",):
+            expected[(int(c), g, compartment)] = expected.get((int(c), g, compartment), 0) + 1
+    rows = list(zip(as_list(counts.cell_id), as_list(counts.gene_id), as_list(counts.compartment),
+                    as_list(counts["count"])))
+    observed = {(int(c), g, part): int(k) for c, g, part, k in rows}
+    assert len(observed) == len(rows)                       # 5: one row per cell, gene and compartment
+    assert observed == expected                             # 2, 3, 5: none counted twice or without being assigned
+    assert all(k > 0 for k in observed.values())
+    assert {g for _, g, _ in observed} <= set(result.genes) and {g for g in gene_of} <= set(result.genes)
+    # 2. Summed over cells and genes the whole counts equal n_assigned; per cell, the cell's n_molecules.
+    whole = {key: k for key, k in observed.items() if key[2] == "whole"}
+    assert sum(whole.values()) == n["assigned"]
+    for c in kept:
+        assert sum(k for (cell, _, _), k in whole.items() if cell == c) == row_of[c].n_molecules
+    # 3. whole = nucleus + cytoplasm per available cell and gene; no part rows elsewhere; the two sums.
+    for c in kept:
+        if row_of[c].compartments == "available":
+            for g in result.genes:
+                assert observed.get((c, g, "whole"), 0) == \
+                    observed.get((c, g, "nucleus"), 0) + observed.get((c, g, "cytoplasm"), 0)
+        else:
+            assert not any(cell == c and part != "whole" for cell, _, part in observed)
+    parts = sum(k for (_, _, part), k in observed.items() if part != "whole")
+    rest = sum(k for (c, _, _), k in whole.items() if row_of[c].compartments != "available")
+    assert parts + rest == n["assigned"]
+    assert all((part is not None) == (s == "assigned") for s, part in zip(status, compartment_of))
+    assert sum(compartment_of.count(v) for v in ("nucleus", "cytoplasm", *COMPARTMENT_STATES[1:])) == n["assigned"]
+    # 4. Excluded cells have no count rows, and the sum of their n_molecules equals n_excluded_cell.
+    assert not any(c in excluded for c, _, _ in observed)
+    assert sum(int(row_of[c].n_molecules) for c in excluded) == n["excluded_cell"]
+    for c in excluded:
+        assert row_of[c].n_molecules == sum(1 for s, m in zip(status, cell_of) if s == "excluded_cell" and m == c)
 
 
 def test_the_vocabularies():
@@ -297,7 +343,7 @@ def test_a2_boxes_statuses_and_accounting():
     assert (counts["assigned"], counts["unassigned"], counts["excluded_cell"], counts["outside_grid"]) == \
         (26, 3, 6, 3)
     assert counts["molecules"] == len(BOXES_MOLECULES) == 38
-    check_accounting(result)
+    check_accounting(result, boxes_inputs()[0])
 
 
 def test_a5_to_a7_nucleus_table_and_cell_rows():
@@ -429,7 +475,7 @@ def test_a11_exclusion_and_its_statuses():
     assert (alone.record["config"]["exclude_cells_without_nucleus"], alone.record["inputs"]["nuclei"]) == \
         (False, None)
     for result in (default, off, alone):
-        check_accounting(result)
+        check_accounting(result, mols)
 
 
 def test_a12_supplied_correspondence_equal_to_the_derived_one():
@@ -644,7 +690,8 @@ def test_a16_a_plane_on_a_projected_grid():
                       input={"projection": {"axis": "z", "method": "max"}})
     in_grid = [(p, g, c) for p, g, c, _ in BOXES_MOLECULES if c is not None]
     rows = [((i % 8, y, x), g) for i, ((_, y, x), g, _) in enumerate(in_grid)] + [((1000, 4, 4), "A")]
-    result = assign_molecules(molecules(rows), plane, grid=GRID)
+    given = molecules(rows)
+    result = assign_molecules(given, plane, grid=GRID)
     table = result.molecules
     expected = [int(cells[4, y, x]) for (_, y, x), _ in rows[:-1]]
     assert [0 if pd.isna(v) else int(v) for v in table.cell_id[:-1]] == expected
@@ -660,7 +707,7 @@ def test_a16_a_plane_on_a_projected_grid():
         row = by_cell(result)[c]
         assert row.size_voxels == pixels and row.centroid_z == 0.0
         assert row.size_physical == pytest.approx(pixels * 0.1 * 0.1, rel=1e-12, abs=0)
-    check_accounting(result)
+    check_accounting(result, given)
 
 
 CULTURE_CELLS = {1: ((0, 1), (2, 12), (2, 12)), 2: ((0, 1), (2, 12), (16, 28)), 3: ((0, 1), (16, 28), (4, 20))}
@@ -684,7 +731,8 @@ def test_a17_culture_labels_extended_through_z():
     for z in (0, 2, 3, 4, 6):
         rows += [((z, 3, 3), "A"), ((z, 6, 6), "B"), ((z, 7, 20), "C"), ((z, 10, 26), "A"), ((z, 22, 10), "D"),
                  ((z, 17, 18), "B"), ((z, 30, 30), "C")]
-    result = assign_molecules(molecules(rows), label_run(cells, "cell", "cell", grid=grid, geometry="extended"),
+    given = molecules(rows)
+    result = assign_molecules(given, label_run(cells, "cell", "cell", grid=grid, geometry="extended"),
                               grid=grid, nuclei=label_run(nuclei, "nucleus", "nucleus", grid=grid,
                                                           geometry="extended"))
     table = result.molecules
@@ -697,7 +745,7 @@ def test_a17_culture_labels_extended_through_z():
             assert table.assignment_status.iloc[i] == "unassigned"
     assert set(result.cells.correspondence) == {"matched"} and set(result.cells.compartments) == {"available"}
     assert result.nuclei.cell_id.astype(int).tolist() == [1, 2, 3]
-    check_accounting(result)
+    check_accounting(result, given)
 
 
 # --- A19, A20: determinism and row order --------------------------------------------------------------

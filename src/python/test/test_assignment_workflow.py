@@ -168,14 +168,14 @@ def test_a18_the_legacy_outputs_equal_the_frozen_helper(tmp_path, dimensions, ex
     # anndata stores the string columns as categoricals, the legacy file's included.
     legacy_obs = obs[LEGACY_OBS[dimensions]].astype({"sample": str, "fov_id": str})
     assert_frame_equal(legacy_obs, meta[LEGACY_OBS[dimensions]].astype({"sample": str, "fov_id": str}),
-                       check_dtype=False)
+                       check_dtype=False, check_exact=True)
     assert obs.volume.dtype == np.float64 and obs.seg_label.dtype == np.int64
     assert list(reads.columns) == LEGACY_READS + NEW_READS
     observed = reads[LEGACY_READS]
     if floats:
         assert (observed[["x", "y", "z"]].dtypes == np.float64).all()
         observed = observed.astype({c: np.int64 for c in ("x", "y", "z", "global_x", "global_y", "global_z")})
-    assert_frame_equal(observed, roundtrip(expected))
+    assert_frame_equal(observed, roundtrip(expected), check_exact=True)
     assert set(reads.assignment_status) <= {"assigned", "unassigned"}
     assert reads.spot_id.tolist() == [f"csv:{i}" for i in expected.index]  # the legacy row order
     record = json.loads(adata.uns["assignment"])

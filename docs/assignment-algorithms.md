@@ -287,12 +287,22 @@ records wall time and peak RSS with `/usr/bin/time -v` against the 4 GiB stop ta
 The checks are in the modules of `src/python/test/` listed below. The task groups added
 most of them with the code they check; `test_segmentation_validation.py` and
 `test_assignment_validation.py` add L12, L4's identity, empty-image and missing-spacing
-clauses on the row's own fixtures, L7's rescale clause on `seg_golden`, and A2's five
-identities on `assign_golden`. Each of the two modules also checks that every row of the
-table below names tests that exist. A test named for a row but built on another fixture
-(the `boxes` cases of `test_l4_*` in `test_assignment.py`, the ramp of `test_l7_rescaling_*`,
-the ring of `test_l5_hole_filling_*`, the plane of `test_l9_the_plane_z4_*`) is an
-additional check and is not listed.
+clauses on the row's own fixtures, L7's rescale clause on `seg_golden`, A2's five
+identities on `assign_golden`, and A15's check of the `FOV.run` and segmentation files on
+the `boxes` FOV. Each of the two modules also checks that every row of the table below
+names tests that exist. A test named for a row but built on another fixture (the `boxes`
+cases of `test_l4_*` in `test_assignment.py`, the ramp of `test_l7_rescaling_*`, the ring
+of `test_l5_hole_filling_*`, the plane of `test_l9_the_plane_z4_*`, and the development
+preset of `test_fov_run_and_segmentation_files_are_untouched_by_assign`, a W-315
+integration test) is an additional check and is not listed.
+
+The identities of A2 are checked by `check_accounting` (`test_assignment.py`), which
+recomputes every count row from the `molecules` table (whole per kept cell and gene,
+nucleus and cytoplasm per available cell and gene) and compares the `counts` table, the
+cell table and `record["counts"]` with them exactly; it also runs in A11, A16 and A17.
+Data-frame comparisons of the rows marked exact use `check_exact=True`. Physical sizes
+(A13, A16) are compared within 1e-12 relative, the bound the rule "Tolerances" sets for
+them.
 
 Seeds are those of the rules above: 20261005 inside `seg_golden`, 101 for the `seeded`
 stain (`segmentation_fixtures.py`), 102 for the L11 stains, 100 for the A20 permutation, and
@@ -340,7 +350,7 @@ models (L10's P1 and L12 also `STARFINDER_STARDIST_3D_SPLEEN`) and skip without 
 | A12 | `test_assignment.py`, `test_a12_*` | default |
 | A13 | `test_assignment.py`, `test_a13_cell_metadata` | default |
 | A14 | `test_assignment.py`, `test_a14_grid_and_identity_checks_raise_before_sampling` | default |
-| A15 | `test_assignment_persistence.py`, `test_a15_*`, `test_fov_run_and_segmentation_files_are_untouched_by_assign` | default |
+| A15 | `test_assignment_persistence.py`, `test_a15_*`; `test_assignment_validation.py`, `test_a15_fov_run_and_segmentation_files_of_boxes_are_untouched_by_assign` | default |
 | A16 | `test_assignment.py`, `test_a16_a_plane_on_a_projected_grid` | default |
 | A17 | `test_assignment.py`, `test_a17_culture_labels_extended_through_z` | default |
 | A18 | `test_assignment_workflow.py`, `test_a18_*` | default; the `raw.h5ad` comparison where `anndata` is installed |

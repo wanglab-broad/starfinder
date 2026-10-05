@@ -5,7 +5,9 @@ case of the table "Label images of a checkpointed assignment" of
 docs/assignment-contract.md, in CSV and Parquet; another checkpoint root counts as
 unsaved; the excluded cells are preserved; and the files of ``FOV.run`` and of
 segmentation are untouched by ``FOV.assign``. The ``boxes`` FOV is synthetic: its
-reference round, spot result, filtering result and codebook are set in memory.
+reference round, spot result, filtering result and codebook are set in memory. Row A15's
+check of the ``FOV.run`` files on ``boxes`` is in ``test_assignment_validation.py``; the
+last test here runs the same check on the development preset, as a W-315 integration test.
 """
 import hashlib
 import json
@@ -18,7 +20,7 @@ import pytest
 from pandas.testing import assert_frame_equal
 
 from starfinder.assignment import AssignmentConfig
-from starfinder.barcode import ReadFilterConfig, ReadFilteringResult
+from starfinder.barcode import Codebook, ReadFilterConfig, ReadFilteringResult
 from starfinder.dataset import CheckpointConfig, Dataset, RoundState
 from starfinder.io import save_volume
 from starfinder.io._checkpoint import FORMAT_VERSION, STAGES
@@ -46,13 +48,16 @@ def hashes(root):
     return {p: file_hash(p) for p in sorted(root.rglob("*")) if p.is_file()}
 
 
+def boxes_codebook():
+    """A hand-written codebook with four entries, one per boxes gene A to D (three rounds, four channels)."""
+    sequences = ["123", "214", "341", "432"]
+    return Codebook(pd.DataFrame({"entry_id": sequences, "gene_id": list("ABCD"), "color_sequence": sequences}),
+                    round_labels=("round1", "round2", "round3"), channel_labels=("ch00", "ch01", "ch02", "ch03"))
+
+
 @pytest.fixture(scope="module")
 def genes():
-    """The development codebook with four entries, one per boxes gene A to D."""
-    book, _ = development_scene_preset("clean", size="small")
-    sequences = ["123", "214", "341", "432"]
-    return replace(book, table=pd.DataFrame({"entry_id": sequences, "gene_id": list("ABCD"),
-                                             "color_sequence": sequences}))
+    return boxes_codebook()
 
 
 def boxes_fov(root, book):
@@ -63,6 +68,11 @@ def boxes_fov(root, book):
     fov = dataset.fov("FOV_001")
     fov.images["round1"] = seeded_stain()[..., None]
     fov.metadata["round1"] = BOXES_METADATA
+    return set_boxes_reads(fov)
+
+
+def set_boxes_reads(fov):
+    """Set the boxes molecules as the FOV's spot result and accepted reads, in memory."""
     ids = pd.array([f"m{i}" for i in range(len(BOXES_MOLECULES))], dtype="string")
     positions = np.array([p for p, _, _, _ in BOXES_MOLECULES], np.float64)
     spots = pd.DataFrame({"spot_id": ids, "z": positions[:, 0], "y": positions[:, 1], "x": positions[:, 2]})
