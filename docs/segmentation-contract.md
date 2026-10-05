@@ -84,8 +84,9 @@ The rules Jiahao set after W-305 (2026-10-04) also hold:
   sensitivity setting and is recorded as such.
 * One environment holds StarDist 0.9.2 with TensorFlow 2.20.0, Cellpose and the §2.7
   detectors next to the locked packages, with one locked change (tensorboard 2.21.0 to
-  2.20.0) and the `+cu126` torch build on GPU hosts. This page proposes the lock change;
-  no issue makes it.
+  2.20.0) and the `+cu126` torch build on GPU hosts. The lock change was approved at
+  W-309 and applied before the implementation batch (W-322); no implementation issue
+  makes it.
 
 ## Terms
 
@@ -848,17 +849,20 @@ plane (check 10), a diameter that must be explicit (`diameter` required) and its
 images is open (W-306 choice 10); `tile_overlap` is recorded and the input window is
 fixed by the FOV.
 
-**The proposed `pyproject.toml` change.** For the W-309 gate; not made by any §2.9
-specification issue:
+**The `pyproject.toml` change.** Approved at W-309 as option E1 and applied before the
+implementation batch (W-322, 2026-10-05), with the `stardist` extra limited to Python 3.11
+to 3.13 for the reason given under the lock change:
 
 ```toml
 [project.optional-dependencies]
 # Segmentation backends (§2.9). TensorFlow 2.20.0 and torch 2.7.1 have no cp314
-# wheels, so the extras are empty on Python 3.14 and later.
+# wheels, so the extras are empty on Python 3.14 and later. keras 3.15.1, the
+# version measured with TensorFlow 2.20.0, needs Python 3.11, so the stardist
+# extra is also empty on Python 3.10.
 stardist = [
-    "stardist==0.9.2; python_version < '3.14'",
-    "csbdeep==0.8.2; python_version < '3.14'",
-    "tensorflow==2.20.0; python_version < '3.14'",
+    "stardist==0.9.2; python_version >= '3.11' and python_version < '3.14'",
+    "csbdeep==0.8.2; python_version >= '3.11' and python_version < '3.14'",
+    "tensorflow==2.20.0; python_version >= '3.11' and python_version < '3.14'",
 ]
 cellpose = [
     "cellpose==4.2.1.1; python_version < '3.14'",
@@ -878,8 +882,10 @@ The two extras are added after `piscis`; nothing else in the file changes. torch
 torchvision are listed in `cellpose` for the same reason as in the §2.7 extras: uv applies
 `[tool.uv.sources]` (the CPU index on Linux) to direct dependencies only.
 
-**The expected `uv.lock` change**, from the W-305 resolution rows B and C and the W-306
-audit (`provisioning/lock-diff.txt`, `spike-added-packages.txt`):
+**The `uv.lock` change**, as `uv lock` made it on 2026-10-05 (W-322). On Linux x86_64 with
+Python 3.12 it is the change expected from the W-305 resolution rows B and C and the W-306
+audit (`provisioning/lock-diff.txt`, `spike-added-packages.txt`): 20 packages added and one
+version changed.
 
 * `tensorboard` 2.21.0 → 2.20.0 (its wheel URL and hash), the only change to a locked
   package; spotiflow, which requires tensorboard, accepts 2.20.0.
@@ -888,29 +894,45 @@ audit (`provisioning/lock-diff.txt`, `spike-added-packages.txt`):
   `ml-dtypes` 0.6.0, `namex` 0.1.0, `opt-einsum` 3.4.0, `optree` 0.20.0, `termcolor` 3.3.0,
   `wheel` 0.48.0 (TensorFlow's closure); `cellpose` 4.2.1.1, `fastremap` 1.20.0,
   `fill-voids` 2.1.2, `opencv-python-headless` 5.0.0.93, `roifile` 2026.9.22,
-  `segment-anything` 1.0 (Cellpose's closure).
-* The `starfinder` package entry gains the `stardist` and `cellpose` optional
-  dependencies and the two constraints in its metadata.
+  `segment-anything` 1.0 (Cellpose's closure). `roifile` is locked in three versions by
+  Python version: 2025.12.12 for 3.10, 2026.2.10 for 3.11 and 2026.9.22 from 3.12.
+* The `starfinder` package entry gains the `stardist`, `cellpose` and `anndata` optional
+  dependencies and the two constraints in its metadata. The `anndata` extra
+  ({doc}`assignment-contract`) pins the two versions the `spatialdata` extra already
+  locked and adds no package.
+* Python 3.10: with the `stardist` extra as first proposed (`python_version < '3.14'`),
+  `uv lock` found no solution, because keras 3.15.1 needs Python 3.11. The extra is
+  therefore empty on Python 3.10, where a `stardist` call raises
+  `SegmentationBackendUnavailableError`. Holding keras at 3.15.1 only from Python 3.11
+  would have locked keras 3.12.4 for Python 3.10, a combination nothing has measured.
+* One platform-specific change beyond the list: on Intel macOS with Python 3.11 to 3.13,
+  `numba` goes from 0.63.1 to 0.62.1 and `llvmlite` from 0.46.0 to 0.45.1. `numba` 0.63.1
+  has no macOS x86_64 wheel, and the new packages make uv resolve that platform on its
+  own. No other platform changes these two packages. TensorFlow 2.20.0 has no Intel macOS
+  wheel either, so the `stardist` extra cannot be installed there.
 * No NVIDIA library and no `triton`: the lock keeps the CPU torch build; the NVIDIA CUDA
   12.6 libraries and triton 3.3.1 (3.72 GB, W-306 notes section 1) come only with the
   `+cu126` build on GPU hosts.
 
-Verification for whoever applies it: `uv lock`; `uv export --locked --all-extras
---all-groups --no-hashes` before and after, whose difference must be exactly the list
-above; `uv sync --extra stardist --extra cellpose` in a fresh environment, then the
-routine test gate and the `learned` parity test. W-305 resolved only Python 3.12 on Linux
-x86_64; `uv lock` resolves every Python version from 3.10 and every platform, where it may
-add platform-specific entries or find no TensorFlow 2.20.0 wheel. If it does, the marker of
-the `stardist` extra narrows to the versions with wheels, and the gate reviews the
-narrower marker.
+Verification, as planned for whoever applied it: `uv lock`; `uv export --locked
+--all-extras --all-groups --no-hashes` before and after, whose difference must be exactly
+the list above; `uv sync --extra stardist --extra cellpose` in a fresh environment, then
+the routine test gate and the `learned` parity test. W-305 resolved only Python 3.12 on
+Linux x86_64; `uv lock` resolves every Python version from 3.10 and every platform, where
+it may add platform-specific entries or find no solution. It did both, and Jiahao decided
+on 2026-10-05 to narrow the marker of the `stardist` extra and to accept the Intel macOS
+entries (W-322). The `learned` parity test does not exist until the implementation adds
+it.
 
 **Limitations of the evidence.** The W-305 matrix ("What this does not show") and the
 W-306 notes (sections 4, 5, 12, 13 and 14) qualify every number on this page and on
 {doc}`segmentation-algorithms`:
 
-* Resolution and environments: `uv lock` was not run; the rows resolve the exported pins
-  for Python 3.12 on Linux x86_64 only, and TensorFlow 2.20.0 wheels for the lock's other
-  Python versions and platforms were not checked. TensorFlow 2.20.0 is built against
+* Resolution and environments: the W-305 rows resolve the exported pins for Python 3.12
+  on Linux x86_64 only. `uv lock` has since resolved every Python version and platform of
+  the lock (W-322), but an environment was built and tested only for Python 3.12 on Linux
+  x86_64. TensorFlow 2.20.0 has wheels for Linux x86_64 and aarch64, Windows amd64 and
+  macOS arm64. TensorFlow 2.20.0 is built against
   CUDA 12.5.1 and cuDNN 9 and ran on torch's CUDA 12.6 libraries only in the W-305 smoke
   tests and the W-306 runs. The legacy environment ran on CPU only.
 * Not examined: GPU memory with both frameworks loaded in one process, UGER or GCP GPU
