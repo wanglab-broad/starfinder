@@ -93,6 +93,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.image.ImageMetadata`
 * :py:obj:`starfinder.segmentation.import_labels`
 * :py:obj:`starfinder.image.IncompatibleGeometryError`
+* :py:obj:`starfinder.segmentation.InputChannel`
 * :py:obj:`starfinder.barcode.inspect_read`
 * :py:obj:`starfinder.registration.InsufficientLandmarksError`
 * :py:obj:`starfinder.barcode.IntensityExtractionResult`
@@ -114,6 +115,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.preprocessing.match_histogram`
 * :py:obj:`starfinder.evaluation.matching.match_points`
 * :py:obj:`starfinder.preprocessing.merge_histograms`
+* :py:obj:`starfinder.segmentation.MethodContext`
 * :py:obj:`starfinder.preprocessing.MinMaxNormalizationConfig`
 * :py:obj:`starfinder.segmentation.MissingModelError`
 * :py:obj:`starfinder.spot_finding.MissingWeightsError`
@@ -181,9 +183,16 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.synthetic.ScalarDistribution`
 * :py:obj:`starfinder.synthetic.SCENE_PRESETS`
 * :py:obj:`starfinder.barcode.score_reads`
+* :py:obj:`starfinder.segmentation.SeededWatershedConfig`
 * :py:obj:`starfinder.barcode.Segment`
+* :py:obj:`starfinder.segmentation.segment`
+* :py:obj:`starfinder.segmentation.SEGMENTATION_METHODS`
 * :py:obj:`starfinder.segmentation.SegmentationBackendUnavailableError`
+* :py:obj:`starfinder.segmentation.SegmentationInput`
+* :py:obj:`starfinder.segmentation.SegmentationPlan`
 * :py:obj:`starfinder.segmentation.SegmentationResult`
+* :py:obj:`starfinder.segmentation.SegmentationRun`
+* :py:obj:`starfinder.segmentation.SegmentationSpec`
 * :py:obj:`starfinder.spot_finding.SPOT_FINDING_METHODS`
 * :py:obj:`starfinder.spot_finding.SpotFindingBackendUnavailableError`
 * :py:obj:`starfinder.spot_finding.SpotFindingPlan`

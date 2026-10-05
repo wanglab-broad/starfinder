@@ -64,6 +64,52 @@ its labels and a record mapping. The model and backend errors
 :py:class:`~starfinder.segmentation.ModelHashMismatchError` are those the contract names
 for the segmentation methods.
 
+:py:func:`~starfinder.segmentation.segment` runs one segmentation method on a
+:py:class:`~starfinder.segmentation.SegmentationInput` (a ZYXC image on its
+:py:class:`~starfinder.segmentation.ReferenceGrid`, with one role per channel:
+``nuclear``, ``cytoplasm``, ``membrane``, ``amplicon`` or ``composite``) and returns a
+:py:class:`~starfinder.segmentation.SegmentationResult` on the input's grid. It reads and
+writes no file. :py:data:`~starfinder.segmentation.SEGMENTATION_METHODS` maps each exact
+config type to its :py:class:`~starfinder.segmentation.SegmentationSpec`: the method name
+(the config's ``method`` value), its targets, accepted and required roles, seeds,
+dimensions, whether it needs a model, its devices and optional dependencies; see
+:doc:`../method-registry`. Before the method's ``run`` is called with a
+:py:class:`~starfinder.segmentation.MethodContext`, ``segment`` checks, in order, the
+config (a :py:class:`~starfinder.segmentation.LabelImportConfig` raises ``TypeError``),
+the target, the input and its roles, the device (``"cpu"`` or ``"cuda"``, among the
+method's), the dependencies
+(:py:class:`~starfinder.segmentation.SegmentationBackendUnavailableError`), the model
+files and their SHA-256, the dimensionality and minimum shape, and the seeds (a nucleus
+result on the input's grid). Afterwards it checks the labels: an integer array of the
+input's ZYX shape (a Z axis dropped for one plane is restored), with no negative value,
+converted to ``uint32``. The run record holds the method's provenance entry with its
+model artifacts, its execution entry and its effective parameters, the input's SHA-256
+and channel sources, and the seed run with its labels' SHA-256. A result without objects
+has outcome ``empty``; there is no foreground gate.
+
+The registry holds ``seeded_watershed``
+(:py:class:`~starfinder.segmentation.SeededWatershedConfig`): cells grown from the nuclei
+of a seed run on one stain channel, smoothed by a Gaussian of ``sigma_um`` converted with
+the input's spacing (required), thresholded (Otsu by default), with the mask united with
+every seed voxel. Every seed keeps its value, so cell k contains nucleus k, also for a
+nucleus outside the stained foreground. It runs on the CPU.
+
+``FOV.segment(plan, device="cpu")`` runs a
+:py:class:`~starfinder.segmentation.SegmentationPlan` of
+:py:class:`~starfinder.segmentation.SegmentationRun` entries in order on the FOV's
+resident images and stores each result in ``FOV.segmentation_results`` under the run's
+name, after every run has finished. A run imports a mask or names a method, its target,
+its input channels (:py:class:`~starfinder.segmentation.InputChannel`: a channel of the
+reference round, of a sequencing round registered by ``FOV.run`` or of a morphology round
+registered by ``FOV.register_rounds``, or the reference round's channel maximum, each
+optionally through the composite or the Flamingo enhancement), an earlier run as its
+seeds, an optional Z projection and ``extend_labels_through_z`` after a projection. Every
+run is on ``FOV.reference_grid()``, or on its projection. An input round that is not
+loaded, a morphology round without an entry in ``registration_record["rounds"]`` or with
+other metadata raises ``ValueError``; a round of another shape, or seeds on another grid,
+raises :py:class:`~starfinder.image.IncompatibleGeometryError`. Results stay in memory
+(``checkpoints`` must be ``None`` for now).
+
 .. currentmodule:: starfinder.segmentation
 
 .. autosummary::
@@ -75,15 +121,24 @@ for the segmentation methods.
    extend_labels_through_z
    FlamingoEnhancementConfig
    import_labels
+   InputChannel
    LabelImportConfig
    labels_to_grid
+   MethodContext
    MissingModelError
    ModelHashMismatchError
    normalize_percentiles
    reference_grid_from_file
    ReferenceGrid
    rescale_input
+   SeededWatershedConfig
+   segment
+   SEGMENTATION_METHODS
    SegmentationBackendUnavailableError
+   SegmentationInput
+   SegmentationPlan
    SegmentationResult
+   SegmentationRun
+   SegmentationSpec
    to_label_dtype
    ZExtensionConfig

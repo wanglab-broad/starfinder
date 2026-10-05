@@ -909,6 +909,30 @@ rescale; {py:func}`~starfinder.segmentation.labels_to_grid` maps labels detected
 shrunk image back onto the exact input grid. None of these is registered in
 `PREPROCESSING_METHODS`.
 
+### The segment entry and the seeded watershed
+
+Segmentation is its own entry, separate from `FOV.run` (decision D1 of
+{doc}`segmentation-contract`): `PipelineConfig` and `ExecutionConfig` gain no field.
+{py:func}`~starfinder.segmentation.segment` runs one method of
+{py:data}`~starfinder.segmentation.SEGMENTATION_METHODS` on a
+{py:class}`~starfinder.segmentation.SegmentationInput` (a ZYXC image on its grid, with one
+role per channel) behind the stage checks, and `FOV.segment(plan)` runs a
+{py:class}`~starfinder.segmentation.SegmentationPlan` of named runs on the FOV's resident
+reference-frame images, keeping the results in `FOV.segmentation_results`. Saved label
+files come later; `FOV.segment` takes `checkpoints=None` only.
+
+`segment` and `FOV.segment` take a `device` keyword, `"cpu"` (default) or `"cuda"`, which
+each method accepts only for its own devices. `ExecutionConfig.device` and the §2.7
+`device="cpu"` rule of `FOV.run` do not change. The legacy scripts have no device setting.
+
+The first registered method is `seeded_watershed`
+({py:class}`~starfinder.segmentation.SeededWatershedConfig`), the nucleus-seeded,
+stain-guided watershed of the W-306 prototype. It grows each cell from a nucleus of an
+earlier run on a stain (amplicon, cytoplasm, membrane or composite), so cell k carries
+nucleus k's value; the legacy workflow has no such step (`reads_assignment.py` expands the
+nuclei instead). There is no foreground gate: an image without objects gives an empty
+label image with outcome `empty` instead of an error.
+
 ## Intentional behavior changes — not mechanical equivalence
 
 | Area | Change and consequence |

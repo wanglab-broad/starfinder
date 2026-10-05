@@ -41,7 +41,7 @@ DIRECT_NEEDS_ROUNDS = ("readout_mode='direct' assigns each candidate from its ow
 if TYPE_CHECKING:
     from starfinder.dataset.dataset import Dataset
     from starfinder.dataset.types import RoundState
-    from starfinder.segmentation import ReferenceGrid
+    from starfinder.segmentation import ReferenceGrid, SegmentationPlan, SegmentationResult
 
 
 def _recipe_record(recipe):
@@ -138,7 +138,8 @@ class FOV:
     ``recipe``, or ``sequential`` for a loaded version-1 checkpoint; the
     recipe summary; the WarpConfig applied per round), and
     preprocessing_record (the recipe, per-round step records and, per round
-    and snapshot, the transforms composed, of the last run with a recipe).
+    and snapshot, the transforms composed, of the last run with a recipe),
+    and segmentation_results (run name to SegmentationResult, from segment()).
     One instance per job; not thread-safe.
     The repr summarizes image geometry, channels and completed stages without
     array values or table rows; results maps completed stages by name.
@@ -167,6 +168,7 @@ class FOV:
 
     load_diagnostics: dict[str, dict] = field(default_factory=dict)
     preprocessing_record: dict = field(default_factory=dict)
+    segmentation_results: dict[str, SegmentationResult] = field(default_factory=dict)
     _run_record: object | None = field(default=None, init=False, repr=False, compare=False)
 
     # --- Delegated properties ---
@@ -1547,7 +1549,7 @@ class FOV:
         ValueError
             The reference round's image or metadata is not resident.
         """
-        from starfinder.segmentation import ReferenceGrid
+        from starfinder.segmentation import ReferenceGrid, SegmentationPlan, SegmentationResult
         from starfinder.segmentation._labels import grid_sha256
         ref = self.rounds.reference_round
         if not ref or ref not in self.images or ref not in self.metadata:
@@ -1555,6 +1557,57 @@ class FOV:
                              'load_checkpoint("registered") first')
         image = self.images[ref]
         return ReferenceGrid(np.shape(image)[:3], self.metadata[ref], f'fov:{ref}', grid_sha256(image))
+
+    def segment(self, plan: SegmentationPlan, *, device: str = 'cpu',
+                checkpoints: CheckpointConfig | None = None) -> FOV:
+        """Run a segmentation plan on this FOV's resident reference-frame images.
+
+        Each run, in order, takes the reference grid (:meth:`reference_grid`, or its
+        Z projection for a run with ``projection``), assembles its
+        :class:`~starfinder.segmentation.SegmentationInput` from the resident images
+        (each :class:`~starfinder.segmentation.InputChannel` from the reference round,
+        its channel maximum or a registered morphology round, with its ``prepare``
+        function applied), calls :func:`~starfinder.segmentation.segment` with the
+        run's seeds (or :func:`~starfinder.segmentation.import_labels` with that
+        grid), applies the run's label operations, and keys the result by the run's
+        name. The results are stored in ``segmentation_results`` together once every
+        run has finished. A label's namespace is the JSON list ``[dataset_id,
+        sample_id, fov_id, subtile_id, run name]``. Each record also holds, under
+        ``upstream``, the SHA-256 of preprocessing_record and registration_record.
+        It never runs registration, detection or decoding (docs/segmentation-contract.md,
+        "Coordination per FOV").
+
+        Parameters
+        ----------
+        plan : SegmentationPlan
+            The runs; a run's seeds name an earlier run of the plan.
+        device : str
+            ``"cpu"`` (default) or ``"cuda"``, passed to every method.
+        checkpoints : None
+            Only None: results stay in memory (the saved format comes later).
+
+        Returns
+        -------
+        FOV
+            This instance.
+
+        Raises
+        ------
+        ValueError
+            An input round that is not loaded, a morphology round without an entry
+            in registration_record["rounds"] (or a sequencing round without a
+            registration), a round with metadata other than the reference round's,
+            an unknown channel, an unknown device, or checkpoints other than None;
+            and every error of segment and import_labels.
+        IncompatibleGeometryError
+            An input round whose ZYX shape differs from the reference grid, or seeds
+            on another grid.
+        """
+        from starfinder.segmentation._plan import segment_fov
+        if checkpoints is not None:
+            raise ValueError('FOV.segment keeps its results in memory; checkpoints must be None')
+        self.segmentation_results.update(segment_fov(self, plan, device=device))
+        return self
 
     # --- Output ---
 
