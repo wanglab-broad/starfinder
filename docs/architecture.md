@@ -14,6 +14,7 @@ streaming select image residency, not different scientific pipelines.
 | `io` | Image/table persistence and explicit conversion | Does not process experiments |
 | `preprocessing` | Typed finite-array operations | Does not own FOV state |
 | `registration` | Estimate/apply transforms and diagnostics | Does not evaluate truth or time experiments |
+| `segmentation` | Label images on a reference grid, mask import and label functions | Does not assign molecules or run inside `FOV.run` |
 | `spot_finding` | Detection and stable SpotFindingResult identities | Does not perform registration evaluation |
 | `synthetic` | Processed-image scenes, rendering and truth records | Does not orchestrate benchmarks or invent molecular truth |
 

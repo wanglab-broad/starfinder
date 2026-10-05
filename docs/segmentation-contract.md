@@ -1,6 +1,6 @@
 # Segmentation contract: label images, methods, inputs and environments
 
-Status: Proposed
+Status: Accepted (W-309, 2026-10-05, at 3550723)
 
 This page proposes the §2.9 segmentation contract: a segment entry separate from
 `FOV.run`, one label-image contract for every method and for imported masks, a

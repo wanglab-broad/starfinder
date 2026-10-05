@@ -41,6 +41,7 @@ DIRECT_NEEDS_ROUNDS = ("readout_mode='direct' assigns each candidate from its ow
 if TYPE_CHECKING:
     from starfinder.dataset.dataset import Dataset
     from starfinder.dataset.types import RoundState
+    from starfinder.segmentation import ReferenceGrid
 
 
 def _recipe_record(recipe):
@@ -1528,6 +1529,32 @@ class FOV:
         for name, value in read_checkpoint(directory, stage).items():
             setattr(self, name, value)
         return self
+
+    # --- Segmentation ---
+
+    def reference_grid(self) -> ReferenceGrid:
+        """The grid of the resident reference round, on which every label image of this FOV lies.
+
+        A :class:`~starfinder.segmentation.ReferenceGrid` with
+        ``images[reference_round].shape[:3]``, ``metadata[reference_round]``, source
+        ``"fov:<reference round>"`` and the SHA-256 of the reference image (its
+        dtype, shape and C-order bytes). It is available after run() (whose
+        streaming mode keeps the reference round) or after
+        ``load_checkpoint("registered")``. See docs/segmentation-contract.md.
+
+        Raises
+        ------
+        ValueError
+            The reference round's image or metadata is not resident.
+        """
+        from starfinder.segmentation import ReferenceGrid
+        from starfinder.segmentation._labels import array_sha256
+        ref = self.rounds.reference_round
+        if not ref or ref not in self.images or ref not in self.metadata:
+            raise ValueError(f'the reference round {ref!r} is not resident; call run() or '
+                             'load_checkpoint("registered") first')
+        image = self.images[ref]
+        return ReferenceGrid(np.shape(image)[:3], self.metadata[ref], f'fov:{ref}', array_sha256(image))
 
     # --- Output ---
 

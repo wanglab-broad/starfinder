@@ -1,6 +1,6 @@
 # Segmentation algorithm specification
 
-Status: Proposed
+Status: Accepted (W-309, 2026-10-05, at 3550723)
 
 This page specifies, for each §2.9 segmentation method and each reusable function, the
 problem it addresses, its parameters with units and defaults, its failure behavior

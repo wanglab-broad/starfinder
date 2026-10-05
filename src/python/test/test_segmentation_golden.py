@@ -44,7 +44,7 @@ from skimage.measure import label, regionprops
 from skimage.segmentation import expand_labels
 from skimage.transform import rescale
 
-pytestmark = [pytest.mark.workflow, pytest.mark.golden]
+pytestmark = [pytest.mark.workflow, pytest.mark.segmentation, pytest.mark.golden]
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPTS = REPO_ROOT / "workflow" / "scripts"

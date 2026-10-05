@@ -272,7 +272,7 @@ Markers are registered in `src/python/pyproject.toml` and checked with
 
 | Group | Markers | Set on |
 | --- | --- | --- |
-| Subsystem | `core`, `io`, `dataset`, `preprocessing`, `registration`, `spot_finding`, `barcode`, `synthetic`, `evaluation`, `benchmark`, `workflow`, `integration` | the file, with `pytestmark` |
+| Subsystem | `core`, `io`, `dataset`, `preprocessing`, `registration`, `spot_finding`, `barcode`, `segmentation`, `synthetic`, `evaluation`, `benchmark`, `workflow`, `integration` | the file, with `pytestmark` |
 | Cost and requirement | `slow`, `learned` | the test or the parameter |
 | Kind | `contract`, `golden`, `validation`, `e2e` | the file or the test |
 

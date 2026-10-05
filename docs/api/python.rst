@@ -26,6 +26,7 @@ Modules (alphabetical)
    io
    preprocessing
    registration
+   segmentation
    spot_finding
    synthetic
 

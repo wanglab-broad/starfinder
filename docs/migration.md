@@ -851,6 +851,35 @@ calls `inspect_read`, `plot_read` or `explain_read`; when it scores or deduplica
 `run.json` records the summary under `counts["summary"]`, and
 `FOV.save_diagnostics` now writes it as `summary` beside the filtering counts.
 
+### Segmentation label contract and mask import
+
+The new module `starfinder.segmentation` ({doc}`segmentation-contract`) starts with the
+label contract that every later segmentation result follows.
+{py:class}`~starfinder.segmentation.SegmentationResult` holds a `uint32` ZYX label
+image (a plane is 1×Y×X) on a {py:class}`~starfinder.segmentation.ReferenceGrid`, with
+its target, geometry, label namespace and run record.
+{py:func}`~starfinder.segmentation.to_label_dtype` converts int32, uint16 or other integer
+labels to `uint32` and raises on a negative value or one above 2³²−1, where the legacy
+`stardist_segmentation.py` cast to `uint16` and wrapped label 65,536 to 0.
+`FOV.reference_grid()` returns the grid of the resident reference round after
+`FOV.run`, and {py:func}`~starfinder.segmentation.reference_grid_from_file` reads one
+from a TIFF such as `images/ref_merged/{fovID}.tif`.
+
+Masks made elsewhere, such as CellProfiler outputs, the legacy
+`images/stardist_segmentation` files or the culture references, enter through
+{py:func}`~starfinder.segmentation.import_labels` (with
+{py:class}`~starfinder.segmentation.LabelImportConfig` for a plan run) instead of a
+plain `imread`. Big-endian files are read with native values, float and boolean masks
+are rejected, and the shape and any stored metadata are checked against the grid.
+{py:func}`~starfinder.segmentation.labels_to_grid` replaces the legacy round trip
+`rescale(labels, [1, 2, 2], order=0)`, which turned a 61×63 grid into 60×64, by an
+exact map onto the target shape.
+{py:func}`~starfinder.segmentation.extend_labels_through_z` with
+{py:class}`~starfinder.segmentation.ZExtensionConfig` is the per-FOV Python form of
+`create_3d_segmentation.m`: sizes are in µm instead of pixels, a numeric threshold is on
+the [0, 1] scale of the stain's dtype range, and `Cyto = Cell − Nuclei` is not
+reproduced. MATLAB was not run, so there is no parity with the example.
+
 ## Intentional behavior changes — not mechanical equivalence
 
 | Area | Change and consequence |
