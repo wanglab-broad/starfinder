@@ -181,7 +181,24 @@ def test_a18_the_legacy_outputs_equal_the_frozen_helper(tmp_path, dimensions, ex
     record = json.loads(adata.uns["assignment"])
     assert record["name"] == "reads_assignment" and record["workflow"]["target"] == "cell"
     assert record["config"]["legacy_pixel_expansion"] == expand and record["grid"]["check"] == "declared_checked"
-    assert (tmp_path / "output/data/out/expr/Position001/assignment.png").stat().st_size > 0
+    # The figures: the Z-maximum view for every FOV, the single-layer view for a ZYX label image only.
+    expr = tmp_path / "output/data/out/expr/Position001"
+    figures = ["assignment.png"] + (["assignment_single_layer.png"] if dimensions == "3d" else [])
+    assert sorted(p.name for p in expr.iterdir()) == sorted(figures + ["log.txt", "raw.h5ad", "reads_assignment.csv"])
+    assert all((expr / name).stat().st_size > 0 for name in figures)
+    # The log's ratio line: assigned / all molecules of the record, both counts given.
+    assigned, total = record["counts"]["assigned"], record["counts"]["molecules"]
+    assert (assigned, total) == (int(reads.assignment_status.eq("assigned").sum()), len(KEEP))
+    assert (expr / "log.txt").read_text().splitlines()[1] == \
+        f"assignment ratio: {100 * assigned / total:.2f}% ({assigned} of {total} molecules assigned)"
+
+
+def test_the_log_of_a_run_without_molecules_has_no_ratio(tmp_path):
+    adata, reads, _ = run_rule(tmp_path, label_fixture(), ())
+    assert json.loads(adata.uns["assignment"])["counts"]["molecules"] == 0 and len(reads) == 0
+    lines = (tmp_path / "output/data/out/expr/Position001/log.txt").read_text().splitlines()
+    assert lines[0].startswith("0 of 0 molecules assigned to 5 cells;")
+    assert lines[1] == "assignment ratio: none (no molecule)"
 
 
 def test_a18_volume_and_position_come_from_the_expanded_territory(tmp_path):

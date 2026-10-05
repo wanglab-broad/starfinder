@@ -8,8 +8,11 @@ from ._config import (ASSIGNMENT_STATUSES, CELL_CORRESPONDENCE, CELL_STATUSES, C
                       CORRESPONDENCE_FLAGS, NUCLEUS_STATUSES)
 
 _QUANTILES = (0.0, 0.25, 0.5, 0.75, 1.0)
-_STATUS_COLOURS = {"assigned": "tab:green", "unassigned": "tab:grey", "excluded_cell": "tab:orange",
-                   "outside_grid": "tab:red"}
+# plot_assignment: the two views, the outline and centre colours, and the colour of each drawn status.
+_VIEWS = ("z_max", "single_layer")
+_OUTLINE_COLOUR = "lime"
+_CENTRE_COLOUR = "red"
+_STATUS_COLOURS = {"assigned": "dodgerblue", "unassigned": "red", "excluded_cell": "orange"}
 
 
 def _quantiles(values):
@@ -30,8 +33,10 @@ def summarize_assignment(result: AssignmentResult) -> dict:
     ``quantiles`` (0, 0.25, 0.5, 0.75 and 1 of ``size_voxels``, ``size_physical``,
     ``n_molecules`` and ``n_nuclei``, None when no finite value exists); and
     ``exclusion``, the totals before (every cell) and after (kept cells) the
-    exclusion: cells, molecules in cells, and the whole, nuclear and cytoplasmic
-    totals.
+    exclusion, each with the same five keys: ``cells``, ``molecules`` (in cells),
+    and the ``whole``, ``nucleus`` and ``cytoplasm`` totals. An excluded cell has
+    no compartment counts, so ``nucleus`` and ``cytoplasm`` are equal before and
+    after; without an excluded cell, ``before`` equals ``after``.
 
     Raises
     ------
@@ -60,23 +65,39 @@ def summarize_assignment(result: AssignmentResult) -> dict:
                       "n_molecules": _quantiles(cells.n_molecules),
                       "n_nuclei": _quantiles(cells.n_nuclei.astype("Float64").to_numpy(np.float64, na_value=np.nan))},
         "exclusion": {
+            # Excluded cells have no compartment counts: the compartment totals are those after.
             "before": {"cells": len(cells), "molecules": int(status.isin(("assigned", "excluded_cell")).sum()),
-                       "whole": int(cells.n_molecules.sum())},
+                       "whole": int(cells.n_molecules.sum()), "nucleus": totals["nucleus"],
+                       "cytoplasm": totals["cytoplasm"]},
             "after": {"cells": int(kept.sum()), "molecules": int(status.eq("assigned").sum()), **totals},
         },
     })
     return summary
 
 
-def plot_assignment(result: AssignmentResult, *, image=None, z=None):
-    """Territory outlines over an image with molecules coloured by status, and three histograms.
 
-    The left panel shows the outlines of the territories (the expanded ones when
-    assign expanded) as their Z maximum, or plane ``z``, over ``image`` (a ZYX or
-    YX array reduced the same way; none by default), with each molecule as a dot
-    coloured by its ``assignment_status`` (``outside_grid`` molecules are not
-    drawn). The other panels are the histograms of ``size_voxels``,
-    ``n_molecules`` and ``n_nuclei`` (when nuclei were given).
+
+def plot_assignment(result: AssignmentResult, *, image=None, view=None, z=None):
+    """One row of four panels: cell centres, molecules by status, voxels and molecules per cell.
+
+    Panel 1 shows ``image`` in grey scale (scaled between its 0.5 and 99.5
+    percentiles; none by default) with the territory outlines in green and one
+    red dot per cell centre; panel 2 the same image and outlines with the
+    molecules, ``assigned`` blue, ``unassigned`` red and ``excluded_cell`` orange
+    (drawn and listed in the legend only when the result has such molecules);
+    ``outside_grid`` molecules are not drawn. Panels 3 and 4 are the histograms
+    of the voxels and of the molecules per cell, over every cell. The
+    territories are the ones assign used (the expanded ones when it expanded),
+    and a cell's centre is the centroid of that territory.
+
+    ``view="z_max"`` (the default without ``z``) draws the Z maximum of the
+    territories and of a ZYX ``image``, every molecule with a position on the
+    grid and every cell centre. ``view="single_layer"`` (the default with ``z``)
+    draws plane ``z`` (default the middle plane ``Z // 2``): the outlines and
+    the image of that plane, the molecules whose sampled voxel has that Z index
+    and the centres of the cells whose territory occurs in it. It needs
+    territories with Z > 1; a plane or Z=1 result has the ``z_max`` view only. A
+    YX ``image`` is drawn as is in both views.
 
     Returns
     -------
@@ -87,49 +108,85 @@ def plot_assignment(result: AssignmentResult, *, image=None, z=None):
     TypeError
         result is not an AssignmentResult.
     ValueError
-        z is outside the territories, or image does not match their Y, X.
+        An unknown view, ``z`` with the ``z_max`` view, the ``single_layer``
+        view of a Z=1 result, ``z`` outside the territories, or an image that
+        does not match their Y, X (or, in the ``single_layer`` view, their Z).
     """
     import matplotlib.pyplot as plt
+    from matplotlib.colors import ListedColormap
     from skimage.segmentation import find_boundaries
 
     if not isinstance(result, AssignmentResult):
         raise TypeError("result must be an AssignmentResult")
+    view = ("z_max" if z is None else "single_layer") if view is None else view
+    if view not in _VIEWS:
+        raise ValueError(f"view must be one of {_VIEWS}; got {view!r}")
     territories = result.territories if result.territories is not None else result.cell_labels
-    if z is None:
+    n_z = territories.shape[0]
+    if view == "z_max":
+        if z is not None:
+            raise ValueError("z selects the plane of the single_layer view; the z_max view takes none")
         plane = territories.max(axis=0)
     else:
-        if isinstance(z, bool) or not isinstance(z, (int, np.integer)) or not 0 <= z < territories.shape[0]:
-            raise ValueError(f"z must be a plane of the territories (0 to {territories.shape[0] - 1}); got {z!r}")
+        if n_z == 1:
+            raise ValueError("the single_layer view needs territories with Z > 1; "
+                             "a plane or Z=1 result has the z_max view only")
+        z = n_z // 2 if z is None else z
+        if isinstance(z, bool) or not isinstance(z, (int, np.integer)) or not 0 <= z < n_z:
+            raise ValueError(f"z must be a plane of the territories (0 to {n_z - 1}); got {z!r}")
         plane = territories[z]
     background = None
     if image is not None:
         background = np.asarray(image)
         if background.ndim == 3:
-            background = background.max(axis=0) if z is None or background.shape[0] == 1 else background[z]
+            if view == "z_max" or background.shape[0] == 1:
+                background = background.max(axis=0)
+            elif background.shape[0] == n_z:
+                background = background[z]
+            else:
+                raise ValueError(f"image Z {background.shape[0]} differs from the territories' {n_z}")
         if background.shape != plane.shape:
             raise ValueError(f"image Y, X {background.shape} differ from the territories' {plane.shape}")
-    figure, axes = plt.subplots(1, 4, figsize=(16, 4))
-    ax = axes[0]
-    if background is not None:
-        ax.imshow(background, cmap="gray")
-    outline = np.ma.masked_where(~find_boundaries(plane, mode="inner"), np.ones(plane.shape))
-    ax.imshow(outline, cmap="autumn", alpha=0.8, interpolation="nearest")
+
     molecules = result.molecules
-    if z is not None and territories.shape[0] > 1:
-        molecules = molecules[molecules.voxel_z.eq(z).fillna(False).to_numpy(dtype=bool)]
-    for status, colour in _STATUS_COLOURS.items():
-        chosen = molecules[molecules.assignment_status.eq(status).to_numpy(dtype=bool)]
-        if status != "outside_grid" and len(chosen):
-            ax.scatter(chosen.x, chosen.y, s=4, c=colour, label=status)
-    ax.set_title("territories" + ("" if z is None else f", z = {z}"))
-    ax.set_xlim(-0.5, plane.shape[1] - 0.5)
-    ax.set_ylim(plane.shape[0] - 0.5, -0.5)
-    if len(molecules):
-        ax.legend(loc="upper right", fontsize="small")
+    drawn = ~molecules.assignment_status.eq("outside_grid").to_numpy(dtype=bool)
+    if view == "single_layer":
+        drawn &= molecules.voxel_z.eq(z).fillna(False).to_numpy(dtype=bool)
+    molecules = molecules[drawn]
+    statuses = [s for s in _STATUS_COLOURS
+                if s != "excluded_cell" or result.molecules.assignment_status.eq(s).any()]
     cells = result.cells
-    for ax, column, label in ((axes[1], "size_voxels", "voxels per cell"),
-                              (axes[2], "n_molecules", "molecules per cell"),
-                              (axes[3], "n_nuclei", "nuclei per cell")):
+    prefix = "expanded_" if result.territories is not None else ""
+    centres = cells
+    if view == "single_layer":
+        centres = cells[np.isin(cells.cell_id.to_numpy(np.int64), np.unique(plane))]
+    where = "Z maximum" if view == "z_max" else f"z = {z}"
+    # Marker area in points², smaller as the image grows: 12 up to about 250 pixels, 2 from 1500.
+    size = float(np.clip(3000.0 / max(plane.shape), 2.0, 12.0))
+
+    outline = np.ma.masked_where(~find_boundaries(plane, mode="inner"), np.ones(plane.shape))
+    if background is not None and background.size:
+        low, high = np.percentile(background, (0.5, 99.5))
+    figure, axes = plt.subplots(1, 4, figsize=(20, 5))
+    for ax in axes[:2]:
+        if background is not None:
+            ax.imshow(background, cmap="gray", vmin=low, vmax=max(high, low + 1e-12), interpolation="nearest",
+                      label="image")
+        ax.imshow(outline, cmap=ListedColormap([_OUTLINE_COLOUR]), interpolation="nearest", label="outlines")
+        ax.set_xlim(-0.5, plane.shape[1] - 0.5)
+        ax.set_ylim(plane.shape[0] - 0.5, -0.5)
+    ax = axes[0]
+    ax.scatter(centres[f"{prefix}centroid_x"], centres[f"{prefix}centroid_y"], s=2 * size, c=_CENTRE_COLOUR,
+               linewidths=0, label="cell centres")
+    ax.set_title(f"cell centres, {where}")
+    ax = axes[1]
+    for status in statuses:
+        chosen = molecules[molecules.assignment_status.eq(status).to_numpy(dtype=bool)]
+        ax.scatter(chosen.x, chosen.y, s=size, c=_STATUS_COLOURS[status], linewidths=0, label=status)
+    ax.legend(loc="upper right", fontsize="small", markerscale=max(1.0, 12.0 / size))
+    ax.set_title(f"molecules, {where}")
+    for ax, column, label in ((axes[2], f"{prefix}size_voxels", "voxels per cell"),
+                              (axes[3], "n_molecules", "molecules per cell")):
         values = cells[column].dropna().to_numpy(np.float64)
         if len(values):
             ax.hist(values, bins=min(30, max(1, len(np.unique(values)))))

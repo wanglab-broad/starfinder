@@ -1067,8 +1067,10 @@ Intentional changes of the outputs of `reads_assignment`:
   text), and, with nuclei, the `nucleus` and `cytoplasm` layers (NaN where compartments
   are not available). `reads_assignment.csv` gains `spot_id`, `assignment_status`,
   `cell_id`, `in_expansion`, `original_cell_id`, `nucleus_id` and `compartment`.
-* `assignment.png` (`plot_assignment`) and a new `log.txt` replace the four diagnostic
-  PNGs and the coverage log.
+* `assignment.png` (`plot_assignment`, the Z-maximum view), with
+  `assignment_single_layer.png` (the middle plane) for a ZYX label image, and a new
+  `log.txt` with the assignment ratio replace the four diagnostic PNGs and the coverage
+  log ("Assignment diagnostics" below).
 
 The legacy `obs` columns keep their meaning, computed on the territories assign samples,
 and the tile configuration, global coordinates and overlap filter are applied outside the
@@ -1090,6 +1092,23 @@ nucleus 0.073). To keep exact containment, pass
 `CorrespondenceConfig(outside_tolerance=0.0)`, or `correspondence: {outside_tolerance: 0.0}`
 in the block. The golden digests and the outputs of `reads_assignment`, which has no
 nuclei, do not change.
+
+### Assignment diagnostics
+
+`plot_assignment` draws one row of four panels instead of the territory panel and three
+histograms (W-321 review, 2026-10-05): the stain in grey scale with green territory
+outlines and a red dot at each cell's centroid; the same with the molecules (`assigned`
+blue, `unassigned` red, `excluded_cell` orange only when present, `outside_grid` not
+drawn); voxels per cell; molecules per cell. The "nuclei per cell" histogram is gone. A
+new `view` argument selects the Z-maximum view (`"z_max"`) or one plane
+(`"single_layer"`, default plane `Z // 2`); `z` alone still selects that plane, and
+`view="single_layer"` on a plane or Z=1 result, or `z` with `view="z_max"`, raises
+`ValueError`. The `reads_assignment` rule writes `assignment.png` for every FOV and
+`assignment_single_layer.png` for a ZYX label image, and `log.txt` gains a second line
+with the assignment ratio (assigned over all molecules, both counts; `none` without a
+molecule). `summarize_assignment(result)["exclusion"]["before"]` gains `nucleus` and
+`cytoplasm`, equal to those after the exclusion, as its docstring promised. No table,
+count or digest changes: `raw.h5ad` and `reads_assignment.csv` are as before.
 
 ## Intentional behavior changes — not mechanical equivalence
 

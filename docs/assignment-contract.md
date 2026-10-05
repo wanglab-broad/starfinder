@@ -119,7 +119,7 @@ New names under N1:
 | Sampling | `sample_labels(labels, positions_zyx, *, geometry)` | function |
 | Correspondence | `match_nuclei(nuclei, cells, *, config)` | function |
 | Coordination | `FOV.assign(config=AssignmentConfig(), *, cells="cell", nuclei=None, name="default", population="final", correspondence=None, checkpoints=None)`, `FOV.assignment_results`, `FOV.load_assignment(name)` | method, attribute, method |
-| Diagnostics | `summarize_assignment(result)`, `plot_assignment(result, *, image=None, z=None)` | functions |
+| Diagnostics | `summarize_assignment(result)`, `plot_assignment(result, *, image=None, view=None, z=None)` | functions |
 
 ## The assign entry
 
@@ -785,11 +785,29 @@ On demand, never by `FOV.assign`:
 
 * `summarize_assignment(result)`: molecules per status, cells per status, per flag and per
   compartment state, nuclei per status, quantiles of `size_voxels`, `size_physical`,
-  `n_molecules` and `n_nuclei`, and the totals before and after the exclusion. `FOV.assign`
-  stores it in `record["counts"]`.
-* `plot_assignment(result, *, image=None, z=None)`: the territory outlines (Z maximum, or
-  plane `z`) over `image`, with molecules coloured by status, and the size, count and
-  nucleus-count histograms. It replaces the four legacy PNGs and their hard-coded plane.
+  `n_molecules` and `n_nuclei`, and the totals before (every cell) and after (kept cells)
+  the exclusion, each with the same five keys: `cells`, `molecules` in cells, and the
+  `whole`, `nucleus` and `cytoplasm` totals. An excluded cell has no compartment counts,
+  so the two compartment totals are equal before and after; without an excluded cell,
+  `before` equals `after`. `FOV.assign` stores it in `record["counts"]`.
+* `plot_assignment(result, *, image=None, view=None, z=None)`: one row of four panels.
+  1. `image` in grey scale with the territory outlines in green and one red dot per cell
+     centre;
+  2. the same image and outlines with the molecules: `assigned` blue, `unassigned` red,
+     `excluded_cell` orange (drawn and in the legend only when the result has such
+     molecules); `outside_grid` molecules are not drawn;
+  3. the histogram of voxels per cell;
+  4. the histogram of molecules per cell.
+
+  The territories are the ones assign used (the expanded ones after an expansion), and a
+  cell's centre is the centroid of that territory. `view="z_max"` (the default without
+  `z`) draws the Z maximum of the territories and of a ZYX `image`, every molecule with a
+  position on the grid and every cell centre. `view="single_layer"` (the default with
+  `z`) draws one plane, by default the middle one `Z // 2`: its outlines and image, the
+  molecules whose sampled voxel has that Z index and the centres of the cells present in
+  it. A plane or Z=1 result has the `z_max` view only, and asking it for the other raises
+  `ValueError`. The figure replaces the four legacy PNGs and their hard-coded plane; the
+  workflow adapter writes both views of a ZYX label image ({doc}`workflow-downstream`).
 
 ## Workflow configuration
 

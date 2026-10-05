@@ -57,9 +57,15 @@ totals). Construction checks the count identities of the contract.
 ``AssignmentResult.matrix(compartment, cells=…)`` gives a dense ``int64`` cells × genes
 matrix; for ``nucleus`` and ``cytoplasm`` the cells whose compartments are not available
 are absent, not zero. :py:func:`~starfinder.assignment.summarize_assignment` counts
-statuses, flags and states, with quantiles and the totals before and after the exclusion;
-:py:func:`~starfinder.assignment.plot_assignment` draws the territory outlines with the
-molecules by status and three histograms.
+statuses, flags and states, with quantiles and the totals before and after the exclusion
+(the same five keys in both; the nuclear and cytoplasmic totals are equal, because an
+excluded cell has no compartment counts).
+:py:func:`~starfinder.assignment.plot_assignment` draws one row of four panels: the stain
+in grey scale with the territory outlines in green and a red dot at each cell's centroid;
+the same with the molecules, ``assigned`` blue, ``unassigned`` red and ``excluded_cell``
+orange (``outside_grid`` not drawn); and the histograms of voxels and of molecules per
+cell. ``view="z_max"`` draws the Z maximum, ``view="single_layer"`` one plane ``z``
+(default ``Z // 2``) of a volumetric result.
 
 ``FOV.assign(config, cells="cell", nuclei=None, name="default", population="final")``
 builds the molecule table from the FOV's spot and read results and the codebook's genes,

@@ -1387,6 +1387,14 @@ def _write_reads_assignment(result, reads_csv, path, *, tile, cells):
     pd.concat([reads[assigned], reads[background], reads[off_grid]]).to_csv(path, index=False)
 
 
+def _assignment_ratio(counts):
+    """The ratio line of log.txt: assigned / all molecules of the record's counts, with both counts."""
+    if not counts['molecules']:
+        return 'assignment ratio: none (no molecule)'
+    return (f"assignment ratio: {counts['assigned'] / counts['molecules']:.2%} "
+            f"({counts['assigned']} of {counts['molecules']} molecules assigned)")
+
+
 def _run_reads_assignment(snakemake):
     """reads_assignment: assign_molecules on the legacy label file, written as raw.h5ad and reads_assignment.csv.
 
@@ -1398,7 +1406,9 @@ def _run_reads_assignment(snakemake):
     the tile configuration, read for the sample of the FOV and applied outside
     the package: global coordinates and the overlap filter, as the script does
     (§2.10 boundary); outside_grid molecules are kept in reads_assignment.csv.
-    Also writes expr/{fovID}/assignment.png (plot_assignment) and log.txt.
+    Also writes expr/{fovID}/assignment.png (plot_assignment, Z-maximum view
+    over the DAPI image), assignment_single_layer.png (its middle plane) for a
+    ZYX label image only, and log.txt with the assignment ratio.
     """
     import matplotlib.pyplot as plt
     import tifffile
@@ -1419,11 +1429,18 @@ def _run_reads_assignment(snakemake):
     _write_reads_assignment(result, snakemake.input[3], csv_path, tile=tile, cells=written)
     image = tifffile.imread(snakemake.input[1])
     image = image if image.shape[-2:] == result.cell_labels.shape[1:] else None
-    figure = plot_assignment(result, image=image)
-    figure.savefig(h5ad.parent / 'assignment.png')
-    plt.close(figure)
+    figures = {'assignment.png': {}}
+    n_z = result.cell_labels.shape[0]
+    if n_z > 1:  # a ZYX label image; a YX one is a plane with the Z-maximum view only
+        layer_image = image if image is None or image.ndim == 2 or image.shape[0] in (1, n_z) else None
+        figures['assignment_single_layer.png'] = {'view': 'single_layer', 'image': layer_image}
+    for name, options in figures.items():
+        figure = plot_assignment(result, **{'image': image, **options})
+        figure.savefig(h5ad.parent / name)
+        plt.close(figure)
     counts = result.record['counts']
     (h5ad.parent / 'log.txt').write_text(
         f"{counts['assigned']} of {counts['molecules']} molecules assigned to {counts['cells_kept']} cells; "
         f"{counts['unassigned']} unassigned, {counts['excluded_cell']} in excluded cells, "
-        f"{counts['outside_grid']} outside the grid; {len(written)} cells inside the tile box\n")
+        f"{counts['outside_grid']} outside the grid; {len(written)} cells inside the tile box\n"
+        f"{_assignment_ratio(counts)}\n")

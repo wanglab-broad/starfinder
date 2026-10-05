@@ -102,8 +102,13 @@ nuclei, the `nucleus` and `cytoplasm` layers hold 0.0 for a measured zero and Na
 where compartments are not available. `reads_assignment.csv` keeps its columns and
 gains `spot_id`, `assignment_status`, `cell_id`, `in_expansion`, `original_cell_id`,
 `nucleus_id` and `compartment`; after the rows the overlap filter keeps, it holds every
-`outside_grid` molecule, with `seg_label` 0. The rule also writes `assignment.png`
-(`plot_assignment` over the DAPI image) and `log.txt` beside them.
+`outside_grid` molecule, with `seg_label` 0. The rule also writes, beside them,
+`assignment.png` (`plot_assignment`, the Z-maximum view over the DAPI image) for every
+FOV, `assignment_single_layer.png` (the middle plane `Z // 2`) when the label image is
+ZYX, not for a YX one, and `log.txt`: one line of totals, then the assignment ratio,
+assigned molecules over all molecules of the table with both counts
+(`assignment ratio: 61.11% (11 of 18 molecules assigned)`), or
+`assignment ratio: none (no molecule)` when the FOV has none.
 
 Assignment needs the `anndata` extra for `raw.h5ad`; sample H5AD aggregation uses
 Scanpy, which the base package does not install. The matrix counts decoded genes
