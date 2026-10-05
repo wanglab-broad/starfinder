@@ -58,18 +58,23 @@ label image; time linear in `m`, independent of the grid size.
 
 ## Expansion
 
-**Rule.** `expand_labels` of {doc}`segmentation-algorithms`, called once on the cell
-territories with an `ExpandLabelsConfig` (`distance`, `unit`, `mode`). `planar` reproduces
-`reads_assignment.py` (scikit-image `expand_labels` per Z plane, pixels); `volumetric`
-grows in 3D with the ZYX spacing. Labels are never overwritten, so every original territory
-is contained in its expanded territory, and every nucleus inside its territory stays there.
+**Rule.** `expand_labels` of {doc}`segmentation-algorithms`, called once, by assign, on
+the cell run's labels (the original territories) with an `ExpandLabelsConfig`
+(`distance`, `unit`, `mode`). `planar` reproduces `reads_assignment.py` (scikit-image
+`expand_labels` per Z plane); `volumetric` grows in 3D with the ZYX spacing. Labels are
+never overwritten or renumbered, so every original territory is contained in its expanded
+territory under the same value, and every nucleus inside its territory stays there. Both
+label images are kept ({doc}`assignment-contract`, "Label expansion").
 
 **Parameters.** `distance` (no default), `unit` `pixel` or `um`, `mode` `planar` or
-`volumetric`. The legacy translation is `planar`, `pixel`, `dilation_distance`.
+`volumetric`. On a calibrated grid the distance is in µm; on an uncalibrated grid it must
+be in pixels. The legacy translation is `planar`, `pixel`, `dilation_distance`, with
+`AssignmentConfig.legacy_pixel_expansion=True` on its calibrated declared grid.
 
-**Failure behavior.** A cell run whose record lists `expand_labels` refuses a second
-expansion (`ValueError`, contract check 7). `unit="um"` without spacing raises
-(W-307's rule). An empty label image stays empty; distance 0 changes nothing (W-307 probe).
+**Failure behavior.** A cell run whose record lists `expand_labels` is refused, with or
+without an assign expansion, because its original mask was not kept (`ValueError`,
+contract check 7). `unit="um"` on an uncalibrated grid raises; `unit="pixel"` on a
+calibrated grid raises unless `legacy_pixel_expansion=True`. An empty label image stays empty; distance 0 changes nothing (W-307 probe).
 Two successive planar expansions are not one: 4 then 2 pixels differs from 6 pixels by 585
 voxels on the assignment golden fixture (`test_two_expansions_are_not_one`), which is why
 the legacy pair cannot be folded silently.
@@ -97,10 +102,15 @@ expansion needs blocks or the §2.10 tiling.
 5. Cell flags: `several_nuclei` (two or more matched nuclei), `ambiguous_nucleus` (an
    ambiguous nucleus has `o(n, c) > 0`), `nucleus_outside_cell` (a matched nucleus of
    `c` is `outside`), `foreign_nucleus` (`o(n, c) > 0` for a nucleus matched to another
-   cell). Any of the last three makes the cell's compartments `withheld`.
+   cell). Any of the last three makes the compartments of a `matched` or `ambiguous` cell
+   `withheld`.
+6. Cell correspondence: `matched` with at least one matched nucleus; else `ambiguous` with
+   an ambiguous nucleus over it; else `no_nucleus`.
 
-A supplied table replaces step 4's match; steps 1, 2, the `outside` test and step 5 are
-unchanged.
+A supplied table replaces step 4's match only: a nucleus in the table is matched to its
+row's cell; a nucleus absent from it is `ambiguous` if it overlaps a cell and `no_cell`
+otherwise, as in step 4. Steps 1, 2, the `outside` test, 5 and 6 are unchanged, so a table
+equal to the derived matches reproduces the derived result.
 
 **Parameters.** `match_fraction` (dimensionless share of the nucleus's voxels, default
 0.5, allowed [0.5, 1); strict `>`); `outside_tolerance` (dimensionless share, default 0.0,
@@ -109,8 +119,8 @@ is exact containment (contract option C1). Shares are voxel counts, so anisotrop
 does not change them.
 
 **Failure behavior.** No nucleus image: no correspondence, every cell `unavailable`. A
-nucleus image with no object: every cell has `n_nuclei = 0` (all excluded by default, and
-the record says the nucleus run's outcome was `empty`). A supplied table with an unknown
+nucleus image with no object: every cell is `no_nucleus` (all excluded by default, and the
+record says the nucleus run's outcome was `empty`). A supplied table with an unknown
 value or a repeated nucleus raises `ValueError`. Nothing is repaired: no nucleus is
 clipped to its cell, no cell is merged or split, no nucleus is re-matched by distance.
 
@@ -125,9 +135,10 @@ measured.
 
 ## Compartment partition
 
-**Rule.** For an `assigned` molecule of cell `c`: `unavailable` without nuclei; `withheld`
-when `c` is withheld; otherwise `nucleus` when its `nucleus_id` is a nucleus matched to
-`c`, else `cytoplasm`. Because an `available` cell has no `foreign_nucleus` flag, a
+**Rule.** For an `assigned` molecule of cell `c`: `unavailable` without nuclei;
+`no_nucleus` when `c`'s correspondence is `no_nucleus` (never `cytoplasm`: a cell without a
+detected nucleus gets no compartment); `withheld` when `c` is withheld; otherwise `nucleus`
+when its `nucleus_id` is a nucleus matched to `c`, else `cytoplasm`. Because an `available` cell has no `foreign_nucleus` flag, a
 nonzero `nucleus_id` inside it is always one of its own nuclei, so the rule partitions its
 molecules exactly. Molecules inside a nucleus but outside every territory stay
 `unassigned`.
@@ -146,8 +157,8 @@ when not `assigned`).
 `(cell_id, gene_id, compartment)` for the `nucleus` and `cytoplasm` molecules of
 `available` cells; keep nonzero groups as the long `counts` table. Cell sizes and
 centroids: per positive territory value, the voxel count and the mean of the voxel
-indices (float64 sums accumulated per plane), from the original territory;
-`expanded_size_voxels` from the expanded one; physical sizes multiply by the voxel volume
+indices (float64 sums accumulated per plane), from the original territory, and
+`expanded_size_voxels` and `expanded_centroid_*` from the expanded one; physical sizes multiply by the voxel volume
 (or area) when the calibration is known. The identities of the contract ("Count
 accounting", 1 to 5) are checked after counting; a violation raises `AssertionError`
 naming the identity, because it can only come from a defect.
@@ -166,7 +177,9 @@ deterministic.
 
 ## Engineering validation design (task group 6)
 
-Task group 6 is engineering validation only, as in §2.7 and §2.8: known-answer fixtures
+Task group 6 of the outline, "Validation and inspection", has three parts: this
+engineering validation, the bounded real examples below and the usage documentation (the
+tour notebook). The engineering validation is, as in §2.7 and §2.8, known-answer fixtures
 with pass/fail tolerances fixed before the run, in default-tier pytest modules, plus
 `learned`-tier modules for the checks that need StarDist or Cellpose. It has no
 comparison matrix, no parameter sweep, no ranking of methods, no default chosen from
@@ -198,54 +211,54 @@ Rules:
 | Fixture | Construction | Used by |
 | --- | --- | --- |
 | `seg_golden` | The W-307 segmentation golden fixture (16×64×64 uint8 DAPI, amplicon, Flamingo; seed 20261005). | L4, L6, L7 |
-| `assign_golden` | The W-308 assignment golden fixture (16×64×64 `uint16` labels with cells 3, 7, 12, 20, 25; 19 molecules; five genes). | A2, A3, A4, A19 |
-| `boxes` | 8×32×32 grid, spacing (0.35, 0.1, 0.1) µm, unit `micrometer`. Cells are boxes; nuclei are boxes: cell 1 with one nucleus inside; cell 2 with two nuclei inside; cells 3 and 4 adjacent, with nucleus 31 of 100 voxels split 50 / 50 across their border; cell 5 with nucleus 51 of 10 voxels, 6 inside and 4 in the background; cells 6 and 7 adjacent, with nucleus 61 of 10 voxels, 8 in cell 6 and 2 in cell 7; cell 8 without a nucleus; nucleus 91 entirely in the background. Molecules: two nuclear and two cytoplasmic per cell, one in the background, one in nucleus 91, one in the background part of nucleus 51, three off the grid. | A2, A5–A13, A15, A20 |
+| `assign_golden` | The W-308 assignment golden fixture (16×64×64 `uint16` labels with cells 3, 7, 12, 20, 25; 19 molecules; five genes), on an uncalibrated grid (`ImageMetadata("assign_golden")`); its Z maximum as a plane on the projection of that grid. | A2, A3, A4, A19 |
+| `boxes` | 8×32×32 grid, spacing (0.35, 0.1, 0.1) µm, unit `micrometer`. Cells are boxes; nuclei are boxes; every box includes the plane z = 4 and the shares below hold in 3D: cell 1 with one nucleus inside; cell 2 with two nuclei inside; cells 3 and 4 adjacent, with nucleus 31 of 100 voxels split 50 / 50 across their border; cell 5 with nucleus 51 of 10 voxels, 6 inside and 4 in the background; cells 6 and 7 adjacent, with nucleus 61 of 10 voxels, 8 in cell 6 and 2 in cell 7; cell 8 without a nucleus; nucleus 91 entirely in the background. Molecules: in every cell two molecules outside every nucleus, and two inside each nucleus part that lies in the cell (nucleus 31's halves in cells 3 and 4, nucleus 61's parts in cells 6 and 7; none in cell 8); one in the background; one in nucleus 91; one in the background part of nucleus 51; three off the grid. | A2, A5–A13, A15, A20 |
 | `boxes_51_49` | `boxes` with nucleus 31 split 51 / 49 (51 of its 100 voxels in cell 3). | A7 |
 | `boxes_nocal` | `boxes` with metadata `ImageMetadata("boxes")` (no spacing, no unit). | A13 |
-| `bounds` | 4×8×8 labels, value 1 everywhere except a 0 at voxel (2, 3, 3); molecules at `c ∈ {−0.5, −0.5 − 1e−9, 2.5, 3.5, n − 0.5 − 1e−9, n − 0.5, 1e6}` on each axis in turn, the others at 1.0. | A1 |
+| `bounds` | 8×8×8 labels, value 1 everywhere except a 0 at voxel (2, 3, 3); molecules at `c ∈ {−0.5, −0.5 − 1e−9, 2.5, 3.5, n − 0.5 − 1e−9, n − 0.5, 1e6}` on each axis in turn (`n` that axis's size), the other two at 1.0, and one molecule at (2.0, 3.0, 3.0). | A1 |
 | `plane` | `boxes` reduced to its plane z = 4 (1×32×32), on the projection of the `boxes` grid; molecules of `boxes` with `z` from 0 to 7, and one at z = 1000 (off the 8-plane molecule grid). | A16 |
-| `culture` | 8×32×32 culture layer: 2D cell and nucleus labels (1×32×32 boxes) and a stain that is bright in z 2–4 only (seed 100 noise); cells and nuclei extended with `extend_labels_through_z`; molecules inside the layer, above it and below it. | L5, A17 |
+| `culture` | 8×32×32 culture layer, spacing (0.35, 0.1, 0.1) µm: 2D cell and nucleus labels (1×32×32 boxes, each nucleus inside its cell) and a noise-free stain of 200 in z 2–4 and 10 elsewhere; extension with `threshold` 100, `median_um` 0.1, `min_area_um2` 0.01, `dilation_um` 0 and one hole filling, so the extended labels are the 2D labels in z 2–4 and 0 elsewhere; molecules inside the layer, above it and below it. | L5, A17 |
 | `seeded` | The `boxes` nuclei as seeds and a stain bright inside the `boxes` cells (seed 101 noise). | L9 |
-| `imports` | TIFF files written in the test: big-endian `uint16` labels, `int32`, `float32` and `bool` masks, a YX file, a file with `starfinder_metadata` that differs from the grid. | L3 |
-| `many_labels` | 1×256×280 `int32` labels with 70,000 single-pixel objects (values 1 to 70,000), within the 32×64×64 voxel budget. | L2 |
+| `imports` | TIFF files written in the test: big-endian `uint16` labels with the values 4, 9 and 30, `int32`, `float32` and `bool` masks, a YX file, a file with `starfinder_metadata` that differs from the grid, a file of another shape. | L3 |
+| `many_labels` | 32×64×64 `int32` labels whose first 70,000 voxels in C order hold the values 1 to 70,000 and the rest 0. | L2 |
 | `parity` | The W-306 parity outputs, copied as `test/data/segmentation_parity.npz` (357 KB, sha256 `4a5df997…`), {doc}`segmentation-contract` ("Tests the implementation changes"). | L10 |
 
 ### Checks
 
 | # | Check | Fixture | Metric | Pass/fail tolerance |
 | --- | --- | --- | --- | --- |
-| L1 | Label contract | hand-built arrays | `SegmentationResult.__post_init__` and `ReferenceGrid` | A `uint32` ZYX array on its grid constructs; each violation (wrong dtype, a negative value, `labels.shape ≠ grid.shape_zyx`, a target other than `nucleus` or `cell`, `plane` with Z>1, `volume` with Z=1) raises its named error. Exact. |
+| L1 | Label contract | hand-built arrays | `SegmentationResult.__post_init__` and `ReferenceGrid` | A `uint32` ZYX array on its grid constructs; each violation (a dtype other than `uint32`, among them an `int32` array with a negative value; a 2D array; `labels.shape ≠ grid.shape_zyx`; a target other than `nucleus` or `cell`; `plane` with Z>1; `volume` or `extended` with Z=1) raises its named error. Exact. |
 | L2 | Label dtype rule | `many_labels`; int32, uint16 and uint32 versions of `assign_golden`'s labels | Converted array and values | All 70,000 values survive the conversion to `uint32` (none wraps; label 65,536 stays 65,536); the three dtypes give identical `uint32` arrays; a negative value raises. Exact. |
-| L3 | Import | `imports` | `import_labels` result and record | Big-endian data read with native values; a YX file becomes 1×Y×X and needs a Z=1 grid; `float32` and `bool` raise `TypeError`; a shape other than the grid raises `IncompatibleGeometryError`; differing metadata raises `ValueError`; missing metadata is recorded as `declared`; `relabel=True` maps to 1…n in increasing order with the map recorded; the file and array SHA-256 are recorded. Exact. |
-| L4 | `expand_labels` | `seg_golden` stand-in labels; single-voxel label in 9×21×21 with spacing (0.3, 0.1, 0.1) | Labels | `planar`, `pixel`, distance 4, cast to `uint16`, equals W-307's `LABELS_3D[(False, True)]` and `LABELS_2D[(False, True)]`; `volumetric`, `um`, distance 0.5 labels exactly the voxels whose physical distance to the seed is ≤ 0.5 µm (computed in the test); distance 0 is the identity; an empty image stays empty; `um` without spacing raises. Exact. |
-| L5 | `extend_labels_through_z` | `culture` | Extended labels | Equals, plane by plane, the mask derived by hand from the stain's bright layer (median, threshold, minimum area, dilation and hole filling at the fixture's physical parameters) times the 2D labels; geometry `extended`; labels with Z>1 raise; a dark stain gives an empty image with outcome `empty`. Exact. **Provisional**: no MATLAB parity (MATLAB not run). |
-| L6 | `labels_to_grid` | `seg_golden` | Labels | 16×32×32 → 16×64×64 equals W-307's `RESTORED_LABELS` values; 30×32 → exactly 61×63 by the index rule ⌊(i + 0.5) × n_s / n_t⌋. Exact. |
-| L7 | Input functions | `seg_golden`; constant and zero images | Digests and values | `composite_nuclei_amplicon` and `enhance_with_flamingo` equal W-307's `COMPOSITE_DIGESTS`, `FLAMINGO_DIGEST` and `CONSTANT_DIGESTS`; `normalize_percentiles` equals `(x − p_low) / (p_high − p_low)` with NumPy's linear percentiles, within 1e-6 relative (float32); `rescale_input` divides the spacing by the factors. Exact except the stated float32 bound. |
-| L8 | Every method at contract level: the stage wrapper | a test-only method registered for the test; `seg_golden` | Raised errors and the record | Each of the 11 wrapper checks of {doc}`segmentation-contract` raises its named error in the stated order (config, target, input, device, dependencies, model, dimensionality, seeds, run, output, record); a method returning another shape, a negative value or a float array is refused; a dropped Z axis for one plane is restored; `segment` refuses `LabelImportConfig`. Exact. |
-| L9 | `seeded_watershed` at contract level | `seeded` | Labels and record | Every cell carries the value of the seed it grew from; every seed voxel inside the foreground keeps its value; no seeds give an empty image with outcome `empty`; a missing spacing raises; the result is on the input grid. Exact. |
+| L3 | Import | `imports` | `import_labels` result and record | Big-endian data read with native values; a YX file becomes 1×Y×X and needs a Z=1 grid; `float32` and `bool` raise `TypeError`; the file of another shape raises `IncompatibleGeometryError`; differing metadata raises `ValueError`; missing metadata is recorded as `declared`; `relabel=True` maps 4, 9, 30 to 1, 2, 3 with the map recorded; the file and array SHA-256 are recorded. Exact. |
+| L4 | `expand_labels` | `seg_golden` stand-in labels; single-voxel label in 9×21×21 with spacing (0.3, 0.1, 0.1) | Labels | `planar`, `pixel`, distance 4, cast to `uint16`, equals W-307's `LABELS_3D[(False, True)]`, and on the 1×Y×X form of the 2D stand-in labels, reshaped to Y×X, `LABELS_2D[(False, True)]`; `volumetric`, `um`, distance 0.5 labels exactly the voxels whose physical distance to the seed is ≤ 0.5 µm (computed in the test); distance 0 is the identity; an empty image stays empty; `um` without spacing raises. Exact. |
+| L5 | `extend_labels_through_z` | `culture` | Extended labels | Equals the 2D labels in z 2–4 and 0 in the other planes (the fixture's parameters make every bright plane one foreground region); geometry `extended`; labels with Z>1 raise; a stain of 10 everywhere gives an empty image with outcome `empty`. Exact. **Provisional**: no MATLAB parity (MATLAB not run). |
+| L6 | `labels_to_grid` | `seg_golden` | Labels | The W-307 shrunk stand-in labels, 16×32×32 → 16×64×64, equal the values of W-307's `RESTORED_LABELS` array (its 2×2 block repetition) after a cast to `int32`; a 1×30×32 image → exactly 1×61×63 by the index rule ⌊(i + 0.5) × n_s / n_t⌋, computed in the test. Exact. |
+| L7 | Input functions | `seg_golden`; constant and zero images | Digests and values | `composite_nuclei_amplicon` and `enhance_with_flamingo` equal W-307's `COMPOSITE_DIGESTS`, `FLAMINGO_DIGEST` and `CONSTANT_DIGESTS`; `normalize_percentiles` equals `(x − p_low) / (p_high − p_low)` with NumPy's linear percentiles, within 1e-6 relative and 1e-6 absolute (float32); `rescale_input` divides the spacing by the factors. Exact except the stated float32 bound. |
+| L8 | Every method at contract level: the stage wrapper | a test-only method registered for the test; `seg_golden` | Raised errors and the record | Each raising check of the 11 wrapper checks of {doc}`segmentation-contract` (config, target, input, device, dependencies, model, dimensionality, seeds; output after the run) raises its named error, and an input violating two checks raises the earlier one; a method returning another shape, a negative value or a float array is refused by the output check; a dropped Z axis for one plane is restored; the record (check 11) holds the uniform provenance entry; `segment` refuses `LabelImportConfig` with `TypeError`. Exact. |
+| L9 | `seeded_watershed` at contract level | `seeded` | Labels and record | The set of output values equals the set of seed values with at least one voxel in the foreground; every seed voxel inside the foreground keeps its value; no seeds give an empty image with outcome `empty`; a grid without spacing raises; the result is on the input grid. Exact. |
 | L10 | `stardist` at contract level (`learned`) | `parity` | Labels | The six `rescale0` arrays of P1 to P3, recomputed on CPU with `scale` 1.0, the stored thresholds and, for `expand1`, planar expansion by 4, equal the saved arrays after a cast to `uint16`; a 3D model on Z=1 and a 2D model on Z>1 raise before the model loads; `threshold_source` is `stored`. Exact on CPU. |
 | L11 | `cellpose` at contract level (`learned`) | 2D and Z=1 boxes stains (seed 102); a missing model path | Labels and errors | A missing model path raises `MissingModelError` before any library call; a Z=1 input returns 1×Y×X; the result is `uint32`; two calls in one process give identical labels (the normalization mapping is not mutated); `diameter` is required. Exact on CPU. |
 | L12 | CPU against GPU (`learned`, GPU batches only) | `parity` P1, P2 | Label count, matched fraction, median matched IoU | Within max(1, 1 %); at least 99 % at IoU ≥ 0.5; median at least 0.99 (W-306 tolerances, one host). |
-| L13 | Segmentation persistence | `seg_golden` stand-in run, imported and computed | Files and record | `labels.tif`, `input.ome.tif` and `segmentation.json` written; `FOV.load_segmentation` returns an equal result (array equality, record equality); a changed label file raises naming the hash. Exact. |
+| L13 | Segmentation persistence | an imported run of the `seg_golden` stand-in labels; a `seeded_watershed` run on `seeded` | Files and record | `labels.tif`, `input.ome.tif` and `segmentation.json` written; `FOV.load_segmentation` returns an equal result (array equality, record equality); a changed label file raises naming the hash. Exact. |
 | L14 | Model resolution (`learned` for the files) | the cached `2D_versatile_fluo` files; a copy with one byte changed | Hashes and errors | Known-model hashes equal `KNOWN_MODELS`; the changed copy raises `ModelHashMismatchError` naming both hashes; with the network disabled nothing is fetched. Exact. |
-| A1 | Sampling at the bounds | `bounds` | Sampled voxel and status | −0.5 → voxel 0; −0.5 − 1e−9 → `outside_grid`; 2.5 → 3; 3.5 → 4; n − 0.5 − 1e−9 → n − 1; n − 0.5 and 1e6 → `outside_grid`; the molecule on voxel (2, 3, 3) is `unassigned`. Exact. |
-| A2 | Statuses and accounting | `assign_golden` (without gene `Z`), `boxes` | Molecule statuses; identities 1–5 of the contract | Every molecule has the status written in the fixture; the four status counts sum to the number of molecules; whole-cell counts sum to `n_assigned`; `nucleus + cytoplasm = whole` per available cell and gene; excluded molecules equal the excluded cells' `n_molecules`. Exact. |
-| A3 | Legacy equivalence | `assign_golden` | Per-molecule cell and counts | With no expansion and with `planar`/`pixel`/4, `cell_id` equals the pinned `SEG_LABELS` (0 as null) and the whole-cell matrix the pinned counts, in 3D and 2D; `size_voxels` and the truncated centroids equal the pinned `volume` and `fov_*`. Exact. |
-| A4 | One expansion | `assign_golden` | Territories, `in_expansion`, errors | Assign's territories equal `expand_labels` of the cell run; `in_expansion` is true exactly for the three band molecules; a run whose record lists `expand_labels` refuses `expansion`; the record holds both hashes and the voxels added. Exact. |
-| A5 | Correspondence, one nucleus | `boxes` cell 1 | Nucleus and cell rows | Nucleus `matched`, `share_in_cell` 1.0; cell `n_nuclei` 1, no flag, `available`. Exact. |
+| A1 | Sampling at the bounds | `bounds` | Sampled voxel and status | On each axis: −0.5 → voxel 0; −0.5 − 1e−9 → `outside_grid`; 2.5 → 3; 3.5 → 4; n − 0.5 − 1e−9 → n − 1; n − 0.5 and 1e6 → `outside_grid`; every in-grid molecule of these is `assigned` to cell 1; the molecule at (2.0, 3.0, 3.0) is `unassigned`. Exact. |
+| A2 | Statuses and accounting | `assign_golden` (without gene `Z`), `boxes` | Molecule statuses; identities 1–5 of the contract | Every molecule has the status written in the fixture; the four status counts sum to the number of molecules; whole-cell counts sum to `n_assigned`; `nucleus + cytoplasm = whole` per available cell and gene, and the compartment values of the assigned molecules sum to `n_assigned`; excluded molecules equal the excluded cells' `n_molecules`. Exact. |
+| A3 | Legacy equivalence | `assign_golden` | Per-molecule cell and counts | With no expansion and with `planar`/`pixel`/4, `cell_id` equals the pinned `SEG_LABELS` (0 as null) and the whole-cell matrix the pinned counts, in 3D and 2D. The pinned `volume` and `fov_*` columns (computed after the legacy expansion) equal `size_voxels` and the truncated `centroid_*` without expansion, and `expanded_size_voxels` and the truncated `expanded_centroid_*` with it (for cell 3 in 3D: 771 and 1866 voxels). Exact. |
+| A4 | One expansion | `assign_golden` | Territories, `in_expansion`, errors | Assign's territories equal `expand_labels` of the cell run, and `original_territories` equals the cell run's labels; `in_expansion` is true exactly for the three band molecules (3D and 2D), whose `original_cell_id` is 0; a cell run whose record lists `expand_labels` raises with and without `expansion`; `unit="um"` on this uncalibrated grid raises; the record holds both masks' paths and hashes and the voxels added. Exact. |
+| A5 | Correspondence, one nucleus | `boxes` cell 1 | Nucleus and cell rows | Nucleus `matched`, `share_in_cell` 1.0; cell `n_nuclei` 1, correspondence `matched`, no flag, `available`. Exact. |
 | A6 | Correspondence, several nuclei | `boxes` cell 2 | Cell row | `n_nuclei` 2, flag `several_nuclei` only, `available`; its nuclear count is the sum over both nuclei. Exact. |
-| A7 | Correspondence, ambiguous | `boxes` cells 3, 4; `boxes_51_49` | Nucleus status and flags | 50/50: nucleus 31 `ambiguous`; cells 3 and 4 flagged `ambiguous_nucleus`, `withheld`, and (no matched nucleus) excluded by default. 51/49: matched to cell 3 and flagged `outside`; cell 3 `nucleus_outside_cell`, cell 4 `foreign_nucleus`, both `withheld`, and cell 4 (no matched nucleus) excluded by default. Exact. |
+| A7 | Correspondence, ambiguous | `boxes` cells 3, 4; `boxes_51_49` | Nucleus status and flags | 50/50: nucleus 31 `ambiguous` (0.5 is not more than 0.5); cells 3 and 4 have correspondence `ambiguous`, flag `ambiguous_nucleus`, compartments `withheld`, and are kept by default (ambiguous is not absence of a nucleus). 51/49: nucleus 31 matched to cell 3 and flagged `outside`; cell 3 `matched`, `nucleus_outside_cell`, `withheld`; cell 4 `no_nucleus` with `foreign_nucleus`, excluded by default. Exact. |
 | A8 | Correspondence, nucleus outside its cell | `boxes` cell 5 | Flags | With `outside_tolerance` 0.0, nucleus 51 is `matched`, `outside`, cell 5 `withheld`; with 0.5, not `outside` and cell 5 `available`; the molecule in its background part is `unassigned` with `nucleus_id` 51. Exact. |
-| A9 | Foreign nucleus | `boxes` cells 6, 7, with `exclude_cells_without_nucleus=False` | Flags | Nucleus 61 matched to cell 6 (share 0.8), `outside`; cell 6 `nucleus_outside_cell`, cell 7 `foreign_nucleus`; both `withheld`, with their whole-cell counts. Exact. |
-| A10 | Compartment partition | `boxes` | Molecule compartments; counts | In every available cell, the nuclear molecules are exactly those placed in its nuclei and `nucleus + cytoplasm = whole` per gene; withheld cells have no compartment rows (absent, not zero); without nuclei every assigned molecule is `unavailable`. Exact. |
-| A11 | Exclusion and its statuses | `boxes` with nuclei (default), with `exclude_cells_without_nucleus=False`, without nuclei | Cell status, molecule status, counts, totals | Default: cells 3, 4, 7 and 8 (no matched nucleus) `excluded_no_nucleus`, their molecules `excluded_cell` with their `cell_id`, no count rows, `exclusion_source` `default`; totals before and after differ by exactly those cells and molecules. `False`: all kept; cell 8 `available` with a nuclear count of 0, cells 3, 4 and 7 `withheld`. Without nuclei: nothing excluded, every cell `unavailable`. Exact. |
+| A9 | Foreign nucleus | `boxes` cells 6, 7, with `exclude_cells_without_nucleus=False` | Flags | Nucleus 61 matched to cell 6 (share 0.8), `outside`; cell 6 `matched`, `nucleus_outside_cell`, compartments `withheld`; cell 7 correspondence `no_nucleus`, flag `foreign_nucleus`, compartments `no_nucleus`; both keep their whole-cell counts and have no nuclear or cytoplasmic rows. Exact. |
+| A10 | Compartment partition | `boxes` | Molecule compartments; counts | The available cells are 1 and 2; in each, the nuclear molecules are exactly those placed in its nuclei and `nucleus + cytoplasm = whole` per gene; withheld cells (3, 4, 5, 6) have no compartment rows (absent, not zero); with the exclusion off, cells 7 and 8 have no compartment rows and their molecules are `no_nucleus`, none `cytoplasm`; without nuclei every assigned molecule is `unavailable`. Exact. |
+| A11 | Exclusion and its statuses | `boxes` with nuclei (default), with `exclude_cells_without_nucleus=False`, without nuclei | Cell status, molecule status, counts, totals | Default: cells 7 and 8 (correspondence `no_nucleus`) are `excluded_no_nucleus` with reason `no_matched_nucleus`, their molecules `excluded_cell` with their `cell_id`, no count rows, `exclusion_source` `default`; cells 3 and 4 (`ambiguous`) stay kept; the complete cell table keeps cells 7 and 8, and the totals before and after differ by exactly those cells and molecules. `False`: all kept; cells 7 and 8 have compartments `no_nucleus` with whole-cell counts only. Without nuclei: nothing excluded, every cell `unavailable`. Exact. |
 | A12 | Supplied correspondence | `boxes` | Result equality; errors | A supplied table equal to the derived matches gives an identical result except `record["correspondence"]["source"]`; an unknown value or a repeated nucleus raises. Exact. |
 | A13 | Cell metadata | `boxes`, `boxes_nocal` | Sizes, centroids, calibration | `size_voxels` equal the box volumes; `size_physical` equals voxels × 0.35 × 0.1 × 0.1 µm³ within 1e-12 relative, unit `micrometer^3`; centroids equal the box centres exactly; `boxes_nocal` gives NaN sizes and `calibration` `unknown`. Exact except the stated relative bound. |
 | A14 | Grid and identity checks | `boxes` with a shifted frame, another shape, a plane on the wrong projection, nuclei on another grid, another FOV's namespace | Raised errors | Each raises its named error before any sampling. Exact. |
-| A15 | Persistence round trip | `boxes` results, CSV and Parquet | Tables, image, record | `FOV.load_assignment` returns tables equal under `assert_frame_equal(check_exact=True)`, an equal `territories.tif` and an equal record; a changed file raises naming its hash; the files of `FOV.run` and of segmentation are unchanged. Exact. |
-| A16 | Z=1 case | `plane` | Statuses, counts, calibration | The territory is read at `y, x` for every `z` from 0 to 7, the z = 1000 molecule is `outside_grid`, the result equals the `boxes` assignment of the same columns, and the area uses the projection source's Y, X spacing (`calibration_source` `projection_source`). Exact. |
-| A17 | Culture case | `culture` | Statuses and compartments | Molecules inside the extended layer are assigned to the cell above whose 2D label they lie; those above or below the layer are `unassigned`; nuclear and cytoplasmic counts follow the extended nuclei. Exact. |
-| A18 | Workflow translation | legacy configurations; `assign_golden` written as a goodSpots CSV, integer and float | Config, errors, outputs | The legacy keys translate as the contract's table states; both `expand_labels` keys true raise naming both; float coordinates are accepted; a gene mismatch with the codebook raises; where `anndata` is importable, `raw.h5ad`'s legacy `obs` columns and `X` equal the frozen helper's values for the kept cells. Exact. |
+| A15 | Persistence round trip | `boxes` results, CSV and Parquet, without expansion and with a `planar` 0.1 µm expansion of a cell run that has no saved file | Tables, images, record | `FOV.load_assignment` returns tables equal under `assert_frame_equal(check_exact=True)`, `territories.tif` and `original_territories.tif` equal to the result's arrays, and an equal record; a changed file raises naming its hash; the files of `FOV.run` and of segmentation are unchanged. Exact. |
+| A16 | Z=1 case | `plane` | Statuses, counts, calibration | Each molecule with `z` from 0 to 7 has the `cell_id` of the plane label at its `(y, x)`; the z = 1000 molecule is `outside_grid`; `size_physical` equals pixels × 0.1 × 0.1 µm² (unit `micrometer^2`, `calibration_source` `projection_source`). Exact. |
+| A17 | Culture case | `culture` | Statuses and compartments | Molecules in z 2–4 are assigned to the cell whose 2D label holds their `(y, x)`; those in the other planes are `unassigned`; every cell is `matched` and `available`, and its nuclear molecules are those inside its extended nucleus. Exact. |
+| A18 | Workflow translation | legacy configurations; `assign_golden` written as a goodSpots CSV, integer and float | Config, errors, outputs | The legacy keys translate as the contract's table states (the legacy `dilation_distance` with `legacy_pixel_expansion=True`); `stardist_segmentation.expand_labels: true`, alone or with the assignment key, raises naming the key; float coordinates are accepted; a gene mismatch with the codebook raises; where `anndata` is importable, `raw.h5ad`'s legacy `obs` columns and `X` equal the frozen helper's values for the kept cells. Exact. |
 | A19 | Determinism | `assign_golden`, `boxes` | SHA-256 of every result table, three single-thread processes | Identical. |
 | A20 | Row order | `boxes` with the molecule rows shuffled (seed 100) | Per-key results and `MoleculeTable.sha256` | Identical per `(spot_namespace, spot_id)` and the same hash. Exact. |
 
@@ -266,8 +279,8 @@ records wall time and peak RSS with `/usr/bin/time -v` against the 4 GiB stop ta
 
 ## Bounded real examples
 
-These run after the methods exist (task group 4) and inspect the three contexts on the
-W-305 crops, volumetric first. They are inspections, not comparisons: no annotation exists
+These run after the segmentation methods (task group 3) and assignment (task group 4)
+exist and inspect the three contexts on the W-305 crops, volumetric first. They are inspections, not comparisons: no annotation exists
 (W-123), the culture reference labels are earlier workflow results, and nothing is ranked
 or called accurate. Every input is a W-305 crop listed in
 `runs/W-305/20261004T0630Z-summary/examples.md` with its SHA-256 in the run's
@@ -281,7 +294,7 @@ and the territory statistics only, and report the molecule outputs as not run.
 
 | Order | Context | Crop (W-305 run) | Runs | Resources |
 | --- | --- | --- | --- | --- |
-| 1 | Volumetric tissue (LN, `Position020`) | `20261004T0530Z-ln-3d-spleen/crop_dapi_round4.tif` (50×512×512 uint8), and `crop_dapi_enhanced_with_flamingo.tif` for the Flamingo-assisted nuclei | Nuclei: `stardist`, `3D_spleen`, `scale` 1.0, stored thresholds. Territories: (a) planar expansion of the nuclei by 4 pixels (the legacy parity value), (b) `seeded_watershed` on `crop_flamingo.tif`. Assign with nuclei, C1 thresholds, exclusion on and off. Spacing 0.3463 × 0.1944 × 0.1944 µm (TIFF tags). | StarDist 226 s per call on one CPU thread (W-306 `ln_dapi_round4@1.0`; 58 s on four threads, 55 s on the GPU), 2,245 MiB peak RSS per call including the loaded model; assignment code-derived: two `uint32` volumes of 52 MB plus the expanded one, under 0.5 GB, seconds. |
+| 1 | Volumetric tissue (LN, `Position020`) | `20261004T0530Z-ln-3d-spleen/crop_dapi_round4.tif` (50×512×512 uint8), and `crop_dapi_enhanced_with_flamingo.tif` for the Flamingo-assisted nuclei | Nuclei: `stardist`, `3D_spleen`, `scale` 1.0, stored thresholds. Territories: (a) assign's planar expansion of the nuclei by 0.7776 µm (4 pixels at 0.1944 µm, the legacy parity distance), with the original nuclei and the expanded territories both kept, (b) `seeded_watershed` on `crop_flamingo.tif`. Assign with nuclei, C1 thresholds, exclusion on and off. Spacing 0.3463 × 0.1944 × 0.1944 µm (TIFF tags). | StarDist 226 s per call on one CPU thread (W-306 `ln_dapi_round4@1.0`; 58 s on four threads, 55 s on the GPU), 2,245 MiB peak RSS per call including the loaded model; assignment code-derived: two `uint32` volumes of 52 MB plus the expanded one, under 0.5 GB, seconds. |
 | 2 | 2D tissue (tissue-2D, `round1/tile_1`) | `20261004T0600Z-tissue2d-watershed/crop_PI.tif` and `crop_amplicon_merged.tif` (1024×1024 uint8) | Nuclei: `stardist`, `2D_versatile_fluo`, `scale` 0.25. Cells: `seeded_watershed` on the amplicon signal, `sigma_um` 1.5, spacing 0.0946 µm. Assign as a `plane` (Z=1 grid), with nuclei, C1 thresholds, exclusion on and off. | StarDist 1.2 s per call on one CPU thread, 868 MiB peak RSS including the loaded model (W-306 `tissue_pi@0.25`); watershed 0.25 s (W-306 `tissue2d_amplicon`); assignment code-derived: 4 MB per label image, under 1 s. |
 | 3 | Single-layer culture (stitched sample) | `20261004T0615Z-culture-fused-crop/crop_DAPI_3d_42x512x512.tif`, `crop_Flamingo_3d_42x512x512.tif`, the projections `crop_DAPI_max_2d.tif`, `crop_Flamingo_max_2d.tif`, and the references `reference_Cell_label_2d.tif`, `reference_DAPI_label_2d.tif`, `reference_Cell_3d_42x512x512.tif` (big-endian; imported) | (a) The imported 2D references, extended through z with `extend_labels_through_z` on the 3D crops; (b) Cellpose `cpsam_v2` on the projections, cells at `diameter` 240 and nuclei at an explicit recorded diameter (W-306 ran 60 and 240 on the DAPI projection), then extended the same way. Assign with nuclei and compartments, C1, exclusion on and off. The 2D projections are 1024×1024 and the 3D crops their 512×512 centre, so the extension uses the matching centre window. | Cellpose 203 s per call on one CPU thread for the two-channel cells, 1,718 MiB peak RSS including the loaded model, or 1.5 s on the GPU (W-306 `culture_cells_2d@d240`); nuclei 229 s on one CPU thread at diameter 60 (`culture_nuclei_2d@d60`; diameter 240 was measured on the GPU only, 0.38 s); import and extension code-derived: 42×512×512 `uint32` is 44 MB per volume; assignment seconds. |
 
@@ -293,9 +306,9 @@ and the territory statistics only, and report the molecule outputs as not run.
   `outside_grid`);
 * distributions: `size_voxels` and `size_physical`, molecules per cell and nuclei per cell
   (histograms and quantile tables);
-* correspondence warnings: nuclei per status, cells per flag, the distribution of the
-  matched nuclei's outside share (the evidence a C2 tolerance would need), and the cells
-  whose compartments are withheld;
+* correspondence warnings: nuclei per status, cells per correspondence status and per
+  flag, the distribution of the matched nuclei's outside share (the evidence a C2
+  tolerance would need), and the cells whose compartments are withheld or `no_nucleus`;
 * totals before and after the exclusion: cells, molecules `assigned`, molecules
   `excluded_cell`, and the whole-cell, nuclear and cytoplasmic totals;
 * `summarize_assignment` as JSON, with the input hashes.

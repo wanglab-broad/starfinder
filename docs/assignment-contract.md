@@ -34,31 +34,61 @@ From the W-152 comment "§2.9 planning decisions (2026-10-03)", quoted in full i
   a method; assign calls it and does not reimplement it.
 * **D7 Two specification issues.** Segmentation is specified by W-307 up to the label
   contract; this page takes over from there.
+* **D2, D5 and D6** concern segmentation methods, their environments and the GPU. Assign
+  is not a method and has no registry, needs only the base dependencies (no separate
+  environment) and runs on CPU.
 
 Proposed in the same comment and not objected to, and followed here: nucleus and cell
 masks come from two runs; nucleus–cell correspondence belongs to assignment; the second
 expansion of `reads_assignment.py` folds into one recorded expansion; the configuration
 is a plan, not a recipe.
 
-The issue scope adds: every molecule is kept with an explicit status; when nuclear
-segmentation is available, cells without a matched nucleus are excluded by default;
-affected compartment counts are withheld, with no automatic repair; there is no size or
-count filter, no probabilistic or transcript-based assignment and no second exporter;
-assignment is FOV-local, and stitching, global coordinates, overlap ownership and
-cross-FOV matching are §2.10's.
+The development outline §2.9 (the Linear document "Chapter II development outline and
+priorities", copied by the operator session on 2026-10-05) is settled scope. Its task
+group 4, "Assignment and compartments" (default direct territory assignment, optional
+recorded expansion, explicit unassigned molecules, validated nucleus–cell correspondence,
+optional whole-cell/nuclear/cytoplasmic counts and the agreed configurable exclusion), and
+the assignment part of task group 5, "Persistence and downstream outputs", are what this
+page specifies. Its rules, and where this page follows each:
+
+* Direct assignment uses supplied cell territories and keeps molecules outside them as
+  unassigned ("Direct assignment and statuses").
+* Optional label expansion is a separate operation applied once, with the original and
+  the expanded masks preserved; physical distance when calibrated, explicit pixel or voxel
+  units otherwise; volumetric expansion is distinguished from the legacy per-plane one;
+  how the territories were obtained is recorded ("Label expansion").
+* Ambiguous correspondence and nuclei extending outside their cells are flagged;
+  whole-cell counts are kept and the affected compartment counts withheld pending
+  resolution; no automatic clipping or repair ("Nucleus–cell correspondence",
+  "Compartments").
+* With nuclear segmentation, cells without a matched detected nucleus are excluded from
+  the filtered cell table and the expression matrices by default, with an explicit reason
+  and an option to keep them, and never without nuclear masks. Ambiguous correspondence is
+  a separate status, not absence of a detected nucleus. Excluded cells keep their masks,
+  metadata and molecule assignments; their status reaches their molecules, which stay
+  distinct from molecules outside all territories. Possible cell residue is the filtering
+  rationale, not a confirmed biological identity. A cell without a detected nucleus never
+  has all its molecules classified as cytoplasmic ("Exclusion of cells without a nucleus",
+  "Compartments").
+
+The issue adds: there is no size or count filter, no probabilistic or transcript-based
+assignment and no second exporter; assignment is FOV-local, and stitching, global
+coordinates, overlap ownership and cross-FOV matching are §2.10's.
 
 ## Terms
 
 * A **molecule** is one row of the final molecule table: a read with its spot identity
   `(spot_namespace, spot_id)`, its zero-based position `z, y, x` and its `gene_id`.
 * A **territory** is the set of voxels of one positive value of the label image that
-  assign samples (the cell run's labels, or their expansion).
+  assign samples: the cell run's labels (the **original territories**), or their expansion
+  by assign (the **expanded territories**).
 * A **cell** is one territory, identified by `(cell_namespace, cell_id)`: the cell run's
   `label_namespace` and the label value.
 * A **nucleus** is one object of the nucleus run, identified by the nucleus run's
   `label_namespace` and its value.
 * **Correspondence** relates nuclei to cells. A nucleus is **matched** to at most one
-  cell; a cell has zero or more matched nuclei.
+  cell; a cell has zero or more matched nuclei. Each cell has one **correspondence
+  status**: `matched`, `ambiguous`, `no_nucleus` or `unavailable`.
 * A **compartment** is the whole cell, its nuclear part (the territory inside its matched
   nuclei) or its cytoplasmic part (the rest of the territory).
 * An **assignment status** says what assign decided for one molecule; a **cell status**
@@ -85,7 +115,7 @@ New names under N1:
 | Molecule input | `MoleculeTable`; `molecule_table(detection, reads, *, genes, population="final")`; `molecule_table_from_csv(path, *, spot_namespace, genes)` (legacy one-based CSV) | frozen dataclass, functions |
 | Config | `AssignmentConfig`, `CorrespondenceConfig` | frozen dataclasses |
 | Expansion | `ExpandLabelsConfig` and `expand_labels` of {doc}`segmentation-contract`, unchanged | reused |
-| Statuses | `ASSIGNMENT_STATUSES = ("assigned", "unassigned", "excluded_cell", "outside_grid")`; `CELL_STATUSES = ("kept", "excluded_no_nucleus")`; `NUCLEUS_STATUSES = ("matched", "ambiguous", "no_cell")`; `COMPARTMENT_STATES = ("available", "withheld", "unavailable")` | tuples |
+| Statuses | `ASSIGNMENT_STATUSES = ("assigned", "unassigned", "excluded_cell", "outside_grid")`; `CELL_STATUSES = ("kept", "excluded_no_nucleus")`; `CELL_CORRESPONDENCE = ("matched", "ambiguous", "no_nucleus", "unavailable")`; `NUCLEUS_STATUSES = ("matched", "ambiguous", "no_cell")`; `COMPARTMENT_STATES = ("available", "withheld", "no_nucleus", "unavailable")` | tuples |
 | Sampling | `sample_labels(labels, positions_zyx, *, geometry)` | function |
 | Correspondence | `match_nuclei(nuclei, cells, *, config)` | function |
 | Coordination | `FOV.assign(config=AssignmentConfig(), *, cells="cell", nuclei=None, name="default", population="final", correspondence=None, checkpoints=None)`, `FOV.assignment_results`, `FOV.load_assignment(name)` | method, attribute, method |
@@ -103,7 +133,8 @@ def assign_molecules(molecules: MoleculeTable, cells: SegmentationResult, *,
 
 @dataclass(frozen=True)
 class AssignmentConfig:
-    expansion: ExpandLabelsConfig | None = None       # applied once to the cell territories
+    expansion: ExpandLabelsConfig | None = None       # applied once, here, to the cell territories
+    legacy_pixel_expansion: bool = False               # allow a pixel distance on a calibrated grid (legacy adapter only)
     correspondence: CorrespondenceConfig = CorrespondenceConfig()
     exclude_cells_without_nucleus: bool | None = None  # None: True when nuclei are given
 
@@ -118,8 +149,9 @@ the correspondence, partitions compartments, applies the exclusion, counts and r
 `AssignmentResult`. It never reads or writes files, never segments and never reads a tile
 configuration. `cells` is the label image whose objects become cells: a `cell` run, or a
 `nucleus` run whose objects serve as territories (the legacy nucleus-only case), usually
-with `expansion`; the record names the territory source (`cells`, `nuclei` or
-`expanded_nuclei`).
+with `expansion`. The record says how the territories were obtained
+(`territory_source`): the run's name and target, whether it was segmented or imported
+(its record's `methods` or `import` entry), and whether assign expanded it.
 
 ### Inputs
 
@@ -176,9 +208,14 @@ In this order, before any sampling; each uses only the arguments:
 6. **Identity.** The first four entries of `cells.label_namespace` (and of
    `nuclei.label_namespace`) equal the molecules' FOV identity, else `ValueError` naming
    both.
-7. **One expansion.** With `config.expansion` set, the cell run's
-   `record["operations"]` must list no `expand_labels`, else `ValueError("labels of run
-   'cell' were already expanded by segmentation; expand once")`.
+7. **One expansion, with both masks.** The cell run's `record["operations"]` must list
+   no `expand_labels`, whether or not `config.expansion` is set, else
+   `ValueError("labels of run 'cell' were expanded by segmentation, which keeps no
+   original mask; run segment without the expansion and set AssignmentConfig.expansion")`.
+   An imported mask has no operations and is a supplied territory as it stands.
+   With `config.expansion`: `unit="um"` needs a calibrated grid (`ValueError` otherwise);
+   `unit="pixel"` on a calibrated grid needs `legacy_pixel_expansion=True` (`ValueError`
+   otherwise) ("Label expansion").
 8. **Supplied correspondence.** Validated as in "Nucleus–cell correspondence".
 
 ### What assign records
@@ -205,7 +242,7 @@ in `AssignmentResult.record`:
   "dataset_id": "...", "sample_id": "...", "fov_id": "FOV_001", "subtile_id": null,
   "name": "default",
   "cell_namespace": "[\"dataset\", \"sample\", \"FOV_001\", null, \"cell\"]",
-  "territory_source": "cells",
+  "territory_source": {"run": "cell", "target": "cell", "origin": "segmented", "expanded_by_assign": true},
   "grid": {"shape_zyx": [50, 512, 512], "metadata": {"frame_id": "..."}, "source": "fov:round1",
            "sha256": "...", "check": "checked"},
   "inputs": {
@@ -217,17 +254,22 @@ in `AssignmentResult.record`:
                "record_sha256": "...", "file_sha256": "...", "operations": []},
     "correspondence": {"source": "overlap", "sha256": null}
   },
-  "config": {"expansion": {"distance": 4, "unit": "pixel", "mode": "planar"},
+  "config": {"expansion": {"distance": 0.7776, "unit": "um", "mode": "planar"}, "legacy_pixel_expansion": false,
              "correspondence": {"match_fraction": 0.5, "outside_tolerance": 0.0},
-             "exclude_cells_without_nucleus": true, "exclusion_source": "default"},
+             "exclude_cells_without_nucleus": true, "exclusion_source": "default",
+             "exclusion_rationale": "possible cell residue; not a biological identity"},
   "sampling": {"rule": "floor(c + 0.5)", "sampled_axes": "zyx"},
-  "expansion": {"applied_by": "assign", "function": "expand_labels", "voxels_added": 51234,
-                "original_sha256": "...", "expanded_sha256": "..."},
+  "expansion": {"function": "expand_labels", "mode": "planar", "unit": "um", "distance": 0.7776,
+                "spacing_yx": [0.1944, 0.1944], "voxels_added": 51234,
+                "original": {"path": "../../segmentation/cell/labels.tif", "sha256": "..."},
+                "expanded": {"path": "territories.tif", "sha256": "..."}},
   "calibration": "known", "calibration_source": "grid", "size_unit": "micrometer^3",
   "counts": {"molecules": 1234, "assigned": 1000, "unassigned": 200, "excluded_cell": 30, "outside_grid": 4,
              "cells": 425, "cells_kept": 410, "cells_excluded": 15, "nuclei": 430,
-             "compartments": {"available": 380, "withheld": 30, "unavailable": 0},
-             "assigned_by_compartment": {"nucleus": 400, "cytoplasm": 540, "withheld": 60, "unavailable": 0}},
+             "correspondence": {"matched": 400, "ambiguous": 10, "no_nucleus": 15, "unavailable": 0},
+             "compartments": {"available": 370, "withheld": 40, "no_nucleus": 0, "unavailable": 0},
+             "assigned_by_compartment": {"nucleus": 400, "cytoplasm": 520, "withheld": 80, "no_nucleus": 0,
+                                         "unavailable": 0}},
   "outcome": "ok",
   "files": {"molecules": {"path": "molecules.csv", "sha256": "..."}, "cells": {"path": "cells.csv", "sha256": "..."},
             "counts": {"path": "counts.csv", "sha256": "..."}, "nuclei": {"path": "nuclei.csv", "sha256": "..."},
@@ -236,6 +278,7 @@ in `AssignmentResult.record`:
 }
 ```
 
+`counts.compartments` covers the kept cells; the excluded cells are the `no_nucleus` ones.
 `outcome` is `ok`, or `empty` when the territory image has no object; `software` has the
 content of `run.json`'s `code` and `environment` ({doc}`checkpoints`). The numbers above
 are an illustration of the layout, not results.
@@ -272,6 +315,7 @@ class AssignmentResult:
     counts: pd.DataFrame         # long counts ("Count accounting")
     nuclei: pd.DataFrame | None  # one row per nucleus ("Nucleus–cell correspondence")
     territories: np.ndarray | None  # uint32 ZYX expanded territories, when assign expanded
+    original_territories: np.ndarray | None  # the cell run's labels, when assign expanded
     genes: tuple[str, ...]
     cell_namespace: str
     record: Mapping[str, Any]
@@ -282,7 +326,8 @@ class AssignmentResult:
 `__post_init__` checks the count identities of "Count accounting". `matrix` returns a
 dense cells×genes count matrix (`int64`) in `genes` order with its cell table rows, for
 `whole`, `nucleus` or `cytoplasm`; for a compartment, rows of cells whose compartments are
-not `available` are absent, never zero.
+not `available` are absent, never zero. `cells="all"` adds the excluded cells to the
+`whole` matrix for the before/after totals.
 
 ## Coordinate sampling
 
@@ -350,35 +395,59 @@ cell.
 | `assignment_status` | string | One of `ASSIGNMENT_STATUSES`. |
 | `cell_id` | UInt32 | The territory value, or null. |
 | `in_expansion` | boolean | True when the territory value comes only from assign's expansion (the original territory value is 0); null when assign did not expand. |
+| `original_cell_id` | UInt32 | The original territory value at the voxel (0 in the expansion band); null when assign did not expand or outside the grid. |
 | `nucleus_id` | UInt32 | The nucleus value at the voxel, 0 outside every nucleus; null without nuclei or outside the grid. |
-| `compartment` | string | `nucleus`, `cytoplasm`, `withheld` or `unavailable` for `assigned` molecules ("Compartments"); null otherwise. |
+| `compartment` | string | `nucleus` or `cytoplasm` for `assigned` molecules of cells whose compartments are available; otherwise the cell's state, `withheld`, `no_nucleus` or `unavailable` ("Compartments"); null when not `assigned`. |
 
 The cell key is `(cell_namespace, cell_id)`; `cell_namespace` is the cell run's
 `label_namespace`, stored once in the record.
 
 ## Label expansion
 
-The expansion is optional and applied once, through `expand_labels` of
-{doc}`segmentation-contract` with an `ExpandLabelsConfig` (`distance`, `unit` `pixel` or
-`um`, `mode` `planar` or `volumetric`; no default distance). Exactly one place applies it:
+The expansion is optional and is applied once, by assign only
+(`AssignmentConfig.expansion`), through `expand_labels` of {doc}`segmentation-contract`
+with an `ExpandLabelsConfig` (`distance`, `unit` `pixel` or `um`, `mode` `planar` or
+`volumetric`; no default distance). Assign is the place where the original label image is
+always at hand: it is the cell run's `labels`, which segment saves as
+`segmentation/<run>/labels.tif`. So both masks exist in every case this contract allows:
 
-* **In assign** (`AssignmentConfig.expansion`). Assign expands the cell territories once,
-  refuses a cell run whose record already lists `expand_labels` (check 7), and keeps both
-  territories: the original is the cell run's labels (linked by their SHA-256), the
-  expanded one is `AssignmentResult.territories`, saved as `territories.tif`. Each molecule
-  records `in_expansion`; each cell records `size_voxels` (original) and
-  `expanded_size_voxels`. The record holds the config, the unit and mode, the number of
-  voxels added and both hashes. Nuclei are never expanded.
-* **In segmentation** (a run's `operations`, W-307). Assign then expands nothing, records
-  `"expansion": {"applied_by": "segmentation", …}` from the run's record, and the
-  original territory is known only by the input hash in that operation's record:
-  `in_expansion` and `expanded_size_voxels` are null.
+| Mask | Array | Saved as | Identity | Hash |
+| --- | --- | --- | --- | --- |
+| Original territories | `cells.labels`, also `AssignmentResult.original_territories` | the cell run's `segmentation/<run>/labels.tif`; when the cell run has no saved file with a recorded SHA-256 (a direct `segment` or `import_labels` result, or `FOV.segment` without checkpoints), `FOV.assign` writes `original_territories.tif` itself | `(cell_namespace, value)` | the labels' SHA-256 from the cell run's record |
+| Expanded territories | `AssignmentResult.territories` | `assignment/<name>/territories.tif` | the same `(cell_namespace, value)`: `expand_labels` never creates, removes or renumbers a value, so a cell keeps its `cell_id` in both | SHA-256 in `assignment.json` |
+
+Rules:
+
+* **No expansion in segmentation for assignment.** A cell run whose record lists
+  `expand_labels` is refused (check 7), because W-307's saved format keeps only the label
+  image after its operations, so its original mask would be lost. W-307's `expand_labels`
+  operation stays available for other uses of a label image; its results are not
+  assignment territories. An imported mask is a supplied territory as it stands; if another
+  tool expanded it, that is the import's provenance, recorded with the import.
+* **Units.** On a calibrated grid (the cell grid's metadata with `spacing_zyx` and
+  `spatial_unit`, or, for a plane on a projected grid, the molecule grid it was projected
+  from, as for the sizes in "Cell table"), the distance is physical (`unit="um"`): `planar` converts it with the Y and X spacing,
+  `volumetric` with the ZYX spacing. On an uncalibrated grid the unit must be explicit
+  pixels (`unit="pixel"`; `um` raises). A `pixel` distance on a calibrated grid is accepted
+  only with `legacy_pixel_expansion=True`, which the workflow adapter sets for the legacy
+  `dilation_distance`, and the record then holds the distance's physical equivalent in Y
+  and X.
+* **Mode.** `planar` is the legacy per-plane expansion (Y and X only, plane by plane);
+  `volumetric` grows in 3D. The record names the mode.
+* **Record.** `"expansion"` holds the config, the unit and mode, the spacing used and the
+  physical equivalent, the number of voxels added, the paths and SHA-256 of both masks,
+  and `territory_source` says the territories were expanded by assign.
+* **Results.** Every original territory is contained in its expanded territory. Each
+  molecule records `in_expansion` and `original_cell_id`; each cell records
+  `size_voxels` and the centroid of the original territory, and `expanded_size_voxels` and
+  `expanded_centroid_*` of the expanded one. Nuclei are never expanded. Without
+  `expansion`, the territories are the cell run's labels and the expanded columns are null.
 
 `expand_labels(mode="planar", unit="pixel", distance=d)` reproduces today's
-`reads_assignment.py` expansion, and the golden digests with expansion stay. A label image
-is never expanded twice: the legacy pair of expansions (segmentation's `distance`, then
-assignment's `dilation_distance`) is not one expansion (the golden test shows 4 then 2
-differs from 6), and "Workflow configuration" states what the adapter does with it.
+`reads_assignment.py` expansion, and the golden digests with expansion stay. The legacy
+pair of expansions (segmentation's `distance`, then assignment's `dilation_distance`) is
+not one expansion (the golden test shows 4 then 2 differs from 6), and "Workflow
+configuration" states what the adapter does with a legacy expansion in segmentation.
 
 ## Nucleus–cell correspondence
 
@@ -414,6 +483,19 @@ whole-cell counts stay, its nuclear and cytoplasmic counts are not produced, and
 moves, trims, merges or re-matches a nucleus or a cell to repair it. `several_nuclei` does
 not withhold anything.
 
+**Correspondence status of a cell** (`CELL_CORRESPONDENCE`), one per cell:
+
+| Status | When |
+| --- | --- |
+| `matched` | at least one nucleus is matched to the cell |
+| `ambiguous` | no nucleus is matched to it, and at least one ambiguous nucleus overlaps it |
+| `no_nucleus` | no nucleus is matched to it and no ambiguous nucleus overlaps it: no detected nucleus belongs to it. It may still hold voxels of a nucleus matched to another cell, which raises `foreign_nucleus`. |
+| `unavailable` | no `nuclei` were given |
+
+Ambiguous correspondence is a separate status, not the absence of a detected nucleus: an
+`ambiguous` cell is never treated as `no_nucleus`, never excluded by the no-nucleus rule,
+and always carries `ambiguous_nucleus`, so its compartments are withheld.
+
 **Thresholds.**
 
 | Option | `match_fraction`, `outside_tolerance` | Effect on the golden digests | Effect on the existing outputs |
@@ -433,8 +515,11 @@ tolerance belongs to Jiahao at the W-309 gate. With C1, the value agreement of a
 every value must exist in its image (`ValueError` naming the missing values), a nucleus
 appears at most once, and a cell may appear several times. Supplied rows replace the
 majority rule; the outside share is still computed from overlap, so the `outside` flag and
-the three cell flags apply as above, and nuclei absent from the table are `no_cell`. The
-record holds `"correspondence": {"source": "supplied", "sha256": …}`.
+the three cell flags apply as above. A nucleus absent from the table is matched to no
+cell, and its status follows from overlap exactly as for a derived one: `ambiguous` when it
+overlaps a cell, `no_cell` otherwise. A table equal to the derived matches therefore gives
+the derived result. The record holds `"correspondence": {"source": "supplied", "sha256":
+…}`.
 
 **Nucleus table.** `AssignmentResult.nuclei`, one row per nucleus: `nucleus_id` (UInt32),
 `size_voxels` (int64), `status` (`matched`, `ambiguous`, `no_cell`), `cell_id` (UInt32,
@@ -451,43 +536,72 @@ seeded).
 | nucleus | the territory of `c` inside the nuclei matched to `c` | `assigned` molecules of `c` whose `nucleus_id` is a nucleus matched to `c` |
 | cytoplasm | the territory of `c` outside those nuclei | the other `assigned` molecules of `c` |
 
-When each is available, recorded per cell in `compartments`:
+When each is available, recorded per cell in `compartments` (`COMPARTMENT_STATES`), in
+this order of precedence:
 
 * `unavailable`: no `nuclei` were given. Only whole-cell counts exist; every `assigned`
   molecule has `compartment = "unavailable"`.
-* `withheld`: nuclei were given and the cell carries `ambiguous_nucleus`,
-  `nucleus_outside_cell` or `foreign_nucleus`. Only whole-cell counts exist; its molecules
-  have `compartment = "withheld"`.
-* `available`: nuclei were given and none of those flags applies; nuclear and cytoplasmic
-  counts exist and sum to the whole-cell counts. A kept cell without a nucleus (with the
-  exclusion off) is `available` with a measured nuclear count of 0.
+* `no_nucleus`: nuclei were given and the cell's correspondence is `no_nucleus` (it is
+  kept only when the exclusion is off). Only whole-cell counts exist. Assign does not infer
+  that the cell's molecules are cytoplasmic: a cell without a detected nucleus has no
+  nuclear and no cytoplasmic count, and its molecules have `compartment = "no_nucleus"`.
+* `withheld`: the cell's correspondence is `matched` or `ambiguous` and it carries
+  `ambiguous_nucleus`, `nucleus_outside_cell` or `foreign_nucleus`. Only whole-cell counts
+  exist, pending resolution; its molecules have `compartment = "withheld"`.
+* `available`: the cell's correspondence is `matched` and none of the three flags applies.
+  Nuclear and cytoplasmic counts exist and sum to the whole-cell counts.
 
 Because a cell without `foreign_nucleus` contains no voxel of another cell's nucleus, every
 nuclear voxel inside an `available` cell belongs to one of its own nuclei, so the partition
-is exact. Withheld counts are absent, not zero (W-168: missing expression is never a
-measured zero).
+is exact.
+
+**Not available is never zero** (W-168: missing expression is never a measured zero):
+
+* In `counts`, an `available` cell has `nucleus` and `cytoplasm` rows for its nonzero
+  entries, so a gene without a row there is a measured zero. A cell whose `compartments` is
+  `withheld`, `no_nucleus` or `unavailable` has no `nucleus` or `cytoplasm` row at all, and
+  its `compartments` value in the cell table says why.
+* `matrix("nucleus")` and `matrix("cytoplasm")` return only `available` cells (with zeros
+  for measured zeros); the other cells are absent, not zero rows.
+* In `raw.h5ad`, the `nucleus` and `cytoplasm` layers hold 0.0 for a measured zero and NaN
+  for every gene of a cell whose compartments are not available; the `compartments` and
+  `correspondence` obs columns say why.
+* Per molecule, `compartment` holds the cell's state (`withheld`, `no_nucleus`,
+  `unavailable`) instead of `nucleus` or `cytoplasm`.
+
+`withheld` and `no_nucleus` stay apart: `withheld` follows a correspondence problem (an
+ambiguous nucleus, a nucleus outside its cell, a foreign nucleus) that a later resolution
+may settle; `no_nucleus` records that no detected nucleus belongs to the cell.
 
 ## Exclusion of cells without a nucleus
 
-When `nuclei` are given, a cell with `n_nuclei = 0` (no matched nucleus, including a cell
-whose only nucleus is ambiguous) is excluded by default. Without nuclei nothing is
-excluded.
+When `nuclei` are given, a cell whose correspondence is `no_nucleus` (no matched detected
+nucleus, and no ambiguous nucleus over it) is excluded by default from the filtered cell
+table, the counts and the expression matrices, with the reason `no_matched_nucleus`. A cell
+whose correspondence is `ambiguous` is not excluded: it is kept with its whole-cell counts
+and withheld compartments. Without nuclei nothing is excluded and the rule is not applied.
+The reason is a filtering rationale (the territory may be cell residue), not a confirmed
+biological identity, and the record says so (`"exclusion_rationale": "possible cell residue;
+not a biological identity"`).
 
 | Option | Default | Effect on the golden digests | Effect on the existing outputs |
 | --- | --- | --- | --- |
-| **X1. On when nuclei are given (recommended)** | `exclude_cells_without_nucleus=None` resolves to `True` with nuclei and `False` without; recorded with `"exclusion_source": "default"`. | None: the golden test and every legacy configuration use one label image and no nuclei, so nothing is excluded. | None for the legacy rule. In a two-run plan, cells without a matched nucleus leave the count matrix and `raw.h5ad`; they stay in the cell table and their molecules are `excluded_cell`. |
-| X2. Off by default | `False`; exclusion only on request. | None. | None for the legacy rule; two-run plans count territories without nuclei, which the planning decision treats as a likely segmentation artefact. |
+| **X1. On when nuclei are given (recommended)** | `exclude_cells_without_nucleus=None` resolves to `True` with nuclei and `False` without; recorded with `"exclusion_source": "default"`. | None: the golden test and every legacy configuration use one label image and no nuclei, so nothing is excluded. | None for the legacy rule. In a two-run plan, `no_nucleus` cells leave the count tables and `raw.h5ad`; they stay in the complete cell table with their reason, and their molecules are `excluded_cell`. |
+| X2. Off by default | `False`; exclusion only on request. | None. | None for the legacy rule; two-run plans keep `no_nucleus` cells in the counts, with whole-cell counts only (`compartments = "no_nucleus"`). |
 | X3. Required when nuclei are given | `None` with nuclei raises `ValueError` asking for an explicit value. | None. | None for the legacy rule; every two-run configuration must state it. |
 
-**Recommendation: X1**, the default the planning decision sets. `False` turns it off and
-is recorded as `"exclusion_source": "config"`.
+**Recommendation: X1**, the default the planning decision and the outline set. `False`
+keeps the cells and is recorded as `"exclusion_source": "config"`.
 
 How the status reaches molecules and counts: the cell's `status` becomes
-`excluded_no_nucleus`; every molecule in its territory becomes `excluded_cell` (with its
-`cell_id`), not `assigned`; the cell has no row in the count tables and no row in `X`; its
-territory stays in the label image and its row stays in the cell table, with
-`n_molecules` counting its molecules, so the totals before and after the exclusion can be
-reported. No size or count filter exists, here or anywhere in assign.
+`excluded_no_nucleus` and its `exclusion_reason` `no_matched_nucleus`; every molecule in
+its territory becomes `excluded_cell` (with its `cell_id`), not `assigned`, and stays
+distinct from `unassigned` molecules outside all territories; the cell has no row in the
+count tables and no row in `X`. Its masks (original and expanded territories) are kept
+unchanged, its row stays in the complete cell table with its metadata and `n_molecules`,
+and its molecules keep their assignment, so the totals before and after the exclusion can
+be reported. The filtered cell table is the rows with `status == "kept"`. No size or count
+filter exists, here or anywhere in assign.
 
 ## Cell table
 
@@ -498,14 +612,17 @@ increasing `cell_id`:
 | --- | --- | --- |
 | `cell_id` | UInt32 | Label value. |
 | `status` | string | `kept` or `excluded_no_nucleus`. |
+| `exclusion_reason` | string | `no_matched_nucleus` for an excluded cell; null otherwise. |
 | `size_voxels` | int64 | Voxels of the original territory (pixels for a plane). |
 | `expanded_size_voxels` | Int64 | Voxels of the expanded territory; null unless assign expanded. |
 | `size_physical`, `expanded_size_physical` | float64 | The same times the voxel volume (`spacing_z × spacing_y × spacing_x`), or the pixel area (`spacing_y × spacing_x`) for a plane; NaN when the calibration is unknown. |
 | `centroid_z`, `centroid_y`, `centroid_x` | float64 | Mean voxel index of the original territory, zero-based on the reference grid (0.0 in Z for a plane); not truncated. |
+| `expanded_centroid_z`, `expanded_centroid_y`, `expanded_centroid_x` | float64 | The same for the expanded territory; NaN unless assign expanded. |
 | `n_molecules` | int64 | Molecules in the territory (`assigned` or `excluded_cell`). |
 | `n_nuclei` | Int64 | Matched nuclei; null without nuclei. |
+| `correspondence` | string | One of `CELL_CORRESPONDENCE`. |
 | `correspondence_flags` | string | `;`-joined flags (`several_nuclei`, `ambiguous_nucleus`, `nucleus_outside_cell`, `foreign_nucleus`); empty when none; null without nuclei. |
-| `compartments` | string | `available`, `withheld` or `unavailable`. |
+| `compartments` | string | One of `COMPARTMENT_STATES`. |
 
 The record holds `size_unit` (for example `micrometer^3`, or `micrometer^2` for a plane)
 and `calibration`: `known` when the grid metadata has `spacing_zyx` and `spatial_unit`,
@@ -526,10 +643,10 @@ on every fixture of the validation design. With `M` the input molecules:
    `whole`, the number of `assigned` molecules of `c` with gene `g`. Summed over cells and
    genes it equals `n_assigned`; per cell it equals the cell's `n_molecules`.
 3. **Compartments.** For each kept cell with `compartments == "available"` and each gene,
-   `whole = nucleus + cytoplasm`. Cells whose compartments are `withheld` or
+   `whole = nucleus + cytoplasm`. Cells whose compartments are `withheld`, `no_nucleus` or
    `unavailable` have no `nucleus` or `cytoplasm` rows. Hence
-   `Σ nucleus + Σ cytoplasm + Σ_{c not available} whole(c) = n_assigned`, and per molecule
-   `#nucleus + #cytoplasm + #withheld + #unavailable = n_assigned`.
+   `Σ nucleus + Σ cytoplasm + Σ_{c kept, not available} whole(c) = n_assigned`, and per
+   molecule `#nucleus + #cytoplasm + #withheld + #no_nucleus + #unavailable = n_assigned`.
 4. **Exclusion.** Excluded cells have no count rows, and the sum of their `n_molecules`
    equals `n_excluded_cell`.
 5. **Genes.** Every counted gene is in `genes`; no molecule is counted twice and none is
@@ -543,7 +660,7 @@ on every fixture of the validation design. With `M` the input molecules:
 
 | Option | Layout | Effect on the golden digests | Effect on the existing outputs |
 | --- | --- | --- | --- |
-| **L1. Tables and a JSON record beside the segmentation runs (recommended)** | `<checkpoint dir>/<fov_id>/assignment/<name>/`: `molecules.<fmt>`, `cells.<fmt>`, `counts.<fmt>`, `nuclei.<fmt>` (with nuclei), `territories.tif` (only when assign expanded; `uint32` ZYX with `ImageMetadata`, written by `save_volume`) and `assignment.json`. `<fmt>` is CSV or Parquet through the checkpoint table writer ({doc}`checkpoints`, "Table formats"), so tables round-trip exactly. | None: the golden test pins arrays and tables, not files. | `run.json`, the `FOV.run` checkpoints and W-307's `segmentation/<run>/` folders are untouched. The workflow keeps `expr/{fovID}/raw.h5ad` and `expr/{fovID}/reads_assignment.csv`, written by the adapter from the result, with the changes listed under "Workflow configuration". |
+| **L1. Tables and a JSON record beside the segmentation runs (recommended)** | `<checkpoint dir>/<fov_id>/assignment/<name>/`: `molecules.<fmt>`, `cells.<fmt>` (every cell, kept and excluded), `counts.<fmt>`, `nuclei.<fmt>` (with nuclei), `territories.tif` (only when assign expanded), `original_territories.tif` (only when assign expanded and the cell run has no saved label file) and `assignment.json`. Label images are `uint32` ZYX with `ImageMetadata`, written by `save_volume`. `<fmt>` is CSV or Parquet through the checkpoint table writer ({doc}`checkpoints`, "Table formats"), so tables round-trip exactly. | None: the golden test pins arrays and tables, not files. | `run.json`, the `FOV.run` checkpoints and W-307's `segmentation/<run>/` folders are untouched. The workflow keeps `expr/{fovID}/raw.h5ad` and `expr/{fovID}/reads_assignment.csv`, written by the adapter from the result, with the changes listed under "Workflow configuration". |
 | L2. Per-FOV AnnData as the store | `assignment/<name>/assignment.h5ad`: `X` whole-cell counts, `layers` `nucleus` and `cytoplasm`, `obs` the cell table, `uns` the record; molecules and nuclei as CSV beside it. | None. | One file per FOV for cells, but `anndata` becomes a dependency of the assign entry (today it is locked only through the `spatialdata` extra), and the H5AD duplicates what `raw.h5ad` already carries. |
 | L3. Per-FOV SpatialData | A Zarr store with the territories, points and table. | None. | `spatialdata` becomes a dependency of the assign entry, and the W-168 sample-export contract rules out a per-FOV SpatialData API and export fan-out. |
 
@@ -557,9 +674,9 @@ SHA-256 and returns the `AssignmentResult`.
 | Object | Key | Link |
 | --- | --- | --- |
 | Molecule | `(spot_namespace, spot_id)` | to its read and spot rows in `pre_qc` and `candidates`; to its cell by `(cell_namespace, cell_id)`, nullable |
-| Cell | `(cell_namespace, cell_id)`; `cell_namespace` is the cell run's `label_namespace` | to its territory voxels in `segmentation/<run>/labels.tif` (and `territories.tif`), by value |
+| Cell | `(cell_namespace, cell_id)`; `cell_namespace` is the cell run's `label_namespace` | to its original territory in `segmentation/<run>/labels.tif` (or `original_territories.tif`) and to its expanded territory in `territories.tif`, by the same value |
 | Nucleus | `(nucleus run label_namespace, nucleus_id)` | to `segmentation/<nucleus run>/labels.tif`; to its cell by `cell_id` |
-| Assignment | `assignment.json` | the SHA-256 of the molecule table, both label files, both segmentation records, the grid and every written file |
+| Assignment | `assignment.json` | the SHA-256 of the molecule table, the cell and nucleus label files, both segmentation records, the original and expanded territories, the grid and every written file |
 
 **AnnData and SpatialData.** Assignment adds no exporter:
 
@@ -589,13 +706,15 @@ by position.
 
 What §2.10 receives from assign, per FOV:
 
-* the cell table: `(cell_namespace, cell_id)`, `centroid_z/y/x` in zero-based index
-  coordinates of the FOV's reference grid, sizes, `status`, `n_nuclei`, the flags and
+* the cell table: `(cell_namespace, cell_id)`, `centroid_z/y/x` (and
+  `expanded_centroid_*`) in zero-based index coordinates of the FOV's reference grid, sizes,
+  `status` and `exclusion_reason`, `correspondence`, `n_nuclei`, the flags and
   `compartments`;
 * the grid (`ReferenceGrid`: shape and `ImageMetadata`, whose origin, spacing and
   direction place the FOV), with which §2.10 maps centroids and territories into sample
   coordinates;
-* the territory label files and their SHA-256, for overlap and cross-FOV matching;
+* the original and expanded territory label files and their SHA-256, for overlap and
+  cross-FOV matching;
 * the molecule table with each molecule's status and cell key, and the count tables.
 
 What stays in the legacy script until §2.10 replaces it: the tile-configuration read
@@ -625,7 +744,7 @@ assignment:
   cells: cell              # a segmentation run name
   nuclei: nucleus          # a segmentation run name, or null
   population: final        # final (accepted reads) or called
-  expansion: null          # or {distance: 4, unit: pixel, mode: planar}
+  expansion: null          # or {distance: 0.78, unit: um, mode: planar}
   correspondence: {match_fraction: 0.5, outside_tolerance: 0.0}
   exclude_cells_without_nucleus: null   # null: on when nuclei is set
 ```
@@ -642,24 +761,27 @@ name, inputs and outputs.
 
 | Legacy input or key | Translation |
 | --- | --- |
-| `images/stardist_segmentation/{fovID}.tif` | `import_labels` with the target the segmentation adapter infers (W-307: `cell` for the `overlay` input, else `nucleus`); its grid is declared from the file's shape and the configured `voxel_size_z`, `voxel_size_xy`, recorded as declared. |
+| `images/stardist_segmentation/{fovID}.tif` | `import_labels` with the target the segmentation adapter infers (W-307: `cell` for the `overlay` input, else `nucleus`); its grid is declared from the file's shape and the configured `voxel_size_z`, `voxel_size_xy`, recorded as declared. When `rules.stardist_segmentation.parameters.expand_labels` is true, the file was expanded in segmentation and no original mask exists: the adapter raises `ValueError` naming that key and the replacement (set it to false and give the distance as `reads_assignment.parameters.dilation_distance` with `expand_labels: true`, so assign expands once and keeps both masks). |
 | `signal/{fovID}_goodSpots.csv` | `molecule_table_from_csv` with the FOV's `spot_namespace` and the codebook's genes; integer and float coordinates are both accepted. |
 | `documents/genes.csv` | Checked against the codebook's genes; a gene of the CSV absent from the codebook, or the reverse, raises `ValueError` naming them. |
 | `parameters.expand_labels: false` | `expansion: null`; `dilation_distance` is ignored and recorded. |
-| `parameters.expand_labels: true`, `dilation_distance: d` | `expansion: {distance: d, unit: pixel, mode: planar}`, when `rules.stardist_segmentation.parameters.expand_labels` is false. |
-| both `expand_labels` keys true | `ValueError` naming both keys: the legacy pair of expansions is not one expansion (golden test), and a label image is expanded once. The message names the replacement (one of the two keys, or `assignment.expansion`). |
+| `parameters.expand_labels: true`, `dilation_distance: d` | `expansion: {distance: d, unit: pixel, mode: planar}` with `legacy_pixel_expansion=True` (the declared grid is calibrated), when `rules.stardist_segmentation.parameters.expand_labels` is false. |
+| both `expand_labels` keys true | `ValueError` naming both keys (the row of the label file above): the legacy pair of expansions is not one expansion (golden test), and a label image is expanded once, by assign. |
 | `images/DAPI/{fovID}.tif` | Read only for the diagnostic plots. |
 | `output/tile_config_{sample}.csv` | Not read by the package; the adapter applies the legacy overlap filter and global coordinates to the result (§2.10 boundary). |
 
-The outputs keep their names. `raw.h5ad` keeps its legacy `obs` columns (`sample`,
-`fov_id`, `volume` = the territory's voxels, `fov_x/y/z` = the truncated centroid,
-`seg_label` = `cell_id`, `global_*`) and gains `size_voxels`, `size_physical`,
-`centroid_*`, `n_molecules`, `n_nuclei`, `correspondence_flags`, `compartments`, the
-layers `nucleus` and `cytoplasm` (float64, NaN rows for cells whose compartments are not
-available) when nuclei are given, and the record in `uns["assignment"]`. `X` stays float64
-whole-cell counts of the kept cells. `reads_assignment.csv` keeps its columns and gains
-`spot_id`, `assignment_status`, `cell_id`, `in_expansion`, `nucleus_id` and
-`compartment`.
+The outputs keep their names. `raw.h5ad` keeps its legacy `obs` columns with their
+legacy meaning, computed on the territories assign samples (the expanded ones when assign
+expanded, as today): `sample`, `fov_id`, `volume` = `expanded_size_voxels` (or
+`size_voxels` without expansion), `fov_x/y/z` = the truncated `expanded_centroid_*` (or
+`centroid_*`), `seg_label` = `cell_id`, `global_*`. It gains `size_voxels`,
+`expanded_size_voxels`, `size_physical`, `centroid_*`, `n_molecules`, `n_nuclei`,
+`correspondence`, `correspondence_flags`, `compartments`, the layers `nucleus` and
+`cytoplasm` (float64; 0.0 for a measured zero, NaN rows for cells whose compartments are
+not available) when nuclei are given, and the record in `uns["assignment"]`. `X` stays
+float64 whole-cell counts of the kept cells. `reads_assignment.csv` keeps its columns and
+gains `spot_id`, `assignment_status`, `cell_id`, `in_expansion`, `original_cell_id`,
+`nucleus_id` and `compartment`.
 
 ## Tests the implementation changes
 
@@ -668,11 +790,13 @@ whole-cell counts of the kept cells. `reads_assignment.csv` keeps its columns an
   (the empty branch for a FOV whose molecules miss every cell, the far-edge read, the two
   `IndexError` cases, the two expansions). Named edits, all additions: tests that build a
   `MoleculeTable` from the golden CSV without the gene-`Z` molecule (unknown genes now
-  raise), run `assign_molecules` with `expand_labels(mode="planar", unit="pixel",
-  distance=4)` or none, and assert that the `cell_id` of every molecule equals
-  `SEG_LABELS` (0 as null), that the whole-cell matrix equals the pinned counts (the
-  gene-`Z` molecule was never counted), and that `size_voxels` and the truncated centroids
-  equal the pinned `volume` and `fov_*` columns; and tests of the new behavior on the same
+  raise), run `assign_molecules` on the fixture's uncalibrated grid with
+  `ExpandLabelsConfig(distance=4, unit="pixel", mode="planar")` or no expansion, and assert that the `cell_id` of every
+  molecule equals `SEG_LABELS` (0 as null), that the whole-cell matrix equals the pinned
+  counts (the gene-`Z` molecule was never counted), and that the pinned `volume` and
+  `fov_*` columns equal `size_voxels` and the truncated `centroid_*` without expansion, and
+  `expanded_size_voxels` and the truncated `expanded_centroid_*` with it (the legacy
+  metadata is computed after the expansion); and tests of the new behavior on the same
   fixture (cells kept when no molecule is assigned, `outside_grid` for one-based 0 and
   beyond the grid, float coordinates accepted). When `reads_assignment.py` becomes an
   adapter call, `test_the_helper_follows_the_script` is removed, because the cited lines
@@ -693,8 +817,10 @@ The implementation adds: the `starfinder.assignment` module and its names; the
 `assignment` YAML block; and these intentional changes of the legacy rule's outputs:
 cells are kept when no molecule lands in them; float goodSpots coordinates are accepted;
 molecules outside the grid are kept as `outside_grid` instead of wrapping or raising;
-genes outside the codebook raise; both `expand_labels` keys true raises; the new columns of
-`raw.h5ad` and `reads_assignment.csv`. The notebook example of the three calls per FOV
+genes outside the codebook raise; a label file expanded by `stardist_segmentation`
+(`expand_labels: true` there) raises, with the distance moved to
+`reads_assignment.parameters.dilation_distance`; the new columns of `raw.h5ad` and
+`reads_assignment.csv`. The notebook example of the three calls per FOV
 that D1 asks for is added with them.
 
 ## Exclusions
