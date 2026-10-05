@@ -282,6 +282,71 @@ second (the golden tests take 0.2–0.3 s each); the learned checks take what W-
 for its parity inputs on CPU (a few seconds per call after the model load). Each run
 records wall time and peak RSS with `/usr/bin/time -v` against the 4 GiB stop target.
 
+### Implemented checks (W-318)
+
+The checks are in the modules of `src/python/test/` listed below. The task groups added
+most of them with the code they check; `test_segmentation_validation.py` and
+`test_assignment_validation.py` add L12, L4's identity, empty-image and missing-spacing
+clauses on the row's own fixtures, L7's rescale clause on `seg_golden`, and A2's five
+identities on `assign_golden`. Each of the two modules also checks that every row of the
+table below names tests that exist. A test named for a row but built on another fixture
+(the `boxes` cases of `test_l4_*` in `test_assignment.py`, the ramp of `test_l7_rescaling_*`,
+the ring of `test_l5_hole_filling_*`, the plane of `test_l9_the_plane_z4_*`) is an
+additional check and is not listed.
+
+Seeds are those of the rules above: 20261005 inside `seg_golden`, 101 for the `seeded`
+stain (`segmentation_fixtures.py`), 102 for the L11 stains, 100 for the A20 permutation, and
+none for `assign_golden` or the other hand-built fixtures. Every tolerance is the one in
+the table "Checks", unchanged; no check is skipped in the default tier or marked as an
+expected failure. Rows A2, A3, A4 and A19 use `assign_golden` without the gene-`Z` molecule
+and the matching subset of the pinned labels; the unmodified fixture serves the
+unknown-gene rejection and the legacy pins (`test_assignment_golden.py`).
+
+Two rows are not in the default tier. A19 starts three Python processes, each of which
+imports the package (about 2.2 s on one CPU), so its test is `slow` under the rule of
+{doc}`contributing` ("Test markers"); its three hash lists for each change are kept in
+the run's notes. L12 is `learned` and `slow` and runs only where `STARFINDER_L12_GPU_PYTHON`
+names the Python of a GPU environment, that is in a batch whose guidance grants the GPU;
+otherwise it skips with that reason. The learned checks need the extras and the cached
+models (L10's P1 and L12 also `STARFINDER_STARDIST_3D_SPLEEN`) and skip without them.
+
+| # | Module and tests | Tier |
+| --- | --- | --- |
+| L1 | `test_segmentation_labels.py`, `test_l1_*` | default |
+| L2 | `test_segmentation_labels.py`, `test_l2_*` | default |
+| L3 | `test_segmentation_labels.py`, `test_l3_*` | default |
+| L4 | `test_segmentation_golden.py`, `test_expand_labels_function`; `test_assignment.py`, `test_l4_volumetric_expansion_in_um_labels_the_voxels_within_the_distance`; `test_segmentation_validation.py`, `test_l4_distance_zero_is_the_identity_and_an_empty_image_stays_empty`, `test_l4_um_without_spacing_raises` | default |
+| L5 | `test_segmentation_labels.py`, `test_l5_the_labels_extend_through_the_stained_planes`, `test_l5_labels_with_z_above_1_raise`, `test_l5_a_stain_of_10_everywhere_gives_an_empty_image` | default |
+| L6 | `test_segmentation_labels.py`, `test_l6_the_shrunk_stand_in_labels_return_to_the_restored_values`, `test_l6_an_odd_grid_is_reached_exactly` | default |
+| L7 | `test_segmentation_inputs.py`, `test_l7_composite_and_enhancement_equal_the_pinned_digests`, `test_l7_constant_and_zero_inputs_equal_the_pinned_digests`, `test_l7_normalization_follows_the_formula`, `test_l7_normalization_of_a_constant_image_gives_zeros`; `test_segmentation_validation.py`, `test_l7_rescaling_seg_golden_divides_the_spacing_and_records_the_rescale` | default |
+| L8 | `test_segmentation_segment.py`, `test_l8_*` | default |
+| L9 | `test_segmentation_segment.py`, `test_l9_every_seed_keeps_its_value_and_no_other_value_appears`, `test_l9_no_seeds_give_an_empty_label_image`, `test_l9_a_grid_without_spacing_raises` | default |
+| L10 | `test_segmentation_learned.py`, `test_l10_*` | `learned`; P1 (`3D_spleen`) also `slow` |
+| L11 | `test_segmentation_learned.py`, `test_l11_*` | `learned`; the two Cellpose calls also `slow` |
+| L12 | `test_segmentation_validation.py`, `test_l12_cpu_and_gpu_labels_agree_within_the_w306_bounds`, `test_the_l12_metrics_on_hand_built_labels` | `learned` and `slow`, GPU batches only; the metric test on hand-built labels default |
+| L13 | `test_segmentation_persistence.py`, `test_l13_*` | default |
+| L14 | `test_segmentation_learned.py`, `test_l14_the_cached_files_equal_the_table_and_a_changed_copy_raises` | `learned` |
+| A1 | `test_assignment.py`, `test_a1_sampling_at_the_bounds` | default |
+| A2 | `test_assignment.py`, `test_a2_boxes_statuses_and_accounting`; `test_assignment_golden.py`, `test_the_package_statuses_and_count_identities`; `test_assignment_validation.py`, `test_a2_assign_golden_statuses_and_identities_1_to_5` | default |
+| A3 | `test_assignment_golden.py`, `test_the_package_reproduces_the_pins` | default |
+| A4 | `test_assignment.py`, `test_a4_*` | default |
+| A5 | `test_assignment.py`, `test_a5_to_a7_nucleus_table_and_cell_rows` | default |
+| A6 | `test_assignment.py`, `test_a5_to_a7_nucleus_table_and_cell_rows`, `test_a6_several_nuclei_count_both` | default |
+| A7 | `test_assignment.py`, `test_a5_to_a7_nucleus_table_and_cell_rows`, `test_a7_a_nucleus_split_51_49` | default |
+| A8 | `test_assignment.py`, `test_a8_a_nucleus_outside_its_cell` | default |
+| A9 | `test_assignment.py`, `test_a9_a_foreign_nucleus` | default |
+| A10 | `test_assignment.py`, `test_a10_compartment_partition` | default |
+| A11 | `test_assignment.py`, `test_a11_exclusion_and_its_statuses` | default |
+| A12 | `test_assignment.py`, `test_a12_*` | default |
+| A13 | `test_assignment.py`, `test_a13_cell_metadata` | default |
+| A14 | `test_assignment.py`, `test_a14_grid_and_identity_checks_raise_before_sampling` | default |
+| A15 | `test_assignment_persistence.py`, `test_a15_*`, `test_fov_run_and_segmentation_files_are_untouched_by_assign` | default |
+| A16 | `test_assignment.py`, `test_a16_a_plane_on_a_projected_grid` | default |
+| A17 | `test_assignment.py`, `test_a17_culture_labels_extended_through_z` | default |
+| A18 | `test_assignment_workflow.py`, `test_a18_*` | default; the `raw.h5ad` comparison where `anndata` is installed |
+| A19 | `test_assignment.py`, `test_a19_three_single_thread_processes_give_identical_tables` | `slow` |
+| A20 | `test_assignment.py`, `test_a20_row_order` | default |
+
 ## Bounded real examples
 
 These run after the segmentation methods (task group 3) and assignment (task group 4)
