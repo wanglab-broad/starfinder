@@ -89,9 +89,12 @@ default. {doc}`workflow-configuration` lists the same keys.
 | Projection | 35-36 | With the rule parameter `maximum_projection` (read directly; a missing `parameters` block raises `KeyError`), the Z maximum. |
 | Output | 38-40 | `img_as_ubyte`, written with `imwrite` and no metadata, to `images/overlay/{fovID}.tif`. |
 
-The quantile stretch makes an all-zero DAPI image an all-zero channel, so the composite
-is then the amplicon channel alone; it does not raise. The golden test pins the output
-with and without projection; the projected output equals the Z maximum of the 3D one.
+A constant image is not stretched: its two quantiles are equal, and `rescale_intensity`
+then clips it to the output range, which leaves its grey level unchanged (scikit-image
+0.26). So an all-zero DAPI image stays zero and the composite is the stretched amplicon
+alone, and a constant DAPI image of 50 floors the composite at 50; neither raises. The
+golden test pins the output with and without projection (the projected output equals the
+Z maximum of the 3D one) and on constant and all-zero inputs.
 
 ## Flamingo enhancement: `enhance_dapi_with_flamingo.py`
 
@@ -101,6 +104,10 @@ with and without projection; the projected output equals the Z maximum of the 3D
 | Flamingo | 17-23 | quantile stretch at 0.005/0.995, then a median filter with `disk(1)` on each Z plane. The plane loop assumes 3D: YX inputs raise `RuntimeError: footprint.ndim (2) must match len(axes) (1)`. |
 | DAPI | 26-30 | quantile stretch at 0.001/0.999 |
 | Combination | 33-40 | `dapi × (1 − flamingo)` in float, `img_as_ubyte`, written with no metadata to `images/flamingo/enhanced_DAPI/{fovID}.tif` |
+
+Constant inputs pass through the stretch unchanged, as in the composite: a constant DAPI
+image of 50 and a constant Flamingo image of 80 give an all-34 image, an all-zero Flamingo
+image leaves the stretched DAPI, and an all-zero DAPI image gives zeros (golden test).
 
 The two inputs are written by the Python `nuclei_registration` adapter
 (`src/python/starfinder/dataset/workflow.py:784-795`) for an additional round named
@@ -223,7 +230,9 @@ and a Flamingo stain (larger ellipsoids around the nuclei), plus a DAPI image ho
 only the small blobs. It pins with exact SHA-256 digests:
 
 * (a) the composite, run unchanged through a stub `snakemake` object, with and without
-  `maximum_projection`, and the Flamingo enhancement, run the same way;
+  `maximum_projection`, and the Flamingo enhancement, run the same way; both also on
+  constant and all-zero inputs, where the constant passes through the quantile stretch
+  unchanged (added in the W-307 repair);
 * (b) the foreground gate decision (Otsu threshold, component count, largest area,
   decision and the digest of the area list) on the 3D DAPI image, its Z maximum and the
   small-blob image, which closes the gate and gives an all-zero `uint16` image;
@@ -247,7 +256,9 @@ Three separate single-thread processes (`taskset -c 0`, every thread variable 1)
 recomputed every pinned value with byte-identical output
 (`scripts/w307_compute_pins.py` and `scripts/pins-run{1,2,3}.json` in the W-307 run
 directory; 1.34–1.37 s and 122–125 MB peak RSS each), so the test uses exact equality.
-The 27 test cases take 0.24 s together.
+After the repair added the constant and all-zero cases, three more such runs
+(`scripts/pins-repair-run{1,2,3}.json`) were again byte-identical and left every earlier
+value unchanged. The 28 test cases take about 0.3 s together.
 
 **What the default tier cannot run, and how W-306 pins it.** Model inference
 (normalization with csbdeep, `predict_instances` with a real model, tiling) needs

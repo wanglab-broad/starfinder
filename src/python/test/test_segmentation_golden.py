@@ -6,7 +6,8 @@ merged amplicon and Flamingo images):
 (a) the DAPI–amplicon composite of ``workflow/scripts/create_nuclei_amplicon_overlay.py``
     with and without its maximum projection, and the Flamingo enhancement of
     ``workflow/scripts/enhance_dapi_with_flamingo.py``, both run unchanged through a stub
-    ``snakemake`` object;
+    ``snakemake`` object, and both on constant and all-zero inputs (a constant image passes
+    through their quantile stretch unchanged);
 (b) the foreground gate decision of ``workflow/scripts/stardist_segmentation.py`` (Otsu
     threshold, connected components, largest area > 100) in 3D and 2D;
 (c) the script's nearest-neighbour rescale of labels back to the input grid after its
@@ -234,6 +235,14 @@ SHRUNK_IMAGE_DIGEST = "11e543854295fe0c085cb7d40d87fc87649d07f8a17ea948ba704803e
 SHRUNK_LABELS_DIGEST = "9a1bd53e5353a3cbbc68f6e28e32cb5309a00a3889882c861ee0baf9bf40f8d7"
 # (dtype, digest) of the labels rescaled back to 16×64×64
 RESTORED_LABELS = ("<i4", "e4f1917decc37e7624442672437bd40f75e6589ee9e3f3f89cd6f84f17db512e")
+# Constant and all-zero inputs (W-307 repair): the composite with a constant (50) or all-zero
+# nuclear image, the Flamingo enhancement with a constant (80) or all-zero Flamingo image
+CONSTANT_DIGESTS = {
+    "composite_constant": "e3243c99e77c1157d05452adc0c9cc827900931e2eb37761ba7007d2113acdf2",
+    "composite_zero": "22b2aded212f0c6aa03dfb392c9fbd6cc533ed4987da7e5343489cbb3597f53e",
+    "flamingo_constant": "1fd6fc43ecbe16c439425d52710940ea96b32e90f7493a206beb9db9f0e9e816",
+    "flamingo_zero": "a81c7feae65ae58f9df9e14ea1489c4beb7452054fca8a585d71c4a812c9ec4c",
+}
 
 
 @pytest.fixture(scope="module")
@@ -269,6 +278,28 @@ def test_flamingo_enhancement(tmp_path, images):
     result = flamingo_enhancement(tmp_path, images["dapi"], images["flamingo"])
     assert result.dtype == np.uint8 and result.shape == SHAPE_ZYX
     assert digest(result) == FLAMINGO_DIGEST
+
+
+def test_constant_and_zero_inputs(tmp_path, images):
+    """A constant image passes through the quantile stretch unchanged; it is not set to zero.
+
+    Its two quantiles are equal, so skimage's rescale_intensity clips it to the output
+    range (the dtype range for uint8), which leaves its grey level as it is.
+    """
+    c50, c80, zero = (np.full(SHAPE_ZYX, value, np.uint8) for value in (50, 80, 0))
+    assert np.unique(composite(tmp_path, c50, c80, False)).tolist() == [80]  # the maximum
+    assert np.unique(composite(tmp_path, zero, zero, False)).tolist() == [0]
+    # 50 × (1 − 80/255) = 34.3
+    assert np.unique(flamingo_enhancement(tmp_path, c50, c80)).tolist() == [34]
+    zero_nuclear = flamingo_enhancement(tmp_path, zero, images["flamingo"])
+    assert np.unique(zero_nuclear).tolist() == [0]
+    constant = composite(tmp_path, c50, images["amplicon"], False)
+    alone = composite(tmp_path, zero, images["amplicon"], False)  # the stretched amplicon alone
+    assert np.array_equal(constant, np.maximum(alone, 50))
+    results = {"composite_constant": constant, "composite_zero": alone,
+               "flamingo_constant": flamingo_enhancement(tmp_path, images["dapi"], c80),
+               "flamingo_zero": flamingo_enhancement(tmp_path, images["dapi"], zero)}
+    assert {name: digest(result) for name, result in results.items()} == CONSTANT_DIGESTS
 
 
 @pytest.mark.parametrize("name", ["dapi", "dapi_2d", "small_only"])

@@ -35,23 +35,42 @@ agree, nothing more. This page makes no accuracy claim either.
 
 ## Settled decisions this page follows
 
-The W-307 issue restates five decisions from the W-152 comment "§2.9 planning
-decisions (2026-10-03)"; this page follows them as stated there:
+Decided by Jiahao in the §2.9 planning session (W-152 comment "§2.9 planning decisions
+(2026-10-03)"; the text was supplied to this issue by its review and the operator note
+of its repair):
 
-1. **D1** The segment entry is separate from `FOV.run` and `PipelineConfig`, with its
-   own run record.
-2. **D2** A method is an in-process callable that produces one label image from an
-   input image (and optional seeds).
-3. **D3** External-mask import produces the same label contract; import is not a
-   method.
-4. **D4** The composite, the Flamingo enhancement, normalization and rescaling of the
-   input, label expansion and the culture extension through z are reusable functions,
-   not methods.
-5. **D5, D6** The device values and the environments follow the W-305 and W-306
-   evidence.
+1. **D1 Separate entries.** Segmentation and assignment are their own entries, not
+   fields of `PipelineConfig` and not stages of `FOV.run`. Per FOV there are three calls:
+   `FOV.run` (molecules), segment (label mask), assign (cell table and counts). The
+   coordination methods may live on `FOV`, as `FOV.register_rounds` does. Accepted costs:
+   the segmentation input image becomes a specified, saved artifact, and assign checks
+   the grid and records the hashes of the mask and the molecule table. The documentation
+   gives a notebook example of the three calls.
+2. **D2 Method registry.** `SEGMENTATION_METHODS` on the W-240 mechanism. A method
+   produces a label mask from an input image; it is an in-process Python callable with
+   lazily imported optional dependencies. There is no "external process" kind of method.
+3. **D3 External masks.** A mask from any other tool enters through mask import into the
+   same label contract. Import is not a method.
+4. **D4 Reusable functions.** Processes that are not image → mask are plain functions,
+   not methods: label expansion, the culture extension through z, the DAPI–amplicon
+   composite and the Flamingo-assisted DAPI enhancement. Input preparation reuses the
+   preprocessing mechanism where it fits; there is no second recipe engine.
+5. **D5 Conflicting environments.** A backend that cannot share the locked environment
+   gets its own locked environment, and the engine chooses the environment of the
+   segment task. The API never spawns another environment.
+6. **D6 GPU.** §2.9 allows GPU execution. §2.7's `device="cpu"` rule is not changed. The
+   routine test gate stays on CPU; a batch that needs the GPU names it as an exception.
+7. **D7 Two specification issues.** The specification is split at the label contract:
+   segmentation (this page), then assignment (W-308).
 
-The comment's own text and D7 were not among this issue's inputs; nothing below relies
-on D7. The rules Jiahao set after W-305 (2026-10-04) also hold:
+Proposed in the same comment and not objected to, and followed here: a method's input is
+a ZYXC image with declared channel roles plus optional seed labels; its output is one
+label image on the input grid with a declared target; nucleus and cell masks come from
+two runs; nucleus–cell correspondence belongs to assignment; the checks that hold for
+every method live in the stage wrapper; the second expansion of `reads_assignment.py`
+folds into one recorded expansion; the configuration is a plan, not a recipe.
+
+The rules Jiahao set after W-305 (2026-10-04) also hold:
 
 * Models in scope are the trained StarDist `3D_spleen` (LN), the pretrained StarDist
   `2D_versatile_fluo` (tissue-2D) and Cellpose `cpsam_v2`; `2D_brain_overlay_05` and the
@@ -78,6 +97,9 @@ on D7. The rules Jiahao set after W-305 (2026-10-04) also hold:
 * The **geometry** of a label image is how its Z extent was obtained: `volume` (a true
   3D result on Z>1), `plane` (a 2D result on Z=1), or `extended` (a 2D result extended
   through z by `extend_labels_through_z`).
+* The **reference grid** of a FOV is the shape and `ImageMetadata` of its reference
+  round's image after `FOV.run`; every label image of the FOV is on it or on its Z
+  projection.
 * **Seeds** are a label image of another run on the same grid that a method grows
   from (the nuclei of a seeded watershed).
 * A **segmentation run** is one call of the segment entry for one FOV that yields one
@@ -113,7 +135,8 @@ New names under S1:
 | Label functions | `expand_labels` (`ExpandLabelsConfig`), `extend_labels_through_z` (`ZExtensionConfig`), `labels_to_grid` | functions, configs |
 | Models | `KNOWN_MODELS`, `resolve_model`, `ModelFile`, `KnownModel` | table, function, dataclasses |
 | Errors | `SegmentationBackendUnavailableError`, `MissingModelError`, `ModelHashMismatchError` | exceptions |
-| Coordination | `FOV.segment(plan, *, device="cpu", checkpoints=None)`, `FOV.segmentation_results`, `FOV.load_segmentation(name)`; `SegmentationPlan`, `SegmentationRun`, `InputChannel` | method, attribute, dataclasses |
+| Coordination | `FOV.segment(plan, *, device="cpu", checkpoints=None)`, `FOV.segmentation_results`, `FOV.load_segmentation(name)`, `FOV.reference_grid()`; `SegmentationPlan`, `SegmentationRun`, `InputChannel` | methods, attribute, dataclasses |
+| Grid | `ReferenceGrid`, `reference_grid_from_file` | frozen dataclass, function |
 
 ## The segment entry
 
@@ -158,61 +181,113 @@ class SegmentationPlan:
 ```
 
 `FOV.segment(plan, *, device="cpu", checkpoints=None)` runs each run in order: it
-assembles the `SegmentationInput` from the FOV's images, calls `segment` (or
-`import_labels`), applies the run's label operations, stores the result in
+takes the FOV's reference grid (`FOV.reference_grid()`, below), assembles the
+`SegmentationInput` from the FOV's resident images, calls `segment` (or `import_labels`
+with that grid), applies the run's label operations, stores the result in
 `FOV.segmentation_results[run.name]` and, when `checkpoints` is given, writes the run's
 files ("Saved format"). It never runs registration, detection or decoding, and
 `PipelineConfig` gains no field (D1).
 
-The three calls per FOV are:
+A plan is not a recipe engine (D4): each run names one method or one import, at most
+one input function per channel and an ordered tuple of the two label functions. There
+is no general step chain; preprocessing of the rounds stays in `FOV.run`'s
+`PreprocessingRecipe`.
 
-1. `fov.run(pipeline, execution=…, checkpoints=…)` registers and processes the
-   sequencing rounds as today and leaves the reference round's image and metadata
-   resident (streaming keeps the reference image; {doc}`coordination`).
-2. `fov.register_rounds(recipe, rounds=[…])` brings the loaded morphology rounds into
-   the reference frame through their shared stain ({doc}`coordination`, "Other rounds
-   and external references").
-3. `fov.segment(plan, device=…, checkpoints=…)` builds each segmentation input from the
-   reference-frame images and runs the plan.
+**The three calls per FOV (D1)** are:
 
-A plan whose inputs use only the reference round (tissue-2D PI in a sequencing round)
-needs no `register_rounds` call; a plan that imports external masks needs neither of the
-first two calls beyond loading the reference metadata.
+1. `fov.run(pipeline, execution=…, checkpoints=…)`: the molecules. It registers and
+   processes the sequencing rounds, detects and decodes as today, and leaves the
+   reference round's image and metadata resident (streaming keeps the reference image;
+   {doc}`coordination`).
+2. `fov.segment(plan, device=…, checkpoints=…)`: the label masks. It builds each
+   segmentation input from the reference-frame images and runs the plan.
+3. assign: the cell table and counts. W-308 specifies it; this page names only what it
+   receives from segment ("What assign receives from segment").
+
+**The coordination step before segment.** When a plan's inputs come from morphology
+rounds (DAPI or Flamingo acquired in an additional round), the caller loads those rounds
+and calls `fov.register_rounds(recipe, rounds=[…])` between the first two calls. It
+brings each round into the reference frame through its shared stain ({doc}`coordination`,
+"Other rounds and external references"). It is a coordination step that a plan needs,
+not one of the three calls. It is not needed when the plan's inputs use only the
+reference round (tissue-2D PI in a sequencing round) or when every run imports an
+external mask.
+
+**The reference grid.** Every label image of a FOV is on one grid. Because
+`ImageMetadata` carries no shape (`src/python/starfinder/image.py`), the grid is passed
+as its own object:
+
+```python
+@dataclass(frozen=True)
+class ReferenceGrid:
+    shape_zyx: tuple[int, int, int]    # the grid's Z, Y, X sizes
+    metadata: ImageMetadata            # its frame and geometry
+    source: str                        # "fov:<reference round>", "file:<path>" or "declared"
+    sha256: str | None = None          # SHA-256 of the C-order bytes of the image it was read from
+
+    def projected(self, *, method: str = "max") -> ReferenceGrid: ...   # Z=1, metadata.projected(method)
+```
+
+* `FOV.reference_grid()` returns the grid of the resident reference round:
+  `images[reference_round].shape[:3]`, `metadata[reference_round]`, source
+  `"fov:<round>"` and the SHA-256 of the reference image. It is available after
+  `FOV.run`, or after `FOV.load_checkpoint("registered")`, and raises `ValueError` when
+  the reference round is not resident.
+* `reference_grid_from_file(path, *, metadata=None)` reads a TIFF with `load_volume`:
+  the shape from the array, the metadata from the file's `starfinder_metadata`
+  description, or from `metadata` when the file has none (a file with neither raises).
+  Its source is `"file:<path>"` and its hash the array's SHA-256. The natural file is
+  `images/ref_merged/{fovID}.tif`, which `FOV.save_reference_image` writes with the
+  reference metadata after `FOV.run` (a YX file gives a Z=1 grid).
+* A `ReferenceGrid(…, source="declared")` built by the caller serves masks imported
+  without any molecule run: nothing is checked against a molecule grid then, the record
+  says so, and assign checks the grid against the molecule run when it runs (D1).
+
+The grid used is recorded in every run record (`grid`: shape, the metadata, source and
+hash).
 
 ### What the segment entry needs from `FOV.run` and `FOV.register_rounds`
 
 | From | What | Used for |
 | --- | --- | --- |
-| `FOV.run` | `fov.metadata[reference_round]`: the reference `ImageMetadata` (frame, spacing, origin, direction) and the reference grid `images[reference_round].shape[:3]` | the grid and metadata every segmentation input and label image must have |
+| `FOV.run` | `fov.metadata[reference_round]`: the reference `ImageMetadata` (frame, spacing, origin, direction) and the reference grid `images[reference_round].shape[:3]`, together `FOV.reference_grid()` | the grid and metadata every segmentation input and label image must have, and the grid of an import |
 | `FOV.run` | the reference round's current image (its detection image after `run`), whose channel maximum is the reference merged image, ZYX, exactly as `save_reference_image(reference_image="merged")` writes it | the amplicon channel of the composite (`InputChannel(reference_merged=True)`) and the stain of a seeded watershed on the amplicon signal (tissue-2D) |
 | `FOV.run` | `preprocessing_record` and `registration_record` | copied by reference (their hashes) into the segmentation record, so the input's processing is traceable |
 | `FOV.register_rounds` | each registered morphology round's image (every channel resampled once into the reference frame) and its metadata, which equals the reference metadata | the `nuclear`, `cytoplasm` and Flamingo channels |
 | `FOV.register_rounds` | `registration_record["rounds"][round]`: the recipe summary, the reference label and `reference_sha256` | the input-channel identity in the segmentation record |
 | `Dataset` | `channel_labels(round)` and `other_channel_order` | resolving `InputChannel.channel` by label; an unknown label raises `ValueError` |
 
-`FOV.segment` raises `ValueError` naming the round when an input round is not loaded, is
-a morphology round that has not been registered, or has metadata different from the
-reference round's; and `IncompatibleGeometryError` when a grid differs. A run's
-`projection` is the only route to a plane from a volume, and the record keeps it.
+Every image `FOV.segment` reads must be resident: the reference round (after `FOV.run`,
+whose streaming mode keeps it, or after `FOV.load_checkpoint("registered")`) and each
+morphology round named by an input (loaded and registered). `FOV.segment` raises
+`ValueError` naming the round when an input round is not loaded, is a morphology round
+without an entry in `registration_record["rounds"]`, or has metadata different from the
+reference round's; and `IncompatibleGeometryError` when its `shape[:3]` differs from the
+reference grid. A run's `projection` is the only route to a plane from a volume; the
+input and the labels of such a run are on `FOV.reference_grid().projected(…)`, and the
+record keeps it.
 
-### What the assignment entry receives
+### What assign receives from segment
 
-W-308 builds the assignment entry on these, and on nothing else from segmentation:
+The third call (W-308) builds on these, and on nothing else from segmentation:
 
-* one `SegmentationResult` per run: `labels` (`uint32` ZYX on the reference grid, or Z=1
-  for a `plane` or projected run), `metadata` (equal to the reference metadata, or its
-  `projected` form), `target`, `geometry`, `label_namespace`, `n_labels`, `max_label`;
+* one `SegmentationResult` per run: `labels` (`uint32` ZYX), `grid` (the
+  `ReferenceGrid` they are on: the reference grid, or its projection for a `plane` or
+  projected run), `target`, `geometry`, `label_namespace`, `n_labels`, `max_label`;
+* the hashes assign records and checks (D1): the labels' SHA-256 and the grid's shape,
+  metadata, source and hash, which assign compares with the molecule run's reference
+  grid;
 * `record["operations"]`: the label operations already applied, so expansion is applied
-  once and the assignment never expands again;
+  once and assign never expands again;
 * for a seeded run, `record["seeds"]`: the seed run's name and labels SHA-256, and the
-  correspondence rule of the method (`seeded_watershed`: cell k contains nucleus k,
-  `record["seed_correspondence"] = "label"`); for other runs `None`;
-* the saved files of each run and their SHA-256 values, so a later assignment can load
-  them with `FOV.load_segmentation(name)` without the images.
+  method's label rule (`seeded_watershed` gives each cell the value of the seed it grew
+  from); nucleus–cell correspondence itself is decided by assignment;
+* the saved files of each run and their SHA-256 values, so assign can load them with
+  `FOV.load_segmentation(name)` without the images.
 
 The molecules' `z, y, x` (index coordinates of the reference grid, from the spot table)
 index these label images directly. How a 3D molecule is assigned to a `plane` label
-image, and how nuclei and cells correspond, are W-308's.
+image is W-308's.
 
 ### Run record
 
@@ -226,6 +301,7 @@ mapping in `SegmentationResult.record`:
   "dataset_id": "...", "sample_id": "...", "fov_id": "FOV_001", "subtile_id": null,
   "run": "nucleus", "target": "nucleus", "geometry": "volume",
   "label_namespace": "[\"dataset\", \"sample\", \"FOV_001\", null, \"nucleus\"]",
+  "grid": {"shape_zyx": [50, 512, 512], "metadata": {"frame_id": "..."}, "source": "fov:round1", "sha256": "..."},
   "input": {
     "path": "input.ome.tif", "sha256": "<C-order bytes>", "file_sha256": "...",
     "shape_zyxc": [50, 512, 512, 1], "dtype": "uint8", "metadata": {"frame_id": "..."},
@@ -265,7 +341,7 @@ mapping in `SegmentationResult.record`:
 | Array | Integer ZYX, C-contiguous. 0 is background; each positive value is one object. A plane is 1×Y×X, never YX. |
 | dtype | The label dtype rule below (recommended: `uint32`). |
 | Grid | Equal to the segmentation input's ZYX shape. A method whose library returns another shape (Cellpose drops Z for one plane, W-306 notes section 6) has it restored by the wrapper; any other shape raises `ValueError`. |
-| Metadata | The input's `ImageMetadata`, unchanged: the same `frame_id`, spacing, origin and direction. For the reference grid this is the reference round's metadata; for a projected run, its `projected(method=…)` form. |
+| Grid and metadata | `SegmentationResult.grid`, a `ReferenceGrid` whose `shape_zyx` equals the labels' shape and whose `metadata` is the input's `ImageMetadata`, unchanged: the same `frame_id`, spacing, origin and direction. In a FOV run it is `FOV.reference_grid()`, or its `projected(method=…)` form for a projected run; for an import it is the grid the caller passes. |
 | Target | `nucleus` or `cell`, declared by the run and checked against the method's `targets`. |
 | Geometry | `volume` when a method ran in 3D on Z>1; `plane` when the input has Z=1; `extended` after `extend_labels_through_z`, whose record keeps the source plane run. |
 | Identities | A label's identity is `(label_namespace, value)`. `label_namespace` is a JSON list `[dataset_id, sample_id, fov_id, subtile_id, run name]`, built like the spot namespace. Values are kept as the method returned them; the wrapper never relabels, so a seeded watershed keeps its seeds' values. Values are unique within one result and mean nothing across runs except through a recorded seed correspondence. |
@@ -277,7 +353,7 @@ mapping in `SegmentationResult.record`:
 @dataclass(frozen=True)
 class SegmentationResult:
     labels: np.ndarray                 # uint32 ZYX, 0 background
-    metadata: ImageMetadata            # equal to the input's
+    grid: ReferenceGrid                # shape_zyx == labels.shape; metadata equal to the input's
     target: str                        # nucleus or cell
     geometry: str                      # volume, plane or extended
     label_namespace: str
@@ -290,8 +366,10 @@ class SegmentationResult:
     def max_label(self) -> int: ...
 ```
 
-`__post_init__` checks the dtype, the absence of negative values, the target and the
-geometry, and that `labels.shape` equals `metadata`'s grid when one is recorded.
+`__post_init__` checks, from its own fields: a three-dimensional `uint32` array, no
+negative value, `labels.shape == grid.shape_zyx`, a target of `nucleus` or `cell`, and a
+geometry that agrees with the shape (`plane` needs Z=1; `volume` and `extended` need
+Z>1).
 
 ### Label dtype rule
 
@@ -334,7 +412,7 @@ recorded SHA-256 values and returns the `SegmentationResult`.
 
 **Recommendation: T1.** It is what D2 implies, it lets each target come from a
 different method (StarDist nuclei, watershed or Cellpose cells) or from an import, and
-the seed link records the correspondence that W-308 needs.
+the seed link records what W-308 needs to establish nucleus–cell correspondence.
 
 ## Method input
 
@@ -342,14 +420,17 @@ the seed link records the correspondence that W-308 needs.
 @dataclass(frozen=True)
 class SegmentationInput:
     image: np.ndarray                  # ZYXC, finite, real dtype; Z=1 for a plane
-    metadata: ImageMetadata            # the grid and frame (the reference metadata in a FOV run)
+    grid: ReferenceGrid                # image.shape[:3] == grid.shape_zyx; FOV.reference_grid() in a FOV run
     roles: tuple[str, ...]             # one role per channel, in channel order
     sources: tuple[Mapping, ...]       # per channel: the InputChannel fields and its SHA-256
 ```
 
 * Roles are `nuclear`, `cytoplasm`, `membrane`, `amplicon` and `composite`; each role
   appears at most once. A method declares the roles it accepts and those it requires.
-* Seeds are a `SegmentationResult` on the same grid and metadata, with target `nucleus`.
+* Seeds are a `SegmentationResult` with target `nucleus` whose `grid` has the input's
+  shape and metadata.
+* A direct caller of `segment` builds the grid itself, from `FOV.reference_grid()`, from
+  `reference_grid_from_file` or as a declared grid.
 * **The input as a saved artifact.** `FOV.segment` assembles the input from the
   reference-frame images, applying each channel's `prepare` function and the run's
   `projection`, then writes it as `segmentation/<run>/input.ome.tif` with `save_volume`
@@ -386,7 +467,7 @@ class SegmentationSpec:
 ```
 
 `run` receives the validated ZYXC image, the config and a `MethodContext`
-(`roles`, `seeds` as an array or `None`, `metadata`, `device`, the resolved model folder
+(`roles`, `seeds` as an array or `None`, `grid`, `device`, the resolved model folder
 or file) and returns a label array and a details mapping (`effective` parameters,
 `library_dtype`, counts). The stage wrapper calls it; callers never do.
 
@@ -394,7 +475,8 @@ or file) and returns a label array and a details mapping (`effective` parameters
 
 Every registered method takes an image (and, for the watershed, seeds) and returns one
 label image on the input grid. Nothing that maps labels to labels or images to images
-is registered.
+is registered. Every method runs in process; there is no external-process kind of method
+(D2).
 
 | Name | Config | Targets | Roles (required) | Seeds | Dimensions | Models | Devices | `requires` (extra) | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -446,39 +528,45 @@ Config fields (frozen dataclasses, validated in `__post_init__`):
 | `compactness` | 0.0 | Passed to `skimage.segmentation.watershed`. |
 | `connectivity` | 1 | Passed to `skimage.segmentation.watershed`. |
 
-The watershed needs a spacing: an input whose metadata has no `spacing_zyx` raises
+The watershed needs a spacing: an input whose `grid.metadata` has no `spacing_zyx` raises
 `ValueError`.
 
 ### Checks the stage wrapper applies to every method
 
-In this order, before and after `spec.run`:
+In this order, before and after `spec.run`. Each check uses only the arguments of
+`segment` (the input, the config, the target, the seeds and the device) and the files the
+config names:
 
 1. **Config.** `spec_for(SEGMENTATION_METHODS, config, …)` with `TypeError("no
    segmentation method is registered for …")`; `LabelImportConfig` raises
    `TypeError("import_labels imports masks; it is not a segmentation method")`.
 2. **Target.** `target` is in `spec.targets`, else `ValueError`.
-3. **Input.** A `SegmentationInput` with a finite ZYXC image, one role per channel,
-   known and unique roles, every required role present and no role outside
+3. **Input.** A `SegmentationInput` with a finite four-dimensional (ZYXC) image whose
+   `shape[:3]` equals `grid.shape_zyx` (`IncompatibleGeometryError`), one role per
+   channel, known and unique roles, every required role present and no role outside
    `spec.roles` (`ValueError` naming the role).
-4. **Dimensionality.** Z=1 needs 2 in `spec.dimensions`, Z>1 needs 3; for model methods
-   the model's own dimensionality must match too (StarDist `config.json` `n_dim`), so a
-   3D model rejects Z=1 and a 2D model rejects Z>1 (`IncompatibleGeometryError`; W-306
-   choice 4). The shape must be at least `min_shape_zyx`.
-5. **Seeds.** Required, optional or refused per `spec.seeds`; a seed image must be an
-   integer `SegmentationResult` with target `nucleus`, the input's shape and equal
-   metadata (`IncompatibleGeometryError`).
-6. **Device.** `device` in `spec.devices` ("Device and environments").
-7. **Dependencies.** `require(spec, "segmentation method",
+4. **Device.** `device` in `spec.devices` ("Device and environments").
+5. **Dependencies.** `require(spec, "segmentation method",
    SegmentationBackendUnavailableError)`, naming the module and the extra.
-8. **Model.** For `spec.models`, `resolve_model` checks the files and their SHA-256
+6. **Model.** For `spec.models`, `resolve_model` checks the files and their SHA-256
    before any library call ("Models"), so Cellpose's silent fallback for a missing path
-   (W-306 section 6) cannot happen.
+   (W-306 notes section 6) cannot happen. It also reads the model's dimensionality from
+   the resolved files without the library: StarDist's `config.json` (`n_dim`), and for
+   Cellpose the config's `do_3d`.
+7. **Dimensionality.** Z=1 (`image.shape[0] == 1`) needs 2 in `spec.dimensions`, Z>1
+   needs 3; the model's dimensionality from check 6 must match too, so a 3D model rejects
+   Z=1 and a 2D model rejects Z>1 (`IncompatibleGeometryError`; W-306 choice 4). The shape
+   must be at least `min_shape_zyx`.
+8. **Seeds.** Required, optional or refused per `spec.seeds`; a seed result must have
+   target `nucleus`, and its `grid.shape_zyx` and `grid.metadata` must equal the input
+   grid's (`IncompatibleGeometryError`).
 9. **Run.** `spec.run(image, config, context)`.
-10. **Output.** An integer array of the input's ZYX shape (a Z axis the library dropped
-    is restored), no negative value, converted to `uint32` by the dtype rule; the
-    details' `effective` parameters are recorded.
+10. **Output.** An integer array whose shape equals `image.shape[:3]` (a Z axis the
+    library dropped for Z=1 is restored), with no negative value, converted to `uint32`
+    by the dtype rule; the details' `effective` parameters are recorded.
 11. **Record.** The uniform provenance entry with `artifacts` (model files) and
-    `execution`; `outcome` `empty` when no label remains.
+    `execution`; `outcome` `empty` when no label remains. The result's grid is the
+    input's grid.
 
 No method gets an image without its roles, and none returns a label image off the input
 grid. There is no foreground gate (baseline discrepancy 2).
@@ -491,29 +579,39 @@ class LabelImportConfig:
     path: str                          # a TIFF readable by load_volume, YX or ZYX
     target: str                        # nucleus or cell
     geometry: str | None = None        # None: plane for Z=1, volume for Z>1; or extended
-    frame: str = "reference"           # the file is declared to be on the reference grid
     relabel: bool = False              # False: keep the file's values
 
-def import_labels(path, *, metadata: ImageMetadata, target: str, geometry=None,
+def import_labels(path, *, grid: ReferenceGrid, target: str, geometry=None,
                   relabel=False, label_namespace: str) -> SegmentationResult: ...
 ```
 
 Import is not a method (D3): it is not in `SEGMENTATION_METHODS`, it takes no image, and
-`segment` refuses its config. It produces the same `SegmentationResult`, so the
-assignment cannot tell an imported run from a computed one except by its record.
+`segment` refuses its config. It produces the same `SegmentationResult`, so assign cannot
+tell an imported run from a computed one except by its record.
 
-Validation, in order: the file exists and is read with its byte order converted to
-native (the W-305 culture references are big-endian; W-306 notes section 6); a YX image
-becomes 1×Y×X; the dtype is integer (a float or boolean mask raises `TypeError`); no
-value is negative; the shape equals the grid of `metadata` (`IncompatibleGeometryError`);
-when the TIFF carries `starfinder_metadata`, it must equal `metadata`, otherwise the
-caller's `metadata` is taken as a declaration and recorded as such
-(`"metadata_source": "declared"`); values above 2³²−1 raise. With `relabel=True`, values
-are mapped to 1…n in increasing order and the map is recorded.
+**Where the grid comes from.** In the three-call sequence, `FOV.segment` passes
+`FOV.reference_grid()` (or its projection, for a run with `projection`) for an import run.
+A caller who imports masks without running `FOV.run` in the same process gets the grid
+from `reference_grid_from_file("images/ref_merged/{fovID}.tif")`, which an earlier
+molecule run wrote with the reference metadata, or declares it as a `ReferenceGrid(…,
+source="declared")` when no molecule run exists yet; assign then checks the declared
+grid against the molecule run.
+
+Validation, in order, from the file and the arguments only: the file exists and is read
+with its byte order converted to native (the W-305 culture references are big-endian;
+W-306 notes section 6); a YX file is read as 1×Y×X and needs a grid with Z=1 (for a
+volume FOV, `grid.projected()`); the dtype is integer (a float or boolean mask raises
+`TypeError`); no value is negative; the array's shape equals `grid.shape_zyx`
+(`IncompatibleGeometryError`); when the TIFF carries `starfinder_metadata`, it must equal
+`grid.metadata` (`ValueError`), and otherwise `grid.metadata` is taken as a declaration
+(`"metadata_source": "declared"`); values above 2³²−1 raise; `geometry`, given or derived,
+must agree with the shape as in `SegmentationResult`. With `relabel=True`, values are
+mapped to 1…n in increasing order and the map is recorded.
 
 Provenance: the run record has `methods: []` and an `import` entry with the path, the
 file's SHA-256, the array's SHA-256, the source dtype and shape, `metadata_source`,
-`relabel` and its map, and the target and geometry. CellProfiler outputs, the legacy
+`relabel` and its map, and the target and geometry; the run record's `grid` holds the
+grid's shape, metadata, source and hash. CellProfiler outputs, the legacy
 `images/stardist_segmentation` files and the W-305 references all enter this way.
 
 ## Input preparation and label functions
@@ -525,21 +623,22 @@ sha256}`), which the run record keeps.
 
 | Function | Signature | Parameters and units | What it records |
 | --- | --- | --- | --- |
-| `composite_nuclei_amplicon` | `(nuclear, amplicon, *, config=CompositeConfig()) -> np.ndarray` | `nuclear_quantile` 0.005 and `amplicon_quantile` 0.001 (fractions; the stretch uses q and 1 − q of the whole volume); ZYX inputs on one grid; output uint8 ZYX | the config, the four quantile values reached, both input hashes |
-| `enhance_with_flamingo` | `(nuclear, flamingo, *, config=FlamingoEnhancementConfig()) -> np.ndarray` | `flamingo_quantile` 0.005, `nuclear_quantile` 0.001 (fractions), `median_radius_px` 1 (pixels, a disk in each plane); output uint8 ZYX | the config, the quantile values, both input hashes |
+| `composite_nuclei_amplicon` | `(nuclear, amplicon, *, config=CompositeConfig()) -> np.ndarray` | `nuclear_quantile` 0.005 and `amplicon_quantile` 0.001 (fractions; the stretch uses q and 1 − q of the whole volume); two ZYX arrays of equal shape, else `IncompatibleGeometryError` (arrays carry no metadata, so `FOV.segment` checks that both come from images with the reference metadata); output uint8 ZYX | the config, the four quantile values reached, both input hashes |
+| `enhance_with_flamingo` | `(nuclear, flamingo, *, config=FlamingoEnhancementConfig()) -> np.ndarray` | `flamingo_quantile` 0.005, `nuclear_quantile` 0.001 (fractions), `median_radius_px` 1 (pixels, a disk in each plane); two ZYX arrays of equal shape, checked as for the composite; output uint8 ZYX | the config, the quantile values, both input hashes |
 | `normalize_percentiles` | `(image, *, p_low=1.0, p_high=99.8, axes=None) -> np.ndarray` | percents of the intensity distribution over `axes` (default all spatial axes); output float32, unclipped | `p_low`, `p_high` and the two values reached |
-| `rescale_input` | `(image, metadata, *, scale_zyx) -> tuple[np.ndarray, ImageMetadata]` | per-axis factors (dimensionless); linear interpolation with anti-aliasing; the metadata's spacing is divided by the factors and its `frame_id` extended | factors, input and output shapes |
-| `labels_to_grid` | `(labels, metadata, *, target_metadata, target_shape) -> np.ndarray` | nearest neighbour through physical coordinates, onto exactly `target_shape` | both shapes and frames |
-| `expand_labels` | `(labels, metadata, *, config=ExpandLabelsConfig(distance, unit, mode)) -> np.ndarray` | `distance` in `pixel` or `um`; `mode` `planar` (each Z plane, the current behavior) or `volumetric` (3D Euclidean distance in physical units); no default distance | the config and the number of voxels added |
-| `extend_labels_through_z` | `(labels_2d, stain, metadata, *, config=ZExtensionConfig()) -> np.ndarray` | `median_um`, `threshold` (`"otsu"` or a number), `min_area_um2`, `dilation_um`, `fill_holes` (twice for cells); legacy values in pixels are translated by the workflow adapter with the configured spacing | the config, the threshold reached, the source plane run's hash; the result's geometry becomes `extended` |
+| `rescale_input` | `(image, metadata, *, scale_zyx) -> tuple[np.ndarray, ImageMetadata]` | per-axis factors > 0 (dimensionless); linear interpolation with anti-aliasing; the metadata's spacing, when it has one, is divided by the factors, and its `frame_id` is extended | factors, input and output shapes |
+| `labels_to_grid` | `(labels, *, target_shape) -> np.ndarray` | nearest neighbour by pixel centres, source index ⌊(i + 0.5) × n_source / n_target⌋ per axis, onto exactly `target_shape`; the caller attaches the target grid | both shapes |
+| `expand_labels` | `(labels, metadata, *, config=ExpandLabelsConfig(distance, unit, mode)) -> np.ndarray` | `distance` in `pixel` or `um` (`um` needs `metadata.spacing_zyx`, else `ValueError`); `mode` `planar` (each Z plane, the current behavior) or `volumetric` (3D Euclidean distance with the ZYX spacing); no default distance | the config and the number of voxels added |
+| `extend_labels_through_z` | `(labels_2d, stain, metadata, *, config=ZExtensionConfig()) -> np.ndarray` | `labels_2d` of shape (1, Y, X) and a ZYX `stain` with the same Y, X (else `IncompatibleGeometryError`); `median_um`, `threshold` (`"otsu"` or a number), `min_area_um2`, `dilation_um`, `fill_holes` (twice for cells), converted with `metadata.spacing_zyx` (required); legacy values in pixels are translated by the workflow adapter with the configured spacing | the config, the threshold reached and the hash of the plane labels; `FOV.segment` adds the source run's name and sets the geometry to `extended` |
 
 Rules:
 
-* `rescale_input` and `labels_to_grid` serve nucleus detection on a shrunk input by a
-  method without its own scale parameter. `labels_to_grid` maps through physical
-  coordinates onto the exact target shape, so the odd-size grid change of the current
-  round trip cannot happen. A cell run, or a run with seeds, rejects an input whose
-  metadata is not the reference grid. StarDist and Cellpose scale internally (`scale`,
+* `rescale_input` and `labels_to_grid` serve a direct caller who detects nuclei on a
+  shrunk input with a method that has no scale parameter of its own. `labels_to_grid`
+  maps onto exactly the target shape, so the odd-size grid change of the current round
+  trip cannot happen. `FOV.segment` has no option that shrinks an input, and `segment`
+  rejects seeds whose grid differs from the input's, so a cell run never computes
+  outlines on a shrunk grid. StarDist and Cellpose scale internally (`scale`,
   `diameter`), which W-306 found returns labels on the input grid, so they never use
   these two functions.
 * `expand_labels` is the only expansion. It is applied once, by a run's `operations`,
@@ -550,8 +649,10 @@ Rules:
   Python form of `create_3d_segmentation.m` per FOV ({doc}`segmentation-baseline`),
   without the `Cyto` subtraction, which is a compartment (W-308).
 
-**Reuse of `PREPROCESSING_METHODS`.** None of these functions is registered as a
-preprocessing method:
+**Reuse of the preprocessing mechanism (D4).** D4 asks input preparation to reuse the
+preprocessing mechanism where it fits. A preprocessing step fits an operation that maps
+one round's image to an image of the same shape; none of these functions is such an
+operation, so none is registered in `PREPROCESSING_METHODS`:
 
 * A preprocessing step returns an image of its input's shape within one round
   ({doc}`preprocessing-contract`, `StepResult`). The composite combines two rounds
@@ -639,12 +740,15 @@ rows of `segmentation-calls.csv`).
 | Option | Rule | Effect on existing files | Effect on the lock | Effect on the engines |
 | --- | --- | --- | --- | --- |
 | **V1. A `device` keyword of the segment entry (recommended)** | `segment(…, device=…)` and `FOV.segment(…, device=…)` accept `"cpu"` (default) and `"cuda"`; a method accepts only the devices of `spec.devices`. `ExecutionConfig.device` and `_execution.DEVICES` stay CPU-only for `FOV.run`. | `_execution.py` gains a per-stage device check and a TensorFlow entry in `execution_record`; `test_spot_finding_registry.py::test_device_accepts_only_cpu` and `test_spot_finding_workflow_key.py::test_the_rule_level_device` pass unchanged. | None. | A rule passes `device` from its own Python-only parameter; GPU rules need Snakemake GPU resources (§2.13). |
-| V2. `ExecutionConfig.device` accepts `"cuda"` | `_execution.DEVICES` becomes `("cpu", "cuda")`; spot finding and `FOV.run` reject `"cuda"` in their wrappers. | Those two tests need named edits (construction no longer raises; the stage does). | None. | One device key for every rule. |
+| V2. `ExecutionConfig.device` accepts `"cuda"` | `_execution.DEVICES` becomes `("cpu", "cuda")`; spot finding and `FOV.run` reject `"cuda"` in their wrappers. | Those two tests need named edits (construction no longer raises; the stage does), which moves where §2.7's `device="cpu"` rule is enforced, against the letter of D6. | None. | One device key for every rule. |
 
-**Recommendation: V1.** D1 separates the segment entry from `FOV.run`, so it need not
-share `FOV.run`'s execution settings, and no existing test changes. The spot-finding
-contract expected segmentation to reuse `ExecutionConfig.device`; the worker notes list
-this as an open choice.
+**Recommendation: V1.** D6 allows the GPU for §2.9 and leaves §2.7's `device="cpu"` rule
+unchanged; V1 does exactly that. D1 separates the segment entry from `FOV.run`, so it
+need not share `FOV.run`'s execution settings, and no existing test changes. The
+spot-finding contract expected segmentation to reuse `ExecutionConfig.device`; the worker
+notes list this as an open choice. The routine test gate stays on CPU (D6): every
+default-tier and `learned` segmentation test runs with `device="cpu"`, and a GPU test runs
+only in a batch whose guidance names the GPU as an exception.
 
 What is recorded (the execution entry of the provenance entry): `device`; `framework`
 with its name (`tensorflow` or `torch`), version, CUDA build (`None` for CPU builds) and,
@@ -653,7 +757,11 @@ enabled; and `threads` as in {doc}`spot-finding-contract` plus TensorFlow's intr
 inter-op thread counts. Starfinder enables TensorFlow memory growth before the first
 model call on `"cuda"` and changes no thread setting.
 
-Behavior to state with the device (W-306 notes sections 4 and 5, `comparisons.csv`):
+Behavior to state with the device (W-306 notes sections 4 and 5, `comparisons.csv`,
+`segmentation-calls.csv`). The times below are measured per-call wall times unless marked
+projected: each call ran in a job process that had already loaded the model (and, for the
+learned main and repeat jobs, run a warm-up call), so process start-up, imports and the
+model load are not in them.
 
 * For a fixed device and environment, labels are bitwise repeatable across processes
   and between one and four CPU threads, in the one repeat case per method.
@@ -662,29 +770,37 @@ Behavior to state with the device (W-306 notes sections 4 and 5, `comparisons.cs
   with median 0.9952. A validation compares CPU with GPU by label count (within max(1,
   1 %)), matched fraction (at least 99 % at IoU ≥ 0.5) and median matched IoU (at least
   0.99), the tolerances W-306 supports; exact digests hold on CPU only.
-* StarDist's non-maximum suppression runs on the CPU even on `"cuda"` (38.7 s of CPU
-  time in a 54.6 s GPU call).
-* TensorFlow keeps the GPU memory it grows to (8.9 GB after the tiled LN calls, 17.1 GB
-  after the untiled one), so one learned backend runs per process on the GPU (W-306
-  choice 6).
+* StarDist's non-maximum suppression runs on the CPU even on `"cuda"`: the GPU LN call
+  used 38.7 s of process CPU time (all threads, over the call) in 54.6 s of wall time.
+* TensorFlow keeps the GPU memory it grows to: nvidia-smi reported 8.9 GB for the job
+  process after the tiled LN calls and 17.1 GB after the untiled one. These are per-job
+  process figures that include the framework's allocator caches and what earlier calls
+  grew; the per-call framework peaks of the same calls were 1.2 to 8.2 GB, and those
+  exclude the CUDA context. Neither is the GPU memory one call needs on its own. So one
+  learned backend runs per process on the GPU (W-306 choice 6).
 * `3D_spleen` on LN 50×512×512 takes 226 s on one CPU thread, 58 s on four and 54.6 s on
   the GPU; `cpsam_v2` on a 1024² two-channel culture image at diameter 240 takes 203 s,
-  69 s and 1.5 s; Cellpose 3D mode on 42×512×512 is projected at 3,015–3,833 s per CPU
-  call and was run on the GPU only (6.2 s) (`cost-summary.csv`).
+  69 s and 1.5 s; Cellpose 3D mode on 42×512×512 ran on the GPU only (6.2 s), and its CPU
+  cost is projected, not measured, at 3,015–3,833 s per call from 129–164 network tiles at
+  the 23.4 s median single-tile CPU call, without the 3D flow dynamics (`cost-summary.csv`,
+  `not_run` rows). The four-thread figures exist for one case per model only.
 
 ### Environments
 
 | Option | Plan | Effect on existing files | Effect on the lock | Effect on the engines |
 | --- | --- | --- | --- | --- |
 | **E1. One environment, backends as optional extras (recommended)** | Extras `stardist` and `cellpose` in `pyproject.toml`, resolved in the one `uv.lock` with the §2.7 extras; GPU hosts install the `+cu126` torch build and TensorFlow's `and-cuda` extra in their own environment. | `src/python/pyproject.toml` and `src/python/uv.lock` (below). | tensorboard 2.21.0 → 2.20.0 is the only locked version change; 20 packages are added (W-305 rows B, C, D; W-306 notes section 1). | `stardist_segmentation` drops its `conda:` directive and runs in the project environment; the legacy conda environment is kept only to regenerate the parity outputs. |
-| E2. Separate environments per backend | The lock is unchanged; StarDist keeps the conda environment `{envs_path}/stardist`, Cellpose gets another; the package calls them out of process. | Workflow environment files per backend. | None. | A method would not be an in-process callable, which contradicts D2; the legacy environment has Python 3.9 and no Starfinder. |
+| E2. A separate locked environment per conflicting backend (the D5 rule) | The project lock stays unchanged; StarDist with TensorFlow gets its own locked environment that also holds Starfinder, and the method runs in process there. The engine chooses the environment of each segment task; the API never spawns another environment (D5). | A second lock file and environment definition per backend; the legacy conda environment `{envs_path}/stardist` (Python 3.9, no Starfinder) cannot serve. | None to `uv.lock`; a second lock to maintain. | Snakemake selects the environment per segment rule; a plan that mixes StarDist and Cellpose runs as two tasks. |
 | E3. Backends as default dependencies | The same packages in `[project] dependencies`. | `pyproject.toml`, `uv.lock`. | The same version change; every install gains about 1.9 GB (TensorFlow) and 0.2 GB (Cellpose) (W-306 `environment-packages.csv`). | Every rule's environment holds TensorFlow. |
 
 **Recommendation: E1**, the W-305 row D environment that W-306 adopted (W-306 notes
 section 10, unresolved choice 1). W-306 audited it: all 312 locked packages installed,
 exactly three differing (tensorboard 2.20.0 and the `+cu126` torch and torchvision), 36
 packages added in the GPU spike, and every call of `segmentation-calls.csv` ran there;
-StarDist, Cellpose, TensorFlow and PyTorch import together in one process.
+StarDist, Cellpose, TensorFlow and PyTorch import together in one process. D5 applies
+only when a backend cannot share the locked environment; W-305 and W-306 found that it can
+(on Python 3.12, Linux x86_64). If `uv lock` at the gate cannot resolve E1, E2 is the D5
+fallback.
 
 **Versions** (W-306 notes section 10, `provisioning/freeze.txt`): StarDist 0.9.2,
 csbdeep 0.8.2 (already locked), TensorFlow 2.20.0, Keras 3.15.1, tensorboard 2.20.0;
@@ -694,10 +810,11 @@ has 3.15.1), and 2.19 needs numpy < 2.2 (the lock has 2.2.6). In these versions 
 step-by-step prototype reproduces the legacy script exactly on CPU (W-306 section 3).
 
 **Cellpose is integrated**, as W-306 recommends (notes section 10): it loads offline from
-an explicit path, runs in the same environment, repeats exactly for a fixed device,
-covers 2D and 3D (by planes) and costs about 1.5 s per 1024² image on the GPU. The
+an explicit path, runs in the same environment, repeats exactly for a fixed device in
+its one repeat case, covers 2D and 3D (by planes) and took about 1.5 s per 1024² image on
+the GPU (per-call wall time). The
 contract absorbs the five behaviors W-306 lists: the silent fallback for a missing model
-path (check 8), the uint16 to uint32 switch (the dtype rule), the dropped Z axis for one
+path (check 6), the uint16 to uint32 switch (the dtype rule), the dropped Z axis for one
 plane (check 10), a diameter that must be explicit (`diameter` required) and its CPU cost
 (documented; 3D mode is GPU-only in practice). Whether tile seams change dense real
 images is open (W-306 choice 10); `tile_overlap` is recorded and the input window is
@@ -759,18 +876,47 @@ add platform-specific entries or find no TensorFlow 2.20.0 wheel. If it does, th
 the `stardist` extra narrows to the versions with wheels, and the gate reviews the
 narrower marker.
 
-**Limitations of the evidence** (W-305 `matrix.md`, "What this does not show"; W-306
-notes section 12): `uv lock` was not run; TensorFlow 2.20.0 is built against CUDA 12.5.1
-and cuDNN 9 and ran on torch's CUDA 12.6 libraries only in the W-305 smoke tests and the
-W-306 runs; GPU memory with both frameworks in one process, UGER or GCP GPU nodes and
-whole fields of view were not examined (the 50×1496×1496 `3D_spleen` call is an estimate:
-3,442 MiB for four dense arrays, about 12,500 MiB peak RSS and 1,930 s by linear
-extrapolation, `fov-memory-estimate.json`); one host (GP099-29C, RTX A5000, driver 580);
-few images, one field of view per context, and no annotation, so no accuracy statement;
-the four-thread run covers one case per model and the scale and threshold rows ran on the
-GPU only; the 3D seam conclusion rests on one LN crop; the CPU costs of GPU-only calls
-are projections; no published hash was checked for `cpsam_v2`; the legacy environment's
-parity timings come from a network share and are not costs.
+**Limitations of the evidence.** The W-305 matrix ("What this does not show") and the
+W-306 notes (sections 4, 5, 12, 13 and 14) qualify every number on this page and on
+{doc}`segmentation-algorithms`:
+
+* Resolution and environments: `uv lock` was not run; the rows resolve the exported pins
+  for Python 3.12 on Linux x86_64 only, and TensorFlow 2.20.0 wheels for the lock's other
+  Python versions and platforms were not checked. TensorFlow 2.20.0 is built against
+  CUDA 12.5.1 and cuDNN 9 and ran on torch's CUDA 12.6 libraries only in the W-305 smoke
+  tests and the W-306 runs. The legacy environment ran on CPU only.
+* Not examined: GPU memory with both frameworks loaded in one process, UGER or GCP GPU
+  nodes, and whole fields of view. The 50×1496×1496 `3D_spleen` call is an estimate:
+  3,442 MiB for four dense arrays that leave out the process baseline, tile activations,
+  workspace and copies, and about 12,500 MiB peak RSS and 1,930 s by linear extrapolation,
+  which is not a bound in either direction (`fov-memory-estimate.json`).
+* How calls were measured (W-306 section 4): calls share one job process per method,
+  device, thread count and plan, which loaded the model once. Per-call peak RSS is the
+  process's high-water mark during the call (reset before it), so it includes what the
+  model load and earlier calls left resident (`rss_before_mib`) and is not the memory one
+  call needs on its own. Per-call CPU time is the whole process's CPU time over the call,
+  all threads. The framework GPU peak (TensorFlow or torch peak allocation during the call)
+  excludes the CUDA context; the nvidia-smi process figure is per job, read after the
+  call, and includes the allocator caches of earlier calls; the two are not
+  interchangeable. Process start-up and imports fall outside every call; the learned
+  main and repeat jobs ran a warm-up call after the load, while the seam, block-probe and
+  watershed jobs did not, so their first call includes first-call costs. The `/usr/bin/time`
+  maximum RSS of a job covers only the part after the last reset.
+* One measured call lacks a value: the pilot Cellpose CPU call at diameter None was stopped
+  by the worker after 35.8 s; it has no CPU time, and its wall time (from the orchestrator)
+  and peak RSS (the watchdog's process-tree peak over the whole attempt, load included)
+  come from other sources than the other rows. No figure on these pages uses that call.
+* Coverage: one host (GP099-29C, RTX A5000, driver 580), few images, one field of view per
+  context, synthetic fixtures outside the models' training data, and no annotation, so no
+  accuracy statement. The four-thread run covers one case per model; the scale and
+  threshold rows ran on the GPU only; the CPU costs of GPU-only calls are projections; the
+  repeatability statements rest on one repeat case per method; the CPU-against-GPU
+  tolerances come from this one host and few images.
+* Open behaviors: the 3D seam conclusion rests on one LN crop (the 3D seam fixture found
+  nothing); Cellpose seams on dense images are open; the Cellpose normalization-default
+  mutation is from code reading, not a measurement.
+* Identity: no published hash was checked for `cpsam_v2`; the legacy environment's parity
+  timings come from a network share and are not costs.
 
 ## Workflow configuration
 
@@ -805,9 +951,18 @@ names, and a default-tier test keeps the schema list equal to the registry, as f
 other stages ({doc}`method-registry`, "YAML naming per stage"). The block is rejected
 unless `backend: python`.
 
+The block is executed by the §2.13 method-agnostic segmentation rule, which loads the FOV's
+reference-frame images (for example from the `registered` checkpoint) and runs the segment
+call; until then it serves the Python API and the adapter function.
+
 **Translation of the legacy keys.** The workflow adapter (`dataset/workflow.py`, a new
 `_segmentation` beside `_nuclei_registration`) turns `rules.stardist_segmentation.parameters`
-into a one-run plan when the `segmentation` block is absent:
+into one run when the `segmentation` block is absent. The legacy rule keeps its single
+input file, so the run's input is that file, read with `load_volume`, and its grid is
+`reference_grid_from_file(<input file>)`: the shape of the file, and the metadata of its
+`starfinder_metadata` description or, for files without one (the legacy scripts write
+none), metadata built from the configured `voxel_size_z` and `voxel_size_xy` and recorded
+as declared.
 
 | Legacy key | Translation |
 | --- | --- |
@@ -815,26 +970,29 @@ into a one-run plan when the `segmentation` block is absent:
 | `prob_thresh`, `nms_thresh` | `prob_thresh`, `nms_thresh`; recorded with `threshold_source: "stored"` when they equal the model's `thresholds.json`, else `"override"`. |
 | `rescale` | `true` becomes `scale` 0.5 in Y and X inside StarDist, so the labels are rendered on the input grid instead of the legacy round trip; the change is recorded in `docs/migration.md`. `false` becomes `scale` 1.0. |
 | `expand_labels`, `distance` | `operations: [{operation: expand_labels, distance: <distance>, unit: pixel, mode: planar}]` when `expand_labels` is true. |
-| `segmentation_input_folder` | `overlay` (default): one `composite` channel prepared by `composite_nuclei_amplicon` from the nuclear stain and the reference merged image; `DAPI`: one `nuclear` channel; `flamingo/enhanced_DAPI`: one `nuclear` channel prepared by `enhance_with_flamingo`; any other folder: that image, read as one `nuclear` channel declared to be on the reference grid. |
+| `segmentation_input_folder` | The role of the input file's one channel: `overlay` (default; the file written by the `create_nuclei_amplicon_overlay` rule, which itself calls `composite_nuclei_amplicon`): `composite`; `DAPI`: `nuclear`; `flamingo/enhanced_DAPI` (written by the `enhance_dapi_with_flamingo` rule through `enhance_with_flamingo`): `nuclear`; any other folder: `nuclear`. |
 | (none) | `target`: a new Python-only key of the legacy block; without it, `cell` for `overlay` and `nucleus` otherwise, recorded as `"target_source": "legacy_default"`. |
 | `create_nuclei_amplicon_overlay.parameters.maximum_projection`, top-level `maximum_projection` | the run's `projection` (`ProjectionConfig()` when true). |
-| `rotate_angle`, `dapi_round` | not read by segmentation: inputs come from the FOV's rounds after `FOV.run`'s rotation and registration; the adapter checks that exactly one input file matches and raises naming the matches. |
+| `rotate_angle`, `dapi_round` | not read by the segmentation adapter. In the legacy rules they still drive `rotate_nuclei`, whose file the composite rule reads; `get_dapi_input` raises unless exactly one file matches, naming the matches. In the `segmentation` block, inputs come from the FOV's rounds after `FOV.run`'s rotation and `FOV.register_rounds`. |
 
 `rules.reads_assignment.parameters.expand_labels` and `dilation_distance` are W-308's;
 this page only requires that a label image is expanded once.
 
-**Which rule changes belong to §2.9 and which to §2.13.** This page assigns to §2.9 the
-changes that keep every rule's name, inputs and outputs, and to §2.13 the changes to rule
-topology, names, outputs and engine settings, following the W-152 boundary comment
-(2026-09-28) as the issue cites it; the comment's text was not among this issue's
-inputs, so W-309 checks the split.
+**Which rule changes belong to §2.9 and which to §2.13.** The W-152 planning comment
+summarizes the §2.13 boundary (2026-09-28, its decisions 1, 5 and 7): logic that can
+change a result moves into the package when §2.9 delivers; environments, GPUs and
+scheduling stay with the engine. This page therefore assigns to §2.9 the package, the
+adapter and the changes that keep every rule's name, inputs and outputs, and to §2.13 the
+changes to rule topology, names, outputs and engine resources. The boundary comment itself
+was not among this issue's inputs, so W-309 checks the split.
 
 | Change | Section |
 | --- | --- |
 | The bodies of `stardist_segmentation.py`, `create_nuclei_amplicon_overlay.py` and `enhance_dapi_with_flamingo.py` become adapter calls (like `nuclei_registration.py`), keeping the rule names, inputs, outputs and file names; the composite and the Flamingo enhancement keep their golden digests | §2.9 |
 | `stardist_segmentation` drops `conda: {envs_path}/stardist` and runs in the project environment with the `stardist` extra (needed by the line above) | §2.9 |
 | The schema gains the Python-only `segmentation` block, the legacy block's `target` key and a Python-only `device`; a default-tier test keeps the method list equal to the registry | §2.9 |
-| A method-agnostic rule per run with outputs `images/segmentation/<run>/{fovID}.tif` and the record; retiring `stardist_segmentation` | §2.13 |
+| `get_dapi_input` (the input function of `rotate_nuclei`) raises unless exactly one file matches; the rule's name, input and output stay | §2.9 |
+| A method-agnostic rule per run that loads the FOV, runs the segment call from the `segmentation` block and writes `images/segmentation/<run>/{fovID}.tif` and the record; retiring `stardist_segmentation` | §2.13 |
 | Declaring `nuclei_registration`'s image outputs; connecting `enhance_dapi_with_flamingo` to them; retiring `rotate_nuclei` as a segmentation input | §2.13 |
 | GPU resources and one-backend-per-process rules on GPU nodes | §2.13 |
 | Removing `create_segmentation_preview.py` | §2.13 |
@@ -854,7 +1012,8 @@ MATLAB rules, shared MATLAB keys and filenames do not change.
   bodies become adapter calls, `run_script` is replaced by those package calls and
   `test_the_helper_follows_the_script` is removed, because the cited lines leave the
   script; `legacy_stardist_steps` stays as the frozen legacy reference, with the four
-  legacy-behavior tests.
+  legacy-behavior tests. `test_constant_and_zero_inputs` keeps its assertions and
+  `CONSTANT_DIGESTS` with the package functions in place of the scripts.
 * A new `learned` parity test copies `parity/parity_expected.npz` of the W-306 run into
   `src/python/test/data/segmentation_parity.npz` (357 KB, sha256 `4a5df997…`) and runs the
   `stardist` method on CPU with `scale` 1.0, `normalize_percentiles` (1, 99.8), the
@@ -880,7 +1039,10 @@ The implementation adds: the `starfinder.segmentation` module and its names; the
 output dtype of `images/stardist_segmentation/{fovID}.tif` (uint16 → uint32) and
 `rescale: true` rendered on the input grid; no foreground gate, so an image without
 foreground gives an empty label image instead of an error; the `stardist` and
-`cellpose` extras; the `device` keyword of the segment entry.
+`cellpose` extras; the `device` keyword of the segment entry. The documentation also gains
+the notebook example of the three calls per FOV that D1 asks for: `FOV.run`, then
+`FOV.register_rounds` where morphology rounds are used, then `FOV.segment`, then assign
+once W-308's entry exists.
 
 ## Exclusions
 

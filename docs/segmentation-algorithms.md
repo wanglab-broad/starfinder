@@ -18,13 +18,43 @@ Every measured number comes from W-306, run directory
 `notes.md` sections 3 to 7; tables `segmentation-calls.csv`, `cost-summary.csv`,
 `comparisons.csv`, `fov-memory-estimate.json`, `label-dtype-probe.json`), or from W-305
 (`runs/W-305/20261004T0630Z-summary/models.md` and `examples.md`). W-307 repeats no
-measurement. Costs are wall time, CPU time and per-call peak RSS on GP099-29C (one RTX
-A5000, driver 580) with StarDist 0.9.2, TensorFlow 2.20.0 and Cellpose 4.2.1.1 with torch
-2.7.1; one CPU thread unless stated. Where W-306 did not measure a function, the estimate
-below is derived from the code and labelled as such. The W-306 limitations apply
-throughout: one field of view per context, synthetic fixtures outside the models'
-training data, no annotation, one host ({doc}`segmentation-contract`, "Device and
-environments").
+measurement. The measurements ran on GP099-29C (one RTX A5000, driver 580) with StarDist
+0.9.2, TensorFlow 2.20.0 and Cellpose 4.2.1.1 with torch 2.7.1; one CPU thread unless
+stated. Where W-306 did not measure a function, the estimate below is derived from the code
+and labelled as such. The W-306 and W-305 limitations apply throughout; the full list is
+in {doc}`segmentation-contract` ("Limitations of the evidence").
+
+Each statement of failure or edge behavior below names what supports it: a W-306 row or
+section (measured with the library), the W-307 golden test (`test_segmentation_golden.py`,
+run on the unchanged scripts), a probe in the locked environment recorded in the W-307
+worker notes, or the code (read, not run). Statements about functions that do not exist
+yet are marked as proposed rules.
+
+### How to read the resource figures
+
+W-306 measured calls inside job processes (notes section 4). Every figure below says which
+of these kinds it is:
+
+* **Wall** and **CPU**: per-call wall time, and the whole process's CPU time over the call
+  (all threads), both measured. Process start-up, imports and the model load are outside
+  them; the load has its own row. The learned main and repeat jobs ran a warm-up call after
+  the load; the watershed job did not, so its first call includes first-call costs.
+* **Peak RSS**: the process's resident-memory high-water mark during the call, reset before
+  it. It includes what the model load and earlier calls in the same job left resident; the
+  RSS before the call is given in brackets where it matters. It is not the memory one call
+  needs on its own.
+* **Framework GPU peak**: TensorFlow's or torch's peak allocation during the call. It
+  excludes the CUDA context.
+* **Process GPU memory**: nvidia-smi's figure for the job process, read after the call. It
+  includes the allocator caches and the memory that earlier calls grew (TensorFlow keeps
+  what it grows to), so it is per job, not per call, and not interchangeable with the
+  framework peak.
+* **Projected**: a CPU cost W-306 did not measure, with its basis.
+* **Code-derived estimate**: W-307's reading of the code, for functions W-306 did not run.
+
+The one W-306 call without a CPU time (the stopped pilot Cellpose CPU call at diameter
+None, whose wall time and peak RSS come from the orchestrator and the watchdog) is not
+used on this page.
 
 ## What each element addresses
 
@@ -74,40 +104,50 @@ at prob 0.3, the stored 0.479 and 0.8.
 **Failure behavior.**
 
 * No foreground: an all-zero image gives an empty label image without error, on CPU and
-  GPU (`*_empty` rows); the result has `outcome` `empty`. `3D_spleen` returns uint16 when
-  it finds nothing and int32 otherwise; the wrapper converts both to `uint32`.
+  GPU (W-306 `f2:empty`, `f3:empty` rows); the result has `outcome` `empty` (proposed
+  rule). `3D_spleen` returns uint16 when it finds nothing and int32 otherwise (W-306
+  section 14, all rows); the wrapper converts both to `uint32` (proposed rule).
 * Background noise: `2D_versatile_fluo` returns one spurious object along the image
-  border, `3D_spleen` none (`*_noise` rows). No filter is applied; the worker notes keep
-  object filtering open.
-* Wrong dimensionality: rejected by the stage wrapper before the model loads. Unwrapped,
-  StarDist 2D on 1×64×64 raises a bare `ValueError` and `3D_spleen` on one plane returns
-  nothing where it finds the same blobs in a volume (W-306 section 6), which is why Z=1 is
-  refused for 3D models.
+  border, `3D_spleen` none (W-306 `f2:noise`, `f3:noise` rows). No filter is applied; the
+  worker notes keep object filtering open.
+* The current script on an image with no Otsu component raises at `areas.max()` (W-306
+  parity probe `probe_zeros_64x64_2d`; W-307 golden test); the method has no gate.
+* Wrong dimensionality and Z=1: rejected by the stage wrapper before the model loads
+  (proposed rule). Unwrapped, StarDist 2D on 1×64×64 raises a bare `ValueError`
+  (W-306 `f2:z1`) and `3D_spleen` on one plane returns nothing where it finds the same
+  blobs in a volume (W-306 `f3:z1`), which is why Z=1 is refused for 3D models.
 * Small inputs: no minimum is enforced by the library; inputs from 8×8 run and may be
-  empty (`min_*` rows). `min_shape_zyx` stays (1, 1, 1).
+  empty (W-306 `probe:2d_8x8` and the other `probe:` minimum rows). `min_shape_zyx` stays
+  (1, 1, 1).
 * Missing or changed model files: `MissingModelError` or `ModelHashMismatchError` before
-  loading. Loading a model with the wrong class raises the library's `ValueError` about
-  the grid; the dimensionality check runs first, so it is not reached.
-* Low thresholds slow the CPU non-maximum suppression: prob 0.5 took 72 s against 54.6 s
-  at the stored value on the GPU, and the un-normalized 16×64×64 fixture took 176–180 s.
+  loading (proposed rule). Loading a model with the wrong class raises the library's
+  `ValueError` about the grid (W-306 `loading-probes.json`); the dimensionality check runs
+  first, so it is not reached.
+* Low thresholds slow the CPU non-maximum suppression: on the GPU, prob 0.5 took 72 s of
+  per-call wall time against 54.6 s at the stored value, and the un-normalized 16×64×64
+  fixture took 176–180 s on either device (W-306 section 4; the cause was not measured).
   The method sets no time limit; the cost is the caller's.
 * Tiling: on the CPU, tiled and untiled labels are identical; on the GPU, seam-crossing
   labels keep IoU ≥ 0.9996 on the tissue crop, and all 135 seam-crossing LN labels are
-  identical to the untiled run (W-306 seam tables).
+  identical to the untiled GPU run (W-306 seam tables). The 3D seam fixture found no
+  object, so the 3D statement rests on one LN crop.
 
-**Resources** (`cost-summary.csv`; load 0.3 s on CPU, 1.0–1.2 s on GPU):
+**Resources** (measured per call, `cost-summary.csv` and `segmentation-calls.csv`; the
+kinds are defined under "How to read the resource figures"):
 
 | Case | CPU, 1 thread | CPU, 4 threads | GPU |
 | --- | --- | --- | --- |
-| `3D_spleen`, LN 50×512×512, scale 1, 1×4×4 tiles | 226 s, 2,245 MiB | 58 s, 2,256 MiB | 54.6 s, 2,707 MiB framework peak, 8.9 GB process |
-| `3D_spleen`, the other LN crops | 165–190 s, up to 2,338 MiB | | 3.7–29.5 s |
-| `3D_spleen`, LN untiled / 1×2×2 | | | 62.4 s, 8,245 MiB GPU peak / 42.5 s, 3,074 MiB |
-| `2D_versatile_fluo`, 1024² at scale 0.25 | 1.2 s, 868 MiB | 1.0 s | 3.0 s (first call at this size) |
-| `2D_versatile_fluo`, 1024² at scale 1.0 | 1.7–1.8 s, up to 1,041 MiB | | 0.8–1.8 s |
+| Model load (`load` rows) | `3D_spleen` 0.3 s wall; `2D_versatile_fluo` 0.2 s | | `3D_spleen` 1.0 s, `2D_versatile_fluo` 0.9–1.2 s wall |
+| `3D_spleen`, LN 50×512×512, scale 1, 1×4×4 tiles | 226 s wall, 197 s CPU; peak RSS 2,245 MiB (887 MiB before the call) | 58 s wall, 207 s CPU; peak RSS 2,256 MiB | 54.6 s wall, 38.7 s CPU; framework GPU peak 2,707 MiB; process GPU memory 8,922 MiB (job, after the call); peak RSS 1,999 MiB (1,329 MiB before) |
+| `3D_spleen`, the other LN crops | 165–190 s wall; peak RSS up to 2,338 MiB | | 3.7–29.5 s wall; framework GPU peak 1,183 MiB |
+| `3D_spleen`, LN untiled / 1×2×2 tiles | not run (projected 220 s / 200 s) | | 62.4 s wall, framework GPU peak 8,245 MiB, process GPU memory 17,114 MiB / 42.5 s, 3,074 MiB framework peak |
+| `2D_versatile_fluo`, 1024² at scale 0.25 | 1.2 s wall; peak RSS 868 MiB (839 MiB before) | 1.0 s wall | 3.0 s wall (the job's first call at this size); framework GPU peak 231 MiB |
+| `2D_versatile_fluo`, 1024² at scale 1.0 | 1.7–1.8 s wall; peak RSS up to 1,041 MiB | | 0.8–1.8 s wall; framework GPU peak up to 454 MiB |
 
 A whole LN field of view (50×1496×1496) was not run. The configuration gives 3,442 MiB
-for four dense arrays, and a linear extrapolation of the 50×512×512 CPU call gives about
-12,500 MiB peak RSS and 1,930 s; both are estimates, not bounds
+for four dense arrays (leaving out the process baseline, tile activations, workspace and
+copies, and assuming dense distances), and a linear extrapolation of the 50×512×512 CPU
+call's peak RSS gives about 12,500 MiB and 1,930 s; both are estimates, not bounds
 (`fov-memory-estimate.json`). A whole FOV therefore needs a measurement, StarDist's
 block-wise prediction or the §2.10 tiling (W-306 choice 7).
 
@@ -139,29 +179,35 @@ YX, ZY and ZX planes.
 **Failure behavior.**
 
 * No foreground: an all-zero image gives an empty label image without error; background
-  noise gives none (`*_empty`, `*_noise` rows).
+  noise gives none (W-306 `f2:empty`, `f2:noise` rows).
 * A missing model path: Cellpose itself silently loads the default `cpsam_v2` (and would
-  download it); the wrapper's model check raises first.
-* More than 65,535 masks: Cellpose switches from uint16 to uint32 with a warning; the
-  wrapper converts to `uint32` either way.
-* One plane: the Z axis is dropped by Cellpose and restored by the wrapper.
-* `normalize=False` gives no labels; Starfinder always passes its normalization.
-* Seams on dense images: isolated objects on tile edges stay whole (49 of 49), but moving
-  the tile grid by half a tile changed 3 of 22 interior culture cells beyond IoU 0.5, and
-  every interior cell lay on a seam in both layouts (W-306 choice 10, open).
+  download it) (W-306 `loading-probes.json` and code reading of `cellpose/models.py`); the
+  wrapper's model check raises first (proposed rule).
+* More than 65,535 masks: Cellpose switches from uint16 to uint32 with a warning (W-306
+  code reading of `cellpose/dynamics.py` and `label-dtype-probe.json`); the wrapper
+  converts to `uint32` either way (proposed rule).
+* One plane: the Z axis is dropped by Cellpose (W-306 `f2:z1`, `f3:z1` rows) and restored by
+  the wrapper (proposed rule).
+* `normalize=False` gives no labels (W-306 `iso_unnormalized` row); Starfinder always passes
+  its normalization.
+* Seams on dense images: isolated objects on tile edges stay whole (49 of 49, W-306
+  `seam-summary.csv`), but moving the tile grid by half a tile changed 3 of 22 interior
+  culture cells beyond IoU 0.5, and every interior cell lay on a seam in both layouts
+  (W-306 `seam-shift.csv`, choice 10, open).
 
 **Resources:**
 
 | Case | CPU, 1 thread | CPU, 4 threads | GPU |
 | --- | --- | --- | --- |
-| culture cells 1024² × 2 channels, diameter 240 | 203 s, 1,718 MiB | 69 s, 1,740 MiB | 1.5 s, 860 MiB framework peak, 2.4 GB process |
-| culture nuclei 1024², diameter 60 | 229 s, 2,361 MiB | | 0.6 s, 1,503 MiB |
-| any input within one 256-pixel tile | 22–25 s | | 0.04–0.08 s |
-| 3D mode, 42×512×512 × 2, diameter 240 | not run; projected 3,015–3,833 s per call | | 6.2 s, 1,504 MiB GPU peak, 2,430 MiB RSS |
+| Model load (`load` rows) | 2.7 s wall; peak RSS 2,435 MiB (679 MiB before) | 2.3 s wall | 2.7 s wall; framework GPU peak 1,760 MiB; process GPU memory 2,020 MiB |
+| culture cells 1024² × 2 channels, diameter 240 | 203 s wall, 191 s CPU; peak RSS 1,718 MiB (1,342 MiB before) | 69 s wall, 267 s CPU; peak RSS 1,740 MiB | 1.5 s wall; framework GPU peak 860 MiB; process GPU memory 2,376 MiB (job, after the call) |
+| culture nuclei 1024², diameter 60 | 229 s wall; peak RSS 2,361 MiB (1,465 MiB before) | | 0.6 s wall; framework GPU peak 1,503 MiB |
+| any input within one 256-pixel tile | 22–25 s wall | | 0.04–0.08 s wall |
+| 3D mode, 42×512×512 × 2, diameter 240 | not run; projected 3,015–3,833 s per call (129–164 tiles at the 23.4 s median single-tile CPU call, 3D flow dynamics not included) | | 6.2 s wall; framework GPU peak 1,504 MiB; peak RSS 2,430 MiB (1,855 MiB before) |
 
-Load: 2.7 s and 2,435 MiB peak during the load on CPU; 1,760 MiB on the GPU. On the
-CPU, flow dynamics take 200/rescale iterations (1,600 at diameter 240), an estimated
-180 s of the 203 s call. Cellpose 3D mode is GPU-only in practice.
+On the CPU, flow dynamics take 200/rescale iterations (1,600 at diameter 240), which
+W-306 estimates at about 180 s of the 203 s call (the call minus one tile's 23 s, not a
+separate measurement). Cellpose 3D mode is GPU-only in practice.
 
 ### `seeded_watershed`
 
@@ -179,22 +225,24 @@ W-305 tissue-2D run used 16 pixels × 0.094635 µm = 1.514 µm); `threshold`, de
 `compactness` 0.0; `connectivity` 1. The spacing comes from the input metadata and is
 required.
 
-**Failure behavior** (W-306 section 7):
+**Failure behavior** (W-306 section 7, measured on the prototype):
 
-* No seeds: an empty label image, no error.
+* No seeds: an empty label image, no error (W-306 `no_seeds_2d` rows).
 * No foreground (an all-zero stain): the threshold is 0, the mask holds only the seeds,
-  and every cell equals its seed.
-* A seed outside the foreground is always kept and becomes a cell equal to the seed; on
-  tissue-2D, 3 of 39 nuclei lie entirely outside the Otsu foreground and 5 cells equal
-  their nucleus.
-* Different shapes, a spacing of the wrong length, missing spacing or non-integer seeds
-  raise.
+  and every cell equals its seed (W-306 `empty_stain_2d`).
+* A seed outside the foreground is always kept and becomes a cell equal to the seed
+  (W-306 `seed_outside_foreground_2d`); on tissue-2D, 3 of 39 nuclei lie entirely outside
+  the Otsu foreground and 5 cells equal their nucleus (`tissue2d_amplicon`).
+* Different shapes, a spacing of the wrong length or non-integer seeds raise (W-306
+  prototype code, `scripts/seeded_watershed.py`); missing spacing raises (proposed rule).
 * Repeats are identical (11 cases, each twice); the function has no random state. Giving
   the spacing (1, 2, 2) instead of ignoring it raised the matched IoU against the
   construction cells from 0.964 to 0.980, a geometry check, not accuracy.
 
-**Resources.** 0.22–0.25 s and 157–161 MiB on a 1024² tissue image; at most 5 ms on the
-fixtures. A 3D field of view was not measured.
+**Resources.** Measured per call on CPU, one thread: 0.22–0.25 s wall and 157–161 MiB
+peak RSS (121–141 MiB before the call) on a 1024² tissue image; at most 5 ms on the
+fixtures. The watershed job had no warm-up call and no watchdog, and its `/usr/bin/time`
+record covers only the part after the last reset. A 3D field of view was not measured.
 
 ## Input functions
 
@@ -212,17 +260,28 @@ two images (the result is identical), and an optional projection is the run's
 0.001, fractions; inputs ZYX on one grid with equal metadata (Z=1 for a plane). Output
 uint8 ZYX.
 
-**Failure behavior.** Different grids or metadata raise `IncompatibleGeometryError`
-before any computation (today a broadcasting `ValueError`). An all-zero nuclear image
-gives the amplicon channel alone; two all-zero images give an all-zero image; neither
-raises (checked on the golden fixture). A constant image has equal quantiles and maps to
-zero.
+**Failure and edge behavior.**
 
-**Resources.** Not measured by W-306. From the code: two float64 copies and their
+* A constant image is not set to zero. Its two quantiles are equal, and
+  `rescale_intensity` then clips the image to the output range (the uint8 range) instead
+  of stretching it (code: `skimage/exposure/exposure.py`, scikit-image 0.26), so its grey
+  level passes through unchanged: a constant nuclear image of 50 and a constant amplicon
+  image of 80 give an all-80 composite, and a constant nuclear image of 50 with the fixture
+  amplicon gives the amplicon composite floored at 50 (W-307 golden test
+  `test_constant_and_zero_inputs`, `CONSTANT_DIGESTS`).
+* An all-zero nuclear image is the constant 0: the composite is the stretched amplicon
+  alone; two all-zero images give an all-zero image; neither raises (golden test).
+* Mismatched shapes raise a broadcasting `ValueError` today (W-307 probe, worker notes);
+  the function raises `IncompatibleGeometryError` instead, before any computation, and
+  `FOV.segment` checks the metadata (proposed rule).
+* YX inputs raise `AxisError` today (golden test `test_composite_needs_3d_inputs`); the
+  function takes Z=1 for a plane (proposed rule).
+
+**Resources.** Not measured by W-306. Code-derived estimate: two float64 copies and their
 maximum, about 24 bytes per voxel beyond the uint8 inputs, so about 2.7 GB for a
 50×1496×1496 field of view (the current script's stacked copy adds 16 bytes per voxel,
-about 4.5 GB in total, above the 4 GiB target). On the golden fixture (16×64×64) a run
-takes about 10 ms.
+about 4.5 GB in total, above the 4 GiB target). Measured on the golden fixture (16×64×64,
+CPU, one thread): about 10 ms per call (pytest durations).
 
 ### `enhance_with_flamingo`
 
@@ -235,13 +294,20 @@ convert both to float and return `img_as_ubyte(nuclear × (1 − flamingo))`.
 `nuclear_quantile` 0.001 (fractions), `median_radius_px` 1 (pixels, per plane). Inputs
 ZYX on one grid; a plane is Z=1 (today a YX input raises).
 
-**Failure behavior.** An all-zero Flamingo image leaves the stretched nuclear image; an
-all-zero nuclear image gives zeros; neither raises (golden fixture). Different grids
-raise `IncompatibleGeometryError`.
+**Failure and edge behavior.**
 
-**Resources.** Not measured by W-306. From the code: about three float64 arrays of the
-volume, about 2.7 GB for 50×1496×1496; the per-plane median adds one plane. About 20 ms
-on the golden fixture.
+* Constant images pass through the stretch unchanged, as for the composite: a constant
+  nuclear image of 50 with a constant Flamingo image of 80 gives 50 × (1 − 80/255), an
+  all-34 image (golden test `test_constant_and_zero_inputs`).
+* An all-zero Flamingo image leaves the stretched nuclear image, and an all-zero nuclear
+  image gives zeros; neither raises (golden test, `CONSTANT_DIGESTS`).
+* YX inputs raise `RuntimeError` in the per-plane median today (W-307 probe, worker notes);
+  the function takes Z=1 for a plane (proposed rule).
+* Mismatched shapes raise `IncompatibleGeometryError` (proposed rule).
+
+**Resources.** Not measured by W-306. Code-derived estimate: about three float64 arrays of
+the volume, about 2.7 GB for 50×1496×1496; the per-plane median adds one plane. Measured
+on the golden fixture (CPU, one thread): about 20 ms per call.
 
 ### `normalize_percentiles`
 
@@ -252,28 +318,34 @@ percentiles (NumPy, linear) over `axes`, unclipped: csbdeep's `normalize`, which
 **Parameters.** `p_low` 1.0 and `p_high` 99.8 [percent of the intensity distribution];
 `axes` all spatial axes of one channel.
 
-**Failure behavior.** A constant image maps to zeros. Without normalization StarDist
-gives different objects (2D: 3 labels, none matching; 3D: 1 label) and Cellpose none; a
-scaled image (×10) gives identical results after normalization (W-306 section 6).
+**Failure behavior.** A constant image maps to zeros: x − p_low is 0 everywhere (code;
+csbdeep 0.8.2 `normalize` on a constant image returns float32 zeros, W-307 probe in the
+locked environment). Without normalization StarDist gives different objects (2D: 3 labels,
+none matching; 3D: 1 label) and Cellpose none; a scaled image (×10) gives identical
+results after normalization (W-306 `iso_unnormalized` and `iso_x10*` rows, section 6).
 
-**Resources.** One float32 copy: 427 MiB for 50×1496×1496 (`fov-memory-estimate.json`).
+**Resources.** One float32 copy: 427 MiB for 50×1496×1496, a code-derived estimate from
+the model configuration (W-306 `fov-memory-estimate.json`).
 
 ### `rescale_input` and `labels_to_grid`
 
 **Algorithm.** `rescale_input` resamples the image by per-axis factors (linear, with
 anti-aliasing when shrinking) and returns metadata whose spacing is divided by the
-factors and whose `frame_id` records the rescale. `labels_to_grid` maps a label image back
-by nearest neighbour through physical coordinates onto exactly the target shape, so an
-odd size keeps its grid (the current round trip turns 61×67 into 60×68).
+factors (when it has a spacing) and whose `frame_id` records the rescale. `labels_to_grid`
+maps a label image back by nearest neighbour by pixel centres (source index ⌊(i + 0.5) ×
+n_source / n_target⌋ per axis) onto exactly the target shape, so an odd size keeps its grid
+(the current round trip turns 61×67 into 60×68: W-306 P3; and 61×63 into 60×64: golden
+test `test_rescale_round_trip_changes_an_odd_grid`).
 
-**Parameters.** `scale_zyx`, dimensionless factors > 0; the target metadata and shape.
+**Parameters.** `scale_zyx`, dimensionless factors > 0; the target shape.
 
-**Rules and failure behavior.** For nucleus targets only; a cell run, or a seeded run,
-whose input is not on the reference grid raises. Factors ≤ 0 raise; an axis that would
-shrink below one pixel keeps one.
+**Rules and failure behavior** (proposed rules). For direct callers detecting nuclei; a
+seeded run rejects seeds whose grid differs from its input's, so a cell run never uses a
+shrunk grid. Factors ≤ 0 raise. An axis that would shrink below one pixel keeps one
+(scikit-image's `rescale` already does this, W-307 probe).
 
-**Resources.** Not measured. One float copy of the rescaled image and one label array of
-the target grid.
+**Resources.** Not measured. Code-derived estimate: one float copy of the rescaled image
+and one label array of the target grid.
 
 ## Label functions
 
@@ -290,11 +362,13 @@ distance transform resolves them.
 `mode` `planar` or `volumetric`. The legacy translation is `planar`, `pixel`, the YAML
 `distance` (W-306 parity used 4).
 
-**Failure behavior.** An empty label image stays empty; distance 0 changes nothing;
-`unit="um"` without spacing raises. Applied once per run; the assignment never expands
-again (W-308).
+**Failure behavior.** An empty label image stays empty, and distance 0 changes nothing
+(scikit-image 0.26 `expand_labels`, W-307 probe in the locked environment); expansion is
+per plane in 3D today (golden test `test_expansion_is_per_slice`). `unit="um"` without
+spacing raises (proposed rule). Applied once per run; the assignment never expands again
+(W-308).
 
-**Resources.** Not measured. From scikit-image 0.26's implementation: float64 distances,
+**Resources.** Not measured. Code-derived estimate from scikit-image 0.26's implementation: float64 distances,
 int32 indices per axis, two masks and the output, about 22 bytes per pixel of one plane in
 `planar` mode (about 50 MB for a 1496² plane) and about 26 bytes per voxel in `volumetric`
 mode (about 2.9 GB for 50×1496×1496, close to the 4 GiB target together with the input
@@ -315,23 +389,24 @@ of radius 10 (cells) or 5 (nuclei); the workflow adapter translates them with th
 configured spacing. No default is proposed until a hand-built fixture pins the
 translation; MATLAB was not run in this batch, so there is no parity with the example.
 
-**Failure behavior.** A `volume` input raises (the function takes a `plane` label image
-and a ZYX stain on the same Y, X grid); an empty mask gives an empty label image with
-`outcome` `empty`. The MATLAB `Cyto = Cell − Nuclei` is not reproduced (W-308 defines
-compartments).
+**Failure behavior** (proposed rules; the function does not exist yet and MATLAB was not
+run). Labels with Z>1 raise (the function takes a plane label image, shape (1, Y, X), and a
+ZYX stain with the same Y, X); an empty mask gives an empty label image with `outcome`
+`empty`. The MATLAB `Cyto = Cell − Nuclei` is not reproduced (W-308 defines compartments).
 
-**Resources.** Not measured. Per-plane filters on one plane at a time; the output is one
-`uint32` volume (448 MB for 50×1496×1496, or 4 bytes per voxel).
+**Resources.** Not measured. Code-derived estimate: per-plane filters on one plane at a
+time; the output is one `uint32` volume (448 MB for 50×1496×1496, or 4 bytes per voxel).
 
 ## Import
 
 `import_labels` reads a YX or ZYX integer TIFF, converts the byte order to native,
-validates dtype, sign, grid and metadata, and records the file and array hashes
-({doc}`segmentation-contract`, "External-mask import"). Failure behavior: a float or
-boolean mask raises `TypeError`; a negative value, a grid mismatch or a metadata mismatch
-raises; an all-zero mask is a valid `empty` result. Resources: one copy of the file's
-array and its `uint32` conversion; the W-305 culture references (42×512×512, big-endian)
-read page by page.
+validates dtype, sign, shape against the given `ReferenceGrid` and the metadata, and
+records the file and array hashes and the grid ({doc}`segmentation-contract`, "External-mask
+import"). Failure behavior (proposed rules): a float or boolean mask raises `TypeError`; a
+negative value, a shape different from `grid.shape_zyx` or a metadata mismatch raises; an
+all-zero mask is a valid `empty` result. The W-305 culture references are big-endian
+(W-306 section 6), which the byte-order conversion handles. Resources (code-derived
+estimate): one copy of the file's array and its `uint32` conversion.
 
 ## Limitations
 
@@ -343,5 +418,8 @@ read page by page.
 * The CPU costs of GPU-only calls, Cellpose 3D mode on the CPU and whole fields of view are
   projections or estimates; the composite, Flamingo, expansion, extension and rescale
   estimates above come from the code, not from measurements.
+* Peak RSS and process GPU figures include what the model load and earlier calls left in
+  the job process, and framework GPU peaks exclude the CUDA context; none of them is the
+  memory one call needs on its own ("How to read the resource figures").
 * The Cellpose seam behavior on dense images and the 3D StarDist seam behavior beyond one
   LN crop are open.
