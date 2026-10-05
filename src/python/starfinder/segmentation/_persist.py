@@ -10,6 +10,7 @@ stages.
 from __future__ import annotations
 
 import json
+import weakref
 from dataclasses import replace
 from pathlib import Path
 
@@ -23,6 +24,10 @@ LABELS_FILE = "labels.tif"
 INPUT_FILE = "input.ome.tif"
 RECORD_FILE = "segmentation.json"
 FILES = (RECORD_FILE, LABELS_FILE, INPUT_FILE)   # removal order: the record first
+
+# Result object -> resolved labels.tif it was written to (write_run) or read from (read_run). Kept per
+# object, not per FOV or run name, so every result a save or a load returned keeps its location.
+_SAVED = weakref.WeakKeyDictionary()
 
 
 def run_directory(fov_directory, name) -> Path:
@@ -113,7 +118,9 @@ def write_run(directory, result: SegmentationResult, segmentation_input=None) ->
         record["input"] = dict(record["input"], path=INPUT_FILE, file_sha256=file_sha256(path))
     record = json_record(record)
     write_json(record, directory / RECORD_FILE)
-    return replace(result, record=record)
+    saved = replace(result, record=record)
+    _SAVED[saved] = (directory / LABELS_FILE).resolve()
+    return saved
 
 
 def read_run(directory, name) -> SegmentationResult:
@@ -141,4 +148,26 @@ def read_run(directory, name) -> SegmentationResult:
     grid = ReferenceGrid(tuple(grid["shape_zyx"]), ImageMetadata(**grid["metadata"]), grid["source"], grid["sha256"])
     if stored is not None and stored != grid.metadata:
         raise ValueError(f"label file {labels_path} stores metadata {stored!r}, the record {grid.metadata!r}")
-    return SegmentationResult(labels, grid, record["target"], record["geometry"], record["label_namespace"], record)
+    result = SegmentationResult(labels, grid, record["target"], record["geometry"], record["label_namespace"], record)
+    _SAVED[result] = labels_path.resolve()
+    return result
+
+
+def saved_labels(result, fov_directory) -> Path | None:
+    """The ``labels.tif`` of a result saved under its run in this per-FOV checkpoint directory, else None.
+
+    The rule of docs/assignment-contract.md ("Label images of a checkpointed
+    assignment"): the result was returned by :func:`write_run` (``FOV.segment`` with
+    checkpoints) or :func:`read_run` (``FOV.load_segmentation``), its file is
+    ``<fov_directory>/segmentation/<run>/labels.tif``, and that file's array SHA-256
+    equals the labels' SHA-256 now. Any other result (a direct ``segment`` or
+    ``import_labels`` result, a run kept in memory or saved under another root, a
+    caller-made or replaced result) is unsaved.
+    """
+    path = _SAVED.get(result)
+    if path is None or path != (run_directory(fov_directory, result.record.get("run")) / LABELS_FILE).resolve():
+        return None
+    if not path.is_file():
+        return None
+    labels, _ = read_labels(path)
+    return path if array_sha256(labels) == array_sha256(result.labels) else None

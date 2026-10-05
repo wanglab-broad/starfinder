@@ -248,6 +248,94 @@ def test_another_checkpoint_root_counts_as_unsaved(tmp_path, genes, masks):
     assert hashes(first) == before    # nothing in the first root changes
 
 
+def other_run(run):
+    return "nucleus" if run == "cell" else "cell"
+
+
+@pytest.mark.parametrize("source", ["segmented_on_another_fov_object", "loaded_on_another_fov_object",
+                                    "first_of_two_loads"])
+@pytest.mark.parametrize("run", ["cell", "nucleus"])
+@pytest.mark.parametrize("table_format", ["csv", "parquet"])
+def test_a15_a_saved_run_stays_saved_after_a_reload_or_on_another_fov_object(tmp_path, genes, masks, table_format,
+                                                                             run, source):
+    """A run written by FOV.segment(checkpoints=…) or loaded by FOV.load_segmentation in the assignment's root is
+    linked, also when another FOV object of the same FOV assigns it, or when the run was loaded again since."""
+    if table_format == "parquet":
+        pytest.importorskip("pyarrow")
+    root = tmp_path / "checkpoints"
+    checkpoints = CheckpointConfig(directory=root, table_format=table_format)
+    saving = boxes_fov(tmp_path, genes)
+    saving.segment(SegmentationPlan((import_run(run, masks),)), checkpoints=checkpoints)
+    assigning = saving if source == "first_of_two_loads" else boxes_fov(tmp_path, genes)
+    if source == "segmented_on_another_fov_object":
+        result = saving.segmentation_results[run]
+    elif source == "loaded_on_another_fov_object":
+        result = saving.load_segmentation(run, checkpoints=checkpoints)
+    else:
+        result = saving.load_segmentation(run, checkpoints=checkpoints)
+        second = saving.load_segmentation(run, checkpoints=checkpoints)
+        assert second is not result and saving.segmentation_results[run] is second
+    # The other run is kept in memory on the assigning FOV object: unsaved, so written.
+    assigning.segment(SegmentationPlan((import_run(other_run(run), masks),)))
+    runs = {run: result, other_run(run): assigning.segmentation_results[other_run(run)]}
+    before = hashes(root)
+    assigning.assign(cells=runs["cell"], nuclei=runs["nucleus"], checkpoints=checkpoints)
+    assert {p: h for p, h in hashes(root).items() if p in before} == before
+
+    folder = root / "FOV_001" / "assignment" / "default"
+    names = {"cell": "cell_labels.tif", "nucleus": "nucleus_labels.tif"}
+    present = {p.name for p in folder.iterdir()}
+    assert names[run] not in present and names[other_run(run)] in present
+    record = json.loads((folder / "assignment.json").read_text())
+    keys = {"cell": "cells", "nucleus": "nuclei"}
+    linked, written = record["inputs"][keys[run]], record["inputs"][keys[other_run(run)]]
+    labels_tif = root / "FOV_001" / "segmentation" / run / "labels.tif"
+    assert linked["saved_under_run"] is True
+    assert linked["file"] == {"path": f"../../segmentation/{run}/labels.tif", "sha256": file_hash(labels_tif)}
+    assert written["saved_under_run"] is False
+    assert written["file"] == {"path": names[other_run(run)], "sha256": file_hash(folder / names[other_run(run)])}
+    assert set(record["files"]) == {"molecules", "cells", "counts", "nuclei", names[other_run(run)][:-4]}
+
+    stored = assigning.assignment_results["default"]
+    loaded = boxes_fov(tmp_path, genes).load_assignment("default", checkpoints=checkpoints)
+    for name in TABLES:
+        assert_frame_equal(getattr(loaded, name), getattr(stored, name), check_exact=True)
+    assert np.array_equal(loaded.cell_labels, stored.cell_labels)
+    assert np.array_equal(loaded.nucleus_labels, stored.nucleus_labels)
+    assert loaded.record == stored.record == record
+
+
+@pytest.mark.parametrize("case", ["label_file_changed", "caller_made_copy", "segment_without_checkpoints",
+                                  "import_labels"])
+def test_a15_inputs_the_rule_calls_unsaved_are_written(tmp_path, genes, masks, case):
+    root = tmp_path / "checkpoints"
+    checkpoints = CheckpointConfig(directory=root)
+    fov = boxes_fov(tmp_path, genes)
+    fov.segment(SegmentationPlan((import_run("cell", masks),)), checkpoints=checkpoints)
+    labels_tif = root / "FOV_001" / "segmentation" / "cell" / "labels.tif"
+    cells = fov.load_segmentation("cell", checkpoints=checkpoints)
+    if case == "label_file_changed":
+        changed = cells.labels.copy()
+        changed[0, 0, 0] += 1
+        save_volume(changed, labels_tif, compress=True, metadata=BOXES_METADATA)
+    elif case == "caller_made_copy":
+        cells = replace(cells)
+    elif case == "segment_without_checkpoints":
+        cells = boxes_fov(tmp_path, genes).segment(SegmentationPlan((import_run("cell", masks),))) \
+            .segmentation_results["cell"]
+    else:
+        cells = import_labels(labels_tif, grid=fov.reference_grid(), target="cell",
+                              label_namespace=json.dumps(["data", "sample", "FOV_001", None, "cell"],
+                                                         separators=(",", ":")))
+    fov.assign(cells=cells, checkpoints=checkpoints)
+    folder = root / "FOV_001" / "assignment" / "default"
+    entry = json.loads((folder / "assignment.json").read_text())["inputs"]["cells"]
+    assert entry["saved_under_run"] is False
+    assert entry["file"] == {"path": "cell_labels.tif", "sha256": file_hash(folder / "cell_labels.tif")}
+    labels, _ = read_labels(folder / "cell_labels.tif")
+    assert np.array_equal(labels, cells.labels)
+
+
 @pytest.mark.parametrize("table_format", ["csv", "parquet"])
 def test_excluded_cells_are_preserved(tmp_path, genes, masks, table_format):
     if table_format == "parquet":

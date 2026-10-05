@@ -173,9 +173,6 @@ class FOV:
     segmentation_results: dict[str, SegmentationResult] = field(default_factory=dict)
     assignment_results: dict[str, AssignmentResult] = field(default_factory=dict)
     _run_record: object | None = field(default=None, init=False, repr=False, compare=False)
-    # Run name -> (SegmentationResult, resolved labels.tif) of runs written by segment() or read by
-    # load_segmentation(); assign() links such a result instead of copying it.
-    _segmentation_files: dict = field(default_factory=dict, init=False, repr=False, compare=False)
 
     # --- Delegated properties ---
 
@@ -1642,7 +1639,6 @@ class FOV:
         for name, result in results.items():
             directory = run_directory(root, name)
             results[name] = write_run(directory, result, inputs.get(name))
-            self._segmentation_files[name] = (results[name], (directory / 'labels.tif').resolve())
         self.segmentation_results.update(results)
         return self
 
@@ -1655,8 +1651,10 @@ class FOV:
         grid, the input file's SHA-256 when the run has one, and the record's
         FOV identity against this FOV. The result (its record is the saved
         record; diagnostics are not saved) is stored in
-        ``segmentation_results[name]`` and counts as saved under its run for
-        :meth:`assign` with the same checkpoint root.
+        ``segmentation_results[name]``. Like each result :meth:`segment` saved, it
+        counts as saved under its run for :meth:`assign` with the same checkpoint
+        root, on any FOV object of this FOV, also after the run is loaded again,
+        as long as ``labels.tif`` still holds its labels.
 
         Parameters
         ----------
@@ -1688,26 +1686,7 @@ class FOV:
                 raise ValueError(f'segmentation run {name!r} has {key} {result.record.get(key)!r}, this FOV '
                                  f'{expected[key]!r}')
         self.segmentation_results[name] = result
-        self._segmentation_files[name] = (result, (directory / 'labels.tif').resolve())
         return result
-
-    def _saved_labels(self, result, root):
-        """The labels.tif of a result saved under its run in this checkpoint root, else None.
-
-        Saved means written by segment(checkpoints=...) or read by
-        load_segmentation() from ``<root>/segmentation/<run>/labels.tif``, with
-        that file's array SHA-256 still equal to the labels' SHA-256.
-        """
-        from starfinder.segmentation._labels import array_sha256
-        from starfinder.segmentation._persist import read_labels, run_directory
-        for name, (stored, path) in self._segmentation_files.items():
-            if stored is not result:
-                continue
-            if path != (run_directory(root, name) / 'labels.tif').resolve() or not path.is_file():
-                return None
-            labels, _ = read_labels(path)
-            return path if array_sha256(labels) == array_sha256(result.labels) else None
-        return None
 
     def _label_run(self, value, what):
         from starfinder.segmentation import SegmentationResult
@@ -1820,10 +1799,11 @@ class FOV:
         result = replace(result, record=record)
         if checkpoints is not None:
             from starfinder.assignment._persist import assignment_directory, write_assignment
+            from starfinder.segmentation._persist import saved_labels
             root = self._checkpoint_dir(checkpoints)
             result = write_assignment(assignment_directory(root, name), result, metadata=cell_run.grid.metadata,
-                                      cells_saved=self._saved_labels(cell_run, root),
-                                      nuclei_saved=None if nucleus_run is None else self._saved_labels(nucleus_run, root),
+                                      cells_saved=saved_labels(cell_run, root),
+                                      nuclei_saved=None if nucleus_run is None else saved_labels(nucleus_run, root),
                                       same_run=nucleus_run is cell_run, table_format=checkpoints.table_format)
         self.assignment_results[name] = result
         return self
