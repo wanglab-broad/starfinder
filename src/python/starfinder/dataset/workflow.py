@@ -1362,8 +1362,10 @@ def _write_reads_assignment(result, reads_csv, path, *, tile, cells):
     voxel or 0); the new ones are spot_id, assignment_status, cell_id,
     in_expansion, original_cell_id, nucleus_id and compartment. The legacy
     overlap filter keeps the molecules assigned to the written cells, then the
-    other molecules whose sampled voxel lies in the tile box (outside_grid
-    molecules have none).
+    unassigned and excluded_cell molecules whose sampled voxel lies in the tile
+    box. Every outside_grid molecule follows them, in input order, unfiltered
+    (it has no sampled voxel, and the script wrapped or raised on it): seg_label
+    0, null cell columns and coordinates computed as for the other rows.
     """
     import numpy as np
     import pandas as pd
@@ -1380,8 +1382,9 @@ def _write_reads_assignment(result, reads_csv, path, *, tile, cells):
     assigned = (status == 'assigned') & np.isin(reads.seg_label.to_numpy(), cells)
     x = molecules.voxel_x.astype('Int64').fillna(-1).to_numpy(np.int64)
     y = molecules.voxel_y.astype('Int64').fillna(-1).to_numpy(np.int64)
-    background = (status != 'assigned') & (x >= 0) & (y >= 0) & _in_box(x, y, tile)
-    pd.concat([reads[assigned], reads[background]]).to_csv(path, index=False)
+    off_grid = status == 'outside_grid'
+    background = (status != 'assigned') & ~off_grid & (x >= 0) & (y >= 0) & _in_box(x, y, tile)
+    pd.concat([reads[assigned], reads[background], reads[off_grid]]).to_csv(path, index=False)
 
 
 def _run_reads_assignment(snakemake):
@@ -1394,8 +1397,8 @@ def _run_reads_assignment(snakemake):
     documents/genes.csv (checked against the codebook, _assignment_genes) and
     the tile configuration, read for the sample of the FOV and applied outside
     the package: global coordinates and the overlap filter, as the script does
-    (§2.10 boundary). Also writes expr/{fovID}/assignment.png (plot_assignment)
-    and log.txt.
+    (§2.10 boundary); outside_grid molecules are kept in reads_assignment.csv.
+    Also writes expr/{fovID}/assignment.png (plot_assignment) and log.txt.
     """
     import matplotlib.pyplot as plt
     import tifffile

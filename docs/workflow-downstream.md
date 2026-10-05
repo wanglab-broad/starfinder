@@ -101,7 +101,8 @@ float64 whole-cell counts of the kept cells, also of cells without molecules. Wi
 nuclei, the `nucleus` and `cytoplasm` layers hold 0.0 for a measured zero and NaN
 where compartments are not available. `reads_assignment.csv` keeps its columns and
 gains `spot_id`, `assignment_status`, `cell_id`, `in_expansion`, `original_cell_id`,
-`nucleus_id` and `compartment`. The rule also writes `assignment.png`
+`nucleus_id` and `compartment`; after the rows the overlap filter keeps, it holds every
+`outside_grid` molecule, with `seg_label` 0. The rule also writes `assignment.png`
 (`plot_assignment` over the DAPI image) and `log.txt` beside them.
 
 Assignment needs the `anndata` extra for `raw.h5ad`; sample H5AD aggregation uses

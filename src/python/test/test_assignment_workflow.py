@@ -204,8 +204,15 @@ def test_molecules_off_the_grid_are_outside_grid(tmp_path):
     adata, reads, _ = run_rule(tmp_path, label_fixture(), KEEP + off_grid)
     counts = json.loads(adata.uns["assignment"])["counts"]
     assert (counts["molecules"], counts["outside_grid"]) == (len(KEEP) + 2, 2)
-    # Neither wraps to the far edge nor raises; they lie outside the tile box, so the CSV leaves them out.
-    assert len(reads) == len(KEEP) and "outside_grid" not in set(reads.assignment_status)
+    # Neither wraps to the far edge nor raises: both are rows of the CSV with status outside_grid.
+    assert len(reads) == len(KEEP) + 2
+    rows = reads[reads.assignment_status == "outside_grid"]
+    assert rows.spot_id.tolist() == [f"csv:{len(KEEP)}", f"csv:{len(KEEP) + 1}"]
+    assert rows.seg_label.tolist() == [0, 0] and rows.cell_id.isna().all()
+    assert rows.x.tolist() == [-1, SHAPE_ZYX[2]] and rows.global_x.tolist() == [-1, SHAPE_ZYX[2]]
+    # The rows of the other molecules are those of the run without the two.
+    _, without, _ = run_rule(tmp_path / "without", label_fixture(), KEEP)
+    assert_frame_equal(reads[reads.assignment_status != "outside_grid"], without)
 
 
 def test_a_gene_outside_the_codebook_raises_before_assignment(tmp_path):

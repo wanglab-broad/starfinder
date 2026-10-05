@@ -1052,7 +1052,9 @@ Intentional changes of the outputs of `reads_assignment`:
 * Float goodSpots coordinates (`8.0`, as `export_spots` writes them) are accepted.
 * Molecules outside the label grid are `outside_grid` instead of reading the far edge
   (one-based 0) or raising `IndexError` (beyond the grid); they are counted in the
-  record and, lying outside the tile box, not written to `reads_assignment.csv`.
+  record, and `reads_assignment.csv` keeps each of them as a row with status
+  `outside_grid`, `seg_label` 0 and no cell, after the rows the legacy overlap filter
+  keeps (the filter itself is unchanged for the molecules on the grid).
 * A goodSpots gene outside the codebook raises `ValueError` naming it before
   assignment, where the script silently left it out of the counts; `documents/genes.csv`
   must list the codebook's genes.
