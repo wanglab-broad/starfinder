@@ -27,6 +27,12 @@ Spot-finding algorithms (proposed) <spot-finding-algorithms>
 Readout baseline (proposed) <readout-baseline>
 Readout contract (proposed) <readout-contract>
 Readout algorithms (proposed) <readout-algorithms>
+Segmentation baseline (proposed) <segmentation-baseline>
+Segmentation contract (proposed) <segmentation-contract>
+Segmentation algorithms (proposed) <segmentation-algorithms>
+Assignment baseline (proposed) <assignment-baseline>
+Assignment contract (proposed) <assignment-contract>
+Assignment algorithms (proposed) <assignment-algorithms>
 Learned detectors <learned-detectors>
 Coordination <coordination>
 Checkpoints <checkpoints>
