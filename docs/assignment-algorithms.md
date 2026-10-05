@@ -248,8 +248,8 @@ Rules:
 | L14 | Model resolution (`learned` for the files) | the cached `2D_versatile_fluo` files; a copy with one byte changed | Hashes and errors | Known-model hashes equal `KNOWN_MODELS`; the changed copy raises `ModelHashMismatchError` naming both hashes; with the network disabled nothing is fetched. Exact. |
 | A1 | Sampling at the bounds | `bounds` | Sampled voxel and status | On each axis: −0.5 → voxel 0; −0.5 − 1e−9 → `outside_grid`; 2.5 → 3; 3.5 → 4; n − 0.5 − 1e−9 → n − 1; n − 0.5 and 1e6 → `outside_grid`; every in-grid molecule of these is `assigned` to cell 1; the molecule at (2.0, 3.0, 3.0) is `unassigned`. Exact. |
 | A2 | Statuses and accounting | `assign_golden` (without gene `Z`), `boxes` | Molecule statuses; identities 1–5 of the contract | Every molecule has the status written in the fixture; the four status counts sum to the number of molecules; whole-cell counts sum to `n_assigned`; `nucleus + cytoplasm = whole` per available cell and gene, and the compartment values of the assigned molecules sum to `n_assigned`; excluded molecules equal the excluded cells' `n_molecules`. Exact. |
-| A3 | Legacy equivalence | `assign_golden` | Per-molecule cell and counts | With no expansion and with `planar`/`pixel`/4, `cell_id` equals the pinned `SEG_LABELS` (0 as null) and the whole-cell matrix the pinned counts, in 3D and 2D. The pinned `volume` and `fov_*` columns (computed after the legacy expansion) equal `size_voxels` and the truncated `centroid_*` without expansion, and `expanded_size_voxels` and the truncated `expanded_centroid_*` with it (for cell 3 in 3D: 771 and 1866 voxels). Exact. |
-| A4 | One expansion | `assign_golden` | Territories, `in_expansion`, errors | `AssignmentResult.territories` equals `expand_labels` of the cell run and `cell_labels` equals the cell run's labels; `in_expansion` is true exactly for the three band molecules (3D and 2D), whose `original_cell_id` is 0; a cell run whose record lists `expand_labels` raises `ValueError` with and without `expansion`; `unit="um"` on this uncalibrated grid raises `ValueError`; the record's `expansion` entry holds both masks' SHA-256 and the voxels added (no file paths: `assign_molecules` writes nothing). Exact. |
+| A3 | Legacy equivalence | `assign_golden` (without gene `Z`, as A2) | Per-molecule cell and counts | With no expansion and with `planar`/`pixel`/4, `cell_id` equals the pinned `SEG_LABELS` of the remaining molecules (0 as null; the entry of the gene-`Z` molecule is left out) and the whole-cell matrix the pinned counts, which never held gene `Z`, in 3D and 2D. The pinned `volume` and `fov_*` columns (computed after the legacy expansion) equal `size_voxels` and the truncated `centroid_*` without expansion, and `expanded_size_voxels` and the truncated `expanded_centroid_*` with it (for cell 3 in 3D: 771 and 1866 voxels). Exact. |
+| A4 | One expansion | `assign_golden` (without gene `Z`, as A2) | Territories, `in_expansion`, errors | `AssignmentResult.territories` equals `expand_labels` of the cell run and `cell_labels` equals the cell run's labels; `in_expansion` is true exactly for the three band molecules (3D and 2D), whose `original_cell_id` is 0; a cell run whose record lists `expand_labels` raises `ValueError` with and without `expansion`; `unit="um"` on this uncalibrated grid raises `ValueError`; the record's `expansion` entry holds both masks' SHA-256 and the voxels added (no file paths: `assign_molecules` writes nothing). Exact. |
 | A5 | Correspondence, one nucleus | `boxes` cell 1 | Nucleus and cell rows | Nucleus `matched`, `share_in_cell` 1.0; cell `n_nuclei` 1, correspondence `matched`, no flag, `available`. Exact. |
 | A6 | Correspondence, several nuclei | `boxes` cell 2 | Cell row | `n_nuclei` 2, flag `several_nuclei` only, `available`; its nuclear count is the sum over both nuclei. Exact. |
 | A7 | Correspondence, ambiguous | `boxes` cells 3, 4; `boxes_51_49` | Nucleus status and flags | 50/50: nucleus 31 `ambiguous` (0.5 is not more than 0.5); cells 3 and 4 have correspondence `ambiguous`, flag `ambiguous_nucleus`, compartments `withheld`, and are kept by default (ambiguous is not absence of a nucleus). 51/49: nucleus 31 matched to cell 3 and flagged `outside`; cell 3 `matched`, `nucleus_outside_cell`, `withheld`; cell 4 `no_nucleus` with `foreign_nucleus`, excluded by default. Exact. |
@@ -264,7 +264,7 @@ Rules:
 | A16 | Z=1 case | `plane` | Statuses, counts, calibration | Each molecule with `z` from 0 to 7 has the `cell_id` of the plane label at its `(y, x)`; the z = 1000 molecule is `outside_grid`; `size_physical` equals pixels × 0.1 × 0.1 µm² (unit `micrometer^2`, `calibration_source` `projection_source`). Exact. |
 | A17 | Culture case | `culture` | Statuses and compartments | Molecules in z 2–4 are assigned to the cell whose 2D label holds their `(y, x)`; those in the other planes are `unassigned`; every cell is `matched` and `available`, and its nuclear molecules are those inside its extended nucleus. Exact. |
 | A18 | Workflow translation | legacy configurations; `assign_golden` written as a goodSpots CSV, integer and float | Config, errors, outputs | The legacy keys translate as the contract's table states (the legacy `dilation_distance` with `legacy_pixel_expansion=True`); `stardist_segmentation.expand_labels: true`, alone or with the assignment key, raises naming the key; float coordinates are accepted; a gene mismatch with the codebook raises; where `anndata` is importable, `raw.h5ad`'s legacy `obs` columns and `X` equal the frozen helper's values for the kept cells. Exact. |
-| A19 | Determinism | `assign_golden`, `boxes` | SHA-256 of every result table, three single-thread processes | Identical. |
+| A19 | Determinism | `assign_golden` (without gene `Z`, as A2), `boxes` | SHA-256 of every result table, three single-thread processes | Identical. |
 | A20 | Row order | `boxes` with the molecule rows permuted by `numpy.random.default_rng(100).permutation` | Per-key results and `MoleculeTable.sha256` | Identical per `(spot_namespace, spot_id)` and the same hash. Exact. |
 
 ### What the default tier covers and what it does not
@@ -321,6 +321,25 @@ and the territory statistics only, and report the molecule outputs as not run.
 Budget: one CPU process at a time within 4 GiB RSS; the whole plan is about 15 minutes on
 one CPU thread, dominated by the StarDist 3D calls (two LN inputs at about 226 s) and the
 Cellpose projection calls (203 s and 229 s); on a GPU batch, a few minutes.
+
+**Whole-FOV measurement** (authorized once at W-309 on 2026-10-05; outside the budget
+above). After the three examples, one whole volumetric field of view is segmented
+block-wise, to replace the estimate of {doc}`segmentation-algorithms` by a measurement:
+
+* Input: the whole `round4` `ch04` (DAPI) image of LN `Position020`, 50×1496×1496, the
+  image `crop_dapi_round4.tif` was cut from, with its SHA-256 recorded.
+* Call: `stardist`, `3D_spleen`, `scale` 1.0, stored thresholds, with the block fields
+  ({doc}`segmentation-contract`, "Block-wise prediction") fixed in the script before the
+  run; on the GPU, with one CPU thread. No assignment follows.
+* Limits: the process is stopped at 16 GiB RSS or after 3600 s for the call, and a stop is
+  recorded as the outcome and not retried larger; artifacts stay within 1 GiB.
+* Recorded: peak RSS, framework and process GPU memory, wall and CPU time, the label
+  count, the requested and the effective block parameters, and the SHA-256 of the labels.
+* Not run: any other whole field of view, a whole-FOV call of Cellpose or of the seeded
+  watershed, and a CPU-only whole-FOV call, which is a row with the outcome not run.
+
+The result is one measurement on one host. It sets no default block size and supports no
+accuracy statement.
 
 ## Limitations
 

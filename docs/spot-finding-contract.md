@@ -233,8 +233,10 @@ Python nor MATLAB accepts. MATLAB rules, shared keys and filenames do not change
 `ExecutionConfig` gains `device: str = "cpu"`. In §2.7 any other value raises
 `ValueError("device must be 'cpu'; §2.7 runs on CPU only")`. Direct `find_spots`
 takes the same keyword (`device="cpu"`). The setting belongs to execution, not to
-a method, so §2.9 segmentation reuses it unchanged; it is recorded in `run.json`
-with the rest of `ExecutionConfig`.
+a method; it is recorded in `run.json` with the rest of `ExecutionConfig`. §2.9
+segmentation does not reuse it: the segment entry takes its own `device` keyword
+({doc}`segmentation-contract`, option V1, approved at W-309 on 2026-10-05), and
+`ExecutionConfig.device` stays CPU-only.
 
 Each detection records an execution entry in its diagnostics and in its provenance
 entry (`"execution"`):

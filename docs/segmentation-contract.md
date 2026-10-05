@@ -503,6 +503,34 @@ Config fields (frozen dataclasses, validated in `__post_init__`):
 | `prob_thresh`, `nms_thresh` | `None` | `None` uses the model's `thresholds.json`; a number is a sensitivity override and is recorded with `threshold_source: "override"`. |
 | `normalize_percentiles` | `(1.0, 99.8)` | csbdeep percentile normalization over the whole image, as the current script. |
 | `n_tiles` | `None` | `None` is the current script's tiling: 1×4×4 for a volume, 2×2 for a plane. A tuple is passed as given (ZYX; Y, X for a plane). |
+| `block_size`, `min_overlap`, `context` | `None` | All `None`: whole-image prediction (`predict_instances`). All given (voxels of the input grid, ZYX; Y, X for a plane): block-wise prediction (`predict_instances_big`). No default values; see "Block-wise prediction" below. |
+
+**Block-wise prediction** (W-309 amendment, 2026-10-05). An image too large for one
+`predict_instances` call, such as a whole volumetric field of view, is run with StarDist's
+`predict_instances_big`: the library reads the image block by block, predicts each block
+with `predict_instances`, drops the objects that belong to a neighbouring block and
+writes the rest into one label image. The §2.10 tiling is unrelated to segmentation and is
+not an alternative (W-309 decision).
+
+* The three fields are given together or not at all (else `ValueError`), and on every
+  spatial axis `min_overlap + 2 × context < block_size` (the library's condition, checked
+  before the model is loaded; else `ValueError`).
+* The library rounds each value to a multiple of the model's grid (`3D_spleen`: 1, 4, 4;
+  `2D_versatile_fluo`: 2, 2). The record's `effective` entry holds the rounded values.
+* The library assumes that every object is smaller than `min_overlap` on each axis. An
+  object that is not may be cut or lost at a block border, and the method cannot detect
+  it, so the plan chooses `min_overlap` above the largest expected object (W-305:
+  `3D_spleen` labels on LN are about 31 pixels in Y and X).
+* `n_tiles` applies inside each block. Label values are numbered in block order, so they
+  differ from the whole-image result; two results are compared by matched objects.
+* The method never switches to block-wise prediction on its own.
+* Proposed rule: block fields together with a `scale` other than 1 raise `ValueError`
+  until a test covers that combination, which nothing has run.
+
+W-305 and W-306 did not call `predict_instances_big`, so no cost, memory or agreement
+figure exists for it. The implementation compares block-wise against whole-image
+prediction on the LN 50×512×512 crop, and the bounded real examples measure one whole LN
+field of view ({doc}`assignment-algorithms`, "Bounded real examples").
 
 **`CellposeConfig`** (`method="cellpose"`)
 
@@ -629,7 +657,7 @@ sha256}`), which the run record keeps.
 | `rescale_input` | `(image, metadata, *, scale_zyx) -> tuple[np.ndarray, ImageMetadata]` | per-axis factors > 0 (dimensionless); linear interpolation with anti-aliasing; the metadata's spacing, when it has one, is divided by the factors, and its `frame_id` is extended | factors, input and output shapes |
 | `labels_to_grid` | `(labels, *, target_shape) -> np.ndarray` | nearest neighbour by pixel centres, source index ⌊(i + 0.5) × n_source / n_target⌋ per axis, onto exactly `target_shape`; the caller attaches the target grid | both shapes |
 | `expand_labels` | `(labels, metadata, *, config=ExpandLabelsConfig(distance, unit, mode)) -> np.ndarray` | `distance` in `pixel` or `um` (`um` needs `metadata.spacing_zyx`, else `ValueError`); `mode` `planar` (each Z plane, the current behavior) or `volumetric` (3D Euclidean distance with the ZYX spacing); no default distance | the config and the number of voxels added |
-| `extend_labels_through_z` | `(labels_2d, stain, metadata, *, config=ZExtensionConfig()) -> np.ndarray` | `labels_2d` of shape (1, Y, X) and a ZYX `stain` with the same Y, X (else `IncompatibleGeometryError`); `median_um`, `threshold` (`"otsu"` or a number), `min_area_um2`, `dilation_um`, `fill_holes` (twice for cells), converted with `metadata.spacing_zyx` (required); legacy values in pixels are translated by the workflow adapter with the configured spacing | the config, the threshold reached and the hash of the plane labels; `FOV.segment` adds the source run's name and sets the geometry to `extended` |
+| `extend_labels_through_z` | `(labels_2d, stain, metadata, *, config=ZExtensionConfig()) -> np.ndarray` | `labels_2d` of shape (1, Y, X) and a ZYX `stain` with the same Y, X (else `IncompatibleGeometryError`); `median_um`, `threshold` (`"otsu"` or a number on the [0, 1] scale of the stain's dtype range, as `img_as_float` and MATLAB's `graythresh` give it; a voxel is foreground when its filtered value is strictly greater, as MATLAB's `imbinarize` and `im2bw`; W-309 amendment), `min_area_um2`, `dilation_um`, `fill_holes` (twice for cells), converted with `metadata.spacing_zyx` (required); legacy values in pixels are translated by the workflow adapter with the configured spacing | the config, the threshold reached and the hash of the plane labels; `FOV.segment` adds the source run's name and sets the geometry to `extended` |
 
 Rules:
 
@@ -889,7 +917,9 @@ W-306 notes (sections 4, 5, 12, 13 and 14) qualify every number on this page and
   nodes, and whole fields of view. The 50×1496×1496 `3D_spleen` call is an estimate:
   3,442 MiB for four dense arrays that leave out the process baseline, tile activations,
   workspace and copies, and about 12,500 MiB peak RSS and 1,930 s by linear extrapolation,
-  which is not a bound in either direction (`fov-memory-estimate.json`).
+  which is not a bound in either direction (`fov-memory-estimate.json`). Both figures are
+  for whole-image prediction; a whole field of view is run block-wise ("Block-wise
+  prediction"), which was not called in W-305 or W-306 and has no measurement yet.
 * How calls were measured (W-306 section 4): calls share one job process per method,
   device, thread count and plan, which loaded the model once. Per-call peak RSS is the
   process's high-water mark during the call (reset before it), so it includes what the
@@ -999,6 +1029,24 @@ was not among this issue's inputs, so W-309 checks the split.
 | Removing the second expansion in `reads_assignment.py` | W-308 and §2.13 |
 
 MATLAB rules, shared MATLAB keys and filenames do not change.
+
+**The shared rules under `backend: matlab`** (W-309 amendment, 2026-10-05).
+`rules/segmentation.smk` is included for both backends, so `enhance_dapi_with_flamingo`,
+`stardist_segmentation` and `create_nuclei_amplicon_overlay` are the same rules in a
+MATLAB-backend run, and the §2.9 changes apply to them there as well:
+
+* Their scripts call the package, so the environment that runs Snakemake must hold the
+  Starfinder package, and `stardist_segmentation` needs the `stardist` extra there in
+  place of the `{envs_path}/stardist` conda environment. This is a new requirement for
+  MATLAB-backend runs: today the scripts that import the package belong only to
+  `registration-py.smk` and `spot-finding-py.smk`. `docs/migration.md` records it.
+* The legacy keys are translated as in the table above, with the same intentional changes:
+  `rescale` on the input grid, `uint32` labels and the `empty` outcome.
+* The Python-only keys (the `segmentation` block, `target`, `device`) are still rejected
+  without `backend: python`, so the target is the legacy default and the device is
+  `"cpu"`.
+* `envs_path` is no longer read by any rule. The key stays in the schema; removing it is a
+  §2.13 change.
 
 ## Tests the implementation changes
 

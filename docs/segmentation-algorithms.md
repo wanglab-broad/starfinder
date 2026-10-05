@@ -82,7 +82,12 @@ n_tiles=…, prob_thresh=…, nms_thresh=…)`. StarDist resamples the input by 
 (`ndi.zoom`, order 1), predicts object probabilities and ray distances, runs non-maximum
 suppression on the CPU and renders the surviving polygons or polyhedra on the original
 grid, so the labels are on the input grid at every scale (W-306 notes section 6). A Z=1
-input to a 2D model is squeezed to YX and the axis restored.
+input to a 2D model is squeezed to YX and the axis restored. With the block fields set,
+the call is `predict_instances_big(image, axes=…, block_size=…, min_overlap=…,
+context=…, n_tiles=…, prob_thresh=…, nms_thresh=…)`: each block is predicted with
+`predict_instances`, its context margin is cropped, objects that belong to a neighbouring
+block are dropped, and the block's labels are renumbered after those already written
+({doc}`segmentation-contract`, "Block-wise prediction").
 
 **Parameters** (`StarDistConfig`):
 
@@ -94,6 +99,7 @@ input to a 2D model is squeezed to YX and the axis restored.
 | `nms_thresh` | overlap | `None` = stored | `3D_spleen` 0.5, `2D_versatile_fluo` 0.3 |
 | `normalize_percentiles` | percent | (1.0, 99.8) | the current script's values |
 | `n_tiles` | tiles per axis | `None` = 1×4×4 (volume), 2×2 (plane) | csbdeep may use fewer tiles than requested (W-306 `seam-tiles.json`) |
+| `block_size`, `min_overlap`, `context` | voxels per axis | `None` = whole-image prediction | given together; `min_overlap + 2 × context < block_size`; rounded by the library to multiples of the model's grid; objects must be smaller than `min_overlap`; not run in W-305 or W-306 |
 
 **How outputs move with the parameters** (W-306 GPU rows; boundaries, not tuning):
 `3D_spleen` on LN `dapi_round4` gives 3, 253 and 426 labels at scale 0.5, 0.75 and 1.0,
@@ -148,8 +154,11 @@ A whole LN field of view (50×1496×1496) was not run. The configuration gives 3
 for four dense arrays (leaving out the process baseline, tile activations, workspace and
 copies, and assuming dense distances), and a linear extrapolation of the 50×512×512 CPU
 call's peak RSS gives about 12,500 MiB and 1,930 s; both are estimates, not bounds
-(`fov-memory-estimate.json`). A whole FOV therefore needs a measurement, StarDist's
-block-wise prediction or the §2.10 tiling (W-306 choice 7).
+(`fov-memory-estimate.json`). A whole FOV is therefore run with StarDist's block-wise
+prediction (W-306 choice 7, decided at W-309 on 2026-10-05), which W-306 did not call: its
+cost, its memory and its agreement with whole-image prediction are measured by the
+implementation and by the whole-FOV measurement of the bounded real examples
+({doc}`assignment-algorithms`).
 
 ### `cellpose`
 
@@ -372,17 +381,19 @@ spacing raises (proposed rule). Applied once per run; the assignment never expan
 int32 indices per axis, two masks and the output, about 22 bytes per pixel of one plane in
 `planar` mode (about 50 MB for a 1496² plane) and about 26 bytes per voxel in `volumetric`
 mode (about 2.9 GB for 50×1496×1496, close to the 4 GiB target together with the input
-labels, so `volumetric` on a whole FOV needs a measurement, blocks or the §2.10
-tiling).
+labels, so `volumetric` on a whole FOV needs a measurement or blocks).
 
 ### `extend_labels_through_z`
 
 **Algorithm** (the Python form of `create_3d_segmentation.m`, per FOV). Median-filter each
-plane of the stain; one threshold over the filtered stack (Otsu or a number); per plane:
+plane of the stain; one threshold over the filtered stack (Otsu or a number, on the
+[0, 1] scale of the stain's dtype range; foreground is strictly greater, as MATLAB's
+`graythresh` and `imbinarize` in the example); per plane:
 fill holes, remove objects below `min_area_um2`, dilate by `dilation_um`, fill holes again
 (cells), and multiply the mask by the 2D labels. The result has geometry `extended`.
 
-**Parameters** (`ZExtensionConfig`, physical units): `median_um`, `threshold` (`"otsu"`),
+**Parameters** (`ZExtensionConfig`, physical units): `median_um`, `threshold` (`"otsu"`,
+or a number on the [0, 1] scale),
 `min_area_um2`, `dilation_um`, `fill_holes` (`once` or `twice`). The MATLAB values, in
 pixels, are a 10×10 median, 200-pixel (cells) or 10-pixel (nuclei) minimum areas and disks
 of radius 10 (cells) or 5 (nuclei); the workflow adapter translates them with the
