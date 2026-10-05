@@ -18,6 +18,7 @@ Modules (alphabetical)
 .. toctree::
    :maxdepth: 1
 
+   assignment
    barcode
    benchmark
    dataset

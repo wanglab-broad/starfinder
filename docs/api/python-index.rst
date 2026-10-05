@@ -5,6 +5,10 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.registration.AffineTransform`
 * :py:obj:`starfinder.registration.apply_transform`
 * :py:obj:`starfinder.barcode.assign_direct`
+* :py:obj:`starfinder.assignment.assign_molecules`
+* :py:obj:`starfinder.assignment.ASSIGNMENT_STATUSES`
+* :py:obj:`starfinder.assignment.AssignmentConfig`
+* :py:obj:`starfinder.assignment.AssignmentResult`
 * :py:obj:`starfinder.preprocessing.Background3DConfig`
 * :py:obj:`starfinder.synthetic.BackgroundConfig`
 * :py:obj:`starfinder.barcode.BarcodeDecodingResult`
@@ -17,14 +21,18 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.registration.BSplineTransform`
 * :py:obj:`starfinder.synthetic.CALIBRATED_CONDITIONS`
 * :py:obj:`starfinder.synthetic.calibrated_scene_preset`
+* :py:obj:`starfinder.assignment.CELL_CORRESPONDENCE`
+* :py:obj:`starfinder.assignment.CELL_STATUSES`
 * :py:obj:`starfinder.spot_finding.ChannelOverride`
 * :py:obj:`starfinder.dataset.CheckpointConfig`
 * :py:obj:`starfinder.evaluation.spot_finding.classify_detections`
 * :py:obj:`starfinder.barcode.Codebook`
 * :py:obj:`starfinder.barcode.CodebookAwareDecoderConfig`
+* :py:obj:`starfinder.assignment.COMPARTMENT_STATES`
 * :py:obj:`starfinder.segmentation.composite_nuclei_amplicon`
 * :py:obj:`starfinder.segmentation.CompositeConfig`
 * :py:obj:`starfinder.io.convert_image`
+* :py:obj:`starfinder.assignment.CorrespondenceConfig`
 * :py:obj:`starfinder.registration.CpdConfig`
 * :py:obj:`starfinder.dataset.CropWindow`
 * :py:obj:`starfinder.dataset.Dataset`
@@ -63,6 +71,8 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.evaluation.registration.evaluate_translation`
 * :py:obj:`starfinder.evaluation.EvaluationResult`
 * :py:obj:`starfinder.dataset.ExecutionConfig`
+* :py:obj:`starfinder.segmentation.expand_labels`
+* :py:obj:`starfinder.segmentation.ExpandLabelsConfig`
 * :py:obj:`starfinder.barcode.explain_read`
 * :py:obj:`starfinder.io.export_spots`
 * :py:obj:`starfinder.segmentation.extend_labels_through_z`
@@ -113,6 +123,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.evaluation.spot_finding.localization_errors`
 * :py:obj:`starfinder.spot_finding.LocalMaximaConfig`
 * :py:obj:`starfinder.preprocessing.match_histogram`
+* :py:obj:`starfinder.assignment.match_nuclei`
 * :py:obj:`starfinder.evaluation.matching.match_points`
 * :py:obj:`starfinder.preprocessing.merge_histograms`
 * :py:obj:`starfinder.segmentation.MethodContext`
@@ -120,6 +131,9 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.segmentation.MissingModelError`
 * :py:obj:`starfinder.spot_finding.MissingWeightsError`
 * :py:obj:`starfinder.segmentation.ModelHashMismatchError`
+* :py:obj:`starfinder.assignment.molecule_table`
+* :py:obj:`starfinder.assignment.molecule_table_from_csv`
+* :py:obj:`starfinder.assignment.MoleculeTable`
 * :py:obj:`starfinder.barcode.NeighborhoodSumConfig`
 * :py:obj:`starfinder.synthetic.NoiseConfig`
 * :py:obj:`starfinder.spot_finding.NoiseLandmarkConfig`
@@ -127,11 +141,13 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.preprocessing.normalize_percentile`
 * :py:obj:`starfinder.segmentation.normalize_percentiles`
 * :py:obj:`starfinder.evaluation.registration.normalized_cross_correlation`
+* :py:obj:`starfinder.assignment.NUCLEUS_STATUSES`
 * :py:obj:`starfinder.barcode.OneBaseEncodingConfig`
 * :py:obj:`starfinder.spot_finding.PercentileCentroidConfig`
 * :py:obj:`starfinder.preprocessing.PercentileNormalizationConfig`
 * :py:obj:`starfinder.dataset.PipelineConfig`
 * :py:obj:`starfinder.spot_finding.PiscisConfig`
+* :py:obj:`starfinder.assignment.plot_assignment`
 * :py:obj:`starfinder.spot_finding.plot_detections`
 * :py:obj:`starfinder.barcode.plot_read`
 * :py:obj:`starfinder.preprocessing.PREPROCESSING_METHODS`
@@ -176,6 +192,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.dataset.RoundState`
 * :py:obj:`starfinder.benchmark.run_benchmark`
 * :py:obj:`starfinder.preprocessing.run_step`
+* :py:obj:`starfinder.assignment.sample_labels`
 * :py:obj:`starfinder.synthetic.save_formed_scene`
 * :py:obj:`starfinder.io.save_volume`
 * :py:obj:`starfinder.preprocessing.scalar_background_histograms`
@@ -209,6 +226,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.dataset.SubtileConfig`
 * :py:obj:`starfinder.preprocessing.subtract_background_3d`
 * :py:obj:`starfinder.preprocessing.subtract_scalar_background`
+* :py:obj:`starfinder.assignment.summarize_assignment`
 * :py:obj:`starfinder.preprocessing.summarize_histograms`
 * :py:obj:`starfinder.barcode.summarize_reads`
 * :py:obj:`starfinder.preprocessing.summary_stage`

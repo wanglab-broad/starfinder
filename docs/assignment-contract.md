@@ -1,6 +1,6 @@
 # Assignment contract: molecules to cells, correspondence, compartments and counts
 
-Status: Proposed
+Status: Accepted (W-309, 2026-10-05, at 3550723)
 
 This page proposes the §2.9 assignment contract: an assign entry separate from
 `FOV.run`, the rule that turns a molecule position into a voxel, direct assignment with

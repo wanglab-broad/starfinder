@@ -1,4 +1,4 @@
-"""Label functions that are not methods (D4): labels_to_grid and the culture extension through z."""
+"""Label functions that are not methods (D4): expand_labels, labels_to_grid and the culture extension through z."""
 from __future__ import annotations
 
 import math
@@ -66,6 +66,113 @@ def _nonnegative(value, name, *, positive=False):
             or (positive and value == 0):
         raise ValueError(f"{name} must be a finite number {'> 0' if positive else '>= 0'}; got {value!r}")
     return float(value)
+
+
+EXPANSION_UNITS = ("pixel", "um")
+EXPANSION_MODES = ("planar", "volumetric")
+
+
+@dataclass(frozen=True)
+class ExpandLabelsConfig:
+    """Settings of :func:`expand_labels`, the one label expansion; no field has a default.
+
+    ``distance`` is how far each label grows into the background, in ``unit``:
+    ``"pixel"`` (voxel steps) or ``"um"`` (micrometres, converted with the
+    metadata's spacing). ``mode`` is ``"planar"`` (each Z plane on its own, in Y
+    and X: the legacy expansion of ``stardist_segmentation.py`` and
+    ``reads_assignment.py``) or ``"volumetric"`` (3D Euclidean distance).
+
+    Raises
+    ------
+    ValueError
+        distance is not a finite number >= 0, or unit or mode is unknown.
+    """
+
+    distance: float
+    unit: str
+    mode: str
+
+    def __post_init__(self):
+        object.__setattr__(self, "distance", _nonnegative(self.distance, "distance"))
+        if self.unit not in EXPANSION_UNITS:
+            raise ValueError(f"unit must be pixel or um; got {self.unit!r}")
+        if self.mode not in EXPANSION_MODES:
+            raise ValueError(f"mode must be planar or volumetric; got {self.mode!r}")
+
+
+def expand_labels(labels, metadata: ImageMetadata | None, *, config: ExpandLabelsConfig) -> tuple[np.ndarray, dict]:
+    """Grow every label into the background by a distance, without overwriting or renumbering.
+
+    scikit-image's ``expand_labels``: each background voxel within ``distance`` of
+    a label takes the value of its nearest labelled voxel. ``planar`` applies it to
+    each Z plane (Y and X only); ``volumetric`` to the whole volume. With
+    ``unit="pixel"`` the distance is in voxel steps (spacing 1 on every axis); with
+    ``unit="um"`` it is physical, and the Y, X spacing (``planar``) or the Z, Y, X
+    spacing (``volumetric``) of ``metadata`` is passed to the distance transform.
+    Every label keeps its voxels and its value, so each original label is contained
+    in its expansion; an empty image stays empty and distance 0 changes nothing.
+
+    Parameters
+    ----------
+    labels : numpy.ndarray
+        Integer ZYX label image (a plane is 1×Y×X).
+    metadata : ImageMetadata or None
+        The labels' geometry; its ``spacing_zyx`` is required for ``unit="um"``.
+    config : ExpandLabelsConfig
+        Distance, unit and mode.
+
+    Returns
+    -------
+    tuple[numpy.ndarray, dict]
+        The C-contiguous ``uint32`` ZYX labels and the record: ``function``,
+        ``config``, ``inputs`` and ``output`` (array SHA-256 values), ``mode``,
+        ``unit``, ``distance``, ``spacing`` (the spacing given to the distance
+        transform, Y, X for ``planar`` and Z, Y, X for ``volumetric``),
+        ``physical_distance_yx`` (the distance in µm along Y and X, None when
+        the metadata has no spacing) and ``voxels_added``.
+
+    Raises
+    ------
+    IncompatibleGeometryError
+        labels is not three-dimensional.
+    ValueError
+        ``unit="um"`` and the metadata has no spacing, or a label is negative or
+        above 2**32 - 1.
+    TypeError
+        config or metadata has the wrong type, or labels is not integer.
+    """
+    from skimage.segmentation import expand_labels as _expand
+
+    if not isinstance(config, ExpandLabelsConfig):
+        raise TypeError("config must be an ExpandLabelsConfig")
+    if metadata is not None and not isinstance(metadata, ImageMetadata):
+        raise TypeError("metadata must be an ImageMetadata or None")
+    array = np.asarray(labels)
+    if array.ndim != 3:
+        raise IncompatibleGeometryError(f"labels must be ZYX (a plane is 1×Y×X); got {array.ndim} dimensions")
+    source = to_label_dtype(array)
+    spacing_zyx = None if metadata is None else metadata.spacing_zyx
+    if config.unit == "um" and spacing_zyx is None:
+        raise ValueError("expand_labels with unit 'um' needs metadata.spacing_zyx; give the distance in pixels "
+                         "on an uncalibrated grid")
+    axes = slice(1, 3) if config.mode == "planar" else slice(0, 3)
+    spacing = tuple(spacing_zyx[axes]) if config.unit == "um" else (1.0,) * (axes.stop - axes.start)
+    if config.mode == "planar":
+        output = np.stack([_expand(plane, distance=config.distance, spacing=spacing) for plane in source])
+    else:
+        output = _expand(source, distance=config.distance, spacing=spacing)
+    output = np.ascontiguousarray(output, dtype=np.uint32)
+    if spacing_zyx is None:
+        physical = None
+    elif config.unit == "um":
+        physical = [config.distance, config.distance]
+    else:
+        physical = [config.distance * spacing_zyx[1], config.distance * spacing_zyx[2]]
+    record = {"function": "expand_labels", "config": _json(asdict(config)), "inputs": [array_sha256(array)],
+              "output": array_sha256(output), "mode": config.mode, "unit": config.unit,
+              "distance": config.distance, "spacing": list(spacing), "physical_distance_yx": physical,
+              "voxels_added": int(np.count_nonzero(output) - np.count_nonzero(source))}
+    return output, record
 
 
 @dataclass(frozen=True, kw_only=True)

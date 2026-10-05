@@ -18,10 +18,10 @@ from ._import import LabelImportConfig, import_labels
 from ._inputs import CompositeConfig, FlamingoEnhancementConfig, composite_nuclei_amplicon, enhance_with_flamingo
 from ._labels import SegmentationResult, _check_target, _grid_record, _json, array_sha256
 from ._methods import DEVICES, ROLES, SEGMENTATION_METHODS
-from ._operations import ZExtensionConfig, extend_labels_through_z
+from ._operations import ExpandLabelsConfig, ZExtensionConfig, expand_labels, extend_labels_through_z
 from ._segment import SegmentationInput, segment
 
-_OPERATIONS = (ZExtensionConfig,)
+_OPERATIONS = (ZExtensionConfig, ExpandLabelsConfig)
 
 
 def _channel_key(value, name):
@@ -103,16 +103,17 @@ class SegmentationRun:
     plan; ``projection`` is an optional Z projection (``ProjectionConfig`` with
     axis ``z``) of the input, which puts the run (an import too) on the
     projected reference grid; ``operations`` are label functions applied in order after the
-    method (:class:`ZExtensionConfig`, which needs a projected run with one
-    input channel and extends the plane labels through the unprojected
-    channel).
+    method: :class:`ExpandLabelsConfig` (:func:`expand_labels` on the run's grid) and
+    :class:`ZExtensionConfig` (which needs a projected run with one input channel
+    and extends the plane labels through the unprojected channel). An import
+    takes no operations.
 
     Raises
     ------
     ValueError
         A name that is not snake_case, an unknown target, inputs missing or
         given to an import, repeated roles, a target that differs from the
-        import's, seeds on an import, a projection along the
+        import's, seeds or operations on an import, a projection along the
         channels, or an extension without a projection and one input.
     TypeError
         A field of the wrong type or an unregistered method config.
@@ -157,8 +158,11 @@ class SegmentationRun:
             if self.projection.axis != "z":
                 raise ValueError("a run's projection is along z")
         if not isinstance(self.operations, tuple) or not all(type(o) in _OPERATIONS for o in self.operations):
-            raise TypeError("operations must be a tuple of ZExtensionConfig")
-        if self.operations and (imported or self.projection is None or len(self.inputs) != 1):
+            raise TypeError("operations must be a tuple of ExpandLabelsConfig and ZExtensionConfig")
+        if imported and self.operations:
+            raise ValueError(f"run {self.name!r} imports a mask and takes no operations")
+        extends = any(type(o) is ZExtensionConfig for o in self.operations)
+        if extends and (self.projection is None or len(self.inputs) != 1):
             raise ValueError(f"run {self.name!r}: extend_labels_through_z needs a projected run with one input "
                              "channel, whose unprojected channel is the stain")
 
@@ -297,6 +301,20 @@ def _extend(result, stain, grid, run, config):
                               result.diagnostics)
 
 
+def _expand(result, config):
+    """expand_labels on a run's labels, on its own grid; the record lists the operation."""
+    labels, record = expand_labels(result.labels, result.grid.metadata, config=config)
+    max_label = int(labels.max())
+    run_record = dict(result.record,
+                      operations=[*result.record["operations"], {"operation": "expand_labels",
+                                                                 "config": record["config"], "record": record}],
+                      outcome="ok" if max_label else "empty",
+                      labels={"dtype": str(labels.dtype), "sha256": array_sha256(labels),
+                              "n_labels": int(np.count_nonzero(np.unique(labels))), "max_label": max_label})
+    return SegmentationResult(labels, result.grid, result.target, result.geometry, result.label_namespace,
+                              run_record, result.diagnostics)
+
+
 def segment_fov(fov, plan, *, device="cpu"):
     """Run a plan on one FOV; return the results by run name (FOV.segment stores them)."""
     if not isinstance(plan, SegmentationPlan):
@@ -324,7 +342,10 @@ def segment_fov(fov, plan, *, device="cpu"):
             result = segment(segmentation_input, config=run.method, target=run.target, seeds=seeds, device=device,
                              label_namespace=namespace)
             for operation in run.operations:
-                result = _extend(result, stack[..., 0], grid, run, operation)
+                if type(operation) is ExpandLabelsConfig:
+                    result = _expand(result, operation)
+                else:
+                    result = _extend(result, stack[..., 0], grid, run, operation)
             record = dict(result.record)
             if run.projection is not None:
                 record["input"] = dict(record["input"], projection=_json(asdict(run.projection)))

@@ -6,6 +6,7 @@ streaming select image residency, not different scientific pipelines.
 
 | Namespace | Responsibility | Boundary |
 | --- | --- | --- |
+| `assignment` | Molecules to cells, nucleus–cell correspondence, compartments and counts on one FOV's grid | Does not segment, stitch or run inside `FOV.run` |
 | `barcode` | Codebook validation, extraction, decoding, filtering | Does not load images or select benchmarks |
 | `benchmark` | Cases, timing, manifests, saved-output evaluation/reporting | Does not implement algorithms or select hidden scientific defaults |
 | `dataset` | Dataset/FOV inputs, rounds, typed pipeline and execution policy | Calls public processing functions |

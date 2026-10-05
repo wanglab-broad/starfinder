@@ -1,6 +1,6 @@
 # Assignment algorithm specification and §2.9 validation design
 
-Status: Proposed
+Status: Accepted (W-309, 2026-10-05, at 3550723)
 
 This page specifies the numerical rules of §2.9 assignment (sampling, expansion, overlap
 correspondence, compartment partition and count accounting), each with its parameters,

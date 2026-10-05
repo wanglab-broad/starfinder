@@ -52,6 +52,12 @@ and returns metadata whose spacing is divided by the factors and whose ``frame_i
 records the rescale. None of them is a preprocessing method: they combine two images,
 change the dtype or change the grid.
 
+:py:func:`~starfinder.segmentation.expand_labels` grows every label into the background
+by a distance (:py:class:`~starfinder.segmentation.ExpandLabelsConfig`: ``distance``,
+``unit`` ``pixel`` or ``um``, ``mode`` ``planar``, each Z plane as the workflow scripts do,
+or ``volumetric``), never overwriting or renumbering a label; ``um`` needs the metadata's
+spacing. It is the one label expansion: the assignment entry applies it to the cell
+territories and keeps both masks (:doc:`assignment`).
 :py:func:`~starfinder.segmentation.labels_to_grid` (nearest neighbour at pixel centres
 onto exactly the target shape) and
 :py:func:`~starfinder.segmentation.extend_labels_through_z` (plane labels kept where a
@@ -103,7 +109,8 @@ its input channels (:py:class:`~starfinder.segmentation.InputChannel`: a channel
 reference round, of a sequencing round registered by ``FOV.run`` or of a morphology round
 registered by ``FOV.register_rounds``, or the reference round's channel maximum, each
 optionally through the composite or the Flamingo enhancement), an earlier run as its
-seeds, an optional Z projection and ``extend_labels_through_z`` after a projection. Every
+seeds, an optional Z projection, and label operations in order: ``expand_labels`` and
+``extend_labels_through_z`` after a projection (an import takes none). Every
 run is on ``FOV.reference_grid()``, or on its projection. An input round that is not
 loaded, a morphology round without an entry in ``registration_record["rounds"]`` or with
 other metadata raises ``ValueError``; a round of another shape, or seeds on another grid,
@@ -118,6 +125,8 @@ raises :py:class:`~starfinder.image.IncompatibleGeometryError`. Results stay in 
    composite_nuclei_amplicon
    CompositeConfig
    enhance_with_flamingo
+   expand_labels
+   ExpandLabelsConfig
    extend_labels_through_z
    FlamingoEnhancementConfig
    import_labels

@@ -40,6 +40,7 @@ DIRECT_NEEDS_ROUNDS = ("readout_mode='direct' assigns each candidate from its ow
 
 if TYPE_CHECKING:
     from starfinder.dataset.dataset import Dataset
+    from starfinder.assignment import AssignmentConfig, AssignmentResult
     from starfinder.dataset.types import RoundState
     from starfinder.segmentation import ReferenceGrid, SegmentationPlan, SegmentationResult
 
@@ -139,7 +140,8 @@ class FOV:
     recipe summary; the WarpConfig applied per round), and
     preprocessing_record (the recipe, per-round step records and, per round
     and snapshot, the transforms composed, of the last run with a recipe),
-    and segmentation_results (run name to SegmentationResult, from segment()).
+    segmentation_results (run name to SegmentationResult, from segment()) and
+    assignment_results (assignment name to AssignmentResult, from assign()).
     One instance per job; not thread-safe.
     The repr summarizes image geometry, channels and completed stages without
     array values or table rows; results maps completed stages by name.
@@ -169,6 +171,7 @@ class FOV:
     load_diagnostics: dict[str, dict] = field(default_factory=dict)
     preprocessing_record: dict = field(default_factory=dict)
     segmentation_results: dict[str, SegmentationResult] = field(default_factory=dict)
+    assignment_results: dict[str, AssignmentResult] = field(default_factory=dict)
     _run_record: object | None = field(default=None, init=False, repr=False, compare=False)
 
     # --- Delegated properties ---
@@ -1607,6 +1610,96 @@ class FOV:
         if checkpoints is not None:
             raise ValueError('FOV.segment keeps its results in memory; checkpoints must be None')
         self.segmentation_results.update(segment_fov(self, plan, device=device))
+        return self
+
+    def _label_run(self, value, what):
+        from starfinder.segmentation import SegmentationResult
+        if isinstance(value, SegmentationResult):
+            return value
+        if not isinstance(value, str):
+            raise TypeError(f'{what} must name a segmentation run or be a SegmentationResult')
+        if value not in self.segmentation_results:
+            raise ValueError(f'{what} run {value!r} is not in segmentation_results; call segment() first '
+                             f'(runs: {sorted(self.segmentation_results)})')
+        return self.segmentation_results[value]
+
+    def assign(self, config: AssignmentConfig | None = None, *, cells: str | SegmentationResult = 'cell',
+               nuclei: str | SegmentationResult | None = None, name: str = 'default', population: str = 'final',
+               correspondence: pd.DataFrame | None = None, checkpoints: CheckpointConfig | None = None) -> FOV:
+        """Assign this FOV's molecules to the cells of a segmentation run (the third call per FOV).
+
+        ``cells`` and ``nuclei`` name runs of ``segmentation_results`` or are
+        :class:`~starfinder.segmentation.SegmentationResult` objects the caller made
+        (an ``import_labels`` result, for example). The molecules are
+        :func:`~starfinder.assignment.molecule_table` of ``spot_result`` and the
+        read result of ``population``: ``final`` takes the accepted reads of
+        ``filtering_result``; ``called`` the reads called ``assigned`` in
+        ``filtering_result`` (or in ``decoding_result`` before filtering). The
+        genes are the loaded codebook's (the direct panel's in direct readout)
+        and the grid is :meth:`reference_grid`. Calls
+        :func:`~starfinder.assignment.assign_molecules` and stores the result in
+        ``assignment_results[name]``; its record names it and holds
+        :func:`~starfinder.assignment.summarize_assignment` under ``counts``. It
+        never runs registration, detection, decoding or segmentation
+        (docs/assignment-contract.md, "Coordination per FOV").
+
+        Parameters
+        ----------
+        config : AssignmentConfig, optional
+            Expansion, correspondence and exclusion; ``AssignmentConfig()`` by default.
+        cells, nuclei : str or SegmentationResult
+            The territories (default the run ``cell``) and the optional nuclei.
+        name : str
+            snake_case key of ``assignment_results``.
+        population : str
+            ``final`` (default) or ``called``.
+        correspondence : pandas.DataFrame, optional
+            Supplied ``nucleus_id``, ``cell_id`` pairs.
+        checkpoints : None
+            Only None: results stay in memory (the saved files come later).
+
+        Returns
+        -------
+        FOV
+            This instance.
+
+        Raises
+        ------
+        ValueError
+            checkpoints other than None, a name that is not snake_case, a run
+            that is not in segmentation_results, no spot or read result, no gene
+            list, and every error of assign_molecules and molecule_table.
+        TypeError
+            cells or nuclei of another type, and the type errors of assign_molecules.
+        IncompatibleGeometryError
+            The grid errors of assign_molecules.
+        """
+        from starfinder._registry import check_name
+        from starfinder.assignment import AssignmentConfig, assign_molecules, molecule_table, summarize_assignment
+        if checkpoints is not None:
+            raise ValueError('FOV.assign keeps its results in memory; checkpoints must be None')
+        check_name(name, 'assignment')
+        config = AssignmentConfig() if config is None else config
+        cell_run = self._label_run(cells, 'cells')
+        nucleus_run = None if nuclei is None else self._label_run(nuclei, 'nuclei')
+        if self.spot_result is None:
+            raise ValueError('FOV.assign needs spot_result; call run() or load_checkpoint() first')
+        reads = (self.filtering_result if population == 'final' or self.filtering_result is not None
+                 else self.decoding_result)
+        if reads is None:
+            raise ValueError(f'FOV.assign with population {population!r} needs '
+                             + ('filtering_result' if population == 'final' else 'a decoding or filtering result'))
+        if self.dataset.readout_mode == 'direct' and self.dataset.direct_panel is not None:
+            genes = tuple(dict.fromkeys(self.dataset.direct_panel.genes))
+        elif self.codebook is not None:
+            genes = tuple(self.codebook.genes)
+        else:
+            raise ValueError('FOV.assign needs the gene list: load the codebook (or the direct panel)')
+        molecules = molecule_table(self.spot_result, reads, genes=genes, population=population)
+        result = assign_molecules(molecules, cell_run, grid=self.reference_grid(), nuclei=nucleus_run,
+                                  correspondence=correspondence, config=config)
+        record = dict(result.record, name=name, counts=summarize_assignment(result))
+        self.assignment_results[name] = replace(result, record=record)
         return self
 
     # --- Output ---

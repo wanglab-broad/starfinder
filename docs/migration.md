@@ -933,6 +933,53 @@ nucleus k's value; the legacy workflow has no such step (`reads_assignment.py` e
 nuclei instead). There is no foreground gate: an image without objects gives an empty
 label image with outcome `empty` instead of an error.
 
+### The assign entry
+
+Assignment is the third call per FOV, after `FOV.run` and `FOV.segment` (decision D1 of
+{doc}`assignment-contract`): the new module `starfinder.assignment` holds
+{py:func}`~starfinder.assignment.assign_molecules`, which places the molecules of a
+{py:class}`~starfinder.assignment.MoleculeTable` (from
+{py:func}`~starfinder.assignment.molecule_table` or a legacy goodSpots CSV through
+{py:func}`~starfinder.assignment.molecule_table_from_csv`) in the territories of a cell
+{py:class}`~starfinder.segmentation.SegmentationResult` and returns an
+{py:class}`~starfinder.assignment.AssignmentResult` with the molecule, cell, count and
+nucleus tables. `FOV.assign(config, cells=…, nuclei=…)` runs it on the FOV's results and
+keeps the result in `FOV.assignment_results`; `PipelineConfig` gains no field, and saved
+assignment files come later (`checkpoints=None` only). The workflow's `reads_assignment`
+rule still runs `reads_assignment.py` unchanged; the `assignment` YAML block and the
+adapter translation of the legacy keys follow with the workflow change.
+
+Compared with the per-FOV steps of `reads_assignment.py`, the package changes these on
+purpose:
+
+* every molecule keeps a row and one status: `assigned`, `unassigned`, `excluded_cell` or
+  `outside_grid`. A position is sampled at `floor(c + 0.5)` per axis, so float coordinates
+  (`8.0`, as `export_spots` writes them), which raised `IndexError`, are read; one-based 0
+  no longer reads the far edge and one beyond the grid no longer raises: both are
+  `outside_grid`;
+* the cells are the territories of the label image, also when no molecule lands in them
+  (the script dropped every cell of such a FOV);
+* a gene outside the gene list raises `ValueError` naming it instead of being dropped from
+  the counts silently;
+* the expansion is applied once, by assign, with
+  {py:func}`~starfinder.segmentation.expand_labels`
+  ({py:class}`~starfinder.segmentation.ExpandLabelsConfig`; `planar` and `pixel` give the
+  script's `expand_labels` per plane), and both the original and the expanded territories
+  are kept. A cell run whose record lists `expand_labels` (an expansion in segmentation)
+  is refused, because its original mask was not kept. On a calibrated grid the distance
+  is in µm; a pixel distance needs `AssignmentConfig.legacy_pixel_expansion=True`;
+* with nuclei, each nucleus is matched to the cell holding more than half of it, every
+  doubtful correspondence is flagged, nuclear and cytoplasmic counts exist only where it
+  allows, and cells without a matched nucleus are excluded by default with the reason
+  `no_matched_nucleus`, their molecules `excluded_cell`. None of this existed before;
+* cell sizes and centroids are computed on the original territories, with the expanded
+  ones beside them (the script's `volume` and `fov_*` are the expanded size and the
+  truncated expanded centroid).
+
+A µm expansion compares physical distances in floating point, so a distance that is an
+exact multiple of the spacing (0.3 µm at 0.1 µm) may leave out the outermost ring of
+voxels; the legacy pixel distance has no such rounding.
+
 ## Intentional behavior changes — not mechanical equivalence
 
 | Area | Change and consequence |

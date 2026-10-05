@@ -8,7 +8,9 @@ its target (``nucleus`` or ``cell``), geometry (``volume``, ``plane`` or
 :func:`enhance_with_flamingo`, :func:`normalize_percentiles` and
 :func:`rescale_input` are plain input functions, :func:`labels_to_grid` and
 :func:`extend_labels_through_z` plain label functions; each returns its result and a
-record mapping and leaves its inputs unchanged. :func:`segment` runs one method of
+record mapping and leaves its inputs unchanged. :func:`expand_labels` is the one
+label expansion; the assignment entry (``starfinder.assignment``) applies it to the
+cell territories and keeps both masks. :func:`segment` runs one method of
 ``SEGMENTATION_METHODS`` on a :class:`SegmentationInput` behind the stage checks;
 ``FOV.segment`` runs a :class:`SegmentationPlan` of named runs on one FOV. See
 docs/segmentation-contract.md and docs/segmentation-algorithms.md.
@@ -20,7 +22,7 @@ from ._inputs import (CompositeConfig, FlamingoEnhancementConfig, composite_nucl
 from ._labels import ReferenceGrid, SegmentationResult, reference_grid_from_file, to_label_dtype
 from ._methods import SEGMENTATION_METHODS as _SEGMENTATION_METHODS
 from ._methods import MethodContext, SeededWatershedConfig, SegmentationSpec
-from ._operations import ZExtensionConfig, extend_labels_through_z, labels_to_grid
+from ._operations import ExpandLabelsConfig, ZExtensionConfig, expand_labels, extend_labels_through_z, labels_to_grid
 from ._plan import InputChannel, SegmentationPlan, SegmentationRun
 from ._segment import SegmentationInput, segment
 
@@ -29,7 +31,8 @@ from ._segment import SegmentationInput, segment
 SEGMENTATION_METHODS = _SEGMENTATION_METHODS
 
 __all__ = ["ReferenceGrid", "reference_grid_from_file", "SegmentationResult", "to_label_dtype",
-           "LabelImportConfig", "import_labels", "labels_to_grid", "ZExtensionConfig", "extend_labels_through_z",
+           "LabelImportConfig", "import_labels", "labels_to_grid", "ExpandLabelsConfig", "expand_labels",
+           "ZExtensionConfig", "extend_labels_through_z",
            "CompositeConfig", "composite_nuclei_amplicon", "FlamingoEnhancementConfig", "enhance_with_flamingo",
            "normalize_percentiles", "rescale_input",
            "segment", "SegmentationInput", "SEGMENTATION_METHODS", "SegmentationSpec", "MethodContext",

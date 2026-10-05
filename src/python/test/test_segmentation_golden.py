@@ -46,6 +46,7 @@ from skimage.transform import rescale
 
 from starfinder.preprocessing import ProjectionConfig, project_image
 from starfinder.segmentation import composite_nuclei_amplicon, enhance_with_flamingo
+from starfinder.segmentation import ExpandLabelsConfig, expand_labels as package_expand_labels
 
 pytestmark = [pytest.mark.workflow, pytest.mark.segmentation, pytest.mark.golden]
 
@@ -377,6 +378,16 @@ def test_label_steps_2d(images, rescale_labels, expand):
     labels = legacy_stardist_steps(image, rescale_labels=rescale_labels, expand=expand)
     assert labels.dtype == np.uint16 and labels.shape == SHAPE_ZYX[1:]
     assert digest(labels) == LABELS_2D[(rescale_labels, expand)]
+
+
+def test_expand_labels_function(images):
+    """expand_labels(planar, pixel, 4) on the stand-in labels, cast to uint16, gives the expanded pins."""
+    config = ExpandLabelsConfig(DISTANCE, "pixel", "planar")
+    volume, _ = package_expand_labels(stand_in_model(images["dapi"]), None, config=config)
+    assert digest(volume.astype("uint16")) == LABELS_3D[(False, True)]
+    plane = stand_in_model(images["dapi"].max(axis=0))
+    expanded, _ = package_expand_labels(plane[None], None, config=config)
+    assert digest(expanded.reshape(plane.shape).astype("uint16")) == LABELS_2D[(False, True)]
 
 
 def test_expansion_is_per_slice(images):
