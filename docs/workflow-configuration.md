@@ -21,14 +21,14 @@ An em dash in the default column means the schema defines no default.
 | `fov_id_pattern` | string | Yes | —; Python format string with `{i}`, e.g. `tile_{i}`, `Position{i:03}` |
 | `n_fovs`, `n_rounds` | integers >=1 | Yes | —; FOV indices start at 1, round names are exactly `round1` … `roundN` |
 | `ref_round` | string | Yes | —; must identify an existing sequencing round; membership is not schema-checked |
-| `ref_channel`, `dapi_round` | strings | No | —; nuclei registration / DAPI input selection, not Python sequencing-channel selection |
+| `ref_channel`, `dapi_round` | strings | No | —; nuclei registration / DAPI input selection, not Python sequencing-channel selection. In Python, `dapi_round` with `ref_channel` gives `Dataset.reference_stains` (`ChannelInfo("ch04", ref_channel)`); `dapi_round` must equal `ref_round`, else every rule raises `ValueError` |
 | `rotate_angle` | number | Yes | —; degrees, 0 for no rotation |
 | `img_col`, `img_row` | integers >=1 | Yes | —; width X and height Y; subtile windows use these values |
 | `img_z` | integer >=1 | No | —; downstream 3-D metadata/preview uses it; `reads_assignment` needs it for a YX label image (the Z size of the molecule grid) |
 | `voxel_size_xy`, `voxel_size_z` | numbers >0 | No | —; physical microns for stitching and the declared calibration of the files the segmentation and assignment rules read; **not** extraction window radii |
 | `maximum_projection` | boolean | No | `false`; reference-image/DAPI output projection; does not turn sequencing into a 2-D algorithm |
-| `seq_channel_order` | array of strings | No | —; set explicit patterns for Python, e.g. `[ch00, ch02, ch01, ch03]` |
-| `additional_round` | array of objects with string `round_name` | No | —; supply `[]` when unused; accessed at parse time |
+| `seq_channel_order` | array of strings, or of objects with `wavelength`, `channel`, `name` | No | —; set explicit patterns for Python, e.g. `[ch00, ch02, ch01, ch03]`, or MATLAB's `channel_order_dict` entries; see [channels](#channels) |
+| `additional_round` | array of objects with string `round_name` and optional `channel_order` | No | —; supply `[]` when unused; accessed at parse time; `channel_order` lists the round's `wavelength`/`channel`/`name` entries, see [channels](#channels) |
 | `backend` | `python` or `matlab` | No | `matlab` |
 | `segmentation`, `assignment` | objects | No | —; Python only (`backend: python`): a segmentation plan and an assign call for the §2.13 rule, see [segmentation and assignment](#segmentation-and-assignment) |
 | `readout_mode` | `multiplexed` or `direct` | No | `multiplexed`; Python only (`Dataset.readout_mode`), and `direct` only with `backend: python`; see [readout mode](#readout-mode) |
@@ -64,6 +64,47 @@ it does not supply MATLAB's default. MATLAB's default order is
 loader expecting a struct array with `channel`/`name`, incompatible with this
 schema's string array. Use `seq_channel_order: []` for default MATLAB loading;
 do not assume a Python custom list is portable to MATLAB.
+
+### Channels
+
+The shared keys keep their names; Python reads them into the channel groups of
+`Dataset` ({doc}`coordination`, "Channels"):
+
+* `seq_channel_order` is either a list of file patterns or a list of objects
+  with `wavelength` (nm, optional), `channel` (the file pattern) and `name`
+  (MATLAB's `channel_order_dict`). Both give the same patterns
+  (`Dataset.channel_order`); the object form adds the names and wavelengths
+  (`Dataset.channel_info`). The object form is the one MATLAB loads.
+* Every rule's `Dataset` names the other rounds by each `additional_round`
+  entry's `round_name` and takes the round's channels from its `channel_order`
+  (`Dataset.other_channel_order`); an entry without `channel_order` takes the
+  sequencing channels.
+* `dapi_round` with `ref_channel` gives the reference stain:
+  `Dataset.reference_stains == (ChannelInfo("ch04", ref_channel),)`, the
+  `*ch04.tif` file of the reference round that `nuclei_registration` reads.
+  Without `dapi_round` there is none. A `dapi_round` other than `ref_round`
+  raises `ValueError` naming both keys: the stain file is always in the
+  reference round.
+
+`nuclei_registration` still selects each other round's shared stain by
+MATLAB's substring match of `ref_channel` in the channel names.
+
+```yaml
+ref_round: round1
+dapi_round: round1
+ref_channel: DAPI
+seq_channel_order:
+  - {wavelength: 488, channel: ch00, name: seq}
+  - {wavelength: 546, channel: ch02, name: seq}
+  - {wavelength: 594, channel: ch01, name: seq}
+  - {wavelength: 647, channel: ch03, name: seq}
+additional_round:
+  - round_name: round5
+    channel_order:
+      - {wavelength: 488, channel: ch00, name: Flamingo}
+      - {channel: ch01, name: RBD}
+      - {wavelength: 405, channel: ch02, name: DAPI}
+```
 
 ## MATLAB launcher
 

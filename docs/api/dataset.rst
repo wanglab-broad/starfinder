@@ -17,11 +17,17 @@ at most one local step, one signal and one final resampling per moving round; se
 :doc:`../registration-contract`. ``FOV.register_rounds`` registers other rounds to a
 reference round or an ``ExternalReference`` through a shared stain.
 
+Each channel is a ``ChannelInfo`` (file pattern, content name, wavelength in nm).
+``Dataset.channel_info(round)`` returns a round's channels (``reference_stain``: the
+reference stains), and ``Dataset.channel_index(round, key)`` is the one lookup by
+index, pattern or name; see :doc:`../coordination`, "Channels".
+
 .. currentmodule:: starfinder.dataset
 
 .. autosummary::
    :toctree: generated
 
+   ChannelInfo
    CheckpointConfig
    CropWindow
    Dataset

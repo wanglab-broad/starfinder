@@ -115,6 +115,7 @@ starfinder.benchmark
 starfinder.dataset
 ~~~~~~~~~~~~~~~~~~
 
+* :py:obj:`starfinder.dataset.ChannelInfo`
 * :py:obj:`starfinder.dataset.CheckpointConfig`
 * :py:obj:`starfinder.dataset.CropWindow`
 * :py:obj:`starfinder.dataset.Dataset`

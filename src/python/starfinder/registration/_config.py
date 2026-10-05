@@ -244,7 +244,8 @@ class RegistrationSignalConfig:
     float64 channel sum (the earlier Python merged) and "channel" one channel
     per round: reference_channel for the reference round and moving_channel
     (None: reference_channel) for the moving round, each a zero-based index or
-    a channel label. Channels are set only for mode "channel".
+    a channel pattern or name of the round (resolved by Dataset.channel_index).
+    Channels are set only for mode "channel".
     """
 
     mode: str = "max"

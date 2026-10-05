@@ -600,6 +600,7 @@ def test_a_two_run_plan_imports_the_nuclei_and_grows_the_cells(fov, tmp_path):
     image = merged(fov)[..., None]
     assert cell.record["input"]["sha256"] == digest(image)
     assert cell.record["input"]["channels"] == [{"role": "amplicon", "round": None, "channel": None,
+                                                 "name": None, "wavelength": "unavailable",
                                                  "reference_merged": True, "prepare": None, "prepare_channel": None,
                                                  "registration": None, "sha256": digest(merged(fov))}]
     assert np.array_equal(cell.labels[mask > 0], mask[mask > 0])

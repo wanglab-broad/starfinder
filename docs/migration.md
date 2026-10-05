@@ -1110,6 +1110,34 @@ molecule). `summarize_assignment(result)["exclusion"]["before"]` gains `nucleus`
 `cytoplasm`, equal to those after the exclusion, as its docstring promised. No table,
 count or digest changes: `raw.h5ad` and `reads_assignment.csv` are as before.
 
+### Channel name and wavelength per round
+
+{py:class}`~starfinder.dataset.ChannelInfo` (`channel`, `name`, `wavelength`; MATLAB's
+`channel_order_dict` fields) is new (W-336; {doc}`coordination`, "Channels").
+`Dataset.channel_order` and each `Dataset.other_channel_order[round]` accept patterns as
+before, `ChannelInfo` values or mappings, and still hold the patterns after
+construction, so `Dataset.channel_labels(round)` returns what it returned.
+`Dataset.reference_stains` lists the stain files of the reference round that are not
+sequencing colours (image name `reference_stain`, which a configured round may no longer
+take), and `Dataset.channel_info(round)` returns the `ChannelInfo` tuple of a round.
+`Dataset.channel_index(round, key)` is the one channel lookup: an index, an exact
+pattern, else a name that occurs once. `RegistrationSignalConfig` channel labels and
+`InputChannel.channel` and `prepare_channel` may therefore name a channel by its
+content, for example `"DAPI"`; an unknown key now raises the same `ValueError` from all
+three, naming the round and its channels. Repeated patterns raise as before; a
+non-string or empty pattern in `channel_order` (accepted before) and a non-positive or
+non-finite wavelength now raise.
+
+In the workflow translation the shared keys keep their names: `seq_channel_order` also
+accepts MATLAB's list of `wavelength`/`channel`/`name` objects; every rule names the
+other rounds by `additional_round[i].round_name` (the sequencing rules raised
+`TypeError` for a non-empty list before) and takes their `channel_order`; `dapi_round`
+with `ref_channel` gives `reference_stains`, and a `dapi_round` other than `ref_round`
+now raises `ValueError`. The schema declares both forms of `seq_channel_order` and
+`channel_order` under `additional_round` items. `run.json` gains `channels` and each
+`input.channels` entry of a segmentation record gains `name` and `wavelength`; both
+are additive. No image, table or digest changes.
+
 ## Intentional behavior changes — not mechanical equivalence
 
 | Area | Change and consequence |

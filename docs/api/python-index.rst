@@ -24,6 +24,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.assignment.CELL_CORRESPONDENCE`
 * :py:obj:`starfinder.assignment.CELL_STATUSES`
 * :py:obj:`starfinder.segmentation.CellposeConfig`
+* :py:obj:`starfinder.dataset.ChannelInfo`
 * :py:obj:`starfinder.spot_finding.ChannelOverride`
 * :py:obj:`starfinder.dataset.CheckpointConfig`
 * :py:obj:`starfinder.evaluation.spot_finding.classify_detections`

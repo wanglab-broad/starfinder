@@ -124,10 +124,17 @@ properties:
 
   # ==================== Channel Configuration ====================
   seq_channel_order:
-    type: array
-    items:
-      type: string
-    description: "Custom sequencing channel order (empty for default)"
+    description: >-
+      Custom sequencing channel order (empty for default): a list of file patterns, or a
+      list of wavelength/channel/name entries (MATLAB's channel_order_dict). Python records
+      the name and wavelength (Dataset.channel_info).
+    anyOf:
+      - type: array
+        items:
+          type: string
+      - type: array
+        items:
+          $ref: "#/$defs/channel_info"
 
   additional_round:
     type: array
@@ -136,6 +143,14 @@ properties:
       properties:
         round_name:
           type: string
+        channel_order:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/$defs/channel_info"
+          description: >-
+            The round's channels in C order: channel is the file pattern, name the content
+            (nuclei_registration matches ref_channel in it and writes images/<round>/<name>).
     description: "Additional imaging rounds beyond sequencing"
 
   # ==================== Readout Mode ====================
@@ -362,6 +377,24 @@ allOf:
 
 # ==================== Reusable Definitions ====================
 $defs:
+  channel_info:
+    type: object
+    required: [channel]
+    additionalProperties: false
+    properties:
+      wavelength:
+        type: number
+        exclusiveMinimum: 0
+        description: "Wavelength in nm; absent when unknown (recorded as unavailable)"
+      channel:
+        type: string
+        minLength: 1
+        description: "File pattern (*<channel>.tif), the channel label"
+      name:
+        type: string
+        minLength: 1
+        description: "Content of the channel, for example DAPI or seq"
+
   # Base resources schema
   resources:
     type: object

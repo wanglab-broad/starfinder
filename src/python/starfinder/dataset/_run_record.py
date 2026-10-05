@@ -88,6 +88,8 @@ class _RunRecord:
             # The dataset's readout mode (docs/readout-contract.md) is recorded with the configs.
             "config": {"pipeline": config, "execution": execution, "checkpoints": checkpoints,
                        "readout_mode": dataset.readout_mode, "encoding": encoding},
+            # Channel pattern, name and wavelength per round (docs/checkpoints.md, "run.json").
+            "channels": dataset.channel_record(),
             "inputs": [], "steps": [], "preprocessing": None, "registration": {}, "counts": {},
             "checkpoint_directory": str(self.directory), "checkpoints": {},
         }

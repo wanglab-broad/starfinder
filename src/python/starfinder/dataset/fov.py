@@ -493,18 +493,15 @@ class FOV:
         """The channel index that mode "channel" of signal selects in round name; None for other modes.
 
         role is "reference" or "moving" (moving_channel, None: reference_channel).
-        A label is looked up in the round's channel labels: dataset.channel_order,
-        or an other round's own labels in dataset.other_channel_order. An
-        unknown label or an index outside the round's image is a ValueError.
+        A string is a channel pattern or name of the round, resolved by
+        dataset.channel_index. An unknown or repeated name or an index outside
+        the round's image is a ValueError.
         """
         if signal.mode != 'channel':
             return None
         channel = signal.moving_channel if role == 'moving' and signal.moving_channel is not None else signal.reference_channel
         if isinstance(channel, str):
-            labels = self.dataset.other_channel_order.get(name, self.dataset.channel_order)
-            if channel not in labels:
-                raise ValueError(f'registration channel {channel!r} is not a channel label of round {name!r}')
-            channel = tuple(labels).index(channel)
+            channel = self.dataset._resident_channel_index(name, channel)
         if channel >= np.shape(self.images[name])[-1]:
             raise ValueError(f'registration channel {channel} is outside the image of round {name!r}')
         return channel

@@ -12,6 +12,7 @@ from dataclasses import asdict, dataclass, replace
 import numpy as np
 
 from starfinder._registry import check_name, spec_for
+from starfinder.dataset.types import UNAVAILABLE
 from starfinder.image import IncompatibleGeometryError
 
 from ._import import LabelImportConfig, import_labels
@@ -37,15 +38,16 @@ class InputChannel:
 
     ``role`` is ``nuclear``, ``cytoplasm``, ``membrane``, ``amplicon`` or
     ``composite``. Either ``round`` and ``channel`` name a loaded round in the
-    reference frame and one of its channels (a label of
-    ``Dataset.channel_labels(round)`` or an index), or ``reference_merged`` is
+    reference frame and one of its channels (a pattern or a name, resolved by
+    ``Dataset.channel_index(round, channel)``, or an index), or ``reference_merged`` is
     True and both are None: the reference round's channel maximum, as
     ``FOV.save_reference_image(reference_image="merged")`` writes it.
     ``prepare`` applies one input function to the channel: a
     :class:`CompositeConfig` combines it (the nuclear stain) with the reference
     merged image (the amplicon) through :func:`composite_nuclei_amplicon`; a
     :class:`FlamingoEnhancementConfig` combines it with the Flamingo channel
-    ``prepare_channel`` of the same round through :func:`enhance_with_flamingo`.
+    ``prepare_channel`` of the same round (looked up as ``channel``) through
+    :func:`enhance_with_flamingo`.
 
     Raises
     ------
@@ -228,18 +230,19 @@ def _check_rounds(fov, plan, grid):
 
 
 def _channel_index(fov, round_name, channel):
+    """The C index of a channel key: Dataset.channel_index for a pattern or name; an index is checked on the image."""
     image = fov.images[round_name]
-    if isinstance(channel, str):
-        # The lookup of FOV.register_rounds: an other round's own labels, else the dataset channel order.
-        labels = tuple(fov.dataset.other_channel_order.get(round_name, fov.dataset.channel_order))
-        if channel not in labels:
-            raise ValueError(f"round {round_name!r} has no channel {channel!r}; its channels are {labels}")
-        index = labels.index(channel)
-    else:
-        index = channel
+    index = fov.dataset._resident_channel_index(round_name, channel) if isinstance(channel, str) else channel
     if np.ndim(image) != 4 or not 0 <= index < np.shape(image)[3]:
         raise ValueError(f"channel {channel!r} is outside round {round_name!r}")
     return index
+
+
+def _channel_details(fov, round_name, index):
+    """name and wavelength (written form) of a round's channel; null and "unavailable" when not configured."""
+    channels = fov.dataset._resident_channels(round_name)
+    record = channels[index].record() if index < len(channels) else {"name": None, "wavelength": UNAVAILABLE}
+    return {"name": record["name"], "wavelength": record["wavelength"]}
 
 
 def _reference_merged(fov):
@@ -251,9 +254,12 @@ def _channel(fov, item):
     ref = fov.rounds.reference_round
     if item.reference_merged:
         image, round_name = _reference_merged(fov), ref
+        details = {"name": None, "wavelength": UNAVAILABLE}
     else:
         round_name = item.round
-        image = np.asarray(fov.images[round_name])[..., _channel_index(fov, round_name, item.channel)]
+        index = _channel_index(fov, round_name, item.channel)
+        image = np.asarray(fov.images[round_name])[..., index]
+        details = _channel_details(fov, round_name, index)
     prepared = None
     if isinstance(item.prepare, CompositeConfig):
         image, prepared = composite_nuclei_amplicon(image, _reference_merged(fov), config=item.prepare)
@@ -261,7 +267,7 @@ def _channel(fov, item):
         flamingo = np.asarray(fov.images[round_name])[..., _channel_index(fov, round_name, item.prepare_channel)]
         image, prepared = enhance_with_flamingo(image, flamingo, config=item.prepare)
     entry = fov.registration_record.get("rounds", {}).get(round_name) if round_name != ref else None
-    source = {"round": item.round, "channel": item.channel, "reference_merged": item.reference_merged,
+    source = {"round": item.round, "channel": item.channel, **details, "reference_merged": item.reference_merged,
               "prepare": prepared, "prepare_channel": item.prepare_channel,
               "registration": None if entry is None else {"reference": entry.get("reference"),
                                                           "reference_sha256": entry.get("reference_sha256")},

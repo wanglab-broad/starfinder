@@ -162,7 +162,7 @@ label operation; those belong to the coordination layer or to the caller.
 class InputChannel:
     role: str                          # nuclear, cytoplasm, membrane, amplicon or composite
     round: str | None = None           # a loaded round in the reference frame; None with reference_merged
-    channel: str | int | None = None   # a label of Dataset.channel_labels(round), or an index
+    channel: str | int | None = None   # a pattern or a name of the round (Dataset.channel_index), or an index
     reference_merged: bool = False     # the reference round's channel maximum (save_reference_image "merged")
     prepare: CompositeConfig | FlamingoEnhancementConfig | None = None  # an input function and its own sources
 
@@ -256,7 +256,7 @@ hash).
 | `FOV.run` | `preprocessing_record` and `registration_record` | copied by reference (their hashes) into the segmentation record, so the input's processing is traceable |
 | `FOV.register_rounds` | each registered morphology round's image (every channel resampled once into the reference frame) and its metadata, which equals the reference metadata | the `nuclear`, `cytoplasm` and Flamingo channels |
 | `FOV.register_rounds` | `registration_record["rounds"][round]`: the recipe summary, the reference label and `reference_sha256` | the input-channel identity in the segmentation record |
-| `Dataset` | `channel_labels(round)` and `other_channel_order` | resolving `InputChannel.channel` by label; an unknown label raises `ValueError` |
+| `Dataset` | `channel_index(round, key)` and `channel_info(round)` ({doc}`coordination`, "Channels") | resolving `InputChannel.channel` and `prepare_channel` by pattern or by name, and the channel's `name` and `wavelength` in the record; an unknown key or a repeated name raises `ValueError` naming the round and its channels |
 
 Every image `FOV.segment` reads must be resident: the reference round (after `FOV.run`,
 whose streaming mode keeps it, or after `FOV.load_checkpoint("registered")`) and each
@@ -307,8 +307,9 @@ mapping in `SegmentationResult.record`:
     "path": "input.ome.tif", "sha256": "<C-order bytes>", "file_sha256": "...",
     "shape_zyxc": [50, 512, 512, 1], "dtype": "uint8", "metadata": {"frame_id": "..."},
     "projection": null,
-    "channels": [{"role": "nuclear", "round": "round4", "channel": "ch04", "reference_merged": false,
-                  "prepare": null, "registration": {"reference": "round1:ch04", "reference_sha256": "..."},
+    "channels": [{"role": "nuclear", "round": "round4", "channel": "DAPI", "name": "DAPI",
+                  "wavelength": "unavailable", "reference_merged": false, "prepare": null,
+                  "registration": {"reference": "round1:ch04", "reference_sha256": "..."},
                   "sha256": "..."}]
   },
   "seeds": null,
@@ -331,6 +332,11 @@ mapping in `SegmentationResult.record`:
   tiles). An imported run has `methods: []` and an `import` entry instead.
 * `input.sha256` is the SHA-256 of the segmentation input's C-order bytes (dtype and
   shape included, as the golden tests hash arrays); each channel also has its own.
+* Each `input.channels` entry keeps the `InputChannel` key as given (`channel`: a
+  pattern, a name or an index) and, beside it, the resolved channel's `name` and
+  `wavelength` from `Dataset.channel_info` (`null` and `"unavailable"` when not
+  configured, and for the reference merged image). Both keys are additive; a record
+  written without them still loads.
 * `outcome` is `ok` or `empty` (no object; not an error).
 * `software` has the same content as the `run.json` written by `FOV.run`
   ({doc}`checkpoints`); `run.json` itself does not change.

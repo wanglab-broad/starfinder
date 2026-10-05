@@ -5,7 +5,7 @@ from pathlib import Path
 
 from .config import ExternalReference, PipelineConfig, ExecutionConfig, RegistrationRecipe, RegistrationStep, RecoveryConfig
 from .dataset import Dataset
-from .types import RoundState, SubtileConfig
+from .types import ChannelInfo, RoundState, SubtileConfig
 from starfinder.io import ImageLoadConfig
 from starfinder.preprocessing import (MinMaxNormalizationConfig, HistogramMatchingConfig,
     ReconstructionConfig, TophatConfig, ProjectionConfig, PreprocessingRecipe, PreprocessingStep, step_config_type)
@@ -564,21 +564,12 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
     """
     if rule not in _RULES:
         raise ValueError(f'unsupported Python workflow rule {rule}')
-    n = config['n_rounds']
-    if isinstance(n, bool) or not isinstance(n, int) or n < 1:
-        raise ValueError('n_rounds must be a positive integer')
-    rounds = RoundState(sequencing_rounds=[f'round{i}' for i in range(1, n + 1)],
-                        other_rounds=list(config.get('additional_round', [])), reference_round=config['ref_round'])
-    rounds.validate()
     if set(config) & {'channel_order', 'fov_pattern'}:
         raise ValueError('direct Python field names belong to Dataset; use shared seq_channel_order/fov_id_pattern here')
-    channels = tuple(config.get('seq_channel_order', ()))
     params = config.get('rules', {}).get(rule, {}).get('parameters', {})
     mode = _readout_mode(config, params)
-    dataset = Dataset(Path(config['root_input_path']) / config['dataset_id'] / config['sample_id'],
-        Path(config['root_output_path']) / config['dataset_id'] / config['output_id'],
-        config['dataset_id'], config['sample_id'], config['output_id'], rounds=rounds,
-        channel_order=channels, fov_pattern=config.get('fov_id_pattern', 'Position%03d'), readout_mode=mode)
+    dataset = _workflow_dataset(config, readout_mode=mode)
+    rounds, channels = dataset.rounds, dataset.channel_order
     _known(params, ('streaming', 'snr_threshold', 'load_codebook', 'load_raw_images', 'enhance_contrast',
         'hist_equalize', 'morph_recon', 'tophat', 'preprocessing', 'registration', 'global_registration', 'local_registration',
         'spot_finding', 'reads_extraction', 'reads_filtration', 'decoding', 'scoring', 'deduplication',
@@ -600,7 +591,7 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
     if mode == 'direct':
         encoding, layout, split_index, end_base = EncodingConfig(), None, None, None
     else:
-        encoding, layout, split_index, end_base = _codebook_layout(book, filt, n)
+        encoding, layout, split_index, end_base = _codebook_layout(book, filt, len(rounds.sequencing_rounds))
     if 'decoding' in params and not do_filter:
         raise ValueError('decoding requires reads_filtration.run')
     decoding = (_decoding(params['decoding'], mode) if 'decoding' in params else
@@ -700,49 +691,99 @@ def _run_workflow(snakemake, rule):
 _NUCLEI_REFERENCE_CHANNEL = 'ch04'
 
 
-def _nuclei_registration(config):
-    """(dataset, stain label per other round, output folder per channel per other round) of nuclei_registration.
+def _additional_rounds(config):
+    """(round names, channel_order per round that has one) of the shared additional_round entries.
 
-    Reads the shared keys as workflow/scripts/nuclei_registration.m does. Each
-    additional_round entry is an other round with its channel_order: entry
-    ``channel`` is the filename pattern and the round's channel label, entry
-    ``name`` the output folder. The round's shared stain is its one channel
-    whose name contains the top-level ref_channel (MATLAB single-channel
-    matching); none or several is a ValueError.
+    Each entry names an other round by round_name; its optional channel_order
+    lists the round's channels (wavelength, channel and name entries, or
+    patterns), which Dataset validates.
+    """
+    entries = config.get('additional_round') or []
+    if not isinstance(entries, list):
+        raise ValueError('additional_round must be a list of round entries')
+    names, orders = [], {}
+    for entry in entries:
+        name = entry.get('round_name') if isinstance(entry, dict) else None
+        if not isinstance(name, str) or not name:
+            raise ValueError('each additional_round entry requires a round_name')
+        names.append(name)
+        if entry.get('channel_order') is not None:
+            orders[name] = entry['channel_order']
+    return names, orders
+
+
+def _reference_stains(config):
+    """Dataset.reference_stains of the shared keys: the reference round's *ch04.tif, named by ref_channel.
+
+    dapi_round names the round whose ch04 file is the stain (MATLAB's
+    nuclei_registration rule); it must be ref_round. Without dapi_round there
+    is no reference stain.
+    """
+    dapi, ref = config.get('dapi_round'), config['ref_round']
+    if dapi is None:
+        return ()
+    if dapi != ref:
+        raise ValueError(f'dapi_round {dapi!r} differs from ref_round {ref!r}: the stain file '
+                         f'(*{_NUCLEI_REFERENCE_CHANNEL}.tif) is a file of the reference round')
+    return (ChannelInfo(_NUCLEI_REFERENCE_CHANNEL, config.get('ref_channel')),)
+
+
+def _workflow_dataset(config, **fields):
+    """The Dataset of every rule: sequencing rounds, other rounds by round_name, channels and the reference stain.
+
+    seq_channel_order is a list of patterns or of wavelength/channel/name
+    entries (MATLAB's channel_order_dict); each additional_round entry's
+    channel_order gives that round its own channels.
     """
     n = config['n_rounds']
     if isinstance(n, bool) or not isinstance(n, int) or n < 1:
         raise ValueError('n_rounds must be a positive integer')
+    names, orders = _additional_rounds(config)
+    rounds = RoundState(sequencing_rounds=[f'round{i}' for i in range(1, n + 1)], other_rounds=names,
+                        reference_round=config['ref_round'])
+    rounds.validate()
+    channels = config.get('seq_channel_order') or ()
+    if not isinstance(channels, (list, tuple)):
+        raise ValueError('seq_channel_order must be a list of channel patterns or of wavelength/channel/name entries')
+    return Dataset(Path(config['root_input_path']) / config['dataset_id'] / config['sample_id'],
+        Path(config['root_output_path']) / config['dataset_id'] / config['output_id'],
+        config['dataset_id'], config['sample_id'], config['output_id'], rounds=rounds,
+        channel_order=tuple(channels), fov_pattern=config.get('fov_id_pattern', 'Position%03d'),
+        other_channel_order=orders, reference_stains=_reference_stains(config), **fields)
+
+
+def _nuclei_registration(config):
+    """(dataset, stain label per other round, output folder per channel per other round) of nuclei_registration.
+
+    Reads the shared keys as workflow/scripts/nuclei_registration.m does, with
+    the Dataset of every rule (_workflow_dataset). Each additional_round entry
+    is an other round with its channel_order: entry ``channel`` is the filename
+    pattern and the round's channel label, entry ``name`` the output folder.
+    The round's shared stain is its one channel whose name contains the
+    top-level ref_channel (MATLAB single-channel matching, kept here instead of
+    Dataset.channel_index); none or several is a ValueError.
+    """
     stain = config.get('ref_channel')
     if not isinstance(stain, str) or not stain:
         raise ValueError('nuclei_registration requires the top-level ref_channel naming the shared stain')
-    entries = config.get('additional_round') or []
-    if not isinstance(entries, list) or not entries:
+    names, orders = _additional_rounds(config)
+    if not names:
         raise ValueError('nuclei_registration requires additional_round entries')
-    orders, stains, folders = {}, {}, {}
-    for entry in entries:
-        name = entry.get('round_name') if isinstance(entry, dict) else None
-        order = entry.get('channel_order') if isinstance(entry, dict) else None
-        if not isinstance(name, str) or not name:
-            raise ValueError('each additional_round entry requires a round_name')
+    for name in names:
+        order = orders.get(name)
         if (not isinstance(order, list) or not order or
                 any(not isinstance(c, dict) or not isinstance(c.get('channel'), str) or not isinstance(c.get('name'), str)
                     for c in order)):
             raise ValueError(f'additional round {name!r} requires a channel_order of channel and name entries')
-        matches = [c['channel'] for c in order if stain in c['name']]
+    dataset = _workflow_dataset(config)
+    stains, folders = {}, {}
+    for name in names:
+        channels = dataset.channel_info(name)
+        matches = [c.channel for c in channels if stain in c.name]
         if len(matches) != 1:
             raise ValueError(f'expected one channel of additional round {name!r} whose name contains ref_channel '
                              f'{stain!r}; found {len(matches)}')
-        orders[name], stains[name] = tuple(c['channel'] for c in order), matches[0]
-        folders[name] = tuple(c['name'] for c in order)
-    rounds = RoundState(sequencing_rounds=[f'round{i}' for i in range(1, n + 1)], other_rounds=list(orders),
-                        reference_round=config['ref_round'])
-    rounds.validate()
-    dataset = Dataset(Path(config['root_input_path']) / config['dataset_id'] / config['sample_id'],
-        Path(config['root_output_path']) / config['dataset_id'] / config['output_id'],
-        config['dataset_id'], config['sample_id'], config['output_id'], rounds=rounds,
-        channel_order=tuple(config.get('seq_channel_order', ())), fov_pattern=config.get('fov_id_pattern', 'Position%03d'),
-        other_channel_order=orders)
+        stains[name], folders[name] = matches[0], tuple(c.name for c in channels)
     return dataset, stains, folders
 
 
