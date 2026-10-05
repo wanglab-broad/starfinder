@@ -222,8 +222,9 @@ In this order, before any sampling; each uses only the arguments:
 
 * the molecule table's `sha256`, `population` and `source`;
 * for each label run: its name, target, geometry, `label_namespace`, the labels' SHA-256
-  from its record, its `operations` and, when loaded from files, the record's and the
-  label file's SHA-256;
+  from its record, its `operations`, its full record, whether it is saved under its run,
+  and the path and SHA-256 of the label file that holds it (linked or written; "Label images
+  of a checkpointed assignment");
 * the grid (shape, metadata, source, hash) and the outcome of the grid check
   (`checked` or `declared_checked`);
 * the supplied correspondence table's SHA-256, when given;
@@ -232,8 +233,9 @@ In this order, before any sampling; each uses only the arguments:
 
 ### Run record
 
-Each call writes one `assignment.json` (when checkpoints are on) and keeps the same mapping
-in `AssignmentResult.record`:
+A `FOV.assign` call with checkpoints writes one `assignment.json`, and every call keeps
+the same mapping in `AssignmentResult.record` (without checkpoints, the `file` entries name
+no path):
 
 ```json
 {
@@ -249,9 +251,11 @@ in `AssignmentResult.record`:
     "molecules": {"population": "final", "n": 1234, "sha256": "...",
                   "source": {"detection": "SpotFindingResult", "reads": "ReadFilteringResult", "filter_config": {}}},
     "cells": {"run": "cell", "target": "cell", "geometry": "volume", "labels_sha256": "...",
-              "record_sha256": "...", "file_sha256": "...", "operations": []},
+              "record_sha256": "...", "operations": [], "saved_under_run": true,
+              "file": {"path": "../../segmentation/cell/labels.tif", "sha256": "..."}, "record": {}},
     "nuclei": {"run": "nucleus", "target": "nucleus", "geometry": "volume", "labels_sha256": "...",
-               "record_sha256": "...", "file_sha256": "...", "operations": []},
+               "record_sha256": "...", "operations": [], "saved_under_run": false,
+               "file": {"path": "nucleus_labels.tif", "sha256": "..."}, "record": {}},
     "correspondence": {"source": "overlap", "sha256": null}
   },
   "config": {"expansion": {"distance": 0.7776, "unit": "um", "mode": "planar"}, "legacy_pixel_expansion": false,
@@ -273,12 +277,17 @@ in `AssignmentResult.record`:
   "outcome": "ok",
   "files": {"molecules": {"path": "molecules.csv", "sha256": "..."}, "cells": {"path": "cells.csv", "sha256": "..."},
             "counts": {"path": "counts.csv", "sha256": "..."}, "nuclei": {"path": "nuclei.csv", "sha256": "..."},
-            "territories": {"path": "territories.tif", "sha256": "..."}},
+            "territories": {"path": "territories.tif", "sha256": "..."},
+            "nucleus_labels": {"path": "nucleus_labels.tif", "sha256": "..."}},
   "software": {"starfinder": "...", "git_commit": "...", "packages": {}}
 }
 ```
 
 `counts.compartments` covers the kept cells; the excluded cells are the `no_nucleus` ones.
+In this illustration the cell run was saved under its run and is linked, while the nucleus
+run was not and is written into the assignment folder ("Persistence", "Label images of a
+checkpointed assignment"); `inputs.<run>.record` holds the run's full record, so its
+`label_namespace`, grid, target and operations resolve from `assignment.json` alone.
 `outcome` is `ok`, or `empty` when the territory image has no object; `software` has the
 content of `run.json`'s `code` and `environment` ({doc}`checkpoints`). The numbers above
 are an illustration of the layout, not results.
@@ -295,7 +304,9 @@ made (an `import_labels` result, for example). It takes the molecules from
 re-applied) through `molecule_table`, the genes from the loaded codebook, and the grid
 from `FOV.reference_grid()`; calls `assign_molecules`; stores the result in
 `FOV.assignment_results[name]`; and, with `checkpoints`, writes the files of
-"Persistence". It never runs registration, detection, decoding or segmentation, and
+"Persistence", including every label image it used that is not already saved under its run
+there ("Label images of a checkpointed assignment"). Without `checkpoints` it writes
+nothing. It never runs registration, detection, decoding or segmentation, and
 `PipelineConfig` gains no field (D1).
 
 ```python
@@ -314,8 +325,9 @@ class AssignmentResult:
     cells: pd.DataFrame          # one row per territory ("Cell table")
     counts: pd.DataFrame         # long counts ("Count accounting")
     nuclei: pd.DataFrame | None  # one row per nucleus ("Nucleus–cell correspondence")
-    territories: np.ndarray | None  # uint32 ZYX expanded territories, when assign expanded
-    original_territories: np.ndarray | None  # the cell run's labels, when assign expanded
+    cell_labels: np.ndarray            # uint32 ZYX original territories: the cell run's labels
+    territories: np.ndarray | None     # uint32 ZYX expanded territories; None without expansion
+    nucleus_labels: np.ndarray | None  # uint32 ZYX nucleus labels; None without nuclei
     genes: tuple[str, ...]
     cell_namespace: str
     record: Mapping[str, Any]
@@ -408,12 +420,13 @@ The expansion is optional and is applied once, by assign only
 (`AssignmentConfig.expansion`), through `expand_labels` of {doc}`segmentation-contract`
 with an `ExpandLabelsConfig` (`distance`, `unit` `pixel` or `um`, `mode` `planar` or
 `volumetric`; no default distance). Assign is the place where the original label image is
-always at hand: it is the cell run's `labels`, which segment saves as
-`segmentation/<run>/labels.tif`. So both masks exist in every case this contract allows:
+always at hand: it is the cell run's `labels`. So both masks exist in every case this
+contract allows, in memory and, for a checkpointed assignment, on disk by the one rule of
+"Persistence" ("Label images of a checkpointed assignment"):
 
-| Mask | Array | Saved as | Identity | Hash |
+| Mask | Array | File of a checkpointed assignment | Identity | Hash |
 | --- | --- | --- | --- | --- |
-| Original territories | `cells.labels`, also `AssignmentResult.original_territories` | the cell run's `segmentation/<run>/labels.tif`; when the cell run has no saved file with a recorded SHA-256 (a direct `segment` or `import_labels` result, or `FOV.segment` without checkpoints), `FOV.assign` writes `original_territories.tif` itself | `(cell_namespace, value)` | the labels' SHA-256 from the cell run's record |
+| Original territories | `AssignmentResult.cell_labels` (the cell run's labels) | the cell run's `segmentation/<run>/labels.tif` when it is saved under its run, else `assignment/<name>/cell_labels.tif` | `(cell_namespace, value)` | the labels' SHA-256 from the cell run's record |
 | Expanded territories | `AssignmentResult.territories` | `assignment/<name>/territories.tif` | the same `(cell_namespace, value)`: `expand_labels` never creates, removes or renumbers a value, so a cell keeps its `cell_id` in both | SHA-256 in `assignment.json` |
 
 Rules:
@@ -660,23 +673,57 @@ on every fixture of the validation design. With `M` the input molecules:
 
 | Option | Layout | Effect on the golden digests | Effect on the existing outputs |
 | --- | --- | --- | --- |
-| **L1. Tables and a JSON record beside the segmentation runs (recommended)** | `<checkpoint dir>/<fov_id>/assignment/<name>/`: `molecules.<fmt>`, `cells.<fmt>` (every cell, kept and excluded), `counts.<fmt>`, `nuclei.<fmt>` (with nuclei), `territories.tif` (only when assign expanded), `original_territories.tif` (only when assign expanded and the cell run has no saved label file) and `assignment.json`. Label images are `uint32` ZYX with `ImageMetadata`, written by `save_volume`. `<fmt>` is CSV or Parquet through the checkpoint table writer ({doc}`checkpoints`, "Table formats"), so tables round-trip exactly. | None: the golden test pins arrays and tables, not files. | `run.json`, the `FOV.run` checkpoints and W-307's `segmentation/<run>/` folders are untouched. The workflow keeps `expr/{fovID}/raw.h5ad` and `expr/{fovID}/reads_assignment.csv`, written by the adapter from the result, with the changes listed under "Workflow configuration". |
+| **L1. Tables and a JSON record beside the segmentation runs (recommended)** | `<checkpoint dir>/<fov_id>/assignment/<name>/`: `molecules.<fmt>`, `cells.<fmt>` (every cell, kept and excluded), `counts.<fmt>`, `nuclei.<fmt>` (with nuclei), `territories.tif` (with an expansion), `cell_labels.tif` and `nucleus_labels.tif` (each only when that input is not saved under its run; see the table below) and `assignment.json`. Label images are `uint32` ZYX with `ImageMetadata`, written by `save_volume`. `<fmt>` is CSV or Parquet through the checkpoint table writer ({doc}`checkpoints`, "Table formats"), so tables round-trip exactly. | None: the golden test pins arrays and tables, not files. | `run.json`, the `FOV.run` checkpoints and W-307's `segmentation/<run>/` folders are untouched (linked, never written). The workflow keeps `expr/{fovID}/raw.h5ad` and `expr/{fovID}/reads_assignment.csv`, written by the adapter from the result, with the changes listed under "Workflow configuration". |
 | L2. Per-FOV AnnData as the store | `assignment/<name>/assignment.h5ad`: `X` whole-cell counts, `layers` `nucleus` and `cytoplasm`, `obs` the cell table, `uns` the record; molecules and nuclei as CSV beside it. | None. | One file per FOV for cells, but `anndata` becomes a dependency of the assign entry (today it is locked only through the `spatialdata` extra), and the H5AD duplicates what `raw.h5ad` already carries. |
 | L3. Per-FOV SpatialData | A Zarr store with the territories, points and table. | None. | `spatialdata` becomes a dependency of the assign entry, and the W-168 sample-export contract rules out a per-FOV SpatialData API and export fan-out. |
 
 **Recommendation: L1.** It needs only the base dependencies, reuses the checkpoint table
 format and the W-307 label files, and leaves AnnData and SpatialData to the outputs that
-already own them. `FOV.load_assignment(name)` reads the folder, checks every recorded
-SHA-256 and returns the `AssignmentResult`.
+already own them. `FOV.load_assignment(name)` reads the folder and the linked
+segmentation files, checks every recorded SHA-256 and returns the `AssignmentResult`.
+
+**Label images of a checkpointed assignment.** One rule: a checkpointed assignment
+(`FOV.assign(checkpoints=…)`) keeps every label image it used. A label image that is
+**saved under its run** is linked, not copied; every other label image it used is written
+into the assignment folder. A `SegmentationResult` is saved under its run when it was
+written by `FOV.segment(checkpoints=…)` or loaded by `FOV.load_segmentation` from
+`<checkpoint dir>/<fov_id>/segmentation/<run>/labels.tif` in the same checkpoint root as the
+assignment, and that file's array SHA-256 equals the labels' SHA-256 when `FOV.assign` runs
+(it checks). Every other input is unsaved: a direct `segment` result, a `FOV.segment` run
+without checkpoints or under another root, a caller-made result, and an `import_labels`
+result (its source file lies outside the layout and may hold another dtype). Without
+checkpoints nothing is written and the arrays stay in `AssignmentResult`;
+`assign_molecules` itself never writes.
+
+| Mask | Exists when | Input | Without checkpoints | File with checkpoints | Links that point to it |
+| --- | --- | --- | --- | --- | --- |
+| Cell labels (original territories) | always | saved under its run | `AssignmentResult.cell_labels` | `segmentation/<cell run>/labels.tif`, linked | `inputs.cells.file`; `cells.cell_id`, `molecules.cell_id` and `molecules.original_cell_id` are values in it; `expansion.original` when expanded |
+| Cell labels (original territories) | always | unsaved, including imports | `AssignmentResult.cell_labels` | `assignment/<name>/cell_labels.tif`, written | the same links, pointing to `cell_labels.tif` |
+| Expanded territories | `expansion` set | computed by assign | `AssignmentResult.territories` | `assignment/<name>/territories.tif`, written | `expansion.expanded`; `cells.cell_id` and `molecules.cell_id` are values in it |
+| Expanded territories | no `expansion` | none | `territories` is `None` | no file | `expansion` is `null`; the territories are the cell labels |
+| Nucleus labels | `nuclei` given | saved under its run | `AssignmentResult.nucleus_labels` | `segmentation/<nucleus run>/labels.tif`, linked | `inputs.nuclei.file`; `nuclei.nucleus_id` and `molecules.nucleus_id` are values in it |
+| Nucleus labels | `nuclei` given | unsaved, including imports | `AssignmentResult.nucleus_labels` | `assignment/<name>/nucleus_labels.tif`, written | the same links, pointing to `nucleus_labels.tif` |
+| Nucleus labels | no `nuclei` | none | `nucleus_labels` is `None` | no file | `inputs.nuclei` is `null`; no `nuclei` table; `molecules.nucleus_id` is null |
+
+Each mask's file depends only on its own row, so every combination of the cell input
+(saved, unsaved, imported), the nucleus input (absent, saved, unsaved), the expansion (with,
+without) and the checkpoints (with, without) is the product of these rows. When the cell
+run and the nucleus run are the same result (nucleus territories, the legacy nucleus-only
+case), one file serves both and both links name it. A written label image is `uint32` ZYX
+with the run's grid `ImageMetadata` (`save_volume`), and `inputs.<run>.record` holds the
+run's full record, so `(label_namespace, value)` resolves from the assignment folder alone.
+The linked `segmentation/<run>/labels.tif` files are prerequisites of
+`FOV.load_assignment`: a linked file that is missing or whose SHA-256 differs makes the
+reload raise `ValueError` naming the path and both hashes.
 
 **Identities and links.**
 
 | Object | Key | Link |
 | --- | --- | --- |
 | Molecule | `(spot_namespace, spot_id)` | to its read and spot rows in `pre_qc` and `candidates`; to its cell by `(cell_namespace, cell_id)`, nullable |
-| Cell | `(cell_namespace, cell_id)`; `cell_namespace` is the cell run's `label_namespace` | to its original territory in `segmentation/<run>/labels.tif` (or `original_territories.tif`) and to its expanded territory in `territories.tif`, by the same value |
-| Nucleus | `(nucleus run label_namespace, nucleus_id)` | to `segmentation/<nucleus run>/labels.tif`; to its cell by `cell_id` |
-| Assignment | `assignment.json` | the SHA-256 of the molecule table, the cell and nucleus label files, both segmentation records, the original and expanded territories, the grid and every written file |
+| Cell | `(cell_namespace, cell_id)`; `cell_namespace` is the cell run's `label_namespace` | to its original territory in the cell-label file and to its expanded territory in `territories.tif`, by the same value (files as in the table above) |
+| Nucleus | `(nucleus run label_namespace, nucleus_id)` | to the nucleus-label file of the table above; to its cell by `cell_id` |
+| Assignment | `assignment.json` | the SHA-256 of the molecule table, of every label file in the table above (linked or written), of both segmentation records, of the grid and of every written file |
 
 **AnnData and SpatialData.** Assignment adds no exporter:
 
@@ -693,7 +740,7 @@ SHA-256 and returns the `AssignmentResult`.
   `unassigned` with the status as the reason; `excluded_cell` becomes `unassigned` with
   the reason `excluded_cell`, and its cell a mask-only cell); "Cells and expression" are
   `raw.h5ad` joined by the explicit cell key; "Mask/table relation" is `(label
-  namespace, local label)` from W-307's label files; "Zero-count cells" are kept cells
+  namespace, local label)` from the label files of the table above; "Zero-count cells" are kept cells
   with zero rows; "Mask-only cells" are excluded cells. W-168's `unavailable` means that
   no assignment was supplied and is never written by assign.
 
