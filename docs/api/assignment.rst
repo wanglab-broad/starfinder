@@ -61,10 +61,11 @@ statuses, flags and states, with quantiles and the totals before and after the e
 (the same five keys in both; the nuclear and cytoplasmic totals are equal, because an
 excluded cell has no compartment counts).
 :py:func:`~starfinder.assignment.plot_assignment` draws one row of four panels: the stain
-in grey scale with the territory outlines in green and a red dot at each cell's centroid;
+in grey scale with the territory outlines in green and a dot at each cell's centroid,
+``kept`` cells blue and excluded cells orange (legend entries ``kept`` and ``excluded``);
 the same with the molecules, ``assigned`` blue, ``unassigned`` red and ``excluded_cell``
-orange (``outside_grid`` not drawn); and the histograms of voxels and of molecules per
-cell. ``view="z_max"`` draws the Z maximum, ``view="single_layer"`` one plane ``z``
+orange with the legend entry ``excluded`` (``outside_grid`` not drawn); and the histograms
+of voxels and of molecules per cell. ``view="z_max"`` draws the Z maximum, ``view="single_layer"`` one plane ``z``
 (default ``Z // 2``) of a volumetric result.
 
 ``FOV.assign(config, cells="cell", nuclei=None, name="default", population="final")``

@@ -1096,10 +1096,13 @@ nuclei, do not change.
 ### Assignment diagnostics
 
 `plot_assignment` draws one row of four panels instead of the territory panel and three
-histograms (W-321 review, 2026-10-05): the stain in grey scale with green territory
-outlines and a red dot at each cell's centroid; the same with the molecules (`assigned`
-blue, `unassigned` red, `excluded_cell` orange only when present, `outside_grid` not
-drawn); voxels per cell; molecules per cell. The "nuclei per cell" histogram is gone. A
+histograms (W-321 review, 2026-10-05; the centre colours and the legend entry `excluded`
+from the checkpoint after it, the same day): the stain in grey scale with green territory
+outlines and a dot at each cell's centroid, coloured by the cell's status (`kept` blue,
+excluded orange; legend entries `kept` and `excluded`, the latter only when a cell is
+excluded); the same with the molecules (`assigned` blue, `unassigned` red, `excluded_cell`
+orange with the legend entry `excluded`, only when present; `outside_grid` not drawn);
+voxels per cell; molecules per cell. The "nuclei per cell" histogram is gone. A
 new `view` argument selects the Z-maximum view (`"z_max"`) or one plane
 (`"single_layer"`, default plane `Z // 2`); `z` alone still selects that plane, and
 `view="single_layer"` on a plane or Z=1 result, or `z` with `view="z_max"`, raises

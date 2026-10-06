@@ -548,7 +548,8 @@ and always carries `ambiguous_nucleus`, so its compartments are withheld.
 nucleus is flagged `outside` only when its share outside its cell is strictly greater
 than 0.1, and a part of a nucleus inside another cell still raises `foreign_nucleus` on
 that cell, whatever the tolerance. The evidence is the bounded culture example of W-320
-(one crop, 18 matched nuclei, cells and nuclei segmented independently): with 0.0, 10 of
+(one crop, 11 matched nuclei with the reference labels and 8 with the Cellpose labels, cells
+and nuclei segmented independently): with 0.0, 10 of
 the 11 matched nuclei of the reference labels and 7 of the 8 of the Cellpose labels were
 flagged `nucleus_outside_cell`, so the compartment counts of nearly every cell were
 withheld, while the largest share of a nucleus outside its cell was 0.073. A tolerance of
@@ -816,11 +817,13 @@ On demand, never by `FOV.assign`:
   so the two compartment totals are equal before and after; without an excluded cell,
   `before` equals `after`. `FOV.assign` stores it in `record["counts"]`.
 * `plot_assignment(result, *, image=None, view=None, z=None)`: one row of four panels.
-  1. `image` in grey scale with the territory outlines in green and one red dot per cell
-     centre;
+  1. `image` in grey scale with the territory outlines in green and one dot per cell
+     centre, coloured by the cell's status: `kept` blue and `excluded_no_nucleus` orange,
+     with the legend entries `kept` and `excluded` (the excluded centres drawn and in the
+     legend only when the result has an excluded cell);
   2. the same image and outlines with the molecules: `assigned` blue, `unassigned` red,
-     `excluded_cell` orange (drawn and in the legend only when the result has such
-     molecules); `outside_grid` molecules are not drawn;
+     `excluded_cell` orange with the legend entry `excluded` (drawn and in the legend only
+     when the result has such molecules); `outside_grid` molecules are not drawn;
   3. the histogram of voxels per cell;
   4. the histogram of molecules per cell.
 

@@ -8,11 +8,16 @@ from ._config import (ASSIGNMENT_STATUSES, CELL_CORRESPONDENCE, CELL_STATUSES, C
                       CORRESPONDENCE_FLAGS, NUCLEUS_STATUSES)
 
 _QUANTILES = (0.0, 0.25, 0.5, 0.75, 1.0)
-# plot_assignment: the two views, the outline and centre colours, and the colour of each drawn status.
+# plot_assignment: the two views, the outline colour, the colour of each drawn molecule status and cell
+# status (a kept cell as an assigned molecule, an excluded one as an excluded_cell molecule), and the
+# legend text of each.
 _VIEWS = ("z_max", "single_layer")
 _OUTLINE_COLOUR = "lime"
-_CENTRE_COLOUR = "red"
 _STATUS_COLOURS = {"assigned": "dodgerblue", "unassigned": "red", "excluded_cell": "orange"}
+_STATUS_LEGEND = {"assigned": "assigned", "unassigned": "unassigned", "excluded_cell": "excluded"}
+_CENTRE_COLOURS = {"kept": _STATUS_COLOURS["assigned"],
+                   "excluded_no_nucleus": _STATUS_COLOURS["excluded_cell"]}
+_CENTRE_LEGEND = {"kept": "kept", "excluded_no_nucleus": "excluded"}
 
 
 def _quantiles(values):
@@ -82,13 +87,16 @@ def plot_assignment(result: AssignmentResult, *, image=None, view=None, z=None):
 
     Panel 1 shows ``image`` in grey scale (scaled between its 0.5 and 99.5
     percentiles; none by default) with the territory outlines in green and one
-    red dot per cell centre; panel 2 the same image and outlines with the
-    molecules, ``assigned`` blue, ``unassigned`` red and ``excluded_cell`` orange
-    (drawn and listed in the legend only when the result has such molecules);
-    ``outside_grid`` molecules are not drawn. Panels 3 and 4 are the histograms
-    of the voxels and of the molecules per cell, over every cell. The
-    territories are the ones assign used (the expanded ones when it expanded),
-    and a cell's centre is the centroid of that territory.
+    dot per cell centre, coloured by the cell's status: ``kept`` blue and
+    ``excluded_no_nucleus`` orange (drawn, and listed in the legend as
+    ``excluded``, only when the result has an excluded cell); panel 2 the same
+    image and outlines with the molecules, ``assigned`` blue, ``unassigned`` red
+    and ``excluded_cell`` orange (drawn, and listed in the legend as
+    ``excluded``, only when the result has such molecules); ``outside_grid``
+    molecules are not drawn. Panels 3 and 4 are the histograms of the voxels
+    and of the molecules per cell, over every cell. The territories are the
+    ones assign used (the expanded ones when it expanded), and a cell's centre
+    is the centroid of that territory.
 
     ``view="z_max"`` (the default without ``z``) draws the Z maximum of the
     territories and of a ZYX ``image``, every molecule with a position on the
@@ -156,6 +164,7 @@ def plot_assignment(result: AssignmentResult, *, image=None, view=None, z=None):
     statuses = [s for s in _STATUS_COLOURS
                 if s != "excluded_cell" or result.molecules.assignment_status.eq(s).any()]
     cells = result.cells
+    cell_statuses = [s for s in _CENTRE_COLOURS if s == "kept" or cells.status.eq(s).any()]
     prefix = "expanded_" if result.territories is not None else ""
     centres = cells
     if view == "single_layer":
@@ -163,6 +172,7 @@ def plot_assignment(result: AssignmentResult, *, image=None, view=None, z=None):
     where = "Z maximum" if view == "z_max" else f"z = {z}"
     # Marker area in points², smaller as the image grows: 12 up to about 250 pixels, 2 from 1500.
     size = float(np.clip(3000.0 / max(plane.shape), 2.0, 12.0))
+    legend = dict(loc="upper right", fontsize="small", markerscale=max(1.0, 12.0 / size))
 
     outline = np.ma.masked_where(~find_boundaries(plane, mode="inner"), np.ones(plane.shape))
     if background is not None and background.size:
@@ -176,14 +186,18 @@ def plot_assignment(result: AssignmentResult, *, image=None, view=None, z=None):
         ax.set_xlim(-0.5, plane.shape[1] - 0.5)
         ax.set_ylim(plane.shape[0] - 0.5, -0.5)
     ax = axes[0]
-    ax.scatter(centres[f"{prefix}centroid_x"], centres[f"{prefix}centroid_y"], s=2 * size, c=_CENTRE_COLOUR,
-               linewidths=0, label="cell centres")
+    for status in cell_statuses:
+        chosen = centres[centres.status.eq(status).to_numpy(dtype=bool)]
+        ax.scatter(chosen[f"{prefix}centroid_x"], chosen[f"{prefix}centroid_y"], s=2 * size,
+                   c=_CENTRE_COLOURS[status], linewidths=0, label=_CENTRE_LEGEND[status])
+    ax.legend(**legend)
     ax.set_title(f"cell centres, {where}")
     ax = axes[1]
     for status in statuses:
         chosen = molecules[molecules.assignment_status.eq(status).to_numpy(dtype=bool)]
-        ax.scatter(chosen.x, chosen.y, s=size, c=_STATUS_COLOURS[status], linewidths=0, label=status)
-    ax.legend(loc="upper right", fontsize="small", markerscale=max(1.0, 12.0 / size))
+        ax.scatter(chosen.x, chosen.y, s=size, c=_STATUS_COLOURS[status], linewidths=0,
+                   label=_STATUS_LEGEND[status])
+    ax.legend(**legend)
     ax.set_title(f"molecules, {where}")
     for ax, column, label in ((axes[2], f"{prefix}size_voxels", "voxels per cell"),
                               (axes[3], "n_molecules", "molecules per cell")):

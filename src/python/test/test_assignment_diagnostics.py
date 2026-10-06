@@ -1,10 +1,11 @@
 """The §2.9 assignment diagnostics: the four-panel figure of plot_assignment, its two views, and the
-exclusion totals of summarize_assignment (W-332; docs/assignment-contract.md, "Diagnostics").
+exclusion totals of summarize_assignment (W-332, W-340; docs/assignment-contract.md, "Diagnostics").
 
-The figure is checked by its artists (axes, titles, colours, point counts), not by pixels. The
-fixture is ``boxes`` with nuclei (exclusion on: cells 7 and 8 excluded; and off), its molecules
-spread over the planes 1 to 6 of the cells so that the single-layer view selects a subset; every
-expected count is taken from the stated geometry of test_assignment.py.
+The figure is checked by its artists (axes, titles, colours, point counts, legend texts), not by
+pixels. The fixture is ``boxes`` with nuclei (exclusion on: cells 7 and 8 excluded; and off), its
+molecules spread over the planes 1 to 6 of the cells so that the single-layer view selects a
+subset; every expected count and centre is taken from the stated geometry of test_assignment.py
+and segmentation_fixtures.py.
 """
 import matplotlib
 
@@ -20,7 +21,8 @@ from starfinder.assignment import (AssignmentConfig, assign_molecules, plot_assi
                                    summarize_assignment)
 from starfinder.segmentation import ExpandLabelsConfig, ReferenceGrid  # noqa: E402
 
-from .segmentation_fixtures import BOXES_METADATA, BOXES_SHAPE, boxes, seeded_stain  # noqa: E402
+from .segmentation_fixtures import (BOXES_METADATA, BOXES_SHAPE, CELL_BOXES, boxes, paint,  # noqa: E402
+                                    seeded_stain)
 from .test_assignment import (BOXES_MOLECULES, GRID, boxes_inputs, expected_status, label_run,  # noqa: E402
                               molecules)
 
@@ -35,6 +37,18 @@ STAIN = seeded_stain()
 # Hue ranges (matplotlib HSV, 0 to 1) of the colours the figure promises.
 HUES = {"green": (0.25, 0.42), "red": (-0.03, 0.03), "blue": (0.55, 0.70), "orange": (0.05, 0.13)}
 STATUS_HUES = {"assigned": "blue", "unassigned": "red", "excluded_cell": "orange"}
+# The legend text (and artist label) of each molecule status in panel 2, and the inverse.
+LEGEND = {"assigned": "assigned", "unassigned": "unassigned", "excluded_cell": "excluded"}
+STATUS_OF = {text: status for status, text in LEGEND.items()}
+# Panel 1: the legend text of each cell status and its hue (kept as assigned, excluded as excluded_cell).
+CENTRE_LEGEND = {"kept": "kept", "excluded_no_nucleus": "excluded"}
+CENTRE_HUES = {"kept": "blue", "excluded": "orange"}
+
+
+def box_centroid(ranges):
+    """(x, y) of the centroid of a half-open box, in voxel index coordinates."""
+    (_, _), (y0, y1), (x0, x1) = ranges
+    return ((x0 + x1 - 1) / 2.0, (y0 + y1 - 1) / 2.0)
 
 
 def spread_result(**config):
@@ -82,6 +96,29 @@ def drawn_points(collection):
     return sorted(map(tuple, np.asarray(collection.get_offsets(), np.float64).tolist()))
 
 
+def legend_texts(ax):
+    return [t.get_text() for t in ax.get_legend().get_texts()]
+
+
+def molecule_scatters(ax):
+    """status -> the panel-2 scatter of that status (the artists are labelled with the legend text)."""
+    return {STATUS_OF[label]: c for label, c in by_label(ax).items()}
+
+
+def expected_centres(result, plane=None, boxes=CELL_BOXES):
+    """legend text -> sorted (x, y) of the centres of the cells of each status (those whose box holds
+    plane ``plane`` when given), from the box geometry and the excluded cells."""
+    centres = {"kept": []}
+    for cell, ranges in boxes.items():
+        if plane is not None and not ranges[0][0] <= plane < ranges[0][1]:
+            continue
+        status = "excluded" if cell in excluded_of(result) else "kept"
+        centres.setdefault(status, []).append(box_centroid(ranges))
+    if excluded_of(result):
+        centres.setdefault("excluded", [])
+    return {s: sorted(p) for s, p in centres.items()}
+
+
 @pytest.mark.parametrize("view", ["z_max", "single_layer"])
 def test_four_panels_their_titles_and_colours(result, view):
     figure = plot_assignment(result, image=STAIN, view=view)
@@ -97,16 +134,29 @@ def test_four_panels_their_titles_and_colours(result, view):
         outline = images["outlines"]
         assert np.array_equal(~np.ma.getmaskarray(outline.get_array()), find_boundaries(plane, mode="inner"))
         assert hue_is(outline.get_cmap()(1.0), "green") and hue_is(outline.get_cmap()(0.0), "green")
+    # Panel 1: centres by cell status, kept blue and excluded orange, with a legend in that order.
+    entries = ["kept"] + (["excluded"] if excluded_of(result) else [])
     centres = by_label(figure.axes[0])
-    assert list(centres) == ["cell centres"]
-    assert all(hue_is(c, "red") for c in centres["cell centres"].get_facecolors())
+    assert list(centres) == entries
+    assert legend_texts(figure.axes[0]) == entries
+    for entry in entries:
+        assert all(hue_is(c, CENTRE_HUES[entry]) for c in centres[entry].get_facecolors())
+    # Panel 2: the colours are unchanged; the excluded_cell molecules are listed as "excluded".
     statuses = ["assigned", "unassigned"] + (["excluded_cell"] if excluded_of(result) else [])
-    scatters = by_label(figure.axes[1])
+    scatters = molecule_scatters(figure.axes[1])
     assert list(scatters) == statuses
     for status in statuses:
         assert all(hue_is(c, STATUS_HUES[status]) for c in scatters[status].get_facecolors())
-    assert [t.get_text() for t in figure.axes[1].get_legend().get_texts()] == statuses
-    assert figure.axes[0].get_legend() is None
+    texts = legend_texts(figure.axes[1])
+    assert texts == [LEGEND[s] for s in statuses] and "excluded_cell" not in texts
+    # The same blue and orange in both panels.
+    assert np.array_equal(centres["kept"].get_facecolors(), scatters["assigned"].get_facecolors())
+    if excluded_of(result):
+        assert np.array_equal(centres["excluded"].get_facecolors(), scatters["excluded_cell"].get_facecolors())
+    # The two legends have the same style.
+    legends = [ax.get_legend() for ax in figure.axes[:2]]
+    assert legends[0]._loc == legends[1]._loc and legends[0].markerscale == legends[1].markerscale
+    assert legends[0].get_texts()[0].get_fontsize() == legends[1].get_texts()[0].get_fontsize()
     plt.close(figure)
 
 
@@ -116,11 +166,13 @@ def test_counts_drawn_in_each_view(result):
     assert int(cells.status.eq("kept").sum()) + len(excluded_of(result)) == len(cells) == 8
     for view, plane in (("z_max", None), ("single_layer", 4), ("single_layer", 1), ("single_layer", 6)):
         figure = plot_assignment(result, image=STAIN, view=view, z=plane)
-        centres = by_label(figure.axes[0])["cell centres"]
-        assert len(centres.get_offsets()) == 8
-        assert drawn_points(centres) == sorted(zip(cells.centroid_x, cells.centroid_y))
+        centres = by_label(figure.axes[0])
+        # With exclusion on: six blue centres (cells 1 to 6) and two orange (cells 7 and 8); off: eight blue.
+        assert {s: len(c.get_offsets()) for s, c in centres.items()} == \
+            ({"kept": 6, "excluded": 2} if excluded_of(result) else {"kept": 8})
+        assert {s: drawn_points(c) for s, c in centres.items()} == expected_centres(result)
         expected = expected_points(result, plane)
-        scatters = by_label(figure.axes[1])
+        scatters = molecule_scatters(figure.axes[1])
         for status, collection in scatters.items():
             assert drawn_points(collection) == expected.get(status, []), (view, plane, status)
         assert "outside_grid" not in scatters
@@ -129,14 +181,53 @@ def test_counts_drawn_in_each_view(result):
     # In the Z-maximum view: every molecule of each status with a position on the grid.
     statuses = result.molecules.assignment_status
     figure = plot_assignment(result)
-    for status, collection in by_label(figure.axes[1]).items():
+    for status, collection in molecule_scatters(figure.axes[1]).items():
         assert len(collection.get_offsets()) == int(statuses.eq(status).sum())
+    plt.close(figure)
+
+
+def cut_result(**config):
+    """boxes with cell 1 cut to the planes 3 to 6 (its nucleus 11, z 3 to 5, stays inside, so it is kept)
+    and cell 8 to the planes 1 and 2 (still without a nucleus): plane 1 lacks a kept cell, plane 4 an
+    excluded one."""
+    cut = {**CELL_BOXES, 1: ((3, 7), *CELL_BOXES[1][1:]), 8: ((1, 3), *CELL_BOXES[8][1:])}
+    mols, _, nuclei, grid = boxes_inputs()
+    return assign_molecules(mols, label_run(paint(cut), "cell", "cell", grid=grid), grid=grid, nuclei=nuclei,
+                            config=AssignmentConfig(**config)), cut
+
+
+@pytest.mark.parametrize("exclusion", [True, False])
+def test_the_single_layer_view_colours_the_centres_of_the_cells_in_its_plane(exclusion):
+    result, cut = cut_result(exclude_cells_without_nucleus=exclusion)
+    assert sorted(result.cells.cell_id[result.cells.status.eq("excluded_no_nucleus").to_numpy(bool)]
+                  .astype(int).tolist()) == list(excluded_of(result)) == ([7, 8] if exclusion else [])
+    for plane, kept, excluded in ((1, 5, 2), (4, 6, 1), (6, 6, 1), (0, 0, 0)):
+        figure = plot_assignment(result, image=STAIN, z=plane)
+        centres = by_label(figure.axes[0])
+        assert {s: drawn_points(c) for s, c in centres.items()} == expected_centres(result, plane, cut)
+        counts = {"kept": kept, "excluded": excluded} if exclusion else {"kept": kept + excluded}
+        assert {s: len(c.get_offsets()) for s, c in centres.items()} == counts, plane
+        # The excluded entry is listed whenever the result has an excluded cell, as in panel 2.
+        assert legend_texts(figure.axes[0]) == list(counts)
+        for entry, collection in centres.items():
+            assert all(hue_is(c, CENTRE_HUES[entry]) for c in collection.get_facecolors())
+        plt.close(figure)
+
+
+def test_without_nuclei_every_centre_is_kept():
+    mols, cells, _, grid = boxes_inputs()
+    result = assign_molecules(mols, cells, grid=grid)
+    figure = plot_assignment(result)
+    centres = by_label(figure.axes[0])
+    assert list(centres) == legend_texts(figure.axes[0]) == ["kept"]
+    assert drawn_points(centres["kept"]) == sorted(box_centroid(r) for r in CELL_BOXES.values())
+    assert legend_texts(figure.axes[1]) == ["assigned", "unassigned"]
     plt.close(figure)
 
 
 def test_a_plane_outside_the_territories_draws_no_centre_and_no_molecule():
     figure = plot_assignment(spread_result(), view="single_layer", z=0)
-    assert len(by_label(figure.axes[0])["cell centres"].get_offsets()) == 0
+    assert all(len(c.get_offsets()) == 0 for c in by_label(figure.axes[0]).values())
     assert all(len(c.get_offsets()) == 0 for c in by_label(figure.axes[1]).values())
     plt.close(figure)
 
@@ -157,8 +248,10 @@ def test_the_territories_and_centres_are_the_expanded_ones_after_an_expansion():
     figure = plot_assignment(result, view="single_layer")
     outline = images_by_label(figure.axes[0])["outlines"].get_array()
     assert np.array_equal(~np.ma.getmaskarray(outline), find_boundaries(result.territories[4], mode="inner"))
-    assert drawn_points(by_label(figure.axes[0])["cell centres"]) == \
-        sorted(zip(result.cells.expanded_centroid_x, result.cells.expanded_centroid_y))
+    kept = result.cells.status.eq("kept").to_numpy(bool)
+    for entry, rows in (("kept", kept), ("excluded", ~kept)):
+        assert drawn_points(by_label(figure.axes[0])[entry]) == \
+            sorted(zip(result.cells.expanded_centroid_x[rows], result.cells.expanded_centroid_y[rows]))
     sizes = result.cells.expanded_size_voxels.to_numpy(np.float64)
     assert figure.axes[2].patches[0].get_x() == pytest.approx(sizes.min())
     plt.close(figure)
@@ -188,9 +281,9 @@ def test_a_plane_or_z1_result_has_the_z_maximum_view_only(grid):
     figure = plot_assignment(result, image=STAIN[4])
     statuses = result.molecules.assignment_status
     assert int(statuses.eq("outside_grid").sum()) == 1
-    for status, collection in by_label(figure.axes[1]).items():
+    for status, collection in molecule_scatters(figure.axes[1]).items():
         assert len(collection.get_offsets()) == int(statuses.eq(status).sum())
-    assert len(by_label(figure.axes[0])["cell centres"].get_offsets()) == len(result.cells) == 8
+    assert len(by_label(figure.axes[0])["kept"].get_offsets()) == len(result.cells) == 8
     plt.close(figure)
     for options in ({"view": "single_layer"}, {"z": 0}, {"view": "single_layer", "z": 0}):
         with pytest.raises(ValueError, match="single_layer view needs territories with Z > 1"):
