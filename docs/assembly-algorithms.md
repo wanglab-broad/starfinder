@@ -51,6 +51,7 @@ row of `placement.fovs` and `spacing`, `D` from its `ReferenceGrid.metadata`
 | molecule | `z, y, x` (float64, zero-based; sub-voxel kept) | `sample_z, sample_y, sample_x` |
 | cell | `centroid_z/y/x`; `expanded_centroid_z/y/x` | `sample_centroid_*`; `sample_expanded_centroid_*` (NaN where the §2.9 value is NaN) |
 | plane cell | as above, but `centroid_z` is not a position | `sample_centroid_z` = NaN |
+| ownership centroid | the expanded centroid when `centroid="territory"` and assign expanded, else the original | `ownership_centroid` (`expanded` or `original`) and `sample_ownership_centroid_*`, a copy of the pair it names |
 
 | Parameter | Unit | Default | Rule |
 | --- | --- | --- | --- |
@@ -141,16 +142,18 @@ take about 1 GB. Not measured.
 Per FOV, in order:
 
 1. Placement status: no finite origin → every row `excluded`, `fov_not_placed`.
-2. Cells: owner of the ownership centroid (`centroid="territory"`: the expanded centroid
-   when assign expanded, else the original; `"original"`: always the original) → retained
-   when it is the FOV, else `not_owner`.
+2. Cells: owner of the ownership centroid, `sample_ownership_centroid_y/x`
+   (`centroid="territory"`: the expanded centroid when assign expanded, else the original;
+   `"original"`: always the original) → retained when it is the FOV, else `not_owner`.
 3. Molecules by `assignment_status`: `assigned`, `excluded_cell` → the cell's status
    (reason `cell_not_owner` for `not_owner`); `unassigned` → owner of the molecule's own
    position; `outside_grid` → `outside_grid`. In `molecules_only` mode every molecule is
    treated as `unassigned`, except `outside_grid` positions (`z, y, x` outside the grid by
    the §2.9 bounds), which are excluded.
-4. Counts: the FOV's §2.9 `counts` rows of the retained cells whose §2.9 status is `kept`,
-   with `fov_id` and `cell_namespace` added.
+4. Counts: the FOV's §2.9 `counts` rows of its counted cells (retained, §2.9 status
+   `kept`; {doc}`assembly-contract`, "Statuses and reasons"), with `fov_id` and
+   `cell_namespace` added. A retained `excluded_no_nucleus` cell has no §2.9 count rows and
+   gets none.
 
 | Parameter | Unit | Default | Rule |
 | --- | --- | --- | --- |
@@ -170,7 +173,7 @@ per cell and per unassigned molecule, one join of molecules to cells by `cell_id
 | --- | --- | --- |
 | `fov_edge` | The set of label values on the first and last Y row and X column of the territory image (all planes); a cell is flagged when its `cell_id` is in it. | Reads `2 × (n_y + n_x) × n_z` voxels per FOV. |
 | `z_edge` | The same on the first and last Z plane, for `volume` and `extended` territories. | `2 × n_y × n_x` voxels per FOV. |
-| `conflict` | For each retained cell of FOV `a` and each other placed FOV `b` whose footprint contains its sample centroid: map the centroid into `b`'s index coordinates (`p = (q − origin_b) ⊘ spacing_b`), sample `b`'s territory at `floor(p + 0.5)` (Y and X for a `plane`; Z, Y and X otherwise; outside the grid is no territory). A value that is a retained cell of `b` flags both cells and records each in the other's `conflict_with`. | One voxel read per (cell, overlapping FOV) pair. |
+| `conflict` | For each retained cell of FOV `a` and each other placed FOV `b` whose footprint contains its ownership centroid (`sample_ownership_centroid_*`): map that centroid into `b`'s index coordinates (`p = (q − origin_b) ⊘ spacing_b`), sample `b`'s territory at `floor(p + 0.5)` (Y and X for a `plane`; Z, Y and X otherwise; outside the grid is no territory). A value that is a retained cell of `b` flags both cells and records each in the other's `conflict_with`. | One voxel read per (cell, overlapping FOV) pair. |
 | `unclaimed` | For each cell excluded `not_owner`: the same sampling in the owner FOV; flagged when the value is 0 or a cell the owner did not retain. | One voxel read per excluded cell. |
 | `outside_owner_region` | A retained molecule of a retained cell whose own position's owner is another FOV. | One owner query per such molecule. |
 | `cell_unclaimed` | A molecule of a cell flagged `unclaimed`. | A join. |
@@ -189,7 +192,7 @@ path and both hashes (the §2.9 loader's rule).
 
 On the fixture under O1: in 2D FOV1's cell 6 and FOV3's cell 5 (both scene cell 9) are
 flagged `conflict`; in 3D FOV3's cell 5 is excluded `not_owner` and not `unclaimed`
-(FOV1 retains a cell at its centroid), and FOV1's cell 6 is flagged `fov_edge` (it touches
+(FOV1 retains a cell at its ownership centroid), and FOV1's cell 6 is flagged `fov_edge` (it touches
 x 63).
 
 ## Count accounting
@@ -204,10 +207,10 @@ result:
 3. per molecule, the status rule of "Retention" recomputed from the molecule's
    `assignment_status`, its cell's status and its owner;
 4. the sample `counts` equal the concatenation of the per-FOV §2.9 `counts` restricted to
-   retained kept cells (a sorted comparison of `(fov_id, cell_id, gene_id, compartment,
+   the counted cells (a sorted comparison of `(fov_id, cell_id, gene_id, compartment,
    count)`), and `Σ whole` equals the retained `assigned` molecules and the sum of
-   `n_molecules` over retained kept cells;
-5. the §2.9 compartment identities over the retained cells.
+   `n_molecules` over the counted cells;
+5. the §2.9 compartment identities over the counted cells.
 
 Parameters: none; the quantities are counts of rows and molecules (integers), compared
 exactly. A violation raises `ValueError` naming the identity and the first differing key.
@@ -218,16 +221,22 @@ Cost: sorts and joins over the tables, `O(n log n)`; no copy beyond the key colu
 From the cell table and `counts` ({doc}`assembly-contract`, "Sample-level AnnData"),
 through `counts_anndata`:
 
-1. Select the rows with `assembly_status == "retained"` and `status == "kept"`, in table
-   order.
+1. Select the counted cells: the cell-table rows with `assembly_status == "retained"` and
+   §2.9 `status == "kept"`, in table order. A retained cell whose §2.9 status is
+   `excluded_no_nucleus` is not selected; it stays in the cell table with its assembly
+   status. Check that the number selected equals `adata.n_obs` at the end.
 2. Build `X` (float64, rows × genes) from the `whole` counts by `(cell_namespace,
    cell_id)` and `gene_id`, 0 where there is no row; the `nucleus` and `cytoplasm` layers
    likewise, NaN rows for cells whose `compartments` is not `available`, only when some
    FOV gave nuclei.
 3. `obs` from the selected rows (strings written as anndata expects, as `raw.h5ad` is),
-   `obs_names` = `obs_name`, `obsm["spatial"]` = `[sample_centroid_x, sample_centroid_y]`
-   of the ownership centroid, `var_names` = `genes`, `uns` = the record as JSON, the unit
-   and the frame.
+   with every sample-coordinate column copied under its own name; `obs_names` =
+   `obs_name`; `obsm["spatial"]` = the columns `[sample_ownership_centroid_x,
+   sample_ownership_centroid_y]` of the selected rows, which equal
+   `sample_expanded_centroid_x/y` where `ownership_centroid` is `expanded` and
+   `sample_centroid_x/y` where it is `original`; `var_names` = `genes`; `uns` = the record
+   as JSON, the unit, the frame and `spatial_centroid` (the two columns `obsm["spatial"]`
+   copies, the `centroid` setting and the row count per `ownership_centroid` value).
 4. `molecules_only`: zero rows, `var["n_molecules_retained"]`.
 
 | Parameter | Unit | Default | Rule |
