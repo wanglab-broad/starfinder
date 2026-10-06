@@ -67,14 +67,14 @@ derived from a W-324 record (marked below).
 | LN import against the W-324 parity outputs | Exact (float64 equality, byte-equal CSV) | {doc}`stitching-contract`, "What the import of the LN `dataset.xml` must reproduce". |
 | Review defaults (`max_correction_fraction` 0.5, `max_residual_um` 1.0) | Tested at their boundary; not tuned | {doc}`stitching-algorithms`, "Placement-quality checks". For scale, W-324 notes section 5: LN grid-start corrections reach 44.5 px, 0.30 of the 149.6 px overlap, and pass; stage-start corrections reach 149.9 px, 1.0 of it, and are flagged. |
 | Agreement of the two backends on LN (real examples only) | Monitored, never gating: residual after the linear trend at most 3.5 px in x, 1.5 px in y, 1.5 slices in z; trend in x at most 2.5 px per column; absolute difference at most 10 px in x, 2.5 px in y, 3.5 slices in z | W-324 notes section 5, regression bounds over the four grid-start configurations; W-324 choice 2 recommends monitoring them, not gating. |
-| Memory of fusion | Traced peak below the bound each check states, derived from "Bounded memory" of {doc}`sample-output-contract` | A whole-sample array, or two FOV volumes at once, exceeds the bound by construction of the fixture. |
+| Memory of fusion, of the store writer and of the label export | Traced peak below the bound each check states (FI7, SD9, SD10, LB4), derived from "Bounded memory" of {doc}`sample-output-contract` | A whole-sample array, or two FOV volumes at once, exceeds the bound by construction of the fixture. |
 
 ## Fixtures
 
 Every fixture is generated in the test from the values stated here, or is a named copy of
 a record. No test reads the network share, a W-323 or W-324 run directory, real images or
-Fiji. Arrays in the routine tier are at most 32×64×64; the larger ones are marked `slow`
-and need the array bound of the batch that runs them ("Resource plan").
+Fiji. Every fixture stays inside the test bounds of the §2.10 resource exceptions
+("Resource plan"); the ones above the routine size are marked `slow`.
 
 | Fixture | Construction | Seeds | Needs |
 | --- | --- | --- | --- |
@@ -91,10 +91,10 @@ and need the array bound of the batch that runs them ("Resource plan").
 | `status_cases` | `assembly_golden` with FOV2 `placeholder` (no input), FOV3 `missing`, then FOV3 `failed` with an input; review `required` without and with an approval. | none | hand-built |
 | `scene_tiny` | `sample_scene_preset("sample-tiny-v1")` ({doc}`synthetic-sample-scene`, "Presets and resources"): 2 × 2 FOVs of 5×36×36, fractional J1 jitter, seed 42, split `development`; and `scene_tiny_inward`, its variant with every FOV moved by the jitter bound towards the grid centre in Y and X and by `+J_z` in Z (the least-covered case of that page). | 42 | generator addition |
 | `scene_small` | `sample_scene_preset("sample-small-v1")`: 3 × 3 FOVs of 14×96×96 at the LN calibration, overlap 0.25, jitter bound (0.8, 4.5, 4.5) voxels, seed 42. | 42 | generator addition; `slow` |
-| `voxel_fused` | Source images that are zero except one voxel of value `A` (200 for uint8, and per allowed dtype a value whose block means exercise rounding half to even): FOVs of (1, 4, 4) at X origins 0 and 1.4 µm (the worked counterexample of {doc}`sample-output-contract`), and 2 × 2 FOVs of (3, 8, 8) at origins that are not half a voxel off the grid. | none | hand-built |
-| `zstack` | Two FOVs of 4×8×8 uint16, unit spacing, values `1 + 64·z + 8·y + x + 100·f` for FOV `f`: once with equal `origin_z`, once with `origin_z` 0 and 1.4 µm; and two Z = 1 FOVs with equal `origin_z`. | none | hand-built |
-| `fuse_band` | 6 rows × 1 column of FOVs of 16×256×256 uint8, overlap 0.1, values `(z + y + x) mod 251`, so the fusion grid has about 1,408 rows (three 512-row bands). | none | `slow`; arrays above the routine bound |
-| `export_cases` | The assemblies of `assembly_golden` (3D, 2D, with an expansion), `empty_cases` and `status_cases`, with the fused records of `voxel_fused`; one sample per row of the table "Empty populations" of {doc}`sample-output-contract`. | none | `spatialdata` extra |
+| `voxel_fused` | Source images that are zero except one voxel of value `A` (200 for uint8; per allowed dtype the value FI6 names), unit spacing: the pair of FC1 (two FOVs of 1×4×4 at X origins 0 and 1.4 µm, the worked counterexample of {doc}`sample-output-contract`) and the quad of FC3 (four FOVs of 3×8×8 at origins that are not half a voxel off the grid). | none | hand-built |
+| `zstack` | Two FOVs of 4×8×8 uint16, unit spacing, values `1 + 64·z + 8·y + x + 100·f` for FOV `f`, at the origins of FC6 (equal `origin_z`) and FC7 (`origin_z` 0 and 1.4 µm), and two Z = 1 FOVs of 1×8×8 (FC8); a float32 copy for FC10. | none | hand-built |
+| `fuse_band` | Six FOVs of 16×256×256 uint8 in one column, overlap 0.1 (Y origins `230.4·r` µm), unit spacing, values `(z + y + x) mod 251`: fusion grid 16 × 1408 × 256 (three 512-row bands, three OME-TIFF tiles, two projection chunks and three stack chunks of OME-Zarr, one automatic level), the FC11 of the fusion configurations. | none | `slow`; inside the `slow` bound of a 3 × 3 grid of 16×256×256 tiles |
+| `export_cases` | The assemblies of `assembly_golden` (3D, 2D, with an expansion), `empty_cases` and `status_cases`, with the fused images of FC1 or FC3; one sample per row of the table "Empty populations" of {doc}`sample-output-contract`. | none | `spatialdata` extra |
 | `wf_configs` | The repository's existing test configurations (legacy, without the new blocks), and copies with a `stitching`, an `assembly` and a `sample_outputs` block. | none | hand-built |
 
 Seeds: 324 and 325 (W-324 jitter), 20261006 (W-324 scene), 1000 + tile and 1050 (W-324
@@ -130,6 +130,7 @@ OME-Zarr, which uses `ome-zarr`); **S** `slow`.
 | PL14 | Persistence | results of PL4, PL10 (with an approval) and PL12 | Files and tables | `save_placement` writes `placement.json`, `fovs.csv`, `links.csv` (and for the import `view_map.csv` with the macro's and `dataset.xml`'s SHA-256); `load_placement` returns tables equal under `assert_frame_equal(check_exact=True)` (float64 origins bit-identical through CSV) and an equal record; a changed table raises `ValueError` naming it. Exact. | H, C |
 | PL15 | Entry, registry and errors | `stub_grid` | Raised errors, record | `stitch` refuses an unknown config type (`TypeError`), inputs that do not match the table, and incompatible grids, before calling the method; it never reads or writes a file (a test with a read-only temporary directory as the working directory); `STITCHING_METHODS` uses the shared mechanism (exact-type lookup, names, provenance entry with `stage` `stitching`); a spec whose dependency is missing raises `StitchingBackendUnavailableError` naming the module and the extra; importing `starfinder.stitching` imports no `multiview_stitcher`; `devices` is `("cpu",)`. Exact. | H |
 | PL16 | Determinism of the stub path | `stub_variants` | SHA-256 of `fovs.csv` and `links.csv` in three single-thread processes | Identical. | H; S |
+| PL17 | `Dataset.stitch` | a synthetic dataset folder written in the test: four FOVs of 4×16×24 with `images/ref_merged/{fovID}.tif` carrying reference metadata, one copy with a FOV of another tile size (none) | Table, inputs, saved files, errors | Given the workflow `positions` mapping without `tile_shape_yx` and `spacing_yx`, the table equals `positions_from_grid` with the grids' `shape_zyx[1:]` and `spacing_zyx[1:]`, recorded in the table's record; the inputs are built in table order; with `output_dir` the files of PL14 are written; the copy with another tile size raises `IncompatibleGeometryError` naming the FOVs and both values. Exact. | H |
 
 ### `multiview_stitcher` (MV)
 
@@ -144,7 +145,7 @@ binning 4 in every axis, links with quality below 0.7 or NaN dropped (L1),
 | MV3 | Fractional jitter on the synthetic scene | `scene_small` (42); input per FOV the reference-round image, maximum over channels (the `reference_merged` analogue); `binning_zyx=(1, 1, 1)` | `origin_*` against `true_origin_g1_*` of `placement_truth.csv`, in voxels | All nine FOVs `image_supported`; max absolute error at most 0.5 voxel per axis. | G, MV, S |
 | MV4 | Hand-built cases | `cut_synthetic`: `two_tiles`, `z1_3d`, `plane_2d`, `spacing_1_2_2`, `non_square`, `no_signal_zero`, `no_signal_noise` (1050), `disconnected` | Statuses and error per axis | Every FOV of the reference component within 2 voxels per axis; Z = 1 cases have z correction exactly 0 (registered in 2D); `spacing_1_2_2` errors in each axis's own voxels; the centre tile of both no-signal cases and tile 8 of `disconnected` are `failed` with `fallback=None` and `metadata_only` at nominal with `fallback="nominal"`; review `required` in those three cases; in the others the review state and its reasons are recorded (with spacing (1, 2, 2) µm a residual of half a voxel already reaches the 1.0 µm default, so no state is asserted there). | MV, S |
 | MV5 | Wrapper rules | `cut_synthetic` 3 × 3; two tiles with no overlap | Links, errors | The registered pairs are a subset of `neighbor_pairs` and every other pair is recorded `pruned`; no NaN-quality link is kept; translations are in µm, view to common frame; with no link left, every FOV is `failed` (the library's `NotEnoughOverlapError`), and the result is still returned and saved. Exact. | MV, S |
-| MV6 | Determinism | `cut_synthetic` 3 × 3 | Translations of two runs at one thread and one at four threads | Bitwise identical. | MV, S |
+| MV6 | Determinism | `cut_synthetic` 3 × 3 | Translations of two runs at one thread, each in its own process | Bitwise identical. The independence of the thread count, which W-324 measured (`pairs_between_runs.csv`), is checked in the real placement examples, whose bound allows four threads; the `slow` tier allows one CPU. | MV, S |
 
 ### Assembly (AS)
 
@@ -167,6 +168,7 @@ accounting", by its number.
 | AS12 | Persistence round trip | AS3 and AS7 results, CSV and Parquet | Files, tables, record | `save_assembly` writes the files of S1 with their SHA-256 in `assembly.json`; `load_assembly` returns tables equal under `assert_frame_equal(check_exact=True)` and an equal record; a changed file raises `ValueError` naming the path and both hashes. Exact. | H |
 | AS13 | Legacy adapter unchanged | `test_assignment_workflow.py`'s configurations and the A18 `raw.h5ad` comparison | `raw.h5ad` | After `counts_anndata` is factored out of the adapter, `raw.h5ad`'s `obs` columns and `X` equal the frozen helper's values, as A18 of {doc}`assignment-algorithms` states. Exact. | H |
 | AS14 | Determinism and row order | `assembly_golden` (3D) | SHA-256 of every sample table in three single-thread processes; per-key results with the input molecule rows permuted by `numpy.random.default_rng(210).permutation` | Identical hashes; identical per-key status, reason, owner and flags. | H; S for the processes |
+| AS15 | `Dataset.assemble` | `assembly_golden` written as a dataset with saved placement (PL14) and saved §2.9 assignment folders; the same with `assignment=None` and saved molecule tables (none) | Result, saved folder, memory | The result equals `assemble` called on the same inputs (tables equal under `assert_frame_equal(check_exact=True)`, equal records); with `output_dir` the files of S1 are written; a changed assignment file raises naming the path; at most two territory images are loaded at a time (counted through the loader). Exact. | H |
 
 ### End-to-end path of the synthetic scene (EE)
 
@@ -191,45 +193,80 @@ never from `assemble`'s output.
 ### Fused image (FI)
 
 Each read-back check cites "Sample position to image position" (conditions 1 to 4) or
-"Read-back checks" of {doc}`sample-output-contract`.
+"Read-back checks" of {doc}`sample-output-contract`. The files that are read back come
+from the accepted configurations FC1 to FC11 below; the refused configurations FR1 to
+FR5 write nothing and are tested only for the error. For each configuration the table
+gives the fusion grid `n0` (Z × Y × X, from the shape formula of "The fusion grid"), the
+output level `N` (Y × X, `ceil(n0 / k)`), the largest `pyramid_levels` that `fuse`
+accepts, `floor(log2(max(N_y, N_x)))`, and the tiles and chunks of the output level.
+Every fixture has unit spacing (1 µm on each axis) unless stated.
+
+| Config | Fixture and geometry | `k_yx` (`k_z`), `pyramid_levels` | `n0`; `N`; largest accepted levels | OME-TIFF tiles; OME-Zarr chunks and automatic levels | Accepted |
+| --- | --- | --- | --- | --- | --- |
+| FC1 | `voxel_fused` pair: two FOVs of 1×4×4 at X origins 0 and 1.4, Y and Z origins 0 | 1, 0 | 1 × 4 × 6; 4 × 6; 2 | one tile; one chunk, no automatic level | yes |
+| FC2 | the same | 1, 1 | as FC1; level 1 is 2 × 3 | as FC1 | yes |
+| FC3 | `voxel_fused` quad: four FOVs of 3×8×8 at (Z, Y, X) origins (0, 0, 0), (0, 6.25, 0.25), (0, 0.25, 6.25), (0, 6.25, 6.25) | 1, 2 | 3 × 15 × 15; 15 × 15, padded to 16 × 16; 3 (levels 8 × 8, 4 × 4) | one tile per plane; one chunk, no automatic level | yes |
+| FC4 | the same | 2, 2 | 8 × 8 (partial last block); 3 (levels 4 × 4, 2 × 2) | as FC3 | yes |
+| FC5 | the same | 4, 1 | 4 × 4 (partial last block); 2 (level 2 × 2) | as FC3 | yes |
+| FC6 | `zstack`, equal Z: two FOVs of 4×8×8 uint16 at origins (0, 0, 0) and (0, 0, 6.25) | 1 (`k_z` 1 and 2), 0 | 4 × 8 × 15; stack 4 × 8 × 15 at `k_z` 1 and 2 × 8 × 15 at `k_z` 2, projection 1 × 8 × 15; 3 | one tile per plane; one chunk | yes |
+| FC7 | `zstack`, different Z offsets: origins (0, 0, 0) and (1.4, 0, 6.25) | 1, 0 | 6 × 8 × 15; projection 1 × 8 × 15; 3 | as FC6 | yes |
+| FC8 | `zstack`, Z = 1: two FOVs of 1×8×8 at origins (0, 0, 0) and (0, 0, 6.25) | 1 (`k_z` 1 and 2), 0 | 1 × 8 × 15; stack one plane at both `k_z`; 3 | as FC6 | yes |
+| FC9 | `zstack`, equal Z, as FC6 | 2, 0 | 4 × 4 × 8 (partial last block in X); 3 | as FC6 | yes |
+| FC10 | `zstack`, equal Z, `projection: sum`, on the uint16 fixture and on its float32 copy | 1, 0 | projection 1 × 8 × 15 in float64; 3 | as FC6 | yes |
+| FC11 | `fuse_band`: six FOVs of 16×256×256 uint8 in one column at Y origins `230.4·r` (overlap 0.1) | 1, 2 | 16 × 1408 × 256; 1408 × 256; 10 (levels 704 × 128, 352 × 64) | projection 3 × 1 tiles, stack 3 × 1 tiles per plane; OME-Zarr projection chunks `(1, 1024, 1024)`: 2 × 1, stack chunks `(1, 16, 512, 512)`: 1 × 3 × 1; one automatic level (704 × 128) | yes (`slow`) |
+| FR1 | FC1's pair | 2, 2 | `N` 2 × 3; 1 | – | refused (`pyramid_levels` above 1) |
+| FR2 | FC3's quad | 4, 3 | `N` 4 × 4; 2 | – | refused (`pyramid_levels` above 2) |
+| FR3 | FC3's quad | `scale_yx` 0.3 | – | – | refused (reciprocal not whole) |
+| FR4 | FC6, `dimensionality: projection` | `scale_z` 0.5 | – | – | refused (`scale_z` with a projection) |
+| FR5 | FC3's quad in uint64, int64, float16, bool and complex64 | 1, 0 | – | – | refused (dtype not allowed) |
 
 | # | Check | Fixture (seeds) | Metric | Pass/fail tolerance | Needs |
 | --- | --- | --- | --- | --- | --- |
-| FI1 | Fusion grid | `voxel_fused`, `zstack`, `status_cases` | `fused_grid` and `fused.json` | `o` is the smallest included origin per axis; `n0` follows the shape formula with its 1e-9 tolerance; one included FOV gives its own grid; excluded FOVs do not extend it; Z = 1 FOVs at `origin_z` 0 and 1.4 with unit spacing give `n0_z = 3`; with no included FOV no image is written and `fused.json` has `outputs: []` and `reason: "no_included_fov"`, which `check_fused` accepts only then. Exact. | H |
-| FI2 | The value of a voxel | `voxel_fused` | Whole stack and projection at scale 1 against condition 4's oracle | The image equals the oracle exactly: `A` at `v*` when V1 chooses FOV `g` at the voxel centre `c*`, 0 elsewhere; on the counterexample (X origins 0 and 1.4) the stack is 0 everywhere; a `placeholder` owner is skipped for the nearest-centre candidate with an image; for the stack a candidate must cover `c` in Z; the uncovered count equals the record's. Exact. | H |
-| FI3 | OME-TIFF read-back | FI2 and FI6 outputs; `zstack` | Conditions 1 to 5 of "Read-back checks", OME-TIFF | BigTIFF and OME, one series, axes `YX` or `ZYX`; shape, dtype (the output dtype of "Dtypes written"), 512 × 512 tiles, `zlib`, SubIFD count and shapes equal the record; `PhysicalSize*` and `Plane` positions equal the record's `S` and `O` within 1e-9 µm and `load_volume` restores that `ImageMetadata`; a region spanning an ownership boundary, uncovered voxels and a partial last block equals the oracle exactly at the output level and every SubIFD level; the file's SHA-256 equals the record's. | H |
-| FI4 | OME-Zarr read-back | the outputs of FI3 written with `formats: [ome_zarr]` | Conditions 1 to 4, OME-Zarr | Zarr format 2, `multiscales` version `0.4`, axes, units, one dataset per level with `scale` and `translation` equal to `S^(ℓ)` and `O^(ℓ)` within 1e-9; shape, dtype, chunks and compressor equal the record; values equal the OME-TIFF oracle exactly; a region inside one chunk reads that chunk only (chunk keys counted). | SD |
-| FI5 | The 2D projection against the 3D stack | `zstack` (equal Z; different Z offsets; Z = 1) | Projection and stack values | Equal Z at scale 1: `projection[0, y, x] == stack[:, y, x].max()` for every covered `(y, x)`; different Z offsets: the projection equals the maximum over the owning FOV's own planes (oracle), and at every voxel where it differs from the stack's maximum a non-owner covers planes the owner does not or the Z resampling moves a plane (checked voxel by voxel); Z = 1 with equal `origin_z`: the stack's one plane equals the projection's values at the same `scale_yx`, and at `scale_z` 0.5 the stack has `S_z = 2`, `O_z = 0.5` while the projection has `S_z = 1`, `O_z = 0`. Exact. | H |
-| FI6 | Scale factor, levels and recorded geometry | `voxel_fused`, `zstack`; `k_yx` 1, 2 and 3 (3 does not divide `n0`); `pyramid_levels` 2; each allowed dtype; `projection: sum` on uint8 and float32 | Conditions 1 to 3; the resampling rule; "Dtypes written" | `S = k·s`, `O = o + s·(k − 1)/2` per axis and the projection's Z slab (`S_z = n0_z·s_z`, `O_z = o_z + s_z·(n0_z − 1)/2`) within 1e-9 µm; `j = (j⁰ − (k − 1)/2)/k` within 1e-9 and `v = floor(v⁰/k)` exactly at positions at least 1e-6 voxel from a boundary, also for level `ℓ` with `k·2^ℓ`; block means over covered voxels in float64, rounded half to even into an integer dtype (blocks constructed to give x.5 means) and cast for a float dtype; levels padded to `2^L`; every level has the dtype of its row of "Dtypes written" (the sum is float64); `scale_yx` 0.3 and a dtype outside the allowed list raise `ValueError`. Exact. | H |
-| FI7 | Bounded memory | `fuse_band` | `tracemalloc` peak during `fuse` (NumPy reports its allocations to `tracemalloc`); peak RSS from `/usr/bin/time -v` recorded | Stack at scale 1: the traced peak is below two planes per FOV plus one 512-row band in float64 and one in uint8 (1.9 MiB), about a third of the level-0 stack (5.5 MiB), so holding the stack or all FOV volumes fails; projection: below the six FOV projections plus one and a half FOV volumes (1.9 MiB), so holding two FOV volumes at once (2.4 MiB with the projections) fails, while one volume with its projection (1.45 MiB) or the projections with one band in float64 and one in uint8 (1.5 MiB) pass; `fused.json` records the band size and the measured peak. | H, S |
-| FI8 | Entry and config checks | `voxel_fused`, `status_cases` | Raised errors | Checks 1 to 6 of "The fuse and export entry" raise in order (review, assembly placement hashes, inputs, grid, images with the dtype list, config); `FusionConfig` refuses a non-whole reciprocal, `scale_z ≠ 1` with `projection`, negative levels, empty lists and image names equal ignoring case; `fuse` refuses `pyramid_levels` above `floor(log2(max(N_y, N_x)))`; the sum-projection bound is evaluated before computing (tested on the bound's formula with a declared plane count of 2²¹ + 1 for uint32). Exact. | H |
-| FI9 | Run record and the output profile | outputs of FI2 to FI6 | `fused.json`, the folder | Every written file is listed with SHA-256, format, image, dimensionality, projection, factors, shape, dtype, spacing, origin, levels, tiles or chunks and compression; a file present but unlisted, or listed but missing, fails `check_fused`; `formats: [ome_zarr]` with `spatialdata: true` writes no `fused/<sample>/*.ome.zarr`; the record says `viewer_qualification: "deferred"`. Exact. | H |
+| FI1 | Fusion grid | FC1, FC3, FC7, FC8, FC11; two Z = 1 FOVs of 1×4×4 at `origin_z` 0 and 1.4; `status_cases` (none) | `fused_grid` and `fused.json` | `o` is the smallest included origin per axis; `n0` equals the table's value for each configuration (the shape formula with its 1e-9 tolerance); one included FOV gives its own grid; excluded FOVs do not extend it; the two Z = 1 FOVs give `n0_z = 3`; with no included FOV no image is written and `fused.json` has `outputs: []` and `reason: "no_included_fov"`, which `check_fused` accepts only then. Exact. | H; S for FC11 |
+| FI2 | The value of a voxel | FC1 (the counterexample), FC3 (none) | Whole stack and projection at the output level against condition 4's oracle | The image equals the oracle exactly: `A` (200, uint8) at `v*` when V1 chooses FOV `g` at the voxel centre `c*`, 0 elsewhere; on FC1 with FOV 2's voxel `(0, 1, 1)` bright the stack is 0 everywhere; on FC3, with each FOV's bright voxel in turn, `A` appears where the oracle says; a `placeholder` owner is skipped for the nearest-centre candidate with an image; for the stack a candidate must cover `c` in Z; the uncovered count equals the record's. Exact. | H |
+| FI3 | OME-TIFF read-back | the files of FC1 to FC10 and, `slow`, FC11 (none) | Conditions 1 to 5 of "Read-back checks", OME-TIFF | BigTIFF and OME, one series, axes `YX` or `ZYX`; shape (the table's `N`, padded where levels are written), dtype (the output dtype of "Dtypes written"), 512 × 512 tiles, `zlib`, the SubIFD count and shapes of the table (FC2: 2 × 3; FC3: 8 × 8, 4 × 4; FC4: 4 × 4, 2 × 2; FC5: 2 × 2; FC11: 704 × 128, 352 × 64) equal the record; `PhysicalSize*` and `Plane` positions equal the record's `S` and `O` within 1e-9 µm and `load_volume` restores that `ImageMetadata`; FC3 to FC5 and FC11 hold a region spanning an ownership boundary and uncovered voxels, FC4, FC5 and FC9 a partial last block, and each equals the oracle exactly at the output level and every SubIFD level; FC11's three tiles in Y are read one at a time; the file's SHA-256 equals the record's. | H; S for FC11 |
+| FI4 | OME-Zarr read-back | FC1, FC3 and, `slow`, FC11 written with `formats: [ome_zarr]` (none) | Conditions 1 to 4, OME-Zarr | Zarr format 2, `multiscales` version `0.4`, axes, units; one dataset per level: FC1 and FC3 one (no automatic level, since 6 and 15 are at most 1024), FC11 two (1408 × 256, then 704 × 128); each dataset's `scale` and `translation` equal `S^(ℓ)` and `O^(ℓ)` within 1e-9; shape, dtype, chunks and compressor equal the record; values equal the OME-TIFF oracle exactly; on FC11 a region inside one chunk reads that chunk only (2 projection chunks and 3 stack chunks, keys counted). | SD; S for FC11 |
+| FI5 | The 2D projection against the 3D stack | FC6, FC7, FC8 (none) | Projection and stack values | FC6 at `k_z` 1: `projection[0, y, x] == stack[:, y, x].max()` for every covered `(y, x)`; FC7: the projection equals the maximum over the owning FOV's own planes (oracle), and at every voxel where it differs from the stack's maximum a non-owner covers planes the owner does not or the Z resampling moves a plane (checked voxel by voxel); FC8: the stack's one plane equals the projection's values, and at `k_z` 2 the stack has `S_z = 2`, `O_z = 0.5` while the projection has `S_z = 1`, `O_z = 0`. Exact. | H |
+| FI6 | Scale factor, levels and recorded geometry | FC3, FC4, FC5 (quad, `A` per allowed dtype: 200 for 8-bit, 40000 for uint16, 2,000,000 for 32-bit integers, 1.5 for floats), FC9 (rounding), FC10 (sum) (none) | Conditions 1 to 3; the resampling rule; "Dtypes written" | `S = k·s`, `O = o + s·(k − 1)/2` per axis and the projection's Z slab (`S_z = n0_z·s_z`, `O_z = o_z + s_z·(n0_z − 1)/2`) within 1e-9 µm; `j = (j⁰ − (k − 1)/2)/k` within 1e-9 and `v = floor(v⁰/k)` exactly at positions at least 1e-6 voxel from a boundary, also for each written level `ℓ` with `k·2^ℓ`; block means over covered voxels in float64, rounded half to even into an integer dtype (FC9: every full 2 × 2 block inside one FOV's ownership region holds `zstack` values whose mean ends in .5) and cast for a float dtype; levels padded to `2^L` as the table states; every level has the dtype of its row of "Dtypes written" (FC10 is float64 for both inputs). Exact. | H |
+| FI7 | Bounded memory of `fuse` | FC11 (none) | `tracemalloc` peak during `fuse` (NumPy reports its allocations to `tracemalloc`); peak RSS from `/usr/bin/time -v` recorded | Stack at scale 1: the traced peak is below two planes per FOV plus one 512-row band in float64 and one in uint8 (1.9 MiB), about a third of the level-0 stack (5.5 MiB), so holding the stack or all FOV volumes fails; projection: below the six FOV projections plus one and a half FOV volumes (1.9 MiB), so holding two FOV volumes at once (2.4 MiB with the projections) fails, while one volume with its projection (1.45 MiB) or the projections with one band in float64 and one in uint8 (1.5 MiB) pass; `fused.json` records the band size and the measured peak. | H, S |
+| FI8 | Entry and config checks | FR1 to FR5; FC1, `status_cases` (none) | Raised errors | Checks 1 to 6 of "The fuse and export entry" raise in order (review, assembly placement hashes, inputs, grid, images with the dtype list, config); FR3, FR4 and FR5 raise `ValueError` from `FusionConfig` or check 5, and FR1 and FR2 from `fuse` once the grid is known, before any file is written; `FusionConfig` also refuses negative levels, empty lists and image names equal ignoring case; the sum-projection bound is evaluated before computing (tested on the bound's formula with a declared plane count of 2²¹ + 1 for uint32). Exact. | H |
+| FI9 | Run record and the output profile | the files of FC1 to FC10 (none) | `fused.json`, the folder | Every written file is listed with SHA-256, format, image, dimensionality, projection, factors, shape, dtype, spacing, origin, levels, tiles or chunks and compression; a file present but unlisted, or listed but missing, fails `check_fused`; `formats: [ome_zarr]` with `spatialdata: true` writes no `fused/<sample>/*.ome.zarr`; the record says `viewer_qualification: "deferred"`. Exact. | H |
+| FI10 | `Dataset.sample_outputs` | FC3 written as a dataset with saved placement and assembly (PL14, AS12); one FOV without its `reference_stain` file (none) | Files, errors | The files equal those of `write_sample_outputs` on the same inputs (identical SHA-256 except the record's timing fields); the FOV without its source image raises `ValueError` naming the FOV and the key `images`. Exact. | H |
 
 ### SpatialData export (SD)
 
 The eight round-trip conditions are those of "Read-back checks", SpatialData, of
-{doc}`sample-output-contract`; each row names the one it implements.
+{doc}`sample-output-contract`; each row names the one it implements. SD9 and SD10 are the
+measurement and the fallback that "Bounded memory" of that page asks for inside the
+store. Image elements come from the accepted fusion configurations above.
 
 | # | Check | Fixture (seeds) | Metric | Pass/fail tolerance | Needs |
 | --- | --- | --- | --- | --- | --- |
-| SD1 | Elements and omissions (condition 1) | `export_cases`, one per row of "Empty populations" | Store contents against `export.json` | Names and kinds equal the `written` entries; no two names equal ignoring case; each `omitted` reason recomputed from the tables, the fusion record and the configuration; `store: null` exactly when every element is omitted; one image element per fused image and no other OME-Zarr group of it; Zarr format 2, `multiscales` version `0.4-dev-spatialdata`. Exact. | SD |
-| SD2 | Points (condition 2) | `export_cases` | `molecules` against the sample molecule table | Joined on `(spot_namespace, spot_id)`: `x, y, z` equal `sample_x/y/z` exactly, `fov_index_z/y/x` equal the §2.9 `z, y, x`, every other column equal (NaN equals NaN), no `sample_x/y/z` column left; with `molecules_unplaced`, every source row exactly once; dtypes as `export.json` lists. Exact. | SD |
-| SD3 | Tables preserve their source (condition 3) | `export_cases` | `cells`, `cells_unplaced`, `molecules_unplaced`, `expression` | Every source column of the cell table and every row exactly once; `expression` equals `sample.h5ad` in `X`, `layers`, `var`, `obsm`, every source `obs` column and every source `uns` key; dtypes after the round trip as recorded. Exact. | SD |
-| SD4 | Export metadata, separately (condition 4) | `export_cases` | Added columns and keys | `region` (categorical, `cell_centroids`) and `instance_id` (uint32) on `cells` and `expression`, `uns["spatialdata_attrs"]` as specified, nothing else added; the `_unplaced` tables carry only `instance_id` or `cell_instance_id` and no `spatialdata_attrs`. Exact. | SD |
-| SD5 | Links and accounting (condition 5) | `export_cases` | IDs and counts | `instance_id` is `1..N` in the cell table's order; `cells` and `cell_centroids` written together with equal IDs; every molecule's `cell_instance_id` matches its cell key, null without one; every `expression` row is a counted cell; molecule counts by `assignment_status` and by `assembly_status` and reason equal `export.json` and identity 2 of {doc}`assembly-contract`. Exact. | SD |
-| SD6 | Calibration and alignment (condition 6; "Sample position to image position", condition 5) | `voxel_fused` exported | Element transforms, extents, point lookup | Each image transform equals `Scale(S)` then `Translation(O − S/2)` within 1e-9, level `ℓ` `Scale(2^ℓ·S)`; extents `[O − S/2, O + (N_padded − ½)·S)`; points and shapes have the identity; a point at `q*` falls in the intrinsic voxel that holds `A` exactly when condition 4's oracle says so. | SD |
-| SD7 | Values, written once (condition 7) | `export_cases` with `fuse: true`, with and without `formats: [ome_tiff]` | Store image against the OME-TIFF | Output levels equal on the shared extent, 0 in the padding; same dtype; further levels follow FI4. Exact. | SD |
-| SD8 | Hashes, staging and lookup (condition 8) | `export_cases`; an export interrupted after its first element (a test hook raising) | Files, `lookup_source` | Every store file's SHA-256 equals `export.json`; the interrupted export leaves no `export/<sample>/` folder; `lookup_source(spot=…)` and `(cell=…)` return the FOV, the assignment folder, its `assignment.json` SHA-256 and the row's position. Exact. | SD |
+| SD1 | Elements and omissions (condition 1) | `export_cases`, one per row of "Empty populations", with FC1 or FC3 images (none) | Store contents against `export.json` | Names and kinds equal the `written` entries; no two names equal ignoring case; each `omitted` reason recomputed from the tables, the fusion record and the configuration; `store: null` exactly when every element is omitted; one image element per fused image and no other OME-Zarr group of it; Zarr format 2, `multiscales` version `0.4-dev-spatialdata`. Exact. | SD |
+| SD2 | Points (condition 2) | `export_cases` (none) | `molecules` against the sample molecule table | Joined on `(spot_namespace, spot_id)`: `x, y, z` equal `sample_x/y/z` exactly, `fov_index_z/y/x` equal the §2.9 `z, y, x`, every other column equal (NaN equals NaN), no `sample_x/y/z` column left; with `molecules_unplaced`, every source row exactly once; dtypes as `export.json` lists. Exact. | SD |
+| SD3 | Tables preserve their source (condition 3) | `export_cases` (none) | `cells`, `cells_unplaced`, `molecules_unplaced`, `expression` | Every source column of the cell table and every row exactly once; `expression` equals `sample.h5ad` in `X`, `layers`, `var`, `obsm`, every source `obs` column and every source `uns` key; dtypes after the round trip as recorded. Exact. | SD |
+| SD4 | Export metadata, separately (condition 4) | `export_cases` (none) | Added columns and keys | `region` (categorical, `cell_centroids`) and `instance_id` (uint32) on `cells` and `expression`, `uns["spatialdata_attrs"]` as specified, nothing else added; the `_unplaced` tables carry only `instance_id` or `cell_instance_id` and no `spatialdata_attrs`. Exact. | SD |
+| SD5 | Links and accounting (condition 5) | `export_cases` (none) | IDs and counts | `instance_id` is `1..N` in the cell table's order; `cells` and `cell_centroids` written together with equal IDs; every molecule's `cell_instance_id` matches its cell key, null without one; every `expression` row is a counted cell; molecule counts by `assignment_status` and by `assembly_status` and reason equal `export.json` and identity 2 of {doc}`assembly-contract`. Exact. | SD |
+| SD6 | Calibration and alignment (condition 6; "Sample position to image position", condition 5) | FC1, FC3 exported (one level each); FC11 exported, `dimensionality: both` (two levels: 1408 × 256 and 704 × 128) (none) | Element transforms, extents, point lookup | Each image transform equals `Scale(S)` then `Translation(O − S/2)` within 1e-9, and FC11's level 1 `Scale(2·S)` then the same translation; extents `[O − S/2, O + (N_padded − ½)·S)`; points and shapes have the identity; on FC1 and FC3 a point at `q*` falls in the intrinsic voxel that holds `A` exactly when condition 4's oracle says so. | SD; S for FC11 |
+| SD7 | Values, written once (condition 7) | `export_cases` with FC3 images, and FC11 with `dimensionality: both`, each with and without `formats: [ome_tiff]` (none) | Store image against the OME-TIFF (or the oracle without it) | Output levels equal on the shared extent, 0 in the padding; same dtype; FC11's level 1 equals the 2 × 2 block mean of its output level, as FI4; FC11's projection spans two chunks and its stack three. Exact. | SD; S for FC11 |
+| SD8 | Hashes, staging and lookup (condition 8) | `export_cases`; an export interrupted after its first element (a test hook raising) (none) | Files, `lookup_source` | Every store file's SHA-256 equals `export.json`; the interrupted export leaves no `export/<sample>/` folder; `lookup_source(spot=…)` and `(cell=…)` return the FOV, the assignment folder, its `assignment.json` SHA-256 and the row's position. Exact. | SD |
+| SD9 | Bounded memory of the store writer | FC11 with `dimensionality: both`, `spatialdata: true`, in one process with one `dask` thread (none) | `tracemalloc` peak while `export_spatialdata` writes the image elements (spatialdata's one `dask` computation of every level); peak RSS from `/usr/bin/time -v`; the path used | The traced peak during the image write is below the level-0 stack's bytes (5.5 MiB), so no path holds the whole output level of the stack at once; `export.json` records the peak, the RSS and which path wrote the levels (`lazy` or `scratch`). | SD, S |
+| SD10 | The scratch fallback | FC11 as SD9, with the fallback forced by the export's test switch (none) | Values, temporary file, traced peak | The output level is written to a temporary array under the local scratch directory (`TMPDIR`), never on the artifact mount, and the levels are computed from it; the store's values and levels equal SD7's exactly; the temporary file is removed after the export, also when the export fails; the traced peak is below SD9's bound; `export.json` records `scratch`. | SD, S |
 
 ### Assembled label export (LB), for the later delivery
 
-Only if the gate decides the label export ({doc}`sample-output-contract`, option LD2 recommends a later delivery).
+Only if the gate decides the label export ({doc}`sample-output-contract`, option LD2
+recommends a later delivery). `quad_labels` is FC3's quad geometry with hand-built uint32
+territories: box cells, one of which lies in the overlap of all four FOVs with a
+different territory in each, and one cell of one FOV that a neighbour's territory holds as
+background.
 
 | # | Check | Fixture (seeds) | Metric | Pass/fail tolerance | Needs |
 | --- | --- | --- | --- | --- | --- |
-| LB1 | Values and placement | `assembly_golden` territories, `voxel_fused` geometry | Label voxels against the oracle of "The value of a voxel" on territories | Every nonzero value is an `instance_id`; every fusion-grid voxel equals the chosen FOV's territory value mapped to its `instance_id`. Exact. | H; SD for LP1 |
-| LB2 | Reduction and lost IDs | the same at `k` 2 and 3 and level 1 | Block mode, ties to the smallest, lost IDs | Each level equals the block mode; every ID missing from a level is listed in `labels.json`. Exact. | H |
-| LB3 | Conflicts and the no-cell cases | `assembly_golden` (2D), `empty_cases` | `labels.json` | The conflict pairs and background-over-cell counts recomputed from the territories equal the record; `molecules_only` and no included FOV record their reasons and write no image. Exact. | H |
+| LB1 | Values and placement | `quad_labels`, fusion grid 3 × 15 × 15 at `k_yx` 1, no level (none) | Label voxels against the oracle of "The value of a voxel" on territories | Every nonzero value is an `instance_id`; every fusion-grid voxel equals the chosen FOV's territory value mapped to its `instance_id`. Exact. | H; SD for LP1 |
+| LB2 | Reduction and lost IDs | `quad_labels` at `k_yx` 2 (`N` 8 × 8, largest accepted levels 3) with one level (4 × 4), and at `k_yx` 3 (`N` 5 × 5, largest 2) with one level (padded to 6 × 6, level 3 × 3) (none) | Block mode, ties to the smallest, lost IDs | Each level equals the block mode; every ID missing from a level is listed in `labels.json`. Exact. | H |
+| LB3 | Conflicts and the no-cell cases | `quad_labels`; `assembly_golden` (2D) at `k_yx` 1, no level; `empty_cases` (none) | `labels.json` | The conflict pairs and background-over-cell counts recomputed from the territories equal the record; `molecules_only` and no included FOV record their reasons and write no image. Exact. | H |
+| LB4 | Bounded memory of `fuse_labels` | FC11's geometry with uint32 territories of 16×256×256 per FOV (none) | `tracemalloc` peak during `fuse_labels` | Below two planes per FOV plus two 512-row bands in uint32 (4 MiB), about a sixth of the level-0 label volume (22 MiB), so no full-sample mask is held in memory. | H, S |
 
 ### Workflow (WF)
 
@@ -241,12 +278,13 @@ Only if the gate decides the label export ({doc}`sample-output-contract`, option
 
 ### What the default tier covers and what it does not
 
-PL1 to PL15, AS1 to AS13, FI1 to FI3, FI5, FI6, FI8, FI9, LB1 to LB3 (when built) and
-WF1 to WF3 run in the routine tier on hand-built geometry or the copied records. PL4's
-scene part and EE1 to EE5 run in the routine tier once the generator addition exists
-(`sample-tiny-v1` is inside the routine bound, {doc}`synthetic-sample-scene`). PL16, AS14's
-three processes, FI7, MV1 to MV6 and EE6 are `slow`. MV1 to MV6 and EE6 need the
-`multiview-stitcher` extra; FI4 and SD1 to SD8 need the `spatialdata` extra. Nothing here
+PL1 to PL15, PL17, AS1 to AS13, AS15, FI1 to FI3 (their FC1 to FC10 parts), FI5, FI6, FI8 to FI10, LB1
+to LB3 (when built) and WF1 to WF3 run in the routine tier on hand-built geometry or the
+copied records. PL4's scene part and EE1 to EE5 run in the routine tier once the generator
+addition exists (`sample-tiny-v1` is inside the routine bound, {doc}`synthetic-sample-scene`).
+PL16, AS14's three processes, the FC11 parts of FI1, FI3, FI4, SD6 and SD7, FI7, SD9,
+SD10, LB4, MV1 to MV6 and EE6 are `slow`. MV1 to MV6 and EE6 need the
+`multiview-stitcher` extra; FI4 and SD1 to SD10 need the `spatialdata` extra. Nothing here
 measures how well a backend places real tiles or how well a sample's cells are
 represented; those are questions for E07 and for annotation.
 
@@ -259,17 +297,23 @@ cut-fixture recipe, rebuilt in the test).
 
 ### Resource plan
 
-* Routine tier: every array at most 32×64×64 (the largest, `own_cases` and `stub_grid`,
-  are far below); each check well under a second; one CPU thread.
-* `slow` tier: `cut_synthetic` holds one 16×256×256 float32 scene (4 MiB) and nine tiles
-  of 14×120×120 uint16; W-324 measured 12 to 78.5 s wall and 0.29 to 1.02 GiB peak RSS per
-  fixture row, most of it the import of multiview-stitcher (W-324 notes section 2.5).
-  `scene_small` is estimated below 1 GiB ({doc}`synthetic-sample-scene`, "Presets and
-  resources"). `fuse_band` holds six FOVs of 16×256×256 uint8 (6 MiB). These arrays exceed
-  the default 32×64×64 bound, so the batch that runs them needs the bound of the W-324
-  exception for hand-built fixtures (at most a 3 × 3 grid of 16×256×256 tiles).
-* Each run records wall time and peak RSS with `/usr/bin/time -v` against the 4 GiB stop
-  target.
+The bounds are the §2.10 resource exceptions recorded in W-323 (agreed with Jiahao on
+2026-10-05) for tests:
+
+* **Routine tests**: synthetic tiles cut from one scene of at most 16×256×256; one CPU,
+  4 GiB, 1800 s. Every routine fixture here is far below it: the largest are the scene of
+  `sample-tiny-v1` (sample grid 6×63×63), `assembly_golden` (three FOVs of 8×48×64) and
+  `stub_grid`; each check is expected well under a second.
+* **`slow` tests**: a synthetic 3 × 3 grid of tiles of 16×256×256; one CPU, 4 GiB,
+  1800 s. `cut_synthetic` holds one 16×256×256 float32 scene (4 MiB) and nine tiles of
+  14×120×120 uint16; W-324 measured 12 to 78.5 s wall and 0.29 to 1.02 GiB peak RSS per
+  fixture row at one thread, most of it the import of multiview-stitcher (W-324 notes
+  section 2.5). `scene_small` is nine FOVs of 14×96×96, estimated below 1 GiB
+  ({doc}`synthetic-sample-scene`, "Presets and resources"). `fuse_band` and LB4 hold six
+  tiles of 16×256×256 (6 MiB in uint8, 24 MiB in uint32). Every `slow` check runs at one
+  thread, MV6 included.
+* Each test run records wall time and peak RSS with `/usr/bin/time -v`; a run above a
+  bound is a failure to report, not a reason to raise the bound.
 
 ## Whole-sample real examples
 
@@ -291,11 +335,35 @@ and cell-culture-3D, 0.094635 µm for tissue-2D, 0.346255 µm in z), recorded as
 `declared`, and the package functions are called with these `StitchingInput`s directly
 rather than through `Dataset.stitch`, which reads grids from saved reference images.
 
-**Molecules and cells.** W-323 staged the stitching inputs only. Assembly needs each FOV's
-molecule table and, for cells, its §2.9 results. The issue that runs the examples needs an
-authorization naming those files (the existing per-FOV molecule outputs of each dataset,
-read-only), and a decision on the cell inputs (worker notes, choice 11). Without them it
-runs placement and the fused outputs, and reports the assembly outputs as not run.
+**Step 1: inventory of the assembly inputs.** W-323 inventoried the stitching inputs only;
+the molecule and cell tables of the three samples are not inventoried. They are expected
+among each dataset's analysed per-FOV outputs: for LN sample1 under
+`Data/Analyzed/2024-03-08-Hongyu-Covid_LN/` (the outputs of the 2024 workflow run whose
+stitching inputs W-323 lists), for tissue-2D and cell-culture-3D under
+`Data/Analyzed/sample-dataset-output/<dataset>/`, beside the `images/ref_merged/` inputs:
+the per-FOV molecule files the legacy workflow writes (the reads or goodSpots tables) and,
+for cells, any per-FOV label images. None of these paths was opened for this page. The
+first step of the issue that runs the examples is their inventory: per FOV, the path, the
+row and column counts and the SHA-256 of each file, recorded before any assembly runs, and
+read only where its authorization names them. Until then every assembly figure below is
+an estimate, and an assembly without inputs is reported as not run. Which cell inputs to
+use is choice 11 of the W-331 worker notes.
+
+**Steps and their limits.** The §2.10 resource exceptions recorded in W-323 set a separate
+limit for each step; W-323 states that its numbers for the real examples are estimates
+from file sizes, not measurements, and that placement uses the CPU only.
+
+| Step | What runs | Limit |
+| --- | --- | --- |
+| Placement | Per sample and backend: LN sample1 through the import of the 2024 `dataset.xml` and through `multiview_stitcher`; tissue-2D and cell-culture-3D through `multiview_stitcher`; once, W-324's real_2x2 cut fixture of one LN tile; the LN `multiview_stitcher` run repeated at one thread, for the thread-count part of MV6 | 4 CPU threads, 32 GiB RSS, 7200 s per backend and sample; CPU only |
+| Assembly | Per sample: assembly in `molecules_only` mode from the inventoried molecule tables, and with cells where cell inputs exist | one CPU, 16 GiB RSS, 3600 s per sample |
+| Sample outputs | The default output (projection at scale 0.5 and `sample.h5ad`) of all three samples; the 3D stack of LN sample1 in both formats, as OME-TIFF and as OME-Zarr inside its SpatialData store (`dimensionality: both`, `spatialdata: true`, `scale_yx` 0.5); the SpatialData export of LN sample1 | 4 CPU threads, 32 GiB RSS; new artifacts at most 20 GiB per run, written to the artifact mount; no time limit is listed, and each run is timed |
+
+The exceptions grant the 3D stack of one whole sample only. The seam views through depth
+of cell-culture-3D therefore come from the 3D stack of a 2 × 2 block of its FOVs around one
+grid corner, fused by the same rule from those four FOVs' placement rows (a bounded region
+of the sample-outputs step), not from a whole-sample stack; those of LN sample1 come from
+its whole stack.
 
 **Outputs to inspect**, per sample, in the run directory (at most ten PNGs in total; eight
 are planned):
@@ -307,7 +375,8 @@ are planned):
 * **Seam views through depth** (LN and cell-culture-3D, one PNG each): at three seams (a
   column seam, a row seam and a corner), XY crops of the 3D stack at the first, middle
   and last quarter planes and one XZ and one YZ section across the seam, with the
-  ownership boundary drawn; the stack at `scale_yx` 0.5 is written to local scratch only.
+  ownership boundary drawn; for LN from its whole stack at `scale_yx` 0.5, for
+  cell-culture-3D from the stack of the 2 × 2 block at `scale_yx` 1.
 * **Ownership regions with retained and excluded observations** (one PNG per sample): the
   O1 regions over the default projection, molecules coloured by assembly status and
   reason, retained and excluded cell centroids, and the `conflict`, `unclaimed` and
@@ -316,28 +385,35 @@ are planned):
 * **Accounting tables**: the `fovs` table and `record["counts"]` (inputs, retained, excluded
   by reason, flag counts) per sample, as CSV and JSON.
 * **The default sample outputs**: `sample.h5ad`, `fused/<sample>/fused.json` and the
-  projection OME-TIFF at scale 0.5, with `check_fused` passing, and the SpatialData export
-  of one sample with `check_spatialdata_export` passing.
+  projection OME-TIFF at scale 0.5 of each sample, with `check_fused` passing; for LN
+  sample1 also the stack OME-TIFF and the SpatialData export with its stack and projection
+  image elements, with `check_spatialdata_export` passing and the SD9 measurement of the
+  store writer's peak memory recorded.
 * **Monitored agreement** (LN only): the per-axis differences between the imported
   BigStitcher placement and the `multiview_stitcher` placement, against the monitored
   bounds of "Tolerances and where they come from"; reported, never gating. The real_2x2
   cut fixture of W-324 (one LN tile, seed 325, noise seed 1100 + tile) is run once with
   `multiview_stitcher` against MV1's bound.
 
-**Resources**, within the §2.10 exceptions agreed for W-324 (at most 4 CPU threads, 32 GiB
-RSS per process and 7200 s per run, `/usr/bin/time -v` for each run, at most 2 GiB of
-artifacts and ten PNGs, temporary arrays on local scratch, nothing written into a data
-directory); the issue that runs them needs the same grant:
+**Resources per sample and step.** Placement figures are W-324 measurements; assembly
+figures are estimates from {doc}`assembly-algorithms` ("Cost": about 100 bytes per molecule
+row with the §2.9 columns, and at most two territory images in memory at a time), pending
+the inventory of step 1; output figures are W-328 estimates
+({doc}`sample-output-contract`, "Resources"). Every run is measured with
+`/usr/bin/time -v`; a run above its step's limit is recorded as `resource_stop` and not
+retried with a higher limit.
 
-| Sample | Placement (W-324 figures) | Default outputs (W-328 estimates) | Seam views | Artifacts |
+| Sample | Placement (limit 4 threads, 32 GiB, 7200 s) | Assembly (limit one CPU, 16 GiB, 3600 s), an estimate | Default outputs (limit 4 threads, 32 GiB) | Stack and export (same limit; artifacts at most 20 GiB per run) |
 | --- | --- | --- | --- | --- |
-| LN sample1 | import: one XML parse; `multiview_stitcher`: 145 to 182 s, 7.0 GiB peak RSS, loading 58 to 81 s | read 7.16 GB of sources once; projection 0.031 GiB; memory about 254 MiB by the model; fusion work about 6 s at the probe's TIFF rate | 3D stack at `scale_yx` 0.5: 2.1 GiB on scratch; about 440 s of fusion work at the probe's TIFF rate | under 0.1 GiB |
-| cell-culture-3D | 65 to 78 s, 4.69 GiB | 4.70 GB read; 0.030 GiB; about 223 MiB | 1.4 GiB on scratch; about 283 s | under 0.1 GiB |
-| tissue-2D | 44 to 49 s, 0.83 GiB | 0.53 GB read; 0.104 GiB; about 532 MiB | none (one plane) | under 0.2 GiB |
+| LN sample1 | import: one XML parse; `multiview_stitcher`: 145 to 182 s, 7.0 GiB peak RSS, loading 58 to 81 s | molecule rows unknown until step 1: about 1 GB per 10⁷ rows, plus two territory images of 50×1496×1496 uint32 (0.45 GB each) when cells are assembled; time measured | reads 7.16 GB of sources once; projection 0.031 GiB; about 254 MiB by the memory model; fusion work about 6 s at the probe's TIFF rate | the whole stack at `scale_yx` 0.5: 68 × 6,167 × 5,442, 2.1 GiB uncompressed in each of the two formats (OME-TIFF, and OME-Zarr in the store), about 440 s of fusion work at the probe's TIFF rate; the store's tables, sized after step 1; under 5 GiB of artifacts |
+| cell-culture-3D | 65 to 78 s, 4.69 GiB | as LN, with territory images of 30×1496×1496 uint32 (0.27 GB each) | 4.70 GB read; 0.030 GiB; about 223 MiB | the 2 × 2 block's stack at `scale_yx` 1, about 45 × 2,842 × 2,842 (0.34 GiB uncompressed; the Z extent depends on the placement's z corrections); under 0.5 GiB of artifacts |
+| tissue-2D | 44 to 49 s, 0.83 GiB | as LN, with territory images of 3072×3072 uint32 (38 MB each) | 0.53 GB read; 0.104 GiB; about 532 MiB | none (one plane) |
 
-The fusion times are upper estimates extrapolated from W-324's multiview-stitcher probe
-({doc}`sample-output-contract`, "Resources"); the issue measures them. The whole plan is
-about 30 minutes of compute plus loading, inside one 7200 s budget.
+By the assembly estimate a sample fits in its 16 GiB limit up to about 10⁸ molecule rows;
+the inventory of step 1 replaces the estimate with the row counts. The fusion times are
+upper estimates extrapolated from W-324's multiview-stitcher probe; the issue measures
+them. At most ten PNGs are written, eight are planned, and temporary files go to local
+scratch; nothing is written into a data directory.
 
 ## Limitations
 
@@ -348,4 +424,6 @@ about 30 minutes of compute plus loading, inside one 7200 s budget.
   exists: `dataset.xml` does not mark the two links BigStitcher's optimization removed.
 * The scene fixtures exercise the rules on generated geometry; duplicates and losses on
   real samples are only inspected, not measured against truth.
+* The molecule and cell tables of the real samples are not inventoried; their assembly
+  figures stay estimates until step 1 of the real examples.
 * Viewer qualification stays deferred; no check opens a file in a viewer.
