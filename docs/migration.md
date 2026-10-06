@@ -1131,7 +1131,11 @@ pattern, else a name that occurs once. `RegistrationSignalConfig` channel labels
 content, for example `"DAPI"`; an unknown key now raises the same `ValueError` from all
 three, naming the round and its channels. Repeated patterns raise as before; a
 non-string or empty pattern in `channel_order` (accepted before) and a non-positive or
-non-finite wavelength now raise.
+non-finite wavelength now raise. `dataclasses.replace(dataset, ...)` reads the channels
+the call passes as given (patterns carry no name or wavelength), except that the
+dataset's own tuple of a round (`channel_order`, or `other_channel_order[round]` inside
+any mapping), which `replace` passes for an unchanged field, keeps that round's names
+and wavelengths; it lost them before (W-350).
 
 In the workflow translation the shared keys keep their names: `seq_channel_order` also
 accepts MATLAB's list of `wavelength`/`channel`/`name` objects; every rule names the

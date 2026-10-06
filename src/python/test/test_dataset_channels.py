@@ -9,10 +9,12 @@ from pathlib import Path
 
 import jsonschema
 import numpy as np
+import pandas as pd
 import pytest
 import yaml
 from skimage.measure import label
 
+from starfinder.barcode import Codebook
 from starfinder.dataset import (ChannelInfo, CheckpointConfig, Dataset, PipelineConfig, RegistrationRecipe,
                                 RegistrationStep, RoundState, from_workflow_config)
 from starfinder.dataset.workflow import _nuclei_registration
@@ -90,6 +92,71 @@ def test_the_string_form_keeps_todays_labels():
     assert ds.channel_labels("round1") == SEQUENCING and ds.channel_labels("morph") == ("a", "b")
     assert ds.reference_stains == () and ds.channel_info("reference_stain") == ()
     assert ds.channel_info("morph") == (ChannelInfo("a"), ChannelInfo("b"))
+
+
+# --- dataclasses.replace (W-350) ------------------------------------------------------------------------
+
+NAMED = tuple(ChannelInfo(c, "seq", w) for c, w in zip(SEQUENCING, (488, 546, 594, 647)))
+
+
+def all_channel_info(ds):
+    return {name: ds.channel_info(name) for name in ("round1", "round2", "morph", "reference_stain")}
+
+
+def test_replace_keeps_the_channel_information_of_every_round():
+    ds = dataset(NAMED)
+    original = all_channel_info(ds)
+    assert original["round1"] == NAMED and original["morph"] == MORPH and original["reference_stain"] == (STAIN,)
+    book = Codebook(pd.DataFrame(dict(gene_id=["g"], color_sequence=["12"])), ("round1", "round2"), SEQUENCING)
+    copies = {"sample_id": replace(ds, sample_id="other"), "codebook": replace(ds, codebook=book),
+              "twice": replace(replace(ds, sample_id="other"), codebook=book)}
+    for copy in copies.values():
+        assert all_channel_info(copy) == original
+        assert copy.channel_order == SEQUENCING and copy.other_channel_order == {"morph": ("ch00", "ch01", "ch02")}
+        assert copy.channel_labels("morph") == ("ch00", "ch01", "ch02") and copy.channel_index("morph", "RBD") == 1
+    assert copies["twice"].sample_id == "other" and copies["twice"].codebook is book
+    # The copy keeps its own store: changing a field of the copy afterwards leaves the source as it was.
+    copies["twice"].channel_order = ("a", "b")
+    assert all_channel_info(ds) == original
+
+
+def test_replace_reads_the_channels_it_passes_as_given():
+    ds = dataset(NAMED)
+    strings = replace(ds, channel_order=SEQUENCING)
+    assert strings.channel_info("round1") == tuple(ChannelInfo(c) for c in SEQUENCING)
+    assert strings.channel_info("morph") == MORPH and strings.channel_info("reference_stain") == (STAIN,)
+    infos = (ChannelInfo("ch00", "A", 405), ChannelInfo("ch01", "B"))
+    given = replace(ds, channel_order=infos)
+    assert given.channel_info("round2") == infos and given.channel_order == ("ch00", "ch01")
+    assert given.channel_info("morph") == MORPH and given.channel_info("reference_stain") == (STAIN,)
+    stainless = replace(ds, reference_stains=())
+    assert stainless.channel_info("reference_stain") == () and stainless.reference_stains == ()
+    assert stainless.channel_info("round1") == NAMED and stainless.channel_info("morph") == MORPH
+    # Strings for the other round give it plain patterns; the sequencing rounds keep theirs.
+    plain = replace(ds, other_channel_order={"morph": ("ch00", "ch01", "ch02")})
+    assert plain.channel_info("morph") == tuple(ChannelInfo(c.channel) for c in MORPH)
+    assert plain.channel_info("round1") == NAMED
+    # Values that cannot be channels still raise as on construction.
+    with pytest.raises(TypeError):
+        replace(ds, channel_order=None)
+
+
+def test_replace_keeps_a_rounds_own_tuple_and_reads_an_equal_new_value_as_given():
+    ds = dataset(NAMED)
+    plain = tuple(ChannelInfo(c) for c in SEQUENCING)
+    plain_morph = tuple(ChannelInfo(c.channel) for c in MORPH)
+    # The dataset's own tuple is what replace hands over for an unchanged field, so passing it back keeps.
+    assert replace(ds, channel_order=ds.channel_order).channel_info("round1") == NAMED
+    # An equal list or an equal new tuple is passed patterns: no name or wavelength.
+    for value in (list(ds.channel_order), tuple(list(ds.channel_order))):
+        copy = replace(ds, channel_order=value)
+        assert copy.channel_info("round1") == copy.channel_info("round2") == plain
+        assert copy.channel_info("morph") == MORPH and copy.channel_info("reference_stain") == (STAIN,)
+    # A new mapping keeps the rounds whose own tuples it holds and reads the other values as given.
+    kept = replace(ds, other_channel_order=dict(ds.other_channel_order))
+    assert kept.channel_info("morph") == MORPH and kept.channel_info("round1") == NAMED
+    cleared = replace(ds, other_channel_order={name: list(p) for name, p in ds.other_channel_order.items()})
+    assert cleared.channel_info("morph") == plain_morph and cleared.channel_info("round1") == NAMED
 
 
 @pytest.mark.parametrize("change, error", [

@@ -498,8 +498,9 @@ W-337 separates the two kinds of round, as the MATLAB workflow does ({doc}`coord
 * **Rotation.** `FOV.load_images(..., rotation_degrees=…)` rotates with the code of
   `PipelineConfig.rotation_degrees`; a round is rotated once.
 * **Saved form.** With `checkpoints`, `register_rounds` and the entry write
-  `other_rounds/<name>/image.ome.tif` and `registration.json` (the chain, the attempts,
-  the reference and the hashes; {doc}`checkpoints`, "Prepared morphology images"), and
+  `other_rounds/<name>/image.ome.tif`, `registration.json` (the chain, the attempts, the
+  reference and the hashes) and, only for a chain with a dense or B-spline transform,
+  `field.npz` (its arrays; {doc}`checkpoints`, "Prepared morphology images"), and
   `FOV.load_registered_round(name)` restores the image, its metadata, the chain and the
   `registration_record["rounds"]` entry.
 

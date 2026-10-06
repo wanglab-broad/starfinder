@@ -41,6 +41,10 @@ class Dataset:
     channel, name and wavelength; after construction channel_order and
     other_channel_order hold the patterns (the channel labels) and
     :meth:`channel_info` returns the full ChannelInfo of a round.
+    With ``dataclasses.replace``, channels the call passes are read as
+    given, except that the dataset's own tuple of a round (channel_order, or
+    other_channel_order[round] inside any mapping), which replace passes
+    for an unchanged field, keeps that round's ChannelInfo.
     :meth:`channel_index` is the one rule that finds a channel by index,
     pattern or name.
     readout_mode is how reads get their identity (docs/readout-contract.md,
@@ -90,8 +94,10 @@ class Dataset:
     # Stain files of the reference round's folder that are not sequencing colours
     reference_stains: tuple[ChannelInfo, ...] = ()
 
-    # ChannelInfo of the sequencing channels and of each other round with its own channels
-    _channels: dict = field(default_factory=dict, init=False, repr=False)
+    # The patterns and ChannelInfo of the sequencing channels (key None) and of each other round with its own
+    # channels. An init field so that dataclasses.replace hands it to the copy, which keeps the ChannelInfo of
+    # every round whose patterns the call leaves as they are (__post_init__).
+    _channels: dict = field(default_factory=dict, repr=False, kw_only=True)
 
     def __post_init__(self):
         if self.readout_mode not in READOUT_MODES:
@@ -102,12 +108,21 @@ class Dataset:
         if REFERENCE_STAIN in self.rounds.all_rounds:
             raise ValueError(f"{REFERENCE_STAIN!r} is the reserved image name of the reference stains; "
                              "no configured round may take it")
-        sequencing = _channel_infos(self.channel_order, "channel_order")
+        kept = dict(self._channels)
+
+        def infos(key, channels, what):
+            # dataclasses.replace passes the source's own pattern tuple for a round the call does not change; that
+            # very tuple keeps the source's ChannelInfo, while any other value is read as given.
+            if key in kept and channels is kept[key][0]:
+                return kept[key][1]
+            return _channel_infos(channels, what)
+
+        sequencing = infos(None, self.channel_order, "channel_order")
         others = {}
         for name, channels in dict(self.other_channel_order).items():
             if name not in self.rounds.other_rounds:
                 raise ValueError(f"other_channel_order round {name!r} is not an other round")
-            others[name] = _channel_infos(channels, f"the channels of round {name!r}")
+            others[name] = infos(name, channels, f"the channels of round {name!r}")
             if not others[name]:
                 raise ValueError(f"channel labels of round {name!r} must be nonempty and unique")
         self.reference_stains = _channel_infos(self.reference_stains, "reference_stains")
@@ -120,7 +135,8 @@ class Dataset:
                                  "stain is not a sequencing colour")
         self.channel_order = tuple(c.channel for c in sequencing)
         self.other_channel_order = {name: tuple(c.channel for c in channels) for name, channels in others.items()}
-        self._channels = {None: sequencing, **others}
+        self._channels = {None: (self.channel_order, sequencing),
+                          **{name: (self.other_channel_order[name], channels) for name, channels in others.items()}}
 
     def channel_info(self, round_name: str) -> tuple[ChannelInfo, ...]:
         """The channels of one round, in its C order, with pattern, name and wavelength.
@@ -211,7 +227,7 @@ class Dataset:
     def _channels_of(self, key, labels):
         """The stored ChannelInfo of key (None: the sequencing channels); patterns assigned after construction carry
         no name or wavelength."""
-        channels = self._channels.get(key, ())
+        channels = self._channels.get(key, ((), ()))[1]
         if tuple(c.channel for c in channels) != tuple(labels):
             channels = tuple(ChannelInfo(label) for label in labels)
         return channels
