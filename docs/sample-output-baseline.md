@@ -97,8 +97,10 @@ What `dev` does have and the contract uses:
 
 spatialdata 0.6.1 (source read from the uv cache, `spatialdata/_io/format.py`, not
 imported) writes by default its container format 0.2 on OME-NGFF 0.5 and Zarr v3
-(`CurrentRasterFormat = RasterFormatV03`, a `FormatV05`), and can still write NGFF 0.4 on
-Zarr v2 (`RasterFormatV01`, `RasterFormatV02`, `SpatialDataContainerFormatV01`). Its raster
+(`CurrentRasterFormat = RasterFormatV03`, a `FormatV05`), and can still write the NGFF 0.4 layout on
+Zarr v2 (`SpatialDataContainerFormatV01` with `RasterFormatV01`, whose `multiscales`
+version string is `0.4`, or `RasterFormatV02`, its default there, whose string is
+`0.4-dev-spatialdata`; lines 156 to 179 and 345 to 350). Its raster
 extent in intrinsic coordinates is `[0, n)` per axis (`_get_extent_of_data_array` in
 `spatialdata/_core/data_extent.py`): voxel `i` covers `[i, i + 1)`, so its centre is at
 `i + ½`, unlike the voxel-centre convention of `ImageMetadata`.
