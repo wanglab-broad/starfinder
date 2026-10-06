@@ -40,6 +40,8 @@ Stitching algorithms (proposed) <stitching-algorithms>
 Assembly baseline (proposed) <assembly-baseline>
 Assembly contract (proposed) <assembly-contract>
 Assembly algorithms (proposed) <assembly-algorithms>
+Sample-output baseline (proposed) <sample-output-baseline>
+Sample-output contract (proposed) <sample-output-contract>
 Learned detectors <learned-detectors>
 Coordination <coordination>
 Checkpoints <checkpoints>
