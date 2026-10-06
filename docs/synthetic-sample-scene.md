@@ -59,8 +59,15 @@ batch (W-331); this page states the identities a test can check, not the validat
 
 * The **sample frame** is that of {doc}`stitching-contract`: ZYX, µm, identity direction,
   `frame_id` `sample:<sample>`.
-* The **sample domain** `Ω` is the box of the sample frame in which the scene is defined
-  ("The sample scene").
+* The **scene domain** `Ω` is the box of the sample frame in which scene content is
+  generated; it contains every footprint for any allowed jitter ("The sample scene").
+* The **covered region** `K ⊂ Ω` is the box that at least one footprint covers for every
+  jitter within the bound. **The sample** is the content of `K`: the **sample molecules**
+  `M` are the molecules whose position lies in `K`, and the **sample cells** are the cells
+  whose anchor lies in `K` ("The sample scene", "Sample membership").
+* The **halo** is `Ω \ K`, a band of width `2 · J_a · s_a` on each outer side. Its content
+  is rendered so that FOV edges are not empty where a jitter exposes them, but it is not
+  part of the sample, and nothing about it is claimed beyond what is stated for it.
 * A FOV's **nominal origin** is its position from the nominal grid; its **true origin** is
   where it was actually rendered; the **jitter** is true minus nominal, the true
   correction in the language of the placement record.
@@ -190,19 +197,48 @@ complete and not retained, as `generate_dataset`'s `on_round` does for rounds; `
 One scene of sample size is defined once, in continuous sample-frame coordinates (µm),
 and every FOV is rendered from it.
 
-* **Domain.** With the nominal grid of "Multi-FOV acquisition", per axis `a`, FOV size
-  `n_a`, spacing `s_a`, the largest nominal origin `N_a` and the jitter bound `J_a`
+* **Scene domain.** With the nominal grid of "Multi-FOV acquisition", per axis `a`, FOV
+  size `n_a`, spacing `s_a`, the largest nominal origin `N_a` and the jitter bound `J_a`
   (voxels):
   `Ω_a = [−s_a/2 − J_a·s_a, N_a + (n_a − ½)·s_a + J_a·s_a)`.
-  `Ω` contains every footprint for any jitter within the bound, and it depends on the
-  nominal grid and the bound, not on the drawn jitter: redrawing the jitter moves no cell
-  and no molecule.
+  `Ω` contains every footprint for any jitter within the bound. All scene content (seeds,
+  nuclei, cells, molecules, background) is generated in `Ω`.
+* **Covered region.** Per axis
+  `K_a = [−s_a/2 + J_a·s_a, N_a + (n_a − ½)·s_a − J_a·s_a)`,
+  that is `Ω` shrunk by `2 · J_a · s_a` on each side (for Z=1, `K_z = Ω_z = {0}`, since
+  `J_z = 0`). **Every point of `K` lies in at least one footprint, for every jitter within
+  the bound.** Proof, per axis: the nominal footprint intervals of grid index `i` are
+  `I_i = [i·step_a − s_a/2, i·step_a + (n_a − ½)·s_a)`. Shrink each by `J_a·s_a` on both
+  sides to its core. Adjacent cores still overlap, because the overlap rule gives
+  `overlap · n_a ≥ 2·J_a + 1` voxels, so the union of the cores is exactly `K_a`. A point of
+  `K` therefore has, on each axis, an index `i_a` whose core holds it. The FOV at
+  `(i_y, i_x)` exists (the grid is a full rectangle with one layer in Z), and its true
+  footprint is its nominal interval moved by at most `J_a·s_a` per axis, so it still
+  contains the core and the point. `K` is also the largest such box: a point outside it
+  is uncovered when every FOV on that edge is jittered inward by the bound.
+* **Sample membership.** A molecule belongs to the sample when its position `σ` lies in
+  `K` (`in_sample` true), whatever its population or cell. A cell belongs to the sample
+  when its **anchor** lies in `K`. The anchor is the centre of its first site: the
+  nucleus centre of an ordinary cell, the first nucleus centre of a binucleate cell, or
+  the virtual centre of an empty cell. The anchor always lies inside its own territory,
+  because it is inside its site sphere ("Cell territories"). A nucleus belongs to the
+  sample when its cell does. Everything else generated in `Ω` is **halo** content
+  (`in_sample` false).
+  * **A cell that straddles the boundary of `K`** keeps the one membership its anchor
+    gives it. Its molecules are members by their own positions: a sample cell can have
+    halo molecules where its territory crosses into the halo, and a halo cell can have
+    sample molecules in `K`. Those molecules keep that cell as their `true_cell_id`.
+* **Independence from the drawn jitter.** `Ω`, `K` and membership depend on the nominal
+  grid and the jitter bound, not on the drawn jitter. Redrawing the jitter moves no cell
+  and no molecule, and changes no membership.
 * **Sample grid.** The sample label volumes are evaluated on the grid of spacing `s` whose
   voxel `q = (0, 0, 0)` has its centre at `origin_sample = lo(Ω) + s/2`, with shape
   `ceil((hi(Ω) − lo(Ω)) ⊘ s − 1e-9)` (the tolerance keeps a whole number of voxels from
   rounding up). Its `ImageMetadata` has `frame_id` `sample:<sample>`, that spacing, origin
   `origin_sample`, identity direction and unit `µm`. FOV `f`'s index `p` is sample-grid
-  index `δ_f + p`, with `δ_f = (true_f − origin_sample) ⊘ s`, fractional in general.
+  index `δ_f + p`, with `δ_f = (true_f − origin_sample) ⊘ s`, fractional in general. The
+  sample grid covers the whole of `Ω`, halo included; `sample.json` records the bounds of
+  `Ω` and `K`, and a sample-grid voxel is in `K` when its centre is.
 * **Content.** The cellular scene (nuclei, cells) and the molecules (amplicons with their
   formed properties), as positions in µm, shapes and amplitudes; and the background
   components of the amplicon channels and of the stain, as `BackgroundConfig` records in
@@ -211,6 +247,17 @@ and every FOV is rendered from it.
 * **Z=1.** A sample with `n_z = 1` is a plane at z = 0: the jitter bound in Z must be 0,
   every centre has z = 0, and the label functions ignore z, as the formed model does for
   singleton Z.
+
+**The halo.** The covered region needs a decision about the content outside it.
+
+| Option | Rule | Cost | Consequence |
+| --- | --- | --- | --- |
+| **H1. Keep a halo, mark it (recommended)** | Generate in `Ω`; the sample is the content of `K`; halo content carries `in_sample` false. | One more column on three tables. About 40 % of `sample-tiny-v1`'s molecules and 30 % of `sample-small-v1`'s lie in the halo, mostly in Z ("Presets and resources"). | FOV images look the same up to their edges for every jitter: no FOV shows an empty strip that a stitcher could register on. The identities are exact for the sample, and halo content is reported, not claimed. |
+| H2. No halo: generate in `K` only | `Ω := K`; every generated molecule and cell is a sample member. | No marking; fewer molecules. | A FOV jittered outward images up to `2 · J_a` voxels of nothing at its outer edge. Cells and the stain end in a straight cut along `∂K`, an artificial edge in exactly the overlap-free border, and the stitching input then differs by FOV for a reason that real data does not have. |
+| H3. Acquire a ring of extra FOVs around the sample | Add one row and one column of FOVs on each side, so the nominal union covers `Ω`. | A 2 × 2 sample becomes 4 × 4 FOVs, four times the rendering, and outside the routine bound. | The outer ring has the same problem one ring further out. It moves the halo rather than removing it. |
+
+**Recommendation: H1.** It is the only option that keeps every FOV image natural at its
+edge and still states exact coverage for a population fixed before the jitter is drawn.
 
 ## Multi-FOV acquisition
 
@@ -279,7 +326,7 @@ model evaluated at that voxel's centre.
   `p = (σ − true_f) ⊘ s` (float64). FOV `f` receives every molecule whose `p` lies within
   `[−0.5 − M_a, n_a − 0.5 + M_a]` on every axis, with the margin
   `M_a = 4 · w_a + D_a + 1` voxels, `w_a` the largest axis-aligned kernel extent over the
-  sample's molecules ({doc}`synthetic-specification`, `support_truncated`) and `D_a` the
+  generated molecules (sample and halo) ({doc}`synthetic-specification`, `support_truncated`) and `D_a` the
   bound of the FOV's per-round displacement on that axis. Molecules beyond the margin
   cannot touch the grid in any round; including them would change nothing but the truth
   rows. Each molecule enters with its sample ID and its sample-level gene and properties.
@@ -503,14 +550,14 @@ class SampleSceneConfig:
     stain: StainConfig | None = StainConfig()                   # None: no stain image
     molecules_per_cell: float = 8.0      # Poisson mean per cell
     ambient_density: float = 0.002       # molecules per µm³ of Ω
-    max_count: int = 100_000             # guard on the sample's molecule count
+    max_count: int = 100_000             # guard on the number of molecules generated in Ω
 ```
 
 The template's `shape_zyx` must equal `acquisition.fov_shape_zyx`; its population fields
 (`count`, `density`, `coordinates`, `amplicon_ids`, `gene_ids`, non-uniform `placement`)
 must be at their defaults, because the sample scene owns the population (`ValueError`
 otherwise). Its property laws (`brightness`, widths, `elongation`, `angle`) and
-`abundances` are used for the sample's molecules.
+`abundances` are used for every generated molecule.
 
 **Populations.**
 
@@ -524,6 +571,9 @@ otherwise). Its property laws (`brightness`, widths, `elongation`, `angle`) and
   geometry decides.
 * Without a cellular scene (`cells=None`), only the ambient population exists and no
   label or cell truth is produced.
+* Both populations are generated throughout `Ω`, so the halo is filled at the same
+  density as `K`. Sample membership is then decided by position ("Sample membership"); it
+  does not change how anything is drawn.
 
 **Truth.** The true cell of a molecule is `C(σ)` at its own continuous sample position
 (the reference-round position), not at a voxel: `true_cell_id = C(σ)`, null where
@@ -531,7 +581,9 @@ otherwise). Its property laws (`brightness`, widths, `elongation`, `angle`) and
 `true_nucleus_id = N(σ)` and `compartment` is `nucleus` where `N > 0`, `cytoplasm` where
 `N = 0 < C`, and `outside` where `C = 0`. The `population` column (`cell`, `ambient`)
 records how it was placed; it is not the truth: an ambient molecule inside a cell
-belongs to that cell.
+belongs to that cell. `in_sample` (on `molecules.csv`, `cells.csv` and `nuclei.csv`)
+records sample membership, and `true_cell_in_sample` on `molecules.csv` records the
+membership of the molecule's true cell (null without one).
 
 IDs: `c<k>-m<j>` for the `j`-th molecule of cell `k` and `a-m<j>` for ambient molecules
 (`j` from 0), so adding molecules to one cell changes no other molecule's draws. Each
@@ -541,25 +593,32 @@ molecule keeps its ID in every FOV that renders it (the FOV namespace differs).
 
 * **Label volumes cut to each FOV** ("Label volumes" above), in which a cell at a border is
   partial.
-* **`cell_fovs`**, one row per (cell, FOV) where the FOV's cell label holds the cell:
-  `cell_id`, `fov_id`, `n_voxels` (in that FOV), `fov_edge` (the cell touches the first or
-  last Y or X index of the FOV grid) and `z_edge` (first or last Z index, for Z>1): the same
-  tests as the `fov_edge` and `z_edge` flags of {doc}`assembly-contract`, computed on the
-  truth labels. A cell that touches no edge of some FOV is **complete** in it.
-* **`molecule_fovs`**, one row per (molecule, FOV) rendered in that FOV: `amplicon_id`,
-  `fov_id`, `z`, `y`, `x` (reference-round index position `p`), `in_footprint`
-  (`−0.5 ≤ p < n − 0.5` on every axis), `fov_cell_label` and `fov_nucleus_label` (the FOV
-  label image at `floor(p + 0.5)`, null outside the grid: what §2.9 assign samples),
-  `label_agrees` (`fov_cell_label == true_cell_id`, both null counting as equal) and
-  `csv_row` (its row in the FOV's molecule CSV, "The path that needs no segmenter").
-* **Sample-level tables that say which FOVs see each object:** `cells.csv` has `fov_ids`
-  (`;`-joined, table order) and `n_fovs`; `molecules.csv` has `fov_ids` and `n_fovs`,
-  where a molecule is **seen** by a FOV when it is `in_footprint` there.
+* **`cell_fovs`**, one row per (cell, FOV) where the FOV's cell label holds the cell or
+  its anchor is in the FOV's footprint: `cell_id`, `fov_id`, `in_sample` (the cell's),
+  `anchor_in_footprint`, `n_voxels` (in that FOV, possibly 0), `fov_edge` (the cell
+  touches the first or last Y or X index of the FOV grid) and `z_edge` (first or last Z
+  index, for Z>1). The two edge flags are the same tests as the `fov_edge` and `z_edge`
+  flags of {doc}`assembly-contract`, computed on the truth labels. A cell with
+  `n_voxels > 0` that touches no edge of a FOV is **complete** in it.
+* **`molecule_fovs`**, one row per (molecule, FOV) rendered in that FOV:
+  * `amplicon_id`, `fov_id` and `in_sample` (the molecule's);
+  * `z`, `y`, `x`: the reference-round index position `p`;
+  * `in_footprint`: `−0.5 ≤ p < n − 0.5` on every axis;
+  * `fov_cell_label` and `fov_nucleus_label`: the FOV label image at `floor(p + 0.5)`,
+    null outside the grid, which is what §2.9 assign samples;
+  * `label_agrees`: `fov_cell_label == true_cell_id`, with two nulls counting as equal;
+  * `csv_row`: its row in the FOV's molecule CSV ("The path that needs no segmenter").
+* **Sample-level tables that say which FOVs see each object.** A molecule is **seen** by
+  a FOV when it is `in_footprint` there. A cell is **seen** by a FOV when its anchor is
+  in that FOV's footprint. `molecules.csv` and `cells.csv` have `fov_ids` (`;`-joined,
+  table order) and `n_fovs` by these rules, for sample and halo content alike.
+  `cells.csv` also has `label_fov_ids`: the FOVs whose label image holds the cell.
 
 ### Identities a test can check
 
-With `M` the sample's molecules, `M_f` the molecules seen by FOV `f`, and `L` the label
-functions:
+With `G` every generated molecule (sample and halo), `M = {m ∈ G : σ_m ∈ K}` the sample
+molecules, `M_f` the molecules of `G` seen by FOV `f`, `n_fovs(m) = #{f : σ_m ∈
+footprint_f}`, and `L` the label functions:
 
 1. **One cell or none.** `molecules.csv` has one row per molecule, keyed by `amplicon_id`;
    `true_cell_id` is a single value or null, and every non-null value is a `cell_id` of
@@ -574,17 +633,36 @@ functions:
    offset, except at voxels whose centre lies within 1e-9 µm of a label boundary, whose
    number the test reports and expects to be 0. Every value in a FOV label image is a
    value of the sample image or 0.
-3. **The FOVs cover the sample with the stated multiplicity.**
-   `Σ_f |M_f| = Σ_{m ∈ M} n_fovs(m)`; `∪_f M_f = {m : n_fovs(m) ≥ 1}`;
-   `n_fovs(m) = #{f : σ_m ∈ footprint_f}`. A molecule farther than `J_a · s_a` on every
-   axis from every nominal footprint boundary has the nominal multiplicity: 1 outside the
-   overlaps, 2 in an overlap of two neighbours, 4 in a corner overlap of four. A molecule
-   with `n_fovs = 0` lies in the outer band of `Ω`, within `2 · J_a · s_a` of its boundary
-   on some axis. There is no interior gap: per axis, every interior point lies in some
-   nominal footprint at least `overlap · n_a / 2 ≥ J_a + ½` voxels from its edges, and the
-   jitter moves an edge by at most `J_a`.
-4. **Cells.** `cells.csv` `fov_ids` equals the set of FOVs with a `cell_fovs` row for the
-   cell, and the number of `cell_fovs` rows equals `Σ_cells n_fovs`.
+3. **The FOVs cover the sample with the stated multiplicity.** For the sample molecules
+   `M`, whatever the drawn jitter:
+   * **coverage**: every `m ∈ M` has `n_fovs(m) ≥ 1`, so `∪_f (M_f ∩ M) = M` (proof:
+     "Covered region");
+   * **multiplicity**: `Σ_f |M_f ∩ M| = Σ_{m ∈ M} n_fovs(m)`;
+   * **nominal multiplicity**: a sample molecule farther than `J_a · s_a` on every axis
+     from every nominal footprint boundary has the nominal multiplicity, 1 outside the
+     overlaps, 2 in an overlap of two neighbours and 4 in a corner overlap of four.
+
+   For the halo molecules `G \ M`, only the counting identity
+   `Σ_f |M_f \ M| = Σ_{m ∈ G \ M} n_fovs(m)` is claimed. A halo molecule may be seen by
+   no FOV (`n_fovs = 0`), and every molecule with `n_fovs = 0` is a halo molecule. A test
+   checks all of these on `molecules.csv` and `molecule_fovs.csv`, splitting by
+   `in_sample`. It also checks that `in_sample` equals `σ ∈ K` recomputed from the bounds
+   in `sample.json`, and is unchanged when the same scene is generated with another
+   jitter.
+4. **Cells.** For the sample cells, whatever the drawn jitter:
+   * every sample cell has `n_fovs ≥ 1`, because its anchor is a point of `K`;
+   * the number of `cell_fovs` rows with `anchor_in_footprint` and `in_sample` equals
+     `Σ_{sample cells} n_fovs`;
+   * the nominal multiplicity of identity 3 holds for anchors.
+
+   For every cell, sample or halo:
+   * `cells.csv` `fov_ids` equals the FOVs of its `cell_fovs` rows with
+     `anchor_in_footprint`;
+   * `label_fov_ids` equals the FOVs of its rows with `n_voxels > 0`.
+
+   A sample cell is not guaranteed to have label voxels in a FOV that sees its anchor:
+   the label image is sampled at voxel centres. The validation reads `label_fov_ids` for
+   that.
 5. **Sampling agreement is measured, not assumed.** `label_agrees` is false only where the
    molecule and the centre of its sampled voxel lie in different labels; the count is
    reported per FOV. It separates the §2.9 sampling rule from assignment and assembly
@@ -611,7 +689,9 @@ assembly can be compared with sample-level truth without running a segmenter:
    inputs)`: with the placement from `stitch` on the stain images (the full chain), or with
    one built from the placement truth (assembly alone). Retained cells and molecules are
    then compared with `cells.csv`, `molecules.csv`, `cell_fovs.csv` and
-   `molecule_fovs.csv` by cell ID and amplicon ID.
+   `molecule_fovs.csv` by cell ID and amplicon ID. The sample truth is the rows with
+   `in_sample` true. Halo rows are observations at the edge of the acquisition that the
+   FOVs may or may not see, and they are reported separately.
 
 The validation itself (which comparisons, which numbers) belongs to the validation
 design; this page fixes only the inputs and their identities. Two needs of this path are
@@ -645,8 +725,10 @@ with the template's `split` and `seed`.
   `stain.noise.dependent`, `stain.noise.independent` and `stain.noise.correlated` with the
   stain's channel label for the stain.
 * **Consequences.** Adding a FOV changes no draw of another FOV and no sample-level draw
-  (the domain depends on the grid, so adding a column does change `Ω`, which changes
-  placement outcomes); changing the jitter law moves no cell or molecule; changing one
+  (the domain depends on the grid, so adding a column does change `Ω` and `K`, which
+  changes placement outcomes and membership); changing the jitter law or its draws moves
+  no cell or molecule and changes no membership; no stream entity depends on membership;
+  changing one
   molecule's law changes only that molecule; changing a nucleus size can move later seeds
   (sequential placement). Repeatability is that of the formed model: exact for a pinned
   NumPy build on one CPU.
@@ -669,11 +751,13 @@ are off (required), and the per-round geometry is a translation only.
 | Jitter bound (voxels, J1) | 0.4, 1.5, 1.5 | 0.8, 4.5, 4.5 |
 | Per-round translation bound (voxels) | 0, 1, 1 | 1, 2, 2 |
 | Sample grid (voxels) | 6 × 63 × 63 | 16 × 249 × 249 |
-| `Ω` (µm, Y and X) | 31.5 | 48.4 |
+| `Ω` (µm, Z; Y and X) | 5.8; 31.5 | 5.40; 48.4 |
+| `K` (µm, Z; Y and X) | 4.2; 28.5 | 4.29; 44.9 |
+| Share of `Ω`'s volume in `K` (the expected share of molecules in the sample) | 0.59 | 0.68 |
 | Seeds | 7 ordinary, 1 binucleate, 1 empty | 14 ordinary, 2 binucleate, 2 empty |
 | Nucleus radii, median (µm) | axial 1.5, lateral 2.5 | axial 2.0, lateral 3.0 |
 | Reach, median (µm) | 3.0 | 2.5 |
-| Molecules | 8 per cell, ambient 0.002 µm⁻³ (about 80) | 30 per cell, ambient 0.002 µm⁻³ (about 560) |
+| Molecules | 8 per cell, ambient 0.002 µm⁻³ (about 80 generated in `Ω`, about 50 sample molecules) | 30 per cell, ambient 0.002 µm⁻³ (about 560 generated in `Ω`, about 380 sample molecules) |
 | Amplicon appearance | constant A 100, sz = sl = 1, no readout effect, no background, Gaussian read noise σ 1; float64 accumulation (for the oracle identities) | the benchmark appearance of `benchmark-presets-v1` (`_appearance` at float32: lognormal brightness and widths, trend 0.95, 5 % crosstalk, baseline, gradient and regions placed by fractions of the sample grid, Poisson and read noise); float32 accumulation |
 | Stain | `StainConfig()` | `StainConfig()` |
 | Voxel values rendered | 440,640 (4 FOVs × 6,480 voxels × 17 images) | 19,740,672 (9 × 129,024 × 17) |
@@ -729,18 +813,22 @@ schema per table, and versions the addition independently of generator version 6
 <directory>/
   sample.json                   # record: sample_truth_version "1", sample_preset_version, generator versions,
                                 #   requested and effective SampleSceneConfig, seed, stream scheme and
-                                #   descriptors, sample grid, codebook, SHA-256 of every file below
+                                #   descriptors, sample grid, the bounds of Ω and K (µm), codebook,
+                                #   SHA-256 of every file below
   positions.csv                 # tile position table: fov_id, nominal_z/y/x (µm)
   placement_truth.csv           # "Placement truth"
-  nuclei.csv                    # nucleus_id, cell_id, centre_z/y/x (µm), axial_radius, lateral_radius (µm),
-                                #   elongation, angle (rad), site_radius (µm), stain_brightness
-  cells.csv                     # cell_id, kind (ordinary, binucleate, empty), n_nuclei, reach (µm),
-                                #   centroid_z/y/x (µm, of the sample-grid voxels), n_voxels (sample grid),
-                                #   n_molecules, fov_ids, n_fovs
-  molecules.csv                 # amplicon_id, population, gene_id, color_sequence, sample_z/y/x (µm),
-                                #   A, sz, sl, e, theta, true_cell_id, true_nucleus_id, compartment, fov_ids, n_fovs
-  cell_fovs.csv                 # "Per-FOV truth"
-  molecule_fovs.csv             # "Per-FOV truth"
+  nuclei.csv                    # nucleus_id, cell_id, in_sample, centre_z/y/x (µm), axial_radius,
+                                #   lateral_radius (µm), elongation, angle (rad), site_radius (µm), stain_brightness
+  cells.csv                     # cell_id, kind (ordinary, binucleate, empty), in_sample, anchor_z/y/x (µm),
+                                #   n_nuclei, reach (µm), centroid_z/y/x (µm, of the sample-grid voxels),
+                                #   n_voxels (sample grid), n_molecules, fov_ids, n_fovs, label_fov_ids
+  molecules.csv                 # amplicon_id, population, in_sample, gene_id, color_sequence, sample_z/y/x (µm),
+                                #   A, sz, sl, e, theta, true_cell_id, true_cell_in_sample, true_nucleus_id,
+                                #   compartment, fov_ids, n_fovs
+  cell_fovs.csv                 # "Per-FOV truth": cell_id, fov_id, in_sample, anchor_in_footprint,
+                                #   n_voxels, fov_edge, z_edge
+  molecule_fovs.csv             # "Per-FOV truth": amplicon_id, fov_id, in_sample, z, y, x, in_footprint,
+                                #   fov_cell_label, fov_nucleus_label, label_agrees, csv_row
   labels/sample_nuclei.tif, labels/sample_cells.tif
   fovs/<fov_id>/                # save_formed_scene layout: images/<round>.ome.tif, formed.csv,
                                 #   round_truth.csv, signals.csv, provenance.json
@@ -761,7 +849,10 @@ the FOV frame, radians for angles; IDs are strings except the uint32 label value
   network share): config validation (overlap rule, Z=1 rule, template population fields,
   stochastic readout refused); the nominal grid equal to `positions_from_grid` values;
   the placement identity and its tolerance on `sample-tiny-v1`; the rendering and
-  no-interpolation identities; cellular identities 1 to 5; nucleus inside cell on every
+  no-interpolation identities; cellular identities 1 to 5, with identity 3 also on a
+  `sample-tiny-v1` variant whose supplied jitter moves every FOV by the bound towards the
+  grid centre in Y and X and by `+J_z` in Z, a case that leaves the halo least covered (all sample molecules still seen, halo
+  molecules allowed unseen); `in_sample` unchanged between two jitter draws; nucleus inside cell on every
   label voxel; stream isolation (redrawing the jitter moves no molecule; adding a FOV
   changes no other FOV's images); the save and reload round trip with SHA-256 checks;
   `import_labels` and `molecule_table_from_csv` accepting the saved files of one FOV;
