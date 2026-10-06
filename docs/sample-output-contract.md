@@ -1,47 +1,63 @@
-# Sample-output contract: the fused image, the SpatialData export and the output profiles
+# Sample-output contract: the export entry, the fused image, the label export, the SpatialData export and the output profiles
 
 Status: Proposed
 
-This page proposes what a sample has on disk after spatial assembly: the output profiles
-and the workflow keys that select them; the fused image as a 2D projection (the default)
-or a 3D stack, at an adjustable scale factor, as OME-TIFF (the default) or OME-Zarr; the
-SpatialData export of the sample tables; the optional assembled label export; the
-read-back checks; and the resources each output needs. It builds on three contracts and
-redefines none of them:
+This page proposes what a sample has on disk after spatial assembly: the one sample-level
+export entry `Dataset.export` and its parts; the folder `export/<sample>/` and its output
+profiles; the fused image, made by multiview-stitcher's `fuse` from the placement of
+either backend, as a 2D projection (the default) or a 3D stack, at an adjustable scale
+factor, written as OME-TIFF (the default) or OME-Zarr; the assembled label export; the
+SpatialData export of the sample tables; the read-back checks; and the resources and
+dependencies each output needs. It builds on three contracts and redefines none of them:
 
 * {doc}`stitching-contract`: `PlacementResult` (per-FOV `status`, float64 `origin_z/y/x`
   in µm), the sample frame (`frame_id` `sample:<sample>`, ZYX, µm, identity direction),
   the index-to-sample rule `sample_zyx = origin_zyx + D · (p ⊙ spacing_zyx)` and its
-  inverse, `placed_metadata`, the failure policy and `PlacementReviewRequiredError`;
-* {doc}`assembly-contract`: `AssemblyResult` and its sample tables (`fovs`, `cells`,
-  `molecules`, `counts`), `sample.h5ad`, the record `assembly.json`, the persistence
-  folder `<OUTPUT>/assembly/<sample>/`, footprints and centres, `ownership_map` with
-  options O1, T1 and Z1, the sample-level identities and the count accounting;
+  inverse, `placed_metadata`, the failure policy, `PlacementReviewRequiredError`, and the
+  dependency plan (Python 3.11 or later, the `multiview-stitcher` extra);
+* {doc}`assembly-contract`: `assemble`, `AssemblyResult` and its sample tables (`fovs`,
+  `cells`, `molecules`, `counts`), `sample.h5ad`, the assembly record, `save_assembly` and
+  `load_assembly`, footprints and centres, `ownership_map` with options O1, T1 and Z1 and
+  its `candidates` argument, the sample-level identities and the count accounting;
 * the `ReferenceGrid` of {doc}`segmentation-contract` and `ImageMetadata`
   (`src/python/starfinder/image.py`).
 
 Where this page names a column, a function or a rule of those pages, it uses it unchanged.
 The current exporter work and today's fused files are recorded in
 {doc}`sample-output-baseline`. Nothing here is implemented, nothing is renamed and no
-dependency changes. The validation design and the implementation issues are W-331's.
+dependency changes. The validation design and the implementation issues are in
+{doc}`stitching-assembly-validation`.
+
+This page was revised on 2026-10-06 after the W-329 review, from the fusion measurement of
+W-354: the fused image is now made by multiview-stitcher's `fuse`, the export has one
+entry and one folder, and the label export is part of the first delivery.
 
 Evidence, cited by path; this page repeats only the numbers it needs:
 
+* **W-354** (the fusion measurement), run directory
+  `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-354/20261006T175525Z-174cf769`
+  (found with `timeout 30 find …/runs/W-354 -maxdepth 2 -name fusion-manifest.json`). This
+  page cites its files as "W-354 `<path>`", relative to that directory: `worker-notes.md`
+  (sections 1 to 12), `tables/position_summary.csv`, `tables/overlap_dtype.csv`,
+  `tables/overlap_line.csv`, `tables/reduced.csv`, `tables/projection_fixture.csv`,
+  `tables/projection_ln_region.csv`, `tables/labels_summary.csv`,
+  `tables/labels_absent_ids.csv`, `tables/labels_new_values.csv`,
+  `tables/ln_two_placements_grids.csv`, `tables/runs.csv`, `readback/readback.csv`,
+  `readback/readback.json`, `readback/spatialdata_read.json`,
+  `readback/spatialdata_write_ln_stack_*.json`, `fixtures/writers_lazy.json` and the
+  scripts `scripts/common.py` and `scripts/fixtures.py`. The library version measured is
+  multiview-stitcher 0.1.62 on Python 3.12.12.
 * W-323, `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-323/`:
-  `20261005T2110Z-input-inventory/inputs.md` (tile shapes, dtypes, calibration),
-  `20261005T1930Z-fiji-baseline/fiji-baseline.md` (BigStitcher's stored levels, CIFS).
+  `20261005T2110Z-input-inventory/inputs.md` (tile shapes, dtypes, calibration).
 * W-324, run directory
-  `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-324/20261006T063540Z-5cb2f421`
-  (found with `timeout 30 find …/runs/W-324 -maxdepth 2 -name stitching-manifest.json`):
-  `notes.md` sections 2.2 and 3, `tables/runs.csv` (load times), `fusion/fusion_probe.json`
-  (fusion of one LN region and the label-fusion cases) and the per-FOV placements
-  `runs/ln-grid-b4-t4-rep2/per_fov.csv`, `runs/culture3d-grid-b4-t4/per_fov.csv`,
-  `runs/tissue2d-grid-b4-t4/per_fov.csv`.
+  `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-324/20261006T063540Z-5cb2f421`:
+  `notes.md` section 3 and `fusion/fusion_probe.json` (the first label-fusion probe).
 * W-328, run directory
   `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-328/20261006T111902Z-ad45aa68`:
-  `scripts/resource_estimate.py` and its output `tables/resource_estimate.csv`, which
-  derive the sizes of "Resources" from the W-323 and W-324 records without reading an
-  image.
+  `tables/resource_estimate.csv` (the Z extent of cell-culture-3D, derived without
+  reading an image).
+* The trial resolution for Python 3.11,
+  `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-329/20261006T1630Z-gate-review-preparation/lock-py311-trial/README.md`.
 
 ## Settled decisions this page follows
 
@@ -49,12 +65,9 @@ Decided by Jiahao in the §2.10 planning session (W-152 comment "§2.10 planning
 (2026-10-05)" and its reply "Amendment on the sample outputs"), and in the W-152 comments
 of 2026-09-27 on §2.10:
 
-* **Three sample-level entries** outside `PipelineConfig` and `FOV.run`: stitch, assemble,
-  and fuse and export (D3). The fuse and export entry is separate from stitch and
-  assemble; the workflow runs it by default and a key turns fusion off.
-* **By default** every assembled sample has a sample-level AnnData (written by assemble,
-  {doc}`assembly-contract`) and a fused image as OME-TIFF, a **2D projection** at an
-  **adjustable scale factor**, because the image at acquired size is rarely needed.
+* **By default** every assembled sample has a sample-level AnnData and a fused image as
+  OME-TIFF, a **2D projection** at an **adjustable scale factor**, because the image at
+  acquired size is rarely needed.
 * **On request**: a SpatialData export of the sample, a 3D stack, OME-Zarr and further
   channels. In the SpatialData store the image is **written once as OME-Zarr** and not
   duplicated.
@@ -63,22 +76,86 @@ of 2026-09-27 on §2.10:
 * 2026-09-27: both image formats are supported; assembled labels are inspection products;
   mask conflicts are flagged, not resolved.
 
-Excluded: viewer sessions, reassignment of molecules or recomputation of counts from a
-fused image or a label raster, cross-FOV cell matching, and any change to the placement,
-assembly or §2.9 contracts.
+Amended at the W-329 review (comment "Approval record — 2026-10-06"):
+
+* **Fusion.** Starfinder writes no fusion of its own. multiview-stitcher's `fuse` fuses
+  the placements of both backends: a placement is one type whichever backend produced it,
+  so there is one fusion path. For images the library's own blending is used; the earlier
+  rule that an image voxel takes the value of the owning FOV is dropped for image values.
+  Assembly's ownership still decides which cells and molecules are retained. BigStitcher's
+  own fusion in Fiji is not part of this delivery.
+* **Labels** are never blended. Interpolation order 0 with a function that takes the
+  first valid view places labels without new values (W-324). A small function passed to
+  the library is allowed; a second fusion implementation is not.
+* **The label export** is part of the first delivery, with a default scale factor of 0.25.
+* **The default fused image** is a 2D maximum projection at scale 0.5 in Y and X, as
+  OME-TIFF, beside the sample-level AnnData. The 3D stack, OME-Zarr and the SpatialData
+  export stay options. The default source image is the reference stain, chosen per
+  dataset by configuration.
+* **One export entry and one folder**, amending D3 of 2026-10-05: `Dataset.stitch` and
+  `stitching/<sample>/` stay as they are; `Dataset.assemble` and `Dataset.sample_outputs`
+  become one `Dataset.export`; the package functions `assemble`, `fuse`, `fuse_labels` and
+  `export_spatialdata` stay separate parts that the method calls in order, each can be
+  turned off by configuration and called alone, and when a part cannot run the files of
+  the earlier parts are still written and the record says which parts exist. Everything
+  the entry writes goes to `export/<sample>/`: one record `export.json` with a section per
+  part, `sample.h5ad`, the fused images, the label image, `sample.zarr/` and the four
+  sample tables in `tables/`. The assembly statuses, reasons, flags and column names keep
+  the word "assembly".
+* **Python 3.11 or later** (`requires-python = ">=3.11"`), with the optional extra
+  `multiview-stitcher`, which the fuse part names when it is missing; both are applied by
+  the operator ({doc}`stitching-contract`, "Dependency plan").
+
+At the checkpoint after W-354 the operator decided, pending Jiahao's confirmation at the
+gate (W-329), how this page uses the measurement: it writes the option W-354 recommends
+as its proposed text and keeps each of those choices visible ("Choices kept open"); the
+default OME-TIFF is written by Starfinder with tifffile from the image the library fused,
+which is a file writer and not a fusion, and the library's own TIFF is specified as the
+alternative ("File layouts"); the measured memory peaks are stated and no bounded memory
+is promised for a whole-sample stack; and what W-354 did not measure is marked as an
+assumption ("Assumptions").
+
+Excluded: viewer sessions, BigStitcher's fusion in Fiji, reassignment of molecules or
+recomputation of counts from a fused image or a label raster, cross-FOV cell matching,
+and any change to the placement or §2.9 contracts or to the assembly contract beyond its
+`Dataset` method, saved layout and workflow configuration, which move to the export
+entry.
+
+## Assumptions
+
+W-354 did not measure the following, and this page relies on them. Each is an assumption
+for the implementation issue to verify; the sections that rely on one name it.
+
+| | Assumption | What W-354 measured instead |
+| --- | --- | --- |
+| A1 | `fuse` with lazily loaded tiles (a dask array per tile, read from its file on demand) keeps the peak memory of a whole-sample stack well below the bytes of the loaded tiles. | Every run loaded every tile into memory first; the LN stack peaked at 12.35 GiB (`tables/runs.csv`, `ln-mvs-stack-s05-a2`; `worker-notes.md` section 8). |
+| A2 | Label fusion behaves on real label images, and on 3D label volumes, as on the 2D fixture. | One synthetic 2D scene of discs (`tables/labels_summary.csv`). |
+| A3 | tifffile writes and reads back a BigTIFF above 4 GiB with the layout of "OME-TIFF layout"; the library's own TIFF writer (the alternative) writes a valid file above 4 GiB. | The largest file was the 2,247,808,158-byte LN stack TIFF (`readback/readback.csv`). |
+| A4 | A whole-sample stack of cell-culture-3D costs about 160 s and 8 GiB at scale 0.5. | An estimate from voxel counts, not a run (`worker-notes.md` section 10). |
+| A5 | Input dtypes other than uint8, uint16 and float32 pass through `fuse` as they do. | uint8, uint16 and float32 only (`tables/overlap_dtype.csv`). |
+| A6 | Two `fuse` calls with the same inputs and arguments return identical arrays. | Each configuration was fused once. |
+| A7 | The library's multiscale of a fused image (`msi_utils.get_msim_from_sim`) gives SubIFD levels whose shapes and geometry follow "Resolution levels inside a file" also for odd sizes. | The library's block mean per tile (`tables/reduced.csv`, route `level1`) and its OME-Zarr levels (`readback/readback.json`). |
+| A8 | Starfinder's tiled, zlib-compressed OME-TIFF writer, writing band by band from the lazy fused array, costs about as much as the library's uncompressed writer plus compression. | The library's TIFF writer only (`tables/runs.csv`). |
+| A9 | A labels element parsed from the label OME-TIFF (read with tifffile's `aszarr`) writes and reads back like the image element. | Image elements only (`readback/spatialdata_read.json`). |
+| A10 | A SpatialData store in container format 0.1 on Zarr format 2 (option Z1) writes and reads back under spatialdata 0.6.1 like the default format. | The default format only (`readback/spatialdata_write_ln_stack_*.json`). |
+| A11 | Where the label image does not show the owner's label, the point lies within one input voxel of an O1 territory boundary. | The counts of such points on the fixture, described as lying at territory boundaries (`worker-notes.md` section 6). |
+| A12 | A fused image rechunked with dask before the library's OME-Zarr writer is written with those chunks. | Chunks follow the dask chunks passed (`fixtures/writers_lazy.json`). |
 
 ## Terms
 
-* The **fused image** is one image of a sample in the sample frame, made from one saved
-  image per FOV (a **source image**) and the placement.
-* The **fusion grid** (level 0) is the voxel grid of the fused image at the acquired
+* The **fused image** is one image of a sample in the sample frame, made by
+  multiview-stitcher's `fuse` from one saved image per FOV (a **source image**) and the
+  placement.
+* The **fusion grid** is the library's union grid of the included FOVs at the acquired
   spacing ("The fusion grid"). A file's **output level** is the fusion grid reduced by an
-  integer factor `k` per axis; its **scale factor** is `1/k`. A file's further
+  integer factor `k` in Y and X; its **scale factor** is `1/k`. A file's further
   **resolution levels** halve its output level in Y and X.
 * The **3D stack** is the fused image with a Z axis; the **2D projection** collapses Z.
-* An **output profile** is the set of files a finished sample has for a given
-  configuration ("Output profiles").
-* The **store** is the SpatialData Zarr store of one sample.
+* A **part** is one of the four functions `Dataset.export` calls: `assemble`, `fuse`,
+  `fuse_labels`, `export_spatialdata`.
+* The **export folder** is `export/<sample>/`; an **output profile** is the set of files it
+  holds for a given configuration ("The export folder and the output profiles").
+* The **store** is the SpatialData Zarr store `export/<sample>/sample.zarr/`.
 * A FOV is **included** in fusion when it has a finite origin and a source image: status
   `image_supported` or `metadata_only` ({doc}`stitching-contract`). `placeholder` FOVs (a
   blank image), `missing` and `failed` FOVs contribute nothing.
@@ -87,106 +164,167 @@ assembly or §2.9 contracts.
 
 | Option | Names | Effect on the golden values | Effect on existing files and outputs |
 | --- | --- | --- | --- |
-| **N1. One `starfinder.sample_output` module (recommended)** | Entry `write_sample_outputs` and coordination `Dataset.sample_outputs`; fusion `fuse`, `fused_grid`, `FusionInput`, `FusionConfig`, `FusedGrid`, `FusionRecord`; export `export_spatialdata`, `SpatialDataExportConfig`; labels `fuse_labels`; checks `check_fused`, `check_spatialdata_export`; lookup `lookup_source` | None: the golden tests pin the legacy scripts and are untouched. | New files only, plus one method on `Dataset`; `docs/api/sample_output.rst`, `docs/api/inventory.rst` and `docs/api/python-index.rst` gain the exports, which `docs/check_reference.py` requires. The legacy `images/fused/{sample}/` folder is not written. |
-| N2. Two modules, `starfinder.fusion` and `starfinder.sample_export` | The same functions split by output; `sample_export` is the reference-branch name | None. | The same files; one entry of D3 is then spread over two modules, and `sample_export` reuses a name whose reference-branch API (`export_sample` with affine source mappings) this page does not adopt. |
-| N3. Inside `starfinder.assembly` | `starfinder.assembly.fuse`, `export_spatialdata` | None. | The same files; the assembly module grows image I/O and optional zarr and spatialdata imports, which D3 keeps apart from assemble. |
+| **N1. One `starfinder.sample_output` module (recommended)** | Coordination `Dataset.export`; config `ExportConfig`; fusion `fuse`, `fused_grid`, `FusionInput`, `FusionConfig`, `FusedGrid`, `FusionRecord`; labels `fuse_labels`, `LabelConfig`, `LabelRecord`; export `export_spatialdata`, `SpatialDataExportConfig`; record `ExportRecord`, `ExportIncompleteWarning`; check `check_export`; lookup `lookup_source`. `assemble`, `save_assembly`, `load_assembly` and `sample_anndata` stay in `starfinder.assembly`. | None: the golden tests pin the legacy scripts and are untouched. | New files only, plus one method on `Dataset`; `docs/api/sample_output.rst`, `docs/api/inventory.rst` and `docs/api/python-index.rst` gain the exports, which `docs/check_reference.py` requires. The legacy `images/fused/{sample}/` folder is not written. |
+| N2. Two modules, `starfinder.fusion` and `starfinder.sample_export` | The same functions split by output; `sample_export` is the reference-branch name | None. | The same files; the parts of one entry are spread over two modules, and `sample_export` reuses a name whose reference-branch API (`export_sample` with affine source mappings) this page does not adopt. |
+| N3. Inside `starfinder.assembly` | `starfinder.assembly.fuse`, `export_spatialdata` | None. | The same files; the assembly module grows image I/O and the optional multiview-stitcher, zarr and spatialdata imports. |
 
-**Recommendation: N1.** It mirrors D3 (one module per sample-level entry: `stitching`,
-`assembly`, `sample_output`), keeps the optional zarr and spatialdata imports out of the
-assembly module, and does not reuse a reference-branch name for a different API.
+**Recommendation: N1.** It keeps the optional imports out of the assembly module, which
+`assemble` needs without any extra, and does not reuse a reference-branch name for a
+different API.
 
 New names under N1:
 
 | Concept | Name | Kind |
 | --- | --- | --- |
-| Entry | `write_sample_outputs(placement, inputs, *, assembly=None, config=SampleOutputConfig(), output_dir)` | function |
-| Coordination | `Dataset.sample_outputs(sample, *, placement, assembly, config=SampleOutputConfig(), output_dir)` | method |
-| Config | `SampleOutputConfig(fuse=True, fusion=FusionConfig(), spatialdata=False, labels=False)` | frozen dataclass |
-| Fusion | `fuse(placement, inputs, *, ownership, config, output_dir) -> FusionRecord` | function |
+| Coordination | `Dataset.export(sample, *, placement, assignment="default", config=ExportConfig(), output_dir)` | method |
+| Config | `ExportConfig` ("Configuration") | frozen dataclass |
+| Fusion | `fuse(placement, inputs, *, assembly=None, config=FusionConfig(), output_dir) -> FusionRecord` | function |
 | Fusion input | `FusionInput(fov_id, grid, images)` | frozen dataclass |
-| Fusion config | `FusionConfig` ("Fusion config") | frozen dataclass |
+| Fusion config | `FusionConfig` ("Configuration") | frozen dataclass |
 | Geometry | `fused_grid(placement, grids, *, config) -> FusedGrid` | function, frozen dataclass |
-| Record | `FusionRecord`: the content of `fused.json` and the written paths | frozen dataclass |
-| Labels | `fuse_labels(placement, assembly, territories, *, config, output_dir)` | function |
+| Labels | `fuse_labels(placement, assembly, *, config=LabelConfig(), output_dir) -> LabelRecord` | function |
+| Label config | `LabelConfig` ("Configuration") | frozen dataclass |
 | Export | `export_spatialdata(assembly, *, fused=None, labels=None, config=SpatialDataExportConfig(), output_dir) -> Path` | function |
-| Checks | `check_fused(folder)`, `check_spatialdata_export(folder)` | functions; raise `ValueError` naming the first failed condition |
+| Records | `FusionRecord`, `LabelRecord`, `ExportRecord`: the content of their sections of `export.json` and the written paths | frozen dataclasses |
+| Warning | `ExportIncompleteWarning`, issued when a part could not run | `UserWarning` subclass |
+| Check | `check_export(folder)` | function; raises `ValueError` naming the first failed condition |
 | Lookup | `lookup_source(folder, *, spot=None, cell=None)` | function |
 
-## The fuse and export entry
+## The export entry
 
 ```python
-def write_sample_outputs(placement: PlacementResult, inputs: Sequence[FusionInput], *,
-                         assembly: AssemblyResult | None = None,
-                         config: SampleOutputConfig = SampleOutputConfig(),
-                         output_dir) -> dict: ...
+Dataset.export(sample: str, *, placement: PlacementResult | str | Path,
+               assignment: str | None = "default",
+               config: ExportConfig = ExportConfig(),
+               output_dir: str | Path) -> ExportRecord
 ```
 
-calls, in this order, `fuse` (unless `config.fuse` is false), `fuse_labels` (with
-`config.labels`) and `export_spatialdata` (with `config.spatialdata`), and returns the
-paths of the records it wrote. It is the D3 entry; the three functions are its parts and
-can be called alone. Like `stitch` and `assemble` it is a sample-level computation, not a
-multi-FOV runner ({doc}`stitching-contract`, "Not the multi-FOV runner").
+`placement` is a `PlacementResult` or its saved folder `stitching/<sample>/`, read with
+`load_placement`. `assignment` is the §2.9 assignment name read per FOV, or `None` for a
+sample without segmentation (molecules only). `output_dir` is the sample's export folder;
+the workflow passes `<OUTPUT>/export/<sample>/`. Like `stitch`, it is a sample-level
+computation, not a multi-FOV runner ({doc}`stitching-contract`, "Not the multi-FOV
+runner").
 
-Unlike `stitch` and `assemble`, `fuse` and `fuse_labels` write as they compute and return
-only their record, because a fused image does not fit in memory at every size ("Bounded
-memory").
+### The parts, in order
 
-`Dataset.sample_outputs(sample, *, placement, assembly, config, output_dir)` loads the
-saved placement (`load_placement`) and assembly (`load_assembly`), builds one
-`FusionInput` per included FOV from the saved source images and reference grids
-(`reference_grid_from_file`), and calls `write_sample_outputs`.
+| Order | Part | Turned off by | What the method does | Writes in `output_dir` |
+| --- | --- | --- | --- | --- |
+| 1 | `assemble` ({doc}`assembly-contract`) | `assemble: false` | Builds one `AssemblyInput` per FOV of the placement from the saved assignment folders named `assignment` (or, with `assignment=None`, from the saved molecule tables through `molecule_table`) and the reference grids (`reference_grid_from_file`), calls `assemble`, and saves the result with `save_assembly(result, output_dir, table_format=config.table_format)`. It keeps the tables of every FOV and at most two label images in memory at a time ({doc}`assembly-algorithms`, "Flags"). Turned off, it loads the saved assembly with `load_assembly(output_dir)`, which checks every SHA-256, and records the part as `reused`. | `tables/fovs.<fmt>`, `tables/cells.<fmt>`, `tables/molecules.<fmt>`, `tables/counts.<fmt>`, `sample.h5ad`; section `assembly` |
+| 2 | `fuse` | `fuse: false` | Builds one `FusionInput` per included FOV from the saved source images and reference grids, and calls `fuse` with the assembly of part 1. | The fused images; section `fusion` |
+| 3 | `fuse_labels` | `fuse_labels: false` (the default; "Choices kept open", 8) | Calls `fuse_labels` with the placement and the assembly. | `cell_labels.ome.tif`; section `labels` |
+| 4 | `export_spatialdata` | `export_spatialdata: false` (the default) | Calls `export_spatialdata` with the assembly and the records of parts 2 and 3 that were written. | `sample.zarr/`; section `spatialdata` |
 
-**Checks**, in this order, before anything is written; each raises and names the FOVs:
+Each part can also be called alone with the saved files of the parts before it:
+`assemble` and `save_assembly` as {doc}`assembly-contract` specifies;
+`fuse(placement, inputs, *, assembly=None, config, output_dir)`;
+`fuse_labels(placement, load_assembly(output_dir), *, config, output_dir)`; and
+`export_spatialdata(load_assembly(output_dir), fused=…, labels=…, config, output_dir)`,
+which reads the fused and label files from the folder through their records. A part
+called alone writes its files and its section of `export.json` (creating the record when
+it does not exist) and leaves the other sections unchanged; each section records the
+SHA-256 of the sections it was computed from, so `check_export` finds a section made from
+an earlier assembly ("Read-back checks", R1).
 
-1. **Review.** A placement whose review is `required` without an approval raises
+### Checks before anything is written
+
+In this order; each raises, names the FOVs or keys, and leaves the folder unchanged:
+
+1. **Config.** `ExportConfig`, `FusionConfig`, `LabelConfig` and `AssemblyConfig`
+   validate their fields in `__post_init__` ("Configuration").
+2. **Review.** A placement whose review is `required` without an approval raises
    `PlacementReviewRequiredError`, exactly as `assemble` does ({doc}`assembly-contract`,
    "Checks the entry applies", 2).
-2. **Assembly.** With `assembly`, its record's placement SHA-256 values equal the
-   placement's (`ValueError`), so the image and the tables come from one placement.
-3. **Inputs.** Every included FOV has exactly one `FusionInput`; no input names another
-   FOV (`ValueError`).
-4. **Grid.** Each input's grid equals the grid the placement recorded for that FOV, by the
-   grid rule of {doc}`assignment-contract`; known spacing, unit `µm`, identity direction
-   (`IncompatibleGeometryError`). All included FOVs share one spacing, as `stitch`
-   requires.
-5. **Images.** Each named source image exists for every included FOV, has the grid's shape
-   and one dtype across FOVs (`ValueError` naming the dtypes; no implicit conversion), and
-   that dtype is one of uint8, uint16, uint32, int8, int16, int32, float32 and float64, the
-   real dtypes the pinned tifffile writes to OME-TIFF (`tifffile.py` lines 14946 to 14963
-   of 2026.1.28); any other dtype (uint64, int64, float16, bool, complex) raises
-   `ValueError` naming it and the allowed list ("Dtypes written").
-6. **Config.** `FusionConfig.__post_init__` validates every field ("Fusion config").
+3. **Required extras.** The assemble part runs only with the `anndata` extra
+   (`sample.h5ad`) and, for `table_format: parquet`, the `checkpoint` extra; without one
+   the method raises `ModuleNotFoundError` naming it. These are the first part's own
+   outputs, so nothing earlier exists to keep.
+4. **Assembly.** With `assemble: true`, the checks of {doc}`assembly-contract` ("Checks
+   the entry applies") run inside `assemble`, which computes in memory before
+   `save_assembly` writes. With `assemble: false`, when `fuse_labels` or
+   `export_spatialdata` is on, `output_dir` must hold a saved assembly that `load_assembly`
+   accepts and whose placement SHA-256 values equal the placement's (`ValueError`).
+5. **Fusion inputs**, when `fuse` is on: every included FOV has exactly one `FusionInput`
+   and no input names another FOV (`ValueError`); each input's grid equals the grid the
+   placement recorded for that FOV, by the grid rule of {doc}`assignment-contract`, with
+   known spacing, unit `µm` and identity direction (`IncompatibleGeometryError`); all
+   included FOVs share one spacing, as `stitch` requires, and either all have one plane
+   or none has (`ValueError`, "The fusion grid").
+6. **Label IDs**, when `fuse_labels` is on: the sample cell table has at most
+   16,777,215 rows (2^24 − 1), so every shifted label fits in float32 exactly ("Assembled
+   label export"; `ValueError` naming the count).
 
-## Output profiles
+### When a part cannot run
 
-A finished sample has its outputs in three folders beside its placement
-(`stitching/<sample>/`): `assembly/<sample>/`, `fused/<sample>/` and `export/<sample>/`.
-`<image>` is the source-image name of "Fused image inputs" (`reference_stain` by default);
-`<sample>` the sample name.
+A part **cannot run** when an optional extra it needs is not installed or a file it reads
+is missing. That is not an error of the entry: the method records the part as `not_run`
+with its reason, issues `ExportIncompleteWarning` naming the part and the reason, runs the
+later parts that do not need the missing output, and returns. The files of the earlier
+parts are written and listed. `export.json` has `complete: false` and lists every part
+with its status.
 
-| Profile | Selected by | Files that exist | Format | What each contains |
+| Condition | Part | Status, reason | The later parts |
+| --- | --- | --- | --- |
+| `multiview_stitcher` not importable (the extra not installed, or Python 3.14 and later, where the extra is empty) | `fuse` | `not_run`, `extra_missing`, `extra: "multiview-stitcher"` | `fuse_labels` likewise `not_run`, `extra_missing`; `export_spatialdata` runs and records the image and labels elements as omitted, reason `part_not_run` |
+| A selected source image missing for an included FOV | `fuse` | `not_run`, `source_image_missing`, with each FOV and image name | No image is fused, for any image name, so the part is all or nothing. `fuse_labels` runs (it reads no source image); `export_spatialdata` omits the image elements (`part_not_run`) |
+| A territory file of an owning FOV missing | `fuse_labels` | `not_run`, `territory_missing`, with each FOV and path | `export_spatialdata` omits `cell_labels` (`part_not_run`) |
+| `spatialdata` not importable | `export_spatialdata` | `not_run`, `extra_missing`, `extra: "spatialdata"` | none |
+
+Two other outcomes are not failures: `fuse` with no included FOV writes no image and
+records `status: "empty"`, reason `no_included_fov`; `fuse_labels` on a `molecules_only`
+sample writes no label image and records `empty`, reason `no_cells`.
+
+Any other error inside a part (a library error, a write error, a territory file whose
+SHA-256 differs from the assembly record) records the part as `failed` with the
+exception's type and message and the files it completed, writes `export.json`, and is
+raised again. The files of the earlier parts stay.
+
+The statuses of a part in `export.json` are therefore `written`, `reused` (assemble
+only), `off`, `empty`, `not_run` and `failed`.
+
+### How the folder is kept equal to its record
+
+* Before the parts run, the method removes the files that the previous `export.json`
+  lists for each part that will run or is off; files of a `reused` assembly stay. It
+  never removes a file the record does not list.
+* Each part writes each file atomically (a temporary name, then a rename); the store is
+  written into a sibling staging folder and renamed into place, so a failed export
+  publishes no partial store.
+* `export.json` is written atomically after each part, so after an interruption it lists
+  the parts that finished.
+
+## The export folder and the output profiles
+
+`<OUTPUT>/export/<sample>/` holds everything the entry writes. It sits beside the
+placement folder `<OUTPUT>/stitching/<sample>/`, which is unchanged
+({doc}`stitching-contract`, "Persistence"), and is not the legacy
+`<OUTPUT>/images/fused/<sample>/`, which keeps BigStitcher's inputs and `dataset.xml`
+({doc}`stitching-baseline`); no existing file is rewritten. `<image>` is a source-image
+name of "Fused image inputs" (`reference_stain` by default); `<fmt>` is `csv` by default
+or `parquet`.
+
+| Profile | Selected by | Files that exist under `export/<sample>/` | Format | What each contains |
 | --- | --- | --- | --- | --- |
-| Always (assembly) | an `assembly` block ({doc}`assembly-contract`, "Workflow configuration") | `assembly/<sample>/assembly.json`, `fovs.<fmt>`, `cells.<fmt>`, `molecules.<fmt>`, `counts.<fmt>` | JSON; CSV by default or Parquet | The record and the four sample tables of {doc}`assembly-contract`, "Sample tables" |
-| | | `assembly/<sample>/sample.h5ad` | H5AD | The sample-level AnnData of {doc}`assembly-contract`: one row per counted cell; written by assemble, so it is part of every profile, the default included |
-| Default | nothing (the `sample_outputs` defaults) | the above, plus `fused/<sample>/fused.json` | JSON | The fusion record ("Run record") |
-| | | `fused/<sample>/<image>_projection.ome.tif` | OME-TIFF, BigTIFF, tiled | The maximum projection of `<image>`, at scale 0.5 in Y and X, in the input dtype ("Dtypes written"), with calibration and origin ("OME-TIFF layout"); not written when no FOV is included ("The fusion grid") |
-| No fused image | `fuse: false` | the "Always" files only | | No `fused/<sample>/` folder |
-| 3D stack | `dimensionality: stack` (or `both`) | `fused/<sample>/<image>_stack.ome.tif` instead of (or beside) the projection | OME-TIFF | The 3D fused image at `scale_yx` in Y and X and `scale_z` in Z |
-| OME-Zarr, without SpatialData | `formats: [ome_zarr]` (or both formats), `spatialdata: false` | `fused/<sample>/<image>_projection.ome.zarr` (and `_stack.ome.zarr`) | OME-NGFF 0.4 on Zarr v2 ("OME-Zarr layout") | The same image values as the OME-TIFF, with resolution levels |
-| Further channels | `images: [reference_stain, reference_merged, …]` | one file per image name and dimensionality, as above | as above | Each selected source image fused on the same grid with the same placement and ownership |
-| SpatialData | `spatialdata: true` | `export/<sample>/export.json`, `export/<sample>/sample.zarr/` | JSON; SpatialData store on Zarr v2, container format 0.1, raster groups in spatialdata's raster format 0.2 (NGFF 0.4 layout, version string `0.4-dev-spatialdata`) | Points `molecules`, shapes `cell_centroids`, tables `cells`, `expression`, `cells_unplaced`, `molecules_unplaced`, and one image element `<image>_projection` (and `<image>_stack`) per fused image, each written when not empty ("SpatialData export", "Empty populations"). The OME-Zarr image exists only here: no `fused/<sample>/*.ome.zarr` is written. The OME-TIFF files of `formats` are still written. |
-| SpatialData without a fused image | `spatialdata: true`, `fuse: false` | `export/<sample>/` as above without image elements | | `export.json` records each image element as `omitted`, reason `not_requested` |
-| Pyramid in OME-TIFF | `pyramid_levels: L` | the same files | SubIFD levels | `L` further levels, each halving Y and X ("OME-TIFF layout") |
-| Assembled labels (optional, proposed for a later delivery) | `labels: true` | `fused/<sample>/labels.json`; with SpatialData the labels element `sample.zarr/labels/cell_labels`, without it `fused/<sample>/cell_labels.ome.tif` | uint32 | Sample-level cell instance IDs placed without blending ("Assembled label export") |
+| **Default** | nothing (the defaults of "Configuration") | `export.json` | JSON | The record: one section per part ("The record"); `labels` and `spatialdata` have status `off` |
+| | | `tables/fovs.csv`, `tables/cells.csv`, `tables/molecules.csv`, `tables/counts.csv` | CSV | The four sample tables of {doc}`assembly-contract`, "Sample tables" |
+| | | `sample.h5ad` | H5AD | The sample-level AnnData of {doc}`assembly-contract`: one row per counted cell |
+| | | `<image>_projection.ome.tif` | OME-TIFF: BigTIFF, 512 × 512 tiles, zlib ("OME-TIFF layout") | The maximum projection of `<image>` fused by the library at scale 0.5 in Y and X, in the input dtype, with calibration and origin; not written when no FOV is included |
+| Parquet tables | `table_format: parquet` (the `assembly` block) | `tables/*.parquet` instead of `tables/*.csv` | Parquet | The same tables |
+| No fused image | `fuse: false` | the default files without `<image>_projection.ome.tif` | | Section `fusion` has status `off` |
+| 3D stack | `dimensionality: stack` (or `both`) | `<image>_stack.ome.tif` instead of (or beside) the projection | OME-TIFF | The 3D fused image at `scale_yx` in Y and X, Z as acquired |
+| Sum projection | `projection: sum` | the projection file | OME-TIFF, float32 | The per-FOV sums over Z, fused ("Dtypes written") |
+| Another scale factor | `scale_yx: 1/k` | the same names | | The output level of factor `k` |
+| Standalone OME-Zarr | `ome_zarr: true` with `export_spatialdata: false` | `<image>_projection.ome.zarr/` (and `_stack.ome.zarr/`) beside each OME-TIFF | OME-NGFF 0.5 on Zarr format 3 ("OME-Zarr layout") | The same array as the OME-TIFF, with the library's resolution levels |
+| Further channels | `images: [reference_stain, reference_merged, …]` | one file per image name and dimensionality, as above | as above | Each selected source image fused on the same grid with the same placement |
+| Pyramid in OME-TIFF | `pyramid_levels: L` | the same files | SubIFD levels | `L` further levels, each halving Y and X ("Resolution levels inside a file") |
+| Label export | `fuse_labels: true` | `cell_labels.ome.tif` | OME-TIFF, uint32 | The sample-level cell instance IDs placed without blending at `labels_scale_yx` (default 0.25) ("Assembled label export"); not written for a `molecules_only` sample or without an included FOV |
+| SpatialData | `export_spatialdata: true` | `sample.zarr/` | SpatialData store, spatialdata's default format (container format 0.2 on Zarr format 3) | Points `molecules`, shapes `cell_centroids`, tables `cells`, `expression`, `cells_unplaced`, `molecules_unplaced`, one image element per fused image and, with the label export, the labels element `cell_labels`; each written when not empty ("SpatialData export"). No standalone `.ome.zarr` is written; the OME-TIFF files stay. |
+| Assembly reused | `assemble: false` | the tables and `sample.h5ad` of the earlier run, unchanged | | Section `assembly` has status `reused` |
+| A part that cannot run | "When a part cannot run" | the files of the parts that ran | | The part's section has status `not_run` and its reason; `complete: false` |
 
-A reader checks a finished sample against the table with the record: `fused.json` lists
-every fused file with its SHA-256, shape, dtype, dimensionality, scale factor and format,
-and `export.json` every element of the store; a file that exists but is not listed, or is
-listed but missing, fails `check_fused` or `check_spatialdata_export`.
-
-The new folders `<OUTPUT>/fused/<sample>/` and `<OUTPUT>/export/<sample>/` are not the
-legacy `<OUTPUT>/images/fused/<sample>/`, which keeps BigStitcher's inputs and
-`dataset.xml` ({doc}`stitching-baseline`); no existing file is rewritten.
+A reader checks a finished folder against its record: `export.json` lists every file of
+every part with its SHA-256, and `check_export` fails on a file that exists but is not
+listed, or is listed but missing.
 
 ## The fused image
 
@@ -194,324 +332,341 @@ legacy `<OUTPUT>/images/fused/<sample>/`, which keeps BigStitcher's inputs and
 
 * **A placement** (`PlacementResult`, saved as `stitching/<sample>/`), from either backend:
   the BigStitcher import and `multiview_stitcher` give one type, and both are fused by the
-  same code ("Fusion implementation").
+  same call ("Fusion by multiview-stitcher").
 * **Per included FOV, the selected source images on its reference grid**, named as the
   stitching inputs are ({doc}`stitching-contract`, "Input image"): `reference_stain` (the
-  saved `reference_stain` of `FOV.prepare_morphology`) by default; `reference_merged`
-  (`images/ref_merged/{fovID}.tif`); or `<name>=file:<pattern>` with `{fov_id}`, accepted
-  only when its shape equals the reference grid's, where `<name>` names its files and store
-  element and may use letters, digits, `_`, `-` and `.` only. Further channels are further
-  names in `images`. A source image is read from its saved file; `fuse` holds no FOV image
-  it is not using ("Bounded memory").
-* **The ownership settings**: `ownership` and `tie` of the assembly record when an assembly
-  is given, else the defaults of `AssemblyConfig` (O1, T1); the record says which.
+  saved `reference_stain` of `FOV.prepare_morphology`, whose stain each dataset's
+  configuration chooses) by default; `reference_merged` (`images/ref_merged/{fovID}.tif`);
+  or `<name>=file:<pattern>` with `{fov_id}`, accepted only when its shape equals the
+  reference grid's, where `<name>` names its files and store element and may use letters,
+  digits, `_`, `-` and `.` only. Further channels are further names in `images`.
+* **Optionally the assembly**, whose record's placement SHA-256 values must equal the
+  placement's (`ValueError`), so that the image and the tables come from one placement.
+  Fusion uses no ownership: the assembly is only recorded.
+
+### Fusion by multiview-stitcher
+
+`fuse` makes every fused image with one call of multiview-stitcher's
+`multiview_stitcher.fusion.fuse`, for the placement of either backend. Starfinder chooses
+no candidate, interpolates nothing and blends nothing. Around the call it builds the
+library's inputs from the placement, computes the output grid it passes, projects each
+FOV along Z for the projection route, requests the library's reduced level of each FOV
+for a scale factor, and writes the files.
+
+**From a `PlacementResult` to the library's input** (W-354 `worker-notes.md` section 1,
+`scripts/common.py`, functions `mvs_placement` and `bigstitcher_placement`): each
+included FOV and source image becomes one image
+
+```python
+spatial_image_utils.get_sim_from_array(
+    array,                                   # the source image, or its projection
+    dims=["z", "y", "x"],                    # ["y", "x"] for a projection or a one-plane FOV
+    scale={axis: spacing_um},                # the grid's ImageMetadata spacing
+    translation={axis: origin_um},           # the placement's origin_z/y/x of the FOV
+    transform_key="placed")
+```
+
+whose affine under the key `placed` is the identity: the placement's origin is the sample
+position of voxel (0, 0, 0), so the image's own coordinates are sample coordinates. The
+images of all included FOVs, in placement table order, are passed to
+`fusion.fuse(images, transform_key="placed", fusion_func=weighted_average_fusion,
+interpolation_order=1, output_stack_properties=…)`, with the output grid of "The fusion
+grid" or "The scale factor". W-354 fused LN sample1 from both placements this way
+(`tables/ln_two_placements_grids.csv`).
+
+**Fusion function and interpolation order for images.** `weighted_average_fusion`, the
+library's default, at interpolation order 1 (linear), with the library's default
+`blending_widths` of 3 µm in Z and 10 µm in Y and X (W-354 `worker-notes.md` section 3).
+They are fixed, not configuration keys. `multi_view_deconvolution` is not offered: it
+creates values outside the input range, changes single-coverage values (100 became 99 in
+uint8) and leaves 1e-4 in uncovered float32 voxels (W-354 `tables/overlap_dtype.csv`).
+
+**What a fused image holds.** Each statement rests on the W-354 record named beside it:
+
+| Property | Statement | W-354 record |
+| --- | --- | --- |
+| Values where one FOV covers | Where the FOV's voxel centres coincide with output voxel centres, the input values unchanged. At fractional offsets, linear interpolation of the FOV's neighbouring voxels: a single bright voxel spreads over its neighbours, and its intensity centroid stays within 0.0008 µm of its true position. | `tables/overlap_dtype.csv` (`single_a_value`, `single_b_value`); `tables/position_summary.csv` (order 1, scale 1) |
+| Values in an overlap | The weighted average of the covering FOVs, with a cosine ramp over the blending width from each FOV's edge. Values lie between the inputs' values; integer averages are truncated, not rounded, so two constant FOVs of 100 and 203 give a ramp from 100 to 202 and an equal-weight mean of 151, not 152. | `tables/overlap_dtype.csv`, `tables/overlap_line.csv` |
+| Dtype | The input dtype, in memory, in the library's TIFF and OME-Zarr, and in Starfinder's OME-TIFF (which writes the array it is given). `fuse` converts every input to float32, resamples, and casts the result back with `astype`. | `tables/overlap_dtype.csv` (dtype columns); `worker-notes.md` section 1 |
+| Output grid | The grid passed as `output_stack_properties`; the library's recorded origin, spacing and shape equal it ("The fusion grid", "The scale factor"). | `tables/reduced.csv` (`geometry_matches_formula`) |
+| Uncovered voxels | 0, also 0.0 (not NaN) for float32: the library fills NaN outside the views and converts it with `nan_to_num` before the cast. | `tables/overlap_dtype.csv` (`uncovered_*`, `uncovered_is_nan`) |
+| Position | At scale 1, a single bright voxel's maximum lies on the output voxel nearest its true position. | `tables/position_summary.csv` |
+
+**Allowed input dtypes.** uint8, uint16 and float32, the dtypes W-354 fused; one dtype
+across FOVs, with no implicit conversion. `fuse` refuses any other dtype with
+`ValueError` naming it and the allowed list. Integers of 8 and 16 bits are exact in
+float32. Other dtypes are an assumption (A5): above 2^24, 32-bit integers are not exact
+in float32, and float64 inputs would pass through float32 ("Choices kept open", 9).
 
 ### The fusion grid
 
-The fusion grid is computed from the placement and the included FOVs' grids only, by
-`fused_grid`:
+The fusion grid is the library's union grid of the included FOVs, computed by
+`fused_grid` from the placement and the FOVs' grids only, with the library's rule
+(`fusion.process_output_stack_properties`; W-354 `worker-notes.md` section 4,
+`tables/reduced.csv`):
 
 * **Spacing** `s = (s_z, s_y, s_x)`: the included FOVs' shared spacing, µm.
-* **Origin** `o`: per axis, the smallest origin of an included FOV,
-  `o_a = min_f origin_f,a`. The FOV with the smallest origin on an axis therefore has its
-  voxel centres on grid centres along that axis.
-* **Shape** `n0`: per axis `ceil((max_f (origin_f,a + (n_f,a − 1)·s_a) − o_a) / s_a − 1e-9) + 1`,
-  so the last voxel centre of every included FOV lies within the grid (the tolerance keeps
-  a whole number of voxels from rounding up, as the synthetic sample grid does,
-  {doc}`synthetic-sample-scene`).
+* **Origin** `o`: per axis the smallest origin of an included FOV, `o_a = min_f origin_f,a`.
+* **Shape** `n0`: per axis `floor((max_f (origin_f,a + (n_f,a − 1)·s_a) − o_a) / s_a + 1e-9) + 1`,
+  the number of grid voxel centres up to the last voxel centre of any included FOV. A FOV's
+  last fractional part beyond the last grid centre is not covered: the grid can be one
+  voxel shorter than a grid that contains every FOV's last voxel centre. On LN sample1 the
+  grid is 67 × 12,332 × 10,882 (W-354 `tables/ln_two_placements_grids.csv`, columns
+  `scale1_shape_y` and `scale1_shape_x`, and `tables/runs.csv`, `ln-mvs-stack-s05-a2`).
 * **Metadata**: `ImageMetadata(frame_id="sample:<sample>", spacing_zyx=s, origin_zyx=o,
   direction_zyx=identity, spatial_unit="µm")`. Index `v` of the grid is at sample position
   `o + v ⊙ s`.
-* **Z = 1 FOVs.** The grid has one plane when every included FOV has Z = 1 and the same
-  `origin_z`. Neither earlier contract requires that: {doc}`stitching-contract` places a
-  Z = 1 grid as a plane but fixes only relative positions, and the one-layer check of
-  {doc}`assembly-contract` ("Checks the entry applies", 8) compares `nominal_z`, not
-  `origin_z`. When Z = 1 FOVs have different `origin_z`, the shape formula gives `n0_z > 1`
-  (unit spacing and Z origins 0 and 1.4 give `n0_z = 3`), each FOV covers the planes its
-  one-plane footprint contains, and the other planes are uncovered there. `fuse` does not
-  refuse this; the record lists `n0_z` and the per-FOV `origin_z`, and the projection
-  collapses the planes as for any stack.
 
-Excluded FOVs (`placeholder`, `missing`, `failed`) do not extend the grid; the area only
-they would cover is uncovered.
+`fuse` passes the output level's grid ("The scale factor") explicitly as
+`output_stack_properties`, so the file's geometry is the recorded grid by construction;
+W-354 found the library's recorded origin, spacing and shape equal to these formulas in
+every case but one, the one-plane 3D input below.
+
+**One-plane FOVs.** A one-plane 3D input gets a Z spacing of 1.0 in the library instead of
+its own, because the library derives spacing from coordinates (W-354 `tables/reduced.csv`,
+case `z1_3d`: `z_spacing_lib` 1.0 against 0.5). When every included FOV has Z = 1, `fuse`
+therefore passes them as 2D images (dims `["y", "x"]`) and keeps Z in its own record: the
+grid has one plane, `n0_z = 1`, and its Z extent is the slab
+`[z_lo, z_hi) = [min_f origin_f,z − s_z/2, max_f origin_f,z + s_z/2)`. The stack and the
+projection then both have the slab geometry in Z: spacing `S_z = z_hi − z_lo` and origin
+`O_z = (z_lo + z_hi)/2`, which are `s_z` and `o_z` when every `origin_z` is equal. FOVs
+whose `origin_z` differ are fused into that one plane and the record lists each FOV's
+`origin_z`. A placement whose
+included FOVs mix one-plane and multi-plane grids is refused (`ValueError`), because the
+library fuses one dimensionality at a time.
+
+Excluded FOVs (`placeholder`, `missing`, `failed`) are not passed to the library and do
+not extend the grid; the area only they would cover is uncovered.
 
 **No included FOV.** When no FOV is included (every FOV excluded, or a placement whose
-placed FOVs are all placeholders), there is no grid: `fuse` writes no image file and writes
-`fused.json` with `outputs: []` and `reason: "no_included_fov"`; `check_fused` accepts that
-record only when the placement indeed has no included FOV. One included FOV gives a grid
-equal to that FOV's grid (`o` its origin, `n0` its shape), with no overlap and no
-uncovered voxel.
-
-### The value of a voxel
-
-For an output voxel with centre `c` (sample frame, µm) at level 0:
-
-1. **Candidates**: the included FOVs whose footprint contains `c`. The footprint is the
-   assembly footprint `[origin − s/2, origin + (n − ½)·s)` per axis
-   ({doc}`assembly-algorithms`, "Footprints and centres"), in Y and X for the projection
-   and in Z, Y and X for the stack.
-2. **Overlap rule**: one candidate is chosen ("Overlap rule"; recommended V1: the
-   ownership rule).
-3. **Sampling**: the chosen FOV's voxel that contains `c`: index `floor(p + ½)` per axis,
-   with `p = (c − origin_f) ⊘ s` the inverse rule of {doc}`stitching-contract`. This is the
-   §2.9 sampling rule ({doc}`assignment-contract`, "Coordinate sampling"); no
-   interpolation.
-4. **No candidate**: the voxel is **uncovered** and holds 0. Uncovered voxels are counted
-   in the record and excluded from the block means of "The scale factor".
-
-Level 0 of the stack therefore holds input values only: **the dtype is preserved** and no
-new value is created. The projection holds per-FOV projections. Every fused image, at
-level 0 and at every scale factor and resolution level, has the output dtype of its row of
-"Dtypes written"; the scale factor reduces level 0 by block means converted into that
-dtype ("The scale factor").
+placed FOVs are all placeholders), there is no grid: `fuse` writes no image file and
+records the part as `empty` with `outputs: []` and `reason: "no_included_fov"`. Such a
+placement has no owning FOV either, so through `Dataset.export` with the assemble part on
+it is refused by `assemble` before anything is written ({doc}`assembly-algorithms`,
+"Ownership"); the `empty` record arises when `fuse` is called alone.
+**One included FOV** gives a grid equal to that FOV's grid (`o` its origin, `n0` its
+shape); its voxel centres are the grid's, so at scale 1 the fused image equals the source
+image.
 
 ### Dtypes written
 
-For every allowed input dtype `d` (check 5 of "The fuse and export entry"), every
-configuration writes one definite dtype, the same in OME-TIFF and OME-Zarr. This table is
-the one place that defines it: the third column is the **output dtype** `e` of a file, at
-level 0 and at every scale factor and resolution level. The resampling rule of "The scale
-factor", the OME-TIFF pixel type ("OME-TIFF layout"), the OME-Zarr array dtype ("OME-Zarr
-layout"), the SpatialData image and labels elements, the `dtype` of `fused.json` and the
-read-back checks all take `e` from this table.
-
-| Output | Input dtype | Dtype written `e` (OME-TIFF and OME-Zarr) | Rule |
+| Output | Input dtype | Dtype written | Rule |
 | --- | --- | --- | --- |
-| Stack, any scale factor and level | any allowed `d` | `d` | Level 0 holds input values; block means are accumulated in float64 and rounded half to even into `d` for integer `d` (a mean lies between the block's extremes, so it never overflows `d`), kept as `d` for float `d` (a mean of finite float32 values is finite in float32). |
-| Projection, `projection: max` | any allowed `d` | `d` | `project_image` keeps the dtype for `max`; then as the stack. |
-| Projection, `projection: sum` | uint8, uint16, uint32, int8, int16, int32 | float64 | `project_image` sums integers into uint64 or int64 (`src/python/starfinder/preprocessing/projection.py` line 60), which OME-TIFF cannot store. The sum is computed with `ProjectionConfig(method="sum", output_dtype="float64")`, a checked cast (`src/python/starfinder/io/conversion.py`, `_cast`, lines 23 to 39). It is exact while the number of planes times the dtype's largest magnitude is at most 2^53 (for 32-bit inputs, up to 2^21 = 2,097,152 planes); `fuse` checks that bound before computing and raises `ValueError` naming it otherwise. Block means of the float64 projection stay float64. |
-| Projection, `projection: sum` | float32, float64 | float64 | `project_image` sums floats in float64 and raises `ValueError("sum projection overflow")` on a non-finite result (lines 62 to 63). |
-| P3 (one plane) and P4 (maximum of the stack), options not offered as keys | any allowed `d` | `d` | Input values, as the stack. |
-| Label export, any place, any scale factor and level | uint32 labels | uint32 | Block mode, no arithmetic; more than 2³² − 1 cell rows is an error ("SpatialData export"). |
+| Stack and `max` projection, any scale factor and level | uint8, uint16, float32 | the input dtype | The library casts its float32 result back to the input dtype by truncation (W-354 `tables/overlap_dtype.csv`; `worker-notes.md` section 1). The reduced level of each FOV is the library's block mean truncated to the dtype (`msi_utils._mean_dtype`; `worker-notes.md` section 4). |
+| Projection, `projection: sum` | uint8, uint16, float32 | float32 | Each FOV's sum is computed by `project_image` with `ProjectionConfig(method="sum", output_dtype="float32")` (`src/python/starfinder/preprocessing/projection.py`, the checked cast of `src/python/starfinder/io/conversion.py`), then fused as float32, which the library keeps (W-354 `tables/overlap_dtype.csv`, float32 rows). For integer inputs `fuse` first checks that the number of planes times the dtype's largest value is at most 2^24, so every sum is exact in float32, and raises `ValueError` naming the bound otherwise (uint8: up to 65,793 planes; uint16: up to 256). |
+| Label export, any place and level | uint32 instance IDs | uint32 | No arithmetic on labels; IDs pass through float32 exactly because they are at most 2^24 ("Assembled label export"). |
 
-OME-TIFF accepts every dtype of the third column (`tifffile.py` lines 14946 to 14963:
-`uint8`, `uint16`, `uint32`, `int8`, `int16`, `int32`, `float32` as `float`, `float64` as
-`double`). Zarr stores any numpy dtype; the rule above keeps the two formats equal. The
-dtype is recorded per file in `fused.json`, and OME-TIFF and OME-Zarr check 2 compare it.
+OME-TIFF stores each of these dtypes (uint8, uint16, float32 as `float`, uint32); the
+library's OME-Zarr writer keeps the dtype (W-354 `tables/overlap_dtype.csv`,
+`ome_zarr_dtype`). The dtype is recorded per file in `export.json`.
 
-Converting the sum to float64 or refusing `projection: sum` with OME-TIFF is a design
-choice; this page recommends the conversion (worker notes, choice 11).
+### Memory
 
-### Overlap rule
+W-354 measured these peaks with every tile loaded into memory first (`tables/runs.csv`,
+`worker-notes.md` section 8; four threads):
 
-| Option | Rule | Cost | Consequence |
-| --- | --- | --- | --- |
-| **V1. Ownership (recommended)** | The candidate that owns `c` by the assembly's ownership rule (O1 nearest footprint centre in Y and X, T1 table order on exact ties), restricted to the candidates. For the projection the candidates are decided in Y and X, so where the owner has a source image the chosen FOV is exactly `ownership_map(placement, grids, config).owner(c)`; where the owner has none (a `placeholder`), the nearest-centre candidate is chosen. For the stack a candidate must also cover `c` in Z; where the Y and X owner covers `c` in Z it is chosen, otherwise the nearest-centre candidate that does. | One `ownership_map` evaluation per output chunk (a nearest-centre test against the few FOVs that overlap the chunk); no weights. | The image at a point comes from the FOV whose molecules and cells assembly retains there, so image and tables agree. Values are input values; seams are visible where neighbouring FOVs differ in brightness. The same rule places labels without blending. |
-| V2. Linear blending | Weighted mean of all candidates, weight falling linearly to 0 at each footprint edge (Fiji Grid/Collection "Linear Blending", today's fused files; multiview-stitcher's default weighted average) | One weight per candidate per voxel and a float accumulator per chunk; W-324's region probe with multiview-stitcher's weighted average and linear interpolation: 19.9 s wall, 70 s CPU for 413 million voxels written as TIFF | Smooth seams; the overlap shows a mix of two FOVs, possibly misaligned by the placement error (W-324: up to about 10 px between backends on LN); values not present in any input; cannot place labels (W-324 `fusion_probe.json`: weighted fusion created label IDs 7 to 10 from inputs 1 to 6 and 11 to 16). |
-| V3. Maximum | The largest candidate value | One comparison per candidate | No seams for sparse amplicon signal; doubles a molecule seen twice at slightly different places; biased bright in overlaps. |
-| V4. First in table order | The candidate first in the tile position table order | None beyond the candidate test | Deterministic, but the overlap shows the FOV whose molecules assembly may have excluded there. |
+* the default output of a whole sample: 0.60 to 1.42 GiB;
+* the LN 3D stack at scale 0.5: 12.35 GiB, the 7.2 GB of loaded tiles plus their reduced
+  copies.
 
-**Recommendation: V1.** It is the only rule under which the fused image, the sample tables
-and an assembled label image say the same thing about a point, it keeps input values and
-dtype exactly, and it reuses the assembly's rule instead of adding one. The seams it shows
-are the honest state of the data; a blended display is a viewer matter and is deferred.
+This page does not promise bounded memory for a whole-sample stack. `fuse` reads each
+source image as a lazy dask array from its file; that this keeps the peak of a stack well
+below the loaded tiles is assumption A1. The projection route holds one FOV volume at a
+time while it projects, then the 2D projections. The OME-TIFF writer computes the lazy
+fused array band by band (a row of 512-pixel tiles at a time) and writes the tiles of
+that band (A8). The record states the measured peak RSS of every part.
 
-### Bounded memory
+### The fusion section of `export.json`
 
-No whole-sample array is held in memory, at any size:
-
-* The output is computed in **bands** of whole output tiles: `512·k_y` rows of level 0
-  (one row of 512-pixel tiles at the output level), full width, one plane at a time for
-  the stack. For each band, only the FOVs whose footprint meets the band are read.
-* **Projection**: each FOV's projection is computed once from its own volume ("The 2D
-  projection") and kept (one Y × X plane per FOV); at most one FOV volume is in memory at
-  a time.
-* **Stack**: for each output plane, at most one plane of each overlapping FOV is in
-  memory, read from its file page by page.
-* **Resolution levels** of an OME-TIFF are accumulated from the output-level bands as
-  they are computed (together at most a third of the output level's bytes) into a
-  temporary file on local scratch, not in memory, and written from it after the output
-  level: tifffile writes each SubIFD level as one series after the whole main series
-  (`tifffile.py` lines 1980 to 1989 of the locked 2026.1.28). OME-Zarr levels are computed
-  region by region from the written output level.
-* **Inside the SpatialData store** spatialdata computes every level in one `dask`
-  computation (`spatialdata/_io/io_raster.py` lines 349 to 350 of 0.6.1). Whether that
-  computation stays within the bound with levels given as one lazy graph is not
-  established here; it is an assumption for the implementation issue to measure (record
-  the peak RSS), with a temporary output-level array on local scratch as the fallback.
-
-The peak is about the FOV projections plus one FOV volume plus one band for the
-projection, and one plane per overlapping FOV plus one band for the stack ("Resources"
-gives the figures per sample). The record states the band size and the measured peak
-RSS.
-
-### Run record
-
-`fused/<sample>/fused.json`, written last and atomically:
-
-* `format_version` 1, `stage` `fusion`, `sample`, `frame_id`;
+* `status`, and for `not_run`, `empty` and `failed` the reason;
 * the placement: method, gauge, review state and approval, the SHA-256 of `fovs.csv` and
-  `links.csv` as `placement.json` records them; the assembly record's SHA-256 and the
-  ownership settings used (or `defaults`);
+  `links.csv` as `placement.json` records them; the SHA-256 of the `assembly` section when
+  an assembly was given;
 * per FOV: `fov_id`, placement status, included or the reason it is not, origin, grid
   (shape, metadata, SHA-256), and per source image its path and SHA-256;
-* the config (`FusionConfig` fields), the fusion grid (`n0`, `s`, `o`), and per output
-  file: path, SHA-256, format, image name, dimensionality, projection rule, factors `k`,
-  shape, dtype, the level's spacing and origin, the projected z slab for a projection, the
-  resolution levels with their shapes, spacings and origins, tile or chunk shape and
-  compression;
-* counts: voxels at level 0, uncovered voxels, voxels per chosen FOV;
-* `reason: "no_included_fov"` with `outputs: []` when no FOV is included ("The fusion
-  grid");
-* `software` as in `run.json` ({doc}`checkpoints`), the band size, wall and CPU time and
-  peak RSS.
+* the library: `multiview-stitcher` version, `fusion_func` (`weighted_average_fusion`),
+  `interpolation_order` (1), `blending_widths`, the reduction route (`level1` or `none`),
+  and whether the FOVs were passed as 2D;
+* the config (`FusionConfig` fields), the fusion grid (`n0`, `s`, `o`, and the Z slab for
+  one-plane FOVs), and per output file: path, SHA-256, format, image name,
+  dimensionality, projection rule, factor `k`, shape, dtype, the output level's spacing
+  and origin, the projection's Z slab, the resolution levels with their shapes, spacings
+  and origins, tile or chunk shape and compression;
+* `software` as in `run.json` ({doc}`checkpoints`), wall and CPU time and peak RSS.
 
 ```json
 {
-  "format_version": 1, "stage": "fusion", "sample": "sample1", "frame_id": "sample:sample1",
-  "placement": {"method": "bigstitcher", "gauge": "G1", "review": "not_needed",
-                "fovs_sha256": "...", "links_sha256": "..."},
-  "ownership": {"source": "assembly", "assembly_sha256": "...", "ownership": "nearest_center", "tie": "table_order"},
-  "grid": {"shape_zyx": [68, 12333, 10883], "spacing_zyx": [0.346255, 0.194398, 0.194398],
-           "origin_zyx": [-2.6205, -8.6413, 1.0461]},
-  "outputs": [{"path": "reference_stain_projection.ome.tif", "sha256": "...", "format": "ome_tiff",
-               "image": "reference_stain", "dimensionality": "projection", "projection": "max",
-               "factors_zyx": [1, 2, 2], "shape_zyx": [1, 6167, 5442], "dtype": "uint8",
-               "spacing_zyx": [23.5453, 0.388796, 0.388796], "origin_zyx": [8.9790, -8.5441, 1.1433],
-               "levels": [], "tile_yx": [512, 512], "compression": "zlib"}],
-  "counts": {"level0_voxels": 0, "uncovered": 0, "per_fov": {}},
-  "software": {"starfinder": "...", "git_commit": "...", "packages": {}}
+  "format_version": 1, "stage": "export", "sample": "sample1", "frame_id": "sample:sample1",
+  "complete": true,
+  "parts": {"assemble": "written", "fuse": "written", "fuse_labels": "off", "export_spatialdata": "off"},
+  "assembly": {"status": "written", "...": "the record of the assembly contract"},
+  "fusion": {
+    "status": "written", "assembly_sha256": "...",
+    "placement": {"method": "multiview_stitcher", "gauge": "G1", "review": "not_needed",
+                  "fovs_sha256": "...", "links_sha256": "..."},
+    "library": {"multiview_stitcher": "0.1.62", "fusion_func": "weighted_average_fusion",
+                "interpolation_order": 1, "blending_widths_um": {"z": 3, "y": 10, "x": 10},
+                "route": "level1", "inputs_2d": false},
+    "grid": {"shape_zyx": [67, 12332, 10882], "spacing_zyx": [0.346255, 0.194398, 0.194398],
+             "origin_zyx": [0.0, -8.641221, 1.046148]},
+    "outputs": [{"path": "reference_stain_projection.ome.tif", "sha256": "...", "format": "ome_tiff",
+                 "image": "reference_stain", "dimensionality": "projection", "projection": "max",
+                 "factor_yx": 2, "shape_zyx": [1, 6166, 5441], "dtype": "uint8",
+                 "spacing_zyx": [23.199085, 0.388796, 0.388796],
+                 "origin_zyx": [11.426415, -8.544022, 1.143347],
+                 "levels": [], "tile_yx": [512, 512], "compression": "zlib"}],
+    "software": {"starfinder": "...", "git_commit": "...", "packages": {}},
+    "peak_rss_kib": 0, "wall_s": 0, "cpu_s": 0},
+  "labels": {"status": "off"},
+  "spatialdata": {"status": "off"}
 }
 ```
 
-The numbers are an illustration of the layout, not results.
+The Y and X numbers are those of W-354's LN projection from the multiview-stitcher
+placement (`tables/ln_two_placements_grids.csv`); the Z numbers illustrate the layout and
+are not results.
 
 ## The 2D projection
 
 The default fused image. Its Y and X grid is the stack's at the same scale factor; its
 one plane represents the whole Z extent.
 
-**Computation, without building the 3D volume.** For each included FOV, its source image
-is projected once along Z with `project_image` and `ProjectionConfig(method=…, axis="z")`
-(`src/python/starfinder/preprocessing/projection.py`, unchanged), for `sum` with
-`output_dtype="float64"`, so each FOV's projection already has the output dtype of "Dtypes
-written". The projections are then
-fused in Y and X by "The value of a voxel" with the candidates decided in Y and X. A FOV's
-projection uses all its own planes; no Z resampling happens.
+**Route: projection first.** For each included FOV, its source image is projected along Z
+with `project_image` and `ProjectionConfig(method=…, axis="z")`
+(`src/python/starfinder/preprocessing/projection.py`, unchanged; for `sum` with
+`output_dtype="float32"`), and the per-FOV projections are fused in 2D by the library,
+with the FOVs' Y and X spacing and origins. A FOV's projection uses all its own planes; no
+Z resampling happens. This is W-354's projection route, which cost 23 to 72 s and at most
+1.42 GiB per whole sample, against 242 s and 12.35 GiB for the LN stack (W-354
+`tables/runs.csv`).
 
-**Relation to the 3D stack when FOVs have different Z offsets.** The projection at a point
-is the projection of the owning FOV's own column. The stack at the same point takes, plane
-by plane, the owner where it covers the plane and another candidate where it does not, and
-it resamples Z to the fusion grid. Therefore:
+**Relation to the 3D stack.** The projection is not the maximum of the fused stack, and
+no check compares their values. Their Y and X grids are equal at the same scale factor
+(W-354 `tables/projection_fixture.csv` and `tables/projection_ln_region.csv`, column
+`grid_yx_equal`). W-354 measured the differences:
 
-* **Equal Z** (every included FOV has the same `origin_z` and Z size, so every FOV covers
-  every plane of the fusion grid, whose planes coincide with the FOVs'): at scale factor 1,
-  `projection[0, y, x] == stack[:, y, x].max()` for every covered `(y, x)` under the
-  maximum rule, exactly. At other scale factors both are block means of their level-0
-  images, and the maximum of block means is not the block mean of maxima, so the identity
-  is stated at level 0 only.
-* **Different Z offsets** (W-324: LN z corrections from −7.6 to 10.4 slices,
-  cell-culture-3D from −4.1 to 10.7): the projection can differ from the maximum of the
-  stack where a non-owner FOV covers planes the owner does not, or where the Z resampling
-  of the stack moves a plane by up to half a slice. The projection is then the maximum of
-  the owner's own planes, which is what assembly's ownership means for a column.
+| Input (W-354 table) | Scale | Pixels that differ | Largest difference |
+| --- | --- | --- | --- |
+| Fixture, integer Z offsets, weighted average (`projection_fixture.csv`) | 1 | 2,134 of 57,600, all in overlaps | 94 |
+| Fixture, integer Z offsets, `max_fusion` | 1 | 0 of 57,600 | 0 |
+| Fixture, fractional Z offsets, weighted average | 1 | 41,563 of 57,600 | 94 |
+| Fixture, any configuration | 0.5 | 13,297 to 14,129 of 14,400 | 18 to 75 |
+| LN tiles 30, 31, 39, 40, weighted average (`projection_ln_region.csv`) | 1 | 5,984,543 of 8,105,360 (74 %) | 69 |
+| LN tiles 30, 31, 39, 40, weighted average | 0.5 | 1,895,657 of 2,026,340 | 50 |
+
+They agree only with integer Z offsets, `max_fusion` and scale 1. Linear interpolation in
+Z averages neighbouring planes at fractional Z offsets, the Z blending ramp weights
+planes differently in 3D, and the maximum of block means is not the block mean of maxima
+(W-354 `worker-notes.md` section 5).
 
 **Geometry.** The projection's one plane is the slab `[z_lo, z_hi)`, the Z extent of the
-fusion grid: `z_lo = o_z − s_z/2`, `z_hi = o_z + (n0_z − ½)·s_z`. Its metadata has the
-fusion grid's Y and X at the output level, and in Z spacing `S_z = z_hi − z_lo = n0_z·s_z`
-and origin `O_z = (z_lo + z_hi)/2 = o_z + s_z·(n0_z − 1)/2`: the stack's formula of "The
-scale factor" with `k_z = n0_z`, one block over the whole Z extent. `world_to_index` then
-maps every z of the slab to index 0 (by the `floor(j + ½)` rule) and every Y and X like
-the stack's. Example: `n0_z = 4`, `s_z = 1`, `o_z = 0` give the slab `[−0.5, 3.5)`,
-`S_z = 4` and `O_z = 1.5`. This differs on purpose from
+stack's fusion grid: `z_lo = o_z − s_z/2`, `z_hi = o_z + (n0_z − ½)·s_z`, with `o_z` and
+`n0_z` computed by `fused_grid` with the library's rule of "The fusion grid" (the 2D
+fusion itself records no Z). Its metadata has the fusion grid's Y and X at the output
+level, and in Z spacing `S_z = n0_z·s_z` and origin `O_z = o_z + s_z·(n0_z − 1)/2`, one
+block over the whole Z extent, so `world_to_index` maps every z of the slab to index 0.
+For one-plane FOVs the slab is the one of "The fusion grid". This differs on purpose from
 `ImageMetadata.projected`, which leaves the physical fields of a per-FOV projection
-unknown; the per-FOV rule is not changed (worker notes, choice 5).
+unknown; the per-FOV rule is not changed.
 
 | Option | Projection rule | Cost | Consequence |
 | --- | --- | --- | --- |
-| **P1. Maximum (recommended)** | `max` over Z | Keeps the dtype; one pass over each FOV | Today's practice (`MAX_*.tif`); spots and nuclei at any depth stay visible; noise floor rises with the number of planes. |
-| P2. Sum | `sum` over Z (`ProjectionConfig` `sum`), written as float64 ("Dtypes written") | 8 bytes per pixel, 8 times the uint8 default | Proportional to total signal; not the input dtype, so "dtype preserved" no longer holds. |
-| P3. One plane | The owner's plane nearest to a given sample z | Reads one plane per FOV | Cheapest; loses everything out of that plane. |
-| P4. Project the stack | `max` over Z of the 3D stack, computed band by band | The cost of the 3D stack ("Resources": LN 8.5 GiB of level 0 fused) | Equals the maximum of the stack by construction, also with different Z offsets. |
+| **P1. Maximum, projection first (recommended)** | `max` over Z of each FOV, fused in 2D | One read of each FOV, a 2D fusion (W-354: 23 to 72 s, at most 1.42 GiB) | Today's practice (`MAX_*.tif`); spots and nuclei at any depth stay visible; differs from the maximum of the stack as measured above. |
+| P2. Sum | `sum` over Z of each FOV, written as float32 ("Dtypes written") | 4 bytes per pixel | Proportional to total signal; not the input dtype. |
+| P3. One plane | Each FOV's plane nearest to a given sample z, fused in 2D | Reads one plane per FOV | Cheapest; loses everything out of that plane. Not offered as a key. |
+| P4. Project the stack | `max` over Z of the fused 3D stack | The stack's cost (LN at scale 0.5: 242 s, 12.35 GiB) | Equals the maximum of the stack by construction. Not offered as a key. |
 
-**Recommendation: P1, computed projection-first.** It is today's practice, keeps the
-dtype, and needs one read of each FOV and no 3D fusion; P4 is the option if exact equality
-with the stack matters more than the cost.
+**Recommendation: P1.** It is the decided default, needs no 3D fusion, and the
+difference from the stack is stated rather than hidden ("Choices kept open", 4).
 
 ## The scale factor
 
-**Meaning per axis.** `scale_yx = 1/k_yx` with `k_yx` a whole number ≥ 1, applied to Y and
-X alike; for the stack `scale_z = 1/k_z` (default 1, Z kept as acquired, as today's
-`*_05` stacks keep it). The projection has no Z factor. A value whose reciprocal is not a
-whole number within 1e-9 is refused by `FusionConfig`.
+**Meaning.** `scale_yx = 1/k` with `k` a whole number ≥ 1, applied to Y and X alike; Z is
+kept as acquired, as today's `*_05` stacks keep it. The default is 0.5. A value whose
+reciprocal is not a whole number within 1e-9 is refused by `FusionConfig`.
 
-**Resampling rule.** The output level is level 0 reduced by **block means** over
-`k_z × k_y × k_x` blocks, accumulated in float64 over the covered voxels of the block only
-(a block without a covered voxel is 0, uncovered), and converted into the file's output
-dtype `e` of "Dtypes written": rounded half to even for an integer `e` (the stack, a
-`max` projection, P3 and P4 of an integer input), cast to `e` for a float `e` (float32
-by rounding to nearest, float64 unchanged; a `sum` projection is always float64). Level 0
-already has the dtype `e`, so no level of a file has another dtype. The level-0 grid is
-padded at its far end with uncovered voxels to a whole number of blocks. This is the
-reduction geometry of the reference-branch `raster.py` ({doc}`sample-output-baseline`), rewritten per chunk.
+**How it is requested from the library: the `level1` route** (W-354 `worker-notes.md`
+section 4, `tables/reduced.csv`, rows `level1`). For `k > 1`, each FOV image (or its
+projection) becomes the library's two-level multiscale image
+`msi_utils.get_msim_from_sim(sim, scale_factors=[{"y": k, "x": k}])`, and its level 1,
+`msi_utils.get_sim_from_msim(msim, scale="scale1")`, is the input of `fuse`. That level is
+the block mean of `k × k` voxels on the FOV's own grid, truncated to the dtype. The output
+grid is passed as `output_stack_properties`:
 
-**Achieved spacing and origin**, recorded in the file and in the run record, per file
-and per axis `a`, with `s`, `o`, `n0` the fusion grid's:
-
-| File | Axis | Spacing `S_a` | Origin `O_a` | Size `N_a` before padding |
+| File | Axis | Spacing `S_a` | Origin `O_a` | Size `N_a` |
 | --- | --- | --- | --- | --- |
-| Stack | Z, Y, X | `k_a·s_a` | `o_a + s_a·(k_a − 1)/2` | `ceil(n0_a / k_a)` |
-| Projection | Y, X | `k_a·s_a` | `o_a + s_a·(k_a − 1)/2` | `ceil(n0_a / k_a)` |
+| Stack | Y, X | `k·s_a` | `o_a + s_a·(k − 1)/2` | `ceil(n0_a / k)` |
+| Stack | Z | `s_z` | `o_z` | `n0_z` |
+| Projection | Y, X | `k·s_a` | `o_a + s_a·(k − 1)/2` | `ceil(n0_a / k)` |
 | Projection | Z | `n0_z·s_z` (the slab) | `o_z + s_z·(n0_z − 1)/2` | 1 |
 
-The projection's Z row is the stack's formula with `k_z = n0_z`. So the centre of output
-voxel `w` is the centre of its block (for the projection's Z, of the slab), and sample
-coordinates map onto the image by the same metadata rule in every file.
+For one-plane FOVs the Z rows of both files are the slab of "The fusion grid". The centre
+of output voxel `w` is the centre of its `k × k` block of the fusion grid. On
+LN sample1 at `k = 2` this gives 6,166 × 5,441 at 0.388796 µm with origin (−8.544022,
+1.143347) µm (W-354 `tables/ln_two_placements_grids.csv`). In W-354's fixtures the
+library's recorded geometry equals this table (`geometry_matches_formula` and
+`geometry_matches_page` true), a checkerboard of 0 and 200 became 100 in both tiles
+(`a_only_values`, `b_only_values`), and every single bright voxel stayed visible: 9 of 9
+at 0.5 and at 0.25, with its maximum within 0.29 µm (`k = 2`) and 0.585 µm (`k = 4`) of the
+true position, which is consistent with `((k − 1)/(2k) + ½)·S` per axis
+(`tables/position_summary.csv`, route `level1`).
 
-**Resolution levels inside a file.** A file with `L` further resolution levels (OME-TIFF
-`pyramid_levels`, OME-Zarr automatic) has its output level padded at the far end of Y and
-X with uncovered voxels (value 0) to a multiple of `2^L`, so every level is exactly half
-the one before. spatialdata infers a level's scale from the ratio of shapes
-(`spatialdata/transformations/_utils.py` lines 104 to 109 of 0.6.1), which is then exactly
-`2^ℓ`; an OME-TIFF SubIFD level carries no geometry of its own besides its shape (how
-viewers derive it is part of the deferred viewer qualification). The padded size is recorded beside `N_a`. Level `ℓ` holds the mean of
-each `2^ℓ × 2^ℓ` block of the output level in Y and X (Z kept), over all its voxels,
-uncovered and padding voxels counting as 0, converted into the file's output dtype `e` as
-in the resampling rule (rounded half to even for an integer `e`); it can be
-recomputed from the file alone. Its geometry is `S_a^(ℓ) = 2^ℓ·S_a` and
-`O_a^(ℓ) = O_a + S_a·(2^ℓ − 1)/2` in Y and X. With `L = 0` (the default OME-TIFF) nothing
-is padded.
+This is not the block mean of a fused level 0: the mean is taken per FOV on its own grid,
+truncated, and then resampled onto the output grid by the interpolation order, which
+matters for FOVs at fractional positions. At `k = 1` the FOV images are the inputs and the
+output grid is the fusion grid.
 
-| Option | Default scale factor | Cost (default output, LN / culture / tissue-2D, uint8) | Consequence |
+| Option | Route | Cost | Consequence |
 | --- | --- | --- | --- |
-| S1. 1 (acquired spacing) | `scale_yx: 1` | 0.125 / 0.122 / 0.414 GiB | Full detail; the size of today's full fused projections (tissue-2D `PI.tif` 444,335,200 bytes). |
-| **S2. 0.5 (recommended)** | `scale_yx: 0.5` | 0.031 / 0.030 / 0.104 GiB | Today's `*_05` practice; 0.39 µm pixels for LN and culture, 0.19 µm for tissue-2D, well below a nucleus diameter. |
-| S3. 0.25 | `scale_yx: 0.25` | 0.008 / 0.008 / 0.026 GiB | An overview at 0.78 µm (LN, culture) or 0.38 µm (tissue-2D) pixels. |
+| **R1. `level1` (recommended)** | The library's block mean per FOV, then fused onto the output grid above | One reduced copy per FOV; LN default output 72 s, 0.78 GiB (W-354 `tables/runs.csv`) | Keeps every bright voxel (9 of 9); geometry nested in the fusion grid; values are means of per-FOV blocks, resampled. |
+| R2. Fuse at scale 1, then a block mean in Starfinder | `fuse` at the fusion grid, then the mean of each `k × k` block of the fused image | The fusion of every level-0 voxel (not measured on whole samples) | The earlier page's exact semantics; a resampling step of Starfinder's own, not a fusion. |
+| R3. `output_spacing` alone (sampling) | `fuse(..., output_spacing=k·s)` | Cheapest | Samples instead of averaging: at 0.5 only 3 (order 0) or 7 (order 1) of 9 single bright voxels remain; origin `o`, not nested (W-354 `tables/position_summary.csv`, `tables/reduced.csv`, rows `spacing`). The route of the label export ("Assembled label export"). |
+| R4. Multiscale inputs | `fuse` of two-level images with `output_spacing` | As R1 | The library chooses the level per FOV from spacings derived from coordinates, and float error sends some FOVs to level 0 (LN: 8 of 64 FOVs at level 1); averaged and sampled FOVs mix (W-354 `worker-notes.md` section 4). Not offered. |
 
-**Recommendation: S2.** Existing files use it, the default output stays small for every
-sample, and the acquired size remains one key away.
+**Recommendation: R1** ("Choices kept open", 1).
 
-| Option | Resampling | Cost | Consequence |
+| Option | Default scale factor | Default output, measured (W-354 `tables/runs.csv`) | Consequence |
 | --- | --- | --- | --- |
-| **R1. Block mean, `1/k` only (recommended)** | as above | One pass, exact geometry | No interpolation choice; the output grid nests in the fusion grid. |
-| R2. Any factor, area-weighted | each output voxel averages the level-0 area it covers, with fractional weights | Weights per output voxel | Arbitrary scale factors; voxel centres no longer nest, and the result depends on an interpolation rule. |
-| R3. Subsampling | every `k`-th voxel | Cheapest | Aliasing; small spots disappear or not depending on their position. |
+| S1. 1 | `scale_yx: 1` | not measured on whole samples | Full detail; four times the bytes of S2. |
+| **S2. 0.5 (decided)** | `scale_yx: 0.5` | LN 6,166 × 5,441, tissue-2D 11,291 × 9,845, cell-culture-3D 6,818 × 4,788, uint8 | Today's `*_05` practice; 0.39 µm pixels for LN and culture, 0.19 µm for tissue-2D. |
+| S3. 0.25 | `scale_yx: 0.25` | not measured on whole samples | An overview; the label export's default. |
+
+### Resolution levels inside a file
+
+* **OME-TIFF** (`pyramid_levels: L`, default 0): `L` SubIFD levels, each from the fused
+  output level by the library's own multiscale, `msi_utils.get_msim_from_sim(fused,
+  scale_factors=[{"y": 2, "x": 2}] * L)`, the same block mean truncated to the dtype as
+  the `level1` route. Level `ℓ` has `S^(ℓ) = 2^ℓ·S` and `O^(ℓ) = O + S·(2^ℓ − 1)/2` in Y
+  and X, Z as the output level; its shape is recorded. That these shapes and this
+  geometry hold for odd sizes is assumption A7. Starfinder computes no level of its own.
+* **OME-Zarr** (the library's writer): the writer's own levels, halving each spatial axis,
+  Z included, while the halved size stays above 100, with `S^(ℓ) = 2^ℓ·S` and
+  `O^(ℓ) = O + S·(2^ℓ − 1)/2` (W-354 `worker-notes.md` section 7, `readback/readback.json`:
+  2 levels for a 21 × 240 × 240 fixture, the last 120 × 120 with Z 21 kept; 6 levels for
+  the LN projection, the last 192 × 170).
+* **SpatialData store**: one level by default ("SpatialData export").
 
 ## The 3D stack
 
-On request (`dimensionality: stack` or `both`). The same grid rule in three dimensions:
-the fusion grid with Z, the value rule with candidates decided in Z, Y and X, the scale
-factors `k_z`, `k_y`, `k_x`, the same `S`, `O`, `N`. When every included FOV has Z = 1 and
-the same `origin_z` (`n0_z = 1`), the stack is one plane and its values equal the
-projection's at the same `scale_yx` under `projection: max`. Its Z geometry equals the
-projection's only at `scale_z = 1`: by the table of "The scale factor" a Z factor `k_z > 1`
-gives the one plane `S_z = k_z·s_z` and `O_z = o_z + s_z·(k_z − 1)/2` (a block padded with
-uncovered planes), while the projection has `S_z = s_z` and `O_z = o_z`; both map every z of
-the plane's footprint to index 0. Example: `s_z = 1`, `o_z = 0`, `scale_z = 0.5` give the
-stack `S_z = 2`, `O_z = 0.5` and the projection `S_z = 1`, `O_z = 0`.
+On request (`dimensionality: stack` or `both`). The same conversion with dims
+`["z", "y", "x"]`, the fusion grid in Z, Y and X, and the `level1` route in Y and X only;
+Z keeps the fusion grid's `s_z`, `o_z` and `n0_z`. FOVs at fractional Z offsets are
+interpolated in Z at order 1 (W-354 `worker-notes.md` section 5), and voxels no FOV covers,
+whole planes included, hold 0 (`tables/overlap_dtype.csv`). When every included FOV has
+Z = 1 the stack is the one plane of "The fusion grid", fused from the same 2D inputs as the
+projection, so it equals the projection's values under `projection: max`.
 
-Its cost is the fusion of every level-0 voxel ("Resources"): LN 68 × 12,333 × 10,883 voxels
-(8.5 GiB of uint8 before compression), cell-culture-3D 45 × 13,636 × 9,576 (5.5 GiB). A
-`scale_yx` of 0.5 divides the written size by four but not the fusion work, which reads
-every FOV voxel once.
+Its cost (W-354 `tables/runs.csv`, `ln-mvs-stack-s05-a2`): LN sample1 at scale 0.5, 67 ×
+6,166 × 5,441 uint8, 241.7 s wall, 532.7 s CPU, 12.35 GiB peak RSS, a 2,247,808,158-byte
+TIFF from the library's uncompressed writer. A cell-culture-3D stack was not run (A4).
 
 ## Sample position to image position
 
 This is the condition that ties every fused file to the sample tables.
 
 For a file with recorded spacing `S` and origin `O` (from the file or its record; the
-table of "The scale factor" gives them per axis, the projection's Z included), a sample
-position `q = (q_z, q_y, q_x)` in µm has the continuous index
+table of "The scale factor" gives them per axis), a sample position `q = (q_z, q_y, q_x)`
+in µm has the continuous index
 
 ```
 j = (q − O) ⊘ S
@@ -520,160 +675,210 @@ j = (q − O) ⊘ S
 and lies in voxel `v = floor(j + ½)` per axis (the voxel whose half-open support
 `[O + (v − ½)·S, O + (v + ½)·S)` contains `q`). Below, `j⁰` and `v⁰` are the indices on
 the fusion grid (`S = s`, `O = o`), and `k` is a file's factor per axis (`k_z = n0_z` for
-the projection's Z).
+the projection's Z, `k_z = 1` for the stack's).
 
 A test can evaluate, for a set of sample positions inside the fusion grid's extent (the
 FOV origins, fractional positions inside each FOV, the molecule positions `sample_z/y/x`
-of the sample molecule table, and positions next to voxel boundaries and to ownership
-boundaries):
+of the sample molecule table, and positions next to voxel boundaries):
 
 1. **Recorded geometry, per file and per axis.** The `S` and `O` read back from each file
-   ("Read-back checks") equal those of `fused.json` within 1e-9 µm, and equal the formulas
-   of "The scale factor": for the stack on Z, Y and X and for the projection on Y and X,
-   `S_a = k_a·s_a` and `O_a = o_a + s_a·(k_a − 1)/2`; for the projection on Z,
-   `S_z = n0_z·s_z` and `O_z = o_z + s_z·(n0_z − 1)/2`. For resolution level `ℓ` of a
-   file, `S^(ℓ) = 2^ℓ·S` and `O^(ℓ) = O + S·(2^ℓ − 1)/2` in Y and X, and Z as the output
-   level.
-2. **Projection and stack agree.** At the same `k_yx`, the Y and X components of `j` and
-   `v` are equal in the projection and in the stack. In Z the projection's `v_z` is 0 for
-   every `q_z` in `[z_lo, z_hi)`, the stack's `v_z` is `floor(v⁰_z / k_z)`.
+   equal those of `export.json` and the formulas of "The scale factor": within 1e-9 µm for
+   Starfinder's OME-TIFF, which writes the recorded float64 values; within 1e-6 µm for the
+   library's OME-Zarr, the agreement W-354 found (`readback/readback.csv`,
+   `origin_matches_grid`); for resolution level `ℓ`, `S^(ℓ) = 2^ℓ·S` and
+   `O^(ℓ) = O + S·(2^ℓ − 1)/2` in Y and X.
+2. **Projection and stack agree in Y and X.** At the same `k`, the Y and X components of
+   `j` and `v` are equal in the projection and in the stack (W-354 `grid_yx_equal`). In Z
+   the projection's `v_z` is 0 for every `q_z` in `[z_lo, z_hi)`.
 3. **Any scale factor.** Per axis, `j = (j⁰ − (k − 1)/2) / k` within 1e-9, and
    `v = floor(v⁰ / k)` exactly, also when `k` does not divide `n0` (the last block is
-   partial) and for the projection's Z (`k = n0_z`, so `v_z = 0`). For resolution level `ℓ`
-   the same holds with `k·2^ℓ` in Y and X. The floor identities are evaluated at positions
-   at least 1e-6 voxel from a voxel boundary of the fusion grid, where float64 rounding of
-   `j` cannot move `floor`.
-4. **The value follows the fusion rule.** On a fixture whose source images are zero except
-   one voxel of value `A > 0` at index `p*` of FOV `g`, at sample position
-   `q* = origin_g + p* ⊙ s`, and whose origins are not offset from the grid by exactly half
-   a voxel on any axis:
-   * Because the fusion grid has the FOVs' spacing, exactly one fusion-grid voxel samples
-     FOV `g` at `p*` ("The value of a voxel", step 3): `v* = floor((q* − o) ⊘ s + ½)`, the
-     voxel that contains `q*`, whose centre `c* = o + v* ⊙ s` is within half a voxel of
-     `q*` on each axis.
-   * The stack at the fusion grid holds `A` at `v*` if the overlap rule chooses FOV `g` at
-     `c*` (for V1: `g` owns `c*`, among the candidates covering `c*` in Z, Y and X), and 0
-     at every other voxel; if the rule chooses another FOV at `c*`, the stack is 0
-     everywhere. The choice is made at `c*`, not at `q*`: the two can lie on opposite sides
-     of an ownership boundary. A sufficient condition for `A` to appear is that every point
-     within half a voxel of `q*` on each axis is owned by `g`.
-   * The projection holds `A` at the Y and X of `v*` under the same condition with the
-     candidates decided in Y and X, and 0 elsewhere.
-   * At factor `k`, the voxel `floor(v* / k)` holds `A` divided by the number of covered
-     fusion-grid voxels of its block, converted into the file's output dtype by the
-     resampling rule of "The scale factor" (rounded half to even for an integer dtype, the
-     float64 quotient cast for a float dtype, as for a `sum` projection; the fixture
-     chooses `A` large enough that this is not 0), when `A` appears at `v*`; every other
-     voxel is 0.
-   * A test evaluates this oracle for the configured fixture: it computes the owner of `c*`
-     with the overlap rule and expects `A` or an all-zero image accordingly.
+   partial) and for the projection's Z (`k = n0_z`, so `v_z = 0`); for resolution level `ℓ`
+   the same with `k·2^ℓ` in Y and X. The floor identities are evaluated at positions at
+   least 1e-6 voxel from a voxel boundary of the fusion grid.
+4. **A bright voxel lands where it belongs.** On the fixture of W-354's position
+   measurement (`tables/position_summary.csv`, `worker-notes.md` section 2): 3 × 3 FOVs of
+   16 × 128 × 128 uint16 at spacing (0.346255, 0.194398, 0.194398) µm, origins jittered by
+   up to 3 px in Y and X around a step of 115.2 px and by up to 2 slices in Z (seed 354),
+   and one voxel of 1000 per FOV in the part only that FOV covers. The contract accepts it
+   (one dtype, one spacing, finite origins). With `q*` the bright voxel's sample position:
+   * at scale 1, the fused maximum near `q*` lies on the output voxel nearest `q*`, and the
+     intensity centroid of its 3 × 3 × 3 neighbourhood lies within 0.001 µm of `q*` (W-354:
+     at most 0.0008 µm);
+   * at `k = 2` and `k = 4` (`level1`), each of the nine bright voxels gives a local maximum
+     above 0 and at most `floor(1000 / k²)`, within `((k − 1)/(2k) + ½)·S_a` of `q*` on each
+     axis `a` of Y and X (W-354: 9 of 9 found, at most 0.290 µm at `k = 2` against the bound
+     0.2916 µm, and 0.585 µm at `k = 4` against 0.6804 µm; peaks 78 to 166 and 24 to 48).
 5. **SpatialData.** In the store, the image element's transform to the sample coordinate
    system maps the intrinsic coordinate `w + ½` of voxel `w` (spatialdata's voxel `w`
    covers `[w, w + 1)`, `spatialdata/_core/data_extent.py` line 90 of 0.6.1) to
-   `O + w ⊙ S` on the element's axes (Y and X for a projection; Z, Y and X for a stack),
-   so a point at sample position `q` lands in intrinsic voxel `floor(j + ½)`, the `v` of
-   condition 1. On the fixture of condition 4, the intrinsic voxel of a point at `q*` holds
-   `A` exactly when condition 4 says the file holds `A` there.
-
-Worked counterexample to a rule stated at `q*` instead of `c*`: two FOVs of shape
-`(1, 4, 4)` at X origins 0 and 1.4, unit spacing, Y and Z origins 0, only FOV 2's voxel
-`(0, 1, 1)` bright. `q*_x = 2.4`, owned by FOV 2 (centres at X 1.5 and 2.9). The fusion
-grid has `o_x = 0` and six voxels in X; `v*_x = floor(2.4 + ½) = 2`, `c*_x = 2`, owned by
-FOV 1 (distance 0.5 against 0.9), which samples its own index 2, value 0. The stack is 0
-everywhere, as condition 4 states.
+   `O + w ⊙ S` on the element's axes (Y and X for a projection; Z, Y and X for a stack), so
+   a point at sample position `q` lands in intrinsic voxel `floor(j + ½)`, the `v` of
+   condition 1 (W-354 `readback/spatialdata_read.json`: scale equals the spacing, and the
+   translation plus `S/2` equals the library's origin). On the fixture of condition 4, the
+   intrinsic voxel of a point at `q*` holds the file's value there.
 
 ## File layouts
 
+### What the library writes
+
+From W-354 `worker-notes.md` section 7, `readback/readback.csv` and
+`readback/readback.json`:
+
+* **TIFF**, `multiview_stitcher.io.save_sim_as_tif` (it needs a dask-backed image): classic
+  TIFF, not BigTIFF; an ImageJ hyperstack without OME-XML; uncompressed, contiguous, one
+  strip per plane, not tiled; one resolution level, no SubIFDs; X and Y calibration as
+  `XResolution` / `YResolution` with ImageJ `unit=um`, equal to the fused spacing within
+  1e-10; no Z spacing (also in the 67-plane LN stack) and no origin.
+* **OME-Zarr**, `ngff_utils.write_sim_to_ome_zarr`: NGFF 0.4 on Zarr format 2 by default,
+  NGFF 0.5 on Zarr format 3 with `ngff_version="0.5"`; axes `t, c, (z), y, x`, the space
+  axes with unit `micrometer`; per level `scale` and `translation` (the voxel-centre
+  origin) equal to the fused grid within 1e-6 µm; levels as in "Resolution levels inside
+  a file"; Zstd level 0; chunks equal to the dask chunks of the image passed; `omero`
+  channel metadata; no `coordinateTransformations` on the multiscale itself.
+* **spatialdata 0.6.1 cannot read the library's OME-Zarr as an image element**: NGFF 0.4
+  fails on the missing multiscale `coordinateTransformations`, then on the `t` axis without
+  a unit, and NGFF 0.5 fails with `KeyError: 'multiscales'` (`readback/spatialdata_read.json`).
+
+### The earlier layouts against the library's files
+
+Each requirement of the earlier OME-TIFF and OME-Zarr layouts (this page at `6b622e9`),
+with whether the library's file meets it:
+
+| Requirement of the earlier layout | Library's file | Outcome |
+| --- | --- | --- |
+| OME-TIFF: BigTIFF | classic TIFF | Needs Starfinder's step: the OME-TIFF writer below. |
+| OME-TIFF: OME-XML with SizeZ, SizeC, SizeT and the pixel type | ImageJ description only | Needs the writer. |
+| OME-TIFF: 512 × 512 tiles, zlib | strips, uncompressed | Needs the writer. |
+| OME-TIFF: SubIFD levels on request | one level | Needs the writer; the level values come from the library's multiscale (A7). |
+| OME-TIFF: `PhysicalSizeX/Y` | `XResolution` / `YResolution` with unit um | Needs the writer (the library's values are correct, in another tag). |
+| OME-TIFF: `PhysicalSizeZ`, plane positions (the origin) | absent | Needs the writer. |
+| OME-TIFF: the `ImageMetadata` annotation that `load_volume` restores, and the `starfinder.sample_output` annotation | absent | Needs the writer. |
+| OME-Zarr: NGFF 0.4 on Zarr format 2 | the default | Holds; reconsidered below for Python 3.11 or later. |
+| OME-Zarr: axes `c, (z), y, x` | `t, c, (z), y, x` | Dropped: the `t` axis is accepted. |
+| OME-Zarr: per-level `scale` and voxel-centre `translation` | yes, within 1e-6 µm | Holds. |
+| OME-Zarr: levels halving Y and X until both are at most 1024, padded to exact halves | halving every axis while above 100, unpadded | Dropped: the library's levels are accepted and recorded. |
+| OME-Zarr: Blosc `lz4` | Zstd level 0 | Dropped: Zstd is lossless and accepted. |
+| OME-Zarr: chunks `(1, 1024, 1024)` and `(1, 16, 512, 512)` | the dask chunks passed | Starfinder rechunks the lazy array before the writer (a dask call, not a writer; A12). |
+| OME-Zarr: group attributes `starfinder` with the `ImageMetadata` | absent | Dropped from the file: recorded in `export.json` instead, so no file of the library is edited. |
+| OME-Zarr readable by spatialdata as an image element | no | Dropped: the store is written by spatialdata itself ("SpatialData export"). |
+
 ### OME-TIFF layout
 
-* **Container**: BigTIFF always (LN's stack is 8.5 GiB, above the 4 GiB classic limit),
-  written with `tifffile` (a base dependency).
+**Proposed (T1): Starfinder writes the OME-TIFF with tifffile from the image the library
+fused.** This is a file writer, not a fusion: it writes the array `fuse` returned, value
+for value, and computes no voxel.
+
+* **Container**: BigTIFF always, written with `tifffile` (a base dependency). A file above
+  4 GiB is assumption A3.
 * **Series and axes**: one image per file, one channel; axes `YX` stored with SizeZ 1 for
   the projection and `ZYX` for the stack; the OME-XML declares SizeZ, SizeC 1, SizeT 1 and
-  the pixel type of the file's output dtype `e` ("Dtypes written"), for every resolution
-  level alike: the input dtype's type for the stack and a `max` projection, `double` for a
-  `sum` projection.
-* **Tiling**: 512 × 512 tiles (written band by band, "Bounded memory"); compression `zlib`
-  (deflate, lossless; tifffile encodes and decodes it with its own fallback when
+  the pixel type of the file's dtype ("Dtypes written").
+* **Tiling**: 512 × 512 tiles, written band by band from the lazy fused array (A8);
+  compression `zlib` (lossless; tifffile encodes and decodes it with its own fallback when
   `imagecodecs` is absent, `tifffile.py` lines 15660 to 15667 of 2026.1.28).
-* **Resolution levels**: `pyramid_levels` (default 0) further levels as SubIFDs, with the
-  padding, values and geometry of "Resolution levels inside a file", written as SubIFD
-  series after the main series ("Bounded memory").
+* **Resolution levels**: `pyramid_levels` (default 0) SubIFD levels of "Resolution levels
+  inside a file", written after the main series.
 * **Calibration and frame**: `PhysicalSizeX`, `PhysicalSizeY`, `PhysicalSizeZ` = `S` of the
   output level with unit `µm` (for the projection `PhysicalSizeZ` is the slab thickness
   `n0_z·s_z`); for plane `i` the OME `Plane` positions `PositionZ = O_z + i·S_z`,
-  `PositionY = O_y`, `PositionX = O_x` in µm (the centre of voxel `(i, 0, 0)`; for the
-  projection the slab's middle); and the `ImageMetadata` of the output level as JSON in a `CommentAnnotation` of namespace `starfinder.image.ImageMetadata`,
-  the convention of `save_volume`, so `load_volume` restores the metadata. A second
-  annotation, namespace `starfinder.sample_output`, holds the sample, image name,
-  dimensionality, projection rule and factors, and the SHA-256 of the placement tables.
+  `PositionY = O_y`, `PositionX = O_x` in µm; the `ImageMetadata` of the output level as
+  JSON in a `CommentAnnotation` of namespace `starfinder.image.ImageMetadata`, the
+  convention of `save_volume`, so `load_volume` restores the metadata; a second
+  annotation, namespace `starfinder.sample_output`, with the sample, image name,
+  dimensionality, projection rule, factor and the SHA-256 of the placement tables.
+* **File names**: `<image>_projection.ome.tif`, `<image>_stack.ome.tif`,
+  `cell_labels.ome.tif`.
+
+**Layout checks** (`check_export`, with `tifffile` and `load_volume`), for each OME-TIFF:
+
+1. The file opens as BigTIFF and OME (`is_bigtiff`, `is_ome`), with one series whose axes
+   are `YX` (projection, or a one-plane stack) or `ZYX` (stack) and one channel.
+2. Shape and dtype equal the record's; the OME pixel type is the dtype's; the tile shape is
+   512 × 512 and the compression `zlib`; the number and shapes of SubIFD levels equal the
+   record's.
+3. `PhysicalSizeX`, `PhysicalSizeY` and `PhysicalSizeZ` equal the record's `S` within
+   1e-9 µm with unit `µm`; the `Plane` positions of plane `i` equal
+   `(O_z + i·S_z, O_y, O_x)`; the `ImageMetadata` restored by `load_volume` has that
+   spacing and origin.
+
+**The alternative: the library's own TIFF as the default file** (W-354 choice 5, option
+b). Choosing it at the gate changes this section only:
+
+* `fuse` writes each fused image with `multiview_stitcher.io.save_sim_as_tif` from the
+  dask-backed fused image, as `<image>_projection.tif`, `<image>_stack.tif` and
+  `cell_labels.tif`.
+* The file is what "What the library writes" lists: a classic ImageJ TIFF, uncompressed
+  strips, one level, X and Y calibration only. It lacks BigTIFF (a file above 4 GiB is
+  assumption A3), OME-XML, Z spacing, the origin, tiles, compression, resolution levels
+  and the `ImageMetadata` annotation, so `load_volume` cannot restore the sample frame
+  from it and `pyramid_levels` must be 0.
+* The missing calibration and origin are recorded in `export.json` only: per file the
+  spacing and origin of the output level, the projection's Z slab and the `ImageMetadata`
+  as JSON. A reader takes the frame from there; the file alone places the image nowhere.
+* Layout checks: the file opens as an ImageJ TIFF with the series axes `YX` or `ZYX`;
+  shape and dtype equal the record's; `1/XResolution` and `1/YResolution` equal the
+  record's `S_x` and `S_y` within 1e-10 µm with ImageJ unit `um` (W-354
+  `readback/readback.csv`); the record holds the origin and Z spacing.
 
 | Option | Layout | Cost | Consequence |
 | --- | --- | --- | --- |
-| **T1. BigTIFF, 512² tiles, zlib, SubIFD levels on request (recommended)** | as above | Tiles add an index per plane; zlib costs CPU on write (W-324's TIFF write of 413 MB took 19.9 s with fusion) | Region reads touch only their tiles; `load_volume` reads it; small default files need no pyramid. Reading by Bio-Formats and other viewers belongs to the deferred viewer qualification. |
-| T2. Strips, no compression, no levels | One strip per row band, as `save_volume` writes today | Fastest write | The 8.5 GiB stack is read whole for any region; the file is the raw size. |
-| T3. One multichannel file per sample | All `images` as C of one OME-TIFF | One file | A channel added later rewrites the file; differs from today's one file per channel. |
+| **T1. Starfinder's tifffile writer of the fused array (recommended)** | as above | A writer of BigTIFF, tiles, zlib, OME-XML and SubIFDs on tifffile (A8) | The default file carries its own calibration and origin, region reads touch only their tiles, and `load_volume` reads it. |
+| T2. The library's TIFF | the alternative above | No writer of Starfinder's own | Frame only in `export.json`; no Z spacing, origin or levels; classic TIFF. |
+| T3. One multichannel file per sample | All `images` as C of one OME-TIFF | One file | A channel added later rewrites the file. |
 
-**Recommendation: T1.** It reads by region, keeps the default output small, and stays
-readable by the existing loader.
+**Recommendation: T1** ("Choices kept open", 5): the decision names OME-TIFF as the
+default format, and the library's file has no Z spacing, no origin and no OME-XML.
 
 ### OME-Zarr layout
 
-* **Format**: OME-NGFF 0.4 on Zarr v2, written with ome-zarr's `FormatV04` (version
-  `0.4`, Zarr format 2). ome-zarr 0.12.2 defaults to `FormatV05` (0.5, Zarr v3) and uses
-  `FormatV04` for a Zarr v2 group or when it is passed (`ome_zarr/format.py` lines 232 to
-  250 and 361 to 380, `ome_zarr/writer.py` lines 180 to 197). `multiscales` with axes `c` (type `channel`), `z`
-  (stack only), `y`, `x` (type `space`, unit `micrometer`, the NGFF name of µm), one
-  channel with its image name in `omero` channel metadata.
-* **Chunks**: `(1, 1024, 1024)` for a projection (`c, y, x`), `(1, 16, 512, 512)` for a
-  stack; Blosc `lz4`, level 5, byte shuffle; C order; fill value 0.
-* **Dtype**: the array dtype of every level is the file's output dtype `e` ("Dtypes
-  written"): the input dtype for the stack and a `max` projection, float64 for a `sum`
-  projection.
-* **Resolution levels**: the output level, then levels halving Y and X until both are at
-  most 1024, with the padding, values and geometry of "Resolution levels inside a file",
-  computed region by region from the written output level. Each dataset's
-  `coordinateTransformations` are `scale` `[1, S^(ℓ)]` then `translation` `[0, O^(ℓ)]`,
-  the NGFF voxel-centre convention, with the spacing and origin of that level.
-* **Frame**: group attributes `starfinder` with the output level's `ImageMetadata`, the sample,
-  `frame_id` and the SHA-256 of the placement tables.
-* **Writer**: standalone files through `ome-zarr` and `zarr` of the `spatialdata` extra.
-  Inside the store, spatialdata's own raster writer writes the image with the same
-  dtype, chunks, codec, padding and levels, the levels passed as an explicit multiscale so it
-  computes no second pyramid. Its raster format 0.2 (`RasterFormatV02`, the default
-  raster format of container format 0.1) writes the NGFF 0.4 layout on Zarr v2 with the
-  `multiscales` version string `0.4-dev-spatialdata` (`spatialdata/_io/format.py` lines
-  170 to 179 and 345 to 350 of 0.6.1). The per-level scales there are spatialdata's, from
-  the shape ratios, exact because of the padding, and the placement in the sample frame is
-  the element transform of "SpatialData export". The
-  store's metadata is not edited after writing (the half-voxel problem of W-168,
-  {doc}`sample-output-baseline`); how a reader without spatialdata interprets the store's
-  image is part of the deferred viewer qualification.
+The standalone OME-Zarr (`ome_zarr: true` without the SpatialData export) is written by
+the library's `ngff_utils.write_sim_to_ome_zarr` from the fused image, rechunked to
+`(1, 1, 1024, 1024)` for a projection and `(1, 1, 16, 512, 512)` for a stack (`t, c, z,
+y, x`; A12). Starfinder writes no OME-Zarr of its own. Its axes, units, levels, codec and
+per-level geometry are the library's ("What the library writes"); its dtype is the fused
+image's.
 
-| Option | Layout | Cost | Consequence |
+**Python 3.11 or later.** The earlier choice of NGFF 0.4 on Zarr format 2 rested on Python
+3.10, where the extra resolved zarr 2.18.3. With `requires-python >= 3.11` the locked
+zarr 3.1.5 writes both formats, and W-354 wrote and read back both with the library's
+writer (`readback/readback.csv`, `fixture_*_ngff04` and `fixture_*_ngff05`). The store is
+written by spatialdata 0.6.1, whose default is Zarr format 3 with raster groups of version
+string `0.5-dev-spatialdata`; W-354 wrote and read back stores in that default
+(`readback/spatialdata_write_ln_stack_*.json`).
+
+| Option | Standalone file | Store | Consequence |
 | --- | --- | --- | --- |
-| **Z1. NGFF 0.4 on Zarr v2 (recommended)** | as above | spatialdata 0.6.1 writes NGFF 0.5 on Zarr v3 by default, so the export passes `SpatialDataContainerFormatV01`, whose element defaults are `RasterFormatV02`, `ShapesFormatV02`, `PointsFormatV01` and `TablesFormatV01` (`spatialdata/_io/format.py` lines 281 to 285, 329 to 350 and 421 to 425 of 0.6.1); ome-zarr needs `FormatV04` for the standalone files | On Python 3.11 and later the locked zarr 3.1.5 writes Zarr v2 when asked (`zarr_format` of `create_group`, `zarr/api/synchronous.py` line 572; spatialdata passes it, `spatialdata/_core/spatialdata.py` lines 1171 to 1172). On Python 3.10 the extra resolves zarr 2.18.3 and spatialdata 0.3.0; that zarr 2 writes Zarr v2 by default and Zarr v3 only behind an experimental switch (read in zarr 2.18.7, `zarr/_storage/store.py` lines 24 to 26; 2.18.3 and spatialdata 0.3.0 were not read and are an assumption for the implementation issue). It is the version the W-168 store used and W-324's fusion probe wrote. |
-| Z2. NGFF 0.5 on Zarr v3 | spatialdata 0.6.1's default | No format argument on Python 3.11 and later | Not writable on Python 3.10 with the locked zarr 2.18.3 (same assumption); sharding is available for very large stores; fewer readers. |
-| Z3. NGFF 0.4, no resolution levels | the output level only | About 1/3 less written | Region reads at full detail only. |
+| **Z2. NGFF 0.5 on Zarr format 3 (recommended)** | the library's writer with `ngff_version="0.5"` | spatialdata's default, no format argument | Both the file and the store in the form W-354 wrote and read back; one Zarr format in the folder; NGFF 0.5 has fewer readers today (viewer qualification is deferred). |
+| Z1. NGFF 0.4 on Zarr format 2 | the library's default | `SpatialDataContainerFormatV01` (raster format 0.2, version string `0.4-dev-spatialdata`) | The earlier recommendation and the reference-branch format; the store in this format was not written by W-354 (A10). |
+| Z3. No resolution levels | the output level only | the store's one level | About a third less written; region reads at full detail only. |
 
-**Recommendation: Z1.** It works on every supported Python with the locked versions and
-matches the format of the earlier exporter.
+**Recommendation: Z2** ("Choices kept open", 7).
+
+**Layout checks** (`check_export`, with `zarr`), for each standalone OME-Zarr:
+
+1. The group's Zarr format and NGFF version are the recorded ones (format 3 and 0.5 under
+   Z2); the axes are `t, c, (z), y, x` with unit `micrometer` on the space axes; one
+   dataset per recorded level; each dataset's `scale` and `translation` equal the record's
+   `S^(ℓ)` and `O^(ℓ)` per axis within 1e-6 µm.
+2. Each level's shape, dtype, chunks and codec equal the record's.
+3. When the output level has more than one chunk, a region read inside one chunk touches
+   that chunk only (chunk keys counted).
 
 ## SpatialData export
 
-On request (`spatialdata: true`). It is an export of the sample tables and the fused
-image, **not a second source**: every value comes from `assembly/<sample>/` and
-`fused/<sample>/`, nothing is filtered, reassigned or recounted, and the sample tables
-stay the reference.
+On request (`export_spatialdata: true`). It is an export of the sample tables and the
+fused and label images, **not a second source**: every value comes from `tables/`,
+`sample.h5ad` and the image files of `export/<sample>/`; nothing is filtered, reassigned
+or recounted, and the sample tables stay the reference.
 
 **Inputs**: the `AssemblyResult` (from `load_assembly`, which checks every SHA-256), the
-`FusionRecord` and, with `labels`, the label record.
+`FusionRecord` and the `LabelRecord` of the parts that were written.
 
 **Coordinate system**: one, named after the sample; its axes are the sample frame's, in
 µm. spatialdata does not check coordinate-system names, but the export applies its element
 naming rule to it (letters, digits, `_`, `-` and `.`; `spatialdata/_core/validation.py`
 line 109 of 0.6.1) and refuses other sample names. `frame_id` `sample:<sample>` is recorded
-in `export.json` and in the store's attributes.
+in the `spatialdata` section and in the store's attributes.
 
 **Element names.** spatialdata requires every element name to satisfy that rule and to be
 unique across all element types, tables included, ignoring case: images, labels, points,
@@ -700,8 +905,19 @@ row or its image exists ("Empty populations"):
 | table `cells` | The sample cell table for the same rows, every column as `obs`, no `X` (zero variables); added `obs` columns `region` (categorical, every value `cell_centroids`) and `instance_id` (numpy `uint32`, an instance-key dtype the model accepts, lines 1033 to 1047); parsed with `TableModel.parse(region="cell_centroids", region_key="region", instance_key="instance_id")` | annotates `cell_centroids` |
 | table `expression` | `sample.h5ad` with every part kept: `X`, `layers`, `var`, `obs`, `obsm` and every key of `uns`; added `obs` columns `region` and `instance_id` as for `cells`; parsed as `cells` | annotates `cell_centroids` |
 | tables `cells_unplaced`, `molecules_unplaced` | The rows of the cell and molecule tables without finite sample coordinates (status `fov_not_placed`), every column as `obs`, zero variables, plus `instance_id` (cells) or `cell_instance_id` (molecules) as plain columns; parsed without region, region key or instance key, so the model adds nothing (lines 1131 to 1135) | none |
-| image `<image>_projection` (and `<image>_stack`) | The fused image, one element per image name and dimensionality, written once in the store as OME-Zarr ("OME-Zarr layout") with the fused levels, in the output dtype `e` of its row of "Dtypes written" | `Sequence([Scale(S), Translation(O − S/2)])` on its axes (Y and X for the projection; Z, Y and X for the stack): spatialdata's voxel `w` covers `[w, w + 1)` (`spatialdata/_core/data_extent.py` line 90), so its centre `w + ½` goes to `O + w ⊙ S`. Further levels get spatialdata's shape-ratio scale before it, exactly `2^ℓ` because of the padding ("Resolution levels inside a file"). |
-| labels `cell_labels` (optional) | The assembled label export ("Assembled label export"), uint32 ("Dtypes written") | as for the image, at the labels' grid |
+| image `<image>_projection` (and `<image>_stack`) | The fused image, one element per image name and dimensionality: the OME-TIFF's output level read lazily with tifffile's `aszarr` (`dask.array.from_zarr`), given a channel axis of length 1, parsed as `Image2DModel` (`c, y, x`) or `Image3DModel` (`c, z, y, x`), one level, in the file's dtype | `Sequence([Scale(S), Translation(O − S/2)])` on its axes (Y and X for the projection; Z, Y and X for the stack): spatialdata's voxel `w` covers `[w, w + 1)`, so its centre `w + ½` goes to `O + w ⊙ S` (W-354 `readback/spatialdata_read.json`, the route that works) |
+| labels `cell_labels` | The label export ("Assembled label export"), read from `cell_labels.ome.tif` likewise and parsed as `Labels2DModel` or `Labels3DModel`, uint32 (A9) | as for the image, with the label file's `S` and `O` |
+
+**Store format and levels.** spatialdata 0.6.1's default format (container format 0.2,
+Zarr format 3, raster version string `0.5-dev-spatialdata`) under Z2, or
+`SpatialDataContainerFormatV01` under Z1 ("OME-Zarr layout"). The image and labels
+elements have one level: W-354 wrote the LN stack (67 × 6,166 × 5,441 uint8, 2.09 GiB) as
+one level read through `aszarr` at a peak RSS of 1.59 GiB in 156 s, while
+`scale_factors=[2, 2]` peaked at 3.20 GiB, also reduced Z (67 → 33 → 16) and gave
+shape-ratio scales of 2.0303 in Z and 2.0004 in X
+(`readback/spatialdata_write_ln_stack_single_aszarr.json`,
+`readback/spatialdata_write_ln_stack_multiscale_aszarr.json`). Levels in the store are
+"Choices kept open", 10.
 
 **Metadata spatialdata adds.** `TableModel.parse` of an annotating table writes
 `uns["spatialdata_attrs"] = {"region": "cell_centroids", "region_key": "region",
@@ -716,25 +932,27 @@ check tests it separately from the source content ("Read-back checks").
 `spatialdata/models/models.py` lines 449 to 450 of 0.6.1) and an annotating table whose
 declared region does not occur among its region values, which is every annotating table
 without rows (lines 1048 to 1051). The rule is therefore: **an element whose population has
-no row, or whose image does not exist, is left out of the store**, and `export.json` lists
-every element the configuration asks for, each with `status` `written` or `omitted`, its
-row count or shape, and for an omitted element a `reason`: `empty` (no row), `no_cells`
-(a `molecules_only` sample has no territories), `no_included_fov` or `not_requested`
-(`fuse: false`, `labels: false`). A name that the store lacks and `export.json` does not
-list as omitted is missing, and the read-back check fails on it. The export relies on no
-library behavior for empty elements, because it writes none. When every element is
-omitted, no `sample.zarr` is written and `export.json` records `store: null` with the
-reason; the export does not rely on spatialdata writing an empty store.
+no row, or whose image does not exist, is left out of the store**, and the `spatialdata`
+section lists every element the configuration asks for, each with `status` `written` or
+`omitted`, its row count or shape, and for an omitted element a `reason`: `empty` (no row),
+`no_cells` (a `molecules_only` sample has no territories), `no_included_fov`,
+`not_requested` (`fuse: false`, `fuse_labels: false`) or `part_not_run` (the part that
+makes it could not run, "When a part cannot run"). A name that the store lacks and the
+section does not list as omitted is missing, and the read-back check fails on it. The
+export relies on no library behavior for empty elements, because it writes none. When
+every element is omitted, no `sample.zarr` is written and the section records
+`store: null` with the reason.
 
 | Case | Written | Left out (reason) |
 | --- | --- | --- |
 | Usual sample | every element with rows; the images | `cells_unplaced`, `molecules_unplaced` when every FOV is placed (`empty`, the common case) |
-| No cell with a finite ownership centroid (no cell, or only cells of FOVs without an origin) | `molecules` if any row; `cells_unplaced` if any row; images | `cell_centroids`, `cells`, `expression` (`empty`) |
+| No cell with a finite ownership centroid (no cell, or only cells of FOVs without an origin) | `molecules` if any row; `cells_unplaced` if any row; images | `cell_centroids`, `cells`, `expression` (`empty`); `cell_labels` (`empty` when the label part wrote no ID) |
 | Cells, but no counted cell | `cell_centroids`, `cells`, the rest as usual | `expression` (`empty`); `sample.h5ad` has no row ({doc}`assembly-contract`, "Sample-level AnnData") |
 | `molecules_only` sample | `molecules` if any row, `molecules_unplaced` if any row, images | `cell_centroids`, `cells`, `expression`, `cells_unplaced` (`empty`); `cell_labels` (`no_cells`) |
 | No molecule with finite sample coordinates | the rest as usual | `molecules` (`empty`) |
 | No included FOV | each table, points or shapes element that has rows (usually only `cells_unplaced` and `molecules_unplaced`) | image elements and `cell_labels` (`no_included_fov`); every table, points or shapes element without rows (`empty`) |
-| `fuse: false` or `labels: false` | the tables, points and shapes as above | image elements or `cell_labels` (`not_requested`) |
+| `fuse: false` or `fuse_labels: false` | the tables, points and shapes as above | image elements or `cell_labels` (`not_requested`) |
+| `fuse` or `fuse_labels` not run | the tables, points and shapes as above | image elements or `cell_labels` (`part_not_run`) |
 
 In the "No included FOV" row, a placed FOV without a source image (a `placeholder`) still
 has sample coordinates, so its observations, if it has any, go to `molecules`, `cells` and
@@ -745,20 +963,18 @@ tables.
 
 | Option | Store image | Cost | Consequence |
 | --- | --- | --- | --- |
-| **D1. What the fuse profile writes (recommended)** | The projection by default; the stack when `dimensionality` is `stack`; both with `both` | Nothing beyond the fused images already requested | The default store is small (LN 0.031 GiB of image); points keep their z, the projection's transform maps Y and X; a user who wants 3D in the store asks for the stack once. |
-| D2. Always the 3D stack | The stack, whatever the fuse profile | The stack's fusion and size for every export (LN 8.5 GiB at scale 1, 2.1 GiB at 0.5) | 3D points and image agree in Z; every export pays for 3D. |
+| **D1. What the fuse part writes (recommended)** | The projection by default; the stack when `dimensionality` is `stack`; both with `both` | Nothing beyond the fused images already requested | The default store is small; points keep their z, the projection's transform maps Y and X; a user who wants 3D in the store asks for the stack once. |
+| D2. Always the 3D stack | The stack, whatever the fuse part writes | The stack's fusion for every export (LN at 0.5: 242 s, 12.35 GiB) | 3D points and image agree in Z; every export pays for 3D. |
 | D3. Always the projection | The projection only | Smallest | A requested stack never reaches the store. |
 
 **Recommendation: D1.** One setting decides the image everywhere, and the default export
 stays small.
 
-**Written once, not duplicated.** With `spatialdata: true` the OME-Zarr image exists only
-as the store's image element: `fuse` writes no `fused/<sample>/*.ome.zarr`, and the store
-holds one image element per image name and dimensionality. Its values are those of the
-fused computation (the same as the OME-TIFF's at the same level); the implementation may
-recompute them or read the written OME-TIFF lazily, and the read-back check requires
-equality on the extent the two share (padding voxels are 0). The record keeps the image
-element's path and the SHA-256 of its first-level array metadata.
+**Written once, not duplicated.** With `export_spatialdata: true` the OME-Zarr image
+exists only as the store's image element: `fuse` writes no standalone `.ome.zarr`, and the
+store holds one image element per image name and dimensionality. Its values are read from
+the OME-TIFF, so the two are equal. The section keeps the image element's path and the
+SHA-256 of its array metadata.
 
 **Identities and source lookup.** Molecules keep `(spot_namespace, spot_id)` and `fov_id`;
 cells keep `(cell_namespace, cell_id)` and `obs_name` ({doc}`assembly-contract`,
@@ -767,7 +983,7 @@ in its order (uint32; more than 2³² − 1 rows is an error); `cell_instance_id
 is the `instance_id` of its `(cell_namespace, cell_id)`. `lookup_source(folder, spot=…)` or
 `(cell=…)` reads `export.json`, verifies its hashes, finds the row and returns its FOV, the
 FOV's assignment folder, its `assignment.json` SHA-256 and the row's position in the §2.9
-table, from the assembly record.
+table, from the `assembly` section.
 
 **What it takes from the reference-branch exporter** ({doc}`sample-output-baseline`): the
 store-once rule; writing into a sibling staging folder and renaming it into place, so a
@@ -778,210 +994,280 @@ a guessed cell). It does not take `prepare_rasters`, the affine source mappings,
 `MoleculeIndex` input, the rewrite of NGFF transforms inside the store, the pinned Zarr 2
 environment or the napari adapter.
 
-**`export.json`**: `format_version` 1, `stage` `export`, sample, `frame_id`, coordinate
-system name, the SHA-256 of `assembly.json`, `fused.json` and (labels) `labels.json`, the
-spatialdata version and the formats written, `store` (the store path, or `null` when every
-element is omitted), per element its name, kind, `status` (`written` or `omitted`) and for an
-omitted element its `reason` ("Empty populations"), and for a written element its path, row
-count or shape, transform and, for tables, the `spatialdata_attrs` written and the dtype of every
-column after the round trip, and the counts of "Read-back checks" (molecules by `assignment_status`
-and by `assembly_status` and reason, cells by `assembly_status`, counted cells), the column
-renames, and the SHA-256 of every file of the store.
+**The `spatialdata` section of `export.json`**: status and reason; coordinate system name;
+the SHA-256 of the `assembly`, `fusion` and `labels` sections it read; the spatialdata
+version and the formats written; `store` (the store path, or `null` when every element is
+omitted); per element its name, kind, `status` (`written` or `omitted`) and for an omitted
+element its `reason`, and for a written element its path, row count or shape, transform
+and, for tables, the `spatialdata_attrs` written and the dtype of every column after the
+round trip; the counts of "Read-back checks" (molecules by `assignment_status` and by
+`assembly_status` and reason, cells by `assembly_status`, counted cells); the column
+renames; and the SHA-256 of every file of the store.
 
 ## Assembled label export
 
-An optional part (`labels: true`), from the 2026-09-27 scope: assembled labels are an
-inspection product.
+Part of the first delivery (`fuse_labels`), at a default scale factor of 0.25 in Y and X.
+The label image is an inspection product: it shows which cell's territory lies at each
+point, placed without blending.
 
-* **Inputs**: the placement, the assembly result and, per FOV, the territory label image
-  that assign sampled (the expanded one when assign expanded, as the cell table's
-  `ownership_centroid` records), whose SHA-256 the assembly record holds. A `molecules_only`
-  sample has no territories: the label export writes no label image, `labels.json` records
-  `reason: "no_cells"`, and the store records `cell_labels` as omitted. With no included FOV
-  it records `reason: "no_included_fov"` likewise.
-* **Unique sample-level labels**: the value of a voxel is the `instance_id` of the cell
-  ("SpatialData export", "Identities") whose territory the chosen FOV has there, whatever
-  that cell's assembly status; 0 is background, and an uncovered voxel is 0. uint32.
-* **Categorical placement without blending**: "The value of a voxel" with V1, nearest
-  sampling and no interpolation, on the territory images instead of the source images; at
-  a scale factor below 1, the most frequent value of each block, background and uncovered
-  voxels counting as 0, the smallest ID on a tie (the reference-branch rule), with every ID
-  lost at that level listed in the record (no fallback to full size). Resolution level `ℓ`
-  is the mode of each `2^ℓ × 2^ℓ` block of the output level, with the padding of
-  "Resolution levels inside a file".
-* **Grid**: the stack's grid for `volume` and `extended` territories; for `plane`
-  territories the projection's Y and X grid with one plane, the candidates decided in Y and
-  X. There is no label projection of volumes, because a maximum of IDs means nothing.
-* **Flagged conflicts**: a fusion-grid voxel is a conflict when the chosen FOV's territory
-  holds a cell `a` with `assembly_status == "retained"` and another candidate FOV's
-  territory holds a retained cell `b` (a cell of another FOV, so `b ≠ a`; no cell is
-  matched across FOVs). `labels.json` lists each pair `(a, b)` with its voxel count, and
-  separately, per retained cell `b`, the voxels where the chosen FOV holds background but
-  `b`'s FOV holds `b`; both beside the cell table's `conflict` flags
-  ({doc}`assembly-contract`, "Flags"). No conflict is resolved and no cell is merged.
-* **Place**: the labels element `cell_labels` of the store. Its values are the
-  `instance_id` of the tables `cells` and `expression`, which annotate `cell_centroids`;
-  the labels element is linked to them through that ID, not through a second table
-  annotation.
-* **Checks a test can evaluate**: every nonzero value is an `instance_id` of the cell
-  table; at the fusion grid, every voxel equals the territory value of the FOV that "The
-  value of a voxel" chooses there, mapped to its `instance_id` (an independent oracle as for
-  the image); the output level equals the block mode of the fusion grid over `k` blocks, and
-  resolution level `ℓ` the block mode of the output level over `2^ℓ × 2^ℓ` blocks, and every
-  ID missing from a level is listed; the conflict counts recomputed from the territories equal
-  `labels.json`.
+**Inputs**: the placement, the assembly and, per owning FOV of a `cells` sample, the
+territory label image that assign sampled (the expanded one when assign expanded, as the
+cell table's `ownership_centroid` records), at the path the assembly record holds beside
+its SHA-256 ({doc}`assembly-contract`, "What assemble records"); when that path is null
+(`conflicts=False` or an assignment given in memory), the file the §2.9 loader resolves
+from the recorded assignment folder, with the SHA-256 the §2.9 record holds. A
+`molecules_only` sample has no territories: the part writes no label image and records
+`empty`, reason `no_cells`. A `cells` sample without a cell row gets a label image of
+zeros. Without an included FOV it records `empty`, reason
+`no_included_fov`.
+
+**Values.** The value of a voxel is the `instance_id` of the cell ("SpatialData export",
+"Identities") whose territory is shown there, whatever that cell's assembly status; 0 is
+background, and an uncovered voxel is 0. uint32.
+
+**Placement without blending: owner-masked FOVs, the first positive view, order 0**
+(W-354 `worker-notes.md` section 6, `scripts/fixtures.py`, functions `masked_tiles` and
+`first_positive`):
+
+1. Each owning FOV's territory image is mapped from `cell_id` to `instance_id`.
+2. **Owner mask.** Each voxel of the FOV whose centre the FOV owns, by
+   `ownership_map(placement, grids, config=<the assembly's config>)` with its default
+   candidates, every owning FOV ({doc}`assembly-contract`, "Ownership regions"), holds
+   `instance_id + 1`, or 1 for background; every other voxel holds 0. Placeholders own no
+   point, so they contribute nothing.
+3. **Fusion.** The masked images, converted as in "Fusion by multiview-stitcher", are
+   fused by `fusion.fuse(images, transform_key="placed", interpolation_order=0,
+   fusion_func=_first_positive, output_spacing=…)`, where `_first_positive` is a small
+   function passed to the library: for each output voxel, the value of the first view in
+   placement table order whose value is valid (not NaN) and greater than 0, and NaN where
+   there is none. It is a fusion function the library calls, not a second fusion.
+4. The output minus 1 where it is greater than 0, else 0, is the label image.
+
+Labels are never blended: W-354 found that blending creates label values that occur in no
+input, at order 1 and at order 0 alike (4,602 and 2,354 new values on the fixture), and
+that the `level1` route's block mean creates them too (1,621 to 2,532), so neither is
+used for labels (`tables/labels_summary.csv`, `tables/labels_new_values.csv`).
+
+**Which FOV's label an overlap shows.** The label of the FOV that owns the point under
+O1, the rule by which assembly retains cells and molecules ({doc}`assembly-contract`,
+"Ownership regions"), except near territory boundaries: the mask is decided at the FOV's
+voxel centres, and order 0 shows the FOV voxel nearest the output voxel's centre, which
+can lie on the other side of a boundary. On W-354's label fixture (3 × 3 uint32 FOVs of
+112 × 112 cut from one 2D scene of discs, seed 354, at steps of 96 px with a jitter of up
+to 0.4 px, seed 355; 538 IDs) at scale 1, among the 8,203 overlap points where the
+covering FOVs hold different labels, 8,016 (97.7 %) show the owner's label, 86 a
+neighbour's and 101 hold 0 (`tables/labels_summary.csv`, configuration
+`first_valid_order0_owner_masked`; `tables/labels_overlap_points.csv`). That the others
+lie within one input voxel of a territory boundary is assumption A11. Without the masks,
+the first view in table order and `max_fusion` agree with the owner at under half of
+those points (48.6 % and 47.7 %).
+
+**Scale factor 0.25.** `labels_scale_yx` (default 0.25, `1/k` with `k` whole) is requested
+with `output_spacing` (the sampling route R3 of "The scale factor"), on the FOVs' own
+grids, at order 0: no label is averaged. The label grid then has, per axis of Y and X,
+spacing `k·s_a`, origin `o_a` and size `floor((max_f (origin_f,a + (n_f,a − 1)·s_a) − o_a) /
+(k·s_a) + 1e-9) + 1` (W-354 `tables/reduced.csv`, rows `spacing`); Z keeps the fusion
+grid's. This grid does not nest with the fused image's at the same `k` (their origins
+differ by `s·(k − 1)/2`); each file records its own geometry and the store places each
+with its own transform. The part records the grid the library returned and checks it
+against these formulas (R6 of "Read-back checks").
+
+**IDs absent at the output scale.** Sampling drops small or thin territories. W-354 found
+at scale 0.25 with the owner masks that 35 of the 451 IDs present at scale 1 were absent,
+and 15 of 391 scene cells had no ID left (`tables/labels_summary.csv`,
+`tables/labels_absent_ids.csv`). The `labels` section therefore records the set of
+instance IDs present in the masked FOV images (step 2), the set present in the label
+image, and the full list of `absent_ids` (present in the first, absent from the second)
+with its count; there is no fallback to a finer scale.
+
+**Grid and dimensionality.** For `volume` and `extended` territories the label image has
+the stack's Z; for `plane` territories it is 2D. There is no label projection of volumes,
+because a maximum of IDs means nothing. Label fusion on real and on 3D label images is
+assumption A2.
+
+**IDs and float32.** `fuse` passes values through float32, which holds every integer up to
+2^24 exactly. With the +1 shift the largest value is `N + 1` for `N` cell rows, so the
+entry refuses a sample with more than 16,777,215 cell rows before writing ("Checks before
+anything is written", 6). W-354 found that IDs shifted by 2^24 produce 187 values found in
+no input even with a non-blending function (`tables/labels_summary.csv`, `id_offset`
+16777216).
+
+**Conflicts.** The label image shows one territory per point and resolves nothing.
+Conflicting cells are the cell table's `conflict` flags ({doc}`assembly-contract`,
+"Flags"); the `labels` section records how many cells flagged `conflict` have an ID in
+the label image. No cell is merged.
+
+**File and store.** `cell_labels.ome.tif` in the folder, in the OME-TIFF layout, uint32,
+with the label grid's geometry; with the SpatialData export also the labels element
+`cell_labels` of the store, read from that file ("SpatialData export"). Its values are the
+`instance_id` of the tables `cells` and `expression`, which annotate `cell_centroids`; the
+labels element is linked to them through that ID, not through a second table annotation.
+
+**The `labels` section of `export.json`**: status and reason; the SHA-256 of the
+`assembly` section; per FOV the territory path and SHA-256 read, and whether it owns
+points; the library version, `fusion_func` `_first_positive`, `interpolation_order` 0 and
+the route `output_spacing`; `labels_scale_yx`, the grid returned by the library and the
+formula grid; the file's path, SHA-256, shape and dtype; the input and output ID counts,
+`absent_ids`; the conflict count; wall and CPU time and peak RSS.
+
+| Option | Placement rule | Agreement with the owner at disagreeing overlap points (W-354 fixture, scale 1) | Consequence |
+| --- | --- | --- | --- |
+| **LR1. Owner-masked FOVs, first positive view, order 0 (recommended)** | as above | 97.7 % (101 points 0, 86 a neighbour's) | The label image agrees with assembly's ownership except at territory boundaries; one mask per FOV and a small function. |
+| LR2. First valid view in table order, order 0 | no mask | 48.6 % | Table order decides the overlap; the shown cell may be one assembly excluded there. |
+| LR3. `max_fusion`, order 0 | no mask | 47.7 % | The larger ID wins. |
+
+**Recommendation: LR1** ("Choices kept open", 2).
 
 | Option | Place | Cost | Consequence |
 | --- | --- | --- | --- |
-| **LP1. Labels element of the store (recommended)** | `sample.zarr/labels/cell_labels`, NGFF 0.4 layout as the image | uint32: 4 bytes per voxel (LN stack 34.0 GiB at scale 1, 8.5 GiB at 0.5) | Image, labels, points and tables in one frame and one store; a label is linked to its table row by `instance_id`. |
-| LP2. A separate OME-TIFF | `fused/<sample>/cell_labels.ome.tif` | The same bytes, no zarr needed | Readable without the extra; the link to the tables is only the ID. |
-| LP3. Both | both | Twice the bytes | Duplicates the largest output. |
+| **LP1. The label OME-TIFF always, and the labels element when the store is written (recommended)** | `cell_labels.ome.tif`; `sample.zarr/labels/cell_labels` | The store's copy repeats the bytes when the store is requested | Each part writes its own file, so `fuse_labels` and `export_spatialdata` can run alone; the same rule as for the fused image. |
+| LP2. The store only when it is written | as the earlier page | One copy | `export_spatialdata` would have to fuse labels itself, or `fuse_labels` depend on the store. |
 
-**Recommendation: LP1**, with LP2 when `spatialdata` is false.
+**Recommendation: LP1** ("Choices kept open", 8).
 
-| Option | Delivery | Cost | Consequence |
-| --- | --- | --- | --- |
-| LD1. In the first delivery | with the fused image and the export | The conflict accounting, the territories of every FOV and the uint32 volumes above in the first implementation issue | Labels available at once; the largest and least-qualified output gates the rest. |
-| **LD2. In a later delivery (recommended)** | after the fused image and the SpatialData export pass their read-back checks | The rule and the key are specified here; nothing is built yet | The first delivery is the default output and the export; the label export reuses their grid, writer and transforms unchanged. |
-
-**Recommendation: LD2**, for Jiahao to decide at the gate (W-329). The decision is open;
-the key `labels` stays false until the part exists.
+**Size, derived here from W-354's grids** (not measured; uint32, four bytes per voxel): at
+0.25 the LN label grid is 3,083 × 2,721 in Y and X; as a volume with 67 planes that is
+2.25 GB, as a plane 34 MB. tissue-2D's plane is about 5,646 × 4,923, 0.11 GB.
+cell-culture-3D is about 3,409 × 2,394, 1.47 GB as a volume of 45 planes (the Z extent of
+W-328 `tables/resource_estimate.csv`).
 
 ## Read-back checks
 
-`check_fused(folder)` and `check_spatialdata_export(folder)` read the written files back
-through the libraries and evaluate these conditions; no viewer session is involved.
+`check_export(folder)` reads the record and the written files back through the libraries
+and evaluates these conditions; no viewer session is involved. Each condition with a
+tolerance names the W-354 record it is taken from, and each fixture is one the contract
+accepts.
 
-**OME-TIFF** (each file of `fused.json`), with `tifffile` and `load_volume`:
+**The record and the folder**
 
-1. The file opens as BigTIFF and OME (`is_bigtiff`, `is_ome`), with one series whose axes
-   are `YX` (projection, or a one-plane stack) or `ZYX` (stack) and one channel.
-2. Shape (the padded size when the file has levels) and dtype equal the record's, and the
-   dtype and the OME pixel type are the output dtype `e` of the file's row of "Dtypes
-   written" for the source images' dtype and the recorded projection rule; the tile
-   shape is 512 × 512 and the compression `zlib`; the number and shapes of SubIFD levels
-   equal the record's, each exactly half the one before in Y and X.
-3. **Geometry, per axis.** `PhysicalSizeX`, `PhysicalSizeY` and `PhysicalSizeZ` equal the
-   record's `S` within 1e-9 µm with unit `µm`, where `S` follows the table of "The scale
-   factor" for this file (for a projection, `PhysicalSizeZ` is the slab thickness
-   `n0_z·s_z`); the `Plane` positions of plane `i` equal `(O_z + i·S_z, O_y, O_x)`; the
-   `ImageMetadata` annotation, as restored by `load_volume`, has that spacing and origin
-   and equals the record's metadata; conditions 1 to 3 of "Sample position to image
-   position" hold with these values.
-4. **Voxel values.** A region read from the file equals an independent oracle computed
-   from the source images, the placement and the rules of "The value of a voxel" and "The
-   scale factor", in value and dtype: the oracle's level 0 has the output dtype `e` of the
-   file's row of "Dtypes written" (for a `sum` projection the float64 per-FOV sums), and
-   every block mean is converted into `e` by the resampling rule (rounded half to even for
-   an integer `e`, cast for a float `e`). It holds exactly at the output level (block means
-   over covered voxels) and at every SubIFD level (block means of the output level,
-   uncovered and padding voxels counting as 0). When the sample has two or more included
-   FOVs the region spans an ownership boundary; it also includes uncovered voxels when the fusion grid has
-   any, and, where the factor does not divide `n0`, the partial last block. On the fixture
-   of condition 4 of "Sample position to image position", the whole file equals that
-   condition's oracle. The uncovered count equals the record's.
-5. The SHA-256 of the file equals the record's.
+* R1. `export.json` parses; every part has one of the statuses of "When a part cannot run";
+  `complete` is true exactly when no requested part is `not_run` or `failed`; each section
+  that records the SHA-256 of another section equals that section's current SHA-256 (the
+  SHA-256 of its canonical JSON: sorted keys, no spaces, UTF-8).
+* R2. Every file the record lists exists with its SHA-256; every file under
+  `export/<sample>/` (the store's files included) is listed. A part with status `off`,
+  `not_run` or `empty` lists no file.
+* R3. When the `assembly` section is `written` or `reused`, it and the files of `tables/`
+  and `sample.h5ad` pass `load_assembly` ({doc}`assembly-contract`, "Persistence"); when
+  it is `off`, no such file exists.
 
-**OME-Zarr** (standalone files), with `zarr`:
+**Fused images**, each file of the `fusion` section:
 
-1. The group is Zarr format 2 with `multiscales` version `0.4`; axes names, types and units
-   as specified; one dataset per recorded level; each dataset's `scale` and `translation`
-   equal the record's `S^(ℓ)` and `O^(ℓ)` per axis within 1e-9 (the projection's Z as in
-   OME-TIFF check 3).
-2. Each level's shape, dtype, chunks and compressor equal the record's, and each level's
-   dtype is the output dtype `e` of "Dtypes written", as in OME-TIFF check 2; each level is
-   exactly half the one before in Y and X.
-3. A region of the output level equals the oracle of OME-TIFF check 4 exactly, in value
-   and in the dtype `e`; every further level equals the block mean of the output level
-   converted into `e`, as in OME-TIFF check 4.
-4. When the output level has more than one chunk, a region read inside one chunk touches
-   that chunk only (chunk keys counted).
+* F1. The layout checks of its layout ("OME-TIFF layout", "OME-Zarr layout"), and
+  conditions 1 to 3 of "Sample position to image position".
+* F2. **Dtype.** The file's dtype is the input dtype of "Dtypes written" (float32 for a
+  `sum` projection) and equals the record's (W-354 `tables/overlap_dtype.csv`).
+* F3. **Uncovered voxels.** Every voxel whose centre lies outside the voxel-centre extent
+  `[origin_f, origin_f + (n_f − 1)·s]` of every included FOV in Y and X (and in Z for the
+  stack), by more than 1e-6 of a fusion-grid voxel, holds exactly 0 (W-354
+  `tables/overlap_dtype.csv`, `uncovered_*`).
+* F4. **Values of the library's blending**, on W-354's overlap fixture
+  (`worker-notes.md` section 3): two constant 2D FOVs of 32 × 256 px at 0.194398 µm, the
+  second at (8, 200) px, overlapping over 56 px in X, with values 100 and 203 (uint8),
+  1000 and 3001 (uint16), and 0.25 and 0.8 (float32). At scale 1, where one FOV covers,
+  the value equals that FOV's exactly; in the overlap every value lies between the two
+  inputs, inclusive (W-354: 100 to 202, 1000 to 3000, 0.2500023 to 0.7999977); and an
+  integer value never exceeds the truncation of the float mean, so 203 does not occur in
+  the uint8 overlap.
+* F5. **Position.** Condition 4 of "Sample position to image position" on its fixture.
+* F6. **Library consistency.** On a fixture of 2 × 2 FOVs, the output level read from the
+  file equals the array a direct call of `fusion.fuse` returns for the inputs and
+  arguments the `fusion` section records, exactly (assumption A6). This is what ties the
+  file to the library's fusion; no oracle of Starfinder's own recomputes blended values.
+* F7. **Projection and stack.** With `dimensionality: both`, the two files have equal Y and
+  X grids (condition 2); their values are not compared (W-354
+  `tables/projection_fixture.csv`).
+* F8. **No included FOV.** The section has `outputs: []` and `reason: "no_included_fov"`
+  exactly when the placement has no included FOV.
+* F9. A standalone OME-Zarr's output level equals the OME-TIFF's exactly (both are
+  lossless writes of one fused array).
+
+**Labels**, the file of the `labels` section:
+
+* L1. The layout checks of the OME-TIFF layout; dtype uint32.
+* L2. **No new value.** Every nonzero value is an `instance_id` of the sample cell table
+  and occurs in the masked FOV images (W-354: no value in no input for this configuration,
+  `tables/labels_new_values.csv`, row `none`).
+* L3. **Owner agreement**, on W-354's label fixture at scale 1: among the overlap points
+  where the covering FOVs hold different labels, the share that shows the owner's label is
+  at least W-354's 8,016 of 8,203, and every other such point lies within one input voxel
+  of an O1 territory boundary (A11) (`tables/labels_summary.csv`).
+* L4. **Absent IDs.** The `absent_ids` of the record equal the IDs of the masked FOV images
+  minus the IDs of the label image, recomputed from the files.
+* L5. **Grid.** The label file's spacing, origin and size equal the formulas of "Scale
+  factor 0.25" within 1e-9 µm (W-354 `tables/reduced.csv`, `geometry_matches_formula` of
+  the `spacing` rows).
+* L6. **ID bound.** A sample with more than 16,777,215 cell rows is refused before
+  anything is written.
 
 **SpatialData** round trip, with `spatialdata.read_zarr` of the written store. Each check
-below applies to the elements `export.json` records as `written`; an element recorded as
-`omitted` is tested by check 1 only.
+below applies to the elements the `spatialdata` section records as `written`; an element
+recorded as `omitted` is tested by check S1 only.
 
-1. **Elements**: the element names and kinds in the store equal those `export.json`
-   records as `written`, and no two names are equal ignoring case; every element the
-   configuration asks for is recorded as `written` or `omitted`; for each `omitted`
-   element the reason holds when recomputed from the sample tables, the fusion record and
-   the configuration (`empty`: its population has no row; `no_cells`: the sample is
-   `molecules_only`; `no_included_fov`: `fused.json` has that reason; `not_requested`: the
-   key is off), and the element is absent from the store; when `export.json` records
-   `store: null`, no `sample.zarr` exists and every element is `omitted`. One image element
-   per recorded fused image; no other OME-Zarr group
-   of the same image exists under `export/<sample>/` or `fused/<sample>/`; the store is Zarr
-   format 2 and each raster group's `multiscales` version string is the one its recorded
-   raster format writes (`0.4-dev-spatialdata` for `RasterFormatV02`).
-2. **Points**: the `molecules` rows, joined on `(spot_namespace, spot_id)`, equal the
-   sample molecule table's rows with finite sample coordinates, column by column: `x`,
-   `y`, `z` equal `sample_x`, `sample_y`, `sample_z` exactly, `fov_index_z/y/x` equal the
-   §2.9 `z`, `y`, `x`, every other source column equals its source (NaN equals NaN, null
-   equals null), `cell_instance_id` follows check 5, and no `sample_x/y/z` column remains; the dtypes equal those `export.json`
-   lists. Together with `molecules_unplaced` (each where written), every row of the sample
-   molecule table appears exactly once; a sample molecule table without rows has both
-   omitted.
-3. **Source content of the tables is preserved.** The `cells` and `cells_unplaced` rows,
-   joined on `(cell_namespace, cell_id)`, equal the sample cell table's rows in every
-   source column, and together contain each of them exactly once; `molecules_unplaced` likewise for its molecule rows; `expression` equals
-   `sample.h5ad` in `X`, `layers`, `var` and `obsm` exactly, in every source column of
-   `obs`, and in every key of the source `uns`, each with the same value. Values are
-   compared, and each column's dtype after the round trip equals the one `export.json`
-   records (how anndata 0.12.6 under pandas 3 returns string columns is recorded rather
-   than assumed). When `expression` is omitted, `sample.h5ad` has no row.
-4. **Export metadata is present, separately.** `cells` and `expression` have the added
-   `obs` columns `region` (categorical, every value `cell_centroids`) and `instance_id`
-   (`uint32`), and `uns["spatialdata_attrs"]` equal to `{"region": "cell_centroids",
-   "region_key": "region", "instance_key": "instance_id"}`; they have no other key or
-   column that their source lacks. `cells_unplaced` and `molecules_unplaced` have no
-   `spatialdata_attrs` key and no added column besides `instance_id` and
-   `cell_instance_id` respectively. Points, shapes and raster elements carry
-   the transforms of check 6 and no feature or instance key.
-5. **Links and accounting**: `instance_id` of `cells` and `cells_unplaced` together is
-   `1..N` in the sample cell table's order (empty when both are omitted); `cells` and
-   `cell_centroids` are written or omitted together, and the index of `cell_centroids`
-   equals the `instance_id` of `cells`; every molecule of `molecules` and `molecules_unplaced` with a
-   non-null cell key has a
-   `cell_instance_id` equal to that cell's `instance_id`, and every molecule without one a
-   null `cell_instance_id`; every `expression` row is a `cells` row with
-   `assembly_status == "retained"` and `status == "kept"`. Counts of molecules by
-   `assignment_status` (`assigned`, `unassigned`, `excluded_cell`, `outside_grid`) and by
-   `assembly_status` and reason, recounted from `molecules` and `molecules_unplaced`, equal
-   `export.json` and the assembly record's counts.
-6. **Calibration and alignment**: the transform of each written image (and labels) element to the
-   sample coordinate system equals `Scale(S)` then `Translation(O − S/2)` on its axes within
-   1e-9, with `S` and `O` of that file's output level (Y and X for a projection); its extent
-   there (`get_extent`) is `[O − S/2, O + (N_padded − ½)·S)` per axis; level `ℓ`'s composed
-   transform equals `Scale(2^ℓ·S)` then `Translation(O − S/2)` in Y and X; points and shapes
-   have the identity transform. For the positions of "Sample position to image position",
-   a point at `q`, transformed into the image's intrinsic coordinates, falls in voxel
-   `floor(j + ½)`; on the fixture of its condition 4, that voxel holds `A` exactly when the
-   condition's oracle says so.
-7. **Values**: each written image element's output level equals the corresponding OME-TIFF output
-   level exactly on the extent they share, with 0 in the padding (or the oracle of OME-TIFF
-   check 4 when no OME-TIFF is written), and every level's dtype is the output dtype `e` of
-   "Dtypes written", the same as the OME-TIFF's; its further levels follow OME-Zarr check 3.
-8. The SHA-256 of every store file equals `export.json` (no file when `store: null`).
+* S1. **Elements**: the element names and kinds in the store equal those recorded as
+  `written`, and no two names are equal ignoring case; every element the configuration
+  asks for is recorded as `written` or `omitted`; for each `omitted` element the reason
+  holds when recomputed from the sample tables, the `fusion` and `labels` sections and the
+  configuration (`empty`: its population has no row; `no_cells`: the sample is
+  `molecules_only`; `no_included_fov`: the `fusion` section has that reason;
+  `not_requested`: the key is off; `part_not_run`: the part's status is `not_run`), and the
+  element is absent from the store; when the section records `store: null`, no
+  `sample.zarr` exists and every element is `omitted`. One image element per recorded
+  fused image; no standalone OME-Zarr of the same image exists under `export/<sample>/`;
+  the store's Zarr format and each raster group's version string are those of the
+  recorded format.
+* S2. **Points**: the `molecules` rows, joined on `(spot_namespace, spot_id)`, equal the
+  sample molecule table's rows with finite sample coordinates, column by column: `x`,
+  `y`, `z` equal `sample_x`, `sample_y`, `sample_z` exactly, `fov_index_z/y/x` equal the
+  §2.9 `z`, `y`, `x`, every other source column equals its source (NaN equals NaN, null
+  equals null), `cell_instance_id` follows S5, and no `sample_x/y/z` column remains; the
+  dtypes equal those the section lists. Together with `molecules_unplaced` (each where
+  written), every row of the sample molecule table appears exactly once; a sample
+  molecule table without rows has both omitted.
+* S3. **Source content of the tables is preserved.** The `cells` and `cells_unplaced`
+  rows, joined on `(cell_namespace, cell_id)`, equal the sample cell table's rows in every
+  source column, and together contain each of them exactly once; `molecules_unplaced`
+  likewise for its molecule rows; `expression` equals `sample.h5ad` in `X`, `layers`,
+  `var` and `obsm` exactly, in every source column of `obs`, and in every key of the
+  source `uns`, each with the same value. Values are compared, and each column's dtype
+  after the round trip equals the one the section records (how anndata 0.12.6 under
+  pandas 3 returns string columns is recorded rather than assumed). When `expression` is
+  omitted, `sample.h5ad` has no row.
+* S4. **Export metadata is present, separately.** `cells` and `expression` have the added
+  `obs` columns `region` (categorical, every value `cell_centroids`) and `instance_id`
+  (`uint32`), and `uns["spatialdata_attrs"]` equal to `{"region": "cell_centroids",
+  "region_key": "region", "instance_key": "instance_id"}`; they have no other key or
+  column that their source lacks. `cells_unplaced` and `molecules_unplaced` have no
+  `spatialdata_attrs` key and no added column besides `instance_id` and
+  `cell_instance_id` respectively. Points, shapes and raster elements carry the transforms
+  of S6 and no feature or instance key.
+* S5. **Links and accounting**: `instance_id` of `cells` and `cells_unplaced` together is
+  `1..N` in the sample cell table's order (empty when both are omitted); `cells` and
+  `cell_centroids` are written or omitted together, and the index of `cell_centroids`
+  equals the `instance_id` of `cells`; every molecule of `molecules` and
+  `molecules_unplaced` with a non-null cell key has a `cell_instance_id` equal to that
+  cell's `instance_id`, and every molecule without one a null `cell_instance_id`; every
+  `expression` row is a `cells` row with `assembly_status == "retained"` and
+  `status == "kept"`. Counts of molecules by `assignment_status` (`assigned`,
+  `unassigned`, `excluded_cell`, `outside_grid`) and by `assembly_status` and reason,
+  recounted from `molecules` and `molecules_unplaced`, equal the section's and the
+  assembly record's counts.
+* S6. **Calibration and alignment**: the transform of each written image and labels
+  element to the sample coordinate system equals `Scale(S)` then `Translation(O − S/2)` on
+  its axes within 1e-9, with `S` and `O` of its file's output level (W-354
+  `readback/spatialdata_read.json`); its extent there (`get_extent`) is
+  `[O − S/2, O + (N − ½)·S)` per axis; points and shapes have the identity transform. A
+  point at `q`, transformed into the image's intrinsic coordinates, falls in voxel
+  `floor(j + ½)` (condition 5 of "Sample position to image position").
+* S7. **Values**: each written image and labels element equals its OME-TIFF's output level
+  exactly, in value and dtype (the element is read from that file).
+* S8. The SHA-256 of every store file equals the section's (no file when `store: null`).
 
 **Deferred**: viewer qualification in Fiji and napari (opening the OME-TIFF and the store,
 display of levels, channels, labels and points). These checks do not stand in for it; the
-records say `viewer_qualification: "deferred"`.
+record says `viewer_qualification: "deferred"`.
 
-## Fusion implementation
-
-| Option | Implementation | Cost | Effect on the BigStitcher path |
-| --- | --- | --- | --- |
-| **FI1. A writer on shared raster functions (recommended)** | `fuse` in `starfinder.sample_output`: the fusion grid, the ownership rule (`ownership_map` of assembly), nearest sampling, block means and the band writer, on numpy and `tifffile` (base) and `zarr` (extra) | New code: a band loop and two writers. Not measured; its work per voxel is a candidate test and a gather, against interpolation and weighting in FI2 | The imported BigStitcher placement is a `PlacementResult` like any other and is fused by the same code; no Fiji run and no extra are needed for the default output. |
-| FI2. multiview-stitcher's `fuse` | Convert the placement into multiview-stitcher's per-view affine transforms and call its fusion with `fusion_func` and interpolation order set | Needs the `multiview-stitcher` extra (proposed by {doc}`stitching-contract`, Python 3.11 to 3.13 only) for the default output of every sample. W-324 probe (`fusion/fusion_probe.json`): LN 2 × 2 tiles, 51 × 2854 × 2840 uint8, 95.6 s to OME-Zarr, 19.9 s to TIFF (70 s CPU), 1.2 to 1.8 GiB peak RSS | BigStitcher placements must be converted into its transforms, and BigStitcher users need the extra too. Ownership would be a custom `fusion_func`; labels need order 0 and a non-blending function (W-324 notes section 3). |
-| FI3. BigStitcher's fusion in Fiji | An engine task that fuses from BigStitcher's HDF5 | A Fiji run per sample and image | Only for BigStitcher placements; the current macro stores no full-resolution level and cannot write its HDF5 on the CIFS mount (W-323 `fiji-baseline.md`); multiview-stitcher placements would need a second path. |
-
-**Recommendation: FI1**, decided from the W-324 measurements: the probe shows that
-multiview-stitcher's fusion works on the CPU at a cost dominated by interpolation and
-writing, but it ties the default output of every sample, including BigStitcher samples, to
-an extra that Python 3.10 cannot install, and its blending is not the recommended overlap
-rule. FI1 fuses both backends' placements with one function on the base dependencies.
-
-## Fusion config
+## Configuration
 
 ```python
 @dataclass(frozen=True)
@@ -990,140 +1276,171 @@ class FusionConfig:
     dimensionality: str = "projection"               # "projection" | "stack" | "both"
     projection: str = "max"                          # "max" | "sum"
     scale_yx: float = 0.5                            # 1/k, k whole ≥ 1
-    scale_z: float = 1.0                             # stack only; 1/k
-    formats: tuple[str, ...] = ("ome_tiff",)         # "ome_tiff", "ome_zarr"
-    pyramid_levels: int = 0                          # OME-TIFF SubIFD levels; OME-Zarr levels are automatic
-    band_tiles: int = 1                              # rows of 512-pixel output tiles per band
+    ome_zarr: bool = False                           # standalone OME-Zarr beside each OME-TIFF
+    pyramid_levels: int = 0                          # OME-TIFF SubIFD levels
+
+@dataclass(frozen=True)
+class LabelConfig:
+    scale_yx: float = 0.25                           # 1/k, k whole ≥ 1
+
+@dataclass(frozen=True)
+class ExportConfig:
+    assemble: bool = True
+    fuse: bool = True
+    fuse_labels: bool = False
+    export_spatialdata: bool = False
+    assembly: AssemblyConfig = AssemblyConfig()      # {doc}`assembly-contract`
+    table_format: str = "csv"                        # "csv" | "parquet"
+    fusion: FusionConfig = FusionConfig()
+    labels: LabelConfig = LabelConfig()
+    spatialdata: SpatialDataExportConfig = SpatialDataExportConfig()
 ```
 
-`__post_init__` refuses unknown values, a scale whose reciprocal is not whole, a
-`scale_z` other than 1 when `dimensionality` is `projection` (it applies to the stack
-only), a negative `pyramid_levels`, an empty `images` or `formats`, and image names that
-are equal when case is ignored (spatialdata treats element names case-insensitively,
-"SpatialData export"). Once the grid is known, `fuse` refuses a `pyramid_levels` larger
-than `floor(log2(max(N_y, N_x)))`, whose last level would be a single padded voxel row.
+`__post_init__` refuses unknown values, a scale whose reciprocal is not whole, a negative
+`pyramid_levels`, an empty `images`, image names that are equal when case is ignored
+(spatialdata treats element names case-insensitively, "SpatialData export"), and
+`ome_zarr` together with `export_spatialdata` (the store holds the one OME-Zarr copy).
+Once the grid is known, `fuse` refuses a `pyramid_levels` larger than
+`floor(log2(max(N_y, N_x)))`. The fusion function, the interpolation orders and the
+reduction routes are fixed by this page, not configuration keys. `SpatialDataExportConfig`
+holds the store format of "OME-Zarr layout".
 
 ## Workflow configuration
 
-A Python-only `sample_outputs` block, read by `_run_sample_outputs` in the workflow
-adapter and run by one per-sample rule `sample_outputs` after `assemble_sample`
-({doc}`assembly-contract`, "Workflow configuration"):
+The Python-only `export` block, read by `_run_export` in the workflow adapter and run by
+one per-sample rule `export_sample`, which runs `Dataset.export` after the placement
+exists and after `reads_assignment` of every FOV of the sample. The assemble part takes
+its keys from the `assembly` block ({doc}`assembly-contract`, "Workflow configuration"):
 
 ```yaml
-sample_outputs:
-  fuse: true                  # false: no fused image (the assembly files and sample.h5ad stay)
+export:
+  assemble: true              # false: reuse the saved assembly of export/<sample>/
+  fuse: true                  # false: no fused image (the tables and sample.h5ad stay)
+  fuse_labels: false          # true: cell_labels.ome.tif at labels_scale_yx
+  export_spatialdata: false   # true: export/<sample>/sample.zarr
   images: [reference_stain]   # source images; further channels are further names
   dimensionality: projection  # projection | stack | both
   projection: max             # max | sum
   scale_yx: 0.5               # 1/k
-  scale_z: 1.0                # stack only
-  formats: [ome_tiff]         # ome_tiff and/or ome_zarr
+  ome_zarr: false             # standalone OME-Zarr (not with export_spatialdata)
   pyramid_levels: 0
-  spatialdata: false          # true: export/<sample>/sample.zarr
-  labels: false               # the assembled label export (proposed for a later delivery)
+  labels_scale_yx: 0.25       # 1/k
 ```
 
-* The rule runs by default for every sample of a configuration with `stitching` and
-  `assembly` blocks: without a `sample_outputs` block the defaults above apply. Without an
-  `assembly` block the legacy rules run unchanged and nothing here runs.
-* It reads `stitching/{sample}/placement.json`, `assembly/{sample}/assembly.json` and the
-  source images of the sample's FOVs, and writes the files of "Output profiles". Its
-  declared outputs follow the keys.
-* A default-tier test keeps the static schema equal to the fields of `FusionConfig` and
-  `SampleOutputConfig`, as for the other blocks.
+* The rule runs for every sample of a configuration with `stitching` and `assembly`
+  blocks; without an `export` block the defaults above apply. Without an `assembly` block
+  the legacy rules run unchanged and nothing here runs.
+* It reads `stitching/{sample}/placement.json`, the saved assignment folders (or molecule
+  tables) and reference grids of the sample's FOVs, and the source images, and writes the
+  files of "The export folder and the output profiles". Its declared output is
+  `export/{sample}/export.json`, which lists every other file; a part that cannot run
+  therefore does not fail the rule, and the warning and the record say so ("When a part
+  cannot run").
+* A default-tier test keeps the static schema equal to the fields of `ExportConfig`,
+  `FusionConfig` and `LabelConfig`, as for the other blocks.
 
 ## Resources
 
-From `tables/resource_estimate.csv` of the W-328 run directory, derived by
-`scripts/resource_estimate.py` from the W-324 per-FOV placements (main multiview-stitcher
-run of each sample), the tile shapes of W-323 `inputs.md`, the load times of W-324
-`tables/runs.csv` and the fusion probe of W-324 `fusion/fusion_probe.json`. No image was
-read. Sizes are uint8, one channel, before compression. The fusion grid of LN from the
-BigStitcher placement (`parity/prototype/tile_config_ln/T2_sum.csv`) has the same extent
-within a few voxels (X span 9,391 px against 9,387; Z offsets spanning 16.6 slices against
-18).
+Measured by W-354 (`tables/runs.csv`, `worker-notes.md` sections 8 and 10), four threads,
+`level1` route, weighted average at order 1, every tile loaded first, the library's
+uncompressed TIFF writer:
 
-| Sample | Fusion grid (Z × Y × X) | Default output: projection at 0.5 | 3D stack at scale 1 | Source read once | W-324 load time of the sources |
+| Sample and output | Grid (Z ×) Y × X | Wall | CPU | Peak RSS | Bytes |
 | --- | --- | --- | --- | --- | --- |
-| LN sample1 (64 FOVs, 50 × 1496², DAPI) | 68 × 12,333 × 10,883 | 1 × 6,167 × 5,442: 33.6 million voxels, 0.031 GiB | 9.13 billion voxels, 8.50 GiB | 7.16 GB (6.67 GiB) | 57.7 to 81.2 s |
-| cell-culture-3D (70 FOVs, 30 × 1496²) | 45 × 13,636 × 9,576 | 1 × 6,818 × 4,788: 32.6 million, 0.030 GiB | 5.88 billion, 5.47 GiB | 4.70 GB | 11.8 to 20.3 s |
-| tissue-2D (56 FOVs, 3072², one plane) | 1 × 22,582 × 19,691 | 1 × 11,291 × 9,846: 111 million, 0.104 GiB | the one plane: 445 million, 0.414 GiB | 0.53 GB | 6.5 to 9.3 s |
+| tissue-2D, projection at 0.5 | 11,291 × 9,845 | 24.2 s | 47.2 s | 1.42 GiB | 111,160,279 |
+| LN sample1, projection at 0.5, multiview-stitcher placement, TIFF and OME-Zarr | 6,166 × 5,441 | 72.0 s | 40.8 s | 0.78 GiB | 60,416,083 |
+| LN sample1, projection at 0.5, BigStitcher placement | 6,167 × 5,435 | 67.9 s | 38.1 s | 0.60 GiB | 33,518,029 |
+| cell-culture-3D, projection at 0.5 | 6,818 × 4,788 | 22.9 s | 28.7 s | 0.62 GiB | 32,644,968 |
+| LN sample1, 3D stack at 0.5 | 67 × 6,166 × 5,441 | 241.7 s | 532.7 s | 12.35 GiB | 2,247,808,158 |
 
-The estimates match today's files: tissue-2D `PI.tif` is 444,335,200 bytes against
-444,662,162 estimated voxels, and cell-culture-3D `MAX_DAPI.tif` 130,794,660 bytes against
-130,578,336 ({doc}`sample-output-baseline`).
-
-**Time.** The default output reads every FOV once (the load times above, from the CIFS
-share) and fuses one plane. Extrapolated linearly in voxels from the one W-324 probe
-(multiview-stitcher, weighted average, linear interpolation, four threads; not FI1, and not
-measured for these samples): fusing and writing the level-0 plane takes about 6 s (LN,
-culture) to 21 s (tissue-2D) at the probe's TIFF rate (20.8 million voxels per second) and
-31 to 103 s at its OME-Zarr rate (4.3 million per second). The 3D stack at scale 1 takes
-about 440 s (LN), 283 s (culture) at the TIFF rate, and 2,111 s and 1,359 s at the OME-Zarr
-rate. A `scale_yx` below 1 does not reduce the fusion work, which visits every level-0
-voxel; it divides the written bytes by `k²`. FI1 does less work per voxel than the probe
-(no interpolation, no weights), so these are upper estimates of the computation, not of
-the CIFS reads.
-
-**Memory** (the model of "Bounded memory", without interpreter overhead): the projection
-holds every FOV's projection plus one FOV volume plus one band: about 254 MiB for LN, 223
-MiB for culture and 532 MiB for tissue-2D (its 56 projections of 3072² are 504 MiB). The
-stack holds one plane per FOV plus one band: about 142 MiB (LN) and 154 MiB (culture), plus
-at most a third of one output plane for resolution levels. Both stay far below the 7.0 GiB
-that multiview-stitcher's registration needed to hold LN in memory (W-324 section 2.2).
-
-**Further outputs**: OME-TIFF SubIFD or OME-Zarr levels add at most a third of the output
-level;
-each further channel repeats its image's cost; the label export is uint32, four times the
-image bytes (LN stack 34.0 GiB at scale 1, 8.5 GiB at 0.5; tissue-2D plane 1.66 GiB and
-0.41 GiB); the SpatialData export adds the sample tables (size not estimated here: no real
-assembly exists yet) and, with D1, the default image of 0.03 to 0.10 GiB.
+* The LN projections are dominated by loading the 64 tiles from the share (about 59 s);
+  fusing and writing took under 10 s.
+* The stack held the 7.2 GB of loaded tiles plus their reduced copies; fusing and writing
+  it took 174 s. No bounded memory is promised for a whole-sample stack (A1).
+* A cell-culture-3D stack was not run: about 160 s and 8 GiB by voxel count, an estimate
+  (A4).
+* Starfinder's OME-TIFF writer adds tiling and zlib to these costs (A8).
+* The SpatialData store with one image level: 1.59 GiB peak and 156 s for the LN stack
+  through `aszarr` (W-354 `readback/spatialdata_write_ln_stack_single_aszarr.json`); the
+  default projection is about 0.03 to 0.10 GiB of image.
+* The label export at 0.25 was not measured on real labels (A2); its sizes are in
+  "Assembled label export".
 
 ### Dependencies per output
 
-| Output or path | Packages | Extra | Locked versions (Python ≥ 3.11 / 3.10) |
+On Python 3.11 or later, the supported versions once the dependency plan of
+{doc}`stitching-contract` is applied. The versions are those of `src/python/uv.lock`
+(sha256 `bc994b55…`) for its Python 3.11-and-later entries, and of the trial resolution of
+2026-10-06 for the `multiview-stitcher` extra, which is not yet in the lock.
+
+| Output or path | Packages | Extra | Versions |
 | --- | --- | --- | --- |
-| Sample tables as CSV (`table_format: csv`, the default) | numpy, pandas | none (base) | as locked |
-| Sample tables as Parquet (`table_format: parquet`) | pyarrow, through the checkpoint table writer ({doc}`checkpoints`, "Table formats"; `_require_parquet` in `src/python/starfinder/io/_checkpoint.py` raises without it) | `checkpoint` (`pyarrow>=15`) | pyarrow 23.0.0 / 23.0.0 |
-| `sample.h5ad` | anndata | `anndata` | 0.12.6 / 0.11.4 |
-| Fused OME-TIFF, projection or stack, with or without SubIFD levels (levels spooled through a numpy memory map on local scratch) | tifffile, numpy; zlib through tifffile's own codec when `imagecodecs` is absent | none (base) | tifffile 2026.1.28 / 2025.5.10 |
-| Reading the fused OME-TIFF back (`load_volume`, `check_fused`) | tifffile | none (base) | as above |
-| Fused OME-Zarr, standalone (`formats: [ome_zarr]`) and its read-back | zarr, numcodecs (Blosc), ome-zarr, dask | `spatialdata` (which brings them; no extra of their own) | zarr 3.1.5 / 2.18.3; numcodecs 0.15.1 / 0.13.1; ome-zarr 0.12.2 / 0.10.2 or 0.11.1; dask 2024.11.2 |
-| SpatialData export and its round trip | spatialdata with anndata, zarr, ome-zarr, dask, xarray, multiscale-spatial-image, geopandas and shapely (shapes), pyarrow (points) | `spatialdata` | spatialdata 0.6.1 / 0.3.0; geopandas 1.1.2; shapely 2.1.2; pyarrow 23.0.0 |
-| Assembled labels as OME-TIFF (LP2) | tifffile, numpy | none (base) | as the fused OME-TIFF |
-| Assembled labels in the store (LP1) | as the SpatialData export | `spatialdata` | as above |
-| Fusion through multiview-stitcher (FI2, not recommended) | multiview-stitcher | `multiview-stitcher`, proposed by {doc}`stitching-contract`, not in the lock | — |
+| Sample tables as CSV (`table_format: csv`, the default) | numpy, pandas | none (base) | numpy 2.2.6, pandas 3.0.0 |
+| Sample tables as Parquet | pyarrow, through the checkpoint table writer ({doc}`checkpoints`, "Table formats") | `checkpoint` | pyarrow 23.0.0 |
+| `sample.h5ad` | anndata | `anndata` | anndata 0.12.6 |
+| Any fused image, the default projection included, and the label export (`fuse`, `fuse_labels`) | multiview-stitcher with ngff-zarr, itkwasm, itkwasm-downsample, wasmtime, dask, xarray, zarr | `multiview-stitcher` (Python 3.11 to 3.13; empty on 3.14 and later, where the parts record `extra_missing`) | multiview-stitcher 0.1.62, ngff-zarr 0.38.0, itkwasm 1.0b201, itkwasm-downsample 2.0.2, wasmtime 49.0.0; dask 2024.11.2, xarray 2026.1.0, zarr 3.1.5 as locked |
+| Fused and label OME-TIFF (T1) and its read-back | tifffile, numpy; zlib through tifffile's own codec when `imagecodecs` is absent | none (base) | tifffile 2026.1.28 |
+| Standalone OME-Zarr (`ome_zarr: true`) and its read-back | the library's writer, zarr | `multiview-stitcher` | as above |
+| SpatialData export and its round trip | spatialdata with anndata, zarr, dask, xarray, multiscale-spatial-image, geopandas and shapely (shapes), pyarrow (points); tifffile `aszarr` to read the image files | `spatialdata` | spatialdata 0.6.1, geopandas 1.1.2, shapely 2.1.2, pyarrow 23.0.0, zarr 3.1.5 |
 
-The versions are those of `src/python/uv.lock` (sha256 `bc994b55…`); the package lists of
-the `spatialdata` row are the locked dependencies of spatialdata 0.6.1 and 0.3.0.
+The default output therefore needs the `anndata` and `multiview-stitcher` extras (and
+`checkpoint` for Parquet tables). Without `multiview-stitcher` the tables and
+`sample.h5ad` are still written and the record says the fuse part did not run. A missing
+extra is named in the record and the warning; importing `starfinder.sample_output`
+imports neither multiview-stitcher, zarr nor spatialdata. `spatialdata-io` in the
+`spatialdata` extra is not used. No dependency or lock change is made by this page.
 
-The default output needs no extra beyond `anndata` for `sample.h5ad` (and `checkpoint`
-when the sample tables are Parquet). A missing extra
-raises `ModuleNotFoundError` naming it, as `sample_anndata` does; importing
-`starfinder.sample_output` imports neither zarr nor spatialdata. `spatialdata-io` in the
-`spatialdata` extra is not used by the export; the extra is not changed. No dependency or
-lock change.
+## Choices kept open
+
+Each is written above as its recommended option, the proposed text; Jiahao decides at the
+gate (W-329). Choices 1 to 6 are W-354's (`worker-notes.md` section 12).
+
+1. **Meaning of a reduced scale**: R1 `level1` (recommended), R2 fuse at scale 1 and take
+   a block mean in Starfinder, R3 sampling ("The scale factor").
+2. **Label placement rule**: LR1 owner-masked FOVs with the first positive view at order 0
+   (recommended), LR2 first valid view, LR3 `max_fusion` ("Assembled label export").
+3. **Label IDs of 2^24 and more**: refuse (recommended), remap to a compact range before
+   fusion and back, or accept the float32 rounding ("Assembled label export").
+4. **Projection and stack**: state the measured difference and drop the equality
+   (recommended), with P4 as the option when equality matters ("The 2D projection").
+5. **The default TIFF**: T1 Starfinder's OME-TIFF writer of the fused array (recommended)
+   or T2 the library's TIFF ("OME-TIFF layout").
+6. **Fusion grid size**: the library's union grid (recommended), or the earlier grid that
+   contains every FOV's last voxel centre passed as `output_stack_properties` ("The
+   fusion grid").
+7. **OME-Zarr format under Python 3.11 or later**: Z2 NGFF 0.5 on Zarr format 3
+   (recommended) or Z1 NGFF 0.4 on Zarr format 2 ("OME-Zarr layout").
+8. **The label export's default and place**: off by default (recommended, until a real
+   sample's labels are measured, A2) or on by default; LP1 the OME-TIFF always and the
+   store element with the store (recommended) or LP2 ("Assembled label export").
+9. **Input dtypes**: uint8, uint16 and float32 only (recommended, measured) or also int8,
+   int16, uint32, int32 and float64 after the implementation verifies them (A5).
+10. **Levels in the store**: one level (recommended, measured to stream) or spatialdata's
+    `scale_factors`, which reduce Z and cost more memory ("SpatialData export").
+11. **A part that cannot run**: record and warn (recommended), raise after writing the
+    record, or refuse before writing ("When a part cannot run").
 
 ## Tests the implementation keeps
 
 `test_workflow_stitching_golden.py`, `test_workflow_assembly_golden.py` and every existing
 test pass unchanged; nothing here changes a legacy script or an existing output. The new
-tests follow W-331's validation design from the conditions of "Sample position to image
-position" and "Read-back checks".
+tests follow {doc}`stitching-assembly-validation` from the conditions of "Sample position
+to image position" and "Read-back checks". Tests that call multiview-stitcher need its
+extra and are skipped without it, naming the extra.
 
 ## `docs/migration.md` entries
 
-The implementation adds the `starfinder.sample_output` module and its names, the
-`sample_outputs` YAML block and the `sample_outputs` rule, and the folders
-`<OUTPUT>/fused/<sample>/` and `<OUTPUT>/export/<sample>/` for configurations with
-`stitching` and `assembly` blocks. Legacy configurations and `images/fused/{sample}/` are
-unchanged.
+The implementation adds the `starfinder.sample_output` module and its names,
+`Dataset.export`, the `export` YAML block and the `export_sample` rule, and the folder
+`<OUTPUT>/export/<sample>/` for configurations with `stitching` and `assembly` blocks.
+Legacy configurations and `images/fused/{sample}/` are unchanged.
 
 ## Exclusions
 
 No implementation, rename, dependency or lock change; no code brought over from the
-reference branch; no viewer session (deferred); no change to the placement, assembly or
-§2.9 contracts; no reassignment of molecules or recomputation of counts from a fused image
-or a label raster; no validation design or draft issues (W-331); no real data (every
-measured number comes from the W-323 and W-324 records by path, and the estimates are
-derived from them without reading an image).
+reference branch; no fusion of Starfinder's own and no BigStitcher fusion in Fiji; no
+viewer session (deferred); no change to the placement or §2.9 contracts, and none to the
+assembly contract beyond its `Dataset` method, saved layout and workflow configuration;
+no reassignment of molecules or recomputation of counts from a fused image or a label
+raster; no real data (every measured number comes from the W-323, W-324, W-328 and W-354
+records by path, and the label sizes are derived from them without reading an image).

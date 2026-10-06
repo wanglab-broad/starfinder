@@ -203,8 +203,8 @@ per cell and per unassigned molecule, one join of molecules to cells by `cell_id
 
 The territories are those of the §2.9 result (`territories` when assign expanded, else
 `cell_labels`), read from the saved assignment folder with their SHA-256 checked. The
-record (`assembly.json`) holds, per FOV, the path of the file read, as the §2.9 loader
-resolved it, beside that SHA-256 ({doc}`assembly-contract`, "What assemble records"), so a
+record (the `assembly` section of `export.json`) holds, per FOV, the path of the file
+read, as the §2.9 loader resolved it, beside that SHA-256 ({doc}`assembly-contract`, "What assemble records"), so a
 later reader, such as the label export, opens the file directly. Pairs of
 FOVs are processed so that at most two territory images are in memory: 4 bytes per voxel
 (`uint32`), 8.95 MB per plane of a 1496 × 1496 grid.
