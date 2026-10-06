@@ -765,16 +765,23 @@ assembly can be compared with sample-level truth without running a segmenter:
    synthetic package writes the CSV and never imports `starfinder.assignment`.
 3. **Assign and assemble.** `assign_molecules` per FOV, then `assemble(placement,
    inputs)`: with the placement from `stitch` on the stain images (the full chain), or with
-   one built from the placement truth (assembly alone). Retained cells and molecules are
+   one built from the placement truth by `placement_from_table` (assembly alone; see
+   below). Retained cells and molecules are
    then compared with `cells.csv`, `molecules.csv`, `cell_fovs.csv` and
    `molecule_fovs.csv` by cell ID and amplicon ID. The sample truth is the rows with
    `in_sample` true. Halo rows are observations at the edge of the acquisition that the
    FOVs may or may not see, and they are reported separately.
 
 The validation itself (which comparisons, which numbers) belongs to the validation
-design; this page fixes only the inputs and their identities. Two needs of this path are
-not met by the current contracts and are recorded in the worker notes: a `PlacementResult`
-built from a known table, and a molecule input that keeps the sample IDs.
+design; this page fixes only the inputs and their identities. The placement from the
+placement truth is built by `placement_from_table` of {doc}`stitching-contract`
+("Supplied placement"): a tile position table whose `nominal_z/y/x` are the
+`true_origin_z/y/x` of `placement_truth.csv` (read by `positions_from_table`), and each
+FOV's reference grid. Every FOV is then `metadata_only` at its true origin, flagged
+`supplied`, and the review is `required` with the reason `supplied_placement`, so the
+caller approves it with `approve_placement` before `assemble` accepts it. One need of this
+path is still not met by the current contracts and is recorded in the worker notes: a
+molecule input that keeps the sample IDs.
 
 ## Random streams and seeds
 
@@ -961,6 +968,6 @@ the FOV frame, radians for angles; IDs are strings except the uint32 label value
 No implementation and no change to the generator, its presets or its tests; no microsim
 or other new rendering dependency, no calibration to real tissue and no empirical
 profiles; no claim about segmentation accuracy, and no learned segmenter run on this scene
-as a measure of its quality; no change to the §2.9 or §2.10 contracts (the needs of the
-no-segmenter path are listed in the worker notes); no rotation, illumination model, stage
+as a measure of its quality; no change to the §2.9 or §2.10 contracts (the need of the
+no-segmenter path that they still do not meet is listed in the worker notes); no rotation, illumination model, stage
 drift (beyond a supplied jitter table) or cross-FOV cell matching.
