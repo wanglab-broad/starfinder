@@ -140,6 +140,7 @@ for the implementation issue to verify; the sections that rely on one name it.
 | A10 | A SpatialData store in container format 0.1 on Zarr format 2 (option Z1) writes and reads back under spatialdata 0.6.1 like the default format. | The default format only (`readback/spatialdata_write_ln_stack_*.json`). |
 | A11 | Where the label image does not show the owner's label, the point lies within one input voxel of an O1 territory boundary. | The counts of such points on the fixture, described as lying at territory boundaries (`worker-notes.md` section 6). |
 | A12 | A fused image rechunked with dask before the library's OME-Zarr writer is written with those chunks. | Chunks follow the dask chunks passed (`fixtures/writers_lazy.json`). |
+| A13 | Every output voxel outside the voxel-centre extent of every included FOV, in the axes fused, holds 0, and a FOV's `level1` image covers no output voxel outside the FOV's level-0 extent. | 0 at the two uncovered corners of the overlap fixture (`tables/overlap_dtype.csv`). |
 
 ## Terms
 
@@ -149,7 +150,8 @@ for the implementation issue to verify; the sections that rely on one name it.
 * The **fusion grid** is the library's union grid of the included FOVs at the acquired
   spacing ("The fusion grid"). A file's **output level** is the fusion grid reduced by an
   integer factor `k` in Y and X; its **scale factor** is `1/k`. A file's further
-  **resolution levels** halve its output level in Y and X.
+  **resolution levels** reduce its output level by a factor of 2 on the axes that each
+  level halves, which depend on the writer ("Resolution levels inside a file").
 * The **3D stack** is the fused image with a Z axis; the **2D projection** collapses Z.
 * A **part** is one of the four functions `Dataset.export` calls: `assemble`, `fuse`,
   `fuse_labels`, `export_spatialdata`.
@@ -379,13 +381,15 @@ library's default, at interpolation order 1 (linear), with the library's default
 `blending_widths` of 3 µm in Z and 10 µm in Y and X (W-354 `worker-notes.md` section 3).
 They are fixed, not configuration keys. `multi_view_deconvolution` is not offered: it
 creates values outside the input range, changes single-coverage values (100 became 99 in
-uint8) and leaves 1e-4 in uncovered float32 voxels (W-354 `tables/overlap_dtype.csv`).
+uint8) and leaves 9.9999997e-05 (about 1e-4) in uncovered float32 voxels (W-354
+`tables/overlap_dtype.csv`, `uncovered_corner_*` of the `multi_view_deconvolution` float32
+row).
 
 **What a fused image holds.** Each statement rests on the W-354 record named beside it:
 
 | Property | Statement | W-354 record |
 | --- | --- | --- |
-| Values where one FOV covers | Where the FOV's voxel centres coincide with output voxel centres, the input values unchanged. At fractional offsets, linear interpolation of the FOV's neighbouring voxels: a single bright voxel spreads over its neighbours, and its intensity centroid stays within 0.0008 µm of its true position. | `tables/overlap_dtype.csv` (`single_a_value`, `single_b_value`); `tables/position_summary.csv` (order 1, scale 1) |
+| Values where one FOV covers | Where the FOV's voxel centres coincide with output voxel centres, the input values unchanged. At fractional offsets, linear interpolation of the FOV's neighbouring voxels: a single bright voxel spreads over its neighbours, and its intensity centroid stays within 0.0008183 µm of its true position (`max_distance_centroid_um` of the order 1, scale 1 row: 0.0008183085523003642). | `tables/overlap_dtype.csv` (`single_a_value`, `single_b_value`); `tables/position_summary.csv` (order 1, scale 1) |
 | Values in an overlap | The weighted average of the covering FOVs, with a cosine ramp over the blending width from each FOV's edge. Values lie between the inputs' values; integer averages are truncated, not rounded, so two constant FOVs of 100 and 203 give a ramp from 100 to 202 and an equal-weight mean of 151, not 152. | `tables/overlap_dtype.csv`, `tables/overlap_line.csv` |
 | Dtype | The input dtype, in memory, in the library's TIFF and OME-Zarr, and in Starfinder's OME-TIFF (which writes the array it is given). `fuse` converts every input to float32, resamples, and casts the result back with `astype`. | `tables/overlap_dtype.csv` (dtype columns); `worker-notes.md` section 1 |
 | Output grid | The grid passed as `output_stack_properties`; the library's recorded origin, spacing and shape equal it ("The fusion grid", "The scale factor"). | `tables/reduced.csv` (`geometry_matches_formula`) |
@@ -465,9 +469,10 @@ library's OME-Zarr writer keeps the dtype (W-354 `tables/overlap_dtype.csv`,
 W-354 measured these peaks with every tile loaded into memory first (`tables/runs.csv`,
 `worker-notes.md` section 8; four threads):
 
-* the default output of a whole sample: 0.60 to 1.42 GiB;
-* the LN 3D stack at scale 0.5: 12.35 GiB, the 7.2 GB of loaded tiles plus their reduced
-  copies.
+* the default output of a whole sample: 629,552 to 1,492,944 KiB of peak RSS (0.60 to
+  1.42 GiB, rounded; `peak_rss_kib` of the four `*-proj-s05-a2` rows);
+* the LN 3D stack at scale 0.5: 12,946,284 KiB (12.35 GiB, rounded), the 7.2 GB of
+  loaded tiles plus their reduced copies (`worker-notes.md` section 8).
 
 This page does not promise bounded memory for a whole-sample stack. `fuse` reads each
 source image as a lazy dask array from its file; that this keeps the peak of a stack well
@@ -523,8 +528,8 @@ that band (A8). The record states the measured peak RSS of every part.
 ```
 
 The Y and X numbers are those of W-354's LN projection from the multiview-stitcher
-placement (`tables/ln_two_placements_grids.csv`); the Z numbers illustrate the layout and
-are not results.
+placement, rounded to six decimals (`tables/ln_two_placements_grids.csv`, row `mvs`); the
+Z numbers illustrate the layout and are not results.
 
 ## The 2D projection
 
@@ -536,9 +541,10 @@ with `project_image` and `ProjectionConfig(method=…, axis="z")`
 (`src/python/starfinder/preprocessing/projection.py`, unchanged; for `sum` with
 `output_dtype="float32"`), and the per-FOV projections are fused in 2D by the library,
 with the FOVs' Y and X spacing and origins. A FOV's projection uses all its own planes; no
-Z resampling happens. This is W-354's projection route, which cost 23 to 72 s and at most
-1.42 GiB per whole sample, against 242 s and 12.35 GiB for the LN stack (W-354
-`tables/runs.csv`).
+Z resampling happens. This is W-354's projection route, which cost 22.92 to 71.96 s of
+wall time and at most 1,492,944 KiB (1.42 GiB, rounded) of peak RSS per whole sample,
+against 241.65 s and 12,946,284 KiB (12.35 GiB, rounded) for the LN stack (W-354
+`tables/runs.csv`, `wall_s` and `peak_rss_kib` of the `*-s05-a2` rows).
 
 **Relation to the 3D stack.** The projection is not the maximum of the fused stack, and
 no check compares their values. Their Y and X grids are equal at the same scale factor
@@ -551,7 +557,7 @@ no check compares their values. Their Y and X grids are equal at the same scale 
 | Fixture, integer Z offsets, `max_fusion` | 1 | 0 of 57,600 | 0 |
 | Fixture, fractional Z offsets, weighted average | 1 | 41,563 of 57,600 | 94 |
 | Fixture, any configuration | 0.5 | 13,297 to 14,129 of 14,400 | 18 to 75 |
-| LN tiles 30, 31, 39, 40, weighted average (`projection_ln_region.csv`) | 1 | 5,984,543 of 8,105,360 (74 %) | 69 |
+| LN tiles 30, 31, 39, 40, weighted average (`projection_ln_region.csv`) | 1 | 5,984,543 of 8,105,360 (73.8 %, rounded) | 69 |
 | LN tiles 30, 31, 39, 40, weighted average | 0.5 | 1,895,657 of 2,026,340 | 50 |
 
 They agree only with integer Z offsets, `max_fusion` and scale 1. Linear interpolation in
@@ -563,18 +569,19 @@ planes differently in 3D, and the maximum of block means is not the block mean o
 stack's fusion grid: `z_lo = o_z − s_z/2`, `z_hi = o_z + (n0_z − ½)·s_z`, with `o_z` and
 `n0_z` computed by `fused_grid` with the library's rule of "The fusion grid" (the 2D
 fusion itself records no Z). Its metadata has the fusion grid's Y and X at the output
-level, and in Z spacing `S_z = n0_z·s_z` and origin `O_z = o_z + s_z·(n0_z − 1)/2`, one
-block over the whole Z extent, so `world_to_index` maps every z of the slab to index 0.
-For one-plane FOVs the slab is the one of "The fusion grid". This differs on purpose from
+level, and in Z spacing `S_z = z_hi − z_lo = n0_z·s_z` and origin
+`O_z = (z_lo + z_hi)/2 = o_z + s_z·(n0_z − 1)/2`, one block over the whole Z extent, so
+`world_to_index` maps every z of the slab to index 0. For one-plane FOVs `[z_lo, z_hi)` is
+the slab of "The fusion grid", and `S_z = z_hi − z_lo`, `O_z = (z_lo + z_hi)/2` as there. This differs on purpose from
 `ImageMetadata.projected`, which leaves the physical fields of a per-FOV projection
 unknown; the per-FOV rule is not changed.
 
 | Option | Projection rule | Cost | Consequence |
 | --- | --- | --- | --- |
-| **P1. Maximum, projection first (recommended)** | `max` over Z of each FOV, fused in 2D | One read of each FOV, a 2D fusion (W-354: 23 to 72 s, at most 1.42 GiB) | Today's practice (`MAX_*.tif`); spots and nuclei at any depth stay visible; differs from the maximum of the stack as measured above. |
+| **P1. Maximum, projection first (recommended)** | `max` over Z of each FOV, fused in 2D | One read of each FOV, a 2D fusion (W-354: 22.92 to 71.96 s, at most 1,492,944 KiB) | Today's practice (`MAX_*.tif`); spots and nuclei at any depth stay visible; differs from the maximum of the stack as measured above. |
 | P2. Sum | `sum` over Z of each FOV, written as float32 ("Dtypes written") | 4 bytes per pixel | Proportional to total signal; not the input dtype. |
 | P3. One plane | Each FOV's plane nearest to a given sample z, fused in 2D | Reads one plane per FOV | Cheapest; loses everything out of that plane. Not offered as a key. |
-| P4. Project the stack | `max` over Z of the fused 3D stack | The stack's cost (LN at scale 0.5: 242 s, 12.35 GiB) | Equals the maximum of the stack by construction. Not offered as a key. |
+| P4. Project the stack | `max` over Z of the fused 3D stack | The stack's cost (LN at scale 0.5: 241.65 s, 12.35 GiB rounded) | Equals the maximum of the stack by construction. Not offered as a key. |
 
 **Recommendation: P1.** It is the decided default, needs no 3D fusion, and the
 difference from the stack is stated rather than hidden ("Choices kept open", 4).
@@ -600,15 +607,18 @@ grid is passed as `output_stack_properties`:
 | Projection | Y, X | `k·s_a` | `o_a + s_a·(k − 1)/2` | `ceil(n0_a / k)` |
 | Projection | Z | `n0_z·s_z` (the slab) | `o_z + s_z·(n0_z − 1)/2` | 1 |
 
-For one-plane FOVs the Z rows of both files are the slab of "The fusion grid". The centre
+For one-plane FOVs the Z rows of both files are the slab of "The fusion grid"
+(`S_z = z_hi − z_lo`, `O_z = (z_lo + z_hi)/2`, one plane). The centre
 of output voxel `w` is the centre of its `k × k` block of the fusion grid. On
 LN sample1 at `k = 2` this gives 6,166 × 5,441 at 0.388796 µm with origin (−8.544022,
-1.143347) µm (W-354 `tables/ln_two_placements_grids.csv`). In W-354's fixtures the
+1.143347) µm, rounded to six decimals (W-354 `tables/ln_two_placements_grids.csv`, row
+`mvs`: `origin_y_um` −8.544022432956568, `origin_x_um` 1.1433469582247893). In W-354's fixtures the
 library's recorded geometry equals this table (`geometry_matches_formula` and
 `geometry_matches_page` true), a checkerboard of 0 and 200 became 100 in both tiles
 (`a_only_values`, `b_only_values`), and every single bright voxel stayed visible: 9 of 9
-at 0.5 and at 0.25, with its maximum within 0.29 µm (`k = 2`) and 0.585 µm (`k = 4`) of the
-true position, which is consistent with `((k − 1)/(2k) + ½)·S` per axis
+at 0.5 and at 0.25, with its maximum at most 0.29043 µm (`k = 2`) and 0.58486 µm
+(`k = 4`) from the true position (`max_distance_max_um` 0.2904285101109904 and
+0.5848581960387487, a distance in Z, Y and X), within `((k − 1)/(2k) + ½)·S` per axis
 (`tables/position_summary.csv`, route `level1`).
 
 This is not the block mean of a fused level 0: the mean is taken per FOV on its own grid,
@@ -628,23 +638,47 @@ output grid is the fusion grid.
 | Option | Default scale factor | Default output, measured (W-354 `tables/runs.csv`) | Consequence |
 | --- | --- | --- | --- |
 | S1. 1 | `scale_yx: 1` | not measured on whole samples | Full detail; four times the bytes of S2. |
-| **S2. 0.5 (decided)** | `scale_yx: 0.5` | LN 6,166 × 5,441, tissue-2D 11,291 × 9,845, cell-culture-3D 6,818 × 4,788, uint8 | Today's `*_05` practice; 0.39 µm pixels for LN and culture, 0.19 µm for tissue-2D. |
+| **S2. 0.5 (decided)** | `scale_yx: 0.5` | LN 6,166 × 5,441, tissue-2D 11,291 × 9,845, cell-culture-3D 6,818 × 4,788, uint8 | Today's `*_05` practice; 0.388796 µm pixels for LN and culture, 0.18927 µm for tissue-2D (twice the W-323 spacing). |
 | S3. 0.25 | `scale_yx: 0.25` | not measured on whole samples | An overview; the label export's default. |
 
 ### Resolution levels inside a file
 
+Each level `ℓ` reduces each axis `a` of the output level by its own factor `f_a^(ℓ)`, a
+power of 2 that depends on the writer. On every axis, with `S_a`, `O_a` and `N_a` of the
+output level:
+
+* spacing `S_a^(ℓ) = f_a^(ℓ)·S_a` and origin `O_a^(ℓ) = O_a + S_a·(f_a^(ℓ) − 1)/2`, so an
+  axis with `f_a^(ℓ) = 1` keeps the output level's spacing and origin;
+* the shape is recorded per level.
+
+The writers:
+
 * **OME-TIFF** (`pyramid_levels: L`, default 0): `L` SubIFD levels, each from the fused
   output level by the library's own multiscale, `msi_utils.get_msim_from_sim(fused,
   scale_factors=[{"y": 2, "x": 2}] * L)`, the same block mean truncated to the dtype as
-  the `level1` route. Level `ℓ` has `S^(ℓ) = 2^ℓ·S` and `O^(ℓ) = O + S·(2^ℓ − 1)/2` in Y
-  and X, Z as the output level; its shape is recorded. That these shapes and this
-  geometry hold for odd sizes is assumption A7. Starfinder computes no level of its own.
-* **OME-Zarr** (the library's writer): the writer's own levels, halving each spatial axis,
-  Z included, while the halved size stays above 100, with `S^(ℓ) = 2^ℓ·S` and
-  `O^(ℓ) = O + S·(2^ℓ − 1)/2` (W-354 `worker-notes.md` section 7, `readback/readback.json`:
-  2 levels for a 21 × 240 × 240 fixture, the last 120 × 120 with Z 21 kept; 6 levels for
-  the LN projection, the last 192 × 170).
-* **SpatialData store**: one level by default ("SpatialData export").
+  the `level1` route. So `f_y^(ℓ) = f_x^(ℓ) = 2^ℓ` and `f_z^(ℓ) = 1` for a stack (a
+  projection has no Z level axis). That the library's multiscale of a fused image has
+  these shapes and this geometry, also for odd sizes, is assumption A7. Starfinder
+  computes no level of its own.
+* **OME-Zarr** (the library's writer): the writer decides per axis. Going from level `ℓ` to
+  `ℓ + 1`, an axis of size `n` is halved to `floor(n/2)`, doubling its factor, when
+  `floor(n/2) > 100`, and kept otherwise; a further level exists while at least one axis
+  is halved (W-354 `worker-notes.md` section 7: `msi_utils.calc_resolution_levels`,
+  `min_shape=100`). Z is included for a stack. W-354 `readback/readback.json`:
+  * `fixture_stack_ngff04` (21 × 240 × 240 at (0.346255, 0.194398, 0.194398) µm, origin
+    (1.3, 10.0, −5.0) µm): level 1 is 21 × 120 × 120 with Z kept (`f_z^(1) = 1`: spacing
+    0.346255, origin 1.3) and Y and X halved (spacing 0.388796, origins 10.097199 and
+    −4.902801 = 10.0 and −5.0 plus 0.194398/2); no level 2, because 120 and 21 cannot be
+    halved above 100;
+  * `fixture_projection_ngff04`: the same in Y and X;
+  * `ln_mvs_projection_ngff04` (6,166 × 5,441 at 0.388796 µm, origin (−8.544022,
+    1.143347) µm): levels 1 to 5 halve Y and X, 3,083 × 2,720 down to 192 × 170, with
+    spacing `2^ℓ·0.388796` and origin `O + 0.388796·(2^ℓ − 1)/2` (level 1: −8.349624,
+    1.337745; level 5: −2.517684, 7.169685, rounded to six decimals); an odd size loses its
+    last voxel (5,441 → 2,720).
+* **SpatialData store**: one level by default ("SpatialData export"); spatialdata's own
+  levels (choice 10) have per-level scales from shape ratios, and they are not covered by
+  the formula above.
 
 ## The 3D stack
 
@@ -657,7 +691,8 @@ Z = 1 the stack is the one plane of "The fusion grid", fused from the same 2D in
 projection, so it equals the projection's values under `projection: max`.
 
 Its cost (W-354 `tables/runs.csv`, `ln-mvs-stack-s05-a2`): LN sample1 at scale 0.5, 67 ×
-6,166 × 5,441 uint8, 241.7 s wall, 532.7 s CPU, 12.35 GiB peak RSS, a 2,247,808,158-byte
+6,166 × 5,441 uint8, 241.65 s wall, 532.74 s CPU, 12,946,284 KiB (12.35 GiB, rounded) peak
+RSS, a 2,247,808,158-byte
 TIFF from the library's uncompressed writer. A cell-culture-3D stack was not run (A4).
 
 ## Sample position to image position
@@ -675,7 +710,9 @@ j = (q − O) ⊘ S
 and lies in voxel `v = floor(j + ½)` per axis (the voxel whose half-open support
 `[O + (v − ½)·S, O + (v + ½)·S)` contains `q`). Below, `j⁰` and `v⁰` are the indices on
 the fusion grid (`S = s`, `O = o`), and `k` is a file's factor per axis (`k_z = n0_z` for
-the projection's Z, `k_z = 1` for the stack's).
+the projection's Z and `k_z = 1` for the stack's, both for multi-plane FOVs; for one-plane
+FOVs Z is the slab of "The fusion grid" in both files, and conditions 1 to 3 treat it as
+stated there).
 
 A test can evaluate, for a set of sample positions inside the fusion grid's extent (the
 FOV origins, fractional positions inside each FOV, the molecule positions `sample_z/y/x`
@@ -685,16 +722,22 @@ of the sample molecule table, and positions next to voxel boundaries):
    equal those of `export.json` and the formulas of "The scale factor": within 1e-9 µm for
    Starfinder's OME-TIFF, which writes the recorded float64 values; within 1e-6 µm for the
    library's OME-Zarr, the agreement W-354 found (`readback/readback.csv`,
-   `origin_matches_grid`); for resolution level `ℓ`, `S^(ℓ) = 2^ℓ·S` and
-   `O^(ℓ) = O + S·(2^ℓ − 1)/2` in Y and X.
+   `origin_matches_grid`); for resolution level `ℓ`, on every axis `a`,
+   `S_a^(ℓ) = f_a^(ℓ)·S_a` and `O_a^(ℓ) = O_a + S_a·(f_a^(ℓ) − 1)/2`, with the per-axis
+   factor `f_a^(ℓ)` of "Resolution levels inside a file" (1 on an axis the level keeps).
+   For one-plane FOVs, `S_z = z_hi − z_lo` and `O_z = (z_lo + z_hi)/2` in both files.
 2. **Projection and stack agree in Y and X.** At the same `k`, the Y and X components of
    `j` and `v` are equal in the projection and in the stack (W-354 `grid_yx_equal`). In Z
-   the projection's `v_z` is 0 for every `q_z` in `[z_lo, z_hi)`.
-3. **Any scale factor.** Per axis, `j = (j⁰ − (k − 1)/2) / k` within 1e-9, and
+   the projection's `v_z` is 0 for every `q_z` in `[z_lo, z_hi)`, and so is the stack's for
+   one-plane FOVs.
+3. **Any scale factor.** In Y and X, and in Z for the projection of multi-plane FOVs
+   (`k = n0_z`, so `v_z = 0`), `j = (j⁰ − (k − 1)/2) / k` within 1e-9 and
    `v = floor(v⁰ / k)` exactly, also when `k` does not divide `n0` (the last block is
-   partial) and for the projection's Z (`k = n0_z`, so `v_z = 0`); for resolution level `ℓ`
-   the same with `k·2^ℓ` in Y and X. The floor identities are evaluated at positions at
-   least 1e-6 voxel from a voxel boundary of the fusion grid.
+   partial); in Z for the stack of multi-plane FOVs `k_z = 1`, so `j_z = j⁰_z`. For
+   resolution level `ℓ` the same holds per axis with `k_a·f_a^(ℓ)` in place of `k_a`. For
+   one-plane FOVs Z is condition 2's slab, where no fusion-grid index `j⁰_z` exists. The
+   floor identities are evaluated at positions at least 1e-6 voxel from a voxel boundary
+   of the fusion grid.
 4. **A bright voxel lands where it belongs.** On the fixture of W-354's position
    measurement (`tables/position_summary.csv`, `worker-notes.md` section 2): 3 × 3 FOVs of
    16 × 128 × 128 uint16 at spacing (0.346255, 0.194398, 0.194398) µm, origins jittered by
@@ -703,11 +746,14 @@ of the sample molecule table, and positions next to voxel boundaries):
    (one dtype, one spacing, finite origins). With `q*` the bright voxel's sample position:
    * at scale 1, the fused maximum near `q*` lies on the output voxel nearest `q*`, and the
      intensity centroid of its 3 × 3 × 3 neighbourhood lies within 0.001 µm of `q*` (W-354:
-     at most 0.0008 µm);
+     at most 0.0008183085523003642 µm, `max_distance_centroid_um` of the order 1, scale 1
+     row);
    * at `k = 2` and `k = 4` (`level1`), each of the nine bright voxels gives a local maximum
      above 0 and at most `floor(1000 / k²)`, within `((k − 1)/(2k) + ½)·S_a` of `q*` on each
-     axis `a` of Y and X (W-354: 9 of 9 found, at most 0.290 µm at `k = 2` against the bound
-     0.2916 µm, and 0.585 µm at `k = 4` against 0.6804 µm; peaks 78 to 166 and 24 to 48).
+     axis `a` of Y and X. W-354: 9 of 9 found at both factors; the largest distance in Z, Y
+     and X, which bounds each axis's, was 0.2904285101109904 µm at `k = 2`, against the
+     bound 0.291597 µm (0.75 × 0.388796), and 0.5848581960387487 µm at `k = 4`, against
+     0.680393 µm (0.875 × 0.777592); the peaks at order 1 were 78 to 166 and 24 to 48.
 5. **SpatialData.** In the store, the image element's transform to the sample coordinate
    system maps the intrinsic coordinate `w + ½` of voxel `w` (spatialdata's voxel `w`
    covers `[w, w + 1)`, `spatialdata/_core/data_extent.py` line 90 of 0.6.1) to
@@ -779,8 +825,8 @@ for value, and computes no voxel.
 * **Resolution levels**: `pyramid_levels` (default 0) SubIFD levels of "Resolution levels
   inside a file", written after the main series.
 * **Calibration and frame**: `PhysicalSizeX`, `PhysicalSizeY`, `PhysicalSizeZ` = `S` of the
-  output level with unit `µm` (for the projection `PhysicalSizeZ` is the slab thickness
-  `n0_z·s_z`); for plane `i` the OME `Plane` positions `PositionZ = O_z + i·S_z`,
+  output level with unit `µm` (for the projection, and for every file of one-plane FOVs,
+  `PhysicalSizeZ` is the slab thickness `z_hi − z_lo`); for plane `i` the OME `Plane` positions `PositionZ = O_z + i·S_z`,
   `PositionY = O_y`, `PositionX = O_x` in µm; the `ImageMetadata` of the output level as
   JSON in a `CommentAnnotation` of namespace `starfinder.image.ImageMetadata`, the
   convention of `save_volume`, so `load_volume` restores the metadata; a second
@@ -911,10 +957,12 @@ row or its image exists ("Empty populations"):
 **Store format and levels.** spatialdata 0.6.1's default format (container format 0.2,
 Zarr format 3, raster version string `0.5-dev-spatialdata`) under Z2, or
 `SpatialDataContainerFormatV01` under Z1 ("OME-Zarr layout"). The image and labels
-elements have one level: W-354 wrote the LN stack (67 × 6,166 × 5,441 uint8, 2.09 GiB) as
-one level read through `aszarr` at a peak RSS of 1.59 GiB in 156 s, while
-`scale_factors=[2, 2]` peaked at 3.20 GiB, also reduced Z (67 → 33 → 16) and gave
-shape-ratio scales of 2.0303 in Z and 2.0004 in X
+elements have one level: W-354 wrote the LN stack (67 × 6,166 × 5,441 uint8,
+2,247,796,802 bytes, 2.09 GiB rounded) as one level read through `aszarr` at a peak RSS of
+1,662,724 KiB (1.59 GiB, rounded) in 156.48 s (`tables/runs.csv`,
+`sd-write-ln-stack-single-aszarr`), while `scale_factors=[2, 2]` peaked at 3,360,240 KiB
+(3.20 GiB, rounded), also reduced Z (67 → 33 → 16) and gave shape-ratio scales of 2.0303
+in Z and 2.0004 in X (67/33 and 5,441/2,720, rounded; `worker-notes.md` section 7)
 (`readback/spatialdata_write_ln_stack_single_aszarr.json`,
 `readback/spatialdata_write_ln_stack_multiscale_aszarr.json`). Levels in the store are
 "Choices kept open", 10.
@@ -964,7 +1012,7 @@ tables.
 | Option | Store image | Cost | Consequence |
 | --- | --- | --- | --- |
 | **D1. What the fuse part writes (recommended)** | The projection by default; the stack when `dimensionality` is `stack`; both with `both` | Nothing beyond the fused images already requested | The default store is small; points keep their z, the projection's transform maps Y and X; a user who wants 3D in the store asks for the stack once. |
-| D2. Always the 3D stack | The stack, whatever the fuse part writes | The stack's fusion for every export (LN at 0.5: 242 s, 12.35 GiB) | 3D points and image agree in Z; every export pays for 3D. |
+| D2. Always the 3D stack | The stack, whatever the fuse part writes | The stack's fusion for every export (LN at 0.5: 241.65 s, 12.35 GiB rounded) | 3D points and image agree in Z; every export pays for 3D. |
 | D3. Always the projection | The projection only | Smallest | A requested stack never reaches the store. |
 
 **Recommendation: D1.** One setting decides the image everywhere, and the default export
@@ -1043,6 +1091,21 @@ background, and an uncovered voxel is 0. uint32.
    there is none. It is a fusion function the library calls, not a second fusion.
 4. The output minus 1 where it is greater than 0, else 0, is the label image.
 
+**One ID domain.** Every ID the `labels` section lists and every label check compares is
+an `instance_id` of the sample cell table, the decoded domain; the encoded values of steps
+2 and 3 never appear in the record or in a file. Decoding maps an encoded value `m` to:
+
+* `m ≥ 2`: the cell with `instance_id = m − 1`;
+* `m = 1`: background inside the owner region of the FOV whose view was taken, written 0;
+* `m = 0` (no view valid and positive: outside every included FOV, or the nearest voxel of
+  each covering FOV lies outside that FOV's owner region, as at the 101 boundary points
+  below): no label, written 0.
+
+So 0 in the label image is background or no label alike, and every nonzero value is an
+`instance_id`. W-354 compared in the same domain: it decoded the fused output with
+`np.where(d > 0, d - 1, 0)` before comparing it with the unshifted source labels
+(`scripts/fixtures.py`, `masked_tiles` and line 470).
+
 Labels are never blended: W-354 found that blending creates label values that occur in no
 input, at order 1 and at order 0 alike (4,602 and 2,354 new values on the fixture), and
 that the `level1` route's block mean creates them too (1,621 to 2,532), so neither is
@@ -1055,12 +1118,12 @@ voxel centres, and order 0 shows the FOV voxel nearest the output voxel's centre
 can lie on the other side of a boundary. On W-354's label fixture (3 × 3 uint32 FOVs of
 112 × 112 cut from one 2D scene of discs, seed 354, at steps of 96 px with a jitter of up
 to 0.4 px, seed 355; 538 IDs) at scale 1, among the 8,203 overlap points where the
-covering FOVs hold different labels, 8,016 (97.7 %) show the owner's label, 86 a
+covering FOVs hold different labels, 8,016 (97.7 %, rounded) show the owner's label, 86 a
 neighbour's and 101 hold 0 (`tables/labels_summary.csv`, configuration
 `first_valid_order0_owner_masked`; `tables/labels_overlap_points.csv`). That the others
 lie within one input voxel of a territory boundary is assumption A11. Without the masks,
 the first view in table order and `max_fusion` agree with the owner at under half of
-those points (48.6 % and 47.7 %).
+those points (3,991 of 8,209 and 3,929 of 8,232: 48.6 % and 47.7 %, rounded).
 
 **Scale factor 0.25.** `labels_scale_yx` (default 0.25, `1/k` with `k` whole) is requested
 with `output_spacing` (the sampling route R3 of "The scale factor"), on the FOVs' own
@@ -1070,18 +1133,31 @@ spacing `k·s_a`, origin `o_a` and size `floor((max_f (origin_f,a + (n_f,a − 1
 grid's. This grid does not nest with the fused image's at the same `k` (their origins
 differ by `s·(k − 1)/2`); each file records its own geometry and the store places each
 with its own transform. The part records the grid the library returned and checks it
-against these formulas (R6 of "Read-back checks").
+against these formulas (L5 of "Read-back checks").
 
 **IDs absent at the output scale.** Sampling drops small or thin territories. W-354 found
 at scale 0.25 with the owner masks that 35 of the 451 IDs present at scale 1 were absent,
 and 15 of 391 scene cells had no ID left (`tables/labels_summary.csv`,
-`tables/labels_absent_ids.csv`). The `labels` section therefore records the set of
-instance IDs present in the masked FOV images (step 2), the set present in the label
-image, and the full list of `absent_ids` (present in the first, absent from the second)
-with its count; there is no fallback to a finer scale.
+`tables/labels_absent_ids.csv`, column `absent_ids_of_scale1_output`; W-354 counted
+against its scale-1 output, while this page counts against the input set below). The
+`labels` section therefore records, all in the decoded domain:
 
-**Grid and dimensionality.** For `volume` and `extended` territories the label image has
-the stack's Z; for `plane` territories it is 2D. There is no label projection of volumes,
+* `ids_input`: the `instance_id`s that occur in the owner regions, `{m − 1 : m ≥ 2}` over
+  the masked FOV images of step 2, that is the cells with at least one voxel inside their
+  FOV's owner region;
+* `ids_output`: the nonzero values of the label image;
+* `absent_ids = ids_input − ids_output`, in full, with its count.
+
+There is no fallback to a finer scale. Example: one owning FOV whose territory is all cell
+`instance_id` 1. Its masked image holds the encoded value 2 everywhere, the fused output 2
+where covered, the label image 1; `ids_input = {1}`, `ids_output = {1}` and `absent_ids`
+is empty.
+
+**Grid and dimensionality.** For `volume` and `extended` territories of multi-plane FOVs
+the label image has the stack's Z; for `plane` territories, and for one-plane FOVs, whose
+territories are converted as 2D like their images ("The fusion grid"), it is 2D, and its
+Z geometry in the file and the record is the projection's slab (`S_z = z_hi − z_lo`,
+`O_z = (z_lo + z_hi)/2`), as for a projection. There is no label projection of volumes,
 because a maximum of IDs means nothing. Label fusion on real and on 3D label images is
 assumption A2.
 
@@ -1112,9 +1188,9 @@ formula grid; the file's path, SHA-256, shape and dtype; the input and output ID
 
 | Option | Placement rule | Agreement with the owner at disagreeing overlap points (W-354 fixture, scale 1) | Consequence |
 | --- | --- | --- | --- |
-| **LR1. Owner-masked FOVs, first positive view, order 0 (recommended)** | as above | 97.7 % (101 points 0, 86 a neighbour's) | The label image agrees with assembly's ownership except at territory boundaries; one mask per FOV and a small function. |
-| LR2. First valid view in table order, order 0 | no mask | 48.6 % | Table order decides the overlap; the shown cell may be one assembly excluded there. |
-| LR3. `max_fusion`, order 0 | no mask | 47.7 % | The larger ID wins. |
+| **LR1. Owner-masked FOVs, first positive view, order 0 (recommended)** | as above | 8,016 of 8,203, 97.7 % rounded (101 points 0, 86 a neighbour's) | The label image agrees with assembly's ownership except at territory boundaries; one mask per FOV and a small function. |
+| LR2. First valid view in table order, order 0 | no mask | 3,991 of 8,209, 48.6 % rounded | Table order decides the overlap; the shown cell may be one assembly excluded there. |
+| LR3. `max_fusion`, order 0 | no mask | 3,929 of 8,232, 47.7 % rounded | The larger ID wins. |
 
 **Recommendation: LR1** ("Choices kept open", 2).
 
@@ -1157,16 +1233,28 @@ accepts.
   conditions 1 to 3 of "Sample position to image position".
 * F2. **Dtype.** The file's dtype is the input dtype of "Dtypes written" (float32 for a
   `sum` projection) and equals the record's (W-354 `tables/overlap_dtype.csv`).
-* F3. **Uncovered voxels.** Every voxel whose centre lies outside the voxel-centre extent
-  `[origin_f, origin_f + (n_f − 1)·s]` of every included FOV in Y and X (and in Z for the
-  stack), by more than 1e-6 of a fusion-grid voxel, holds exactly 0 (W-354
-  `tables/overlap_dtype.csv`, `uncovered_*`).
+* F3. **Uncovered voxels.** Coverage is decided in the axes in which `fuse` fused the
+  file: Y and X for a projection and for every file of one-plane FOVs (fused as 2D, "The
+  fusion grid"), and Z, Y and X for the stack of multi-plane FOVs. A voxel is uncovered
+  when, for every included FOV, its centre lies outside that FOV's voxel-centre extent
+  `[origin_f,a, origin_f,a + (n_f,a − 1)·s_a]` on at least one of those axes, by more than
+  1e-6 of a fusion-grid voxel. Every uncovered voxel holds exactly 0 (W-354
+  `tables/overlap_dtype.csv`, `uncovered_corner_top_right` and
+  `uncovered_corner_bottom_left` 0 for every function but `multi_view_deconvolution`, and
+  `uncovered_is_nan` false). The slab of one-plane FOVs is not a coverage axis: two
+  one-plane FOVs with constant positive values, unit Z spacing and Z origins 0 and 2 give
+  one plane with slab origin 1 and spacing 3, whose voxels inside either FOV in Y and X
+  hold that FOV's value, and only voxels outside both in Y and X hold 0. That the library
+  gives 0 at every uncovered voxel, not only at the measured corners, and that a FOV's
+  `level1` image covers no output voxel outside the FOV's level-0 extent, is assumption
+  A13.
 * F4. **Values of the library's blending**, on W-354's overlap fixture
   (`worker-notes.md` section 3): two constant 2D FOVs of 32 × 256 px at 0.194398 µm, the
   second at (8, 200) px, overlapping over 56 px in X, with values 100 and 203 (uint8),
   1000 and 3001 (uint16), and 0.25 and 0.8 (float32). At scale 1, where one FOV covers,
   the value equals that FOV's exactly; in the overlap every value lies between the two
-  inputs, inclusive (W-354: 100 to 202, 1000 to 3000, 0.2500023 to 0.7999977); and an
+  inputs, inclusive (W-354 `overlap_min` and `overlap_max`: 100 to 202, 1000 to 3000, and
+  0.25000232458114624 to 0.7999976873397827); and an
   integer value never exceeds the truncation of the float mean, so 203 does not occur in
   the uint8 overlap.
 * F5. **Position.** Condition 4 of "Sample position to image position" on its fixture.
@@ -1185,15 +1273,20 @@ accepts.
 **Labels**, the file of the `labels` section:
 
 * L1. The layout checks of the OME-TIFF layout; dtype uint32.
-* L2. **No new value.** Every nonzero value is an `instance_id` of the sample cell table
-  and occurs in the masked FOV images (W-354: no value in no input for this configuration,
-  `tables/labels_new_values.csv`, row `none`).
+* L2. **No new value.** In the decoded domain of "One ID domain": every nonzero value of
+  the label image is an `instance_id` of the sample cell table and belongs to `ids_input`
+  (W-354, after decoding: no value found in no input for this configuration,
+  `tables/labels_new_values.csv`, row `none` of `first_valid_order0_owner_masked`). In the
+  example of "IDs absent at the output scale" the label image holds 1, which is in
+  `ids_input = {1}`.
 * L3. **Owner agreement**, on W-354's label fixture at scale 1: among the overlap points
   where the covering FOVs hold different labels, the share that shows the owner's label is
   at least W-354's 8,016 of 8,203, and every other such point lies within one input voxel
   of an O1 territory boundary (A11) (`tables/labels_summary.csv`).
-* L4. **Absent IDs.** The `absent_ids` of the record equal the IDs of the masked FOV images
-  minus the IDs of the label image, recomputed from the files.
+* L4. **Absent IDs.** The record's `ids_input`, `ids_output` and `absent_ids` equal their
+  recomputation in the decoded domain: `ids_input` from the territory files, the
+  `instance_id` map and the owner regions of `ownership_map`, `ids_output` from the label
+  file, and `absent_ids = ids_input − ids_output` (empty in the example).
 * L5. **Grid.** The label file's spacing, origin and size equal the formulas of "Scale
   factor 0.25" within 1e-9 µm (W-354 `tables/reduced.csv`, `geometry_matches_formula` of
   the `spacing` rows).
@@ -1277,6 +1370,7 @@ class FusionConfig:
     projection: str = "max"                          # "max" | "sum"
     scale_yx: float = 0.5                            # 1/k, k whole ≥ 1
     ome_zarr: bool = False                           # standalone OME-Zarr beside each OME-TIFF
+    ome_zarr_version: str = "0.5"                    # "0.5" (Z2) | "0.4" (Z1)
     pyramid_levels: int = 0                          # OME-TIFF SubIFD levels
 
 @dataclass(frozen=True)
@@ -1302,8 +1396,20 @@ class ExportConfig:
 `ome_zarr` together with `export_spatialdata` (the store holds the one OME-Zarr copy).
 Once the grid is known, `fuse` refuses a `pyramid_levels` larger than
 `floor(log2(max(N_y, N_x)))`. The fusion function, the interpolation orders and the
-reduction routes are fixed by this page, not configuration keys. `SpatialDataExportConfig`
-holds the store format of "OME-Zarr layout".
+reduction routes are fixed by this page, not configuration keys.
+
+The OME-Zarr format choice of "OME-Zarr layout" is the one configuration of the store and
+of the standalone file:
+
+```python
+@dataclass(frozen=True)
+class SpatialDataExportConfig:
+    zarr_format: int = 3            # 3: spatialdata's default (Z2); 2: SpatialDataContainerFormatV01 (Z1, A10)
+```
+
+and `FusionConfig.ome_zarr_version` (`"0.5"` under Z2, `"0.4"` under Z1), passed as the
+library writer's `ngff_version`. `__post_init__` refuses other values. Both follow
+the gate's choice 7; the defaults are Z2.
 
 ## Workflow configuration
 
@@ -1323,8 +1429,10 @@ export:
   projection: max             # max | sum
   scale_yx: 0.5               # 1/k
   ome_zarr: false             # standalone OME-Zarr (not with export_spatialdata)
+  ome_zarr_version: "0.5"     # "0.5" | "0.4"
   pyramid_levels: 0
   labels_scale_yx: 0.25       # 1/k
+  spatialdata_zarr_format: 3  # 3 | 2
 ```
 
 * The rule runs for every sample of a configuration with `stitching` and `assembly`
@@ -1337,11 +1445,12 @@ export:
   therefore does not fail the rule, and the warning and the record say so ("When a part
   cannot run").
 * A default-tier test keeps the static schema equal to the fields of `ExportConfig`,
-  `FusionConfig` and `LabelConfig`, as for the other blocks.
+  `FusionConfig`, `LabelConfig` and `SpatialDataExportConfig`, as for the other blocks.
 
 ## Resources
 
-Measured by W-354 (`tables/runs.csv`, `worker-notes.md` sections 8 and 10), four threads,
+Measured by W-354 (`tables/runs.csv`, `worker-notes.md` sections 8 and 10; wall, CPU and
+peak RSS rounded from `wall_s`, `cpu_s` and `peak_rss_kib`), four threads,
 `level1` route, weighted average at order 1, every tile loaded first, the library's
 uncompressed TIFF writer:
 
@@ -1356,13 +1465,17 @@ uncompressed TIFF writer:
 * The LN projections are dominated by loading the 64 tiles from the share (about 59 s);
   fusing and writing took under 10 s.
 * The stack held the 7.2 GB of loaded tiles plus their reduced copies; fusing and writing
-  it took 174 s. No bounded memory is promised for a whole-sample stack (A1).
+  it took 173.82 s (`in_process_steps_wall_s`). No bounded memory is promised for a
+  whole-sample stack (A1).
 * A cell-culture-3D stack was not run: about 160 s and 8 GiB by voxel count, an estimate
   (A4).
 * Starfinder's OME-TIFF writer adds tiling and zlib to these costs (A8).
-* The SpatialData store with one image level: 1.59 GiB peak and 156 s for the LN stack
+* The SpatialData store with one image level: 1,662,724 KiB (1.59 GiB, rounded) peak and
+  156.48 s for the LN stack
   through `aszarr` (W-354 `readback/spatialdata_write_ln_stack_single_aszarr.json`); the
-  default projection is about 0.03 to 0.10 GiB of image.
+  default projection's image is 32,644,968 to 111,160,279 bytes (0.030 to 0.104 GiB,
+  rounded; `output_bytes` of the `*-proj-s05-a2` rows of `tables/runs.csv`, where the LN
+  multiview-stitcher row's 60,416,083 bytes include its OME-Zarr).
 * The label export at 0.25 was not measured on real labels (A2); its sizes are in
   "Assembled label export".
 
