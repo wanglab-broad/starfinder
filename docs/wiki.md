@@ -42,6 +42,7 @@ Assembly contract (proposed) <assembly-contract>
 Assembly algorithms (proposed) <assembly-algorithms>
 Sample-output baseline (proposed) <sample-output-baseline>
 Sample-output contract (proposed) <sample-output-contract>
+§2.10 validation design (proposed) <stitching-assembly-validation>
 Learned detectors <learned-detectors>
 Coordination <coordination>
 Checkpoints <checkpoints>
