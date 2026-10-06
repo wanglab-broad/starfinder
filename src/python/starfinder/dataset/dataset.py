@@ -41,8 +41,10 @@ class Dataset:
     channel, name and wavelength; after construction channel_order and
     other_channel_order hold the patterns (the channel labels) and
     :meth:`channel_info` returns the full ChannelInfo of a round.
-    ``dataclasses.replace`` keeps the ChannelInfo of every round whose
-    channels the call does not pass; channels it passes are read as given.
+    With ``dataclasses.replace``, channels the call passes are read as
+    given, except that the dataset's own tuple of a round (channel_order, or
+    other_channel_order[round] inside any mapping), which replace passes
+    for an unchanged field, keeps that round's ChannelInfo.
     :meth:`channel_index` is the one rule that finds a channel by index,
     pattern or name.
     readout_mode is how reads get their identity (docs/readout-contract.md,

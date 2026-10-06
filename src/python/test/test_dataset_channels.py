@@ -141,6 +141,24 @@ def test_replace_reads_the_channels_it_passes_as_given():
         replace(ds, channel_order=None)
 
 
+def test_replace_keeps_a_rounds_own_tuple_and_reads_an_equal_new_value_as_given():
+    ds = dataset(NAMED)
+    plain = tuple(ChannelInfo(c) for c in SEQUENCING)
+    plain_morph = tuple(ChannelInfo(c.channel) for c in MORPH)
+    # The dataset's own tuple is what replace hands over for an unchanged field, so passing it back keeps.
+    assert replace(ds, channel_order=ds.channel_order).channel_info("round1") == NAMED
+    # An equal list or an equal new tuple is passed patterns: no name or wavelength.
+    for value in (list(ds.channel_order), tuple(list(ds.channel_order))):
+        copy = replace(ds, channel_order=value)
+        assert copy.channel_info("round1") == copy.channel_info("round2") == plain
+        assert copy.channel_info("morph") == MORPH and copy.channel_info("reference_stain") == (STAIN,)
+    # A new mapping keeps the rounds whose own tuples it holds and reads the other values as given.
+    kept = replace(ds, other_channel_order=dict(ds.other_channel_order))
+    assert kept.channel_info("morph") == MORPH and kept.channel_info("round1") == NAMED
+    cleared = replace(ds, other_channel_order={name: list(p) for name, p in ds.other_channel_order.items()})
+    assert cleared.channel_info("morph") == plain_morph and cleared.channel_info("round1") == NAMED
+
+
 @pytest.mark.parametrize("change, error", [
     (dict(channel_order=[1, "ch01"]), TypeError),
     (dict(channel_order=[None]), TypeError),
