@@ -53,8 +53,23 @@ All paths are relative to `OUTPUT = {root_output_path}/{dataset_id}/{output_id}`
 | `run_BigStitcher_macro` | the macro and `grid.csv`; the macro itself reads `images/fused/{sample}/DAPI/*.tif` | `images/fused/{sample}/DAPI/dataset.xml` | `dataset.h5` and BigStitcher's `dataset.xml~*` backups in the same folder; Java's temporary files there (`-Djava.io.tmpdir`) |
 | `create_tile_config` | `dataset.xml`, `grid.csv` | `output/tile_config_{sample}.csv`, `output/tile_config_{sample}.html` | none |
 
-The undeclared files are not tracked by Snakemake: a changed `Position*.tif` does not
-trigger new tile copies, and a removed `dataset.h5` is not regenerated.
+What Snakemake tracks follows from these declarations:
+
+* **Changed inputs rerun the rule.** `stitching_preparation` declares the annotation, the
+  sample's stage file and the sample's DAPI images (`get_stitching_input`,
+  `{DAPI_DIR}/{fovID}.tif` for every FOV of the sample, `stitching.smk:8-9`, `:14-17`), so a changed
+  DAPI image makes the rule run again, and the script then copies every tile again
+  (`stitching_preparation.py:101-116`). The new `grid.csv` in turn reruns
+  `create_BigStitcher_macro`, `run_BigStitcher_macro` and `create_tile_config`, which
+  declare it as an input. The declared names follow `fov_id_pattern`, while the script
+  reads `images/DAPI/Position{id:03}.tif` (line 113); the two coincide only for the pattern
+  `Position{i:03}`.
+* **Undeclared outputs are not tracked.** The tile copies under
+  `images/fused/{sample}/DAPI/`, `dataset.h5` and BigStitcher's backups are not declared
+  outputs (`stitching.smk:18-21`, `:44-45`), so Snakemake does not notice when one of
+  them is removed or altered and does not regenerate it. `run_BigStitcher_macro` does not
+  declare the tile copies as inputs either (`stitching.smk:42-43`): a tile copy changed by
+  hand does not rerun Fiji.
 
 ## `stitching_preparation.py` step by step
 

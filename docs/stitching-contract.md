@@ -139,14 +139,27 @@ BigStitcher is not called through `stitch`: its placement enters the same
 ### Coordination on the dataset
 
 ```python
-Dataset.stitch(sample: str, fov_ids: Sequence[str], *, table: TilePositionTable, config,
-               input: str = "reference_merged", review=ReviewPolicy(), fallback=None,
+Dataset.stitch(sample: str, fov_ids: Sequence[str], *, table: TilePositionTable | Mapping,
+               config, input: str = "reference_merged", review=ReviewPolicy(), fallback=None,
                output_dir=None) -> PlacementResult
 ```
 
 reads, for each FOV, the saved stitching input ("Input image") and its reference grid
 with `reference_grid_from_file`, builds the `StitchingInput` list in table order, calls
-`stitch`, and with `output_dir` saves the result ("Persistence"). It loads one FOV image at
+`stitch`, and with `output_dir` saves the result ("Persistence").
+
+`table` is a built `TilePositionTable`, or the `positions` mapping of the workflow
+configuration ("Workflow configuration"), from which `Dataset.stitch` builds the table
+with the named converter after reading the reference grids. A converter that needs the
+tile size and spacing (`positions_from_grid`, or `positions_from_leica` with a
+`GridSnap`) gets them from the mapping's `tile_shape_yx` and `spacing_yx` when it gives
+them; otherwise from the FOVs' `ReferenceGrid` ({doc}`segmentation-contract`):
+`tile_shape_yx = grid.shape_zyx[1:]` and `spacing_yx = grid.metadata.spacing_zyx[1:]`
+(the `ImageMetadata` spacing, µm). Taken from the grids, both must be the same for every
+FOV of the sample; if the FOVs do not share one tile size or one spacing,
+`Dataset.stitch` raises `IncompatibleGeometryError` naming the FOVs and their values, and
+the caller must give both values explicitly (spacing must be shared in any case, "Input
+image"). The values used are recorded in the table's record. It loads one FOV image at
 a time into the list the method needs and holds nothing else: the method's memory is the
 loaded tiles (W-324: LN 6.67 GiB of uint8 loaded, 7.0 GiB peak).
 
@@ -183,9 +196,16 @@ class TilePositionTable:
 Rules: one row per acquired FOV, never a padding row; `fov_id` unique; every nominal value
 finite. The rows' order is the acquisition order and is the order of every per-FOV table
 of the placement record. Only the converters build tables; each is a function, not a
-method, and none reads an image:
+method, and none reads an image: the tile size and spacing a converter needs are
+arguments, as values.
 
 ```python
+@dataclass(frozen=True)
+class GridSnap:
+    overlap: float | tuple[float, float]   # fraction, 0 ≤ overlap < 1; one value or (y, x)
+    tile_shape_yx: tuple[int, int]         # px; integers ≥ 1; the reference grids' Y and X sizes
+    spacing_yx: tuple[float, float]        # µm per px; finite and > 0; the reference grids' Y and X spacing
+
 def positions_from_leica(path, *, stage_axes: StageAxisMapping, fov_ids: Mapping[int, str],
                          snap_to_grid: GridSnap | None = None) -> TilePositionTable: ...
 def positions_from_grid(*, columns: int, rows: int, order: str, tile_shape_yx: tuple[int, int],
@@ -199,11 +219,15 @@ def positions_from_table(path_or_frame, *, unit: str = "µm") -> TilePositionTab
   0 for every FOV, because the stage file gives no z offset between tiles (W-323
   `positions.md`). `fov_ids` maps `PositionID` to the FOV id. `snap_to_grid` optionally
   replaces the positions by a regular grid derived from them, as today's grid derivation
-  does ({doc}`stitching-algorithms`, "Leica stage file").
+  does ({doc}`stitching-algorithms`, "Leica stage file"): the stage positions decide each
+  FOV's cell, and `GridSnap`'s `overlap`, `tile_shape_yx` and `spacing_yx` give the step,
+  with the same names, types, units and rules as the arguments of `positions_from_grid`.
+  None of the three fields has a default.
 * **Regular grid**: FOV `k` in `fov_ids` order goes to a cell by `order`;
   `column_major_down_right`, the scan of the two sample datasets (W-323 `positions.md`),
-  puts it at column `k // rows`, row `k % rows`. The step is `(1 − overlap) × tile size ×
-  spacing` per axis. `order` and `overlap` have no defaults.
+  puts it at column `k // rows`, row `k % rows`. The step is `(1 − overlap) ×
+  tile_shape_yx × spacing_yx` per axis. `order`, `overlap`, `tile_shape_yx` and
+  `spacing_yx` have no defaults.
 * **Supplied table**: a CSV or frame with `fov_id`, `nominal_z`, `nominal_y`, `nominal_x`
   in `unit` (converted to µm), for example from another microscope's metadata.
 
@@ -307,18 +331,23 @@ The **statuses**:
 * `image_supported`: placed from its image; at least one kept link joins it to the
   reference component (the component with the most FOVs; ties go to the one holding the
   first FOV in table order).
-* `metadata_only`: its image is present but no kept link joins it to the reference
-  component (no overlap, every link dropped, or another component). With
-  `fallback="nominal"` (opt-in) its origin is its nominal position in the gauge of the
-  reference component, and it is flagged `fallback`. In the BigStitcher import, a view that
-  BigStitcher's second round placed from metadata gets this status as well.
+* `metadata_only`: only with `fallback="nominal"` (opt-in): its image is present but no
+  kept link joins it to the reference component (no overlap, every link dropped, or
+  another component). Its origin is its nominal position, `origin = nominal` (correction
+  0), which under gauge G1 is its nominal position in the gauge of the reference
+  component; it is flagged `fallback`. The BigStitcher import applies the same rule to a
+  view without a link into the reference component (one that BigStitcher's second round
+  placed from metadata); BigStitcher's own position for it stays in
+  `method_translation_*` ("BigStitcher").
 * `placeholder`: an acquired FOV whose image is absent and was replaced by a blank of the
   tile's shape so that the BigStitcher grid stays complete (D4; only in the BigStitcher
   path, with `BigStitcherConfig.pad_missing=True`); its origin is the one BigStitcher gives
-  the blank view, which is its regular-grid position.
+  the blank view, which is its regular-grid position. `pad_missing=True`, off by default, is
+  the caller's explicit opt-in to this metadata position; review is `required`.
 * `missing`: an acquired FOV whose image is absent and not replaced; no origin.
 * `failed`: the method or a check rejected the FOV: disconnected from the reference
-  component without the fallback, a non-finite translation, or a method error that
+  component without the fallback (with `fallback=None`, the default, in `stitch` and in
+  the BigStitcher import alike), a non-finite translation, or a method error that
   affects every FOV (multiview-stitcher's `NotEnoughOverlapError` makes every FOV
   `failed`). Its method translation, if any, stays in `method_translation_*`.
 
@@ -484,6 +513,28 @@ gauge, statuses and review of `stitch`. Padding views have no row; their raw tra
 stay in the method record. The arithmetic is in {doc}`stitching-algorithms` ("Import
 arithmetic").
 
+The import follows the same fallback rule as `stitch`. An acquired view without a link
+into the reference component is a view BigStitcher's second round placed from metadata:
+
+* with `fallback=None`, the default, its FOV is `failed`: the origin is NaN, the
+  translation BigStitcher gave it stays as a diagnostic in `method_translation_*` (world
+  units, unrounded), and review is `required`;
+* with `fallback="nominal"`, its FOV is `metadata_only` at `origin = nominal` (correction
+  0) and flagged `fallback`, and review stays `required`. This is not BigStitcher's
+  second-round position: the second round moves the view by its metadata relative to tiles
+  already placed, so the two differ by the corrections of the tiles it was aligned to and,
+  for stage positions, by the difference between the stage positions and BigStitcher's
+  regular grid. BigStitcher's position stays in `method_translation_*`, from which it can
+  be converted and gauged as for an `image_supported` FOV.
+
+Either way the raw `dataset.xml` content of every view stays available, and the legacy
+view does not read statuses: the cast, shift and rectangles (T3 to T7) run on the raw
+translations of every view, so `tile_config_{sample}.csv` is the same for any `fallback`
+value. No `fallback` value is needed to reproduce today's output: the workflow's default
+configuration (no `stitching` block) runs the four legacy rules unchanged and does not
+call the import, and with a `stitching` block the legacy writer reads the raw
+translations, not the statuses.
+
 **A macro variant from the tile position table (option).** Instead of moving tiles to a
 padded regular grid, the macro can define the dataset from the table's nominal positions
 (BigStitcher's tile configuration import), with acquired FOVs only and no padding views.
@@ -565,10 +616,14 @@ As agreed on 2026-09-27:
 3. **Stage-position fallback is opt-in and flagged.** With `fallback=None`, the default, a
    FOV that is not joined to the reference component is `failed`. With
    `fallback="nominal"` it is `metadata_only` at its nominal position in the gauge of the
-   reference component and flagged `fallback`; review stays `required`. BigStitcher's
-   two-round strategy is today's built-in fallback; the import makes it visible the same
-   way (status `metadata_only`, review `required`), and whether the macro's default should
-   switch to a one-round strategy is an open choice (worker notes).
+   reference component (`origin = nominal`) and flagged `fallback`; review stays
+   `required`. The BigStitcher import follows the same rule: a view BigStitcher's second
+   round placed from metadata is `failed` with `fallback=None`, with BigStitcher's
+   translation kept as a diagnostic, and `metadata_only` only with `fallback="nominal"`
+   ("BigStitcher"). BigStitcher's two-round strategy is today's built-in fallback inside
+   Fiji; the import does not adopt its result as a placement unless the caller opts in.
+   Whether the macro's default should switch to a one-round strategy is an open choice
+   (worker notes).
 
 ### Review criterion
 
@@ -622,12 +677,14 @@ stitching:
   positions:
     source: stage_file           # stage_file | regular_grid | table
     stage_axes: {x: "+x", y: "+y"}   # required with stage_file; no default
-    snap_to_grid: {overlap: 0.1} # stage_file only: GridSnap, the legacy-like start; null keeps stage positions
+    snap_to_grid: {overlap: 0.1} # stage_file only: GridSnap with tile_shape_yx and spacing_yx below; null keeps stage positions
     regular_grid: {columns: 7, rows: 10, order: column_major_down_right, overlap: 0.1}
+    tile_shape_yx: null          # px; null: from the FOVs' ReferenceGrid (shape_zyx[1:])
+    spacing_yx: null             # µm; null: from the FOVs' ReferenceGrid (metadata.spacing_zyx[1:])
     table: null                  # a CSV path with source: table
   config: {}                     # fields of MultiviewStitcherConfig or BigStitcherConfig
   review: {max_correction_fraction: 0.5, max_residual_um: 1.0}
-  fallback: null                 # or nominal
+  fallback: null                 # or nominal; for multiview_stitcher and the BigStitcher import alike
   bigstitcher_save_dir: null     # a local folder; required with method: bigstitcher
 ```
 

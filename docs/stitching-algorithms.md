@@ -45,9 +45,14 @@ FOVs; it was not measured and is negligible beside registration.
 3. Shift so that the smallest y and x are 0; z is 0 for every FOV.
 4. Map `PositionID` to `fov_id` through `fov_ids`.
 
-With `snap_to_grid=GridSnap(overlap=…)`, the positions are replaced by a regular grid,
-which reproduces the start of today's BigStitcher macro and of W-324's main
-configuration:
+With `snap_to_grid=GridSnap(overlap=…, tile_shape_yx=…, spacing_yx=…)`, the positions are
+replaced by a regular grid, which reproduces the start of today's BigStitcher macro and of
+W-324's main configuration. The converter reads no image: the tile size and spacing are
+`GridSnap` fields, given as values. `Dataset.stitch` fills them, when the configuration
+does not give them, from the FOVs' `ReferenceGrid` (`shape_zyx[1:]` and
+`metadata.spacing_zyx[1:]`) and raises `IncompatibleGeometryError` if the FOVs of the
+sample do not share one tile size or spacing ({doc}`stitching-contract`, "Coordination on
+the dataset").
 
 * **Step for the cells.** Differences of consecutive positions along the scan's fast axis
   (y for a column scan), rounded to 0.1 µm; the step is the most frequent absolute
@@ -58,14 +63,17 @@ configuration:
 * **Cells.** `column = floor((x − min x)/step + 0.5)`, `row = floor((y − min y)/step +
   0.5)`, the legacy rounding written for every sign.
 * **Nominal positions.** Those of `positions_from_grid` for the cells, with step
-  `(1 − overlap) × tile size × spacing` per axis (LN: 0.9 × 1496 px = 1346.4 px), and
-  `source` `grid`.
+  `(1 − overlap) × tile_shape_yx × spacing_yx` per axis, in µm (LN: 0.9 × 1496 px =
+  1346.4 px, times 0.194398 µm), and `source` `grid`.
 
 | Parameter | Unit | Default | Rule |
 | --- | --- | --- | --- |
 | `stage_axes` | | none (required) | `StageAxisMapping`; the two entries name different image axes |
 | `fov_ids` | | none (required) | every `PositionID` of the file must be a key |
-| `snap_to_grid` | | `None` | `GridSnap(overlap)`, `0 ≤ overlap < 1`, per axis or one value |
+| `snap_to_grid` | | `None` | a `GridSnap` with the three fields below, or `None` to keep the stage positions |
+| `GridSnap.overlap` | fraction | none (required) | `0 ≤ overlap < 1`; one value or `(y, x)` |
+| `GridSnap.tile_shape_yx` | px | none (required) | integers ≥ 1; the reference grids' Y and X sizes, as for `positions_from_grid` |
+| `GridSnap.spacing_yx` | µm per px | none (required) | finite, > 0; the reference grids' Y and X spacing, as for `positions_from_grid` |
 
 Failure: a repeated `PositionID`, a `PositionID` without a FOV id, a non-finite position,
 or (with snapping) two positions in one cell raise `ValueError` naming them. The legacy
@@ -85,8 +93,8 @@ script summed two such ids into one cell.
 | --- | --- | --- | --- |
 | `columns`, `rows` | | none | `columns × rows ≥ len(fov_ids)` |
 | `order` | | none | one of the four orders |
-| `tile_shape_yx` | px | none | the reference grids' Y and X sizes |
-| `spacing_yx` | µm | none | the reference grids' spacing |
+| `tile_shape_yx` | px | none | integers ≥ 1; the reference grids' Y and X sizes (`Dataset.stitch` takes `ReferenceGrid.shape_zyx[1:]` when not given) |
+| `spacing_yx` | µm per px | none | finite, > 0; the reference grids' spacing (`Dataset.stitch` takes `ReferenceGrid.metadata.spacing_zyx[1:]` when not given) |
 | `overlap` | fraction | none | `0 ≤ overlap < 1` |
 
 Failure: more FOVs than cells, or an unknown order, raise `ValueError`. The y step is
@@ -228,11 +236,16 @@ For each `ViewRegistration` (setup `v`, timepoint 0):
    the status `placeholder`. A FOV of the table without a view is `missing`.
 
 **Status from links.** An acquired view with at least one link into the reference
-component is `image_supported`; one without is `metadata_only` (BigStitcher's second round
-placed it from metadata).
+component is `image_supported`. One without (a view BigStitcher's second round placed from
+metadata) follows the fallback rule of `stitch`: with `fallback=None`, the default, its FOV
+is `failed`, its origin NaN and its `w_v` kept in `method_translation_*`; with
+`fallback="nominal"`, it is `metadata_only` at `origin = nominal` (correction 0), flagged
+`fallback`, with `w_v` kept the same way. Review is `required` in both cases. The gauge of
+step 5 uses only `image_supported` FOVs, so the choice changes no other origin.
 
 **The legacy view** applies T3 to T7 of {doc}`stitching-baseline` to `w_v` of every view
-(FOVs and padding, in view order) with the view map as the grid. On LN it must reproduce
+(FOVs and padding, in view order) with the view map as the grid. It reads no status, so
+its output is the same for `fallback=None` and `fallback="nominal"`. On LN it must reproduce
 `tile_config_sample1.csv` byte for byte ({doc}`stitching-contract`, "What the import of
 the LN `dataset.xml` must reproduce"); on the golden fixture it must reproduce
 `TILE_CONFIG` of `test_workflow_stitching_golden.py`.
@@ -256,7 +269,7 @@ the record and cost nothing measurable.
 
 | Check | Rule | Parameter (unit, default) | Outcome |
 | --- | --- | --- | --- |
-| Components | The reference component holds the most FOVs; ties go to the one with the first FOV in table order | – | FOVs outside it: `failed`, or `metadata_only` with the fallback; review required |
+| Components | The reference component holds the most FOVs; ties go to the one with the first FOV in table order | – | FOVs outside it, in `stitch` and in the BigStitcher import alike: `failed` with `fallback=None`, `metadata_only` (flagged `fallback`) with `fallback="nominal"`; review required |
 | Unplaced FOVs | any status other than `image_supported` | – | review required |
 | Correction bound | `|correction_y| > f × w_y` or `|correction_x| > f × w_x`, with `w` the median nominal overlap width of the FOV's pairs in that axis | `max_correction_fraction` (–, 0.5) | flag `correction_above_bound`; review required |
 | Link residual | `‖(origin_b − origin_a) − (nominal_b − nominal_a) − shift_ab‖ > r` for a kept link | `max_residual_um` (µm, 1.0) | flag `residual_above_tolerance` on both FOVs; review required |
