@@ -260,15 +260,22 @@ For an output voxel with centre `c` (sample frame, µm) at level 0:
    in the record and excluded from the block means of "The scale factor".
 
 Level 0 of the stack therefore holds input values only: **the dtype is preserved** and no
-new value is created. The projection holds per-FOV projections, in the dtypes of "Dtypes
-written". The scale factor reduces level 0 by block means, rounded into the level-0 dtype.
+new value is created. The projection holds per-FOV projections. Every fused image, at
+level 0 and at every scale factor and resolution level, has the output dtype of its row of
+"Dtypes written"; the scale factor reduces level 0 by block means converted into that
+dtype ("The scale factor").
 
 ### Dtypes written
 
 For every allowed input dtype `d` (check 5 of "The fuse and export entry"), every
-configuration writes one definite dtype, the same in OME-TIFF and OME-Zarr:
+configuration writes one definite dtype, the same in OME-TIFF and OME-Zarr. This table is
+the one place that defines it: the third column is the **output dtype** `e` of a file, at
+level 0 and at every scale factor and resolution level. The resampling rule of "The scale
+factor", the OME-TIFF pixel type ("OME-TIFF layout"), the OME-Zarr array dtype ("OME-Zarr
+layout"), the SpatialData image and labels elements, the `dtype` of `fused.json` and the
+read-back checks all take `e` from this table.
 
-| Output | Input dtype | Dtype written (OME-TIFF and OME-Zarr) | Rule |
+| Output | Input dtype | Dtype written `e` (OME-TIFF and OME-Zarr) | Rule |
 | --- | --- | --- | --- |
 | Stack, any scale factor and level | any allowed `d` | `d` | Level 0 holds input values; block means are accumulated in float64 and rounded half to even into `d` for integer `d` (a mean lies between the block's extremes, so it never overflows `d`), kept as `d` for float `d` (a mean of finite float32 values is finite in float32). |
 | Projection, `projection: max` | any allowed `d` | `d` | `project_image` keeps the dtype for `max`; then as the stack. |
@@ -376,7 +383,9 @@ one plane represents the whole Z extent.
 
 **Computation, without building the 3D volume.** For each included FOV, its source image
 is projected once along Z with `project_image` and `ProjectionConfig(method=…, axis="z")`
-(`src/python/starfinder/preprocessing/projection.py`, unchanged). The projections are then
+(`src/python/starfinder/preprocessing/projection.py`, unchanged), for `sum` with
+`output_dtype="float64"`, so each FOV's projection already has the output dtype of "Dtypes
+written". The projections are then
 fused in Y and X by "The value of a voxel" with the candidates decided in Y and X. A FOV's
 projection uses all its own planes; no Z resampling happens.
 
@@ -428,10 +437,13 @@ whole number within 1e-9 is refused by `FusionConfig`.
 
 **Resampling rule.** The output level is level 0 reduced by **block means** over
 `k_z × k_y × k_x` blocks, accumulated in float64 over the covered voxels of the block only
-(a block without a covered voxel is 0, uncovered), and rounded half to even into the input
-dtype for integer dtypes (float dtypes keep their dtype). The level-0 grid is padded at its
-far end with uncovered voxels to a whole number of blocks. This is the reduction geometry
-of the reference-branch `raster.py` ({doc}`sample-output-baseline`), rewritten per chunk.
+(a block without a covered voxel is 0, uncovered), and converted into the file's output
+dtype `e` of "Dtypes written": rounded half to even for an integer `e` (the stack, a
+`max` projection, P3 and P4 of an integer input), cast to `e` for a float `e` (float32
+by rounding to nearest, float64 unchanged; a `sum` projection is always float64). Level 0
+already has the dtype `e`, so no level of a file has another dtype. The level-0 grid is
+padded at its far end with uncovered voxels to a whole number of blocks. This is the
+reduction geometry of the reference-branch `raster.py` ({doc}`sample-output-baseline`), rewritten per chunk.
 
 **Achieved spacing and origin**, recorded in the file and in the run record, per file
 and per axis `a`, with `s`, `o`, `n0` the fusion grid's:
@@ -454,7 +466,8 @@ the one before. spatialdata infers a level's scale from the ratio of shapes
 `2^ℓ`; an OME-TIFF SubIFD level carries no geometry of its own besides its shape (how
 viewers derive it is part of the deferred viewer qualification). The padded size is recorded beside `N_a`. Level `ℓ` holds the mean of
 each `2^ℓ × 2^ℓ` block of the output level in Y and X (Z kept), over all its voxels,
-uncovered and padding voxels counting as 0, rounded half to even into the dtype; it can be
+uncovered and padding voxels counting as 0, converted into the file's output dtype `e` as
+in the resampling rule (rounded half to even for an integer `e`); it can be
 recomputed from the file alone. Its geometry is `S_a^(ℓ) = 2^ℓ·S_a` and
 `O_a^(ℓ) = O_a + S_a·(2^ℓ − 1)/2` in Y and X. With `L = 0` (the default OME-TIFF) nothing
 is padded.
@@ -547,8 +560,11 @@ boundaries):
    * The projection holds `A` at the Y and X of `v*` under the same condition with the
      candidates decided in Y and X, and 0 elsewhere.
    * At factor `k`, the voxel `floor(v* / k)` holds `A` divided by the number of covered
-     fusion-grid voxels of its block, rounded half to even (the fixture chooses `A` large
-     enough that this is not 0), when `A` appears at `v*`; every other voxel is 0.
+     fusion-grid voxels of its block, converted into the file's output dtype by the
+     resampling rule of "The scale factor" (rounded half to even for an integer dtype, the
+     float64 quotient cast for a float dtype, as for a `sum` projection; the fixture
+     chooses `A` large enough that this is not 0), when `A` appears at `v*`; every other
+     voxel is 0.
    * A test evaluates this oracle for the configured fixture: it computes the owner of `c*`
      with the overlap rule and expects `A` or an all-zero image accordingly.
 5. **SpatialData.** In the store, the image element's transform to the sample coordinate
@@ -574,7 +590,9 @@ everywhere, as condition 4 states.
   written with `tifffile` (a base dependency).
 * **Series and axes**: one image per file, one channel; axes `YX` stored with SizeZ 1 for
   the projection and `ZYX` for the stack; the OME-XML declares SizeZ, SizeC 1, SizeT 1 and
-  the pixel type of the input dtype.
+  the pixel type of the file's output dtype `e` ("Dtypes written"), for every resolution
+  level alike: the input dtype's type for the stack and a `max` projection, `double` for a
+  `sum` projection.
 * **Tiling**: 512 × 512 tiles (written band by band, "Bounded memory"); compression `zlib`
   (deflate, lossless; tifffile encodes and decodes it with its own fallback when
   `imagecodecs` is absent, `tifffile.py` lines 15660 to 15667 of 2026.1.28).
@@ -609,6 +627,9 @@ readable by the existing loader.
   channel with its image name in `omero` channel metadata.
 * **Chunks**: `(1, 1024, 1024)` for a projection (`c, y, x`), `(1, 16, 512, 512)` for a
   stack; Blosc `lz4`, level 5, byte shuffle; C order; fill value 0.
+* **Dtype**: the array dtype of every level is the file's output dtype `e` ("Dtypes
+  written"): the input dtype for the stack and a `max` projection, float64 for a `sum`
+  projection.
 * **Resolution levels**: the output level, then levels halving Y and X until both are at
   most 1024, with the padding, values and geometry of "Resolution levels inside a file",
   computed region by region from the written output level. Each dataset's
@@ -618,7 +639,7 @@ readable by the existing loader.
   `frame_id` and the SHA-256 of the placement tables.
 * **Writer**: standalone files through `ome-zarr` and `zarr` of the `spatialdata` extra.
   Inside the store, spatialdata's own raster writer writes the image with the same
-  chunks, codec, padding and levels, the levels passed as an explicit multiscale so it
+  dtype, chunks, codec, padding and levels, the levels passed as an explicit multiscale so it
   computes no second pyramid. Its raster format 0.2 (`RasterFormatV02`, the default
   raster format of container format 0.1) writes the NGFF 0.4 layout on Zarr v2 with the
   `multiscales` version string `0.4-dev-spatialdata` (`spatialdata/_io/format.py` lines
@@ -679,8 +700,8 @@ row or its image exists ("Empty populations"):
 | table `cells` | The sample cell table for the same rows, every column as `obs`, no `X` (zero variables); added `obs` columns `region` (categorical, every value `cell_centroids`) and `instance_id` (numpy `uint32`, an instance-key dtype the model accepts, lines 1033 to 1047); parsed with `TableModel.parse(region="cell_centroids", region_key="region", instance_key="instance_id")` | annotates `cell_centroids` |
 | table `expression` | `sample.h5ad` with every part kept: `X`, `layers`, `var`, `obs`, `obsm` and every key of `uns`; added `obs` columns `region` and `instance_id` as for `cells`; parsed as `cells` | annotates `cell_centroids` |
 | tables `cells_unplaced`, `molecules_unplaced` | The rows of the cell and molecule tables without finite sample coordinates (status `fov_not_placed`), every column as `obs`, zero variables, plus `instance_id` (cells) or `cell_instance_id` (molecules) as plain columns; parsed without region, region key or instance key, so the model adds nothing (lines 1131 to 1135) | none |
-| image `<image>_projection` (and `<image>_stack`) | The fused image, one element per image name and dimensionality, written once in the store as OME-Zarr ("OME-Zarr layout") with the fused levels | `Sequence([Scale(S), Translation(O − S/2)])` on its axes (Y and X for the projection; Z, Y and X for the stack): spatialdata's voxel `w` covers `[w, w + 1)` (`spatialdata/_core/data_extent.py` line 90), so its centre `w + ½` goes to `O + w ⊙ S`. Further levels get spatialdata's shape-ratio scale before it, exactly `2^ℓ` because of the padding ("Resolution levels inside a file"). |
-| labels `cell_labels` (optional) | The assembled label export ("Assembled label export") | as for the image, at the labels' grid |
+| image `<image>_projection` (and `<image>_stack`) | The fused image, one element per image name and dimensionality, written once in the store as OME-Zarr ("OME-Zarr layout") with the fused levels, in the output dtype `e` of its row of "Dtypes written" | `Sequence([Scale(S), Translation(O − S/2)])` on its axes (Y and X for the projection; Z, Y and X for the stack): spatialdata's voxel `w` covers `[w, w + 1)` (`spatialdata/_core/data_extent.py` line 90), so its centre `w + ½` goes to `O + w ⊙ S`. Further levels get spatialdata's shape-ratio scale before it, exactly `2^ℓ` because of the padding ("Resolution levels inside a file"). |
+| labels `cell_labels` (optional) | The assembled label export ("Assembled label export"), uint32 ("Dtypes written") | as for the image, at the labels' grid |
 
 **Metadata spatialdata adds.** `TableModel.parse` of an annotating table writes
 `uns["spatialdata_attrs"] = {"region": "cell_centroids", "region_key": "region",
@@ -835,7 +856,9 @@ through the libraries and evaluate these conditions; no viewer session is involv
 
 1. The file opens as BigTIFF and OME (`is_bigtiff`, `is_ome`), with one series whose axes
    are `YX` (projection, or a one-plane stack) or `ZYX` (stack) and one channel.
-2. Shape (the padded size when the file has levels) and dtype equal the record's; the tile
+2. Shape (the padded size when the file has levels) and dtype equal the record's, and the
+   dtype and the OME pixel type are the output dtype `e` of the file's row of "Dtypes
+   written" for the source images' dtype and the recorded projection rule; the tile
    shape is 512 × 512 and the compression `zlib`; the number and shapes of SubIFD levels
    equal the record's, each exactly half the one before in Y and X.
 3. **Geometry, per axis.** `PhysicalSizeX`, `PhysicalSizeY` and `PhysicalSizeZ` equal the
@@ -847,10 +870,13 @@ through the libraries and evaluate these conditions; no viewer session is involv
    position" hold with these values.
 4. **Voxel values.** A region read from the file equals an independent oracle computed
    from the source images, the placement and the rules of "The value of a voxel" and "The
-   scale factor": exactly at the output level (block means over covered voxels, rounded
-   half to even) and at every SubIFD level (block means of the output level, uncovered and
-   padding voxels counting as 0). When the sample has two or more included FOVs the region
-   spans an ownership boundary; it also includes uncovered voxels when the fusion grid has
+   scale factor", in value and dtype: the oracle's level 0 has the output dtype `e` of the
+   file's row of "Dtypes written" (for a `sum` projection the float64 per-FOV sums), and
+   every block mean is converted into `e` by the resampling rule (rounded half to even for
+   an integer `e`, cast for a float `e`). It holds exactly at the output level (block means
+   over covered voxels) and at every SubIFD level (block means of the output level,
+   uncovered and padding voxels counting as 0). When the sample has two or more included
+   FOVs the region spans an ownership boundary; it also includes uncovered voxels when the fusion grid has
    any, and, where the factor does not divide `n0`, the partial last block. On the fixture
    of condition 4 of "Sample position to image position", the whole file equals that
    condition's oracle. The uncovered count equals the record's.
@@ -862,10 +888,12 @@ through the libraries and evaluate these conditions; no viewer session is involv
    as specified; one dataset per recorded level; each dataset's `scale` and `translation`
    equal the record's `S^(ℓ)` and `O^(ℓ)` per axis within 1e-9 (the projection's Z as in
    OME-TIFF check 3).
-2. Each level's shape, dtype, chunks and compressor equal the record's; each level is
+2. Each level's shape, dtype, chunks and compressor equal the record's, and each level's
+   dtype is the output dtype `e` of "Dtypes written", as in OME-TIFF check 2; each level is
    exactly half the one before in Y and X.
-3. A region of the output level equals the oracle exactly; every further level equals the
-   block mean of the output level as in OME-TIFF check 4.
+3. A region of the output level equals the oracle of OME-TIFF check 4 exactly, in value
+   and in the dtype `e`; every further level equals the block mean of the output level
+   converted into `e`, as in OME-TIFF check 4.
 4. When the output level has more than one chunk, a region read inside one chunk touches
    that chunk only (chunk keys counted).
 
@@ -930,8 +958,9 @@ below applies to the elements `export.json` records as `written`; an element rec
    `floor(j + ½)`; on the fixture of its condition 4, that voxel holds `A` exactly when the
    condition's oracle says so.
 7. **Values**: each written image element's output level equals the corresponding OME-TIFF output
-   level exactly on the extent they share, with 0 in the padding (or the oracle when no
-   OME-TIFF is written); its further levels follow OME-Zarr check 3.
+   level exactly on the extent they share, with 0 in the padding (or the oracle of OME-TIFF
+   check 4 when no OME-TIFF is written), and every level's dtype is the output dtype `e` of
+   "Dtypes written", the same as the OME-TIFF's; its further levels follow OME-Zarr check 3.
 8. The SHA-256 of every store file equals `export.json` (no file when `store: null`).
 
 **Deferred**: viewer qualification in Fiji and napari (opening the OME-TIFF and the store,
