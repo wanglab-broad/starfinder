@@ -150,7 +150,11 @@ saved placement (`load_placement`) and assembly (`load_assembly`), builds one
    (`IncompatibleGeometryError`). All included FOVs share one spacing, as `stitch`
    requires.
 5. **Images.** Each named source image exists for every included FOV, has the grid's shape
-   and one dtype across FOVs (`ValueError` naming the dtypes; no implicit conversion).
+   and one dtype across FOVs (`ValueError` naming the dtypes; no implicit conversion), and
+   that dtype is one of uint8, uint16, uint32, int8, int16, int32, float32 and float64, the
+   real dtypes the pinned tifffile writes to OME-TIFF (`tifffile.py` lines 14946 to 14963
+   of 2026.1.28); any other dtype (uint64, int64, float16, bool, complex) raises
+   `ValueError` naming it and the allowed list ("Dtypes written").
 6. **Config.** `FusionConfig.__post_init__` validates every field ("Fusion config").
 
 ## Output profiles
@@ -165,13 +169,13 @@ A finished sample has its outputs in three folders beside its placement
 | Always (assembly) | an `assembly` block ({doc}`assembly-contract`, "Workflow configuration") | `assembly/<sample>/assembly.json`, `fovs.<fmt>`, `cells.<fmt>`, `molecules.<fmt>`, `counts.<fmt>` | JSON; CSV by default or Parquet | The record and the four sample tables of {doc}`assembly-contract`, "Sample tables" |
 | | | `assembly/<sample>/sample.h5ad` | H5AD | The sample-level AnnData of {doc}`assembly-contract`: one row per counted cell; written by assemble, so it is part of every profile, the default included |
 | Default | nothing (the `sample_outputs` defaults) | the above, plus `fused/<sample>/fused.json` | JSON | The fusion record ("Run record") |
-| | | `fused/<sample>/<image>_projection.ome.tif` | OME-TIFF, BigTIFF, tiled | The maximum projection of `<image>`, at scale 0.5 in Y and X, in the input dtype, with calibration and origin ("OME-TIFF layout") |
+| | | `fused/<sample>/<image>_projection.ome.tif` | OME-TIFF, BigTIFF, tiled | The maximum projection of `<image>`, at scale 0.5 in Y and X, in the input dtype ("Dtypes written"), with calibration and origin ("OME-TIFF layout"); not written when no FOV is included ("The fusion grid") |
 | No fused image | `fuse: false` | the "Always" files only | | No `fused/<sample>/` folder |
 | 3D stack | `dimensionality: stack` (or `both`) | `fused/<sample>/<image>_stack.ome.tif` instead of (or beside) the projection | OME-TIFF | The 3D fused image at `scale_yx` in Y and X and `scale_z` in Z |
 | OME-Zarr, without SpatialData | `formats: [ome_zarr]` (or both formats), `spatialdata: false` | `fused/<sample>/<image>_projection.ome.zarr` (and `_stack.ome.zarr`) | OME-NGFF 0.4 on Zarr v2 ("OME-Zarr layout") | The same image values as the OME-TIFF, with resolution levels |
 | Further channels | `images: [reference_stain, reference_merged, …]` | one file per image name and dimensionality, as above | as above | Each selected source image fused on the same grid with the same placement and ownership |
-| SpatialData | `spatialdata: true` | `export/<sample>/export.json`, `export/<sample>/sample.zarr/` | JSON; SpatialData store on Zarr v2, container format 0.1, raster groups in spatialdata's raster format 0.2 (NGFF 0.4 layout, version string `0.4-dev-spatialdata`) | Points `molecules`, shapes `cell_centroids`, tables `cells`, `expression`, `cells_unplaced`, `molecules_unplaced`, and one image element `<image>_projection` (and `<image>_stack`) per fused image ("SpatialData export"). The OME-Zarr image exists only here: no `fused/<sample>/*.ome.zarr` is written. The OME-TIFF files of `formats` are still written. |
-| SpatialData without a fused image | `spatialdata: true`, `fuse: false` | `export/<sample>/` as above without image elements | | The record says `image: "not requested"` |
+| SpatialData | `spatialdata: true` | `export/<sample>/export.json`, `export/<sample>/sample.zarr/` | JSON; SpatialData store on Zarr v2, container format 0.1, raster groups in spatialdata's raster format 0.2 (NGFF 0.4 layout, version string `0.4-dev-spatialdata`) | Points `molecules`, shapes `cell_centroids`, tables `cells`, `expression`, `cells_unplaced`, `molecules_unplaced`, and one image element `<image>_projection` (and `<image>_stack`) per fused image, each written when not empty ("SpatialData export", "Empty populations"). The OME-Zarr image exists only here: no `fused/<sample>/*.ome.zarr` is written. The OME-TIFF files of `formats` are still written. |
+| SpatialData without a fused image | `spatialdata: true`, `fuse: false` | `export/<sample>/` as above without image elements | | `export.json` records each image element as `omitted`, reason `not_requested` |
 | Pyramid in OME-TIFF | `pyramid_levels: L` | the same files | SubIFD levels | `L` further levels, each halving Y and X ("OME-TIFF layout") |
 | Assembled labels (optional, proposed for a later delivery) | `labels: true` | `fused/<sample>/labels.json`; with SpatialData the labels element `sample.zarr/labels/cell_labels`, without it `fused/<sample>/cell_labels.ome.tif` | uint32 | Sample-level cell instance IDs placed without blending ("Assembled label export") |
 
@@ -218,10 +222,25 @@ The fusion grid is computed from the placement and the included FOVs' grids only
 * **Metadata**: `ImageMetadata(frame_id="sample:<sample>", spacing_zyx=s, origin_zyx=o,
   direction_zyx=identity, spatial_unit="µm")`. Index `v` of the grid is at sample position
   `o + v ⊙ s`.
-* For Z = 1 FOVs the grid has one plane.
+* **Z = 1 FOVs.** The grid has one plane when every included FOV has Z = 1 and the same
+  `origin_z`. Neither earlier contract requires that: {doc}`stitching-contract` places a
+  Z = 1 grid as a plane but fixes only relative positions, and the one-layer check of
+  {doc}`assembly-contract` ("Checks the entry applies", 8) compares `nominal_z`, not
+  `origin_z`. When Z = 1 FOVs have different `origin_z`, the shape formula gives `n0_z > 1`
+  (unit spacing and Z origins 0 and 1.4 give `n0_z = 3`), each FOV covers the planes its
+  one-plane footprint contains, and the other planes are uncovered there. `fuse` does not
+  refuse this; the record lists `n0_z` and the per-FOV `origin_z`, and the projection
+  collapses the planes as for any stack.
 
 Excluded FOVs (`placeholder`, `missing`, `failed`) do not extend the grid; the area only
 they would cover is uncovered.
+
+**No included FOV.** When no FOV is included (every FOV excluded, or a placement whose
+placed FOVs are all placeholders), there is no grid: `fuse` writes no image file and writes
+`fused.json` with `outputs: []` and `reason: "no_included_fov"`; `check_fused` accepts that
+record only when the placement indeed has no included FOV. One included FOV gives a grid
+equal to that FOV's grid (`o` its origin, `n0` its shape), with no overlap and no
+uncovered voxel.
 
 ### The value of a voxel
 
@@ -240,8 +259,31 @@ For an output voxel with centre `c` (sample frame, µm) at level 0:
 4. **No candidate**: the voxel is **uncovered** and holds 0. Uncovered voxels are counted
    in the record and excluded from the block means of "The scale factor".
 
-Level 0 therefore holds input values only: **the dtype is preserved** and no new value is
-created. The scale factor reduces level 0 by block means, rounded into the input dtype.
+Level 0 of the stack therefore holds input values only: **the dtype is preserved** and no
+new value is created. The projection holds per-FOV projections, in the dtypes of "Dtypes
+written". The scale factor reduces level 0 by block means, rounded into the level-0 dtype.
+
+### Dtypes written
+
+For every allowed input dtype `d` (check 5 of "The fuse and export entry"), every
+configuration writes one definite dtype, the same in OME-TIFF and OME-Zarr:
+
+| Output | Input dtype | Dtype written (OME-TIFF and OME-Zarr) | Rule |
+| --- | --- | --- | --- |
+| Stack, any scale factor and level | any allowed `d` | `d` | Level 0 holds input values; block means are accumulated in float64 and rounded half to even into `d` for integer `d` (a mean lies between the block's extremes, so it never overflows `d`), kept as `d` for float `d` (a mean of finite float32 values is finite in float32). |
+| Projection, `projection: max` | any allowed `d` | `d` | `project_image` keeps the dtype for `max`; then as the stack. |
+| Projection, `projection: sum` | uint8, uint16, uint32, int8, int16, int32 | float64 | `project_image` sums integers into uint64 or int64 (`src/python/starfinder/preprocessing/projection.py` line 60), which OME-TIFF cannot store. The sum is computed with `ProjectionConfig(method="sum", output_dtype="float64")`, a checked cast (`src/python/starfinder/io/conversion.py`, `_cast`, lines 23 to 39). It is exact while the number of planes times the dtype's largest magnitude is at most 2^53 (for 32-bit inputs, up to 2^21 = 2,097,152 planes); `fuse` checks that bound before computing and raises `ValueError` naming it otherwise. Block means of the float64 projection stay float64. |
+| Projection, `projection: sum` | float32, float64 | float64 | `project_image` sums floats in float64 and raises `ValueError("sum projection overflow")` on a non-finite result (lines 62 to 63). |
+| P3 (one plane) and P4 (maximum of the stack), options not offered as keys | any allowed `d` | `d` | Input values, as the stack. |
+| Label export, any place, any scale factor and level | uint32 labels | uint32 | Block mode, no arithmetic; more than 2³² − 1 cell rows is an error ("SpatialData export"). |
+
+OME-TIFF accepts every dtype of the third column (`tifffile.py` lines 14946 to 14963:
+`uint8`, `uint16`, `uint32`, `int8`, `int16`, `int32`, `float32` as `float`, `float64` as
+`double`). Zarr stores any numpy dtype; the rule above keeps the two formats equal. The
+dtype is recorded per file in `fused.json`, and OME-TIFF and OME-Zarr check 2 compare it.
+
+Converting the sum to float64 or refusing `projection: sum` with OME-TIFF is a design
+choice; this page recommends the conversion (worker notes, choice 11).
 
 ### Overlap rule
 
@@ -302,6 +344,8 @@ RSS.
   resolution levels with their shapes, spacings and origins, tile or chunk shape and
   compression;
 * counts: voxels at level 0, uncovered voxels, voxels per chosen FOV;
+* `reason: "no_included_fov"` with `outputs: []` when no FOV is included ("The fusion
+  grid");
 * `software` as in `run.json` ({doc}`checkpoints`), the band size, wall and CPU time and
   peak RSS.
 
@@ -367,7 +411,7 @@ unknown; the per-FOV rule is not changed (worker notes, choice 5).
 | Option | Projection rule | Cost | Consequence |
 | --- | --- | --- | --- |
 | **P1. Maximum (recommended)** | `max` over Z | Keeps the dtype; one pass over each FOV | Today's practice (`MAX_*.tif`); spots and nuclei at any depth stay visible; noise floor rises with the number of planes. |
-| P2. Sum | `sum` over Z (`ProjectionConfig` `sum`) | The output dtype widens to uint64 or int64 or float64 (`project_image`): 8 bytes per pixel, 8 times the uint8 default | Proportional to total signal; not the input dtype, so "dtype preserved" no longer holds. |
+| P2. Sum | `sum` over Z (`ProjectionConfig` `sum`), written as float64 ("Dtypes written") | 8 bytes per pixel, 8 times the uint8 default | Proportional to total signal; not the input dtype, so "dtype preserved" no longer holds. |
 | P3. One plane | The owner's plane nearest to a given sample z | Reads one plane per FOV | Cheapest; loses everything out of that plane. |
 | P4. Project the stack | `max` over Z of the 3D stack, computed band by band | The cost of the 3D stack ("Resources": LN 8.5 GiB of level 0 fused) | Equals the maximum of the stack by construction, also with different Z offsets. |
 
@@ -435,8 +479,13 @@ sample, and the acquired size remains one key away.
 On request (`dimensionality: stack` or `both`). The same grid rule in three dimensions:
 the fusion grid with Z, the value rule with candidates decided in Z, Y and X, the scale
 factors `k_z`, `k_y`, `k_x`, the same `S`, `O`, `N`. When every included FOV has Z = 1 and
-the same `origin_z`, the stack is one plane, its Z geometry equals the projection's
-(`n0_z = 1`), and it equals the projection at the same scale factor.
+the same `origin_z` (`n0_z = 1`), the stack is one plane and its values equal the
+projection's at the same `scale_yx` under `projection: max`. Its Z geometry equals the
+projection's only at `scale_z = 1`: by the table of "The scale factor" a Z factor `k_z > 1`
+gives the one plane `S_z = k_z·s_z` and `O_z = o_z + s_z·(k_z − 1)/2` (a block padded with
+uncovered planes), while the projection has `S_z = s_z` and `O_z = o_z`; both map every z of
+the plane's footprint to index 0. Example: `s_z = 1`, `o_z = 0`, `scale_z = 0.5` give the
+stack `S_z = 2`, `O_z = 0.5` and the projection `S_z = 1`, `O_z = 0`.
 
 Its cost is the fusion of every level-0 voxel ("Resources"): LN 68 × 12,333 × 10,883 voxels
 (8.5 GiB of uint8 before compression), cell-culture-3D 45 × 13,636 × 9,576 (5.5 GiB). A
@@ -620,7 +669,8 @@ table must satisfy the same rule and be unique ignoring case
 and the keys of `sample.h5ad` do ({doc}`assembly-contract`), and the export refuses a table
 that does not, naming the key.
 
-**Elements** (`export/<sample>/sample.zarr`):
+**Elements** (`export/<sample>/sample.zarr`), each written only when its population has a
+row or its image exists ("Empty populations"):
 
 | Element | Content | Transform to the sample coordinate system |
 | --- | --- | --- |
@@ -640,6 +690,35 @@ categorical (lines 1083 to 1086). A table parsed without these arguments and wit
 key is returned unchanged (lines 1131 to 1135). The points and raster models add their
 `transform` attributes. This metadata is the export's, not the source's; the round-trip
 check tests it separately from the source content ("Read-back checks").
+
+**Empty populations.** The pinned library rejects an empty shapes element (`ShapesModel`,
+`spatialdata/models/models.py` lines 449 to 450 of 0.6.1) and an annotating table whose
+declared region does not occur among its region values, which is every annotating table
+without rows (lines 1048 to 1051). The rule is therefore: **an element whose population has
+no row, or whose image does not exist, is left out of the store**, and `export.json` lists
+every element the configuration asks for, each with `status` `written` or `omitted`, its
+row count or shape, and for an omitted element a `reason`: `empty` (no row), `no_cells`
+(a `molecules_only` sample has no territories), `no_included_fov` or `not_requested`
+(`fuse: false`, `labels: false`). A name that the store lacks and `export.json` does not
+list as omitted is missing, and the read-back check fails on it. The export relies on no
+library behavior for empty elements, because it writes none. When every element is
+omitted, no `sample.zarr` is written and `export.json` records `store: null` with the
+reason; the export does not rely on spatialdata writing an empty store.
+
+| Case | Written | Left out (reason) |
+| --- | --- | --- |
+| Usual sample | every element with rows; the images | `cells_unplaced`, `molecules_unplaced` when every FOV is placed (`empty`, the common case) |
+| No cell with a finite ownership centroid (no cell, or only cells of FOVs without an origin) | `molecules` if any row; `cells_unplaced` if any row; images | `cell_centroids`, `cells`, `expression` (`empty`) |
+| Cells, but no counted cell | `cell_centroids`, `cells`, the rest as usual | `expression` (`empty`); `sample.h5ad` has no row ({doc}`assembly-contract`, "Sample-level AnnData") |
+| `molecules_only` sample | `molecules` if any row, `molecules_unplaced` if any row, images | `cell_centroids`, `cells`, `expression`, `cells_unplaced` (`empty`); `cell_labels` (`no_cells`) |
+| No molecule with finite sample coordinates | the rest as usual | `molecules` (`empty`) |
+| No included FOV | each table, points or shapes element that has rows (usually only `cells_unplaced` and `molecules_unplaced`) | image elements and `cell_labels` (`no_included_fov`); every table, points or shapes element without rows (`empty`) |
+| `fuse: false` or `labels: false` | the tables, points and shapes as above | image elements or `cell_labels` (`not_requested`) |
+
+In the "No included FOV" row, a placed FOV without a source image (a `placeholder`) still
+has sample coordinates, so its observations, if it has any, go to `molecules`, `cells` and
+`cell_centroids` as usual; only rows without sample coordinates go to the `_unplaced`
+tables.
 
 **Image dimensionality in the store.**
 
@@ -680,8 +759,10 @@ environment or the napari adapter.
 
 **`export.json`**: `format_version` 1, `stage` `export`, sample, `frame_id`, coordinate
 system name, the SHA-256 of `assembly.json`, `fused.json` and (labels) `labels.json`, the
-spatialdata version and the formats written, per element its name, path, kind, row count or
-shape, transform and, for tables, the `spatialdata_attrs` written and the dtype of every
+spatialdata version and the formats written, `store` (the store path, or `null` when every
+element is omitted), per element its name, kind, `status` (`written` or `omitted`) and for an
+omitted element its `reason` ("Empty populations"), and for a written element its path, row
+count or shape, transform and, for tables, the `spatialdata_attrs` written and the dtype of every
 column after the round trip, and the counts of "Read-back checks" (molecules by `assignment_status`
 and by `assembly_status` and reason, cells by `assembly_status`, counted cells), the column
 renames, and the SHA-256 of every file of the store.
@@ -693,7 +774,10 @@ inspection product.
 
 * **Inputs**: the placement, the assembly result and, per FOV, the territory label image
   that assign sampled (the expanded one when assign expanded, as the cell table's
-  `ownership_centroid` records), whose SHA-256 the assembly record holds.
+  `ownership_centroid` records), whose SHA-256 the assembly record holds. A `molecules_only`
+  sample has no territories: the label export writes no label image, `labels.json` records
+  `reason: "no_cells"`, and the store records `cell_labels` as omitted. With no included FOV
+  it records `reason: "no_included_fov"` likewise.
 * **Unique sample-level labels**: the value of a voxel is the `instance_id` of the cell
   ("SpatialData export", "Identities") whose territory the chosen FOV has there, whatever
   that cell's assembly status; 0 is background, and an uncovered voxel is 0. uint32.
@@ -785,10 +869,19 @@ through the libraries and evaluate these conditions; no viewer session is involv
 4. When the output level has more than one chunk, a region read inside one chunk touches
    that chunk only (chunk keys counted).
 
-**SpatialData** round trip, with `spatialdata.read_zarr` of the written store:
+**SpatialData** round trip, with `spatialdata.read_zarr` of the written store. Each check
+below applies to the elements `export.json` records as `written`; an element recorded as
+`omitted` is tested by check 1 only.
 
-1. **Elements**: the element names and kinds equal `export.json`, and no two names are
-   equal ignoring case; one image element per recorded fused image; no other OME-Zarr group
+1. **Elements**: the element names and kinds in the store equal those `export.json`
+   records as `written`, and no two names are equal ignoring case; every element the
+   configuration asks for is recorded as `written` or `omitted`; for each `omitted`
+   element the reason holds when recomputed from the sample tables, the fusion record and
+   the configuration (`empty`: its population has no row; `no_cells`: the sample is
+   `molecules_only`; `no_included_fov`: `fused.json` has that reason; `not_requested`: the
+   key is off), and the element is absent from the store; when `export.json` records
+   `store: null`, no `sample.zarr` exists and every element is `omitted`. One image element
+   per recorded fused image; no other OME-Zarr group
    of the same image exists under `export/<sample>/` or `fused/<sample>/`; the store is Zarr
    format 2 and each raster group's `multiscales` version string is the one its recorded
    raster format writes (`0.4-dev-spatialdata` for `RasterFormatV02`).
@@ -797,16 +890,17 @@ through the libraries and evaluate these conditions; no viewer session is involv
    `y`, `z` equal `sample_x`, `sample_y`, `sample_z` exactly, `fov_index_z/y/x` equal the
    §2.9 `z`, `y`, `x`, every other source column equals its source (NaN equals NaN, null
    equals null), `cell_instance_id` follows check 5, and no `sample_x/y/z` column remains; the dtypes equal those `export.json`
-   lists. Together with `molecules_unplaced`, every row of the sample molecule table
-   appears exactly once.
+   lists. Together with `molecules_unplaced` (each where written), every row of the sample
+   molecule table appears exactly once; a sample molecule table without rows has both
+   omitted.
 3. **Source content of the tables is preserved.** The `cells` and `cells_unplaced` rows,
    joined on `(cell_namespace, cell_id)`, equal the sample cell table's rows in every
-   source column; `molecules_unplaced` likewise for its molecule rows; `expression` equals
+   source column, and together contain each of them exactly once; `molecules_unplaced` likewise for its molecule rows; `expression` equals
    `sample.h5ad` in `X`, `layers`, `var` and `obsm` exactly, in every source column of
    `obs`, and in every key of the source `uns`, each with the same value. Values are
    compared, and each column's dtype after the round trip equals the one `export.json`
    records (how anndata 0.12.6 under pandas 3 returns string columns is recorded rather
-   than assumed).
+   than assumed). When `expression` is omitted, `sample.h5ad` has no row.
 4. **Export metadata is present, separately.** `cells` and `expression` have the added
    `obs` columns `region` (categorical, every value `cell_centroids`) and `instance_id`
    (`uint32`), and `uns["spatialdata_attrs"]` equal to `{"region": "cell_centroids",
@@ -816,8 +910,9 @@ through the libraries and evaluate these conditions; no viewer session is involv
    `cell_instance_id` respectively. Points, shapes and raster elements carry
    the transforms of check 6 and no feature or instance key.
 5. **Links and accounting**: `instance_id` of `cells` and `cells_unplaced` together is
-   `1..N` in the sample cell table's order; the index of `cell_centroids` equals the
-   `instance_id` of `cells`; every molecule of `molecules` and `molecules_unplaced` with a
+   `1..N` in the sample cell table's order (empty when both are omitted); `cells` and
+   `cell_centroids` are written or omitted together, and the index of `cell_centroids`
+   equals the `instance_id` of `cells`; every molecule of `molecules` and `molecules_unplaced` with a
    non-null cell key has a
    `cell_instance_id` equal to that cell's `instance_id`, and every molecule without one a
    null `cell_instance_id`; every `expression` row is a `cells` row with
@@ -825,7 +920,7 @@ through the libraries and evaluate these conditions; no viewer session is involv
    `assignment_status` (`assigned`, `unassigned`, `excluded_cell`, `outside_grid`) and by
    `assembly_status` and reason, recounted from `molecules` and `molecules_unplaced`, equal
    `export.json` and the assembly record's counts.
-6. **Calibration and alignment**: the transform of each image (and labels) element to the
+6. **Calibration and alignment**: the transform of each written image (and labels) element to the
    sample coordinate system equals `Scale(S)` then `Translation(O − S/2)` on its axes within
    1e-9, with `S` and `O` of that file's output level (Y and X for a projection); its extent
    there (`get_extent`) is `[O − S/2, O + (N_padded − ½)·S)` per axis; level `ℓ`'s composed
@@ -834,10 +929,10 @@ through the libraries and evaluate these conditions; no viewer session is involv
    a point at `q`, transformed into the image's intrinsic coordinates, falls in voxel
    `floor(j + ½)`; on the fixture of its condition 4, that voxel holds `A` exactly when the
    condition's oracle says so.
-7. **Values**: the image element's output level equals the corresponding OME-TIFF output
+7. **Values**: each written image element's output level equals the corresponding OME-TIFF output
    level exactly on the extent they share, with 0 in the padding (or the oracle when no
    OME-TIFF is written); its further levels follow OME-Zarr check 3.
-8. The SHA-256 of every store file equals `export.json`.
+8. The SHA-256 of every store file equals `export.json` (no file when `store: null`).
 
 **Deferred**: viewer qualification in Fiji and napari (opening the OME-TIFF and the store,
 display of levels, channels, labels and points). These checks do not stand in for it; the
@@ -872,9 +967,12 @@ class FusionConfig:
     band_tiles: int = 1                              # rows of 512-pixel output tiles per band
 ```
 
-`__post_init__` refuses unknown values, a scale whose reciprocal is not whole, an empty
-`images` or `formats`, and image names that are equal when case is ignored (spatialdata
-treats element names case-insensitively, "SpatialData export").
+`__post_init__` refuses unknown values, a scale whose reciprocal is not whole, a
+`scale_z` other than 1 when `dimensionality` is `projection` (it applies to the stack
+only), a negative `pyramid_levels`, an empty `images` or `formats`, and image names that
+are equal when case is ignored (spatialdata treats element names case-insensitively,
+"SpatialData export"). Once the grid is known, `fuse` refuses a `pyramid_levels` larger
+than `floor(log2(max(N_y, N_x)))`, whose last level would be a single padded voxel row.
 
 ## Workflow configuration
 
