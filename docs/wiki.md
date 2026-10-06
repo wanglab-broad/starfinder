@@ -36,6 +36,9 @@ Assignment algorithms (proposed) <assignment-algorithms>
 Stitching baseline (proposed) <stitching-baseline>
 Stitching contract (proposed) <stitching-contract>
 Stitching algorithms (proposed) <stitching-algorithms>
+Assembly baseline (proposed) <assembly-baseline>
+Assembly contract (proposed) <assembly-contract>
+Assembly algorithms (proposed) <assembly-algorithms>
 Learned detectors <learned-detectors>
 Coordination <coordination>
 Checkpoints <checkpoints>
