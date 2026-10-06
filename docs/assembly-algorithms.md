@@ -78,14 +78,18 @@ For each placed FOV `f` with grid sizes `(n_y, n_x)` and spacing `(s_y, s_x)`:
 * centre `(o_y + (n_y − 1)/2 · s_y, o_x + (n_x − 1)/2 · s_x)`, the centre of the middle
   voxel position.
 
-Both are written to the `fovs` table and the record, so a reader can recompute every
-owner.
+Both are written to the `fovs` table and the record, for every placed FOV, placeholders
+included, with `owns_points`, so a reader can recompute every owner. Only owning FOVs
+({doc}`assembly-contract`, "Terms": placed, with an input, `image_supported` or
+`metadata_only`) take part in the rules below; a `placeholder`'s footprint is kept for the
+record and never decides an owner.
 
 ### O1, nearest centre (recommended default)
 
 For a point `q` (Y and X of a sample position):
 
-1. Candidates: the placed FOVs whose footprint contains `q`.
+1. Candidates: the owning FOVs whose footprint contains `q`, restricted to the
+   `candidates` argument when it is given.
 2. No candidate: no owner.
 3. Otherwise the candidate with the smallest `(q_y − c_y)² + (q_x − c_x)²`, in float64.
 4. Exact ties (equal float64 squared distances): the candidate first in the placement's
@@ -93,7 +97,19 @@ For a point `q` (Y and X of a sample position):
 
 For two FOVs of one shape and spacing the boundary is the perpendicular bisector of their
 centres, which for a regular grid is the midline of the overlap; three or more FOVs meet
-at points, and every covered point has one owner.
+at points, and every point covered by an owning FOV has one owner.
+
+**A placeholder in the grid.** Its footprint is not a candidate, so a point there goes to
+the nearest owning FOV that covers it, or to none. A placeholder at a corner of the grid
+has at most three neighbours (two sides and one diagonal), one at an edge at most five,
+one inside the grid at most eight. Each part of its footprint that neighbours cover goes
+to the nearest of them; where two neighbours cover a point, as in a corner overlap, the
+nearest centre decides as anywhere else. The rest of its footprint, which no owning FOV
+covers (its middle, and at the grid's border the strip along the outer edge), has no
+owner. With overlaps below half a tile, that middle is never empty. Neither the golden
+fixture nor the LN records have a placeholder (LN's blank cells are padding views), so no
+figure below changes; `test_workflow_assembly_golden.py` still pins the legacy behavior,
+whose rectangles include every grid cell.
 
 **On the golden fixture** (fractional origins `(y, x)`: FOV1 `(0, 0)`, FOV2 `(37.4, 0.7)`,
 FOV3 `(−0.3, 55.4)`, in the fixture's unit voxels): the FOV1/FOV3 boundary runs from
@@ -117,7 +133,9 @@ Per FOV an axis-aligned box: its footprint, with the edge towards each neighbour
 to the middle of their overlap: towards a left neighbour `l`,
 `x0 = (o_x(l) + n_x(l)·s_x + o_x(f))/2 − s_x/2`, and likewise for the other three sides,
 each with its own axis's size. Neighbours are the four grid neighbours (`grid_row`,
-`grid_column` of the tile position table), so O2 needs a grid. Ties on an edge go by T2
+`grid_column` of the tile position table) that are owning FOVs (and candidates, when
+`candidates` is given), so O2 needs a grid; towards a placeholder, the edge stays at the
+FOV's own footprint edge, and only owning FOVs have boxes. Ties on an edge go by T2
 (half-open). On the fixture: box edges x 59.2 and y 42.2, the same retained sets as O1.
 On LN: 33,760 px² owned twice and 2,576 px² unowned, as the legacy rule has at blank
 cells and corners.
@@ -126,9 +144,12 @@ cells and corners.
 | --- | --- | --- | --- |
 | `ownership` | – | `nearest_center` | `nearest_center` (O1) or `midpoint_box` (O2); `midpoint_box` raises `ValueError` when the tile position table has no grid cells |
 | `tie` | – | `table_order` | T1; `half_open` (T2) only with `midpoint_box` |
+| `candidates` (argument of `ownership_map`) | – | `None` (every owning FOV) | a non-empty collection of `fov_id`s, each an owning FOV of the placement; restricts the FOVs that may own a point |
 
-Failure: a placement with no placed FOV raises `ValueError`; a sample with FOVs of
-different `nominal_z` raises (check 8 of the entry).
+Failure: a placement with no owning FOV raises `ValueError` (also when every FOV is a
+`placeholder`); `candidates` that is empty or names a FOV that is not an owning FOV (not in
+the placement, not placed, a `placeholder` or without a grid) raises `ValueError` naming
+it; a sample with FOVs of different `nominal_z` raises (check 8 of the entry).
 
 **Cost.** Candidates are found by binning the footprints on a grid of cells one tile wide
 (each point then tests the few FOVs of its bin; four or fewer on a grid with overlaps
@@ -144,7 +165,9 @@ Per FOV, in order:
 1. Placement status: no finite origin → every row `excluded`, `fov_not_placed`.
 2. Cells: owner of the ownership centroid, `sample_ownership_centroid_y/x`
    (`centroid="territory"`: the expanded centroid when assign expanded, else the original;
-   `"original"`: always the original) → retained when it is the FOV, else `not_owner`.
+   `"original"`: always the original) → retained when it is the FOV, else `not_owner`
+   (for a `placeholder`, always `not_owner`, with a null owner where no owning FOV covers
+   the centroid).
 3. Molecules by `assignment_status`: `assigned`, `excluded_cell` → the cell's status
    (reason `cell_not_owner` for `not_owner`); `unassigned` → owner of the molecule's own
    position; `outside_grid` → `outside_grid`. In `molecules_only` mode every molecule is
@@ -174,12 +197,15 @@ per cell and per unassigned molecule, one join of molecules to cells by `cell_id
 | `fov_edge` | The set of label values on the first and last Y row and X column of the territory image (all planes); a cell is flagged when its `cell_id` is in it. | Reads `2 × (n_y + n_x) × n_z` voxels per FOV. |
 | `z_edge` | The same on the first and last Z plane, for `volume` and `extended` territories. | `2 × n_y × n_x` voxels per FOV. |
 | `conflict` | For each retained cell of FOV `a` and each other placed FOV `b` whose footprint contains its ownership centroid (`sample_ownership_centroid_*`): map that centroid into `b`'s index coordinates (`p = (q − origin_b) ⊘ spacing_b`), sample `b`'s territory at `floor(p + 0.5)` (Y and X for a `plane`; Z, Y and X otherwise; outside the grid is no territory). A value that is a retained cell of `b` flags both cells and records each in the other's `conflict_with`. | One voxel read per (cell, overlapping FOV) pair. |
-| `unclaimed` | For each cell excluded `not_owner`: the same sampling in the owner FOV; flagged when the value is 0 or a cell the owner did not retain. | One voxel read per excluded cell. |
+| `unclaimed` | For each cell excluded `not_owner`: flagged when its ownership centroid has no owner (a cell of a `placeholder` outside every owning footprint); otherwise the same sampling in the owner FOV, flagged when the value is 0 or a cell the owner did not retain. | One voxel read per excluded cell with an owner. |
 | `outside_owner_region` | A retained molecule of a retained cell whose own position's owner is another FOV. | One owner query per such molecule. |
 | `cell_unclaimed` | A molecule of a cell flagged `unclaimed`. | A join. |
 
 The territories are those of the §2.9 result (`territories` when assign expanded, else
-`cell_labels`), read from the saved assignment folder with their SHA-256 checked. Pairs of
+`cell_labels`), read from the saved assignment folder with their SHA-256 checked. The
+record (`assembly.json`) holds, per FOV, the path of the file read, as the §2.9 loader
+resolved it, beside that SHA-256 ({doc}`assembly-contract`, "What assemble records"), so a
+later reader, such as the label export, opens the file directly. Pairs of
 FOVs are processed so that at most two territory images are in memory: 4 bytes per voxel
 (`uint32`), 8.95 MB per plane of a 1496 × 1496 grid.
 
@@ -212,14 +238,21 @@ result:
    `n_molecules` over the counted cells;
 5. the §2.9 compartment identities over the counted cells.
 
+Placeholders change none of these identities. A placeholder's observations, when it has an
+input, all get excluded reasons (`not_owner`, `cell_not_owner`, `outside_grid`), and
+identity 3 recomputes them with the placeholder never being the owner.
+
 Parameters: none; the quantities are counts of rows and molecules (integers), compared
 exactly. A violation raises `ValueError` naming the identity and the first differing key.
 Cost: sorts and joins over the tables, `O(n log n)`; no copy beyond the key columns.
 
 ## Sample-level AnnData
 
-From the cell table and `counts` ({doc}`assembly-contract`, "Sample-level AnnData"),
-through `counts_anndata`:
+From the cell table and `counts` ({doc}`assembly-contract`, "Sample-level AnnData"):
+`sample_anndata(result, path, *, annotation=None)` prepares the sample's `obs` and the
+other parts (steps 1 and 3 to 4) and passes them to `write_h5ad(path, obs, keys, counts,
+genes, *, layers, uns, var, obsm)` of `starfinder.assignment`, which builds the AnnData
+(step 2) and writes it at `path`:
 
 1. Select the counted cells: the cell-table rows with `assembly_status == "retained"` and
    §2.9 `status == "kept"`, in table order. A retained cell whose §2.9 status is
@@ -237,14 +270,19 @@ through `counts_anndata`:
    `sample_centroid_x/y` where it is `original`; `var_names` = `genes`; `uns` = the record
    as JSON, the unit, the frame and `spatial_centroid` (the two columns `obsm["spatial"]`
    copies, the `centroid` setting and the row count per `ownership_centroid` value).
-4. `molecules_only`: zero rows, `var["n_molecules_retained"]`.
+4. `molecules_only`: zero rows, `var["n_molecules_retained"]`, passed to `write_h5ad` as
+   `var`; with no row in `obs`, `write_h5ad` writes `X` of shape `(0, n_genes)`.
 
 | Parameter | Unit | Default | Rule |
 | --- | --- | --- | --- |
 | `annotation` | – | `None` | a mapping of extra `obs` columns for the sample (the workflow passes the annotation row) |
 
-Failure: without `anndata`, `ModuleNotFoundError` naming the `anndata` extra; a
-non-unique `obs_name` cannot occur after the entry's checks.
+Failure: without `anndata`, `ModuleNotFoundError` naming the `anndata` extra, from
+`write_h5ad` and `sample_anndata` alike; a non-unique `obs_name` cannot occur after the
+entry's checks; a `keys` row count that differs from `obs`, or a key column missing from
+`counts`, raises `ValueError` in `write_h5ad`. The workflow adapter calls the same
+`write_h5ad` for `raw.h5ad`, with the `obs` that `_cell_obs` prepares after its tile-box
+filter, and the file's content is as before.
 
 Cost: `X` and each layer are dense float64, as in `raw.h5ad`: 8 bytes × cells × genes
 (100,000 cells × 1,000 genes is 0.8 GB per matrix). A sparse `X` would change the
@@ -255,8 +293,8 @@ Cost: `X` and each layer are dense float64, as in `raw.h5ad`: 8 bytes × cells �
 * The ownership comparison on LN is an area comparison of two rules on one placement;
   the number of cells or molecules whose owner changes depends on their density there
   and was not measured.
-* The fixture is synthetic, one layer, with tiles of one shape; unequal tile shapes and
-  stage positions are covered by the rule, not by a pinned case.
+* The fixture is synthetic, one layer, with tiles of one shape; unequal tile shapes,
+  stage positions and placeholder FOVs are covered by the rule, not by a pinned case.
 * Nearest-centre ownership is a geometric rule. It does not decide which FOV saw a cell
   better (focus, completeness), and no quality-weighted ownership is proposed.
 * Duplicates and losses are flagged, not counted as biological cells; their frequency on

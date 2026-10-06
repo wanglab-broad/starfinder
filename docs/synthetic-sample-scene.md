@@ -588,8 +588,12 @@ otherwise). Its property laws (`brightness`, widths, `elongation`, `angle`) and
 are compared with the value 0 of a label image is stated in "Per-FOV truth" ("Sampled
 labels and nullable truth IDs"). The `population` column (`cell`, `ambient`)
 records how it was placed; it is not the truth: an ambient molecule inside a cell
-belongs to that cell. `in_sample` (on `molecules.csv`, `cells.csv` and `nuclei.csv`)
-records sample membership, and `true_cell_in_sample` on `molecules.csv` records the
+belongs to that cell. Accordingly, `n_molecules` of `cells.csv` is the number of molecules
+whose `true_cell_id` is the cell: every row of `molecules.csv` with that `true_cell_id`,
+sample and halo molecules alike and whatever their `population`. A cell's own generated
+molecules always count, because each is accepted only where `C(σ) = k`, and so do the
+ambient molecules that land in it; it is not the cell's Poisson draw. `in_sample` (on
+`molecules.csv`, `cells.csv` and `nuclei.csv`) records sample membership, and `true_cell_in_sample` on `molecules.csv` records the
 membership of the molecule's true cell (null without one).
 
 IDs: `c<k>-m<j>` for the `j`-th molecule of cell `k` and `a-m<j>` for ambient molecules
@@ -798,10 +802,12 @@ with the template's `split` and `seed`.
   existing `geometry.*` and `noise.*` components for the amplicon rounds, and
   `stain.noise.dependent`, `stain.noise.independent` and `stain.noise.correlated` with the
   stain's channel label for the stain.
-* **Consequences.** Adding a FOV changes no draw of another FOV and no sample-level draw
-  (the domain depends on the grid, so adding a column does change `Ω` and `K`, which
-  changes placement outcomes and membership); changing the jitter law or its draws moves
-  no cell or molecule and changes no membership; no stream entity depends on membership;
+* **Consequences.** Adding a FOV leaves the draws of the other FOVs as they were: their
+  jitter (`sample.jitter`, entity the FOV ID) and their per-FOV draws (scene key
+  `[scene_key, fov_id]`). Nothing more is claimed for an added FOV: the domain depends on
+  the grid, so adding a column changes `Ω` and `K`, which changes placement outcomes and
+  membership, and with them what the other FOVs image. Changing the jitter law or its
+  draws moves no cell or molecule and changes no membership; no stream entity depends on membership;
   changing one
   molecule's law changes only that molecule; changing a nucleus size can move later seeds
   (sequential placement). Repeatability is that of the formed model: exact for a pinned
@@ -895,7 +901,8 @@ schema per table, and versions the addition independently of generator version 6
                                 #   lateral_radius (µm), elongation, angle (rad), site_radius (µm), stain_brightness
   cells.csv                     # cell_id, kind (ordinary, binucleate, empty), in_sample, anchor_z/y/x (µm),
                                 #   n_nuclei, reach (µm), centroid_z/y/x (µm, of the sample-grid voxels; NaN when n_voxels is 0),
-                                #   n_voxels (sample grid), n_molecules, fov_ids, n_fovs, label_fov_ids
+                                #   n_voxels (sample grid), n_molecules (the molecules whose true_cell_id
+                                #   is the cell), fov_ids, n_fovs, label_fov_ids
   molecules.csv                 # amplicon_id, population, in_sample, gene_id, color_sequence, sample_z/y/x (µm),
                                 #   A, sz, sl, e, theta, true_cell_id, true_cell_in_sample, true_nucleus_id,
                                 #   compartment, fov_ids, n_fovs
@@ -928,11 +935,26 @@ the FOV frame, radians for angles; IDs are strings except the uint32 label value
   grid centre in Y and X and by `+J_z` in Z, a case that leaves the halo least covered (all sample molecules still seen, halo
   molecules allowed unseen); `in_sample` unchanged between two jitter draws; nucleus inside cell on every
   label voxel; stream isolation (redrawing the jitter moves no molecule; adding a FOV
-  changes no other FOV's images); the save and reload round trip with SHA-256 checks;
+  leaves the draws of the other FOVs as they were, which the test checks for an added
+  column on the jitter and per-FOV draws of every existing FOV, and does not compare their
+  images); a successful single-plane scene (below); the save and reload round trip with
+  SHA-256 checks;
   `import_labels` and `molecule_table_from_csv` accepting the saved files of one FOV;
   cross-process repeatability of `sample-tiny-v1`; and one `slow` test that generates
   `sample-small-v1` under `/usr/bin/time -v` and records its time and peak RSS, as
   `test_medium_cli_both_modes_time_and_peak_rss` does for the benchmark presets.
+* **The single-plane case.** No preset has Z=1, and none is added. The test supplies the
+  configuration it generates from, built in the test with `dataclasses.replace` from
+  `sample_scene_preset("sample-tiny-v1")`: that configuration with
+  `fov_shape_zyx` and the template's `shape_zyx` set to `(1, 36, 36)` and
+  `jitter_max_zyx` to `(0.0, 1.5, 1.5)`, everything else unchanged (its per-round
+  translation bound in Z is already 0). It asserts that generation succeeds, with no
+  error; that the sample grid has one plane and every FOV image, stain and label image
+  has the shape `(1, 36, 36)`; that every nucleus centre, cell anchor and molecule has
+  z = 0, and every FOV's true offset in Z is 0; that no `cell_fovs` row has `z_edge`;
+  that cellular identities 1 to 5 hold; that `import_labels` reads one FOV's saved
+  labels as a `plane` label image; and that `SAMPLE_PRESETS` keeps its two keys. It runs
+  in the routine tier, with fewer voxels than `sample-tiny-v1`.
 
 ## Exclusions
 

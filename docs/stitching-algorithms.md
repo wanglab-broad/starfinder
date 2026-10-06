@@ -4,9 +4,9 @@ Status: Proposed
 
 This page specifies the numerical behavior of each element of {doc}`stitching-contract`:
 the three converters into the tile position table, the neighbour derivation, the
-`multiview_stitcher` method, the import arithmetic of BigStitcher's `dataset.xml`, and the
-placement-quality checks. Each has its parameters, units, defaults, failure behavior and
-a resource estimate. The current behavior is in {doc}`stitching-baseline`. Nothing here is
+`multiview_stitcher` method, the import arithmetic of BigStitcher's `dataset.xml`, the
+supplied placement, and the placement-quality checks. Each has its parameters, units,
+defaults, failure behavior and a resource estimate. The current behavior is in {doc}`stitching-baseline`. Nothing here is
 implemented, and no default here is accepted.
 
 ## Evidence
@@ -260,6 +260,39 @@ or a calibration with `c_x ≠ c_y` raise `ValueError` naming the view. Cost: a 
 XML file (141 KB for LN's 72 views and 145 links); not measured, negligible beside the
 Fiji run (W-323: 14 min 33 s, almost all of it the HDF5 resave, and 18 s for shifts,
 filter and optimization).
+
+## Supplied placement
+
+`placement_from_table(table, grids, *, sample)` ({doc}`stitching-contract`, "Supplied
+placement") turns known positions into a `PlacementResult` without registration:
+
+1. **Checks.** The table has at least one row; its `fov_id`s and the keys of `grids` are
+   the same set; every grid has known spacing, unit `µm` and identity direction; and all
+   grids share Z size, spacing, direction and unit. Y and X sizes may differ.
+2. **Per-FOV rows**, in table order: `status` `metadata_only`; `origin_* = nominal_*`, the
+   float64 values of the table, copied, not recomputed; `correction_*` 0.0;
+   `method_translation_*` NaN; `component` the row index; `n_links_kept` 0; `flags`
+   `supplied`.
+3. **Links.** An empty table with the link columns.
+4. **Record.** The method entry `supplied`, the table record, `gauge` `none`, the frame
+   `sample:<sample>`, the inputs (per FOV the source `supplied` and the grid with its
+   SHA-256) and `format_version` 1.
+5. **Review.** `required`, with the reason `supplied_placement`; no other check of
+   "Placement-quality checks" applies, because there are no links and no corrections.
+
+With one FOV the result has one row and component 0. With Z=1 grids the origins are used
+as given, z included; one layer of tiles is assemble's requirement (check 8 of
+{doc}`assembly-contract`), not this function's.
+
+| Parameter | Unit | Default | Rule |
+| --- | --- | --- | --- |
+| `table` | µm | none (required) | a `TilePositionTable` with at least one row |
+| `grids` | | none (required) | one `ReferenceGrid` per `fov_id` of the table, and no other key |
+| `sample` | | none (required) | the sample name; the frame is `sample:<sample>` |
+
+Failure: `ValueError` for an empty table, for a table FOV without a grid (naming the
+FOVs) and for a grid key outside the table; `IncompatibleGeometryError` for the geometry
+of step 1. Cost: one pass over the table, no image read; negligible.
 
 ## Placement-quality checks
 

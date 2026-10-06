@@ -58,6 +58,9 @@ Decided by Jiahao in the §2.10 planning session (W-152 comment "§2.10 planning
 * The failure policy agreed on 2026-09-27 (W-152 comments on §2.10): successful transforms
   and diagnostics are saved; unreliable or disconnected placement needs review before
   sample assembly; stage-position fallback is opt-in and flagged.
+* Amended at the W-329 review (2026-10-06): a known placement enters through a public
+  `placement_from_table` that the caller must approve ("Supplied placement"), and the
+  package requires Python 3.11 or later ("Dependency plan").
 
 Excluded: rotation, affine or deformable stitching, the GPU, a backend ranking, and any
 default change.
@@ -106,6 +109,7 @@ New names under N1:
 | Stage axes | `StageAxisMapping` | frozen dataclass |
 | Neighbours | `neighbor_pairs`, `NeighborPair` | function, frozen dataclass |
 | Registry | `STITCHING_METHODS: dict[type, StitchingSpec]`; a method returns `MethodPlacement` | registry, frozen dataclass |
+| Supplied placement | `placement_from_table(table, grids, *, sample)` ("Supplied placement") | function |
 | Sample-frame metadata | `placed_metadata(result, fov_id)` | function |
 | Method | `MultiviewStitcherConfig` (`multiview_stitcher`) | config |
 | BigStitcher | `BigStitcherConfig`, `bigstitcher_macro`, `import_bigstitcher` | config, functions |
@@ -324,21 +328,23 @@ class PlacementResult:
 | `method_translation_z/y/x` | float64 | The method's own result for this FOV before the gauge, in the method's units (µm for `multiview_stitcher`; BigStitcher world units, x and y in pixels and z in xy-pixel units, for the import) |
 | `component` | int | Index of the FOV's component of kept links; −1 for `missing` |
 | `n_links_kept` | int | Kept links of this FOV |
-| `flags` | str | `;`-separated: `fallback`, `correction_above_bound`, `residual_above_tolerance`, `nan_quality_link`, `optimizer_removed_link` |
+| `flags` | str | `;`-separated: `fallback`, `supplied`, `correction_above_bound`, `residual_above_tolerance`, `nan_quality_link`, `optimizer_removed_link` |
 
 The **statuses**:
 
 * `image_supported`: placed from its image; at least one kept link joins it to the
   reference component (the component with the most FOVs; ties go to the one holding the
   first FOV in table order).
-* `metadata_only`: only with `fallback="nominal"` (opt-in): its image is present but no
-  kept link joins it to the reference component (no overlap, every link dropped, or
-  another component). Its origin is its nominal position, `origin = nominal` (correction
+* `metadata_only`: in a measured placement only with `fallback="nominal"` (opt-in): its
+  image is present but no kept link joins it to the reference component (no overlap,
+  every link dropped, or another component). Its origin is its nominal position, `origin = nominal` (correction
   0), which under gauge G1 is its nominal position in the gauge of the reference
   component; it is flagged `fallback`. The BigStitcher import applies the same rule to a
   view without a link into the reference component (one that BigStitcher's second round
   placed from metadata); BigStitcher's own position for it stays in
-  `method_translation_*` ("BigStitcher").
+  `method_translation_*` ("BigStitcher"). Every FOV of a supplied placement is
+  `metadata_only` too, at `origin = nominal` and flagged `supplied` instead of `fallback`
+  ("Supplied placement").
 * `placeholder`: an acquired FOV whose image is absent and was replaced by a blank of the
   tile's shape so that the BigStitcher grid stays complete (D4; only in the BigStitcher
   path, with `BigStitcherConfig.pad_missing=True`); its origin is the one BigStitcher gives
@@ -588,6 +594,70 @@ The legacy writer of `tile_config_{sample}.csv` stays for the rule chain that re
 its values from the record's raw translations and the view map, so its output is
 unchanged.
 
+## Supplied placement
+
+A placement that is known rather than measured, such as the placement truth of a
+synthetic scene ({doc}`synthetic-sample-scene`, "Placement truth") or another program's
+registration, enters through one public function. It defines no new placement type: the
+result is a `PlacementResult` like those of `stitch` and `import_bigstitcher`, and assemble,
+`placed_metadata`, the review functions and persistence treat it as they treat any
+placement.
+
+```python
+def placement_from_table(table: TilePositionTable, grids: Mapping[str, ReferenceGrid], *,
+                         sample: str) -> PlacementResult: ...
+```
+
+* **Arguments.** `table` is a tile position table from any converter; its nominal
+  positions are the supplied positions, in µm, usually read by `positions_from_table`
+  (`source` `supplied`). `grids` maps each `fov_id` of the table to that FOV's
+  `ReferenceGrid`, the grid its molecules and masks use. `sample` names the sample, whose
+  frame is `sample:<sample>`. The function reads no image or file, calls no method, derives
+  no neighbour pair and needs no extra.
+* **Per-FOV table.** One row per table row, in table order. Every FOV has the status
+  `metadata_only` and the flag `supplied`. Its origin is its nominal position
+  (`origin = nominal`, correction 0), and its `method_translation_*` is NaN, because no
+  method ran. `n_links_kept` is 0, and `component` is the FOV's row index: without links
+  each FOV is its own component.
+* **Links.** None: `links` has the columns of "Links" and no row.
+* **Method record.** `record["method"]` is the uniform provenance entry with `stage`
+  `stitching` and `method` `supplied`, and with `implementation`
+  `starfinder.stitching.placement_from_table`. `config_type`, `config`, `requires` and
+  `artifacts` are empty. `supplied` is not a key of `STITCHING_METHODS`, so `stitch` cannot
+  select it and the workflow's `stitching.method` does not name it. `record["table"]` holds
+  the table's record, with the SHA-256 of a supplied file. `record["gauge"]` is `none`: the
+  origins are the positions as supplied, and no gauge shift is applied (G1 averages over
+  `image_supported` FOVs, and there are none). `record["inputs"]` holds, per FOV, the
+  source `supplied`, a null file SHA-256 and the grid shape, metadata and SHA-256 that
+  assemble's grid check reads.
+* **Review.** `record["review"]` is `required` with the reason `supplied_placement`,
+  whatever the positions, so a supplied placement reaches assembly only after the caller
+  approves it explicitly with `approve_placement(result, *, reviewer, note)` ("Failure
+  policy"). Under V1 the review would be required anyway, because no FOV is
+  `image_supported`; the reason names the cause. `review_placement` keeps the reason on a
+  placement whose method is `supplied`. The approval changes no origin.
+* **Persistence.** The same saved form as any placement: `save_placement` writes
+  `stitching/<sample>/placement.json`, `fovs.csv` and `links.csv` (header only), and
+  `load_placement` checks both tables' SHA-256 as for any placement. No view map, macro or
+  `dataset.xml` copy exists for it.
+
+**Failure.** `ValueError` for a table with no row, for a `fov_id` of the table without a
+grid in `grids` (naming those FOVs), and for a key of `grids` that is not a `fov_id` of the
+table. `IncompatibleGeometryError`, as in `stitch`, for grids with unknown spacing, a unit
+other than µm or a non-identity direction, and for grids that differ in Z size, spacing,
+direction or unit. Tile shapes may differ in Y and X, because no method registers the
+tiles. The table's own rules (unique `fov_id`, finite nominal values) are checked when the
+table is built.
+
+A test can check it with these assertions: the result is a `PlacementResult`; its `fovs`
+rows equal the table's `fov_id`s in order, each `metadata_only` with the flag `supplied`,
+origins equal to the nominal values exactly and corrections 0; `links` has no row;
+`record["method"]["method"]` is `supplied`; review is `required` with the reason
+`supplied_placement`; assemble refuses the result with `PlacementReviewRequiredError` until
+`approve_placement` has run; a save and load round trip returns equal tables and record;
+and a table FOV without a grid raises `ValueError` naming it. The arithmetic is in
+{doc}`stitching-algorithms` ("Supplied placement").
+
 ## Link-quality rule
 
 | Option | Rule | Effect on the golden values | Effect on existing outputs |
@@ -637,7 +707,8 @@ As agreed on 2026-09-27:
 connected, so connectivity alone is not enough; the correction bound catches a shift of
 about one overlap width, and the residual catches links the optimization could not
 reconcile. The two defaults are proposals for W-331's validation design; neither is
-accepted.
+accepted. Whatever the criterion, a supplied placement is always `required`, with the
+reason `supplied_placement` ("Supplied placement").
 
 ## The form of the placement
 
@@ -663,7 +734,8 @@ The placement is saved at sample level, beside the FOV checkpoints:
 **Recommendation: S1.** It follows the run-record pattern of the FOV checkpoints, records
 every identity and hash next to the tables, and needs no extra. `save_placement` writes
 the three files atomically; `load_placement` checks both tables' SHA-256 against the
-record and raises `ValueError` on a mismatch.
+record and raises `ValueError` on a mismatch. A placement from `placement_from_table` is
+saved and loaded the same way ("Supplied placement").
 
 ## Workflow configuration
 
@@ -698,56 +770,79 @@ stitching:
 
 ## Dependency plan
 
-For the gate (W-329), from W-323 (`20261005T2025Z-spike-environment/`) and W-324 (notes
-sections 1 and 5):
+Amended at the W-329 review of 2026-10-06, from W-323 (`20261005T2025Z-spike-environment/`),
+W-324 (notes sections 1 and 5) and the trial resolution of 2026-10-06,
+`/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-329/20261006T1630Z-gate-review-preparation/lock-py311-trial/README.md`:
 
-* **Extra:** `multiview-stitcher`, named after the backend like the other backend extras
-  (`stardist`, `cellpose`, `spotiflow`, `piscis`).
-* **Pin and Python bound:** `multiview-stitcher==0.1.62; python_version >= '3.11' and
-  python_version < '3.14'`. The lower bound is its `Requires-Python >=3.11`; the upper
-  bound follows its classifiers (3.11 to 3.13) and the convention of the existing backend
-  extras. On Python 3.10 the extra is empty and a `multiview_stitcher` call raises
-  `StitchingBackendUnavailableError`.
-* **Packages it adds (8, 71.8 MB on disk):** `multiview-stitcher` 0.1.62, `ngff-zarr`
-  0.38.0, `itkwasm` 1.0b201, `itkwasm-downsample` 2.0.2, `itkwasm-downsample-wasi` 2.0.2,
-  `wasmtime` 49.0.0, `importlib-resources` 7.1.0, `rich-argparse` 1.8.0.
-* **Locked packages that would change: none** on Python 3.12, Linux x86_64. W-323 resolved
-  the extra against the complete locked set (`resolve-python312.txt`, every other package
-  at its locked version) and installed it (`lock-diff.txt`: none differs). The pins the
-  library declares are met by the lock's versions for Python 3.11 to 3.13: `dask!=2025.11.0`
-  (2024.11.2), `zarr>=3` (3.1.5), `ngff-zarr<0.44`, `xarray>=2024.10.0` (2026.1.0).
-  Python 3.11 and 3.13 and other platforms were not resolved; `uv lock` at the gate may add
-  platform entries or find no solution there.
+* **Python bound of the package:** `requires-python >= 3.11`, written
+  `requires-python = ">=3.11"` in `pyproject.toml`. multiview-stitcher 0.1.62 declares
+  `Requires-Python >=3.11`, so under this bound the extra needs no lower bound of its own.
+* **Extra:** `multiview-stitcher = ["multiview-stitcher==0.1.62; python_version < '3.14'"]`,
+  named after the backend like the other backend extras (`stardist`, `cellpose`,
+  `spotiflow`, `piscis`). The upper bound follows the library's classifiers (3.11 to 3.13)
+  and the convention of the existing backend extras. The package stays an optional extra:
+  on Python 3.14 and later the extra is empty, and wherever the package is not installed a
+  `multiview_stitcher` call raises `StitchingBackendUnavailableError` naming the extra.
+* **How they are applied.** The two changes are applied together as one commit, by the
+  operator, during the preparation of an implementation batch. No issue of a batch applies
+  them: no issue edits `pyproject.toml` or `uv.lock` or runs `uv lock`, and this page
+  applies neither.
+* **Trial resolution** (uv 0.9.28, `uv lock` on copies of `pyproject.toml` and `uv.lock`
+  of `169c410`, with the existing lock as preferences; resolution only, nothing installed):
+  * the bound alone removes 27 lock entries that served only Python versions below 3.11
+    (four package names leave the lock) and adds none, and no remaining package changes
+    version;
+  * the bound and the extra remove the same 27 entries and add nine packages:
+    `multiview-stitcher` 0.1.62, `ngff-zarr` 0.38.0, `itkwasm` 1.0b201,
+    `itkwasm-downsample` 2.0.2, `itkwasm-downsample-wasi` 2.0.2,
+    `itkwasm-downsample-emscripten` 2.0.2, `wasmtime` 49.0.0, `importlib-resources` 7.1.0
+    and `rich-argparse` 1.8.0. The emscripten package is in the universal lock for that
+    platform; the Linux spike environment of W-323 installed the other eight (71.8 MB on
+    disk).
+* **Locked packages that change version: none.** W-323 also resolved the extra against the
+  complete locked set on Python 3.12, Linux x86_64 (`resolve-python312.txt`, every other
+  package at its locked version), and installed it (`lock-diff.txt`: none differs). The
+  pins the library declares are met by the lock's versions: `dask!=2025.11.0` (2024.11.2),
+  `zarr>=3` (3.1.5), `ngff-zarr<0.44`, `xarray>=2024.10.0` (2026.1.0).
+* **Not verified:** installation or any test on Python 3.11 or 3.13 (only 3.12 has an
+  environment), and platforms other than Linux x86_64.
 
-**The `pyproject.toml` change** (proposed; not applied by this issue):
+**The `pyproject.toml` change** (proposed; applied by the batch-preparation commit, not by
+this page):
 
 ```toml
+[project]
+requires-python = ">=3.11"
+
 [project.optional-dependencies]
-# Stitching backend (§2.10). multiview-stitcher 0.1.62 requires Python 3.11 and lists
-# 3.11 to 3.13, so the extra is empty on Python 3.10 and on 3.14 and later.
+# Stitching backend (§2.10). multiview-stitcher 0.1.62 requires Python 3.11, as the
+# package does, and lists 3.11 to 3.13, so the extra is empty on 3.14 and later.
 multiview-stitcher = [
-    "multiview-stitcher==0.1.62; python_version >= '3.11' and python_version < '3.14'",
+    "multiview-stitcher==0.1.62; python_version < '3.14'",
 ]
 ```
 
-added after `cellpose`; nothing else in the file changes.
+The `requires-python` line replaces the current one and the extra is added after
+`cellpose`; nothing else in the file changes. Markers that already name Python 3.11 (for
+example in the `anndata` and `stardist` extras) stay as they are; under the new bound their
+branches for older versions can no longer be selected.
 
-**The `uv.lock` change** expected from `uv lock` (not run by this issue):
+**The `uv.lock` change**, written by `uv lock` in the same commit:
 
-* the `starfinder` entry gains, under `[package.optional-dependencies]`,
-  `multiview-stitcher = [{ name = "multiview-stitcher", marker = "python_full_version >=
-  '3.11' and python_full_version < '3.14'" }]`; under `[package.metadata] requires-dist`,
-  `{ name = "multiview-stitcher", marker = "python_full_version >= '3.11' and
-  python_full_version < '3.14' and extra == 'multiview-stitcher'", specifier = "==0.1.62" }`;
-  and `"multiview-stitcher"` in `provides-extras`;
-* eight new `[[package]]` entries, at the versions above, with their sdist and wheel URLs
-  and hashes as `uv lock` writes them;
-* no existing `[[package]]` entry changes on Linux x86_64 with Python 3.12.
+* `requires-python = ">=3.11"`, and the 27 entries of the trial removed;
+* the `starfinder` entry gains the extra under `[package.optional-dependencies]`, its
+  requirement (specifier `==0.1.62`, marker `python_full_version < '3.14'` with
+  `extra == 'multiview-stitcher'`) under `[package.metadata] requires-dist`, and
+  `"multiview-stitcher"` in `provides-extras`, as `uv lock` writes them;
+* the nine new `[[package]]` entries, at the versions above, with their sdist and wheel
+  URLs and hashes;
+* no remaining `[[package]]` entry changes version.
 
 Verification for whoever applies it: `uv lock`; `uv export --locked --all-extras
---all-groups --no-hashes` before and after, whose difference must be exactly the eight
-packages; `uv sync --extra multiview-stitcher` in a fresh environment; the routine test
-gate. A difference beyond the list returns to Jiahao, as the §2.9 lock change did.
+--all-groups --no-hashes` before and after, whose difference must be exactly that of the
+trial (the 27 entries removed and the nine packages added); `uv sync --extra
+multiview-stitcher` in a fresh environment; the routine test gate. A difference beyond the
+trial returns to Jiahao, as the §2.9 lock change did.
 
 ## Tests the implementation keeps
 

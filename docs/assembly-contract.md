@@ -57,6 +57,13 @@ of 2026-09-27 on §2.10:
 * **The sample-level AnnData is a required default output of every assembled sample**
   (Jiahao, 2026-10-05, amendment), written from the sample tables through the §2.9
   AnnData code, without a second exporter. The fused image and SpatialData are W-328's.
+* **Amended at the W-329 review (2026-10-06):** placeholder FOVs own no points, and only a
+  placed FOV that has an input owns points ("Placeholder FOVs"); the shared AnnData
+  function is named `write_h5ad` and builds the AnnData and writes the file ("Sample-level
+  AnnData"); the record holds each territory label file's path beside its SHA-256 ("What
+  assemble records"); and `ownership_map` takes an optional `candidates` argument
+  ("Ownership regions"). A placement from `placement_from_table`
+  ({doc}`stitching-contract`, "Supplied placement") is a `PlacementResult` like any other.
 
 Excluded: cross-FOV cell matching or merging, recovery of complete cells, reassignment
 of molecules, the fused image and label export, and any change to the placement, label or
@@ -73,7 +80,10 @@ assignment contracts.
   per axis, with `n` the grid size and `s` the spacing.
 * An **observation** is one row of a FOV's cell or molecule table. The same biological
   cell or molecule may be observed by several FOVs where they overlap.
-* The **owner** of a sample-frame point is the placed FOV that ownership assigns it to
+* An **owning FOV** is a placed FOV that has an input and whose placement status is
+  `image_supported` or `metadata_only`. A `placeholder` is placed but never an owning FOV,
+  with or without an input ("Placeholder FOVs").
+* The **owner** of a sample-frame point is the owning FOV that ownership assigns it to
   ("Ownership regions"); a FOV's **ownership region** is the set of points it owns.
 * An observation is **retained** when it represents the sample, and **excluded**
   otherwise; the **assembly status** records which, with a reason. It is distinct from the
@@ -101,9 +111,9 @@ New names under A1:
 | Result | `AssemblyResult` | frozen dataclass |
 | Input per FOV | `AssemblyInput(fov_id, grid, assignment=None, molecules=None)` | frozen dataclass |
 | Config | `AssemblyConfig` | frozen dataclass |
-| Ownership | `ownership_map(placement, grids, *, config)` returning `OwnershipMap` with `owner(points_zyx)` | function, frozen dataclass |
+| Ownership | `ownership_map(placement, grids, *, config, candidates=None)` returning `OwnershipMap` with `owner(points_zyx)` | function, frozen dataclass |
 | Vocabularies | `ASSEMBLY_STATUSES = ("retained", "excluded")`; `CELL_ASSEMBLY_REASONS = ("not_owner", "fov_not_placed")`; `MOLECULE_ASSEMBLY_REASONS = ("cell_not_owner", "not_owner", "outside_grid", "fov_not_placed")`; `CELL_ASSEMBLY_FLAGS = ("fov_edge", "z_edge", "conflict", "unclaimed")`; `MOLECULE_ASSEMBLY_FLAGS = ("outside_owner_region", "cell_unclaimed")` | tuples |
-| AnnData | `sample_anndata(result, *, annotation=None)`, through `counts_anndata` of `starfinder.assignment` ("Sample-level AnnData") | functions |
+| AnnData | `sample_anndata(result, path, *, annotation=None)`, through `write_h5ad` of `starfinder.assignment` ("Sample-level AnnData") | functions |
 | Persistence | `save_assembly(result, folder, *, table_format="csv")`, `load_assembly(folder)` | functions |
 | Coordination | `Dataset.assemble(sample, *, placement, assignment="default", config=AssemblyConfig(), output_dir=None)` | method |
 
@@ -174,7 +184,9 @@ In this order, before any coordinate is computed; each raises and names the FOVs
    `placement.fovs` (`ValueError`). Every FOV whose placement status is
    `image_supported` or `metadata_only` must have an input (`ValueError`); an input of a
    `missing` or `failed` FOV is accepted and its observations are excluded with the reason
-   `fov_not_placed`.
+   `fov_not_placed`. An input of a `placeholder` FOV is accepted too; the placeholder owns
+   no point ("Placeholder FOVs"), so its observations are excluded `not_owner` (rules 1
+   and 3 of "Retention").
 4. **Kind.** Each input gives exactly one of `assignment`, `molecules`, and all inputs give
    the same kind (`ValueError`). The kind is recorded as `mode`: `cells` or
    `molecules_only`.
@@ -202,11 +214,15 @@ The record of the result (`assembly.json` when saved) holds:
   `placement.json` records them;
 * per FOV: `fov_id`, placement status, origin, input kind, the assignment name and the
   SHA-256 of its `assignment.json` and of its molecule, cell and count tables, the
-  molecule table's `sha256` (`MoleculeTable`), the SHA-256 of the territory label file read
-  for the flags, the grid (shape, metadata, SHA-256) and its `calibration_source`
+  molecule table's `sha256` (`MoleculeTable`), the territory label file read for the flags
+  as `territories`: its path (absolute, as the §2.9 loader resolved it) beside its SHA-256,
+  both null when no file was read (`conflicts=False`, a `molecules_only` input, or an
+  assignment given in memory, whose territories' SHA-256 its §2.9 record already holds),
+  the grid (shape, metadata, SHA-256) and its `calibration_source`
   (`grid` for a grid read from an image's metadata, `declared` for a grid the legacy
   adapter declared from `voxel_size_*`, never upgraded);
-* the config, the ownership geometry with each FOV's footprint and centre, the counts of
+* the config, the ownership geometry with each FOV's footprint, centre and whether it is an
+  owning FOV (`owns_points`), the counts of
   "Count accounting", and the SHA-256 of every table and file it writes;
 * `format_version` 1 and `software` as in `run.json` ({doc}`checkpoints`).
 
@@ -219,9 +235,11 @@ The record of the result (`assembly.json` when saved) holds:
   "config": {"ownership": "nearest_center", "centroid": "territory", "tie": "table_order", "conflicts": true},
   "fovs": [{"fov_id": "Position001", "placement_status": "image_supported", "origin_zyx": [0.0, 0.0, 0.0],
             "kind": "assignment", "assignment": {"name": "default", "record_sha256": "...", "tables": {}},
-            "molecules_sha256": "...", "territories_sha256": "...",
+            "molecules_sha256": "...",
+            "territories": {"path": "/.../Position001/assignment/default/territories.tif", "sha256": "..."},
             "grid": {"shape_zyx": [50, 1496, 1496], "sha256": "...", "calibration_source": "grid"},
-            "footprint_yx": [[-0.0972, 290.7222], [-0.0972, 290.7222]], "centre_yx": [145.3125, 145.3125]}],
+            "footprint_yx": [[-0.0972, 290.7222], [-0.0972, 290.7222]], "centre_yx": [145.3125, 145.3125],
+            "owns_points": true}],
   "counts": {"cells": {"input": 0, "retained": 0, "excluded": {"not_owner": 0, "fov_not_placed": 0}},
              "molecules": {"input": 0, "retained": 0,
                            "excluded": {"cell_not_owner": 0, "not_owner": 0, "outside_grid": 0, "fov_not_placed": 0}},
@@ -294,21 +312,65 @@ fixture's units), a cell centroid `(3.0, 8.0, 20.0)` → `(4.3, 45.4, 20.7)` µm
 Ownership is computed in assemble from the placement's origins and each placed FOV's
 grid shape and spacing (D3); it is not stored in the placement, and it uses no row or
 column index, no padding view and no YAML tile size. `ownership_map(placement, grids, *,
-config)` returns an `OwnershipMap` whose `owner(points_zyx)` gives, for each sample-frame
-point, the owning `fov_id` or none. Only placed FOVs own points. A point in no footprint
-has no owner. Ownership is decided in Y and X only (option Z1 below).
+config, candidates=None)` returns an `OwnershipMap` whose `owner(points_zyx)` gives, for
+each sample-frame point, the owning `fov_id` or none. Only owning FOVs own points: a
+placed FOV that has an input and is `image_supported` or `metadata_only` ("Terms"). In
+`ownership_map` these are the FOVs of those two statuses that have a grid in `grids`;
+assemble passes the grids of its inputs, and check 3 gives every FOV of those statuses an
+input. A point in no owning FOV's footprint has no owner. Ownership is decided in Y and X
+only (option Z1 below).
+
+**Candidates.** `candidates`, an optional collection of `fov_id`s, restricts the FOVs that
+may own a point: with it, a point goes to the nearest-centre owning FOV among the
+candidates whose footprint contains it, or to none, by the same geometry and tie rule.
+The default `None` means every owning FOV, which is what assemble uses. A caller that needs
+the owner among a subset, for example the FOVs that have a source image, passes that
+subset. An empty collection, or a `fov_id` that is not an owning FOV of the placement (not
+in it, not placed, a `placeholder`, or without a grid), raises `ValueError` naming it.
+
+### Placeholder FOVs
+
+A `placeholder` ({doc}`stitching-contract`, "Placement record") is placed, so it has a
+footprint and a centre, which the `fovs` table and the record keep, but it owns no point.
+A point in a placeholder's footprint goes to the nearest owning FOV whose footprint covers
+it, by the geometry and tie rule below, or to none when no owning FOV covers it. Its
+effects:
+
+* **On the ownership options.** O1 decides among owning FOVs only, so the placeholder's
+  overlap with a neighbour belongs to the neighbour, and the part of its footprint that no
+  owning FOV covers has no owner. Under O2 a placeholder neighbour sets no box edge: the
+  edge of an owning FOV towards a placeholder stays at its own footprint edge. T1 and Z1
+  are unchanged; check 8 still reads the `nominal_z` of every placed FOV.
+* **On the `unclaimed` flag.** A neighbour's cell whose ownership centroid lies in the
+  placeholder's footprint is owned by the neighbour that covers it, and is therefore no
+  longer excluded `not_owner` and flagged `unclaimed` because of a FOV that has no
+  observations. A cell of a placeholder with an input is excluded `not_owner`; it is
+  flagged `unclaimed` when no FOV owns its ownership centroid or when the owner has no
+  retained cell there ("Flags").
+* **On the count identities.** They are unchanged: every observation still has exactly one
+  assembly status, and the populations still sum to the inputs. Identity 3 reads "its
+  position's owner is its FOV", which is never true for a placeholder, so all of a
+  placeholder's observations are counted under the excluded reasons.
+* **On the golden values.** None. `test_workflow_assembly_golden.py` still pins the legacy
+  behavior, in which the rectangles of `tile_config` include every grid cell, blanks
+  included; neither its fixture nor the LN records have a placeholder (LN's eight blank
+  cells are padding views, which have no row in the placement).
+
+This follows the W-329 review (2026-10-06): no observation is lost to a FOV that has
+none.
 
 ### Geometry
 
 | Option | Rule | Effect on the golden values | Effect on existing outputs |
 | --- | --- | --- | --- |
-| **O1. Nearest footprint centre (recommended)** | A point is owned by the placed FOV whose footprint contains it and whose footprint centre `origin + (n − 1)/2 · s` is nearest in Y and X (Euclidean, µm). For tiles of one shape on a regular grid this is the midline of every overlap, the legacy midpoint without the cast; for irregular positions (stage files) and unequal shapes it is the nearest-centre partition restricted to the footprints. Every point covered by a footprint has exactly one owner. | None for the pins (frozen helpers). The assemble entry on the fixture (`tables/option_effects.json`): boundaries near x 59.2 (59.1 to 59.3: slightly tilted, because FOV3's origin is 0.3 µm higher than FOV1's) and y 42.2, instead of 60 and 51. 3D: scene cell 4 is retained once (by FOV2), not twice, and the background molecule at y 45 once; cell 9's molecule at x 64 stays unretained (excluded `cell_not_owner`, its retained copy flagged `fov_edge`). 2D: cell 9 is retained by FOV1 and FOV3 (FOV3's projected centroid lies at x 59.5, past the boundary at 59.1 there), and both copies are flagged `conflict`. | LN (`tables/ln_ownership.json`, 4 px raster, fractional origins of the 2024 placement): the owner differs from the 2024 rectangles on 159,040 px² (0.13 % of the 119.4 million px² covered); no covered point is unowned and none is owned twice (legacy: about 33,600 px² twice, 3,000 px² unowned). |
+| **O1. Nearest footprint centre (recommended)** | A point is owned by the owning FOV whose footprint contains it and whose footprint centre `origin + (n − 1)/2 · s` is nearest in Y and X (Euclidean, µm). For tiles of one shape on a regular grid this is the midline of every overlap, the legacy midpoint without the cast; for irregular positions (stage files) and unequal shapes it is the nearest-centre partition restricted to the footprints. Every point covered by an owning FOV's footprint has exactly one owner. | None for the pins (frozen helpers). The assemble entry on the fixture (`tables/option_effects.json`): boundaries near x 59.2 (59.1 to 59.3: slightly tilted, because FOV3's origin is 0.3 µm higher than FOV1's) and y 42.2, instead of 60 and 51. 3D: scene cell 4 is retained once (by FOV2), not twice, and the background molecule at y 45 once; cell 9's molecule at x 64 stays unretained (excluded `cell_not_owner`, its retained copy flagged `fov_edge`). 2D: cell 9 is retained by FOV1 and FOV3 (FOV3's projected centroid lies at x 59.5, past the boundary at 59.1 there), and both copies are flagged `conflict`. | LN (`tables/ln_ownership.json`, 4 px raster, fractional origins of the 2024 placement): the owner differs from the 2024 rectangles on 159,040 px² (0.13 % of the 119.4 million px² covered); no covered point is unowned and none is owned twice (legacy: about 33,600 px² twice, 3,000 px² unowned). |
 | O2. Midpoint boxes of neighbour pairs | Today's rule written in µm: per FOV an axis-aligned box whose edge towards each neighbour is the middle of their overlap, with fractional origins, each FOV's own grid shape (`img_row` for Y) and the edges of neighbour pairs from the nominal grid. | None for the pins. On the fixture the same retained sets as O1 (box edges at x 59.2 and y 42.2). | LN: owner differs from 2024 on 76,608 px²; 33,760 px² owned twice and 2,576 px² unowned, at blank cells and corners, as today. Needs grid neighbours, which a stage file or supplied table without a grid does not give. |
 | O3. The legacy rectangles | Read `start/end_*_norm` of `tile_config` | Reproduces every pinned value, including the doubly owned band. | Keeps discrepancies 1, 2, 4, 8 and 12 of {doc}`assembly-baseline`; works only with BigStitcher's padded grid. |
 
-**Recommendation: O1.** It is the only option that gives every covered point exactly one
-owner whatever the positions (stage, grid or supplied), reduces to the legacy midline
-where the legacy rule is right, and needs nothing but origins and grid shapes. Its
+**Recommendation: O1.** It is the only option that gives every point covered by an owning
+FOV exactly one owner whatever the positions (stage, grid or supplied), reduces to the
+legacy midline where the legacy rule is right, and needs nothing but origins and grid
+shapes. Its
 boundaries are not axis-aligned for irregular positions, which costs nothing because
 ownership is a point test ({doc}`assembly-algorithms`, "Ownership").
 
@@ -346,13 +408,16 @@ As agreed on 2026-09-27, with the reasons of "Statuses and reasons":
    (`sample_ownership_centroid_*`, "Sample coordinates": the expanded territory's under
    `centroid="territory"` when assign expanded, the original territory's otherwise) is its
    own FOV; otherwise it is excluded with the reason `not_owner`. Either centroid lies in
-   its own FOV's footprint, so it always has an owner.
+   its own FOV's footprint, so the cell of an owning FOV always has an owner. A cell of a
+   `placeholder` with an input is excluded `not_owner`, because a placeholder owns no
+   point; its `owner_fov_id` is the neighbour that owns the centroid, or null when none
+   does.
 2. **Molecules of cells.** An `assigned` or `excluded_cell` molecule (§2.9) takes the
    assembly status of its cell: retained with a retained cell, wherever its own position
    lies, even in another FOV's ownership region; excluded with the reason
    `cell_not_owner` when its cell is excluded.
 3. **Unassigned molecules** are retained when the owner of their own sample position is
-   their FOV, else excluded `not_owner`.
+   their FOV, else excluded `not_owner` (also when the position has no owner).
 4. **`outside_grid` molecules** (§2.9) are excluded with the reason `outside_grid`: their
    FOV did not sample them, so no FOV claims them by position.
 5. **FOVs without an origin** (`missing`, `failed`): every observation is excluded with the
@@ -375,7 +440,7 @@ Every cell and every molecule of every input FOV has exactly one assembly status
 | Status | Cells: reason | Molecules: reason |
 | --- | --- | --- |
 | `retained` | null | null |
-| `excluded` | `not_owner`: its ownership centroid is owned by another FOV; `fov_not_placed`: its FOV has no origin | `cell_not_owner`: its cell is excluded `not_owner`; `not_owner`: unassigned and its position is owned by another FOV; `outside_grid`: §2.9 `outside_grid`; `fov_not_placed` |
+| `excluded` | `not_owner`: its ownership centroid is not owned by its own FOV (another FOV owns it, or, for a cell of a `placeholder`, possibly none); `fov_not_placed`: its FOV has no origin | `cell_not_owner`: its cell is excluded `not_owner`; `not_owner`: unassigned and its position is not owned by its own FOV; `outside_grid`: §2.9 `outside_grid`; `fov_not_placed` |
 
 **Counted cells.** The sample's **counted cells** are the cells with
 `assembly_status == "retained"` and §2.9 `status == "kept"`. They are the only cells with
@@ -399,7 +464,7 @@ Flags make visible what assembly cannot decide; they never change a status.
 | `fov_edge` | cell | Its territory touches the first or last index of its grid in Y or X: the FOV may see only part of it. |
 | `z_edge` | cell | A `volume` or `extended` territory touches the first or last Z index. |
 | `conflict` | retained cell | Its ownership centroid (`sample_ownership_centroid_*`) lies inside the territory of a retained cell of another FOV, or the ownership centroid of a retained cell of another FOV lies inside its territory; `conflict_with` lists those cell keys. The same biological cell may then be retained twice. |
-| `unclaimed` | excluded cell (`not_owner`) | At its ownership centroid the owner FOV has no retained cell (its territory value there is 0 or a cell the owner excluded): the cell may be missing from the sample. |
+| `unclaimed` | excluded cell (`not_owner`) | No FOV owns its ownership centroid (only possible for a cell of a `placeholder`), or the owner FOV has no retained cell there (its territory value there is 0 or a cell the owner excluded): the cell may be missing from the sample. |
 | `outside_owner_region` | retained molecule | Retained with its cell, but its own position is owned by another FOV, which may retain the same molecule as unassigned. |
 | `cell_unclaimed` | excluded molecule | Its cell is flagged `unclaimed`. |
 
@@ -449,7 +514,8 @@ With `F` the input FOVs, `C_f` and `M_f` the cell and molecule tables of FOV `f`
 3. **Molecules follow their cell.** Every `assigned` or `excluded_cell` molecule has its
    cell's assembly status (and reason `cell_not_owner` when the cell's is `not_owner`, or
    `fov_not_placed`); every `unassigned` molecule of a placed FOV is retained exactly when
-   its position's owner is its FOV; every `outside_grid` molecule is excluded.
+   its position's owner is its FOV, which is never the case for a `placeholder` ("Placeholder
+   FOVs"); every `outside_grid` molecule is excluded.
 4. **Counted cells' counts equal the per-FOV counts.** For every counted cell
    ("Statuses and reasons"), its rows in the sample `counts` equal its rows in its FOV's
    §2.9 `counts`, compartment by compartment; no other cell has rows, so a retained cell
@@ -475,7 +541,8 @@ cell and count tables have no row).
 
 **`fovs`**, one row per FOV of the placement: `fov_id`; `placement_status`; `origin_z/y/x`
 (µm, copied); `kind` (`assignment`, `molecules`, or null without input); `footprint_y0,
-footprint_y1, footprint_x0, footprint_x1` and `centre_y, centre_x` (µm); `n_cells`,
+footprint_y1, footprint_x0, footprint_x1` and `centre_y, centre_x` (µm); `owns_points`
+(boolean: whether it is an owning FOV, false for a `placeholder`); `n_cells`,
 `n_cells_retained`, `n_molecules`, `n_molecules_retained`.
 
 **`cells`**, one row per cell of every input FOV, in placement table order, then
@@ -491,7 +558,7 @@ increasing `cell_id`:
 | `sample_expanded_centroid_z/y/x` | float64, µm | The same for the expanded territory; NaN unless assign expanded. |
 | `ownership_centroid` | string | Which centroid ownership tests: `expanded` or `original` ("Sample coordinates"). |
 | `sample_ownership_centroid_z/y/x` | float64, µm | A copy of `sample_expanded_centroid_*` when `ownership_centroid` is `expanded`, of `sample_centroid_*` when it is `original`. |
-| `owner_fov_id` | string | The owner of `sample_ownership_centroid_*`; null for `fov_not_placed`. |
+| `owner_fov_id` | string | The owner of `sample_ownership_centroid_*`; null for `fov_not_placed` and where no FOV owns that point. |
 | `assembly_status`, `assembly_reason` | string | "Statuses and reasons". |
 | `assembly_flags` | string | `;`-joined `CELL_ASSEMBLY_FLAGS`; empty when none; `conflict` and `unclaimed` null with `conflicts=False`. |
 | `conflict_with` | string | `;`-joined `obs_name`s of the conflicting retained cells; empty when none. |
@@ -522,13 +589,46 @@ mismatch.
 
 ## Sample-level AnnData
 
-Every assembled sample has `sample.h5ad`, written by `sample_anndata(result, *,
+Every assembled sample has `sample.h5ad`, written by `sample_anndata(result, path, *,
 annotation=None)` from the sample tables. It is not a second exporter: the AnnData is
-built by the §2.9 AnnData code, factored out of the workflow adapter's `_write_raw_h5ad`
-and `_cell_obs` (`src/python/starfinder/dataset/workflow.py:1361-1430`) into one function,
-`counts_anndata(cells, counts, genes, *, uns)` in `starfinder.assignment`, which the adapter
-then calls for `raw.h5ad` with its legacy columns (its output unchanged) and
-`sample_anndata` calls for the sample. Its content:
+built and written by the §2.9 AnnData code, which the implementation factors out of the
+workflow adapter's `_write_raw_h5ad` (`src/python/starfinder/dataset/workflow.py:1395-1430`)
+into one function of `starfinder.assignment`:
+
+```python
+def write_h5ad(path, obs: pd.DataFrame, keys: pd.DataFrame, counts: pd.DataFrame,
+               genes: Sequence[str], *, layers: bool, uns: Mapping[str, str],
+               var: pd.DataFrame | None = None,
+               obsm: Mapping[str, np.ndarray] | None = None) -> Path: ...
+```
+
+`write_h5ad` builds the AnnData and writes the file at the given `path`, creating its
+folder, and returns the path. The caller prepares `obs`, one row per cell to write, in
+order, with the `obs_names` as its index, and `keys`, the same rows' key columns that
+`counts` also has (`cell_id` within one FOV; `cell_namespace` and `cell_id` for a sample).
+From the long counts of {doc}`assignment-contract` it builds `X`, float64 whole-cell
+counts in `genes` order with 0 where a cell has no row, and, with `layers=True`, the
+`nucleus` and `cytoplasm` layers: float64, 0.0 for a measured zero and NaN for every gene
+of a row whose `obs["compartments"]` is not `available`. `var_names` are `genes`, with the
+columns of `var` when given; `uns` and `obsm` are stored as given. Strings are written as
+anndata expects (object strings, not the pandas Arrow strings that pandas 3 infers), as
+`_write_raw_h5ad` does today. With no row in `obs` it writes an AnnData whose `X` has
+shape `(0, len(genes))` (and layers of the same shape with `layers=True`).
+
+It has two callers, and each prepares its own `obs`:
+
+* **The workflow adapter**, for `expr/{fovID}/raw.h5ad`. `_cell_obs`
+  (`workflow.py:1361-1392`) prepares the legacy and cell-table columns of the kept cells;
+  the adapter applies its tile-box filter to them as today and calls `write_h5ad` with the
+  FOV result's counts, `layers` when the result has nuclei, and `uns["assignment"]`.
+  `raw.h5ad` keeps the content it has today: the same rows, `obs` columns, `X`, layers and
+  `uns`, which A18 of {doc}`assignment-algorithms` compares with the frozen helper.
+* **`sample_anndata`**, for `sample.h5ad`. It prepares the sample's `obs` from the sample
+  cell table (the rows and columns below), and its `keys`, `obsm["spatial"]`, `uns` and,
+  in `molecules_only` mode, `var["n_molecules_retained"]`, and calls `write_h5ad` with the
+  sample `counts`. `save_assembly` calls it for `sample.h5ad`.
+
+The content of `sample.h5ad`:
 
 | Part | Content |
 | --- | --- |
@@ -571,9 +671,11 @@ rows with `assembly_status == "retained"` and `status == "kept"`), in table orde
 `uns["assembly"]` the record. The molecule table holds the molecules themselves.
 
 **Dependency.** `sample_anndata` imports `anndata`, from the existing `anndata` extra
-(`starfinder[anndata]`: `anndata==0.12.6` on Python 3.11 and later, `0.11.4` on 3.10),
-lazily; without it, it raises `ModuleNotFoundError` naming the extra. `assemble` and the
-tables need only the base dependencies. No dependency or lock change.
+(`starfinder[anndata]`: `anndata==0.12.6`, its pin for Python 3.11 and later, which are
+the versions the package supports once the dependency plan of {doc}`stitching-contract` is
+applied), lazily; `write_h5ad` imports it the same way. Without it, either raises
+`ModuleNotFoundError` naming the extra. `assemble` and the tables need only the base
+dependencies. No dependency or lock change.
 
 **Where it differs from `create_sample_h5ad.py`**:
 
@@ -645,11 +747,22 @@ reads another sample's placement.
   `excluded_no_nucleus` cell that has no AnnData row and an expanded FOV whose
   `obsm["spatial"]` holds the expanded centroids; the save and load
   round trip with its SHA-256 check; the workflow block and its schema.
+* For the amendments of the W-329 review: a constructed placement with a `placeholder` at
+  a corner and one at an edge of the grid, where every point of a placeholder's footprint
+  that an owning FOV covers is owned by the nearest such FOV, the rest has no owner, no
+  placeholder appears as an owner, and a neighbour's cell whose ownership centroid lies in
+  the placeholder's footprint is retained; a placement whose FOVs are all placeholders,
+  which raises `ValueError` because there is no owning FOV; `candidates` restricting the
+  owner on that placement, its default equal to every owning FOV, and its `ValueError` for
+  a placeholder or unknown `fov_id`; the territory path in `assembly.json` resolving to the
+  file whose SHA-256 is recorded beside it; and `write_h5ad` with no cell, which writes an
+  AnnData of shape `(0, n_genes)`, while `raw.h5ad` written through it keeps A18's values.
 
 ## `docs/migration.md` entries
 
 The implementation adds the `starfinder.assembly` module and its names; the `assembly`
-YAML block and the `assemble_sample` rule; `counts_anndata` in `starfinder.assignment`;
+YAML block and the `assemble_sample` rule; `write_h5ad` in `starfinder.assignment`, which
+the adapter calls for `raw.h5ad`;
 and, for configurations with an `assembly` block only, the intentional changes: the
 per-FOV `raw.h5ad` and `reads_assignment.csv` are not box-filtered and have no `global_*`
 columns, the sample outputs are `assembly/<sample>/` instead of
