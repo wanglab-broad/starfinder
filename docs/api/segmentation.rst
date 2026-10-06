@@ -20,10 +20,13 @@ A :py:class:`~starfinder.segmentation.ReferenceGrid` is a shape, an
 :py:class:`~starfinder.image.ImageMetadata`, a source and the SHA-256 of the image it was
 read from (its C-order bytes alone, without a dtype or shape prefix).
 ``FOV.reference_grid()`` returns the grid of the resident reference round after
-``FOV.run`` or after ``FOV.load_checkpoint("registered")``;
+``FOV.run`` or after ``FOV.load_checkpoint("registered")``, or, without that round, the
+grid of the saved reference image after ``FOV.load_reference_image()``;
 :py:func:`~starfinder.segmentation.reference_grid_from_file` reads it from a TIFF such as
 ``images/ref_merged/{fovID}.tif``; a caller without a molecule run declares one with
 ``source="declared"``. ``ReferenceGrid.projected()`` is the Z=1 grid of a projection.
+Two grids are one grid when their shapes and metadata are equal; the source and hash are
+recorded, not compared (:doc:`../assignment-contract`, "The grid rule").
 
 :py:func:`~starfinder.segmentation.import_labels` brings a mask made elsewhere
 (CellProfiler, an earlier workflow run) onto a grid: the byte order is converted to
@@ -145,7 +148,9 @@ resident images and stores each result in ``FOV.segmentation_results`` under the
 name, after every run has finished. A run imports a mask or names a method, its target,
 its input channels (:py:class:`~starfinder.segmentation.InputChannel`: a channel of the
 reference round, of a sequencing round registered by ``FOV.run`` or of a morphology round
-registered by ``FOV.register_rounds``, or the reference round's channel maximum, each
+prepared by ``FOV.prepare_morphology`` (or ``FOV.register_rounds``) or reloaded by
+``FOV.load_registered_round``, or the reference round's channel maximum (the saved
+reference image of ``FOV.load_reference_image`` when the round is not resident), each
 optionally through the composite or the Flamingo enhancement), an earlier run as its
 seeds, an optional Z projection, and label operations in order: ``expand_labels`` and
 ``extend_labels_through_z`` after a projection (an import takes none). Every

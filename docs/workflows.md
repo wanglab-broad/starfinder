@@ -131,11 +131,12 @@ default) runs a local MATLAB executable; `matlab_launcher: broad` sources
 morphology rounds) to the reference round's DAPI stain, one job per FOV. The
 MATLAB backend runs `workflow/scripts/nuclei_registration.m`. The Python backend
 runs `workflow/scripts/nuclei_registration.py`, which calls
-`FOV.register_rounds` ({doc}`coordination`) and keeps the MATLAB inputs and
+`FOV.prepare_morphology` ({doc}`coordination`) and keeps the MATLAB inputs and
 file names:
 
-- it reads the reference round's `*ch04.tif`, rotated by `rotate_angle`, as an
-  `ExternalReference` labelled `<ref_round>:ch04`;
+- it reads the reference round's `*ch04.tif`, rotated by `rotate_angle`, as the
+  reference stain and registers on it as an `ExternalReference` labelled
+  `<ref_round>:ch04`;
 - it loads each `additional_round` entry with its `channel_order` (each
   entry's `channel` is the filename pattern and label, its `name` the output
   folder), rotated by `rotate_angle`; the stain is the one channel whose
@@ -149,6 +150,11 @@ file names:
 
 Unlike MATLAB, the Python rule does not min–max stretch the other rounds before
 registering and saving them: the images keep their loaded dtype and values.
+With the Python-only `rules.nuclei_registration.parameters.checkpoints` (a mapping
+of `CheckpointConfig` fields, `{}` for the defaults) it also writes the saved form
+of each prepared image under `<checkpoint dir>/<fov>/other_rounds/<name>/`, which
+`FOV.load_registered_round` reads ({doc}`checkpoints`); the declared files do not
+change.
 
 | Mode | Selected core rules | Intermediate files and execution |
 | --- | --- | --- |

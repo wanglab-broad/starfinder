@@ -12,7 +12,7 @@ import pandas as pd
 
 from starfinder.image import IncompatibleGeometryError
 from starfinder.segmentation import ReferenceGrid, SegmentationResult, expand_labels
-from starfinder.segmentation._labels import GEOMETRIES, _grid_record, _json, array_sha256
+from starfinder.segmentation._labels import GEOMETRIES, _grid_record, _json, array_sha256, same_grid
 
 from ._config import (ASSIGNMENT_STATUSES, CELL_CORRESPONDENCE, COMPARTMENT_STATES, EXCLUSION_RATIONALE,
                       EXCLUSION_REASON, SAMPLING_RULE, AssignmentConfig)
@@ -112,8 +112,7 @@ def _check_grid(cells, grid):
     if cells.geometry == "plane" and grid.shape_zyx[0] > 1:
         method = _projection_method(cells)
         expected = grid.projected(method=method) if method else None
-    if (expected is None or cells.grid.shape_zyx != expected.shape_zyx
-            or cells.grid.metadata != expected.metadata):
+    if expected is None or not same_grid(cells.grid, expected):
         frame = cells.grid.metadata.frame_id
         raise IncompatibleGeometryError(
             f"{cells.geometry} labels of run {cells.record.get('run')!r} on grid {cells.grid.shape_zyx} "
@@ -313,7 +312,7 @@ def _check_inputs(molecules, cells, grid, nuclei, correspondence, config):
         raise ValueError(f"nuclei must have target nucleus; got {nuclei.target!r}")
     check = _check_grid(cells, grid)
     if nuclei is not None:
-        if nuclei.grid.shape_zyx != cells.grid.shape_zyx or nuclei.grid.metadata != cells.grid.metadata:
+        if not same_grid(nuclei.grid, cells.grid):
             extend = (" (a plane nucleus image with extended cells: extend the nuclei through z too)"
                       if nuclei.geometry == "plane" and cells.geometry == "extended" else "")
             raise IncompatibleGeometryError(

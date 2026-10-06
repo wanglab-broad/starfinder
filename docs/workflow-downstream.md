@@ -24,7 +24,7 @@ in the backend registration rule file).
 
 | Rule | Inputs | Outputs / behavior |
 | --- | --- | --- |
-| `nuclei_registration` | Config JSON and INPUT additional-round/FOV directories; script also reads reference-round `*ch04.tif` | `log/{fovID}_nr.txt`, `log/gr_shifts/{fovID}_nr.txt`, registered `images/<round>/<channel name>/{fovID}.tif`; MATLAB script, or with `backend: python` the Python script ([workflows](workflows.md#nuclei-registration)) |
+| `nuclei_registration` | Config JSON and INPUT additional-round/FOV directories; script also reads reference-round `*ch04.tif` | `log/{fovID}_nr.txt`, `log/gr_shifts/{fovID}_nr.txt`, registered `images/<round>/<channel name>/{fovID}.tif`; MATLAB script, or with `backend: python` the Python script, which calls `FOV.prepare_morphology` and, with the Python-only `parameters.checkpoints`, also writes the saved form under `checkpoints/{fovID}/other_rounds/` (not declared) ([workflows](workflows.md#nuclei-registration)) |
 | `rotate_nuclei` | INPUT/`{dapi_round}/{fovID}/*ch04.tif` | `images/DAPI/{fovID}.tif`, rotated and optionally projected by top-level `maximum_projection` |
 | `create_nuclei_amplicon_overlay` | DAPI and `images/ref_merged/{fovID}.tif` (the reference round's channel-merged detection image, ZYX, or YX with top-level `maximum_projection`; see [projection views](workflows.md#projection-views-and-the-reference-merged-image)) | `images/overlay/{fovID}.tif`; `composite_nuclei_amplicon` (contrast stretch, maximum of the DAPI and amplicon images) and the optional Z projection |
 | `enhance_dapi_with_flamingo` | `images/flamingo/DAPI/{fovID}.tif`, `images/flamingo/Flamingo/{fovID}.tif` | `images/flamingo/enhanced_DAPI/{fovID}.tif` (`enhance_with_flamingo`); those input folders must be supplied separately |
@@ -35,6 +35,17 @@ with MATLAB channel/name metadata beyond the schema-described `round_name`;
 both backends read them.
 It is not sufficient to add a name to `additional_round`. Reference-channel
 identity, rotation and registration must match the sequencing coordinate frame.
+
+Like these rules, which read saved reference-frame images and never load a sequencing
+round, a Python process can segment from saved images: `FOV.load_reference_image()`
+restores `images/ref_merged/{fovID}.tif` and `FOV.load_registered_round(name)` the
+saved form of each prepared image (the `reference_stain` and the additional rounds),
+and `FOV.segment` then runs with no sequencing round resident
+({doc}`segmentation-contract`, "Coordination per FOV"). For the Python rule to write
+that saved form, set
+`rules.nuclei_registration.parameters.checkpoints` (for example `{}`; `null` or absent
+writes none). The Python-only `segmentation` block is not wired to a rule yet (§2.13),
+and `rotate_nuclei` and the legacy segmentation rules are unchanged.
 
 `stardist_segmentation` runs the package's `stardist` method in the environment that
 runs Snakemake, which needs the `stardist` extra (StarDist, CSBDeep and TensorFlow); it

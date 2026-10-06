@@ -205,12 +205,32 @@ def _record_sha256(record):
 
 
 def _check_rounds(fov, plan, grid):
-    """Every round an input reads is resident, registered into the reference frame and on the reference grid."""
+    """Every round an input reads is resident, registered into the reference frame and on the reference grid.
+
+    The reference merged image (an input's own, or the amplicon of a composite)
+    is the resident reference round's, else the saved reference image of
+    FOV.load_reference_image, which is the grid itself.
+    """
     ref = fov.rounds.reference_round
     registered = fov.registration_record.get("rounds", {})
+    restored = fov._reference_file is not None and not fov._reference_resident()
     for run in plan.runs:
-        for name in dict.fromkeys(ref if i.reference_merged else i.round for i in run.inputs):
+        names = [ref if i.reference_merged else i.round for i in run.inputs]
+        names += [ref for i in run.inputs if isinstance(i.prepare, CompositeConfig)]
+        # Only the merged image of the reference round is read: the restored file serves it.
+        merged_only = all(i.reference_merged or i.round != ref for i in run.inputs)
+        for name in dict.fromkeys(names):
+            if name == ref and restored and merged_only:
+                continue
             if name not in fov.images or name not in fov.metadata:
+                if name == ref:
+                    raise ValueError(
+                        f"run {run.name!r}: input round {name!r} is not loaded; "
+                        + ("a channel of the reference round other than its merged image needs the reference "
+                           "round resident (FOV.run or FOV.load_checkpoint('registered')), not only the saved "
+                           "reference image of FOV.load_reference_image" if restored else
+                           "the reference merged image needs FOV.run, FOV.load_checkpoint('registered') or "
+                           "FOV.load_reference_image"))
                 raise ValueError(f"run {run.name!r}: input round {name!r} is not loaded")
             if name != ref:
                 if name in fov.rounds.sequencing_rounds:
@@ -247,7 +267,8 @@ def _channel_details(fov, round_name, index):
 
 
 def _reference_merged(fov):
-    return np.asarray(fov.images[fov.rounds.reference_round]).max(axis=3)
+    """The reference merged image, ZYX: the reference round's channel maximum, or the saved file restored."""
+    return fov._merged_reference()[0]
 
 
 def _channel(fov, item):
@@ -275,6 +296,12 @@ def _channel(fov, item):
                   # The reference stain's relation, and the saved file of an image reloaded by load_registered_round.
                   **{key: entry[key] for key in ("relation", "saved") if key in entry}},
               "sha256": array_sha256(image)}
+    path = fov._merged_reference()[1] if item.reference_merged or isinstance(item.prepare, CompositeConfig) else None
+    if path is not None:
+        # The reference merged image (the channel, or the composite's amplicon) was read from the saved
+        # reference image of FOV.load_reference_image: its path below the output root and its file SHA-256.
+        source["reference_image"] = {"path": path.relative_to(fov.dataset.output_root).as_posix(),
+                                     "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
     return np.ascontiguousarray(image), source
 
 

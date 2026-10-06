@@ -221,6 +221,36 @@ a coordination step that a plan needs, not one of the three calls. It is not nee
 the plan's inputs use only the reference round's own channels or its merged image, or
 when every run imports an external mask.
 
+**Two dataset designs.** As in the MATLAB workflow, whose segmentation rules read saved
+reference-frame images (`images/ref_merged`, `images/DAPI`, `images/<round>/<name>`) chosen
+by `segmentation_input_folder` and never load a sequencing round, the calls can run in one
+process or in separate ones:
+
+* *One process.* `fov.run(…)`, `fov.prepare_morphology(…)` when the plan needs it,
+  `fov.segment(plan)` and `fov.assign(…)` on one `FOV` object. The reference round stays
+  resident after `FOV.run` (or comes back with `FOV.load_checkpoint("registered")`, which
+  restores every sequencing round as well).
+* *Segmenting from saved images.* Process 1 calls `fov.run(pipeline, checkpoints=…)` and
+  `fov.save_reference_image()`; process 2 calls
+  `fov.prepare_morphology(MorphologyConfig(rotation_degrees=…), checkpoints=…)`, which needs
+  only the raw files, so processes 1 and 2 run in either order (`FOV.run` second needs
+  `overwrite=True`, which removes only checkpoint stage files, {doc}`checkpoints`).
+  Process 3 calls, on a new `FOV` object, `fov.load_reference_image()`,
+  `fov.load_registered_round(name)` for `reference_stain` and each other round its plan
+  names, and `fov.segment(plan, checkpoints=…)`. It reads
+  `images/ref_merged/{fovID}.tif` and `<checkpoint dir>/<fov_id>/other_rounds/<name>/`
+  (`image.ome.tif`, `registration.json`) and nothing else: no sequencing round and no
+  `registered` checkpoint. Its reference grid is the grid of that file (source
+  `file:<path>`), which is the reference round's grid by the grid rule
+  ({doc}`assignment-contract`, "The grid rule"), so its labels and assignment tables equal
+  those of the same calls in one process. `fov.assign(…)` there takes the molecules of
+  process 1 from its `candidates` and `pre_qc` checkpoints, with the filter re-applied by
+  `FOV.run`; `assign_molecules` with `molecule_table_from_csv` of the exported table is the
+  other route. An input that reads a channel of the reference round other than its merged
+  image still needs that round resident, and `FOV.segment` says so. A reference image saved
+  with a projection (YX) gives a Z=1 grid, on which a run's inputs must also have Z=1, and
+  which `FOV.assign` refuses as the molecules' grid.
+
 **The reference grid.** Every label image of a FOV is on one grid. Because
 `ImageMetadata` carries no shape (`src/python/starfinder/image.py`), the grid is passed
 as its own object:
@@ -239,8 +269,18 @@ class ReferenceGrid:
 * `FOV.reference_grid()` returns the grid of the resident reference round:
   `images[reference_round].shape[:3]`, `metadata[reference_round]`, source
   `"fov:<round>"` and the SHA-256 of the reference image. It is available after
-  `FOV.run`, or after `FOV.load_checkpoint("registered")`, and raises `ValueError` when
-  the reference round is not resident.
+  `FOV.run`, or after `FOV.load_checkpoint("registered")`. Without the reference round,
+  after `FOV.load_reference_image()`, it returns the grid of the saved reference image, as
+  `reference_grid_from_file` reads it (below). It raises `ValueError` when neither is
+  resident, or when both are and the file is not the round's channel maximum.
+* `FOV.load_reference_image()` reads `images/ref_merged/{fovID}.tif`, the file
+  `FOV.save_reference_image(reference_image="merged")` wrote (ZYX, or YX after a
+  projection), with its stored metadata, and makes it resident as the reference merged
+  image: `InputChannel(reference_merged=True)` and the amplicon of a `CompositeConfig`
+  read it when the reference round is not resident. A missing file raises
+  `FileNotFoundError`; with the reference round resident, the file must equal its channel
+  maximum (shape, metadata, dtype and values; a YX file, its projection), else
+  `ValueError`.
 * `reference_grid_from_file(path, *, metadata=None)` reads a TIFF with `load_volume`:
   the shape from the array, the metadata from the file's `starfinder_metadata`
   description, or from `metadata` when the file has none (a file with neither raises).
@@ -259,7 +299,7 @@ hash).
 | From | What | Used for |
 | --- | --- | --- |
 | `FOV.run` | `fov.metadata[reference_round]`: the reference `ImageMetadata` (frame, spacing, origin, direction) and the reference grid `images[reference_round].shape[:3]`, together `FOV.reference_grid()` | the grid and metadata every segmentation input and label image must have, and the grid of an import |
-| `FOV.run` | the reference round's current image (its detection image after `run`), whose channel maximum is the reference merged image, ZYX, exactly as `save_reference_image(reference_image="merged")` writes it | the amplicon channel of the composite (`InputChannel(reference_merged=True)`) and the stain of a seeded watershed on the amplicon signal (tissue-2D) |
+| `FOV.run` | the reference round's current image (its detection image after `run`), whose channel maximum is the reference merged image, ZYX, exactly as `save_reference_image(reference_image="merged")` writes it; in a process without the reference round, that saved file restored by `FOV.load_reference_image` | the amplicon channel of the composite (`InputChannel(reference_merged=True)`) and the stain of a seeded watershed on the amplicon signal (tissue-2D) |
 | `FOV.run` | `preprocessing_record` and `registration_record` | copied by reference (their hashes) into the segmentation record, so the input's processing is traceable |
 | `FOV.prepare_morphology` (`FOV.register_rounds`) | each registered morphology round's image (every channel resampled once into the reference frame) and its metadata, which equals the reference metadata | the `nuclear`, `cytoplasm` and Flamingo channels |
 | `FOV.prepare_morphology` | the image `reference_stain` (the reference round's stain files, rotated as the reference round, with its metadata) | a nuclear stain stored as an extra file of the reference round |
@@ -267,10 +307,12 @@ hash).
 | `Dataset` | `channel_index(round, key)` and `channel_info(round)` ({doc}`coordination`, "Channels") | resolving `InputChannel.channel` and `prepare_channel` by pattern or by name, and the channel's `name` and `wavelength` in the record; an unknown key or a repeated name raises `ValueError` naming the round and its channels |
 
 Every image `FOV.segment` reads must be resident: the reference round (after `FOV.run`,
-whose streaming mode keeps it, or after `FOV.load_checkpoint("registered")`) and
+whose streaming mode keeps it, or after `FOV.load_checkpoint("registered")`), or, for the
+reference merged image alone, the saved reference image (`FOV.load_reference_image`), and
 `reference_stain` or each morphology round named by an input (prepared in this process,
 or reloaded by `FOV.load_registered_round`). `FOV.segment` raises `ValueError` naming the
-round when an input round is not loaded, is `reference_stain` or a morphology round
+round when an input round is not loaded (for a channel of the reference round other than
+its merged image, saying that the saved reference image does not serve it), is `reference_stain` or a morphology round
 without an entry in `registration_record["rounds"]` (loaded but not prepared), or has
 metadata different from the reference round's; and `IncompatibleGeometryError` when its `shape[:3]` differs from the
 reference grid. A run's `projection` is the only route to a plane from a volume; the
@@ -316,9 +358,12 @@ mapping in `SegmentationResult.record`:
     "path": "input.ome.tif", "sha256": "<C-order bytes>", "file_sha256": "...",
     "shape_zyxc": [50, 512, 512, 1], "dtype": "uint8", "metadata": {"frame_id": "..."},
     "projection": null,
-    "channels": [{"role": "nuclear", "round": "round4", "channel": "DAPI", "name": "DAPI",
-                  "wavelength": "unavailable", "reference_merged": false, "prepare": null,
-                  "registration": {"reference": "round1:ch04", "reference_sha256": "..."},
+    "channels": [{"role": "nuclear", "round": "reference_stain", "channel": "DAPI", "name": "DAPI",
+                  "wavelength": 405.0, "reference_merged": false, "prepare": null,
+                  "registration": {"reference": "round1", "reference_sha256": null,
+                                   "relation": "same acquisition as the reference round",
+                                   "saved": {"path": "other_rounds/reference_stain/image.ome.tif",
+                                             "sha256": "..."}},
                   "sha256": "..."}]
   },
   "seeds": null,
@@ -346,6 +391,14 @@ mapping in `SegmentationResult.record`:
   `wavelength` from `Dataset.channel_info` (`null` and `"unavailable"` when not
   configured, and for the reference merged image). Both keys are additive; a record
   written without them still loads.
+* The illustrated channel is the reference stain (the reference round's `*ch04.tif`, named
+  `DAPI`) reloaded with `FOV.load_registered_round`, so its `registration` entry states the
+  relation and links the saved file (its path below the FOV checkpoint directory and its
+  SHA-256). A morphology round registered to it has `reference` `"round1:ch04"` and its
+  `reference_sha256`. When the reference merged image of an input (the channel itself, or
+  the amplicon of a composite) was read from the saved reference image of
+  `FOV.load_reference_image`, the channel also has `reference_image`: the file's path below
+  the dataset output root and its SHA-256. The key is additive.
 * `outcome` is `ok` or `empty` (no object; not an error).
 * `software` has the same content as the `run.json` written by `FOV.run`
   ({doc}`checkpoints`); `run.json` itself does not change.
@@ -996,7 +1049,7 @@ segmentation:
     - name: nucleus
       target: nucleus
       inputs:
-        - {role: nuclear, round: round4, channel: ch04}
+        - {role: nuclear, round: reference_stain, channel: DAPI}
       method: stardist
       model_path: /absolute/stardist_models/3D_spleen
       scale: 1.0

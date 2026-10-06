@@ -262,7 +262,7 @@ properties:
         $ref: "#/$defs/rule_with_resources"
 
       nuclei_registration:
-        $ref: "#/$defs/rule_with_resources"
+        $ref: "#/$defs/nuclei_registration_config"
 
       rotate_nuclei:
         $ref: "#/$defs/rule_with_resources"
@@ -1422,6 +1422,28 @@ $defs:
         properties:
           maximum_projection:
             type: boolean
+        additionalProperties: true
+    additionalProperties: true
+
+  nuclei_registration_config:
+    type: object
+    required:
+      - run
+    properties:
+      run:
+        type: boolean
+      resources:
+        $ref: "#/$defs/resources"
+      parameters:
+        type: object
+        properties:
+          checkpoints:
+            description: >-
+              Python only (backend python). CheckpointConfig fields ({} for the defaults), or null:
+              also write the saved form of each prepared image (other_rounds/<name>/ under the
+              checkpoint directory), which FOV.load_registered_round reads. The declared outputs
+              do not change.
+            type: [object, "null"]
         additionalProperties: true
     additionalProperties: true
 

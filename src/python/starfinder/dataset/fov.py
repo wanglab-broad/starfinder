@@ -174,6 +174,8 @@ class FOV:
     segmentation_results: dict[str, SegmentationResult] = field(default_factory=dict)
     assignment_results: dict[str, AssignmentResult] = field(default_factory=dict)
     _run_record: object | None = field(default=None, init=False, repr=False, compare=False)
+    # The saved reference merged image restored by load_reference_image: (ZYX image, its grid, path).
+    _reference_file: tuple | None = field(default=None, init=False, repr=False, compare=False)
 
     # --- Delegated properties ---
 
@@ -1871,6 +1873,10 @@ class FOV:
 
     # --- Segmentation ---
 
+    def _reference_resident(self) -> bool:
+        ref = self.rounds.reference_round
+        return bool(ref) and ref in self.images and ref in self.metadata
+
     def reference_grid(self) -> ReferenceGrid:
         """The grid of the resident reference round, on which every label image of this FOV lies.
 
@@ -1879,21 +1885,106 @@ class FOV:
         ``"fov:<reference round>"`` and the SHA-256 of the reference image's C-order
         bytes (as ``reference_sha256`` of register_rounds). It is available after run() (whose
         streaming mode keeps the reference round) or after
-        ``load_checkpoint("registered")``. See docs/segmentation-contract.md.
+        ``load_checkpoint("registered")``. Without the reference round, after
+        :meth:`load_reference_image`, it is the grid of the saved reference image
+        as :func:`~starfinder.segmentation.reference_grid_from_file` reads it
+        (source ``"file:<path>"``; a YX file gives a Z=1 grid). Either is the
+        same grid by the grid rule (equal shape and metadata). See
+        docs/segmentation-contract.md.
 
         Raises
         ------
         ValueError
-            The reference round's image or metadata is not resident.
+            Neither the reference round nor the saved reference image is
+            resident, or both are and disagree.
         """
         from starfinder.segmentation import ReferenceGrid, SegmentationPlan, SegmentationResult
         from starfinder.segmentation._labels import grid_sha256
         ref = self.rounds.reference_round
-        if not ref or ref not in self.images or ref not in self.metadata:
-            raise ValueError(f'the reference round {ref!r} is not resident; call run() or '
-                             'load_checkpoint("registered") first')
+        if not self._reference_resident():
+            if self._reference_file is not None:
+                return self._reference_file[1]
+            raise ValueError(f'the reference round {ref!r} is not resident; call run(), '
+                             'load_checkpoint("registered") or load_reference_image() first')
+        if self._reference_file is not None:
+            self._check_reference_file(*self._reference_file)
         image = self.images[ref]
         return ReferenceGrid(np.shape(image)[:3], self.metadata[ref], f'fov:{ref}', grid_sha256(image))
+
+    def _merged_reference(self):
+        """(ZYX reference merged image, its saved file or None): the resident reference round's channel
+        maximum, else the image load_reference_image restored."""
+        if self._reference_resident():
+            return np.asarray(self.images[self.rounds.reference_round]).max(axis=3), None
+        if self._reference_file is not None:
+            return self._reference_file[0], self._reference_file[2]
+        raise ValueError(f'the reference merged image needs the reference round {self.rounds.reference_round!r} '
+                         'or the saved reference image; call run() or load_reference_image() first')
+
+    def _check_reference_file(self, image, grid, path):
+        """ValueError unless the saved reference image is the resident reference round's channel maximum.
+
+        A ZYX file must be the channel maximum with the reference metadata; a YX
+        file (a Z=1 grid in the reference frame's projection) its Z projection
+        by that method, as save_reference_image writes them.
+        """
+        from starfinder.preprocessing import project_image
+        ref = self.rounds.reference_round
+        expected, metadata = np.asarray(self.images[ref]).max(axis=3), self.metadata[ref]
+        method = next((m for m in ('max', 'sum') if grid.metadata == metadata.projected(method=m)), None)
+        if method is not None and grid.shape_zyx[0] == 1:
+            expected = project_image(expected, config=ProjectionConfig(method=method))
+            metadata = metadata.projected(method=method)
+        if (grid.shape_zyx != expected.shape or grid.metadata != metadata or image.dtype != expected.dtype
+                or not np.array_equal(image, expected)):
+            raise ValueError(f'the saved reference image {path} is not the channel maximum of the resident reference '
+                             f'round {ref!r}: the file has {grid.shape_zyx} {image.dtype} {grid.metadata!r}, the '
+                             f'round gives {expected.shape} {expected.dtype} {metadata!r}'
+                             + ('' if grid.shape_zyx != expected.shape or grid.metadata != metadata
+                                or image.dtype != expected.dtype else ' with other values'))
+
+    @_log_step
+    def load_reference_image(self) -> FOV:
+        """Restore the reference merged image that :meth:`save_reference_image` wrote, without the reference round.
+
+        Reads ``images/ref_merged/{fov_id}.tif`` (``paths.ref_merged_tif``), the
+        file ``save_reference_image(reference_image="merged")`` writes: ZYX, or YX
+        after a projection, with its stored ``ImageMetadata``. The image becomes
+        resident as the reference merged image: without the reference round,
+        :meth:`reference_grid` returns the grid of that file (as
+        :func:`~starfinder.segmentation.reference_grid_from_file`: source
+        ``"file:<path>"`` and the SHA-256 of the array's C-order bytes; a YX
+        file gives a Z=1 grid), and ``InputChannel(reference_merged=True)``, also
+        as the amplicon of a ``CompositeConfig``, reads it. With
+        :meth:`load_registered_round`, a process can then segment with no
+        sequencing round resident (docs/segmentation-contract.md, "Coordination
+        per FOV"). A channel of the reference round other than the merged image
+        still needs that round. When the reference round is resident too, the
+        round is read, and the file must agree with its channel maximum
+        (checked here and by reference_grid).
+
+        Returns
+        -------
+        FOV
+            This instance.
+
+        Raises
+        ------
+        FileNotFoundError
+            The file does not exist.
+        ValueError
+            The file has no stored metadata, or it disagrees with the resident
+            reference round (shape, metadata, dtype or values).
+        """
+        from starfinder.io import load_volume
+        from starfinder.segmentation import reference_grid_from_file
+        path = self.paths.ref_merged_tif
+        grid = reference_grid_from_file(path)
+        image = np.ascontiguousarray(load_volume(path).image)
+        if self._reference_resident():
+            self._check_reference_file(image, grid, path)
+        self._reference_file = (image, grid, path)
+        return self
 
     def segment(self, plan: SegmentationPlan, *, device: str = 'cpu',
                 checkpoints: CheckpointConfig | None = None) -> FOV:
@@ -1903,7 +1994,9 @@ class FOV:
         Z projection for a run with ``projection``), assembles its
         :class:`~starfinder.segmentation.SegmentationInput` from the resident images
         (each :class:`~starfinder.segmentation.InputChannel` from the reference round,
-        its channel maximum, a registered sequencing round, or ``reference_stain`` or
+        its channel maximum (or, without the round, the saved reference image
+        restored by :meth:`load_reference_image`), a registered sequencing round,
+        or ``reference_stain`` or
         an other round with an entry of ``registration_record["rounds"]`` (prepared by
         :meth:`prepare_morphology` or :meth:`register_rounds` in this process, or
         reloaded by :meth:`load_registered_round`), with its ``prepare`` function
@@ -1916,7 +2009,12 @@ class FOV:
         ``upstream``, the SHA-256 of preprocessing_record and registration_record.
         The record of an input channel names its round, channel name and
         registration entry; for an image reloaded by load_registered_round the
-        entry links the saved file (relative path and SHA-256).
+        entry links the saved file (relative path and SHA-256), and a channel
+        whose reference merged image (its own, or a composite's amplicon) was
+        read from the saved reference image links that file under
+        ``reference_image`` (path relative to the dataset output root and
+        SHA-256). A process that restores the reference image and the prepared
+        images it needs segments with no sequencing round resident.
         It never runs registration, detection or decoding (docs/segmentation-contract.md,
         "Coordination per FOV").
 
@@ -1947,11 +2045,13 @@ class FOV:
         Raises
         ------
         ValueError
-            An input round that is not loaded, a morphology round without an entry
-            in registration_record["rounds"] (or a sequencing round without a
-            registration), a round with metadata other than the reference round's,
-            an unknown channel or an unknown device; and every error of segment and
-            import_labels.
+            No reference round and no saved reference image, an input round that
+            is not loaded (a channel of the reference round other than its merged
+            image needs that round, not the saved reference image), a morphology
+            round without an entry in registration_record["rounds"] (or a
+            sequencing round without a registration), a round with metadata other
+            than the reference round's, an unknown channel or an unknown device;
+            and every error of segment and import_labels.
         TypeError
             checkpoints is neither None nor a CheckpointConfig.
         FileExistsError
@@ -2052,7 +2152,9 @@ class FOV:
         ``filtering_result``; ``called`` the reads called ``assigned`` in
         ``filtering_result`` (or in ``decoding_result`` before filtering). The
         genes are the loaded codebook's (the direct panel's in direct readout)
-        and the grid is :meth:`reference_grid`. Calls
+        and the grid is :meth:`reference_grid`: the reference round's, or the
+        grid of the saved reference image after :meth:`load_reference_image`
+        (one grid by the grid rule of docs/assignment-contract.md). Calls
         :func:`~starfinder.assignment.assign_molecules` and stores the result in
         ``assignment_results[name]``; its record names it and holds
         :func:`~starfinder.assignment.summarize_assignment` under ``counts``. It
@@ -2091,8 +2193,9 @@ class FOV:
         ------
         ValueError
             A name that is not snake_case, a run that is not in
-            segmentation_results, no spot or read result, no gene list, and every
-            error of assign_molecules and molecule_table.
+            segmentation_results, no spot or read result, no gene list, a grid
+            from a Z-projected saved reference image without the reference
+            round, and every error of assign_molecules and molecule_table.
         TypeError
             checkpoints is neither None nor a CheckpointConfig, cells or nuclei of
             another type, and the type errors of assign_molecules.
@@ -2132,8 +2235,14 @@ class FOV:
             genes = tuple(self.codebook.genes)
         else:
             raise ValueError('FOV.assign needs the gene list: load the codebook (or the direct panel)')
+        grid = self.reference_grid()
+        projected = grid.shape_zyx[0] == 1 and grid.metadata.frame_id.endswith(('/projection:max', '/projection:sum'))
+        if projected and not self._reference_resident():
+            raise ValueError('the saved reference image is a Z projection, so its grid is not the grid of the molecules '
+                             'of FOV.run; call assign_molecules with the molecule run\'s grid, or save the reference '
+                             'image without a projection')
         molecules = molecule_table(self.spot_result, reads, genes=genes, population=population)
-        result = assign_molecules(molecules, cell_run, grid=self.reference_grid(), nuclei=nucleus_run,
+        result = assign_molecules(molecules, cell_run, grid=grid, nuclei=nucleus_run,
                                   correspondence=correspondence, config=config)
         record = dict(result.record, name=name, counts=summarize_assignment(result))
         result = replace(result, record=record)
@@ -2257,13 +2366,15 @@ class FOV:
         ``log/gr_shifts/<fov>.txt`` for every registered round; ``nr`` (the
         nuclei_registration names) writes ``log/<fov>_nr.txt`` and
         ``log/gr_shifts/<fov>_nr.txt`` for the rounds registered by
-        register_rounds, with their attempts.
+        register_rounds (prepare_morphology's other rounds; the reference
+        stain has no registration), with their attempts.
         """
         if log_type not in ('rsf', 'gr', 'nr'):
             raise ValueError('invalid log_type')
         path = {'rsf': self.paths.rsf_log, 'gr': self.paths.gr_log, 'nr': self.paths.nr_log}[log_type]()
         path.parent.mkdir(parents=True, exist_ok=True)
-        rounds = list(self.registration_record.get('rounds', {})) if log_type == 'nr' else None
+        rounds = ([r for r in self.registration_record.get('rounds', {}) if r in self.registration_attempts]
+                  if log_type == 'nr' else None)
         attempts = (self.registration_attempts if rounds is None else
                     {name: self.registration_attempts[name] for name in rounds})
         path.write_text(json.dumps(dict(fov_id=self.fov_id, backend='python',

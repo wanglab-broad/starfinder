@@ -419,7 +419,7 @@ segmentation:
     - name: nucleus
       target: nucleus
       inputs:
-        - {role: nuclear, round: round4, channel: ch04}
+        - {role: nuclear, round: reference_stain, channel: DAPI}
       method: stardist
       model_path: /absolute/stardist_models/3D_spleen
       scale: 1.0

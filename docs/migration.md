@@ -1175,6 +1175,38 @@ and `FOV.load_registered_round` reads a saved prepared image ({doc}`checkpoints`
 `FORMAT_VERSION` stays 2). Datasets without other rounds give the same images, tables
 and digests as before.
 
+### Segmenting from saved reference-frame images
+
+Additions (W-338), following the MATLAB segmentation rules, which read saved
+reference-frame images and never load a sequencing round. Nothing that worked before
+changes its result:
+
+* `FOV.load_reference_image()` restores `images/ref_merged/{fovID}.tif`, written by
+  `FOV.save_reference_image`. Without the reference round, `FOV.reference_grid()`
+  returns that file's grid (source `file:<path>`) and `InputChannel(reference_merged=True)`
+  (also the amplicon of a composite) reads it; the input channel's record gains
+  `reference_image` (path and SHA-256), an additive key. A process can therefore segment
+  with `load_reference_image`, `load_registered_round` and `segment` only:
+
+  ```python
+  fov = dataset.fov(fov_id).load_reference_image()
+  for name in ("reference_stain", "morph"):
+      fov.load_registered_round(name, checkpoints=checkpoints)
+  fov.segment(plan, checkpoints=checkpoints)        # no sequencing round resident
+  ```
+
+* The grid rule is stated in {doc}`assignment-contract` ("The grid rule") and implemented
+  once: labels and molecules are on one grid when shape and `ImageMetadata` are equal;
+  `source` and `sha256` are recorded, not compared. This is the rule assign already
+  applied. `FOV.assign` refuses the Z=1 grid of a projected saved reference image without
+  the reference round, a case that did not exist before.
+* The Python `nuclei_registration` rule calls `FOV.prepare_morphology`; its declared files
+  are byte-identical to before. A new Python-only key,
+  `rules.nuclei_registration.parameters.checkpoints` (`CheckpointConfig` fields, `{}`
+  for the defaults), also writes the saved form under `checkpoints/{fovID}/other_rounds/`.
+  `save_processing_log("nr")` lists only registered rounds, so the reference stain, which
+  has no registration, is not in `log/{fovID}_nr.txt`.
+
 ## Intentional behavior changes — not mechanical equivalence
 
 | Area | Change and consequence |

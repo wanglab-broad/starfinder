@@ -154,6 +154,17 @@ class ReferenceGrid:
                              self.source, self.sha256)
 
 
+def same_grid(a: ReferenceGrid, b: ReferenceGrid) -> bool:
+    """Whether two grids are one grid: equal shape and equal ``ImageMetadata``.
+
+    The one grid identity of docs/assignment-contract.md ("The grid rule"). The
+    ``source`` and ``sha256`` say where a grid was read from and are recorded,
+    not compared, so the grid of the saved reference image (``file:<path>``) and
+    the grid of the resident reference round (``fov:<round>``) are one grid.
+    """
+    return a.shape_zyx == b.shape_zyx and a.metadata == b.metadata
+
+
 def _grid_record(grid):
     """The run record's ``grid`` entry: shape, metadata, source and hash."""
     return {"shape_zyx": list(grid.shape_zyx), "metadata": _json(asdict(grid.metadata)),

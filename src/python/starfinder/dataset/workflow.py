@@ -787,43 +787,78 @@ def _nuclei_registration(config):
     return dataset, stains, folders
 
 
-def _run_nuclei_registration(snakemake):
-    """Python counterpart of nuclei_registration.m for the Python backend.
+def _nuclei_checkpoints(config):
+    """The CheckpointConfig of the Python-only rules.nuclei_registration.parameters.checkpoints, or None.
 
-    Loads each additional round with its channel_order and rotates it by
-    rotate_angle; reads the reference round's ch04 image, rotated the same
-    way, as an ExternalReference; registers each round by one translation
-    step on its shared stain and transfers the transform to all its
-    channels. Writes the MATLAB names: log/<fov>_nr.txt (the attempts),
-    log/gr_shifts/<fov>_nr.txt and images/<round>/<channel name>/<fov>.tif
-    (ZYX, or the Z maximum YX with maximum_projection), keeping the dtype.
-    Unlike MATLAB, it does not min-max stretch the other rounds.
+    A mapping of CheckpointConfig fields ({} for the defaults) enables the saved
+    form of FOV.prepare_morphology; absent or null writes none.
+    """
+    from .config import CheckpointConfig
+    values = _rule_parameters(config, 'nuclei_registration').get('checkpoints')
+    if values is None:
+        return None
+    _python_only(config, ['rules.nuclei_registration.parameters.checkpoints'])
+    return _typed(CheckpointConfig, values, 'rules.nuclei_registration.parameters.checkpoints')
+
+
+def _run_nuclei_registration(snakemake):
+    """Python counterpart of nuclei_registration.m for the Python backend, through FOV.prepare_morphology.
+
+    The entry loads the reference round's ch04 image as the reference stain
+    and each additional round with its channel_order, rotates them by
+    rotate_angle, and registers each round by one translation step on its
+    shared stain (the channel _nuclei_registration matches) against the stain
+    as an ExternalReference labelled ``<ref_round>:ch04``, transferring the
+    transform to all its channels. A round whose shared stain has another
+    pattern than the rounds before it is registered after the entry by the
+    same public calls (load_images with the angle, register_rounds), in the
+    configured order. Writes the MATLAB names: log/<fov>_nr.txt (the
+    attempts), log/gr_shifts/<fov>_nr.txt and
+    images/<round>/<channel name>/<fov>.tif (ZYX, or the Z maximum YX with
+    maximum_projection), keeping the dtype; with the Python-only
+    rules.nuclei_registration.parameters.checkpoints, also the saved form of
+    each prepared image (other_rounds/<name>/, docs/checkpoints.md), which
+    FOV.load_registered_round reads. Unlike MATLAB, it does not min-max
+    stretch the other rounds.
     """
     from dataclasses import asdict
+    import numpy as np
     import tifffile
-    from starfinder.io import load_round, save_volume
+    from starfinder.io import save_volume
     from starfinder.preprocessing import project_image
-    from .fov import _rotated
+    from .config import MorphologyConfig
+    from .types import REFERENCE_STAIN
     config = snakemake.config
     dataset, stains, folders = _nuclei_registration(config)
+    checkpoints = _nuclei_checkpoints(config)
+    if not dataset.reference_stains:
+        # nuclei_registration.m reads the reference round's ch04 file with or without dapi_round. The rule reads
+        # no sequencing channel, so a ch04 that a configuration without dapi_round lists among the sequencing
+        # colours is left out of the rule's Dataset, where it is the reference stain.
+        sequencing = dataset.channel_info(dataset.rounds.sequencing_rounds[0])
+        dataset = replace(dataset, channel_order=tuple(c for c in sequencing if c.channel != _NUCLEI_REFERENCE_CHANNEL),
+                          other_channel_order={name: dataset.channel_info(name) for name in dataset.other_channel_order},
+                          reference_stains=(ChannelInfo(_NUCLEI_REFERENCE_CHANNEL, config['ref_channel']),))
     fov = dataset.fov(snakemake.wildcards.fovID)
     angle, ref = config.get('rotate_angle'), dataset.rounds.reference_round
-    for name in dataset.rounds.other_rounds:
-        fov.load_images(rounds=[name], config=ImageLoadConfig(channel_labels=dataset.channel_labels(name)))
-        if angle is not None:
-            fov._rotate_round(round_name=name, angle=angle)
-    loaded = load_round(fov.input_dir(ref), config=ImageLoadConfig(channel_labels=(_NUCLEI_REFERENCE_CHANNEL,)))
-    image, metadata = loaded.image[..., 0], loaded.metadata
-    if angle is not None:
-        image, metadata, _ = _rotated(image, metadata, angle)
-    reference = ExternalReference(image, metadata, f'{ref}:{_NUCLEI_REFERENCE_CHANNEL}')
-    for name in dataset.rounds.other_rounds:
+    names = list(dataset.rounds.other_rounds)
+
+    def recipe(name):
         signal = RegistrationSignalConfig('channel', _NUCLEI_REFERENCE_CHANNEL, stains[name])
-        fov.register_rounds(RegistrationRecipe((RegistrationStep(TranslationConfig()),), signal=signal),
-                            rounds=[name], reference=reference)
+        return RegistrationRecipe((RegistrationStep(TranslationConfig()),), signal=signal)
+
+    # The leading rounds that share the first round's stain pattern go through the entry in one call.
+    leading = next((i for i, name in enumerate(names) if stains[name] != stains[names[0]]), len(names))
+    fov.prepare_morphology(MorphologyConfig(rotation_degrees=angle, recipe=recipe(names[0]),
+                                            rounds=tuple(names[:leading])), checkpoints=checkpoints)
+    reference = ExternalReference(np.ascontiguousarray(fov.images[REFERENCE_STAIN][..., 0]),
+                                  fov.metadata[REFERENCE_STAIN], f'{ref}:{_NUCLEI_REFERENCE_CHANNEL}')
+    for name in names[leading:]:
+        fov.load_images(rounds=[name], rotation_degrees=angle)
+        fov.register_rounds(recipe(name), rounds=[name], reference=reference, checkpoints=checkpoints)
     fov.save_processing_log('nr')
     projection = ProjectionConfig() if config.get('maximum_projection', False) else None
-    for name in dataset.rounds.other_rounds:
+    for name in names:
         # Channels that share a name write the same file, the last one winning, as in MATLAB.
         for c, folder in enumerate(folders[name]):
             path = dataset.output_root / 'images' / name / folder / f'{fov.fov_id}.tif'

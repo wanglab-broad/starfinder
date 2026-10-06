@@ -16,7 +16,7 @@ from starfinder.image import IncompatibleGeometryError, _validate_image
 from ._errors import MissingModelError, SegmentationBackendUnavailableError
 from ._import import LabelImportConfig, _software
 from ._labels import (FORMAT_VERSION, ReferenceGrid, SegmentationResult, _check_namespace, _check_target,
-    _grid_record, _json, _namespace_ids, array_sha256, to_label_dtype)
+    _grid_record, _json, _namespace_ids, array_sha256, same_grid, to_label_dtype)
 from ._methods import DEVICES, ROLES, SEGMENTATION_METHODS, MethodContext
 from ._models import model_dimensions, resolve_model
 
@@ -147,7 +147,7 @@ def _check_seeds(seeds, spec, grid):
         raise TypeError("seeds must be a SegmentationResult")
     if seeds.target != "nucleus":
         raise ValueError(f"seeds must have target 'nucleus', not {seeds.target!r}")
-    if seeds.grid.shape_zyx != grid.shape_zyx or seeds.grid.metadata != grid.metadata:
+    if not same_grid(seeds.grid, grid):
         raise IncompatibleGeometryError(f"the seeds are on grid {seeds.grid.shape_zyx} {seeds.grid.metadata!r}, "
                                         f"the input on {grid.shape_zyx} {grid.metadata!r}")
 

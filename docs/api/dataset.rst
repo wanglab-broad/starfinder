@@ -23,7 +23,10 @@ beside ``FOV.run``, loads and rotates the reference stain (the image
 ``reference_stain``) and loads, rotates and registers each other round, and can save
 each prepared image; ``FOV.load_registered_round`` restores one. ``FOV.load_images``
 takes ``rotation_degrees``. See :doc:`../coordination`, "Sequencing rounds and other
-rounds".
+rounds". ``FOV.load_reference_image()`` restores the reference merged image that
+``FOV.save_reference_image`` wrote, so that a process with no sequencing round resident
+can segment from the saved images; see :doc:`../segmentation-contract`, "Coordination per
+FOV".
 
 Each channel is a ``ChannelInfo`` (file pattern, content name, wavelength in nm).
 ``Dataset.channel_info(round)`` returns a round's channels (``reference_stain``: the

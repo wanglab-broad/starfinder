@@ -78,8 +78,11 @@ The `other_rounds/`, `segmentation/` and `assignment/` folders are written by
 `FOV.prepare_morphology` (or `FOV.register_rounds`), `FOV.segment` and `FOV.assign`, not
 by `FOV.run`: they are not checkpoint stages, `CheckpointConfig.stages` does not name
 them, and they do not change the stage format version or `run.json` (see "Prepared
-morphology images", "Segmentation runs" and "Assignments" below). Call `FOV.run` with
-checkpoints first: it refuses an existing FOV directory unless `overwrite=True`.
+morphology images", "Segmentation runs" and "Assignments" below). `FOV.run` with
+checkpoints refuses an existing FOV directory unless `overwrite=True`, so call it first,
+or, when `FOV.prepare_morphology` ran first in another process, with `overwrite=True`:
+that removes only the stage files above and leaves `other_rounds/` as it is, so the two
+calls give the same files in either order.
 
 ### registered
 
@@ -297,7 +300,17 @@ grid's. It restores the image, its metadata, the rotation diagnostics and
 `registration_record["rounds"][name]`, with `saved` (the image file's path relative to
 the FOV directory and its SHA-256); a registered round also gets its results, chain,
 attempts and `WarpConfig` back. `FOV.segment` links that saved file in the record of a
-run that reads the image.
+run that reads the image. The Python `nuclei_registration` rule writes these folders when
+`rules.nuclei_registration.parameters.checkpoints` is set ({doc}`workflows`).
+
+**Segmenting in another process.** These folders and the reference image
+`images/ref_merged/{fovID}.tif` (written by `FOV.save_reference_image`, not a checkpoint)
+are what a process that only segments reads: `fov.load_reference_image()`, then
+`fov.load_registered_round(name)` for each image its plan names, then
+`fov.segment(plan, checkpoints=…)`, with no sequencing round resident and no partial load
+of `registered` ({doc}`segmentation-contract`, "Coordination per FOV"). `fov.assign` there
+takes the molecules from the `candidates` and `pre_qc` stages, which restore no image,
+and re-applies the filter with `FOV.run` ("Reload and continue").
 
 ## Segmentation runs
 

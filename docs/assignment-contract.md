@@ -181,7 +181,9 @@ with `expansion`. The record says how the territories were obtained
   ({doc}`segmentation-contract`), in memory or loaded with `FOV.load_segmentation(name)`.
 * **Grid.** `grid` is the molecule run's reference grid (`ReferenceGrid`): in a FOV,
   `FOV.reference_grid()`, or `reference_grid_from_file("images/ref_merged/{fovID}.tif")`
-  when the reference image is not resident.
+  when the reference image is not resident (also `FOV.reference_grid()` after
+  `FOV.load_reference_image()`). Either is the molecule run's grid by "The grid rule"
+  below.
 * **Correspondence.** An optional supplied table with the columns `nucleus_id` and
   `cell_id` ("Nucleus–cell correspondence").
 
@@ -195,9 +197,10 @@ In this order, before any sampling; each uses only the arguments:
 2. **Molecules.** A `MoleculeTable` (`TypeError` otherwise).
 3. **Targets.** `cells.target` is `cell` or `nucleus`; `nuclei.target` is `nucleus`
    (`ValueError`).
-4. **Grid.** For `volume` and `extended` labels, `cells.grid.shape_zyx == grid.shape_zyx`
-   and `cells.grid.metadata == grid.metadata`; for `plane` labels on a volume grid, the
-   cell grid must equal `grid.projected(method=m)`, where `m` is the projection recorded in
+4. **Grid.** By "The grid rule" below: for `volume` and `extended` labels,
+   `cells.grid.shape_zyx == grid.shape_zyx` and `cells.grid.metadata == grid.metadata`;
+   for `plane` labels on a volume grid, the cell grid must equal
+   `grid.projected(method=m)`, where `m` is the projection recorded in
    the cell run's record (`input.projection`) or, for an import, declared by it; a `plane`
    label image on a Z=1 grid must equal the grid. Otherwise `IncompatibleGeometryError`
    naming both shapes and frames. A `declared` grid of an import ({doc}`segmentation-contract`,
@@ -217,6 +220,23 @@ In this order, before any sampling; each uses only the arguments:
    `unit="pixel"` on a calibrated grid needs `legacy_pixel_expansion=True` (`ValueError`
    otherwise) ("Label expansion").
 8. **Supplied correspondence.** Validated as in "Nucleus–cell correspondence".
+
+### The grid rule
+
+Labels and molecules are on one grid when the two `ReferenceGrid`s have the same
+`shape_zyx` and the same `ImageMetadata` (frame, spacing, origin, direction and unit).
+That is the whole rule. A grid's `source` (`fov:<round>`, `file:<path>` or `declared`)
+and `sha256` say where it was read from; they are recorded (the run records' `grid`, the
+assignment record's `grid`) and never compared. So the grid of the saved reference image
+`images/ref_merged/{fovID}.tif` (`reference_grid_from_file`, or `FOV.reference_grid()`
+after `FOV.load_reference_image()`) and the grid of the resident reference round
+(`fov:<round>`) are one grid: labels made on the file grid in a process that holds no
+sequencing round are accepted with the molecules of `FOV.run`, or of
+`molecule_table_from_csv`, and give the same statuses and counts as in one process. Labels
+of another shape or with other metadata raise `IncompatibleGeometryError` before any
+sampling (check 4; row A14 of {doc}`assignment-algorithms`). The rule is implemented once
+(`same_grid` in `starfinder.segmentation._labels`) and used by checks 4 and 5 and by the
+segment entry's check that the seeds are on the input's grid.
 
 ### What assign records
 
@@ -302,7 +322,12 @@ made (an `import_labels` result, for example). It takes the molecules from
 `FOV.spot_result` and
 `FOV.filtering_result` (or the `candidates` and `pre_qc` checkpoints with the filter
 re-applied) through `molecule_table`, the genes from the loaded codebook, and the grid
-from `FOV.reference_grid()`; calls `assign_molecules`; stores the result in
+from `FOV.reference_grid()`: the reference round's, or, in a process that segmented from
+the saved images ({doc}`segmentation-contract`, "Coordination per FOV"), the grid of the
+saved reference image, one grid by "The grid rule". A saved reference image that is a Z
+projection is not the molecules' grid, so `FOV.assign` refuses its grid without the
+reference round (`ValueError`); call `assign_molecules` with the molecule run's grid
+there. `FOV.assign` calls `assign_molecules`; stores the result in
 `FOV.assignment_results[name]`; and, with `checkpoints`, writes the files of
 "Persistence", including every label image it used that is not already saved under its run
 there ("Label images of a checkpointed assignment"). Without `checkpoints` it writes
