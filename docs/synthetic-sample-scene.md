@@ -1,0 +1,779 @@
+# Synthetic sample scene: multi-FOV acquisition and a minimal cellular scene
+
+Status: Proposed
+
+This page proposes a bounded, opt-in addition to the synthetic generator of
+{doc}`synthetic-specification`: one scene of sample size in continuous coordinates, a
+nominal grid of FOVs acquired from it at true offsets with a known fractional jitter, a
+minimal cellular scene (nucleus and cell label volumes and a nuclear stain), cell truth for
+every molecule, per-FOV truth, and the path by which per-FOV truth labels enter the §2.9
+mask import. It gives §2.10 the two kinds of truth that real data cannot give: the true
+offset of every FOV, in 3D and with a fractional part, and the knowledge of which FOVs see
+each true cell and molecule. It is also a fixture that §2.11 measurement QC can use later.
+
+It builds on these pages and redefines none of them:
+
+* {doc}`synthetic-specification`: the formed-amplicon model, its stages, truth tables and
+  random streams, used unchanged for every FOV;
+* {doc}`stitching-contract`: the sample frame, the tile position table and
+  `positions_from_grid`, the placement record (`PlacementResult`, `origin_z/y/x` in µm,
+  the gauge G1) and the index-to-sample rule;
+* {doc}`assembly-contract`: footprints, ownership, retention, statuses and the count
+  identities;
+* {doc}`segmentation-contract` ("External-mask import", "Label image") and
+  {doc}`assignment-contract` (`MoleculeTable`, `molecule_table_from_csv`, "Coordinate
+  sampling").
+
+Nothing here is implemented, no existing generator behavior changes and nothing is
+renamed. The validation design that uses the scene belongs to the next issue of the §2.10
+batch (W-331); this page states the identities a test can check, not the validation plan.
+
+## What this addition is not
+
+* It does **not establish the accuracy of a learned segmenter.** No segmenter is run on
+  this scene as a measure of its quality, and no segmentation accuracy is claimed from it.
+* It is **not a calibrated tissue model.** Nuclei are smooth ellipsoids, cells are
+  power-diagram territories, molecules are uniform within them; sizes and densities are
+  development choices, not fitted to tissue, and no empirical profile is used.
+* It does **not use microsim** or any other new rendering dependency (Jiahao,
+  2026-10-05). Everything is rendered by the existing analytic model or by closed-form
+  functions evaluated at voxel centres, with NumPy and SciPy, which are already locked.
+* It does not model stage drift, rotation, illumination differences between FOVs,
+  photobleaching in overlaps or cross-FOV cell matching.
+
+## Settled decisions this page follows
+
+* **The §2.12 scope is amended** for multi-FOV and cellular synthetic truth, without
+  microsim (D7 of the W-152 comment "§2.10 planning decisions (2026-10-05)"). The §2.12
+  milestone had excluded cellular masks and assignment truth; this page is the bounded
+  addition. W-93 keeps canonical responsibility for synthetic truth and reproducibility.
+* **Three sample-level entries** (stitch, assemble, fuse and export) outside
+  `PipelineConfig` and `FOV.run`; ownership regions are computed in assemble (D3). The
+  scene feeds those entries; it adds no entry of its own to the pipeline.
+* **Placement runs on the CPU only** and is translation only. The scene's FOV offsets are
+  translations; no rotation or deformation of a FOV against the sample is generated.
+* **Retention** (2026-09-27, {doc}`assembly-contract`): cells by centroid, no cross-FOV
+  matching. The scene provides truth to measure that policy, not a replacement for it.
+
+## Terms
+
+* The **sample frame** is that of {doc}`stitching-contract`: ZYX, µm, identity direction,
+  `frame_id` `sample:<sample>`.
+* The **sample domain** `Ω` is the box of the sample frame in which the scene is defined
+  ("The sample scene").
+* A FOV's **nominal origin** is its position from the nominal grid; its **true origin** is
+  where it was actually rendered; the **jitter** is true minus nominal, the true
+  correction in the language of the placement record.
+* A FOV's **footprint** is that of {doc}`assembly-contract`: per axis
+  `[origin − s/2, origin + (n − ½)·s)`. In index units, a position `p` is in the
+  footprint exactly when `−0.5 ≤ p < n − 0.5` on every axis, which is the "inside" test of
+  §2.9 coordinate sampling (`0 ≤ floor(p + 0.5) < n`).
+* A **seed** is one generated cell: an ordinary cell has one nucleus, a binucleate cell
+  two, an empty cell none.
+* A **site** is one sphere of the power diagram: one per nucleus, and one virtual sphere
+  per empty cell.
+
+## Opt-in, and what stays as it is
+
+The addition is **opt-in**: it is reached only through new names ("Names"). Nothing that
+exists today calls it, and a caller who does not call it gets exactly today's behavior.
+The implementation must keep, by construction:
+
+* **No existing signature or config changes.** `generate_formed_scene`, `generate_dataset`,
+  `generate_registration_pair`, `save_formed_scene`, `formed_scene_preset` and every preset
+  function keep their parameters. `FormedSceneConfig`, `ReadoutEffectsConfig`,
+  `BackgroundConfig`, `TextureConfig`, `NoiseConfig`, `GeometryConfig` and
+  `ScalarDistribution` gain no field: their `asdict` form is the `requested_config` of
+  every provenance record, so a new field would change every saved `provenance.json`.
+* **No registry entry changes.** `SCENE_PRESETS`, `BENCHMARK_PRESETS`,
+  `DEFORMATION_PRESETS`, `DEVELOPMENT_FIXTURES`, `DEVELOPMENT_SIZES` and
+  `CALIBRATED_CONDITIONS` keep their keys and values; the sample presets live in a
+  separate registry, because `test_one_registry_holds_every_tier` calls
+  `formed_scene_preset` on every `SCENE_PRESETS` name.
+* **No version changes.** `_GENERATOR_VERSION` stays `"6"`, `PRESET_VERSION` stays
+  `benchmark-presets-v1`, `HISTORICAL_TRUTH_VERSION` stays `"2.0"` and the stream
+  namespace stays `starfinder.synthetic/1`. Every FOV scene of a sample scene is produced
+  by the unchanged formed generator and records generator version 6; the sample-level
+  additions carry their own versions ("Truth schema").
+* **No stream descriptor of an existing component changes.** The new draws use new
+  component names ("Random streams"), so no existing draw moves.
+* **The package stays light.** Importing `starfinder.synthetic` still imports no
+  `starfinder.benchmark`, `starfinder.provenance`, `starfinder.artifacts`,
+  `starfinder.io.checkpoints`, `starfinder.io.candidates` or `starfinder.io.molecules`
+  module (`test_old_generator_api_is_removed`,
+  `test_package_imports_no_persistence_or_checkpoint_modules`), and the synthetic sources
+  name no issue or artifact contract (`test_no_artifact_contract_or_issue_references`). The
+  no-segmenter path therefore writes plain files, and the consumer builds the §2.9 inputs
+  from them.
+
+**Existing tests that must pass unchanged** (no edit to any assertion, fixture or pinned
+value):
+
+* every file with the `synthetic` marker: `test_synthetic_contracts.py`,
+  `test_formed_scene.py`, `test_formed_geometry.py`, `test_formed_streams.py`,
+  `test_development_fixtures.py`, `test_development_presets.py`,
+  `test_calibrated_presets.py`, `test_background_noise.py`, `test_readout_effects.py` and
+  `test_benchmark_synthetic.py`;
+* the tests that consume generator output of existing presets and pin results computed
+  from it: `test_readout_validation.py` (R6, `PINNED_CAL_141C093` and
+  `test/data/readout_r6_cal_141c093/`, from `calibrated_scene_preset` at seed 103),
+  `test_spot_finding_validation.py` and `test_spot_finding_rounds.py` (scenes of
+  `spot_finding_scenes.py` and `spot_finding_fixtures.py`), `test_assignment.py` (the
+  `development_scene_preset("clean", size="small")` FOV run),
+  `test_preprocessing_synthetic_evaluation.py`,
+  `test_preprocessing_calibrated_evaluation.py`, `test_image_statistics.py`,
+  `test_segmentation_labels.py`, `test_segmentation_segment.py` and
+  `test_dataset_channels.py`;
+* the session fixture `small_dataset` of `conftest.py` with its recorded
+  `SMALL_DATASET_GENERATOR` (`generator_version` 6, `benchmark-presets-v1`).
+
+**Preset outputs whose digests stay bit-identical**, for the same seed, NumPy build and
+CPU (the repeatability limit of {doc}`synthetic-specification`, "Random streams"):
+
+* the per-round `image_sha256`, the `formed`, `round_truth` and signal tables, and the
+  whole `provenance` record of `formed-small-v1`, `formed-z1-v1`, the four development
+  fixtures (`z1-clean`, `z1-combined`, `small-clean`, `small-combined`), every
+  `calibrated_scene_preset` condition and dtype, and one FOV of each benchmark preset
+  (`tiny`, `small`, `medium`, `large`, `tissue`, `thick_medium`) from
+  `benchmark_scene_preset` and `registration_scene_preset`;
+* the files written by `starfinder synthetic generate` in both modes (`--mode e2e` and
+  `--mode registration`), including `ground_truth.json` and `generation.json`;
+* the files of `save_formed_scene` for the fixtures above.
+
+The implementation shows this by running the files above unchanged; the cross-process
+tests (`test_actual_cross_process_repeats_and_no_files`,
+`test_cross_process_byte_repeatability`, `test_cross_process_repeatability_with_hash_seeds`)
+compare the provenance and digests of these presets between processes, and the pinned R6
+and spot-finding digests compare them with values pinned before this addition.
+
+## Names
+
+All new, in `starfinder.synthetic`, with `docs/api/synthetic.rst`,
+`docs/api/inventory.rst` and `docs/api/python-index.rst` gaining the exports that
+`docs/check_reference.py` requires:
+
+| Concept | Name | Kind |
+| --- | --- | --- |
+| Entry | `generate_sample_scene(codebook, *, config=SampleSceneConfig(), on_fov=None)` | function |
+| Result | `SampleScene` | dataclass |
+| Config | `SampleSceneConfig`, `AcquisitionConfig`, `CellularSceneConfig`, `StainConfig` | frozen dataclasses |
+| Persistence | `save_sample_scene(scene, directory)` | function |
+| Presets | `sample_scene_preset(name)`, `SAMPLE_PRESETS`, `SAMPLE_PRESET_VERSION` (`sample-presets-v1`) | function, dict, str |
+| Version | `SAMPLE_TRUTH_VERSION` (`"1"`) | str |
+
+```python
+@dataclass
+class SampleScene:
+    sample: str                                   # the sample frame is sample:<sample>
+    fovs: dict[str, FormedScene]                  # one formed scene per FOV, in table order
+    stains: dict[str, np.ndarray]                 # ZYX stain image per FOV (empty without a stain)
+    fov_metadata: dict[str, ImageMetadata]        # each FOV's reference grid metadata (FOV frame)
+    placement: pd.DataFrame                       # placement truth ("Placement truth")
+    positions: pd.DataFrame                       # the nominal tile position table
+    nuclei: pd.DataFrame                          # sample-level tables ("Truth schema")
+    cells: pd.DataFrame
+    molecules: pd.DataFrame
+    cell_fovs: pd.DataFrame
+    molecule_fovs: pd.DataFrame
+    sample_grid: ImageMetadata                    # the sample label grid
+    sample_labels: dict[str, np.ndarray]          # "nucleus", "cell": uint32 ZYX on the sample grid
+    fov_labels: dict[str, dict[str, np.ndarray]]  # fov_id -> "nucleus", "cell": uint32 ZYX on the FOV grid
+    record: dict                                  # versions, requested and effective config, streams, digests
+```
+
+With `on_fov(fov_id, scene, stain, labels)`, each FOV is handed over as soon as it is
+complete and not retained, as `generate_dataset`'s `on_round` does for rounds; `fovs`,
+`stains` and `fov_labels` are then empty and the tables are complete.
+
+## The sample scene
+
+One scene of sample size is defined once, in continuous sample-frame coordinates (µm),
+and every FOV is rendered from it.
+
+* **Domain.** With the nominal grid of "Multi-FOV acquisition", per axis `a`, FOV size
+  `n_a`, spacing `s_a`, the largest nominal origin `N_a` and the jitter bound `J_a`
+  (voxels):
+  `Ω_a = [−s_a/2 − J_a·s_a, N_a + (n_a − ½)·s_a + J_a·s_a)`.
+  `Ω` contains every footprint for any jitter within the bound, and it depends on the
+  nominal grid and the bound, not on the drawn jitter: redrawing the jitter moves no cell
+  and no molecule.
+* **Sample grid.** The sample label volumes are evaluated on the grid of spacing `s` whose
+  voxel `q = (0, 0, 0)` has its centre at `origin_sample = lo(Ω) + s/2`, with shape
+  `ceil((hi(Ω) − lo(Ω)) ⊘ s − 1e-9)` (the tolerance keeps a whole number of voxels from
+  rounding up). Its `ImageMetadata` has `frame_id` `sample:<sample>`, that spacing, origin
+  `origin_sample`, identity direction and unit `µm`. FOV `f`'s index `p` is sample-grid
+  index `δ_f + p`, with `δ_f = (true_f − origin_sample) ⊘ s`, fractional in general.
+* **Content.** The cellular scene (nuclei, cells) and the molecules (amplicons with their
+  formed properties), as positions in µm, shapes and amplitudes; and the background
+  components of the amplicon channels and of the stain, as `BackgroundConfig` records in
+  the index units of the sample grid (centres and widths in voxels, a gradient normalized
+  by the sample grid's shape). All are analytic records, never a rendered sample image.
+* **Z=1.** A sample with `n_z = 1` is a plane at z = 0: the jitter bound in Z must be 0,
+  every centre has z = 0, and the label functions ignore z, as the formed model does for
+  singleton Z.
+
+## Multi-FOV acquisition
+
+### Nominal grid
+
+```python
+@dataclass(frozen=True)
+class AcquisitionConfig:
+    columns: int = 2
+    rows: int = 2
+    order: str = "column_major_down_right"
+    fov_shape_zyx: tuple[int, int, int] = (5, 36, 36)      # voxels
+    spacing_zyx: tuple[float, float, float] = (1.0, 0.5, 0.5)   # µm per voxel
+    overlap: float | tuple[float, float] = 1 / 3            # fraction of the FOV, (y, x) or one value
+    jitter: str = "uniform"                                 # "uniform" (J1) or "supplied"
+    jitter_max_zyx: tuple[float, float, float] = (0.4, 1.5, 1.5)   # voxels, J1 bound
+    jitter_zyx: Mapping[str, tuple[float, float, float]] | None = None   # voxels, per FOV, "supplied"
+    fov_ids: tuple[str, ...] | None = None                  # None: FOV_001, FOV_002, ... in k order
+```
+
+| Parameter | Unit | Default | Rule |
+| --- | --- | --- | --- |
+| `columns`, `rows` | – | 2, 2 | integers ≥ 1 |
+| `order` | – | `column_major_down_right` | FOV `k` at column `k // rows`, row `k % rows`, the order of `positions_from_grid` ({doc}`stitching-contract`) |
+| `fov_shape_zyx` | voxels | (5, 36, 36) | positive integers; every FOV has this reference grid |
+| `spacing_zyx` | µm | (1.0, 0.5, 0.5) | finite, > 0 |
+| `overlap` | fraction | 1/3 | `0 ≤ overlap < 1`; the nominal step is `(1 − overlap) · n · s` in Y and X, as in `positions_from_grid` |
+| `jitter_max_zyx` | voxels | (0.4, 1.5, 1.5) | finite, ≥ 0; `0` in Z when `n_z = 1` |
+| `jitter_zyx` | voxels | None | with `jitter="supplied"`: one finite triple per FOV ID, `|j_a| ≤ jitter_max_a` |
+
+The nominal origin of FOV `k` is `(0, row · step_y, col · step_x)` µm: every FOV has
+nominal z 0 (one layer of tiles, option Z1 of {doc}`assembly-contract`). The nominal
+positions equal, value for value, those of
+`positions_from_grid(columns=…, rows=…, order=…, tile_shape_yx=fov_shape_zyx[1:],
+spacing_yx=spacing_zyx[1:], overlap=…, fov_ids=…)`.
+
+**Validation.** In Y and X, wherever there are at least two columns (or rows),
+`overlap · n_a ≥ 2 · jitter_max_a + 1` voxels, so that neighbouring footprints overlap by at
+least one voxel for every jitter: every nominal neighbour pair stays a neighbour pair and
+the union of footprints has no interior gap. In Z, `jitter_max_z < n_z / 2`. A violation
+raises `ValueError` naming the axis.
+
+### True offsets and the form of the jitter
+
+The true origin of FOV `f` is `true_f = nominal_f + j_f ⊙ s` with `j_f` in voxels.
+
+| Option | Rule | Cost | What it tests |
+| --- | --- | --- | --- |
+| **J1. Bounded uniform, independent per FOV and axis (recommended)** | `j_{f,a} = J_a · (2u − 1)`, `u ~ U[0, 1)` from the stream `sample.jitter` of FOV `f`, drawn z, y, x in order. Continuous draws have a fractional part on every axis with probability 1; a preset test checks that every axis of every FOV has a non-integer jitter. | Three draws per FOV; the bound makes the overlap rule above a guarantee. | Sub-voxel recovery in every axis, independent of the grid structure; the corrections W-324 compared ("removing the mean translation"). |
+| J2. Truncated Gaussian | `j ~ N(0, σ_a²)` truncated at `±J_a` by redrawing | As J1, plus a redraw loop; the same bound. | As J1, with most offsets small and a few near the bound. |
+| J3. Linear trend plus J1 residual | `j_f = g ⊙ (col_f, row_f, 0) + J1 residual` with a supplied per-column and per-row slope `g` | Two more parameters; the bound applies to the total. | A systematic per-column drift like the 1.7 px per column trend W-324 measured between the backends on LN (notes section 2.2); a gauge that removes only the mean leaves the trend visible. |
+
+**Recommendation: J1**, with `jitter="supplied"` always available for hand-chosen cases
+(for example a whole-voxel jitter, or a known trend). J1 is the simplest law whose bound
+guarantees the overlap rule, it isolates sub-voxel placement error from systematic error,
+and its truth is three numbers per FOV. J3 is the natural next step if the validation
+design needs a trend; it can be written as a supplied table today.
+
+### Rendering each FOV at its true offset
+
+Each FOV is rendered by the unchanged formed generator, as one `FormedScene` on its own
+grid, with **no interpolation of a rendered image**: every voxel value is the analytic
+model evaluated at that voxel's centre.
+
+* **Molecules.** A molecule at sample position `σ` (µm) is at FOV index position
+  `p = (σ − true_f) ⊘ s` (float64). FOV `f` receives every molecule whose `p` lies within
+  `[−0.5 − M_a, n_a − 0.5 + M_a]` on every axis, with the margin
+  `M_a = 4 · w_a + D_a + 1` voxels, `w_a` the largest axis-aligned kernel extent over the
+  sample's molecules ({doc}`synthetic-specification`, `support_truncated`) and `D_a` the
+  bound of the FOV's per-round displacement on that axis. Molecules beyond the margin
+  cannot touch the grid in any round; including them would change nothing but the truth
+  rows. Each molecule enters with its sample ID and its sample-level gene and properties.
+* **Background of the amplicon channels.** The template's background components are
+  sample-grid records ("The sample scene"). FOV `f` evaluates them at sample-grid index
+  `δ_f + F_r⁻¹(p)`: for a translation round exactly per axis, as
+  `evaluate_background_translated` does, with the translation `t_r − δ_f`; for a deformed
+  round through the inverse map of the formed model. A gradient is normalized by the
+  sample grid, not the FOV grid, so it is continuous across FOVs.
+* **Rounds.** Each FOV keeps its own per-round geometry (translation, local, affine,
+  polynomial), drawn from its own streams, with the reference round at identity in the FOV
+  frame: in an acquisition, round-to-round registration is per FOV. The FOV's true origin
+  applies to the reference frame, so every round of the FOV is placed by it.
+* **Noise.** Every residual of every FOV is drawn from that FOV's streams (scene key
+  `[scene_key, fov_id]`, as `generate_dataset` gives), so **the noise is independent per
+  FOV**: two FOVs that image the same molecule in an overlap see independent noise.
+* **Stochastic readout effects** (`loss`, `dropout`, `weakening`) are per-ID draws of each
+  FOV's scene; drawn per FOV, the same molecule could be lost in one FOV and kept in its
+  neighbour. A sample scene therefore requires them disabled in the template
+  (`ValueError` otherwise); deterministic effects (trend, gains, mixing) are allowed. A
+  later version may draw them once per molecule at sample level (worker notes).
+* **Metadata.** Each FOV's reference `ImageMetadata` is in the FOV frame
+  (`<formed namespace>/reference`, as today) with the acquisition spacing, origin
+  `(0, 0, 0)`, identity direction and unit `µm`, which is what `stitch` and `assemble`
+  require ("Relation to `ImageMetadata.origin`", {doc}`stitching-contract`). The true
+  origin is never written into it; it is truth.
+
+**Implementation route.**
+
+| Option | How | Cost | Effect on existing outputs |
+| --- | --- | --- | --- |
+| **R1. Compose public configs per FOV (recommended)** | For each FOV, `replace(template, FOV_id=f, scene_key=[scene_key, f], shape_zyx=n, coordinates=P_f, amplicon_ids=…, gene_ids=…, brightness=ScalarDistribution("supplied", …), …)`, with the background components translated into the FOV frame (region and texture centres minus `δ_f`, supplied texture widths and heights, the gradient's intercept and slopes re-expressed for the FOV grid) and the FOV metadata above; then the unchanged `_generate`. | No edit of `_formed.py`, `_observation.py` or `_geometry.py`. The gradient can be re-expressed only while the FOV intercept stays ≥ 0 (true for nonnegative slopes; validated, `ValueError` otherwise). | None, by construction: no existing code path changes. |
+| R2. An internal offset hook | `_generate` gains a private argument carrying sample-frame components and the FOV offset, evaluated with `evaluate_background_translated` directly. | A change inside the formed generator's control flow; every gradient allowed. | None if the default path is untouched, but that has to be shown by the digests rather than by construction. |
+
+**Recommendation: R1.** It meets "no change to existing outputs" without argument, and
+its one restriction (a gradient whose FOV intercept would be negative) does not occur in
+the presets.
+
+## Placement truth
+
+`SampleScene.placement`, saved as `placement_truth.csv`, has one row per FOV in tile
+position table order:
+
+| Column | Type, unit | Content |
+| --- | --- | --- |
+| `fov_id` | str | The FOV, as in `positions` and every per-FOV table |
+| `grid_column`, `grid_row` | int | The nominal grid cell |
+| `nominal_z`, `nominal_y`, `nominal_x` | float64, µm | The nominal origin, equal to `positions` |
+| `true_origin_z`, `true_origin_y`, `true_origin_x` | float64, µm | The sample-frame position of index `(0, 0, 0)` of the FOV's reference grid |
+| `true_correction_z/y/x` | float64, µm | `true_origin − nominal`, the jitter in µm |
+| `jitter_z_vox`, `jitter_y_vox`, `jitter_x_vox` | float64, voxels | The jitter in the FOV's index units, as drawn |
+| `true_origin_g1_z/y/x` | float64, µm | `nominal + c − mean(c)` with `c` the true correction and the mean over all FOVs: the truth in gauge G1 |
+| `shape_z/y/x`, `spacing_z/y/x` | int, float64 µm | The FOV's reference grid |
+
+**Units and direction.** Positions are in µm in the sample frame. The direction is the
+push sense of the placement record ({doc}`stitching-contract`, "Index to sample
+coordinates"): a FOV index position `p` is at `sample = true_origin + p ⊙ spacing`, the
+identity direction of the sample frame. A `PlacementResult` is therefore compared with the
+truth column for column: its `origin_*` with `true_origin_g1_*` under G1 (both have zero
+mean correction over the FOVs, when every FOV is `image_supported`), its `correction_*`
+with `true_correction_* − mean`, and its `nominal_*` with `nominal_*`. `positions`, saved as
+`positions.csv` with `fov_id`, `nominal_z/y/x` in µm, is a supplied tile position table
+that `positions_from_table` reads unchanged.
+
+**The identity a test can check.** For every FOV `f`, every row of `f`'s `formed` table
+(the molecules rendered in `f`, at their reference-round index positions `p`) and the
+placement-truth row of `f`:
+
+```
+true_origin_f + p ⊙ spacing_f  ==  (sample_z, sample_y, sample_x) of that molecule in molecules.csv
+```
+
+on every axis within **1e-9 µm** (absolute); equivalently
+`ImageMetadata("sample:<sample>", spacing, true_origin, identity, "µm").index_to_world(p)`,
+which is what `placed_metadata` returns for a placement holding the true origins. The
+tolerance covers float64 rounding: the generator computes `p` with one subtraction and one
+division and the test inverts them with one multiplication and one addition, each with
+relative error at most 2⁻⁵³, on positions below 10⁴ µm, so the error is below 1e-11 µm;
+1e-9 µm is 1e-8 of the smallest spacing in use (0.0946 µm, W-323 `inputs.md`), so no
+voxel-level error can hide inside it.
+
+Two further identities tie the rendered images to the truth, with noise disabled and
+float64 accumulation:
+
+* **Rendering.** FOV `f`'s reference-round image equals the independent oracle of the
+  formed model (`test/formed_oracle.py`) evaluated at the `p` above with the molecules'
+  properties, within the oracle tolerance of `test_development_fixtures.py`.
+* **No interpolation.** Rendering FOV `f` again at `true_f + k ⊙ s`, for an integer
+  vector `k`, gives the first image shifted by `k` voxels on the voxels both cover, within
+  1e-12 of the image maximum. This holds for fractional true offsets because each voxel
+  value is evaluated, not resampled.
+
+## The cellular scene
+
+```python
+@dataclass(frozen=True)
+class CellularSceneConfig:
+    nuclei: int = 7                       # ordinary cells, one nucleus each
+    binucleate: int = 1                   # cells with two nuclei
+    empty: int = 0                        # cells without a nucleus
+    nucleus_axial_radius: ScalarDistribution = ScalarDistribution("lognormal", (log(1.5), 0.1))   # µm, semi-axis along z
+    nucleus_lateral_radius: ScalarDistribution = ScalarDistribution("lognormal", (log(2.5), 0.1)) # µm, minor lateral semi-axis
+    nucleus_elongation: ScalarDistribution = ScalarDistribution("folded_lognormal", (0.0, 0.1))   # ≥ 1
+    nucleus_angle: ScalarDistribution = ScalarDistribution("uniform", (0.0, π))                   # rad, in the YX plane
+    empty_radius: float = 2.5             # µm, virtual site radius of an empty cell
+    gap: float = 1.0                      # µm, minimum gap between site spheres
+    reach: ScalarDistribution = ScalarDistribution("lognormal", (log(3.0), 0.15))                 # µm, territory beyond the site sphere
+    max_proposals: int = 10_000           # per seed and per molecule
+```
+
+### Nuclei
+
+Nucleus `n` is an ellipsoid with centre `c_n` (µm), axial semi-axis `a_z`, lateral
+semi-axes `a_l · e` and `a_l`, rotated by `θ` in the YX plane, with the convention of the
+amplicon kernel ({doc}`synthetic-specification`, stage 7): with `d = σ − c_n`,
+`u = cos θ · d_y + sin θ · d_x`, `v = −sin θ · d_y + cos θ · d_x`, the normalized radius is
+`ρ_n(σ) = sqrt((d_z / a_z)² + (u / (a_l e))² + (v / a_l)²)`, and the nucleus is
+`ρ_n ≤ 1`. Its **site sphere** has radius `R_n = max(a_z, a_l · e)`, which contains it.
+Sizes are drawn before placement, each from its own stream.
+
+**Placement (random sequential addition).** Seeds are placed in order: ordinary cells,
+then binucleate cells, then empty cells. Each proposal draws a centre uniformly in `Ω`
+from the seed's own `sample.cell.placement` stream; it is accepted when its site spheres
+keep a gap of at least `gap` to every accepted sphere (`‖c_i − c_j‖ ≥ R_i + R_j + gap`).
+A binucleate seed draws a centre `c` and an angle `φ ~ U[0, π)` from the same stream and
+places its two nuclei at `c ± (d/2)(0, sin φ, cos φ)`, with
+`d = R_1 + R_2 + gap`, both tested. An empty seed is one virtual sphere of radius
+`empty_radius`. A seed with no accepted proposal after `max_proposals` raises
+`ValueError` naming it: nothing is dropped silently. Because acceptance depends on the
+seeds before it, changing one seed's size can move later seeds; streams stay separate,
+outcomes do not.
+
+### Cell territories and the label-generation rule
+
+**Nucleus label.** `N(σ) = n` where `ρ_n(σ) ≤ 1`, else 0. Nuclei never overlap, because
+their site spheres keep a positive gap.
+
+**Cell label (rule L1 below).** With `pow_j(σ) = ‖σ − c_j‖² − R_j²` over all sites `j`, let
+`j*` be the site of smallest `pow_j(σ)` (ties to the smaller site index). Then
+`C(σ) = cell(j*)` when `σ ∈ Ω` and `‖σ − c_{j*}‖ ≤ R_{j*} + reach(cell(j*))`, else 0. The two
+sites of a binucleate cell map to one cell, so its territory is the union of their power
+cells. Because the site spheres are disjoint, each lies inside its own power cell
+(`pow_i ≤ 0` inside sphere `i`, `pow_j > 0` outside sphere `j`), so **every nucleus lies
+inside its own cell** and `N(σ) = n` implies `C(σ) = cell(n)`.
+
+Both are point functions of the sample position. They are what "the label at a position"
+means everywhere on this page, and they are evaluated at voxel centres only to fill label
+volumes.
+
+| Option | Rule | Cost | Consequence |
+| --- | --- | --- | --- |
+| **L1. Ellipsoidal nuclei, power-diagram territories with a reach (recommended)** | As above. | Brute force over sites: one `(points × sites)` power-distance evaluation in blocks of 2¹⁸ points; about 4.3·10⁷ point-site pairs for the `slow` preset. Closed form, exact, no new dependency. | A label is defined at every point, so labels at fractional offsets need no resampling; cells have flat shared faces and rounded outer edges; a nucleus is always inside its cell. |
+| L2. Ellipsoidal nuclei, Voronoi territories of the centres | `j*` by `‖σ − c_j‖` instead of the power distance | As L1. | A large nucleus beside a small one can cross the bisector, so the gap rule must grow to `2 · max R`, which wastes space; otherwise the same. |
+| L3. Raster on the sample grid, then `expand_labels` | Rasterize the nuclei on the sample grid and grow territories with the §2.9 `expand_labels` | Imports `starfinder.segmentation` into the generator; cost of one distance transform of the sample grid. | Labels exist only at sample-grid voxels: a FOV at a fractional offset would need a resampled label image, which breaks "the per-FOV labels are the sample labels restricted to the FOV", and the truth would depend on the code it is meant to check. |
+
+**Recommendation: L1.** It is the only option whose labels are exact at every FOV offset,
+it keeps the generator independent of the segmentation code it validates, and its
+guarantees (one cell per point, nucleus inside cell) are proved by the construction
+rather than tested after the fact.
+
+**Optional cases.** `empty` (default 0) gives cells without a nucleus, which §2.9 assign
+reports as `excluded_no_nucleus`; `binucleate` (default 1 in the library, as in the tiny
+preset) gives cells with two nuclei, which §2.9 counts with `n_nuclei` 2. Both are
+ordinary seeds otherwise: the same territory rule, molecules and truth.
+
+### Label volumes
+
+* **Sample level.** `labels/sample_nuclei.tif` and `labels/sample_cells.tif`: uint32 ZYX
+  on the sample grid, `N` and `C` evaluated at each voxel centre; 0 is background; values
+  are the nucleus and cell IDs (`1, 2, …` in seed order; nuclei numbered in order of
+  their seeds, two per binucleate seed).
+* **Per FOV.** `fovs/<fov_id>/labels/nuclei.tif` and `cells.tif`: uint32 ZYX on the FOV's
+  reference grid, `N` and `C` evaluated at `true_f + p ⊙ s` for every index `p`, written
+  with `save_volume` and the FOV's reference `ImageMetadata`. A cell at a FOV border is
+  partial: only the voxels inside the grid carry its value. Values are the sample IDs; no
+  relabelling.
+
+The label dtype and geometry follow the label-image contract (uint32, option L1 of
+{doc}`segmentation-contract`; `volume` for Z>1, `plane` for Z=1).
+
+### Stain
+
+```python
+@dataclass(frozen=True)
+class StainConfig:
+    channel_label: str = "DAPI"
+    brightness: ScalarDistribution = ScalarDistribution("lognormal", (log(200), 0.2))  # intensity, per nucleus
+    edge_width: float = 0.5                                  # µm, Gaussian edge (w)
+    background: BackgroundConfig = BackgroundConfig(baseline_enabled=True, baseline=[[100.0]])
+    noise: NoiseConfig = NoiseConfig(dependent_enabled=True, model="poisson", alpha=1.0,
+                                     independent_enabled=True, sigma=3.0)
+```
+
+The stain is one ZYX image per FOV, in the template's dtype, saved as
+`fovs/<fov_id>/stain.ome.tif` with the FOV's reference metadata. It is the
+`reference_stain` input of `stitch` ({doc}`stitching-contract`, "Input image") and the
+nuclear image of the cellular scene.
+
+| Option | Pre-noise signal | Cost | Consequence |
+| --- | --- | --- | --- |
+| **St1. Analytic soft-edged ellipsoid per nucleus (recommended)** | `S(σ) = Σ_n A_n · ½ erfc((ρ_n(σ) − 1) · r̄_n / (√2 · w))`, `r̄_n` the geometric mean of the semi-axes, `w = edge_width`; exactly 0 where `ρ_n > 1 + 4w / min(a)`. Evaluated at each FOV voxel centre `true_f + p ⊙ s`, then the existing observation stages (tissue background, baseline, dependent and read noise, optional correlated noise, cast; stages 8 to 11 of {doc}`synthetic-specification`) with the stain's own streams. | One new closed-form kernel (`scipy.special.erfc`, locked) over each nucleus's bounding box; per FOV a few nuclei times their box voxels. | The stain plateau coincides with the nucleus label up to the edge width, so a threshold of the stain reproduces the labels; exact at fractional offsets. |
+| St2. One Gaussian per nucleus through the amplicon kernel | Each nucleus is a formed molecule with `sz = a_z / 2`, `sl = a_l / 2`, elongation and angle of the nucleus, rendered by stage 7 into a one-channel image, then the same observation stages | No new kernel at all. | Nuclei are blobs without an edge; the label boundary is not visible in the stain, so stain-derived masks disagree with the truth by construction. Enough for stitching, not for §2.11 measurement QC. |
+| St3. Partial-volume raster and blur per FOV | Average the indicator of each nucleus over `k³` sub-voxel points of every FOV voxel, then convolve with a Gaussian on a grid padded by the kernel radius | `k³` evaluations per voxel (27 at `k = 3`) and one padded convolution per FOV. | The closest to an optical image; exact at fractional offsets because the raster is per FOV, but the blur's padding must reach beyond the FOV and costs more than the rest of the stain. |
+
+**Recommendation: St1.** It renders the stain from the same nuclei as the labels, with
+one closed-form expression evaluated at voxel centres, and it reuses the observation
+model for everything after the signal, which is what "through the existing observation
+model" requires. St2 is the fallback if a new kernel is unwanted; it serves stitching but
+not measurement QC.
+
+## Cell truth for molecules
+
+```python
+@dataclass(frozen=True)
+class SampleSceneConfig:
+    fov: FormedSceneConfig = FormedSceneConfig(     # template: dtype, laws, readout, background, noise,
+        dataset_version="sample-scene-v1", sample_id="sample",   # geometry, seed, split, scene_key, sample_id
+        scene_key="sample-scene-v1", shape_zyx=(5, 36, 36), dtype="float32", accumulation="float64")
+    acquisition: AcquisitionConfig = AcquisitionConfig()
+    cells: CellularSceneConfig | None = CellularSceneConfig()   # None: no cellular scene
+    stain: StainConfig | None = StainConfig()                   # None: no stain image
+    molecules_per_cell: float = 8.0      # Poisson mean per cell
+    ambient_density: float = 0.002       # molecules per µm³ of Ω
+    max_count: int = 100_000             # guard on the sample's molecule count
+```
+
+The template's `shape_zyx` must equal `acquisition.fov_shape_zyx`; its population fields
+(`count`, `density`, `coordinates`, `amplicon_ids`, `gene_ids`, non-uniform `placement`)
+must be at their defaults, because the sample scene owns the population (`ValueError`
+otherwise). Its property laws (`brightness`, widths, `elongation`, `angle`) and
+`abundances` are used for the sample's molecules.
+
+**Populations.**
+
+* **Cell molecules.** Cell `k` receives `Poisson(molecules_per_cell)` molecules
+  (stream `sample.molecule.count`, entity the cell). Each draws proposals uniformly in the
+  box of its cell's site spheres grown by the reach, clipped to `Ω`, from its own
+  `sample.molecule.placement` stream, and is accepted where `C(σ) = k`; after
+  `max_proposals` without acceptance it raises `ValueError`.
+* **Ambient molecules.** `Poisson(ambient_density · |Ω|)` molecules (entity `ambient`),
+  uniform in `Ω`, with no rejection: they land in cells or outside every cell as the
+  geometry decides.
+* Without a cellular scene (`cells=None`), only the ambient population exists and no
+  label or cell truth is produced.
+
+**Truth.** The true cell of a molecule is `C(σ)` at its own continuous sample position
+(the reference-round position), not at a voxel: `true_cell_id = C(σ)`, null where
+`C(σ) = 0`. A molecule outside every cell is **kept** with a null cell. Likewise
+`true_nucleus_id = N(σ)` and `compartment` is `nucleus` where `N > 0`, `cytoplasm` where
+`N = 0 < C`, and `outside` where `C = 0`. The `population` column (`cell`, `ambient`)
+records how it was placed; it is not the truth: an ambient molecule inside a cell
+belongs to that cell.
+
+IDs: `c<k>-m<j>` for the `j`-th molecule of cell `k` and `a-m<j>` for ambient molecules
+(`j` from 0), so adding molecules to one cell changes no other molecule's draws. Each
+molecule keeps its ID in every FOV that renders it (the FOV namespace differs).
+
+## Per-FOV truth
+
+* **Label volumes cut to each FOV** ("Label volumes" above), in which a cell at a border is
+  partial.
+* **`cell_fovs`**, one row per (cell, FOV) where the FOV's cell label holds the cell:
+  `cell_id`, `fov_id`, `n_voxels` (in that FOV), `fov_edge` (the cell touches the first or
+  last Y or X index of the FOV grid) and `z_edge` (first or last Z index, for Z>1): the same
+  tests as the `fov_edge` and `z_edge` flags of {doc}`assembly-contract`, computed on the
+  truth labels. A cell that touches no edge of some FOV is **complete** in it.
+* **`molecule_fovs`**, one row per (molecule, FOV) rendered in that FOV: `amplicon_id`,
+  `fov_id`, `z`, `y`, `x` (reference-round index position `p`), `in_footprint`
+  (`−0.5 ≤ p < n − 0.5` on every axis), `fov_cell_label` and `fov_nucleus_label` (the FOV
+  label image at `floor(p + 0.5)`, null outside the grid: what §2.9 assign samples),
+  `label_agrees` (`fov_cell_label == true_cell_id`, both null counting as equal) and
+  `csv_row` (its row in the FOV's molecule CSV, "The path that needs no segmenter").
+* **Sample-level tables that say which FOVs see each object:** `cells.csv` has `fov_ids`
+  (`;`-joined, table order) and `n_fovs`; `molecules.csv` has `fov_ids` and `n_fovs`,
+  where a molecule is **seen** by a FOV when it is `in_footprint` there.
+
+### Identities a test can check
+
+With `M` the sample's molecules, `M_f` the molecules seen by FOV `f`, and `L` the label
+functions:
+
+1. **One cell or none.** `molecules.csv` has one row per molecule, keyed by `amplicon_id`;
+   `true_cell_id` is a single value or null, and every non-null value is a `cell_id` of
+   `cells.csv`. A non-null `true_nucleus_id` belongs to a nucleus of that cell
+   (`nuclei.csv` `cell_id`).
+2. **Per-FOV labels are the sample labels restricted to the FOV.** For every FOV and every
+   index `p`, `fov_labels[f][t][p] == L_t(true_f + p ⊙ s)` for `t` in nucleus and cell, and
+   `sample_labels[t][q] == L_t(origin_sample + q ⊙ s)`: both volumes are the same label
+   functions sampled at their own voxel centres. When a FOV's true origin is a whole number
+   of sample voxels from the sample grid (`jitter="supplied"` with whole-voxel values, or a
+   test with zero jitter), the FOV volume equals the crop of the sample volume at that
+   offset, except at voxels whose centre lies within 1e-9 µm of a label boundary, whose
+   number the test reports and expects to be 0. Every value in a FOV label image is a
+   value of the sample image or 0.
+3. **The FOVs cover the sample with the stated multiplicity.**
+   `Σ_f |M_f| = Σ_{m ∈ M} n_fovs(m)`; `∪_f M_f = {m : n_fovs(m) ≥ 1}`;
+   `n_fovs(m) = #{f : σ_m ∈ footprint_f}`. A molecule farther than `J_a · s_a` on every
+   axis from every nominal footprint boundary has the nominal multiplicity: 1 outside the
+   overlaps, 2 in an overlap of two neighbours, 4 in a corner overlap of four. A molecule
+   with `n_fovs = 0` lies in the outer band of `Ω`, within `2 · J_a · s_a` of its boundary
+   on some axis. There is no interior gap: per axis, every interior point lies in some
+   nominal footprint at least `overlap · n_a / 2 ≥ J_a + ½` voxels from its edges, and the
+   jitter moves an edge by at most `J_a`.
+4. **Cells.** `cells.csv` `fov_ids` equals the set of FOVs with a `cell_fovs` row for the
+   cell, and the number of `cell_fovs` rows equals `Σ_cells n_fovs`.
+5. **Sampling agreement is measured, not assumed.** `label_agrees` is false only where the
+   molecule and the centre of its sampled voxel lie in different labels; the count is
+   reported per FOV. It separates the §2.9 sampling rule from assignment and assembly
+   errors in the validation.
+
+## The path that needs no segmenter
+
+Per FOV, the truth labels enter through the §2.9 mask import, so that assignment and
+assembly can be compared with sample-level truth without running a segmenter:
+
+1. **Labels.** `import_labels(fovs/<f>/labels/cells.tif, grid=ReferenceGrid(n,
+   fov_metadata[f], source="declared"), target="cell",
+   label_namespace=["<dataset>", "<sample>", "<f>", null, "truth"])`, and the same for
+   `nuclei.tif` with `target="nucleus"`. The files carry `starfinder_metadata` equal to the
+   grid's, so the import's metadata check passes; `relabel=False` keeps the sample IDs,
+   so an assigned molecule's `cell_id` is directly comparable with `true_cell_id`.
+2. **Molecules.** `fovs/<f>/molecules.csv` is the legacy one-based `x, y, z, gene` CSV of
+   the reference-round positions of the molecules that FOV renders (`p + 1`, round-trip
+   float precision), in `molecule_fovs` order. `molecule_table_from_csv(path,
+   spot_namespace=["<dataset>", "<sample>", "<f>", null], genes=codebook.genes)` reads it
+   unchanged; its `spot_id` `csv:<row>` maps to `amplicon_id` through `csv_row`. The
+   synthetic package writes the CSV and never imports `starfinder.assignment`.
+3. **Assign and assemble.** `assign_molecules` per FOV, then `assemble(placement,
+   inputs)`: with the placement from `stitch` on the stain images (the full chain), or with
+   one built from the placement truth (assembly alone). Retained cells and molecules are
+   then compared with `cells.csv`, `molecules.csv`, `cell_fovs.csv` and
+   `molecule_fovs.csv` by cell ID and amplicon ID.
+
+The validation itself (which comparisons, which numbers) belongs to the validation
+design; this page fixes only the inputs and their identities. Two needs of this path are
+not met by the current contracts and are recorded in the worker notes: a `PlacementResult`
+built from a known table, and a molecule input that keeps the sample IDs.
+
+## Random streams and seeds
+
+Every new draw uses the descriptor of {doc}`synthetic-specification`, unchanged:
+`["starfinder.synthetic/1", split, seed, scene_key, component, entity, round_label, channel_label]`,
+with the template's `split` and `seed`.
+
+* **Sample-level draws** use the template's `scene_key` and new components, all prefixed
+  `sample.`, so they can never equal an existing descriptor:
+
+  | Component | Entity | Draws |
+  | --- | --- | --- |
+  | `sample.jitter` | FOV ID | `u_z, u_y, u_x` in order (J1) |
+  | `sample.nucleus.axial`, `sample.nucleus.lateral`, `sample.nucleus.elongation`, `sample.nucleus.angle` | `nucleus-<n>` | one value each |
+  | `sample.cell.placement` | `cell-<k>` | proposals, z, y, x per proposal; then `φ` for a binucleate seed |
+  | `sample.cell.reach` | `cell-<k>` | one value |
+  | `sample.molecule.count` | `cell-<k>` or `ambient` | one Poisson draw |
+  | `sample.molecule.placement` | molecule ID | proposals, z, y, x per proposal |
+  | `sample.identity`, `sample.brightness`, `sample.width.axial`, `sample.width.lateral`, `sample.elongation`, `sample.angle` | molecule ID | one value each, with the template's laws |
+  | `sample.background.count`, `sample.background.placement`, `sample.background.width`, `sample.background.brightness` | as for texture today | the sample-frame texture of the amplicon channels |
+  | `sample.stain.brightness` | `nucleus-<n>` | one value |
+  | `sample.stain.background.*` | as above | the stain's sample-frame texture |
+
+* **Per-FOV draws** use the scene key `[scene_key, fov_id]` of `generate_dataset`: the
+  existing `geometry.*` and `noise.*` components for the amplicon rounds, and
+  `stain.noise.dependent`, `stain.noise.independent` and `stain.noise.correlated` with the
+  stain's channel label for the stain.
+* **Consequences.** Adding a FOV changes no draw of another FOV and no sample-level draw
+  (the domain depends on the grid, so adding a column does change `Ω`, which changes
+  placement outcomes); changing the jitter law moves no cell or molecule; changing one
+  molecule's law changes only that molecule; changing a nucleus size can move later seeds
+  (sequential placement). Repeatability is that of the formed model: exact for a pinned
+  NumPy build on one CPU.
+* **Seeds.** The template's root seed, default 42; `split` `development`. Each preset
+  fixes its scene key to its name.
+
+## Presets and resources
+
+`SAMPLE_PRESETS` (version `sample-presets-v1`), separate from `SCENE_PRESETS`. Both use
+`development_codebook("balanced")` (16 genes, four rounds, four channels), seed 42, split
+`development`, float32 output and the scene key of their name; stochastic readout effects
+are off (required), and the per-round geometry is a translation only.
+
+| | `sample-tiny-v1` (routine tier) | `sample-small-v1` (`slow` tier) |
+| --- | --- | --- |
+| Grid | 2 × 2 FOVs | 3 × 3 FOVs |
+| FOV shape (voxels) | 5 × 36 × 36 | 14 × 96 × 96 |
+| Spacing (µm) | 1.0, 0.5, 0.5 | 0.346255, 0.194398, 0.194398 (the raw LN calibration, W-323 `inputs.md`) |
+| Overlap | 1/3 (12 voxels) | 0.25 (24 voxels) |
+| Jitter bound (voxels, J1) | 0.4, 1.5, 1.5 | 0.8, 4.5, 4.5 |
+| Per-round translation bound (voxels) | 0, 1, 1 | 1, 2, 2 |
+| Sample grid (voxels) | 6 × 63 × 63 | 16 × 249 × 249 |
+| `Ω` (µm, Y and X) | 31.5 | 48.4 |
+| Seeds | 7 ordinary, 1 binucleate, 1 empty | 14 ordinary, 2 binucleate, 2 empty |
+| Nucleus radii, median (µm) | axial 1.5, lateral 2.5 | axial 2.0, lateral 3.0 |
+| Reach, median (µm) | 3.0 | 2.5 |
+| Molecules | 8 per cell, ambient 0.002 µm⁻³ (about 80) | 30 per cell, ambient 0.002 µm⁻³ (about 560) |
+| Amplicon appearance | constant A 100, sz = sl = 1, no readout effect, no background, Gaussian read noise σ 1; float64 accumulation (for the oracle identities) | the benchmark appearance of `benchmark-presets-v1` (`_appearance` at float32: lognormal brightness and widths, trend 0.95, 5 % crosstalk, baseline, gradient and regions placed by fractions of the sample grid, Poisson and read noise); float32 accumulation |
+| Stain | `StainConfig()` | `StainConfig()` |
+| Voxel values rendered | 440,640 (4 FOVs × 6,480 voxels × 17 images) | 19,740,672 (9 × 129,024 × 17) |
+
+**Resource estimate** (from array sizes and the existing peak formula
+`_estimate_peak_bytes` of `_presets.py`; nothing here is a measurement):
+
+* **`sample-tiny-v1`, inside the routine test bound.** Every array is within the default
+  bound (at most 32 × 64 × 64 voxels, four channels, four rounds): FOV images 5 × 36 × 36
+  × 4, the sample label grid 6 × 63 × 63. Working memory per FOV and round is at most
+  132 MiB by the peak formula, almost all of it the formula's fixed noise-chunk term;
+  labels and tables are below 1 MiB. It renders 440,640 voxel values, fewer than the
+  524,288 of one `calibrated-development-v1` scene (8 × 64 × 64, four rounds, four
+  channels), which `test_calibrated_generation_stays_within_bounds` generates in the
+  default tier, so it is expected below the 5 s `slow` threshold on one CPU. The label
+  functions add `(4 × 6,480 + 23,814) × 10` point-site evaluations, about 5·10⁵. Saved,
+  it is about 2.2 MB (images 1.7 MB, stain 0.1 MB, labels 0.4 MB). The
+  implementation measures it with `--durations=0` and `/usr/bin/time -v`; if a test that
+  generates it takes 5 s or more, that test is marked `slow`, and the routine tier uses
+  the same grid with 3 × 36 × 36 FOVs.
+* **`sample-small-v1`, inside the `slow` bound of the §2.10 exceptions.** Its sample grid
+  of 16 × 249 × 249 is within the bound of one scene of at most 16 × 256 × 256 cut into at
+  most a 3 × 3 grid of overlapping tiles, the synthetic cut-fixture bound of the batch
+  (the W-324 fixture used one 16 × 256 × 256 scene and 3 × 3 tiles of 14 × 120 × 120,
+  W-324 notes section 2.5). Peak working memory per FOV and round: 153 MiB by the formula;
+  label volumes 7.6 MiB (sample) plus 1 MiB per FOV; the power-diagram evaluation in
+  blocks of 2¹⁸ points holds about 0.2 GiB of temporaries; all FOV images held in memory
+  (without `on_fov`) are 71 MiB in float32. Estimated peak RSS below 1 GiB beside the
+  interpreter and its imports, against the 4 GiB stop target, on one CPU and one thread.
+  It renders 19.7 million voxel values, 0.59 of the 33.6 million of the benchmark `small`
+  dataset that `conftest.py` generates once per session; the label functions add about
+  4.3·10⁷ point-site evaluations. Saved, it is about 96 MB uncompressed (images 74 MB,
+  stain 4.6 MB, labels 17 MB) plus the tables.
+* **Not in either tier.** Larger grids, LN-sized FOVs (50 × 1496 × 1496) and whole-sample
+  scenes are outside this addition; the generator sets no upper bound, as today, and the
+  caller owns memory and time.
+
+## Truth schema
+
+| Option | Where the truth goes | Cost | Effect on existing outputs |
+| --- | --- | --- | --- |
+| **V1. New sample-level files with their own version (recommended)** | Per FOV the unchanged `save_formed_scene` layout; beside it the sample tables and label images below, described by `sample.json` with `sample_truth_version` `"1"`. No existing table gains a column. | Consumers join the sample tables with the FOV tables by `fov_id` and `amplicon_id`; seven new files. | None: every existing file keeps its columns and bytes. |
+| V2. New columns on the per-FOV tables | `formed` gains `sample_z/y/x`, `true_cell_id`, `compartment`; `round_truth` gains `in_footprint` | Fewer files. | The columns would exist only for sample scenes, so the schema of `formed.csv` would depend on how it was made; or they exist always and every existing `formed.csv` changes. |
+| V3. `ground_truth.json` version 3 | Extend the historical MATLAB-compatible record with the sample keys | One file for MATLAB readers. | `HISTORICAL_TRUTH_VERSION` would move from `"2.0"`, which changes the files `starfinder synthetic generate` writes and `test_benchmark_synthetic.py` checks. |
+
+**Recommendation: V1.** It is the only option that changes no existing file, keeps one
+schema per table, and versions the addition independently of generator version 6.
+
+**Layout** written by `save_sample_scene(scene, directory)` into a new or empty directory
+(nothing is overwritten, as `save_formed_scene`):
+
+```
+<directory>/
+  sample.json                   # record: sample_truth_version "1", sample_preset_version, generator versions,
+                                #   requested and effective SampleSceneConfig, seed, stream scheme and
+                                #   descriptors, sample grid, codebook, SHA-256 of every file below
+  positions.csv                 # tile position table: fov_id, nominal_z/y/x (µm)
+  placement_truth.csv           # "Placement truth"
+  nuclei.csv                    # nucleus_id, cell_id, centre_z/y/x (µm), axial_radius, lateral_radius (µm),
+                                #   elongation, angle (rad), site_radius (µm), stain_brightness
+  cells.csv                     # cell_id, kind (ordinary, binucleate, empty), n_nuclei, reach (µm),
+                                #   centroid_z/y/x (µm, of the sample-grid voxels), n_voxels (sample grid),
+                                #   n_molecules, fov_ids, n_fovs
+  molecules.csv                 # amplicon_id, population, gene_id, color_sequence, sample_z/y/x (µm),
+                                #   A, sz, sl, e, theta, true_cell_id, true_nucleus_id, compartment, fov_ids, n_fovs
+  cell_fovs.csv                 # "Per-FOV truth"
+  molecule_fovs.csv             # "Per-FOV truth"
+  labels/sample_nuclei.tif, labels/sample_cells.tif
+  fovs/<fov_id>/                # save_formed_scene layout: images/<round>.ome.tif, formed.csv,
+                                #   round_truth.csv, signals.csv, provenance.json
+  fovs/<fov_id>/stain.ome.tif
+  fovs/<fov_id>/labels/nuclei.tif, fovs/<fov_id>/labels/cells.tif
+  fovs/<fov_id>/molecules.csv   # legacy one-based x, y, z, gene (the no-segmenter path)
+```
+
+Units are in the column names' tables above: µm in the sample frame, voxel indices in
+the FOV frame, radians for angles; IDs are strings except the uint32 label values
+`cell_id` and `nucleus_id`. CSV floats use round-trip precision; empty cells are nulls.
+`sample.json` names `SAMPLE_TRUTH_VERSION`; any change to a column or rule above bumps it.
+
+## Tests the implementation keeps and adds
+
+* **Keeps**: every test named in "Opt-in, and what stays as it is", unchanged.
+* **Adds** (marker `synthetic`; `slow` where measured at 5 s or more; no test reads the
+  network share): config validation (overlap rule, Z=1 rule, template population fields,
+  stochastic readout refused); the nominal grid equal to `positions_from_grid` values;
+  the placement identity and its tolerance on `sample-tiny-v1`; the rendering and
+  no-interpolation identities; cellular identities 1 to 5; nucleus inside cell on every
+  label voxel; stream isolation (redrawing the jitter moves no molecule; adding a FOV
+  changes no other FOV's images); the save and reload round trip with SHA-256 checks;
+  `import_labels` and `molecule_table_from_csv` accepting the saved files of one FOV;
+  cross-process repeatability of `sample-tiny-v1`; and one `slow` test that generates
+  `sample-small-v1` under `/usr/bin/time -v` and records its time and peak RSS, as
+  `test_medium_cli_both_modes_time_and_peak_rss` does for the benchmark presets.
+
+## Exclusions
+
+No implementation and no change to the generator, its presets or its tests; no microsim
+or other new rendering dependency, no calibration to real tissue and no empirical
+profiles; no claim about segmentation accuracy, and no learned segmenter run on this scene
+as a measure of its quality; no change to the §2.9 or §2.10 contracts (the needs of the
+no-segmenter path are listed in the worker notes); no rotation, illumination model, stage
+drift (beyond a supplied jitter table) or cross-FOV cell matching.
