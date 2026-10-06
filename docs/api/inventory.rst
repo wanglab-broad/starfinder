@@ -41,6 +41,26 @@ Root exports refer to the same objects as their owning namespaces; modules and
 Owning namespaces (alphabetical)
 --------------------------------
 
+starfinder.assignment
+~~~~~~~~~~~~~~~~~~~~~
+
+* :py:obj:`starfinder.assignment.assign_molecules`
+* :py:obj:`starfinder.assignment.ASSIGNMENT_STATUSES`
+* :py:obj:`starfinder.assignment.AssignmentConfig`
+* :py:obj:`starfinder.assignment.AssignmentResult`
+* :py:obj:`starfinder.assignment.CELL_CORRESPONDENCE`
+* :py:obj:`starfinder.assignment.CELL_STATUSES`
+* :py:obj:`starfinder.assignment.COMPARTMENT_STATES`
+* :py:obj:`starfinder.assignment.CorrespondenceConfig`
+* :py:obj:`starfinder.assignment.match_nuclei`
+* :py:obj:`starfinder.assignment.molecule_table`
+* :py:obj:`starfinder.assignment.molecule_table_from_csv`
+* :py:obj:`starfinder.assignment.MoleculeTable`
+* :py:obj:`starfinder.assignment.NUCLEUS_STATUSES`
+* :py:obj:`starfinder.assignment.plot_assignment`
+* :py:obj:`starfinder.assignment.sample_labels`
+* :py:obj:`starfinder.assignment.summarize_assignment`
+
 starfinder.barcode
 ~~~~~~~~~~~~~~~~~~
 
@@ -95,6 +115,7 @@ starfinder.benchmark
 starfinder.dataset
 ~~~~~~~~~~~~~~~~~~
 
+* :py:obj:`starfinder.dataset.ChannelInfo`
 * :py:obj:`starfinder.dataset.CheckpointConfig`
 * :py:obj:`starfinder.dataset.CropWindow`
 * :py:obj:`starfinder.dataset.Dataset`
@@ -102,6 +123,7 @@ starfinder.dataset
 * :py:obj:`starfinder.dataset.ExternalReference`
 * :py:obj:`starfinder.dataset.FOV`
 * :py:obj:`starfinder.dataset.from_workflow_config`
+* :py:obj:`starfinder.dataset.MorphologyConfig`
 * :py:obj:`starfinder.dataset.PipelineConfig`
 * :py:obj:`starfinder.dataset.RecoveryConfig`
 * :py:obj:`starfinder.dataset.RegistrationRecipe`
@@ -238,6 +260,45 @@ starfinder.registration
 * :py:obj:`starfinder.registration.TranslationTransform`
 * :py:obj:`starfinder.registration.UnsupportedTransformOperationError`
 * :py:obj:`starfinder.registration.WarpConfig`
+
+starfinder.segmentation
+~~~~~~~~~~~~~~~~~~~~~~~
+
+* :py:obj:`starfinder.segmentation.CellposeConfig`
+* :py:obj:`starfinder.segmentation.composite_nuclei_amplicon`
+* :py:obj:`starfinder.segmentation.CompositeConfig`
+* :py:obj:`starfinder.segmentation.enhance_with_flamingo`
+* :py:obj:`starfinder.segmentation.expand_labels`
+* :py:obj:`starfinder.segmentation.ExpandLabelsConfig`
+* :py:obj:`starfinder.segmentation.extend_labels_through_z`
+* :py:obj:`starfinder.segmentation.FlamingoEnhancementConfig`
+* :py:obj:`starfinder.segmentation.import_labels`
+* :py:obj:`starfinder.segmentation.InputChannel`
+* :py:obj:`starfinder.segmentation.KNOWN_MODELS`
+* :py:obj:`starfinder.segmentation.KnownModel`
+* :py:obj:`starfinder.segmentation.LabelImportConfig`
+* :py:obj:`starfinder.segmentation.labels_to_grid`
+* :py:obj:`starfinder.segmentation.MethodContext`
+* :py:obj:`starfinder.segmentation.MissingModelError`
+* :py:obj:`starfinder.segmentation.ModelFile`
+* :py:obj:`starfinder.segmentation.ModelHashMismatchError`
+* :py:obj:`starfinder.segmentation.normalize_percentiles`
+* :py:obj:`starfinder.segmentation.reference_grid_from_file`
+* :py:obj:`starfinder.segmentation.ReferenceGrid`
+* :py:obj:`starfinder.segmentation.rescale_input`
+* :py:obj:`starfinder.segmentation.resolve_model`
+* :py:obj:`starfinder.segmentation.SeededWatershedConfig`
+* :py:obj:`starfinder.segmentation.segment`
+* :py:obj:`starfinder.segmentation.SEGMENTATION_METHODS`
+* :py:obj:`starfinder.segmentation.SegmentationBackendUnavailableError`
+* :py:obj:`starfinder.segmentation.SegmentationInput`
+* :py:obj:`starfinder.segmentation.SegmentationPlan`
+* :py:obj:`starfinder.segmentation.SegmentationResult`
+* :py:obj:`starfinder.segmentation.SegmentationRun`
+* :py:obj:`starfinder.segmentation.SegmentationSpec`
+* :py:obj:`starfinder.segmentation.StarDistConfig`
+* :py:obj:`starfinder.segmentation.to_label_dtype`
+* :py:obj:`starfinder.segmentation.ZExtensionConfig`
 
 starfinder.spot_finding
 ~~~~~~~~~~~~~~~~~~~~~~~

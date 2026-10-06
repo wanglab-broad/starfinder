@@ -1,6 +1,6 @@
 # Assignment contract: molecules to cells, correspondence, compartments and counts
 
-Status: Proposed
+Status: Accepted (W-309, 2026-10-05, at 3550723)
 
 This page proposes the §2.9 assignment contract: an assign entry separate from
 `FOV.run`, the rule that turns a molecule position into a voxel, direct assignment with
@@ -119,7 +119,7 @@ New names under N1:
 | Sampling | `sample_labels(labels, positions_zyx, *, geometry)` | function |
 | Correspondence | `match_nuclei(nuclei, cells, *, config)` | function |
 | Coordination | `FOV.assign(config=AssignmentConfig(), *, cells="cell", nuclei=None, name="default", population="final", correspondence=None, checkpoints=None)`, `FOV.assignment_results`, `FOV.load_assignment(name)` | method, attribute, method |
-| Diagnostics | `summarize_assignment(result)`, `plot_assignment(result, *, image=None, z=None)` | functions |
+| Diagnostics | `summarize_assignment(result)`, `plot_assignment(result, *, image=None, view=None, z=None)` | functions |
 
 ## The assign entry
 
@@ -141,7 +141,7 @@ class AssignmentConfig:
 @dataclass(frozen=True)
 class CorrespondenceConfig:
     match_fraction: float = 0.5        # a nucleus is matched when one cell holds more than this share
-    outside_tolerance: float = 0.0     # share of a matched nucleus allowed outside its cell
+    outside_tolerance: float = 0.1     # share of a matched nucleus allowed outside its cell (option C2, provisional)
 ```
 
 `assign_molecules` applies the checks below, samples every molecule, derives or validates
@@ -181,7 +181,9 @@ with `expansion`. The record says how the territories were obtained
   ({doc}`segmentation-contract`), in memory or loaded with `FOV.load_segmentation(name)`.
 * **Grid.** `grid` is the molecule run's reference grid (`ReferenceGrid`): in a FOV,
   `FOV.reference_grid()`, or `reference_grid_from_file("images/ref_merged/{fovID}.tif")`
-  when the reference image is not resident.
+  when the reference image is not resident (also `FOV.reference_grid()` after
+  `FOV.load_reference_image()`). Either is the molecule run's grid by "The grid rule"
+  below.
 * **Correspondence.** An optional supplied table with the columns `nucleus_id` and
   `cell_id` ("Nucleus–cell correspondence").
 
@@ -195,9 +197,10 @@ In this order, before any sampling; each uses only the arguments:
 2. **Molecules.** A `MoleculeTable` (`TypeError` otherwise).
 3. **Targets.** `cells.target` is `cell` or `nucleus`; `nuclei.target` is `nucleus`
    (`ValueError`).
-4. **Grid.** For `volume` and `extended` labels, `cells.grid.shape_zyx == grid.shape_zyx`
-   and `cells.grid.metadata == grid.metadata`; for `plane` labels on a volume grid, the
-   cell grid must equal `grid.projected(method=m)`, where `m` is the projection recorded in
+4. **Grid.** By "The grid rule" below: for `volume` and `extended` labels,
+   `cells.grid.shape_zyx == grid.shape_zyx` and `cells.grid.metadata == grid.metadata`;
+   for `plane` labels on a volume grid, the cell grid must equal
+   `grid.projected(method=m)`, where `m` is the projection recorded in
    the cell run's record (`input.projection`) or, for an import, declared by it; a `plane`
    label image on a Z=1 grid must equal the grid. Otherwise `IncompatibleGeometryError`
    naming both shapes and frames. A `declared` grid of an import ({doc}`segmentation-contract`,
@@ -217,6 +220,23 @@ In this order, before any sampling; each uses only the arguments:
    `unit="pixel"` on a calibrated grid needs `legacy_pixel_expansion=True` (`ValueError`
    otherwise) ("Label expansion").
 8. **Supplied correspondence.** Validated as in "Nucleus–cell correspondence".
+
+### The grid rule
+
+Labels and molecules are on one grid when the two `ReferenceGrid`s have the same
+`shape_zyx` and the same `ImageMetadata` (frame, spacing, origin, direction and unit).
+That is the whole rule. A grid's `source` (`fov:<round>`, `file:<path>` or `declared`)
+and `sha256` say where it was read from; they are recorded (the run records' `grid`, the
+assignment record's `grid`) and never compared. So the grid of the saved reference image
+`images/ref_merged/{fovID}.tif` (`reference_grid_from_file`, or `FOV.reference_grid()`
+after `FOV.load_reference_image()`) and the grid of the resident reference round
+(`fov:<round>`) are one grid: labels made on the file grid in a process that holds no
+sequencing round are accepted with the molecules of `FOV.run`, or of
+`molecule_table_from_csv`, and give the same statuses and counts as in one process. Labels
+of another shape or with other metadata raise `IncompatibleGeometryError` before any
+sampling (check 4; row A14 of {doc}`assignment-algorithms`). The rule is implemented once
+(`same_grid` in `starfinder.segmentation._labels`) and used by checks 4 and 5 and by the
+segment entry's check that the seeds are on the input's grid.
 
 ### What assign records
 
@@ -259,7 +279,7 @@ no path):
     "correspondence": {"source": "overlap", "sha256": null}
   },
   "config": {"expansion": {"distance": 0.7776, "unit": "um", "mode": "planar"}, "legacy_pixel_expansion": false,
-             "correspondence": {"match_fraction": 0.5, "outside_tolerance": 0.0},
+             "correspondence": {"match_fraction": 0.5, "outside_tolerance": 0.1},
              "exclude_cells_without_nucleus": true, "exclusion_source": "default",
              "exclusion_rationale": "possible cell residue; not a biological identity"},
   "sampling": {"rule": "floor(c + 0.5)", "sampled_axes": "zyx"},
@@ -302,7 +322,12 @@ made (an `import_labels` result, for example). It takes the molecules from
 `FOV.spot_result` and
 `FOV.filtering_result` (or the `candidates` and `pre_qc` checkpoints with the filter
 re-applied) through `molecule_table`, the genes from the loaded codebook, and the grid
-from `FOV.reference_grid()`; calls `assign_molecules`; stores the result in
+from `FOV.reference_grid()`: the reference round's, or, in a process that segmented from
+the saved images ({doc}`segmentation-contract`, "Coordination per FOV"), the grid of the
+saved reference image, one grid by "The grid rule". A saved reference image that is a Z
+projection is not the molecules' grid, so `FOV.assign` refuses its grid without the
+reference round (`ValueError`); call `assign_molecules` with the molecule run's grid
+there. `FOV.assign` calls `assign_molecules`; stores the result in
 `FOV.assignment_results[name]`; and, with `checkpoints`, writes the files of
 "Persistence", including every label image it used that is not already saved under its run
 there ("Label images of a checkpointed assignment"). Without `checkpoints` it writes
@@ -513,16 +538,26 @@ and always carries `ambiguous_nucleus`, so its compartments are withheld.
 
 | Option | `match_fraction`, `outside_tolerance` | Effect on the golden digests | Effect on the existing outputs |
 | --- | --- | --- | --- |
-| **C1. Majority and containment (recommended)** | 0.5 (strict majority), 0.0 (any voxel outside flags) | None: the golden test has no nuclei, and the legacy path has no correspondence. | None of today's files has correspondence. In a new two-run plan, compartment counts are withheld for every cell touched by a nucleus that leaves its cell, even by one voxel; the bounded real examples report how many. |
-| C2. Majority with a tolerance | 0.5, 0.1 (provisional) | None. | As C1, with fewer withheld cells: up to a tenth of a nucleus may lie in the background without flagging its own cell. A part inside another cell still raises `foreign_nucleus` on that cell. The tolerance has no measured basis yet. |
+| C1. Majority and containment | 0.5 (strict majority), 0.0 (any voxel outside flags) | None: the golden test has no nuclei, and the legacy path has no correspondence. | None of today's files has correspondence. In a new two-run plan, compartment counts are withheld for every cell touched by a nucleus that leaves its cell, even by one voxel; the bounded real examples report how many. |
+| **C2. Majority with a tolerance (chosen, 2026-10-05; provisional)** | 0.5, 0.1 (a share strictly greater than 0.1 outside flags) | None. | As C1, with fewer withheld cells: up to a tenth of a nucleus may lie in the background without flagging its own cell. A part inside another cell still raises `foreign_nucleus` on that cell. Its basis is one culture crop of W-320, below. |
 | C3. By label value for seeded runs | none: when the cell run's record shows a seeded method whose label rule gives each cell its seed's value, nucleus `k` is matched to cell `k`. | None. | Cheaper and exact for `seeded_watershed`; it says nothing for imported or independently segmented masks, so overlap would still be needed for them, and a seed masked out of the foreground gives a cell without its nucleus silently. |
 
-**Recommendation: C1.** Neither number is tuned: 0.5 is the smallest share that makes the
-match unique, and 0 is exact containment, so every departure is flagged rather than
-absorbed. The bounded real examples ({doc}`assignment-algorithms`) report the distribution
-of outside shares, which is the evidence a tolerance (C2) would need; the choice of a
-tolerance belongs to Jiahao at the W-309 gate. With C1, the value agreement of a seeded run
-(C3) is recorded as a diagnostic (`seed_value_agrees`), not used.
+**Decision: C2, provisional (Jiahao, W-321 review, 2026-10-05).** The default
+`outside_tolerance` was raised from 0.0 (C1, the option this page recommended at W-309) to
+0.1; `match_fraction` stays 0.5, the strict rule and the flags are unchanged. A matched
+nucleus is flagged `outside` only when its share outside its cell is strictly greater
+than 0.1, and a part of a nucleus inside another cell still raises `foreign_nucleus` on
+that cell, whatever the tolerance. The evidence is the bounded culture example of W-320
+(one crop, 11 matched nuclei with the reference labels and 8 with the Cellpose labels, cells
+and nuclei segmented independently): with 0.0, 10 of
+the 11 matched nuclei of the reference labels and 7 of the 8 of the Cellpose labels were
+flagged `nucleus_outside_cell`, so the compartment counts of nearly every cell were
+withheld, while the largest share of a nucleus outside its cell was 0.073. A tolerance of
+0.05 would still have flagged 2 of 10 and 2 of 7; 0.1 flags none. The value is
+provisional: it rests on one crop without annotation, is not an accuracy statement and
+is not claimed to suit other samples. 0.5 remains the smallest share that makes the match
+unique. With C2, the value agreement of a seeded run (C3) is recorded as a diagnostic
+(`seed_value_agrees`), not used.
 
 **Supplied.** A table with columns `nucleus_id` and `cell_id` (unsigned integers):
 every value must exist in its image (`ValueError` naming the missing values), a nucleus
@@ -776,11 +811,34 @@ On demand, never by `FOV.assign`:
 
 * `summarize_assignment(result)`: molecules per status, cells per status, per flag and per
   compartment state, nuclei per status, quantiles of `size_voxels`, `size_physical`,
-  `n_molecules` and `n_nuclei`, and the totals before and after the exclusion. `FOV.assign`
-  stores it in `record["counts"]`.
-* `plot_assignment(result, *, image=None, z=None)`: the territory outlines (Z maximum, or
-  plane `z`) over `image`, with molecules coloured by status, and the size, count and
-  nucleus-count histograms. It replaces the four legacy PNGs and their hard-coded plane.
+  `n_molecules` and `n_nuclei`, and the totals before (every cell) and after (kept cells)
+  the exclusion, each with the same five keys: `cells`, `molecules` in cells, and the
+  `whole`, `nucleus` and `cytoplasm` totals. An excluded cell has no compartment counts,
+  so the two compartment totals are equal before and after; without an excluded cell,
+  `before` equals `after`. `FOV.assign` stores it in `record["counts"]`.
+* `plot_assignment(result, *, image=None, view=None, z=None)`: one row of four panels.
+  1. `image` in grey scale with the territory outlines in green and one dot per cell
+     centre. The outlines are lines 0.8 points wide around each territory, and each centre
+     is a dot of 30 points² with a thin black edge; both keep their size when a large image
+     is shown small (W-341). The dot is coloured by the cell's status: `kept` blue and
+     `excluded_no_nucleus` orange,
+     with the legend entries `kept` and `excluded` (the excluded centres drawn and in the
+     legend only when the result has an excluded cell);
+  2. the same image and outlines with the molecules: `assigned` blue, `unassigned` red,
+     `excluded_cell` orange with the legend entry `excluded` (drawn and in the legend only
+     when the result has such molecules); `outside_grid` molecules are not drawn;
+  3. the histogram of voxels per cell;
+  4. the histogram of molecules per cell.
+
+  The territories are the ones assign used (the expanded ones after an expansion), and a
+  cell's centre is the centroid of that territory. `view="z_max"` (the default without
+  `z`) draws the Z maximum of the territories and of a ZYX `image`, every molecule with a
+  position on the grid and every cell centre. `view="single_layer"` (the default with
+  `z`) draws one plane, by default the middle one `Z // 2`: its outlines and image, the
+  molecules whose sampled voxel has that Z index and the centres of the cells present in
+  it. A plane or Z=1 result has the `z_max` view only, and asking it for the other raises
+  `ValueError`. The figure replaces the four legacy PNGs and their hard-coded plane; the
+  workflow adapter writes both views of a ZYX label image ({doc}`workflow-downstream`).
 
 ## Workflow configuration
 
@@ -792,7 +850,7 @@ assignment:
   nuclei: nucleus          # a segmentation run name, or null
   population: final        # final (accepted reads) or called
   expansion: null          # or {distance: 0.78, unit: um, mode: planar}
-  correspondence: {match_fraction: 0.5, outside_tolerance: 0.0}
+  correspondence: {match_fraction: 0.5, outside_tolerance: 0.1}
   exclude_cells_without_nucleus: null   # null: on when nuclei is set
 ```
 

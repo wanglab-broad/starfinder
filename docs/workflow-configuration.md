@@ -15,20 +15,22 @@ An em dash in the default column means the schema defines no default.
 | `config_path` | string | Yes | —; absolute path to the same `.yaml` passed to `--configfile`; conversion writes a sibling JSON |
 | `starfinder_path` | string | Yes | —; repository root used to locate Python/MATLAB code |
 | `root_input_path`, `root_output_path` | strings | Yes | —; roots before dataset/sample or dataset/output components |
-| `envs_path`, `fiji_path` | strings | No | —; **needed at parse time**, because included StarDist/Fiji rules index them even if disabled |
+| `fiji_path` | string | No | —; **needed at parse time**, because the included Fiji rule indexes it even if disabled |
+| `envs_path` | string | No | —; no rule reads it: `stardist_segmentation` runs in the environment that runs Snakemake (see [segmentation and assignment](#segmentation-and-assignment)); kept in the schema until §2.13 |
 | `dataset_id`, `sample_id`, `output_id` | strings | Yes | —; directory identifiers |
 | `fov_id_pattern` | string | Yes | —; Python format string with `{i}`, e.g. `tile_{i}`, `Position{i:03}` |
 | `n_fovs`, `n_rounds` | integers >=1 | Yes | —; FOV indices start at 1, round names are exactly `round1` … `roundN` |
 | `ref_round` | string | Yes | —; must identify an existing sequencing round; membership is not schema-checked |
-| `ref_channel`, `dapi_round` | strings | No | —; nuclei registration / DAPI input selection, not Python sequencing-channel selection |
+| `ref_channel`, `dapi_round` | strings | No | —; nuclei registration / DAPI input selection, not Python sequencing-channel selection. In Python, `dapi_round` with `ref_channel` gives `Dataset.reference_stains` (`ChannelInfo("ch04", ref_channel)`); `dapi_round` must equal `ref_round`, else every rule raises `ValueError` |
 | `rotate_angle` | number | Yes | —; degrees, 0 for no rotation |
 | `img_col`, `img_row` | integers >=1 | Yes | —; width X and height Y; subtile windows use these values |
-| `img_z` | integer >=1 | No | —; downstream 3-D metadata/preview uses it |
-| `voxel_size_xy`, `voxel_size_z` | numbers >0 | No | —; physical microns for stitching; **not** extraction window radii |
+| `img_z` | integer >=1 | No | —; downstream 3-D metadata/preview uses it; `reads_assignment` needs it for a YX label image (the Z size of the molecule grid) |
+| `voxel_size_xy`, `voxel_size_z` | numbers >0 | No | —; physical microns for stitching and the declared calibration of the files the segmentation and assignment rules read; **not** extraction window radii |
 | `maximum_projection` | boolean | No | `false`; reference-image/DAPI output projection; does not turn sequencing into a 2-D algorithm |
-| `seq_channel_order` | array of strings | No | —; set explicit patterns for Python, e.g. `[ch00, ch02, ch01, ch03]` |
-| `additional_round` | array of objects with string `round_name` | No | —; supply `[]` when unused; accessed at parse time |
+| `seq_channel_order` | array of strings, or of objects with `wavelength`, `channel`, `name` | No | —; set explicit patterns for Python, e.g. `[ch00, ch02, ch01, ch03]`, or MATLAB's `channel_order_dict` entries; see [channels](#channels) |
+| `additional_round` | array of objects with string `round_name` and optional `channel_order` | No | —; supply `[]` when unused; accessed at parse time; `channel_order` lists the round's `wavelength`/`channel`/`name` entries, see [channels](#channels) |
 | `backend` | `python` or `matlab` | No | `matlab` |
+| `segmentation`, `assignment` | objects | No | —; Python only (`backend: python`): a segmentation plan and an assign call for the §2.13 rule, see [segmentation and assignment](#segmentation-and-assignment) |
 | `readout_mode` | `multiplexed` or `direct` | No | `multiplexed`; Python only (`Dataset.readout_mode`), and `direct` only with `backend: python`; see [readout mode](#readout-mode) |
 | `matlab_launcher` | `path` or `broad` | No | `path`; how MATLAB rules start MATLAB, see [MATLAB launcher](#matlab-launcher) |
 | `matlab_single_thread` | boolean | No | `false`; `true` adds `-singleCompThread` to every MATLAB call |
@@ -58,10 +60,52 @@ expects every FOV in each annotation range, even when sequencing is subsetted.
 Python arrays are `(Z,Y,X,C)`. Explicit channel patterns must match the files
 and codebook ordering. The Python factory leaves an empty channel list empty;
 it does not supply MATLAB's default. MATLAB's default order is
-`ch00,ch02,ch01,ch03`, but its nonempty custom channel setting is passed to a
-loader expecting a struct array with `channel`/`name`, incompatible with this
-schema's string array. Use `seq_channel_order: []` for default MATLAB loading;
+`ch00,ch02,ch01,ch03`, and its nonempty custom channel setting is passed to a
+loader expecting a struct array with `channel`/`name`: the object form of
+`seq_channel_order` ([channels](#channels)) has those fields, the list of
+patterns does not. Use `seq_channel_order: []` for default MATLAB loading;
 do not assume a Python custom list is portable to MATLAB.
+
+### Channels
+
+The shared keys keep their names; Python reads them into the channel groups of
+`Dataset` ({doc}`coordination`, "Channels"):
+
+* `seq_channel_order` is either a list of file patterns or a list of objects
+  with `wavelength` (nm, optional), `channel` (the file pattern) and `name`
+  (MATLAB's `channel_order_dict`). Both give the same patterns
+  (`Dataset.channel_order`); the object form adds the names and wavelengths
+  (`Dataset.channel_info`). The object form is the one MATLAB loads.
+* Every rule's `Dataset` names the other rounds by each `additional_round`
+  entry's `round_name` and takes the round's channels from its `channel_order`
+  (`Dataset.other_channel_order`); an entry without `channel_order` takes the
+  sequencing channels.
+* `dapi_round` with `ref_channel` gives the reference stain:
+  `Dataset.reference_stains == (ChannelInfo("ch04", ref_channel),)`, the
+  `*ch04.tif` file of the reference round that `nuclei_registration` reads.
+  Without `dapi_round` there is none. A `dapi_round` other than `ref_round`
+  raises `ValueError` naming both keys: the stain file is always in the
+  reference round.
+
+`nuclei_registration` still selects each other round's shared stain by
+MATLAB's substring match of `ref_channel` in the channel names.
+
+```yaml
+ref_round: round1
+dapi_round: round1
+ref_channel: DAPI
+seq_channel_order:
+  - {wavelength: 488, channel: ch00, name: seq}
+  - {wavelength: 546, channel: ch02, name: seq}
+  - {wavelength: 594, channel: ch01, name: seq}
+  - {wavelength: 647, channel: ch03, name: seq}
+additional_round:
+  - round_name: round5
+    channel_order:
+      - {wavelength: 488, channel: ch00, name: Flamingo}
+      - {channel: ch01, name: RBD}
+      - {wavelength: 405, channel: ch02, name: DAPI}
+```
 
 ## MATLAB launcher
 
@@ -340,19 +384,76 @@ rsf_single_fov:
         ch03: {threshold_value: 6.0}
 ```
 
+## Segmentation and assignment
+
+The rules `enhance_dapi_with_flamingo`, `create_nuclei_amplicon_overlay`,
+`stardist_segmentation` and `reads_assignment` call the Starfinder package under both
+backends (`dataset/workflow.py`), keeping their names, inputs and outputs. The
+environment that runs Snakemake therefore needs the package, with the `stardist` extra
+for `stardist_segmentation` and the `anndata` extra for `reads_assignment`; no rule reads
+`envs_path` any more. The legacy keys are translated as the
+[segmentation contract](segmentation-contract.md#workflow-configuration) and the
+[assignment contract](assignment-contract.md#workflow-configuration) state; the
+[downstream parameter blocks](#downstream-parameter-blocks) summarize them.
+
+Two Python-only top-level blocks (rejected unless `backend: python`) describe the same
+steps for the §2.13 rule that loads a FOV and runs `FOV.segment` and `FOV.assign`; the
+legacy rules translate their own keys and raise when a block is present. In
+`segmentation`, `device` is `cpu` (default) or `cuda`, and each run has a `name`, a
+`target`, `inputs` (`InputChannel` fields; `prepare` names `composite_nuclei_amplicon` or
+`enhance_with_flamingo` with its config fields), optional `seeds`, `projection` (`true`
+or `ProjectionConfig` fields) and `operations` (`expand_labels` or
+`extend_labels_through_z` with their config fields), and a `method`: a
+`SEGMENTATION_METHODS` name whose config fields are the run's other keys, or `import`
+with the `LabelImportConfig` fields. The `assignment` block holds the `AssignmentConfig`
+fields and the `FOV.assign` arguments (`cells`, `nuclei`, `name`, `population`,
+`checkpoints`); `correspondence` holds the `CorrespondenceConfig` fields (by default
+`match_fraction` 0.5 and `outside_tolerance` 0.1, a provisional value). Default-tier
+tests keep the schema's method list equal to the registry and the assignment keys equal
+to those fields and arguments.
+
+```yaml
+segmentation:
+  device: cpu
+  runs:
+    - name: nucleus
+      target: nucleus
+      inputs:
+        - {role: nuclear, round: reference_stain, channel: DAPI}
+      method: stardist
+      model_path: /absolute/stardist_models/3D_spleen
+      scale: 1.0
+    - name: cell
+      target: cell
+      seeds: nucleus
+      inputs:
+        - {role: amplicon, reference_merged: true}
+      method: seeded_watershed
+      sigma_um: 1.5
+assignment:
+  cells: cell
+  nuclei: nucleus
+  population: final
+  expansion: {distance: 0.78, unit: um, mode: planar}
+  correspondence: {match_fraction: 0.5, outside_tolerance: 0.1}
+  exclude_cells_without_nucleus: null
+```
+
 ## Downstream parameter blocks
 
 | Rule | Parameters | Constraints / effective defaults |
 | --- | --- | --- |
-| `create_nuclei_amplicon_overlay` | `maximum_projection` | boolean; script indexes it directly; separate from top-level projection |
-| `stardist_segmentation` | `stardist_base_path`, `stardist_model_name`, `segmentation_input_folder` | strings; input folder defaults in rule code to `overlay`; supply actual model path/name for execution |
-| `stardist_segmentation` | `prob_thresh`, `nms_thresh` | numbers in [0,1]; required by script, no schema defaults |
-| `stardist_segmentation` | `rescale`, `expand_labels`, `distance` | booleans and integer >=0; no script defaults; rescale halves XY and restores labels, expansion of 3-D labels is per slice |
-| `reads_assignment` | `expand_labels`, `dilation_distance` | boolean and integer >=0; required by script, no defaults; expansion of 3-D labels is per slice |
+| `create_nuclei_amplicon_overlay` | `maximum_projection` | boolean, default false; the Z maximum of the composite; separate from top-level projection |
+| `stardist_segmentation` | `stardist_base_path`, `stardist_model_name`, `segmentation_input_folder` | strings; the model is `<base>/<name>` (the known model of that name when the base is the weights cache's `stardist` folder); the input folder defaults in rule code to `overlay` and gives the channel role (`overlay`: composite, any other folder: nuclear) |
+| `stardist_segmentation` | `prob_thresh`, `nms_thresh` | numbers in [0,1]; equal to the model's `thresholds.json`, they are its stored thresholds, otherwise overrides; omitted, the stored ones |
+| `stardist_segmentation` | `rescale`, `expand_labels`, `distance` | booleans and integer >=0, defaults false; `rescale: true` is StarDist `scale` 0.5 in Y and X, rendered on the input grid; `expand_labels` is a planar pixel expansion by `distance`, which `reads_assignment` refuses (expand there instead) |
+| `stardist_segmentation` | `target`, `device` | Python only: `nucleus` or `cell` (default `cell` for the `overlay` folder, `nucleus` otherwise) and `cpu` (default) or `cuda` |
+| `reads_assignment` | `expand_labels`, `dilation_distance` | boolean, default false, and integer >=0; with `expand_labels`, assign expands the territories once by `dilation_distance` pixels per plane and keeps both masks |
 
 See [downstream inputs and limitations](workflow-downstream.md) before enabling
 these flags. Disabled sections in the full example do not validate model paths
-or exercise those scripts.
+or exercise those scripts. Unknown keys of the `stardist_segmentation` and
+`reads_assignment` parameters raise when the rule runs.
 
 ## Overrides and validation boundaries
 

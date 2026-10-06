@@ -78,7 +78,10 @@ rule nuclei_registration:
 ### ==================== [ Rotate Nuclei ] =========================
 
 def get_dapi_input(wildcards):
-    ff = glob.glob(f"{INPUT_DIR}/{config['dapi_round']}/{wildcards.fovID}/*ch04.tif")
+    pattern = f"{INPUT_DIR}/{config['dapi_round']}/{wildcards.fovID}/*ch04.tif"
+    ff = sorted(glob.glob(pattern))
+    if len(ff) != 1:
+        raise ValueError(f"rotate_nuclei needs exactly one file matching {pattern}; found {len(ff)}: {ff}")
     return ff
 
 rule rotate_nuclei:

@@ -52,16 +52,46 @@ round inside the round loop, `candidates` after detection or extraction, and
     candidates.json
     pre_qc.csv | pre_qc.parquet
     pre_qc.json
+    other_rounds/<name>/                      # FOV.prepare_morphology / FOV.register_rounds(checkpoints=…)
+        image.ome.tif                         # the prepared image, ZYXC, every channel, ImageMetadata
+        registration.json
+        field.npz                             # only for a chain with a dense or B-spline transform
+    segmentation/<run>/                       # FOV.segment(checkpoints=…), one folder per run
+        labels.tif
+        input.ome.tif                         # computed runs only
+        segmentation.json
+    assignment/<name>/                        # FOV.assign(checkpoints=…), one folder per assignment
+        molecules.csv | molecules.parquet
+        cells.csv | cells.parquet
+        counts.csv | counts.parquet
+        nuclei.csv | nuclei.parquet           # with nuclei
+        territories.tif                       # with an expansion
+        cell_labels.tif                       # only when the cell run is not saved under its run
+        nucleus_labels.tif                    # only when the nucleus run is not saved under its run
+        assignment.json
 ```
 
 An FOV loaded from a subtile writes to `subtile_<n>/` inside its FOV directory,
 so subtiles of one FOV never share files. Round labels must be plain file names.
 
+The `other_rounds/`, `segmentation/` and `assignment/` folders are written by
+`FOV.prepare_morphology` (or `FOV.register_rounds`), `FOV.segment` and `FOV.assign`, not
+by `FOV.run`: they are not checkpoint stages, `CheckpointConfig.stages` does not name
+them, and they do not change the stage format version or `run.json` (see "Prepared
+morphology images", "Segmentation runs" and "Assignments" below). `FOV.run` with
+checkpoints refuses an existing FOV directory unless `overwrite=True`, so call it first,
+or, when `FOV.prepare_morphology` ran first in another process, with `overwrite=True`:
+that removes only the stage files above and leaves `other_rounds/` as it is, so the two
+calls give the same files in either order.
+
 ### registered
 
 `registered/<round>.ome.tif` is each round exactly as it enters spot finding and
 extraction: after preprocessing, registration and any post-registration
-reconstruction. It is written with {py:func}`~starfinder.io.save_volume` as
+reconstruction. The checkpoint holds the reference round and the sequencing rounds
+only, the rounds `FOV.run` processes (also when written by `save_checkpoint`); an other
+round is saved under `other_rounds/` ("Prepared morphology images" below), and its
+transforms and attempts are not written here. It is written with {py:func}`~starfinder.io.save_volume` as
 OME-TIFF and read with {py:func}`~starfinder.io.load_volume_zyxc`, which keeps
 singleton Z and C, the dtype (float64 included) and the stored
 {py:class}`~starfinder.image.ImageMetadata`. Checkpoints written before the
@@ -83,7 +113,9 @@ page, and its OME-XML declares SizeZ, SizeC, the pixel type and the dimension
 order `XYCZT`, so Bio-Formats opens it as a Z×C hyperstack in its stored dtype.
 
 `transforms.json` records the FOV identity, the rounds and the channel order,
-the rounds written, the stored snapshot names (`snapshots`), the preprocessing
+the rounds written, the channel information of each written round (`channels`:
+round name to its `ChannelInfo` entries `channel`, `name` and `wavelength`, as in
+`run.json`; added by W-337), the stored snapshot names (`snapshots`), the preprocessing
 record (as in `run.json`, below), the registration attempts, the registration
 recipe summary (`registration_recipe`: step method names, signals, warp,
 reference round and QC config), `registration_semantics` (`recipe`) and, per
@@ -106,6 +138,10 @@ so the reloaded transforms equal the saved ones. `read_checkpoint` and
 (`registration_record["application"]`, also each result's
 `application_config`); applying the chain with it to the pre-registration
 images gives the registered images bit for bit.
+
+`load_checkpoint("registered")` reads each round with the patterns of its
+`channels` entry and falls back to `channel_labels` for a header without the key
+(written before W-337); the key is additive, so the stage's `format_version` stays 2.
 
 The header `format_version` is 2 for the three stages. Version-1 headers still
 load. A version-1 registered checkpoint (before the registration recipe) holds
@@ -239,11 +275,102 @@ Without `deduplication_config` it is `None`.
 All JSON files are strict JSON: a non-finite diagnostic or configuration value
 (NaN or infinity) is written as `null`.
 
+## Prepared morphology images
+
+`fov.prepare_morphology(config, checkpoints=CheckpointConfig(…))` writes each prepared
+image (the reference stain `reference_stain` and each other round) to
+`other_rounds/<name>/`; `fov.register_rounds(recipe, rounds=…, checkpoints=…)` writes each
+round it registers the same way ({doc}`coordination`, "Sequencing rounds and other
+rounds"). Only `directory` and `overwrite` are used. An existing folder raises
+`FileExistsError` before anything is loaded or estimated unless `overwrite=True`, which
+replaces its files.
+
+| File | Content |
+| --- | --- |
+| `image.ome.tif` | The prepared image in the reference frame: ZYXC OME-TIFF by `save_volume`, every channel in the round's C order, with its `ImageMetadata` (the reference round's). |
+| `registration.json` | The record, `format_version` 1 and `stage` `prepared_image`: the name; `dataset_id`, `sample_id`, `fov_id` and `subtile_id`; `channels` (the `ChannelInfo` entries); `rotation` (the rotation diagnostics, or null); `registration` (the `registration_record["rounds"]` entry: for a round the recipe summary, the reference label and `reference_sha256`, with `transforms` (the step results, in the form of `transforms.json`), `application_config` and `attempts`; for `reference_stain` the `relation` `same acquisition as the reference round` and no transform or attempt); `image` (path, shape, dtype, metadata, `sha256` of the image's C-order bytes and `file_sha256` of the file); `software` (as in `run.json`). |
+| `field.npz` | Only for a chain with a dense or B-spline transform: `result_<i>` as in `<round>_field.npz`, with its `file_sha256` in the record. |
+
+`fov.load_registered_round(name, checkpoints=CheckpointConfig(directory=…))` reads the
+folder on any `FOV` object of the same FOV. It checks the record's identity against the
+FOV and its channels against the dataset, each file's SHA-256 and the image's SHA-256
+(`ValueError` naming the path and both hashes), the stored metadata against the record
+and, when the reference round is resident, that the metadata equals the reference
+grid's. It restores the image, its metadata, the rotation diagnostics and
+`registration_record["rounds"][name]`, with `saved` (the image file's path relative to
+the FOV directory and its SHA-256); a registered round also gets its results, chain,
+attempts and `WarpConfig` back. `FOV.segment` links that saved file in the record of a
+run that reads the image. The Python `nuclei_registration` rule writes these folders when
+`rules.nuclei_registration.parameters.checkpoints` is set ({doc}`workflows`).
+
+**Segmenting in another process.** These folders and the reference image
+`images/ref_merged/{fovID}.tif` (written by `FOV.save_reference_image`, not a checkpoint)
+are what a process that only segments reads: `fov.load_reference_image()`, then
+`fov.load_registered_round(name)` for each image its plan names, then
+`fov.segment(plan, checkpoints=…)`, with no sequencing round resident and no partial load
+of `registered` ({doc}`segmentation-contract`, "Coordination per FOV"). `fov.assign` there
+takes the molecules from the `candidates` and `pre_qc` stages, which restore no image,
+and re-applies the filter with `FOV.run` ("Reload and continue").
+
+## Segmentation runs
+
+`fov.segment(plan, checkpoints=CheckpointConfig(…))` writes each run of the plan to
+`segmentation/<run>/` (option F1 of {doc}`segmentation-contract`, "Saved format"). Only
+`directory` and `overwrite` are used. A run folder that already holds these files raises
+`FileExistsError` before any run when `overwrite` is false; with `overwrite=True` the
+run's files are replaced. Other runs and the `FOV.run` files are never touched.
+
+| File | Content |
+| --- | --- |
+| `labels.tif` | The label image: ZYX `uint32` (a plane is 1×Y×X), zlib, written by `save_volume` with the grid's `ImageMetadata` in its description. |
+| `input.ome.tif` | The segmentation input the labels were computed from: ZYXC OME-TIFF by `save_volume`, with its grid's metadata (the projected grid for a projected run). An imported mask has no segmentation input and no such file. |
+| `segmentation.json` | The run record of {doc}`segmentation-contract` ("Run record"), with `labels.path` and `labels.file_sha256`, and for a computed run `input.path` and `input.file_sha256`. Each `input.channels` entry has the channel's `name` and `wavelength` beside `channel` (since W-336; additive, so a record without them still loads). `format_version` is 1. |
+
+`fov.load_segmentation(name, checkpoints=CheckpointConfig(directory=…))` reads the folder
+back into a `SegmentationResult`, stores it in `fov.segmentation_results[name]` and
+returns it. It raises `ValueError` naming the path and both hashes when a file is missing
+or its SHA-256, or the label array's SHA-256, differs from the record, and when the
+record names another run or FOV. The record of the returned result equals the record of
+the result `FOV.segment` stored.
+
+## Assignments
+
+`fov.assign(…, name="default", checkpoints=CheckpointConfig(…))` writes
+`assignment/<name>/` (option L1 of {doc}`assignment-contract`, "Persistence"). `directory`,
+`table_format` and `overwrite` are used, with the same `FileExistsError` and `ImportError`
+rules as `run`, checked before the assignment runs.
+
+* `molecules`, `cells` (every cell, kept and excluded), `counts` and, with nuclei, `nuclei`
+  are written in `table_format` with the table writer below; `assignment.json` records
+  each file's path, SHA-256 and dtype map under `files`.
+* Label images follow the one rule of {doc}`assignment-contract` ("Label images of a
+  checkpointed assignment"): a cell or nucleus run saved under its run in the same
+  checkpoint root (written by `FOV.segment(checkpoints=…)` or read by
+  `FOV.load_segmentation` there, with an unchanged `labels.tif`) is linked by its relative
+  path, `../../segmentation/<run>/labels.tif`, and never copied; any other input, among them
+  a run saved under another root, an `import_labels` result or a run kept in memory, is
+  written as `cell_labels.tif` or `nucleus_labels.tif`. With an expansion the expanded
+  territories are `territories.tif`. Label images are ZYX `uint32` with the grid's
+  `ImageMetadata`.
+* `assignment.json` is the run record of {doc}`assignment-contract` with every `file`
+  entry filled in: `inputs.cells.file` and `inputs.nuclei.file` (path and file SHA-256 of
+  the label file that holds each run, with `saved_under_run`), `expansion.original` and
+  `expansion.expanded` (their paths and `file_sha256`, beside the label arrays'
+  `sha256`), and `files`. `inputs.molecules.genes` holds the gene order of the counts.
+
+`fov.load_assignment(name, checkpoints=CheckpointConfig(directory=…))` reads the folder
+and the linked label files, checks every recorded SHA-256, rebuilds the tables with their
+recorded dtypes, stores the `AssignmentResult` in `fov.assignment_results[name]` and
+returns it. A written or linked file that is missing or changed raises `ValueError` naming
+the path and both hashes; a linked `segmentation/<run>/labels.tif` is therefore a
+prerequisite of the reload.
+
 ## Table formats
 
 CSV is written with floats as `%.17g` and missing values as `<NA>`. It is read
 back with an explicit dtype map from the stage header: pandas `string`, nullable
-`Int64` or `boolean`, and float64. It is then cast to the recorded in-memory
+`Int64`, `UInt32` (the assignment tables' cell and nucleus identifiers) or `boolean`, and
+float64. It is then cast to the recorded in-memory
 dtypes. String columns are read verbatim, without pandas' default missing-value
 parsing. A literal string equal to `<NA>`, or one that starts with a backslash,
 is written with one extra leading backslash, which is removed on reading.
@@ -322,6 +449,7 @@ run starts, after each completed step and when the run ends. It contains:
 | `code` | Package `version`, `git_commit` and `git_dirty`; each is `null` when unknown. The commit is recorded only when the package runs from a starfinder checkout, never from an enclosing repository. |
 | `environment` | Python, platform and package versions (`null` when not installed). |
 | `config` | `pipeline`, `execution` (including the execution `device`) and `checkpoints` configurations, `readout_mode`, the dataset's readout mode (since W-293), and `encoding`, the codebook's encoding as in `pre_qc.json` (`null` without a codebook or in readout mode `direct`; since W-304). |
+| `channels` | The channels of each configured round, and of `reference_stain` when `Dataset.reference_stains` is set: per round, in C order, one entry with `channel` (the file pattern), `name` (`null` when not given) and `wavelength` (nm, or `"unavailable"`), from `Dataset.channel_info` ({doc}`coordination`, "Channels"; since W-336). An additive key: a `run.json` without it still loads. |
 | `inputs` | Loaded TIFF `path` and streamed `sha256` (`null` with `hash_inputs=False`). |
 | `steps` | `name`, `round`, `seconds` and `status` of each completed or failed step. A preprocessing step is named `preprocess:<step name>`. The `find_spots` record also has `methods`, a list with the detection's provenance entry ({doc}`method-registry`, "Provenance in run.json"): `stage` (`spot_finding`), `method`, `config_type`, `implementation`, `config`, `requires` (installed versions of the optional dependencies), `artifacts` (pretrained weights files; empty for methods without weights) and `execution` (device, framework and thread settings). For a plan that names rounds, `run` records one `find_round_spots` step per detected round, each with its own entry, and `FOV.find_spots` called inside a recorded step lists one entry per round, each with its `round`. |
 | `preprocessing` | `null` without a preprocessing recipe. Otherwise `recipe` (the step names of `steps` and `post_registration`, `extraction_source` and `registration_source`), `rounds`: per round, one record per step with `index`, `stage` (`steps` or `post_registration`), `step`, `config`, `fitted`, `diagnostics`, `input_dtype`, `output_dtype` and `save_as`; `transforms`: per round and image (`detection` and each snapshot), the transforms composed in order, each with `result` (its index in the round's registration results in `transforms.json`), `method` and `kind` (`translation`, `affine`, `bspline` or `dense`), empty for the reference round; and `supplied_statistics`. |

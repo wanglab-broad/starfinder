@@ -39,8 +39,9 @@ frozen config:
 | Preprocessing | `starfinder.preprocessing.PREPROCESSING_METHODS` (renamed from `STEPS`) | `PreprocessingSpec` (renamed from `StepSpec`) | `PreprocessingRecipe` with `PreprocessingStep` (renamed from `RecipeStep`) | seven preprocessing configs |
 | Registration | `starfinder.registration.REGISTRATION_METHODS` (new) | `RegistrationSpec` (new) | `RegistrationRecipe` (new) with `RegistrationStep` (exists, not renamed) | `TranslationConfig`, `DemonsConfig`, `TpsConfig`, `CpdConfig` |
 | Spot finding | `starfinder.spot_finding.SPOT_FINDING_METHODS` (new) | `SpotFindingSpec` (new) | none: a `SpotFindingPlan`, not a recipe (one method per run, per-channel overrides, rounds) | `LocalMaximaConfig`, `NoiseLandmarkConfig`, `PercentileCentroidConfig` |
+| Segmentation | `starfinder.segmentation.SEGMENTATION_METHODS` (§2.9) | `SegmentationSpec` | none: a `SegmentationPlan` of named runs, not a recipe (one method or one mask import per run; {doc}`segmentation-contract`) | `SeededWatershedConfig`; the learned `StarDistConfig` and `CellposeConfig` follow with their backends |
 
-The three registries are public module-level constants. The module stays
+The registries of this table are public module-level constants. The module stays
 `starfinder.spot_finding`.
 
 Decoding, segmentation and stitching (§§2.8–2.10) adopt the same mechanism
@@ -179,6 +180,7 @@ stays valid after the rename.
 | `space` | registration | `index` or `physical` estimation coordinates | `index` for the four current methods; `physical` for the §2.6 methods |
 | `pipeline` | spot finding | Whether `FOV.find_spots` and `PipelineConfig.spot_finding` accept it | `True` only for `local_maxima` |
 | `output_columns` | spot finding | Columns of the spot table besides `spot_id` | `z, y, x, channel[, peak_intensity]` or `z, y, x` |
+| `targets`, `roles`, `required_roles`, `seeds`, `dimensions`, `models`, `devices` | segmentation | Label targets, accepted and required channel roles, whether seeds are refused, optional or required, Z=1 as a plane (`2`) and Z>1 as a volume (`3`), whether the config names a model, and the devices ({doc}`segmentation-contract`, "Method registry") | `seeded_watershed`: `cell`; one stain of `cytoplasm`, `membrane`, `amplicon`, `composite`; seeds required; `{2, 3}`; no model; `cpu` |
 
 A capability is shared only when it means the same thing in every stage and a
 generic check can use it. Anything else stays in the stage spec. A stage may add
@@ -236,6 +238,7 @@ the registry.
 | Preprocessing | `preprocessing.steps[].method: <method name>` (Python only) | unchanged | `enhance_contrast`, `hist_equalize`, `morph_recon`, `tophat` and `snr_threshold` keep mapping to recipe 1; the explicit key stays mutually exclusive with them |
 | Registration | `global_registration` and `local_registration` blocks; `method` in `translation`, `demons`, `diffeomorphic`, `symmetric`, `fast_symmetric`, `tps`, `cpd`; MATLAB-style setting names such as `grid_spacing` and `beta` | a Python-only `registration` key for the `RegistrationRecipe`, whose `steps` list names methods by `REGISTRATION_METHODS` names ({doc}`registration-contract`, "Workflow configuration") | the two legacy blocks map to a recipe of two steps (global, then local). The demons variant names stay legacy aliases for `method: demons` with `variant: <name>`; the MATLAB-style setting names and the legacy defaults (CPD `detection_noise_sigma=3`, `grid_spacing_voxels=32`) stay in the adapter |
 | Spot finding | `spot_finding` block with `intensity_estimation`, `intensity_threshold`, `min_distance`/`min_distance_voxels`; always `local_maxima` | an optional `method` key naming a `SPOT_FINDING_METHODS` name, default `local_maxima`, with that config's fields | the legacy keys stay valid for `local_maxima` only and are rejected with any other method |
+| Segmentation | `rules.stardist_segmentation.parameters`; always StarDist | a Python-only `segmentation` block whose runs name a `SEGMENTATION_METHODS` name (or `import`) in `method`, with that config's fields ({doc}`segmentation-contract`, "Workflow configuration") | the legacy block translates into one `stardist` run in the workflow adapter ({doc}`segmentation-contract`, "Translation of the legacy keys") |
 
 The static schema `workflow/schemas/config.schema.yaml` cannot import the
 registry. Each stage's schema list is kept equal to its registry by a

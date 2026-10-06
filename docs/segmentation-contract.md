@@ -1,6 +1,6 @@
 # Segmentation contract: label images, methods, inputs and environments
 
-Status: Proposed
+Status: Accepted (W-309, 2026-10-05, at 3550723)
 
 This page proposes the §2.9 segmentation contract: a segment entry separate from
 `FOV.run`, one label-image contract for every method and for imported masks, a
@@ -84,8 +84,9 @@ The rules Jiahao set after W-305 (2026-10-04) also hold:
   sensitivity setting and is recorded as such.
 * One environment holds StarDist 0.9.2 with TensorFlow 2.20.0, Cellpose and the §2.7
   detectors next to the locked packages, with one locked change (tensorboard 2.21.0 to
-  2.20.0) and the `+cu126` torch build on GPU hosts. This page proposes the lock change;
-  no issue makes it.
+  2.20.0) and the `+cu126` torch build on GPU hosts. The lock change was approved at
+  W-309 and applied before the implementation batch (W-322); no implementation issue
+  makes it.
 
 ## Terms
 
@@ -161,7 +162,7 @@ label operation; those belong to the coordination layer or to the caller.
 class InputChannel:
     role: str                          # nuclear, cytoplasm, membrane, amplicon or composite
     round: str | None = None           # a loaded round in the reference frame; None with reference_merged
-    channel: str | int | None = None   # a label of Dataset.channel_labels(round), or an index
+    channel: str | int | None = None   # a pattern or a name of the round (Dataset.channel_index), or an index
     reference_merged: bool = False     # the reference round's channel maximum (save_reference_image "merged")
     prepare: CompositeConfig | FlamingoEnhancementConfig | None = None  # an input function and its own sources
 
@@ -196,8 +197,9 @@ is no general step chain; preprocessing of the rounds stays in `FOV.run`'s
 **The three calls per FOV (D1)** are:
 
 1. `fov.run(pipeline, execution=…, checkpoints=…)`: the molecules. It registers and
-   processes the sequencing rounds, detects and decodes as today, and leaves the
-   reference round's image and metadata resident (streaming keeps the reference image;
+   processes the reference round and the sequencing rounds only (it neither loads nor
+   changes an other round), detects and decodes as today, and leaves the reference
+   round's image and metadata resident (streaming keeps the reference image;
    {doc}`coordination`).
 2. `fov.segment(plan, device=…, checkpoints=…)`: the label masks. It builds each
    segmentation input from the reference-frame images and runs the plan.
@@ -205,13 +207,49 @@ is no general step chain; preprocessing of the rounds stays in `FOV.run`'s
    receives from segment ("What assign receives from segment").
 
 **The coordination step before segment.** When a plan's inputs come from morphology
-rounds (DAPI or Flamingo acquired in an additional round), the caller loads those rounds
-and calls `fov.register_rounds(recipe, rounds=[…])` between the first two calls. It
-brings each round into the reference frame through its shared stain ({doc}`coordination`,
-"Other rounds and external references"). It is a coordination step that a plan needs,
-not one of the three calls. It is not needed when the plan's inputs use only the
-reference round (tissue-2D PI in a sequencing round) or when every run imports an
-external mask.
+rounds (DAPI or Flamingo acquired in an additional round) or from a stain file of the
+reference round's folder (tissue-2D PI and LN DAPI, `*ch04.tif`, `Dataset.reference_stains`),
+the caller calls `fov.prepare_morphology(MorphologyConfig(rotation_degrees=…), checkpoints=…)`
+between the first two calls ({doc}`coordination`, "Sequencing rounds and other rounds").
+It loads and rotates the reference stain as the image `reference_stain`, recorded as the
+same acquisition as the reference round, and loads, rotates and registers each other
+round with `FOV.register_rounds` through its shared stain; with checkpoints it saves each
+prepared image under `other_rounds/<name>/`, which `fov.load_registered_round(name)`
+restores on another `FOV` object. Loading the rounds and calling
+`fov.register_rounds(recipe, rounds=[…])` directly is the same step, done by hand. It is
+a coordination step that a plan needs, not one of the three calls. It is not needed when
+the plan's inputs use only the reference round's own channels or its merged image, or
+when every run imports an external mask.
+
+**Two dataset designs.** As in the MATLAB workflow, whose segmentation rules read saved
+reference-frame images (`images/ref_merged`, `images/DAPI`, `images/<round>/<name>`) chosen
+by `segmentation_input_folder` and never load a sequencing round, the calls can run in one
+process or in separate ones:
+
+* *One process.* `fov.run(…)`, `fov.prepare_morphology(…)` when the plan needs it,
+  `fov.segment(plan)` and `fov.assign(…)` on one `FOV` object. The reference round stays
+  resident after `FOV.run` (or comes back with `FOV.load_checkpoint("registered")`, which
+  restores every sequencing round as well).
+* *Segmenting from saved images.* Process 1 calls `fov.run(pipeline, checkpoints=…)` and
+  `fov.save_reference_image()`; process 2 calls
+  `fov.prepare_morphology(MorphologyConfig(rotation_degrees=…), checkpoints=…)`, which needs
+  only the raw files, so processes 1 and 2 run in either order (`FOV.run` second needs
+  `overwrite=True`, which removes only checkpoint stage files, {doc}`checkpoints`).
+  Process 3 calls, on a new `FOV` object, `fov.load_reference_image()`,
+  `fov.load_registered_round(name)` for `reference_stain` and each other round its plan
+  names, and `fov.segment(plan, checkpoints=…)`. It reads
+  `images/ref_merged/{fovID}.tif` and `<checkpoint dir>/<fov_id>/other_rounds/<name>/`
+  (`image.ome.tif`, `registration.json`) and nothing else: no sequencing round and no
+  `registered` checkpoint. Its reference grid is the grid of that file (source
+  `file:<path>`), which is the reference round's grid by the grid rule
+  ({doc}`assignment-contract`, "The grid rule"), so its labels and assignment tables equal
+  those of the same calls in one process. `fov.assign(…)` there takes the molecules of
+  process 1 from its `candidates` and `pre_qc` checkpoints, with the filter re-applied by
+  `FOV.run`; `assign_molecules` with `molecule_table_from_csv` of the exported table is the
+  other route. An input that reads a channel of the reference round other than its merged
+  image still needs that round resident, and `FOV.segment` says so. A reference image saved
+  with a projection (YX) gives a Z=1 grid, on which a run's inputs must also have Z=1, and
+  which `FOV.assign` refuses as the molecules' grid.
 
 **The reference grid.** Every label image of a FOV is on one grid. Because
 `ImageMetadata` carries no shape (`src/python/starfinder/image.py`), the grid is passed
@@ -231,8 +269,18 @@ class ReferenceGrid:
 * `FOV.reference_grid()` returns the grid of the resident reference round:
   `images[reference_round].shape[:3]`, `metadata[reference_round]`, source
   `"fov:<round>"` and the SHA-256 of the reference image. It is available after
-  `FOV.run`, or after `FOV.load_checkpoint("registered")`, and raises `ValueError` when
-  the reference round is not resident.
+  `FOV.run`, or after `FOV.load_checkpoint("registered")`. Without the reference round,
+  after `FOV.load_reference_image()`, it returns the grid of the saved reference image, as
+  `reference_grid_from_file` reads it (below). It raises `ValueError` when neither is
+  resident, or when both are and the file is not the round's channel maximum.
+* `FOV.load_reference_image()` reads `images/ref_merged/{fovID}.tif`, the file
+  `FOV.save_reference_image(reference_image="merged")` wrote (ZYX, or YX after a
+  projection), with its stored metadata, and makes it resident as the reference merged
+  image: `InputChannel(reference_merged=True)` and the amplicon of a `CompositeConfig`
+  read it when the reference round is not resident. A missing file raises
+  `FileNotFoundError`; with the reference round resident, the file must equal its channel
+  maximum (shape, metadata, dtype and values; a YX file, its projection), else
+  `ValueError`.
 * `reference_grid_from_file(path, *, metadata=None)` reads a TIFF with `load_volume`:
   the shape from the array, the metadata from the file's `starfinder_metadata`
   description, or from `metadata` when the file has none (a file with neither raises).
@@ -246,23 +294,27 @@ class ReferenceGrid:
 The grid used is recorded in every run record (`grid`: shape, the metadata, source and
 hash).
 
-### What the segment entry needs from `FOV.run` and `FOV.register_rounds`
+### What the segment entry needs from `FOV.run` and `FOV.prepare_morphology`
 
 | From | What | Used for |
 | --- | --- | --- |
 | `FOV.run` | `fov.metadata[reference_round]`: the reference `ImageMetadata` (frame, spacing, origin, direction) and the reference grid `images[reference_round].shape[:3]`, together `FOV.reference_grid()` | the grid and metadata every segmentation input and label image must have, and the grid of an import |
-| `FOV.run` | the reference round's current image (its detection image after `run`), whose channel maximum is the reference merged image, ZYX, exactly as `save_reference_image(reference_image="merged")` writes it | the amplicon channel of the composite (`InputChannel(reference_merged=True)`) and the stain of a seeded watershed on the amplicon signal (tissue-2D) |
+| `FOV.run` | the reference round's current image (its detection image after `run`), whose channel maximum is the reference merged image, ZYX, exactly as `save_reference_image(reference_image="merged")` writes it; in a process without the reference round, that saved file restored by `FOV.load_reference_image` | the amplicon channel of the composite (`InputChannel(reference_merged=True)`; tissue-2D grows its cells by a seeded watershed on the PI–amplicon composite) and the stain of a seeded watershed on the amplicon signal alone |
 | `FOV.run` | `preprocessing_record` and `registration_record` | copied by reference (their hashes) into the segmentation record, so the input's processing is traceable |
-| `FOV.register_rounds` | each registered morphology round's image (every channel resampled once into the reference frame) and its metadata, which equals the reference metadata | the `nuclear`, `cytoplasm` and Flamingo channels |
-| `FOV.register_rounds` | `registration_record["rounds"][round]`: the recipe summary, the reference label and `reference_sha256` | the input-channel identity in the segmentation record |
-| `Dataset` | `channel_labels(round)` and `other_channel_order` | resolving `InputChannel.channel` by label; an unknown label raises `ValueError` |
+| `FOV.prepare_morphology` (`FOV.register_rounds`) | each registered morphology round's image (every channel resampled once into the reference frame) and its metadata, which equals the reference metadata | the `nuclear`, `cytoplasm` and Flamingo channels |
+| `FOV.prepare_morphology` | the image `reference_stain` (the reference round's stain files, rotated as the reference round, with its metadata) | a nuclear stain stored as an extra file of the reference round |
+| `FOV.prepare_morphology` (`FOV.register_rounds`) | `registration_record["rounds"][name]`: the recipe summary, the reference label and `reference_sha256`, or for `reference_stain` the statement `same acquisition as the reference round`; after `FOV.load_registered_round`, also `saved` (the image file's path relative to the FOV checkpoint directory and its SHA-256) | the input-channel identity in the segmentation record: its `registration` entry names the reference and, when present, the relation and the saved file |
+| `Dataset` | `channel_index(round, key)` and `channel_info(round)` ({doc}`coordination`, "Channels") | resolving `InputChannel.channel` and `prepare_channel` by pattern or by name, and the channel's `name` and `wavelength` in the record; an unknown key or a repeated name raises `ValueError` naming the round and its channels |
 
 Every image `FOV.segment` reads must be resident: the reference round (after `FOV.run`,
-whose streaming mode keeps it, or after `FOV.load_checkpoint("registered")`) and each
-morphology round named by an input (loaded and registered). `FOV.segment` raises
-`ValueError` naming the round when an input round is not loaded, is a morphology round
-without an entry in `registration_record["rounds"]`, or has metadata different from the
-reference round's; and `IncompatibleGeometryError` when its `shape[:3]` differs from the
+whose streaming mode keeps it, or after `FOV.load_checkpoint("registered")`), or, for the
+reference merged image alone, the saved reference image (`FOV.load_reference_image`), and
+`reference_stain` or each morphology round named by an input (prepared in this process,
+or reloaded by `FOV.load_registered_round`). `FOV.segment` raises `ValueError` naming the
+round when an input round is not loaded (for a channel of the reference round other than
+its merged image, saying that the saved reference image does not serve it), is `reference_stain` or a morphology round
+without an entry in `registration_record["rounds"]` (loaded but not prepared), or has
+metadata different from the reference round's; and `IncompatibleGeometryError` when its `shape[:3]` differs from the
 reference grid. A run's `projection` is the only route to a plane from a volume; the
 input and the labels of such a run are on `FOV.reference_grid().projected(…)`, and the
 record keeps it.
@@ -306,8 +358,12 @@ mapping in `SegmentationResult.record`:
     "path": "input.ome.tif", "sha256": "<C-order bytes>", "file_sha256": "...",
     "shape_zyxc": [50, 512, 512, 1], "dtype": "uint8", "metadata": {"frame_id": "..."},
     "projection": null,
-    "channels": [{"role": "nuclear", "round": "round4", "channel": "ch04", "reference_merged": false,
-                  "prepare": null, "registration": {"reference": "round1:ch04", "reference_sha256": "..."},
+    "channels": [{"role": "nuclear", "round": "reference_stain", "channel": "DAPI", "name": "DAPI",
+                  "wavelength": 405.0, "reference_merged": false, "prepare": null,
+                  "registration": {"reference": "round1", "reference_sha256": null,
+                                   "relation": "same acquisition as the reference round",
+                                   "saved": {"path": "other_rounds/reference_stain/image.ome.tif",
+                                             "sha256": "..."}},
                   "sha256": "..."}]
   },
   "seeds": null,
@@ -330,6 +386,19 @@ mapping in `SegmentationResult.record`:
   tiles). An imported run has `methods: []` and an `import` entry instead.
 * `input.sha256` is the SHA-256 of the segmentation input's C-order bytes (dtype and
   shape included, as the golden tests hash arrays); each channel also has its own.
+* Each `input.channels` entry keeps the `InputChannel` key as given (`channel`: a
+  pattern, a name or an index) and, beside it, the resolved channel's `name` and
+  `wavelength` from `Dataset.channel_info` (`null` and `"unavailable"` when not
+  configured, and for the reference merged image). Both keys are additive; a record
+  written without them still loads.
+* The illustrated channel is the reference stain (the reference round's `*ch04.tif`, named
+  `DAPI`) reloaded with `FOV.load_registered_round`, so its `registration` entry states the
+  relation and links the saved file (its path below the FOV checkpoint directory and its
+  SHA-256). A morphology round registered to it has `reference` `"round1:ch04"` and its
+  `reference_sha256`. When the reference merged image of an input (the channel itself, or
+  the amplicon of a composite) was read from the saved reference image of
+  `FOV.load_reference_image`, the channel also has `reference_image`: the file's path below
+  the dataset output root and its SHA-256. The key is additive.
 * `outcome` is `ok` or `empty` (no object; not an error).
 * `software` has the same content as the `run.json` written by `FOV.run`
   ({doc}`checkpoints`); `run.json` itself does not change.
@@ -848,17 +917,20 @@ plane (check 10), a diameter that must be explicit (`diameter` required) and its
 images is open (W-306 choice 10); `tile_overlap` is recorded and the input window is
 fixed by the FOV.
 
-**The proposed `pyproject.toml` change.** For the W-309 gate; not made by any §2.9
-specification issue:
+**The `pyproject.toml` change.** Approved at W-309 as option E1 and applied before the
+implementation batch (W-322, 2026-10-05), with the `stardist` extra limited to Python 3.11
+to 3.13 for the reason given under the lock change:
 
 ```toml
 [project.optional-dependencies]
 # Segmentation backends (§2.9). TensorFlow 2.20.0 and torch 2.7.1 have no cp314
-# wheels, so the extras are empty on Python 3.14 and later.
+# wheels, so the extras are empty on Python 3.14 and later. keras 3.15.1, the
+# version measured with TensorFlow 2.20.0, needs Python 3.11, so the stardist
+# extra is also empty on Python 3.10.
 stardist = [
-    "stardist==0.9.2; python_version < '3.14'",
-    "csbdeep==0.8.2; python_version < '3.14'",
-    "tensorflow==2.20.0; python_version < '3.14'",
+    "stardist==0.9.2; python_version >= '3.11' and python_version < '3.14'",
+    "csbdeep==0.8.2; python_version >= '3.11' and python_version < '3.14'",
+    "tensorflow==2.20.0; python_version >= '3.11' and python_version < '3.14'",
 ]
 cellpose = [
     "cellpose==4.2.1.1; python_version < '3.14'",
@@ -878,8 +950,10 @@ The two extras are added after `piscis`; nothing else in the file changes. torch
 torchvision are listed in `cellpose` for the same reason as in the §2.7 extras: uv applies
 `[tool.uv.sources]` (the CPU index on Linux) to direct dependencies only.
 
-**The expected `uv.lock` change**, from the W-305 resolution rows B and C and the W-306
-audit (`provisioning/lock-diff.txt`, `spike-added-packages.txt`):
+**The `uv.lock` change**, as `uv lock` made it on 2026-10-05 (W-322). On Linux x86_64 with
+Python 3.12 it is the change expected from the W-305 resolution rows B and C and the W-306
+audit (`provisioning/lock-diff.txt`, `spike-added-packages.txt`): 20 packages added and one
+version changed.
 
 * `tensorboard` 2.21.0 → 2.20.0 (its wheel URL and hash), the only change to a locked
   package; spotiflow, which requires tensorboard, accepts 2.20.0.
@@ -888,29 +962,45 @@ audit (`provisioning/lock-diff.txt`, `spike-added-packages.txt`):
   `ml-dtypes` 0.6.0, `namex` 0.1.0, `opt-einsum` 3.4.0, `optree` 0.20.0, `termcolor` 3.3.0,
   `wheel` 0.48.0 (TensorFlow's closure); `cellpose` 4.2.1.1, `fastremap` 1.20.0,
   `fill-voids` 2.1.2, `opencv-python-headless` 5.0.0.93, `roifile` 2026.9.22,
-  `segment-anything` 1.0 (Cellpose's closure).
-* The `starfinder` package entry gains the `stardist` and `cellpose` optional
-  dependencies and the two constraints in its metadata.
+  `segment-anything` 1.0 (Cellpose's closure). `roifile` is locked in three versions by
+  Python version: 2025.12.12 for 3.10, 2026.2.10 for 3.11 and 2026.9.22 from 3.12.
+* The `starfinder` package entry gains the `stardist`, `cellpose` and `anndata` optional
+  dependencies and the two constraints in its metadata. The `anndata` extra
+  ({doc}`assignment-contract`) pins the two versions the `spatialdata` extra already
+  locked and adds no package.
+* Python 3.10: with the `stardist` extra as first proposed (`python_version < '3.14'`),
+  `uv lock` found no solution, because keras 3.15.1 needs Python 3.11. The extra is
+  therefore empty on Python 3.10, where a `stardist` call raises
+  `SegmentationBackendUnavailableError`. Holding keras at 3.15.1 only from Python 3.11
+  would have locked keras 3.12.4 for Python 3.10, a combination nothing has measured.
+* One platform-specific change beyond the list: on Intel macOS with Python 3.11 to 3.13,
+  `numba` goes from 0.63.1 to 0.62.1 and `llvmlite` from 0.46.0 to 0.45.1. `numba` 0.63.1
+  has no macOS x86_64 wheel, and the new packages make uv resolve that platform on its
+  own. No other platform changes these two packages. TensorFlow 2.20.0 has no Intel macOS
+  wheel either, so the `stardist` extra cannot be installed there.
 * No NVIDIA library and no `triton`: the lock keeps the CPU torch build; the NVIDIA CUDA
   12.6 libraries and triton 3.3.1 (3.72 GB, W-306 notes section 1) come only with the
   `+cu126` build on GPU hosts.
 
-Verification for whoever applies it: `uv lock`; `uv export --locked --all-extras
---all-groups --no-hashes` before and after, whose difference must be exactly the list
-above; `uv sync --extra stardist --extra cellpose` in a fresh environment, then the
-routine test gate and the `learned` parity test. W-305 resolved only Python 3.12 on Linux
-x86_64; `uv lock` resolves every Python version from 3.10 and every platform, where it may
-add platform-specific entries or find no TensorFlow 2.20.0 wheel. If it does, the marker of
-the `stardist` extra narrows to the versions with wheels, and the gate reviews the
-narrower marker.
+Verification, as planned for whoever applied it: `uv lock`; `uv export --locked
+--all-extras --all-groups --no-hashes` before and after, whose difference must be exactly
+the list above; `uv sync --extra stardist --extra cellpose` in a fresh environment, then
+the routine test gate and the `learned` parity test. W-305 resolved only Python 3.12 on
+Linux x86_64; `uv lock` resolves every Python version from 3.10 and every platform, where
+it may add platform-specific entries or find no solution. It did both, and Jiahao decided
+on 2026-10-05 to narrow the marker of the `stardist` extra and to accept the Intel macOS
+entries (W-322). The `learned` parity test does not exist until the implementation adds
+it.
 
 **Limitations of the evidence.** The W-305 matrix ("What this does not show") and the
 W-306 notes (sections 4, 5, 12, 13 and 14) qualify every number on this page and on
 {doc}`segmentation-algorithms`:
 
-* Resolution and environments: `uv lock` was not run; the rows resolve the exported pins
-  for Python 3.12 on Linux x86_64 only, and TensorFlow 2.20.0 wheels for the lock's other
-  Python versions and platforms were not checked. TensorFlow 2.20.0 is built against
+* Resolution and environments: the W-305 rows resolve the exported pins for Python 3.12
+  on Linux x86_64 only. `uv lock` has since resolved every Python version and platform of
+  the lock (W-322), but an environment was built and tested only for Python 3.12 on Linux
+  x86_64. TensorFlow 2.20.0 has wheels for Linux x86_64 and aarch64, Windows amd64 and
+  macOS arm64. TensorFlow 2.20.0 is built against
   CUDA 12.5.1 and cuDNN 9 and ran on torch's CUDA 12.6 libraries only in the W-305 smoke
   tests and the W-306 runs. The legacy environment ran on CPU only.
 * Not examined: GPU memory with both frameworks loaded in one process, UGER or GCP GPU
@@ -959,7 +1049,7 @@ segmentation:
     - name: nucleus
       target: nucleus
       inputs:
-        - {role: nuclear, round: round4, channel: ch04}
+        - {role: nuclear, round: reference_stain, channel: DAPI}
       method: stardist
       model_path: /absolute/stardist_models/3D_spleen
       scale: 1.0

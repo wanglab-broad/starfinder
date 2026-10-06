@@ -36,8 +36,28 @@ piscis = [
     "torch==2.7.1; python_version < '3.14'",
     "torchvision==0.22.1; python_version < '3.14'",
 ]
+# Segmentation backends (§2.9). TensorFlow 2.20.0 and torch 2.7.1 have no cp314
+# wheels, so the extras are empty on Python 3.14 and later. keras 3.15.1, the
+# version measured with TensorFlow 2.20.0, needs Python 3.11, so the stardist
+# extra is also empty on Python 3.10.
+stardist = [
+    "stardist==0.9.2; python_version >= '3.11' and python_version < '3.14'",
+    "csbdeep==0.8.2; python_version >= '3.11' and python_version < '3.14'",
+    "tensorflow==2.20.0; python_version >= '3.11' and python_version < '3.14'",
+]
+cellpose = [
+    "cellpose==4.2.1.1; python_version < '3.14'",
+    "torch==2.7.1; python_version < '3.14'",
+    "torchvision==0.22.1; python_version < '3.14'",
+]
 checkpoint = ["pyarrow>=15"]
 spatialdata = ["spatialdata>=0.1", "spatialdata-io>=0.1"]
+# AnnData alone, for the per-FOV `raw.h5ad` of the workflow (§2.9), at the versions
+# the `spatialdata` extra already locks.
+anndata = [
+    "anndata==0.11.4; python_version < '3.11'",
+    "anndata==0.12.6; python_version >= '3.11'",
+]
 visualization = ["napari>=0.4"]
 dev = ["pytest>=7.0", "pytest-cov>=4.0", "ruff>=0.1"]
 
@@ -70,8 +90,10 @@ dev = [
 
 [tool.uv]
 # huggingface-hub (pulled in by piscis) is held at the version W-266 measured;
-# newer releases would also move the locked click and idna.
-constraint-dependencies = ["torch==2.7.1", "torchvision==0.22.1", "huggingface-hub==1.16.1"]
+# newer releases would also move the locked click and idna. keras and tensorboard
+# are held at the versions W-305 and W-306 measured with TensorFlow 2.20.0.
+constraint-dependencies = ["torch==2.7.1", "torchvision==0.22.1", "huggingface-hub==1.16.1",
+                           "keras==3.15.1", "tensorboard==2.20.0"]
 
 [tool.uv.sources]
 torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
@@ -94,6 +116,7 @@ markers = [
     "preprocessing: starfinder.preprocessing and its recipes",
     "registration: starfinder.registration and its recipes",
     "spot_finding: starfinder.spot_finding and its detectors",
+    "segmentation: starfinder.segmentation, its label contract, methods, mask import and label functions",
     "barcode: starfinder.barcode (codebook, extraction, decoding, filtering)",
     "synthetic: starfinder.synthetic generation",
     "evaluation: starfinder.evaluation metrics",

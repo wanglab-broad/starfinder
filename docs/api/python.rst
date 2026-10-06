@@ -18,6 +18,7 @@ Modules (alphabetical)
 .. toctree::
    :maxdepth: 1
 
+   assignment
    barcode
    benchmark
    dataset
@@ -26,6 +27,7 @@ Modules (alphabetical)
    io
    preprocessing
    registration
+   segmentation
    spot_finding
    synthetic
 

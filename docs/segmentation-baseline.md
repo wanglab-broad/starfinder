@@ -1,6 +1,6 @@
 # Segmentation baseline: morphology inputs, StarDist and label files
 
-Status: Proposed
+Status: Accepted (W-309, 2026-10-05, at 3550723)
 
 This page records how segmentation and its inputs behave at revision `6b384cd`
 (branch `runner/s29-spec-20261004`, on `dev` after the §2.8 work), before the

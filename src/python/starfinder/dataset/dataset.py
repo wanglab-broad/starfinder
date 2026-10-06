@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from numbers import Integral
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -13,8 +14,11 @@ from starfinder.barcode import (BarcodeLayout, Codebook, DirectPanel, EncodingCo
 from starfinder.barcode.codebook import _encoding_summary
 from starfinder.barcode.decoding import READOUT_MODES
 from starfinder.dataset.types import (
+    REFERENCE_STAIN,
+    ChannelInfo,
     RoundState,
     SubtileConfig,
+    _channel_infos,
 )
 
 if TYPE_CHECKING:
@@ -23,13 +27,22 @@ if TYPE_CHECKING:
 
 @dataclass
 class Dataset:
-    """Sample paths, ordered rounds/channel labels, codebook and FOV factory.
+    """Sample paths, ordered rounds/channels, codebook and FOV factory.
 
     Processing options belong to PipelineConfig, residency to ExecutionConfig.
     Shared workflow YAML is translated by from_workflow_config.
-    channel_order labels the sequencing rounds and, by default, the other
-    rounds; other_channel_order gives an other round its own labels (for
-    example a morphology round's), in its C order.
+    The channels come in three groups (docs/coordination.md, "Channels"):
+    channel_order, the sequencing colours, which also label the other rounds
+    by default; other_channel_order, an other round's own channels (for
+    example a morphology round's), in its C order; and reference_stains, the
+    stain files of the reference round's folder that are not sequencing
+    colours (image name ``reference_stain``). Each channel is given as its
+    file pattern (a string), a :class:`ChannelInfo` or a mapping with the keys
+    channel, name and wavelength; after construction channel_order and
+    other_channel_order hold the patterns (the channel labels) and
+    :meth:`channel_info` returns the full ChannelInfo of a round.
+    :meth:`channel_index` is the one rule that finds a channel by index,
+    pattern or name.
     readout_mode is how reads get their identity (docs/readout-contract.md,
     "Readout modes"): ``multiplexed`` (default) decodes color sequences with
     the codebook; ``direct`` assigns each candidate the direct_panel gene of its
@@ -37,6 +50,16 @@ class Dataset:
     The repr summarizes IDs, round and channel labels, the reference (codebook
     with its encoding method and segment layout, or the panel in direct mode)
     and roots.
+
+    Raises
+    ------
+    ValueError
+        Invalid rounds, a round named ``reference_stain``, repeated patterns
+        within a round, other_channel_order for a round that is not an other
+        round or with no channel, reference stains without a reference round or
+        sharing a pattern with channel_order, or the field errors of ChannelInfo.
+    TypeError
+        A channel that is not a pattern string, ChannelInfo or mapping.
     """
 
     # Paths
@@ -57,12 +80,18 @@ class Dataset:
     # Processing parameters
     fov_pattern: str = "Position%03d"
 
-    # Channel labels of other rounds that have their own channels
+    # Channels of other rounds that have their own channels
     other_channel_order: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
     # Readout mode and the direct-readout reference
     readout_mode: str = "multiplexed"
     direct_panel: DirectPanel | None = None
+
+    # Stain files of the reference round's folder that are not sequencing colours
+    reference_stains: tuple[ChannelInfo, ...] = ()
+
+    # ChannelInfo of the sequencing channels and of each other round with its own channels
+    _channels: dict = field(default_factory=dict, init=False, repr=False)
 
     def __post_init__(self):
         if self.readout_mode not in READOUT_MODES:
@@ -70,33 +99,156 @@ class Dataset:
         if self.direct_panel is not None and not isinstance(self.direct_panel, DirectPanel):
             raise TypeError("direct_panel must be a DirectPanel or None")
         self.rounds.validate()
-        self.channel_order = tuple(self.channel_order)
-        if len(set(self.channel_order)) != len(self.channel_order):
-            raise ValueError("channel_order must be unique")
-        self.other_channel_order = {name: tuple(labels) for name, labels in dict(self.other_channel_order).items()}
-        for name, labels in self.other_channel_order.items():
+        if REFERENCE_STAIN in self.rounds.all_rounds:
+            raise ValueError(f"{REFERENCE_STAIN!r} is the reserved image name of the reference stains; "
+                             "no configured round may take it")
+        sequencing = _channel_infos(self.channel_order, "channel_order")
+        others = {}
+        for name, channels in dict(self.other_channel_order).items():
             if name not in self.rounds.other_rounds:
                 raise ValueError(f"other_channel_order round {name!r} is not an other round")
-            if not labels or len(set(labels)) != len(labels) or any(not isinstance(x, str) or not x for x in labels):
+            others[name] = _channel_infos(channels, f"the channels of round {name!r}")
+            if not others[name]:
                 raise ValueError(f"channel labels of round {name!r} must be nonempty and unique")
+        self.reference_stains = _channel_infos(self.reference_stains, "reference_stains")
+        if self.reference_stains:
+            if self.rounds.reference_round is None:
+                raise ValueError("reference_stains are files of the reference round, but no reference round is set")
+            shared = sorted({c.channel for c in self.reference_stains} & {c.channel for c in sequencing})
+            if shared:
+                raise ValueError(f"reference_stains share the patterns {shared} with channel_order; a reference "
+                                 "stain is not a sequencing colour")
+        self.channel_order = tuple(c.channel for c in sequencing)
+        self.other_channel_order = {name: tuple(c.channel for c in channels) for name, channels in others.items()}
+        self._channels = {None: sequencing, **others}
 
-    def channel_labels(self, round_name: str) -> tuple[str, ...]:
-        """Channel labels of one round, in its C order.
+    def channel_info(self, round_name: str) -> tuple[ChannelInfo, ...]:
+        """The channels of one round, in its C order, with pattern, name and wavelength.
 
         Parameters
         ----------
         round_name : str
-            A configured round.
+            A configured round, or ``reference_stain`` for the reference stains.
+
+        Returns
+        -------
+        tuple[ChannelInfo, ...]
+            The other round's own channels when other_channel_order lists it,
+            reference_stains for ``reference_stain``, else the sequencing
+            channels (channel_order).
+
+        Raises
+        ------
+        ValueError
+            round_name is not a configured round or ``reference_stain``.
+        """
+        if round_name == REFERENCE_STAIN:
+            return self.reference_stains
+        if round_name not in self.rounds.all_rounds:
+            raise ValueError(f"round {round_name!r} is not a configured round")
+        if round_name in self.other_channel_order:
+            return self._channels_of(round_name, self.other_channel_order[round_name])
+        return self._channels_of(None, self.channel_order)
+
+    def channel_labels(self, round_name: str) -> tuple[str, ...]:
+        """Channel labels (file patterns) of one round, in its C order.
+
+        Parameters
+        ----------
+        round_name : str
+            A configured round, or ``reference_stain``.
 
         Returns
         -------
         tuple[str, ...]
             other_channel_order[round_name] for an other round listed there,
-            else channel_order.
+            the reference stains' patterns for ``reference_stain``, else
+            channel_order.
         """
-        if round_name not in self.rounds.all_rounds:
-            raise ValueError(f"round {round_name!r} is not a configured round")
-        return self.other_channel_order.get(round_name, self.channel_order)
+        return tuple(c.channel for c in self.channel_info(round_name))
+
+    def channel_index(self, round_name: str, key: str | int) -> int:
+        """The C index of one channel of a round: the one channel lookup rule.
+
+        An integer is an index. A string is first an exact channel pattern;
+        otherwise an exact name that occurs once in the round. So a string that
+        is the pattern of one channel and the name of another resolves as the
+        pattern.
+
+        Parameters
+        ----------
+        round_name : str
+            A configured round, or ``reference_stain``.
+        key : str or int
+            A channel pattern, a channel name or a nonnegative index.
+
+        Returns
+        -------
+        int
+            The channel's position in channel_info(round_name).
+
+        Raises
+        ------
+        ValueError
+            An unknown round, a name that occurs more than once, a key that is
+            neither a pattern nor a name of the round, or an index outside the
+            round; the message names the round and its channels.
+        TypeError
+            key is not a string or an integer.
+        """
+        return self._index(round_name, self.channel_info(round_name), key)
+
+    def _resident_channels(self, round_name):
+        """channel_info of a resident image; an image under a name the dataset does not configure takes the
+        sequencing channels, as FOV.register_rounds and FOV.segment did before channel_index."""
+        configured = round_name == REFERENCE_STAIN or round_name in self.rounds.all_rounds
+        return self.channel_info(round_name) if configured else self._channels_of(None, self.channel_order)
+
+    def _resident_channel_index(self, round_name, key):
+        """channel_index on the channels of a resident image (_resident_channels)."""
+        return self._index(round_name, self._resident_channels(round_name), key)
+
+    def _channels_of(self, key, labels):
+        """The stored ChannelInfo of key (None: the sequencing channels); patterns assigned after construction carry
+        no name or wavelength."""
+        channels = self._channels.get(key, ())
+        if tuple(c.channel for c in channels) != tuple(labels):
+            channels = tuple(ChannelInfo(label) for label in labels)
+        return channels
+
+    @staticmethod
+    def _index(round_name, channels, key):
+        """The lookup rule of channel_index on the given channels of round_name."""
+        listed = ", ".join(c.channel if c.name is None else f"{c.channel} ({c.name})" for c in channels) or "none"
+        if isinstance(key, bool) or not isinstance(key, (str, Integral)):
+            raise TypeError(f"a channel key is a pattern, a name or an index; got {key!r}")
+        if isinstance(key, Integral):
+            if not 0 <= key < len(channels):
+                raise ValueError(f"channel index {key} is outside round {round_name!r}; its channels are {listed}")
+            return int(key)
+        patterns = [c.channel for c in channels]
+        if key in patterns:
+            return patterns.index(key)
+        named = [i for i, c in enumerate(channels) if c.name == key]
+        if len(named) > 1:
+            raise ValueError(f"round {round_name!r} has {len(named)} channels named {key!r}; name one by its "
+                             f"pattern or index; its channels are {listed}")
+        if not named:
+            raise ValueError(f"round {round_name!r} has no channel {key!r}: {key!r} is not a channel label or a "
+                             f"channel name of the round; its channels are {listed}")
+        return named[0]
+
+    def channel_record(self) -> dict[str, list[dict]]:
+        """The written channel information: per configured round (and ``reference_stain`` when set) its channels.
+
+        Returns
+        -------
+        dict[str, list[dict]]
+            Round name to :meth:`ChannelInfo.record` entries (channel, name,
+            wavelength; a missing wavelength is ``"unavailable"``), in C order.
+        """
+        names = [*self.rounds.all_rounds, *([REFERENCE_STAIN] if self.reference_stains else [])]
+        return {name: [c.record() for c in self.channel_info(name)] for name in names}
 
     def __repr__(self):
         ref = self.rounds.reference_round

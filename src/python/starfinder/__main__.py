@@ -31,7 +31,8 @@ def main(argv=None):
     evaluate.add_argument('--run-dir', type=Path, required=True)
     report = commands.add_parser('report')
     report.add_argument('--evaluation-dir', type=Path, required=True)
-    weights = groups.add_parser('weights', help='Fetch, list and verify the known pretrained weights')
+    weights = groups.add_parser('weights', help='Fetch, list and verify the known pretrained weights and '
+                                'segmentation models')
     weight_commands = weights.add_subparsers(dest='command', required=True)
     fetch = weight_commands.add_parser('fetch', help='Download, verify and install one known model (uses the network)')
     fetch.add_argument('method')
@@ -92,35 +93,59 @@ def main(argv=None):
 
 
 def _weights(args):
-    """starfinder weights fetch|list|verify; verify exits 1 when a local copy is missing or changed."""
+    """starfinder weights fetch|list|verify; verify exits 1 when a local copy is missing or changed.
+
+    The known detector weights (KNOWN_WEIGHTS, §2.7) and the known segmentation models
+    (KNOWN_MODELS, §2.9) share the cache and the commands.
+    """
+    from starfinder.segmentation import KNOWN_MODELS, MissingModelError, ModelHashMismatchError, resolve_model
+    from starfinder.segmentation._models import RECORD_NAME as MODEL_RECORD, _fetch_model
     from starfinder.spot_finding import KNOWN_WEIGHTS, MissingWeightsError, WeightsHashMismatchError
     from starfinder.spot_finding import fetch_weights, resolve_weights
     from starfinder.spot_finding._weights import RECORD_NAME, listed_files, model_folder, weights_directory
     if args.command == 'fetch':
-        print(fetch_weights(args.method, args.model, directory=args.dir))
+        if (args.method, args.model) in KNOWN_MODELS:
+            print(_fetch_model(args.method, args.model, directory=args.dir))
+        else:
+            print(fetch_weights(args.method, args.model, directory=args.dir))
         return 0
+    root = weights_directory(args.dir)
     if args.command == 'list':
-        print(f'weights directory: {weights_directory(args.dir)}')
+        print(f'weights directory: {root}')
         for (method, model), entry in KNOWN_WEIGHTS.items():
             folder = model_folder(method, model, args.dir)
             state = ('fetched' if (folder / RECORD_NAME).is_file() else 'incomplete' if folder.exists()
                      else 'not fetched')
             print(f'{method}\t{model}\t{entry.dimensionality}\t{entry.bytes} bytes\tsha256 {entry.sha256}\t'
                   f'{entry.revision}\t{state}')
+        for (method, model), entry in KNOWN_MODELS.items():
+            folder = root / method / model
+            present = all((folder / item.path).is_file() for item in entry.files)
+            state = ('fetched' if (folder / MODEL_RECORD).is_file() else 'present' if present
+                     else 'incomplete' if folder.exists() else 'not fetched')
+            print(f'{method}\t{model}\t{entry.dimensionality}\t{entry.bytes} bytes\tsha256 {entry.sha256}\t'
+                  f'{entry.url}\t{state}')
         return 0
     if (args.method is None) != (args.model is None):
         raise ValueError('verify takes a method and a model, or neither')
-    keys = ([(args.method, args.model)] if args.method is not None else
-            [key for key in KNOWN_WEIGHTS if model_folder(*key, args.dir).exists()])
+    if args.method is not None:
+        keys = [(args.method, args.model)]
+    else:
+        keys = ([key for key in KNOWN_WEIGHTS if model_folder(*key, args.dir).exists()]
+                + [key for key in KNOWN_MODELS if (root / key[0] / key[1]).exists()])
     if not keys:
-        print(f'no local weights in {weights_directory(args.dir)}')
+        print(f'no local weights in {root}')
     failed = False
     for method, model in keys:
         try:
-            # Every file KNOWN_WEIGHTS lists for the model is re-hashed, as every detection does.
-            folder = resolve_weights(method, model, directory=args.dir, extracted=listed_files(method, model))
+            if (method, model) in KNOWN_MODELS:
+                resolve_model(method, model=model, directory=args.dir)
+                folder = root / method / model
+            else:
+                # Every file KNOWN_WEIGHTS lists for the model is re-hashed, as every detection does.
+                folder = resolve_weights(method, model, directory=args.dir, extracted=listed_files(method, model))
             print(f'{method}\t{model}\tverified\t{folder}')
-        except (MissingWeightsError, WeightsHashMismatchError) as error:
+        except (MissingWeightsError, WeightsHashMismatchError, MissingModelError, ModelHashMismatchError) as error:
             failed = True
             print(f'{method}\t{model}\tfailed\t{error}')
     return int(failed)

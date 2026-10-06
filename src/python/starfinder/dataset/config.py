@@ -195,6 +195,46 @@ class CheckpointConfig:
             raise ValueError('hash_inputs and overwrite must be Boolean')
 
 
+def _check_rotation(value):
+    """A rotation angle in degrees is None or a finite real number (not a bool)."""
+    if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float, np.integer, np.floating))
+                              or not math.isfinite(value)):
+        raise ValueError('rotation_degrees must be finite')
+
+
+@dataclass(frozen=True)
+class MorphologyConfig:
+    """The other rounds and the reference stain prepared by FOV.prepare_morphology.
+
+    rotation_degrees rotates every loaded image in YX as FOV.run's
+    PipelineConfig.rotation_degrees does (None: no rotation); give FOV.run's
+    angle so the prepared images lie on its reference grid. recipe None
+    registers each other round by one translation step on the shared stain:
+    the single reference stain against the round's one channel with the same
+    name. A given recipe is used as FOV.register_rounds uses it, against the
+    reference stain when its signal names a stain channel, else against the
+    resident reference round. rounds None prepares every configured other
+    round except the reference round; otherwise a tuple of other round names.
+    """
+    rotation_degrees: float | None = None
+    recipe: RegistrationRecipe | None = None
+    rounds: tuple[str, ...] | None = None
+
+    def __post_init__(self):
+        _check_rotation(self.rotation_degrees)
+        if self.recipe is not None:
+            if not isinstance(self.recipe, RegistrationRecipe):
+                raise TypeError('recipe requires a RegistrationRecipe or None')
+            self.recipe.__post_init__()
+        if self.rounds is not None:
+            if isinstance(self.rounds, str) or not isinstance(self.rounds, (tuple, list)):
+                raise TypeError('rounds must be a tuple of round names or None')
+            rounds = tuple(self.rounds)
+            if not rounds or any(not isinstance(r, str) or not r for r in rounds) or len(set(rounds)) != len(rounds):
+                raise ValueError('rounds must be nonempty unique round names')
+            object.__setattr__(self, 'rounds', rounds)
+
+
 def _pipeline_spot_finding(value):
     """Whether value is a config, or a SpotFindingPlan of a config, of a method with pipeline=True.
 

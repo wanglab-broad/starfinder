@@ -445,7 +445,7 @@ def test_run_record_fields_inputs_and_hashes(tmp_path):
     data = record(fov)
     assert set(data) == {'format_version', 'dataset_id', 'sample_id', 'fov_id', 'subtile_id', 'status',
         'started_at', 'ended_at', 'error', 'code', 'environment', 'config', 'inputs', 'steps',
-        'preprocessing', 'registration', 'counts', 'checkpoint_directory', 'checkpoints'}
+        'preprocessing', 'registration', 'counts', 'checkpoint_directory', 'checkpoints', 'channels'}
     assert (data['dataset_id'], data['sample_id'], data['fov_id'], data['error']) == ('data', 'sample', 'FOV', None)
     assert set(data['code']) == {'version', 'git_commit', 'git_dirty'}
     assert data['environment']['packages']['numpy'] == np.__version__

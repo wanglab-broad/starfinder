@@ -1,6 +1,6 @@
 # Assignment algorithm specification and §2.9 validation design
 
-Status: Proposed
+Status: Accepted (W-309, 2026-10-05, at 3550723)
 
 This page specifies the numerical rules of §2.9 assignment (sampling, expansion, overlap
 correspondence, compartment partition and count accounting), each with its parameters,
@@ -113,10 +113,13 @@ otherwise, as in step 4. Steps 1, 2, the `outside` test, 5 and 6 are unchanged, 
 equal to the derived matches reproduces the derived result.
 
 **Parameters.** `match_fraction` (dimensionless share of the nucleus's voxels, default
-0.5, allowed [0.5, 1); strict `>`); `outside_tolerance` (dimensionless share, default 0.0,
-allowed [0, 1)). Neither is tuned: 0.5 is the smallest value that makes a match unique, 0.0
-is exact containment (contract option C1). Shares are voxel counts, so anisotropic spacing
-does not change them.
+0.5, allowed [0.5, 1); strict `>`); `outside_tolerance` (dimensionless share, default 0.1,
+allowed [0, 1); strict `>`, so a nucleus with exactly a tenth outside its cell is not
+flagged). 0.5 is the smallest value that makes a match unique. 0.1 is contract option C2,
+chosen on 2026-10-05 as a provisional value from one culture crop of W-320 (largest outside
+share of a matched nucleus 0.073), not fitted and not an accuracy statement; 0.0 is exact
+containment (option C1). Shares are voxel counts, so anisotropic spacing does not change
+them.
 
 **Failure behavior.** No nucleus image: no correspondence, every cell `unavailable`. A
 nucleus image with no object: every cell is `no_nucleus` (all excluded by default, and the
@@ -253,7 +256,7 @@ Rules:
 | A5 | Correspondence, one nucleus | `boxes` cell 1 | Nucleus and cell rows | Nucleus `matched`, `share_in_cell` 1.0; cell `n_nuclei` 1, correspondence `matched`, no flag, `available`. Exact. |
 | A6 | Correspondence, several nuclei | `boxes` cell 2 | Cell row | `n_nuclei` 2, flag `several_nuclei` only, `available`; its nuclear count is the sum over both nuclei. Exact. |
 | A7 | Correspondence, ambiguous | `boxes` cells 3, 4; `boxes_51_49` | Nucleus status and flags | 50/50: nucleus 31 `ambiguous` (0.5 is not more than 0.5); cells 3 and 4 have correspondence `ambiguous`, flag `ambiguous_nucleus`, compartments `withheld`, and are kept by default (ambiguous is not absence of a nucleus). 51/49: nucleus 31 matched to cell 3 and flagged `outside`; cell 3 `matched`, `nucleus_outside_cell`, `withheld`; cell 4 `no_nucleus` with `foreign_nucleus`, excluded by default. Exact. |
-| A8 | Correspondence, nucleus outside its cell | `boxes` cell 5 | Flags | With `outside_tolerance` 0.0, nucleus 51 is `matched`, `outside`, cell 5 `withheld`; with 0.5, not `outside` and cell 5 `available`; the molecule in its background part is `unassigned` with `nucleus_id` 51. Exact. |
+| A8 | Correspondence, nucleus outside its cell | `boxes` cell 5 | Flags | With `outside_tolerance` 0.0 (passed explicitly) and with the default 0.1, nucleus 51 (outside share 0.4) is `matched`, `outside`, cell 5 `withheld`; with 0.5, not `outside` and cell 5 `available`; the molecule in its background part is `unassigned` with `nucleus_id` 51. The default at its boundary, on a hand-built pair on the `boxes` grid: a 30-voxel nucleus with exactly 3 voxels outside its cell (0.1) is not `outside` and its cell `available`; with one voxel more (4 / 30), `outside` and `withheld`; when the outside part lies in a neighbouring cell, that cell has `foreign_nucleus` at 0.1 and at 0.5. Exact. |
 | A9 | Foreign nucleus | `boxes` cells 6, 7, with `exclude_cells_without_nucleus=False` | Flags | Nucleus 61 matched to cell 6 (share 0.8), `outside`; cell 6 `matched`, `nucleus_outside_cell`, compartments `withheld`; cell 7 correspondence `no_nucleus`, flag `foreign_nucleus`, compartments `no_nucleus`; both keep their whole-cell counts and have no nuclear or cytoplasmic rows. Exact. |
 | A10 | Compartment partition | `boxes` | Molecule compartments; counts | The available cells are 1 and 2; in each, the nuclear molecules are exactly those placed in its nuclei and `nucleus + cytoplasm = whole` per gene; withheld cells (3, 4, 5, 6) have no compartment rows (absent, not zero); with the exclusion off, cells 7 and 8 have no compartment rows and their molecules are `no_nucleus`, none `cytoplasm`; without nuclei every assigned molecule is `unavailable`. Exact. |
 | A11 | Exclusion and its statuses | `boxes` with nuclei (default), with `exclude_cells_without_nucleus=False`, without nuclei | Cell status, molecule status, counts, totals | Default: cells 7 and 8 (correspondence `no_nucleus`) are `excluded_no_nucleus` with reason `no_matched_nucleus`, their molecules `excluded_cell` with their `cell_id`, no count rows, `exclusion_source` `default`; cells 3 and 4 (`ambiguous`) stay kept; the complete cell table keeps cells 7 and 8, and the totals before and after differ by exactly those cells and molecules. `False`: all kept; cells 7 and 8 have compartments `no_nucleus` with whole-cell counts only. Without nuclei: nothing excluded, every cell `unavailable`. Exact. |
@@ -282,6 +285,81 @@ second (the golden tests take 0.2–0.3 s each); the learned checks take what W-
 for its parity inputs on CPU (a few seconds per call after the model load). Each run
 records wall time and peak RSS with `/usr/bin/time -v` against the 4 GiB stop target.
 
+### Implemented checks (W-318)
+
+The checks are in the modules of `src/python/test/` listed below. The task groups added
+most of them with the code they check; `test_segmentation_validation.py` and
+`test_assignment_validation.py` add L12, L4's identity, empty-image and missing-spacing
+clauses on the row's own fixtures, L7's rescale clause on `seg_golden`, A2's five
+identities on `assign_golden`, and A15's check of the `FOV.run` and segmentation files on
+the `boxes` FOV. Each of the two modules also checks that every row of the table below
+names tests that exist. A test named for a row but built on another fixture (the `boxes`
+cases of `test_l4_*` in `test_assignment.py`, the ramp of `test_l7_rescaling_*`, the ring
+of `test_l5_hole_filling_*`, the plane of `test_l9_the_plane_z4_*`, and the development
+preset of `test_fov_run_and_segmentation_files_are_untouched_by_assign`, a W-315
+integration test) is an additional check and is not listed.
+
+The identities of A2 are checked by `check_accounting` (`test_assignment.py`), which
+recomputes every count row from the `molecules` table (whole per kept cell and gene,
+nucleus and cytoplasm per available cell and gene) and compares the `counts` table, the
+cell table and `record["counts"]` with them exactly; it also runs in A11, A16 and A17.
+Data-frame comparisons of the rows marked exact use `check_exact=True`. Physical sizes
+(A13, A16) are compared within 1e-12 relative, the bound the rule "Tolerances" sets for
+them.
+
+Seeds are those of the rules above: 20261005 inside `seg_golden`, 101 for the `seeded`
+stain (`segmentation_fixtures.py`), 102 for the L11 stains, 100 for the A20 permutation, and
+none for `assign_golden` or the other hand-built fixtures. Every tolerance is the one in
+the table "Checks", unchanged; no check is skipped in the default tier or marked as an
+expected failure. Rows A2, A3, A4 and A19 use `assign_golden` without the gene-`Z` molecule
+and the matching subset of the pinned labels; the unmodified fixture serves the
+unknown-gene rejection and the legacy pins (`test_assignment_golden.py`).
+
+Two rows are not in the default tier. A19 starts three Python processes, each of which
+imports the package (about 2.2 s on one CPU), so its test is `slow` under the rule of
+{doc}`contributing` ("Test markers"); its three hash lists for each change are kept in
+the run's notes. L12 is `learned` and `slow` and runs only where `STARFINDER_L12_GPU_PYTHON`
+names the Python of a GPU environment, that is in a batch whose guidance grants the GPU;
+otherwise it skips with that reason. The learned checks need the extras and the cached
+models (L10's P1 and L12 also `STARFINDER_STARDIST_3D_SPLEEN`) and skip without them.
+
+| # | Module and tests | Tier |
+| --- | --- | --- |
+| L1 | `test_segmentation_labels.py`, `test_l1_*` | default |
+| L2 | `test_segmentation_labels.py`, `test_l2_*` | default |
+| L3 | `test_segmentation_labels.py`, `test_l3_*` | default |
+| L4 | `test_segmentation_golden.py`, `test_expand_labels_function`; `test_assignment.py`, `test_l4_volumetric_expansion_in_um_labels_the_voxels_within_the_distance`; `test_segmentation_validation.py`, `test_l4_distance_zero_is_the_identity_and_an_empty_image_stays_empty`, `test_l4_um_without_spacing_raises` | default |
+| L5 | `test_segmentation_labels.py`, `test_l5_the_labels_extend_through_the_stained_planes`, `test_l5_labels_with_z_above_1_raise`, `test_l5_a_stain_of_10_everywhere_gives_an_empty_image` | default |
+| L6 | `test_segmentation_labels.py`, `test_l6_the_shrunk_stand_in_labels_return_to_the_restored_values`, `test_l6_an_odd_grid_is_reached_exactly` | default |
+| L7 | `test_segmentation_inputs.py`, `test_l7_composite_and_enhancement_equal_the_pinned_digests`, `test_l7_constant_and_zero_inputs_equal_the_pinned_digests`, `test_l7_normalization_follows_the_formula`, `test_l7_normalization_of_a_constant_image_gives_zeros`; `test_segmentation_validation.py`, `test_l7_rescaling_seg_golden_divides_the_spacing_and_records_the_rescale` | default |
+| L8 | `test_segmentation_segment.py`, `test_l8_*` | default |
+| L9 | `test_segmentation_segment.py`, `test_l9_every_seed_keeps_its_value_and_no_other_value_appears`, `test_l9_no_seeds_give_an_empty_label_image`, `test_l9_a_grid_without_spacing_raises` | default |
+| L10 | `test_segmentation_learned.py`, `test_l10_*` | `learned`; P1 (`3D_spleen`) also `slow` |
+| L11 | `test_segmentation_learned.py`, `test_l11_*` | `learned`; the two Cellpose calls also `slow` |
+| L12 | `test_segmentation_validation.py`, `test_l12_cpu_and_gpu_labels_agree_within_the_w306_bounds`, `test_the_l12_metrics_on_hand_built_labels` | `learned` and `slow`, GPU batches only; the metric test on hand-built labels default |
+| L13 | `test_segmentation_persistence.py`, `test_l13_*` | default |
+| L14 | `test_segmentation_learned.py`, `test_l14_the_cached_files_equal_the_table_and_a_changed_copy_raises` | `learned` |
+| A1 | `test_assignment.py`, `test_a1_sampling_at_the_bounds` | default |
+| A2 | `test_assignment.py`, `test_a2_boxes_statuses_and_accounting`; `test_assignment_golden.py`, `test_the_package_statuses_and_count_identities`; `test_assignment_validation.py`, `test_a2_assign_golden_statuses_and_identities_1_to_5` | default |
+| A3 | `test_assignment_golden.py`, `test_the_package_reproduces_the_pins` | default |
+| A4 | `test_assignment.py`, `test_a4_*` | default |
+| A5 | `test_assignment.py`, `test_a5_to_a7_nucleus_table_and_cell_rows` | default |
+| A6 | `test_assignment.py`, `test_a5_to_a7_nucleus_table_and_cell_rows`, `test_a6_several_nuclei_count_both` | default |
+| A7 | `test_assignment.py`, `test_a5_to_a7_nucleus_table_and_cell_rows`, `test_a7_a_nucleus_split_51_49` | default |
+| A8 | `test_assignment.py`, `test_a8_a_nucleus_outside_its_cell`, `test_the_default_correspondence_is_option_c2`, `test_the_default_tolerance_at_its_boundary` | default |
+| A9 | `test_assignment.py`, `test_a9_a_foreign_nucleus` | default |
+| A10 | `test_assignment.py`, `test_a10_compartment_partition` | default |
+| A11 | `test_assignment.py`, `test_a11_exclusion_and_its_statuses` | default |
+| A12 | `test_assignment.py`, `test_a12_*` | default |
+| A13 | `test_assignment.py`, `test_a13_cell_metadata` | default |
+| A14 | `test_assignment.py`, `test_a14_grid_and_identity_checks_raise_before_sampling` | default |
+| A15 | `test_assignment_persistence.py`, `test_a15_*`; `test_assignment_validation.py`, `test_a15_fov_run_and_segmentation_files_of_boxes_are_untouched_by_assign` | default |
+| A16 | `test_assignment.py`, `test_a16_a_plane_on_a_projected_grid` | default |
+| A17 | `test_assignment.py`, `test_a17_culture_labels_extended_through_z` | default |
+| A18 | `test_assignment_workflow.py`, `test_a18_*` | default; the `raw.h5ad` comparison where `anndata` is installed |
+| A19 | `test_assignment.py`, `test_a19_three_single_thread_processes_give_identical_tables` | `slow` |
+| A20 | `test_assignment.py`, `test_a20_row_order` | default |
+
 ## Bounded real examples
 
 These run after the segmentation methods (task group 3) and assignment (task group 4)
@@ -300,7 +378,7 @@ and the territory statistics only, and report the molecule outputs as not run.
 | Order | Context | Crop (W-305 run) | Runs | Resources |
 | --- | --- | --- | --- | --- |
 | 1 | Volumetric tissue (LN, `Position020`) | `20261004T0530Z-ln-3d-spleen/crop_dapi_round4.tif` (50×512×512 uint8), and `crop_dapi_enhanced_with_flamingo.tif` for the Flamingo-assisted nuclei | Nuclei: `stardist`, `3D_spleen`, `scale` 1.0, stored thresholds. Territories: (a) assign's planar expansion of the nuclei by 0.7776 µm (4 pixels at 0.1944 µm, the legacy parity distance), with the original nuclei and the expanded territories both kept, (b) `seeded_watershed` on `crop_flamingo.tif`. Assign with nuclei, C1 thresholds, exclusion on and off. Spacing 0.3463 × 0.1944 × 0.1944 µm (TIFF tags). | StarDist 226 s per call on one CPU thread (W-306 `ln_dapi_round4@1.0`; 58 s on four threads, 55 s on the GPU), 2,245 MiB peak RSS per call including the loaded model; assignment code-derived: two `uint32` volumes of 52 MB plus the expanded one, under 0.5 GB, seconds. |
-| 2 | 2D tissue (tissue-2D, `round1/tile_1`) | `20261004T0600Z-tissue2d-watershed/crop_PI.tif` and `crop_amplicon_merged.tif` (1024×1024 uint8) | Nuclei: `stardist`, `2D_versatile_fluo`, `scale` 0.25. Cells: `seeded_watershed` on the amplicon signal, `sigma_um` 1.5, spacing 0.0946 µm. Assign as a `plane` (Z=1 grid), with nuclei, C1 thresholds, exclusion on and off. | StarDist 1.2 s per call on one CPU thread, 868 MiB peak RSS including the loaded model (W-306 `tissue_pi@0.25`); watershed 0.25 s (W-306 `tissue2d_amplicon`); assignment code-derived: 4 MB per label image, under 1 s. |
+| 2 | 2D tissue (tissue-2D, `round1/tile_1`) | `20261004T0600Z-tissue2d-watershed/crop_PI.tif` and `crop_amplicon_merged.tif` (1024×1024 uint8) | Nuclei: `stardist`, `2D_versatile_fluo`, `scale` 0.25. Cells: `seeded_watershed` on the PI–amplicon composite (`composite_nuclei_amplicon` of `crop_PI.tif` and `crop_amplicon_merged.tif` with the default `CompositeConfig`, role `composite`), seeds the nuclei, `sigma_um` 1.5, spacing 0.0946 µm (corrected 2026-10-05, W-321 review; W-320 ran it on the amplicon signal alone). Assign as a `plane` (Z=1 grid), with nuclei, C2 thresholds (the default since W-334; W-320 ran C1, which gives the same result here because every nucleus lies wholly inside its cell), exclusion on and off. | StarDist 1.2 s per call on one CPU thread, 868 MiB peak RSS including the loaded model (W-306 `tissue_pi@0.25`); watershed 0.25 s (W-306 `tissue2d_amplicon`); assignment code-derived: 4 MB per label image, under 1 s. |
 | 3 | Single-layer culture (stitched sample) | `20261004T0615Z-culture-fused-crop/crop_DAPI_3d_42x512x512.tif`, `crop_Flamingo_3d_42x512x512.tif`, the projections `crop_DAPI_max_2d.tif`, `crop_Flamingo_max_2d.tif`, and the references `reference_Cell_label_2d.tif`, `reference_DAPI_label_2d.tif`, `reference_Cell_3d_42x512x512.tif` (big-endian; imported) | (a) The imported 2D references, extended through z with `extend_labels_through_z` on the 3D crops; (b) Cellpose `cpsam_v2` on the projections, cells at `diameter` 240 and nuclei at an explicit recorded diameter (W-306 ran 60 and 240 on the DAPI projection), then extended the same way. Assign with nuclei and compartments, C1, exclusion on and off. The 2D projections are 1024×1024 and the 3D crops their 512×512 centre, so the extension uses the matching centre window. | Cellpose 203 s per call on one CPU thread for the two-channel cells, 1,718 MiB peak RSS including the loaded model, or 1.5 s on the GPU (W-306 `culture_cells_2d@d240`); nuclei 229 s on one CPU thread at diameter 60 (`culture_nuclei_2d@d60`; diameter 240 was measured on the GPU only, 0.38 s); import and extension code-derived: 42×512×512 `uint32` is 44 MB per volume; assignment seconds. |
 
 **Outputs to inspect**, per example and per territory option, written to the run directory
@@ -344,8 +422,10 @@ accuracy statement.
 ## Limitations
 
 * Every assignment resource figure is code-derived; nothing was measured on a whole FOV.
-* The correspondence thresholds are rules, not values fitted to data; whether exact
-  containment withholds too many cells on real masks is what the bounded examples report.
+* The correspondence thresholds are not fitted to data. Exact containment (0.0) withheld
+  the compartments of nearly every cell of the W-320 culture crop; the default 0.1 (option
+  C2) is provisional, from that one crop without annotation, and is not claimed to suit
+  other samples.
 * The validation design checks that rules are implemented as written; it measures no
   segmentation or assignment quality, which needs annotation (W-123) and E04.
 * The bounded examples need molecule tables that W-305 did not stage.

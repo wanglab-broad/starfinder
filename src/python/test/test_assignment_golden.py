@@ -19,9 +19,8 @@ its Z maximum as the 2D case, a molecule table of 19 rows written as a one-based
     expansion by 4 followed by one by 2 (segmentation, then assignment) is not one
     expansion by 6.
 
-The script cannot run in the locked environment (it imports ``parse`` and ``anndata``,
-neither of which is installed there), so ``legacy_assignment`` follows its lines, which
-are cited, and a test checks that those lines are still in the script. The tile
+``legacy_assignment`` follows the script at 6b384cd line by line, with the cited lines;
+since the script became an adapter call (W-317) it is the frozen legacy reference. The tile
 configuration, the global coordinates, the overlap filter (lines 39-42, 78-80, 141-165),
 the plots and the H5AD and CSV writing are §2.10 or output plumbing and are not pinned;
 see docs/assignment-baseline.md.
@@ -34,7 +33,6 @@ names an edit.
 """
 import hashlib
 import json
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -42,10 +40,13 @@ import pytest
 from skimage.measure import regionprops
 from skimage.segmentation import expand_labels
 
-pytestmark = [pytest.mark.workflow, pytest.mark.golden]
+from starfinder.assignment import AssignmentConfig, assign_molecules, molecule_table_from_csv
+from starfinder.image import ImageMetadata
+from starfinder.segmentation import ExpandLabelsConfig, ReferenceGrid, SegmentationResult
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-SCRIPT = REPO_ROOT / "workflow" / "scripts" / "reads_assignment.py"
+pytestmark = [pytest.mark.workflow, pytest.mark.golden]
+pytestmark += [pytest.mark.segmentation]  # the §2.9 package calls (docs/assignment-contract.md)
+
 SHAPE_ZYX = (16, 64, 64)
 DISTANCE = 4  # dilation_distance
 # label value -> (z, y, x) centre and (z, y, x) semi-axes in voxels. Cells 3 and 7 lie
@@ -179,7 +180,7 @@ def legacy_assignment(label_img, reads_csv, genes_csv, *, expand, distance=DISTA
     return reads_df, cell_by_gene, meta
 
 
-# The lines of reads_assignment.py that legacy_assignment follows.
+# The lines of reads_assignment.py at 6b384cd that legacy_assignment follows.
 _PARAMETERS = "snakemake.config['rules']['reads_assignment']['parameters']"
 SCRIPT_LINES = {
     52: "if len(current_label_img.shape) == 3:",
@@ -272,11 +273,6 @@ def inputs(tmp_path):
 
 def _case(labels, dimensions):
     return labels if dimensions == "3d" else labels.max(axis=0)
-
-
-def test_the_helper_follows_the_script():
-    lines = SCRIPT.read_text().splitlines()
-    assert {n: lines[n - 1].strip() for n in SCRIPT_LINES} == SCRIPT_LINES
 
 
 def test_fixture(labels):
@@ -380,3 +376,109 @@ def test_changing_a_pinned_input_changes_a_digest(labels, tmp_path, change):
     pinned = PINS[("3d", True)]
     assert digest(reads["seg_label"].to_numpy()) != pinned[0]
     assert digest(counts) != pinned[1]
+
+
+# --- The package calls of §2.9 (docs/assignment-contract.md, "Tests the implementation changes") ----
+# The gene-Z molecule is left out: genes outside the gene list now raise, and it was never counted.
+# The fixture's grid is uncalibrated, so the legacy expansion is ExpandLabelsConfig(4, "pixel", "planar").
+
+PACKAGE_GRID = ReferenceGrid(SHAPE_ZYX, ImageMetadata("assign_golden"), "declared")
+FOV_IDENTITY = ["data", "sample", "Position001", None]
+KEEP = [i for i, (_, gene) in enumerate(MOLECULES) if gene != "Z"]
+
+
+def package_cells(labels, dimensions):
+    """The fixture's labels as a cell run: the volume, or its Z maximum as a plane on the projected grid."""
+    namespace = json.dumps([*FOV_IDENTITY, "cell"], separators=(",", ":"))
+    if dimensions == "3d":
+        return SegmentationResult(labels.astype(np.uint32), PACKAGE_GRID, "cell", "volume", namespace,
+                                  {"run": "cell", "operations": []})
+    plane = np.ascontiguousarray(labels.max(axis=0)[None], np.uint32)
+    return SegmentationResult(plane, PACKAGE_GRID.projected(), "cell", "plane", namespace,
+                              {"run": "cell", "operations": [], "input": {"projection": {"method": "max"}}})
+
+
+def package_assignment(labels, tmp_path, dimensions, expand, molecules=None):
+    reads_csv = write_reads(tmp_path / "goodSpots.csv", molecules or tuple(MOLECULES[i] for i in KEEP))
+    table = molecule_table_from_csv(reads_csv, spot_namespace=json.dumps(FOV_IDENTITY, separators=(",", ":")),
+                                    genes=tuple(gene for gene, _ in GENES))
+    config = AssignmentConfig(expansion=ExpandLabelsConfig(DISTANCE, "pixel", "planar") if expand else None)
+    return assign_molecules(table, package_cells(labels, dimensions), grid=PACKAGE_GRID, config=config)
+
+
+def legacy_meta(result, dimensions, expand):
+    """The legacy cell metadata from the package's cell table: sizes and truncated centroids."""
+    cells = result.cells
+    prefix = "expanded_" if expand else ""
+    size = cells[f"{prefix}size_voxels"].astype("int64").to_numpy()
+    columns = {"sample": "sample1", "fov_id": "Position001", "volume": size.astype(np.float64).tolist(),
+               "fov_x": cells[f"{prefix}centroid_x"].to_numpy().astype(int),
+               "fov_y": cells[f"{prefix}centroid_y"].to_numpy().astype(int)}
+    if dimensions == "3d":
+        columns["fov_z"] = cells[f"{prefix}centroid_z"].to_numpy().astype(int)
+    columns["seg_label"] = cells.cell_id.astype("int64").tolist()
+    return pd.DataFrame(columns)
+
+
+@pytest.mark.parametrize("expand", [False, True])
+@pytest.mark.parametrize("dimensions", ["3d", "2d"])
+def test_the_package_reproduces_the_pins(labels, tmp_path, dimensions, expand):
+    """Row A3: per-molecule cells, the whole-cell matrix and the cell metadata equal the pins."""
+    result = package_assignment(labels, tmp_path, dimensions, expand)
+    pinned = [SEG_LABELS[(dimensions, expand)][i] for i in KEEP]
+    assert [0 if pd.isna(c) else int(c) for c in result.molecules.cell_id] == pinned
+    matrix, rows = result.matrix()
+    assert rows.cell_id.astype(int).tolist() == [3, 7, 12, 20, 25]
+    assert digest(matrix.astype(np.float64)) == PINS[(dimensions, expand)][1]
+    assert frame_digest(legacy_meta(result, dimensions, expand)) == PINS[(dimensions, expand)][2]
+    if dimensions == "3d":
+        cell_3 = result.cells.iloc[0]
+        assert cell_3.size_voxels == 771 and (cell_3.expanded_size_voxels == 1866 if expand else
+                                              pd.isna(cell_3.expanded_size_voxels))
+
+
+@pytest.mark.parametrize("expand", [False, True])
+@pytest.mark.parametrize("dimensions", ["3d", "2d"])
+def test_the_package_statuses_and_count_identities(labels, tmp_path, dimensions, expand):
+    """Row A2: every molecule is assigned exactly where the pins put it in a cell, else unassigned."""
+    result = package_assignment(labels, tmp_path, dimensions, expand)
+    molecules = result.molecules
+    pinned = [SEG_LABELS[(dimensions, expand)][i] for i in KEEP]
+    assert molecules.assignment_status.tolist() == ["assigned" if c else "unassigned" for c in pinned]
+    n_assigned = sum(1 for c in pinned if c)
+    counts = result.record["counts"]
+    assert (counts["assigned"], counts["unassigned"], counts["excluded_cell"], counts["outside_grid"]) == \
+        (n_assigned, len(pinned) - n_assigned, 0, 0)
+    assert int(result.counts["count"].sum()) == n_assigned == int(result.cells.n_molecules.sum())
+    assert set(result.counts.compartment) == {"whole"} and set(result.cells.compartments) == {"unavailable"}
+    assert set(molecules.compartment.dropna()) == {"unavailable"}
+    assert int(molecules.compartment.notna().sum()) == n_assigned
+
+
+def test_the_package_rejects_a_gene_outside_the_gene_list(labels, tmp_path):
+    """The unmodified fixture: the gene-Z molecule raises instead of being dropped from the counts."""
+    with pytest.raises(ValueError, match="\\['Z'\\]"):
+        package_assignment(labels, tmp_path, "3d", False, molecules=MOLECULES)
+
+
+def test_the_package_keeps_cells_without_molecules(labels, tmp_path):
+    """New behavior: when no molecule lands in a cell, the cells stay (the legacy rule drops them all)."""
+    result = package_assignment(labels, tmp_path, "3d", False, molecules=MOLECULES[10:12])
+    assert result.cells.cell_id.astype(int).tolist() == [3, 7, 12, 20, 25]
+    assert set(result.cells.status) == {"kept"} and result.cells.n_molecules.tolist() == [0] * 5
+    matrix, _ = result.matrix()
+    assert matrix.shape == (5, len(GENES)) and not matrix.any()
+    assert set(result.molecules.assignment_status) == {"unassigned"}
+
+
+def test_the_package_marks_molecules_off_the_grid(labels, tmp_path):
+    """New behavior: one-based 0 and one beyond the grid are outside_grid, neither wrapped nor raising."""
+    reads_csv = tmp_path / "reads.csv"
+    reads_csv.write_text(f"x,y,z,gene\n0,11,6,A\n{SHAPE_ZYX[2] + 1},11,6,A\n17.0,17.0,7.0,B\n")
+    table = molecule_table_from_csv(reads_csv, spot_namespace=json.dumps(FOV_IDENTITY, separators=(",", ":")),
+                                    genes=tuple(gene for gene, _ in GENES))
+    result = assign_molecules(table, package_cells(labels, "3d"), grid=PACKAGE_GRID)
+    molecules = result.molecules
+    assert molecules.assignment_status.tolist() == ["outside_grid", "outside_grid", "assigned"]
+    assert molecules.voxel_x.isna().tolist() == [True, True, False]
+    assert molecules.cell_id.iloc[:2].isna().all() and molecules.cell_id.iloc[2] == 3  # float coordinates are read

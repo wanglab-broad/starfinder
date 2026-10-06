@@ -425,6 +425,11 @@ signal, warp, QC config).
 * **`run.json`.** Its `format_version` stays 1 (W-240 choice 3); the
   registration records gain the fields below and `config.pipeline.registration`
   becomes the recipe's fields.
+* **Rounds written (W-337).** The registered checkpoint holds the reference round
+  and the sequencing rounds only, with their transforms and attempts; its header
+  gains the channel information per written round (`channels`) as an additive key,
+  and `FORMAT_VERSION` stays 2. A registered other round has its own saved form
+  ("Other rounds and the reference stain" below).
 
 ## Other-round and external-reference registration
 
@@ -440,7 +445,8 @@ class ExternalReference:
     label: str                   # recorded in the attempts, e.g. "ref_round:ch04"
 
 FOV.register_rounds(recipe: RegistrationRecipe, *, rounds: Sequence[str],
-                    reference: str | ExternalReference | None = None) -> FOV
+                    reference: str | ExternalReference | None = None,
+                    checkpoints: CheckpointConfig | None = None) -> FOV
 ```
 
 * **Shared stain.** The recipe's signal is `mode="channel"` with
@@ -466,6 +472,36 @@ FOV.register_rounds(recipe: RegistrationRecipe, *, rounds: Sequence[str],
   of the Python backend; the MATLAB backend is unchanged.
 * **Out of scope.** Different grids (`scale`, plane-to-volume), stitching and
   segmentation.
+
+### Other rounds and the reference stain
+
+W-337 separates the two kinds of round, as the MATLAB workflow does ({doc}`coordination`,
+"Sequencing rounds and other rounds"):
+
+* **Sequencing rounds.** `FOV.run` and `FOV.register` handle the reference round and
+  the sequencing rounds only. `FOV.register` registers the sequencing rounds other
+  than the reference by default and raises `ValueError` for an other round, naming
+  `FOV.register_rounds`. `FOV.run` neither loads nor changes an other round.
+* **The entry.** `FOV.prepare_morphology(MorphologyConfig(rotation_degrees, recipe,
+  rounds), *, checkpoints=None)` loads the reference stain from the reference round's
+  folder as the image `reference_stain` and rotates it, without registration:
+  `registration_record["rounds"]["reference_stain"]` states `same acquisition as the
+  reference round`, with no transform and no attempt. It then loads and rotates each
+  other round and registers it with `FOV.register_rounds`. With `recipe=None` the
+  recipe is one translation step with `RegistrationSignalConfig("channel",
+  reference_channel=<stain pattern>, moving_channel=<the round's channel of the
+  stain's name>)`, against an `ExternalReference` of the stain labelled
+  `<reference round>:<stain pattern>` (the label of the Python `nuclei_registration`
+  rule); no reference stain, several, or no single channel of that name raise
+  `ValueError`. A given recipe runs against the reference stain when its signals name a
+  stain channel (all of them, one stain), else against the resident reference round.
+* **Rotation.** `FOV.load_images(..., rotation_degrees=…)` rotates with the code of
+  `PipelineConfig.rotation_degrees`; a round is rotated once.
+* **Saved form.** With `checkpoints`, `register_rounds` and the entry write
+  `other_rounds/<name>/image.ome.tif` and `registration.json` (the chain, the attempts,
+  the reference and the hashes; {doc}`checkpoints`, "Prepared morphology images"), and
+  `FOV.load_registered_round(name)` restores the image, its metadata, the chain and the
+  `registration_record["rounds"]` entry.
 
 ## Routine QC
 
