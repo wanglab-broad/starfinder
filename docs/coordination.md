@@ -165,8 +165,10 @@ calling them step by step gives the same images, chains and records.
 
 With checkpoints, `prepare_morphology` and `FOV.register_rounds` write each
 prepared image to `<checkpoint dir>/<fov_id>/other_rounds/<name>/`:
-`image.ome.tif` (ZYXC, every channel, with its `ImageMetadata`) and
-`registration.json`; an existing folder raises `FileExistsError` before any
+`image.ome.tif` (ZYXC, every channel, with its `ImageMetadata`),
+`registration.json` and, only for a chain with a dense or B-spline transform,
+`field.npz` (its arrays; {doc}`checkpoints`, "Prepared morphology images"); an
+existing folder raises `FileExistsError` before any
 computation unless `overwrite=True`. `FOV.load_registered_round(name, *,
 checkpoints=CheckpointConfig())` restores the image, its metadata, the chain
 and the `registration_record["rounds"]` entry on any `FOV` object of the FOV,
