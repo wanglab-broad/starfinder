@@ -1138,6 +1138,43 @@ now raises `ValueError`. The schema declares both forms of `seq_channel_order` a
 `input.channels` entry of a segmentation record gains `name` and `wavelength`; both
 are additive. No image, table or digest changes.
 
+### Sequencing rounds and other rounds handled separately
+
+Two breaking changes (W-337), following the MATLAB workflow, where every
+`STARMapDataset` method works on `layers.seq` and other rounds are prepared by their own
+rules:
+
+* **`FOV.run` no longer loads or registers other rounds.** It loads, rotates,
+  preprocesses, registers and checkpoints the reference round and the sequencing rounds
+  only; a configured other round is neither loaded nor changed (before, batch mode loaded
+  it with the sequencing load config, which raised for a round with its own channels, and
+  registered it with the sequencing recipe). A `SpotFindingPlan` whose rounds name an
+  other round now raises `ValueError` in `run`. The `registered` checkpoint, also from
+  `save_checkpoint`, holds the reference and sequencing rounds only.
+* **`FOV.register` no longer registers other rounds.** Its default rounds are the
+  sequencing rounds other than the reference (before: every moving round, other rounds
+  included), and an other round in `rounds` raises `ValueError` naming
+  `FOV.register_rounds`.
+
+Prepare other rounds and the reference stain with the new entry beside `run`:
+
+```python
+from starfinder.dataset import CheckpointConfig, MorphologyConfig
+
+fov.run(pipeline)                                  # reference and sequencing rounds
+fov.prepare_morphology(MorphologyConfig(rotation_degrees=pipeline.rotation_degrees),
+                       checkpoints=CheckpointConfig())
+fov.segment(plan)                                  # reads "reference_stain" and the other rounds
+```
+
+`FOV.load_images(..., rotation_degrees=…)` rotates as `run` does, and a round is now
+rotated once: a second rotation of a round (by `rotate`, `load_images` or `run`) raises
+`ValueError` where it rotated again before. `FOV.register_rounds` gains `checkpoints`,
+and `FOV.load_registered_round` reads a saved prepared image ({doc}`checkpoints`,
+"Prepared morphology images"). The `registered` header gains `channels` (additive;
+`FORMAT_VERSION` stays 2). Datasets without other rounds give the same images, tables
+and digests as before.
+
 ## Intentional behavior changes — not mechanical equivalence
 
 | Area | Change and consequence |

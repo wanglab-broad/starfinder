@@ -7,7 +7,8 @@ here, and ``rescale_input``'s shape and metadata; then input preservation (D4), 
 rules and records of docs/segmentation-contract.md ("Input preparation and label
 functions"), and the reuse of the §2.6 registration outputs: a morphology round
 registered by ``FOV.register_rounds`` and the reference merged image, compared with the
-same arrays read back from the ``registered`` checkpoint. Every fixture is at most
+same arrays read back from the ``registered`` checkpoint and the round's saved form
+(``FOV.load_registered_round``). Every fixture is at most
 32×64×64 voxels.
 """
 import json
@@ -279,8 +280,8 @@ def test_no_input_function_is_a_preprocessing_method():
 
 # --- Registration outputs are reused --------------------------------------------------------------
 
-# The registered checkpoint reads every round with the sequencing rounds' channel labels, so
-# the morphology round here has four channels too.
+# The morphology round has four channels (it was read back from the registered checkpoint,
+# with the sequencing rounds' channel labels, before W-337).
 MORPH_CHANNELS = ("ch00", "ch01", "ch02", "ch03")
 
 
@@ -304,7 +305,8 @@ def test_the_composite_reuses_the_registration_outputs(tmp_path):
     fov.images = {"round1": np.stack([texture(s, p) for s in (1, 2, 3, 0)], axis=-1),
                   "round2": np.stack([texture(s, p) for s in (6, 7, 8, 9)], axis=-1), "morph": acquired}
     fov.metadata = {name: ImageMetadata(f"FOV/{name}") for name in fov.images}
-    fov.register_rounds(TRANSLATION, rounds=["morph"])
+    checkpoints = CheckpointConfig(directory=tmp_path / "checkpoints")
+    fov.register_rounds(TRANSLATION, rounds=["morph"], checkpoints=checkpoints)
     assert fov.registration_record["rounds"]["morph"]["reference"] == "round1"
     dapi = fov.images["morph"][..., 0]
     merged = project_image(fov.images["round1"], config=ProjectionConfig(axis="channel"))
@@ -316,9 +318,10 @@ def test_the_composite_reuses_the_registration_outputs(tmp_path):
     saved = load_volume(fov.save_reference_image())
     assert np.array_equal(saved.image.reshape(merged.shape), merged)
 
-    checkpoints = CheckpointConfig(directory=tmp_path / "checkpoints")
     fov.save_checkpoint("registered", checkpoints=checkpoints)
+    # The registered checkpoint holds the reference and sequencing rounds; morph is reloaded from its saved form.
     loaded = morphology_fov(tmp_path).load_checkpoint("registered", checkpoints=checkpoints)
+    loaded.load_registered_round("morph", checkpoints=checkpoints)
     dapi_read = loaded.images["morph"][..., 0]
     merged_read = project_image(loaded.images["round1"], config=ProjectionConfig(axis="channel"))
     read_back, read_record = composite_nuclei_amplicon(dapi_read, merged_read)

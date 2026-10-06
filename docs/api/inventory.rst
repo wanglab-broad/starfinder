@@ -123,6 +123,7 @@ starfinder.dataset
 * :py:obj:`starfinder.dataset.ExternalReference`
 * :py:obj:`starfinder.dataset.FOV`
 * :py:obj:`starfinder.dataset.from_workflow_config`
+* :py:obj:`starfinder.dataset.MorphologyConfig`
 * :py:obj:`starfinder.dataset.PipelineConfig`
 * :py:obj:`starfinder.dataset.RecoveryConfig`
 * :py:obj:`starfinder.dataset.RegistrationRecipe`

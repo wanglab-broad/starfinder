@@ -219,7 +219,8 @@ def _check_rounds(fov, plan, grid):
                                          f"reference round {ref!r}")
                 elif name not in registered:
                     raise ValueError(f"run {run.name!r}: morphology round {name!r} has no registration entry; "
-                                     "call FOV.register_rounds first")
+                                     "call FOV.prepare_morphology (or FOV.register_rounds) or "
+                                     "FOV.load_registered_round first")
             shape = np.shape(fov.images[name])[:3]
             if shape != grid.shape_zyx:
                 raise IncompatibleGeometryError(f"run {run.name!r}: input round {name!r} has ZYX shape {shape}, "
@@ -269,8 +270,10 @@ def _channel(fov, item):
     entry = fov.registration_record.get("rounds", {}).get(round_name) if round_name != ref else None
     source = {"round": item.round, "channel": item.channel, **details, "reference_merged": item.reference_merged,
               "prepare": prepared, "prepare_channel": item.prepare_channel,
-              "registration": None if entry is None else {"reference": entry.get("reference"),
-                                                          "reference_sha256": entry.get("reference_sha256")},
+              "registration": None if entry is None else {
+                  "reference": entry.get("reference"), "reference_sha256": entry.get("reference_sha256"),
+                  # The reference stain's relation, and the saved file of an image reloaded by load_registered_round.
+                  **{key: entry[key] for key in ("relation", "saved") if key in entry}},
               "sha256": array_sha256(image)}
     return np.ascontiguousarray(image), source
 

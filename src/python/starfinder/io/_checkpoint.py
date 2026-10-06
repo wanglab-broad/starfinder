@@ -439,6 +439,64 @@ def write_registered_header(directory, header, registration_results, registratio
     return files + ["transforms.json"]
 
 
+def _registration_methods():
+    """Saved registration method name -> config type (saved method values equal the spec names)."""
+    from starfinder._registry import config_type_for, names
+    from starfinder.registration import REGISTRATION_METHODS
+    return {name: config_type_for(REGISTRATION_METHODS, name, "registration method")
+            for name in names(REGISTRATION_METHODS)}
+
+
+def _field_loader(directory):
+    """A function that returns the arrays of a field file in directory by name, reading each file once."""
+    cache = {}
+
+    def load(file_name):
+        if file_name not in cache:
+            with np.load(Path(directory) / file_name) as npz:
+                cache[file_name] = {k: npz[k] for k in npz.files}
+        return cache[file_name]
+    return load
+
+
+def _restore_result(entry, index, fields, format_version, application, methods):
+    """One RegistrationResult of a transforms.json entry (_transform_json); fields loads a field file's arrays."""
+    from starfinder.registration import (AffineTransform, BSplineTransform, DenseDisplacementTransform,
+        RegistrationDiagnostics, RegistrationResult, TranslationTransform)
+    data = dict(entry["transform"])
+    kind = data.pop("kind")
+    data.update(reference_metadata=_metadata(data["reference_metadata"]),
+                moving_metadata=_metadata(data["moving_metadata"]),
+                reference_shape_zyx=tuple(data["reference_shape_zyx"]),
+                moving_shape_zyx=tuple(data["moving_shape_zyx"]))
+    arrays = None
+    if kind in ("dense", "bspline"):
+        arrays = fields(data.pop("field" if kind == "dense" else "coefficients"))
+    if kind == "translation":
+        if format_version == 1:
+            # Version 1 stores the correction c of the pull p - c; the displacement is -c.
+            data.update(displacement_zyx=tuple(-v for v in data.pop("correction_zyx")),
+                        direction="reference_to_moving")
+        transform = TranslationTransform(**data)
+    elif kind == "affine" and format_version != 1:
+        transform = AffineTransform(**data)
+    elif kind == "bspline" and format_version != 1:
+        transform = BSplineTransform(**{k: _tuples(v) for k, v in data.pop("bspline").items()},
+                                     coefficients=arrays[f"result_{index}"], **data)
+    elif kind == "dense":
+        transform = DenseDisplacementTransform(displacement_zyx=arrays[f"result_{index}"], **data)
+    else:
+        raise ValueError(f"unknown transform kind {kind!r} in a version {format_version} checkpoint")
+    diagnostics = dict(entry["diagnostics"])
+    diagnostics["effective_config"] = _config(diagnostics["effective_config"], methods)
+    diagnostics["warnings"] = tuple(diagnostics["warnings"])
+    for key in ("iterations_completed", "final_metric_value", "stop_condition", "elapsed_iterations",
+                "final_rms_change"):
+        if isinstance(diagnostics.get(key), list):
+            diagnostics[key] = tuple(diagnostics[key])
+    return RegistrationResult(transform, RegistrationDiagnostics(**diagnostics), application)
+
+
 def _registration_results(directory, header):
     """Rebuild the results, the TransformChain per round and the registration record of a registered header.
 
@@ -447,57 +505,19 @@ def _registration_results(directory, header):
     and without chains. Version 2 rebuilds every kind, a chain per round and
     the round's application WarpConfig (also set on each result).
     """
-    from starfinder._registry import config_type_for, names
-    from starfinder.registration import (REGISTRATION_METHODS, AffineTransform, BSplineTransform,
-        DenseDisplacementTransform, RegistrationDiagnostics, RegistrationResult, TransformChain,
-        TranslationTransform, WarpConfig)
-    # Saved method values equal the spec names (the discriminator rule).
-    methods = {name: config_type_for(REGISTRATION_METHODS, name, "registration method")
-               for name in names(REGISTRATION_METHODS)}
+    from starfinder.registration import TransformChain, WarpConfig
+    methods = _registration_methods()
     semantics = "sequential" if header["format_version"] == 1 else header.get("registration_semantics", "recipe")
     applications = {name: _config(entry["application_config"], WarpConfig)
                     for name, entry in header.get("applications", {}).items()}
+    fields = _field_loader(Path(directory) / "registered")
     results, chains = {}, {}
     for name, entries in header["transforms"].items():
-        arrays = None
         restored = []
         for i, entry in enumerate(entries):
-            data = dict(entry["transform"])
-            kind = data.pop("kind")
-            data.update(reference_metadata=_metadata(data["reference_metadata"]),
-                        moving_metadata=_metadata(data["moving_metadata"]),
-                        reference_shape_zyx=tuple(data["reference_shape_zyx"]),
-                        moving_shape_zyx=tuple(data["moving_shape_zyx"]))
-            if kind in ("dense", "bspline"):
-                file_name = data.pop("field" if kind == "dense" else "coefficients")
-                if arrays is None:
-                    with np.load(Path(directory) / "registered" / file_name) as npz:
-                        arrays = {k: npz[k] for k in npz.files}
-            if kind == "translation":
-                if header["format_version"] == 1:
-                    # Version 1 stores the correction c of the pull p - c; the displacement is -c.
-                    data.update(displacement_zyx=tuple(-v for v in data.pop("correction_zyx")),
-                                direction="reference_to_moving")
-                transform = TranslationTransform(**data)
-            elif kind == "affine" and header["format_version"] != 1:
-                transform = AffineTransform(**data)
-            elif kind == "bspline" and header["format_version"] != 1:
-                transform = BSplineTransform(**{k: _tuples(v) for k, v in data.pop("bspline").items()},
-                                             coefficients=arrays[f"result_{i}"], **data)
-            elif kind == "dense":
-                transform = DenseDisplacementTransform(displacement_zyx=arrays[f"result_{i}"], **data)
-            else:
-                raise ValueError(f"unknown transform kind {kind!r} in a version {header['format_version']} checkpoint")
-            diagnostics = dict(entry["diagnostics"])
-            diagnostics["effective_config"] = _config(diagnostics["effective_config"], methods)
-            diagnostics["warnings"] = tuple(diagnostics["warnings"])
-            for key in ("iterations_completed", "final_metric_value", "stop_condition", "elapsed_iterations",
-                        "final_rms_change"):
-                if isinstance(diagnostics.get(key), list):
-                    diagnostics[key] = tuple(diagnostics[key])
             application = (_config(entry["application_config"], WarpConfig) if semantics == "sequential"
                            else applications[name])
-            restored.append(RegistrationResult(transform, RegistrationDiagnostics(**diagnostics), application))
+            restored.append(_restore_result(entry, i, fields, header["format_version"], application, methods))
         results[name] = restored
         if semantics == "recipe" and restored:
             chains[name] = TransformChain(tuple(r.transform for r in restored))
@@ -694,7 +714,9 @@ def read_checkpoint(path: Path | str, stage: str) -> dict:
     -------
     dict
         Keys are the FOV attributes the stage restores. ``registered``:
-        ``images`` and ``metadata`` (per round), ``snapshots`` (per round,
+        ``images`` and ``metadata`` (per round, read with the patterns of the
+        header's ``channels`` entry of the round, or ``channel_labels`` for a
+        header without it), ``snapshots`` (per round,
         the stored snapshots by name; empty for checkpoints without them), ``registration_results``,
         ``registration_chains`` (a TransformChain per registered round),
         ``registration_record`` (``semantics``: ``recipe``, or ``sequential``
@@ -735,13 +757,16 @@ def read_checkpoint(path: Path | str, stage: str) -> dict:
     if stage == "pre_qc":
         return _read_pre_qc(directory, header)
     images, metadata, snapshots = {}, {}, {}
+    # The channel information per image round; a header without it (before W-337) has channel_labels only.
+    channels = header.get("channels") or {}
     for name in header["image_rounds"]:
-        loaded = load_volume_zyxc(_registered_image(directory, name),
-                                  channel_labels=tuple(header["channel_labels"]))
+        labels = (tuple(c["channel"] for c in channels[name]) if name in channels
+                  else tuple(header["channel_labels"]))
+        loaded = load_volume_zyxc(_registered_image(directory, name), channel_labels=labels)
         images[name], metadata[name] = loaded.image, loaded.metadata
         for snapshot in header.get("snapshots", []):
             snapshots.setdefault(name, {})[snapshot] = load_volume_zyxc(
-                registered_image_path(directory, name, snapshot), channel_labels=tuple(header["channel_labels"])).image
+                registered_image_path(directory, name, snapshot), channel_labels=labels).image
     results, chains, record = _registration_results(directory, header)
     return {"images": images, "snapshots": snapshots, "metadata": metadata,
             "registration_results": results, "registration_chains": chains, "registration_record": record,

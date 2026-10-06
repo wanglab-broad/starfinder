@@ -17,6 +17,14 @@ at most one local step, one signal and one final resampling per moving round; se
 :doc:`../registration-contract`. ``FOV.register_rounds`` registers other rounds to a
 reference round or an ``ExternalReference`` through a shared stain.
 
+``FOV.run`` and ``FOV.register`` handle the reference round and the sequencing rounds
+only. ``FOV.prepare_morphology(MorphologyConfig(...), checkpoints=...)``, an entry
+beside ``FOV.run``, loads and rotates the reference stain (the image
+``reference_stain``) and loads, rotates and registers each other round, and can save
+each prepared image; ``FOV.load_registered_round`` restores one. ``FOV.load_images``
+takes ``rotation_degrees``. See :doc:`../coordination`, "Sequencing rounds and other
+rounds".
+
 Each channel is a ``ChannelInfo`` (file pattern, content name, wavelength in nm).
 ``Dataset.channel_info(round)`` returns a round's channels (``reference_stain``: the
 reference stains), and ``Dataset.channel_index(round, key)`` is the one lookup by
@@ -35,6 +43,7 @@ index, pattern or name; see :doc:`../coordination`, "Channels".
    ExternalReference
    FOV
    from_workflow_config
+   MorphologyConfig
    PipelineConfig
    RecoveryConfig
    RegistrationRecipe

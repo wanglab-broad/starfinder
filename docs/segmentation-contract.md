@@ -197,8 +197,9 @@ is no general step chain; preprocessing of the rounds stays in `FOV.run`'s
 **The three calls per FOV (D1)** are:
 
 1. `fov.run(pipeline, execution=…, checkpoints=…)`: the molecules. It registers and
-   processes the sequencing rounds, detects and decodes as today, and leaves the
-   reference round's image and metadata resident (streaming keeps the reference image;
+   processes the reference round and the sequencing rounds only (it neither loads nor
+   changes an other round), detects and decodes as today, and leaves the reference
+   round's image and metadata resident (streaming keeps the reference image;
    {doc}`coordination`).
 2. `fov.segment(plan, device=…, checkpoints=…)`: the label masks. It builds each
    segmentation input from the reference-frame images and runs the plan.
@@ -206,13 +207,19 @@ is no general step chain; preprocessing of the rounds stays in `FOV.run`'s
    receives from segment ("What assign receives from segment").
 
 **The coordination step before segment.** When a plan's inputs come from morphology
-rounds (DAPI or Flamingo acquired in an additional round), the caller loads those rounds
-and calls `fov.register_rounds(recipe, rounds=[…])` between the first two calls. It
-brings each round into the reference frame through its shared stain ({doc}`coordination`,
-"Other rounds and external references"). It is a coordination step that a plan needs,
-not one of the three calls. It is not needed when the plan's inputs use only the
-reference round (tissue-2D PI in a sequencing round) or when every run imports an
-external mask.
+rounds (DAPI or Flamingo acquired in an additional round) or from a stain file of the
+reference round's folder (tissue-2D PI and LN DAPI, `*ch04.tif`, `Dataset.reference_stains`),
+the caller calls `fov.prepare_morphology(MorphologyConfig(rotation_degrees=…), checkpoints=…)`
+between the first two calls ({doc}`coordination`, "Sequencing rounds and other rounds").
+It loads and rotates the reference stain as the image `reference_stain`, recorded as the
+same acquisition as the reference round, and loads, rotates and registers each other
+round with `FOV.register_rounds` through its shared stain; with checkpoints it saves each
+prepared image under `other_rounds/<name>/`, which `fov.load_registered_round(name)`
+restores on another `FOV` object. Loading the rounds and calling
+`fov.register_rounds(recipe, rounds=[…])` directly is the same step, done by hand. It is
+a coordination step that a plan needs, not one of the three calls. It is not needed when
+the plan's inputs use only the reference round's own channels or its merged image, or
+when every run imports an external mask.
 
 **The reference grid.** Every label image of a FOV is on one grid. Because
 `ImageMetadata` carries no shape (`src/python/starfinder/image.py`), the grid is passed
@@ -247,23 +254,25 @@ class ReferenceGrid:
 The grid used is recorded in every run record (`grid`: shape, the metadata, source and
 hash).
 
-### What the segment entry needs from `FOV.run` and `FOV.register_rounds`
+### What the segment entry needs from `FOV.run` and `FOV.prepare_morphology`
 
 | From | What | Used for |
 | --- | --- | --- |
 | `FOV.run` | `fov.metadata[reference_round]`: the reference `ImageMetadata` (frame, spacing, origin, direction) and the reference grid `images[reference_round].shape[:3]`, together `FOV.reference_grid()` | the grid and metadata every segmentation input and label image must have, and the grid of an import |
 | `FOV.run` | the reference round's current image (its detection image after `run`), whose channel maximum is the reference merged image, ZYX, exactly as `save_reference_image(reference_image="merged")` writes it | the amplicon channel of the composite (`InputChannel(reference_merged=True)`) and the stain of a seeded watershed on the amplicon signal (tissue-2D) |
 | `FOV.run` | `preprocessing_record` and `registration_record` | copied by reference (their hashes) into the segmentation record, so the input's processing is traceable |
-| `FOV.register_rounds` | each registered morphology round's image (every channel resampled once into the reference frame) and its metadata, which equals the reference metadata | the `nuclear`, `cytoplasm` and Flamingo channels |
-| `FOV.register_rounds` | `registration_record["rounds"][round]`: the recipe summary, the reference label and `reference_sha256` | the input-channel identity in the segmentation record |
+| `FOV.prepare_morphology` (`FOV.register_rounds`) | each registered morphology round's image (every channel resampled once into the reference frame) and its metadata, which equals the reference metadata | the `nuclear`, `cytoplasm` and Flamingo channels |
+| `FOV.prepare_morphology` | the image `reference_stain` (the reference round's stain files, rotated as the reference round, with its metadata) | a nuclear stain stored as an extra file of the reference round |
+| `FOV.prepare_morphology` (`FOV.register_rounds`) | `registration_record["rounds"][name]`: the recipe summary, the reference label and `reference_sha256`, or for `reference_stain` the statement `same acquisition as the reference round`; after `FOV.load_registered_round`, also `saved` (the image file's path relative to the FOV checkpoint directory and its SHA-256) | the input-channel identity in the segmentation record: its `registration` entry names the reference and, when present, the relation and the saved file |
 | `Dataset` | `channel_index(round, key)` and `channel_info(round)` ({doc}`coordination`, "Channels") | resolving `InputChannel.channel` and `prepare_channel` by pattern or by name, and the channel's `name` and `wavelength` in the record; an unknown key or a repeated name raises `ValueError` naming the round and its channels |
 
 Every image `FOV.segment` reads must be resident: the reference round (after `FOV.run`,
-whose streaming mode keeps it, or after `FOV.load_checkpoint("registered")`) and each
-morphology round named by an input (loaded and registered). `FOV.segment` raises
-`ValueError` naming the round when an input round is not loaded, is a morphology round
-without an entry in `registration_record["rounds"]`, or has metadata different from the
-reference round's; and `IncompatibleGeometryError` when its `shape[:3]` differs from the
+whose streaming mode keeps it, or after `FOV.load_checkpoint("registered")`) and
+`reference_stain` or each morphology round named by an input (prepared in this process,
+or reloaded by `FOV.load_registered_round`). `FOV.segment` raises `ValueError` naming the
+round when an input round is not loaded, is `reference_stain` or a morphology round
+without an entry in `registration_record["rounds"]` (loaded but not prepared), or has
+metadata different from the reference round's; and `IncompatibleGeometryError` when its `shape[:3]` differs from the
 reference grid. A run's `projection` is the only route to a plane from a volume; the
 input and the labels of such a run are on `FOV.reference_grid().projected(…)`, and the
 record keeps it.

@@ -46,6 +46,9 @@ last use unless `retain_images=True`; subtile creation requires retention.
 Streaming is a residency policy, not a claim that transforms or retained outputs
 consume constant memory.
 
+`FOV.run` processes the reference round and the sequencing rounds only (see
+"Sequencing rounds and other rounds" below).
+
 Inputs must have explicit round/channel labels. Registration replaces moving
 metadata with reference metadata. Without registration, extraction requires
 verified common frame/grid metadata; it does not assume that matching shapes
@@ -107,12 +110,90 @@ dataset.channel_info("reference_stain")          # (ChannelInfo(channel='ch04', 
 While `FOV.run` writes checkpoints, `run.json` records the channels of every
 round (key `channels`); see {doc}`checkpoints`.
 
+## Sequencing rounds and other rounds
+
+As in the MATLAB workflow, where every `STARMapDataset` method works on
+`layers.seq` by default and other rounds are prepared by their own rules
+(`rotate_nuclei`, `nuclei_registration`), the two kinds of round are handled
+separately:
+
+* `FOV.run` loads, rotates, preprocesses, registers and checkpoints the
+  reference round and the sequencing rounds only. It neither loads nor changes
+  an other round, and a `SpotFindingPlan` whose rounds name one raises
+  `ValueError`. A reference round that is an other round is still processed as
+  the reference.
+* `FOV.register` registers the sequencing rounds other than the reference by
+  default and raises `ValueError` for an other round, naming
+  `FOV.register_rounds`.
+* `FOV.prepare_morphology(config=MorphologyConfig(), *, checkpoints=None)`, an
+  entry beside `FOV.run` and not a stage of it, prepares the reference stain
+  and the other rounds in the reference frame.
+
+Rotation is one function for both kinds of round:
+`FOV.load_images(..., rotation_degrees=angle)` rotates the rounds it loads with
+the code `FOV.run` uses for `PipelineConfig.rotation_degrees`, and records the
+same diagnostics under `load_diagnostics[round]["rotation"]`. A round is
+rotated once: rotating a round that already carries a rotation (by
+`load_images`, `FOV.run` or `FOV.rotate`) raises `ValueError`; loading the
+round again replaces it.
+
+{py:class}`~starfinder.dataset.MorphologyConfig` has `rotation_degrees` (give
+`FOV.run`'s angle), `recipe` and `rounds` (None: every configured other round
+except the reference round). `prepare_morphology` does, in order:
+
+1. when `Dataset.reference_stains` is not empty, it loads those files from the
+   reference round's folder as the image `reference_stain` (ZYXC, one channel
+   per stain; `load_images(rounds=["reference_stain"])` does the same), rotates
+   it and records it without a transform:
+   `registration_record["rounds"]["reference_stain"]` states `same acquisition
+   as the reference round`, and no registration attempt is recorded;
+2. for each other round, it loads the round with its own channels, rotates it
+   and registers it with `FOV.register_rounds`. With `recipe=None` the recipe is
+   one translation step on the shared stain: the single reference stain against
+   the round's one channel of the same name, given as an `ExternalReference`
+   labelled `<reference round>:<stain pattern>` (for example `round1:ch04`, as
+   the `nuclei_registration` rule). No reference stain, several reference
+   stains or no single matching channel raise `ValueError` and ask for a
+   recipe. A given recipe is used as `register_rounds` uses it: against the
+   reference stain when its signal names a stain channel (by pattern or name),
+   else against the resident reference round (after `FOV.run`);
+3. with `checkpoints`, it saves each prepared image (below).
+
+The entry needs the raw files and the angle only, not the results of
+`FOV.run`. `load_images`, the rotation and `register_rounds` stay public, and
+calling them step by step gives the same images, chains and records.
+
+With checkpoints, `prepare_morphology` and `FOV.register_rounds` write each
+prepared image to `<checkpoint dir>/<fov_id>/other_rounds/<name>/`:
+`image.ome.tif` (ZYXC, every channel, with its `ImageMetadata`) and
+`registration.json`; an existing folder raises `FileExistsError` before any
+computation unless `overwrite=True`. `FOV.load_registered_round(name, *,
+checkpoints=CheckpointConfig())` restores the image, its metadata, the chain
+and the `registration_record["rounds"]` entry on any `FOV` object of the FOV,
+checking the hashes, the identity and, when the reference round is resident,
+that the metadata equals the reference grid's; see {doc}`checkpoints`
+("Prepared morphology images"). `FOV.segment` reads `reference_stain` and every
+round with an entry of `registration_record["rounds"]`, prepared in this
+process or reloaded ({doc}`segmentation-contract`, "Coordination per FOV").
+
+```python
+from starfinder.dataset import CheckpointConfig, MorphologyConfig
+
+fov = dataset.fov("FOV_001").run(PipelineConfig(load=..., rotation_degrees=90, registration=...))
+fov.prepare_morphology(MorphologyConfig(rotation_degrees=90),
+                       checkpoints=CheckpointConfig(directory="checkpoints"))
+fov.images["reference_stain"], fov.images["morph"]   # on the reference grid
+
+later = dataset.fov("FOV_001").run(...)            # another process
+later.load_registered_round("morph", checkpoints=CheckpointConfig(directory="checkpoints"))
+```
+
 ## Registration recipe
 
 A {py:class}`~starfinder.dataset.RegistrationRecipe` is zero or more global steps
 (`translation`, `rigid`, `affine`) followed by at most one local step (`demons`,
 `bspline`, `tps`, `cpd`), as specified in {doc}`registration-contract`. For
-each moving round, `FOV.register` (which `run` calls):
+each moving sequencing round, `FOV.register` (which `run` calls):
 
 1. builds a float64 ZYX signal per round with the recipe's
    {py:class}`~starfinder.registration.RegistrationSignalConfig` (default: the
@@ -150,8 +231,9 @@ fov.registration_chains["round2"].pull_field()  # composite pull displacement, f
 
 ### Other rounds and external references
 
-`FOV.register_rounds(recipe, *, rounds, reference=None)` registers loaded
-rounds, such as morphology rounds, through a shared stain, as specified in
+`FOV.register_rounds(recipe, *, rounds, reference=None, checkpoints=None)`
+registers loaded rounds, such as morphology rounds, through a shared stain, as
+specified in
 {doc}`registration-contract` ("Other-round and external-reference
 registration"). The recipe's signal is usually `mode="channel"` with
 `reference_channel` naming the stain in the reference and `moving_channel` in
@@ -171,7 +253,9 @@ attempt records `reference` (the round name or the external label) and
 `reference_sha256` (the SHA-256 of the external image's C-order bytes, `None`
 for a round); `registration_record["rounds"][round]` keeps the recipe summary
 and the reference. `save_processing_log("nr")` writes `log/<fov>_nr.txt` and
-`log/gr_shifts/<fov>_nr.txt` for these rounds.
+`log/gr_shifts/<fov>_nr.txt` for these rounds. With `checkpoints`, each round
+is also saved under `other_rounds/<round>/` (see "Sequencing rounds and other
+rounds" above). `FOV.prepare_morphology` calls it for each other round.
 
 ```python
 from starfinder.dataset import ExternalReference

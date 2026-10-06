@@ -139,6 +139,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.assignment.molecule_table`
 * :py:obj:`starfinder.assignment.molecule_table_from_csv`
 * :py:obj:`starfinder.assignment.MoleculeTable`
+* :py:obj:`starfinder.dataset.MorphologyConfig`
 * :py:obj:`starfinder.barcode.NeighborhoodSumConfig`
 * :py:obj:`starfinder.synthetic.NoiseConfig`
 * :py:obj:`starfinder.spot_finding.NoiseLandmarkConfig`
