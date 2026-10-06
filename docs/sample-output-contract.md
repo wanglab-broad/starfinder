@@ -212,7 +212,7 @@ runner").
 
 | Order | Part | Turned off by | What the method does | Writes in `output_dir` |
 | --- | --- | --- | --- | --- |
-| 1 | `assemble` ({doc}`assembly-contract`) | `assemble: false` | Builds one `AssemblyInput` per FOV of the placement from the saved assignment folders named `assignment` (or, with `assignment=None`, from the saved molecule tables through `molecule_table`) and the reference grids (`reference_grid_from_file`), calls `assemble`, and saves the result with `save_assembly(result, output_dir, table_format=config.table_format)`. It keeps the tables of every FOV and at most two label images in memory at a time ({doc}`assembly-algorithms`, "Flags"). Turned off, it loads the saved assembly with `load_assembly(output_dir)`, which checks every SHA-256, and records the part as `reused`. | `tables/fovs.<fmt>`, `tables/cells.<fmt>`, `tables/molecules.<fmt>`, `tables/counts.<fmt>`, `sample.h5ad`; section `assembly` |
+| 1 | `assemble` ({doc}`assembly-contract`) | `assemble: false` | Builds one `AssemblyInput` per FOV of the placement from the saved assignment folders named `assignment` (or, with `assignment=None`, from the saved molecule tables through `molecule_table`) and the reference grids (`reference_grid_from_file`), calls `assemble`, and saves the result with `save_assembly(result, output_dir, table_format=config.table_format)`. It keeps the tables of every FOV and at most two label images in memory at a time ({doc}`assembly-algorithms`, "Flags"). Turned off, it loads the saved assembly with `load_assembly(output_dir)`, which checks every SHA-256, and records the part as `reused`; when the folder holds no saved assembly and no later part needs one (check 4), it records the part as `off` and `fuse` runs without an assembly. | `tables/fovs.<fmt>`, `tables/cells.<fmt>`, `tables/molecules.<fmt>`, `tables/counts.<fmt>`, `sample.h5ad`; section `assembly` |
 | 2 | `fuse` | `fuse: false` | Builds one `FusionInput` per included FOV from the saved source images and reference grids, and calls `fuse` with the assembly of part 1. | The fused images; section `fusion` |
 | 3 | `fuse_labels` | `fuse_labels: false` (the default; "Choices kept open", 8) | Calls `fuse_labels` with the placement and the assembly. | `cell_labels.ome.tif`; section `labels` |
 | 4 | `export_spatialdata` | `export_spatialdata: false` (the default) | Calls `export_spatialdata` with the assembly and the records of parts 2 and 3 that were written. | `sample.zarr/`; section `spatialdata` |
@@ -389,7 +389,7 @@ row).
 
 | Property | Statement | W-354 record |
 | --- | --- | --- |
-| Values where one FOV covers | Where the FOV's voxel centres coincide with output voxel centres, the input values unchanged. At fractional offsets, linear interpolation of the FOV's neighbouring voxels: a single bright voxel spreads over its neighbours, and its intensity centroid stays within 0.0008183 µm of its true position (`max_distance_centroid_um` of the order 1, scale 1 row: 0.0008183085523003642). | `tables/overlap_dtype.csv` (`single_a_value`, `single_b_value`); `tables/position_summary.csv` (order 1, scale 1) |
+| Values where one FOV covers | Where the FOV's voxel centres coincide with output voxel centres, the input values unchanged. At fractional offsets, linear interpolation of the FOV's neighbouring voxels: a single bright voxel spreads over its neighbours, and its intensity centroid stays at most 0.0008183085523003642 µm from its true position, below the bound 0.00082 µm (`max_distance_centroid_um` of the order 1, scale 1, route `none` row). | `tables/overlap_dtype.csv` (`single_a_value`, `single_b_value`); `tables/position_summary.csv` (order 1, scale 1) |
 | Values in an overlap | The weighted average of the covering FOVs, with a cosine ramp over the blending width from each FOV's edge. Values lie between the inputs' values; integer averages are truncated, not rounded, so two constant FOVs of 100 and 203 give a ramp from 100 to 202 and an equal-weight mean of 151, not 152. | `tables/overlap_dtype.csv`, `tables/overlap_line.csv` |
 | Dtype | The input dtype, in memory, in the library's TIFF and OME-Zarr, and in Starfinder's OME-TIFF (which writes the array it is given). `fuse` converts every input to float32, resamples, and casts the result back with `astype`. | `tables/overlap_dtype.csv` (dtype columns); `worker-notes.md` section 1 |
 | Output grid | The grid passed as `output_stack_properties`; the library's recorded origin, spacing and shape equal it ("The fusion grid", "The scale factor"). | `tables/reduced.csv` (`geometry_matches_formula`) |
@@ -570,8 +570,12 @@ stack's fusion grid: `z_lo = o_z − s_z/2`, `z_hi = o_z + (n0_z − ½)·s_z`, 
 `n0_z` computed by `fused_grid` with the library's rule of "The fusion grid" (the 2D
 fusion itself records no Z). Its metadata has the fusion grid's Y and X at the output
 level, and in Z spacing `S_z = z_hi − z_lo = n0_z·s_z` and origin
-`O_z = (z_lo + z_hi)/2 = o_z + s_z·(n0_z − 1)/2`, one block over the whole Z extent, so
-`world_to_index` maps every z of the slab to index 0. For one-plane FOVs `[z_lo, z_hi)` is
+`O_z = (z_lo + z_hi)/2 = o_z + s_z·(n0_z − 1)/2`, one block over the whole Z extent.
+`ImageMetadata.world_to_index` (`src/python/starfinder/image.py`, line 72) returns the
+continuous index `j_z = (z − O_z)/S_z`, which lies in `[−½, ½)` for every z of the slab;
+the voxel rule `v = floor(j + ½)` of "Sample position to image position" then gives voxel 0
+for each. With `O_z = 1` and `S_z = 3`, z = 0 gives `j_z = −1/3` and voxel 0. For one-plane
+FOVs `[z_lo, z_hi)` is
 the slab of "The fusion grid", and `S_z = z_hi − z_lo`, `O_z = (z_lo + z_hi)/2` as there. This differs on purpose from
 `ImageMetadata.projected`, which leaves the physical fields of a per-FOV projection
 unknown; the per-FOV rule is not changed.
@@ -1463,7 +1467,9 @@ uncompressed TIFF writer:
 | LN sample1, 3D stack at 0.5 | 67 × 6,166 × 5,441 | 241.7 s | 532.7 s | 12.35 GiB | 2,247,808,158 |
 
 * The LN projections are dominated by loading the 64 tiles from the share (about 59 s);
-  fusing and writing took under 10 s.
+  fusing and writing took under 10 s (`in_process_steps_wall_s`: `fuse_compute` plus the
+  writes, 4.72 + 0.6 + 2.81 = 8.13 s from the multiview-stitcher placement and
+  3.73 + 0.61 = 4.34 s from BigStitcher's).
 * The stack held the 7.2 GB of loaded tiles plus their reduced copies; fusing and writing
   it took 173.82 s (`in_process_steps_wall_s`). No bounded memory is promised for a
   whole-sample stack (A1).
