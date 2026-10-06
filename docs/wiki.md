@@ -33,6 +33,9 @@ Segmentation algorithms (proposed) <segmentation-algorithms>
 Assignment baseline (proposed) <assignment-baseline>
 Assignment contract (proposed) <assignment-contract>
 Assignment algorithms (proposed) <assignment-algorithms>
+Stitching baseline (proposed) <stitching-baseline>
+Stitching contract (proposed) <stitching-contract>
+Stitching algorithms (proposed) <stitching-algorithms>
 Learned detectors <learned-detectors>
 Coordination <coordination>
 Checkpoints <checkpoints>
