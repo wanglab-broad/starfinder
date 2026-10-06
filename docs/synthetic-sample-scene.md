@@ -583,8 +583,10 @@ otherwise). Its property laws (`brightness`, widths, `elongation`, `angle`) and
 **Truth.** The true cell of a molecule is `C(σ)` at its own continuous sample position
 (the reference-round position), not at a voxel: `true_cell_id = C(σ)`, null where
 `C(σ) = 0`. A molecule outside every cell is **kept** with a null cell. Likewise
-`true_nucleus_id = N(σ)` and `compartment` is `nucleus` where `N > 0`, `cytoplasm` where
-`N = 0 < C`, and `outside` where `C = 0`. The `population` column (`cell`, `ambient`)
+`true_nucleus_id = N(σ)`, null where `N(σ) = 0`, and `compartment` is `nucleus` where
+`N > 0`, `cytoplasm` where `N = 0 < C`, and `outside` where `C = 0`. How these null IDs
+are compared with the value 0 of a label image is stated in "Per-FOV truth" ("Sampled
+labels and nullable truth IDs"). The `population` column (`cell`, `ambient`)
 records how it was placed; it is not the truth: an ambient molecule inside a cell
 belongs to that cell. `in_sample` (on `molecules.csv`, `cells.csv` and `nuclei.csv`)
 records sample membership, and `true_cell_in_sample` on `molecules.csv` records the
@@ -611,10 +613,37 @@ molecule keeps its ID in every FOV that renders it (the FOV namespace differs).
   * `amplicon_id`, `fov_id` and `in_sample` (the molecule's);
   * `z`, `y`, `x`: the reference-round index position `p`;
   * `in_footprint`: `−0.5 ≤ p < n − 0.5` on every axis;
-  * `fov_cell_label` and `fov_nucleus_label`: the FOV label image at `floor(p + 0.5)`,
-    null outside the grid, which is what §2.9 assign samples;
-  * `label_agrees`: `fov_cell_label == true_cell_id`, with two nulls counting as equal;
+  * `fov_cell_label` and `fov_nucleus_label` (uint32 or null): the value of the FOV's
+    cell and nucleus label image at the voxel `floor(p + 0.5)`, which is what §2.9 assign
+    samples. The value 0 is kept as 0: the voxel is in the grid and in no cell (no
+    nucleus). Null means that nothing was sampled: the voxel is outside the grid, or the
+    scene has no cellular scene and so no label image. With a cellular scene,
+    `fov_cell_label` is null exactly on the rows without `in_footprint`, because
+    `in_footprint` is the in-grid test of the sampling rule ("Terms");
+  * `label_agrees` (boolean or null): `fov_cell_label` compared with `true_cell_id` by the
+    rule below; null where `fov_cell_label` is null;
   * `csv_row`: its row in the FOV's molecule CSV ("The path that needs no segmenter").
+* **Sampled labels and nullable truth IDs.** A label image stores "in no cell" as 0; the
+  truth tables store it as null (`true_cell_id` is null where `C(σ) = 0`, and
+  `true_nucleus_id` where `N(σ) = 0`, "Cell truth for molecules"). A sampled value `v` is
+  compared with a truth ID by this rule, the same for the cell and the nucleus label:
+
+  | Sampled value `v` | Meaning | §2.9 assign (without expansion) | Compared with the truth ID |
+  | --- | --- | --- | --- |
+  | `k > 0` | in the grid, in cell (nucleus) `k` | cell label: `assigned` or `excluded_cell` with `cell_id` `k`; nucleus label: `nucleus_id` `k` | agrees exactly when the truth ID is `k`; a null truth ID disagrees |
+  | `0` | in the grid, in no cell (no nucleus) | cell label: `unassigned`, `cell_id` null; nucleus label: `nucleus_id` 0 | agrees exactly when the truth ID is null |
+  | null | not sampled: outside the grid | `outside_grid`, `cell_id` and `nucleus_id` null | not compared: no agreement value |
+
+  Equivalently, where `v` is not null, the two agree exactly when `v` equals the truth ID
+  read with null as 0, that is `v == C(σ)` for the cell label and `v == N(σ)` for the
+  nucleus label. A null `v` is never equal to a null truth ID: it says that nothing was
+  sampled, not that the molecule is in no cell. The statuses, the sampled voxel and the
+  in-grid test are those of {doc}`assignment-contract` ("Coordinate sampling", "Direct
+  assignment and statuses"), which this page cites and does not redefine; there, too, a
+  null `cell_id` stands for both `unassigned` and `outside_grid`, and the status tells
+  them apart. `label_agrees` records the rule for the cell label only; `molecule_fovs`
+  has no agreement column for the nucleus label, and a test that needs one computes it
+  from `fov_nucleus_label` and `true_nucleus_id` by the same rule.
 * **Sample-level tables that say which FOVs see each object.** A molecule is **seen** by
   a FOV when it is `in_footprint` there. A cell is **seen** by a FOV when its anchor is
   in that FOV's footprint. `molecules.csv` and `cells.csv` have `fov_ids` (`;`-joined,
@@ -698,11 +727,16 @@ identity 3 applies: there are no label images, no `nuclei.csv` and no cell rows,
    the label image is sampled at voxel centres. The validation reads `label_fov_ids` for
    that.
 5. **Sampling agreement is measured, not assumed.** On rows with `in_footprint`,
-   `label_agrees` is false exactly where the molecule and the centre of its sampled voxel
-   lie in different labels; the count is reported per FOV. On the other rows (rendered in
-   the margin, outside the grid) `fov_cell_label` is null, so `label_agrees` is true only
-   for a molecule without a true cell; these rows are excluded from the count. It separates the §2.9 sampling rule from assignment and assembly
-   errors in the validation.
+   `fov_cell_label` is `C(v_m)` at the centre `v_m = true_f + floor(p + 0.5) ⊙ s` of the
+   sampled voxel (identity 2), and the truth is `C(σ_m)`, `true_cell_id` read with null
+   as 0 ("Sampled labels and nullable truth IDs"). `label_agrees` is false exactly when
+   `C(σ_m) ≠ C(v_m)`: the molecule and that centre lie in different cells, or one of them
+   lies in a cell and the other in none. When both lie outside every cell, the row has
+   `fov_cell_label` 0 and a null `true_cell_id`, and `label_agrees` is true. The number of
+   rows with `label_agrees` false is reported per FOV. On the other rows (rendered in the
+   margin, outside the grid) nothing is sampled: `fov_cell_label` and `label_agrees` are
+   null, and these rows are excluded from the count. It separates the §2.9 sampling rule
+   from assignment and assembly errors in the validation.
 
 ## The path that needs no segmenter
 
@@ -714,7 +748,11 @@ assembly can be compared with sample-level truth without running a segmenter:
    label_namespace=["<dataset>", "<sample>", "<f>", null, "truth"])`, and the same for
    `nuclei.tif` with `target="nucleus"`. The files carry `starfinder_metadata` equal to the
    grid's, so the import's metadata check passes; `relabel=False` keeps the sample IDs,
-   so an assigned molecule's `cell_id` is directly comparable with `true_cell_id`.
+   so an assigned molecule's `cell_id` is directly comparable with `true_cell_id`. Assign
+   writes a null `cell_id` for both `unassigned` and `outside_grid`, so a comparison of
+   those molecules reads the status: `unassigned` is the sampled value 0 and
+   `outside_grid` is a molecule not sampled, and each compares with `true_cell_id` by the
+   rule of "Per-FOV truth" ("Sampled labels and nullable truth IDs").
 2. **Molecules.** `fovs/<f>/molecules.csv` is the legacy one-based `x, y, z, gene` CSV of
    the reference-round positions of the molecules that FOV renders (`p + 1`, round-trip
    float precision), in `molecule_fovs` order. `molecule_table_from_csv(path,
