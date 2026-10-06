@@ -1,5 +1,5 @@
 """The §2.9 assignment diagnostics: the four-panel figure of plot_assignment, its two views, and the
-exclusion totals of summarize_assignment (W-332, W-340; docs/assignment-contract.md, "Diagnostics").
+exclusion totals of summarize_assignment (W-332, W-340, W-341; docs/assignment-contract.md, "Diagnostics").
 
 The figure is checked by its artists (axes, titles, colours, point counts, legend texts), not by
 pixels. The fixture is ``boxes`` with nuclei (exclusion on: cells 7 and 8 excluded; and off), its
@@ -14,8 +14,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pytest  # noqa: E402
-from matplotlib.colors import rgb_to_hsv  # noqa: E402
-from skimage.segmentation import find_boundaries  # noqa: E402
+from matplotlib.colors import rgb_to_hsv, to_rgba  # noqa: E402
+from matplotlib.path import Path as PlotPath  # noqa: E402
 
 from starfinder.assignment import (AssignmentConfig, assign_molecules, plot_assignment,  # noqa: E402
                                    summarize_assignment)
@@ -75,11 +75,32 @@ def hue_is(colour, name):
 
 
 def by_label(ax):
-    return {c.get_label(): c for c in ax.collections}
+    """The labelled collections of an axis (the scatters); the unlabelled outline lines are left out."""
+    return {c.get_label(): c for c in ax.collections if not c.get_label().startswith("_")}
 
 
 def images_by_label(ax):
     return {i.get_label(): i for i in ax.get_images()}
+
+
+def check_outlines(ax, plane):
+    """The outlines are one green line collection, 0.8 points wide, whose contours each enclose exactly
+    the pixel centres of one territory of ``plane``, one contour per territory (the boxes have no holes)."""
+    lines = [c for c in ax.collections if c.get_gid() == "outlines"]
+    assert len(lines) == 1
+    outline = lines[0]
+    assert all(hue_is(c, "green") for c in outline.get_colors())
+    assert list(outline.get_linewidths()) == [0.8]
+    yy, xx = np.mgrid[:plane.shape[0], :plane.shape[1]]
+    centres = np.column_stack((xx.ravel(), yy.ravel()))
+    enclosed = []
+    for segment in outline.get_segments():
+        inside = PlotPath(segment).contains_points(centres).reshape(plane.shape)
+        values = np.unique(plane[inside])
+        assert len(values) == 1 and values[0] != 0
+        assert np.array_equal(inside, plane == values[0])
+        enclosed.append(int(values[0]))
+    assert sorted(enclosed) == sorted(int(v) for v in np.unique(plane) if v != 0)
 
 
 def expected_points(result, plane=None):
@@ -128,12 +149,10 @@ def test_four_panels_their_titles_and_colours(result, view):
     plane = result.cell_labels.max(axis=0) if view == "z_max" else result.cell_labels[4]
     for ax in figure.axes[:2]:
         images = images_by_label(ax)
-        assert list(images) == ["image", "outlines"]
+        assert list(images) == ["image"]
         assert images["image"].get_cmap().name == "gray"
         assert np.array_equal(images["image"].get_array(), STAIN.max(axis=0) if view == "z_max" else STAIN[4])
-        outline = images["outlines"]
-        assert np.array_equal(~np.ma.getmaskarray(outline.get_array()), find_boundaries(plane, mode="inner"))
-        assert hue_is(outline.get_cmap()(1.0), "green") and hue_is(outline.get_cmap()(0.0), "green")
+        check_outlines(ax, plane)
     # Panel 1: centres by cell status, kept blue and excluded orange, with a legend in that order.
     entries = ["kept"] + (["excluded"] if excluded_of(result) else [])
     centres = by_label(figure.axes[0])
@@ -232,6 +251,20 @@ def test_a_plane_outside_the_territories_draws_no_centre_and_no_molecule():
     plt.close(figure)
 
 
+def test_centre_dots_have_a_fixed_area_and_a_black_edge():
+    # The molecule points shrink as the image grows; the centre dots do not (W-341).
+    small = spread_result()
+    for result in (small, spread_result(expansion=ExpandLabelsConfig(1, "pixel", "planar"),
+                                        legacy_pixel_expansion=True)):
+        figure = plot_assignment(result)
+        for scatter in by_label(figure.axes[0]).values():
+            assert list(scatter.get_sizes()) == [30.0]
+            assert list(scatter.get_linewidths()) == [0.5]
+            assert all(tuple(c) == to_rgba("black") for c in scatter.get_edgecolors())
+        assert all(list(s.get_sizes()) == [12.0] for s in by_label(figure.axes[1]).values())
+        plt.close(figure)
+
+
 def test_the_histograms_cover_every_cell():
     result = spread_result()
     figure = plot_assignment(result)
@@ -246,8 +279,7 @@ def test_the_territories_and_centres_are_the_expanded_ones_after_an_expansion():
     result = spread_result(expansion=ExpandLabelsConfig(1, "pixel", "planar"), legacy_pixel_expansion=True)
     assert result.territories is not None and not np.array_equal(result.territories, result.cell_labels)
     figure = plot_assignment(result, view="single_layer")
-    outline = images_by_label(figure.axes[0])["outlines"].get_array()
-    assert np.array_equal(~np.ma.getmaskarray(outline), find_boundaries(result.territories[4], mode="inner"))
+    check_outlines(figure.axes[0], result.territories[4])
     kept = result.cells.status.eq("kept").to_numpy(bool)
     for entry, rows in (("kept", kept), ("excluded", ~kept)):
         assert drawn_points(by_label(figure.axes[0])[entry]) == \

@@ -1100,7 +1100,9 @@ histograms (W-321 review, 2026-10-05; the centre colours and the legend entry `e
 from the checkpoint after it, the same day): the stain in grey scale with green territory
 outlines and a dot at each cell's centroid, coloured by the cell's status (`kept` blue,
 excluded orange; legend entries `kept` and `excluded`, the latter only when a cell is
-excluded); the same with the molecules (`assigned` blue, `unassigned` red, `excluded_cell`
+excluded); the outlines are lines 0.8 points wide and the centre dots 30 points² with a
+thin black edge, both of a fixed size, so they stay visible when a large image is shown
+small (2026-10-06); the same with the molecules (`assigned` blue, `unassigned` red, `excluded_cell`
 orange with the legend entry `excluded`, only when present; `outside_grid` not drawn);
 voxels per cell; molecules per cell. The "nuclei per cell" histogram is gone. A
 new `view` argument selects the Z-maximum view (`"z_max"`) or one plane

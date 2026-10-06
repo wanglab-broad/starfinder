@@ -818,7 +818,10 @@ On demand, never by `FOV.assign`:
   `before` equals `after`. `FOV.assign` stores it in `record["counts"]`.
 * `plot_assignment(result, *, image=None, view=None, z=None)`: one row of four panels.
   1. `image` in grey scale with the territory outlines in green and one dot per cell
-     centre, coloured by the cell's status: `kept` blue and `excluded_no_nucleus` orange,
+     centre. The outlines are lines 0.8 points wide around each territory, and each centre
+     is a dot of 30 points² with a thin black edge; both keep their size when a large image
+     is shown small (W-341). The dot is coloured by the cell's status: `kept` blue and
+     `excluded_no_nucleus` orange,
      with the legend entries `kept` and `excluded` (the excluded centres drawn and in the
      legend only when the result has an excluded cell);
   2. the same image and outlines with the molecules: `assigned` blue, `unassigned` red,

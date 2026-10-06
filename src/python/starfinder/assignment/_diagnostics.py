@@ -8,11 +8,15 @@ from ._config import (ASSIGNMENT_STATUSES, CELL_CORRESPONDENCE, CELL_STATUSES, C
                       CORRESPONDENCE_FLAGS, NUCLEUS_STATUSES)
 
 _QUANTILES = (0.0, 0.25, 0.5, 0.75, 1.0)
-# plot_assignment: the two views, the outline colour, the colour of each drawn molecule status and cell
-# status (a kept cell as an assigned molecule, an excluded one as an excluded_cell molecule), and the
-# legend text of each.
+# plot_assignment: the two views, the outline colour and width, the area and edge of a cell centre, the
+# colour of each drawn molecule status and cell status (a kept cell as an assigned molecule, an excluded
+# one as an excluded_cell molecule), and the legend text of each. Outline width and centre area are in
+# points, so they do not shrink when a large image is shown small; molecule points still do.
 _VIEWS = ("z_max", "single_layer")
 _OUTLINE_COLOUR = "lime"
+_OUTLINE_WIDTH = 0.8
+_CENTRE_AREA = 30.0
+_CENTRE_EDGE = ("black", 0.5)
 _STATUS_COLOURS = {"assigned": "dodgerblue", "unassigned": "red", "excluded_cell": "orange"}
 _STATUS_LEGEND = {"assigned": "assigned", "unassigned": "unassigned", "excluded_cell": "excluded"}
 _CENTRE_COLOURS = {"kept": _STATUS_COLOURS["assigned"],
@@ -26,6 +30,23 @@ def _quantiles(values):
     if not len(values):
         return None
     return {str(q): float(v) for q, v in zip(_QUANTILES, np.quantile(values, _QUANTILES))}
+
+
+def _outline_segments(plane):
+    """(x, y) contours of every territory of a YX label plane: closed lines halfway between its pixel
+    centres and the outside ones, in pixel index coordinates."""
+    from scipy import ndimage
+    from skimage.measure import find_contours
+
+    segments = []
+    for value, box in enumerate(ndimage.find_objects(plane), start=1):
+        if box is None:
+            continue
+        y0, x0 = box[0].start, box[1].start
+        # One pixel of background around the box closes the contours of a territory at its border.
+        mask = np.pad(plane[box] == value, 1).astype(np.float64)
+        segments += [np.column_stack((c[:, 1] + x0 - 1, c[:, 0] + y0 - 1)) for c in find_contours(mask, 0.5)]
+    return segments
 
 
 def summarize_assignment(result: AssignmentResult) -> dict:
@@ -86,8 +107,10 @@ def plot_assignment(result: AssignmentResult, *, image=None, view=None, z=None):
     """One row of four panels: cell centres, molecules by status, voxels and molecules per cell.
 
     Panel 1 shows ``image`` in grey scale (scaled between its 0.5 and 99.5
-    percentiles; none by default) with the territory outlines in green and one
-    dot per cell centre, coloured by the cell's status: ``kept`` blue and
+    percentiles; none by default) with the territory outlines as green lines
+    0.8 points wide and one dot of 30 points² with a thin black edge per cell
+    centre (both sizes independent of the image size), coloured by the cell's
+    status: ``kept`` blue and
     ``excluded_no_nucleus`` orange (drawn, and listed in the legend as
     ``excluded``, only when the result has an excluded cell); panel 2 the same
     image and outlines with the molecules, ``assigned`` blue, ``unassigned`` red
@@ -121,8 +144,7 @@ def plot_assignment(result: AssignmentResult, *, image=None, view=None, z=None):
         does not match their Y, X (or, in the ``single_layer`` view, their Z).
     """
     import matplotlib.pyplot as plt
-    from matplotlib.colors import ListedColormap
-    from skimage.segmentation import find_boundaries
+    from matplotlib.collections import LineCollection
 
     if not isinstance(result, AssignmentResult):
         raise TypeError("result must be an AssignmentResult")
@@ -170,11 +192,11 @@ def plot_assignment(result: AssignmentResult, *, image=None, view=None, z=None):
     if view == "single_layer":
         centres = cells[np.isin(cells.cell_id.to_numpy(np.int64), np.unique(plane))]
     where = "Z maximum" if view == "z_max" else f"z = {z}"
-    # Marker area in points², smaller as the image grows: 12 up to about 250 pixels, 2 from 1500.
+    # Molecule marker area in points², smaller as the image grows: 12 up to about 250 pixels, 2 from 1500.
     size = float(np.clip(3000.0 / max(plane.shape), 2.0, 12.0))
-    legend = dict(loc="upper right", fontsize="small", markerscale=max(1.0, 12.0 / size))
+    legend = dict(loc="upper right", fontsize="small")
 
-    outline = np.ma.masked_where(~find_boundaries(plane, mode="inner"), np.ones(plane.shape))
+    segments = _outline_segments(plane)
     if background is not None and background.size:
         low, high = np.percentile(background, (0.5, 99.5))
     figure, axes = plt.subplots(1, 4, figsize=(20, 5))
@@ -182,14 +204,17 @@ def plot_assignment(result: AssignmentResult, *, image=None, view=None, z=None):
         if background is not None:
             ax.imshow(background, cmap="gray", vmin=low, vmax=max(high, low + 1e-12), interpolation="nearest",
                       label="image")
-        ax.imshow(outline, cmap=ListedColormap([_OUTLINE_COLOUR]), interpolation="nearest", label="outlines")
+        # Unlabelled (no legend entry); the gid names the artist.
+        ax.add_collection(LineCollection(segments, colors=_OUTLINE_COLOUR, linewidths=_OUTLINE_WIDTH,
+                                         gid="outlines"), autolim=False)
         ax.set_xlim(-0.5, plane.shape[1] - 0.5)
         ax.set_ylim(plane.shape[0] - 0.5, -0.5)
     ax = axes[0]
     for status in cell_statuses:
         chosen = centres[centres.status.eq(status).to_numpy(dtype=bool)]
-        ax.scatter(chosen[f"{prefix}centroid_x"], chosen[f"{prefix}centroid_y"], s=2 * size,
-                   c=_CENTRE_COLOURS[status], linewidths=0, label=_CENTRE_LEGEND[status])
+        ax.scatter(chosen[f"{prefix}centroid_x"], chosen[f"{prefix}centroid_y"], s=_CENTRE_AREA,
+                   c=_CENTRE_COLOURS[status], edgecolors=_CENTRE_EDGE[0], linewidths=_CENTRE_EDGE[1],
+                   label=_CENTRE_LEGEND[status])
     ax.legend(**legend)
     ax.set_title(f"cell centres, {where}")
     ax = axes[1]
@@ -197,7 +222,7 @@ def plot_assignment(result: AssignmentResult, *, image=None, view=None, z=None):
         chosen = molecules[molecules.assignment_status.eq(status).to_numpy(dtype=bool)]
         ax.scatter(chosen.x, chosen.y, s=size, c=_STATUS_COLOURS[status], linewidths=0,
                    label=_STATUS_LEGEND[status])
-    ax.legend(**legend)
+    ax.legend(**legend, markerscale=max(1.0, 12.0 / size))
     ax.set_title(f"molecules, {where}")
     for ax, column, label in ((axes[2], f"{prefix}size_voxels", "voxels per cell"),
                               (axes[3], "n_molecules", "molecules per cell")):

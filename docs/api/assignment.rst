@@ -62,7 +62,8 @@ statuses, flags and states, with quantiles and the totals before and after the e
 excluded cell has no compartment counts).
 :py:func:`~starfinder.assignment.plot_assignment` draws one row of four panels: the stain
 in grey scale with the territory outlines in green and a dot at each cell's centroid,
-``kept`` cells blue and excluded cells orange (legend entries ``kept`` and ``excluded``);
+``kept`` cells blue and excluded cells orange (legend entries ``kept`` and ``excluded``),
+outlines and centre dots of a fixed size in points whatever the image size;
 the same with the molecules, ``assigned`` blue, ``unassigned`` red and ``excluded_cell``
 orange with the legend entry ``excluded`` (``outside_grid`` not drawn); and the histograms
 of voxels and of molecules per cell. ``view="z_max"`` draws the Z maximum, ``view="single_layer"`` one plane ``z``
