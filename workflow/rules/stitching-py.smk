@@ -6,6 +6,8 @@
     Uses variables from common.smk; the block is validated there (_stitching_block).
 """
 
+from starfinder.dataset.workflow import _stitching_position_inputs
+
 STITCHING_METHOD = config['stitching'].get('method', 'bigstitcher')
 
 ### ==================== [ Helper Functions ] =========================
@@ -14,6 +16,11 @@ def get_stitching_images(wildcards):
     """The sample's reference images, whose grids Dataset.stitch and the import read."""
     return expand("{output_dir}/images/ref_merged/{fovID}.tif", output_dir=OUTPUT_DIR,
                   fovID=SAMPLE_TO_FOV[wildcards.sample])
+
+def get_stitching_positions(wildcards):
+    """The position file the placement reads (a stage file or a supplied table; none for a regular grid), as
+    _stitching_position_inputs gives it from the same expression as Dataset.stitch."""
+    return _stitching_position_inputs(config, OUTPUT_DIR, wildcards.sample)
 
 if STITCHING_METHOD != 'bigstitcher' and not ASSEMBLY_BLOCK and is_rule_enabled('reads_assignment'):
     raise ValueError(f"stitching.method {STITCHING_METHOD} writes no tile_config_{{sample}}.csv, which the legacy "
@@ -27,7 +34,8 @@ if STITCHING_METHOD == 'bigstitcher':
     rule bigstitcher_macro_sample:
         input:
             expand("{output_dir}/documents/sample-annotation.csv", output_dir=OUTPUT_DIR),
-            get_stitching_images
+            get_stitching_images,
+            get_stitching_positions
         output:
             f"{BIGSTITCHER_DIR}/{{sample}}/BigStitcher_macro.ijm",
             f"{BIGSTITCHER_DIR}/{{sample}}/view_map.csv",
@@ -63,7 +71,8 @@ if STITCHING_METHOD == 'bigstitcher':
             f"{BIGSTITCHER_DIR}/{{sample}}/dataset.xml",
             f"{BIGSTITCHER_DIR}/{{sample}}/view_map.csv",
             f"{BIGSTITCHER_DIR}/{{sample}}/BigStitcher_macro.ijm",
-            get_stitching_images
+            get_stitching_images,
+            get_stitching_positions
         output:
             f"{OUTPUT_DIR}/stitching/{{sample}}/placement.json",
             f"{OUTPUT_DIR}/output/tile_config_{{sample}}.csv",
@@ -79,7 +88,8 @@ else:
     rule stitch_sample:
         input:
             expand("{output_dir}/documents/sample-annotation.csv", output_dir=OUTPUT_DIR),
-            get_stitching_images
+            get_stitching_images,
+            get_stitching_positions
         output:
             f"{OUTPUT_DIR}/stitching/{{sample}}/placement.json"
         resources:

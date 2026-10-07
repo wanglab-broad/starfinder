@@ -336,6 +336,62 @@ def test_wf3_the_blocks_are_python_only_and_ordered(tmp_path):
         workflow._assembly_block(dataset_config(tmp_path, stitching=MULTIVIEW, assembly={"filter": True}))
 
 
+STAGE_AXES = {"x": "+x", "y": "+y"}
+POSITION_CASES = {   # positions -> the position file the placement rules declare (OUT is the output root)
+    "stage_file_default": ({"source": "stage_file", "stage_axes": STAGE_AXES}, ["OUT/documents/maf/sample1.maf"]),
+    "stage_file_path": ({"source": "stage_file", "stage_axes": STAGE_AXES, "stage_file": "/data/stage/LN.maf"},
+                        ["/data/stage/LN.maf"]),
+    "table": ({"source": "table", "table": "/data/positions.csv", "unit": "um"}, ["/data/positions.csv"]),
+    "regular_grid": (MULTIVIEW["positions"], []),
+}
+
+
+@pytest.mark.parametrize("case", sorted(POSITION_CASES))
+def test_wf3_placement_rules_declare_the_position_file(tmp_path, case):
+    """The input function of the placement rules gives the stage file (default or given) or the supplied table,
+    and nothing for a regular grid."""
+    positions, expected = POSITION_CASES[case]
+    config = dataset_config(tmp_path, stitching=dict(MULTIVIEW, positions=positions))
+    workflow._stitching_block(config)
+    root = tmp_path / "data" / "output"
+    assert workflow._stitching_position_inputs(config, root, SAMPLE) == [p.replace("OUT", str(root)) for p in expected]
+
+
+@pytest.mark.parametrize("case", ["stage_file_default", "stage_file_path", "table"])
+def test_wf3_the_declared_position_file_is_the_file_dataset_stitch_reads(tmp_path, monkeypatch, case):
+    """table_from_positions (what Dataset.stitch and the BigStitcher rules call) opens the declared file."""
+    import starfinder.stitching._dataset as positions_module
+    positions, _ = POSITION_CASES[case]
+    opened = []
+
+    def spy(path, **kwargs):
+        opened.append(str(path))
+        raise StopIteration
+
+    monkeypatch.setattr(positions_module, "positions_from_leica", spy)
+    monkeypatch.setattr(positions_module, "positions_from_table", spy)
+    config = dataset_config(tmp_path, stitching=dict(MULTIVIEW, positions=positions))
+    root = tmp_path / "data" / "output"
+    with pytest.raises(StopIteration):
+        positions_module.table_from_positions(positions, ["Position001"], {}, sample=SAMPLE, output_root=root,
+                                              fov_pattern="Position{i:03d}")
+    assert opened == workflow._stitching_position_inputs(config, root, SAMPLE)
+
+
+def test_wf3_the_placement_rules_use_the_position_input_function():
+    text = (ROOT / "workflow/rules/stitching-py.smk").read_text()
+    assert re.search(r"def get_stitching_positions\(wildcards\):\n(?:    .*\n)+?    return _stitching_position_inputs"
+                     r"\(config, OUTPUT_DIR, wildcards\.sample\)", text)
+    rules = re.split(r"\n\s*rule ", text)[1:]
+    placing = [r for r in rules if r.startswith(("bigstitcher_macro_sample", "stitch_sample"))]
+    assert len(placing) == 3 and all("get_stitching_positions" in r.split("output:")[0] for r in placing)
+    engine_rule = next(r for r in rules if r.startswith("bigstitcher_engine"))
+    assert "get_stitching_positions" not in engine_rule
+    # With an assembly block reads_assignment reads the grid of images/ref_merged/{fovID}.tif: an input then.
+    reads = (ROOT / "workflow/rules/reads-assignment.smk").read_text()
+    assert 'READS_ASSIGNMENT_GEOMETRY = [f"{OUTPUT_DIR}/images/ref_merged/{{fovID}}.tif"]' in reads
+
+
 def test_wf3_export_sample_inputs_and_declared_output(tmp_path):
     config = dataset_config(tmp_path, stitching=MULTIVIEW, assembly=ASSEMBLY)
     root = Path("/out")

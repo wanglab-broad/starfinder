@@ -1694,6 +1694,25 @@ def _output_root(config):
     return Path(config['root_output_path']) / config['dataset_id'] / config['output_id']
 
 
+def _stitching_position_inputs(config, output_root, sample):
+    """The position file the placement rules read, as a list of rule inputs (stitching-py.smk).
+
+    With source stage_file, positions.stage_file or else the sample's
+    <OUTPUT>/documents/maf/<sample>.maf, the expression Dataset.stitch's
+    table_from_positions uses, so that create_sample_maf is scheduled when the
+    file is absent; with source table, the supplied CSV; a regular grid reads no
+    file and adds none. A path is passed as the configuration gives it, as the
+    package opens it.
+    """
+    positions = (config.get('stitching') or {}).get('positions') or {}
+    source = positions.get('source')
+    if source == 'stage_file':
+        return [str(positions.get('stage_file') or Path(output_root) / 'documents' / 'maf' / f'{sample}.maf')]
+    if source == 'table' and positions.get('table'):
+        return [str(positions['table'])]
+    return []
+
+
 def _sample_table(block, dataset, sample, fov_ids, grids):
     """The tile position table of the block's positions mapping, holding exactly fov_ids (as Dataset.stitch builds it)."""
     from starfinder.stitching._dataset import table_from_positions
