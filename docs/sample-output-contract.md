@@ -1070,6 +1070,16 @@ key is returned unchanged (lines 1131 to 1135). The points and raster models add
 `transform` attributes. This metadata is the export's, not the source's; the round-trip
 check tests it separately from the source content ("Read-back checks").
 
+**A table that already has `uns["spatialdata_attrs"]`** (the table `expression` keeps every
+`uns` key of `sample.h5ad`, so it is one when that file holds the key and the element is
+written, "Empty populations") is refused by `TableModel.parse` as above, and the export
+does not work around it: `export_spatialdata` raises the library's error, neither
+overwrites nor drops the source key, and writes no store, leaving no `sample.zarr` and no
+staging folder, as check SD4 of
+{doc}`stitching-assembly-validation` asserts. Inside `Dataset.export` the same error is an
+error inside the part `export_spatialdata`, and the rule of "When a part cannot run"
+applies to it.
+
 **Empty populations.** The pinned library rejects an empty shapes element (`ShapesModel`,
 `spatialdata/models/models.py` lines 449 to 450 of 0.6.1) and an annotating table whose
 declared region does not occur among its region values, which is every annotating table
@@ -1214,7 +1224,7 @@ with the W-359 record of each:
 | A retained cell | Its `instance_id` on every output voxel whose nearest voxel of its FOV holds the cell, except where a row below applies. | W-354 label fixture at scale 1: 370 of 391 cells drawn whole with one ID (`tables/w354_summary.csv`) |
 | An excluded cell | Not drawn: its voxels show a retained cell of another FOV where one lies there, and 0 elsewhere. | Both fixtures, both scales: `ids_output` holds only `instance_id`s of retained cells (`tables/w354_summary.csv`, `tables/two_fov_summary.csv`) |
 | Two retained cells of different FOVs whose territories overlap | On the shared voxels, the cell of the FOV first in placement table order; the other cell everywhere else, so it is drawn incomplete. | Two-FOV fixture, cell 9: 1 of its 81 voxels shows cell 8 of the other FOV; W-354 label fixture at scale 1: 3 cells (`tables/two_fov_cells.csv`, `tables/w354_incomplete_edges.csv`) |
-| A cell retained by two FOVs (`conflict`) | Both observations, each with its own `instance_id`: the first FOV's whole, the second's where the first does not cover it. One biological cell then shows two IDs. | Two-FOV fixture, cell 6: two IDs; W-354 label fixture: no such cell (`tables/two_fov_cells.csv`, `tables/w354_summary.csv`) |
+| A cell retained by two FOVs | Both observations, each with its own `instance_id`: the first FOV's whole, the second's where the first does not cover it. One biological cell then shows two IDs. Its rows may carry no flag: `conflict` marks only some of these cells ("Conflicts" below). | Two-FOV fixture, cell 6: two IDs; W-354 label fixture: no such cell (`tables/two_fov_cells.csv`, `tables/w354_summary.csv`) |
 | A cell retained by no FOV (`unclaimed`) | Absent: its area shows 0, or a retained cell of another FOV where one lies there. | Two-FOV fixture, cell 7: absent (`tables/two_fov_cells.csv`) |
 | A cell whose ownership centroid lies exactly on an ownership boundary | Retained by the FOV first in table order (the tie rule of O1), and drawn once, whole. | Two-FOV fixture, cell 5: one ID, whole (`tables/two_fov_cells.csv`) |
 | A retained cell cut by the border of its FOV's image | Drawn as its FOV holds it, cut at that border; the rest is not drawn from another FOV, which excluded the cell. | Two-FOV fixture, cell 10: 35 of its 81 pixels imaged and drawn (`tables/two_fov_cells.csv`) |
@@ -1290,10 +1300,20 @@ that IDs above 2^24 (shifted by 2^24) produce 187 values found in no input even 
 non-blending function (`tables/labels_summary.csv`, `id_offset` 16777216).
 
 **Conflicts.** The label image resolves nothing: a cell retained by two FOVs shows two IDs
-(above), and the conflicting cells are the cell table's `conflict` flags
-({doc}`assembly-contract`, "Flags"); the `labels` section records how many cells flagged
-`conflict` have an ID in the label image, or null for an assembly made with
-`conflicts=False`. No cell is merged and no observation is matched across FOVs.
+(above). The flag `conflict` is the cell table's, by the rule of {doc}`assembly-contract`,
+"Flags": a retained cell is flagged when its ownership centroid lies inside the territory
+of a retained cell of another FOV, or the ownership centroid of a retained cell of another
+FOV lies inside its territory. A cell retained by two FOVs may therefore carry no flag:
+when neither observation's territory holds the other's ownership centroid, the pair
+raises no `conflict`. Cell 6 of the two-FOV fixture is one: A's view and B's are discs of
+radius 4 px (49 px) with ownership centroids at x 77 and x 82, 5 px apart, so neither
+holds the other's centroid and neither row is flagged (W-359 `scripts/labels_retained.py`,
+`tables/two_fov_observations.csv`; the flag rule evaluated on W-359's recipe in W-360
+`tables/label_pair_flags.txt`). The conflict count of the `labels` section counts flagged
+cells only: the cell rows flagged `conflict` whose `instance_id` is in the label image,
+not the cells retained by two FOVs, or null for an assembly made with `conflicts=False`.
+On the two-FOV fixture it is 0, although cell 6 shows two IDs. No cell is merged and no
+observation is matched across FOVs.
 
 **File and store.** `cell_labels.ome.tif` in the folder, in the OME-TIFF layout, uint32,
 with the label grid's geometry; with the SpatialData export also the labels element
@@ -1311,7 +1331,7 @@ the conflict count; wall and CPU time and peak RSS.
 
 | Option | Placement rule | On the W-354 label fixture at scale 1 | Consequence |
 | --- | --- | --- | --- |
-| **LR4. Retained cells drawn whole, first positive view, order 0 (decided)** | as above | 370 of 391 cells whole with one ID, 21 incomplete, none with two or more IDs, none absent (W-359 `tables/w354_summary.csv`) | Each retained cell appears once and whole except where neighbouring segmentations disagree; the image shows assembly's retention, a `conflict` as two IDs and an `unclaimed` cell as absent. |
+| **LR4. Retained cells drawn whole, first positive view, order 0 (decided)** | as above | 370 of 391 cells whole with one ID, 21 incomplete, none with two or more IDs, none absent (W-359 `tables/w354_summary.csv`) | Each retained cell appears once and whole except where neighbouring segmentations disagree; the image shows assembly's retention, a cell retained by two FOVs as two IDs and an `unclaimed` cell as absent. |
 | LR1. Owner-masked FOVs, first positive view, order 0 (option not taken) | each FOV's labels, shifted by 1, cut to its O1 ownership region, with background there encoded as 1 | W-354: 8,016 of 8,203 overlap points where the covering FOVs disagree show the owner's label, 97.7 % rounded (101 points 0, 86 a neighbour's) (W-354 `tables/labels_summary.csv`, `tables/labels_overlap_points.csv`). W-359's rerun equals the array W-354 saved and draws 322 cells whole, 16 incomplete, 53 with two or more IDs and none absent (W-359 `tables/w354_checks.json`, `tables/w354_summary.csv`) | A cell that crosses an ownership boundary is drawn with two IDs. |
 | LR2. First valid view in table order, order 0 (option not taken) | no mask | W-354: 3,991 of 8,209, 48.6 % rounded | Table order decides the overlap; the shown cell may be one assembly excluded there. |
 | LR3. `max_fusion`, order 0 (option not taken) | no mask | W-354: 3,929 of 8,232, 47.7 % rounded | The larger ID wins. |

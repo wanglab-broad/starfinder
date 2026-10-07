@@ -47,9 +47,12 @@ batch (W-331); this page states the identities a test can check, not the validat
   microsim (D7 of the W-152 comment "§2.10 planning decisions (2026-10-05)"). The §2.12
   milestone had excluded cellular masks and assignment truth; this page is the bounded
   addition. W-93 keeps canonical responsibility for synthetic truth and reproducibility.
-* **Three sample-level entries** (stitch, assemble, fuse and export) outside
-  `PipelineConfig` and `FOV.run`; ownership regions are computed in assemble (D3). The
-  scene feeds those entries; it adds no entry of its own to the pipeline.
+* **Two sample-level entries** outside `PipelineConfig` and `FOV.run`: `Dataset.stitch`
+  and `Dataset.export` (D3, as amended at the W-329 review of 2026-10-06);
+  `Dataset.export` calls `assemble`, `fuse`, `fuse_labels` and `export_spatialdata` in
+  order ({doc}`sample-output-contract`, "The export entry"); ownership regions are
+  computed in assemble. The scene feeds those entries; it adds no entry of its own to the
+  pipeline.
 * **Placement runs on the CPU only** and is translation only. The scene's FOV offsets are
   translations; no rotation or deformation of a FOV against the sample is generated.
 * **Retention** (2026-09-27, {doc}`assembly-contract`): cells by centroid, no cross-FOV

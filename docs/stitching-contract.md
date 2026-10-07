@@ -48,9 +48,11 @@ Decided by Jiahao in the §2.10 planning session (W-152 comment "§2.10 planning
 * **multiview-stitcher** is an in-process method in `STITCHING_METHODS`; a method takes
   the tiles and nominal positions and returns per-FOV translations and link diagnostics in
   one call (D3).
-* **Three sample-level entries** outside `PipelineConfig` and `FOV.run`: stitch,
-  assemble, and fuse and export (D3). Ownership regions are computed in assemble from the
-  placement.
+* **Two sample-level entries** outside `PipelineConfig` and `FOV.run`: `Dataset.stitch`
+  and `Dataset.export` (D3, as amended at the W-329 review of 2026-10-06);
+  `Dataset.export` calls `assemble`, `fuse`, `fuse_labels` and `export_spatialdata` in
+  order ({doc}`sample-output-contract`, "The export entry"). Ownership regions are
+  computed in assemble from the placement.
 * **One tile position table**, fed by three converters (Leica stage file, regular grid,
   supplied table), with an explicit stage-axis mapping; placeholder tiles stay inside the
   BigStitcher path (D4).
