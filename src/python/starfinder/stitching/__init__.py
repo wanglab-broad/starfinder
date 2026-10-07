@@ -12,6 +12,10 @@ residual, and a record with the frame, gauge, provenance, inputs and review.
 :func:`stitch` runs one method of ``STITCHING_METHODS`` (none is registered yet) on
 :class:`StitchingInput` images; :func:`placement_from_table` turns a known placement into
 the same record; :func:`placed_metadata` gives a FOV's sample-frame ``ImageMetadata``.
+BigStitcher runs in Fiji as an engine task: :func:`bigstitcher_macro` writes its tiles and
+returns the macro (:class:`BigStitcherConfig`) and the view map, :func:`import_bigstitcher`
+reads its ``dataset.xml`` into the same record, and :func:`legacy_tile_config_view` gives
+today's ``tile_config_{sample}.csv`` from the import.
 :func:`review_placement` applies :class:`ReviewPolicy` (criterion V1),
 :func:`approve_placement` records an approval, and :func:`save_placement` and
 :func:`load_placement` write and read ``stitching/<sample>/`` (option S1).
@@ -19,6 +23,7 @@ the same record; :func:`placed_metadata` gives a FOV's sample-frame ``ImageMetad
 module imports no stitching backend. See docs/stitching-contract.md and
 docs/stitching-algorithms.md.
 """
+from ._bigstitcher import BigStitcherConfig, bigstitcher_macro, import_bigstitcher, legacy_tile_config_view
 from ._errors import PlacementReviewRequiredError, StitchingBackendUnavailableError
 from ._methods import STITCHING_METHODS as _STITCHING_METHODS
 from ._methods import MethodPlacement, StitchingSpec
@@ -38,4 +43,5 @@ __all__ = ["TilePositionTable", "GridSnap", "StageAxisMapping", "positions_from_
            "positions_from_table", "NeighborPair", "neighbor_pairs", "StitchingInput", "PlacementResult",
            "MethodPlacement", "StitchingSpec", "STITCHING_METHODS", "stitch", "placement_from_table",
            "placed_metadata", "ReviewPolicy", "review_placement", "approve_placement", "save_placement",
-           "load_placement", "StitchingBackendUnavailableError", "PlacementReviewRequiredError"]
+           "load_placement", "BigStitcherConfig", "bigstitcher_macro", "import_bigstitcher",
+           "legacy_tile_config_view", "StitchingBackendUnavailableError", "PlacementReviewRequiredError"]

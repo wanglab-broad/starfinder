@@ -19,6 +19,8 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.synthetic.benchmark_scene_preset`
 * :py:obj:`starfinder.benchmark.BenchmarkCase`
 * :py:obj:`starfinder.benchmark.BenchmarkTrialResult`
+* :py:obj:`starfinder.stitching.bigstitcher_macro`
+* :py:obj:`starfinder.stitching.BigStitcherConfig`
 * :py:obj:`starfinder.registration.BSplineConfig`
 * :py:obj:`starfinder.registration.BSplineTransform`
 * :py:obj:`starfinder.synthetic.CALIBRATED_CONDITIONS`
@@ -108,6 +110,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.io.ImageLoadConfig`
 * :py:obj:`starfinder.io.ImageLoadResult`
 * :py:obj:`starfinder.image.ImageMetadata`
+* :py:obj:`starfinder.stitching.import_bigstitcher`
 * :py:obj:`starfinder.segmentation.import_labels`
 * :py:obj:`starfinder.image.IncompatibleGeometryError`
 * :py:obj:`starfinder.segmentation.InputChannel`
@@ -123,6 +126,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.spot_finding.KnownWeights`
 * :py:obj:`starfinder.segmentation.LabelImportConfig`
 * :py:obj:`starfinder.segmentation.labels_to_grid`
+* :py:obj:`starfinder.stitching.legacy_tile_config_view`
 * :py:obj:`starfinder.barcode.load_codebook`
 * :py:obj:`starfinder.barcode.load_direct_panel`
 * :py:obj:`starfinder.stitching.load_placement`

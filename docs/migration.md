@@ -1258,6 +1258,28 @@ pixels as `tile_config_{sample}.csv` is; the gauge is zero mean correction over 
 `image_supported` FOVs. The specification is {doc}`stitching-contract` and
 {doc}`stitching-algorithms`.
 
+### Stitching: the BigStitcher macro and the import of `dataset.xml`
+
+New names in `starfinder.stitching`; nothing existing changes. The legacy rules
+`create_BigStitcher_macro`, `run_BigStitcher_macro` and `create_tile_config` and their
+scripts stay as they are, and Fiji is still run only by the workflow.
+
+| Legacy step | New name |
+| --- | --- |
+| `create_BigStitcher_macro_1.py` writes the macro from `grid.csv`; `stitching_preparation.py` copies the tiles and blanks | `bigstitcher_macro(table, inputs, config=BigStitcherConfig(...), tile_dir=..., save_dir=...)` writes `tile_{j}.tif` and returns the macro text and the view map; `BigStitcherConfig` holds today's parameters as defaults, and `pad_missing=True` (off by default) turns an acquired FOV without an image into a placeholder view |
+| `create_tile_config.py` reads `dataset.xml` (lines 19-58) | `import_bigstitcher(dataset_xml, table=..., view_map=..., grids=..., config=..., fallback=None)` returns a `PlacementResult` |
+| `create_tile_config.py` casts, shifts and draws the rectangles (lines 43-130) | `legacy_tile_config_view(result, img_col=..., img_row=...)`, whose `to_csv()` is today's `tile_config_{sample}.csv` |
+| `dataset.xml` beside the tiles | `save_placement` of an import also writes `view_map.csv` and records the SHA-256 of the macro and of `dataset.xml` |
+
+The macro text equals today's except for the two folders, which are arguments, and the
+voxel size, which is the reference grids' spacing instead of `voxel_size_xy` and
+`voxel_size_z`. The import keeps BigStitcher's raw translations unrounded
+(`method_translation_*`, world units) and gives origins in µm, z divided by the
+calibration's z scale; a view without a link into the reference component is `failed`,
+or `metadata_only` at its nominal position with `fallback="nominal"`, and review is then
+required. The specification is {doc}`stitching-contract` ("BigStitcher") and
+{doc}`stitching-algorithms` ("Import arithmetic").
+
 ## Intentional behavior changes — not mechanical equivalence
 
 | Area | Change and consequence |

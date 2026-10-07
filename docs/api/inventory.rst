@@ -330,7 +330,11 @@ starfinder.stitching
 ~~~~~~~~~~~~~~~~~~~~
 
 * :py:obj:`starfinder.stitching.approve_placement`
+* :py:obj:`starfinder.stitching.bigstitcher_macro`
+* :py:obj:`starfinder.stitching.BigStitcherConfig`
 * :py:obj:`starfinder.stitching.GridSnap`
+* :py:obj:`starfinder.stitching.import_bigstitcher`
+* :py:obj:`starfinder.stitching.legacy_tile_config_view`
 * :py:obj:`starfinder.stitching.load_placement`
 * :py:obj:`starfinder.stitching.MethodPlacement`
 * :py:obj:`starfinder.stitching.neighbor_pairs`

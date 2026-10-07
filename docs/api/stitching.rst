@@ -49,6 +49,24 @@ example a synthetic scene's truth) into the same record, with the nominal positi
 the table and, optionally, the origins given separately: every FOV ``metadata_only`` with
 the flag ``supplied``, no link, gauge ``none``.
 
+BigStitcher, the initial default, runs in Fiji as an engine task, and the package owns its
+two ends. :py:func:`~starfinder.stitching.bigstitcher_macro` writes ``tile_{j}.tif`` in
+the column-major order of BigStitcher's ``Down & Right`` grid (a blank for each empty
+cell, a padding view, and with ``pad_missing=True`` for each acquired FOV without an
+image, a placeholder view) and returns the macro text, whose parameters are those of
+:py:class:`~starfinder.stitching.BigStitcherConfig` (today's macro by default) with the
+reference grids' spacing as voxel size, and the view map (``view``, ``grid_column``,
+``grid_row``, ``fov_id``, ``kind``). :py:func:`~starfinder.stitching.import_bigstitcher`
+reads ``dataset.xml`` into the same record: each view maps to its FOV through the
+``ViewSetup`` tile attribute and the view map, every transform but ``calibration`` is
+composed (translation only), world units become µm through the calibration and each
+FOV's reference spacing, each ``PairwiseResult`` becomes a kept link, and the statuses,
+gauge, fallback and review are those of :py:func:`~starfinder.stitching.stitch`. Padding
+views have no row; their raw translations stay in the method record.
+:py:func:`~starfinder.stitching.legacy_tile_config_view` applies today's integer cast,
+shift and rectangles to the raw translations of every view, which reproduces
+``tile_config_{sample}.csv`` whatever the fallback.
+
 :py:class:`~starfinder.stitching.ReviewPolicy` is criterion V1:
 :py:func:`~starfinder.stitching.review_placement` requires review when a FOV is not
 ``image_supported``, a correction exceeds ``max_correction_fraction`` (0.5) of the FOV's
@@ -61,8 +79,10 @@ review and holds no approval of its current tables.
 
 :py:func:`~starfinder.stitching.save_placement` writes the folder
 ``stitching/<sample>/`` (``placement.json``, ``fovs.csv`` and ``links.csv``, float64 bit
-for bit) as a whole or not at all, and :py:func:`~starfinder.stitching.load_placement`
-reads it back, checking both tables' SHA-256. ``Dataset.stitch(sample, fov_ids,
+for bit; for a BigStitcher import also ``view_map.csv``, with the macro's and
+``dataset.xml``'s SHA-256 in the record) as a whole or not at all, and
+:py:func:`~starfinder.stitching.load_placement` reads it back, checking the tables'
+SHA-256. ``Dataset.stitch(sample, fov_ids,
 table=…, config=…)`` reads each FOV's reference grid from ``images/ref_merged/{fovID}.tif``
 and its stitching image (``reference_merged``, the saved ``reference_stain`` or a
 ``file:`` pattern) one FOV at a time, builds the table from the workflow's ``positions``
@@ -75,7 +95,11 @@ mapping when given one, calls :py:func:`~starfinder.stitching.stitch` and, with
    :toctree: generated
 
    approve_placement
+   bigstitcher_macro
+   BigStitcherConfig
    GridSnap
+   import_bigstitcher
+   legacy_tile_config_view
    load_placement
    MethodPlacement
    neighbor_pairs
