@@ -1403,30 +1403,19 @@ def _write_raw_h5ad(result, path, *, sample, fov_id, tile):
     available. uns["assignment"] is the record as JSON text. Returns the
     seg_label values of the cells written.
     """
-    import anndata
-    import numpy as np
     import pandas as pd
+    from starfinder.assignment import write_h5ad
     from starfinder.io._checkpoint import _jsonable
-    matrix, rows = result.matrix()
-    layers = {}
-    if result.nucleus_labels is not None:
-        row_of = {int(c): i for i, c in enumerate(rows.cell_id)}
-        for compartment in ('nucleus', 'cytoplasm'):
-            values, available = result.matrix(compartment)
-            layers[compartment] = np.full(matrix.shape, np.nan)
-            layers[compartment][[row_of[int(c)] for c in available.cell_id], :] = values
+    _, rows = result.matrix()
     # Object strings throughout: anndata 0.12 writes no pandas Arrow string arrays, which pandas 3 infers.
     with pd.option_context('future.infer_string', False):
         obs = _cell_obs(result, rows, sample=sample, fov_id=fov_id, tile=tile)
         keep = _in_box(obs.fov_x.to_numpy(), obs.fov_y.to_numpy(), tile)
-        layers = {name: layer[keep] for name, layer in layers.items()}
         obs = obs[keep]
         obs.index = pd.Index([str(i) for i in range(len(obs))], dtype=object)
-        adata = anndata.AnnData(X=matrix[keep].astype(np.float64), obs=obs,
-                                var=pd.DataFrame(index=pd.Index(list(result.genes), dtype=object)), layers=layers)
-        adata.uns['assignment'] = json.dumps(_jsonable(result.record), default=str)
-        Path(path).parent.mkdir(parents=True, exist_ok=True)
-        adata.write(path)
+        write_h5ad(path, obs, rows[['cell_id']][keep].reset_index(drop=True), result.counts, result.genes,
+                   layers=result.nucleus_labels is not None,
+                   uns={'assignment': json.dumps(_jsonable(result.record), default=str)})
     return obs.seg_label.to_numpy()
 
 

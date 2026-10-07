@@ -41,6 +41,24 @@ Root exports refer to the same objects as their owning namespaces; modules and
 Owning namespaces (alphabetical)
 --------------------------------
 
+starfinder.assembly
+~~~~~~~~~~~~~~~~~~~
+
+* :py:obj:`starfinder.assembly.assemble`
+* :py:obj:`starfinder.assembly.ASSEMBLY_STATUSES`
+* :py:obj:`starfinder.assembly.AssemblyConfig`
+* :py:obj:`starfinder.assembly.AssemblyInput`
+* :py:obj:`starfinder.assembly.AssemblyResult`
+* :py:obj:`starfinder.assembly.CELL_ASSEMBLY_FLAGS`
+* :py:obj:`starfinder.assembly.CELL_ASSEMBLY_REASONS`
+* :py:obj:`starfinder.assembly.load_assembly`
+* :py:obj:`starfinder.assembly.MOLECULE_ASSEMBLY_FLAGS`
+* :py:obj:`starfinder.assembly.MOLECULE_ASSEMBLY_REASONS`
+* :py:obj:`starfinder.assembly.ownership_map`
+* :py:obj:`starfinder.assembly.OwnershipMap`
+* :py:obj:`starfinder.assembly.sample_anndata`
+* :py:obj:`starfinder.assembly.save_assembly`
+
 starfinder.assignment
 ~~~~~~~~~~~~~~~~~~~~~
 
@@ -60,6 +78,7 @@ starfinder.assignment
 * :py:obj:`starfinder.assignment.plot_assignment`
 * :py:obj:`starfinder.assignment.sample_labels`
 * :py:obj:`starfinder.assignment.summarize_assignment`
+* :py:obj:`starfinder.assignment.write_h5ad`
 
 starfinder.barcode
 ~~~~~~~~~~~~~~~~~~

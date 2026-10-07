@@ -1280,6 +1280,30 @@ or `metadata_only` at its nominal position with `fallback="nominal"`, and review
 required. The specification is {doc}`stitching-contract` ("BigStitcher") and
 {doc}`stitching-algorithms` ("Import arithmetic").
 
+### Sample assembly and the shared AnnData writer
+
+New names in a new module, `starfinder.assembly`, and one new function in
+`starfinder.assignment`; nothing existing changes. The legacy overlap filter of the
+workflow adapter, `create_sample_h5ad.py`, `create_sample_reads_assignment.py` and
+`tile_config_{sample}.csv` stay as they are, and no workflow key is added yet: the
+`assembly` block and `Dataset.export` belong to the export entry.
+
+| Legacy step | New name |
+| --- | --- |
+| `reads_assignment` adds integer `global_x/y/z` from `tile_config` offsets | `assemble(placement, inputs, config=AssemblyConfig())` with one `AssemblyInput(fov_id, grid, assignment=… or molecules=…)` per FOV returns an `AssemblyResult` whose `sample_*` columns are float64 µm in the sample frame |
+| The overlap filter keeps cells and background molecules inside the `start/end_*_norm` rectangles | Ownership from the placement, `ownership_map(placement, grids, config=…, candidates=None)` returning `OwnershipMap`: nearest footprint centre among the owning FOVs, ties by table order; placeholders own no point |
+| Dropped cells and molecules are not written | Every cell and molecule keeps a row with `assembly_status`, `assembly_reason` and `assembly_flags` (`ASSEMBLY_STATUSES`, `CELL_ASSEMBLY_REASONS`, `MOLECULE_ASSEMBLY_REASONS`, `CELL_ASSEMBLY_FLAGS`, `MOLECULE_ASSEMBLY_FLAGS`) |
+| `create_sample_h5ad.py` concatenates the per-FOV `raw.h5ad` | `sample_anndata(result, path, annotation=None)` writes `sample.h5ad` from the sample tables, one row per counted cell |
+| `create_sample_reads_assignment.py` concatenates the per-FOV CSVs | `save_assembly(result, folder, table_format="csv")` writes `tables/fovs`, `tables/cells`, `tables/molecules`, `tables/counts`, `sample.h5ad` and the `assembly` section of `export.json`; `load_assembly(folder)` reads it back |
+| The adapter's `_write_raw_h5ad` builds the AnnData itself | `write_h5ad(path, obs, keys, counts, genes, layers=…, uns=…, var=None, obsm=None)` in `starfinder.assignment`, which the adapter now calls; `raw.h5ad` has the same rows, columns, values and `uns` |
+
+Once a configuration adopts the `assembly` block (a later issue), its per-FOV `raw.h5ad`
+and `reads_assignment.csv` are not box-filtered and have no `global_*` columns, the
+sample outputs move to `export/<sample>/`, cells and molecules are retained by the
+ownership regions of the placement instead of the `tile_config` rectangles, and every
+excluded observation is kept with its reason. The specification is
+{doc}`assembly-contract` and {doc}`assembly-algorithms`.
+
 ## Intentional behavior changes — not mechanical equivalence
 
 | Area | Change and consequence |

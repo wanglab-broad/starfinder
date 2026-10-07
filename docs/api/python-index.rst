@@ -6,6 +6,11 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.registration.AffineTransform`
 * :py:obj:`starfinder.registration.apply_transform`
 * :py:obj:`starfinder.stitching.approve_placement`
+* :py:obj:`starfinder.assembly.assemble`
+* :py:obj:`starfinder.assembly.ASSEMBLY_STATUSES`
+* :py:obj:`starfinder.assembly.AssemblyConfig`
+* :py:obj:`starfinder.assembly.AssemblyInput`
+* :py:obj:`starfinder.assembly.AssemblyResult`
 * :py:obj:`starfinder.barcode.assign_direct`
 * :py:obj:`starfinder.assignment.assign_molecules`
 * :py:obj:`starfinder.assignment.ASSIGNMENT_STATUSES`
@@ -25,6 +30,8 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.registration.BSplineTransform`
 * :py:obj:`starfinder.synthetic.CALIBRATED_CONDITIONS`
 * :py:obj:`starfinder.synthetic.calibrated_scene_preset`
+* :py:obj:`starfinder.assembly.CELL_ASSEMBLY_FLAGS`
+* :py:obj:`starfinder.assembly.CELL_ASSEMBLY_REASONS`
 * :py:obj:`starfinder.assignment.CELL_CORRESPONDENCE`
 * :py:obj:`starfinder.assignment.CELL_STATUSES`
 * :py:obj:`starfinder.segmentation.CellposeConfig`
@@ -127,6 +134,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.segmentation.LabelImportConfig`
 * :py:obj:`starfinder.segmentation.labels_to_grid`
 * :py:obj:`starfinder.stitching.legacy_tile_config_view`
+* :py:obj:`starfinder.assembly.load_assembly`
 * :py:obj:`starfinder.barcode.load_codebook`
 * :py:obj:`starfinder.barcode.load_direct_panel`
 * :py:obj:`starfinder.stitching.load_placement`
@@ -147,6 +155,8 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.spot_finding.MissingWeightsError`
 * :py:obj:`starfinder.segmentation.ModelFile`
 * :py:obj:`starfinder.segmentation.ModelHashMismatchError`
+* :py:obj:`starfinder.assembly.MOLECULE_ASSEMBLY_FLAGS`
+* :py:obj:`starfinder.assembly.MOLECULE_ASSEMBLY_REASONS`
 * :py:obj:`starfinder.assignment.molecule_table`
 * :py:obj:`starfinder.assignment.molecule_table_from_csv`
 * :py:obj:`starfinder.assignment.MoleculeTable`
@@ -162,6 +172,8 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.evaluation.registration.normalized_cross_correlation`
 * :py:obj:`starfinder.assignment.NUCLEUS_STATUSES`
 * :py:obj:`starfinder.barcode.OneBaseEncodingConfig`
+* :py:obj:`starfinder.assembly.ownership_map`
+* :py:obj:`starfinder.assembly.OwnershipMap`
 * :py:obj:`starfinder.spot_finding.PercentileCentroidConfig`
 * :py:obj:`starfinder.preprocessing.PercentileNormalizationConfig`
 * :py:obj:`starfinder.dataset.PipelineConfig`
@@ -221,6 +233,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.dataset.RoundState`
 * :py:obj:`starfinder.benchmark.run_benchmark`
 * :py:obj:`starfinder.preprocessing.run_step`
+* :py:obj:`starfinder.assembly.sample_anndata`
 * :py:obj:`starfinder.assignment.sample_labels`
 * :py:obj:`starfinder.synthetic.SAMPLE_PRESET_VERSION`
 * :py:obj:`starfinder.synthetic.SAMPLE_PRESETS`
@@ -228,6 +241,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.synthetic.SAMPLE_TRUTH_VERSION`
 * :py:obj:`starfinder.synthetic.SampleScene`
 * :py:obj:`starfinder.synthetic.SampleSceneConfig`
+* :py:obj:`starfinder.assembly.save_assembly`
 * :py:obj:`starfinder.synthetic.save_formed_scene`
 * :py:obj:`starfinder.stitching.save_placement`
 * :py:obj:`starfinder.synthetic.save_sample_scene`
@@ -291,6 +305,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.spot_finding.WeightsFile`
 * :py:obj:`starfinder.spot_finding.WeightsHashMismatchError`
 * :py:obj:`starfinder.dataset.WorkflowConfig`
+* :py:obj:`starfinder.assignment.write_h5ad`
 * :py:obj:`starfinder.preprocessing.write_histograms`
 * :py:obj:`starfinder.preprocessing.write_supplied_statistics`
 * :py:obj:`starfinder.barcode.WtaDecoderConfig`

@@ -79,6 +79,14 @@ and every label image it used that is not saved under its run, linking the saved
 ``FOV.load_assignment(name)`` reads the folder and the linked files back, checking every
 recorded SHA-256 (see :doc:`../checkpoints`).
 
+:py:func:`~starfinder.assignment.write_h5ad` builds an AnnData from long counts and writes
+it: ``X`` the float64 whole-cell counts in ``genes`` order, optional ``nucleus`` and
+``cytoplasm`` layers (NaN for a row whose ``compartments`` is not ``available``), strings
+as anndata expects; with no row, ``X`` has shape ``(0, len(genes))``. The workflow
+adapter writes ``expr/{fovID}/raw.h5ad`` with it, and
+:py:func:`~starfinder.assembly.sample_anndata` the sample-level ``sample.h5ad``. It needs
+the ``anndata`` extra.
+
 .. currentmodule:: starfinder.assignment
 
 .. autosummary::
@@ -100,3 +108,4 @@ recorded SHA-256 (see :doc:`../checkpoints`).
    plot_assignment
    sample_labels
    summarize_assignment
+   write_h5ad

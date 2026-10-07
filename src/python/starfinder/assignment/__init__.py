@@ -10,9 +10,12 @@ nuclei, :func:`match_nuclei` relates nuclei to cells by overlap and flags every
 doubtful case; nuclear and cytoplasmic counts exist only where the correspondence
 allows; and cells without a matched nucleus are excluded by default. The result is
 an :class:`AssignmentResult` with the molecule, cell, count and nucleus tables;
-nothing is read or written. See docs/assignment-contract.md and
+nothing is read or written. :func:`write_h5ad` builds an AnnData from long counts and
+writes it, for the workflow's per-FOV ``raw.h5ad`` and the sample-level AnnData of
+``starfinder.assembly``. See docs/assignment-contract.md and
 docs/assignment-algorithms.md.
 """
+from ._anndata import write_h5ad
 from ._assign import AssignmentResult, assign_molecules, sample_labels
 from ._config import (ASSIGNMENT_STATUSES, CELL_CORRESPONDENCE, CELL_STATUSES, COMPARTMENT_STATES, NUCLEUS_STATUSES,
                       AssignmentConfig, CorrespondenceConfig)
@@ -23,4 +26,4 @@ from ._molecules import MoleculeTable, molecule_table, molecule_table_from_csv
 __all__ = ["assign_molecules", "AssignmentResult", "AssignmentConfig", "CorrespondenceConfig",
            "MoleculeTable", "molecule_table", "molecule_table_from_csv", "sample_labels", "match_nuclei",
            "ASSIGNMENT_STATUSES", "CELL_STATUSES", "CELL_CORRESPONDENCE", "NUCLEUS_STATUSES",
-           "COMPARTMENT_STATES", "summarize_assignment", "plot_assignment"]
+           "COMPARTMENT_STATES", "summarize_assignment", "plot_assignment", "write_h5ad"]
