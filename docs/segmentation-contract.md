@@ -948,7 +948,11 @@ constraint-dependencies = ["torch==2.7.1", "torchvision==0.22.1", "huggingface-h
 
 The two extras are added after `piscis`; nothing else in the file changes. torch and
 torchvision are listed in `cellpose` for the same reason as in the §2.7 extras: uv applies
-`[tool.uv.sources]` (the CPU index on Linux) to direct dependencies only.
+`[tool.uv.sources]` (the CPU index on Linux) to direct dependencies only. The block is the
+change of 2026-10-05. Since the §2.10 batch-preparation commit of 2026-10-07 the package
+requires Python 3.11 or newer (`requires-python = ">=3.11"`); the markers stay as written
+above, and the comment's last sentence, which also stays in `pyproject.toml`, describes
+a Python version the package no longer supports.
 
 **The `uv.lock` change**, as `uv lock` made it on 2026-10-05 (W-322). On Linux x86_64 with
 Python 3.12 it is the change expected from the W-305 resolution rows B and C and the W-306
@@ -962,17 +966,20 @@ version changed.
   `ml-dtypes` 0.6.0, `namex` 0.1.0, `opt-einsum` 3.4.0, `optree` 0.20.0, `termcolor` 3.3.0,
   `wheel` 0.48.0 (TensorFlow's closure); `cellpose` 4.2.1.1, `fastremap` 1.20.0,
   `fill-voids` 2.1.2, `opencv-python-headless` 5.0.0.93, `roifile` 2026.9.22,
-  `segment-anything` 1.0 (Cellpose's closure). `roifile` is locked in three versions by
-  Python version: 2025.12.12 for 3.10, 2026.2.10 for 3.11 and 2026.9.22 from 3.12.
+  `segment-anything` 1.0 (Cellpose's closure). `roifile` was locked in three versions by
+  Python version: 2025.12.12 for 3.10, 2026.2.10 for 3.11 and 2026.9.22 from 3.12. The
+  lock of 2026-10-07 (Python 3.11 or newer) keeps the last two.
 * The `starfinder` package entry gains the `stardist`, `cellpose` and `anndata` optional
   dependencies and the two constraints in its metadata. The `anndata` extra
   ({doc}`assignment-contract`) pins the two versions the `spatialdata` extra already
   locked and adds no package.
-* Python 3.10: with the `stardist` extra as first proposed (`python_version < '3.14'`),
-  `uv lock` found no solution, because keras 3.15.1 needs Python 3.11. The extra is
-  therefore empty on Python 3.10, where a `stardist` call raises
-  `SegmentationBackendUnavailableError`. Holding keras at 3.15.1 only from Python 3.11
-  would have locked keras 3.12.4 for Python 3.10, a combination nothing has measured.
+* Python 3.10, which the package supported until 2026-10-07: with the `stardist` extra as
+  first proposed (`python_version < '3.14'`), `uv lock` found no solution, because keras
+  3.15.1 needs Python 3.11. The extra was therefore made empty on Python 3.10, where a
+  `stardist` call raised `SegmentationBackendUnavailableError`. Holding keras at 3.15.1
+  only from Python 3.11 would have locked keras 3.12.4 for Python 3.10, a combination
+  nothing has measured. Since 2026-10-07 the package requires Python 3.11 or newer, and
+  the marker's lower bound excludes no supported version.
 * One platform-specific change beyond the list: on Intel macOS with Python 3.11 to 3.13,
   `numba` goes from 0.63.1 to 0.62.1 and `llvmlite` from 0.46.0 to 0.45.1. `numba` 0.63.1
   has no macOS x86_64 wheel, and the new packages make uv resolve that platform on its
@@ -986,8 +993,9 @@ Verification, as planned for whoever applied it: `uv lock`; `uv export --locked
 --all-extras --all-groups --no-hashes` before and after, whose difference must be exactly
 the list above; `uv sync --extra stardist --extra cellpose` in a fresh environment, then
 the routine test gate and the `learned` parity test. W-305 resolved only Python 3.12 on
-Linux x86_64; `uv lock` resolves every Python version from 3.10 and every platform, where
-it may add platform-specific entries or find no solution. It did both, and Jiahao decided
+Linux x86_64; `uv lock` resolves every Python version the package allows (from 3.10 on
+2026-10-05, from 3.11 since 2026-10-07) and every platform, where it may add
+platform-specific entries or find no solution. It did both, and Jiahao decided
 on 2026-10-05 to narrow the marker of the `stardist` extra and to accept the Intel macOS
 entries (W-322). The `learned` parity test does not exist until the implementation adds
 it.

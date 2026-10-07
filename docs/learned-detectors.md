@@ -29,9 +29,9 @@ uv sync --locked --extra spotiflow --extra piscis
 example `--extra local-registration`, on the same command and on every later
 `uv sync`. Run the commands below with `uv run` from `src/python`.
 
-* **Python versions.** Starfinder supports Python 3.10 or newer, but the extras
+* **Python versions.** Starfinder requires Python 3.11 or newer, and the extras
   carry the marker `python_version < '3.14'` because torch 2.7.1 has no wheel for
-  Python 3.14. The learned detectors therefore need Python 3.10 to 3.13. On
+  Python 3.14. The learned detectors therefore need Python 3.11 to 3.13. On
   Python 3.14 and later the extras install nothing. A learned method then raises
   `SpotFindingBackendUnavailableError`, whose message ends with "(the extra is not
   available on Python 3.14 and later)". The recorded runs below used Python 3.12.

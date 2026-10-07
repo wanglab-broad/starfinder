@@ -2,7 +2,7 @@
 
 ## Install the documentation environment
 
-The package supports Python 3.10 or newer; documentation CI uses **Python 3.12**
+The package requires Python 3.11 or newer; documentation CI uses **Python 3.12**
 and **uv 0.9.28** with the committed lockfile. From the repository root:
 
 ```bash
