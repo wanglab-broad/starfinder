@@ -3,7 +3,7 @@ name = "starfinder"
 version = "0.1.0"
 description = "Spatial transcriptomics data processing pipeline for STARmap"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = {text = "MIT"}
 authors = [
     {name = "Jiahao Huang"}
@@ -49,6 +49,11 @@ cellpose = [
     "cellpose==4.2.1.1; python_version < '3.14'",
     "torch==2.7.1; python_version < '3.14'",
     "torchvision==0.22.1; python_version < '3.14'",
+]
+# Stitching backend (§2.10). multiview-stitcher 0.1.62 requires Python 3.11, as the
+# package does, and lists 3.11 to 3.13, so the extra is empty on 3.14 and later.
+multiview-stitcher = [
+    "multiview-stitcher==0.1.62; python_version < '3.14'",
 ]
 checkpoint = ["pyarrow>=15"]
 spatialdata = ["spatialdata>=0.1", "spatialdata-io>=0.1"]
