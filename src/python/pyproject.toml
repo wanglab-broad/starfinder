@@ -117,6 +117,7 @@ markers = [
     "registration: starfinder.registration and its recipes",
     "spot_finding: starfinder.spot_finding and its detectors",
     "segmentation: starfinder.segmentation, its label contract, methods, mask import and label functions",
+    "stitching: starfinder.stitching, starfinder.assembly and starfinder.sample_output (placement, assembly, export)",
     "barcode: starfinder.barcode (codebook, extraction, decoding, filtering)",
     "synthetic: starfinder.synthetic generation",
     "evaluation: starfinder.evaluation metrics",
