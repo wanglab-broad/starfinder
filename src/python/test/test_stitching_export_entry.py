@@ -16,6 +16,7 @@ import sys
 import weakref
 
 import numpy as np
+import pandas as pd
 import pytest
 import tifffile
 from pandas.testing import assert_frame_equal
@@ -222,6 +223,52 @@ def test_assemble_part_from_molecule_tables(folder):
         assert_frame_equal(getattr(saved, name), getattr(direct, name), check_exact=True)
     assert len(saved.molecules) == sum(len(r.molecules) for r in folder.results.values())
     check_export(folder.export_dir)
+
+
+def test_molecule_tables_are_the_goodspots_rows(folder):
+    """assignment=None: the assembled molecules are exactly the rows of each FOV's goodSpots CSV.
+
+    The CSV ``signal/<fov_id>_goodSpots.csv`` is read here with pandas, not with
+    ``molecule_table_from_csv`` or anything built on it. The rule is that of
+    docs/assignment-contract.md ("The assign entry", "Inputs", ``molecule_table_from_csv``): a
+    legacy one-based ``x, y, z, gene`` CSV, 1 subtracted from each coordinate, row ``i`` (zero-based)
+    with the identity ``spot_id = "csv:<i>"``; the namespace is the FOV's
+    ``[dataset_id, sample_id, fov_id, null]``. Assignments made by the §2.9 workflow route from the
+    same files (``molecule_table_from_csv``, then ``assign_molecules``, saved as ``from_csv``)
+    give a sample with the same molecule keys.
+    """
+    from starfinder.assignment import assign_molecules, molecule_table_from_csv
+    from starfinder.assignment._persist import write_assignment
+
+    from .assembly_fixtures import GOLDEN_GENES, GOLDEN_IDS, label_run, unit_grid, with_record
+    from .fusion_fixtures import TILE_ZYX
+    export(folder, ExportConfig(fuse=False), assignment=None)
+    molecules = load_assembly(folder.export_dir).molecules
+    assert set(molecules.fov_id) == set(GOLDEN_IDS)
+    for fov in GOLDEN_IDS:
+        rows = pd.read_csv(folder.root / "signal" / f"{fov}_goodSpots.csv", dtype={"gene": str})
+        got = molecules[molecules.fov_id == fov].set_index("spot_id")
+        assert len(got) == len(rows) > 0
+        assert set(got.index) == {f"csv:{i}" for i in range(len(rows))}
+        namespace = json.dumps(["data", "sample", fov, None], separators=(",", ":"))
+        assert set(got.spot_namespace) == {namespace}
+        for i, row in rows.iterrows():
+            molecule = got.loc[f"csv:{i}"]
+            assert molecule.gene_id == row.gene
+            assert (molecule.z, molecule.y, molecule.x) == (row.z - 1, row.y - 1, row.x - 1)
+    grid = unit_grid(TILE_ZYX)
+    for fov in GOLDEN_IDS:
+        namespace = json.dumps(["data", "sample", fov, None], separators=(",", ":"))
+        table = molecule_table_from_csv(folder.root / "signal" / f"{fov}_goodSpots.csv", spot_namespace=namespace,
+                                        genes=GOLDEN_GENES)
+        result = assign_molecules(table, label_run(folder.results[fov].cell_labels, fov, grid), grid=grid)
+        write_assignment(folder.assignment_dir(fov, "from_csv"), with_record(result, name="from_csv"),
+                         metadata=grid.metadata)
+    other = folder.root / "export" / "from_csv"
+    export(folder, ExportConfig(fuse=False), assignment="from_csv", output_dir=other)
+    assigned = load_assembly(other).molecules
+    keys = set(zip(molecules.spot_namespace, molecules.spot_id))
+    assert keys == set(zip(assigned.spot_namespace, assigned.spot_id)) and len(keys) == len(molecules)
 
 
 # --- EX2: checks before anything is written ----------------------------------------------------------------------

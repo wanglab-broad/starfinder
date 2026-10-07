@@ -246,6 +246,50 @@ def _check_values(folder, name, output, section):
                 _fail("F3", f"{name}: {int(np.count_nonzero(values))} uncovered voxels of plane {i} are not 0")
 
 
+_METADATA_KEYS = ("zarr.json", ".zarray", ".zattrs", ".zgroup")
+
+
+def _chunk_keys_read(path, level_path, region) -> set[str]:
+    """The chunk keys a read of ``region`` of one level of a Zarr group asks its store for."""
+    import zarr
+    store = zarr.storage.LocalStore(path, read_only=True)
+    keys, get = [], store.get
+
+    async def counted(key, *args, **kwargs):
+        keys.append(key)
+        return await get(key, *args, **kwargs)
+
+    store.get = counted
+    array = zarr.open_array(store=store, path=level_path, mode="r")
+    keys.clear()
+    array[region]
+    return {k for k in keys if not k.endswith(_METADATA_KEYS)}
+
+
+def _check_chunk_reads(folder, name, output, multiscale):
+    """OME-Zarr layout check 3: when a level has more than one chunk, a region inside one chunk touches it only.
+
+    The chunks are the requested ones of docs/sample-output-contract.md ("OME-Zarr layout"),
+    (1, 1, 1024, 1024) for a projection and (1, 1, 16, 512, 512) for a stack, clipped to the
+    level's size on each axis. The region is the first such chunk of each level that has more
+    than one: one chunk is read, never a whole array.
+    """
+    from ._fuse import ZARR_CHUNKS
+    requested = ZARR_CHUNKS["stack" if "z" in output["axes"] else "projection"]
+    requested = [requested[a] for a in output["axes"]]
+    for dataset, level in zip(multiscale["datasets"], output["levels"]):
+        shape = level["shape"]
+        chunks = [min(c, n) for c, n in zip(requested, shape)]
+        if math.prod(math.ceil(n / c) for n, c in zip(shape, chunks)) <= 1:
+            continue
+        region = tuple(slice(0, c) for c in chunks)
+        touched = _chunk_keys_read(folder / output["path"], dataset["path"], region)
+        if len(touched) != 1:
+            _fail("F1", f"{name}: OME-Zarr layout check 3 fails at level {dataset['path']}: a region inside one "
+                        f"chunk ({[(r.start, r.stop) for r in region]}) touches {len(touched)} chunks "
+                        f"{sorted(touched)}")
+
+
 def _check_zarr(folder, name, output, tiff_outputs):
     import tifffile
     import zarr
@@ -282,6 +326,7 @@ def _check_zarr(folder, name, output, tiff_outputs):
         from ._fuse import _codec
         if _codec(array) != level["codec"]:
             _fail("F1", f"{name}: dataset {dataset['path']} has codec {_codec(array)}; the record {level['codec']}")
+    _check_chunk_reads(folder, name, output, multiscale)
     twin = next((t for t in tiff_outputs if t["image"] == output["image"]
                  and t["dimensionality"] == output["dimensionality"]), None)
     if twin is not None:
@@ -339,7 +384,8 @@ def check_export(folder) -> None:
     file of the folder is listed, and a part ``off``, ``not_run`` or ``empty``
     lists none. R3: a written or reused assembly passes ``load_assembly``; with
     the part off no table or ``sample.h5ad`` exists. For each fused file: the
-    OME-TIFF layout checks 1 to 3 or the OME-Zarr layout checks 1 and 2, and
+    OME-TIFF layout checks 1 to 3 or the OME-Zarr layout checks 1 to 3 (a
+    region inside one chunk touches that chunk only, chunk keys counted), and
     the recorded geometry against the fusion grid (F1); the dtype (F2); 0 at
     every voxel no included FOV covers (F3); equal Y and X grids of a
     projection and a stack (F7); ``empty`` exactly without an included FOV

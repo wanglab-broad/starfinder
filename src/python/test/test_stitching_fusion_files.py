@@ -270,6 +270,7 @@ def test_ome_tiff_layout(tmp_path, k, levels, shapes):
     from multiview_stitcher import spatial_image_utils as si_utils
     case = quad()
     section = run(case, tmp_path, dimensionality="both", scale_yx=1 / k, pyramid_levels=levels)
+    one_voxel_axes = []
     for entry in section["outputs"]:
         layout = read_ome_layout(tmp_path / entry["path"])
         stack = entry["dimensionality"] == "stack"
@@ -305,18 +306,29 @@ def test_ome_tiff_layout(tmp_path, k, levels, shapes):
                 library = msi_utils.get_sim_from_msim(msim, scale=f"scale{level}")
                 lib_spacing = si_utils.get_spacing_from_sim(library)
                 lib_origin = si_utils.get_origin_from_sim(library)
-                for a in dims:
-                    i = "zyx".index(a)
-                    # A one-voxel axis has no spacing in the library, which derives it from coordinates (1.0).
-                    if library.sizes[a] > 1:
-                        assert abs(lib_spacing[a] - recorded["spacing_zyx"][i]) <= 1e-9
-                    assert abs(lib_origin[a] - recorded["origin_zyx"][i]) <= 1e-9
-                    f = 1 if a == "z" else 2 ** level
+                shape = tif.series[0].levels[level].shape
+                assert list(shape)[-2:] == recorded["shape_zyx"][-2:]
+                for i in range(3):
+                    # The record carries the page's formula on every axis, one-voxel axes included.
+                    f = recorded["factors_zyx"][i]
+                    assert f == (1 if i == 0 else 2 ** level)
                     assert abs(recorded["spacing_zyx"][i] - f * spacing[i]) <= 1e-9
                     assert abs(recorded["origin_zyx"][i] - (origin[i] + spacing[i] * (f - 1) / 2)) <= 1e-9
+                for a in dims:
+                    i = "zyx".index(a)
+                    assert abs(lib_origin[a] - recorded["origin_zyx"][i]) <= 1e-9
+                    if library.sizes[a] > 1:
+                        assert abs(lib_spacing[a] - recorded["spacing_zyx"][i]) <= 1e-9
+                    else:
+                        # A7 at a one-voxel axis: the library derives spacing from coordinates and reports 1.0,
+                        # not the page's f·S; asserted so that a change of the library shows.
+                        one_voxel_axes.append((entry["path"], level, a))
+                        assert lib_spacing[a] == 1.0 and recorded["spacing_zyx"][i] != 1.0
                 assert np.array_equal(tif.series[0].levels[level].asarray(),
                                       np.asarray(library.data[0, 0].compute()).reshape(
                                           tif.series[0].levels[level].shape))
+    # quad at k = 4 with three levels ends at 1 × 1 (15 → 7 → 3 → 1); at k = 1 no level has a one-voxel axis.
+    assert len(one_voxel_axes) == (4 if k == 4 else 0), one_voxel_axes
     check_export(tmp_path)
 
 
@@ -338,6 +350,43 @@ def test_standalone_ome_zarr(tmp_path, version, zarr_format):
         level0 = np.asarray(group["0"][...]).squeeze()
         assert np.array_equal(level0, read(tmp_path, output(section, dimensionality)).squeeze())   # F9
     check_export(tmp_path)
+
+
+@pytest.mark.parametrize(("version", "zarr_format"), [("0.5", 3), ("0.4", 2)])
+def test_check_export_counts_chunk_reads(tmp_path, version, zarr_format):
+    """OME-Zarr layout check 3 in check_export: a region inside one chunk touches that chunk only.
+
+    Two FOVs of 20×8×8 (a hand-built stack taller than 16 planes) give a stack of two requested
+    chunks (1, 1, 16, 512, 512) in Z, clipped to 16 × 8 × 14. check_export passes on the files the
+    export writes; after level 0 is rewritten with chunks of 8 planes (and the record made to
+    match, so that layout checks 1 and 2 and R2 pass), the first requested chunk spans two
+    stored chunks and check_export fails naming layout check 3.
+    """
+    import zarr
+
+    from starfinder.sample_output._fuse import _codec
+    from starfinder.sample_output._record import directory_files, section_sha256
+    z, y, x = np.meshgrid(np.arange(20), np.arange(8), np.arange(8), indexing="ij")
+    arrays = {f"T{f}": (1 + 64 * z + 8 * y + x + 100 * f).astype(np.uint16) for f in range(2)}
+    case = make_case("tall", {"T0": (0.0, 0.0, 0.0), "T1": (0.0, 0.0, 6.25)}, arrays)
+    section = run(case, tmp_path, dimensionality="stack", scale_yx=1, ome_zarr=True, ome_zarr_version=version)
+    entry = output(section, "stack", "ome_zarr")
+    assert entry["zarr_format"] == zarr_format and entry["chunks"] == [1, 1, 16, 8, 14]
+    check_export(tmp_path)
+    path = tmp_path / entry["path"]
+    group = zarr.open_group(str(path), mode="r+")
+    data = group["0"][...]
+    rewritten = group.create_array("0", shape=data.shape, dtype=data.dtype, chunks=(1, 1, 8, 8, 14), overwrite=True)
+    rewritten[...] = data
+    record = json.loads((tmp_path / "export.json").read_text())
+    stored = next(o for o in record["fusion"]["outputs"] if o["path"] == entry["path"])
+    stored["levels"][0]["chunks"] = stored["chunks"] = [1, 1, 8, 8, 14]
+    stored["levels"][0]["codec"] = stored["compression"] = _codec(zarr.open_array(str(path / "0"), mode="r"))
+    stored["files"] = directory_files(path)
+    stored["sha256"] = section_sha256(stored["files"])
+    (tmp_path / "export.json").write_text(json.dumps(record))
+    with pytest.raises(ValueError, match="OME-Zarr layout check 3 fails at level 0: .* touches 2 chunks"):
+        check_export(tmp_path)
 
 
 # --- FI10: dtypes written ----------------------------------------------------------------------------------------
