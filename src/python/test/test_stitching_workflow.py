@@ -46,7 +46,7 @@ from starfinder.stitching._dataset import POSITION_KEYS
 
 from .assembly_fixtures import SAMPLE
 from .fusion_fixtures import export_folder, golden_codebook
-from .stitching_fixtures import LN_SPACING, grid
+from .stitching_fixtures import LN_SPACING, STAGE_SPACING, grid, maf_text
 from .test_assignment_golden import SHAPE_ZYX, label_fixture
 from .test_assignment_workflow import KEEP, LEGACY_OBS, LEGACY_READS, NEW_OBS, NEW_READS, run_rule
 from .test_stitching_bigstitcher import (HAND_RECORDS, LINK_IDS, LINK_SHAPE, golden_stitching_setups,  # noqa: F401
@@ -650,3 +650,87 @@ def test_wf3_legacy_writer_hand_records(tmp_path, hand_records_setups, name, fal
     workflow._write_tile_config(result, path, {"img_col": 100, "img_row": 100})
     frame, _ = legacy_tile_config(plain, grid_csv, 100, 100)
     assert path.read_bytes() == frame.to_csv().encode()
+
+
+# --- WF3: FOV names of a stage file at the workflow boundary ----------------------------------------------------
+# A sample of FOVs 9 to 12 on a 2 × 2 stage grid (step 261 µm, tiles of 16 × 24 px at 18 × 12 µm, so 288 µm), the
+# stage file in the order 9, 10, 12, 11. Its PositionIDs are the FOV numbers i, as create_sample_maf.py keeps them.
+STAGE_POINTS = ((9, "0.076", "0.048"), (10, "0.076", "0.048261"), (12, "0.076261", "0.048261"),
+                (11, "0.076261", "0.048"))
+STAGE_SHAPE = (2, 16, 24)
+STAGE_POSITIONS = {"source": "stage_file", "stage_axes": {"x": "+x", "y": "+y"}, "snap_to_grid": {"overlap": 0.1}}
+
+
+def stage_dataset(tmp_path, pattern, points=STAGE_POINTS, start=9, end=12, **blocks):
+    """A configuration, the sample annotation, the default stage file and a ref_merged image per FOV of the sample."""
+    config = dataset_config(tmp_path, pattern=pattern, **blocks)
+    sheet = annotation(tmp_path, start, end)
+    root = tmp_path / "data" / "output"
+    (root / "documents" / "maf").mkdir(parents=True, exist_ok=True)
+    (root / "documents" / "maf" / f"{SAMPLE}.maf").write_text(maf_text(points))
+    for i in range(start, end + 1):
+        save_volume(np.full(STAGE_SHAPE, i, np.uint16), root / "images/ref_merged" / f"{pattern.format(i=i)}.tif",
+                    metadata=grid(STAGE_SHAPE, STAGE_SPACING).metadata)
+    return config, sheet, root
+
+
+@pytest.mark.parametrize("pattern", ["tile_{i:02d}", "tile_{i}"])
+def test_wf3_stage_file_names_in_process(tmp_path, monkeypatch, pattern):
+    """_run_stitching reaches Dataset.stitch (run for real up to stitch) with a table named by fov_id_pattern."""
+    import starfinder.stitching as stitching
+    config, sheet, root = stage_dataset(tmp_path, pattern, stitching=dict(MULTIVIEW, positions=STAGE_POSITIONS,
+                                                                           input="reference_merged"))
+    calls = []
+    monkeypatch.setattr(stitching, "stitch", lambda inputs, table, **kw: calls.append((inputs, table, kw)) or "result")
+    monkeypatch.setattr(stitching, "save_placement", lambda result, folder: None)
+    placement = root / "stitching" / SAMPLE / "placement.json"
+    workflow._run_stitching(stub(config, inputs=[sheet], outputs=[placement], sample=SAMPLE))
+    (inputs, table, kwargs), = calls
+    names = [pattern.format(i=p) for p, *_ in STAGE_POINTS]
+    assert table.fov_ids == names                                      # stage-file order
+    assert table.positions["position_id"].tolist() == [9, 10, 12, 11]
+    assert [item.fov_id for item in inputs] == names and kwargs["sample"] == SAMPLE
+    assert set(names) == set(workflow._sample_fovs(sheet, config, SAMPLE))
+    assert table.record["fov_ids"] == {str(p): pattern.format(i=p) for p, *_ in STAGE_POINTS}
+
+
+@pytest.mark.parametrize("pattern", ["tile_{i:02d}", "tile_{i}"])
+def test_wf3_stage_file_names_bigstitcher(tmp_path, monkeypatch, pattern):
+    """The macro rule's view map and the import rule's table carry the names of fov_id_pattern."""
+    import starfinder.stitching as stitching
+    save = tmp_path / "bigstitcher"
+    config, sheet, root = stage_dataset(tmp_path, pattern, stitching={"positions": STAGE_POSITIONS,
+                                                                      "bigstitcher_save_dir": str(save)})
+    folder = save / SAMPLE
+    folder.mkdir(parents=True)
+    macro, view_map = folder / "BigStitcher_macro.ijm", folder / "view_map.csv"
+    workflow._run_bigstitcher_macro(stub(config, inputs=[sheet], outputs=[macro, view_map], sample=SAMPLE))
+    views = pd.read_csv(view_map, keep_default_na=False)
+    expected = [pattern.format(i=i) for i in (9, 10, 11, 12)]          # column-major cells: 9, 10 | 11, 12
+    assert views["fov_id"].tolist() == expected and views["kind"].tolist() == ["fov"] * 4
+    assert expected == workflow._sample_fovs(sheet, config, SAMPLE)
+    tables = []
+
+    def spy(xml, *, table, **kwargs):
+        tables.append(table)
+        raise StopIteration
+
+    monkeypatch.setattr(stitching, "import_bigstitcher", spy)
+    with pytest.raises(StopIteration):
+        workflow._run_stitching(stub(config, inputs=[sheet, folder / "dataset.xml", view_map, macro],
+                                     outputs=[root / "stitching" / SAMPLE / "placement.json",
+                                              root / "output" / "tile_config_sample1.csv"], sample=SAMPLE))
+    assert tables[0].fov_ids == [pattern.format(i=p) for p, *_ in STAGE_POINTS]
+
+
+@pytest.mark.parametrize("points, match", [
+    (STAGE_POINTS + ((13, "0.076522", "0.048"),), r"missing \[\], extra \['tile_13'\]"),   # not a FOV of the sample
+    (STAGE_POINTS[:3], r"missing \['tile_11'\], extra \[\]"),                                # a FOV not listed
+])
+def test_wf3_a_stage_file_that_does_not_match_the_sample_raises(tmp_path, points, match):
+    """As Dataset.stitch for a table that does not match its FOVs: ValueError naming both lists."""
+    config, sheet, root = stage_dataset(tmp_path, "tile_{i}", points=points,
+                                        stitching=dict(MULTIVIEW, positions=STAGE_POSITIONS))
+    with pytest.raises(ValueError, match=match):
+        workflow._run_stitching(stub(config, inputs=[sheet], outputs=[root / "stitching/sample1/placement.json"],
+                                     sample=SAMPLE))

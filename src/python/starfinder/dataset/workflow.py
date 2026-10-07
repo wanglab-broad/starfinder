@@ -1713,11 +1713,30 @@ def _stitching_position_inputs(config, output_root, sample):
     return []
 
 
-def _sample_table(block, dataset, sample, fov_ids, grids):
-    """The tile position table of the block's positions mapping, holding exactly fov_ids (as Dataset.stitch builds it)."""
+def _workflow_fov_name(config):
+    """PositionID → FOV ID by the workflow's own rule, fov_id_pattern.format(i=p) (common.smk, _sample_fovs).
+
+    The workflow's fov_id_pattern is a brace pattern; Dataset.fov_pattern is a
+    percent pattern for Python callers, so the placement rules give the package
+    this rule instead of letting it format the brace pattern with %. A sample's
+    stage file keeps the raw PositionIDs, which are the FOV numbers i of
+    fov_start..fov_end (create_sample_maf.py).
+    """
+    pattern = config['fov_id_pattern']
+    return lambda pid: pattern.format(i=pid)
+
+
+def _sample_table(block, dataset, sample, fov_ids, grids, config):
+    """The tile position table of the block's positions mapping, holding exactly fov_ids (as Dataset.stitch builds it).
+
+    A stage file's PositionIDs are named by the workflow's rule
+    (_workflow_fov_name). A FOV of the sample that the positions do not list, or
+    a listed FOV that is not one of the sample, raises ValueError naming both
+    lists, as Dataset.stitch does for a table that does not match its FOVs.
+    """
     from starfinder.stitching._dataset import table_from_positions
     table = table_from_positions(block.positions, fov_ids, grids, sample=sample, output_root=dataset.output_root,
-                                 fov_pattern=dataset.fov_pattern)
+                                 fov_pattern=dataset.fov_pattern, fov_name=_workflow_fov_name(config))
     if set(table.fov_ids) != set(fov_ids):
         missing = [f for f in fov_ids if f not in table.fov_ids]
         extra = [f for f in table.fov_ids if f not in fov_ids]
@@ -1758,7 +1777,9 @@ def _run_stitching(snakemake):
 
     Input 0 is the sample annotation, which gives the sample's FOVs. With an
     in-process method, Dataset.stitch with the block's positions, config,
-    input, review and fallback, saved to the output's folder. With bigstitcher,
+    input, review and fallback, saved to the output's folder; with a stage
+    file the adapter builds the table itself (_sample_table), so that its
+    PositionIDs are named by fov_id_pattern.format(i=p). With bigstitcher,
     the import of the engine rule's dataset.xml (input 1) with the view map
     (input 2) and the macro (input 3) of the macro rule, on the table of the
     positions and the FOVs' reference grids (images/ref_merged/{fovID}.tif);
@@ -1774,11 +1795,17 @@ def _run_stitching(snakemake):
     fov_ids = _sample_fovs(snakemake.input[0], config, sample)
     folder = Path(snakemake.output[0]).parent
     if block.method != _BIGSTITCHER:
-        dataset.stitch(sample, fov_ids, table=block.positions, config=block.config, input=block.input,
+        table = block.positions
+        if table.get('source') == 'stage_file':
+            # Named by the workflow's rule here: Dataset.stitch would format the brace pattern with %.
+            grids = {fov: reference_grid_from_file(_FovPaths(dataset.output_root, fov).ref_merged_tif)
+                     for fov in fov_ids}
+            table = _sample_table(block, dataset, sample, fov_ids, grids, config)
+        dataset.stitch(sample, fov_ids, table=table, config=block.config, input=block.input,
                        review=block.review, fallback=block.fallback, output_dir=folder)
         return
     grids = {fov: reference_grid_from_file(_FovPaths(dataset.output_root, fov).ref_merged_tif) for fov in fov_ids}
-    table = _sample_table(block, dataset, sample, fov_ids, grids)
+    table = _sample_table(block, dataset, sample, fov_ids, grids, config)
     result = import_bigstitcher(snakemake.input[1], table=table, view_map=_read_view_map(snakemake.input[2]),
                                 grids=grids, config=block.config, review=block.review, fallback=block.fallback,
                                 sample=sample, macro=Path(snakemake.input[3]).read_text())
@@ -1802,7 +1829,7 @@ def _run_bigstitcher_macro(snakemake):
     dataset = _workflow_dataset(config)
     fov_ids = _sample_fovs(snakemake.input[0], config, sample)
     loaded = read_inputs(dataset.output_root, fov_ids, block.input)
-    table = _sample_table(block, dataset, sample, fov_ids, {fov: item.grid for fov, item in loaded.items()})
+    table = _sample_table(block, dataset, sample, fov_ids, {fov: item.grid for fov, item in loaded.items()}, config)
     text, view_map = bigstitcher_macro(table, [loaded[fov] for fov in table.fov_ids], config=block.config,
                                        tile_dir=folder / 'tiles', save_dir=folder)
     Path(snakemake.output[0]).write_text(text)

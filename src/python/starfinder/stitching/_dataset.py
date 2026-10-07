@@ -120,8 +120,14 @@ def _section(positions, key, required):
     return section
 
 
-def table_from_positions(positions, fov_ids, grids, *, sample, output_root, fov_pattern) -> TilePositionTable:
-    """The tile position table of the workflow's ``positions`` mapping, with the geometry the converter used."""
+def table_from_positions(positions, fov_ids, grids, *, sample, output_root, fov_pattern,
+                         fov_name=None) -> TilePositionTable:
+    """The tile position table of the workflow's ``positions`` mapping, with the geometry the converter used.
+
+    A stage file's ``PositionID`` ``p`` is the FOV ``fov_name(p)``; without
+    ``fov_name`` (``Dataset.stitch``) it is ``fov_pattern % p``. The workflow
+    adapter passes its own rule, ``fov_id_pattern.format(i=p)``.
+    """
     if not isinstance(positions, Mapping):
         raise TypeError("table must be a TilePositionTable or the workflow's positions mapping")
     unknown = [k for k in positions if k not in POSITION_KEYS]
@@ -144,7 +150,8 @@ def table_from_positions(positions, fov_ids, grids, *, sample, output_root, fov_
             section = _section(positions, "snap_to_grid", ("overlap",))
             tile, spacing, geometry = _geometry(positions, grids)
             snap = GridSnap(overlap=section["overlap"], tile_shape_yx=tile, spacing_yx=spacing)
-        ids = {pid: fov_pattern % pid for pid, *_ in _stage_points(Path(path))} if Path(path).is_file() else {}
+        name = fov_name if fov_name is not None else (lambda pid: fov_pattern % pid)
+        ids = {pid: name(pid) for pid, *_ in _stage_points(Path(path))} if Path(path).is_file() else {}
         table = positions_from_leica(path, stage_axes=StageAxisMapping(x=axes["x"], y=axes["y"]), fov_ids=ids,
                                      snap_to_grid=snap)
     elif source == "table":
