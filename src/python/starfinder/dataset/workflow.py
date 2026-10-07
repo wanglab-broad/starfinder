@@ -1352,6 +1352,33 @@ def _legacy_cells(path, config, fov_id, target):
     return grid, cells
 
 
+def _assembly_cells(path, output_root, config, fov_id, target):
+    """(molecule grid, cell run) of a legacy label file with an assembly block: on the reference grid.
+
+    The molecule grid is that of images/ref_merged/{fovID}.tif, the grid
+    Dataset.export gives assemble, so the saved assignment passes assemble's
+    grid check; a ZYX label file must have its shape, and a YX one is a plane
+    on its Z maximum projection.
+    """
+    import tifffile
+    from starfinder.image import IncompatibleGeometryError
+    from starfinder.segmentation import import_labels, reference_grid_from_file
+    from ._paths import _FovPaths
+    grid = reference_grid_from_file(_FovPaths(output_root, fov_id).ref_merged_tif)
+    with tifffile.TiffFile(path) as tif:
+        shape = tuple(int(n) for n in tif.series[0].shape)
+    if len(shape) == 2 and shape == tuple(grid.shape_zyx[1:]):
+        label_grid = grid.projected(method='max') if grid.shape_zyx[0] > 1 else grid
+    elif shape == tuple(grid.shape_zyx):
+        label_grid = grid
+    else:
+        raise IncompatibleGeometryError(f'{path} has shape {shape}; the reference grid of FOV {fov_id!r} '
+                                        f'(images/ref_merged) is {grid.shape_zyx}')
+    cells = import_labels(path, grid=label_grid, target=target,
+                          label_namespace=_label_namespace(config, fov_id, _LEGACY_SEGMENTATION_RUN))
+    return grid, cells
+
+
 def _in_box(x, y, tile):
     """Whether integer positions lie in the tile's start/end_x_norm, start/end_y_norm box (legacy range test)."""
     return ((x >= tile['start_x_norm']) & (x < tile['end_x_norm']) & (y >= tile['start_y_norm'])
@@ -1364,7 +1391,8 @@ def _cell_obs(result, rows, *, sample, fov_id, tile):
     Legacy meaning, computed on the territories assign samples: volume is
     expanded_size_voxels (size_voxels without expansion), fov_x/y/z the
     truncated (expanded_)centroid, seg_label the cell_id, global_* fov_* plus
-    the tile offsets; plane cells have no fov_z and global_z.
+    the tile offsets; plane cells have no fov_z and global_z. Without a tile
+    (an assembly block, option W1) there are no global_* columns.
     """
     import numpy as np
     import pandas as pd
@@ -1378,7 +1406,7 @@ def _cell_obs(result, rows, *, sample, fov_id, tile):
     for axis in axes:
         columns[f'fov_{axis}'] = rows[f'{prefix}centroid_{axis}'].to_numpy(np.float64).astype(np.int64)
     columns['seg_label'] = rows.cell_id.to_numpy(np.int64)
-    for axis in axes:
+    for axis in axes if tile is not None else ():
         columns[f'global_{axis}'] = columns[f'fov_{axis}'] + np.int64(tile[axis])
     columns.update(size_voxels=rows.size_voxels.to_numpy(np.int64),
                    expanded_size_voxels=pd.array(rows.expanded_size_voxels, dtype='Int64'),
@@ -1397,12 +1425,15 @@ def _write_raw_h5ad(result, path, *, sample, fov_id, tile):
 
     X is the float64 whole-cell counts in result.genes order and obs the
     legacy and cell-table columns (_cell_obs); the legacy overlap filter keeps
-    the cells whose fov_x and fov_y lie in the tile box. With nuclei, the
+    the cells whose fov_x and fov_y lie in the tile box. With tile None (an
+    assembly block, option W1) every kept cell is written and obs has no
+    global_* columns. With nuclei, the
     float64 layers nucleus and cytoplasm hold the compartment counts, 0.0 for
     a measured zero and NaN for every gene of a cell whose compartments are not
     available. uns["assignment"] is the record as JSON text. Returns the
     seg_label values of the cells written.
     """
+    import numpy as np
     import pandas as pd
     from starfinder.assignment import write_h5ad
     from starfinder.io._checkpoint import _jsonable
@@ -1410,7 +1441,8 @@ def _write_raw_h5ad(result, path, *, sample, fov_id, tile):
     # Object strings throughout: anndata 0.12 writes no pandas Arrow string arrays, which pandas 3 infers.
     with pd.option_context('future.infer_string', False):
         obs = _cell_obs(result, rows, sample=sample, fov_id=fov_id, tile=tile)
-        keep = _in_box(obs.fov_x.to_numpy(), obs.fov_y.to_numpy(), tile)
+        keep = (_in_box(obs.fov_x.to_numpy(), obs.fov_y.to_numpy(), tile) if tile is not None
+                else np.ones(len(obs), dtype=bool))
         obs = obs[keep]
         obs.index = pd.Index([str(i) for i in range(len(obs))], dtype=object)
         write_h5ad(path, obs, rows[['cell_id']][keep].reset_index(drop=True), result.counts, result.genes,
@@ -1430,19 +1462,25 @@ def _write_reads_assignment(result, reads_csv, path, *, tile, cells):
     unassigned and excluded_cell molecules whose sampled voxel lies in the tile
     box. Every outside_grid molecule follows them, in input order, unfiltered
     (it has no sampled voxel, and the script wrapped or raised on it): seg_label
-    0, null cell columns and coordinates computed as for the other rows.
+    0, null cell columns and coordinates computed as for the other rows. With
+    tile None (an assembly block, option W1) every molecule is written in input
+    order, without global_* columns.
     """
     import numpy as np
     import pandas as pd
     reads = pd.read_csv(reads_csv)
     for axis in ('x', 'y', 'z'):
         reads[axis] = reads[axis] - 1
-        reads[f'global_{axis}'] = reads[axis] + tile[axis]
+        if tile is not None:
+            reads[f'global_{axis}'] = reads[axis] + tile[axis]
     molecules = result.molecules
     reads['seg_label'] = molecules.cell_id.astype('Int64').fillna(0).to_numpy(np.int64)
     for column in ('spot_id', 'assignment_status', 'cell_id', 'in_expansion', 'original_cell_id', 'nucleus_id',
                    'compartment'):
         reads[column] = molecules[column].to_numpy(dtype=object, na_value=None)
+    if tile is None:
+        reads.to_csv(path, index=False)
+        return
     status = molecules.assignment_status.to_numpy(dtype=object)
     assigned = (status == 'assigned') & np.isin(reads.seg_label.to_numpy(), cells)
     x = molecules.voxel_x.astype('Int64').fillna(-1).to_numpy(np.int64)
@@ -1474,21 +1512,41 @@ def _run_reads_assignment(snakemake):
     Also writes expr/{fovID}/assignment.png (plot_assignment, Z-maximum view
     over the DAPI image), assignment_single_layer.png (its middle plane) for a
     ZYX label image only, and log.txt with the assignment ratio.
+
+    With an assembly block (option W1 of docs/assembly-contract.md, "Workflow
+    configuration") no tile configuration is read: the molecule grid is that
+    of images/ref_merged/{fovID}.tif, as Dataset.export reads it
+    (_assembly_cells), the per-FOV files are written without the overlap
+    filter and without global_* columns, and the result is saved as the FOV's
+    assignment folder checkpoints/{fovID}/assignment/<assembly.assignment>/
+    (its record named so), which the export_sample rule assembles.
     """
     import matplotlib.pyplot as plt
     import tifffile
     from starfinder.assignment import assign_molecules, molecule_table_from_csv, plot_assignment
     config, fov_id = snakemake.config, snakemake.wildcards.fovID
     assignment, target, translation = _reads_assignment(config)
+    block = _assembly_block(config) if 'assembly' in config else None
     sample, number = _fov_sample(snakemake.input[0], config, fov_id)
     output_root = Path(config['root_output_path']) / config['dataset_id'] / config['output_id']
-    tile = _tile_record(output_root / 'output' / f'tile_config_{sample}.csv', number)
+    tile = None if block is not None else _tile_record(output_root / 'output' / f'tile_config_{sample}.csv', number)
     genes = _assignment_genes(snakemake.input[4], config)
-    grid, cells = _legacy_cells(Path(snakemake.input[2]), config, fov_id, target)
+    if block is None:
+        grid, cells = _legacy_cells(Path(snakemake.input[2]), config, fov_id, target)
+    else:
+        grid, cells = _assembly_cells(Path(snakemake.input[2]), output_root, config, fov_id, target)
     molecules = molecule_table_from_csv(snakemake.input[3], spot_namespace=_label_namespace(config, fov_id),
                                         genes=genes)
     result = assign_molecules(molecules, cells, grid=grid, config=assignment)
-    result = replace(result, record=dict(result.record, name='reads_assignment', workflow=translation))
+    name = 'reads_assignment' if block is None or block.assignment is None else block.assignment
+    result = replace(result, record=dict(result.record, name=name, workflow=translation))
+    if block is not None and block.assignment is not None:
+        from starfinder.assignment import summarize_assignment
+        from starfinder.assignment._persist import assignment_directory, write_assignment
+        from ._paths import _FovPaths
+        result = replace(result, record=dict(result.record, counts=summarize_assignment(result)))
+        result = write_assignment(assignment_directory(_FovPaths(output_root, fov_id).checkpoint_dir, name), result,
+                                  metadata=cells.grid.metadata)
     h5ad, csv_path = Path(snakemake.output[0]), Path(snakemake.output[1])
     written = _write_raw_h5ad(result, h5ad, sample=sample, fov_id=fov_id, tile=tile)
     _write_reads_assignment(result, snakemake.input[3], csv_path, tile=tile, cells=written)
@@ -1504,8 +1562,416 @@ def _run_reads_assignment(snakemake):
         figure.savefig(h5ad.parent / name)
         plt.close(figure)
     counts = result.record['counts']
+    kept = (f'{len(written)} cells inside the tile box' if block is None else
+            f'{len(written)} cells written without the tile filter (export_sample assembles the sample)')
     (h5ad.parent / 'log.txt').write_text(
         f"{counts['assigned']} of {counts['molecules']} molecules assigned to {counts['cells_kept']} cells; "
         f"{counts['unassigned']} unassigned, {counts['excluded_cell']} in excluded cells, "
-        f"{counts['outside_grid']} outside the grid; {len(written)} cells inside the tile box\n"
+        f"{counts['outside_grid']} outside the grid; {kept}\n"
         f"{_assignment_ratio(counts)}\n")
+
+
+# --- §2.10: the Python-only stitching, assembly and export blocks (docs/stitching-contract.md,
+# --- docs/assembly-contract.md and docs/sample-output-contract.md, "Workflow configuration").
+
+_STITCHING_KEYS = ('method', 'input', 'positions', 'config', 'review', 'fallback', 'bigstitcher_save_dir')
+# BigStitcher runs in Fiji as an engine task, so it is a method of the block but not of STITCHING_METHODS.
+_BIGSTITCHER = 'bigstitcher'
+# Keys of the assembly block besides the AssemblyConfig fields: the Dataset.export argument and the table format.
+_ASSEMBLY_CALL_KEYS = ('assignment', 'table_format')
+# ExportConfig fields the export block does not name: the assembly block gives them, or they are its parts.
+_EXPORT_PARTS = ('assembly', 'table_format', 'fusion', 'labels', 'spatialdata')
+# The files of the BigStitcher folder <bigstitcher_save_dir>/<sample>/ (the tiles are in its tiles/).
+BIGSTITCHER_MACRO, BIGSTITCHER_VIEW_MAP, BIGSTITCHER_XML = 'BigStitcher_macro.ijm', 'view_map.csv', 'dataset.xml'
+
+
+@dataclass(frozen=True)
+class _StitchingBlock:
+    """The stitching block translated (see _stitching_block)."""
+    method: str
+    config: object
+    input: str
+    positions: dict
+    review: object
+    fallback: str | None
+    bigstitcher_save_dir: Path | None
+
+
+@dataclass(frozen=True)
+class _AssemblyBlock:
+    """The assembly block translated (see _assembly_block)."""
+    config: object
+    assignment: str | None
+    table_format: str
+
+
+def _stitching_methods():
+    """The block's method names: those of STITCHING_METHODS, then bigstitcher."""
+    from starfinder.stitching import STITCHING_METHODS
+    return (*dict.fromkeys(spec.name for spec in STITCHING_METHODS.values()), _BIGSTITCHER)
+
+
+def _stitching_block(config) -> _StitchingBlock:
+    """The Python-only stitching block (docs/stitching-contract.md, "Workflow configuration").
+
+    method is a STITCHING_METHODS name, run in process by Dataset.stitch, or
+    bigstitcher (the default), run by the macro, engine and import rules; config
+    holds the fields of that method's config (MultiviewStitcherConfig or
+    BigStitcherConfig); input is reference_merged (default), reference_stain or
+    file:<pattern>; positions is the positions mapping of Dataset.stitch, whose
+    stage_axes is required with source stage_file (never inferred from
+    rotate_angle); review holds the ReviewPolicy fields; fallback is null or
+    nominal; bigstitcher_save_dir is a local folder, required with bigstitcher
+    and refused with another method. Raises ValueError naming the key.
+    """
+    from starfinder.stitching import STITCHING_METHODS, BigStitcherConfig, ReviewPolicy
+    from starfinder.stitching._dataset import POSITION_KEYS, _check_input
+    _python_only(config, ['stitching'])
+    values = config['stitching']
+    if not isinstance(values, dict):
+        raise TypeError('stitching must be a mapping')
+    _known(values, _STITCHING_KEYS, 'stitching')
+    method = values.get('method', _BIGSTITCHER)
+    if method not in _stitching_methods():
+        raise ValueError(f'stitching.method must be one of {list(_stitching_methods())}; got {method!r}')
+    config_type = (BigStitcherConfig if method == _BIGSTITCHER
+                   else config_type_for(STITCHING_METHODS, method, 'stitching method'))
+    method_config = _typed(config_type, values.get('config') or {}, 'stitching.config')
+    input_name = values.get('input', 'reference_merged')
+    _check_input(input_name)
+    positions = values.get('positions')
+    if not isinstance(positions, dict):
+        raise ValueError('stitching.positions (the positions mapping of Dataset.stitch) is required')
+    _known(positions, POSITION_KEYS, 'stitching.positions')
+    if positions.get('source') == 'stage_file' and positions.get('stage_axes') is None:
+        raise ValueError('stitching.positions.stage_axes ({x, y}) is required with source stage_file; it has no '
+                         'default and is never inferred from rotate_angle')
+    review = _typed(ReviewPolicy, values.get('review') or {}, 'stitching.review')
+    fallback = values.get('fallback')
+    if fallback not in (None, 'nominal'):
+        raise ValueError(f"stitching.fallback must be null or 'nominal'; got {fallback!r}")
+    save_dir = values.get('bigstitcher_save_dir')
+    if method == _BIGSTITCHER and not save_dir:
+        raise ValueError('stitching.bigstitcher_save_dir (a local folder for the tiles, the macro and dataset.xml) is '
+                         'required with method bigstitcher')
+    if method != _BIGSTITCHER and save_dir is not None:
+        raise ValueError(f'stitching.bigstitcher_save_dir is read with method bigstitcher only; method is {method!r}')
+    return _StitchingBlock(method, method_config, input_name, {k: _tuples(v) for k, v in positions.items()}, review,
+                           fallback, None if save_dir is None else Path(save_dir))
+
+
+def _legacy_stitching(config) -> dict:
+    """The adapter's translation of a legacy configuration (one without a stitching block).
+
+    Today's grid derivation sends stage X to columns and stage Y to rows of the
+    rotated images, so the translation is StageAxisMapping(x="+x", y="+y",
+    source="legacy") with the rotate_angle it ran with and the YAML voxel sizes
+    (docs/stitching-contract.md, "Stage-axis mapping"). It applies only to the
+    legacy writer: the four legacy rules run their scripts unchanged. A
+    configuration with a stitching block names stage_axes itself (ValueError).
+    """
+    from starfinder.stitching import StageAxisMapping
+    if 'stitching' in config:
+        raise ValueError('a configuration with a stitching block names positions.stage_axes; the legacy translation '
+                         'is for configurations without the block')
+    return {'stage_axes': StageAxisMapping(x='+x', y='+y', source='legacy'),
+            'rotate_angle': config.get('rotate_angle'),
+            'voxel_size_xy': config.get('voxel_size_xy'), 'voxel_size_z': config.get('voxel_size_z')}
+
+
+def _sample_fovs(annotation, config, sample):
+    """The FOV IDs of a sample: fov_id_pattern of fov_start..fov_end of its sample-annotation row (common.smk)."""
+    import pandas as pd
+    table = pd.read_csv(annotation)
+    rows = table[table['sample_id'] == sample]
+    if rows.empty:
+        raise ValueError(f'{annotation} has no sample {sample!r}')
+    start, end = int(rows['fov_start'].values[0]), int(rows['fov_end'].values[0])
+    return [config['fov_id_pattern'].format(i=i) for i in range(start, end + 1)]
+
+
+def _output_root(config):
+    return Path(config['root_output_path']) / config['dataset_id'] / config['output_id']
+
+
+def _sample_table(block, dataset, sample, fov_ids, grids):
+    """The tile position table of the block's positions mapping, holding exactly fov_ids (as Dataset.stitch builds it)."""
+    from starfinder.stitching._dataset import table_from_positions
+    table = table_from_positions(block.positions, fov_ids, grids, sample=sample, output_root=dataset.output_root,
+                                 fov_pattern=dataset.fov_pattern)
+    if set(table.fov_ids) != set(fov_ids):
+        missing = [f for f in fov_ids if f not in table.fov_ids]
+        extra = [f for f in table.fov_ids if f not in fov_ids]
+        raise ValueError(f'the tile position table must hold exactly the FOVs of sample {sample!r}; missing {missing}, '
+                         f'extra {extra}')
+    return table
+
+
+def _bigstitcher_folder(block, sample):
+    """<bigstitcher_save_dir>/<sample>/: BigStitcher's save folder, with the tiles in its tiles/."""
+    if block.method != _BIGSTITCHER:
+        raise ValueError(f'the BigStitcher rules run with method bigstitcher; method is {block.method!r}')
+    return block.bigstitcher_save_dir / sample
+
+
+def _write_tile_config(result, path, config):
+    """The legacy writer: output/tile_config_{sample}.csv from the import's raw translations and view map.
+
+    legacy_tile_config_view (T3 to T7 of docs/stitching-baseline.md) with the
+    configuration's img_col and img_row, written as create_tile_config.py
+    writes it (frame.to_csv()); it reads no status, so it is the same for every
+    fallback.
+    """
+    from starfinder.stitching import legacy_tile_config_view
+    frame = legacy_tile_config_view(result, img_col=config['img_col'], img_row=config['img_row'])
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(frame.to_csv())
+
+
+def _read_view_map(path):
+    import pandas as pd
+    return pd.read_csv(path, dtype={'fov_id': str}, keep_default_na=False)
+
+
+def _run_stitching(snakemake):
+    """stitch_sample: one sample's placement in <OUTPUT>/stitching/{sample}/ (its placement.json is output 0).
+
+    Input 0 is the sample annotation, which gives the sample's FOVs. With an
+    in-process method, Dataset.stitch with the block's positions, config,
+    input, review and fallback, saved to the output's folder. With bigstitcher,
+    the import of the engine rule's dataset.xml (input 1) with the view map
+    (input 2) and the macro (input 3) of the macro rule, on the table of the
+    positions and the FOVs' reference grids (images/ref_merged/{fovID}.tif);
+    the placement is saved there and the legacy writer writes
+    output/tile_config_{sample}.csv (output 1) from the record.
+    """
+    from starfinder.segmentation import reference_grid_from_file
+    from starfinder.stitching import import_bigstitcher, save_placement
+    from ._paths import _FovPaths
+    config, sample = snakemake.config, snakemake.wildcards.sample
+    block = _stitching_block(config)
+    dataset = _workflow_dataset(config)
+    fov_ids = _sample_fovs(snakemake.input[0], config, sample)
+    folder = Path(snakemake.output[0]).parent
+    if block.method != _BIGSTITCHER:
+        dataset.stitch(sample, fov_ids, table=block.positions, config=block.config, input=block.input,
+                       review=block.review, fallback=block.fallback, output_dir=folder)
+        return
+    grids = {fov: reference_grid_from_file(_FovPaths(dataset.output_root, fov).ref_merged_tif) for fov in fov_ids}
+    table = _sample_table(block, dataset, sample, fov_ids, grids)
+    result = import_bigstitcher(snakemake.input[1], table=table, view_map=_read_view_map(snakemake.input[2]),
+                                grids=grids, config=block.config, review=block.review, fallback=block.fallback,
+                                sample=sample, macro=Path(snakemake.input[3]).read_text())
+    save_placement(result, folder)
+    _write_tile_config(result, snakemake.output[1], config)
+
+
+def _run_bigstitcher_macro(snakemake):
+    """bigstitcher_macro_sample: the tiles, the macro (output 0) and the view map (output 1) of one sample.
+
+    bigstitcher_macro on the block's input images of the sample's FOVs (read
+    as Dataset.stitch reads them) and its positions table, with the tiles in
+    <bigstitcher_save_dir>/<sample>/tiles/ and that folder as BigStitcher's save
+    folder.
+    """
+    from starfinder.stitching import bigstitcher_macro
+    from starfinder.stitching._dataset import read_inputs
+    config, sample = snakemake.config, snakemake.wildcards.sample
+    block = _stitching_block(config)
+    folder = _bigstitcher_folder(block, sample)
+    dataset = _workflow_dataset(config)
+    fov_ids = _sample_fovs(snakemake.input[0], config, sample)
+    loaded = read_inputs(dataset.output_root, fov_ids, block.input)
+    table = _sample_table(block, dataset, sample, fov_ids, {fov: item.grid for fov, item in loaded.items()})
+    text, view_map = bigstitcher_macro(table, [loaded[fov] for fov in table.fov_ids], config=block.config,
+                                       tile_dir=folder / 'tiles', save_dir=folder)
+    Path(snakemake.output[0]).write_text(text)
+    view_map.to_csv(snakemake.output[1], index=False)
+
+
+def _check_bigstitcher_engine(dataset_xml, view_map, returncode=None):
+    """The engine rule's success check: dataset.xml exists and holds a Stitching Transform for every view.
+
+    Fiji exits with status 0 when the macro fails, so the check, not the exit
+    status, decides (docs/stitching-contract.md, "BigStitcher"). A view is
+    mapped to its registration through the ViewSetup tile attribute, as the
+    import maps it. Raises RuntimeError naming the path (no file, or not
+    readable XML) or the views without a Stitching Transform, with Fiji's exit
+    status when given.
+    """
+    from xml.etree import ElementTree
+    from starfinder.stitching._bigstitcher import STITCHING_TRANSFORM, _children, _setup_tiles, _text
+    status = '' if returncode is None else f' (Fiji exited with status {returncode})'
+    path = Path(dataset_xml)
+    if not path.is_file():
+        raise RuntimeError(f'the BigStitcher engine task wrote no dataset.xml at {path}{status}')
+    try:
+        root = ElementTree.parse(path).getroot()
+        tiles = _setup_tiles(root, path)
+    except (ElementTree.ParseError, ValueError) as error:
+        raise RuntimeError(f'{path} is not a dataset.xml the import can read{status}: {error}') from None
+    placed = set()
+    for registration in _children(root, 'ViewRegistration'):
+        setup = registration.get('setup')
+        names = {_text(transform, 'Name') for transform in _children(registration, 'ViewTransform')}
+        if setup is not None and setup.isdigit() and int(setup) in tiles and STITCHING_TRANSFORM in names:
+            placed.add(tiles[int(setup)])
+    missing = [int(view) for view in view_map['view'] if int(view) not in placed]
+    if missing:
+        raise RuntimeError(f"{path} holds no {STITCHING_TRANSFORM!r} for views {', '.join(map(str, missing))}; the "
+                           f'BigStitcher engine task failed{status}')
+
+
+def _run_bigstitcher_engine(snakemake):
+    """bigstitcher_engine: Fiji on the macro (input 0), then the success check against the view map (input 1).
+
+    fiji_path is read here, when the rule runs, not when the rule file is
+    parsed; the command is that of the legacy run_BigStitcher_macro rule, with
+    the BigStitcher folder as Java's temporary folder. The output dataset.xml
+    (output 0) is removed first, so the check reads this run's file.
+    """
+    import subprocess
+    fiji = snakemake.config.get('fiji_path')
+    if not fiji:
+        raise ValueError('the BigStitcher engine rule needs fiji_path (the Fiji executable); the key is read when the '
+                         'rule runs')
+    macro, output = Path(snakemake.input[0]), Path(snakemake.output[0])
+    output.unlink(missing_ok=True)
+    completed = subprocess.run([str(fiji), f'-Djava.io.tmpdir={output.parent}', '--ij2', '--headless', '--run',
+                                str(macro)], check=False)
+    _check_bigstitcher_engine(output, _read_view_map(snakemake.input[1]), completed.returncode)
+
+
+def _assembly_block(config) -> _AssemblyBlock:
+    """The Python-only assembly block (docs/assembly-contract.md, "Workflow configuration").
+
+    Its keys are the AssemblyConfig fields, assignment (the assignment name
+    read per FOV, default ``default``; null for molecules only) and
+    table_format (csv or parquet). It needs backend: python and a stitching
+    block, whose placement it reads.
+    """
+    from starfinder._registry import check_name
+    from starfinder.assembly import AssemblyConfig
+    from starfinder.sample_output._config import TABLE_FORMATS
+    _python_only(config, ['assembly'])
+    if 'stitching' not in config:
+        raise ValueError("the assembly block reads the stitching block's placement; add a stitching block")
+    values = config['assembly']
+    if values is None:
+        values = {}
+    if not isinstance(values, dict):
+        raise TypeError('assembly must be a mapping')
+    names = [f.name for f in fields(AssemblyConfig) if f.init]
+    _known(values, {*names, *_ASSEMBLY_CALL_KEYS}, 'assembly')
+    assignment = values.get('assignment', 'default')
+    if assignment is not None:
+        check_name(assignment, 'assignment')
+    table_format = values.get('table_format', 'csv')
+    if table_format not in TABLE_FORMATS:
+        raise ValueError(f'assembly.table_format must be one of {list(TABLE_FORMATS)}; got {table_format!r}')
+    return _AssemblyBlock(AssemblyConfig(**{k: values[k] for k in names if k in values}), assignment, table_format)
+
+
+def _export_keys():
+    """export block key → (ExportConfig part or None, field): the fields of ExportConfig (its flags), FusionConfig,
+    LabelConfig as labels_<field> and SpatialDataExportConfig as spatialdata_<field>."""
+    from starfinder.sample_output import ExportConfig, FusionConfig, LabelConfig, SpatialDataExportConfig
+    keys = {f.name: (None, f.name) for f in fields(ExportConfig) if f.init and f.name not in _EXPORT_PARTS}
+    keys.update({f.name: ('fusion', f.name) for f in fields(FusionConfig) if f.init})
+    keys.update({f'labels_{f.name}': ('labels', f.name) for f in fields(LabelConfig) if f.init})
+    keys.update({f'spatialdata_{f.name}': ('spatialdata', f.name) for f in fields(SpatialDataExportConfig) if f.init})
+    return keys
+
+
+def _export_config(config):
+    """(ExportConfig, assembly block) of the export block and the assembly block (docs/sample-output-contract.md).
+
+    The export block's keys turn the parts on and off and set FusionConfig,
+    LabelConfig (labels_scale_yx) and SpatialDataExportConfig
+    (spatialdata_zarr_format); without the block the defaults apply. The
+    assembly and table_format of the ExportConfig come from the assembly block,
+    which the export block needs.
+    """
+    from starfinder.sample_output import ExportConfig, FusionConfig, LabelConfig, SpatialDataExportConfig
+    _python_only(config, ['export'] if 'export' in config else [])
+    if 'assembly' not in config:
+        raise ValueError('the export block configures the export_sample rule, which runs with an assembly block only; '
+                         'add an assembly block')
+    block = _assembly_block(config)
+    values = config.get('export')
+    if values is None:
+        values = {}
+    if not isinstance(values, dict):
+        raise TypeError('export must be a mapping')
+    keys = _export_keys()
+    _known(values, keys, 'export')
+    parts = {'fusion': {}, 'labels': {}, 'spatialdata': {}}
+    flags = {}
+    for key, value in values.items():
+        part, name = keys[key]
+        (flags if part is None else parts[part])[name] = _tuples(value)
+    export = ExportConfig(**flags, assembly=block.config, table_format=block.table_format,
+                          fusion=FusionConfig(**parts['fusion']), labels=LabelConfig(**parts['labels']),
+                          spatialdata=SpatialDataExportConfig(**parts['spatialdata']))
+    return export, block
+
+
+def _export_dataset(config, block):
+    """The Dataset of export_sample; for molecules only (assignment null) with the codebook loaded for its genes.
+
+    The codebook is the sequencing rules' input genes.csv (the direct panel in
+    readout_mode direct), loaded with the encoding and layout of the first
+    Python rule the configuration names (rsf_single_fov when none).
+    """
+    if block.assignment is not None:
+        return _workflow_dataset(config)
+    rule = next((r for r in _RULES if r in config.get('rules', {})), 'rsf_single_fov')
+    adapted = from_workflow_config(config, rule)
+    dataset = adapted.dataset
+    codebook = Path(config['root_input_path']) / config['dataset_id'] / config['sample_id'] / 'genes.csv'
+    if dataset.readout_mode == 'direct':
+        dataset.load_direct_panel(codebook)
+    else:
+        dataset.load_codebook(codebook, encoding=adapted.encoding, layout=adapted.layout)
+    return dataset
+
+
+def _export_sample_files(config, output_root, fov_ids, sample='{sample}'):
+    """(inputs, output) of the export_sample rule for one sample (export.smk builds the rule from them).
+
+    The inputs are the sample's placement stitching/<sample>/placement.json,
+    then the per-FOV assignment outputs of reads_assignment (raw.h5ad,
+    reads_assignment.csv and the saved folder's assignment.json), or with
+    assembly.assignment null the goodSpots tables. The output, export.json, is
+    the one declared file: it lists every other file of export/<sample>/.
+    """
+    block = _assembly_block(config)
+    root = Path(output_root)
+    inputs = [str(root / 'stitching' / sample / 'placement.json')]
+    if block.assignment is None:
+        inputs += [str(root / 'signal' / f'{fov}_goodSpots.csv') for fov in fov_ids]
+    else:
+        inputs += [str(root / 'expr' / fov / 'raw.h5ad') for fov in fov_ids]
+        inputs += [str(root / 'expr' / fov / 'reads_assignment.csv') for fov in fov_ids]
+        inputs += [str(root / 'checkpoints' / fov / 'assignment' / block.assignment / 'assignment.json')
+                   for fov in fov_ids]
+    return inputs, str(root / 'export' / sample / 'export.json')
+
+
+def _run_export(snakemake):
+    """export_sample: Dataset.export of one sample into <OUTPUT>/export/{sample}/ (its export.json is output 0).
+
+    Input 0 is the sample's saved placement, stitching/{sample}/placement.json;
+    the other inputs are the per-FOV outputs export reads (the assignment
+    outputs of reads_assignment, or the goodSpots tables for molecules only).
+    The parts and their settings are those of the export block and the
+    assembly block (_export_config); the assignment name is the assembly
+    block's. A part that cannot run (an extra not installed, an input missing)
+    is recorded not_run in export.json and does not fail the rule.
+    """
+    config, sample = snakemake.config, snakemake.wildcards.sample
+    export, block = _export_config(config)
+    dataset = _export_dataset(config, block)
+    dataset.export(sample, placement=Path(snakemake.input[0]).parent, assignment=block.assignment, config=export,
+                   output_dir=Path(snakemake.output[0]).parent)

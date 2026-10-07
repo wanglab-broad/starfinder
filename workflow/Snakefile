@@ -31,8 +31,15 @@ elif BACKEND == "matlab":
     include: "rules/spot-finding.smk"
 
 include: "rules/segmentation.smk"
-include: "rules/stitching.smk"
+# The Python-only stitching block replaces the four legacy stitching rules (stitching-py.smk);
+# the assembly block adds the one per-sample rule export_sample (export.smk).
+if STITCHING_BLOCK:
+    include: "rules/stitching-py.smk"
+else:
+    include: "rules/stitching.smk"
 include: "rules/reads-assignment.smk"
+if ASSEMBLY_BLOCK:
+    include: "rules/export.smk"
 include: "rules/utils.smk"
 
 ### ==================== [ Dynamic Rule Order ] =========================

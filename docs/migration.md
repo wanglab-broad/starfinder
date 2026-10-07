@@ -1401,6 +1401,27 @@ table key that breaks it or equals another ignoring case, a cell of zero voxels 
 written. The store is written into a staging folder and renamed into place, so an
 interrupted export leaves none.
 
+### Stitching, assembly and export workflow rules
+
+Three Python-only YAML blocks, `stitching`, `assembly` and `export`
+({doc}`workflow-configuration`, "Stitching, assembly and export"), new rule files
+`workflow/rules/stitching-py.smk` and `workflow/rules/export.smk`, and the folders
+`<OUTPUT>/stitching/<sample>/` and `<OUTPUT>/export/<sample>/` written by the workflow. A
+configuration without the blocks runs the four legacy stitching rules, `reads_assignment`
+with its tile filter, `create_sample_h5ad` and `create_sample_reads_assignment`
+unchanged; its outputs, including `images/fused/{sample}/`, do not change.
+
+| Legacy rule | With the blocks |
+| --- | --- |
+| `stitching_preparation`, `create_BigStitcher_macro`, `run_BigStitcher_macro` | With `method: bigstitcher` (the default): `bigstitcher_macro_sample` (`bigstitcher_macro`, the tiles in `<bigstitcher_save_dir>/<sample>/tiles/`) and `bigstitcher_engine` (Fiji on the macro; `fiji_path` read when it runs; fails unless `dataset.xml` holds a `Stitching Transform` for every view). With `method: multiview_stitcher`: none |
+| `create_tile_config` | `stitch_sample`: `Dataset.stitch`, or `import_bigstitcher` of the engine's `dataset.xml`, saved to `stitching/<sample>/`; with `bigstitcher` also `output/tile_config_{sample}.csv` from the record (`legacy_tile_config_view`), byte for byte today's file |
+| `reads_assignment` (with an `assembly` block) | The same rule without the tile filter and without `global_*`, on the grid of `images/ref_merged/{fovID}.tif`, also saving `checkpoints/{fovID}/assignment/<assignment>/` |
+| `create_sample_h5ad`, `create_sample_reads_assignment` | `export_sample`: `Dataset.export` with the `assembly` and `export` blocks into `export/<sample>/` (declared output `export.json`) |
+
+The adapter's translation of a legacy configuration is `StageAxisMapping(x="+x", y="+y",
+source="legacy")` with the `rotate_angle` it ran with; a configuration with a
+`stitching` block and a stage file names `stage_axes` itself.
+
 ## Intentional behavior changes — not mechanical equivalence
 
 | Area | Change and consequence |
@@ -1417,6 +1438,7 @@ interrupted export leaves none.
 | Evaluation | Centered NCC has no epsilon bias. Missing/failed shifts, zero denominators and constant images are undefined rather than zero/passing. Shift errors preserve floats; matching thresholds/policies are explicit. |
 | Benchmark / recipes | Failures retain requested/actual method identity. Evaluation/reporting reuse saved artifacts. Optional legacy experiments remain recipes with prerequisites, not validated research results. |
 | Segmentation / assignment workflow | The shared rules call the package under both backends: `uint32` labels, `rescale` on the input grid, no foreground gate, cells kept without molecules, `outside_grid` molecules, unknown genes and a double expansion raise, new `raw.h5ad` and `reads_assignment.csv` columns; MATLAB-backend runs need the package and its `stardist` and `anndata` extras. |
+| Sample assembly workflow (configurations with an `assembly` block only) | Option W1 of {doc}`assembly-contract`: the per-FOV `raw.h5ad` and `reads_assignment.csv` are not box-filtered and have no `global_*` columns (every kept cell, and every molecule in input order); the label file is imported on the grid of `images/ref_merged/{fovID}.tif` instead of one declared from `voxel_size_xy` and `voxel_size_z`; the sample outputs are in `export/<sample>/` instead of `expr/{sample}_raw.h5ad` and `expr/{sample}_reads_assignment.csv`; cells and molecules are retained by the ownership regions of the placement instead of the `tile_config` rectangles, and every excluded observation is kept with its reason. Configurations without the block are unchanged. |
 
 Detailed numerical policies, tolerances and edge cases remain canonical in
 [contracts](api/contracts.md), [evaluation](api/evaluation.registration.rst),

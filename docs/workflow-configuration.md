@@ -439,6 +439,75 @@ assignment:
   exclude_cells_without_nucleus: null
 ```
 
+## Stitching, assembly and export
+
+Three Python-only top-level blocks (rejected unless `backend: python`) replace the legacy
+sample-level rules for a configuration that has them. The specification is the
+"Workflow configuration" section of the
+[stitching contract](stitching-contract.md#workflow-configuration), the
+[assembly contract](assembly-contract.md#workflow-configuration) and the
+[sample-output contract](sample-output-contract.md#workflow-configuration).
+
+* **`stitching`.** With the block, `rules/stitching-py.smk` is included instead of the
+  four legacy stitching rules, which then do not run whatever their `run` flags. One rule
+  per sample, `stitch_sample`, writes `<OUTPUT>/stitching/<sample>/` (`placement.json`,
+  `fovs.csv`, `links.csv`). `method` is a `STITCHING_METHODS` name, run in process by
+  `Dataset.stitch` (`multiview_stitcher`), or `bigstitcher`, the default: then
+  `bigstitcher_macro_sample` writes the tiles, the macro and the view map into
+  `<bigstitcher_save_dir>/<sample>/` (a local folder, required with `bigstitcher`),
+  `bigstitcher_engine` runs Fiji on the macro, and `stitch_sample` imports BigStitcher's
+  `dataset.xml`, saves the placement and writes `output/tile_config_{sample}.csv` with the
+  legacy writer from the record's raw translations and view map. `fiji_path` is read by
+  `bigstitcher_engine` when it runs, not when the rules are parsed, and the rule fails
+  unless `dataset.xml` holds a `Stitching Transform` for every view, whatever Fiji's exit
+  status. `positions` is the positions mapping of `Dataset.stitch`; `stage_axes` is
+  required with `source: stage_file` and is never inferred from `rotate_angle`. `config`
+  holds the fields of `MultiviewStitcherConfig` or `BigStitcherConfig`, `review` the
+  `ReviewPolicy` fields, and `fallback` is null or `nominal`. With `multiview_stitcher`
+  no `tile_config_{sample}.csv` is written, so the legacy `reads_assignment` rule needs an
+  `assembly` block there.
+* **`assembly`** (needs `stitching`). The keys are the `AssemblyConfig` fields,
+  `assignment` (the assignment name read per FOV, default `default`; null for molecules
+  only) and `table_format` (`csv` or `parquet`). With the block, `reads_assignment` writes
+  the per-FOV `raw.h5ad` and `reads_assignment.csv` without the tile filter and without
+  `global_*` columns, on the grid of `images/ref_merged/{fovID}.tif`, reads no
+  `tile_config_{sample}.csv`, and saves the FOV's assignment folder
+  `checkpoints/{fovID}/assignment/<assignment>/`; `create_sample_h5ad` and
+  `create_sample_reads_assignment` do not run. One rule per sample, `export_sample`, runs
+  every part of `Dataset.export` after the placement and every FOV's `reads_assignment`;
+  its declared output is `export/<sample>/export.json`, which lists every other file of
+  the folder, so a part that cannot run (an extra not installed) is recorded `not_run`
+  and does not fail the rule.
+* **`export`** (needs `assembly`). The parts of `Dataset.export` and their settings: the
+  flags `assemble`, `fuse`, `fuse_labels` and `export_spatialdata`, the `FusionConfig`
+  fields (`images`, `dimensionality`, `projection`, `scale_yx`, `ome_zarr`,
+  `ome_zarr_version`, `pyramid_levels`), `labels_scale_yx` (`LabelConfig.scale_yx`) and
+  `spatialdata_zarr_format` (`SpatialDataExportConfig.zarr_format`). Without the block the
+  defaults apply.
+
+Default-tier tests keep the method list equal to `STITCHING_METHODS` plus `bigstitcher`
+and the `assembly` and `export` keys equal to those fields. The blocks raise naming the
+key when the rule files are parsed.
+
+```yaml
+stitching:
+  method: bigstitcher            # or multiview_stitcher
+  input: reference_merged        # or reference_stain, or file:<pattern>
+  positions:
+    source: stage_file           # stage_file | regular_grid | table
+    stage_axes: {x: "+x", y: "+y"}
+    snap_to_grid: {overlap: 0.1}
+  review: {max_correction_fraction: 0.5, max_residual_um: 1.0}
+  fallback: null
+  bigstitcher_save_dir: /local/scratch/bigstitcher
+assembly:
+  assignment: default
+  ownership: nearest_center
+  table_format: csv
+export:
+  dimensionality: stack          # dense 3D tissue; the default is projection
+```
+
 ## Downstream parameter blocks
 
 | Rule | Parameters | Constraints / effective defaults |

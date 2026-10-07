@@ -22,6 +22,14 @@ BACKEND = config.get("backend", "matlab")
 if BACKEND not in ("python", "matlab"):
     raise ValueError(f"Unknown backend '{BACKEND}'. Valid options: 'python', 'matlab'")
 
+# The Python-only §2.10 blocks: with a stitching block, stitching-py.smk replaces the four legacy
+# stitching rules; with an assembly block, export_sample replaces the legacy sample rules (option W1).
+STITCHING_BLOCK = "stitching" in config
+ASSEMBLY_BLOCK = "assembly" in config
+LEGACY_STITCHING_RULES = ('stitching_preparation', 'create_BigStitcher_macro', 'run_BigStitcher_macro',
+                          'create_tile_config')
+LEGACY_SAMPLE_RULES = ('create_sample_h5ad', 'create_sample_reads_assignment')
+
 ### ==================== [ Workflow Mode Configuration ] =========================
 
 # Workflow mode: "free" allows mix-and-match, presets enable predefined rule combinations
@@ -243,7 +251,15 @@ elif config['subset_random']:
 def get_overall_output(wildcards):
     """Create dynamic output list for all rules based on workflow_mode and config."""
     output_list = []
+    if STITCHING_BLOCK:
+        output_list += [f"{OUTPUT_DIR}/stitching/{sample}/placement.json" for sample in SAMPLE]
+    if ASSEMBLY_BLOCK:
+        output_list += [f"{OUTPUT_DIR}/export/{sample}/export.json" for sample in SAMPLE]
     for current_rule in config['rules']:
+        if STITCHING_BLOCK and current_rule in LEGACY_STITCHING_RULES:
+            continue
+        if ASSEMBLY_BLOCK and current_rule in LEGACY_SAMPLE_RULES:
+            continue
         if is_rule_enabled(current_rule):
             if current_rule == 'rsf_single_fov':
                 output_list += [f"{OUTPUT_DIR}/log/{fovID}_rsf.txt" for fovID in FOVS]
@@ -320,3 +336,9 @@ if BACKEND == "python":
                         "lrsf_single_fov_subtile", "deep_create_subtile", "deep_rsf_subtile"):
         if is_rule_enabled(python_rule):
             from_workflow_config(config, python_rule)
+    # The §2.10 blocks raise here, naming the key, rather than when their rules run.
+    from starfinder.dataset.workflow import _export_config, _stitching_block
+    if STITCHING_BLOCK:
+        _stitching_block(config)
+    if ASSEMBLY_BLOCK:
+        _export_config(config)
