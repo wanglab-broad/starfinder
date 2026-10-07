@@ -16,11 +16,13 @@ and ``starfinder synthetic generate`` writes the MATLAB-compatible layout.
 .. autosummary::
    :toctree: generated
 
+   AcquisitionConfig
    BackgroundConfig
    BENCHMARK_PRESETS
    benchmark_scene_preset
    CALIBRATED_CONDITIONS
    calibrated_scene_preset
+   CellularSceneConfig
    deformation_geometry
    DEFORMATION_PRESETS
    development_codebook
@@ -37,14 +39,23 @@ and ``starfinder synthetic generate`` writes the MATLAB-compatible layout.
    generate_dataset
    generate_formed_scene
    generate_registration_pair
+   generate_sample_scene
    GeometryConfig
    NoiseConfig
    PRESET_VERSION
    ReadoutEffectsConfig
    registration_scene_preset
+   SAMPLE_PRESET_VERSION
+   SAMPLE_PRESETS
+   sample_scene_preset
+   SAMPLE_TRUTH_VERSION
+   SampleScene
+   SampleSceneConfig
    save_formed_scene
+   save_sample_scene
    ScalarDistribution
    SCENE_PRESETS
+   StainConfig
    SyntheticDataset
    TextureConfig
 
@@ -507,6 +518,69 @@ tested with ``/usr/bin/time -v`` in the extended tier: peak RSS is asserted belo
 4 GiB, while each mode's wall time is measured and reported, not enforced, because
 it depends on host load. ``large``, ``tissue`` and ``thick_medium`` are
 validated by configuration and this estimate only.
+
+Sample scenes
+-------------
+
+``generate_sample_scene(codebook, config=SampleSceneConfig(), on_fov=None)``
+builds one scene in continuous sample coordinates (µm) and acquires it as a
+nominal grid of FOVs at true, fractional offsets, as specified in
+:doc:`../synthetic-sample-scene`. ``AcquisitionConfig`` sets the grid (FOV
+``k`` at column ``k // rows``, row ``k % rows``, nominal origin
+``(0, row · step_y, col · step_x)`` µm with ``step = (1 − overlap) · n · s``)
+and the jitter: ``"uniform"`` draws ``J · (2u − 1)`` voxels per axis from the
+``sample.jitter`` stream of each FOV, ``"supplied"`` takes one triple per FOV.
+With two or more columns (rows) the overlap rule ``overlap · n ≥ 2 · jitter_max
++ 1`` voxels must hold in X (Y), and ``jitter_max_z < n_z / 2`` (0 for a single
+plane); violations raise ``ValueError`` naming the axis or field.
+
+Every FOV is a ``FormedScene`` rendered by the unchanged formed generator from
+a per-FOV ``FormedSceneConfig``: the molecules at their FOV index positions
+``p = (σ − true_origin) ⊘ s`` with their sample IDs, genes and properties, the
+template's background components (given in the sample grid's index units)
+moved into the FOV frame, and the scene key ``[scene_key, fov_id]`` for the
+per-round geometry and noise. A FOV receives every molecule within the margin
+``4 · w + D + 1`` voxels of its grid, with ``w`` the largest one-sigma kernel
+extent and ``D`` the per-round displacement bound. No rendered image is
+interpolated. The template must leave the population fields at their defaults
+and disable loss, dropout and weakening, which would otherwise be drawn per
+FOV; a background gradient is re-expressed per FOV only while its FOV
+intercept stays nonnegative.
+
+``CellularSceneConfig`` places ordinary, binucleate and empty cells by random
+sequential addition with a gap between site spheres; nuclei are rotated
+ellipsoids and cell territories are power-diagram cells limited by a reach, so
+every nucleus lies inside its cell. Cell and ambient molecules are drawn in the
+scene domain ``Ω``, which includes a halo around the covered region ``K``;
+``in_sample`` marks content in ``K``. ``StainConfig`` renders a soft-edged
+ellipsoid per nucleus and then the observation stages (baseline, background and
+noise from ``stain.noise.*`` streams). ``SampleScene`` holds the formed scenes,
+stains and uint32 label volumes per FOV (empty when each FOV was handed to
+``on_fov`` and not retained), the sample label volumes on the sample grid
+(frame ``sample:<sample>``) and the truth tables ``placement``, ``positions``,
+``nuclei``, ``cells``, ``molecules``, ``cell_fovs`` and ``molecule_fovs``.
+
+``save_sample_scene(scene, directory)`` writes ``sample.json`` (versions
+``SAMPLE_TRUTH_VERSION`` and ``SAMPLE_PRESET_VERSION``, requested and effective
+configuration, stream descriptors, sample grid, bounds of ``Ω`` and ``K`` and
+the SHA-256 of every other file), the CSV tables, the label TIFFs and per FOV
+the ``save_formed_scene`` layout with ``stain.ome.tif``, ``labels/nuclei.tif``,
+``labels/cells.tif`` and a legacy one-based ``molecules.csv`` (``x, y, z,
+gene``). The FOV labels carry the FOV's reference metadata, so
+``segmentation.import_labels(..., relabel=False)`` and
+``assignment.molecule_table_from_csv`` read them without a segmenter. A
+nonempty directory raises ``FileExistsError``.
+
+``sample_scene_preset(name)`` returns ``(Codebook, SampleSceneConfig)`` for a
+``SAMPLE_PRESETS`` name, a registry separate from ``SCENE_PRESETS``:
+``sample-tiny-v1`` (2 × 2 FOVs of 5×36×36 at 1.0, 0.5, 0.5 µm, constant
+amplicons, float64 accumulation; the routine test tier) and
+``sample-small-v1`` (3 × 3 FOVs of 14×96×96 at the LN calibration, the
+benchmark appearance placed on the sample grid; the slow tier, measured at a
+peak RSS of about 0.4 GiB). Both use ``development_codebook("balanced")``,
+seed 42 and a translation-only per-round geometry. The cellular scene is a
+development fixture: sizes and densities are not fitted to tissue, and it
+makes no claim about the accuracy of any segmenter.
 
 Scientific limitations
 ----------------------

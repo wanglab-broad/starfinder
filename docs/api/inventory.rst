@@ -329,11 +329,13 @@ starfinder.spot_finding
 starfinder.synthetic
 ~~~~~~~~~~~~~~~~~~~~
 
+* :py:obj:`starfinder.synthetic.AcquisitionConfig`
 * :py:obj:`starfinder.synthetic.BackgroundConfig`
 * :py:obj:`starfinder.synthetic.BENCHMARK_PRESETS`
 * :py:obj:`starfinder.synthetic.benchmark_scene_preset`
 * :py:obj:`starfinder.synthetic.CALIBRATED_CONDITIONS`
 * :py:obj:`starfinder.synthetic.calibrated_scene_preset`
+* :py:obj:`starfinder.synthetic.CellularSceneConfig`
 * :py:obj:`starfinder.synthetic.deformation_geometry`
 * :py:obj:`starfinder.synthetic.DEFORMATION_PRESETS`
 * :py:obj:`starfinder.synthetic.development_codebook`
@@ -350,14 +352,23 @@ starfinder.synthetic
 * :py:obj:`starfinder.synthetic.generate_dataset`
 * :py:obj:`starfinder.synthetic.generate_formed_scene`
 * :py:obj:`starfinder.synthetic.generate_registration_pair`
+* :py:obj:`starfinder.synthetic.generate_sample_scene`
 * :py:obj:`starfinder.synthetic.GeometryConfig`
 * :py:obj:`starfinder.synthetic.NoiseConfig`
 * :py:obj:`starfinder.synthetic.PRESET_VERSION`
 * :py:obj:`starfinder.synthetic.ReadoutEffectsConfig`
 * :py:obj:`starfinder.synthetic.registration_scene_preset`
+* :py:obj:`starfinder.synthetic.SAMPLE_PRESET_VERSION`
+* :py:obj:`starfinder.synthetic.SAMPLE_PRESETS`
+* :py:obj:`starfinder.synthetic.sample_scene_preset`
+* :py:obj:`starfinder.synthetic.SAMPLE_TRUTH_VERSION`
+* :py:obj:`starfinder.synthetic.SampleScene`
+* :py:obj:`starfinder.synthetic.SampleSceneConfig`
 * :py:obj:`starfinder.synthetic.save_formed_scene`
+* :py:obj:`starfinder.synthetic.save_sample_scene`
 * :py:obj:`starfinder.synthetic.ScalarDistribution`
 * :py:obj:`starfinder.synthetic.SCENE_PRESETS`
+* :py:obj:`starfinder.synthetic.StainConfig`
 * :py:obj:`starfinder.synthetic.SyntheticDataset`
 * :py:obj:`starfinder.synthetic.TextureConfig`
 

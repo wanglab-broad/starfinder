@@ -1,6 +1,7 @@
 Python functions and classes A–Z
 ================================
 
+* :py:obj:`starfinder.synthetic.AcquisitionConfig`
 * :py:obj:`starfinder.registration.AffineConfig`
 * :py:obj:`starfinder.registration.AffineTransform`
 * :py:obj:`starfinder.registration.apply_transform`
@@ -24,6 +25,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.assignment.CELL_CORRESPONDENCE`
 * :py:obj:`starfinder.assignment.CELL_STATUSES`
 * :py:obj:`starfinder.segmentation.CellposeConfig`
+* :py:obj:`starfinder.synthetic.CellularSceneConfig`
 * :py:obj:`starfinder.dataset.ChannelInfo`
 * :py:obj:`starfinder.spot_finding.ChannelOverride`
 * :py:obj:`starfinder.dataset.CheckpointConfig`
@@ -95,6 +97,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.synthetic.generate_dataset`
 * :py:obj:`starfinder.synthetic.generate_formed_scene`
 * :py:obj:`starfinder.synthetic.generate_registration_pair`
+* :py:obj:`starfinder.synthetic.generate_sample_scene`
 * :py:obj:`starfinder.synthetic.GeometryConfig`
 * :py:obj:`starfinder.preprocessing.histogram_percentile`
 * :py:obj:`starfinder.preprocessing.HistogramMatchingConfig`
@@ -200,7 +203,14 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.benchmark.run_benchmark`
 * :py:obj:`starfinder.preprocessing.run_step`
 * :py:obj:`starfinder.assignment.sample_labels`
+* :py:obj:`starfinder.synthetic.SAMPLE_PRESET_VERSION`
+* :py:obj:`starfinder.synthetic.SAMPLE_PRESETS`
+* :py:obj:`starfinder.synthetic.sample_scene_preset`
+* :py:obj:`starfinder.synthetic.SAMPLE_TRUTH_VERSION`
+* :py:obj:`starfinder.synthetic.SampleScene`
+* :py:obj:`starfinder.synthetic.SampleSceneConfig`
 * :py:obj:`starfinder.synthetic.save_formed_scene`
+* :py:obj:`starfinder.synthetic.save_sample_scene`
 * :py:obj:`starfinder.io.save_volume`
 * :py:obj:`starfinder.preprocessing.scalar_background_histograms`
 * :py:obj:`starfinder.preprocessing.ScalarBackgroundConfig`
@@ -224,6 +234,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.spot_finding.SpotFindingSpec`
 * :py:obj:`starfinder.spot_finding.SpotFindingWarning`
 * :py:obj:`starfinder.spot_finding.SpotiflowConfig`
+* :py:obj:`starfinder.synthetic.StainConfig`
 * :py:obj:`starfinder.segmentation.StarDistConfig`
 * :py:obj:`starfinder.spot_finding.StarfishLogConfig`
 * :py:obj:`starfinder.preprocessing.step_config_type`

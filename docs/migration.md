@@ -1216,6 +1216,24 @@ changes its result:
   `save_processing_log("nr")` lists only registered rounds, so the reference stain, which
   has no registration, is not in `log/{fovID}_nr.txt`.
 
+### Multi-FOV synthetic sample scene
+
+New, opt-in names in `starfinder.synthetic`; nothing existing changes. No
+generator function, config, preset, registry, version or stream descriptor is
+modified, so every existing preset, digest and saved file stays as it was.
+
+| Need | New name |
+| --- | --- |
+| One sample scene acquired as a grid of FOVs at true, fractional offsets, with placement, cell and per-FOV truth | `generate_sample_scene(codebook, config=SampleSceneConfig(), on_fov=None)` returns `SampleScene` |
+| The grid, jitter, cellular scene and nuclear stain | `AcquisitionConfig`, `CellularSceneConfig`, `StainConfig`, composed in `SampleSceneConfig` with a `FormedSceneConfig` template |
+| Files: `sample.json`, truth tables, label TIFFs, per-FOV formed scenes, stains, labels and legacy molecule CSVs | `save_sample_scene(scene, directory)` |
+| Presets, separate from `SCENE_PRESETS` | `sample_scene_preset(name)`, `SAMPLE_PRESETS` (`sample-tiny-v1`, `sample-small-v1`), `SAMPLE_PRESET_VERSION` (`sample-presets-v1`) |
+| Version of the sample-level truth files | `SAMPLE_TRUTH_VERSION` (`"1"`) |
+
+Every FOV is rendered by `generate_formed_scene` and records generator version 6;
+the sample-level draws use new `sample.*` and `stain.noise.*` stream components.
+The specification is {doc}`synthetic-sample-scene`.
+
 ## Intentional behavior changes — not mechanical equivalence
 
 | Area | Change and consequence |
