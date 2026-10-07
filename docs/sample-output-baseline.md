@@ -1,6 +1,6 @@
 # Sample-output baseline: the reference-branch exporter, `dev` and today's fused files
 
-Status: Proposed
+Status: Accepted (W-329, 2026-10-07, at 9033d46)
 
 This page records what exists for the §2.10 sample outputs before {doc}`sample-output-contract`
 specifies them: the shared raster preparation (W-169) and the partial exporter (W-170) on

@@ -1,6 +1,6 @@
 # Stitching algorithm specification
 
-Status: Proposed
+Status: Accepted (W-329, 2026-10-07, at 9033d46)
 
 This page specifies the numerical behavior of each element of {doc}`stitching-contract`:
 the three converters into the tile position table, the neighbour derivation, the

@@ -1,6 +1,6 @@
 # §2.10 validation design: placement, assembly and sample outputs
 
-Status: Proposed
+Status: Accepted (W-329, 2026-10-07, at 9033d46)
 
 This page is the task-group-6 validation design for the whole of §2.10: the engineering
 checks of placement ({doc}`stitching-contract`, {doc}`stitching-algorithms`), of assembly

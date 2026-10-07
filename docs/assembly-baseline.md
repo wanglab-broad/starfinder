@@ -1,6 +1,6 @@
 # Assembly baseline: tile rectangles, global coordinates, the overlap filter and the sample tables
 
-Status: Proposed
+Status: Accepted (W-329, 2026-10-07, at 9033d46)
 
 This page records how sample assembly behaves at revision `0f5cbd8` (branch
 `runner/s210-spec-20261006`, on `dev` after the §2.9 work and W-325), before the Chapter II

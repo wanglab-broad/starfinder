@@ -1,6 +1,6 @@
 # Assembly contract: sample coordinates, ownership, retained and excluded populations and the sample tables
 
-Status: Proposed
+Status: Accepted (W-329, 2026-10-07, at 9033d46)
 
 This page proposes the §2.10 assembly contract: a sample-level assemble entry separate
 from stitch and from export, the rule that puts molecules and cells into sample

@@ -1,6 +1,6 @@
 # Sample-output contract: the export entry, the fused image, the label export, the SpatialData export and the output profiles
 
-Status: Proposed
+Status: Accepted (W-329, 2026-10-07, at 9033d46)
 
 This page proposes what a sample has on disk after spatial assembly: the one sample-level
 export entry `Dataset.export` and its parts; the folder `export/<sample>/` and its output

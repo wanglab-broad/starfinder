@@ -1,6 +1,6 @@
 # Synthetic sample scene: multi-FOV acquisition and a minimal cellular scene
 
-Status: Proposed
+Status: Accepted (W-329, 2026-10-07, at 9033d46)
 
 This page proposes a bounded, opt-in addition to the synthetic generator of
 {doc}`synthetic-specification`: one scene of sample size in continuous coordinates, a

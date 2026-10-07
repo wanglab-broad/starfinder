@@ -1,6 +1,6 @@
 # Stitching baseline: stage grid, BigStitcher macro, Fiji run and tile configuration
 
-Status: Proposed
+Status: Accepted (W-329, 2026-10-07, at 9033d46)
 
 This page records how stitching behaves at revision `8e7d256` (branch
 `runner/s210-spec-20261006`, on `dev` after the §2.9 work), before the Chapter II §2.10

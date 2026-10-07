@@ -1,6 +1,6 @@
 # Stitching contract: tile positions, placement, methods and BigStitcher
 
-Status: Proposed
+Status: Accepted (W-329, 2026-10-07, at 9033d46)
 
 This page proposes the §2.10 placement contract: a sample-level stitch entry separate
 from `PipelineConfig` and `FOV.run`, one tile position table with three converters, an
