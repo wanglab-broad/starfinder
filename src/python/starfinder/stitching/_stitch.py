@@ -135,8 +135,12 @@ def _method_links(links, pairs):
     return found
 
 
-def _components(n, eligible, edges):
-    """Component per FOV from the kept links among eligible FOVs, numbered by first FOV; −1 if not eligible."""
+def _components(n, present, placeable, edges):
+    """Component per present FOV, numbered by first FOV in table order; −1 only for an absent image.
+
+    Kept links join two FOVs only when both are placeable (present with a finite
+    translation), so a present FOV the method did not place is its own component.
+    """
     parent = list(range(n))
 
     def root(i):
@@ -146,13 +150,13 @@ def _components(n, eligible, edges):
         return i
 
     for a, b in edges:
-        if eligible[a] and eligible[b]:
+        if placeable[a] and placeable[b]:
             ra, rb = root(a), root(b)
             if ra != rb:
                 parent[max(ra, rb)] = min(ra, rb)
     labels, component = {}, np.full(n, -1, dtype=np.int64)
     for i in range(n):
-        if eligible[i]:
+        if present[i]:
             component[i] = labels.setdefault(root(i), len(labels))
     return component
 
@@ -175,12 +179,17 @@ def stitch(inputs: Sequence[StitchingInput], table: TilePositionTable, *, config
       quality, kept flag and reason, or ``pruned`` for a pair it did not
       register; a kept link's residual is ``‖(origin_b − origin_a) − (nominal_b
       − nominal_a) − shift‖``;
-    * the components are those of the kept links; the reference component holds
-      the most FOVs, a tie going to the one with the first FOV in table order;
-    * each FOV gets one status: ``missing`` (no image), ``failed`` (a non-finite
-      translation, or not joined to the reference component by a kept link with
-      ``fallback=None``), ``metadata_only`` at ``origin = nominal`` flagged
-      ``fallback`` (not joined, ``fallback="nominal"``) or ``image_supported``;
+    * the components are those of the kept links between FOVs the method placed
+      (present, finite translation); every present FOV has one (a FOV with a
+      non-finite translation is its own), and ``component`` is −1 only for
+      ``missing``; the reference component is chosen among the components of
+      placed FOVs: the most FOVs, a tie going to the one with the first FOV in
+      table order;
+    * each FOV gets one status: ``missing`` (no image), ``image_supported``
+      (joined to the reference component by a kept link), else ``failed`` with
+      ``fallback=None`` (a non-finite translation included) or
+      ``metadata_only`` at ``origin = nominal`` flagged ``fallback`` with
+      ``fallback="nominal"``;
     * gauge G1: ``origin = nominal + c − mean(c)`` with ``c`` the method's
       translation (µm) and the mean over the ``image_supported`` FOVs;
     * :func:`review_placement` applies ``review``.
@@ -262,24 +271,24 @@ def stitch(inputs: Sequence[StitchingInput], table: TilePositionTable, *, config
     index = {fov: i for i, fov in enumerate(ids)}
     present = np.array([item.image is not None for item in inputs])
     finite = np.isfinite(translation).all(axis=1)
-    eligible = present & finite
+    placeable = present & finite
     kept_edges = [(index[a], index[b]) for (a, b), value in registered.items() if value[2]]
-    component = _components(n, eligible, kept_edges)
+    component = _components(n, present, placeable, kept_edges)
     joined = np.zeros(n, dtype=bool)
     for a, b in kept_edges:
-        if eligible[a] and eligible[b]:
+        if placeable[a] and placeable[b]:
             joined[a] = joined[b] = True
-    sizes = np.bincount(component[eligible], minlength=1) if eligible.any() else np.zeros(0, dtype=np.int64)
-    # Components are numbered by their first FOV, so argmax breaks a tie by table order.
-    reference = int(np.argmax(sizes)) if sizes.size else -2
+    # A component holding a placeable FOV holds only placeable FOVs. Candidates are numbered by
+    # their first FOV and sorted, so argmax breaks a tie by table order.
+    candidates = np.unique(component[placeable])
+    sizes = np.bincount(component[present])
+    reference = int(candidates[np.argmax(sizes[candidates])]) if candidates.size else -2
 
     status = np.empty(n, dtype=object)
     flags = [[] for _ in range(n)]
     for i in range(n):
         if not present[i]:
             status[i] = "missing"
-        elif not finite[i]:
-            status[i] = "failed"
         elif component[i] == reference and joined[i]:
             status[i] = "image_supported"
         elif fallback == "nominal":

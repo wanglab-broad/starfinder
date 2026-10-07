@@ -23,9 +23,9 @@ from starfinder.stitching import (STITCHING_METHODS, PlacementResult, PlacementR
 from starfinder.stitching._placement import table_sha256
 from starfinder.stitching._review import require_approval
 
-from .stitching_fixtures import (FRACTIONAL, LN_SPACING, MAF_2X3_JITTER, MAF_3X2_GAP, STAGE_SPACING,
-                                 STUB_SHAPE, STUB_SPACING, STUB_SPEC, StubConfig, grid, grids_for, inputs_for,
-                                 metadata, stage_table, stub_run, stub_table, zero)
+from .stitching_fixtures import (FRACTIONAL, LN_SPACING, MAF_2X3_JITTER, MAF_3X2_GAP, STAGE_SPACING, STUB_SHAPE,
+                                 STUB_SPACING, STUB_SPEC, StubConfig, check_components, grid, grids_for, inputs_for,
+                                 metadata, stage_table, stub_run, stub_table, stub_variant_results, zero)
 
 pytestmark = [pytest.mark.stitching, pytest.mark.validation]
 
@@ -45,8 +45,10 @@ def stub(monkeypatch):
 
 def run(table, grids, translations, *, overrides=(), absent=(), yx=False, **kw):
     inputs = inputs_for(table, grids, absent=absent, yx=yx)
-    return stitch(inputs, table, config=StubConfig(tuple(map(tuple, translations)), tuple(overrides)),
-                  sample="s1", **kw)
+    result = stitch(inputs, table, config=StubConfig(tuple(map(tuple, translations)), tuple(overrides)),
+                    sample="s1", **kw)
+    check_components(result)
+    return result
 
 
 def bits(frame, columns):
@@ -70,7 +72,7 @@ def check_record(result, table):
     kept = result.links[result.links.kept]
     counts = [int(((kept.fov_a == f) | (kept.fov_b == f)).sum()) for f in fovs.fov_id]
     assert list(fovs.n_links_kept) == counts
-    assert list(fovs.component[fovs.status == "missing"]) == [-1] * int((fovs.status == "missing").sum())
+    assert list(fovs.component == -1) == list(fovs.status == "missing")
     for fov in table.fov_ids:
         entry = result.record["inputs"][fov]
         assert set(entry) == {"source", "file_sha256", "grid"}
@@ -447,3 +449,76 @@ def test_placement_result_rules():
     with pytest.raises(ValueError, match="no origin"):
         placed_metadata(dataclasses.replace(result, fovs=result.fovs.assign(
             status="failed", origin_z=np.nan, origin_y=np.nan, origin_x=np.nan)), "FOV0")
+
+
+def test_a_present_fov_with_a_non_finite_translation_keeps_a_component(stub):
+    """The review's case: every image present, FOV3's translation NaN and its links dropped as nan_quality."""
+    table = stub_table()
+    grids = grids_for(table)
+    translations = np.array(FRACTIONAL)
+    translations[3] = np.nan
+    nominal = table.nominal_zyx()
+    for overrides in (nan_links("FOV3", STUB_PAIRS), ()):     # links dropped, or reported kept by the method
+        for fallback, status, flags in ((None, "failed", "nan_quality_link"),
+                                        ("nominal", "metadata_only", "fallback;nan_quality_link")):
+            result = run(table, grids, translations, overrides=overrides, fallback=fallback)
+            fovs = result.fovs.set_index("fov_id")
+            reference = check_components(result)
+            assert fovs.loc["FOV3", "status"] == status
+            assert fovs.loc["FOV3", "component"] == 1 and reference == 0
+            if overrides:
+                assert fovs.loc["FOV3", "flags"] == flags
+            else:
+                assert fovs.loc["FOV3", "flags"] == flags.replace("nan_quality_link", "").strip(";")
+                assert fovs.loc["FOV3", "n_links_kept"] == 5
+            if fallback is None:
+                assert fovs.loc["FOV3", ORIGIN].isna().all()
+            else:
+                assert bits(fovs.loc[["FOV3"]], ORIGIN) == nominal[3].tobytes()
+                assert (fovs.loc["FOV3", CORRECTION] == 0.0).all()
+            assert fovs.loc["FOV3", TRANSLATION].isna().all()
+            others = fovs.drop(index="FOV3")
+            assert set(others.status) == {"image_supported"} and set(others.component) == {0}
+            supported = [k for k in range(6) if k != 3]
+            c = translations[supported]
+            assert bits(others, ORIGIN) == (nominal[supported] + c - c.mean(axis=0)).tobytes()
+            assert result.record["review"]["state"] == "required"
+            assert result.record["review"]["flagged"]["unplaced_fovs"] == ["FOV3"]
+            check_record(result, table)
+
+
+def test_the_reference_component_holds_placed_fovs_only(stub):
+    """FOV0 first in table order with a NaN translation; the others form two pairs of equal size."""
+    table = two_by_two()
+    grids = grids_for(table)
+    translations = np.zeros((4, 3))
+    translations[0] = np.nan
+    across = dropped([("FOV1", "FOV2"), ("FOV1", "FOV3"), ("FOV2", "FOV3")])
+    result = run(table, grids, translations, overrides=across)
+    assert list(result.fovs.component) == [0, 1, 2, 3]
+    assert check_components(result) is None and set(result.fovs.status) == {"failed"}
+    joined = run(table, grids, translations, overrides=dropped([("FOV1", "FOV3"), ("FOV2", "FOV3")]))
+    assert list(joined.fovs.component) == [0, 1, 1, 2]
+    assert check_components(joined) == 1
+    assert list(joined.fovs.status) == ["failed", "image_supported", "image_supported", "failed"]
+
+
+def test_present_fovs_joined_by_no_kept_link_have_their_own_component(stub):
+    moved = moved_table()
+    for fallback in (None, "nominal"):
+        result = run(moved, grids_for(moved), FRACTIONAL, fallback=fallback)
+        reference = check_components(result)
+        assert reference == 0 and result.fovs.component[5] == 1 and result.fovs.status[5] != "missing"
+    table = two_by_two()
+    across = [("FOV0", "FOV2"), ("FOV0", "FOV3"), ("FOV1", "FOV2"), ("FOV1", "FOV3")]
+    result = run(table, grids_for(table), zero(4), overrides=dropped(across))
+    reference = check_components(result)
+    assert reference == 0 and list(result.fovs.component[2:]) == [1, 1]
+
+
+def test_every_stub_variant_follows_the_component_rule(stub):
+    results = stub_variant_results()
+    assert len(results) == 8
+    for name, result in results.items():
+        check_components(result)
+    assert results["missing"].fovs.component[4] == -1

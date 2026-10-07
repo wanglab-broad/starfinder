@@ -182,3 +182,21 @@ def determinism_hashes(directory):
         folder = save_placement(result, Path(directory) / name)
         hashes[name] = [hashlib.sha256((folder / f).read_bytes()).hexdigest() for f in ("fovs.csv", "links.csv")]
     return hashes
+
+
+def check_components(result):
+    """``component`` is −1 exactly for ``missing`` FOVs; every other FOV holds a component index.
+
+    Indices are numbered 0, 1, ... by each component's first FOV in table order, and
+    the ``image_supported`` FOVs share one index, the reference component's, which is
+    returned (None when no FOV is ``image_supported``).
+    """
+    fovs = result.fovs
+    missing = (fovs["status"] == "missing").to_numpy()
+    component = fovs["component"].to_numpy()
+    assert list(component == -1) == list(missing), (list(fovs["fov_id"]), list(component), list(fovs["status"]))
+    first_seen = list(dict.fromkeys(int(c) for c in component[~missing]))
+    assert first_seen == list(range(len(first_seen)))
+    supported = set(component[(fovs["status"] == "image_supported").to_numpy()])
+    assert len(supported) <= 1
+    return int(supported.pop()) if supported else None

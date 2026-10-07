@@ -32,7 +32,7 @@ from starfinder.stitching import _persist
 from starfinder.stitching._stitch import stitch as real_stitch
 
 from .stitching_fixtures import (FRACTIONAL, STUB_SPEC, StubConfig, determinism_hashes, grid, grids_for, inputs_for,
-                                 maf_text, metadata, stub_run, stub_table, zero)
+                                 check_components, maf_text, metadata, stub_run, stub_table, zero)
 
 pytestmark = [pytest.mark.stitching, pytest.mark.validation]
 
@@ -75,6 +75,8 @@ def test_save_and_load_round_trip(stub, tmp_path, case):
     folder = save_placement(result, tmp_path / "stitching" / "s1")
     assert sorted(p.name for p in folder.iterdir()) == ["fovs.csv", "links.csv", "placement.json"]
     loaded = load_placement(folder)
+    check_components(result)
+    check_components(loaded)
     pd.testing.assert_frame_equal(loaded.fovs, result.fovs, check_exact=True)
     pd.testing.assert_frame_equal(loaded.links, result.links, check_exact=True)
     origins = ["origin_z", "origin_y", "origin_x"]
@@ -300,7 +302,9 @@ def spy(monkeypatch):
 
     def recording(inputs, table, **kwargs):
         calls.append((list(inputs), table, kwargs))
-        return real_stitch(inputs, table, **kwargs)
+        result = real_stitch(inputs, table, **kwargs)
+        check_components(result)
+        return result
 
     monkeypatch.setattr(starfinder.stitching, "stitch", recording)
     return calls
@@ -365,6 +369,7 @@ def test_dataset_stitch_refuses_another_tile_size(stub, no_fov_stage, tmp_path):
         dataset.stitch("sample1", IDS, table=POSITIONS, config=StubConfig(zero(4)))
     given = dict(POSITIONS, tile_shape_yx=[16, 24], spacing_yx=[0.25, 0.25])
     result = dataset.stitch("sample1", IDS, table=given, config=StubConfig(zero(4)))
+    check_components(result)
     assert result.record["table"]["geometry_source"] == {"tile_shape_yx": "configuration",
                                                          "spacing_yx": "configuration"}
 
@@ -426,6 +431,7 @@ def test_dataset_stitch_reads_the_sample_stage_file(stub, no_fov_stage, tmp_path
     path.write_text(maf_text(points))
     positions = {"source": "stage_file", "stage_axes": {"x": "+x", "y": "+y"}, "snap_to_grid": {"overlap": 0.25}}
     result = dataset.stitch("sample1", IDS, table=positions, config=StubConfig(zero(4)))
+    check_components(result)
     record = result.record["table"]
     assert record["converter"] == "positions_from_leica" and record["path"] == str(path.resolve())
     assert record["fov_ids"] == {str(k): f"Position{k:03d}" for k in range(1, 5)}
