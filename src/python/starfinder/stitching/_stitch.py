@@ -186,10 +186,11 @@ def stitch(inputs: Sequence[StitchingInput], table: TilePositionTable, *, config
       placed FOVs: the most FOVs, a tie going to the one with the first FOV in
       table order;
     * each FOV gets one status: ``missing`` (no image), ``image_supported``
-      (joined to the reference component by a kept link), else ``failed`` with
-      ``fallback=None`` (a non-finite translation included) or
-      ``metadata_only`` at ``origin = nominal`` flagged ``fallback`` with
-      ``fallback="nominal"``;
+      (joined to the reference component by a kept link), ``failed`` for a
+      non-finite translation whatever the ``fallback`` (its
+      ``method_translation_*`` stays as the method returned it), else
+      ``failed`` with ``fallback=None`` or ``metadata_only`` at ``origin =
+      nominal`` flagged ``fallback`` with ``fallback="nominal"``;
     * gauge G1: ``origin = nominal + c − mean(c)`` with ``c`` the method's
       translation (µm) and the mean over the ``image_supported`` FOVs;
     * :func:`review_placement` applies ``review``.
@@ -291,6 +292,8 @@ def stitch(inputs: Sequence[StitchingInput], table: TilePositionTable, *, config
             status[i] = "missing"
         elif component[i] == reference and joined[i]:
             status[i] = "image_supported"
+        elif not finite[i]:
+            status[i] = "failed"   # the method gave no position, so the fallback does not apply
         elif fallback == "nominal":
             status[i], flags[i] = "metadata_only", ["fallback"]
         else:

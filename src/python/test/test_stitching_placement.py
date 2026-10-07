@@ -18,8 +18,9 @@ import tifffile
 from starfinder.image import IncompatibleGeometryError
 from starfinder.segmentation import ReferenceGrid, reference_grid_from_file
 from starfinder.stitching import (STITCHING_METHODS, PlacementResult, PlacementReviewRequiredError, ReviewPolicy,
-                                  StitchingInput, StitchingSpec, approve_placement, placed_metadata,
-                                  placement_from_table, positions_from_table, review_placement, stitch)
+                                  StitchingInput, StitchingSpec, approve_placement, load_placement, placed_metadata,
+                                  placement_from_table, positions_from_table, review_placement, save_placement,
+                                  stitch)
 from starfinder.stitching._placement import table_sha256
 from starfinder.stitching._review import require_approval
 
@@ -451,40 +452,98 @@ def test_placement_result_rules():
             status="failed", origin_z=np.nan, origin_y=np.nan, origin_x=np.nan)), "FOV0")
 
 
-def test_a_present_fov_with_a_non_finite_translation_keeps_a_component(stub):
-    """The review's case: every image present, FOV3's translation NaN and its links dropped as nan_quality."""
+@pytest.mark.parametrize("fallback", [None, "nominal"], ids=["fallback_none", "fallback_nominal"])
+def test_a_present_fov_with_a_non_finite_translation_is_failed_and_keeps_a_component(stub, fallback):
+    """Every image present, FOV3's translation NaN and its links dropped as nan_quality or reported kept.
+
+    docs/stitching-algorithms.md ("Failure behavior"): "A non-finite translation: `failed`", whatever
+    the fallback; the component rule of W-365 holds (its own component, −1 only for ``missing``).
+    """
     table = stub_table()
     grids = grids_for(table)
     translations = np.array(FRACTIONAL)
     translations[3] = np.nan
     nominal = table.nominal_zyx()
+    supported = [k for k in range(6) if k != 3]
+    c = translations[supported]
+    # The other FOVs as they are without FOV3's translation: FOV3 disconnected with a finite one.
+    without = run(table, grids, FRACTIONAL, overrides=nan_links("FOV3", STUB_PAIRS)).fovs.set_index("fov_id")
     for overrides in (nan_links("FOV3", STUB_PAIRS), ()):     # links dropped, or reported kept by the method
-        for fallback, status, flags in ((None, "failed", "nan_quality_link"),
-                                        ("nominal", "metadata_only", "fallback;nan_quality_link")):
-            result = run(table, grids, translations, overrides=overrides, fallback=fallback)
-            fovs = result.fovs.set_index("fov_id")
-            reference = check_components(result)
-            assert fovs.loc["FOV3", "status"] == status
-            assert fovs.loc["FOV3", "component"] == 1 and reference == 0
-            if overrides:
-                assert fovs.loc["FOV3", "flags"] == flags
-            else:
-                assert fovs.loc["FOV3", "flags"] == flags.replace("nan_quality_link", "").strip(";")
-                assert fovs.loc["FOV3", "n_links_kept"] == 5
-            if fallback is None:
-                assert fovs.loc["FOV3", ORIGIN].isna().all()
-            else:
-                assert bits(fovs.loc[["FOV3"]], ORIGIN) == nominal[3].tobytes()
-                assert (fovs.loc["FOV3", CORRECTION] == 0.0).all()
-            assert fovs.loc["FOV3", TRANSLATION].isna().all()
-            others = fovs.drop(index="FOV3")
-            assert set(others.status) == {"image_supported"} and set(others.component) == {0}
-            supported = [k for k in range(6) if k != 3]
-            c = translations[supported]
-            assert bits(others, ORIGIN) == (nominal[supported] + c - c.mean(axis=0)).tobytes()
-            assert result.record["review"]["state"] == "required"
-            assert result.record["review"]["flagged"]["unplaced_fovs"] == ["FOV3"]
-            check_record(result, table)
+        result = run(table, grids, translations, overrides=overrides, fallback=fallback)
+        fovs = result.fovs.set_index("fov_id")
+        reference = check_components(result)
+        assert fovs.loc["FOV3", "status"] == "failed"
+        assert "fallback" not in fovs.loc["FOV3", "flags"].split(";")
+        if overrides:
+            assert fovs.loc["FOV3", "flags"] == "nan_quality_link" and fovs.loc["FOV3", "n_links_kept"] == 0
+        else:
+            assert fovs.loc["FOV3", "flags"] == "" and fovs.loc["FOV3", "n_links_kept"] == 5
+        assert fovs.loc["FOV3", ORIGIN].isna().all() and fovs.loc["FOV3", CORRECTION].isna().all()
+        assert fovs.loc["FOV3", TRANSLATION].isna().all()
+        assert reference == 0 and fovs.loc["FOV3", "component"] == 1
+        others = fovs.drop(index="FOV3")
+        assert set(others.status) == {"image_supported"} and set(others.component) == {0}
+        assert bits(others, ORIGIN) == (nominal[supported] + c - c.mean(axis=0)).tobytes()
+        assert bits(others, ORIGIN) == bits(without.drop(index="FOV3"), ORIGIN)
+        assert list(others.status) == list(without.drop(index="FOV3").status)
+        assert result.record["fallback"] == fallback
+        assert result.record["review"]["state"] == "required"
+        assert result.record["review"]["reasons"] == ["unplaced_fovs"]
+        assert result.record["review"]["flagged"] == {"unplaced_fovs": ["FOV3"]}
+        check_record(result, table)
+
+
+@pytest.mark.parametrize("fallback", [None, "nominal"], ids=["fallback_none", "fallback_nominal"])
+def test_a_method_without_a_finite_translation_fails_every_fov(stub, tmp_path, fallback):
+    """Every translation NaN: every present FOV is ``failed`` under both fallbacks; saved and reloaded."""
+    table = stub_table()
+    grids = grids_for(table)
+    translations = np.full((6, 3), np.nan)
+    every_link = tuple((a, b, np.nan, False, "nan_quality", (0.0, 0.0, 0.0)) for a, b in STUB_PAIRS)
+    for name, overrides in (("kept", ()), ("nan_quality", every_link)):
+        result = run(table, grids, translations, overrides=overrides, fallback=fallback)
+        fovs = result.fovs
+        assert set(fovs.status) == {"failed"} and not set(fovs.status) & {"image_supported", "metadata_only"}
+        assert not any("fallback" in text.split(";") for text in fovs["flags"])
+        assert fovs[ORIGIN].isna().all().all() and fovs[TRANSLATION].isna().all().all()
+        assert check_components(result) is None and list(fovs.component) == list(range(6))
+        assert result.record["gauge_mean_correction_zyx"] is None and result.record["fallback"] == fallback
+        assert result.record["review"]["state"] == "required"
+        assert result.record["review"]["reasons"] == ["unplaced_fovs"]
+        assert result.record["review"]["flagged"] == {"unplaced_fovs": table.fov_ids}
+        check_record(result, table)
+        loaded = load_placement(save_placement(result, tmp_path / name))
+        pd.testing.assert_frame_equal(loaded.fovs, result.fovs, check_exact=True)
+        pd.testing.assert_frame_equal(loaded.links, result.links, check_exact=True)
+        assert loaded.record == result.record
+        check_components(loaded)
+
+
+@pytest.mark.parametrize("fallback", [None, "nominal"], ids=["fallback_none", "fallback_nominal"])
+def test_a_disconnected_fov_with_a_finite_translation_keeps_the_fallback_rule(stub, fallback):
+    """PL9 to PL11: the moved FOV and the second component, finite translations, under each fallback."""
+    moved = moved_table()
+    small = two_by_two()
+    across = [("FOV0", "FOV2"), ("FOV0", "FOV3"), ("FOV1", "FOV2"), ("FOV1", "FOV3")]
+    cases = ((moved, run(moved, grids_for(moved), FRACTIONAL, fallback=fallback), ["FOV5"]),
+             (small, run(small, grids_for(small), zero(4), overrides=dropped(across), fallback=fallback),
+              ["FOV2", "FOV3"]))
+    for table, result, outside in cases:
+        fovs = result.fovs.set_index("fov_id")
+        nominal = pd.DataFrame(table.nominal_zyx(), index=table.fov_ids, columns=ORIGIN)
+        assert set(fovs.drop(index=outside).status) == {"image_supported"}
+        assert np.isfinite(fovs.loc[outside, TRANSLATION].to_numpy()).all()
+        if fallback is None:
+            assert set(fovs.loc[outside, "status"]) == {"failed"} and set(fovs.loc[outside, "flags"]) == {""}
+            assert fovs.loc[outside, ORIGIN].isna().all().all()
+        else:
+            assert set(fovs.loc[outside, "status"]) == {"metadata_only"}
+            assert set(fovs.loc[outside, "flags"]) == {"fallback"}
+            assert bits(fovs.loc[outside], ORIGIN) == bits(nominal.loc[outside], ORIGIN)
+            assert (fovs.loc[outside, CORRECTION] == 0.0).all().all()
+        assert result.record["review"]["state"] == "required"
+        assert result.record["review"]["flagged"]["unplaced_fovs"] == outside
+        check_record(result, table)
 
 
 def test_the_reference_component_holds_placed_fovs_only(stub):
