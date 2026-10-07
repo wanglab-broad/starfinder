@@ -488,8 +488,9 @@ an ownership boundary: then the cell is retained twice (both centroids on their 
 side) or by no FOV (both on the other side), and a cell cut by a FOV border is retained
 with only the part and the molecules that FOV saw. **The sample tables therefore do not
 guarantee one observation per biological cell where neighbouring segmentations disagree**;
-`conflict` marks the first case, `unclaimed` the second, and `fov_edge` with
-`outside_owner_region` the third. The golden fixture shows each: a cell retained twice in
+`conflict` marks some of the cells retained twice and `unclaimed` some of the cells
+retained by no FOV, because both are centroid tests ("Flags"), and `fov_edge` with
+`outside_owner_region` marks the third case. The golden fixture shows each: a cell retained twice in
 2D under O1, and a molecule of a retained cell that its owner did not image. No matching,
 merging or reassignment repairs them (excluded by the planning decisions).
 

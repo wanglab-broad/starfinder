@@ -410,7 +410,10 @@ is a 2D file and a 2D element, which is its only plane. The **middle plane** of 
 * one plane (`n_z = 1`, the stack of one-plane FOVs): `i = 0`, the only plane.
 
 Figures of LN sample1 (placement overviews, ownership regions, seam views and any view of
-its fused image) show its middle plane, never a maximum projection.
+its fused image) show its middle plane, never a maximum projection, except its seam
+sections in XZ and YZ through the stack, which show every plane of one row or one column
+of voxels and no projection either ({doc}`stitching-assembly-validation`, "Outputs to
+inspect").
 
 ### Fused image inputs
 
