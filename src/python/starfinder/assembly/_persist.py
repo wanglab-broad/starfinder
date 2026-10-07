@@ -106,6 +106,11 @@ def save_assembly(result: AssemblyResult, folder, *, table_format: str = "csv") 
 def load_assembly(folder) -> AssemblyResult:
     """Read the assembly of an export folder, checking every recorded SHA-256.
 
+    Every file of the section's ``files`` and every territory label file a
+    FOV's entry records beside its SHA-256 (``conflicts=True`` with a saved
+    assignment folder; the inputs of the assembly, read again by the label
+    export) must exist with that SHA-256.
+
     Raises
     ------
     FileNotFoundError
@@ -129,6 +134,10 @@ def load_assembly(folder) -> AssemblyResult:
     files = record.get("files") or {}
     for key, entry in files.items():
         check_file(folder / entry["path"], entry["sha256"], f"assembly file {key}")
+    for entry in record.get("fovs") or []:
+        territories = entry.get("territories") or {}
+        if territories.get("path"):
+            check_file(territories["path"], territories["sha256"], f"territory file (FOV {entry.get('fov_id')})")
     frames = {name: _read_table(folder / files[name]["path"], files[name]["dtypes"]) for name in TABLES}
     return AssemblyResult(record["sample"], frames["fovs"], frames["cells"], frames["molecules"], frames["counts"],
                           tuple(record["genes"]), record)

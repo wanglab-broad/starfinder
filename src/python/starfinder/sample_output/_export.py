@@ -3,9 +3,8 @@
 It runs the checks before anything is written, removes the files the previous record
 lists for the parts that run or are off, and calls the parts in order: ``assemble``
 (then ``save_assembly``), ``fuse``, ``fuse_labels`` and ``export_spatialdata``, writing
-``export.json`` after each part. The label and SpatialData parts are added by later
-issues; until then a configuration that turns them on is refused before anything is
-written.
+``export.json`` after each part. The SpatialData part is added by a later issue; until
+then a configuration that turns it on is refused before anything is written.
 """
 from __future__ import annotations
 
@@ -17,6 +16,7 @@ from starfinder.stitching import PlacementResult
 from ._config import ExportConfig, image_name
 from ._fuse import FusionInput, check_assembly, check_fusion, fuse
 from ._grid import INCLUDED
+from ._labels import check_label_ids, fuse_labels
 from ._record import (
     PARTS,
     SECTIONS,
@@ -30,9 +30,8 @@ from ._record import (
 
 REFERENCE_STAIN_FILE = Path("other_rounds") / "reference_stain" / "image.ome.tif"
 MOLECULE_CSV = "signal/{fov_id}_goodSpots.csv"
-LABEL_ID_BOUND = 2 ** 24
 #: The parts later issues deliver; a configuration that turns one on is refused until then.
-NOT_YET = {"fuse_labels": "W-370", "export_spatialdata": "W-371"}
+NOT_YET = {"export_spatialdata": "W-371"}
 
 
 def _paths(dataset, fov):
@@ -177,9 +176,8 @@ def export_sample(dataset, sample: str, *, placement, assignment: str | None = "
         inputs = fusion_inputs(dataset, placement, config)
         check_fusion(placement, inputs, config=config.fusion, assembly=None)
     # 6. Label IDs.
-    if config.fuse_labels and result is not None and len(result.cells) > LABEL_ID_BOUND:
-        raise ValueError(f"the sample cell table has {len(result.cells)} rows, above 2^24 = {LABEL_ID_BOUND}: its "
-                         "instance_id values would not be exact in float32, so the label export is refused")
+    if config.fuse_labels and result is not None:
+        check_label_ids(result.cells)
     pending = [f"{part} (delivered by {issue})" for part, issue in NOT_YET.items() if getattr(config, part)]
     if pending:
         raise NotImplementedError(f"the export parts {', '.join(pending)} are not implemented yet; turn them off")
@@ -211,7 +209,11 @@ def export_sample(dataset, sample: str, *, placement, assignment: str | None = "
         fuse(placement, inputs, assembly=result, config=config.fusion, output_dir=output_dir)
     else:
         update_section(output_dir, sample, "fuse", {"status": "off"}, fill=False)
-    # Parts 3 and 4: off until their issues.
-    update_section(output_dir, sample, "fuse_labels", {"status": "off"})
+    # Part 3: fuse_labels.
+    if config.fuse_labels:
+        fuse_labels(placement, result, config=config.labels, output_dir=output_dir)
+    else:
+        update_section(output_dir, sample, "fuse_labels", {"status": "off"})
+    # Part 4: off until its issue.
     record = update_section(output_dir, sample, "export_spatialdata", {"status": "off"})
     return ExportRecord(output_dir, record)

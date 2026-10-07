@@ -517,10 +517,12 @@ class Dataset:
         (``reference_stain``:
         ``checkpoints/{fovID}/other_rounds/reference_stain/image.ome.tif``;
         ``reference_merged``: ``images/ref_merged/{fovID}.tif``;
-        ``<name>=file:<pattern>`` relative to the output root). The label and
-        SpatialData parts are recorded ``off``; they are not implemented yet,
-        and a configuration that turns them on raises ``NotImplementedError``
-        before anything is written.
+        ``<name>=file:<pattern>`` relative to the output root); and, with
+        ``fuse_labels`` on (off by default),
+        :func:`~starfinder.sample_output.fuse_labels` on the placement and the
+        assembly, which writes ``cell_labels.ome.tif``. The SpatialData part is
+        recorded ``off``; it is not implemented yet, and a configuration that
+        turns it on raises ``NotImplementedError`` before anything is written.
 
         Parameters
         ----------
@@ -549,7 +551,7 @@ class Dataset:
             The checks of docs/sample-output-contract.md ("Checks before
             anything is written"), in their order, with the folder unchanged.
         NotImplementedError
-            ``fuse_labels`` or ``export_spatialdata`` is on.
+            ``export_spatialdata`` is on.
         """
         from starfinder.sample_output import ExportConfig
         from starfinder.sample_output._export import export_sample

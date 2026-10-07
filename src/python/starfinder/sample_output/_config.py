@@ -150,6 +150,11 @@ class LabelConfig:
     def __post_init__(self):
         scale_factor(self.scale_yx, "LabelConfig.scale_yx")
 
+    @property
+    def factor_yx(self) -> int:
+        """The whole factor ``k`` of ``scale_yx = 1/k``."""
+        return scale_factor(self.scale_yx, "LabelConfig.scale_yx")
+
 
 @dataclass(frozen=True)
 class SpatialDataExportConfig:

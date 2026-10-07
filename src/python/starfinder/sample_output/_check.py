@@ -4,7 +4,9 @@ R1 to R3 (the record and the folder) and, for each fused image of the ``fusion``
 F1 (the OME-TIFF and OME-Zarr layout checks and conditions 1 to 3 of "Sample position to
 image position"), F2 (dtype), F3 (uncovered voxels), F7 (projection and stack grids), F8
 (no included FOV) and F9 (OME-Zarr equal to OME-TIFF). F4 to F6 are fixture checks of the
-tests. The label and SpatialData checks belong to their parts.
+tests. For the label image of the ``labels`` section: L1 (layout, uint32), L2 (no new
+value), L3 (drawn by retained cells), L4 (absent IDs) and L5 (grid); L6 is a check of the
+entry before anything is written. The SpatialData checks belong to their part.
 """
 from __future__ import annotations
 
@@ -67,13 +69,13 @@ def _r1(folder):
             _fail("R1", f"part {part} has status {status!r} in parts and {section['status']!r} in its section")
     if record.get("complete") is not is_complete(record):
         _fail("R1", f"complete is {record.get('complete')!r}, but the part statuses give {is_complete(record)}")
-    fusion = record.get("fusion") or {}
-    recorded = fusion.get("assembly_sha256")
-    if recorded is not None:
-        current = section_sha256(record.get("assembly"))
-        if recorded != current:
-            _fail("R1", f"the fusion section records the assembly section's SHA-256 {recorded}, but the assembly "
-                        f"section's is {current}")
+    for name in ("fusion", "labels"):
+        recorded = (record.get(name) or {}).get("assembly_sha256")
+        if recorded is not None:
+            current = section_sha256(record.get("assembly"))
+            if recorded != current:
+                _fail("R1", f"the {name} section records the assembly section's SHA-256 {recorded}, but the "
+                            f"assembly section's is {current}")
     return record
 
 
@@ -374,6 +376,108 @@ def _check_fusion(folder, record):
                 _fail("F7", f"the projection and the stack of {image} have different Y and X grids")
 
 
+# --- Labels ------------------------------------------------------------------------------------------------
+
+def _formula_grid(assembly_section, k, two_d):
+    """The label grid's (S, O, N) per axis Z, Y, X from the FOVs the assembly section records (L5)."""
+    from ._grid import INCLUDED
+    from ._labels import label_grid
+    fovs = [e for e in assembly_section["fovs"] if e["placement_status"] in INCLUDED and e.get("grid")]
+    origins = [e["origin_zyx"] for e in fovs]
+    shapes = [e["grid"]["shape_zyx"] for e in fovs]
+    spacing = fovs[0]["grid"]["metadata"]["spacing_zyx"]
+    yx = label_grid(spacing, origins, shapes, k)
+    sz = float(spacing[0])
+    one_plane = all(shape[0] == 1 for shape in shapes)
+    if one_plane:
+        z_lo, z_hi = min(o[0] for o in origins) - sz / 2, max(o[0] for o in origins) + sz / 2
+        z = (z_hi - z_lo, (z_lo + z_hi) / 2, 1)
+    else:
+        oz = min(float(o[0]) for o in origins)
+        nz = int(math.floor((max(float(o[0]) + (n[0] - 1) * sz for o, n in zip(origins, shapes)) - oz) / sz
+                            + 1e-9)) + 1
+        z = (nz * sz, oz + sz * (nz - 1) / 2, 1) if two_d else (sz, oz, nz)
+    return ([z[0], yx["spacing"]["y"], yx["spacing"]["x"]], [z[1], yx["origin"]["y"], yx["origin"]["x"]],
+            [z[2], yx["shape"]["y"], yx["shape"]["x"]])
+
+
+def _check_labels(folder, record):
+    """L1 to L5 for the label image of the ``labels`` section."""
+    import tifffile
+
+    from starfinder.assembly import load_assembly
+
+    from ._labels import LABEL_FILE, _read_territory, retained_by_fov, retained_image
+    section = record.get("labels")
+    status = part_status(record, "fuse_labels")
+    if status != "written" or not isinstance(section, dict):
+        return
+    outputs = section.get("outputs") or []
+    if [o.get("path") for o in outputs] != [LABEL_FILE]:
+        _fail("L1", f"the labels section lists {[o.get('path') for o in outputs]}, not [{LABEL_FILE!r}]")
+    output = outputs[0]
+    if output["dtype"] != "uint32":
+        _fail("L1", f"{LABEL_FILE} is recorded as {output['dtype']}, not uint32")
+    _check_tiff(folder, LABEL_FILE, output, section)
+    # L5: the grid.
+    two_d = bool(output["inputs_2d"])
+    spacing, origin, shape = _formula_grid(record["assembly"], int(output["factor_yx"]), two_d)
+    if list(output["shape_zyx"]) != shape or not _close(output["spacing_zyx"], spacing, TOLERANCE_TIFF_UM) \
+            or not _close(output["origin_zyx"], origin, TOLERANCE_TIFF_UM):
+        _fail("L5", f"{LABEL_FILE} has spacing {output['spacing_zyx']}, origin {output['origin_zyx']} and shape "
+                    f"{output['shape_zyx']}; the formulas give {spacing}, {origin} and {shape}")
+    # L2 to L4: the values, against the territory files, the instance_id map and assembly_status.
+    assembly = load_assembly(folder)
+    retained = retained_by_fov(assembly.cells)
+    retained_ids = {int(v) for _, ids in retained.values() for v in ids}
+    entries = {e["fov_id"]: e for e in section.get("fovs") or []}
+    if set(entries) != set(retained):
+        _fail("L4", f"the labels section reads the territories of {sorted(entries)}, but the FOVs with a retained "
+                    f"cell are {sorted(retained)}")
+    origins = {e["fov_id"]: e["origin_zyx"] for e in record["assembly"]["fovs"]}
+    spacings = {e["fov_id"]: e["grid"]["metadata"]["spacing_zyx"] for e in record["assembly"]["fovs"] if e["grid"]}
+    with tifffile.TiffFile(folder / LABEL_FILE) as tif:
+        n_z = output["shape_zyx"][0]
+        planes = [tif.series[0].asarray(key=i) if n_z > 1 else tif.series[0].asarray() for i in range(n_z)]
+    image = np.stack(planes)
+    ids_output = {int(v) for v in np.unique(image) if v > 0}
+    ids_input = set()
+    centres = [output["origin_zyx"][a] + np.arange(output["shape_zyx"][a]) * output["spacing_zyx"][a]
+               for a in range(3)]
+    for fov, entry in entries.items():
+        territory = _read_territory(Path(entry["path"]), entry["sha256"])
+        cell_ids, ids = retained[fov]
+        mapped = retained_image(territory, cell_ids, ids)
+        ids_input |= {int(v) for v in np.unique(mapped) if v > 0}
+        # L3: at every voxel showing a cell of this FOV, its territory sampled by floor(c + 1/2) holds that cell.
+        own = np.isin(image, ids)
+        if not own.any():
+            continue
+        index = [np.floor((centres[a] - origins[fov][a]) / spacings[fov][a] + 0.5).astype(np.int64)
+                 for a in range(3)]
+        if mapped.shape[0] == 1:
+            index[0] = np.zeros(len(index[0]), np.int64)
+        inside = [(i >= 0) & (i < n) for i, n in zip(index, mapped.shape)]
+        z, y, x = np.nonzero(own)
+        ok = inside[0][z] & inside[1][y] & inside[2][x]
+        sampled = np.zeros(len(z), np.uint32)
+        sampled[ok] = mapped[index[0][z[ok]], index[1][y[ok]], index[2][x[ok]]]
+        if np.any(sampled != image[z, y, x]):
+            bad = int(np.count_nonzero(sampled != image[z, y, x]))
+            _fail("L3", f"{bad} voxels of {LABEL_FILE} show a cell of FOV {fov} that its territory, sampled at the "
+                        "voxel centre by floor(c + 1/2), does not hold there")
+    new = sorted(ids_output - retained_ids) + sorted((ids_output & retained_ids) - ids_input)
+    if new:
+        _fail("L2", f"{LABEL_FILE} holds values that are not the instance_id of a retained cell in ids_input: "
+                    f"{new[:10]}")
+    absent = sorted(ids_input - ids_output)
+    if section.get("n_ids_input") != len(ids_input) or section.get("n_ids_output") != len(ids_output) \
+            or section.get("absent_ids") != absent or section.get("n_absent_ids") != len(absent):
+        _fail("L4", f"the labels section records {section.get('n_ids_input')} IDs in, {section.get('n_ids_output')} "
+                    f"out and absent {section.get('absent_ids')}; recomputed {len(ids_input)}, {len(ids_output)} "
+                    f"and {absent}")
+
+
 def check_export(folder) -> None:
     """Check an export folder against its record ``export.json``; ``ValueError`` names the first failed condition.
 
@@ -389,7 +493,15 @@ def check_export(folder) -> None:
     the recorded geometry against the fusion grid (F1); the dtype (F2); 0 at
     every voxel no included FOV covers (F3); equal Y and X grids of a
     projection and a stack (F7); ``empty`` exactly without an included FOV
-    (F8); the OME-Zarr's output level equal to the OME-TIFF's (F9).
+    (F8); the OME-Zarr's output level equal to the OME-TIFF's (F9). For the
+    label image: the OME-TIFF layout checks and uint32 (L1); every nonzero
+    value the ``instance_id`` of a retained cell in ``ids_input`` (L2); at
+    every voxel showing a cell, that cell's FOV's territory, sampled at the
+    voxel centre by ``floor(c + ½)``, holding it (L3); the recorded counts of
+    ``ids_input`` and ``ids_output`` and ``absent_ids`` equal to their
+    recomputation from the territory files, the cell table and the file
+    (L4); the grid equal to the formulas within 1e-9 µm (L5). R1 also checks
+    the ``labels`` section's recorded SHA-256 of the ``assembly`` section.
 
     Parameters
     ----------
@@ -399,10 +511,12 @@ def check_export(folder) -> None:
     Raises
     ------
     ValueError
-        The first condition that fails, named (``R1`` … ``F9``).
+        The first condition that fails, named (``R1`` … ``F9``, ``L1`` …
+        ``L5``).
     """
     folder = Path(folder)
     record = _r1(folder)
     _r2(folder, record)
     _r3(folder, record)
     _check_fusion(folder, record)
+    _check_labels(folder, record)

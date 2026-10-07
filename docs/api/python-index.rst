@@ -108,6 +108,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.dataset.FOV`
 * :py:obj:`starfinder.dataset.from_workflow_config`
 * :py:obj:`starfinder.sample_output.fuse`
+* :py:obj:`starfinder.sample_output.fuse_labels`
 * :py:obj:`starfinder.sample_output.fused_grid`
 * :py:obj:`starfinder.sample_output.FusedGrid`
 * :py:obj:`starfinder.sample_output.FusionConfig`
@@ -143,6 +144,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.spot_finding.KnownWeights`
 * :py:obj:`starfinder.sample_output.LabelConfig`
 * :py:obj:`starfinder.segmentation.LabelImportConfig`
+* :py:obj:`starfinder.sample_output.LabelRecord`
 * :py:obj:`starfinder.segmentation.labels_to_grid`
 * :py:obj:`starfinder.stitching.legacy_tile_config_view`
 * :py:obj:`starfinder.assembly.load_assembly`

@@ -288,12 +288,14 @@ starfinder.sample_output
 * :py:obj:`starfinder.sample_output.ExportIncompleteWarning`
 * :py:obj:`starfinder.sample_output.ExportRecord`
 * :py:obj:`starfinder.sample_output.fuse`
+* :py:obj:`starfinder.sample_output.fuse_labels`
 * :py:obj:`starfinder.sample_output.fused_grid`
 * :py:obj:`starfinder.sample_output.FusedGrid`
 * :py:obj:`starfinder.sample_output.FusionConfig`
 * :py:obj:`starfinder.sample_output.FusionInput`
 * :py:obj:`starfinder.sample_output.FusionRecord`
 * :py:obj:`starfinder.sample_output.LabelConfig`
+* :py:obj:`starfinder.sample_output.LabelRecord`
 * :py:obj:`starfinder.sample_output.SpatialDataExportConfig`
 
 starfinder.segmentation

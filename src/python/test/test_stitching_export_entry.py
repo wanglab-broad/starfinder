@@ -307,8 +307,6 @@ def test_checks_before_writing(folder, monkeypatch, tmp_path):
     unchanged(folder, lambda: export(folder, ExportConfig(assemble=False, fuse_labels=True)), ValueError,
               "holds no saved assembly")
     # The parts of later issues are refused after the checks, before anything is written.
-    unchanged(folder, lambda: export(folder, ExportConfig(fuse_labels=True, fuse=False)), NotImplementedError,
-              "fuse_labels")
     unchanged(folder, lambda: export(folder, ExportConfig(export_spatialdata=True, fuse=False)), NotImplementedError,
               "export_spatialdata")
 

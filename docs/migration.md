@@ -1333,9 +1333,9 @@ and one new folder, `<OUTPUT>/export/<sample>/`; nothing existing changes.
 `Dataset.stitch` and `stitching/<sample>/` stay as they are, the legacy rules and
 `images/fused/{sample}/` (BigStitcher's inputs and `dataset.xml`) are untouched, and no
 workflow key or rule is added yet: the `export` block and the `export_sample` rule come
-with the workflow issue. The label export (`fuse_labels`) and the SpatialData export
-(`export_spatialdata`) are recorded `off` until their issues; a configuration that turns
-one on is refused before anything is written.
+with the workflow issue. The SpatialData export (`export_spatialdata`) is recorded `off`
+until its issue; a configuration that turns it on is refused before anything is written.
+The label export (`fuse_labels`) is described in the next section.
 
 | Need | New name |
 | --- | --- |
@@ -1354,6 +1354,28 @@ spatialdata. With `assemble` on, `assemble` now keeps at most two territory imag
 memory: a saved assignment's territories are read again from its folder, with their
 SHA-256 checked, when the flags need them; its results are unchanged. The specification
 is {doc}`sample-output-contract`.
+
+### Sample outputs: the assembled label export
+
+One new function, `starfinder.sample_output.fuse_labels`, with `LabelRecord`, and one new
+file, `export/<sample>/cell_labels.ome.tif`; nothing existing changes, and the part is
+off by default (`ExportConfig(fuse_labels=True)` turns it on).
+
+| Need | New name |
+| --- | --- |
+| A label image of the assembled sample, for inspection | `fuse_labels(placement, assembly, config=LabelConfig(), output_dir)` returns a `LabelRecord`; `Dataset.export` calls it third, after `assemble` and `fuse` |
+| What the image holds | The retained cells of the sample cell table (`assembly_status == "retained"`), each drawn whole as its FOV segmented it, with its `instance_id` (`1..N` in cell table order); 0 elsewhere. A cell retained by two FOVs shows two IDs, a cell retained by no FOV is absent; nothing is matched or merged across FOVs |
+| How it is placed | multiview-stitcher's `fusion.fuse` at interpolation order 0 with the first positive view in placement table order (`_first_positive`, a small function passed to the library); labels are never blended |
+| Its scale | `LabelConfig(scale_yx=1/k)`, 0.25 by default, requested with `output_spacing`; the grid starts at the smallest FOV origin, so it does not nest with the fused image's |
+| The `labels` section of `export.json` | The territory files read and their SHA-256, the library's grid and the formula grid, the counts of `ids_input` and `ids_output`, `absent_ids` (cells too small for the output scale) and the conflict count; `check_export` checks L1 to L5 |
+
+`fuse_labels` needs `starfinder[multiview-stitcher]`; without it, or when a territory file
+of a FOV with a retained cell is missing, the part is `not_run` with
+`ExportIncompleteWarning`. A sample with more than 16,777,216 cell rows is refused before
+anything is written. `load_assembly` now also checks the SHA-256 of each territory file the
+`assembly` section records (assemblies made with `conflicts=True` from saved assignment
+folders), as {doc}`assembly-contract` ("Persistence") states; an export whose territory
+files were changed after assembly now raises `ValueError` naming the file.
 
 ## Intentional behavior changes — not mechanical equivalence
 
