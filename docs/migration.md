@@ -1246,7 +1246,7 @@ workflow key is added yet.
 | Nominal FOV positions from a Leica stage file, a regular grid or a supplied table | `positions_from_leica(path, stage_axes=StageAxisMapping(...), fov_ids=..., snap_to_grid=GridSnap(...) or None)`, `positions_from_grid(...)`, `positions_from_table(...)` return `TilePositionTable` |
 | Pairs of FOVs whose nominal boxes overlap | `neighbor_pairs(table, grids, tolerance_um=0.0)` returns `NeighborPair` |
 | One placement record for every backend | `PlacementResult` (`fovs`, `links`, `record`); `placed_metadata(result, fov_id)` |
-| Place a sample with a registered method | `stitch(inputs, table, config=...)` with `StitchingInput`; `STITCHING_METHODS` (empty until a method is added), `StitchingSpec`, `MethodPlacement` |
+| Place a sample with a registered method | `stitch(inputs, table, config=...)` with `StitchingInput`; `STITCHING_METHODS` (the first method, `multiview_stitcher`, is below), `StitchingSpec`, `MethodPlacement` |
 | A known placement, such as a synthetic scene's truth | `placement_from_table(table, grids, sample=..., origins=None)` |
 | Review before sample assembly | `ReviewPolicy`, `review_placement`, `approve_placement`, `PlacementReviewRequiredError` |
 | Save and read `stitching/<sample>/` | `save_placement(result, directory)`, `load_placement(directory)` |
@@ -1303,6 +1303,28 @@ sample outputs move to `export/<sample>/`, cells and molecules are retained by t
 ownership regions of the placement instead of the `tile_config` rectangles, and every
 excluded observation is kept with its reason. The specification is
 {doc}`assembly-contract` and {doc}`assembly-algorithms`.
+
+### Stitching: the `multiview_stitcher` placement method
+
+One new name in `starfinder.stitching`, `MultiviewStitcherConfig`, the first method of
+`STITCHING_METHODS`; nothing existing changes. BigStitcher stays the default, the legacy
+rules stay as they are, and no workflow key is added yet. The method needs the optional
+extra `starfinder[multiview-stitcher]` (multiview-stitcher 0.1.62, Python 3.11 to 3.13);
+without it, `stitch` raises `StitchingBackendUnavailableError` naming the extra, and
+importing `starfinder.stitching` never imports the library.
+
+| Need | New name |
+| --- | --- |
+| Place a sample in process, without Fiji | `stitch(inputs, table, config=MultiviewStitcherConfig())` returns a `PlacementResult` |
+| The contract's starting configuration | the defaults: `binning_zyx=(4, 4, 4)`, `pairwise="phase_correlation"`, `upsample_factor=None` (the library's), `quality_threshold=0.7`, `drop_nan_quality=True`, `pruning="alternating_pattern"`, `overlap_tolerance_um=0.0`, `groupwise="global_optimization"`, `abs_tol_um`, `rel_tol` and `max_iter` `None` (the library's) |
+
+A Z=1 tile is registered as a plane, so its z translation is exactly 0. Links follow rule
+L1: a link below 0.7 or with NaN quality (which the library itself keeps) is not kept. A
+neighbour pair the library does not register is `pruned`; a link its optimizer removes is
+`optimizer_removed` and requires review. When no link is left, every FOV is `failed`
+(the library's `NotEnoughOverlapError`), and the result is still returned and can be
+saved. The specification is {doc}`stitching-contract` ("Method registry") and
+{doc}`stitching-algorithms` ("`multiview_stitcher`").
 
 ## Intentional behavior changes — not mechanical equivalence
 

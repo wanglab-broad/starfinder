@@ -356,6 +356,7 @@ starfinder.stitching
 * :py:obj:`starfinder.stitching.legacy_tile_config_view`
 * :py:obj:`starfinder.stitching.load_placement`
 * :py:obj:`starfinder.stitching.MethodPlacement`
+* :py:obj:`starfinder.stitching.MultiviewStitcherConfig`
 * :py:obj:`starfinder.stitching.neighbor_pairs`
 * :py:obj:`starfinder.stitching.NeighborPair`
 * :py:obj:`starfinder.stitching.placed_metadata`

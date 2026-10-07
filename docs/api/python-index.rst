@@ -161,6 +161,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.assignment.molecule_table_from_csv`
 * :py:obj:`starfinder.assignment.MoleculeTable`
 * :py:obj:`starfinder.dataset.MorphologyConfig`
+* :py:obj:`starfinder.stitching.MultiviewStitcherConfig`
 * :py:obj:`starfinder.stitching.neighbor_pairs`
 * :py:obj:`starfinder.barcode.NeighborhoodSumConfig`
 * :py:obj:`starfinder.stitching.NeighborPair`

@@ -200,7 +200,7 @@ def test_stitch_and_the_supplied_placement_touch_no_file(stub, monkeypatch, tmp_
 
 
 def test_registry_uses_the_shared_mechanism(stub):
-    assert names(STITCHING_METHODS) == ("stub",)
+    assert names(STITCHING_METHODS) == ("multiview_stitcher", "stub")
     assert config_type_for(STITCHING_METHODS, "stub", "stitching method") is StubConfig
     assert spec_for(STITCHING_METHODS, StubConfig(zero(6)), "stitching method") is STUB_SPEC
     assert "supplied" not in names(STITCHING_METHODS) and "bigstitcher" not in names(STITCHING_METHODS)
@@ -213,8 +213,8 @@ def test_registry_uses_the_shared_mechanism(stub):
         "requires": {}, "artifacts": []}
 
 
-def test_no_method_is_registered_by_the_package():
-    assert dict(STITCHING_METHODS) == {}
+def test_the_package_registers_only_multiview_stitcher():
+    assert names(STITCHING_METHODS) == ("multiview_stitcher",)
     assert starfinder.stitching.STITCHING_METHODS is STITCHING_METHODS
 
 

@@ -38,11 +38,24 @@ geometry, derives the neighbour pairs, calls the method registered for the confi
 ``STITCHING_METHODS`` (a :py:class:`~starfinder.stitching.StitchingSpec` returning a
 :py:class:`~starfinder.stitching.MethodPlacement`) once, assigns the statuses, applies
 gauge G1 (zero mean correction over the ``image_supported`` FOVs) and the review
-policy. No method is registered yet; a missing optional dependency raises
+policy. A missing optional dependency raises
 :py:class:`~starfinder.stitching.StitchingBackendUnavailableError`, and importing the
 module imports no backend. A FOV that no kept link joins to the reference component is
 ``failed``, or with ``fallback="nominal"`` ``metadata_only`` at its nominal position and
 flagged ``fallback``.
+
+The first registered method is ``multiview_stitcher``
+(:py:class:`~starfinder.stitching.MultiviewStitcherConfig`, the ``multiview-stitcher``
+extra, imported only when it runs), a second backend beside BigStitcher, which stays the
+default. Its defaults are the contract's starting configuration: each tile becomes a view
+at its nominal origin (a Z=1 tile as a 2D view); the library's overlap graph, restricted
+to the neighbour pairs, is pruned to the alternating pattern; phase correlation registers
+each pair at binning 4; link rule L1 keeps a link whose quality is at least 0.7 and drops
+NaN-quality links, which the library keeps; and the library's global optimization
+resolves translations in µm, view to common frame. Pairs it does not register are
+recorded ``pruned``, links the optimizer removes ``optimizer_removed``. With no link left
+the library raises ``NotEnoughOverlapError``, and every FOV is ``failed``, the result
+still returned.
 
 :py:func:`~starfinder.stitching.placement_from_table` turns a known placement (for
 example a synthetic scene's truth) into the same record, with the nominal positions from
@@ -102,6 +115,7 @@ mapping when given one, calls :py:func:`~starfinder.stitching.stitch` and, with
    legacy_tile_config_view
    load_placement
    MethodPlacement
+   MultiviewStitcherConfig
    neighbor_pairs
    NeighborPair
    placed_metadata
