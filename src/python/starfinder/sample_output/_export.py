@@ -3,8 +3,7 @@
 It runs the checks before anything is written, removes the files the previous record
 lists for the parts that run or are off, and calls the parts in order: ``assemble``
 (then ``save_assembly``), ``fuse``, ``fuse_labels`` and ``export_spatialdata``, writing
-``export.json`` after each part. The SpatialData part is added by a later issue; until
-then a configuration that turns it on is refused before anything is written.
+``export.json`` after each part.
 """
 from __future__ import annotations
 
@@ -30,8 +29,6 @@ from ._record import (
 
 REFERENCE_STAIN_FILE = Path("other_rounds") / "reference_stain" / "image.ome.tif"
 MOLECULE_CSV = "signal/{fov_id}_goodSpots.csv"
-#: The parts later issues deliver; a configuration that turns one on is refused until then.
-NOT_YET = {"export_spatialdata": "W-371"}
 
 
 def _paths(dataset, fov):
@@ -146,6 +143,9 @@ def export_sample(dataset, sample: str, *, placement, assignment: str | None = "
         part.__post_init__()
     if not isinstance(sample, str) or not sample:
         raise ValueError("sample must be a nonempty string")
+    if config.export_spatialdata:
+        from ._spatialdata import check_name
+        check_name(sample, "sample name")
     if assignment is not None and (not isinstance(assignment, str) or not assignment):
         raise ValueError(f"assignment must be a saved assignment name or None; got {assignment!r}")
     if not isinstance(placement, PlacementResult):
@@ -178,9 +178,6 @@ def export_sample(dataset, sample: str, *, placement, assignment: str | None = "
     # 6. Label IDs.
     if config.fuse_labels and result is not None:
         check_label_ids(result.cells)
-    pending = [f"{part} (delivered by {issue})" for part, issue in NOT_YET.items() if getattr(config, part)]
-    if pending:
-        raise NotImplementedError(f"the export parts {', '.join(pending)} are not implemented yet; turn them off")
 
     record = read_export(output_dir)
     if record.get("sample") not in (None, sample):
@@ -213,7 +210,29 @@ def export_sample(dataset, sample: str, *, placement, assignment: str | None = "
     if config.fuse_labels:
         fuse_labels(placement, result, config=config.labels, output_dir=output_dir)
     else:
-        update_section(output_dir, sample, "fuse_labels", {"status": "off"})
-    # Part 4: off until its issue.
-    record = update_section(output_dir, sample, "export_spatialdata", {"status": "off"})
+        update_section(output_dir, sample, "fuse_labels", {"status": "off"}, fill=False)
+    # Part 4: export_spatialdata, from the saved assembly and the sections of parts 2 and 3.
+    if config.export_spatialdata:
+        _spatialdata_part(result, config, output_dir)
+        record = read_export(output_dir)
+    else:
+        record = update_section(output_dir, sample, "export_spatialdata", {"status": "off"})
     return ExportRecord(output_dir, record)
+
+
+def _spatialdata_part(result, config, output_dir):
+    """Part 4. An error inside it records the part ``failed`` with the exception's type and message, then raises."""
+    from ._record import Timer
+    from ._spatialdata import _check, _export
+    timer = Timer()
+    requested = [f"{name}_{d}" for name in config.fusion.image_names for d in config.fusion.dimensionalities]
+    try:
+        record = _check(result, config.spatialdata, output_dir)
+        _export(result, record, config.spatialdata, output_dir, timer,
+                requested_images=requested)
+    except BaseException as error:
+        if (read_export(output_dir).get("spatialdata") or {}).get("status") != "failed":
+            update_section(output_dir, result.sample, "export_spatialdata",
+                           {"status": "failed", "store": None, "outputs": [],
+                            "error": {"type": type(error).__name__, "message": str(error)}})
+        raise

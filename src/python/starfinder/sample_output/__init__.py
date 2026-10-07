@@ -15,8 +15,11 @@ OME-Zarr (:class:`FusionRecord`). :func:`fuse_labels` writes the assembled label
 ``cell_labels.ome.tif`` (:class:`LabelConfig`, :class:`LabelRecord`): the retained cells of
 the sample, each drawn whole with its ``instance_id``, placed by the library at order 0
 with the first positive view and never blended, at scale 0.25 by default (off by default
-in the entry). :func:`check_export` checks a folder against its record. The SpatialData
-part comes with its own issue and is recorded ``off``.
+in the entry). :func:`export_spatialdata` writes the SpatialData store ``sample.zarr``
+(:class:`SpatialDataExportConfig`; off by default in the entry): the sample tables as
+points, shapes and tables, and each fused and label image once, read from its OME-TIFF,
+with one level; :func:`lookup_source` traces a molecule or cell back to its FOV's §2.9
+assignment. :func:`check_export` checks a folder against its record.
 Importing this module imports neither multiview-stitcher, zarr nor spatialdata. See
 docs/sample-output-contract.md.
 """
@@ -26,7 +29,8 @@ from ._fuse import FusionInput, FusionRecord, fuse
 from ._grid import FusedGrid, fused_grid
 from ._labels import LabelRecord, fuse_labels
 from ._record import ExportIncompleteWarning, ExportRecord
+from ._spatialdata import export_spatialdata, lookup_source
 
 __all__ = ["ExportConfig", "FusionConfig", "LabelConfig", "SpatialDataExportConfig", "fuse", "fused_grid",
            "FusionInput", "FusedGrid", "FusionRecord", "fuse_labels", "LabelRecord", "ExportRecord",
-           "ExportIncompleteWarning", "check_export"]
+           "ExportIncompleteWarning", "export_spatialdata", "lookup_source", "check_export"]

@@ -2,7 +2,8 @@ starfinder.sample_output
 ========================
 
 Sample outputs (§2.10): the one sample-level export entry, its record, the fused
-sample image and the assembled label image. See :doc:`../sample-output-contract`.
+sample image, the assembled label image and the SpatialData export. See
+:doc:`../sample-output-contract`.
 
 :py:meth:`~starfinder.dataset.Dataset.export` writes everything to the sample's export
 folder ``<OUTPUT>/export/<sample>/``. After the checks before anything is written (the
@@ -12,9 +13,9 @@ it removes the files the previous ``export.json`` lists for each part that runs 
 and calls the parts in order, writing ``export.json`` after each: ``assemble`` (saved with
 :py:func:`~starfinder.assembly.save_assembly`), :py:func:`~starfinder.sample_output.fuse`,
 :py:func:`~starfinder.sample_output.fuse_labels` (off by default) and
-``export_spatialdata``. :py:class:`~starfinder.sample_output.ExportConfig` turns each part
-on or off and holds the configuration of each; the SpatialData part is not implemented yet
-and is recorded ``off``. A part that cannot run (an extra not installed, a source image or
+:py:func:`~starfinder.sample_output.export_spatialdata` (off by default).
+:py:class:`~starfinder.sample_output.ExportConfig` turns each part on or off and holds the
+configuration of each. A part that cannot run (an extra not installed, a source image or
 a territory file missing) is recorded ``not_run`` with its reason and
 :py:class:`~starfinder.sample_output.ExportIncompleteWarning`; the files of the earlier
 parts are still written and ``complete`` is false. The method returns an
@@ -56,12 +57,43 @@ read, the library's grid against the formula grid, the counts of ``ids_input`` a
 :py:class:`~starfinder.sample_output.LabelRecord` holds it and the written path. A sample
 with more than 2^24 = 16,777,216 cell rows is refused before anything is written.
 
+:py:func:`~starfinder.sample_output.export_spatialdata` writes the SpatialData store
+``sample.zarr/``, an export of the sample tables and the fused and label images, not a
+second source: nothing is filtered, reassigned or recounted. One coordinate system, named
+after the sample (whose name must satisfy spatialdata's element naming rule), in the
+sample frame's axes and µm. The points ``molecules`` hold every molecule with finite
+sample coordinates (the §2.9 ``z, y, x`` renamed ``fov_index_z/y/x``, ``sample_x/y/z``
+the coordinate columns ``x, y, z``, ``cell_instance_id`` added); the shapes
+``cell_centroids`` one circle per cell with a finite ownership centroid, at that centroid,
+with the equivalent radius of the original territory (a sphere for ``volume``, a disc for
+``plane``; a cell of zero voxels is refused), indexed by ``instance_id`` (``1..N`` over the
+sample cell table); the table ``cells`` those cell rows and ``expression``
+(``sample.h5ad`` with every part kept) annotate ``cell_centroids`` through ``region`` and
+``instance_id``; the tables ``cells_unplaced`` and ``molecules_unplaced`` hold the rows
+without sample coordinates. Each fused image (``<image>_projection``, ``<image>_stack``)
+and the label image (``cell_labels``) is one element, its OME-TIFF's output level read
+lazily and written once, with one level, transform ``Scale(S)`` then
+``Translation(O − S/2)``; no standalone OME-Zarr is written beside the store. An element
+whose population has no row, or whose image does not exist, is left out and recorded
+``omitted`` with its reason. :py:class:`~starfinder.sample_output.SpatialDataExportConfig`
+selects Zarr format 3 (spatialdata's default format, the default) or 2. The store is
+written into a staging folder and renamed into place; the ``spatialdata`` section of
+``export.json`` records every element, the formats, the counts and the SHA-256 of every
+store file. A table that already has ``uns["spatialdata_attrs"]`` is refused by
+spatialdata and no store is written. Without the ``spatialdata`` extra the part is
+recorded ``not_run``. :py:func:`~starfinder.sample_output.lookup_source` traces a molecule
+or a cell of an export folder back to its FOV, its §2.9 assignment folder and the row's
+position in the §2.9 table, after verifying the record's hashes.
+:py:func:`~starfinder.sample_output.check_export` reads the store back and evaluates the
+SpatialData conditions S1 to S8.
+
 .. currentmodule:: starfinder.sample_output
 
 .. autosummary::
    :toctree: generated
 
    check_export
+   export_spatialdata
    ExportConfig
    ExportIncompleteWarning
    ExportRecord
@@ -74,4 +106,5 @@ with more than 2^24 = 16,777,216 cell rows is refused before anything is written
    FusionRecord
    LabelConfig
    LabelRecord
+   lookup_source
    SpatialDataExportConfig

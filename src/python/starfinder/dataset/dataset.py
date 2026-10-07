@@ -497,7 +497,8 @@ class Dataset:
         return result
 
     def export(self, sample: str, *, placement, assignment: str | None = "default", config=None, output_dir):
-        """Write a sample's export folder: the sample tables, ``sample.h5ad`` and the fused image.
+        """Write a sample's export folder: the sample tables, ``sample.h5ad``, the fused image and, on request,
+        the label image and the SpatialData store.
 
         The one sample-level export entry (docs/sample-output-contract.md, "The
         export entry"). A sample-level computation, not a multi-FOV runner: it
@@ -520,9 +521,16 @@ class Dataset:
         ``<name>=file:<pattern>`` relative to the output root); and, with
         ``fuse_labels`` on (off by default),
         :func:`~starfinder.sample_output.fuse_labels` on the placement and the
-        assembly, which writes ``cell_labels.ome.tif``. The SpatialData part is
-        recorded ``off``; it is not implemented yet, and a configuration that
-        turns it on raises ``NotImplementedError`` before anything is written.
+        assembly, which writes ``cell_labels.ome.tif``; and, with
+        ``export_spatialdata`` on (off by default),
+        :func:`~starfinder.sample_output.export_spatialdata` on the saved
+        assembly and the ``fusion`` and ``labels`` sections, which writes
+        ``sample.zarr/`` (with it on, a sample name outside spatialdata's
+        element naming rule is refused among the config checks). A part that
+        cannot run is recorded ``not_run`` with
+        :class:`~starfinder.sample_output.ExportIncompleteWarning`; any other
+        error inside the SpatialData part records it ``failed`` and is raised
+        again.
 
         Parameters
         ----------
@@ -550,8 +558,6 @@ class Dataset:
         ValueError, PlacementReviewRequiredError, ModuleNotFoundError, IncompatibleGeometryError
             The checks of docs/sample-output-contract.md ("Checks before
             anything is written"), in their order, with the folder unchanged.
-        NotImplementedError
-            ``export_spatialdata`` is on.
         """
         from starfinder.sample_output import ExportConfig
         from starfinder.sample_output._export import export_sample

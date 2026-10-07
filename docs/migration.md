@@ -1333,9 +1333,8 @@ and one new folder, `<OUTPUT>/export/<sample>/`; nothing existing changes.
 `Dataset.stitch` and `stitching/<sample>/` stay as they are, the legacy rules and
 `images/fused/{sample}/` (BigStitcher's inputs and `dataset.xml`) are untouched, and no
 workflow key or rule is added yet: the `export` block and the `export_sample` rule come
-with the workflow issue. The SpatialData export (`export_spatialdata`) is recorded `off`
-until its issue; a configuration that turns it on is refused before anything is written.
-The label export (`fuse_labels`) is described in the next section.
+with the workflow issue. The label export (`fuse_labels`) and the SpatialData export
+(`export_spatialdata`) are described in the next sections.
 
 | Need | New name |
 | --- | --- |
@@ -1376,6 +1375,31 @@ anything is written. `load_assembly` now also checks the SHA-256 of each territo
 `assembly` section records (assemblies made with `conflicts=True` from saved assignment
 folders), as {doc}`assembly-contract` ("Persistence") states; an export whose territory
 files were changed after assembly now raises `ValueError` naming the file.
+
+### Sample outputs: the SpatialData export
+
+Two new functions, `starfinder.sample_output.export_spatialdata` and `lookup_source`, and
+one new store, `export/<sample>/sample.zarr/`; nothing existing changes, and the part is
+off by default (`ExportConfig(export_spatialdata=True)` turns it on). The reference
+branch's `sample_export` API is not adopted, and no code is brought over from it.
+
+| Need | New name |
+| --- | --- |
+| A SpatialData view of the assembled sample | `export_spatialdata(load_assembly(folder), fused=None, labels=None, config=SpatialDataExportConfig(), output_dir=folder)` returns the store path; `Dataset.export` calls it fourth, after `assemble`, `fuse` and `fuse_labels` |
+| What the store holds | One coordinate system named after the sample, in µm. Points `molecules`, shapes `cell_centroids` (circles at the ownership centroid, equivalent radius), tables `cells` and `expression` (annotating `cell_centroids` by `region` and `instance_id`), `cells_unplaced` and `molecules_unplaced`; one image element per fused OME-TIFF (`<image>_projection`, `<image>_stack`) and `cell_labels`, each read from its file and written once with one level |
+| Values | Taken from `tables/`, `sample.h5ad` and the image files unchanged: nothing is filtered, reassigned or recounted; `instance_id` is `1..N` over the sample cell table, `cell_instance_id` links each molecule to its cell |
+| Empty populations | An element without a row, or whose image does not exist, is left out and recorded `omitted` with `empty`, `no_cells`, `no_included_fov`, `not_requested` or `part_not_run`; with every element omitted no store is written (`store: null`) |
+| Format | Zarr format 3, spatialdata's default container (`SpatialDataExportConfig(zarr_format=3)`), or Zarr format 2 (`zarr_format=2`); no standalone OME-Zarr beside the store |
+| The `spatialdata` section of `export.json` | Every element with its status, reason or path, rows or shape, transform, `spatialdata_attrs` and column dtypes after the round trip; the counts, the column renames, the formats and the SHA-256 of every store file; `check_export` reads the store back and checks S1 to S8 |
+| Where a row came from | `lookup_source(folder, spot=(spot_namespace, spot_id))` or `cell=(cell_namespace, cell_id)` returns its FOV, the §2.9 assignment folder, its `assignment.json` SHA-256 and the row's position in the §2.9 table |
+
+`export_spatialdata` needs `starfinder[spatialdata]`; without it the part is `not_run`
+(`extra_missing`) with `ExportIncompleteWarning`, and the earlier files are written. A
+sample name outside spatialdata's element naming rule (letters, digits, `_`, `-`, `.`), a
+table key that breaks it or equals another ignoring case, a cell of zero voxels and a
+`sample.h5ad` that already has `uns["spatialdata_attrs"]` are refused, and no store is
+written. The store is written into a staging folder and renamed into place, so an
+interrupted export leaves none.
 
 ## Intentional behavior changes — not mechanical equivalence
 

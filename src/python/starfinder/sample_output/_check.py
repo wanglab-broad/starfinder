@@ -6,15 +6,18 @@ image position"), F2 (dtype), F3 (uncovered voxels), F7 (projection and stack gr
 (no included FOV) and F9 (OME-Zarr equal to OME-TIFF). F4 to F6 are fixture checks of the
 tests. For the label image of the ``labels`` section: L1 (layout, uint32), L2 (no new
 value), L3 (drawn by retained cells), L4 (absent IDs) and L5 (grid); L6 is a check of the
-entry before anything is written. The SpatialData checks belong to their part.
+entry before anything is written. For the store of the ``spatialdata`` section, read back
+with ``spatialdata.read_zarr``: S1 (elements, omissions, format) to S8 (store hashes).
 """
 from __future__ import annotations
 
 import json
 import math
+from collections.abc import Mapping
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
 from ._record import (
     EXPORT_FILE,
@@ -69,13 +72,19 @@ def _r1(folder):
             _fail("R1", f"part {part} has status {status!r} in parts and {section['status']!r} in its section")
     if record.get("complete") is not is_complete(record):
         _fail("R1", f"complete is {record.get('complete')!r}, but the part statuses give {is_complete(record)}")
-    for name in ("fusion", "labels"):
+    for name in ("fusion", "labels", "spatialdata"):
         recorded = (record.get(name) or {}).get("assembly_sha256")
         if recorded is not None:
             current = section_sha256(record.get("assembly"))
             if recorded != current:
                 _fail("R1", f"the {name} section records the assembly section's SHA-256 {recorded}, but the "
                             f"assembly section's is {current}")
+    spatialdata = record.get("spatialdata") or {}
+    for name in ("fusion", "labels"):
+        key = f"{name}_sha256"
+        if spatialdata.get(key) is not None and spatialdata[key] != section_sha256(record.get(name)):
+            _fail("R1", f"the spatialdata section records the {name} section's SHA-256 {spatialdata[key]}, but the "
+                        f"{name} section's is {section_sha256(record.get(name))}")
     return record
 
 
@@ -478,6 +487,345 @@ def _check_labels(folder, record):
                     f"and {absent}")
 
 
+# --- SpatialData ---------------------------------------------------------------------------------------------
+
+def _values(series):
+    """A column as Python values, NaN and every null as None, for exact comparison (NaN equals NaN, null null)."""
+    out = []
+    for value in series.astype(object).tolist():
+        if value is None or value is pd.NA or (isinstance(value, float) and math.isnan(value)):
+            out.append(None)
+        elif isinstance(value, np.generic):
+            out.append(value.item())
+        else:
+            out.append(value)
+    return out
+
+
+def _same_columns(condition, what, got, source, columns):
+    for column in columns:
+        if _values(got[column]) != _values(source[column]):
+            _fail(condition, f"{what}: column {column!r} differs from its source")
+
+
+def _keyed(frame, keys):
+    return [tuple(v) for v in zip(*(_values(frame[k]) for k in keys))]
+
+
+def _reorder(condition, what, got, source, keys):
+    """``got`` reordered to the rows of ``source``, joined on ``keys``; each source row exactly once."""
+    index = {}
+    for i, key in enumerate(_keyed(got, keys)):
+        if key in index:
+            _fail(condition, f"{what}: key {key} occurs twice")
+        index[key] = i
+    wanted = _keyed(source, keys)
+    if sorted(index, key=str) != sorted(wanted, key=str):
+        _fail(condition, f"{what}: the rows joined on {list(keys)} are not the source rows exactly once")
+    return got.iloc[[index[k] for k in wanted]].reset_index(drop=True)
+
+
+def _sd_reasons(entry, record, assembly, counts):
+    """Recompute an omitted element's reason (S1)."""
+    from ._spatialdata import LABELS, POINTS, SHAPES
+    reason, name, kind = entry.get("reason"), entry["name"], entry["kind"]
+    if kind == "image":
+        status = part_status(record, "fuse")
+        expected = {"off": "not_requested", "not_run": "part_not_run", "empty": "no_included_fov"}.get(status)
+        if status == "empty" and (record.get("fusion") or {}).get("reason") != "no_included_fov":
+            expected = None
+        return reason == expected
+    if name == LABELS:
+        status, labels = part_status(record, "fuse_labels"), record.get("labels") or {}
+        if status == "written":
+            return reason == "empty" and int(labels.get("n_ids_output") or 0) == 0
+        if status == "empty":
+            return reason == labels.get("reason") and (reason != "no_cells" or assembly.mode == "molecules_only")
+        return reason == {"off": "not_requested", "not_run": "part_not_run"}.get(status)
+    population = {POINTS: counts["placed_molecules"], SHAPES: counts["placed_cells"], "cells": counts["placed_cells"],
+                  "expression": counts["counted"], "cells_unplaced": len(assembly.cells) - counts["placed_cells"],
+                  "molecules_unplaced": len(assembly.molecules) - counts["placed_molecules"]}[name]
+    return reason == "empty" and population == 0
+
+
+def _check_spatialdata(folder, record):
+    """S1 to S8 for the store of the ``spatialdata`` section, read back with ``spatialdata.read_zarr``."""
+    import pandas as pd
+
+    from starfinder.assembly import load_assembly
+
+    from ._spatialdata import (
+        CELL_LINK,
+        FORMATS,
+        INDEX_RENAMES,
+        INSTANCE_KEY,
+        KINDS,
+        LABELS,
+        POINTS,
+        REGION,
+        REGION_KEY,
+        SHAPES,
+        SPATIALDATA_ATTRS,
+        STORE,
+        TABLE_ELEMENTS,
+        cell_links,
+        equivalent_radii,
+        export_counts,
+        instance_ids,
+        placed_cells,
+        placed_molecules,
+    )
+    section, status = record.get("spatialdata"), part_status(record, "export_spatialdata")
+    store_path = folder / STORE
+    if status in ("off", None, "not_run", "failed") or not isinstance(section, dict):
+        if status in ("off", "not_run") and store_path.exists():
+            _fail("S1", f"the spatialdata part is {status} but {STORE} exists")
+        return
+    entries = section.get("elements") or []
+    assembly = load_assembly(folder)
+    cells, molecules = assembly.cells, assembly.molecules
+    placed_c, placed_m = placed_cells(cells), placed_molecules(molecules)
+    counted = int((cells["assembly_status"].eq("retained") & cells["status"].eq("kept")).fillna(False).sum()) \
+        if len(cells) else 0
+    counts = {"placed_cells": int(placed_c.sum()), "placed_molecules": int(placed_m.sum()), "counted": counted}
+    # S1: elements, omissions and format.
+    names = [e["name"] for e in entries]
+    fixed = [POINTS, SHAPES, *TABLE_ELEMENTS, LABELS]
+    if sorted(n for n in names if n in fixed) != sorted(fixed) or len(set(names)) != len(names):
+        _fail("S1", f"the section lists the elements {names}; every fixed element must be listed once: {fixed}")
+    fusion_outputs = [o for o in (record.get("fusion") or {}).get("outputs") or []]
+    if any(o.get("format") == "ome_zarr" for o in fusion_outputs) or list(folder.glob("*.ome.zarr")):
+        _fail("S1", "a standalone OME-Zarr exists beside the SpatialData store")
+    if part_status(record, "fuse") == "written":
+        expected = sorted(f"{o['image']}_{o['dimensionality']}" for o in fusion_outputs)
+        images = sorted(e["name"] for e in entries if e["kind"] == "image" and e["status"] == "written")
+        if images != expected or any(e["kind"] == "image" and e["status"] != "written" for e in entries):
+            _fail("S1", f"the image elements {images} are not one per fused image {expected}")
+    for entry in entries:
+        if entry["status"] == "omitted" and not _sd_reasons(entry, record, assembly, counts):
+            _fail("S1", f"the element {entry['name']} is omitted with reason {entry.get('reason')!r}, which does not "
+                        "hold when recomputed")
+        if entry["status"] not in ("written", "omitted"):
+            _fail("S1", f"the element {entry['name']} has status {entry['status']!r}")
+    written = {e["name"]: e for e in entries if e["status"] == "written"}
+    if not written:
+        if section.get("store") is not None or store_path.exists() or status != "empty":
+            _fail("S1", "every element is omitted, so the section must record store null and no sample.zarr exist")
+        return
+    if section.get("store") != STORE or not store_path.is_dir():
+        _fail("S1", f"the section records store {section.get('store')!r}; {STORE} must exist")
+    import spatialdata
+    import zarr
+    from spatialdata.transformations import get_transformation
+    fmt = section["format"]
+    with pd.option_context("future.infer_string", False):
+        sdata = spatialdata.read_zarr(store_path)
+        found = {name: kind for kind, plural in KINDS.items() for name in getattr(sdata, plural).keys()}
+        if found != {n: e["kind"] for n, e in written.items()}:
+            _fail("S1", f"the store holds {found}; the section records as written "
+                        f"{ {n: e['kind'] for n, e in written.items()} }")
+        if len({n.lower() for n in found}) != len(found):
+            _fail("S1", f"two element names of the store are equal ignoring case: {sorted(found)}")
+        group = zarr.open_group(str(store_path), mode="r")
+        if group.metadata.zarr_format != fmt["zarr_format"] or fmt["raster_version"] != \
+                FORMATS[fmt["zarr_format"]]["raster_version"]:
+            _fail("S1", f"the store is Zarr format {group.metadata.zarr_format}; the section {fmt}")
+        for name, entry in written.items():
+            if entry["kind"] not in ("image", "labels"):
+                continue
+            attrs = dict(group[f"{KINDS[entry['kind']]}/{name}"].attrs)
+            version = (attrs.get("ome") or {}).get("version") or attrs.get("multiscales", [{}])[0].get("version")
+            if version != fmt["raster_version"]:
+                _fail("S1", f"the raster group {name} has version {version!r}, not {fmt['raster_version']!r}")
+        ids = instance_ids(cells)
+        links = cell_links(assembly)
+        # S2: points.
+        if POINTS in written:
+            points = sdata.points[POINTS].compute().reset_index(drop=True)
+            if any(c in points.columns for c in ("sample_x", "sample_y", "sample_z")):
+                _fail("S2", "a sample_x/y/z column remains in molecules")
+            source = molecules[placed_m].reset_index(drop=True)
+            points = _reorder("S2", POINTS, points, source, ("spot_namespace", "spot_id"))
+            for axis in "xyz":
+                if not np.array_equal(points[axis].to_numpy(np.float64), source[f"sample_{axis}"].to_numpy(np.float64)):
+                    _fail("S2", f"molecules {axis} differs from sample_{axis}")
+            for column in source.columns:
+                if column in ("sample_x", "sample_y", "sample_z"):
+                    continue
+                if _values(points[INDEX_RENAMES.get(column, column)]) != _values(source[column]):
+                    _fail("S2", f"molecules: column {INDEX_RENAMES.get(column, column)!r} differs from its source "
+                                f"{column!r}")
+            if _values(points[CELL_LINK]) != _values(pd.Series(links[placed_m])):
+                _fail("S5", "a cell_instance_id of molecules is not its cell's instance_id")
+            if {str(c): str(d) for c, d in points.dtypes.items()} != written[POINTS]["dtypes"]:
+                _fail("S2", "the column dtypes of molecules differ from those the section records")
+        # S3 and S4: tables.
+        tables = {}
+        for name in TABLE_ELEMENTS:
+            if name not in written:
+                continue
+            table = sdata.tables[name]
+            tables[name] = table
+            dtypes = {"obs": {str(c): str(d) for c, d in table.obs.dtypes.items()},
+                      "var": {str(c): str(d) for c, d in table.var.dtypes.items()}}
+            if dtypes != written[name]["dtypes"]:
+                _fail("S3", f"the column dtypes of {name} differ from those the section records")
+        for name, rows, column, added, keys in (
+                ("cells", placed_c, INSTANCE_KEY, [REGION_KEY, INSTANCE_KEY], ("cell_namespace", "cell_id")),
+                ("cells_unplaced", ~placed_c, INSTANCE_KEY, [INSTANCE_KEY], ("cell_namespace", "cell_id")),
+                ("molecules_unplaced", ~placed_m, CELL_LINK, [CELL_LINK], ("spot_namespace", "spot_id"))):
+            if name not in tables:
+                if rows.any():
+                    _fail("S3", f"{name} is omitted but its population has rows")
+                continue
+            source = (cells if name != "molecules_unplaced" else molecules)[rows].reset_index(drop=True)
+            obs = _reorder("S3", name, tables[name].obs.reset_index(drop=True), source, keys)
+            if list(obs.columns) != list(source.columns) + added:
+                _fail("S4", f"{name} has the obs columns {list(obs.columns)}; its source's and {added}")
+            _same_columns("S3", name, obs, source, source.columns)
+            expected = ids[rows] if column == INSTANCE_KEY else pd.Series(links[rows])
+            if _values(obs[column]) != _values(pd.Series(expected)):
+                _fail("S5", f"{name}: {column} is not the instance_id of its cell")
+            if column == INSTANCE_KEY and obs[INSTANCE_KEY].dtype != np.uint32:
+                _fail("S4", f"{name}: instance_id is {obs[INSTANCE_KEY].dtype}, not uint32")
+            uns = dict(tables[name].uns)
+            if name == "cells":
+                if uns != {"spatialdata_attrs": SPATIALDATA_ATTRS}:
+                    _fail("S4", f"cells has uns {uns}")
+                region = obs[REGION_KEY]
+                if not isinstance(region.dtype, pd.CategoricalDtype) or set(region.astype(object)) != {REGION}:
+                    _fail("S4", "cells: region is not categorical with every value cell_centroids")
+            elif uns or tables[name].obsm or tables[name].layers:
+                _fail("S4", f"{name} carries uns, obsm or layers keys its source lacks")
+        # expression against sample.h5ad
+        import anndata
+        source = anndata.read_h5ad(folder / assembly.record["files"]["anndata"]["path"])
+        if "expression" not in tables:
+            if source.n_obs:
+                _fail("S3", "expression is omitted but sample.h5ad has rows")
+        else:
+            table = tables["expression"]
+            if list(table.obs_names) != list(source.obs_names) or list(table.var_names) != list(source.var_names):
+                _fail("S3", "expression rows or variables differ from sample.h5ad")
+            if not np.array_equal(np.asarray(table.X), np.asarray(source.X), equal_nan=True) \
+                    or sorted(table.layers) != sorted(source.layers) \
+                    or any(not np.array_equal(np.asarray(table.layers[k]), np.asarray(source.layers[k]), equal_nan=True)
+                           for k in source.layers) \
+                    or sorted(table.obsm) != sorted(source.obsm) \
+                    or any(not np.array_equal(np.asarray(table.obsm[k]), np.asarray(source.obsm[k]), equal_nan=True)
+                           for k in source.obsm):
+                _fail("S3", "expression differs from sample.h5ad in X, layers or obsm")
+            if list(table.var.columns) != list(source.var.columns):
+                _fail("S3", "expression var columns differ from sample.h5ad")
+            _same_columns("S3", "expression var", table.var, source.var, source.var.columns)
+            if list(table.obs.columns) != list(source.obs.columns) + [REGION_KEY, INSTANCE_KEY]:
+                _fail("S4", f"expression has the obs columns {list(table.obs.columns)}")
+            _same_columns("S3", "expression", table.obs, source.obs, source.obs.columns)
+            uns = dict(table.uns)
+            if set(uns) != set(source.uns) | {"spatialdata_attrs"} or uns["spatialdata_attrs"] != SPATIALDATA_ATTRS \
+                    or any(not _same_value(uns[k], source.uns[k]) for k in source.uns):
+                _fail("S3", "expression uns differs from sample.h5ad's or lacks spatialdata_attrs")
+            by_name = dict(zip(cells["obs_name"].astype(object), range(len(cells))))
+            rows = [by_name[str(n)] for n in table.obs_names]
+            kept = cells.iloc[rows]
+            if not (kept["assembly_status"].eq("retained") & kept["status"].eq("kept")).all() or \
+                    not placed_c[rows].all():
+                _fail("S5", "an expression row is not a cells row with assembly_status retained and status kept")
+            if _values(table.obs[INSTANCE_KEY]) != [int(v) for v in ids[rows]]:
+                _fail("S5", "expression instance_id is not its cell's")
+        # S5: cell_centroids, links and accounting.
+        if (SHAPES in written) != ("cells" in written):
+            _fail("S5", "cells and cell_centroids are not written or omitted together")
+        if SHAPES in written:
+            shapes = sdata.shapes[SHAPES]
+            rows = cells[placed_c]
+            if [int(v) for v in shapes.index] != [int(v) for v in ids[placed_c]] or \
+                    [int(v) for v in shapes.index] != _values(tables["cells"].obs[INSTANCE_KEY]):
+                _fail("S5", "the index of cell_centroids is not the instance_id of cells")
+            x, y = shapes.geometry.x.to_numpy(), shapes.geometry.y.to_numpy()
+            if not (np.array_equal(x, rows["sample_ownership_centroid_x"].to_numpy(np.float64))
+                    and np.array_equal(y, rows["sample_ownership_centroid_y"].to_numpy(np.float64))):
+                _fail("S5", "a circle's centre is not its cell's ownership centroid")
+            from ._spatialdata import _fov_spacing
+            radii = equivalent_radii(rows, _fov_spacing(assembly))
+            if not np.allclose(shapes["radius"].to_numpy(np.float64), radii, rtol=1e-12, atol=0):
+                _fail("S5", "a circle's radius is not its cell's equivalent radius")
+        recount = export_counts(assembly)
+        if recount != section["counts"]:
+            _fail("S5", "the counts recounted from the sample tables differ from the section's")
+        reference = assembly.record.get("counts") or {}
+        for population in ("cells", "molecules"):
+            mine = section["counts"][population]["assembly"]
+            theirs = reference.get(population) or {}
+            if mine != {"retained": theirs.get("retained"), "excluded": theirs.get("excluded")}:
+                _fail("S5", f"the {population} counts differ from the assembly section's")
+        # S4 (attrs), S6 and S7: points, shapes and rasters.
+        cs = section["coordinate_system"]
+        for name, entry in written.items():
+            kind = entry["kind"]
+            element = {"points": sdata.points, "shapes": sdata.shapes, "image": sdata.images,
+                       "labels": sdata.labels}.get(kind, {}).get(name)
+            if element is None:
+                continue
+            if set(element.attrs) != {"transform"}:
+                _fail("S4", f"{name} carries the attributes {sorted(element.attrs)}, not the transform only")
+            transform = get_transformation(element, cs)
+            if kind in ("points", "shapes"):
+                if type(transform).__name__ != "Identity":
+                    _fail("S6", f"{name} has the transform {transform}, not the identity")
+                continue
+            _check_raster(folder, name, entry, element, transform, record, cs, spatialdata)
+    # S8: hashes.
+    from ._record import directory_files
+    output = (section.get("outputs") or [{}])[0]
+    if output.get("path") != STORE or directory_files(store_path) != output.get("files"):
+        _fail("S8", f"the files of {STORE} or their SHA-256 differ from the section's")
+
+
+def _same_value(a, b):
+    if isinstance(a, np.ndarray) or isinstance(b, np.ndarray):
+        return np.array_equal(np.asarray(a), np.asarray(b))
+    if isinstance(a, Mapping) and isinstance(b, Mapping):
+        return set(a) == set(b) and all(_same_value(a[k], b[k]) for k in a)
+    return a == b
+
+
+def _check_raster(folder, name, entry, element, transform, record, cs, spatialdata):
+    """S6 (transform, extent) and S7 (values, dtype, one level) for one image or labels element."""
+    import tifffile
+    section = record["fusion"] if entry["kind"] == "image" else record["labels"]
+    output = next(o for o in section["outputs"] if o["path"] == entry["source"])
+    spacing, origin, shape = output["spacing_zyx"], output["origin_zyx"], output["shape_zyx"]
+    axes = ["y", "x"] if output["axes"] == "YX" else ["z", "y", "x"]
+    matrix = transform.to_affine_matrix(input_axes=tuple(axes), output_axes=tuple(axes))
+    for i, a in enumerate(axes):
+        k = "zyx".index(a)
+        if abs(matrix[i, i] - spacing[k]) > TOLERANCE_TIFF_UM or \
+                abs(matrix[i, -1] - (origin[k] - spacing[k] / 2)) > TOLERANCE_TIFF_UM:
+            _fail("S6", f"{name}: the transform on {a} is not Scale({spacing[k]}) then Translation(O − S/2)")
+    recorded = entry["transform"]
+    for k, a in enumerate("zyx"):
+        if abs(recorded["scale"][a] - spacing[k]) > TOLERANCE_TIFF_UM or \
+                abs(recorded["translation"][a] - (origin[k] - spacing[k] / 2)) > TOLERANCE_TIFF_UM:
+            _fail("S6", f"{name}: the recorded transform on {a} is not the file's")
+    extent = spatialdata.get_extent(element, coordinate_system=cs)
+    for a in axes:
+        k = "zyx".index(a)
+        lo, hi = origin[k] - spacing[k] / 2, origin[k] + (shape[k] - 0.5) * spacing[k]
+        if abs(extent[a][0] - lo) > TOLERANCE_TIFF_UM or abs(extent[a][1] - hi) > TOLERANCE_TIFF_UM:
+            _fail("S6", f"{name}: the extent on {a} is {extent[a]}, not [{lo}, {hi})")
+    if type(element).__name__ != "DataArray":
+        _fail("S7", f"{name} has more than one level")
+    data = element.data[0] if entry["kind"] == "image" else element.data
+    with tifffile.TiffFile(folder / output["path"]) as tif:
+        n_z = shape[0]
+        for i in range(n_z if len(axes) == 3 else 1):
+            plane = tif.series[0].asarray(key=i) if n_z > 1 else tif.series[0].asarray()
+            got = np.asarray(data[i] if len(axes) == 3 else data)
+            if got.dtype != plane.dtype or not np.array_equal(got, plane):
+                _fail("S7", f"{name}: plane {i} differs from {output['path']} in value or dtype")
+
+
 def check_export(folder) -> None:
     """Check an export folder against its record ``export.json``; ``ValueError`` names the first failed condition.
 
@@ -501,7 +849,17 @@ def check_export(folder) -> None:
     ``ids_input`` and ``ids_output`` and ``absent_ids`` equal to their
     recomputation from the territory files, the cell table and the file
     (L4); the grid equal to the formulas within 1e-9 µm (L5). R1 also checks
-    the ``labels`` section's recorded SHA-256 of the ``assembly`` section.
+    the ``labels`` and ``spatialdata`` sections' recorded SHA-256 of the
+    ``assembly`` section, and the ``spatialdata`` section's of the ``fusion``
+    and ``labels`` sections. For the SpatialData store, read back with
+    ``spatialdata.read_zarr`` (the ``spatialdata`` extra): S1 elements,
+    omissions with their reasons recomputed, ``store: null`` exactly when
+    every element is omitted, no standalone OME-Zarr, the Zarr format and the
+    raster version strings; S2 points against the sample molecule table; S3
+    tables against the sample cell table and ``sample.h5ad``, with the
+    recorded dtypes; S4 the export's metadata; S5 links, circles and counts;
+    S6 transforms and extents; S7 values against the OME-TIFF files; S8 the
+    SHA-256 of every store file.
 
     Parameters
     ----------
@@ -512,7 +870,7 @@ def check_export(folder) -> None:
     ------
     ValueError
         The first condition that fails, named (``R1`` … ``F9``, ``L1`` …
-        ``L5``).
+        ``L5``, ``S1`` … ``S8``).
     """
     folder = Path(folder)
     record = _r1(folder)
@@ -520,3 +878,4 @@ def check_export(folder) -> None:
     _r3(folder, record)
     _check_fusion(folder, record)
     _check_labels(folder, record)
+    _check_spatialdata(folder, record)

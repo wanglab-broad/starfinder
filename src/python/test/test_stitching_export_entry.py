@@ -306,9 +306,6 @@ def test_checks_before_writing(folder, monkeypatch, tmp_path):
     # 4. Assembly: assemble off with a later part that needs it and no saved assembly.
     unchanged(folder, lambda: export(folder, ExportConfig(assemble=False, fuse_labels=True)), ValueError,
               "holds no saved assembly")
-    # The parts of later issues are refused after the checks, before anything is written.
-    unchanged(folder, lambda: export(folder, ExportConfig(export_spatialdata=True, fuse=False)), NotImplementedError,
-              "export_spatialdata")
 
 
 def test_check_saved_assembly_of_another_placement(folder):

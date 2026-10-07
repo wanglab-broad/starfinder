@@ -89,6 +89,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.segmentation.expand_labels`
 * :py:obj:`starfinder.segmentation.ExpandLabelsConfig`
 * :py:obj:`starfinder.barcode.explain_read`
+* :py:obj:`starfinder.sample_output.export_spatialdata`
 * :py:obj:`starfinder.io.export_spots`
 * :py:obj:`starfinder.sample_output.ExportConfig`
 * :py:obj:`starfinder.sample_output.ExportIncompleteWarning`
@@ -157,6 +158,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.barcode.LocalBackgroundConfig`
 * :py:obj:`starfinder.evaluation.spot_finding.localization_errors`
 * :py:obj:`starfinder.spot_finding.LocalMaximaConfig`
+* :py:obj:`starfinder.sample_output.lookup_source`
 * :py:obj:`starfinder.preprocessing.match_histogram`
 * :py:obj:`starfinder.assignment.match_nuclei`
 * :py:obj:`starfinder.evaluation.matching.match_points`
