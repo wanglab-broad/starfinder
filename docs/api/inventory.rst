@@ -280,6 +280,22 @@ starfinder.registration
 * :py:obj:`starfinder.registration.UnsupportedTransformOperationError`
 * :py:obj:`starfinder.registration.WarpConfig`
 
+starfinder.sample_output
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+* :py:obj:`starfinder.sample_output.check_export`
+* :py:obj:`starfinder.sample_output.ExportConfig`
+* :py:obj:`starfinder.sample_output.ExportIncompleteWarning`
+* :py:obj:`starfinder.sample_output.ExportRecord`
+* :py:obj:`starfinder.sample_output.fuse`
+* :py:obj:`starfinder.sample_output.fused_grid`
+* :py:obj:`starfinder.sample_output.FusedGrid`
+* :py:obj:`starfinder.sample_output.FusionConfig`
+* :py:obj:`starfinder.sample_output.FusionInput`
+* :py:obj:`starfinder.sample_output.FusionRecord`
+* :py:obj:`starfinder.sample_output.LabelConfig`
+* :py:obj:`starfinder.sample_output.SpatialDataExportConfig`
+
 starfinder.segmentation
 ~~~~~~~~~~~~~~~~~~~~~~~
 

@@ -38,6 +38,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.synthetic.CellularSceneConfig`
 * :py:obj:`starfinder.dataset.ChannelInfo`
 * :py:obj:`starfinder.spot_finding.ChannelOverride`
+* :py:obj:`starfinder.sample_output.check_export`
 * :py:obj:`starfinder.dataset.CheckpointConfig`
 * :py:obj:`starfinder.evaluation.spot_finding.classify_detections`
 * :py:obj:`starfinder.barcode.Codebook`
@@ -89,6 +90,9 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.segmentation.ExpandLabelsConfig`
 * :py:obj:`starfinder.barcode.explain_read`
 * :py:obj:`starfinder.io.export_spots`
+* :py:obj:`starfinder.sample_output.ExportConfig`
+* :py:obj:`starfinder.sample_output.ExportIncompleteWarning`
+* :py:obj:`starfinder.sample_output.ExportRecord`
 * :py:obj:`starfinder.segmentation.extend_labels_through_z`
 * :py:obj:`starfinder.dataset.ExternalReference`
 * :py:obj:`starfinder.barcode.extract_intensities`
@@ -103,6 +107,12 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.synthetic.forward_displacement`
 * :py:obj:`starfinder.dataset.FOV`
 * :py:obj:`starfinder.dataset.from_workflow_config`
+* :py:obj:`starfinder.sample_output.fuse`
+* :py:obj:`starfinder.sample_output.fused_grid`
+* :py:obj:`starfinder.sample_output.FusedGrid`
+* :py:obj:`starfinder.sample_output.FusionConfig`
+* :py:obj:`starfinder.sample_output.FusionInput`
+* :py:obj:`starfinder.sample_output.FusionRecord`
 * :py:obj:`starfinder.synthetic.generate_codebook`
 * :py:obj:`starfinder.synthetic.generate_dataset`
 * :py:obj:`starfinder.synthetic.generate_formed_scene`
@@ -131,6 +141,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.spot_finding.KNOWN_WEIGHTS`
 * :py:obj:`starfinder.segmentation.KnownModel`
 * :py:obj:`starfinder.spot_finding.KnownWeights`
+* :py:obj:`starfinder.sample_output.LabelConfig`
 * :py:obj:`starfinder.segmentation.LabelImportConfig`
 * :py:obj:`starfinder.segmentation.labels_to_grid`
 * :py:obj:`starfinder.stitching.legacy_tile_config_view`
@@ -262,6 +273,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.segmentation.SegmentationResult`
 * :py:obj:`starfinder.segmentation.SegmentationRun`
 * :py:obj:`starfinder.segmentation.SegmentationSpec`
+* :py:obj:`starfinder.sample_output.SpatialDataExportConfig`
 * :py:obj:`starfinder.spot_finding.SPOT_FINDING_METHODS`
 * :py:obj:`starfinder.spot_finding.SpotFindingBackendUnavailableError`
 * :py:obj:`starfinder.spot_finding.SpotFindingPlan`

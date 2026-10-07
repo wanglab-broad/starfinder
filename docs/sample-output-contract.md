@@ -130,8 +130,9 @@ decisions, continued" and "Second-round outcome — 2026-10-06"):
   ("The fused image by dataset"; the operator's reading, which Jiahao confirms at the
   gate).
 * **Figures of LN sample1 show the middle Z plane**, never a maximum projection, because
-  the tissue is dense and a projection blurs it. tissue-2D and cell-culture-3D keep their
-  projection.
+  the tissue is dense and a projection blurs it, except its seam sections in XZ and YZ,
+  which show every plane of one row or one column of voxels and no projection either
+  ("The fused image by dataset"). tissue-2D and cell-culture-3D keep their projection.
 * **The label image is drawn by retained cells.** Each FOV contributes only the cells it
   retains under the assembly rule, drawn whole, in place of each FOV's labels cut to its
   ownership region; where two retained cells of different FOVs overlap, the first view in

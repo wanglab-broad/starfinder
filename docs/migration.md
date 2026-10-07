@@ -1326,6 +1326,35 @@ neighbour pair the library does not register is `pruned`; a link its optimizer r
 saved. The specification is {doc}`stitching-contract` ("Method registry") and
 {doc}`stitching-algorithms` ("`multiview_stitcher`").
 
+### Sample outputs: the export entry and the fused image
+
+New names in a new module, `starfinder.sample_output`, one new method, `Dataset.export`,
+and one new folder, `<OUTPUT>/export/<sample>/`; nothing existing changes.
+`Dataset.stitch` and `stitching/<sample>/` stay as they are, the legacy rules and
+`images/fused/{sample}/` (BigStitcher's inputs and `dataset.xml`) are untouched, and no
+workflow key or rule is added yet: the `export` block and the `export_sample` rule come
+with the workflow issue. The label export (`fuse_labels`) and the SpatialData export
+(`export_spatialdata`) are recorded `off` until their issues; a configuration that turns
+one on is refused before anything is written.
+
+| Need | New name |
+| --- | --- |
+| One sample-level export: the sample tables, `sample.h5ad` and the fused image | `Dataset.export(sample, placement=…, assignment="default", config=ExportConfig(), output_dir=<OUTPUT>/export/<sample>/)` returns an `ExportRecord`; it calls `assemble` (saved with `save_assembly`) and `fuse` in order, each turned off by `ExportConfig(assemble=False)` or `ExportConfig(fuse=False)` |
+| The record of the folder | `export.json`: `parts` (`written`, `reused`, `off`, `empty`, `not_run`, `failed`), `complete`, one section per part (`assembly`, `fusion`, `labels`, `spatialdata`) with the SHA-256 of every file; `check_export(folder)` checks the folder against it |
+| A part that cannot run | `ExportIncompleteWarning`; the part is `not_run` with `extra_missing` (`multiview-stitcher` not installed) or `source_image_missing`, the earlier files are written and `complete` is false |
+| The fused image of a sample, from either backend's placement | `fuse(placement, inputs, assembly=None, config=FusionConfig(), output_dir)` with one `FusionInput(fov_id, grid, images)` per included FOV, returning a `FusionRecord`; multiview-stitcher's `fusion.fuse` with `weighted_average_fusion` at order 1 |
+| Today's `MAX_*_05.tif` overview | `<image>_projection.ome.tif`: the 2D maximum projection at `scale_yx` 0.5 (the default), OME-TIFF (BigTIFF, 512 × 512 zlib tiles, calibration and origin) in the input dtype |
+| A 3D fused stack, such as LN sample1's | `FusionConfig(dimensionality="stack")` (the stack alone) or `"both"`: `<image>_stack.ome.tif`, Y and X reduced by `scale_yx`, Z as acquired; the middle plane `n_z // 2` reads alone with `tifffile.imread(path, key=i)` |
+| Other options | `FusionConfig(images=(…), projection="sum", scale_yx=1/k, ome_zarr=True, ome_zarr_version="0.5", pyramid_levels=L)`; `fused_grid(placement, grids, config=…)` gives the output grid (`FusedGrid`) |
+
+`fuse` and `Dataset.export`'s fuse part need the optional extra
+`starfinder[multiview-stitcher]`; the assemble part needs `starfinder[anndata]`.
+Importing `starfinder.sample_output` imports neither multiview-stitcher, zarr nor
+spatialdata. With `assemble` on, `assemble` now keeps at most two territory images in
+memory: a saved assignment's territories are read again from its folder, with their
+SHA-256 checked, when the flags need them; its results are unchanged. The specification
+is {doc}`sample-output-contract`.
+
 ## Intentional behavior changes — not mechanical equivalence
 
 | Area | Change and consequence |

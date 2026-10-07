@@ -401,13 +401,31 @@ class AssemblyResult:
 
 # --- The entry ------------------------------------------------------------------------------------------
 
+@dataclass(frozen=True)
+class _Saved:
+    """A saved assignment as assemble keeps it: its tables and record, without its label images.
+
+    Its territory image is read again from the folder when it is needed
+    (:func:`_territory`), so at most two territory images are in memory at a
+    time (docs/assembly-algorithms.md, "Flags").
+    """
+    molecules: pd.DataFrame
+    cells: pd.DataFrame
+    counts: pd.DataFrame
+    record: Mapping[str, Any]
+    cell_namespace: str
+    genes: tuple
+    expanded: bool
+    nuclei: bool
+
+
 @dataclass
 class _Fov:
     """One input FOV as assemble reads it."""
     fov_id: str
     grid: Any
     kind: str
-    result: AssignmentResult | None = None
+    result: AssignmentResult | _Saved | None = None
     molecules: Any = None
     folder: Path | None = None
     name: str | None = None
@@ -420,8 +438,34 @@ def _load(item: AssemblyInput) -> _Fov:
         return _Fov(item.fov_id, item.grid, "assignment", result=item.assignment)
     from starfinder.assignment._persist import read_assignment
     folder = Path(os.path.abspath(item.assignment))
-    return _Fov(item.fov_id, item.grid, "assignment", result=read_assignment(folder, folder.name), folder=folder,
-                name=folder.name)
+    loaded = read_assignment(folder, folder.name)
+    saved = _Saved(loaded.molecules, loaded.cells, loaded.counts, loaded.record, loaded.cell_namespace, loaded.genes,
+                   loaded.territories is not None, loaded.nucleus_labels is not None)
+    return _Fov(item.fov_id, item.grid, "assignment", result=saved, folder=folder, name=folder.name)
+
+
+def _expanded(fov: _Fov) -> bool:
+    """Whether assign expanded the FOV's cells (its territories are then the expanded labels)."""
+    result = fov.result
+    return result.expanded if isinstance(result, _Saved) else result.territories is not None
+
+
+def _territory(fov: _Fov) -> np.ndarray:
+    """The territory image assign sampled: the expanded labels when it expanded, else the cell labels.
+
+    In memory for an AssignmentResult; read again from a saved folder, with
+    the SHA-256 of its labels checked as the §2.9 loader checks it.
+    """
+    result = fov.result
+    if not isinstance(result, _Saved):
+        return result.cell_labels if result.territories is None else result.territories
+    from starfinder.assignment._persist import _labels
+    record = result.record
+    if result.expanded:
+        return _labels(fov.folder, record["files"]["territories"], record["expansion"]["expanded"]["sha256"],
+                       "territory file")
+    return _labels(fov.folder, record["inputs"]["cells"]["file"], record["inputs"]["cells"]["labels_sha256"],
+                   "cell label file")
 
 
 def _identity(namespace, what):
@@ -661,9 +705,9 @@ def assemble(placement: PlacementResult, inputs: Sequence[AssemblyInput], *,
 
         if mode == "cells":
             result = fov.result
-            labels = result.cell_labels if result.territories is None else result.territories
+            labels = _territory(fov)
             plane = result.record["inputs"]["cells"]["geometry"] == "plane"
-            expanded = result.territories is not None
+            expanded = _expanded(fov)
             cells = result.cells.sort_values("cell_id", kind="mergesort").reset_index(drop=True)
             cell_ids = cells["cell_id"].astype("int64").to_numpy()
             original = to_sample(cells[[f"centroid_{a}" for a in AXES]].to_numpy(np.float64))
@@ -681,6 +725,7 @@ def assemble(placement: PlacementResult, inputs: Sequence[AssemblyInput], *,
                 retained = np.zeros(len(cells), bool)
                 reason = np.full(len(cells), "fov_not_placed", dtype=object)
             yx_edge, z_edge = _edge_values(labels, plane)
+            del labels
             flags = [{f for f, hit in (("fov_edge", c in yx_edge), ("z_edge", c in z_edge)) if hit}
                      for c in cell_ids.tolist()]
             front = pd.DataFrame({"fov_id": [fov_id] * len(cells),
@@ -698,7 +743,7 @@ def assemble(placement: PlacementResult, inputs: Sequence[AssemblyInput], *,
             frame["owner_fov_id"] = pd.array(list(owner), dtype="string")
             frame["assembly_status"] = np.where(retained, "retained", "excluded")
             frame["assembly_reason"] = pd.array(list(reason), dtype="string")
-            state[fov_id] = {"frame": frame, "flags": flags, "labels": labels, "plane": plane, "origin": origin,
+            state[fov_id] = {"frame": frame, "flags": flags, "plane": plane, "origin": origin,
                              "spacing": spacing, "retained": dict(zip(cell_ids.tolist(), retained.tolist())),
                              "row_of": {c: i for i, c in enumerate(cell_ids.tolist())},
                              "own": own, "placed": placed}
@@ -732,45 +777,49 @@ def assemble(placement: PlacementResult, inputs: Sequence[AssemblyInput], *,
         state[fov_id]["molecule_cells"] = cell_of
         state[fov_id]["molecule_status"] = status
 
-    # Flags across FOVs: conflict and unclaimed (centroid tests in the other FOV's territory).
+    # Flags across FOVs: conflict and unclaimed (centroid tests in the other FOV's territory). The territory of
+    # each FOV b is read once and every test in it is made then, so at most two territory images are in memory.
     conflict_with = {fov_id: [set() for _ in range(len(state[fov_id].get("frame", ())))] for fov_id in order}
     unclaimed = {fov_id: np.zeros(len(state[fov_id].get("frame", ())), bool) for fov_id in order}
     if mode == "cells" and config.conflicts:
         others = [f for f in order if state[f]["placed"]]
+        retained = {}
         for a in others:
-            sa = state[a]
-            frame = sa["frame"]
-            keep = frame["assembly_status"].eq("retained").to_numpy(dtype=bool)
-            if not keep.any():
+            keep = state[a]["frame"]["assembly_status"].eq("retained").to_numpy(dtype=bool)
+            if keep.any():
+                retained[a] = (np.flatnonzero(keep), state[a]["own"][keep])
+        queries = {}
+        for a in order:
+            frame = state[a]["frame"]
+            for i in np.flatnonzero(frame["assembly_reason"].eq("not_owner").fillna(False).to_numpy(dtype=bool)):
+                owner = frame["owner_fov_id"].iloc[i]
+                if pd.isna(owner):
+                    unclaimed[a][i] = True
+                else:
+                    queries.setdefault(owner, []).append((a, i))
+        for b in order:
+            tests = [a for a in retained if a != b] if b in others else []
+            if not tests and b not in queries:
                 continue
-            points = sa["own"][keep]
-            rows = np.flatnonzero(keep)
-            for b in others:
-                if b == a:
-                    continue
-                sb, gb = state[b], geometry.loc[b]
+            sb, labels = state[b], _territory(by_fov[b])
+            gb = geometry.loc[b]
+            for a in tests:
+                rows, points = retained[a]
                 inside = ((points[:, 1] >= gb.footprint_y0) & (points[:, 1] < gb.footprint_y1)
                           & (points[:, 2] >= gb.footprint_x0) & (points[:, 2] < gb.footprint_x1))
                 if not inside.any():
                     continue
-                values = _sample_territory(sb["labels"], sb["plane"], sb["origin"], sb["spacing"], points[inside])
+                values = _sample_territory(labels, sb["plane"], sb["origin"], sb["spacing"], points[inside])
                 for i, v in zip(rows[inside], values.tolist()):
                     if v and sb["retained"].get(v, False):
                         j = sb["row_of"][v]
                         conflict_with[a][i].add((b, j))
                         conflict_with[b][j].add((a, i))
-        for a in order:
-            sa = state[a]
-            frame = sa["frame"]
-            for i in np.flatnonzero(frame["assembly_reason"].eq("not_owner").fillna(False).to_numpy(dtype=bool)):
-                owner = frame["owner_fov_id"].iloc[i]
-                if pd.isna(owner):
-                    unclaimed[a][i] = True
-                    continue
-                so = state[owner]
-                v = int(_sample_territory(so["labels"], so["plane"], so["origin"], so["spacing"],
-                                          sa["own"][i:i + 1])[0])
-                unclaimed[a][i] = v == 0 or not so["retained"].get(v, False)
+            for a, i in queries.get(b, []):
+                v = int(_sample_territory(labels, sb["plane"], sb["origin"], sb["spacing"],
+                                          state[a]["own"][i:i + 1])[0])
+                unclaimed[a][i] = v == 0 or not sb["retained"].get(v, False)
+            del labels
     position = {fov_id: k for k, fov_id in enumerate(order)}
     for fov_id in order:
         sf = state[fov_id]
@@ -880,7 +929,7 @@ def _fov_record(fov_row, entry, fov, config, mode):
     result = fov.result
     record = result.record
     item["molecules_sha256"] = record["inputs"]["molecules"]["sha256"]
-    item["nuclei"] = result.nucleus_labels is not None
+    item["nuclei"] = result.nuclei if isinstance(result, _Saved) else result.nucleus_labels is not None
     if fov.folder is not None:
         from starfinder.segmentation._persist import file_sha256
         files = record["files"]

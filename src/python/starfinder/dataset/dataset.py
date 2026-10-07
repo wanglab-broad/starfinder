@@ -495,3 +495,63 @@ class Dataset:
         if output_dir is not None:
             save_placement(result, output_dir)
         return result
+
+    def export(self, sample: str, *, placement, assignment: str | None = "default", config=None, output_dir):
+        """Write a sample's export folder: the sample tables, ``sample.h5ad`` and the fused image.
+
+        The one sample-level export entry (docs/sample-output-contract.md, "The
+        export entry"). A sample-level computation, not a multi-FOV runner: it
+        reads only saved files. After the checks before anything is written
+        (the configs; the placement's review; the ``anndata`` extra, and
+        ``checkpoint`` for Parquet tables; the assembly; the fusion inputs; the
+        label IDs) it removes the files the previous ``export.json`` lists for
+        each part that runs or is off, then calls the parts in order, writing
+        ``export.json`` after each: ``assemble`` on one
+        :class:`~starfinder.assembly.AssemblyInput` per FOV of the placement
+        (``checkpoints/{fovID}/assignment/<assignment>/`` and the grid of
+        ``images/ref_merged/{fovID}.tif``), saved with
+        :func:`~starfinder.assembly.save_assembly` (with ``assemble`` off the
+        saved assembly is ``reused``, or the part is ``off`` when there is none);
+        :func:`~starfinder.sample_output.fuse` on one
+        :class:`~starfinder.sample_output.FusionInput` per included FOV
+        (``reference_stain``:
+        ``checkpoints/{fovID}/other_rounds/reference_stain/image.ome.tif``;
+        ``reference_merged``: ``images/ref_merged/{fovID}.tif``;
+        ``<name>=file:<pattern>`` relative to the output root). The label and
+        SpatialData parts are recorded ``off``; they are not implemented yet,
+        and a configuration that turns them on raises ``NotImplementedError``
+        before anything is written.
+
+        Parameters
+        ----------
+        sample : str
+            The sample; the placement must be of this sample.
+        placement : PlacementResult, str or Path
+            The placement, or its saved folder ``stitching/<sample>/``.
+        assignment : str or None
+            The §2.9 assignment name read per FOV, or None for a sample without
+            segmentation: each FOV's ``signal/{fovID}_goodSpots.csv`` is read with
+            :func:`~starfinder.assignment.molecule_table_from_csv` and the
+            dataset's gene list.
+        config : ExportConfig or None
+            None is ``ExportConfig()``.
+        output_dir : str or Path
+            The sample's export folder; the workflow passes
+            ``<OUTPUT>/export/<sample>/``.
+
+        Returns
+        -------
+        ExportRecord
+
+        Raises
+        ------
+        ValueError, PlacementReviewRequiredError, ModuleNotFoundError, IncompatibleGeometryError
+            The checks of docs/sample-output-contract.md ("Checks before
+            anything is written"), in their order, with the folder unchanged.
+        NotImplementedError
+            ``fuse_labels`` or ``export_spatialdata`` is on.
+        """
+        from starfinder.sample_output import ExportConfig
+        from starfinder.sample_output._export import export_sample
+        return export_sample(self, sample, placement=placement, assignment=assignment,
+                             config=ExportConfig() if config is None else config, output_dir=output_dir)
