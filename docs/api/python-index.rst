@@ -5,6 +5,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.registration.AffineConfig`
 * :py:obj:`starfinder.registration.AffineTransform`
 * :py:obj:`starfinder.registration.apply_transform`
+* :py:obj:`starfinder.stitching.approve_placement`
 * :py:obj:`starfinder.barcode.assign_direct`
 * :py:obj:`starfinder.assignment.assign_molecules`
 * :py:obj:`starfinder.assignment.ASSIGNMENT_STATUSES`
@@ -99,6 +100,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.synthetic.generate_registration_pair`
 * :py:obj:`starfinder.synthetic.generate_sample_scene`
 * :py:obj:`starfinder.synthetic.GeometryConfig`
+* :py:obj:`starfinder.stitching.GridSnap`
 * :py:obj:`starfinder.preprocessing.histogram_percentile`
 * :py:obj:`starfinder.preprocessing.HistogramMatchingConfig`
 * :py:obj:`starfinder.preprocessing.HistogramSummary`
@@ -123,6 +125,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.segmentation.labels_to_grid`
 * :py:obj:`starfinder.barcode.load_codebook`
 * :py:obj:`starfinder.barcode.load_direct_panel`
+* :py:obj:`starfinder.stitching.load_placement`
 * :py:obj:`starfinder.io.load_round`
 * :py:obj:`starfinder.io.load_volume`
 * :py:obj:`starfinder.io.load_volume_zyxc`
@@ -134,6 +137,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.evaluation.matching.match_points`
 * :py:obj:`starfinder.preprocessing.merge_histograms`
 * :py:obj:`starfinder.segmentation.MethodContext`
+* :py:obj:`starfinder.stitching.MethodPlacement`
 * :py:obj:`starfinder.preprocessing.MinMaxNormalizationConfig`
 * :py:obj:`starfinder.segmentation.MissingModelError`
 * :py:obj:`starfinder.spot_finding.MissingWeightsError`
@@ -143,7 +147,9 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.assignment.molecule_table_from_csv`
 * :py:obj:`starfinder.assignment.MoleculeTable`
 * :py:obj:`starfinder.dataset.MorphologyConfig`
+* :py:obj:`starfinder.stitching.neighbor_pairs`
 * :py:obj:`starfinder.barcode.NeighborhoodSumConfig`
+* :py:obj:`starfinder.stitching.NeighborPair`
 * :py:obj:`starfinder.synthetic.NoiseConfig`
 * :py:obj:`starfinder.spot_finding.NoiseLandmarkConfig`
 * :py:obj:`starfinder.preprocessing.normalize_intensity`
@@ -156,9 +162,16 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.preprocessing.PercentileNormalizationConfig`
 * :py:obj:`starfinder.dataset.PipelineConfig`
 * :py:obj:`starfinder.spot_finding.PiscisConfig`
+* :py:obj:`starfinder.stitching.placed_metadata`
+* :py:obj:`starfinder.stitching.placement_from_table`
+* :py:obj:`starfinder.stitching.PlacementResult`
+* :py:obj:`starfinder.stitching.PlacementReviewRequiredError`
 * :py:obj:`starfinder.assignment.plot_assignment`
 * :py:obj:`starfinder.spot_finding.plot_detections`
 * :py:obj:`starfinder.barcode.plot_read`
+* :py:obj:`starfinder.stitching.positions_from_grid`
+* :py:obj:`starfinder.stitching.positions_from_leica`
+* :py:obj:`starfinder.stitching.positions_from_table`
 * :py:obj:`starfinder.preprocessing.PREPROCESSING_METHODS`
 * :py:obj:`starfinder.preprocessing.PreprocessingRecipe`
 * :py:obj:`starfinder.preprocessing.PreprocessingSpec`
@@ -198,6 +211,8 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.segmentation.rescale_input`
 * :py:obj:`starfinder.segmentation.resolve_model`
 * :py:obj:`starfinder.spot_finding.resolve_weights`
+* :py:obj:`starfinder.stitching.review_placement`
+* :py:obj:`starfinder.stitching.ReviewPolicy`
 * :py:obj:`starfinder.registration.RigidConfig`
 * :py:obj:`starfinder.dataset.RoundState`
 * :py:obj:`starfinder.benchmark.run_benchmark`
@@ -210,6 +225,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.synthetic.SampleScene`
 * :py:obj:`starfinder.synthetic.SampleSceneConfig`
 * :py:obj:`starfinder.synthetic.save_formed_scene`
+* :py:obj:`starfinder.stitching.save_placement`
 * :py:obj:`starfinder.synthetic.save_sample_scene`
 * :py:obj:`starfinder.io.save_volume`
 * :py:obj:`starfinder.preprocessing.scalar_background_histograms`
@@ -234,6 +250,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.spot_finding.SpotFindingSpec`
 * :py:obj:`starfinder.spot_finding.SpotFindingWarning`
 * :py:obj:`starfinder.spot_finding.SpotiflowConfig`
+* :py:obj:`starfinder.stitching.StageAxisMapping`
 * :py:obj:`starfinder.synthetic.StainConfig`
 * :py:obj:`starfinder.segmentation.StarDistConfig`
 * :py:obj:`starfinder.spot_finding.StarfishLogConfig`
@@ -241,6 +258,11 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.preprocessing.step_spec`
 * :py:obj:`starfinder.preprocessing.StepContext`
 * :py:obj:`starfinder.preprocessing.StepResult`
+* :py:obj:`starfinder.stitching.stitch`
+* :py:obj:`starfinder.stitching.STITCHING_METHODS`
+* :py:obj:`starfinder.stitching.StitchingBackendUnavailableError`
+* :py:obj:`starfinder.stitching.StitchingInput`
+* :py:obj:`starfinder.stitching.StitchingSpec`
 * :py:obj:`starfinder.evaluation.registration.structural_similarity`
 * :py:obj:`starfinder.dataset.SubtileConfig`
 * :py:obj:`starfinder.preprocessing.subtract_background_3d`
@@ -253,6 +275,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.preprocessing.supplied_statistics`
 * :py:obj:`starfinder.synthetic.SyntheticDataset`
 * :py:obj:`starfinder.synthetic.TextureConfig`
+* :py:obj:`starfinder.stitching.TilePositionTable`
 * :py:obj:`starfinder.segmentation.to_label_dtype`
 * :py:obj:`starfinder.preprocessing.TophatConfig`
 * :py:obj:`starfinder.registration.TpsConfig`

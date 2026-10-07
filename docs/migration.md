@@ -1234,6 +1234,30 @@ Every FOV is rendered by `generate_formed_scene` and records generator version 6
 the sample-level draws use new `sample.*` and `stain.noise.*` stream components.
 The specification is {doc}`synthetic-sample-scene`.
 
+### Stitching: tile positions, the placement record and the stitch entry
+
+New names in a new module, `starfinder.stitching`, and one new method,
+`Dataset.stitch`; nothing existing changes. The four legacy stitching rules,
+`workflow/scripts/` and `tile_config_{sample}.csv` stay as they are, and no
+workflow key is added yet.
+
+| Need | New name |
+| --- | --- |
+| Nominal FOV positions from a Leica stage file, a regular grid or a supplied table | `positions_from_leica(path, stage_axes=StageAxisMapping(...), fov_ids=..., snap_to_grid=GridSnap(...) or None)`, `positions_from_grid(...)`, `positions_from_table(...)` return `TilePositionTable` |
+| Pairs of FOVs whose nominal boxes overlap | `neighbor_pairs(table, grids, tolerance_um=0.0)` returns `NeighborPair` |
+| One placement record for every backend | `PlacementResult` (`fovs`, `links`, `record`); `placed_metadata(result, fov_id)` |
+| Place a sample with a registered method | `stitch(inputs, table, config=...)` with `StitchingInput`; `STITCHING_METHODS` (empty until a method is added), `StitchingSpec`, `MethodPlacement` |
+| A known placement, such as a synthetic scene's truth | `placement_from_table(table, grids, sample=..., origins=None)` |
+| Review before sample assembly | `ReviewPolicy`, `review_placement`, `approve_placement`, `PlacementReviewRequiredError` |
+| Save and read `stitching/<sample>/` | `save_placement(result, directory)`, `load_placement(directory)` |
+| Place a dataset's sample from its saved per-FOV images | `Dataset.stitch(sample, fov_ids, table=..., config=..., input="reference_merged", output_dir=None)` |
+| A stitching method's missing extra | `StitchingBackendUnavailableError` |
+
+Origins are float64 in µm in the sample frame `sample:<sample>`, never truncated to
+pixels as `tile_config_{sample}.csv` is; the gauge is zero mean correction over the
+`image_supported` FOVs. The specification is {doc}`stitching-contract` and
+{doc}`stitching-algorithms`.
+
 ## Intentional behavior changes — not mechanical equivalence
 
 | Area | Change and consequence |

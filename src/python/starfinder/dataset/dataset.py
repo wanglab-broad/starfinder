@@ -412,3 +412,86 @@ class Dataset:
         """
         self.direct_panel = load_direct_panel(path, round_labels=tuple(self.rounds.sequencing_rounds),
                                               channel_labels=tuple(self.channel_order))
+
+    def stitch(self, sample: str, fov_ids, *, table, config, input: str = "reference_merged", review=None,
+               fallback: str | None = None, output_dir: Path | str | None = None):
+        """Place one sample's FOVs from their saved stitching images (docs/stitching-contract.md).
+
+        A sample-level computation, not a multi-FOV runner: it calls no per-FOV
+        stage and reads only saved per-FOV files. For each FOV it reads the
+        reference grid of ``images/ref_merged/{fovID}.tif`` (the file
+        ``FOV.save_reference_image`` writes) and the stitching image named by
+        ``input``, one FOV at a time, builds the
+        :class:`~starfinder.stitching.StitchingInput` list in table order, calls
+        :func:`~starfinder.stitching.stitch` and, with ``output_dir``, saves the
+        result there with :func:`~starfinder.stitching.save_placement`.
+
+        Parameters
+        ----------
+        sample : str
+            The sample; the placement frame is ``sample:<sample>``.
+        fov_ids : Sequence[str]
+            The sample's FOVs; the table must hold exactly these.
+        table : TilePositionTable or Mapping
+            A built table, or the workflow's ``positions`` mapping: ``source``
+            (``stage_file``, ``regular_grid`` or ``table``), ``stage_axes``
+            (``{x, y}``, required with ``stage_file``), ``snap_to_grid``
+            (``{overlap}`` or null), ``regular_grid`` (``{columns, rows, order,
+            overlap}``), ``tile_shape_yx`` and ``spacing_yx`` (null: from the
+            reference grids, which must then share them), ``table`` (a CSV path),
+            ``unit`` (of the table, default ``µm``) and ``stage_file`` (default
+            ``documents/maf/<sample>.maf`` under the output root). A stage file
+            maps ``PositionID`` ``p`` to ``fov_pattern % p``.
+        config
+            A config registered in ``STITCHING_METHODS``.
+        input : str
+            ``reference_merged`` (``images/ref_merged/{fovID}.tif``, default),
+            ``reference_stain`` (the one-channel saved ``reference_stain`` of
+            ``FOV.prepare_morphology`` under ``checkpoints/{fovID}/other_rounds/``)
+            or ``file:<pattern>`` (``{fovID}`` replaced; relative to the output
+            root), a file of the reference grid's shape. A missing input file
+            gives the FOV an absent image (status ``missing``).
+        review : ReviewPolicy or None
+            The review criterion; None is ``ReviewPolicy()``.
+        fallback : str or None
+            None (default) or ``"nominal"``.
+        output_dir : str, Path or None
+            The sample's placement folder (the workflow passes
+            ``<OUTPUT>/stitching/<sample>/``); None saves nothing.
+
+        Returns
+        -------
+        PlacementResult
+
+        Raises
+        ------
+        FileNotFoundError
+            A FOV's ``images/ref_merged/{fovID}.tif`` does not exist.
+        ValueError
+            An unknown input or positions key, or a table whose FOVs are not
+            fov_ids.
+        IncompatibleGeometryError
+            Tile sizes or spacings taken from the grids differ between FOVs, an
+            input image of another shape or metadata than its grid, or the
+            errors of ``stitch``.
+        """
+        from starfinder.stitching import ReviewPolicy, TilePositionTable, save_placement, stitch
+        from starfinder.stitching._dataset import read_inputs, table_from_positions
+
+        ids = list(fov_ids)
+        if not ids or len(set(ids)) != len(ids):
+            raise ValueError("fov_ids must be a nonempty list of unique FOV IDs")
+        loaded = read_inputs(self.output_root, ids, input)
+        grids = {fov: item.grid for fov, item in loaded.items()}
+        if not isinstance(table, TilePositionTable):
+            table = table_from_positions(table, ids, grids, sample=sample, output_root=self.output_root,
+                                         fov_pattern=self.fov_pattern)
+        if set(table.fov_ids) != set(ids):
+            missing = [f for f in ids if f not in table.fov_ids]
+            extra = [f for f in table.fov_ids if f not in ids]
+            raise ValueError(f"the tile position table must hold exactly fov_ids; missing {missing}, extra {extra}")
+        result = stitch([loaded[fov] for fov in table.fov_ids], table, config=config,
+                        review=ReviewPolicy() if review is None else review, fallback=fallback, sample=sample)
+        if output_dir is not None:
+            save_placement(result, output_dir)
+        return result

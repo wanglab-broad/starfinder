@@ -29,6 +29,7 @@ Modules (alphabetical)
    registration
    segmentation
    spot_finding
+   stitching
    synthetic
 
 Previous reference locations

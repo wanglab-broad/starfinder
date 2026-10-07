@@ -326,6 +326,33 @@ starfinder.spot_finding
 * :py:obj:`starfinder.spot_finding.WeightsFile`
 * :py:obj:`starfinder.spot_finding.WeightsHashMismatchError`
 
+starfinder.stitching
+~~~~~~~~~~~~~~~~~~~~
+
+* :py:obj:`starfinder.stitching.approve_placement`
+* :py:obj:`starfinder.stitching.GridSnap`
+* :py:obj:`starfinder.stitching.load_placement`
+* :py:obj:`starfinder.stitching.MethodPlacement`
+* :py:obj:`starfinder.stitching.neighbor_pairs`
+* :py:obj:`starfinder.stitching.NeighborPair`
+* :py:obj:`starfinder.stitching.placed_metadata`
+* :py:obj:`starfinder.stitching.placement_from_table`
+* :py:obj:`starfinder.stitching.PlacementResult`
+* :py:obj:`starfinder.stitching.PlacementReviewRequiredError`
+* :py:obj:`starfinder.stitching.positions_from_grid`
+* :py:obj:`starfinder.stitching.positions_from_leica`
+* :py:obj:`starfinder.stitching.positions_from_table`
+* :py:obj:`starfinder.stitching.review_placement`
+* :py:obj:`starfinder.stitching.ReviewPolicy`
+* :py:obj:`starfinder.stitching.save_placement`
+* :py:obj:`starfinder.stitching.StageAxisMapping`
+* :py:obj:`starfinder.stitching.stitch`
+* :py:obj:`starfinder.stitching.STITCHING_METHODS`
+* :py:obj:`starfinder.stitching.StitchingBackendUnavailableError`
+* :py:obj:`starfinder.stitching.StitchingInput`
+* :py:obj:`starfinder.stitching.StitchingSpec`
+* :py:obj:`starfinder.stitching.TilePositionTable`
+
 starfinder.synthetic
 ~~~~~~~~~~~~~~~~~~~~
 
