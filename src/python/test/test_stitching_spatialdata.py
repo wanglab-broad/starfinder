@@ -882,6 +882,59 @@ def test_sd8_lookup_source(tmp_path):
         lookup_source(f.export_dir, spot=(loaded.molecules.spot_namespace.iloc[0], loaded.molecules.spot_id.iloc[0]))
 
 
+#: Every SHA-256 of a section that another section records when it reads it: (recording section, field, section).
+RECORDED = [("fusion", "assembly_sha256", "assembly"), ("labels", "assembly_sha256", "assembly"),
+            ("spatialdata", "assembly_sha256", "assembly"), ("spatialdata", "fusion_sha256", "fusion"),
+            ("spatialdata", "labels_sha256", "labels")]
+
+
+@needs_library
+def test_sd8_lookup_source_verifies_every_recorded_section_hash(tmp_path):
+    """Each recorded section hash alone: the section changed, only that field left stale; spot and cell raise."""
+    f = export_folder(tmp_path)
+    export(f, sd_config(fuse_labels=True))
+    path = f.export_dir / "export.json"
+    original = path.read_text()
+    record = json.loads(original)
+    assert {(r, k, n) for r, fields in record.items() if isinstance(fields, dict)
+            for k, n in (("assembly_sha256", "assembly"), ("fusion_sha256", "fusion"), ("labels_sha256", "labels"))
+            if fields.get(k) is not None} == set(RECORDED)
+    saved = load_assembly(f.export_dir)
+    spot = (saved.molecules.spot_namespace.iloc[0], saved.molecules.spot_id.iloc[0])
+    cell = (saved.cells.cell_namespace.iloc[0], int(saved.cells.cell_id.iloc[0]))
+    expected = {"spot": lookup_source(f.export_dir, spot=spot), "cell": lookup_source(f.export_dir, cell=cell)}
+    for recorder, field, name in RECORDED:
+        edited = json.loads(original)
+        edited[name]["edited_by_the_test"] = True
+        for other, other_field, other_name in RECORDED:     # every other record of the changed section matches
+            if other_name == name and (other, other_field) != (recorder, field):
+                edited[other][other_field] = section_sha256(edited[name])
+        assert edited[recorder][field] == record[recorder][field] != section_sha256(edited[name])
+        path.write_text(json.dumps(edited))
+        for key in ({"spot": spot}, {"cell": cell}):
+            with pytest.raises(ValueError, match=f"fails its hashes: the {name} section has SHA-256 [0-9a-f]{{64}}, "
+                                                 f"but {recorder}\\.{field} recorded {record[recorder][field]}"):
+                lookup_source(f.export_dir, **key)
+    path.write_text(original)
+    assert lookup_source(f.export_dir, spot=spot) == expected["spot"]
+    assert lookup_source(f.export_dir, cell=cell) == expected["cell"]
+
+
+def test_sd8_lookup_source_with_the_spatialdata_part_off(tmp_path):
+    """A folder whose spatialdata (and fusion, labels) parts were off: the lookup works from the assembly section."""
+    f = export_folder(tmp_path)
+    record = export(f, ExportConfig(fuse=False))
+    assert record.parts == {"assemble": "written", "fuse": "off", "fuse_labels": "off", "export_spatialdata": "off"}
+    saved = load_assembly(f.export_dir)
+    fov = saved.cells.fov_id.iloc[0]
+    folder = f.assignment_dir(fov)
+    found = lookup_source(f.export_dir, cell=(saved.cells.cell_namespace.iloc[0], int(saved.cells.cell_id.iloc[0])))
+    assert found["fov_id"] == fov and found["row"] == 0 and found["assignment_folder"] == str(folder)
+    assert found["assignment_record_sha256"] == file_sha256(folder / "assignment.json")
+    found = lookup_source(f.export_dir, spot=(saved.molecules.spot_namespace.iloc[0], saved.molecules.spot_id.iloc[0]))
+    assert found["fov_id"] == saved.molecules.fov_id.iloc[0] and found["row"] == 0
+
+
 # --- EX1 and EX3: the SpatialData part inside the entry -----------------------------------------------------------------
 
 @needs_library

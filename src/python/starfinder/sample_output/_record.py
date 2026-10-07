@@ -25,6 +25,13 @@ STATUSES = ("written", "reused", "off", "empty", "not_run", "failed")
 #: Statuses of a part that list no file.
 NO_FILES = ("off", "not_run", "empty")
 VIEWER_QUALIFICATION = "deferred"
+#: The SHA-256 of a section that another section records when it reads it: recording section →
+#: {field: the section it hashes}. Written by ``fuse`` (``_fuse.py``), ``fuse_labels`` (``_labels.py``) and
+#: ``export_spatialdata`` (``_spatialdata.py``); a field holding None records nothing.
+RECORDED_SECTION_HASHES = {"fusion": {"assembly_sha256": "assembly"},
+                           "labels": {"assembly_sha256": "assembly"},
+                           "spatialdata": {"assembly_sha256": "assembly", "fusion_sha256": "fusion",
+                                           "labels_sha256": "labels"}}
 
 
 class ExportIncompleteWarning(UserWarning):
@@ -35,6 +42,28 @@ def section_sha256(section) -> str:
     """SHA-256 of a section's canonical JSON: sorted keys, no spaces, UTF-8."""
     text = json.dumps(section, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def verify_section_hashes(record: Mapping, where="export.json") -> None:
+    """Every section SHA-256 the record holds (:data:`RECORDED_SECTION_HASHES`) equals that section's current one.
+
+    A recording section that is absent (its part off or not run) records
+    nothing. Raises ValueError naming the changed section and the field that
+    recorded its hash.
+    """
+    for recorder, fields in RECORDED_SECTION_HASHES.items():
+        section = record.get(recorder)
+        if not isinstance(section, Mapping):
+            continue
+        for field, name in fields.items():
+            recorded = section.get(field)
+            if recorded is None:
+                continue
+            current = section_sha256(record.get(name))
+            if recorded != current:
+                state = "is absent" if name not in record else f"has SHA-256 {current}"
+                raise ValueError(f"{where} fails its hashes: the {name} section {state}, but {recorder}.{field} "
+                                 f"recorded {recorded} when the {recorder} section read it")
 
 
 def as_json(value):

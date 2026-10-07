@@ -39,6 +39,7 @@ from ._record import (
     remove_listed,
     section_sha256,
     update_section,
+    verify_section_hashes,
 )
 
 EXTRA = "spatialdata"
@@ -704,9 +705,7 @@ def lookup_source(folder, *, spot=None, cell=None) -> dict:
     """Find where a molecule or a cell of an export folder came from.
 
     docs/sample-output-contract.md ("Identities and source lookup"). Reads
-    ``export.json``, verifies its hashes (every section that records the
-    ``assembly`` section's SHA-256 must equal it, and ``load_assembly`` checks
-    every file of the assembly), finds the row by ``spot =
+    ``export.json``, verifies its hashes, finds the row by ``spot =
     (spot_namespace, spot_id)`` or ``cell = (cell_namespace, cell_id)`` and
     returns, from the ``assembly`` section: ``fov_id``; ``assignment_folder``
     and ``assignment_record_sha256`` (the FOV's ``assignment.json``; None for a
@@ -714,12 +713,23 @@ def lookup_source(folder, *, spot=None, cell=None) -> dict:
     position in the FOV's §2.9 table (molecules in input order, cells in
     increasing ``cell_id``); and ``kind``.
 
+    The hashes verified are those ``export.json`` records about its own
+    sections and the assembly's files: each SHA-256 of a section that another
+    section recorded when it read it (``fusion.assembly_sha256``,
+    ``labels.assembly_sha256``, and ``spatialdata``'s ``assembly_sha256``,
+    ``fusion_sha256`` and ``labels_sha256``), and every file of the assembly
+    as ``load_assembly`` checks it. A section absent because its part was off
+    or did not run records nothing; only the ``assembly`` section is needed.
+    The files of the store are not hashed here: that is condition S8, which
+    :func:`check_export` evaluates.
+
     Raises
     ------
     ValueError
-        Neither or both keys given; a section recording another assembly
-        SHA-256 than the current one (an edited folder); a file of the assembly
-        whose SHA-256 differs; a key the sample does not hold.
+        Neither or both keys given; no ``assembly`` section; a section whose
+        SHA-256 differs from the one another section recorded (an edited
+        folder; the message names the section and the recording field); a file
+        of the assembly whose SHA-256 differs; a key the sample does not hold.
     """
     from starfinder.assembly import load_assembly
     if (spot is None) == (cell is None):
@@ -728,12 +738,7 @@ def lookup_source(folder, *, spot=None, cell=None) -> dict:
     record = read_export(folder)
     if not isinstance(record.get("assembly"), Mapping):
         raise ValueError(f"{folder} holds no export record with an assembly section")
-    current = section_sha256(record["assembly"])
-    for name in ("fusion", "labels", "spatialdata"):
-        recorded = (record.get(name) or {}).get("assembly_sha256")
-        if recorded is not None and recorded != current:
-            raise ValueError(f"export.json of {folder} fails its hashes: the {name} section records the assembly "
-                             f"section's SHA-256 {recorded}, but it is {current}")
+    verify_section_hashes(record, where=f"export.json of {folder}")
     assembly = load_assembly(folder)
     if spot is not None:
         frame, keys, kind = assembly.molecules, ("spot_namespace", "spot_id"), "spot"
