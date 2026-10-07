@@ -664,6 +664,132 @@ the inventory of step 1 replaces the estimate with the row counts. The tiled zli
 writer adds to W-354's times (A8). At most ten PNGs are written, nine are planned, and
 temporary files go to local scratch; nothing is written into a data directory.
 
+## Implemented checks (W-373)
+
+The checks are in the modules of `src/python/test/` listed below. The issues that delivered
+the code added most of them with it; `test_stitching_validation.py` adds EE6, the full
+chain on `scene_small`, and the test that keeps this table true. That test reads the rows
+of the tables of "Checks" from this page, with each case line LB7.1 to LB7.12 of LB7 as a
+row of its own, and checks that this table has exactly those rows and the RX rows of the
+real examples; that every row other than an RX row names at least one test of its module
+that pytest collects (a name ending in `*` stands for every test whose name starts so, a
+name with `[…]` for one parametrized case); that none of them is marked as an expected
+failure; that none is skipped where the `multiview-stitcher`, `spatialdata` and `anndata`
+extras are importable, as in the batch environment; and that a row whose tier is
+`default` names no `slow` test and a row whose tier is `slow` names only `slow` tests. A
+test of a module that is not named here is an additional check of the code it tests.
+
+Every tolerance is the one of the table "Checks", unchanged. The rows that need an extra
+(column "Needs") skip without it, naming the extra; the batch environment holds the extras,
+so no named test is skipped there. The `slow` tests run in the `slow` tier of the
+`stitching` subsystem (`slow and not learned and not (benchmark or synthetic or
+registration or spot_finding)`), except the `slow` tests of `test_synthetic_sample_scene.py`,
+which carry the `synthetic` marker. PL13 of the first version is RX4. The RX rows read the
+records on the share and are run by the real-example issue (W-376), not by a test.
+
+| # | Module and tests | Tier |
+| --- | --- | --- |
+| PL1 | `test_stitching_positions.py`, `test_stage_axis_mapping_*`, `test_unsnapped_stage_table_keeps_the_stage_positions`, `test_snapped_cells_equal_the_legacy_grid`, `test_golden_stage_file_covers_its_eight_positions`, `test_a_remaining_step_tie_goes_to_the_smaller_step`, `test_regular_grid_*`, `test_column_major_puts_fov_k_at_column_k_div_rows`, `test_supplied_tables_convert_units`, `test_leica_failures_name_the_item`, `test_grid_parameter_rules`, `test_supplied_table_failures`, `test_table_rules_hold_for_direct_construction` | default |
+| PL2 | `test_stitching_neighbors.py`, `test_stub_grid_pairs_and_boxes_use_each_grid_size`, `test_touching_boxes_pair_only_with_a_tolerance`, `test_z_ranges_must_intersect_for_volumes_only`, `test_pairs_do_not_depend_on_grid_cells_or_row_order`, `test_eight_by_eight_grid_has_210_pairs`, `test_irregular_stage_positions_follow_the_rule`, `test_unequal_shapes_use_each_grid` | default |
+| PL3 | `test_stitching_placement.py`, `test_index_to_sample_rule_and_its_inverse`, `test_contract_example_of_the_index_rule`; `test_stitching_bigstitcher.py`, `test_pl3_*` | default |
+| PL4 | `test_stitching_placement.py`, `test_fractional_translations_give_the_g1_gauge_bitwise`, `test_scene_origins_equal_the_g1_truth` | default |
+| PL5 | `test_stitching_placement.py`, `test_method_translations_stay_in_micrometres`; `test_stitching_bigstitcher.py`, `test_pl5_units_use_the_calibration_and_the_reference_spacing` | default |
+| PL6 | `test_stitching_placement.py`, `test_yx_inputs_give_z1_grids_and_keep_the_method_z`, `test_mixed_geometry_is_refused_naming_the_fovs`, `test_grids_outside_the_sample_frame_are_refused`, `test_a_spec_without_dimension_2_refuses_z1_inputs` | default |
+| PL7 | `test_stitching_placement.py`, `test_non_square_tiles_place_with_their_own_sizes`; `test_stitching_neighbors.py`, `test_stub_grid_pairs_and_boxes_use_each_grid_size`; `test_stitching_bigstitcher.py`, `test_pl7_golden_legacy_view_keeps_img_col_for_the_y_extent` | default |
+| PL8 | `test_stitching_placement.py`, `test_irregular_footprints_are_placed_and_joined`; `test_stitching_neighbors.py`, `test_irregular_stage_positions_follow_the_rule`, `test_unequal_shapes_use_each_grid` | default |
+| PL9 | `test_stitching_placement.py`, `test_a_tile_with_only_nan_quality_links` | default |
+| PL10 | `test_stitching_placement.py`, `test_components_and_the_reference_component`, `test_an_absent_image_is_missing`, `test_correction_bound_boundary`, `test_residual_boundary_and_optimizer_removed_links`, `test_approval_records_the_tables_and_changes_no_origin`, `test_review_placement_is_idempotent_and_keeps_matching_approvals`, `test_a_present_fov_with_a_non_finite_translation_is_failed_and_keeps_a_component`, `test_a_method_without_a_finite_translation_fails_every_fov`, `test_a_disconnected_fov_with_a_finite_translation_keeps_the_fallback_rule`, `test_the_reference_component_holds_placed_fovs_only`, `test_present_fovs_joined_by_no_kept_link_have_their_own_component`, `test_every_stub_variant_follows_the_component_rule`; `test_stitching_assembly_retention.py`, `test_as9_review_required_is_refused_until_approved` | default |
+| PL11 | `test_stitching_placement.py`, `test_stage_position_fallback_for_a_disconnected_tile`; `test_stitching_bigstitcher.py`, `test_pl11_fallback_in_the_import` | default |
+| PL12 | `test_stitching_bigstitcher.py`, `test_pl12_*` | default |
+| PL14 | `test_stitching_entry.py`, `test_save_and_load_round_trip`, `test_a_changed_table_is_refused_naming_it`, `test_an_interrupted_save_leaves_no_partial_folder`; `test_stitching_bigstitcher.py`, `test_pl14_import_persistence` | default |
+| PL15 | `test_stitching_entry.py`, `test_stitch_refuses_bad_input_before_calling_the_method`, `test_stitch_and_the_supplied_placement_touch_no_file`, `test_registry_uses_the_shared_mechanism`, `test_the_package_registers_only_multiview_stitcher`, `test_spec_rules_and_a_missing_dependency`, `test_importing_the_module_imports_no_backend` | default |
+| PL16 | `test_stitching_entry.py`, `test_stub_path_is_deterministic_across_processes` | `slow` |
+| PL17 | `test_stitching_entry.py`, `test_dataset_stitch_*` | default |
+| PL18 | `test_stitching_supplied.py`, `test_without_origins_each_fov_sits_at_its_nominal_position`, `test_with_origins_the_supplied_values_are_kept_bitwise`, `test_origins_equal_to_the_nominal_positions_give_the_same_table`, `test_scene_truth_placement`, `test_a_table_whose_nominal_z_differ_is_still_a_placement`, `test_failures_name_the_fovs`; `test_stitching_assembly_retention.py`, `test_pl18_*` | default |
+| MV1 | `test_stitching_multiview.py`, `test_known_answer_cut_fixture[MV1]` | `slow` |
+| MV2 | `test_stitching_multiview.py`, `test_known_answer_cut_fixture[MV2]` | `slow` |
+| MV3 | `test_stitching_multiview.py`, `test_fractional_jitter_on_the_synthetic_scene` | `slow` |
+| MV4 | `test_stitching_multiview.py`, `test_hand_built_cases` | `slow` |
+| MV5 | `test_stitching_multiview.py`, `test_wrapper_rules_on_the_cut_fixture`, `test_no_nan_quality_link_is_kept_and_nan_is_recorded`, `test_with_no_link_left_every_fov_is_failed_and_the_result_is_saved`, `test_config_defaults_are_the_starting_configuration`, `test_config_refuses_each_invalid_field_at_construction`, `test_spec_declares_the_contract_capabilities`, `test_a_tile_below_16_px_in_y_or_x_is_refused` | `slow`; the configuration, specification and shape parts default |
+| MV6 | `test_stitching_multiview.py`, `test_translations_are_bitwise_identical_in_two_processes` | `slow` |
+| AS1 | `test_stitching_assembly_ownership.py`, `test_as1_*` | default |
+| AS2 | `test_stitching_assembly_ownership.py`, `test_as2_*` | default |
+| AS3 | `test_stitching_assembly_retention.py`, `test_as3_retained_scene_cells` | default |
+| AS4 | `test_stitching_assembly_retention.py`, `test_as4_*` | default |
+| AS5 | `test_stitching_assembly_retention.py`, `test_as5_*` | default |
+| AS6 | `test_stitching_assembly_retention.py`, `test_as6_*`; `test_stitching_assembly_accounting.py`, `test_as6_a_broken_result_is_refused`, `test_the_valid_results_pass_both`, `test_own_states_has_counted_cells_in_every_compartments_state`, `test_the_changes_leave_the_valid_results_alone` | default |
+| AS7 | `test_stitching_assembly_retention.py`, `test_as7_*` | default |
+| AS8 | `test_stitching_assembly_retention.py`, `test_as8_*` | default |
+| AS9 | `test_stitching_assembly_retention.py`, `test_as9_*` | default |
+| AS10 | `test_stitching_assembly_retention.py`, `test_as10_*` | default |
+| AS11 | `test_stitching_assembly_outputs.py`, `test_as11_*` | default |
+| AS12 | `test_stitching_assembly_outputs.py`, `test_as12_*` | default |
+| AS13 | `test_stitching_assembly_outputs.py`, `test_as13_*`, `test_as11_and_as13_without_anndata` | default |
+| AS14 | `test_stitching_assembly_outputs.py`, `test_as14_permuted_molecule_rows_give_the_same_per_key_results`, `test_as14_three_single_thread_processes_give_identical_tables` | default; the three processes `slow` |
+| AS15 | `test_stitching_export_entry.py`, `test_assemble_part`, `test_assemble_off_without_a_saved_assembly`, `test_assemble_part_input_files`, `test_assemble_part_from_molecule_tables`, `test_molecule_tables_are_the_goodspots_rows` | default |
+| AS16 | `test_stitching_assembly_ownership.py`, `test_as16_*` | default |
+| AS17 | `test_stitching_assembly_ownership.py`, `test_as17_*` | default |
+| SC1 | `test_synthetic_sample_scene.py`, `test_single_plane_scene_sc1` | default |
+| EE1 | `test_stitching_assembly_scene.py`, `test_ee1_per_fov_assignment_equals_the_sampled_truth` | default |
+| EE2 | `test_stitching_assembly_scene.py`, `test_ee2_*` | default |
+| EE3 | `test_stitching_assembly_scene.py`, `test_ee3_accounting_on_the_scene` | default |
+| EE4 | `test_stitching_assembly_scene.py`, `test_ee4_guarantees_against_sample_level_truth` | default |
+| EE5 | `test_stitching_assembly_scene.py`, `test_ee5_comparison_with_sample_level_truth` | default |
+| EE6 | `test_stitching_validation.py`, `test_ee6_*` | `slow` |
+| EX1 | `test_stitching_export_entry.py`, `test_default_export`, `test_two_image_names`, `test_parts_called_alone`; `test_stitching_labels.py`, `test_ex1_the_label_part_runs_third`; `test_stitching_spatialdata.py`, `test_ex1_*` | default |
+| EX2 | `test_stitching_export_entry.py`, `test_checks_before_writing`, `test_check_saved_assembly_of_another_placement`, `test_check_fusion_inputs`, `test_check_file_source_shape`, `test_check_spacing_and_planes`; `test_stitching_labels.py`, `test_lb6_id_bound_through_the_entry` | default |
+| EX3 | `test_stitching_export_entry.py`, `test_fuse_without_the_extra`, `test_fuse_with_a_source_image_missing`; `test_stitching_labels.py`, `test_ex3_*`; `test_stitching_spatialdata.py`, `test_ex3_*` | default |
+| EX4 | `test_stitching_export_entry.py`, `test_folder_equals_its_record`, `test_interrupted_export`, `test_assemble_off_and_fuse_on` | default |
+| EX5 | `test_stitching_fusion_files.py`, `test_fusion_section_items` | default |
+| FI1 | `test_stitching_fusion_grid.py`, `test_fused_grid_*`, `test_fuse_alone_without_an_included_fov`; `test_stitching_fusion_files.py`, `test_one_included_fov_is_its_source`; `test_stitching_fusion_slow.py`, `test_fuse_band_grid_layout_and_bands` | default; `fuse_band` `slow` |
+| FI2 | `test_stitching_fusion_slow.py`, `test_overlap_pair_values`; `test_stitching_fusion_files.py`, `test_written_in_the_input_dtype` | `slow`; the dtype written on `quad` default |
+| FI3 | `test_stitching_fusion_files.py`, `test_uncovered_voxels_hold_zero`, `test_plane_pair_values_and_slab`; `test_stitching_fusion_slow.py`, `test_overlap_pair_values` | default; `overlap_pair` `slow` |
+| FI4 | `test_stitching_fusion_slow.py`, `test_position_of_a_bright_voxel` | `slow` |
+| FI5 | `test_stitching_fusion_files.py`, `test_files_equal_a_direct_library_call` | default |
+| FI6 | `test_stitching_fusion_grid.py`, `test_output_level_geometry`, `test_configuration_refusals`; `test_stitching_fusion_files.py`, `test_checker_pair_block_means`, `test_quad_partial_last_block`; `test_stitching_fusion_slow.py`, `test_fuse_band_grid_layout_and_bands` | default; `fuse_band` `slow` |
+| FI7 | `test_stitching_fusion_files.py`, `test_projection_and_stack`, `test_plane_pair_values_and_slab` | default |
+| FI8 | `test_stitching_fusion_files.py`, `test_ome_tiff_layout`; `test_stitching_fusion_slow.py`, `test_fuse_band_grid_layout_and_bands` | default; `fuse_band` `slow` |
+| FI9 | `test_stitching_fusion_files.py`, `test_standalone_ome_zarr`, `test_check_export_counts_chunk_reads`; `test_stitching_fusion_slow.py`, `test_fuse_band_ome_zarr` | default; `fuse_band` `slow` |
+| FI10 | `test_stitching_fusion_grid.py`, `test_configuration_refusals`, `test_configuration_accepts`, `test_sum_bound`, `test_refusals_of_fuse_before_any_file`; `test_stitching_fusion_files.py`, `test_written_in_the_input_dtype`, `test_sum_projection_is_float32` | default |
+| FI11 | `test_stitching_fusion_files.py`, `test_stack_alone_and_middle_plane`; `test_stitching_export_entry.py`, `test_stack_alone_through_the_entry`, `test_stack_of_one_plane_fovs`; `test_stitching_spatialdata.py`, `test_fi11_the_stack_alone_in_the_store` | default |
+| LB1 | `test_stitching_labels.py`, `test_lb1_*` | default |
+| LB2 | `test_stitching_labels.py`, `test_lb2_lb3_label_quad`, `test_lb2_lb3_lb4_label_pair`, `test_label_scene` | default; `label_scene` `slow` |
+| LB3 | `test_stitching_labels.py`, `test_lb2_lb3_label_quad`, `test_lb2_lb3_lb4_label_pair`, `test_label_scene` | default; `label_scene` `slow` |
+| LB4 | `test_stitching_labels.py`, `test_lb4_*`, `test_lb2_lb3_lb4_label_pair`, `test_label_scene` | default; `label_scene` `slow` |
+| LB5 | `test_stitching_labels.py`, `test_lb5_*` | default |
+| LB6 | `test_stitching_labels.py`, `test_lb6_*` | default |
+| LB7 | `test_stitching_labels.py`, `test_lb7_*`, `test_label_scene` (the case lines below) | default; `label_scene` `slow` |
+| LB7.1 | `test_stitching_labels.py`, `test_lb7_1_a_retained_cell` | default |
+| LB7.2 | `test_stitching_labels.py`, `test_lb7_2_an_excluded_cell` | default |
+| LB7.3 | `test_stitching_labels.py`, `test_lb7_3_two_retained_cells_whose_territories_overlap` | default |
+| LB7.4 | `test_stitching_labels.py`, `test_lb7_4_a_cell_retained_by_two_fovs` | default |
+| LB7.5 | `test_stitching_labels.py`, `test_lb7_5_a_cell_retained_by_no_fov` | default |
+| LB7.6 | `test_stitching_labels.py`, `test_lb7_6_a_centroid_on_an_ownership_boundary` | default |
+| LB7.7 | `test_stitching_labels.py`, `test_lb7_7_a_cell_cut_by_its_fovs_border` | default |
+| LB7.8 | `test_stitching_labels.py`, `test_label_scene` | `slow` |
+| LB7.9 | `test_stitching_labels.py`, `test_lb7_9_a_placeholder_fov`, `test_lb7_9_label_scene_with_a_placeholder` | default; `label_scene` `slow` |
+| LB7.10 | `test_stitching_labels.py`, `test_lb7_10_background` | default |
+| LB7.11 | `test_stitching_labels.py`, `test_lb7_11_an_assembly_made_without_conflicts` | default |
+| LB7.12 | `test_stitching_labels.py`, `test_lb7_12_a_cell_retained_by_no_fov_without_a_flag` | default |
+| SD1 | `test_stitching_spatialdata.py`, `test_sd1_*` | default; the case `fov_not_placed` with Zarr format 2 `slow` |
+| SD2 | `test_stitching_spatialdata.py`, `test_sd2_points` | default |
+| SD3 | `test_stitching_spatialdata.py`, `test_sd3_*` | default |
+| SD4 | `test_stitching_spatialdata.py`, `test_sd4_*` | default |
+| SD5 | `test_stitching_spatialdata.py`, `test_sd5_*` | default |
+| SD6 | `test_stitching_spatialdata.py`, `test_sd6_sd7_golden_3d_both`, `test_sd6_golden_2d_stack_slab`, `test_sd6_sd7_label_quad`, `test_sd6_position_grid` | default; `position_grid` `slow` |
+| SD7 | `test_stitching_spatialdata.py`, `test_sd6_sd7_golden_3d_both`, `test_sd6_sd7_label_quad`, `test_sd7_fuse_band` | default; `fuse_band` `slow` |
+| SD8 | `test_stitching_spatialdata.py`, `test_sd8_*`, `test_check_export_finds_a_store_that_differs_from_its_section` | default |
+| WF1 | `test_stitching_workflow.py`, `test_wf1_*` | default |
+| WF2 | `test_stitching_workflow.py`, `test_wf2_*`; `test_assignment_workflow.py`, `test_a18_the_legacy_outputs_equal_the_frozen_helper`; `test_workflow_stitching_golden.py`, `test_stage_file_grid`, `test_tile_config_arithmetic`, `test_script_writes_the_helper_csv`; `test_workflow_assembly_golden.py`, `test_the_adapter_writes_the_legacy_values`, `test_the_empty_branch` | default |
+| WF3 | `test_stitching_workflow.py`, `test_wf3_*` | default |
+| RX1 | Run by the real-example issue (W-376), not by a test | real examples |
+| RX2 | Run by the real-example issue (W-376), not by a test | real examples |
+| RX3 | Run by the real-example issue (W-376), not by a test | real examples |
+| RX4 | Run by the real-example issue (W-376), not by a test | real examples |
+| RX5 | Run by the real-example issue (W-376), not by a test | real examples |
+| RX6 | Run by the real-example issue (W-376), not by a test | real examples |
+| RX7 | Run by the real-example issue (W-376), not by a test | real examples |
+
 ## Limitations
 
 * The tolerances for `multiview_stitcher` come from two cut fixtures with integer offsets
