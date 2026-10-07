@@ -437,6 +437,10 @@ def check_accounting(result, inputs, placement):
             assert (status == "retained") == (owner == r.fov_id)
             if not owning[r.fov_id]:
                 assert status == "excluded"
+    # 3 (continued): an owner is always an owning FOV with an input, never a placeholder.
+    for frame in (cells, mols):
+        owners = {o for o in frame.owner_fov_id.astype(object) if not pd.isna(o)}
+        assert owners <= {f for f in inputs if owning[f]}, owners
     if not cell_mode:
         return
     # 4. The counted cells' counts equal their per-FOV §2.9 counts; Σ whole = retained assigned = Σ n_molecules.
@@ -450,14 +454,50 @@ def check_accounting(result, inputs, placement):
     whole = sum(c for *_, compartment, c in got if compartment == "whole")
     retained_assigned = int(((mols.assignment_status == "assigned") & (mols.assembly_status == "retained")).sum())
     assert whole == retained_assigned == int(counted.n_molecules.sum())
-    # 5. whole = nucleus + cytoplasm per counted cell with compartments available; no compartment rows otherwise.
-    available = {(r.fov_id, int(r.cell_id)) for r in counted.itertuples() if r.compartments == "available"}
+    # 5. The §2.9 compartment identities over the counted cells, for every compartments state, and per molecule.
+    state = {(r.fov_id, int(r.cell_id)): r.compartments for r in counted.itertuples()}
+    available = {k for k, v in state.items() if v == "available"}
     split = {}
     for fov, cell, gene, compartment, n in got:
         if compartment != "whole":
-            assert (fov, cell) in available
+            assert (fov, cell) in available, (fov, cell, state.get((fov, cell)))
             split[(fov, cell, gene)] = split.get((fov, cell, gene), 0) + n
     assert split == {(f, c, g): n for f, c, g, comp, n in got if comp == "whole" and (f, c) in available}
-    for r in mols[(mols.assignment_status == "assigned") & (mols.assembly_status == "retained")].itertuples():
-        if (r.fov_id, int(r.cell_id)) in available:
-            assert r.compartment in ("nucleus", "cytoplasm")
+    given = {}
+    for fov, result_29 in inputs.items():
+        for r in result_29.molecules.itertuples():
+            given[(r.spot_namespace, r.spot_id)] = _none(r.compartment)
+    retained_assigned = mols[(mols.assignment_status == "assigned") & (mols.assembly_status == "retained")]
+    populations = {}
+    held = {}
+    for r in mols.itertuples():
+        compartment = _none(r.compartment)
+        assert compartment == given[(r.spot_namespace, r.spot_id)]        # copied from the input molecule
+        assert (compartment is not None) == (_none(r.assignment_status) == "assigned")
+    for r in retained_assigned.itertuples():
+        cell_state = state[(r.fov_id, int(r.cell_id))]
+        assert r.compartment in (("nucleus", "cytoplasm") if cell_state == "available" else (cell_state,))
+        populations[r.compartment] = populations.get(r.compartment, 0) + 1
+        if r.compartment in ("nucleus", "cytoplasm"):
+            key = (r.fov_id, int(r.cell_id), r.gene_id, r.compartment)
+            held[key] = held.get(key, 0) + 1
+    assert sum(populations.values()) == len(retained_assigned)
+    assert {(f, c, g, comp): n for f, c, g, comp, n in got if comp != "whole"} == held
+
+
+# --- own_states: own_cases with counted cells in every compartments state ---------------------------------
+
+# FOV1 with the exclusion off (cell 4 is kept: no_nucleus) and nucleus 3 one voxel past E1's border
+# (x 14 lies outside E1: nucleus_outside_cell, so E1 is withheld); cells 1 and 2 stay available, FOV2 unavailable.
+OWN_STATES_NUCLEI = {1: ((0, 1), (2, 2), (2, 2)), 2: ((1, 2), (2, 2), (13, 13)), 3: ((1, 2), (7, 7), (12, 14))}
+
+
+def own_states_results():
+    results = own_results()
+    grid = unit_grid(OWN_SHAPE)
+    fov = "FOV1"
+    results[fov] = assign_molecules(
+        molecules(fov, OWN_MOLECULES[fov], OWN_GENES), label_run(paint(OWN_SHAPE, OWN_CELLS[fov]), fov, grid),
+        grid=grid, config=AssignmentConfig(exclude_cells_without_nucleus=False),
+        nuclei=label_run(paint(OWN_SHAPE, OWN_STATES_NUCLEI), fov, grid, target="nucleus", run="nucleus"))
+    return results

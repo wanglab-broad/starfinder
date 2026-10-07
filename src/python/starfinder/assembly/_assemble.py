@@ -223,21 +223,44 @@ def check_identities(result: AssemblyResult) -> None:
     if len(wrong):
         _fail(3, "a molecule's status follows its cell, its own position or outside_grid",
               tuple(molecules[["spot_namespace", "spot_id"]].iloc[int(wrong[0])]))
+    # 3 (continued): no position or centroid is owned by a FOV that owns no point (a placeholder, an unplaced FOV).
+    owning = set(fovs["fov_id"][fovs["owns_points"].to_numpy(dtype=bool)])
+    for name, frame, key in (("cell", cells, ["cell_namespace", "cell_id"]),
+                             ("molecule", molecules, ["spot_namespace", "spot_id"])):
+        owner = frame["owner_fov_id"].astype(object)
+        foreign = (owner.notna() & ~owner.isin(owning)).to_numpy(dtype=bool)
+        if foreign.any():
+            _fail(3, f"a {name}'s owner_fov_id is an owning FOV (owns_points), never a placeholder",
+                  tuple(frame[key].iloc[int(np.flatnonzero(foreign)[0])]))
     # 4: the counted cells' counts equal their retained assigned molecules; no other cell has rows.
+    count_key = ["fov_id", "cell_namespace", "cell_id", "gene_id", "compartment"]
+    repeated = counts[counts.duplicated(count_key, keep=False)]
+    if len(repeated):
+        _fail(4, "one count row per (cell, gene, compartment)", tuple(repeated[count_key].iloc[0]))
+    compartment = counts["compartment"].astype(object)
+    bad = (~compartment.isin(COMPARTMENTS) | ~counts["gene_id"].astype(object).isin(result.genes)
+           | (counts["count"].to_numpy() <= 0)).to_numpy(dtype=bool)
+    if bad.any():
+        _fail(4, f"every count row has a compartment of {list(COMPARTMENTS)}, a gene of genes and a count above 0",
+              tuple(counts[count_key].iloc[int(np.flatnonzero(bad)[0])]))
     counted = cells[(cells["assembly_status"].eq("retained") & cells["status"].eq("kept")).to_numpy(dtype=bool)]
-    counted_keys = {(f, int(c)) for f, c in zip(counted["fov_id"], counted["cell_id"].astype("int64"))}
-    count_keys = {(f, int(c)) for f, c in zip(counts["fov_id"], counts["cell_id"].astype("int64"))}
+    counted_keys = {(f, ns, int(c)) for f, ns, c in zip(counted["fov_id"], counted["cell_namespace"],
+                                                        counted["cell_id"].astype("int64"))}
+    count_keys = {(f, ns, int(c)) for f, ns, c in zip(counts["fov_id"], counts["cell_namespace"],
+                                                      counts["cell_id"].astype("int64"))}
     if not count_keys <= counted_keys:
         _fail(4, "only counted cells (retained, §2.9 kept) have count rows", _first(count_keys - counted_keys))
-    whole = counts[counts["compartment"].eq("whole").to_numpy(dtype=bool)]
-    whole_tally = _tally(whole.assign(cell_id=whole["cell_id"].astype("int64")), ["fov_id", "cell_id", "gene_id"],
-                         "count")
-    if "cell_id" in molecules:
+    tally_key = ["fov_id", "cell_id", "gene_id"]
+    whole = counts[compartment.eq("whole").to_numpy(dtype=bool)]
+    whole_tally = _tally(whole.assign(cell_id=whole["cell_id"].astype("int64")), tally_key, "count")
+    cell_mode = "cell_id" in molecules
+    if cell_mode:
         assigned = molecules[(molecules["assignment_status"].eq("assigned")
                               & molecules["assembly_status"].eq("retained")).to_numpy(dtype=bool)]
         assigned = assigned.assign(cell_id=assigned["cell_id"].astype("int64"))
-        molecule_tally = _tally(assigned, ["fov_id", "cell_id", "gene_id"])
+        molecule_tally = _tally(assigned, tally_key)
     else:
+        assigned = molecules.iloc[:0]
         molecule_tally = {}
     if whole_tally != molecule_tally:
         _fail(4, "the whole counts are the retained assigned molecules per cell and gene",
@@ -250,19 +273,47 @@ def check_identities(result: AssemblyResult) -> None:
     if per_cell != n_molecules:
         _fail(4, "the whole counts sum to n_molecules over the counted cells",
               _first(set(per_cell.items()) ^ set(n_molecules.items())))
-    # 5: whole = nucleus + cytoplasm for available counted cells; no compartment rows otherwise.
-    available = {(f, int(c)) for f, c, a in zip(counted["fov_id"], counted["cell_id"].astype("int64"),
-                                                counted["compartments"].astype(object)) if a == "available"}
-    parts = counts[counts["compartment"].isin(("nucleus", "cytoplasm")).to_numpy(dtype=bool)]
+    # 5: the §2.9 compartment identities over the counted cells and the retained assigned molecules.
+    state = {(f, int(c)): a for f, c, a in zip(counted["fov_id"], counted["cell_id"].astype("int64"),
+                                               counted["compartments"].astype(object))}
+    available = {k for k, a in state.items() if a == "available"}
+    parts = counts[compartment.isin(("nucleus", "cytoplasm")).to_numpy(dtype=bool)]
     part_keys = {(f, int(c)) for f, c in zip(parts["fov_id"], parts["cell_id"].astype("int64"))}
     if not part_keys <= available:
         _fail(5, "only counted cells whose compartments are available have nucleus and cytoplasm rows",
               _first(part_keys - available))
-    split = _tally(parts.assign(cell_id=parts["cell_id"].astype("int64")), ["fov_id", "cell_id", "gene_id"], "count")
+    split = _tally(parts.assign(cell_id=parts["cell_id"].astype("int64")), tally_key, "count")
     expected_split = {k: v for k, v in whole_tally.items() if (k[0], k[1]) in available}
     if split != expected_split:
         _fail(5, "nucleus + cytoplasm = whole per available counted cell and gene",
               _first(set(split.items()) ^ set(expected_split.items())))
+    if not cell_mode:
+        return
+    # Per molecule: a compartment exactly on the assigned molecules; nucleus or cytoplasm in an available cell,
+    # else the cell's state; so the compartment populations sum to the retained assigned molecules.
+    keys = molecules[["spot_namespace", "spot_id"]]
+    has = molecules["compartment"].notna().to_numpy(dtype=bool)
+    is_assigned = molecules["assignment_status"].eq("assigned").fillna(False).to_numpy(dtype=bool)
+    if (has != is_assigned).any():
+        _fail(5, "every assigned molecule, and only those, has a compartment",
+              tuple(keys.iloc[int(np.flatnonzero(has != is_assigned)[0])]))
+    cell_state = pd.Series([state.get((f, int(c))) for f, c in zip(assigned["fov_id"], assigned["cell_id"])],
+                           dtype=object)
+    value = assigned["compartment"].astype(object).reset_index(drop=True)
+    allowed = ((cell_state == "available") & value.isin(("nucleus", "cytoplasm"))) | (
+        (cell_state != "available") & (value == cell_state))
+    if not allowed.all():
+        i = int(np.flatnonzero(~allowed.to_numpy(dtype=bool))[0])
+        _fail(5, f"a retained assigned molecule's compartment is nucleus or cytoplasm in an available cell, else "
+                 f"the cell's compartments state ({cell_state[i]}); got {value[i]}",
+              tuple(assigned[["spot_namespace", "spot_id"]].iloc[i]))
+    for name in ("nucleus", "cytoplasm"):
+        rows = parts[parts["compartment"].eq(name).to_numpy(dtype=bool)]
+        given = _tally(rows.assign(cell_id=rows["cell_id"].astype("int64")), tally_key, "count")
+        held = _tally(assigned[assigned["compartment"].eq(name).to_numpy(dtype=bool)], tally_key)
+        if given != held:
+            _fail(5, f"the {name} counts are the retained assigned molecules whose compartment is {name}",
+                  _first(set(given.items()) ^ set(held.items())))
 
 
 @dataclass(frozen=True, eq=False)
