@@ -263,36 +263,44 @@ filter and optimization).
 
 ## Supplied placement
 
-`placement_from_table(table, grids, *, sample)` ({doc}`stitching-contract`, "Supplied
-placement") turns known positions into a `PlacementResult` without registration:
+`placement_from_table(table, grids, *, sample, origins=None)` ({doc}`stitching-contract`,
+"Supplied placement") turns known positions into a `PlacementResult` without registration:
 
 1. **Checks.** The table has at least one row; its `fov_id`s and the keys of `grids` are
-   the same set; every grid has known spacing, unit `µm` and identity direction; and all
-   grids share Z size, spacing, direction and unit. Y and X sizes may differ.
-2. **Per-FOV rows**, in table order: `status` `metadata_only`; `origin_* = nominal_*`, the
-   float64 values of the table, copied, not recomputed; `correction_*` 0.0;
-   `method_translation_*` NaN; `component` the row index; `n_links_kept` 0; `flags`
+   the same set; with `origins`, its `fov_id`s and the keys of `origins` are the same set
+   and every origin is three finite numbers (z, y, x, µm); every grid has known spacing,
+   unit `µm` and identity direction; and all grids share Z size, spacing, direction and
+   unit. Y and X sizes may differ.
+2. **Per-FOV rows**, in table order: `status` `metadata_only`; `nominal_*` the float64
+   values of the table, copied; without `origins`, `origin_* = nominal_*`, copied, not
+   recomputed, and `correction_*` 0.0; with `origins`, `origin_*` the supplied values as
+   float64, copied, and `correction_* = origin_* − nominal_*`, one float64 subtraction per
+   axis; `method_translation_*` NaN; `component` the row index; `n_links_kept` 0; `flags`
    `supplied`.
 3. **Links.** An empty table with the link columns.
-4. **Record.** The method entry `supplied`, the table record, `gauge` `none`, the frame
-   `sample:<sample>`, the inputs (per FOV the source `supplied` and the grid with its
-   SHA-256) and `format_version` 1.
+4. **Record.** The method entry `supplied`, `origins` (`nominal` or `supplied`), the table
+   record, `gauge` `none`, the frame `sample:<sample>`, the inputs (per FOV the source
+   `supplied` and the grid with its SHA-256) and `format_version` 1.
 5. **Review.** `required`, with the reason `supplied_placement`; no other check of
-   "Placement-quality checks" applies, because there are no links and no corrections.
+   "Placement-quality checks" applies, because there are no links and no registered pairs,
+   so a correction of any size sets no flag.
 
 With one FOV the result has one row and component 0. With Z=1 grids the origins are used
 as given, z included; one layer of tiles is assemble's requirement (check 8 of
-{doc}`assembly-contract`), not this function's.
+{doc}`assembly-contract`, which reads `nominal_z`), not this function's.
 
 | Parameter | Unit | Default | Rule |
 | --- | --- | --- | --- |
 | `table` | µm | none (required) | a `TilePositionTable` with at least one row |
 | `grids` | | none (required) | one `ReferenceGrid` per `fov_id` of the table, and no other key |
 | `sample` | | none (required) | the sample name; the frame is `sample:<sample>` |
+| `origins` | µm | `None` | `None`, or one `(z, y, x)` of finite numbers per `fov_id` of the table, and no other key |
 
 Failure: `ValueError` for an empty table, for a table FOV without a grid (naming the
-FOVs) and for a grid key outside the table; `IncompatibleGeometryError` for the geometry
-of step 1. Cost: one pass over the table, no image read; negligible.
+FOVs), for a grid key outside the table, and, with `origins`, for a table FOV without an
+origin, an origin key outside the table and an origin that is not three finite numbers
+(each naming the FOVs); `IncompatibleGeometryError` for the geometry of step 1. Cost: one
+pass over the table, no image read; negligible.
 
 ## Placement-quality checks
 

@@ -775,11 +775,18 @@ assembly can be compared with sample-level truth without running a segmenter:
 The validation itself (which comparisons, which numbers) belongs to the validation
 design; this page fixes only the inputs and their identities. The placement from the
 placement truth is built by `placement_from_table` of {doc}`stitching-contract`
-("Supplied placement"): a tile position table whose `nominal_z/y/x` are the
-`true_origin_z/y/x` of `placement_truth.csv` (read by `positions_from_table`), and each
+("Supplied placement") from the scene's nominal positions and its true origins: the tile
+position table is `positions.csv` (read by `positions_from_table`), whose `nominal_z/y/x`
+are the nominal grid's; `origins` maps each `fov_id` to the `(true_origin_z,
+true_origin_y, true_origin_x)` of its row of `placement_truth.csv`; and `grids` holds each
 FOV's reference grid. Every FOV is then `metadata_only` at its true origin, flagged
-`supplied`, and the review is `required` with the reason `supplied_placement`, so the
-caller approves it with `approve_placement` before `assemble` accepts it. One need of this
+`supplied`, with `correction_*` equal to the `true_correction_*` of `placement_truth.csv`
+within 1e-9 µm (both are `true_origin − nominal`), and the review is `required` with the reason
+`supplied_placement`, so the caller approves it with `approve_placement` before `assemble`
+accepts it. Because the nominal grid puts every FOV at nominal z 0 ("Nominal grid"), a
+scene with Z jitter then still has one `nominal_z`, and its truth placement passes check 8
+of {doc}`assembly-contract` ("Checks the entry applies"); the jitter in Z moves the
+FOVs' sample z, not ownership (option Z1). One need of this
 path is still not met by the current contracts and is recorded in the worker notes: a
 molecule input that keeps the sample IDs.
 

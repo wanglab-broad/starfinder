@@ -109,7 +109,7 @@ New names under N1:
 | Stage axes | `StageAxisMapping` | frozen dataclass |
 | Neighbours | `neighbor_pairs`, `NeighborPair` | function, frozen dataclass |
 | Registry | `STITCHING_METHODS: dict[type, StitchingSpec]`; a method returns `MethodPlacement` | registry, frozen dataclass |
-| Supplied placement | `placement_from_table(table, grids, *, sample)` ("Supplied placement") | function |
+| Supplied placement | `placement_from_table(table, grids, *, sample, origins=None)` ("Supplied placement") | function |
 | Sample-frame metadata | `placed_metadata(result, fov_id)` | function |
 | Method | `MultiviewStitcherConfig` (`multiview_stitcher`) | config |
 | BigStitcher | `BigStitcherConfig`, `bigstitcher_macro`, `import_bigstitcher` | config, functions |
@@ -343,8 +343,8 @@ The **statuses**:
   view without a link into the reference component (one that BigStitcher's second round
   placed from metadata); BigStitcher's own position for it stays in
   `method_translation_*` ("BigStitcher"). Every FOV of a supplied placement is
-  `metadata_only` too, at `origin = nominal` and flagged `supplied` instead of `fallback`
-  ("Supplied placement").
+  `metadata_only` too, flagged `supplied` instead of `fallback`, at its supplied origin
+  when origins are given and at `origin = nominal` otherwise ("Supplied placement").
 * `placeholder`: an acquired FOV whose image is absent and was replaced by a blank of the
   tile's shape so that the BigStitcher grid stays complete (D4; only in the BigStitcher
   path, with `BigStitcherConfig.pad_missing=True`); its origin is the one BigStitcher gives
@@ -605,57 +605,102 @@ placement.
 
 ```python
 def placement_from_table(table: TilePositionTable, grids: Mapping[str, ReferenceGrid], *,
-                         sample: str) -> PlacementResult: ...
+                         sample: str,
+                         origins: Mapping[str, tuple[float, float, float]] | None = None,
+                         ) -> PlacementResult: ...
 ```
 
 * **Arguments.** `table` is a tile position table from any converter; its nominal
-  positions are the supplied positions, in µm, usually read by `positions_from_table`
+  positions are the FOVs' nominal positions, in µm, usually read by `positions_from_table`
   (`source` `supplied`). `grids` maps each `fov_id` of the table to that FOV's
   `ReferenceGrid`, the grid its molecules and masks use. `sample` names the sample, whose
-  frame is `sample:<sample>`. The function reads no image or file, calls no method, derives
-  no neighbour pair and needs no extra.
-* **Per-FOV table.** One row per table row, in table order. Every FOV has the status
-  `metadata_only` and the flag `supplied`. Its origin is its nominal position
-  (`origin = nominal`, correction 0), and its `method_translation_*` is NaN, because no
-  method ran. `n_links_kept` is 0, and `component` is the FOV's row index: without links
-  each FOV is its own component.
-* **Links.** None: `links` has the columns of "Links" and no row.
+  frame is `sample:<sample>`. `origins`, optional, maps each `fov_id` of the table to that
+  FOV's supplied origin: three numbers in the order z, y, x, in µm in the sample frame,
+  the position of index `(0, 0, 0)` of the FOV's reference grid ("Terms"). The origins are
+  an argument of their own, beside the table, so that a supplied placement keeps the
+  acquisition's nominal positions (for example one common `nominal_z`) and carries the
+  known origins separately. They are read as float64 and used as given: never rounded,
+  cast or shifted. µm is the only unit; a caller with origins in another unit converts
+  them first. The function reads no image or file, calls no method, derives no neighbour
+  pair and needs no extra.
+* **Origin and correction of each FOV.** Without `origins` (`None`, the default), each
+  FOV's origin is its nominal position (`origin = nominal`, correction 0). With `origins`,
+  each FOV's `origin_*` is its supplied value and its `correction_*` is `origin − nominal`,
+  the float64 difference, which may be any finite value. In both cases `nominal_*` is
+  copied from the table. Origins equal to the nominal positions give the same per-FOV
+  table as `origins=None`.
+* **Per-FOV table.** In both cases one row per table row, in table order. Every FOV has
+  the status `metadata_only` and the flag `supplied`, and its `method_translation_*` is
+  NaN, because no method ran. `n_links_kept` is 0, and `component` is the FOV's row index:
+  without links each FOV is its own component.
+* **Links.** In both cases none: `links` has the columns of "Links" and no row.
 * **Method record.** `record["method"]` is the uniform provenance entry with `stage`
   `stitching` and `method` `supplied`, and with `implementation`
   `starfinder.stitching.placement_from_table`. `config_type`, `config`, `requires` and
   `artifacts` are empty. `supplied` is not a key of `STITCHING_METHODS`, so `stitch` cannot
-  select it and the workflow's `stitching.method` does not name it. `record["table"]` holds
-  the table's record, with the SHA-256 of a supplied file. `record["gauge"]` is `none`: the
-  origins are the positions as supplied, and no gauge shift is applied (G1 averages over
-  `image_supported` FOVs, and there are none). `record["inputs"]` holds, per FOV, the
-  source `supplied`, a null file SHA-256 and the grid shape, metadata and SHA-256 that
-  assemble's grid check reads.
-* **Review.** `record["review"]` is `required` with the reason `supplied_placement`,
-  whatever the positions, so a supplied placement reaches assembly only after the caller
-  approves it explicitly with `approve_placement(result, *, reviewer, note)` ("Failure
-  policy"). Under V1 the review would be required anyway, because no FOV is
-  `image_supported`; the reason names the cause. `review_placement` keeps the reason on a
-  placement whose method is `supplied`. The approval changes no origin.
-* **Persistence.** The same saved form as any placement: `save_placement` writes
-  `stitching/<sample>/placement.json`, `fovs.csv` and `links.csv` (header only), and
-  `load_placement` checks both tables' SHA-256 as for any placement. No view map, macro or
-  `dataset.xml` copy exists for it.
+  select it and the workflow's `stitching.method` does not name it. `record["origins"]` is
+  `nominal` without the argument and `supplied` with it; the supplied values are the
+  `origin_*` columns of `fovs`. `record["table"]` holds the table's record, with the
+  SHA-256 of a supplied file. `record["gauge"]` is `none` in both cases: the origins are
+  the nominal or the supplied positions as given, and no gauge shift is applied (G1
+  averages over `image_supported` FOVs, and there are none). `record["inputs"]` holds, per
+  FOV, the source `supplied`, a null file SHA-256 and the grid shape, metadata and SHA-256
+  that assemble's grid check reads.
+* **Review.** In both cases `record["review"]` is `required` with the reason
+  `supplied_placement`, whatever the positions, origins and corrections, so a supplied
+  placement reaches assembly only after the caller approves it explicitly with
+  `approve_placement(result, *, reviewer, note)` ("Failure policy"). Under V1 the review
+  would be required anyway, because no FOV is `image_supported`; the reason names the
+  cause. The approval changes no origin and no correction.
+* **Persistence.** In both cases the same saved form as any placement: `save_placement`
+  writes `stitching/<sample>/placement.json` (with `origins`), `fovs.csv` (the nominal,
+  origin and correction columns) and `links.csv` (header only), and `load_placement`
+  checks both tables' SHA-256 as for any placement. No view map, macro or `dataset.xml`
+  copy exists for it.
+
+**What the review functions report.** `review_placement(result, policy)` keeps, on a
+placement whose method is `supplied`, the review `required` with the reasons exactly
+`[supplied_placement]`; it adds no flag and changes no status, whatever the corrections.
+A correction that is not zero, of any size, including one above `max_residual_um`
+(default 1.0 µm, "Review criterion") or above `max_correction_fraction` of a nominal
+overlap, sets neither `residual_above_tolerance` nor `correction_above_bound`: the
+residual check reads kept links, and the correction bound reads the overlap widths of the
+FOV's registered pairs, and a supplied placement has neither. Nor does the components
+check make a FOV `failed`, although each FOV is its own component. The corrections are
+part of what the caller approves: they are columns of `fovs`, whose SHA-256 the approval
+records. `approve_placement` is required before assemble accepts the placement, with or
+without `origins` and whatever the corrections.
+
+**In assembly.** Assemble reads a supplied placement as any other ({doc}`assembly-contract`):
+sample coordinates and ownership come from `origin_*`, and check 8 ("One layer") reads
+`nominal_z`. A table with one common `nominal_z` therefore passes check 8 whatever the z
+of the supplied origins, and a table whose `nominal_z` differ is refused with or without
+`origins`.
 
 **Failure.** `ValueError` for a table with no row, for a `fov_id` of the table without a
 grid in `grids` (naming those FOVs), and for a key of `grids` that is not a `fov_id` of the
-table. `IncompatibleGeometryError`, as in `stitch`, for grids with unknown spacing, a unit
-other than µm or a non-identity direction, and for grids that differ in Z size, spacing,
-direction or unit. Tile shapes may differ in Y and X, because no method registers the
-tiles. The table's own rules (unique `fov_id`, finite nominal values) are checked when the
-table is built.
+table. With `origins`, `ValueError` naming the FOVs for a `fov_id` of the table without an
+origin in `origins`, for a key of `origins` that is not a `fov_id` of the table, and for an
+origin that is not three finite numbers (NaN or ±inf on any axis, or another number of
+values); an empty mapping is therefore refused for every FOV, and only `None` omits the
+origins. `IncompatibleGeometryError`, as in `stitch`, for grids with unknown spacing, a
+unit other than µm or a non-identity direction, and for grids that differ in Z size,
+spacing, direction or unit. Tile shapes may differ in Y and X, because no method registers
+the tiles. The table's own rules (unique `fov_id`, finite nominal values) are checked when
+the table is built.
 
 A test can check it with these assertions: the result is a `PlacementResult`; its `fovs`
-rows equal the table's `fov_id`s in order, each `metadata_only` with the flag `supplied`,
-origins equal to the nominal values exactly and corrections 0; `links` has no row;
-`record["method"]["method"]` is `supplied`; review is `required` with the reason
-`supplied_placement`; assemble refuses the result with `PlacementReviewRequiredError` until
-`approve_placement` has run; a save and load round trip returns equal tables and record;
-and a table FOV without a grid raises `ValueError` naming it. The arithmetic is in
+rows equal the table's `fov_id`s in order, each `metadata_only` with the flag `supplied`;
+without `origins`, origins equal to the nominal values exactly and corrections 0; with
+`origins`, origins equal to the supplied values exactly and corrections equal to
+`origin − nominal` exactly, also above 1.0 µm; `links` has no row;
+`record["method"]["method"]` is `supplied`; `record["origins"]` is `nominal` or
+`supplied`; review is `required` with the reason `supplied_placement`, and
+`review_placement` adds no flag; assemble refuses the result with
+`PlacementReviewRequiredError` until `approve_placement` has run; a save and load round
+trip returns equal tables and record; a table FOV without a grid raises `ValueError` naming
+it; and a table FOV without an origin, an origin for a FOV the table lacks and an origin
+with a NaN or infinite value each raise `ValueError` naming the FOV. The arithmetic is in
 {doc}`stitching-algorithms` ("Supplied placement").
 
 ## Link-quality rule
@@ -692,8 +737,8 @@ As agreed on 2026-09-27:
    translation kept as a diagnostic, and `metadata_only` only with `fallback="nominal"`
    ("BigStitcher"). BigStitcher's two-round strategy is today's built-in fallback inside
    Fiji; the import does not adopt its result as a placement unless the caller opts in.
-   Whether the macro's default should switch to a one-round strategy is an open choice
-   (worker notes).
+   The macro keeps the two-round strategy as its default (decided at the W-329 review,
+   2026-10-06); `BigStitcherConfig` records it ("BigStitcher").
 
 ### Review criterion
 

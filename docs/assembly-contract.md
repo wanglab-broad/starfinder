@@ -44,9 +44,11 @@ Decided by Jiahao in the §2.10 planning session (W-152 comment "§2.10 planning
 (2026-10-05)" and its reply "Amendment on the sample outputs"), and in the W-152 comments
 of 2026-09-27 on §2.10:
 
-* **Three sample-level entries** outside `PipelineConfig` and `FOV.run`: stitch,
-  assemble, and fuse and export (D3). **Ownership regions are computed in assemble from
-  the placement**, not stored in it.
+* **Two sample-level entries** outside `PipelineConfig` and `FOV.run`: `Dataset.stitch`
+  and `Dataset.export` (D3, as amended at the W-329 review of 2026-10-06);
+  `Dataset.export` calls `assemble`, `fuse`, `fuse_labels` and `export_spatialdata` in
+  order ({doc}`sample-output-contract`, "The export entry"). **Ownership regions are
+  computed in assemble from the placement**, not stored in it.
 * **Placement from either backend** enters as one `PlacementResult` (D1, D2).
 * **Retention** (2026-09-27): a cell is retained by its centroid; all molecules of a
   retained cell are kept wherever they lie; an unassigned molecule is retained by its own
