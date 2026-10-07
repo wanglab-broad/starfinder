@@ -360,7 +360,7 @@ voxel of `v`'s FOV, over its footprint, holds `v`'s cell (W-359 `worker-notes.md
 | LB7.2 | An excluded cell | `label_pair` (A's views of cells 4 and 9, B's of 3, 5, 8 and 11); `label_quad` (FOV 1's 4 × 4 px cell, owned by FOV 2) | The `instance_id` of the excluded row; its territory's voxels | The `instance_id` appears at no voxel and is not in `ids_input`; on its voxels the image shows the cell another FOV retained there where one lies (on A's view of cell 4, B's cell 4; on FOV 1's 4 × 4 px cell, FOV 2's box), and 0 elsewhere. Exact. |
 | LB7.3 | Two retained cells of different FOVs whose territories overlap | `label_pair` (A's cell 8, B's cell 9) | The voxels they share; each cell's voxels | The shared voxel shows A's cell 8, the view first in placement table order; B's cell 9 shows on 80 of its 81 voxels, incomplete (W-359 `tables/two_fov_cells.csv`). Exact. |
 | LB7.4 | A cell retained by two FOVs | `label_pair` (cell 6) at 1 and 0.25; `label_pair_conflict` (cell 6) at 1 | IDs showing the cell | Two `instance_id`s: A's on all of `F_v` (49 voxels at scale 1), B's on its voxels where A's does not lie (37 at scale 1, W-359 `tables/two_fov_cells.csv`); two IDs at 0.25 too. On `label_pair_conflict` both rows carry `conflict` and both IDs show. Exact. |
-| LB7.5 | A cell retained by no FOV (`unclaimed`) | `label_pair` (cell 7) at 1 and 0.25 | IDs showing the cell; flags | Neither `instance_id` appears; both rows are excluded `not_owner` and flagged `unclaimed`; the cell's area holds 0. Exact. |
+| LB7.5 | A cell retained by no FOV | `label_pair` (cell 7) at 1 and 0.25 | IDs showing the cell; flags | Neither `instance_id` appears; both rows are excluded `not_owner` and flagged `unclaimed`; the cell's area holds 0. Exact. |
 | LB7.6 | A cell whose ownership centroid lies exactly on an ownership boundary | `label_pair` (cell 5, centroid x 79.5 px) | Status of both rows; IDs showing the cell | A retains it (the tie goes to the FOV first in table order), B excludes it `not_owner`; one ID, whole on its 62 voxels, also on those beyond x 79.5 in B's ownership region. Exact. |
 | LB7.7 | A retained cell cut by the border of its FOV's image | `label_pair` (cell 10 of B; cell 11) | Voxels showing it; flags | Cell 10 shows on its 35 imaged pixels only and is `fov_edge`; nothing is drawn for it from another FOV. Cell 11, cut by B's left border, is excluded in B (`fov_edge`) and drawn whole from A. Exact. |
 | LB7.8 | A retained cell that reaches the first or last voxel of its FOV, at a fractional offset | `label_scene` (354, 355) | The cells incomplete beyond their FOV's voxel-centre extent; the missing voxels | 18 such cells at scale 1 and 10 at 0.25 (W-359 `tables/w354_summary.csv`, column `incomplete_fov_edge_outside_sampling`; the cells in `tables/w354_incomplete_edges.csv`); every voxel of `F_v` that does not show `v` lies in one row or column just beyond the FOV's voxel-centre extent, within half a voxel of its footprint. Exact. |
@@ -451,7 +451,7 @@ earlier issue.
 
 | Sample | Placement | Source image for fusion | Volumetric | Fused image written | Figures drawn from |
 | --- | --- | --- | --- | --- | --- |
-| LN sample1 (64 FOVs of 50×1496×1496 uint8, DAPI, plus 8 blank grid cells) | The 2024 `dataset.xml` through `import_bigstitcher` (no Fiji rerun), and `multiview_stitcher` in the starting configuration from the grid start | the stitching input tiles, `<name>=file:<pattern>` | yes | the 3D stack alone (`dimensionality: stack`, dense 3D tissue) at `scale_yx` 0.5, from each of the two placements; no projection | the middle plane of its stack, `n_z // 2` ({doc}`sample-output-contract`, "The fused image by dataset"), never a maximum projection |
+| LN sample1 (64 FOVs of 50×1496×1496 uint8, DAPI, plus 8 blank grid cells) | The 2024 `dataset.xml` through `import_bigstitcher` (no Fiji rerun), and `multiview_stitcher` in the starting configuration from the grid start | the stitching input tiles, `<name>=file:<pattern>` | yes | the 3D stack alone (`dimensionality: stack`, dense 3D tissue) at `scale_yx` 0.5, from each of the two placements; no projection | the middle plane of its stack, `n_z // 2` ({doc}`sample-output-contract`, "The fused image by dataset"), never a maximum projection; its stack for the seam sections |
 | tissue-2D (56 FOVs of 3072×3072 uint8, `ref_merged`) | `multiview_stitcher`, starting configuration, grid start (no BigStitcher reference exists; the Grid/Collection file is monitored only) | `reference_merged` | no (one plane) | the default: the 2D maximum projection at `scale_yx` 0.5 | its projection |
 | cell-culture-3D (70 FOVs of 30×1496×1496 uint8, `ref_merged`) | as tissue-2D | `reference_merged` | yes | the default projection at 0.5; the stack of one 2 × 2 block of FOVs at `scale_yx` 1 | its projection; the block's stack for the seam views |
 
@@ -525,9 +525,11 @@ the 2 × 2 blocks (LB2 and LB4 on its file); A3 and A8, by writing the LN stack 
 back with `check_export`; A9, by the store's `cell_labels` element where the label export
 ran. A4 stays open: no whole-sample stack of cell-culture-3D is granted.
 
-**Outputs to inspect**, per sample, in the run directory (at most ten PNGs in total; eight
-are planned). Every figure of LN sample1 is drawn from the middle plane of its stack,
-plane `n_z // 2` (plane 33 of a 67-plane stack), and none from a maximum projection; the
+**Outputs to inspect**, per sample, in the run directory (at most ten PNGs in total; nine
+are planned: a placement overview and an ownership-regions figure per sample, the seam
+views of LN and of cell-culture-3D, and the LN seam sections). Every figure of LN sample1
+other than its seam sections is drawn from the middle plane of its stack, plane
+`n_z // 2` (plane 33 of a 67-plane stack), and none from a maximum projection; the
 figures of tissue-2D and cell-culture-3D use their projection.
 
 * **Placement overview** (one PNG per sample): the FOV footprints at their origins,
@@ -540,6 +542,22 @@ figures of tissue-2D and cell-culture-3D use their projection.
   plane of its whole stack at `scale_yx` 0.5. For cell-culture-3D, through depth: XY crops
   of the 2 × 2 block's stack at `scale_yx` 1 at the first, middle and last quarter planes,
   and one XZ and one YZ section across the seam.
+* **LN seam sections** (LN sample1 only, one PNG): sections through the depth of the LN
+  stack, not its middle plane, to show a displacement in Z between neighbouring FOVs,
+  which no single plane can show. One XZ section across the column seam and one YZ
+  section across the row seam of the LN seam views, each between the same two acquired
+  FOVs in both placements: one row (XZ) or one column (YZ) of voxels of the stack at
+  `scale_yx` 0.5, with every plane and no projection across the section, the one
+  nearest the Y (XZ) or X (YZ) of the midpoint of the two FOVs' footprint centres, over
+  the overlap of their footprints and 256 voxels of the stack on each side of it. Both
+  placements side by side: the sections of the stack fused from the BigStitcher import
+  and of the stack fused from the `multiview_stitcher` placement, each at its own
+  placement's origins, four panels drawn at one physical scale in Z and along the section
+  (µm). Marked on each panel: the O1 ownership boundary between the two FOVs (a vertical
+  line, ownership being decided in Y and X, {doc}`assembly-contract`, "The Z axis"), the
+  outline of each FOV's footprint in the section (along the section and in Z, from its
+  origin, so that a difference of the two FOVs' Z origins shows as offset outlines), and
+  the middle plane `n_z // 2` of that stack as a horizontal line labelled with its index.
 * **Ownership regions with retained and excluded observations** (one PNG per sample): the
   O1 regions over the sample's image (for LN the middle plane of its stack, for tissue-2D
   and cell-culture-3D the default projection), molecules coloured by assembly status and
@@ -548,11 +566,12 @@ figures of tissue-2D and cell-culture-3D use their projection.
 * **Accounting tables**: the `fovs` table and `record["counts"]` (inputs, retained, excluded
   by reason, flag counts) per sample and placement, as CSV and JSON.
 * **Flag frequencies** (one CSV and the table below in the issue's report): how often the
-  flags `conflict`, `unclaimed` and `fov_edge` occur, and over which cells, per sample,
-  placement and region where cells exist. These are the first measurement of these flags
-  on real samples (W-326 notes); with them Jiahao decides whether cells with several
-  observations need more than the present rule, which keeps one observation by centroid
-  ownership and matches or merges nothing. They are recorded, never gating.
+  flags `conflict`, `unclaimed` and `fov_edge` occur, and over which cells, and the number
+  of overlapping retained pairs defined below, per sample, placement and region where
+  cells exist. These are the first measurement of these flags on real samples (W-326
+  notes); with them Jiahao decides whether cells with several observations need more
+  than the present rule, which keeps one observation by centroid ownership and matches or
+  merges nothing. They are recorded, never gating.
 * **The sample outputs**: each sample's `export/<sample>/` folder with `export.json`,
   `tables/`, `sample.h5ad` and its fused image, with `check_export` passing: for tissue-2D
   and cell-culture-3D the projection OME-TIFF at scale 0.5; for LN sample1 the stack
@@ -568,16 +587,61 @@ figures of tissue-2D and cell-culture-3D use their projection.
 The flag table the real-example issue fills in. `conflict` is counted over the retained
 cells, `unclaimed` over the cells excluded `not_owner`, and `fov_edge` over every cell row
 and over the retained cells ({doc}`assembly-contract`, "Flags"); each count is given with
-the number of cells it is counted over.
+the number of cells it is counted over. The last column is not a flag: it counts the
+overlapping retained pairs defined below.
 
-| Sample, placement | Where cells exist | Cell rows | Retained | Excluded `not_owner` | `conflict` (of retained) | `unclaimed` (of `not_owner`) | `fov_edge` (of all rows; of retained) |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| LN sample1, BigStitcher import | one 2 × 2 block at a seam, if the inventory finds its label files | counted | counted | counted | counted | counted | counted |
-| LN sample1, `multiview_stitcher` | the same block | counted | counted | counted | counted | counted | counted |
-| cell-culture-3D, `multiview_stitcher` | one 2 × 2 block around a grid corner, if the inventory finds its label files | counted | counted | counted | counted | counted | counted |
-| tissue-2D, `multiview_stitcher` | none: no cell input; the sample is assembled `molecules_only` | 0 | 0 | 0 | not applicable | not applicable | not applicable |
+| Sample, placement | Where cells exist | Cell rows | Retained | Excluded `not_owner` | `conflict` (of retained) | `unclaimed` (of `not_owner`) | `fov_edge` (of all rows; of retained) | Overlapping retained pairs (of different FOVs) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| LN sample1, BigStitcher import | one 2 × 2 block at a seam, if the inventory finds its label files | counted | counted | counted | counted | counted | counted | counted |
+| LN sample1, `multiview_stitcher` | the same block | counted | counted | counted | counted | counted | counted | counted |
+| cell-culture-3D, `multiview_stitcher` | one 2 × 2 block around a grid corner, if the inventory finds its label files | counted | counted | counted | counted | counted | counted | counted |
+| tissue-2D, `multiview_stitcher` | none: no cell input; the sample is assembled `molecules_only` | 0 | 0 | 0 | not applicable | not applicable | not applicable | not applicable |
 
 A block without label files gets the row "none" with the reason, as tissue-2D does.
+
+**Overlapping retained pairs.** The flags `conflict` and `unclaimed` are tests at
+ownership centroids, so a cell can be retained by two FOVs, or by none, without a flag
+({doc}`sample-output-contract`, "Assembled label export"). This count shows how often
+retained cells of different FOVs cover the same place:
+
+* **Cells compared:** the retained cells (`assembly_status == "retained"`) of the
+  cellular assembly of one row of the table, that is of one sample, one placement and its
+  2 × 2 block, for each two FOVs of the block whose footprints overlap. Excluded cells are
+  not compared, and no cell is compared with a cell of its own FOV.
+* **Grid:** the label grid at scale 1 (`labels_scale_yx` 1: the fusion grid's spacing and
+  origin in Y and X, and its Z for `volume` and `extended` territories). Each FOV's
+  retained-cell image (step 1 of the placement by retained cells,
+  {doc}`sample-output-contract`, "Assembled label export") is placed on it alone, at
+  interpolation order 0, as the label export places it: an output voxel takes the value
+  of the FOV's voxel nearest its centre, inside the FOV's voxel-centre extent. Only
+  voxels where both FOVs' images are defined can contribute, so the count is computed two
+  FOVs at a time on the box where their footprints overlap.
+* **Overlap:** a cell `a` of FOV `f` and a cell `b` of FOV `g ≠ f` overlap when at least
+  one output voxel shows `a` in `f`'s placed image and `b` in `g`'s. Each such pair counts
+  once, however many voxels the two share.
+* **What it counts:** a cell retained by two FOVs whose two observations share a voxel
+  counts one pair, flagged `conflict` or not. Two different neighbouring cells whose
+  territories only touch, with no voxel in common, count nothing; two different cells
+  whose segmentations by two FOVs disagree so that they share a voxel count one pair. The
+  count is therefore an upper bound on the cells retained twice whose two observations
+  share a voxel; a cell retained twice whose observations share none (for instance under a
+  placement error larger than the cell) is not counted, and a cell retained by three or
+  four FOVs at a corner counts one pair for each two of them whose observations share a
+  voxel. A cell retained by no FOV is in no pair. On `label_pair` the count is 2: cell 6,
+  retained by both FOVs (LB7.4), and A's cell 8 with B's cell 9, two different cells that
+  share one voxel (LB7.3); the flag `conflict` marks neither, and cell 7 (LB7.5) is in no
+  pair.
+* **Where:** each row of the table that has cells: LN sample1 from each of its two
+  placements and cell-culture-3D from `multiview_stitcher`, on their cellular 2 × 2
+  blocks; "not applicable" for tissue-2D and for a block without label files.
+
+The count is a measurement of the real-example issue, computed by that issue's own script
+from the cell table and the territory files that the label export of the same block reads
+({doc}`sample-output-contract`, "Assembled label export"), within the limits of the
+sample-outputs step, with its wall time and peak RSS recorded. It is not a flag: it
+changes no status, gates nothing and decides nothing, and it is reported beside the flag
+counts for Jiahao. The product records no such count: no column of the cell table, no
+field of `export.json` and no output of `Dataset.export` holds it.
 
 **Resources per sample and step.** Placement figures are W-324 measurements and output
 figures W-354 measurements ({doc}`sample-output-contract`, "Resources": four threads,
@@ -595,7 +659,7 @@ limit is recorded as `resource_stop` and not retried with a higher limit.
 
 By the assembly estimate a sample fits in its 16 GiB limit up to about 10⁸ molecule rows;
 the inventory of step 1 replaces the estimate with the row counts. The tiled zlib OME-TIFF
-writer adds to W-354's times (A8). At most ten PNGs are written, eight are planned, and
+writer adds to W-354's times (A8). At most ten PNGs are written, nine are planned, and
 temporary files go to local scratch; nothing is written into a data directory.
 
 ## Limitations

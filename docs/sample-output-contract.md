@@ -1225,7 +1225,7 @@ with the W-359 record of each:
 | An excluded cell | Not drawn: its voxels show a retained cell of another FOV where one lies there, and 0 elsewhere. | Both fixtures, both scales: `ids_output` holds only `instance_id`s of retained cells (`tables/w354_summary.csv`, `tables/two_fov_summary.csv`) |
 | Two retained cells of different FOVs whose territories overlap | On the shared voxels, the cell of the FOV first in placement table order; the other cell everywhere else, so it is drawn incomplete. | Two-FOV fixture, cell 9: 1 of its 81 voxels shows cell 8 of the other FOV; W-354 label fixture at scale 1: 3 cells (`tables/two_fov_cells.csv`, `tables/w354_incomplete_edges.csv`) |
 | A cell retained by two FOVs | Both observations, each with its own `instance_id`: the first FOV's whole, the second's where the first does not cover it. One biological cell then shows two IDs. Its rows may carry no flag: `conflict` marks only some of these cells ("Conflicts" below). | Two-FOV fixture, cell 6: two IDs; W-354 label fixture: no such cell (`tables/two_fov_cells.csv`, `tables/w354_summary.csv`) |
-| A cell retained by no FOV (`unclaimed`) | Absent: its area shows 0, or a retained cell of another FOV where one lies there. | Two-FOV fixture, cell 7: absent (`tables/two_fov_cells.csv`) |
+| A cell retained by no FOV | Absent: its area shows 0, or a retained cell of another FOV where one lies there. It may have no flagged row: `unclaimed` marks only some of these cells ("Cells retained by no FOV" below). | Two-FOV fixture, cell 7: absent (`tables/two_fov_cells.csv`) |
 | A cell whose ownership centroid lies exactly on an ownership boundary | Retained by the FOV first in table order (the tie rule of O1), and drawn once, whole. | Two-FOV fixture, cell 5: one ID, whole (`tables/two_fov_cells.csv`) |
 | A retained cell cut by the border of its FOV's image | Drawn as its FOV holds it, cut at that border; the rest is not drawn from another FOV, which excluded the cell. | Two-FOV fixture, cell 10: 35 of its 81 pixels imaged and drawn (`tables/two_fov_cells.csv`) |
 | A retained cell that reaches the first or last voxel of its FOV, at a fractional offset | Up to one row or column of output voxels just beyond its FOV's voxel-centre extent, within half a voxel of its FOV's footprint, stays without the cell, because no other FOV draws it; at the sample's outer border no other FOV covers that row at all. | W-354 label fixture at scale 1: 18 cells, 17 at the sample's outer border and 1 at an interior FOV edge (`tables/w354_incomplete_edges.csv`) |
@@ -1278,11 +1278,12 @@ scale 1 none (W-359 `tables/w354_summary.csv`, columns `absent_ids` and
 A retained cell is absent when none of its voxels is shown: at scale 1 only when retained
 cells of earlier FOVs cover all of them or they all lie beyond its FOV's voxel-centre
 extent, and at a reduced scale also when no output voxel centre falls in it. A cell
-retained by no FOV is not in `ids_input`: its `unclaimed` flag counts it. There is no
-fallback to a finer scale. Example: one owning FOV whose territory is all one retained
-cell of `instance_id` 1. Its retained-cell image holds 1 everywhere, and so does the label
-image where the FOV covers; `ids_input = {1}`, `ids_output = {1}` and `absent_ids` is
-empty.
+retained by no FOV is not in `ids_input`, so `absent_ids` does not hold it, and no count
+of the `labels` section covers it; the flag `unclaimed` marks only some of these cells
+("Cells retained by no FOV" below). There is no fallback to a finer scale. Example: one
+owning FOV whose territory is all one retained cell of `instance_id` 1. Its retained-cell
+image holds 1 everywhere, and so does the label image where the FOV covers;
+`ids_input = {1}`, `ids_output = {1}` and `absent_ids` is empty.
 
 **Grid and dimensionality.** For `volume` and `extended` territories of multi-plane FOVs
 the label image has the stack's Z; for `plane` territories, and for one-plane FOVs, whose
@@ -1315,6 +1316,22 @@ not the cells retained by two FOVs, or null for an assembly made with `conflicts
 On the two-FOV fixture it is 0, although cell 6 shows two IDs. No cell is merged and no
 observation is matched across FOVs.
 
+**Cells retained by no FOV.** The label image does not show such a cell (above). The flag
+`unclaimed` is the cell table's, by the rule of {doc}`assembly-contract`, "Flags": a cell
+excluded `not_owner` is flagged when no FOV owns its ownership centroid (only possible for
+a cell of a `placeholder`), or when the owner FOV has no retained cell there, that is when
+the owner's territory at that centroid, sampled as for `conflict`, is 0 or a cell the
+owner excluded. A cell retained by no FOV may therefore have no flagged row: when the
+owner's territory at the ownership centroid of each of its observations holds a different
+cell that the owner retained, for instance because the owner FOV segmented the cell
+together with a neighbour as one cell and retained that cell, no FOV retains the cell and
+no row is flagged `unclaimed`; its area then shows the owner's merged cell. Cell 7 of the
+two-FOV fixture is flagged: A's view is a disc of radius 4 px at x 83 and B's at x 76, so
+each ownership centroid is owned by the other FOV, whose territory there is 0, and both
+rows are flagged (W-359 `scripts/labels_retained.py`; the flag rule evaluated on W-359's
+recipe in W-360 `tables/label_pair_flags.txt`). The `labels` section records no count of
+these cells.
+
 **File and store.** `cell_labels.ome.tif` in the folder, in the OME-TIFF layout, uint32,
 with the label grid's geometry; with the SpatialData export also the labels element
 `cell_labels` of the store, read from that file ("SpatialData export"). Its values are the
@@ -1331,7 +1348,7 @@ the conflict count; wall and CPU time and peak RSS.
 
 | Option | Placement rule | On the W-354 label fixture at scale 1 | Consequence |
 | --- | --- | --- | --- |
-| **LR4. Retained cells drawn whole, first positive view, order 0 (decided)** | as above | 370 of 391 cells whole with one ID, 21 incomplete, none with two or more IDs, none absent (W-359 `tables/w354_summary.csv`) | Each retained cell appears once and whole except where neighbouring segmentations disagree; the image shows assembly's retention, a cell retained by two FOVs as two IDs and an `unclaimed` cell as absent. |
+| **LR4. Retained cells drawn whole, first positive view, order 0 (decided)** | as above | 370 of 391 cells whole with one ID, 21 incomplete, none with two or more IDs, none absent (W-359 `tables/w354_summary.csv`) | Each retained cell appears once and whole except where neighbouring segmentations disagree; the image shows assembly's retention, a cell retained by two FOVs as two IDs and a cell retained by no FOV as absent. |
 | LR1. Owner-masked FOVs, first positive view, order 0 (option not taken) | each FOV's labels, shifted by 1, cut to its O1 ownership region, with background there encoded as 1 | W-354: 8,016 of 8,203 overlap points where the covering FOVs disagree show the owner's label, 97.7 % rounded (101 points 0, 86 a neighbour's) (W-354 `tables/labels_summary.csv`, `tables/labels_overlap_points.csv`). W-359's rerun equals the array W-354 saved and draws 322 cells whole, 16 incomplete, 53 with two or more IDs and none absent (W-359 `tables/w354_checks.json`, `tables/w354_summary.csv`) | A cell that crosses an ownership boundary is drawn with two IDs. |
 | LR2. First valid view in table order, order 0 (option not taken) | no mask | W-354: 3,991 of 8,209, 48.6 % rounded | Table order decides the overlap; the shown cell may be one assembly excluded there. |
 | LR3. `max_fusion`, order 0 (option not taken) | no mask | W-354: 3,929 of 8,232, 47.7 % rounded | The larger ID wins. |
