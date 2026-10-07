@@ -640,7 +640,64 @@ def test_cellular_identities_with_inward_jitter_and_the_aligned_crop(tiny):
     for target in ("cell", "nucleus"):
         expected = crop.sample_labels[target][0:5, 2:38, 0:36]
         assert np.count_nonzero(crop.fov_labels["FOV_001"][target] != expected) == 0
+    # The FOV voxel centres are the sample-grid centres of the crop, value for value.
+    points, _, _, _ = fov_points(crop, "FOV_001")
+    grid = crop.record["sample_grid"]
+    q = np.moveaxis(np.indices((5, 36, 36), dtype=float), 0, -1) + delta
+    assert np.count_nonzero(points != np.array(grid["origin_zyx"]) + q * np.array(grid["spacing_zyx"])) == 0
+    # Voxel centres within 1e-9 µm of a label boundary: the page reports this count and expects 0.
+    probed, clearance = boundary_probe(points, crop, config), boundary_clearance(points, crop, config)
+    counts = {target: (int(probed[target].sum()), int((clearance[target] <= 1e-9).sum())) for target in probed}
+    print(f"aligned crop FOV_001: voxels within 1e-9 µm of a label boundary (axis probe, distance bound) {counts}; "
+          f"smallest distance bound (µm) { {t: float(c.min()) for t, c in clearance.items()} }")
+    assert counts == {"cell": (0, 0), "nucleus": (0, 0)}, counts
+    # Both measures see boundaries at a coarse step, and a probed change always lies within the bound.
+    coarse = boundary_probe(points, crop, config, step=0.05)
+    for target in coarse:
+        assert coarse[target].any() and np.all(clearance[target][coarse[target]] <= 0.05), target
     check_identities(crop, config)
+
+
+def boundary_probe(points, scene, config, step=1e-9):
+    """Per label kind: True where C or N changes between the centre and the centre moved ±step µm on any axis."""
+    cell, nucleus = labels_at(points, scene, config)
+    near = {"cell": np.zeros(cell.shape, dtype=bool), "nucleus": np.zeros(nucleus.shape, dtype=bool)}
+    for axis in range(3):
+        for sign in (-1, 1):
+            moved = points.copy()
+            moved[..., axis] += sign * step
+            other_cell, other_nucleus = labels_at(moved, scene, config)
+            near["cell"] |= other_cell != cell
+            near["nucleus"] |= other_nucleus != nucleus
+    return near
+
+
+def boundary_clearance(points, scene, config):
+    """Per label kind, a lower bound (µm) of the distance from each point to any surface where the label can change.
+
+    C changes only on a face of Ω, on a reach sphere ‖σ − c_k‖ = R_k + reach_k of some site, or on a power
+    bisector between the nearest site and another site (exact plane distance (pow_k − pow_j*) / 2‖c_k − c_j*‖).
+    N changes only on a face of Ω or on a nucleus surface, at least |ρ_n − 1| · min semi-axis away.
+    """
+    flat = points.reshape(-1, 3)
+    lo, hi = omega(scene)
+    faces = np.minimum(flat - lo, hi - flat).min(axis=1)
+    centres, radii, _, reach = sites(scene, config)
+    offset = flat[:, None, :] - centres[None]
+    distance = np.sqrt(np.sum(offset * offset, axis=-1))
+    power = distance ** 2 - radii ** 2
+    nearest = np.argmin(power, axis=1)
+    rows = np.arange(len(flat))
+    separation = np.linalg.norm(centres[None] - centres[nearest][:, None], axis=-1)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        planes = np.where(separation > 0, (power - power[rows, nearest][:, None]) / (2 * separation), np.inf)
+    spheres = np.abs(distance - (radii + reach)).min(axis=1)
+    cell = np.minimum.reduce([faces, spheres, planes.min(axis=1)])
+    nucleus = faces.copy()
+    for n in scene.nuclei.itertuples():
+        r = rho(flat, (n.centre_z, n.centre_y, n.centre_x), n.axial_radius, n.lateral_radius, n.elongation, n.angle)
+        nucleus = np.minimum(nucleus, np.abs(r - 1) * min(n.axial_radius, n.lateral_radius))
+    return {"cell": cell.reshape(points.shape[:-1]), "nucleus": nucleus.reshape(points.shape[:-1])}
 
 
 @pytest.mark.parametrize("geometry", [
