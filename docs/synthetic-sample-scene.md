@@ -2,7 +2,7 @@
 
 Status: Accepted (W-329, 2026-10-07, at 9033d46)
 
-This page proposes a bounded, opt-in addition to the synthetic generator of
+This page specifies a bounded, opt-in addition to the synthetic generator of
 {doc}`synthetic-specification`: one scene of sample size in continuous coordinates, a
 nominal grid of FOVs acquired from it at true offsets with a known fractional jitter, a
 minimal cellular scene (nucleus and cell label volumes and a nuclear stain), cell truth for
@@ -24,8 +24,8 @@ It builds on these pages and redefines none of them:
   {doc}`assignment-contract` (`MoleculeTable`, `molecule_table_from_csv`, "Coordinate
   sampling").
 
-Nothing here is implemented, no existing generator behavior changes and nothing is
-renamed. The validation design that uses the scene belongs to the next issue of the §2.10
+It is implemented in `starfinder.synthetic`, no existing generator behavior changes and
+nothing is renamed. The validation design that uses the scene belongs to the next issue of the §2.10
 batch (W-331); this page states the identities a test can check, not the validation plan.
 
 ## What this addition is not

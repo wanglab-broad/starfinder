@@ -8,8 +8,8 @@ and the sample-level AnnData built from them. Each has its parameters, units, de
 failure behavior and a resource estimate. The current behavior is in
 {doc}`assembly-baseline`; the placement it starts from is specified in
 {doc}`stitching-contract` and {doc}`stitching-algorithms`, and the per-FOV tables in
-{doc}`assignment-contract` and {doc}`assignment-algorithms`. Nothing here is implemented,
-and no default here is accepted.
+{doc}`assignment-contract` and {doc}`assignment-algorithms`. Each element is implemented in
+`starfinder.assembly`, and no default here is accepted.
 
 ## Evidence
 

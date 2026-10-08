@@ -2,7 +2,7 @@
 
 Status: Accepted (W-329, 2026-10-07, at 9033d46)
 
-This page proposes the §2.10 placement contract: a sample-level stitch entry separate
+This page specifies the §2.10 placement contract: a sample-level stitch entry separate
 from `PipelineConfig` and `FOV.run`, one tile position table with three converters, an
 explicit stage-axis mapping, neighbour pairs from nominal overlap, the stitching input
 image, one placement record for every backend, a stitching registry on the shared
@@ -13,7 +13,7 @@ provenance rules are those of {doc}`method-registry`, used unchanged. It uses th
 `ImageMetadata` (`src/python/starfinder/image.py`) as they are, and redefines neither.
 The current behavior is recorded in {doc}`stitching-baseline`; the numerical behavior of
 each converter, the method, the import and the checks is in {doc}`stitching-algorithms`.
-Nothing here is implemented and nothing is renamed. Sample coordinates of molecules and
+It is implemented in `starfinder.stitching`, and nothing is renamed. Sample coordinates of molecules and
 cells, overlap ownership, retained and excluded populations and the sample tables belong
 to W-326, which builds on the placement record below and does not redefine it; the fused
 image and the exports belong to W-328.
@@ -104,7 +104,7 @@ New names under N1:
 
 | Concept | Name | Kind |
 | --- | --- | --- |
-| Entry | `stitch(inputs, table, *, config, review=ReviewPolicy(), fallback=None)` | function |
+| Entry | `stitch(inputs, table, *, config, review=ReviewPolicy(), fallback=None, sample="sample")` | function |
 | Result | `PlacementResult` | frozen dataclass |
 | Input | `StitchingInput` | frozen dataclass |
 | Tile positions | `TilePositionTable`, `GridSnap`; converters `positions_from_leica`, `positions_from_grid`, `positions_from_table` | frozen dataclasses, functions |
@@ -126,10 +126,12 @@ New names under N1:
 
 ```python
 def stitch(inputs: Sequence[StitchingInput], table: TilePositionTable, *, config,
-           review: ReviewPolicy = ReviewPolicy(), fallback: str | None = None) -> PlacementResult: ...
+           review: ReviewPolicy = ReviewPolicy(), fallback: str | None = None,
+           sample: str = "sample") -> PlacementResult: ...
 ```
 
-`config` is a frozen config registered in `STITCHING_METHODS`. `stitch` checks the inputs
+`config` is a frozen config registered in `STITCHING_METHODS`. `sample` names the sample of
+the result and of its frame `sample:<sample>`; `Dataset.stitch` passes its own. `stitch` checks the inputs
 against the table ("Input image"), derives the neighbour pairs, calls the method's `run`
 once, converts its translations into origins, assigns one status per FOV, applies the
 review policy and returns a `PlacementResult` whose record holds the uniform provenance
@@ -328,7 +330,7 @@ class PlacementResult:
 | `nominal_z`, `nominal_y`, `nominal_x` | float64, µm | Copied from the tile position table |
 | `correction_z`, `correction_y`, `correction_x` | float64, µm | `origin − nominal`; NaN where the origin is NaN |
 | `method_translation_z/y/x` | float64 | The method's own result for this FOV before the gauge, in the method's units (µm for `multiview_stitcher`; BigStitcher world units, x and y in pixels and z in xy-pixel units, for the import) |
-| `component` | int | Index of the FOV's component of kept links; −1 for `missing` |
+| `component` | int | Index of the FOV's component of kept links; −1 for `missing`. A kept link to a FOV whose method translation is not finite joins nothing, so such a FOV is its own component |
 | `n_links_kept` | int | Kept links of this FOV |
 | `flags` | str | `;`-separated: `fallback`, `supplied`, `correction_above_bound`, `residual_above_tolerance`, `nan_quality_link`, `optimizer_removed_link` |
 
@@ -486,8 +488,12 @@ def bigstitcher_macro(table: TilePositionTable, inputs: Sequence[StitchingInput]
                       ) -> tuple[str, pd.DataFrame]: ...      # macro text, view map
 def import_bigstitcher(dataset_xml, *, table: TilePositionTable, view_map: pd.DataFrame,
                        grids: Mapping[str, ReferenceGrid], config: BigStitcherConfig,
-                       review: ReviewPolicy = ReviewPolicy(), fallback=None) -> PlacementResult: ...
+                       review: ReviewPolicy = ReviewPolicy(), fallback=None,
+                       sample: str = "sample", macro: str | None = None) -> PlacementResult: ...
 ```
+
+The import's `sample` is that of `stitch`; `macro` is the text of the macro that ran, whose
+SHA-256 the record keeps (null when it is not given).
 
 **`BigStitcherConfig`** records today's parameters as defaults ({doc}`stitching-baseline`,
 "The macro"): Bioformats loader; `Move Tile to Grid`, `Down & Right`, overlap 10 % in x,
@@ -514,7 +520,9 @@ exits with status 0 when the macro fails.
 
 **The import** reads `dataset.xml`, maps each view to a FOV through the view map and the
 `ViewSetup` tile attribute (not through the order of the transforms), composes the view's
-transforms except `calibration`, refuses a transform with a non-identity linear part,
+transforms except `calibration`, refuses a `dataset.xml` with a non-finite number in a
+view's affine (`ValueError` naming the setup, the view and the transform), refuses a
+transform with a non-identity linear part,
 converts world units to µm through the FOV's reference grid (no integer cast), reads the
 `PairwiseResult` links with their correlation, and builds the `PlacementResult` with the
 gauge, statuses and review of `stitch`. Padding views have no row; their raw translations

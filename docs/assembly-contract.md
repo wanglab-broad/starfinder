@@ -2,7 +2,7 @@
 
 Status: Accepted (W-329, 2026-10-07, at 9033d46)
 
-This page proposes the §2.10 assembly contract: a sample-level assemble entry separate
+This page specifies the §2.10 assembly contract: a sample-level assemble entry separate
 from stitch and from export, the rule that puts molecules and cells into sample
 coordinates, ownership regions computed from the placement, the retention rule agreed on
 2026-09-27, assembly statuses and reasons, flags for partial and conflicting cells,
@@ -22,8 +22,8 @@ neither:
 
 Where this page lists a column of those tables, it copies it unchanged. The current
 behavior is recorded in {doc}`assembly-baseline`; the numerical rules, parameters and
-resources are in {doc}`assembly-algorithms`. Nothing here is implemented and nothing is
-renamed. The fused image and the SpatialData export belong to W-328.
+resources are in {doc}`assembly-algorithms`. It is implemented in `starfinder.assembly`, and
+nothing is renamed. The fused image and the SpatialData export belong to W-328.
 
 Evidence, cited by path:
 
@@ -737,6 +737,14 @@ equal to them, as for the other blocks.
 **Recommendation: W1.** It keeps legacy configurations reproducible, gives the new
 populations one home, and follows the stitching block's pattern ({doc}`stitching-contract`,
 "Workflow configuration").
+
+**The label grid with an `assembly` block.** `reads_assignment` imports a legacy label file
+on the grid of the FOV's reference image `images/ref_merged/{fovID}.tif`, the grid that
+`Dataset.export` gives `assemble`, so that the saved assignment passes assemble's grid
+check. A ZYX label file must have the reference image's shape, and a YX one the shape of
+its Y and X, as a plane on the Z maximum projection of that grid; a file of any other shape
+raises `IncompatibleGeometryError`. Without the block the file is imported, as before, on
+a grid declared from `voxel_size_xy` and `voxel_size_z`.
 
 The rule `export_sample` reads `stitching/{sample}/placement.json`, the saved assignment
 folders (or molecule tables) of the sample's FOVs and their reference grids, and writes

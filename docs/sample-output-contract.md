@@ -2,7 +2,7 @@
 
 Status: Accepted (W-329, 2026-10-07, at 9033d46)
 
-This page proposes what a sample has on disk after spatial assembly: the one sample-level
+This page specifies what a sample has on disk after spatial assembly: the one sample-level
 export entry `Dataset.export` and its parts; the folder `export/<sample>/` and its output
 profiles; the fused image, made by multiview-stitcher's `fuse` from the placement of
 either backend, as a 2D projection (the default) or a 3D stack, at an adjustable scale
@@ -24,8 +24,8 @@ dependencies each output needs. It builds on three contracts and redefines none 
 
 Where this page names a column, a function or a rule of those pages, it uses it unchanged.
 The current exporter work and today's fused files are recorded in
-{doc}`sample-output-baseline`. Nothing here is implemented, nothing is renamed and no
-dependency changes. The validation design and the implementation issues are in
+{doc}`sample-output-baseline`. It is implemented in `starfinder.sample_output`, nothing is
+renamed and no dependency changes. The validation design and the implementation issues are in
 {doc}`stitching-assembly-validation`.
 
 This page was revised on 2026-10-06 after the W-329 review, from the fusion measurement of
@@ -168,7 +168,7 @@ for the implementation issue to verify; the sections that rely on one name it.
 | A4 | A whole-sample stack of cell-culture-3D costs about 160 s and 8 GiB at scale 0.5. | An estimate from voxel counts, not a run (`worker-notes.md` section 10). |
 | A5 | Input dtypes other than uint8, uint16 and float32 pass through `fuse` as they do. | uint8, uint16 and float32 only (`tables/overlap_dtype.csv`). |
 | A6 | Two `fuse` calls with the same inputs and arguments return identical arrays. | Each configuration was fused once. |
-| A7 | The library's multiscale of a fused image (`msi_utils.get_msim_from_sim`) gives SubIFD levels whose shapes and geometry follow "Resolution levels inside a file" also for odd sizes. | The library's block mean per tile (`tables/reduced.csv`, route `level1`) and its OME-Zarr levels (`readback/readback.json`). |
+| A7 | The library's multiscale of a fused image (`msi_utils.get_msim_from_sim`) gives SubIFD levels whose shapes and geometry follow "Resolution levels inside a file" also for odd sizes. On an axis with one voxel the library reports a spacing of 1.0, and the record carries the formula's value. | The library's block mean per tile (`tables/reduced.csv`, route `level1`) and its OME-Zarr levels (`readback/readback.json`). |
 | A8 | Starfinder's tiled, zlib-compressed OME-TIFF writer, writing band by band from the lazy fused array, costs about as much as the library's uncompressed writer plus compression. | The library's TIFF writer only (`tables/runs.csv`). |
 | A9 | A labels element parsed from the label OME-TIFF (read with tifffile's `aszarr`) writes and reads back like the image element. | Image elements only (`readback/spatialdata_read.json`). |
 | A10 | A SpatialData store in container format 0.1 on Zarr format 2 (option Z1) writes and reads back under spatialdata 0.6.1 like the default format. | The default format only (`readback/spatialdata_write_ln_stack_*.json`). |
@@ -248,7 +248,7 @@ runner").
 
 | Order | Part | Turned off by | What the method does | Writes in `output_dir` |
 | --- | --- | --- | --- | --- |
-| 1 | `assemble` ({doc}`assembly-contract`) | `assemble: false` | Builds one `AssemblyInput` per FOV of the placement from the saved assignment folders named `assignment` (or, with `assignment=None`, from the saved molecule tables through `molecule_table`) and the reference grids (`reference_grid_from_file`), calls `assemble`, and saves the result with `save_assembly(result, output_dir, table_format=config.table_format)`. It keeps the tables of every FOV and at most two label images in memory at a time ({doc}`assembly-algorithms`, "Flags"). Turned off, it loads the saved assembly with `load_assembly(output_dir)`, which checks every SHA-256, and records the part as `reused`; when the folder holds no saved assembly and no later part needs one (check 4), it records the part as `off` and `fuse` runs without an assembly. | `tables/fovs.<fmt>`, `tables/cells.<fmt>`, `tables/molecules.<fmt>`, `tables/counts.<fmt>`, `sample.h5ad`; section `assembly` |
+| 1 | `assemble` ({doc}`assembly-contract`) | `assemble: false` | Builds one `AssemblyInput` per FOV of the placement from the saved assignment folders named `assignment` (or, with `assignment=None`, from each FOV's saved goodSpots table `signal/<fov_id>_goodSpots.csv` read through `molecule_table_from_csv`, with the identities `csv:<row>`) and the reference grids (`reference_grid_from_file`), calls `assemble`, and saves the result with `save_assembly(result, output_dir, table_format=config.table_format)`. It keeps the tables of every FOV and at most two label images in memory at a time ({doc}`assembly-algorithms`, "Flags"). Turned off, it loads the saved assembly with `load_assembly(output_dir)`, which checks every SHA-256, and records the part as `reused`; when the folder holds no saved assembly and no later part needs one (check 4), it records the part as `off` and `fuse` runs without an assembly. | `tables/fovs.<fmt>`, `tables/cells.<fmt>`, `tables/molecules.<fmt>`, `tables/counts.<fmt>`, `sample.h5ad`; section `assembly` |
 | 2 | `fuse` | `fuse: false` | Builds one `FusionInput` per included FOV from the saved source images and reference grids, and calls `fuse` with the assembly of part 1. | The fused images; section `fusion` |
 | 3 | `fuse_labels` | `fuse_labels: false` (the default; "Choices decided at the gate", 8) | Calls `fuse_labels` with the placement and the assembly. | `cell_labels.ome.tif`; section `labels` |
 | 4 | `export_spatialdata` | `export_spatialdata: false` (the default) | Calls `export_spatialdata` with the assembly and the records of parts 2 and 3 that were written. | `sample.zarr/`; section `spatialdata` |
@@ -929,6 +929,9 @@ returned, value for value, and computes no voxel.
   convention of `save_volume`, so `load_volume` restores the metadata; a second
   annotation, namespace `starfinder.sample_output`, with the sample, image name,
   dimensionality, projection rule, factor and the SHA-256 of the placement tables.
+* **UUID**: the OME-XML `UUID` of a written file is derived from its content (the shapes,
+  dtype, layout, metadata and tiles written), not drawn at random or from the time, so
+  that equal content gives equal bytes.
 * **File names**: `<image>_projection.ome.tif`, `<image>_stack.ome.tif`,
   `cell_labels.ome.tif`.
 
@@ -1137,9 +1140,10 @@ cells keep `(cell_namespace, cell_id)` and `obs_name` ({doc}`assembly-contract`,
 "Sample-level identities"). `instance_id` is `1..N` over the rows of the sample cell table
 in its order (uint32; more than 2³² − 1 rows is an error); `cell_instance_id` of a molecule
 is the `instance_id` of its `(cell_namespace, cell_id)`. `lookup_source(folder, spot=…)` or
-`(cell=…)` reads `export.json`, verifies its hashes, finds the row and returns its FOV, the
-FOV's assignment folder, its `assignment.json` SHA-256 and the row's position in the §2.9
-table, from the `assembly` section.
+`(cell=…)` reads `export.json`, verifies each section hash that `export.json` records and
+the files of the assembly, finds the row and returns its FOV, the FOV's assignment folder,
+its `assignment.json` SHA-256 and the row's position in the §2.9 table, from the `assembly`
+section. It does not verify the files of the store, which `check_export` verifies.
 
 **What it takes from the reference-branch exporter** ({doc}`sample-output-baseline`): the
 store-once rule; writing into a sibling staging folder and renaming it into place, so a
