@@ -865,8 +865,9 @@ placement was made again. The sentences marked W-391 are from that run.
   assembly equal W-376's in counts, flags and every table row for row. The LN stack
   (BigStitcher placement, `scale_yx` 0.5) was not written: the fusion read the 64 images
   lazily from the share, 295 GB for 4.7 GB of images, and the worker stopped the run after
-  2,911 s with about 45 % of W-376's file size written, because it could not finish within
-  the session; it was not retried, so its comparison with W-376's stack is not made.
+  2,911 s, having misjudged its progress from the writer's bursts, with about 45 % of
+  W-376's file size written; no limit was reached. By the operator's decision it is not run
+  again in this issue, so its comparison with W-376's stack is not made.
 
 Measured resources, in place of the estimates of "Resources per sample and step" (the wall
 time each run recorded for its work, without its closing `check_export`, and the run's peak
@@ -901,12 +902,12 @@ upper bound on the cells retained twice whose observations share a voxel, record
 Jiahao's decision on cells with several observations, not acted on.
 
 **What these examples do not show.** W-391 shows the export of the files as saved for
-tissue-2D and the cell-culture-3D whole sample only. The two cellular blocks and LN sample1
-were exported through a root of links, because the export finds an assignment folder only at
+tissue-2D and the cell-culture-3D whole sample only. LN sample1 and both cellular blocks went
+through links: the export finds an assignment folder only at
 `checkpoints/<fov>/assignment/<name>/` and a grid only at `images/ref_merged/<fov>.tif`
-under the dataset's root; the route from the W-382 folders and the LN images where they are
-saved is not shown. The LN stack from the files as saved was not written, so its equality
-with W-376's stack is not shown. No cells exist for tissue-2D. A9 is not verified, because
+under the dataset's root, so the route from the W-382 folders and the LN images where they
+are saved is not shown. The LN stack from the files as saved is not shown: it was not
+written, so its equality with W-376's stack is not shown either. No cells exist for tissue-2D. A9 is not verified, because
 no store holds `cell_labels`. A4 stays open.
 
 ## Limitations
