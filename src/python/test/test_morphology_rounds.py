@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 import shutil
 from dataclasses import dataclass, field, replace
 
@@ -112,12 +111,6 @@ def files(directory):
     return sorted(p.relative_to(directory).as_posix() for p in directory.rglob("*") if p.is_file())
 
 
-def masked(path):
-    """A file's bytes with the OME UUID masked: tifffile writes a new random UUID into every OME-TIFF."""
-    data = path.read_bytes()
-    return re.sub(rb"urn:uuid:[0-9a-f-]{36}", b"urn:uuid:" + b"0" * 36, data) if path.name.endswith(".ome.tif") else data
-
-
 def without(data, *keys):
     return {k: v for k, v in data.items() if k not in keys}
 
@@ -146,10 +139,10 @@ def test_run_neither_loads_nor_changes_an_other_round(raw, mode, tmp_path):
     header = json.loads((directory / "registered" / "transforms.json").read_text())
     assert header["image_rounds"] == ["round1", "round2"] and list(header["transforms"]) == ["round2"]
     assert list(header["registration_attempts"]) == ["round2"] and list(header["channels"]) == ["round1", "round2"]
-    # Every sequencing output is byte-identical to the run of the dataset without the other round and the stain
-    # (an OME-TIFF apart from its random UUID, which differs between any two writes).
+    # Every sequencing output, the OME-TIFFs included, is byte-identical to the run of the dataset without the other
+    # round and the stain.
     for name in ("registered/round1.ome.tif", "registered/round2.ome.tif", "candidates.csv", "pre_qc.csv"):
-        assert masked(directory / name) == masked(plain_directory / name), name
+        assert (directory / name).read_bytes() == (plain_directory / name).read_bytes(), name
     for name in ("registered/transforms.json", "candidates.json", "pre_qc.json"):
         written, expected = (json.loads((d / name).read_text()) for d in (directory, plain_directory))
         assert written["rounds"]["other_rounds"] == ["morph"] and expected["rounds"]["other_rounds"] == []

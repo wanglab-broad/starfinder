@@ -47,7 +47,7 @@ from starfinder.segmentation._labels import array_sha256, same_grid
 from starfinder.segmentation._plan import assemble_input
 
 from .test_morphology_rounds import (LABELS, MORPH, SEQUENCING_SHIFT, STAIN, THRESHOLD, ThresholdConfig, files,
-                                     make_dataset, masked, pipeline)
+                                     make_dataset, pipeline)
 from .test_registration_other_rounds import SHIFT, grid, texture
 
 pytestmark = [pytest.mark.segmentation, pytest.mark.dataset]
@@ -196,10 +196,9 @@ def file_sha256(path):
 def comparable(path, output_root):
     """A written file's content for comparing two runs of the same calls into two output roots.
 
-    OME UUIDs are masked; run.json is compared without its times (started_at, ended_at and the seconds
-    of each step) and with the output root written as <out>. tifffile writes a random UUID into every
-    OME-TIFF, so the file SHA-256 that a saved form's registration.json records differs between any two
-    writes; it is checked against its own file instead.
+    run.json is compared without its times (started_at, ended_at and the seconds of each step) and
+    with the output root written as <out>; every other file, the OME-TIFFs included, as written. The
+    file SHA-256 that a saved form's registration.json records is also checked against its own file.
     """
     if path.name == "run.json":
         data = json.loads(path.read_text().replace(str(output_root), "<out>"))
@@ -207,9 +206,8 @@ def comparable(path, output_root):
         return json.dumps({k: v for k, v in data.items() if k not in ("started_at", "ended_at")}, sort_keys=True)
     if path.name == "registration.json":
         data = json.loads(path.read_text())
-        assert data["image"].pop("file_sha256") == file_sha256(path.parent / data["image"]["path"])
-        return json.dumps(data, sort_keys=True)
-    return masked(path)
+        assert data["image"]["file_sha256"] == file_sha256(path.parent / data["image"]["path"])
+    return path.read_bytes()
 
 
 def without_links(channel):

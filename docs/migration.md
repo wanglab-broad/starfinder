@@ -1422,6 +1422,29 @@ The adapter's translation of a legacy configuration is `StageAxisMapping(x="+x",
 source="legacy")` with the `rotate_angle` it ran with; a configuration with a
 `stitching` block and a stage file names `stage_axes` itself.
 
+### A deterministic UUID in the package's OME-TIFF files
+
+`save_volume` (a ZYXC OME-TIFF, and a ZYX volume on a `*.ome.*` name, which tifffile
+writes as OME-TIFF) and the OME-TIFF writer of `starfinder.sample_output` (the fused
+images and `cell_labels.ome.tif`) now write a name-based (version 5) `urn:uuid:` in the
+OME-XML header, derived from the pixel data and the metadata written, instead of
+tifffile's time-based UUID. The same array and metadata therefore give the same bytes in
+any process, and a recorded file SHA-256 (for example in `sample.json` or a
+`registration.json`) repeats between two runs of the same input; another voxel or
+another metadata value gives another UUID. Nothing else in the files changes: pixel data,
+compression, tiling, calibration and annotations are as before, readers ignore the UUID
+as before, and existing files are not rewritten. No signature changes.
+
+### The BigStitcher import refuses a non-finite affine
+
+`import_bigstitcher` raises `ValueError` for a `dataset.xml` in which a view's
+`ViewTransform` affine (the `Stitching Transform`, the `Translation to Regular Grid`, the
+calibration or any other) holds a non-finite number (`NaN`, `inf`), naming the file, the
+setup and the transform. The file is refused while it is parsed, before any link or
+placement is built, with `fallback=None` and with `fallback="nominal"`; before, such a
+view could become `metadata_only` under `fallback="nominal"`. Files with finite affines
+import as before. No signature changes.
+
 ## Intentional behavior changes — not mechanical equivalence
 
 | Area | Change and consequence |

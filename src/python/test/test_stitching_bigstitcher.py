@@ -21,6 +21,7 @@ import hashlib
 import inspect
 import json
 import math
+import re
 
 import numpy as np
 import pandas as pd
@@ -458,6 +459,48 @@ def test_pl11_fallback_in_the_import(tmp_path):
     pd.testing.assert_frame_equal(failed.fovs.loc[:2, columns], nominal.fovs.loc[:2, columns], check_exact=True)
     assert legacy_tile_config_view(failed, img_col=24, img_row=16).to_csv() == \
         legacy_tile_config_view(nominal, img_col=24, img_row=16).to_csv()
+
+
+# ---------------------------------------------------------------------------------------
+# A non-finite number in a view's affine is refused when the file is parsed (W-380).
+def with_value(text, setup, transform, position, value):
+    """``text`` with entry ``position`` (row-major 3 × 4) of setup ``setup``'s ``transform`` affine replaced."""
+    lines = text.split("\n")
+    start = lines.index(f'    <ViewRegistration timepoint="0" setup="{setup}">')
+    name = lines.index(f"        <Name>{transform}</Name>", start)
+    line = lines[name + 1]
+    numbers = line.split("<affine>")[1].split("</affine>")[0].split()
+    numbers[position] = value
+    lines[name + 1] = f"        <affine>{' '.join(numbers)}</affine>"
+    return "\n".join(lines)
+
+
+@pytest.mark.parametrize("fallback", [None, "nominal"])
+@pytest.mark.parametrize("value", ["NaN", "inf"])
+@pytest.mark.parametrize("position", [3, 10])   # the x translation and the z diagonal entry
+@pytest.mark.parametrize("transform", ["Stitching Transform", "Translation to Regular Grid", "calibration"])
+def test_a_non_finite_affine_is_refused(tmp_path, monkeypatch, transform, position, value, fallback):
+    import starfinder.stitching._bigstitcher as bigstitcher
+    path = tmp_path / "dataset.xml"
+    path.write_text(with_value(links_xml(), 2, transform, position, value))
+    calls = []
+    for name in ("_pairwise", "_to_um", "review_placement"):
+        real = getattr(bigstitcher, name)
+        monkeypatch.setattr(bigstitcher, name, lambda *a, _name=name, _real=real, **k: calls.append(_name) or
+                            _real(*a, **k))
+    message = rf"{re.escape(str(path))}: setup 2 \(view 2\), transform '{transform}': the affine holds a non-finite"
+    with pytest.raises(ValueError, match=message):
+        import_bigstitcher(path, table=links_table(), view_map=links_view_map(),
+                           grids={fov: grid(LINK_SHAPE, LN_SPACING) for fov in LINK_IDS},
+                           config=BigStitcherConfig(), fallback=fallback, sample="s1")
+    assert calls == []   # refused while parsing the views, before the links and any placement are built
+
+
+def test_the_unedited_links_file_imports_after_the_finite_check(tmp_path):
+    for fallback in (None, "nominal"):
+        result = import_links(tmp_path, name=f"links_{fallback}.xml", fallback=fallback)
+        assert list(result.fovs["status"]) == ["image_supported"] * 4
+        assert raw_by_view(result) == {v: link_world(v) for v in range(4)}
 
 
 # ---------------------------------------------------------------------------------------

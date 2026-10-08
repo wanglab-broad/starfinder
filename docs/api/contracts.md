@@ -174,7 +174,9 @@ Physical conversion requires every field:
 TIFF resolution tags do not supply an invented origin, direction or unit.
 `save_volume(metadata=...)` persists these fields for round-trip loading: in
 the JSON description of a ZYX TIFF, or in an OME-XML comment annotation of a
-ZYXC OME-TIFF.
+ZYXC OME-TIFF. The OME-XML UUID of an OME-TIFF it writes is derived from the
+pixel data and the metadata written, so the same array and metadata give the
+same bytes.
 
 Crop/subtile output indices map to source indices by adding the crop start;
 known origin is translated accordingly. FOV NPZ subtiles retain geometry and

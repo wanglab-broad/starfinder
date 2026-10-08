@@ -36,8 +36,9 @@ levels. The output grid is the library's union grid of the included FOVs,
 :py:class:`~starfinder.sample_output.FusedGrid`), reduced by ``k``. Each fused array is
 written by Starfinder as OME-TIFF (BigTIFF, 512 × 512 zlib tiles, band by band, with
 calibration, plane positions and the ``ImageMetadata`` that
-:py:func:`~starfinder.io.load_volume` restores); the input dtypes are uint8, uint16 and
-float32, written in the input dtype. :py:class:`~starfinder.sample_output.FusionRecord`
+:py:func:`~starfinder.io.load_volume` restores, and an OME UUID derived from the pixel data
+and the metadata written, so the same content gives the same bytes); the input dtypes are
+uint8, uint16 and float32, written in the input dtype. :py:class:`~starfinder.sample_output.FusionRecord`
 holds the ``fusion`` section and the written paths. Importing the module imports neither
 multiview-stitcher, zarr nor spatialdata; ``fuse`` needs the ``multiview-stitcher``
 extra. :py:class:`~starfinder.sample_output.SpatialDataExportConfig` configures the

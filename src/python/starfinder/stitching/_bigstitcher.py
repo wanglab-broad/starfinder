@@ -486,6 +486,9 @@ def _views(root, path, tiles):
         for transform in _children(registration, "ViewTransform"):
             name = _text(transform, "Name") or ""
             matrix = _affine(_text(transform, "affine"), f"{path}: view {view}, transform {name!r}")
+            if not all(math.isfinite(v) for row in matrix for v in row):
+                raise ValueError(f"{path}: setup {setup} (view {view}), transform {name!r}: the affine holds a "
+                                 f"non-finite number ({_text(transform, 'affine')!r})")
             if name == CALIBRATION:
                 if calibration is not None:
                     raise ValueError(f"{path}: view {view} has two calibration transforms")
@@ -627,7 +630,9 @@ def import_bigstitcher(dataset_xml, *, table: TilePositionTable, view_map: pd.Da
         A missing or unreadable file (naming the path); a view without a view-map
         entry or a view-map entry without a view (naming the view); a view
         without ``Stitching Transform`` or calibration, a non-translation, a
-        calibration with ``c_x ≠ c_y`` (naming the view); a view map that breaks
+        calibration with ``c_x ≠ c_y`` (naming the view); a ``ViewTransform``
+        whose affine holds a non-finite number (naming the setup, the transform
+        and the file), whatever ``fallback``; a view map that breaks
         its rules; an unknown fallback; grids that do not match the table.
     IncompatibleGeometryError
         Grids outside the sample-frame geometry.

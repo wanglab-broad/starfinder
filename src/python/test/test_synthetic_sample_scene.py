@@ -808,18 +808,14 @@ def test_new_draw_descriptors(tiny):
 
 
 CROSS_PROCESS = """
-import hashlib, json, re, sys
+import hashlib, json, sys
 from starfinder.synthetic import generate_sample_scene, sample_scene_preset, save_sample_scene
 book, config = sample_scene_preset("sample-tiny-v1")
 root = save_sample_scene(generate_sample_scene(book, config=config), sys.argv[1])
-# tifffile writes a fresh urn:uuid into every OME-XML header; it is the only per-write byte.
-mask = lambda data: re.sub(rb"urn:uuid:[0-9a-f-]{36}", b"urn:uuid:" + b"0" * 36, data)
-files = {p.relative_to(root).as_posix(): hashlib.sha256(mask(p.read_bytes())).hexdigest()
-         for p in sorted(root.rglob("*")) if p.is_file() and p.name != "sample.json"}
+files = {p.relative_to(root).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+         for p in sorted(root.rglob("*")) if p.is_file()}
 record = json.loads((root / "sample.json").read_bytes())
-uuid = sorted(n for n, h in record["files"].items() if h != files[n])
-record["files"] = {n: h for n, h in record["files"].items() if n not in uuid}
-print(json.dumps(dict(files=files, uuid=uuid, record=record), sort_keys=True))
+print(json.dumps(dict(files=files, record=record), sort_keys=True))
 """
 
 
@@ -829,13 +825,12 @@ def test_cross_process_file_hashes(tmp_path):
         environment = dict(os.environ, PYTHONHASHSEED=seed)
         outputs.append(json.loads(subprocess.check_output(
             [sys.executable, "-c", CROSS_PROCESS, str(tmp_path / seed)], env=environment, text=True, timeout=600)))
+    # Every file as written, the OME-TIFFs and sample.json included, has the same SHA-256 in both processes.
     assert outputs[0] == outputs[1]
-    files, uuid = outputs[0]["files"], outputs[0]["uuid"]
-    assert len(files) > 30 and all(name.endswith(".ome.tif") for name in uuid)
-    # Every file that is not an OME-TIFF is byte-identical, unmasked, and recorded with its hash.
-    assert set(files) - set(uuid) == set(outputs[0]["record"]["files"])
-    raw = [json.loads((tmp_path / seed / "sample.json").read_text())["files"] for seed in ("1", "2")]
-    assert {n: h for n, h in raw[0].items() if n not in uuid} == {n: h for n, h in raw[1].items() if n not in uuid}
+    files, record = outputs[0]["files"], outputs[0]["record"]
+    assert len(files) > 30 and sum(name.endswith(".ome.tif") for name in files) > 1
+    # sample.json records every other file with the SHA-256 of the file as written.
+    assert {n: h for n, h in files.items() if n != "sample.json"} == record["files"]
 
 
 # ---------------------------------------------------------------- criterion 7: the on_fov handoff

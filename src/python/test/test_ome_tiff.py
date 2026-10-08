@@ -1,6 +1,11 @@
-"""ZYXC volumes as OME-TIFF: page layout, OME-XML, exact round trips and the earlier layout."""
+"""ZYXC volumes as OME-TIFF: page layout, OME-XML, exact round trips, the earlier layout and the name-based UUID."""
 from dataclasses import asdict, replace
 import json
+import os
+import subprocess
+import sys
+import time
+import uuid
 from xml.etree import ElementTree
 
 import numpy as np
@@ -183,3 +188,111 @@ def test_reference_image_keeps_shared_name_with_merged_zyx_content(tmp_path):
     loaded = load_volume(path)
     np.testing.assert_array_equal(loaded.image, fov.images['round1'].max(axis=-1), strict=True)
     assert loaded.metadata == fov.metadata['round1']
+
+
+# --- The OME UUID is a function of the pixel data and the metadata written (W-380) ----------------------------------
+
+SAVE_IN_A_PROCESS = """
+import hashlib, json, sys
+from pathlib import Path
+import numpy as np
+from starfinder.image import ImageMetadata
+from starfinder.io import save_volume
+source, root = Path(sys.argv[1]), Path(sys.argv[2])
+for name, metadata in json.loads((source / 'cases.json').read_text()).items():
+    save_volume(np.load(source / f'{name}.npy'), root / f'{name}.ome.tif',
+                metadata=None if metadata is None else ImageMetadata(**metadata))
+print(json.dumps({p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(root.iterdir())}))
+"""
+
+
+def uuid_cases():
+    """name -> (array, metadata): a ZYXC volume with metadata, a one-plane (2D) image without, a ZYX volume on an
+    ``.ome.tif`` name, the volume with one voxel changed and the volume with another spacing."""
+    base = volume((3, 5, 6, 2), np.uint16)
+    changed = base.copy()
+    changed[1, 2, 3, 1] += 1
+    return {'volume': (base, METADATA), 'plane': (volume((1, 5, 6, 1), np.uint8), None),
+            'zyx': (volume((3, 5, 6), np.float32), METADATA), 'voxel': (changed, METADATA),
+            'spacing': (base, replace(METADATA, spacing_zyx=(1.5, .25, .25)))}
+
+
+def ome_uuid(path):
+    with tifffile.TiffFile(path) as tif:
+        assert tif.is_ome
+        return ElementTree.fromstring(tif.ome_metadata).get('UUID')
+
+
+def starting_commit_save(image, path, metadata):
+    """save_volume's tifffile call at the starting commit (59c8d0c), whose UUID tifffile draws from the time."""
+    if image.ndim == 3:
+        info = {'axes': 'ZYX'}
+        if metadata is not None:
+            info['starfinder_metadata'] = asdict(metadata)
+        tifffile.imwrite(path, image, compression=None, photometric='minisblack', metadata=info)
+        return
+    info = {'axes': 'ZCYX'}
+    if metadata is not None:
+        info['CommentAnnotation'] = {'Namespace': METADATA_NAMESPACE, 'Value': json.dumps(asdict(metadata))}
+    tifffile.imwrite(path, np.moveaxis(image, 3, 1), ome=True, compression=None, photometric='minisblack',
+                     metadata=info)
+
+
+def loaded(path, image):
+    """load_volume of each channel: (array, metadata, diagnostics)."""
+    configs = [ImageLoadConfig()] if image.ndim == 3 else [ImageLoadConfig(channel_index=c)
+                                                           for c in range(image.shape[3])]
+    return [(r.image, r.metadata, r.diagnostics) for r in (load_volume(path, config=c) for c in configs)]
+
+
+def test_equal_content_gives_equal_bytes_in_two_processes(tmp_path):
+    cases = uuid_cases()
+    source = tmp_path / 'source'
+    source.mkdir()
+    for name, (image, _) in cases.items():
+        np.save(source / f'{name}.npy', image)
+    (source / 'cases.json').write_text(json.dumps({n: None if m is None else asdict(m) for n, (_, m) in cases.items()}))
+    digests, started = [], []
+    for seed in ('1', '2'):
+        if started:  # tifffile's time-based UUID differs between two writes at least a second apart
+            time.sleep(max(0.0, 1.0 - (time.monotonic() - started[-1])))
+        started.append(time.monotonic())
+        digests.append(json.loads(subprocess.check_output(
+            [sys.executable, '-c', SAVE_IN_A_PROCESS, str(source), str(tmp_path / seed)],
+            env=dict(os.environ, PYTHONHASHSEED=seed), text=True, timeout=300)))
+    assert started[1] - started[0] >= 1.0
+    # The two processes write identical files.
+    assert digests[0] == digests[1] and sorted(digests[0]) == sorted(f'{n}.ome.tif' for n in cases)
+    uuids = {n: ome_uuid(tmp_path / '1' / f'{n}.ome.tif') for n in cases}
+    assert uuids == {n: ome_uuid(tmp_path / '2' / f'{n}.ome.tif') for n in cases}
+    for value in uuids.values():
+        assert value.startswith('urn:uuid:') and str(uuid.UUID(value[len('urn:uuid:'):])) == value[len('urn:uuid:'):]
+        assert uuid.UUID(value[len('urn:uuid:'):]).version == 5
+    # Another voxel or another spacing gives another UUID (each case is distinct).
+    assert len(set(uuids.values())) == len(uuids) and len(set(digests[0].values())) == len(cases)
+    # Against the starting commit's writer at the same path: the same bytes but the UUID, and the same loads.
+    for name, (image, metadata) in cases.items():
+        path = tmp_path / 'start' / f'{name}.ome.tif'
+        path.parent.mkdir(exist_ok=True)
+        starting_commit_save(image, path, metadata)
+        before, start_uuid = path.read_bytes(), ome_uuid(path)
+        expected = loaded(path, image)
+        save_volume(image, path, metadata=metadata)
+        assert path.read_bytes() == (tmp_path / '1' / f'{name}.ome.tif').read_bytes()
+        assert before.count(start_uuid.encode()) == 1
+        assert before.replace(start_uuid.encode(), uuids[name].encode()) == path.read_bytes(), name
+        for (a, m, d), (b, n, e) in zip(expected, loaded(path, image), strict=True):
+            np.testing.assert_array_equal(a, b, strict=True)
+            assert m == n and d == e
+        if metadata is not None and image.ndim == 4:
+            assert loaded(path, image)[0][1] == metadata
+
+
+def test_compressed_volume_without_metadata_has_a_content_uuid(tmp_path):
+    image = volume((2, 4, 5, 1), np.uint16)
+    for name in ('a', 'b'):
+        save_volume(image, tmp_path / f'{name}.ome.tif', compress=True)
+    assert (tmp_path / 'a.ome.tif').read_bytes() == (tmp_path / 'b.ome.tif').read_bytes()
+    save_volume(image, tmp_path / 'raw.ome.tif')
+    assert ome_uuid(tmp_path / 'raw.ome.tif') != ome_uuid(tmp_path / 'a.ome.tif')
+    np.testing.assert_array_equal(load_volume_zyxc(tmp_path / 'a.ome.tif').image, image, strict=True)

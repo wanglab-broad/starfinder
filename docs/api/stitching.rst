@@ -75,7 +75,9 @@ reads ``dataset.xml`` into the same record: each view maps to its FOV through th
 composed (translation only), world units become µm through the calibration and each
 FOV's reference spacing, each ``PairwiseResult`` becomes a kept link, and the statuses,
 gauge, fallback and review are those of :py:func:`~starfinder.stitching.stitch`. Padding
-views have no row; their raw translations stay in the method record.
+views have no row; their raw translations stay in the method record. A view whose affine
+holds a non-finite number refuses the file with ``ValueError`` (naming the file, the setup
+and the transform) under either fallback.
 :py:func:`~starfinder.stitching.legacy_tile_config_view` applies today's integer cast,
 shift and rectangles to the raw translations of every view, which reproduces
 ``tile_config_{sample}.csv`` whatever the fallback.
