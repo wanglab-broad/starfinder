@@ -133,20 +133,33 @@ class _Plan:
 PAGE_AXES = ("IYX", "QYX")
 
 
+def _unnamed_axes(tif, series) -> bool:
+    """Whether a series carries no axis metadata of any kind: tifffile's fallback series of a file no metadata format
+    matched (``uniform`` or ``generic`` pages), or a shaped description without axes."""
+    if series.kind in ("uniform", "generic"):
+        return True
+    if series.kind != "shaped":
+        return False
+    described = tif.shaped_metadata or ()
+    return bool(described) and "axes" not in described[0]
+
+
 def _source_shape(path):
     """(shape_zyx, dtype) of a one-channel TIFF from its header; a YX file has Z = 1.
 
-    A series without axis metadata whose axes tifffile reports as pages over Y
-    and X (:data:`PAGE_AXES`) is read as ZYX.
+    A series that carries no axis metadata (not OME, not ImageJ, no shaped
+    description naming axes) and whose axes, as tifffile reports them, are
+    exactly one page axis over Y and X (:data:`PAGE_AXES`) is read as ZYX. Any
+    other file follows the axes it reports, as before.
     """
     import tifffile
     with tifffile.TiffFile(path) as tif:
         series = tif.series[0]
         axes, shape, dtype = series.axes, tuple(series.shape), np.dtype(series.dtype)
-        named = tif.is_ome or tif.is_imagej
+        pages = axes in PAGE_AXES and _unnamed_axes(tif, series)
+    if pages:
+        return (shape[0], shape[1], shape[2]), dtype
     kept = [(a, n) for a, n in zip(axes, shape) if not (n == 1 and a not in "YX")]
-    if not named and "".join(a for a, _ in kept) in PAGE_AXES:
-        kept = [("Z", kept[0][1]), *kept[1:]]
     if "".join(a for a, _ in kept) not in ("YX", "ZYX"):
         raise ValueError(f"source image {path} has axes {axes} {shape}; a source image is one channel, ZYX or YX")
     sizes = dict(kept)

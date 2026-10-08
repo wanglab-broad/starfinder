@@ -30,6 +30,7 @@ multiview-stitcher is not importable; the export tests need anndata.
 """
 import importlib.util
 import json
+from dataclasses import asdict as dataclasses_asdict
 from dataclasses import replace
 
 import numpy as np
@@ -354,6 +355,37 @@ def test_mixed_spellings_are_one_unit():
     assert len(result.molecules) == sum(len(r.molecules) for r in (results["FOV1"], other["FOV2"]))
 
 
+@pytest.mark.parametrize("unit, direction", COMBINATIONS)
+def test_placed_metadata_gives_the_sample_coordinates_of_assemble(tmp_path, unit, direction):
+    """placed_metadata(...).index_to_world(p) equals assemble's sample coordinates within 1e-9 µm for every spelling
+    and with or without a direction; the placement, its saved file and the assembly record keep the metadata given."""
+    from starfinder.stitching import load_placement, placed_metadata
+    metadata = own_metadata(unit, direction)
+    grid = own_grid(metadata)
+    origins = {"FOV1": (0.3, 0.25, 1.5), "FOV2": (-0.7, -0.125, 12.375)}
+    placed = approve_placement(placement_from_table(own_table(), {fov: grid for fov in OWN_IDS}, sample="s1",
+                                                    origins=origins), reviewer="test", note="own")
+    results = own_assignments(grid)
+    assembly = assemble(placed, [AssemblyInput(fov, grid, assignment=results[fov]) for fov in OWN_IDS])
+    for fov in OWN_IDS:
+        world = placed_metadata(placed, fov)
+        assert (world.spatial_unit, world.direction_zyx, world.frame_id, world.origin_zyx) == (
+            "µm", IDENTITY, "sample:s1", origins[fov])
+        mols = assembly.molecules[assembly.molecules["fov_id"].eq(fov).to_numpy(bool)]
+        np.testing.assert_allclose(world.index_to_world(mols[["z", "y", "x"]].to_numpy(float)),
+                                   mols[["sample_z", "sample_y", "sample_x"]].to_numpy(float), rtol=0, atol=1e-9)
+        cells = assembly.cells[assembly.cells["fov_id"].eq(fov).to_numpy(bool)]
+        np.testing.assert_allclose(world.index_to_world(cells[["centroid_z", "centroid_y", "centroid_x"]]
+                                                        .to_numpy(float)),
+                                   cells[[f"sample_centroid_{a}" for a in "zyx"]].to_numpy(float), rtol=0, atol=1e-9)
+    given = json.loads(json.dumps(dataclasses_asdict(metadata)))
+    save_placement(placed, tmp_path / "placement")
+    saved = json.loads((tmp_path / "placement" / "placement.json").read_text())
+    for record in (placed.record, load_placement(tmp_path / "placement").record, saved):
+        assert all(record["inputs"][fov]["grid"]["metadata"] == given for fov in OWN_IDS)
+    assert all(entry["grid"]["metadata"] == given for entry in assembly.record["fovs"] if entry.get("grid"))
+
+
 REFUSED = {"nm": (own_metadata("nm", "identity"), "a unit other than µm: FOV1 ('nm'), FOV2 ('nm')"),
            "no unit": (own_metadata(None, "identity"), "a unit other than µm: FOV1 (None), FOV2 (None)"),
            "flipped": (own_metadata("µm", ((-1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))),
@@ -509,6 +541,57 @@ def test_a_channel_axis_or_more_than_three_axes_is_refused_as_before(tmp_path, c
         _source_shape(path)
     assert str(error.value) == (f"source image {path} has axes {axes} {shape}; a source image is one channel, ZYX "
                                 "or YX")
+
+
+# What the base revision 2303ae6's _source_shape gave for each file (measured on that revision with these files):
+# a ZYX shape, or None for the refusal "a source image is one channel, ZYX or YX". Only a series with no axis
+# metadata whose reported axes are exactly one page axis over Y and X is read differently now (the first two).
+AXIS_CASES = {
+    "pages, no metadata (IYX)": ((2, 6, 6), {"metadata": None}, None, (2, 6, 6)),
+    "shaped pages without axes (QYX)": ((2, 6, 6), {}, None, (2, 6, 6)),
+    "uniform pages, no metadata (IYX)": ((8, 48, 64), {"metadata": None}, None, (8, 48, 64)),
+    "declared IYX": ((2, 6, 6), {"metadata": {"axes": "IYX"}}, None, None),
+    "declared QYX": ((2, 6, 6), {"metadata": {"axes": "QYX"}}, None, None),
+    "declared ICYX, singleton channel after the pages": ((2, 1, 6, 6), {"metadata": {"axes": "ICYX"}}, None, None),
+    "declared CIYX, singleton channel before the pages": ((1, 2, 6, 6), {"metadata": {"axes": "CIYX"}}, None, None),
+    "declared QIYX, singleton extra axis before": ((1, 2, 6, 6), {"metadata": {"axes": "QIYX"}}, None, None),
+    "declared IQYX, singleton extra axis after": ((2, 1, 6, 6), {"metadata": {"axes": "IQYX"}}, None, None),
+    "declared TIYX, singleton time axis": ((1, 2, 6, 6), {"metadata": {"axes": "TIYX"}}, None, None),
+    "shaped QQYX, singleton first": ((1, 2, 6, 6), {}, None, None),
+    "shaped QQYX, singleton second": ((2, 1, 6, 6), {}, None, None),
+    "declared ZYX": ((2, 6, 6), {"metadata": {"axes": "ZYX"}}, (2, 6, 6), (2, 6, 6)),
+    "declared CZYX, singleton channel": ((1, 2, 6, 6), {"metadata": {"axes": "CZYX"}}, (2, 6, 6), (2, 6, 6)),
+    "shaped QYX of one page": ((1, 6, 6), {}, (1, 6, 6), (1, 6, 6)),
+    "YX, no metadata": ((6, 6), {"metadata": None}, (1, 6, 6), (1, 6, 6)),
+    "ImageJ ZYX": ((2, 6, 6), {"imagej": True, "metadata": {"axes": "ZYX"}}, (2, 6, 6), (2, 6, 6)),
+    "ImageJ default (CYX)": ((2, 6, 6), {"imagej": True}, None, None),
+    "OME CZYX, singleton channel": ((1, 2, 6, 6), {"ome": True, "metadata": {"axes": "CZYX"}}, (2, 6, 6), (2, 6, 6)),
+}
+
+# tifffile's series kind for a file no metadata format matched: small pages read as generic, larger as uniform.
+FALLBACK_KINDS = {"pages, no metadata (IYX)": "generic", "uniform pages, no metadata (IYX)": "uniform"}
+
+
+@pytest.mark.parametrize("case", list(AXIS_CASES))
+def test_only_metadata_free_pages_are_read_as_zyx(tmp_path, case):
+    """Every file the base revision read or refused is read or refused the same, except the two metadata-free page
+    series of the decision; a refusal keeps the base message."""
+    from starfinder.sample_output._fuse import _source_shape
+    shape, kwargs, base, expected = AXIS_CASES[case]
+    assert expected == base or case in (*FALLBACK_KINDS, "shaped pages without axes (QYX)")
+    path = tmp_path / "tile.tif"
+    tifffile.imwrite(path, np.zeros(shape, np.uint16), photometric="minisblack", **kwargs)
+    with tifffile.TiffFile(path) as tif:
+        axes, reported = tif.series[0].axes, tuple(tif.series[0].shape)
+        if case in FALLBACK_KINDS:
+            assert tif.series[0].kind == FALLBACK_KINDS[case]
+    if expected is None:
+        with pytest.raises(ValueError) as error:
+            _source_shape(path)
+        assert str(error.value) == (f"source image {path} has axes {axes} {reported}; a source image is one "
+                                    "channel, ZYX or YX")
+    else:
+        assert _source_shape(path) == (expected, np.dtype(np.uint16))
 
 
 # --- Criterion 4: molecules on a single-plane grid (assemble) ----------------------------------------------------

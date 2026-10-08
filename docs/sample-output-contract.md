@@ -430,9 +430,11 @@ inspect").
   or `<name>=file:<pattern>` with `{fov_id}`, accepted only when its shape equals the
   reference grid's, where `<name>` names its files and store element and may use letters,
   digits, `_`, `-` and `.` only. Further channels are further names in `images`. A source
-  file is one channel, ZYX or YX; a TIFF series without axis metadata that tifffile
-  reports as pages over Y and X (`IYX` or `QYX`) is read as ZYX, lazily like the others,
-  and a file with a channel axis or more than three axes is refused.
+  file is one channel, ZYX or YX once its axes of length 1 other than Y and X are set
+  aside, so a channel axis or any further axis of length more than 1 is refused; a TIFF
+  series that carries no axis metadata (not OME, not ImageJ, no description naming axes)
+  and whose axes tifffile reports as exactly one page axis over Y and X (`IYX` or `QYX`)
+  is read as ZYX, lazily like the others.
 * **Optionally the assembly**, whose record's placement SHA-256 values must equal the
   placement's (`ValueError`), so that the image and the tables come from one placement.
   Fusion uses no ownership: the assembly is only recorded.

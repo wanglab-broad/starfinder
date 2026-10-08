@@ -221,9 +221,10 @@ def placed_metadata(result: PlacementResult, fov_id: str) -> ImageMetadata:
 
     ``dataclasses.replace(grid.metadata, frame_id="sample:<sample>",
     origin_zyx=origin)``, with the grid recorded in ``record["inputs"]`` and the
-    FOV's placement origin, so that ``index_to_world(p)`` is ``origin + D · (p ⊙
-    spacing)`` for an index position ``p`` (integer or fractional) of the FOV's
-    reference grid.
+    FOV's placement origin, read as §2.10 checks a grid (a spelling of the
+    micrometre as ``µm``, no direction as the identity), so that ``index_to_world(p)`` is ``origin + D · (p ⊙ spacing)`` for an index
+    position ``p`` (integer or fractional) of the FOV's reference grid, also for
+    a grid recorded without a direction. The record is not changed.
 
     Raises
     ------
@@ -239,7 +240,7 @@ def placed_metadata(result: PlacementResult, fov_id: str) -> ImageMetadata:
     if not all(math.isfinite(v) for v in origin):
         raise ValueError(f"FOV {fov_id!r} has no origin (status {row['status']!r})")
     metadata = ImageMetadata(**result.record["inputs"][fov_id]["grid"]["metadata"])
-    return replace(metadata, frame_id=f"sample:{result.sample}", origin_zyx=origin)
+    return frame_metadata(replace(metadata, frame_id=f"sample:{result.sample}", origin_zyx=origin))
 
 
 def _origin_triple(value):

@@ -374,7 +374,8 @@ sample_zyx = origin_zyx + D · (p ⊙ spacing_zyx)
 with `spacing_zyx` and `D` (`direction_zyx`) of the FOV's `ReferenceGrid.metadata`.
 Equivalently, `placed_metadata(result, fov_id).index_to_world(p)`, where `placed_metadata`
 returns `dataclasses.replace(grid.metadata, frame_id="sample:<sample>",
-origin_zyx=origin)`. Example: origin `(0.0, 250.5, 100.25)` µm, spacing `(0.346255,
+origin_zyx=origin)` read as the grid checks read it (`um` and `micrometer` as `µm`, no
+direction as the identity); the recorded metadata is not changed. Example: origin `(0.0, 250.5, 100.25)` µm, spacing `(0.346255,
 0.194398, 0.194398)` µm and identity direction map `p = (2, 10, 0)` to `(0.69251,
 252.44398, 100.25)` µm. Fractional indices (sub-voxel molecule positions) map by the same
 formula. The inverse, for resampling a FOV into a fused image, is
