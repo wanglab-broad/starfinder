@@ -854,6 +854,13 @@ The overlap count is computed by the issue's script, which gives 2 on `label_pai
 upper bound on the cells retained twice whose observations share a voxel, recorded for
 Jiahao's decision on cells with several observations, not acted on.
 
+**What these examples do not show.** These examples do not show the export of the files
+as saved. The W-382 folders were assembled only from copies whose grid metadata was
+respelled. The fusion read ZYX copies of tiles that read as `IYX`. Two functions of the
+export module (`_reference_grid` and `source_path`) were replaced in the export processes.
+tissue-2D has no placement, assembly, export folder or ownership figure. A9 is not verified,
+because no store holds `cell_labels`. A4 stays open.
+
 ## Limitations
 
 * The tolerances for `multiview_stitcher` come from two cut fixtures with integer offsets
