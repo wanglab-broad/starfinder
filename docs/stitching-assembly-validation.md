@@ -791,6 +791,69 @@ records on the share and are run by the real-example issue (W-376), not by a tes
 | RX6 | Run by the real-example issue (W-376), not by a test | real examples |
 | RX7 | Run by the real-example issue (W-376), not by a test | real examples |
 
+## Results of the real examples
+
+W-376 ran the plan of "Whole-sample real examples" on 2026-10-08, at revision `70ad3d6`, in
+the run directory
+`/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-376/20261008T044605Z-9a24f906`
+(`worker-notes.md`, `results/manifest.json`, `results/tables/`). These are inspections:
+nothing is ranked, no accuracy is claimed and no default changed.
+
+* **Inventory.** The 190 molecule tables (LN sample1 64, 3,782,580 rows; tissue-2D 56,
+  5,353,714; cell-culture-3D 70, 2,458,865) equal the operator's inventory of 2026-10-07 in
+  path, row count and SHA-256. No dataset holds a label image per FOV, so cells exist only
+  on the two 2 × 2 blocks W-382 segmented, and none for tissue-2D.
+* **Records.** RX1 to RX7 pass as their rows state: 213 pairs; the import's five items
+  (145 links, one component, 64 `image_supported`, review `not_needed`, residuals 0.038 to
+  0.943 µm); BigStitcher's cut-fixture results within 1.05 voxels (largest 1.0000000020, z,
+  synthetic_3x3); the bitwise identical LN placement at one and four threads.
+* **Placements.** LN sample1 from both backends and cell-culture-3D: every FOV
+  `image_supported`, review `not_needed`. tissue-2D has no placement: `stitch` raised in the
+  `multiview_stitcher` adapter, which refused a pairwise 2D affine whose linear part is off
+  the identity by 1.1e-16. Its assembly and outputs did not run.
+* **Monitored LN agreement.** Within every monitored bound: |d| at most 8.04 px in x, 1.77 px
+  in y, 2.77 slices in z; trend in x 1.69 px per column; residual at most 3.14, 1.13 and
+  1.31. Of the 111 registered `multiview_stitcher` links, the filter of 0.7 drops 14, all
+  of which agree with the BigStitcher placement (qualities 0.634 to 0.690), and keeps none
+  that disagrees. real_2x2: at most 0.75 voxel, within MV1's 2.
+* **Inputs prepared for the package, without changing it.** The W-382 assignment grids say
+  `micrometer` with no direction, which `assemble` refuses; the blocks were assembled from
+  copies whose `assignment.json` says µm with the identity direction, every other file
+  byte-identical. The LN and cell-culture-3D tiles read as axes `IYX`, which the fusion
+  refuses; it read ZYX copies of the same pixels on local scratch.
+
+Measured resources, in place of the estimates of "Resources per sample and step" (the wall
+time each run recorded for its work, without its closing `check_export`, and the run's peak
+RSS; every run's full figures are in `results/tables/resources.csv`; assembly at one CPU,
+the others at four threads):
+
+| Sample | Placement | Assembly (`molecules_only`; cellular block) | Default outputs | Stack and export |
+| --- | --- | --- | --- | --- |
+| LN sample1 | import: under 2 s; `multiview_stitcher`: 140.6 s, 7.57 GiB (one thread: 151.1 s) | BigStitcher: 121.7 s, 2.90 GiB; `multiview_stitcher`: 124.0 s, 2.91 GiB; blocks 46.7 and 47.2 s, 1.96 GiB | none: LN writes no projection | the stack OME-TIFF from each placement, zlib, with `check_export`: BigStitcher 66 × 6,167 × 5,435, fusion 1,468 s, 2.53 GiB, 662,701,545 bytes, and the store 141.5 s, 729,704,694 bytes (run 1,955 s, 6.00 GiB); `multiview_stitcher` 68 × 6,166 × 5,441, fusion 1,564 s, 2.53 GiB, 669,758,230 bytes (run 1,708 s, 6.08 GiB); the two ran side by side; the blocks' label exports 54 s, 4.6 GiB each |
+| cell-culture-3D | 55.2 s, 4.77 GiB | 79.1 s, 2.18 GiB; block 28.4 s, 1.02 GiB | 6,818 × 4,788 projection: 52.0 s, 2.15 GiB | the block's stack, 33 × 2,844 × 2,842, with its label export: 66.6 s, 2.98 GiB, 31,008,462 bytes |
+| tissue-2D | failed after 30.6 s, 0.87 GiB | not run | not run | none |
+
+No run reached its limit; the largest export folder holds 2.13 GB. Assumptions
+({doc}`sample-output-contract`, "Assumptions"): A1 holds, the LN stack fused from lazily
+loaded tiles peaking at 2.53 GiB in the fusion part against W-354's 12.35 GiB with every
+tile loaded; A2 holds on the three blocks (L2 and L4 pass, every retained ID drawn); A3 and
+A8: both stack files are below 4 GiB, so the BigTIFF case was not reached, they read back
+through `check_export` in 294 s (with the store) and 100 s, and the tiled zlib writer took
+1,468 and 1,564 s against W-354's 242 s uncompressed with every tile loaded; A9 is not
+verified, because the one store written (LN sample1, BigStitcher) has no label export;
+A4 stays open.
+
+| Sample, placement | Where cells exist | Cell rows | Retained | Excluded `not_owner` | `conflict` (of retained) | `unclaimed` (of `not_owner`) | `fov_edge` (of all rows; of retained) | Overlapping retained pairs (of different FOVs) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| LN sample1, BigStitcher import | the 2 × 2 block of `Position048`, `049`, `057`, `058` | 9,102 | 8,194 | 908 | 8 of 8,194 | 361 of 908 | 196 of 9,102; 98 of 8,194 | 93 |
+| LN sample1, `multiview_stitcher` | the same block | 9,102 | 8,197 | 905 | 12 of 8,197 | 360 of 905 | 196 of 9,102; 98 of 8,197 | 82 |
+| cell-culture-3D, `multiview_stitcher` | the 2 × 2 block of `Position397`, `398`, `407`, `408` | 226 | 185 | 41 | 16 of 185 | 6 of 41 | 82 of 226; 46 of 185 | 34 |
+| tissue-2D, `multiview_stitcher` | none: no cell input, and no placement | 0 | 0 | 0 | not applicable | not applicable | not applicable | not applicable |
+
+The overlap count is computed by the issue's script, which gives 2 on `label_pair`; it is an
+upper bound on the cells retained twice whose observations share a voxel, recorded for
+Jiahao's decision on cells with several observations, not acted on.
+
 ## Limitations
 
 * The tolerances for `multiview_stitcher` come from two cut fixtures with integer offsets
