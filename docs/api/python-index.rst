@@ -107,6 +107,8 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.synthetic.FormedSceneConfig`
 * :py:obj:`starfinder.synthetic.forward_displacement`
 * :py:obj:`starfinder.dataset.FOV`
+* :py:obj:`starfinder.assembly.fov_ownership`
+* :py:obj:`starfinder.assignment.FOVOwnership`
 * :py:obj:`starfinder.dataset.from_workflow_config`
 * :py:obj:`starfinder.sample_output.fuse`
 * :py:obj:`starfinder.sample_output.fuse_labels`

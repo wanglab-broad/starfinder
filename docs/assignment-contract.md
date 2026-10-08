@@ -840,6 +840,24 @@ On demand, never by `FOV.assign`:
   `ValueError`. The figure replaces the four legacy PNGs and their hard-coded plane; the
   workflow adapter writes both views of a ZYX label image ({doc}`workflow-downstream`).
 
+  `plot_assignment` also takes the keyword `ownership=None` (W-330, added after §2.10): a
+  `FOVOwnership` of `starfinder.assignment`, plain data that
+  `starfinder.assembly.fov_ownership` builds for one FOV of an assembled sample: a boolean
+  Y, X mask of the pixels whose centres the FOV owns ({doc}`assembly-contract`, "Ownership
+  regions"), and the `cell_id` and `spot_id` of the FOV's cells and molecules whose
+  assembly status is `excluded`. With it, panels 1 and 2 of both views draw the closed
+  boundary of the mask as a yellow line, the colour of the legacy tile box, the image
+  border included where the region reaches it; the centre of an excluded cell and an
+  excluded molecule are grey, and every other keeps the colour of its status (a retained
+  molecule flagged `outside_owner_region` too); the legend gains `ownership region` and,
+  when the panel draws one, `excluded from sample`; and each panel's x-axis label states how
+  many of the cells (panel 1) or molecules (panel 2) drawn the assembly retained; the titles
+  do not change. Panels 3 and 4 do
+  not change. The figure shows what assemble decided and does not apply the retention rule
+  again. A mask of another Y, X than the territories, or an identity the result does not
+  have, raises `ValueError`, and a value that is not a `FOVOwnership` `TypeError`, before
+  any figure is made. Without `ownership` the figure is as described above.
+
 ## Workflow configuration
 
 A Python-only top-level `assignment` block:

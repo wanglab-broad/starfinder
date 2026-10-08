@@ -477,7 +477,10 @@ sample-level rules for a configuration that has them. The specification is the
   every part of `Dataset.export` after the placement and every FOV's `reads_assignment`;
   its declared output is `export/<sample>/export.json`, which lists every other file of
   the folder, so a part that cannot run (an extra not installed) is recorded `not_run`
-  and does not fail the rule.
+  and does not fail the rule. With an `assignment` name it then draws
+  `expr/{fovID}/assignment.png` (and `assignment_single_layer.png` for a ZYX label image)
+  again for each FOV with a saved assignment, with the FOV's ownership region; the two
+  files are not declared outputs.
 * **`export`** (needs `assembly`). The parts of `Dataset.export` and their settings: the
   flags `assemble`, `fuse`, `fuse_labels` and `export_spatialdata`, the `FusionConfig`
   fields (`images`, `dimensionality`, `projection`, `scale_yx`, `ome_zarr`,

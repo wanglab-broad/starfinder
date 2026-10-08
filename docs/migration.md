@@ -1422,6 +1422,21 @@ The adapter's translation of a legacy configuration is `StageAxisMapping(x="+x",
 source="legacy")` with the `rotate_angle` it ran with; a configuration with a
 `stitching` block and a stage file names `stage_axes` itself.
 
+### The ownership region on the assignment figures
+
+`plot_assignment` gains the keyword `ownership=None` (W-330): a `FOVOwnership` of
+`starfinder.assignment` (a boolean Y, X region mask, the excluded `cell_id` and `spot_id`),
+built for one FOV of an assembled sample by the new `starfinder.assembly.fov_ownership(result,
+fov_id, *, placement)`. With it, panels 1 and 2 draw the FOV's ownership region as a yellow
+line and the cells and molecules the assembly excluded grey, with the legend entries
+`ownership region` and `excluded from sample` and the retained counts as x-axis labels. It
+gives back the view of the legacy tile box of `reads_assignment.py`, from the ownership
+regions instead of the tile configuration; no tile box is drawn. Without
+`ownership` the figure is unchanged. With an `assembly` block and an assignment name,
+`export_sample` rewrites `expr/{fovID}/assignment.png` and `assignment_single_layer.png`
+with ownership after the sample is assembled; `reads_assignment` writes them first, as
+before. No table, record, count or `export/<sample>/` file changes.
+
 ### A deterministic UUID in the package's OME-TIFF files
 
 `save_volume` (a ZYXC OME-TIFF, and a ZYX volume on a `*.ome.*` name, which tifffile

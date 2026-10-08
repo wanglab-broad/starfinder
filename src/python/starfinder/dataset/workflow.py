@@ -1498,6 +1498,31 @@ def _assignment_ratio(counts):
             f"({counts['assigned']} of {counts['molecules']} molecules assigned)")
 
 
+def _write_assignment_figures(result, image_path, folder, *, ownership=None):
+    """expr/{fovID}/assignment.png and, for a ZYX label image, assignment_single_layer.png of an assignment.
+
+    plot_assignment over the DAPI image ``image_path`` (left out when it is
+    None or its Y, X are not those of the labels): the Z-maximum view and the
+    middle plane. reads_assignment draws them without ``ownership``;
+    export_sample draws them again with each FOV's FOVOwnership.
+    """
+    import matplotlib.pyplot as plt
+    import tifffile
+    from starfinder.assignment import plot_assignment
+    image = None if image_path is None else tifffile.imread(image_path)
+    image = image if image is not None and image.shape[-2:] == result.cell_labels.shape[1:] else None
+    figures = {'assignment.png': {}}
+    n_z = result.cell_labels.shape[0]
+    if n_z > 1:  # a ZYX label image; a YX one is a plane with the Z-maximum view only
+        layer_image = image if image is None or image.ndim == 2 or image.shape[0] in (1, n_z) else None
+        figures['assignment_single_layer.png'] = {'view': 'single_layer', 'image': layer_image}
+    Path(folder).mkdir(parents=True, exist_ok=True)
+    for name, options in figures.items():
+        figure = plot_assignment(result, **{'image': image, **options}, ownership=ownership)
+        figure.savefig(Path(folder) / name)
+        plt.close(figure)
+
+
 def _run_reads_assignment(snakemake):
     """reads_assignment: assign_molecules on the legacy label file, written as raw.h5ad and reads_assignment.csv.
 
@@ -1521,9 +1546,7 @@ def _run_reads_assignment(snakemake):
     assignment folder checkpoints/{fovID}/assignment/<assembly.assignment>/
     (its record named so), which the export_sample rule assembles.
     """
-    import matplotlib.pyplot as plt
-    import tifffile
-    from starfinder.assignment import assign_molecules, molecule_table_from_csv, plot_assignment
+    from starfinder.assignment import assign_molecules, molecule_table_from_csv
     config, fov_id = snakemake.config, snakemake.wildcards.fovID
     assignment, target, translation = _reads_assignment(config)
     block = _assembly_block(config) if 'assembly' in config else None
@@ -1550,17 +1573,7 @@ def _run_reads_assignment(snakemake):
     h5ad, csv_path = Path(snakemake.output[0]), Path(snakemake.output[1])
     written = _write_raw_h5ad(result, h5ad, sample=sample, fov_id=fov_id, tile=tile)
     _write_reads_assignment(result, snakemake.input[3], csv_path, tile=tile, cells=written)
-    image = tifffile.imread(snakemake.input[1])
-    image = image if image.shape[-2:] == result.cell_labels.shape[1:] else None
-    figures = {'assignment.png': {}}
-    n_z = result.cell_labels.shape[0]
-    if n_z > 1:  # a ZYX label image; a YX one is a plane with the Z-maximum view only
-        layer_image = image if image is None or image.ndim == 2 or image.shape[0] in (1, n_z) else None
-        figures['assignment_single_layer.png'] = {'view': 'single_layer', 'image': layer_image}
-    for name, options in figures.items():
-        figure = plot_assignment(result, **{'image': image, **options})
-        figure.savefig(h5ad.parent / name)
-        plt.close(figure)
+    _write_assignment_figures(result, snakemake.input[1], h5ad.parent)
     counts = result.record['counts']
     kept = (f'{len(written)} cells inside the tile box' if block is None else
             f'{len(written)} cells written without the tile filter (export_sample assembles the sample)')
@@ -2015,9 +2028,48 @@ def _run_export(snakemake):
     assembly block (_export_config); the assignment name is the assembly
     block's. A part that cannot run (an extra not installed, an input missing)
     is recorded not_run in export.json and does not fail the rule.
+
+    After the export, with an assignment name and an assembly in the folder
+    (assemble written or reused), it draws expr/{fovID}/assignment.png and,
+    for a ZYX label image, assignment_single_layer.png again for each FOV of
+    the sample that has a saved assignment (its folder's assignment.json, an
+    input of the rule, and an input of the assembly), with the FOV's ownership
+    (_write_ownership_figures). They are not declared outputs: reads_assignment
+    writes them first, without ownership.
     """
     config, sample = snakemake.config, snakemake.wildcards.sample
     export, block = _export_config(config)
     dataset = _export_dataset(config, block)
-    dataset.export(sample, placement=Path(snakemake.input[0]).parent, assignment=block.assignment, config=export,
-                   output_dir=Path(snakemake.output[0]).parent)
+    placement = Path(snakemake.input[0]).parent
+    record = dataset.export(sample, placement=placement, assignment=block.assignment, config=export,
+                            output_dir=Path(snakemake.output[0]).parent)
+    if block.assignment is not None and record.parts.get('assemble') in ('written', 'reused'):
+        output_root = Path(config['root_output_path']) / config['dataset_id'] / config['output_id']
+        _write_ownership_figures(output_root, block.assignment, placement, record.folder, snakemake.input)
+
+
+def _write_ownership_figures(output_root, name, placement_dir, export_dir, inputs):
+    """The two assignment figures of every assembled FOV whose saved assignment ``name`` is one of ``inputs``.
+
+    The assembly is read from export/<sample>/ (load_assembly), the placement
+    from stitching/<sample>/, each FOV's assignment from
+    checkpoints/{fovID}/assignment/<name>/ and its DAPI image from
+    images/DAPI/{fovID}.tif, the reads_assignment input (not an input of
+    export_sample: without the file the figures have no image).
+    """
+    import os
+    from starfinder.assembly import fov_ownership, load_assembly
+    from starfinder.assignment._persist import RECORD_FILE, assignment_directory, read_assignment
+    from starfinder.stitching import load_placement
+    from ._paths import _FovPaths
+    declared = {os.path.abspath(p) for p in inputs}
+    assembly, placement = load_assembly(export_dir), load_placement(placement_dir)
+    fovs = assembly.fovs
+    for fov_id in fovs['fov_id'][fovs['kind'].eq('assignment').fillna(False).to_numpy(dtype=bool)]:
+        folder = assignment_directory(_FovPaths(output_root, fov_id).checkpoint_dir, name)
+        if os.path.abspath(folder / RECORD_FILE) not in declared:
+            continue
+        result = read_assignment(folder, name)
+        image = output_root / 'images' / 'DAPI' / f'{fov_id}.tif'
+        _write_assignment_figures(result, image if image.is_file() else None, output_root / 'expr' / fov_id,
+                                  ownership=fov_ownership(assembly, fov_id, placement=placement))

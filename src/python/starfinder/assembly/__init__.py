@@ -15,7 +15,10 @@ ownership centroid lies in its own FOV's region, with every molecule assigned to
 There is no matching or merging of observations across FOVs. :func:`sample_anndata`
 writes ``sample.h5ad`` through :func:`starfinder.assignment.write_h5ad`, and
 :func:`save_assembly` and :func:`load_assembly` write and read the sample's export folder
-(``tables/`` and the ``assembly`` section of ``export.json``). :class:`AssemblyConfig`
+(``tables/`` and the ``assembly`` section of ``export.json``). :func:`fov_ownership`
+gives one FOV's ownership region and excluded observations as the
+:class:`~starfinder.assignment.FOVOwnership` that
+:func:`~starfinder.assignment.plot_assignment` draws. :class:`AssemblyConfig`
 selects the ownership rule, the centroid, the tie rule and the conflict flags. See
 docs/assembly-contract.md and docs/assembly-algorithms.md.
 """
@@ -25,7 +28,8 @@ from ._config import (ASSEMBLY_STATUSES, CELL_ASSEMBLY_FLAGS, CELL_ASSEMBLY_REAS
                       MOLECULE_ASSEMBLY_REASONS, AssemblyConfig, AssemblyInput)
 from ._ownership import OwnershipMap, ownership_map
 from ._persist import load_assembly, save_assembly
+from ._region import fov_ownership
 
 __all__ = ["assemble", "AssemblyResult", "AssemblyInput", "AssemblyConfig", "ownership_map", "OwnershipMap",
            "ASSEMBLY_STATUSES", "CELL_ASSEMBLY_REASONS", "MOLECULE_ASSEMBLY_REASONS", "CELL_ASSEMBLY_FLAGS",
-           "MOLECULE_ASSEMBLY_FLAGS", "sample_anndata", "save_assembly", "load_assembly"]
+           "MOLECULE_ASSEMBLY_FLAGS", "sample_anndata", "save_assembly", "load_assembly", "fov_ownership"]

@@ -52,6 +52,16 @@ SHA-256 of every file and, per FOV read from a saved folder, the territory file'
 beside its SHA-256), replacing only that section; :py:func:`~starfinder.assembly.load_assembly`
 reads it back, checking every SHA-256.
 
+:py:func:`~starfinder.assembly.fov_ownership` gives, for one FOV of an assembled sample and
+the placement it was assembled from, the
+:py:class:`~starfinder.assignment.FOVOwnership` that
+:py:func:`~starfinder.assignment.plot_assignment` draws: the pixels of the FOV's Y, X grid
+whose centres ``origin + (y, x) · spacing`` the FOV owns (the ``owner`` test of the
+ownership map, rebuilt from the placement and the grids and config the assembly records;
+empty for a FOV without an origin), and the ``cell_id`` and ``spot_id`` of the FOV's
+observations whose assembly status is ``excluded``, read from the tables. A FOV without an
+input, or another placement, raises ``ValueError``.
+
 .. currentmodule:: starfinder.assembly
 
 .. autosummary::
@@ -64,6 +74,7 @@ reads it back, checking every SHA-256.
    AssemblyResult
    CELL_ASSEMBLY_FLAGS
    CELL_ASSEMBLY_REASONS
+   fov_ownership
    load_assembly
    MOLECULE_ASSEMBLY_FLAGS
    MOLECULE_ASSEMBLY_REASONS

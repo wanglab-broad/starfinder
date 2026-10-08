@@ -119,7 +119,12 @@ FOV, `assignment_single_layer.png` (the middle plane `Z // 2`) when the label im
 ZYX, not for a YX one, and `log.txt`: one line of totals, then the assignment ratio,
 assigned molecules over all molecules of the table with both counts
 (`assignment ratio: 61.11% (11 of 18 molecules assigned)`), or
-`assignment ratio: none (no molecule)` when the FOV has none.
+`assignment ratio: none (no molecule)` when the FOV has none. With an `assembly` block
+the sample's `export_sample` rule draws the two figures again once the sample is
+assembled, with the FOV's ownership region as a yellow line, the cells and molecules the
+assembly excluded in grey and, as each panel's x-axis label, how many of those drawn it retained
+({doc}`assignment-contract`, "Diagnostics"); `log.txt` is not rewritten, and without the
+block the figures stay as `reads_assignment` draws them.
 
 Assignment needs the `anndata` extra for `raw.h5ad`; sample H5AD aggregation uses
 Scanpy, which the base package does not install. The matrix counts decoded genes

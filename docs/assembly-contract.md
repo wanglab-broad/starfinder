@@ -752,6 +752,19 @@ the files of "Persistence" and of the other parts it runs. It runs once per samp
 `reads_assignment` of every FOV of the sample and after the placement exists; unlike
 `reads_assignment` today, no rule reads another sample's placement.
 
+**The assignment figures with ownership** (W-330, added after the implementation). With an
+assignment name (`assembly.assignment` not null) and an assembly in the folder (the
+assemble part written or reused), `export_sample` then draws `expr/{fovID}/assignment.png`,
+and `assignment_single_layer.png` for a ZYX label image, again for each FOV of the sample
+whose saved assignment is an input of the rule, with the FOV's ownership region and the
+observations the assembly excluded (`plot_assignment` with the record of `fov_ownership`,
+{doc}`assignment-contract`, "Diagnostics"), through the helper `reads_assignment` uses
+for the image and the views. The two files are declared outputs of neither rule:
+`reads_assignment` still writes them first, without ownership, because it runs before the
+placement is needed. `export/<sample>/` and `export.json` do not change. Without an
+`assembly` block the figures stay as `reads_assignment` draws them: the tile configuration
+is not an ownership source.
+
 ## Tests the implementation keeps and adds
 
 * `test_workflow_assembly_golden.py`, `test_workflow_stitching_golden.py`,

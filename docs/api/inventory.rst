@@ -51,6 +51,7 @@ starfinder.assembly
 * :py:obj:`starfinder.assembly.AssemblyResult`
 * :py:obj:`starfinder.assembly.CELL_ASSEMBLY_FLAGS`
 * :py:obj:`starfinder.assembly.CELL_ASSEMBLY_REASONS`
+* :py:obj:`starfinder.assembly.fov_ownership`
 * :py:obj:`starfinder.assembly.load_assembly`
 * :py:obj:`starfinder.assembly.MOLECULE_ASSEMBLY_FLAGS`
 * :py:obj:`starfinder.assembly.MOLECULE_ASSEMBLY_REASONS`
@@ -70,6 +71,7 @@ starfinder.assignment
 * :py:obj:`starfinder.assignment.CELL_STATUSES`
 * :py:obj:`starfinder.assignment.COMPARTMENT_STATES`
 * :py:obj:`starfinder.assignment.CorrespondenceConfig`
+* :py:obj:`starfinder.assignment.FOVOwnership`
 * :py:obj:`starfinder.assignment.match_nuclei`
 * :py:obj:`starfinder.assignment.molecule_table`
 * :py:obj:`starfinder.assignment.molecule_table_from_csv`

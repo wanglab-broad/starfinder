@@ -1624,6 +1624,12 @@ export:
   `export/{sample}/export.json`, which lists every other file; a part that cannot run
   therefore does not fail the rule, and the warning and the record say so ("When a part
   cannot run").
+* After `Dataset.export`, with `assembly.assignment` set and the assembly written or
+  reused, the rule also draws each FOV's assignment figures `expr/{fovID}/assignment.png`
+  and `assignment_single_layer.png` again, with the FOV's ownership region
+  ({doc}`assembly-contract`, "Workflow configuration"; W-330). They lie outside
+  `export/<sample>/`, are not declared outputs and are not listed in `export.json`;
+  `Dataset.export` itself writes no figure.
 * A default-tier test keeps the static schema equal to the fields of `ExportConfig`,
   `FusionConfig`, `LabelConfig` and `SpatialDataExportConfig`, as for the other blocks.
 
