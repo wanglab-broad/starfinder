@@ -11,6 +11,7 @@ tier; the missing extra is made by making the import fail inside the test.
 import hashlib
 import importlib.util
 import json
+import math
 import os
 import subprocess
 import sys
@@ -402,16 +403,23 @@ def _replace_global(monkeypatch, view, change):
     monkeypatch.setattr(param_resolution, "groupwise_resolution", replaced)
 
 
-@pytest.mark.slow
-@needs_library
-def test_the_tissue_2d_transform_is_accepted_and_changes_nothing(monkeypatch):
+TISSUE_EDGE = (0, 1)
+# The operator's corrected criterion (2026-10-08): the optimization is not exact under a change of
+# one unit in the last place, so the solved values equal the run without the replacement within this.
+SOLVED_TOLERANCE_UM = 1e-9
+
+
+def _tissue_runs(monkeypatch, optimizer_sees_original):
+    """``plane_2d`` without and with the tissue-2D matrix for the pair (0, 1), and what the adapter read.
+
+    Checks, for the run with the replacement: no exception; the adapter read the replaced matrix and
+    took its last column as float64, bit for bit; the link's shift is that column negated.
+    """
     fixture = case("plane_2d")   # 2 × 2 tiles of 120 × 120, registered in 2D
     with monkeypatch.context() as patch:
         calls = _spy_translation(patch)
         before = run(fixture)
-        pair_calls = calls[:len(before.links[before.links.reason != "pruned"])]
-    edge = (0, 1)
-    own = pair_calls[0][0]
+    own = calls[0][0]   # the first registered pair is (0, 1)
     tissue = own.copy()
     tissue[:2, :2] = TISSUE_2D_LINEAR
     assert not np.array_equal(tissue[:2, :2], np.eye(2)) and np.array_equal(tissue[:2, 2], own[:2, 2])
@@ -419,39 +427,87 @@ def test_the_tissue_2d_transform_is_accepted_and_changes_nothing(monkeypatch):
     def to_tissue(matrix):
         matrix[...] = tissue
 
-    pair = tuple(fixture.fov_ids[i] for i in edge)
-    results = {}
-    for optimizer_sees_original in (True, False):
-        with monkeypatch.context() as patch:
-            calls = _spy_translation(patch)
-            _replace_pairwise(patch, edge, to_tissue, optimizer_sees_original)
-            after = results[optimizer_sees_original] = run(fixture)   # no exception
-        matrix, ndim, taken = calls[0]
-        assert ndim == 2 and np.array_equal(matrix, tissue)
-        assert taken.dtype == np.float64 and np.array_equal(taken, tissue[:2, 2])
-        assert np.array_equal(taken, own[:2, 2])
-        link = after.links.set_index(["fov_a", "fov_b"]).loc[pair]
-        assert [link.shift_y, link.shift_x] == list(-tissue[:2, 2])
-        assert list(after.fovs.status) == list(before.fovs.status) == ["image_supported"] * 4
-    # Only the adapter reads the replaced matrix: every status and every other value equals the run
-    # without the replacement, bit for bit.
-    isolated = results[True]
-    pd.testing.assert_frame_equal(isolated.fovs, before.fovs, check_exact=True)
-    pd.testing.assert_frame_equal(isolated.links, before.links, check_exact=True)
-    assert isolated.record == before.record
-    # The library's global optimization reads the replaced matrix too, as on tissue-2D: every status,
-    # flag, component, link decision and the review are the same; the origins it solves are measured.
-    literal = results[False]
-    exact = ["fov_id", "status", "flags", "component", "n_links_kept", "nominal_z", "nominal_y", "nominal_x"]
-    pd.testing.assert_frame_equal(literal.fovs[exact], before.fovs[exact], check_exact=True)
-    columns = [c for c in before.links.columns if c != "residual"]
-    pd.testing.assert_frame_equal(literal.links[columns], before.links[columns], check_exact=True)
-    assert literal.record["review"] == before.record["review"]
-    numeric = [c for c in before.fovs.columns if c not in exact and before.fovs[c].dtype.kind == "f"]
-    differences = {c: float(np.abs(literal.fovs[c] - before.fovs[c]).max()) for c in numeric}
-    differences["links.residual"] = float(np.nanmax(np.abs(literal.links.residual - before.links.residual)))
-    print(json.dumps({"case": "plane_2d, the optimizer reads the tissue-2D matrix",
-                      "max_abs_difference_from_the_run_without_replacement": differences}))
+    with monkeypatch.context() as patch:
+        calls = _spy_translation(patch)
+        _replace_pairwise(patch, TISSUE_EDGE, to_tissue, optimizer_sees_original)
+        after = run(fixture)   # no exception
+    matrix, ndim, taken = calls[0]
+    assert ndim == 2 and np.array_equal(matrix, tissue)
+    assert taken.dtype == np.float64 and np.array_equal(taken, tissue[:2, 2]) and np.array_equal(taken, own[:2, 2])
+    link = after.links.set_index(["fov_a", "fov_b"]).loc[tuple(fixture.fov_ids[i] for i in TISSUE_EDGE)]
+    assert [link.shift_y, link.shift_x] == list(-tissue[:2, 2])
+    return before, after
+
+
+def _record_differences(after, before, path="record"):
+    """Compare two records: every float within the tolerance (NaN with NaN), everything else exactly.
+
+    Returns the largest absolute float difference, by path.
+    """
+    if isinstance(before, dict):
+        assert isinstance(after, dict) and after.keys() == before.keys(), path
+        found = {}
+        for key in before:
+            found.update(_record_differences(after[key], before[key], f"{path}.{key}"))
+        return found
+    if isinstance(before, (list, tuple)):
+        assert type(after) is type(before) and len(after) == len(before), path
+        found = {}
+        for i, (a, b) in enumerate(zip(after, before)):
+            found.update(_record_differences(a, b, f"{path}[{i}]"))
+        return found
+    if isinstance(before, float) and not isinstance(before, bool):
+        assert isinstance(after, float), path
+        if math.isnan(before):
+            assert math.isnan(after), path
+            return {}
+        difference = abs(after - before)
+        assert difference <= SOLVED_TOLERANCE_UM, (path, after, before)
+        return {path: difference} if difference else {}
+    assert after == before, (path, after, before)
+    return {}
+
+
+@pytest.mark.slow
+@needs_library
+def test_the_tissue_2d_transform_is_accepted_and_changes_nothing(monkeypatch):
+    # The replaced matrix reaches the library's global optimization, as it does in production.
+    before, after = _tissue_runs(monkeypatch, optimizer_sees_original=False)
+    # Every status, flag, component, link decision and the review state equal the run without it.
+    exact_fovs = ["fov_id", "status", "flags", "component", "n_links_kept"]
+    assert list(after.fovs.status) == ["image_supported"] * 4
+    pd.testing.assert_frame_equal(after.fovs[exact_fovs], before.fovs[exact_fovs], check_exact=True)
+    exact_links = ["fov_a", "fov_b", "kept", "reason"]
+    pd.testing.assert_frame_equal(after.links[exact_links], before.links[exact_links], check_exact=True)
+    assert after.record["review"] == before.record["review"]
+    # Every other value of the placement (origins, corrections, method translations, link shifts,
+    # quality and residuals, the record's numbers) within 1e-9 µm, NaN where the run without it has NaN.
+    differences = {}
+    for name, columns in (("fovs", [c for c in before.fovs.columns if c not in exact_fovs]),
+                          ("links", [c for c in before.links.columns if c not in exact_links])):
+        frame_after, frame_before = getattr(after, name)[columns], getattr(before, name)[columns]
+        pd.testing.assert_frame_equal(frame_after, frame_before, check_exact=False, rtol=0.0,
+                                      atol=SOLVED_TOLERANCE_UM)
+        delta = (frame_after - frame_before).abs().max()
+        differences.update({f"{name}.{c}": float(v) for c, v in delta.items() if v > 0})
+    differences.update(_record_differences(after.record, before.record))
+    print(json.dumps({"case": "plane_2d, the optimization reads the tissue-2D matrix",
+                      "max_abs_difference_from_the_run_without_replacement_um": differences}))
+    assert max(differences.values(), default=0.0) <= SOLVED_TOLERANCE_UM, differences
+
+
+@pytest.mark.slow
+@needs_library
+def test_the_adapter_alone_changes_nothing_when_the_optimization_reads_the_library_matrix(monkeypatch):
+    """Isolates the adapter: only it reads the tissue-2D matrix; the optimization gets the library's own.
+
+    Everything then equals the run without the replacement bit for bit. This is a check of the adapter
+    alone; the criterion of the tissue-2D case is the test above.
+    """
+    before, after = _tissue_runs(monkeypatch, optimizer_sees_original=True)
+    pd.testing.assert_frame_equal(after.fovs, before.fovs, check_exact=True)
+    pd.testing.assert_frame_equal(after.links, before.links, check_exact=True)
+    assert after.record == before.record
 
 
 @pytest.mark.slow
