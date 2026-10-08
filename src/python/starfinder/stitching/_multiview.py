@@ -16,7 +16,7 @@ import pandas as pd
 
 from starfinder._registry import Dependency
 
-from ._methods import METHOD_LINK_COLUMNS, STITCHING_METHODS, MethodPlacement, StitchingSpec
+from ._methods import LINEAR_TOLERANCE, METHOD_LINK_COLUMNS, STITCHING_METHODS, MethodPlacement, StitchingSpec
 
 PAIRWISE = ("phase_correlation",)
 PRUNING = ("alternating_pattern", None)
@@ -113,12 +113,15 @@ def _scalar(value):
 
 
 def _translation(affine, ndim):
-    """The translation of a library affine; raise if its linear part is not the identity."""
+    """The translation column of a library affine, unchanged; raise if its linear part is not the identity.
+
+    An entry within ``LINEAR_TOLERANCE`` of the identity, the import's, counts as the identity.
+    """
     matrix = np.asarray(affine, dtype=np.float64).squeeze()
     if matrix.shape != (ndim + 1, ndim + 1):
         raise ValueError(f"multiview-stitcher returned an affine of shape {matrix.shape}; expected "
                          f"{(ndim + 1, ndim + 1)}")
-    if not np.array_equal(matrix[:ndim, :ndim], np.eye(ndim)):
+    if not np.abs(matrix[:ndim, :ndim] - np.eye(ndim)).max() <= LINEAR_TOLERANCE:
         raise ValueError("multiview-stitcher returned a transform that is not a translation")
     return matrix[:ndim, ndim]
 

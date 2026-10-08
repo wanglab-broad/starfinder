@@ -151,7 +151,11 @@ One call per sample. Steps, as W-324 ran them (notes sections 3 and 5):
    removal keeps the component connected is removed.
 7. **Result.** Per view, the translation of its affine under the new transform key (µm,
    view to common frame, fractional), its component, the links with quality, the kept
-   flag, and the links the optimizer removed.
+   flag, and the links the optimizer removed. A transform the library returns, a pair's
+   in step 3 or a view's here, is a translation when every entry of its linear part is
+   within 1e-9 of the identity, the linear-part tolerance of the import ("Import
+   arithmetic", the same constant); its translation column is taken unchanged, and any
+   other transform raises `ValueError`.
 
 | Field of `MultiviewStitcherConfig` | Unit | Default | Rule |
 | --- | --- | --- | --- |

@@ -290,6 +290,204 @@ def test_with_no_link_left_every_fov_is_failed_and_the_result_is_saved(tmp_path,
         assert list(result.links.reason) == ["quality_below_threshold"]
 
 
+# --- The linear-part tolerance of the adapter (W-388) -----------------------------------------
+# multiview-stitcher returned, on tissue-2D (W-376), a pair transform whose linear part is one unit
+# in the last place off the identity. The adapter accepts a linear part within the import's
+# LINEAR_TOLERANCE per entry and takes the translation column unchanged.
+
+TISSUE_2D_LINEAR = ((0.9999999999999999, 0.0), (0.0, 1.0))
+
+
+def _offset_identity(ndim, d, entry):
+    """A homogeneous affine whose linear part is the identity with ``d`` added to ``entry``."""
+    matrix = np.eye(ndim + 1)
+    matrix[:ndim, ndim] = [-1.4006, -0.4921, 2.25][:ndim]
+    matrix[entry] += d
+    return matrix
+
+
+def test_the_tolerance_is_one_object_shared_with_the_import():
+    import ast
+
+    from starfinder.stitching import _bigstitcher, _methods, _multiview
+    assert _methods.LINEAR_TOLERANCE == 1e-9
+    assert _multiview.LINEAR_TOLERANCE is _methods.LINEAR_TOLERANCE is _bigstitcher.LINEAR_TOLERANCE
+    package = Path(starfinder.stitching.__file__).parent
+    defined = [path.name for path in sorted(package.glob("*.py"))
+               for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+               if isinstance(node, ast.Assign) and any(getattr(t, "id", None) == "LINEAR_TOLERANCE"
+                                                       for t in node.targets)]
+    assert defined == ["_methods.py"]
+
+
+@pytest.mark.parametrize("ndim", [2, 3])
+def test_translation_accepts_an_entry_within_the_tolerance(ndim):
+    from starfinder.stitching._multiview import _translation
+    entries = [(i, j) for i in range(ndim) for j in range(ndim)]
+    for entry in entries:
+        # Off the diagonal the difference is 1e-9 exactly; on it, 1 − 1e-9 is 9.99999972e-10 off in float64.
+        for d in ((1e-9, -1e-9) if entry[0] != entry[1] else (-1e-9,)):
+            matrix = _offset_identity(ndim, d, entry)
+            assert abs(matrix[entry] - float(entry[0] == entry[1])) <= 1e-9
+            out = _translation(matrix[None], ndim)   # the library's (t, x_in, x_out) shape
+            assert out.dtype == np.float64 and np.array_equal(out, matrix[:ndim, ndim])
+    tissue = _offset_identity(ndim, 0.0, (0, 0))
+    tissue[:2, :2] = TISSUE_2D_LINEAR
+    assert np.array_equal(_translation(tissue, ndim), tissue[:ndim, ndim])
+
+
+@pytest.mark.parametrize("ndim", [2, 3])
+@pytest.mark.parametrize("d", [2e-9, 1e-6, -2e-9, -1e-6, np.nan])
+def test_translation_refuses_an_entry_beyond_the_tolerance(ndim, d):
+    from starfinder.stitching._multiview import _translation
+    for entry in [(i, j) for i in range(ndim) for j in range(ndim)]:
+        with pytest.raises(ValueError, match=r"^multiview-stitcher returned a transform that is not a translation$"):
+            _translation(_offset_identity(ndim, d, entry), ndim)
+
+
+def _spy_translation(monkeypatch):
+    """Record each ``_translation`` call of the adapter: (the affine as float64, ndim, the returned translation)."""
+    from starfinder.stitching import _multiview
+    calls, original = [], _multiview._translation
+
+    def spy(affine, ndim):
+        out = original(affine, ndim)
+        calls.append((np.asarray(affine, dtype=np.float64).squeeze().copy(), ndim, out.copy()))
+        return out
+
+    monkeypatch.setattr(_multiview, "_translation", spy)
+    return calls
+
+
+def _replace_pairwise(monkeypatch, edge, change, optimizer_sees_original=False):
+    """Let the library's pairwise registration run, then apply ``change`` to the matrix of one edge.
+
+    With ``optimizer_sees_original`` the library's global optimization gets the edge's
+    original matrix back, so that only the adapter reads the changed one.
+    """
+    from multiview_stitcher import param_resolution, registration
+    original, optimize = registration.compute_pairwise_registrations, param_resolution.groupwise_resolution
+    returned = {}
+
+    def replaced(*args, **kwargs):
+        graph = original(*args, **kwargs)
+        returned["transform"] = graph.edges[edge]["transform"]
+        transform = returned["transform"].copy(deep=True)
+        change(transform.data[0])
+        graph.edges[edge]["transform"] = transform
+        return graph
+
+    def restored(graph, *args, **kwargs):
+        if graph.has_edge(*edge):
+            graph.edges[edge]["transform"] = returned["transform"]
+        return optimize(graph, *args, **kwargs)
+
+    monkeypatch.setattr(registration, "compute_pairwise_registrations", replaced)
+    if optimizer_sees_original:
+        monkeypatch.setattr(param_resolution, "groupwise_resolution", restored)
+
+
+def _replace_global(monkeypatch, view, change):
+    """Let the library's global optimization run, then apply ``change`` to the matrix of one view."""
+    from multiview_stitcher import param_resolution
+    original = param_resolution.groupwise_resolution
+
+    def replaced(*args, **kwargs):
+        params, info = original(*args, **kwargs)
+        params = dict(params)
+        params[view] = params[view].copy(deep=True)
+        change(params[view].data[0])
+        return params, info
+
+    monkeypatch.setattr(param_resolution, "groupwise_resolution", replaced)
+
+
+@pytest.mark.slow
+@needs_library
+def test_the_tissue_2d_transform_is_accepted_and_changes_nothing(monkeypatch):
+    fixture = case("plane_2d")   # 2 × 2 tiles of 120 × 120, registered in 2D
+    with monkeypatch.context() as patch:
+        calls = _spy_translation(patch)
+        before = run(fixture)
+        pair_calls = calls[:len(before.links[before.links.reason != "pruned"])]
+    edge = (0, 1)
+    own = pair_calls[0][0]
+    tissue = own.copy()
+    tissue[:2, :2] = TISSUE_2D_LINEAR
+    assert not np.array_equal(tissue[:2, :2], np.eye(2)) and np.array_equal(tissue[:2, 2], own[:2, 2])
+
+    def to_tissue(matrix):
+        matrix[...] = tissue
+
+    pair = tuple(fixture.fov_ids[i] for i in edge)
+    results = {}
+    for optimizer_sees_original in (True, False):
+        with monkeypatch.context() as patch:
+            calls = _spy_translation(patch)
+            _replace_pairwise(patch, edge, to_tissue, optimizer_sees_original)
+            after = results[optimizer_sees_original] = run(fixture)   # no exception
+        matrix, ndim, taken = calls[0]
+        assert ndim == 2 and np.array_equal(matrix, tissue)
+        assert taken.dtype == np.float64 and np.array_equal(taken, tissue[:2, 2])
+        assert np.array_equal(taken, own[:2, 2])
+        link = after.links.set_index(["fov_a", "fov_b"]).loc[pair]
+        assert [link.shift_y, link.shift_x] == list(-tissue[:2, 2])
+        assert list(after.fovs.status) == list(before.fovs.status) == ["image_supported"] * 4
+    # Only the adapter reads the replaced matrix: every status and every other value equals the run
+    # without the replacement, bit for bit.
+    isolated = results[True]
+    pd.testing.assert_frame_equal(isolated.fovs, before.fovs, check_exact=True)
+    pd.testing.assert_frame_equal(isolated.links, before.links, check_exact=True)
+    assert isolated.record == before.record
+    # The library's global optimization reads the replaced matrix too, as on tissue-2D: every status,
+    # flag, component, link decision and the review are the same; the origins it solves are measured.
+    literal = results[False]
+    exact = ["fov_id", "status", "flags", "component", "n_links_kept", "nominal_z", "nominal_y", "nominal_x"]
+    pd.testing.assert_frame_equal(literal.fovs[exact], before.fovs[exact], check_exact=True)
+    columns = [c for c in before.links.columns if c != "residual"]
+    pd.testing.assert_frame_equal(literal.links[columns], before.links[columns], check_exact=True)
+    assert literal.record["review"] == before.record["review"]
+    numeric = [c for c in before.fovs.columns if c not in exact and before.fovs[c].dtype.kind == "f"]
+    differences = {c: float(np.abs(literal.fovs[c] - before.fovs[c]).max()) for c in numeric}
+    differences["links.residual"] = float(np.nanmax(np.abs(literal.links.residual - before.links.residual)))
+    print(json.dumps({"case": "plane_2d, the optimizer reads the tissue-2D matrix",
+                      "max_abs_difference_from_the_run_without_replacement": differences}))
+
+
+@pytest.mark.slow
+@needs_library
+@pytest.mark.parametrize("site", ["pairwise", "global"])
+@pytest.mark.parametrize("name, ndim", [("plane_2d", 2), ("two_tiles", 3)], ids=["2d", "3d"])
+@pytest.mark.parametrize("d, accepted", [(1e-9, True), (2e-9, False), (1e-6, False)],
+                         ids=["1e-9", "2e-9", "1e-6"])
+def test_the_bound_at_both_calls_of_the_adapter(monkeypatch, site, name, ndim, d, accepted):
+    fixture = case(name)
+    entry = (0, 1)   # off the diagonal, so the entry is d off the identity exactly
+
+    def offset(matrix):
+        matrix[entry] += d
+
+    if site == "pairwise":
+        _replace_pairwise(monkeypatch, (0, 1), offset)
+    else:
+        _replace_global(monkeypatch, 1, offset)
+    calls = _spy_translation(monkeypatch)
+    if not accepted:
+        with pytest.raises(ValueError, match=r"^multiview-stitcher returned a transform that is not a translation$"):
+            run(fixture)
+        return
+    result = run(fixture)
+    n_pairs = len(result.links[result.links.reason != "pruned"])
+    matrix, called_ndim, taken = calls[0] if site == "pairwise" else calls[n_pairs + 1]
+    assert called_ndim == ndim and matrix[entry] == d
+    assert np.array_equal(taken, matrix[:ndim, ndim])
+    assert list(result.fovs.status) == ["image_supported"] * len(fixture.tiles)
+    if site == "global":
+        axes = ["y", "x"] if ndim == 2 else ["z", "y", "x"]
+        row = result.fovs.iloc[1]
+        assert [row[f"method_translation_{a}"] for a in axes] == list(taken)
+
+
 # --- MV6: determinism ------------------------------------------------------------------------
 
 DETERMINISM = """

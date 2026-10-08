@@ -25,7 +25,7 @@ from starfinder._registry import provenance
 from starfinder.image import IncompatibleGeometryError
 from starfinder.segmentation._labels import ReferenceGrid
 
-from ._methods import StitchingSpec
+from ._methods import LINEAR_TOLERANCE, StitchingSpec
 from ._neighbors import boxes
 from ._placement import (AXES, FORMAT_VERSION, FOV_COLUMNS, LINK_COLUMNS, STAGE, PlacementResult, _key_sets,
                          check_grids, empty_links, frame_record, input_record)
@@ -36,7 +36,6 @@ from ._stitch import FALLBACKS, StitchingInput, _check_inputs, _components
 VIEW_MAP_COLUMNS = ("view", "grid_column", "grid_row", "fov_id", "kind")
 VIEW_MAP_DTYPES = {"view": "int64", "grid_column": "int64", "grid_row": "int64", "fov_id": "str", "kind": "str"}
 VIEW_KINDS = ("fov", "padding", "placeholder")
-LINEAR_TOLERANCE = 1e-9
 CALIBRATION = "calibration"
 STITCHING_TRANSFORM = "Stitching Transform"
 TWO_ROUND = "Two-Round using Metadata to align unconnected Tiles and iterative dropping of bad links"

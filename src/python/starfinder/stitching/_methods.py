@@ -17,6 +17,9 @@ from starfinder._registry import Dependency, check_shared
 
 WHAT = "stitching method"
 METHOD_LINK_COLUMNS = ("fov_a", "fov_b", "shift_z", "shift_y", "shift_x", "quality", "kept", "reason")
+# Absolute, per matrix entry: how far a linear part may be from the identity and still be a
+# translation, for the BigStitcher import and the multiview_stitcher adapter alike.
+LINEAR_TOLERANCE = 1e-9
 
 
 @dataclass(frozen=True)
