@@ -733,7 +733,9 @@ def _workflow_dataset(config, **fields):
 
     seq_channel_order is a list of patterns or of wavelength/channel/name
     entries (MATLAB's channel_order_dict); each additional_round entry's
-    channel_order gives that round its own channels.
+    channel_order gives that round its own channels. voxel_size_xy and
+    voxel_size_z become the Dataset fields of the same names, the declared
+    calibration of saved files that store none.
     """
     n = config['n_rounds']
     if isinstance(n, bool) or not isinstance(n, int) or n < 1:
@@ -749,7 +751,8 @@ def _workflow_dataset(config, **fields):
         Path(config['root_output_path']) / config['dataset_id'] / config['output_id'],
         config['dataset_id'], config['sample_id'], config['output_id'], rounds=rounds,
         channel_order=tuple(channels), fov_pattern=config.get('fov_id_pattern', 'Position%03d'),
-        other_channel_order=orders, reference_stains=_reference_stains(config), **fields)
+        other_channel_order=orders, reference_stains=_reference_stains(config),
+        voxel_size_xy=config.get('voxel_size_xy'), voxel_size_z=config.get('voxel_size_z'), **fields)
 
 
 def _nuclei_registration(config):
@@ -929,13 +932,13 @@ def _label_namespace(config, fov_id, run=None):
 
 
 def _declared_metadata(config, fov_id):
-    """ImageMetadata of a legacy file without stored metadata: the configured voxel_size_z and voxel_size_xy (µm)."""
-    from starfinder.image import ImageMetadata
-    frame = f"declared:{config['dataset_id']}/{config['output_id']}/{fov_id}"
-    z, xy = config.get('voxel_size_z'), config.get('voxel_size_xy')
-    if z is None or xy is None:
-        return ImageMetadata(frame)
-    return ImageMetadata(frame, spacing_zyx=(float(z), float(xy), float(xy)), spatial_unit='micrometer')
+    """ImageMetadata of a legacy file without stored metadata: the configured voxel_size_z and voxel_size_xy (µm).
+
+    starfinder.dataset._declared.declared_metadata, the rule Dataset.export uses for such a file.
+    """
+    from ._declared import declared_metadata
+    return declared_metadata(config['dataset_id'], config['output_id'], fov_id,
+                             voxel_size_xy=config.get('voxel_size_xy'), voxel_size_z=config.get('voxel_size_z'))
 
 
 @dataclass(frozen=True)
@@ -1356,15 +1359,18 @@ def _assembly_cells(path, output_root, config, fov_id, target):
     """(molecule grid, cell run) of a legacy label file with an assembly block: on the reference grid.
 
     The molecule grid is that of images/ref_merged/{fovID}.tif, the grid
-    Dataset.export gives assemble, so the saved assignment passes assemble's
-    grid check; a ZYX label file must have its shape, and a YX one is a plane
-    on its Z maximum projection.
+    Dataset.export gives assemble (starfinder.dataset._declared.reference_grid:
+    the file's stored metadata, or the grid voxel_size_xy and voxel_size_z
+    declare for a file that stores none), so the saved assignment passes
+    assemble's grid check; a ZYX label file must have its shape, and a YX one
+    is a plane on its Z maximum projection.
     """
     import tifffile
     from starfinder.image import IncompatibleGeometryError
-    from starfinder.segmentation import import_labels, reference_grid_from_file
-    from ._paths import _FovPaths
-    grid = reference_grid_from_file(_FovPaths(output_root, fov_id).ref_merged_tif)
+    from starfinder.segmentation import import_labels
+    from ._declared import reference_grid
+    grid = reference_grid(output_root, fov_id, dataset_id=config['dataset_id'], output_id=config['output_id'],
+                          voxel_size_xy=config.get('voxel_size_xy'), voxel_size_z=config.get('voxel_size_z'))
     with tifffile.TiffFile(path) as tif:
         shape = tuple(int(n) for n in tif.series[0].shape)
     if len(shape) == 2 and shape == tuple(grid.shape_zyx[1:]):

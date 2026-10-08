@@ -49,8 +49,10 @@ def source_path(dataset, fov, entry) -> Path:
 
 
 def _reference_grid(dataset, fov):
-    from starfinder.segmentation import reference_grid_from_file
-    return reference_grid_from_file(_paths(dataset, fov).ref_merged_tif)
+    """The FOV's grid: the stored metadata of ``images/ref_merged/<fov_id>.tif``, else the dataset's voxel sizes."""
+    from starfinder.dataset._declared import reference_grid
+    return reference_grid(dataset.output_root, fov, dataset_id=dataset.dataset_id, output_id=dataset.output_id,
+                          voxel_size_xy=dataset.voxel_size_xy, voxel_size_z=dataset.voxel_size_z)
 
 
 def _genes(dataset):
@@ -68,7 +70,9 @@ def assembly_inputs(dataset, placement, assignment) -> list:
     The folder is ``checkpoints/<fov_id>/assignment/<assignment>/``; with
     ``assignment=None`` the FOV's ``signal/<fov_id>_goodSpots.csv`` is read
     with ``molecule_table_from_csv``. The grid is that of
-    ``images/ref_merged/<fov_id>.tif``. A FOV without a saved input gets none;
+    ``images/ref_merged/<fov_id>.tif``: its stored metadata, or the grid the
+    dataset's ``voxel_size_xy`` and ``voxel_size_z`` declare for a file that
+    stores none. A FOV without a saved input gets none;
     ``assemble`` then refuses an owning FOV without one.
     """
     from starfinder.assembly import AssemblyInput

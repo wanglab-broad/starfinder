@@ -248,7 +248,7 @@ runner").
 
 | Order | Part | Turned off by | What the method does | Writes in `output_dir` |
 | --- | --- | --- | --- | --- |
-| 1 | `assemble` ({doc}`assembly-contract`) | `assemble: false` | Builds one `AssemblyInput` per FOV of the placement from the saved assignment folders named `assignment` (or, with `assignment=None`, from each FOV's saved goodSpots table `signal/<fov_id>_goodSpots.csv` read through `molecule_table_from_csv`, with the identities `csv:<row>`) and the reference grids (`reference_grid_from_file`), calls `assemble`, and saves the result with `save_assembly(result, output_dir, table_format=config.table_format)`. It keeps the tables of every FOV and at most two label images in memory at a time ({doc}`assembly-algorithms`, "Flags"). Turned off, it loads the saved assembly with `load_assembly(output_dir)`, which checks every SHA-256, and records the part as `reused`; when the folder holds no saved assembly and no later part needs one (check 4), it records the part as `off` and `fuse` runs without an assembly. | `tables/fovs.<fmt>`, `tables/cells.<fmt>`, `tables/molecules.<fmt>`, `tables/counts.<fmt>`, `sample.h5ad`; section `assembly` |
+| 1 | `assemble` ({doc}`assembly-contract`) | `assemble: false` | Builds one `AssemblyInput` per FOV of the placement from the saved assignment folders named `assignment` (or, with `assignment=None`, from each FOV's saved goodSpots table `signal/<fov_id>_goodSpots.csv` read through `molecule_table_from_csv`, with the identities `csv:<row>`) and the reference grids (the stored metadata of `images/ref_merged/{fovID}.tif`, read as `reference_grid_from_file` reads it, or, for a file that stores none, the grid the dataset's `voxel_size_xy` and `voxel_size_z` declare; without them such a file raises `ValueError` naming them), calls `assemble`, and saves the result with `save_assembly(result, output_dir, table_format=config.table_format)`. It keeps the tables of every FOV and at most two label images in memory at a time ({doc}`assembly-algorithms`, "Flags"). Turned off, it loads the saved assembly with `load_assembly(output_dir)`, which checks every SHA-256, and records the part as `reused`; when the folder holds no saved assembly and no later part needs one (check 4), it records the part as `off` and `fuse` runs without an assembly. | `tables/fovs.<fmt>`, `tables/cells.<fmt>`, `tables/molecules.<fmt>`, `tables/counts.<fmt>`, `sample.h5ad`; section `assembly` |
 | 2 | `fuse` | `fuse: false` | Builds one `FusionInput` per included FOV from the saved source images and reference grids, and calls `fuse` with the assembly of part 1. | The fused images; section `fusion` |
 | 3 | `fuse_labels` | `fuse_labels: false` (the default; "Choices decided at the gate", 8) | Calls `fuse_labels` with the placement and the assembly. | `cell_labels.ome.tif`; section `labels` |
 | 4 | `export_spatialdata` | `export_spatialdata: false` (the default) | Calls `export_spatialdata` with the assembly and the records of parts 2 and 3 that were written. | `sample.zarr/`; section `spatialdata` |
@@ -284,8 +284,10 @@ In this order; each raises, names the FOVs or keys, and leaves the folder unchan
    accepts and whose placement SHA-256 values equal the placement's (`ValueError`).
 5. **Fusion inputs**, when `fuse` is on: every included FOV has exactly one `FusionInput`
    and no input names another FOV (`ValueError`); each input's grid equals the grid the
-   placement recorded for that FOV, by the grid rule of {doc}`assignment-contract`, with
-   known spacing, unit `µm` and identity direction (`IncompatibleGeometryError`); all
+   placement recorded for that FOV, by the grid rule of {doc}`assignment-contract`
+   reading `µm`, `um` and `micrometer` as one unit and a grid without a direction as
+   having the identity direction, with known spacing, unit `µm` and identity direction
+   (`IncompatibleGeometryError`); all
    included FOVs share one spacing, as `stitch` requires, and either all have one plane
    or none has (`ValueError`, "The fusion grid").
 6. **Label IDs**, when `fuse_labels` is on: the sample cell table has at most
@@ -427,7 +429,10 @@ inspect").
   configuration chooses) by default; `reference_merged` (`images/ref_merged/{fovID}.tif`);
   or `<name>=file:<pattern>` with `{fov_id}`, accepted only when its shape equals the
   reference grid's, where `<name>` names its files and store element and may use letters,
-  digits, `_`, `-` and `.` only. Further channels are further names in `images`.
+  digits, `_`, `-` and `.` only. Further channels are further names in `images`. A source
+  file is one channel, ZYX or YX; a TIFF series without axis metadata that tifffile
+  reports as pages over Y and X (`IYX` or `QYX`) is read as ZYX, lazily like the others,
+  and a file with a channel axis or more than three axes is refused.
 * **Optionally the assembly**, whose record's placement SHA-256 values must equal the
   placement's (`ValueError`), so that the image and the tables come from one placement.
   Fusion uses no ownership: the assembly is only recorded.

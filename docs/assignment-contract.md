@@ -393,12 +393,15 @@ Rules that hold for every option:
   outside.
 * **Non-finite coordinates** are refused when the `MoleculeTable` is built.
 * **Plane labels.** For a label image with geometry `plane` (Z=1), the territory is read
-  at `y, x`; `z` does not select it, and the record says `"sampled_axes": "yx"`. `z` is
-  still checked against the molecule run's grid (its Z size, before any projection), so a
-  molecule off that grid in Z is `outside_grid`. For `volume` and `extended` labels,
-  `z, y, x` are sampled (`"zyx"`).
-* **Z=1 grids.** When the molecule run's grid itself has Z=1 (a projected FOV), molecules
-  have `z = 0` and the labels are a `plane`; the rule is the same.
+  at `y, x`; `z` does not select it, and the record says `"sampled_axes": "yx"`. When the
+  molecule run's grid has more than one plane, `z` is still checked against that grid (its
+  Z size, before any projection), so a molecule off that grid in Z is `outside_grid`. For
+  `volume` and `extended` labels, `z, y, x` are sampled (`"zyx"`).
+* **Z=1 grids.** When the molecule run's grid itself has Z=1 (a projected FOV), the labels
+  are a `plane` and a molecule is sampled at its `y, x` only: its `z` is not considered, so
+  no molecule is `outside_grid` because of its `z`, its `voxel_z` is 0 (the plane) and its
+  recorded `z` stays in the column `z`; a molecule outside the grid in `y` or `x` is
+  `outside_grid`.
 * **Nuclei** are sampled at the same voxel as the cells.
 
 ## Direct assignment and statuses

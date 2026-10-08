@@ -23,6 +23,7 @@ import numpy as np
 
 from starfinder.image import ImageMetadata, IncompatibleGeometryError
 from starfinder.stitching import PlacementResult
+from starfinder.stitching._placement import grid_problems
 
 from . import _tiff
 from ._config import FusionConfig, LabelConfig
@@ -206,8 +207,7 @@ def _grids(placement, assembly, ids):
         grids[fov] = ReferenceGrid(found[0], found[1], "declared")
     if without:
         raise ValueError(f"fuse_labels needs the grid of every included FOV; FOVs without one: {_names(without)}")
-    bad = [fov for fov in ids if grids[fov].metadata.spacing_zyx is None or grids[fov].metadata.spatial_unit != "µm"
-           or grids[fov].metadata.direction_zyx != IDENTITY]
+    bad = [fov for fov in ids if grid_problems(grids[fov].metadata)]
     if bad:
         raise IncompatibleGeometryError("fuse_labels needs known spacing, unit µm and identity direction on every "
                                         f"grid; FOVs without: {_names(bad)}")

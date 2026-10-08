@@ -25,7 +25,7 @@ An em dash in the default column means the schema defines no default.
 | `rotate_angle` | number | Yes | —; degrees, 0 for no rotation |
 | `img_col`, `img_row` | integers >=1 | Yes | —; width X and height Y; subtile windows use these values |
 | `img_z` | integer >=1 | No | —; downstream 3-D metadata/preview uses it; `reads_assignment` needs it for a YX label image (the Z size of the molecule grid) |
-| `voxel_size_xy`, `voxel_size_z` | numbers >0 | No | —; physical microns for stitching and the declared calibration of the files the segmentation and assignment rules read; **not** extraction window radii |
+| `voxel_size_xy`, `voxel_size_z` | numbers >0 | No | —; physical microns for stitching and the declared calibration of the files the segmentation and assignment rules read, and of a reference image `images/ref_merged/{fovID}.tif` that stores no metadata when `reads_assignment` (with an `assembly` block) and `export_sample` read its grid; **not** extraction window radii |
 | `maximum_projection` | boolean | No | `false`; reference-image/DAPI output projection; does not turn sequencing into a 2-D algorithm |
 | `seq_channel_order` | array of strings, or of objects with `wavelength`, `channel`, `name` | No | —; set explicit patterns for Python, e.g. `[ch00, ch02, ch01, ch03]`, or MATLAB's `channel_order_dict` entries; see [channels](#channels) |
 | `additional_round` | array of objects with string `round_name` and optional `channel_order` | No | —; supply `[]` when unused; accessed at parse time; `channel_order` lists the round's `wavelength`/`channel`/`name` entries, see [channels](#channels) |
@@ -470,7 +470,9 @@ sample-level rules for a configuration that has them. The specification is the
   `assignment` (the assignment name read per FOV, default `default`; null for molecules
   only) and `table_format` (`csv` or `parquet`). With the block, `reads_assignment` writes
   the per-FOV `raw.h5ad` and `reads_assignment.csv` without the tile filter and without
-  `global_*` columns, on the grid of `images/ref_merged/{fovID}.tif`, reads no
+  `global_*` columns, on the grid of `images/ref_merged/{fovID}.tif` (its stored
+  metadata, or for a file that stores none the grid `voxel_size_xy` and `voxel_size_z`
+  declare, as `export_sample` reads it), reads no
   `tile_config_{sample}.csv`, and saves the FOV's assignment folder
   `checkpoints/{fovID}/assignment/<assignment>/`; `create_sample_h5ad` and
   `create_sample_reads_assignment` do not run. One rule per sample, `export_sample`, runs

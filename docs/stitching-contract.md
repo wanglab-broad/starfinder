@@ -300,8 +300,10 @@ class StitchingInput:
   (`<checkpoint dir>/<fov_id>/other_rounds/reference_stain/image.ome.tif`), the nuclear
   stain LN is stitched on. Its grid is the reference grid by the grid rule of
   {doc}`assignment-contract`.
-* A YX file gives a Z=1 grid; every FOV of a sample must have the same Z size, spacing,
-  direction and unit, else `IncompatibleGeometryError`. Tile shapes may differ in Y and X
+* A YX file gives a Z=1 grid; every FOV of a sample must have the same Z size and
+  spacing, the unit `µm` and the identity direction, else `IncompatibleGeometryError`;
+  `µm`, `um` and `micrometer` are one unit, and a grid without a direction has the
+  identity direction. Tile shapes may differ in Y and X
   only if the method's spec allows it (`multiview_stitcher` does).
 * The legacy `images/DAPI/{fovID}.tif` (rotated, optionally projected DAPI) is accepted as
   `file:<path>` only when its shape equals the reference grid's; it carries no metadata, so
@@ -381,8 +383,9 @@ formula. The inverse, for resampling a FOV into a fused image, is
 **Relation to `ImageMetadata.origin`.** A FOV's own `ImageMetadata` stays in the FOV frame
 and is not changed by stitching; its `origin_zyx` (usually `(0, 0, 0)` or unknown) is not
 read. The placement origin replaces it only in the derived sample-frame metadata above.
-Every FOV of a sample must have identity `direction_zyx` (the sample frame's), known
-spacing and the unit `µm`, else `stitch` raises `IncompatibleGeometryError`. A cropped grid
+Every FOV of a sample must have identity `direction_zyx` (the sample frame's; a grid
+without a direction has the identity direction), known spacing and the unit `µm` (spelled
+`µm`, `um` or `micrometer`), else `stitch` raises `IncompatibleGeometryError`. A cropped grid
 (`ImageMetadata.cropped(start, …)`) maps its own index `q` to the FOV index `q + start`
 first.
 
@@ -694,8 +697,9 @@ origin in `origins`, for a key of `origins` that is not a `fov_id` of the table,
 origin that is not three finite numbers (NaN or ±inf on any axis, or another number of
 values); an empty mapping is therefore refused for every FOV, and only `None` omits the
 origins. `IncompatibleGeometryError`, as in `stitch`, for grids with unknown spacing, a
-unit other than µm or a non-identity direction, and for grids that differ in Z size,
-spacing, direction or unit. Tile shapes may differ in Y and X, because no method registers
+unit other than µm (`µm`, `um` and `micrometer` are one unit) or a non-identity direction
+(a grid without a direction has the identity direction), and for grids that differ in Z
+size or spacing. Tile shapes may differ in Y and X, because no method registers
 the tiles. The table's own rules (unique `fov_id`, finite nominal values) are checked when
 the table is built.
 

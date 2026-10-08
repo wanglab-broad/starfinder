@@ -51,6 +51,10 @@ class Dataset:
     "Readout modes"): ``multiplexed`` (default) decodes color sequences with
     the codebook; ``direct`` assigns each candidate the direct_panel gene of its
     own round and channel.
+    voxel_size_xy and voxel_size_z (µm, the workflow keys of the same names)
+    declare the calibration of saved files that store none: ``export`` takes
+    a FOV's grid from the stored metadata of ``images/ref_merged/{fovID}.tif``,
+    or else from these sizes.
     The repr summarizes IDs, round and channel labels, the reference (codebook
     with its encoding method and segment layout, or the panel in direct mode)
     and roots.
@@ -61,7 +65,8 @@ class Dataset:
         Invalid rounds, a round named ``reference_stain``, repeated patterns
         within a round, other_channel_order for a round that is not an other
         round or with no channel, reference stains without a reference round or
-        sharing a pattern with channel_order, or the field errors of ChannelInfo.
+        sharing a pattern with channel_order, a voxel size that is not a
+        finite positive number or None, or the field errors of ChannelInfo.
     TypeError
         A channel that is not a pattern string, ChannelInfo or mapping.
     """
@@ -94,6 +99,10 @@ class Dataset:
     # Stain files of the reference round's folder that are not sequencing colours
     reference_stains: tuple[ChannelInfo, ...] = ()
 
+    # The declared calibration (µm) of saved files that store none, as the workflow's voxel_size_xy and voxel_size_z
+    voxel_size_xy: float | None = None
+    voxel_size_z: float | None = None
+
     # The patterns and ChannelInfo of the sequencing channels (key None) and of each other round with its own
     # channels. An init field so that dataclasses.replace hands it to the copy, which keeps the ChannelInfo of
     # every round whose patterns the call leaves as they are (__post_init__).
@@ -104,6 +113,9 @@ class Dataset:
             raise ValueError(f"readout_mode must be one of {READOUT_MODES}; got {self.readout_mode!r}")
         if self.direct_panel is not None and not isinstance(self.direct_panel, DirectPanel):
             raise TypeError("direct_panel must be a DirectPanel or None")
+        from starfinder.dataset._declared import check_voxel_size
+        self.voxel_size_xy = check_voxel_size("voxel_size_xy", self.voxel_size_xy)
+        self.voxel_size_z = check_voxel_size("voxel_size_z", self.voxel_size_z)
         self.rounds.validate()
         if REFERENCE_STAIN in self.rounds.all_rounds:
             raise ValueError(f"{REFERENCE_STAIN!r} is the reserved image name of the reference stains; "
@@ -510,7 +522,9 @@ class Dataset:
         ``export.json`` after each: ``assemble`` on one
         :class:`~starfinder.assembly.AssemblyInput` per FOV of the placement
         (``checkpoints/{fovID}/assignment/<assignment>/`` and the grid of
-        ``images/ref_merged/{fovID}.tif``), saved with
+        ``images/ref_merged/{fovID}.tif``: its stored metadata, or for a file
+        that stores none the grid ``voxel_size_xy`` and ``voxel_size_z``
+        declare), saved with
         :func:`~starfinder.assembly.save_assembly` (with ``assemble`` off the
         saved assembly is ``reused``, or the part is ``off`` when there is none);
         :func:`~starfinder.sample_output.fuse` on one
@@ -557,7 +571,9 @@ class Dataset:
         ------
         ValueError, PlacementReviewRequiredError, ModuleNotFoundError, IncompatibleGeometryError
             The checks of docs/sample-output-contract.md ("Checks before
-            anything is written"), in their order, with the folder unchanged.
+            anything is written"), in their order, with the folder unchanged;
+            a reference image without stored metadata while ``voxel_size_xy``
+            or ``voxel_size_z`` is None raises ``ValueError`` naming them.
         """
         from starfinder.sample_output import ExportConfig
         from starfinder.sample_output._export import export_sample

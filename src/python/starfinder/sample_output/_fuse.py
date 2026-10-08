@@ -26,10 +26,11 @@ import numpy as np
 from starfinder.image import IncompatibleGeometryError
 from starfinder.segmentation import ReferenceGrid
 from starfinder.stitching import PlacementResult
+from starfinder.stitching._placement import grid_problems, same_frame_grid
 
 from . import _tiff
 from ._config import FusionConfig
-from ._grid import AXES, IDENTITY, INCLUDED, FusedGrid, _names, fused_grid, included_fovs
+from ._grid import AXES, INCLUDED, FusedGrid, _names, fused_grid, included_fovs
 from ._record import (
     ExportIncompleteWarning,
     Timer,
@@ -128,13 +129,24 @@ class _Plan:
     placement_origins: dict = None  # fov -> (origin_z, origin_y, origin_x)
 
 
+#: The axes tifffile reports for pages over Y and X of a file without axis metadata (generic and shaped pages).
+PAGE_AXES = ("IYX", "QYX")
+
+
 def _source_shape(path):
-    """(shape_zyx, dtype) of a one-channel TIFF from its header; a YX file has Z = 1."""
+    """(shape_zyx, dtype) of a one-channel TIFF from its header; a YX file has Z = 1.
+
+    A series without axis metadata whose axes tifffile reports as pages over Y
+    and X (:data:`PAGE_AXES`) is read as ZYX.
+    """
     import tifffile
     with tifffile.TiffFile(path) as tif:
         series = tif.series[0]
         axes, shape, dtype = series.axes, tuple(series.shape), np.dtype(series.dtype)
+        named = tif.is_ome or tif.is_imagej
     kept = [(a, n) for a, n in zip(axes, shape) if not (n == 1 and a not in "YX")]
+    if not named and "".join(a for a, _ in kept) in PAGE_AXES:
+        kept = [("Z", kept[0][1]), *kept[1:]]
     if "".join(a for a, _ in kept) not in ("YX", "ZYX"):
         raise ValueError(f"source image {path} has axes {axes} {shape}; a source image is one channel, ZYX or YX")
     sizes = dict(kept)
@@ -221,19 +233,14 @@ def check_fusion(placement, inputs, *, config, assembly=None) -> _Plan:
         return _Plan([], None, {}, {}, [], {}, origins)
     for fov in ids:
         grid, recorded = by_fov[fov].grid, _recorded_grid(placement, fov)
-        if recorded is None or recorded[0] != grid.shape_zyx or recorded[1] != grid.metadata:
+        if recorded is None or not same_frame_grid(recorded[0], recorded[1], grid.shape_zyx, grid.metadata):
             raise IncompatibleGeometryError(
                 f"the grid of FOV {fov} ({grid.shape_zyx}, {grid.metadata}) is not the grid the placement recorded "
                 f"({None if recorded is None else (recorded[0], recorded[1])})")
     bad = {"unknown spacing": [], "a unit other than µm": [], "a direction other than the identity": []}
     for fov in ids:
-        metadata = by_fov[fov].grid.metadata
-        if metadata.spacing_zyx is None:
-            bad["unknown spacing"].append(fov)
-        if metadata.spatial_unit != "µm":
-            bad["a unit other than µm"].append(fov)
-        if metadata.direction_zyx != IDENTITY:
-            bad["a direction other than the identity"].append(fov)
+        for what in grid_problems(by_fov[fov].grid.metadata):
+            bad[what].append(fov)
     found = [f"{what}: {_names(fovs)}" for what, fovs in bad.items() if fovs]
     if found:
         raise IncompatibleGeometryError("fuse needs known spacing, unit µm and identity direction on every grid; "

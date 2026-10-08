@@ -39,6 +39,8 @@ LINK_COLUMNS = ("fov_a", "fov_b", *(f"overlap_{a}{e}" for a in AXES for e in "01
 LINK_DTYPES = {c: "float64" for c in LINK_COLUMNS} | {"fov_a": "str", "fov_b": "str", "kept": "bool",
                                                      "reason": "str"}
 IDENTITY = ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))
+#: The spellings of the micrometre a grid may carry; §2.10 reads them as one unit.
+MICROMETRE = ("µm", "um", "micrometer")
 SUPPLIED_IMPLEMENTATION = "starfinder.stitching.placement_from_table"
 
 
@@ -162,22 +164,45 @@ class PlacementResult:
         object.__setattr__(self, "record", _json(dict(self.record)))
 
 
+def frame_metadata(metadata: ImageMetadata) -> ImageMetadata:
+    """The metadata as §2.10 checks a grid: a spelling of :data:`MICROMETRE` reads as ``µm`` and no direction as
+    the identity. Nothing written changes; only the checks compare this form."""
+    unit = "µm" if metadata.spatial_unit in MICROMETRE else metadata.spatial_unit
+    direction = IDENTITY if metadata.direction_zyx is None else metadata.direction_zyx
+    if (unit, direction) == (metadata.spatial_unit, metadata.direction_zyx):
+        return metadata
+    return replace(metadata, spatial_unit=unit, direction_zyx=direction)
+
+
+def same_frame_grid(shape_a, metadata_a, shape_b, metadata_b) -> bool:
+    """Whether two grids are one grid for §2.10: equal shape and equal :func:`frame_metadata`."""
+    return tuple(shape_a) == tuple(shape_b) and frame_metadata(metadata_a) == frame_metadata(metadata_b)
+
+
+def grid_problems(metadata) -> list[str]:
+    """Which of ``unknown spacing``, ``a unit other than µm`` and ``a direction other than the identity`` a grid
+    has, by :func:`frame_metadata`."""
+    read = frame_metadata(metadata)
+    return [what for what, bad in (("unknown spacing", read.spacing_zyx is None),
+                                   ("a unit other than µm", read.spatial_unit != "µm"),
+                                   ("a direction other than the identity", read.direction_zyx != IDENTITY)) if bad]
+
+
 def check_grids(grids: Mapping[str, ReferenceGrid]) -> None:
     """The sample-frame geometry rule shared by ``stitch`` and ``placement_from_table``.
 
-    Every grid has known spacing, unit ``µm`` and identity direction, and all
-    share Z size, spacing, direction and unit; Y and X sizes may differ.
+    Every grid has known spacing, unit ``µm`` (spelled ``µm``, ``um`` or
+    ``micrometer``) and identity direction (or none, which is the identity),
+    and all share Z size and spacing; Y and X sizes may differ.
     ``IncompatibleGeometryError`` names the FOVs and their values.
     """
     problems = {"unknown spacing": [], "a unit other than µm": [], "a direction other than the identity": []}
     for fov, grid in grids.items():
         metadata = grid.metadata
-        if metadata.spacing_zyx is None:
-            problems["unknown spacing"].append(fov)
-        if metadata.spatial_unit != "µm":
-            problems["a unit other than µm"].append(f"{fov} ({metadata.spatial_unit!r})")
-        if metadata.direction_zyx != IDENTITY:
-            problems["a direction other than the identity"].append(f"{fov} ({metadata.direction_zyx!r})")
+        shown = {"a unit other than µm": metadata.spatial_unit,
+                 "a direction other than the identity": metadata.direction_zyx}
+        for what in grid_problems(metadata):
+            problems[what].append(f"{fov} ({shown[what]!r})" if what in shown else fov)
     found = [f"{what}: {_names(fovs)}" for what, fovs in problems.items() if fovs]
     if found:
         raise IncompatibleGeometryError("the sample frame needs known spacing, unit µm and identity direction "

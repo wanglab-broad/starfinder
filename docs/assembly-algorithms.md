@@ -48,7 +48,7 @@ row of `placement.fovs` and `spacing`, `D` from its `ReferenceGrid.metadata`
 
 | Input | `p` | Output columns |
 | --- | --- | --- |
-| molecule | `z, y, x` (float64, zero-based; sub-voxel kept) | `sample_z, sample_y, sample_x` |
+| molecule | `z, y, x` (float64, zero-based; sub-voxel kept); on a one-plane grid `z` is read as 0, the plane | `sample_z, sample_y, sample_x` |
 | cell | `centroid_z/y/x`; `expanded_centroid_z/y/x` | `sample_centroid_*`; `sample_expanded_centroid_*` (NaN where the §2.9 value is NaN) |
 | plane cell | as above, but `centroid_z` is not a position | `sample_centroid_z` = NaN |
 | ownership centroid | the expanded centroid when `centroid="territory"` and assign expanded, else the original | `ownership_centroid` (`expanded` or `original`) and `sample_ownership_centroid_*`, a copy of the pair it names |
@@ -172,7 +172,7 @@ Per FOV, in order:
    (reason `cell_not_owner` for `not_owner`); `unassigned` → owner of the molecule's own
    position; `outside_grid` → `outside_grid`. In `molecules_only` mode every molecule is
    treated as `unassigned`, except `outside_grid` positions (`z, y, x` outside the grid by
-   the §2.9 bounds), which are excluded.
+   the §2.9 bounds; `y, x` only on a one-plane grid), which are excluded.
 4. Counts: the FOV's §2.9 `counts` rows of its counted cells (retained, §2.9 status
    `kept`; {doc}`assembly-contract`, "Statuses and reasons"), with `fov_id` and
    `cell_namespace` added. A retained `excluded_no_nucleus` cell has no §2.9 count rows and

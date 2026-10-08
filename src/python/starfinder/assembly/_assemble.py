@@ -23,9 +23,8 @@ from starfinder.assignment._assign import COMPARTMENTS
 from starfinder.assignment._assign import table_sha256 as assignment_table_sha256
 from starfinder.image import ImageMetadata, IncompatibleGeometryError
 from starfinder.segmentation import ReferenceGrid
-from starfinder.segmentation._labels import same_grid
 from starfinder.stitching import PlacementResult
-from starfinder.stitching._placement import IDENTITY, PLACED, table_sha256
+from starfinder.stitching._placement import PLACED, grid_problems, same_frame_grid, table_sha256
 from starfinder.stitching._positions import _names
 from starfinder.stitching._review import require_approval
 
@@ -542,26 +541,21 @@ def _check_inputs(placement, inputs, config):
     # 6. Grid.
     for fov in loaded:
         recorded = recorded_grid(placement, fov.fov_id)
-        if recorded is None or recorded[0] != fov.grid.shape_zyx or recorded[1] != fov.grid.metadata:
+        if recorded is None or not same_frame_grid(recorded[0], recorded[1], fov.grid.shape_zyx, fov.grid.metadata):
             raise IncompatibleGeometryError(
                 f"the grid of FOV {fov.fov_id} ({fov.grid.shape_zyx}, {fov.grid.metadata}) is not the grid the "
                 f"placement recorded ({None if recorded is None else (recorded[0], recorded[1])})")
         if fov.kind == "assignment":
             grid = fov.result.record["grid"]
             assigned = ReferenceGrid(tuple(grid["shape_zyx"]), ImageMetadata(**grid["metadata"]), "declared")
-            if not same_grid(assigned, fov.grid):
+            if not same_frame_grid(assigned.shape_zyx, assigned.metadata, fov.grid.shape_zyx, fov.grid.metadata):
                 raise IncompatibleGeometryError(
                     f"the grid of FOV {fov.fov_id} ({fov.grid.shape_zyx}, {fov.grid.metadata}) is not the grid of "
                     f"its assignment record ({assigned.shape_zyx}, {assigned.metadata})")
     bad = {"unknown spacing": [], "a unit other than µm": [], "a direction other than the identity": []}
     for fov in loaded:
-        metadata = fov.grid.metadata
-        if metadata.spacing_zyx is None:
-            bad["unknown spacing"].append(fov.fov_id)
-        if metadata.spatial_unit != "µm":
-            bad["a unit other than µm"].append(fov.fov_id)
-        if metadata.direction_zyx != IDENTITY:
-            bad["a direction other than the identity"].append(fov.fov_id)
+        for what in grid_problems(fov.grid.metadata):
+            bad[what].append(fov.fov_id)
     found = [f"{what}: {_names(fovs)}" for what, fovs in bad.items() if fovs]
     if found:
         raise IncompatibleGeometryError("assemble needs known spacing, unit µm and identity direction on every "
@@ -695,6 +689,11 @@ def assemble(placement: PlacementResult, inputs: Sequence[AssemblyInput], *,
         table = fov.result.molecules if mode == "cells" else fov.molecules.table.assign(
             assignment_status=pd.array([None] * len(fov.molecules.table), dtype="string"))
         positions = table[["z", "y", "x"]].to_numpy(np.float64)
+        if fov.grid.shape_zyx[0] == 1:
+            # A one-plane grid samples y and x only: every molecule is on its plane, index z 0; the column z keeps
+            # the recorded value.
+            positions = positions.copy()
+            positions[:, 0] = 0.0
         sample_zyx = to_sample(positions)
         molecule_owner = ownership.owner(sample_zyx) if placed else np.full(len(table), None, dtype=object)
         molecules = table.copy()

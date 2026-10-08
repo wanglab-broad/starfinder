@@ -173,7 +173,9 @@ separate `Dataset.assemble` (W-329 review, 2026-10-06, amending D3). Its assembl
 loads the saved placement (`load_placement`), builds one `AssemblyInput` per FOV of the
 placement from the saved assignment folders named `assignment` (or, with
 `assignment=None`, from the saved molecule tables through `molecule_table`) and the
-reference grids (`reference_grid_from_file`), calls `assemble` with `config.assembly`, and
+reference grids (the stored metadata of `images/ref_merged/{fovID}.tif`, read as
+`reference_grid_from_file` reads it, or, for a file that stores none, the grid the
+dataset's `voxel_size_xy` and `voxel_size_z` declare), calls `assemble` with `config.assembly`, and
 saves the result in `output_dir`, the sample's export folder ("Persistence"). It keeps the
 tables of every FOV and at most two label images in memory at a time
 ({doc}`assembly-algorithms`, "Resources"). With `assemble: false` the entry loads the
@@ -203,8 +205,10 @@ In this order, before any coordinate is computed; each raises and names the FOVs
    subtiles are not assembled (`ValueError`).
 6. **Grid.** The input's `grid` equals, by the grid rule of {doc}`assignment-contract`,
    the grid the placement recorded for the FOV (`record["inputs"][fov_id]`) and the grid
-   of the assignment record; otherwise `IncompatibleGeometryError` naming both. Its
-   `ImageMetadata` must have known spacing, unit `µm` and identity direction, as
+   of the assignment record, reading `µm`, `um` and `micrometer` as one unit and a grid
+   without a direction as having the identity direction; otherwise
+   `IncompatibleGeometryError` naming both. Its `ImageMetadata` must have known spacing,
+   unit `µm` (spelled `µm`, `um` or `micrometer`) and identity direction (or none), as
    `stitch` requires; assemble never assumes a pixel size.
 7. **Genes.** Every input has the same `genes` tuple (`ValueError` naming the
    differences), which becomes the sample's gene list.
@@ -226,8 +230,9 @@ The record of the result (the `assembly` section of `export.json` when saved, "P
   both null when no file was read (`conflicts=False`, a `molecules_only` input, or an
   assignment given in memory, whose territories' SHA-256 its §2.9 record already holds),
   the grid (shape, metadata, SHA-256) and its `calibration_source`
-  (`grid` for a grid read from an image's metadata, `declared` for a grid the legacy
-  adapter declared from `voxel_size_*`, never upgraded);
+  (`grid` for a grid read from an image's metadata, `declared` for a grid declared from
+  `voxel_size_*`, by the legacy adapter or for a reference image that stores no metadata,
+  never upgraded);
 * the config, the ownership geometry with each FOV's footprint, centre and whether it is an
   owning FOV (`owns_points`), the counts of
   "Count accounting", and the SHA-256 of every table and file it writes;
@@ -285,7 +290,10 @@ reference grid, pushed into the sample frame by the rule of {doc}`stitching-cont
 `placed_metadata(placement, fov_id).index_to_world(p)`.
 
 * **Molecules**: `p` is the molecule's `z, y, x` from the §2.9 molecule table, float64,
-  sub-voxel positions included; never the sampled voxel. An `outside_grid` molecule is
+  sub-voxel positions included; never the sampled voxel. On a FOV whose reference grid has
+  one plane a molecule is sampled at its `y, x` only ({doc}`assignment-contract`,
+  "Coordinate sampling"), so its `p_z` is 0, the plane: its `sample_z` is the plane's,
+  and its recorded `z` stays in the column `z`. An `outside_grid` molecule is
   mapped too (its position is finite) and keeps its coordinates while excluded.
 * **Cells**: `p` is the float centroid of the §2.9 cell table, `centroid_*` for the
   original territory and `expanded_centroid_*` for the expanded one; never truncated. For
@@ -305,8 +313,9 @@ reference grid, pushed into the sample frame by the rule of {doc}`stitching-cont
 * **Unknown calibration stays unknown**: a grid without known spacing cannot be placed
   (`stitch` and the import refuse it) and assemble refuses it too (check 6). No pixel size
   is assumed, the YAML `voxel_size_*` is never read by assemble, and a §2.9 `size_physical`
-  that is NaN stays NaN. A grid declared from YAML values by the legacy adapter is recorded
-  with `calibration_source: declared`.
+  that is NaN stays NaN. A grid declared from YAML values, by the legacy adapter or by the
+  export entry for a reference image that stores no metadata, is recorded with
+  `calibration_source: declared`.
 * **No integer coordinates.** The integer `global_x/y/z` of the legacy files are not
   produced by assemble; they stay in the legacy files while the legacy rules run
   ("Workflow configuration").
@@ -739,9 +748,10 @@ populations one home, and follows the stitching block's pattern ({doc}`stitching
 "Workflow configuration").
 
 **The label grid with an `assembly` block.** `reads_assignment` imports a legacy label file
-on the grid of the FOV's reference image `images/ref_merged/{fovID}.tif`, the grid that
-`Dataset.export` gives `assemble`, so that the saved assignment passes assemble's grid
-check. A ZYX label file must have the reference image's shape, and a YX one the shape of
+on the grid of the FOV's reference image `images/ref_merged/{fovID}.tif` (its stored
+metadata, or for a file that stores none the grid `voxel_size_xy` and `voxel_size_z`
+declare), the grid that `Dataset.export` gives `assemble`, so that the saved assignment
+passes assemble's grid check. A ZYX label file must have the reference image's shape, and a YX one the shape of
 its Y and X, as a plane on the Z maximum projection of that grid; a file of any other shape
 raises `IncompatibleGeometryError`. Without the block the file is imported, as before, on
 a grid declared from `voxel_size_xy` and `voxel_size_z`.

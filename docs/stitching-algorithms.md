@@ -273,8 +273,8 @@ filter and optimization).
 1. **Checks.** The table has at least one row; its `fov_id`s and the keys of `grids` are
    the same set; with `origins`, its `fov_id`s and the keys of `origins` are the same set
    and every origin is three finite numbers (z, y, x, µm); every grid has known spacing,
-   unit `µm` and identity direction; and all grids share Z size, spacing, direction and
-   unit. Y and X sizes may differ.
+   unit `µm` (spelled `µm`, `um` or `micrometer`) and identity direction (or none, which
+   is the identity); and all grids share Z size and spacing. Y and X sizes may differ.
 2. **Per-FOV rows**, in table order: `status` `metadata_only`; `nominal_*` the float64
    values of the table, copied; without `origins`, `origin_* = nominal_*`, copied, not
    recomputed, and `correction_*` 0.0; with `origins`, `origin_*` the supplied values as
