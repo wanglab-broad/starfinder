@@ -802,7 +802,13 @@ example on 2026-10-08, at revision `b4bf7bb`, which holds W-388's tolerance of t
 adapter, in the run directory
 `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-389/20261008T093243Z-b342bf8d`
 (`worker-notes.md`, `results/manifest.json`, `results/tables/`); the tissue-2D rows and
-sentences below are from that run.
+sentences below are from that run. W-391 ran the three samples again through the unchanged
+`Dataset.export` from the files as saved on 2026-10-08, at revision `f6ffdd9`, which holds
+W-390, in the run directory
+`/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-391/20261008T203138Z-905169ae`
+(`worker-notes.md`, `results/manifest.json`, `results/comparison/`), from the saved
+placements of W-389 (tissue-2D) and W-376 (cell-culture-3D, LN sample1 BigStitcher); no
+placement was made again. The sentences marked W-391 are from that run.
 
 * **Inventory.** The 190 molecule tables (LN sample1 64, 3,782,580 rows; tissue-2D 56,
   5,353,714; cell-culture-3D 70, 2,458,865) equal the operator's inventory of 2026-10-07 in
@@ -825,7 +831,12 @@ sentences below are from that run.
   excluded `outside_grid`. Every `outside_grid` molecule is outside in z only. The tiles
   are single-plane maximum projections, while each FOV's molecule table spans 30 planes
   (one-based z 1 to 30), and only the 181,007 molecules of the first plane fall on the
-  one-plane grid. This is recorded as a finding for Jiahao and not acted on.
+  one-plane grid. W-391, with the molecules of a one-plane grid assigned by y and x (W-390):
+  identities 1 to 5 hold; 4,703,832 retained, 649,882 excluded `not_owner`, 0 `outside_grid`
+  (none outside in y or x). Every changed row is one of the 5,172,707 molecules that were
+  `outside_grid` in z alone, with its sample y and x unchanged: 4,543,575 became retained
+  and 629,132 `not_owner`; the 181,007 molecules of the first plane keep their status. The
+  projection equals W-389's pixel for pixel.
 * **Monitored LN agreement.** Within every monitored bound: |d| at most 8.04 px in x, 1.77 px
   in y, 2.77 slices in z; trend in x 1.69 px per column; residual at most 3.14, 1.13 and
   1.31. Of the 111 registered `multiview_stitcher` links, the filter of 0.7 drops 14, all
@@ -837,7 +848,25 @@ sentences below are from that run.
   byte-identical. The LN and cell-culture-3D tiles read as axes `IYX`, which the fusion
   refuses; it read ZYX copies of the same pixels on local scratch. The tissue-2D tiles are
   named by FOV and read as `YX`, so its fusion read the original files; only its grids were
-  declared, as for the other samples.
+  declared, as for the other samples. In W-391 none of this was needed: no function of the
+  package was replaced, the grids came from the dataset's `voxel_size_xy` and
+  `voxel_size_z`, the fusion read the culture's `IYX` tiles and the 64 LN images under their
+  FOV names as saved (each equal byte for byte to its stitching tile), and the W-382 grid
+  metadata was accepted as saved.
+* **From the files as saved (W-391).** tissue-2D and cell-culture-3D ran from their own
+  folders: `check_export` passes, and the cell-culture-3D tables equal W-376's row for row in
+  every column (sample coordinates within 0.0 µm) and its projection pixel for pixel. Two
+  inputs are not where the export's layout looks, so those parts are not run as saved:
+  `Dataset.export` reads `checkpoints/<fov>/assignment/<name>/` under the dataset's root,
+  while W-382 saved the folders under `checkpoints/<sample>/<fov>/` of its run directory;
+  and it reads every grid from `images/ref_merged/<fov>.tif`, which LN sample1 does not have.
+  From the dataset roots the export refuses both blocks and LN sample1. Through a root of
+  symbolic links to the saved files (nothing copied or rewritten), both blocks and the LN
+  assembly equal W-376's in counts, flags and every table row for row. The LN stack
+  (BigStitcher placement, `scale_yx` 0.5) was not written: the fusion read the 64 images
+  lazily from the share, 295 GB for 4.7 GB of images, and the worker stopped the run after
+  2,911 s with about 45 % of W-376's file size written, because it could not finish within
+  the session; it was not retried, so its comparison with W-376's stack is not made.
 
 Measured resources, in place of the estimates of "Resources per sample and step" (the wall
 time each run recorded for its work, without its closing `check_export`, and the run's peak
@@ -846,9 +875,9 @@ the others at four threads):
 
 | Sample | Placement | Assembly (`molecules_only`; cellular block) | Default outputs | Stack and export |
 | --- | --- | --- | --- | --- |
-| LN sample1 | import: under 2 s; `multiview_stitcher`: 140.6 s, 7.57 GiB (one thread: 151.1 s) | BigStitcher: 121.7 s, 2.90 GiB; `multiview_stitcher`: 124.0 s, 2.91 GiB; blocks 46.7 and 47.2 s, 1.96 GiB | none: LN writes no projection | the stack OME-TIFF from each placement, zlib, with `check_export`: BigStitcher 66 × 6,167 × 5,435, fusion 1,468 s, 2.53 GiB, 662,701,545 bytes, and the store 141.5 s, 729,704,694 bytes (run 1,955 s, 6.00 GiB); `multiview_stitcher` 68 × 6,166 × 5,441, fusion 1,564 s, 2.53 GiB, 669,758,230 bytes (run 1,708 s, 6.08 GiB); the two ran side by side; the blocks' label exports 54 s, 4.6 GiB each |
-| cell-culture-3D | 55.2 s, 4.77 GiB | 79.1 s, 2.18 GiB; block 28.4 s, 1.02 GiB | 6,818 × 4,788 projection: 52.0 s, 2.15 GiB | the block's stack, 33 × 2,844 × 2,842, with its label export: 66.6 s, 2.98 GiB, 31,008,462 bytes |
-| tissue-2D | `multiview_stitcher`: 37.4 s (loading 8.0 s), 0.88 GiB | 160.7 s, 5.38 GiB | 11,291 × 9,845 projection (max, 0.5), 77,776,028 bytes: 86.4 s, 4.76 GiB | none |
+| LN sample1 | import: under 2 s; `multiview_stitcher`: 140.6 s, 7.57 GiB (one thread: 151.1 s) | BigStitcher: 121.7 s, 2.90 GiB; `multiview_stitcher`: 124.0 s, 2.91 GiB; blocks 46.7 and 47.2 s, 1.96 GiB; W-391 (BigStitcher, link root): 180.4 s, 2.91 GiB; block 51.8 s, 1.97 GiB | none: LN writes no projection | the stack OME-TIFF from each placement, zlib, with `check_export`: BigStitcher 66 × 6,167 × 5,435, fusion 1,468 s, 2.53 GiB, 662,701,545 bytes, and the store 141.5 s, 729,704,694 bytes (run 1,955 s, 6.00 GiB); `multiview_stitcher` 68 × 6,166 × 5,441, fusion 1,564 s, 2.53 GiB, 669,758,230 bytes (run 1,708 s, 6.08 GiB); the two ran side by side; the blocks' label exports 54 s, 4.6 GiB each; W-391, from the FOV-named images read lazily from the share: stopped by the worker after 2,911 s (295 GB read, about 45 % of the stack's size written, 3.82 GiB), not retried |
+| cell-culture-3D | 55.2 s, 4.77 GiB | 79.1 s, 2.18 GiB; block 28.4 s, 1.02 GiB; W-391: 92.3 s, 2.18 GiB; block (link root) 31.1 s, 1.02 GiB | 6,818 × 4,788 projection: 52.0 s, 2.15 GiB; W-391, from the `IYX` tiles as saved: 229.9 s, 2.21 GiB | the block's stack, 33 × 2,844 × 2,842, with its label export: 66.6 s, 2.98 GiB, 31,008,462 bytes |
+| tissue-2D | `multiview_stitcher`: 37.4 s (loading 8.0 s), 0.88 GiB | 160.7 s, 5.38 GiB; W-391: 164.9 s, 3.86 GiB | 11,291 × 9,845 projection (max, 0.5), 77,776,028 bytes: 86.4 s, 4.76 GiB; W-391: 89.1 s, 3.59 GiB | none |
 
 No run reached its limit; the largest export folder holds 2.13 GB. Assumptions
 ({doc}`sample-output-contract`, "Assumptions"): A1 holds, the LN stack fused from lazily
@@ -871,13 +900,14 @@ The overlap count is computed by the issue's script, which gives 2 on `label_pai
 upper bound on the cells retained twice whose observations share a voxel, recorded for
 Jiahao's decision on cells with several observations, not acted on.
 
-**What these examples do not show.** These examples do not show the export of the files
-as saved. The W-382 folders were assembled only from copies whose grid metadata was
-respelled. The fusion read ZYX copies of tiles that read as `IYX`. Two functions of the
-export module (`_reference_grid` and `source_path`) were replaced in the export processes.
-For tissue-2D only `_reference_grid` was replaced, because its tiles carry no calibration,
-so the export of the tissue-2D files as saved is not shown either. A9 is not verified,
-because no store holds `cell_labels`. A4 stays open.
+**What these examples do not show.** W-391 shows the export of the files as saved for
+tissue-2D and the cell-culture-3D whole sample only. The two cellular blocks and LN sample1
+were exported through a root of links, because the export finds an assignment folder only at
+`checkpoints/<fov>/assignment/<name>/` and a grid only at `images/ref_merged/<fov>.tif`
+under the dataset's root; the route from the W-382 folders and the LN images where they are
+saved is not shown. The LN stack from the files as saved was not written, so its equality
+with W-376's stack is not shown. No cells exist for tissue-2D. A9 is not verified, because
+no store holds `cell_labels`. A4 stays open.
 
 ## Limitations
 
