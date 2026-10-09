@@ -16,13 +16,23 @@ and assigning the sample's molecules to those cells. Jiahao agrees in outline wi
 third for samples exported as projections and the first for dense 3D tissue, and does not
 want two orders of processing if one can do.
 
-**Read every number on this page with three limits.**
+**Read every number on this page with four limits.**
 
-* **Every number comes from one 2 × 2 block, not from a whole sample.** A 2 × 2 block has
-  two ownership boundaries crossing at its centre, so a larger share of its area lies near
-  a seam than in a whole sample of the same tissue. Counts of cells at seams therefore
-  scale with the length of seam, not with the area: a whole sample has a smaller share of
-  such cells than a block.
+* **Every number comes from one 2 × 2 block, not from a whole sample, and a whole sample
+  has more seam per FOV than a block.** A regular grid of N × M FOVs has
+  (N − 1)·M + (M − 1)·N inner seams of one FOV side each, which is 2 − 1/N − 1/M per FOV:
+  1 for a 2 × 2 block, about 1.76 for the cell-culture-3D sample (7 × 10 FOVs, 123 inner
+  seams) and 1.73 for LN sample1 (64 FOVs on an 8 × 9 grid with blank cells, 111 inner
+  seams, counted from W-376's placement), and up to 2 for a large grid. For the same
+  tissue, FOV size and overlap, the share of cells near a seam in a whole sample is
+  therefore expected to be larger than in a block, by a factor of up to about 1.8 for
+  these samples. This factor is an expectation from the geometry, not a measurement; the
+  counts measured on a block are not extrapolated to a whole sample on this page.
+* **Pairs are candidates, inferred from geometry.** No annotation exists. A pair of
+  retained cells of two FOVs whose territories overlap strongly, with nearby centroids, is
+  called here a candidate duplicate (one cell seen by two FOVs, by this measure); that two
+  observations are one biological cell is an inference from the overlap of their
+  territories and the distance of their centroids, never a measurement.
 * **Nothing here measures whether a segmentation is right.** The measurements count
   cells, nuclei, molecules, overlaps and times. No annotation exists, so no number on this
   page is an accuracy, and no segmentation method or scale is ranked. The nucleus labels
@@ -38,9 +48,9 @@ want two orders of processing if one can do.
 The run directory of W-399 is
 `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-399/20261009T073706Z-367758c2`
 (found with `timeout 30 find …/runs/W-399 -maxdepth 2 -name notes.md`). This page cites
-its files as "`results/<path>`", relative to that directory. `notes.md` there describes how
-each step ran; `results/manifest.json` holds the SHA-256 of every file read and written;
-`results/tables/resources.csv` the time, memory and GPU memory of every step.
+its files as "`results/<path>`", relative to that directory. `notes.md` there describes
+how each step ran; `results/manifest.json` holds the SHA-256 of every file read and
+written; `results/tables/resources.csv` the time, memory and GPU memory of every step.
 
 | Measurement | Tables | Figures |
 | --- | --- | --- |
@@ -82,16 +92,18 @@ and 93 in the LN block (`pairs_equal_w376` in the `.json`).
 | LN sample1 | 93 | 5 | 4 | 2 | 8 of 8,194 (0.10%) | 48 of 71,881 (0.07%) |
 
 * **In the culture the shares fall into two groups.** 26 pairs share at most 3% of the
-  smaller territory: two different cells that touch across the seam. 8 pairs share 63% to
-  90%: one cell seen by both FOVs, with ownership centroids 1.5 µm to 9.8 µm apart. No pair
-  lies between 3% and 63% (`fig3_pair_overlap_distribution.png`).
-* **In LN the shares are small.** 88 pairs share at most 21%: neighbouring nuclei whose
-  expanded territories touch across the seam. 5 pairs share 29% to 86%; their centroids
-  are 0.5 µm to 4 µm apart.
-* **The review's figures are upper bounds.** The review counted 34 of the 158 cells of
-  the culture's `sample.h5ad` in a pair (21.5%); counting the cells of every pair gives 35
-  of 158 here (22.2%), and only 16 of them belong to pairs above 0.25: the others touch a
-  cell of the other FOV. In LN the 157 cells of every pair (1.9%) fall to 10 above 0.25.
+  smaller territory: by this measure two different cells that touch across the seam. 8
+  pairs share 63% to 90%, with ownership centroids 1.5 µm to 9.8 µm apart: candidate
+  duplicates, one cell seen by both FOVs by this measure (an inference from geometry). No
+  pair lies between 3% and 63% (`fig3_pair_overlap_distribution.png`).
+* **In LN the shares are small.** 88 pairs share at most 21%: by this measure neighbouring
+  nuclei whose expanded territories touch across the seam. 5 pairs share 29% to 86%;
+  their centroids are 0.5 µm to 4 µm apart (candidate duplicates by this measure).
+* **The review's figures are upper bounds.** The review counted 34 of the 158 cells of the
+  culture's `sample.h5ad` in a pair (21.5%); counting the cells of every pair gives 35 of
+  158 here (22.2%), and only 16 of them belong to pairs above 0.25: by this measure the
+  others touch a cell of the other FOV. In LN the 157 cells of every pair (1.9%) fall to
+  10 above 0.25.
 * **The present flag `conflict` marks exactly the cells of the pairs above 0.5** in both
   blocks: 16 retained culture cells carry it and 8 retained LN cells, and these are the 16
   and 8 cells of the pairs above 0.5.
@@ -115,7 +127,7 @@ The block's 190,541 retained molecules were assigned on the fused grid.
 | --- | --- | --- | --- |
 | Cells | 173 | 168 | 226 in the four FOVs; 185 retained |
 | Cells without a matched nucleus (excluded) | 27 | 22 | 37 in the four FOVs; 27 of the retained |
-| Kept cells (the cells of a `sample.h5ad`) | 146 | 146 | 158, of which 8 are second observations (pairs above 0.5) |
+| Kept cells (the cells of a `sample.h5ad`) | 146 | 146 | 158, of which 8 are candidate second observations by the overlap measure (pairs above 0.5) |
 | Molecules assigned | 165,155 of 190,541 | 168,086 of 190,541 | 167,358 counts in `sample.h5ad`, from 195,974 retained molecules |
 | Counts per kept cell, median (mean) | 1,186 (1,131) | 1,185 (1,151) | 1,117 (1,059) |
 | Cells touching the outer border of the block | 32 (24 kept) | 32 (22 kept) | 31 retained; 18 more retained cells touch an inner FOV edge |
@@ -128,9 +140,18 @@ Source: `results/tables/routes_culture.csv` and `.json`; the call records under
 `results/calls/` (tags `21_` to `24_`, `32_`, `34_`); W-382 `notes.md` ("Segmentation")
 for the route per FOV.
 
+**Times measured beside other work.** The steps did not all run one after another: the
+Cellpose calls at 1/4 (`23_`, `24_`) ran while the extension `32_culture_extend_k1` ran on
+another CPU of the same host (CPU 5; the calls were bound to CPU 1). No step shared a CPU
+with another step; the CPUs, start and end of every step and the steps beside it are in
+`results/tables/resources.csv` (columns `cpus_bound`, `start_utc`, `end_utc`,
+`ran_beside`, `shared_cpus_with`). The disk and the memory bandwidth of the host were
+shared, so these times can differ by some percent from a run alone.
+
 * **No cell of the route after fusion is in the table twice** (the script checks that each
-  label of the image is one row and each molecule one row: `w399_unique_check.json` in each
-  assignment folder). The route per FOV holds 8 cells twice among its 158 (measurement 1).
+  label of the image is one row and each molecule one row: `w399_unique_check.json` in
+  each assignment folder). The route per FOV holds 8 candidate second observations among
+  its 158 (measurement 1, inferred from geometry).
 * **Both scales give the same number of kept cells, 146**, and almost the same counts per
   cell; at 1/4 the model call and the extension take a fraction of the time
   (`fig1_culture_cells_two_routes.png` shows the cells of both scales and of the route per
@@ -170,8 +191,21 @@ Source: `results/tables/routes_ln.csv` and `.json`, `results/tables/m3_nuclei_se
 plane 26 of 52, whole block and a window of 80 µm at the crossing) and
 `fig4_ln_nuclei_seam_density.png`.
 
+**Times measured beside other work.** The three StarDist calls ran bound to CPUs 0 to 3
+while other steps ran on other CPUs of the same host: `20_ln_stardist_k1.rerun-…` beside
+the fusions (CPUs 8 to 11) and the measurement and figure steps (CPU 4);
+`25_ln_stardist_k2` beside the culture extensions and assignments and the LN assignment
+(CPU 5) and helper steps (CPU 4); `26_ln_stardist_fov_Position057` beside the LN
+assignments (CPU 5) and helper steps (CPU 4). No step shared a CPU with a model call; the
+session's own short commands ran on CPU 0, one of the four CPUs of these calls, and their
+effect is not measured. The disk and memory bandwidth were shared. A difference of 10%
+between two of these times is within what such sharing can explain; the times are fit for
+"about the same cost per voxel", not for a finer comparison (`results/tables/resources.csv`,
+columns `cpus_bound`, `ran_beside`, `shared_cpus_with`).
+
 * **At full resolution, a voxel costs about as much after fusion as per FOV**: 6.5 s against
-  5.9 s per million voxels with 4 threads (10% more). The block's four FOVs hold 448
+  5.9 s per million voxels with 4 threads (10% more, within what the work beside the calls
+  can explain). The block's four FOVs hold 448
   million voxels against the fused block's 421 million, because each overlap is segmented
   twice per FOV; the two routes took about the same time for the block. The CPU time was 1.8
   times the wall time with 4 threads; W-382 found most of a call's time to be CPU work.
@@ -181,9 +215,9 @@ plane 26 of 52, whole block and a window of 80 µm at the crossing) and
   nuclei). The run at 1/2 is therefore not a cheaper equivalent for this model.
 * **No deficit or excess of nuclei at the seams on either route.** Within 20 µm of a
   boundary the density is 1.01 times (after fusion) and 1.03 times (per FOV) that of the
-  rest of the block. The duplicates of measurement 1 (4 pairs above 0.5) are too few to
-  show in this density, and the 361 excluded LN cells flagged `unclaimed` do not show as
-  a deficit either.
+  rest of the block. The candidate duplicates of measurement 1 (4 pairs above 0.5) are too
+  few to show in this density, and the 361 excluded LN cells flagged `unclaimed` do not
+  show as a deficit either.
 * **The after-fusion run finds 8,932 nuclei where the route per FOV retains 8,194**, 9%
   more on the same block with the same model. Whether either number is right is not
   measured.
@@ -215,8 +249,9 @@ no status is changed.
   and 11% to 38% (`share_of_a_matched`, `share_of_b_matched`). The offsets between matched
   molecules are a few tenths of a µm: in LN the mean offset per axis is at
   most 0.6 µm in Z and 0.3 µm in Y and X, with spreads of 0.2 µm to 0.4 µm.
-* **The rule counts very few matched molecules twice or not at all.** Of the matched pairs
-  at 1 µm in the four side overlaps, both observations are retained in 154 of 22,006 in LN
+* **The rule counts very few matched molecules twice or not at all.** A matched pair is a
+  candidate for one molecule seen by both FOVs, inferred from position and gene. Of the
+  matched pairs at 1 µm in the four side overlaps, both observations are retained in 154 of 22,006 in LN
   and 23 of 12,174 in the culture: counted twice. Neither is retained while both positions
   belong to the two FOVs in 101 and 140: counted by neither. The other pairs that neither
   FOV retains lie where a third FOV owns the position, near the crossing. Against the
@@ -250,7 +285,11 @@ no status is changed.
 * (C) keeps both orders of processing, and both sets of code and checks.
 
 **The measured cost.** Every number is from one 2 × 2 block; the whole-sample figures are
-**extrapolations** from the time per million voxels, not measurements.
+**extrapolations** from the time per million voxels, not measurements. The model calls ran
+while other steps used other CPUs of the host (`20_ln_stardist_k1.rerun-…`, `25_`, `26_`,
+`23_`, `24_`; measurement 3, "Times measured beside other work"), so the 10% between the
+two StarDist rates is within what that can explain: the two routes cost about the same per
+voxel, and no finer statement rests on these times.
 
 | | Time per million voxels | Block | Whole LN sample (extrapolation) |
 | --- | --- | --- | --- |
@@ -262,7 +301,8 @@ no status is changed.
 * The fused LN grid is larger than the sum of the FOVs (8,849 against 7,162 million voxels)
   because its bounding box holds the blank cells of the LN grid; the fused route pays for
   them unless the blocks of blank voxels are skipped. Per voxel imaged, the two routes cost
-  the same within about 10%.
+  about the same (the measured rates differ by 10%, within what the work beside the calls
+  can explain).
 * **A whole tissue-2D sample treated as 3D (extrapolation, with an assumed plane count).**
   56 tiles of 3,072 × 3,072 pixels in 7 × 8 with 10% overlap make a fused plane of about
   19,661 × 22,426 pixels (441 million). At 6.5 s per million voxels, each plane costs about
@@ -278,12 +318,14 @@ chunked label file; the per-FOV times of the other three LN FOVs at 4 threads; t
 tissue-2D sample; any accuracy.
 
 **Recommendation.** (A): segmentation after fusion as the one route to a sample's cells,
-with segmentation per FOV kept only as it exists. The measured cost per voxel is the same
-within 10%, the route after fusion holds no cell twice, and the molecules keep the present
-rule (question 4). For projection samples it can follow now. For dense 3D tissue it needs
-the block-by-block segmentation and the chunked label file of question 2 first; until
-those exist, the duplicate rule of question 3 is the interim for 3D samples, not a second
-route kept for good.
+with segmentation per FOV kept only as it exists. The measured cost per voxel is about the
+same, the route after fusion holds no cell twice, and the molecules keep the present rule
+(question 4). A whole sample has more seam per FOV than the block (first limit), so the
+candidate duplicates the route per FOV leaves are expected to be a larger share there,
+which adds to this recommendation rather than weakening it. For projection samples it can
+follow now. For dense 3D tissue it needs the block-by-block segmentation and the chunked
+label file of question 2 first; until those exist, the duplicate rule of question 3 is the
+interim for 3D samples, not a second route kept for good.
 
 ## Question 2: how to segment after fusion
 
@@ -306,9 +348,10 @@ route kept for good.
   times that. A whole culture projection at full resolution is about 13,636 × 9,576 pixels
   (130 million, from W-376's projection at 1/2), 16 times the block's, which one call is
   expected to take; this is not measured.
-* **Block overlap.** Larger than the largest object, as StarDist requires (`min_overlap` above
-  the object size): the present 64 voxels (12.4 µm) for LN nuclei; for culture cells of up
-  to about 47 µm, more than 47 µm at the segmented scale if a projection is ever split.
+* **Block overlap.** Larger than the largest object, as StarDist requires (`min_overlap`
+  above the object size): the present 64 voxels (12.4 µm) for LN nuclei; for culture cells
+  of up to about 47 µm, more than 47 µm at the segmented scale if a projection is ever
+  split.
 * **Label file of a large 3D sample.** One OME-Zarr label image (OME-NGFF 0.5 on Zarr
   format 3, the format the store already uses), `uint32`, chunks of 16 × 512 × 512 voxels as
   the standalone fused OME-Zarr, written block by block. A whole LN stack at full
@@ -341,7 +384,8 @@ fused stack, block by block with StarDist's present blocks (all planes × 256 ×
 * **(a) No rule** (the present state): both observations stay; `conflict` marks them.
 * **(b) Keep one of two observations by their overlap.** Among retained cells of
   different FOVs, a pair whose shared voxels are at least a share *t* of the smaller
-  territory is one cell; one observation stays retained, the other becomes excluded with
+  territory is taken as one cell (a candidate duplicate, inferred from geometry); one
+  observation stays retained, the other becomes excluded with
   a new reason.
 * **(c) Merge the two observations** into one cell (union of territories, molecules of
   both). Not proposed: it needs a new cell key across FOVs, a rule for molecules seen by
@@ -352,13 +396,14 @@ fused stack, block by block with StarDist's present blocks (all planes × 256 ×
 * **Measure:** shared voxels on the sample grid divided by the smaller territory, as
   `results/tables/m1_pairs_*.csv` computes it. The union share gives the same split here
   but is smaller for a cut cell, whose part is much smaller than the whole.
-* **Threshold:** *t* = 0.5, one of the three values the issue fixed before the measurement.
-  **The choice among them is informed by the result**, and this page says so: in the culture
-  no pair lies between 0.03 and 0.63, so 0.25, 0.5 and 0.75 would give 8, 8 and 5 pairs; in
-  LN 0.5 keeps the 4 pairs whose observations are the same nucleus by every other sign
-  (centroids at most 2.2 µm apart) and leaves out one pair at 0.29 with centroids 4 µm
-  apart. At 0.5 the rule picks exactly the cells `conflict` already marks in both blocks,
-  so it can be stated as "`conflict` and at least half of the smaller territory shared".
+* **Threshold:** *t* = 0.5, one of the three values the issue fixed before the
+  measurement. **The choice among them is informed by the result**, and this page says so:
+  in the culture no pair lies between 0.03 and 0.63, so 0.25, 0.5 and 0.75 would give 8, 8
+  and 5 pairs; in LN 0.5 keeps the 4 pairs whose centroids are at most 2.2 µm apart,
+  consistent with one nucleus seen twice (an inference from geometry, not measured) and
+  leaves out one pair at 0.29 with centroids 4 µm apart. At 0.5 the rule picks exactly the
+  cells `conflict` already marks in both blocks, so it can be stated as "`conflict` and at
+  least half of the smaller territory shared".
 * **Which observation stays:** the one with the larger territory on the sample grid, ties
   by placement table order. A cut observation is smaller than an uncut one, so this keeps
   the more complete view. An alternative is the observation without `fov_edge`; in the
@@ -377,11 +422,14 @@ these blocks (`rule_reading` in `results/tables/m1_pairs_*.json`, read from the 
 applied): 8 of the 158 cells of the culture's `sample.h5ad` would drop, with 7,994 of its
 167,358 counts (4.8%), and 4 of the 8,194 LN cells, with 25 of 71,881 counts (0.03%); the
 fused label image by retained cells loses the rim or half of another colour at those
-cells.
+cells. These shares are a 2 × 2 block's. A whole sample has more seam per FOV, so its
+share of candidate duplicates, and of the counts they hold, is expected to be larger, by a
+factor of up to about 1.76 (cell culture, 7 × 10 FOVs) and 1.73 (LN, 64 FOVs on 8 × 9),
+from the seam count of the first limit; this is an expectation, not a measurement.
 
 **What it leaves wrong.** The kept observation of a culture cell cut by its FOV's edge is
-still the part that FOV saw: the rule removes the second copy, it does not complete the
-cell. In the culture 6 of the 8 kept observations would carry `fov_edge`. A cell retained
+still the part that FOV saw: the rule removes the candidate second observation, it does
+not complete the cell. In the culture 6 of the 8 kept observations would carry `fov_edge`. A cell retained
 by no FOV (`unclaimed`: 6 of 41 excluded culture cells, 361 of 908 excluded LN cells) is
 not affected.
 
@@ -408,10 +456,10 @@ with it.
 density at the boundary; matched observations counted twice are 0.05% (LN) and 0.01%
 (culture) of the retained molecules of a block, and counted by neither 0.03% and 0.07%.
 Matching finds a partner for only 35% to 79% of the molecules of an overlap at 1 µm, and
-the share changes strongly between 0.5 µm and 1 µm, so option (c) would remove only part of the duplicates it aims at and would have to choose a
-radius; it adds a second, uncertain decision for a small effect. Option (b) has no
-advantage in these numbers and makes the kept molecules of an overlap depend on the
-acquisition order.
+the share changes strongly between 0.5 µm and 1 µm, so option (c) would remove only part
+of the candidate duplicates it aims at and would have to choose a radius; it adds a second,
+uncertain decision for a small effect. Option (b) has no advantage in these numbers and
+makes the kept molecules of an overlap depend on the acquisition order.
 
 **What it changes.** Nothing under (a). Under the recommendation for question 1, the
 after-fusion route takes its molecules from a `molecules_only` assembly, so the rule is
@@ -443,7 +491,8 @@ fused label image drawn by retained cells (rule LR4, `fuse_labels`).
 `conflict` keeps its rule and is the candidate set of the duplicate rule (it marked exactly
 the pairs above 0.5 in both blocks, measurement 1); `unclaimed` keeps its rule and meaning
 (cells possibly missing, which the duplicate rule does not touch); `fov_edge` keeps marking
-cut cells; `fuse_labels` keeps drawing retained cells, now without the second observations.
+cut cells; `fuse_labels` keeps drawing retained cells, now without the candidate second
+observations.
 For a sample on the route after fusion, `fuse_labels` is not run: the segmentation of the
 fused image is the label image, and the cell flags do not apply. No existing name, format
 version or default changes; the new parts are additions.
@@ -466,7 +515,8 @@ These are named, not edited:
 * {doc}`assembly-contract`, "Flags": "No matching, merging or reassignment repairs them".
 * {doc}`sample-output-contract`, the exclusions of its introduction: "cross-FOV cell
   matching" is excluded. Under option (b) the label image of "Assembled label export"
-  still shows the retained cells, but a second observation would no longer be retained;
+  still shows the retained cells, but a candidate second observation would no longer be
+  retained;
   the rule LR4 itself does not change.
 * {doc}`sample-output-contract`, the same exclusions: "reassignment of molecules or
   recomputation of counts from a fused image or a label raster". The route after fusion of
