@@ -36,9 +36,13 @@ Evidence, cited by path:
   synthetic dataset of the same two FOVs), cited as "call C1" to "call C25" (with
   letters for the further calls of one statement, such as C11b). A statement about the
   present code that no call checks is marked "read from the source" with its file and
-  line, at revision `d24eb11`. No real data was read and no model was called: where a
-  statement would need a model, the call is the refusal `segment` makes before any
-  library is read.
+  line, at revision `d24eb11`. No real data was read and no model was loaded or run:
+  where a statement would need a model, the call is the refusal `segment` makes before
+  any inference. That refusal comes after `segment` has imported the method's libraries:
+  it calls `require` before it resolves the model (read from the source,
+  `src/python/starfinder/segmentation/_segment.py:261` and `:262`;
+  `src/python/starfinder/_registry.py:84–88` imports each dependency), and call C15c
+  showed Cellpose and torch imported after a refused `segment` call.
 
 ## What Jiahao decides
 
@@ -241,8 +245,8 @@ read-back checks (T1 and T5 of "The record") and the validation (SG4) follow:
 (`part_not_run` when `fuse` did not run; `extra_missing` naming the method's extra, for
 example `cellpose`, when its backend is not importable) and `failed`. A model that is
 missing or whose SHA-256 differs is a setting error: it is refused before anything is
-written (check 7 below), as `segment` itself refuses it before any library call (calls
-C15 and C15b).
+written (check 7 below). `segment` itself refuses it too, before any inference but after
+importing the method's libraries (calls C15, C15b and C15c).
 
 When `segment` is `not_run` or `empty`, `assemble` still writes the tables of the
 `molecules_only` assembly, `sample.h5ad` without a row and its section with `mode`
@@ -259,10 +263,17 @@ off, the reuse conditions of the table above hold when `segment` is off, the run
 validate, their
 seeds name earlier runs, `cells` and `nuclei` name runs of the targets `cell` (or
 `nucleus` as territories) and `nucleus`, and every model resolves with its SHA-256
-(`resolve_model`, which reads no library; a missing file and a SHA-256 mismatch are
-refused, calls C15 and C15b). Each failure raises `ValueError` (or the
+(`resolve_model` called by check 7 itself, not through `segment`: called alone in a fresh
+process it refused a missing model and imported neither Cellpose nor torch, call C15c; a
+missing file and a SHA-256 mismatch are refused, calls C15 and C15b). Each failure raises `ValueError` (or the
 model errors of {doc}`segmentation-contract`) naming the key, and the folder stays
-unchanged.
+unchanged. What check 7 promises about models: a missing or mismatched model is refused
+before anything is written, also on a machine without the method's extra, because
+`resolve_model` imports no segmentation library. What it does not promise: that the
+method's backend imports; that is `segment`'s `require`, which records the part `segment`
+`not_run` with `extra_missing`. An implementation calls `resolve_model` in check 7; the
+order of `require` and model resolution inside `segment` need not change, and no choice
+of "What Jiahao decides" depends on it.
 
 ## The stains and the scale
 
@@ -788,12 +799,27 @@ grid of the route after fusion, and the shared pixels of a pair of cells are cou
   `conflict`) and its `duplicate_of`.
 * **Counts per matched cell**: both whole counts, their difference, and the sum over genes
   of the absolute per-gene differences.
-* **Molecules**: per molecule key of either route, its assembly status and its cell on
-  each route, and one category: in the same matched pair; in two cells that are not
-  matched; assigned on one route only; retained on one route only. On the route per FOV
-  a molecule is retained with its cell wherever it lies; on the route after fusion only
-  by its position, so the retained populations differ at seams by design, and the report
-  counts this rather than hiding it.
+* **Molecules**: per molecule key (the two routes hold the same keys), its assembly
+  status and its cell on each route (a cell when `cell_id` is not null), and exactly one
+  category. The category is decided in this order, so no two can apply: first retention,
+  then the cell, then the match.
+
+  | Retained on | Cell on | Category |
+  | --- | --- | --- |
+  | both routes | both routes, and the two cells are a matched pair | `same_cell` |
+  | both routes | both routes, and the two cells are not a matched pair | `different_cells` |
+  | both routes | one route only (the route named) | `cell_on_one_route` |
+  | both routes | neither route (`unassigned` or `outside_grid` on both) | `no_cell_on_both` |
+  | one route only (the route named) | — | `retained_on_one_route` |
+  | neither route | — | `excluded_on_both` |
+
+  On the route per FOV a molecule is retained with its cell wherever it lies; on the route
+  after fusion only by its position, so the retained populations differ at seams by
+  design, and the report counts this rather than hiding it. A molecule in a cell of the
+  route per FOV that is not matched only because the route after fusion's cell shares the
+  threshold with two of them (a cell seen twice that the duplicate rule kept) is
+  `different_cells`; the summary's count of such cells says why
+  ({doc}`sample-segmentation-validation`, `fused_pair_seams`).
 
 W-399's comparison of the culture block is an example of what the report holds: 146 kept
 cells after fusion against 158 counted cells per FOV, of which 8 are candidate second
