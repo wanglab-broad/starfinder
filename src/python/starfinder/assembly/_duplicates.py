@@ -121,7 +121,8 @@ def measure(fovs, load, grid):
                 both = (left > 0) & (right > 0)
                 if not both.any():
                     continue
-                keys = (left[both].astype(np.int64) << 32) | right[both].astype(np.int64)
+                # Two uint32 cell IDs in one unsigned 64-bit key, so that every ID up to 2^32 − 1 comes back whole.
+                keys = (left[both].astype(np.uint64) << np.uint64(32)) | right[both].astype(np.uint64)
                 values, n = np.unique(keys, return_counts=True)
                 for key, count in zip(values.tolist(), n.tolist()):
                     shared[((f["fov_id"], key >> 32), (g["fov_id"], key & 0xFFFFFFFF))] += count

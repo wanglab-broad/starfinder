@@ -834,6 +834,27 @@ def test_w400_the_excluded_observation_is_not_drawn(runs, name):
     check_export(r.folder)
 
 
+def test_w400_cell_ids_over_the_whole_uint32_range(tmp_path):
+    """The two pairs of the duplicate test's ``both_high`` case written as label files (1×24×20, unit spacing, x origins 0
+    and 10): P1's cells 2^32 − 1 and 2^31 (4 px wide) each share half of their pixels with P2's cells 2^31 + 5 and
+    2^32 − 1 (6 px wide). The default rule excludes both P1 cells; the label image shows the two P2 cells only."""
+    top = 2 ** 32 - 1
+    territories = {f: np.zeros((1, 24, 20), np.uint32) for f in ("P1", "P2")}
+    territories["P1"][0, 9:11, 11:15], territories["P1"][0, 13:15, 11:15] = top, 2 ** 31
+    territories["P2"][0, 9:11, 3:9], territories["P2"][0, 13:15, 3:9] = 2 ** 31 + 5, top
+    case = lf.build(tmp_path, "large_ids", territories, {"P1": (0.0, 0.0, 0.0), "P2": (0.0, 0.0, 10.0)})
+    r = run(case, 1)
+    ids, retained = instance_map(case)
+    cells = case.assembly.cells.set_index(["fov_id", "cell_id"])
+    assert retained == {("P2", 2 ** 31 + 5), ("P2", top)}
+    assert cells.loc[("P1", top), "duplicate_of"] == f"large_ids_P2_{2 ** 31 + 5}"
+    assert cells.loc[("P1", 2 ** 31), "duplicate_of"] == f"large_ids_P2_{top}"
+    assert {int(v) for v in np.unique(r.image) if v > 0} == {ids[key] for key in retained}
+    for key in retained:
+        assert shows(r, *key).sum() == 12
+    check_export(r.folder)
+
+
 # --- EX1 and EX3: the label part inside the entry ------------------------------------------------------------------
 
 DEFAULT_FILES = ["export.json", "reference_stain_projection.ome.tif", "sample.h5ad", "tables/cells.csv",

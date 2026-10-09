@@ -182,6 +182,49 @@ def test_the_measure_and_the_decision(dimensions, ownership):
     assert cells.duplicate_of.notna().sum() == 3
 
 
+# Cell IDs over the whole uint32 range (the §2.9 labels allow 1 to 2^32 − 1). Each pair: a P1 cell of 4 columns
+# (x 11 to 14, 16 voxels in 3D) and a P2 cell of 6 columns (x 13 to 18, 24 voxels) sharing 2 columns (8 voxels):
+# exactly 0.5 of the smaller, so P1's is excluded naming P2's, which stays.
+TOP = 2 ** 32 - 1
+LARGE_ID_CASES = {
+    # the review's reproduction: P1's cell 2^31 against P2's cell 1
+    "review": {"P1": {2 ** 31: ((9, 10), (11, 14))}, "P2": {1: ((9, 10), (13, 18))}},
+    # both cells of each pair at or above 2^31, 2^32 − 1 once excluded (rows 9 to 10) and once kept (rows 13 to 14)
+    "both_high": {"P1": {TOP: ((9, 10), (11, 14)), 2 ** 31: ((13, 14), (11, 14))},
+                  "P2": {2 ** 31 + 5: ((9, 10), (13, 18)), TOP: ((13, 14), (13, 18))}},
+}
+LARGE_ID_EXCLUDED = {"review": {("P1", 2 ** 31): "large_P2_1"},
+                     "both_high": {("P1", TOP): f"large_P2_{2 ** 31 + 5}", ("P1", 2 ** 31): f"large_P2_{TOP}"}}
+
+
+@pytest.mark.parametrize("dimensions", ["3d", "2d"])
+@pytest.mark.parametrize("case", list(LARGE_ID_CASES))
+def test_the_measure_and_the_decision_keep_the_whole_uint32_range(case, dimensions):
+    placement, results, grids, origins = build("large", SHARE_IDS, (4, 24, 20), 2, 1, LARGE_ID_CASES[case],
+                                               dimensions=dimensions)
+    off, _ = run(placement, results, grids, config=AssemblyConfig(duplicate_threshold=None))
+    assert set(off.cells.assembly_status) == {"retained"}
+    result, captured = run(placement, results, grids)
+    sizes, shares, excluded = oracle(result, results, placement, origins)
+    assert measured_shares(captured) == {pair: s for pair, (_, s) in shares.items()}
+    pairs = [((("P1", a), ("P2", b))) for a, b in (((2 ** 31, 1),) if case == "review" else
+                                                   ((TOP, 2 ** 31 + 5), (2 ** 31, TOP)))]
+    assert measured_shares(captured) == {pair: 0.5 for pair in pairs}
+    per_plane = 1 if dimensions == "2d" else 2
+    assert {key: sizes[key] for pair in pairs for key in pair} == {
+        key: (8 if key[0] == "P1" else 12) * per_plane for pair in pairs for key in pair}
+    assert decisions(result) == LARGE_ID_EXCLUDED[case]
+    assert {k: f"large_{v[0]}_{v[1]}" for k, v in excluded.items()} == LARGE_ID_EXCLUDED[case]
+    cells = result.cells.set_index(["fov_id", "cell_id"])
+    assert str(result.cells.cell_id.dtype) == "UInt32"
+    for key, kept in LARGE_ID_EXCLUDED[case].items():
+        assert (cells.loc[key, "assembly_status"], cells.loc[key, "assembly_reason"]) == \
+            ("excluded", "duplicate_observation")
+        kept_id = int(kept.rsplit("_", 1)[1])
+        assert cells.loc[("P2", kept_id), "assembly_status"] == "retained"
+        assert cells.loc[("P2", kept_id), "obs_name"] == kept
+
+
 def test_placed_on_grid_is_the_nearest_voxel():
     """The test's own placement: a fractional origin shifts by the nearest voxel, and the grid voxel whose centre
     lies outside the FOV's voxel-centre extent shows nothing (here the FOV's first or last voxel is not shown)."""
