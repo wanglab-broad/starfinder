@@ -1,6 +1,6 @@
 # Sample segmentation contract: segmentation after fusion for projection samples, the route setting and the consistency check of the two routes
 
-Status: Proposed (W-401, 2026-10-09)
+Status: Accepted (W-377, 2026-10-09, at 779ea77)
 
 This page specifies the second route to a sample's cells, so that it can be implemented
 after Jiahao approves it: the fused Z maximum of a projection sample is segmented once,
@@ -45,6 +45,10 @@ Evidence, cited by path:
   showed Cellpose and torch imported after a refused `segment` call.
 
 ## What Jiahao decides
+
+**Decided by Jiahao on 2026-10-09: every choice below as recommended**, and a dataset with
+`projection: sum` is refused on this route. The options stay on the page as the record of
+what was considered.
 
 The settled points below are not reopened. The open choices of this page, each with its
 options further down and one recommendation:

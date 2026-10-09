@@ -1,6 +1,6 @@
 # Validation design: segmentation after fusion, the route setting and the consistency check
 
-Status: Proposed (W-401, 2026-10-09)
+Status: Accepted (W-377, 2026-10-09, at 779ea77)
 
 This page is the validation design of {doc}`sample-segmentation-contract`: the fixtures
 and the checks an implementation of the route after fusion, the route setting and
