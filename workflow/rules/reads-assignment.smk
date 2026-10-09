@@ -8,10 +8,12 @@
 # Without an assembly block the legacy filter reads every sample's tile configuration. With one
 # (option W1) the per-FOV files are written without the filter, so no tile configuration is read,
 # and the FOV's assignment folder, which export_sample assembles, is saved as well; the molecule grid
-# is then that of images/ref_merged/{fovID}.tif, which the adapter reads (_assembly_cells).
+# is then that of the FOV's reference image (the file reference_image names, default
+# images/ref_merged/{fovID}.tif), which the adapter reads (_assembly_cells).
 # READS_ASSIGNMENT_GEOMETRY is the one input that places the FOV: the tile configuration, or that grid.
 if ASSEMBLY_BLOCK:
-    READS_ASSIGNMENT_GEOMETRY = [f"{OUTPUT_DIR}/images/ref_merged/{{fovID}}.tif"]
+    from starfinder.dataset.workflow import _reference_image_inputs
+    READS_ASSIGNMENT_GEOMETRY = _reference_image_inputs(config, OUTPUT_DIR, ["{fovID}"])
     READS_ASSIGNMENT_NAME = (config['assembly'] or {}).get('assignment', 'default')
     READS_ASSIGNMENT_FOLDER = ([] if READS_ASSIGNMENT_NAME is None else
                                [f"{OUTPUT_DIR}/checkpoints/{{fovID}}/assignment/{READS_ASSIGNMENT_NAME}/assignment.json"])

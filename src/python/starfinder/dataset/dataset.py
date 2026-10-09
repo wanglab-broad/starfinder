@@ -13,6 +13,7 @@ from starfinder.barcode import (BarcodeLayout, Codebook, DirectPanel, EncodingCo
     load_codebook, load_direct_panel)
 from starfinder.barcode.codebook import _encoding_summary
 from starfinder.barcode.decoding import READOUT_MODES
+from starfinder.dataset._declared import REFERENCE_IMAGE
 from starfinder.dataset.types import (
     REFERENCE_STAIN,
     ChannelInfo,
@@ -52,9 +53,13 @@ class Dataset:
     the codebook; ``direct`` assigns each candidate the direct_panel gene of its
     own round and channel.
     voxel_size_xy and voxel_size_z (µm, the workflow keys of the same names)
-    declare the calibration of saved files that store none: ``export`` takes
-    a FOV's grid from the stored metadata of ``images/ref_merged/{fovID}.tif``,
-    or else from these sizes.
+    declare the calibration of saved files that store none: ``stitch`` and
+    ``export`` take a FOV's grid from the stored metadata of its reference
+    image, or else from these sizes. reference_image (the workflow key of the
+    same name) is the file pattern of that image, with ``{fov_id}``, absolute
+    or relative to the output root; the default is
+    ``images/ref_merged/{fov_id}.tif``, the file ``FOV.save_reference_image``
+    writes.
     The repr summarizes IDs, round and channel labels, the reference (codebook
     with its encoding method and segment layout, or the panel in direct mode)
     and roots.
@@ -66,7 +71,8 @@ class Dataset:
         within a round, other_channel_order for a round that is not an other
         round or with no channel, reference stains without a reference round or
         sharing a pattern with channel_order, a voxel size that is not a
-        finite positive number or None, or the field errors of ChannelInfo.
+        finite positive number or None, a reference_image that is not a
+        pattern with ``{fov_id}``, or the field errors of ChannelInfo.
     TypeError
         A channel that is not a pattern string, ChannelInfo or mapping.
     """
@@ -102,6 +108,8 @@ class Dataset:
     # The declared calibration (µm) of saved files that store none, as the workflow's voxel_size_xy and voxel_size_z
     voxel_size_xy: float | None = None
     voxel_size_z: float | None = None
+    # The file pattern of a FOV's reference image, as the workflow's reference_image
+    reference_image: str = REFERENCE_IMAGE
 
     # The patterns and ChannelInfo of the sequencing channels (key None) and of each other round with its own
     # channels. An init field so that dataclasses.replace hands it to the copy, which keeps the ChannelInfo of
@@ -113,9 +121,10 @@ class Dataset:
             raise ValueError(f"readout_mode must be one of {READOUT_MODES}; got {self.readout_mode!r}")
         if self.direct_panel is not None and not isinstance(self.direct_panel, DirectPanel):
             raise TypeError("direct_panel must be a DirectPanel or None")
-        from starfinder.dataset._declared import check_voxel_size
+        from starfinder.dataset._declared import check_reference_image, check_voxel_size
         self.voxel_size_xy = check_voxel_size("voxel_size_xy", self.voxel_size_xy)
         self.voxel_size_z = check_voxel_size("voxel_size_z", self.voxel_size_z)
+        self.reference_image = check_reference_image(self.reference_image)
         self.rounds.validate()
         if REFERENCE_STAIN in self.rounds.all_rounds:
             raise ValueError(f"{REFERENCE_STAIN!r} is the reserved image name of the reference stains; "
@@ -431,8 +440,11 @@ class Dataset:
 
         A sample-level computation, not a multi-FOV runner: it calls no per-FOV
         stage and reads only saved per-FOV files. For each FOV it reads the
-        reference grid of ``images/ref_merged/{fovID}.tif`` (the file
-        ``FOV.save_reference_image`` writes) and the stitching image named by
+        reference grid of its reference image, the file ``reference_image``
+        names (default ``images/ref_merged/{fovID}.tif``, the file
+        ``FOV.save_reference_image`` writes): its stored metadata, or for a
+        file that stores none the grid ``voxel_size_xy`` and ``voxel_size_z``
+        declare. It reads that grid and the stitching image named by
         ``input``, one FOV at a time, builds the
         :class:`~starfinder.stitching.StitchingInput` list in table order, calls
         :func:`~starfinder.stitching.stitch` and, with ``output_dir``, saves the
@@ -457,7 +469,7 @@ class Dataset:
         config
             A config registered in ``STITCHING_METHODS``.
         input : str
-            ``reference_merged`` (``images/ref_merged/{fovID}.tif``, default),
+            ``reference_merged`` (the reference image, default),
             ``reference_stain`` (the one-channel saved ``reference_stain`` of
             ``FOV.prepare_morphology`` under ``checkpoints/{fovID}/other_rounds/``)
             or ``file:<pattern>`` (``{fovID}`` replaced; relative to the output
@@ -478,10 +490,12 @@ class Dataset:
         Raises
         ------
         FileNotFoundError
-            A FOV's ``images/ref_merged/{fovID}.tif`` does not exist.
+            A FOV's reference image does not exist (the error names the
+            setting ``reference_image`` and the path).
         ValueError
-            An unknown input or positions key, or a table whose FOVs are not
-            fov_ids.
+            An unknown input or positions key, a table whose FOVs are not
+            fov_ids, or a reference image without stored metadata while
+            ``voxel_size_xy`` or ``voxel_size_z`` is None (naming them).
         IncompatibleGeometryError
             Tile sizes or spacings taken from the grids differ between FOVs, an
             input image of another shape or metadata than its grid, or the
@@ -493,7 +507,8 @@ class Dataset:
         ids = list(fov_ids)
         if not ids or len(set(ids)) != len(ids):
             raise ValueError("fov_ids must be a nonempty list of unique FOV IDs")
-        loaded = read_inputs(self.output_root, ids, input)
+        from starfinder.dataset._declared import reference_settings
+        loaded = read_inputs(self.output_root, ids, input, reference=reference_settings(self))
         grids = {fov: item.grid for fov, item in loaded.items()}
         if not isinstance(table, TilePositionTable):
             table = table_from_positions(table, ids, grids, sample=sample, output_root=self.output_root,
@@ -521,7 +536,8 @@ class Dataset:
         each part that runs or is off, then calls the parts in order, writing
         ``export.json`` after each: ``assemble`` on one
         :class:`~starfinder.assembly.AssemblyInput` per FOV of the placement
-        (``checkpoints/{fovID}/assignment/<assignment>/`` and the grid of
+        (``checkpoints/{fovID}/assignment/<assignment>/`` and the grid of the
+        reference image ``reference_image`` names, default
         ``images/ref_merged/{fovID}.tif``: its stored metadata, or for a file
         that stores none the grid ``voxel_size_xy`` and ``voxel_size_z``
         declare), saved with
@@ -531,7 +547,7 @@ class Dataset:
         :class:`~starfinder.sample_output.FusionInput` per included FOV
         (``reference_stain``:
         ``checkpoints/{fovID}/other_rounds/reference_stain/image.ome.tif``;
-        ``reference_merged``: ``images/ref_merged/{fovID}.tif``;
+        ``reference_merged``: the reference image ``reference_image`` names;
         ``<name>=file:<pattern>`` relative to the output root); and, with
         ``fuse_labels`` on (off by default),
         :func:`~starfinder.sample_output.fuse_labels` on the placement and the

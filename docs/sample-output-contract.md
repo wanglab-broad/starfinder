@@ -248,7 +248,7 @@ runner").
 
 | Order | Part | Turned off by | What the method does | Writes in `output_dir` |
 | --- | --- | --- | --- | --- |
-| 1 | `assemble` ({doc}`assembly-contract`) | `assemble: false` | Builds one `AssemblyInput` per FOV of the placement from the saved assignment folders named `assignment` (or, with `assignment=None`, from each FOV's saved goodSpots table `signal/<fov_id>_goodSpots.csv` read through `molecule_table_from_csv`, with the identities `csv:<row>`) and the reference grids (the stored metadata of `images/ref_merged/{fovID}.tif`, read as `reference_grid_from_file` reads it, or, for a file that stores none, the grid the dataset's `voxel_size_xy` and `voxel_size_z` declare; without them such a file raises `ValueError` naming them), calls `assemble`, and saves the result with `save_assembly(result, output_dir, table_format=config.table_format)`. It keeps the tables of every FOV and at most two label images in memory at a time ({doc}`assembly-algorithms`, "Flags"). Turned off, it loads the saved assembly with `load_assembly(output_dir)`, which checks every SHA-256, and records the part as `reused`; when the folder holds no saved assembly and no later part needs one (check 4), it records the part as `off` and `fuse` runs without an assembly. | `tables/fovs.<fmt>`, `tables/cells.<fmt>`, `tables/molecules.<fmt>`, `tables/counts.<fmt>`, `sample.h5ad`; section `assembly` |
+| 1 | `assemble` ({doc}`assembly-contract`) | `assemble: false` | Builds one `AssemblyInput` per FOV of the placement from the saved assignment folders named `assignment` (or, with `assignment=None`, from each FOV's saved goodSpots table `signal/<fov_id>_goodSpots.csv` read through `molecule_table_from_csv`, with the identities `csv:<row>`) and the reference grids (the stored metadata of each FOV's reference image, the file the dataset's `reference_image` names, default `images/ref_merged/{fov_id}.tif`, read as `reference_grid_from_file` reads it, or, for a file that stores none, the grid the dataset's `voxel_size_xy` and `voxel_size_z` declare; without them such a file raises `ValueError` naming them, and a missing file raises `FileNotFoundError` naming `reference_image` and the path), calls `assemble`, and saves the result with `save_assembly(result, output_dir, table_format=config.table_format)`. It keeps the tables of every FOV and at most two label images in memory at a time ({doc}`assembly-algorithms`, "Flags"). Turned off, it loads the saved assembly with `load_assembly(output_dir)`, which checks every SHA-256, and records the part as `reused`; when the folder holds no saved assembly and no later part needs one (check 4), it records the part as `off` and `fuse` runs without an assembly. | `tables/fovs.<fmt>`, `tables/cells.<fmt>`, `tables/molecules.<fmt>`, `tables/counts.<fmt>`, `sample.h5ad`; section `assembly` |
 | 2 | `fuse` | `fuse: false` | Builds one `FusionInput` per included FOV from the saved source images and reference grids, and calls `fuse` with the assembly of part 1. | The fused images; section `fusion` |
 | 3 | `fuse_labels` | `fuse_labels: false` (the default; "Choices decided at the gate", 8) | Calls `fuse_labels` with the placement and the assembly. | `cell_labels.ome.tif`; section `labels` |
 | 4 | `export_spatialdata` | `export_spatialdata: false` (the default) | Calls `export_spatialdata` with the assembly and the records of parts 2 and 3 that were written. | `sample.zarr/`; section `spatialdata` |
@@ -330,8 +330,12 @@ only), `off`, `empty`, `not_run` and `failed`.
 * Each part writes each file atomically (a temporary name, then a rename); the store is
   written into a sibling staging folder and renamed into place, so a failed export
   publishes no partial store.
+* Before the first part, `export.json` records each part that will run as `not_run` with
+  the reason `export_not_finished`, and each part that is off as `off`; each part replaces
+  its entry with its own section when it ends, whatever its status.
 * `export.json` is written atomically after each part, so after an interruption it lists
-  the parts that finished.
+  the parts that finished, shows each part that had not finished as `not_run`,
+  `export_not_finished`, and has `complete: false`.
 
 ## The export folder and the output profiles
 
@@ -426,7 +430,8 @@ inspect").
 * **Per included FOV, the selected source images on its reference grid**, named as the
   stitching inputs are ({doc}`stitching-contract`, "Input image"): `reference_stain` (the
   saved `reference_stain` of `FOV.prepare_morphology`, whose stain each dataset's
-  configuration chooses) by default; `reference_merged` (`images/ref_merged/{fovID}.tif`);
+  configuration chooses) by default; `reference_merged` (the FOV's reference image, the file
+  the dataset's `reference_image` names, default `images/ref_merged/{fov_id}.tif`);
   or `<name>=file:<pattern>` with `{fov_id}`, accepted only when its shape equals the
   reference grid's, where `<name>` names its files and store element and may use letters,
   digits, `_`, `-` and `.` only. Further channels are further names in `images`. A source
@@ -569,8 +574,16 @@ W-354 measured these peaks with every tile loaded into memory first (`tables/run
 
 This page does not promise bounded memory for a whole-sample stack. `fuse` reads each
 source image as a lazy dask array from its file; that this keeps the peak of a stack well
-below the loaded tiles is assumption A1. The projection route holds one FOV volume at a
-time while it projects, then the 2D projections. The OME-TIFF writer computes the lazy
+below the loaded tiles is assumption A1. In one fusion each page of a source file is read
+and decoded at most once: Starfinder's reading of the file gives the library one task per
+page (a Z plane; a file whose pages are not its Z planes is one task), and for the
+projection one task per file that reads its pages and projects them; a task's result is
+kept from the first band of the OME-TIFF writer that needs it until the last, then
+released, so the stack holds a few pages of each FOV rather than whole tiles. No source
+file is read before the fused array is computed, apart from its header; nothing is staged
+or copied on disk; a source given as an array is used as given; the fusion and its
+blending stay the library's. A later pass over the fused array (`pyramid_levels`, the
+standalone OME-Zarr) reads the sources again. The OME-TIFF writer computes the lazy
 fused array band by band (a row of 512-pixel tiles at a time) and writes the tiles of
 that band (A8). The record states the measured peak RSS of every part.
 
@@ -1394,6 +1407,8 @@ accepts.
 **The record and the folder**
 
 * R1. `export.json` parses; every part has one of the statuses of "When a part cannot run";
+  no part is still the entry `not_run`, `export_not_finished` of an export that stopped
+  before the part ended (the condition names the part);
   `complete` is true exactly when no requested part is `not_run` or `failed`; each section
   that records the SHA-256 of another section equals that section's current SHA-256 (the
   SHA-256 of its canonical JSON: sorted keys, no spaces, UTF-8).
@@ -1626,7 +1641,8 @@ export:
   and gets no projection file; the others keep the default projection ("The fused image
   by dataset").
 * It reads `stitching/{sample}/placement.json`, the saved assignment folders (or molecule
-  tables) and reference grids of the sample's FOVs, and the source images, and writes the
+  tables) and reference grids of the sample's FOVs (from the files the top-level
+  `reference_image` names), and the source images, and writes the
   files of "The export folder and the output profiles". Its declared output is
   `export/{sample}/export.json`, which lists every other file; a part that cannot run
   therefore does not fail the rule, and the warning and the record say so ("When a part

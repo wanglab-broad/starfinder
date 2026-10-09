@@ -173,7 +173,8 @@ separate `Dataset.assemble` (W-329 review, 2026-10-06, amending D3). Its assembl
 loads the saved placement (`load_placement`), builds one `AssemblyInput` per FOV of the
 placement from the saved assignment folders named `assignment` (or, with
 `assignment=None`, from the saved molecule tables through `molecule_table`) and the
-reference grids (the stored metadata of `images/ref_merged/{fovID}.tif`, read as
+reference grids (the stored metadata of each FOV's reference image, the file the dataset's
+`reference_image` names, default `images/ref_merged/{fov_id}.tif`, read as
 `reference_grid_from_file` reads it, or, for a file that stores none, the grid the
 dataset's `voxel_size_xy` and `voxel_size_z` declare), calls `assemble` with `config.assembly`, and
 saves the result in `output_dir`, the sample's export folder ("Persistence"). It keeps the
@@ -748,9 +749,10 @@ populations one home, and follows the stitching block's pattern ({doc}`stitching
 "Workflow configuration").
 
 **The label grid with an `assembly` block.** `reads_assignment` imports a legacy label file
-on the grid of the FOV's reference image `images/ref_merged/{fovID}.tif` (its stored
-metadata, or for a file that stores none the grid `voxel_size_xy` and `voxel_size_z`
-declare), the grid that `Dataset.export` gives `assemble`, so that the saved assignment
+on the grid of the FOV's reference image, the file `reference_image` names (default
+`images/ref_merged/{fov_id}.tif`; its stored metadata, or for a file that stores none the
+grid `voxel_size_xy` and `voxel_size_z` declare), the grid that `Dataset.export` gives
+`assemble`, so that the saved assignment
 passes assemble's grid check. A ZYX label file must have the reference image's shape, and a YX one the shape of
 its Y and X, as a plane on the Z maximum projection of that grid; a file of any other shape
 raises `IncompatibleGeometryError`. Without the block the file is imported, as before, on

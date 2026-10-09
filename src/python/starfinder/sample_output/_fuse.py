@@ -9,15 +9,22 @@ library's level 1 of each FOV for a scale factor (``level1``), passes the output
 ``output_stack_properties`` and calls ``multiview_stitcher.fusion.fuse`` once per file with
 ``weighted_average_fusion`` at interpolation order 1. It blends, interpolates and averages
 nothing itself; it writes the fused array as OME-TIFF (and the library's OME-Zarr on
-request). The library is imported only when ``fuse`` runs.
+request). The library is imported only when ``fuse`` runs. Its own reading of a source file
+(``_Reader``) gives the library one task per page, or per file for the projection, and keeps
+each result from its first use until the last band of the file written that needs it, so
+that in one fusion each page is read and decoded at most once.
 """
 from __future__ import annotations
 
+import itertools
 import math
+import threading
+import uuid
 import warnings
 from collections.abc import Mapping, Sequence
 from contextlib import ExitStack
 from dataclasses import asdict, dataclass
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -382,29 +389,212 @@ def _section(status, placement, plan, config, assembly, outputs, timer, *, versi
 
 # --- Fusion ------------------------------------------------------------------------------------------------
 
-def _lazy(source, stack):
-    """A ZYX dask array of a source: a file read lazily through tifffile's Zarr store, or an array."""
+class _Reader:
+    """Starfinder's reading of the source files of one ``fuse`` call (docs/sample-output-contract.md, "Memory").
+
+    A file is one task per page (a page is a Z plane), or one task for the
+    whole file when its pages are not its Z planes; its projection along Z is
+    one task that reads the file's pages and projects them. The tasks open
+    nothing but the file's header before the fused array is computed. A task's
+    result is held from its first call until :meth:`plan` says no later band
+    of the writer needs it, then released; a task the plan does not count is
+    read at each call. Nothing is staged on disk.
+    """
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._task_locks = {}
+        self._held = {}
+        self._remaining = {}
+        self._files = {}
+        self._prefix = f"starfinder-source-{uuid.uuid4().hex}"
+
+    # Files and tasks.
+
+    def _file(self, path, stack):
+        """The open file of a path (its header read) and the lock its reads take."""
+        import tifffile
+        with self._lock:
+            if path not in self._files:
+                self._files[path] = (stack.enter_context(tifffile.TiffFile(path)), threading.Lock())
+            return self._files[path]
+
+    def _key(self, source, what, index=None):
+        return f"{self._prefix}-{source.fov_id}-{source.name}-{what}" + ("" if index is None else f"-{index}")
+
+    def _task(self, key, load, shape, dtype):
+        import dask
+        import dask.array as da
+        # The key is bound into the function: as an argument dask would read it as a reference to the task itself.
+        return da.from_delayed(dask.delayed(partial(self._get, key, load), pure=False)(dask_key_name=key),
+                               shape=shape, dtype=dtype)
+
+    def stack(self, source, stack):
+        """The ZYX dask array of a source file, in the chunks of tifffile's Zarr view (the reader before W-397)."""
+        import dask.array as da
+        import tifffile
+        import zarr
+        tif, lock = self._file(source.path, stack)
+        n_z, n_y, n_x = source.shape
+        with tifffile.imread(source.path, aszarr=True) as store:
+            chunks = da.from_zarr(zarr.open(store, mode="r")).reshape(source.shape).chunks
+        if _paged(tif, source.shape):
+            planes = [self._task(self._key(source, "page", i), partial(_read_page, tif, lock, i, (1, n_y, n_x)),
+                                 (1, n_y, n_x), source.dtype) for i in range(n_z)]
+            array = da.concatenate(planes, axis=0) if n_z > 1 else planes[0]
+        else:
+            array = self._task(self._key(source, "file"), partial(_read_file, tif, lock, source.shape),
+                               source.shape, source.dtype)
+        return array.rechunk(chunks) if array.chunks != chunks else array
+
+    def projection(self, source, stack, projection):
+        """The projection along Z of a source file, as one task that reads its pages."""
+        from starfinder.preprocessing.projection import ProjectionConfig, project_image
+        tif, lock = self._file(source.path, stack)
+        config = ProjectionConfig(method=projection, axis="z", output_dtype="float32" if projection == "sum" else None)
+        dtype = project_image(np.zeros((1, 1, 1), source.dtype), config=config)[0].dtype
+        load = partial(_read_projection, tif, lock, source.shape, config)
+        return self._task(self._key(source, f"projection-{projection}"), load, source.shape[1:], dtype)
+
+    def _get(self, key, load):
+        """A task's result: held from its first call while the plan counts later calls, read once."""
+        with self._lock:
+            task_lock = self._task_locks.setdefault(key, threading.Lock())
+        with task_lock:
+            with self._lock:
+                value = self._held.get(key)
+            if value is None:
+                value = load()
+            with self._lock:
+                remaining = self._remaining.get(key, 0) - 1
+                self._remaining[key] = remaining
+            if remaining > 0:
+                self._hold(key, value)
+            else:
+                self._release(key)
+            return value
+
+    def _hold(self, key, value):
+        with self._lock:
+            self._held[key] = value
+
+    def _release(self, key):
+        with self._lock:
+            self._held.pop(key, None)
+
+    # The plan.
+
+    def plan(self, array) -> None:
+        """Count, for each source task, the bands of ``array`` the writer computes (``_tiff.bands``) that need it."""
+        from dask.core import get_dependencies
+        from dask.utils import ensure_dict
+        graph = ensure_dict(array.__dask_graph__())
+        found = {}   # key -> frozenset of the source tasks it depends on (memoized over the whole graph)
+        empty = frozenset()
+
+        def tasks(key):
+            todo = [key]
+            while todo:
+                current = todo[-1]
+                if current in found:
+                    todo.pop()
+                    continue
+                if isinstance(current, str) and current.startswith(self._prefix):
+                    found[current] = frozenset((current,))
+                    todo.pop()
+                    continue
+                dependencies = get_dependencies(graph, current)
+                pending = [d for d in dependencies if d not in found]
+                if pending:
+                    todo.extend(pending)
+                    continue
+                todo.pop()
+                sets = {found[d] for d in dependencies} - {empty}
+                found[current] = empty if not sets else next(iter(sets)) if len(sets) == 1 else frozenset().union(*sets)
+            return found[key]
+
+        keys = array.__dask_keys__()
+
+        def block_key(index):
+            value = keys
+            for i in index:
+                value = value[i]
+            return value
+
+        edges = [np.cumsum((0,) + tuple(c)) for c in array.chunks]
+
+        def blocks(axis, lo, hi):
+            return [i for i in range(len(edges[axis]) - 1) if edges[axis][i] < hi and edges[axis][i + 1] > lo]
+
+        counts = {}
+        for z, y0, y1 in _tiff.bands(array.shape):
+            axes = ([blocks(0, z, z + 1)] if array.ndim == 3 else []) + [blocks(array.ndim - 2, y0, y1),
+                                                                          range(array.numblocks[-1])]
+            needed = set()
+            for index in itertools.product(*axes):
+                needed |= tasks(block_key(index))
+            for key in needed:
+                counts[key] = counts.get(key, 0) + 1
+        with self._lock:
+            for key, count in counts.items():
+                self._remaining[key] = max(self._remaining.get(key, 0), 0) + count
+
+    def clear(self) -> None:
+        """Release every held result and forget the plan (the end of one fused file)."""
+        with self._lock:
+            self._held.clear()
+            self._remaining.clear()
+
+
+def _read_page(tif, lock, index, shape):
+    """One page of a source file, decoded, as a one-plane ZYX array."""
+    with lock:
+        return tif.series[0].pages[index].asarray().reshape(shape)
+
+
+def _paged(tif, shape) -> bool:
+    """Whether the pages of a file's first series are its Z planes, in order (else the file is read whole)."""
+    pages = tif.series[0].pages
+    return len(pages) == shape[0] and all(page is not None for page in pages) \
+        and math.prod(pages[0].shape) == shape[1] * shape[2]
+
+
+def _read_file(tif, lock, shape):
+    """A whole source file as ZYX: page by page when its pages are its planes, each page decoded once."""
+    if _paged(tif, shape):
+        return np.concatenate([_read_page(tif, lock, i, (1,) + tuple(shape[1:])) for i in range(shape[0])])
+    with lock:
+        return tif.series[0].asarray().reshape(shape)
+
+
+def _read_projection(tif, lock, shape, config):
+    """The projection along Z of a whole source file."""
+    from starfinder.preprocessing.projection import project_image
+    return project_image(_read_file(tif, lock, shape), config=config)[0]
+
+
+def _lazy(source, stack, reader=None):
+    """A ZYX dask array of a source: a file read lazily by ``reader`` (one task per page), or an array."""
     import dask.array as da
     if source.path is None:
         value = source.value
         return da.from_array(value if value.ndim == 3 else value[None])
-    import tifffile
-    import zarr
-    store = stack.enter_context(tifffile.imread(source.path, aszarr=True))
-    array = da.from_zarr(zarr.open(store, mode="r"))
-    return array.reshape(source.shape)
+    return (reader or _Reader()).stack(source, stack)
 
 
-def _fov_image(source, lazy, grid, dimensionality, projection):
-    """The array the library gets for one FOV: the stack (lazy), its plane, or its projection along Z."""
+def _fov_image(source, lazy, grid, dimensionality, projection, reader=None, stack=None):
+    """The array the library gets for one FOV: the stack (lazy), its plane, or its projection along Z (lazy for a
+    file read by ``reader``)."""
     from starfinder.preprocessing.projection import ProjectionConfig, project_image
     if dimensionality == "projection":
+        if source.path is not None and reader is not None:
+            return reader.projection(source, stack, projection)
         config = ProjectionConfig(method=projection, axis="z", output_dtype="float32" if projection == "sum" else None)
         return project_image(np.asarray(lazy), config=config)[0]
     return lazy[0] if grid.one_plane else lazy
 
 
-def _sims(plan, lazies, name, dimensionality, config):
+def _sims(plan, lazies, name, dimensionality, config, reader=None, stack=None):
     """The library's input images of one file, in placement table order (level 1 of each for k > 1)."""
     from multiview_stitcher import msi_utils
     from multiview_stitcher import spatial_image_utils as si_utils
@@ -413,7 +603,7 @@ def _sims(plan, lazies, name, dimensionality, config):
     sims = []
     for fov in plan.ids:
         source = plan.sources[(fov, name)]
-        array = _fov_image(source, lazies[(fov, name)], grid, dimensionality, config.projection)
+        array = _fov_image(source, lazies[(fov, name)], grid, dimensionality, config.projection, reader, stack)
         spacing = plan.by_fov[fov].grid.metadata.spacing_zyx
         origin = plan.placement_origins[fov]
         sim = si_utils.get_sim_from_array(array, dims=dims, scale={a: float(spacing[AXES.index(a)]) for a in dims},
@@ -434,10 +624,10 @@ def output_stack_properties(grid: FusedGrid, dimensionality: str, dims) -> dict:
             "shape": {a: int(shape[AXES.index(a)]) for a in dims}}
 
 
-def _fuse_file(plan, lazies, name, dimensionality, config):
+def _fuse_file(plan, lazies, name, dimensionality, config, reader=None, stack=None):
     """One fused image, lazily: (the library's fused image, dims, the recorded arguments)."""
     from multiview_stitcher import fusion
-    sims, dims = _sims(plan, lazies, name, dimensionality, config)
+    sims, dims = _sims(plan, lazies, name, dimensionality, config, reader, stack)
     properties = output_stack_properties(plan.grid, dimensionality, dims)
     chunks = CHUNKS["stack" if len(dims) == 3 else "plane"]
     fused = fusion.fuse(sims, transform_key=TRANSFORM_KEY, fusion_func=fusion.weighted_average_fusion,
@@ -469,9 +659,11 @@ def level_geometry(spacing, origin, factors) -> tuple[list[float], list[float]]:
             [o + s * (f - 1) / 2 for f, s, o in zip(factors, spacing, origin)])
 
 
-def _write_tiff(path, fused, grid, dimensionality, config, name, placement):
+def _write_tiff(path, fused, grid, dimensionality, config, name, placement, reader=None):
     from multiview_stitcher import msi_utils
     data = fused.data[0, 0]
+    if reader is not None:
+        reader.plan(data)
     spacing, origin, shape = grid.level(dimensionality)
     metadata = grid.level_metadata(dimensionality)
     levels, level_entries = [], []
@@ -633,10 +825,13 @@ def fuse(placement: PlacementResult, inputs: Sequence[FusionInput], *, assembly=
     outputs = []
     try:
         with ExitStack() as stack:
-            lazies = {key: _lazy(source, stack) for key, source in plan.sources.items()}
+            reader = _Reader()
+            stack.callback(reader.clear)
+            lazies = {key: _lazy(source, stack, reader) for key, source in plan.sources.items()}
             for name in config.image_names:
                 for dimensionality in config.dimensionalities:
-                    fused, dims, arguments = _fuse_file(plan, lazies, name, dimensionality, config)
+                    reader.clear()
+                    fused, dims, arguments = _fuse_file(plan, lazies, name, dimensionality, config, reader, stack)
                     spacing, origin, shape = plan.grid.level(dimensionality)
                     dtype = np.dtype(fused.dtype).name
                     file_name = f"{name}_{dimensionality}.ome.tif"
@@ -648,7 +843,7 @@ def fuse(placement: PlacementResult, inputs: Sequence[FusionInput], *, assembly=
                              if shape[0] == 1 else None, "inputs_2d": len(dims) == 2,
                              "library_grid": _library_grid(fused), **arguments}
                     entry.update(_write_tiff(output_dir / file_name, fused, plan.grid, dimensionality, config, name,
-                                             placement))
+                                             placement, reader))
                     from starfinder.segmentation._persist import file_sha256
                     entry["sha256"] = file_sha256(output_dir / file_name)
                     outputs.append(entry)

@@ -24,10 +24,12 @@ from ._record import (
     FORMAT_VERSION,
     NO_FILES,
     PARTS,
+    PENDING_REASON,
     SECTIONS,
     STAGE,
     STATUSES,
     is_complete,
+    is_pending,
     listed_file_hashes,
     listed_files,
     part_status,
@@ -70,6 +72,9 @@ def _r1(folder):
         section = record.get(SECTIONS[part])
         if isinstance(section, dict) and "status" in section and section["status"] != status:
             _fail("R1", f"part {part} has status {status!r} in parts and {section['status']!r} in its section")
+        if is_pending(record, part):
+            _fail("R1", f"part {part} was not finished: the export stopped before the part wrote its section "
+                        f"(status 'not_run', reason {PENDING_REASON!r})")
     if record.get("complete") is not is_complete(record):
         _fail("R1", f"complete is {record.get('complete')!r}, but the part statuses give {is_complete(record)}")
     for name in ("fusion", "labels", "spatialdata"):
@@ -829,8 +834,10 @@ def _check_raster(folder, name, entry, element, transform, record, cs, spatialda
 def check_export(folder) -> None:
     """Check an export folder against its record ``export.json``; ``ValueError`` names the first failed condition.
 
-    R1: the record parses, every part has a known status, ``complete`` holds
-    exactly when no part is ``not_run`` or ``failed``, and the ``fusion``
+    R1: the record parses, every part has a known status, no part is still
+    the entry ``not_run`` with the reason ``export_not_finished`` (an export
+    stopped before the part ended), ``complete`` holds exactly when no part
+    is ``not_run`` or ``failed``, and the ``fusion``
     section's recorded SHA-256 of the ``assembly`` section is that section's
     canonical SHA-256. R2: every listed file exists with its SHA-256, every
     file of the folder is listed, and a part ``off``, ``not_run`` or ``empty``

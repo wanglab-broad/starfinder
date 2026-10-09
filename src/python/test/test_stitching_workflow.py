@@ -387,9 +387,9 @@ def test_wf3_the_placement_rules_use_the_position_input_function():
     assert len(placing) == 3 and all("get_stitching_positions" in r.split("output:")[0] for r in placing)
     engine_rule = next(r for r in rules if r.startswith("bigstitcher_engine"))
     assert "get_stitching_positions" not in engine_rule
-    # With an assembly block reads_assignment reads the grid of images/ref_merged/{fovID}.tif: an input then.
+    # With an assembly block reads_assignment reads the grid of the file reference_image names: an input then.
     reads = (ROOT / "workflow/rules/reads-assignment.smk").read_text()
-    assert 'READS_ASSIGNMENT_GEOMETRY = [f"{OUTPUT_DIR}/images/ref_merged/{{fovID}}.tif"]' in reads
+    assert 'READS_ASSIGNMENT_GEOMETRY = _reference_image_inputs(config, OUTPUT_DIR, ["{fovID}"])' in reads
 
 
 def test_wf3_export_sample_inputs_and_declared_output(tmp_path):

@@ -117,6 +117,12 @@ properties:
     exclusiveMinimum: 0
     description: "Z step size in microns"
 
+  reference_image:
+    type: string
+    pattern: "\\{fov_id\\}"
+    default: "images/ref_merged/{fov_id}.tif"
+    description: "File pattern of a FOV's reference image with {fov_id}, absolute or relative to the output root; the §2.10 stitching, assembly and export read its grid there (Python only)"
+
   maximum_projection:
     type: boolean
     default: false

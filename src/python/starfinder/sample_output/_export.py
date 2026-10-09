@@ -1,9 +1,11 @@
 """``Dataset.export``: the one sample-level export entry (docs/sample-output-contract.md, "The export entry").
 
 It runs the checks before anything is written, removes the files the previous record
-lists for the parts that run or are off, and calls the parts in order: ``assemble``
-(then ``save_assembly``), ``fuse``, ``fuse_labels`` and ``export_spatialdata``, writing
-``export.json`` after each part.
+lists for the parts that run or are off, records each part that will run as ``not_run``
+with the reason ``export_not_finished`` (and each part that is off as ``off``), and calls
+the parts in order: ``assemble`` (then ``save_assembly``), ``fuse``, ``fuse_labels`` and
+``export_spatialdata``, writing ``export.json`` after each part, whose section replaces
+its entry.
 """
 from __future__ import annotations
 
@@ -21,6 +23,7 @@ from ._record import (
     SECTIONS,
     ExportRecord,
     listed_files,
+    pending_section,
     read_export,
     remove_listed,
     update_section,
@@ -42,17 +45,17 @@ def source_path(dataset, fov, entry) -> Path:
     if entry == "reference_stain":
         return paths.checkpoint_dir / REFERENCE_STAIN_FILE
     if entry == "reference_merged":
-        return paths.ref_merged_tif
+        from starfinder.dataset._declared import reference_image_path
+        return reference_image_path(dataset.output_root, fov, dataset.reference_image)
     pattern = entry.split("=", 1)[1][len("file:"):].replace("{fov_id}", fov)
     path = Path(pattern)
     return path if path.is_absolute() else Path(dataset.output_root) / path
 
 
 def _reference_grid(dataset, fov):
-    """The FOV's grid: the stored metadata of ``images/ref_merged/<fov_id>.tif``, else the dataset's voxel sizes."""
-    from starfinder.dataset._declared import reference_grid
-    return reference_grid(dataset.output_root, fov, dataset_id=dataset.dataset_id, output_id=dataset.output_id,
-                          voxel_size_xy=dataset.voxel_size_xy, voxel_size_z=dataset.voxel_size_z)
+    """The FOV's grid: the stored metadata of its reference image (``reference_image``), else the voxel sizes."""
+    from starfinder.dataset._declared import reference_grid, reference_settings
+    return reference_grid(dataset.output_root, fov, **reference_settings(dataset))
 
 
 def _genes(dataset):
@@ -69,8 +72,9 @@ def assembly_inputs(dataset, placement, assignment) -> list:
 
     The folder is ``checkpoints/<fov_id>/assignment/<assignment>/``; with
     ``assignment=None`` the FOV's ``signal/<fov_id>_goodSpots.csv`` is read
-    with ``molecule_table_from_csv``. The grid is that of
-    ``images/ref_merged/<fov_id>.tif``: its stored metadata, or the grid the
+    with ``molecule_table_from_csv``. The grid is that of the FOV's reference
+    image, the file the dataset's ``reference_image`` names (default
+    ``images/ref_merged/<fov_id>.tif``): its stored metadata, or the grid the
     dataset's ``voxel_size_xy`` and ``voxel_size_z`` declare for a file that
     stores none. A FOV without a saved input gets none;
     ``assemble`` then refuses an owning FOV without one.
@@ -188,13 +192,18 @@ def export_sample(dataset, sample: str, *, placement, assignment: str | None = "
         raise ValueError(f"{output_dir} holds the export of sample {record.get('sample')!r}, not {sample!r}")
 
     # Keep the folder equal to its record: remove what the previous record lists for each part that runs or is off.
+    # Each part that will run is recorded not_run (export_not_finished) until it writes its own section, so a record
+    # left by an export stopped during a part is not complete; a part that is off is recorded off, as at its turn.
     output_dir.mkdir(parents=True, exist_ok=True)
+    runs = {"assemble": config.assemble, "fuse": config.fuse, "fuse_labels": config.fuse_labels,
+            "export_spatialdata": config.export_spatialdata}
     for part in PARTS:
         if part == "assemble" and status == "reused":
             continue
         remove_listed(output_dir, listed_files(record, part))
         record.pop(SECTIONS[part], None)
         (record.get("parts") or {}).pop(part, None)
+        record[SECTIONS[part]] = pending_section() if runs[part] else {"status": "off"}
     write_export(output_dir, record, sample=sample)
 
     # Part 1: assemble.

@@ -36,17 +36,24 @@ def _band(array, z, y0, y1):
     return np.asarray(part.compute() if hasattr(part, "compute") else part)
 
 
-def _tiles(array, dtype):
-    """The 512 × 512 tiles of an array, plane by plane and band by band (row-major), from a lazy array."""
-    planes = 1 if array.ndim == 2 else array.shape[0]
-    n_y, n_x = array.shape[-2:]
+def bands(shape):
+    """``(z, y0, y1)`` of each band the writer computes, in writing order: plane by plane, rows of 512 (z 0 in 2D)."""
+    planes = 1 if len(shape) == 2 else shape[0]
+    n_y = shape[-2]
     for z in range(planes):
         for y0 in range(0, n_y, TILE):
-            band = _band(array, z, y0, min(y0 + TILE, n_y))
-            if band.dtype != dtype:
-                raise ValueError(f"a band of the fused array has dtype {band.dtype}, not {dtype}")
-            for x0 in range(0, n_x, TILE):
-                yield band[:, x0:x0 + TILE]
+            yield z, y0, min(y0 + TILE, n_y)
+
+
+def _tiles(array, dtype):
+    """The 512 × 512 tiles of an array, plane by plane and band by band (row-major), from a lazy array."""
+    n_x = array.shape[-1]
+    for z, y0, y1 in bands(array.shape):
+        band = _band(array, z, y0, y1)
+        if band.dtype != dtype:
+            raise ValueError(f"a band of the fused array has dtype {band.dtype}, not {dtype}")
+        for x0 in range(0, n_x, TILE):
+            yield band[:, x0:x0 + TILE]
 
 
 def _hashed(tiles, digest):

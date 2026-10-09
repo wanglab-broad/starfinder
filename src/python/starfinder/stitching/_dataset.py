@@ -26,33 +26,31 @@ def _check_input(name):
         raise ValueError(f"input must be 'reference_merged', 'reference_stain' or 'file:<pattern>'; got {name!r}")
 
 
-def read_inputs(output_root, fov_ids, input_name) -> dict[str, StitchingInput]:
+def read_inputs(output_root, fov_ids, input_name, *, reference) -> dict[str, StitchingInput]:
     """One StitchingInput per FOV, read one FOV at a time, keyed in fov_ids order.
 
-    The grid is that of ``images/ref_merged/{fovID}.tif`` (its stored metadata);
-    with ``reference_merged`` that file is read once and is also the image.
+    The grid is that of the FOV's reference image, as
+    :func:`starfinder.dataset._declared.reference_grid` decides it with the
+    keyword arguments ``reference`` (``reference_settings`` of the Dataset or
+    the workflow configuration): the file ``reference_image`` names (default
+    ``images/ref_merged/{fovID}.tif``), its stored metadata, or the grid the
+    voxel sizes declare for a file that stores none. With ``reference_merged``
+    that file is read once and is also the image.
     """
+    from starfinder.dataset._declared import reference_volume
     from starfinder.dataset._paths import _FovPaths
     from starfinder.io import load_volume, load_volume_zyxc
-    from starfinder.segmentation._labels import ReferenceGrid, grid_sha256, reference_grid_from_file
     from starfinder.segmentation._persist import file_sha256
     _check_input(input_name)
     output_root = Path(output_root)
     loaded = {}
     for fov in fov_ids:
         paths = _FovPaths(output_root, fov)
-        reference = paths.ref_merged_tif
-        if not reference.is_file():
-            raise FileNotFoundError(f"the reference image of FOV {fov!r} is missing: {reference}")
+        grid, volume, reference_path = reference_volume(output_root, fov, **reference)
         if input_name == "reference_merged":
-            volume = load_volume(reference)
-            if volume.diagnostics["metadata_source"] != "stored":
-                raise ValueError(f"{reference} has no starfinder_metadata description, so it has no reference grid")
-            grid = ReferenceGrid(volume.image.shape, volume.metadata, f"file:{reference.resolve()}",
-                                 grid_sha256(volume.image))
-            loaded[fov] = StitchingInput(fov, volume.image, grid, input_name, file_sha256(reference))
+            loaded[fov] = StitchingInput(fov, volume.image, grid, input_name, file_sha256(reference_path))
             continue
-        grid = reference_grid_from_file(reference)
+        del volume
         if input_name == "reference_stain":
             path, source = paths.checkpoint_dir / REFERENCE_STAIN_FILE, input_name
         else:

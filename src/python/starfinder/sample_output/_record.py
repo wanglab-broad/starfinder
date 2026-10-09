@@ -24,6 +24,9 @@ SECTIONS = {"assemble": "assembly", "fuse": "fusion", "fuse_labels": "labels", "
 STATUSES = ("written", "reused", "off", "empty", "not_run", "failed")
 #: Statuses of a part that list no file.
 NO_FILES = ("off", "not_run", "empty")
+#: The reason of the entry ``Dataset.export`` records for each part it will run before the first part starts, so
+#: that a record left by an interrupted export is not complete; the part replaces it with its own section.
+PENDING_REASON = "export_not_finished"
 VIEWER_QUALIFICATION = "deferred"
 #: The SHA-256 of a section that another section records when it reads it: recording section →
 #: {field: the section it hashes}. Written by ``fuse`` (``_fuse.py``), ``fuse_labels`` (``_labels.py``) and
@@ -94,6 +97,18 @@ def part_status(record: Mapping, part: str) -> str | None:
     if "status" in section:
         return section["status"]
     return "written" if part == "assemble" and section.get("stage") == "assembly" else None
+
+
+def pending_section() -> dict:
+    """The entry of a part that ``Dataset.export`` will run and that has not written its own section yet."""
+    return {"status": "not_run", "reason": PENDING_REASON}
+
+
+def is_pending(record: Mapping, part: str) -> bool:
+    """Whether a part's section is still the entry :func:`pending_section` (the export stopped before it ended)."""
+    section = record.get(SECTIONS[part])
+    return isinstance(section, Mapping) and section.get("status") == "not_run" \
+        and section.get("reason") == PENDING_REASON
 
 
 def is_complete(record: Mapping) -> bool:

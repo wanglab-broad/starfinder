@@ -4,6 +4,7 @@ from dataclasses import MISSING, asdict, dataclass, field, fields, replace
 from pathlib import Path
 
 from .config import ExternalReference, PipelineConfig, ExecutionConfig, RegistrationRecipe, RegistrationStep, RecoveryConfig
+from ._declared import reference_settings
 from .dataset import Dataset
 from .types import ChannelInfo, RoundState, SubtileConfig
 from starfinder.io import ImageLoadConfig
@@ -735,7 +736,8 @@ def _workflow_dataset(config, **fields):
     entries (MATLAB's channel_order_dict); each additional_round entry's
     channel_order gives that round its own channels. voxel_size_xy and
     voxel_size_z become the Dataset fields of the same names, the declared
-    calibration of saved files that store none.
+    calibration of saved files that store none, and reference_image (absent
+    or null: images/ref_merged/{fov_id}.tif) the field of that name.
     """
     n = config['n_rounds']
     if isinstance(n, bool) or not isinstance(n, int) or n < 1:
@@ -752,7 +754,8 @@ def _workflow_dataset(config, **fields):
         config['dataset_id'], config['sample_id'], config['output_id'], rounds=rounds,
         channel_order=tuple(channels), fov_pattern=config.get('fov_id_pattern', 'Position%03d'),
         other_channel_order=orders, reference_stains=_reference_stains(config),
-        voxel_size_xy=config.get('voxel_size_xy'), voxel_size_z=config.get('voxel_size_z'), **fields)
+        voxel_size_xy=config.get('voxel_size_xy'), voxel_size_z=config.get('voxel_size_z'),
+        reference_image=reference_settings(config)['reference_image'], **fields)
 
 
 def _nuclei_registration(config):
@@ -1358,7 +1361,8 @@ def _legacy_cells(path, config, fov_id, target):
 def _assembly_cells(path, output_root, config, fov_id, target):
     """(molecule grid, cell run) of a legacy label file with an assembly block: on the reference grid.
 
-    The molecule grid is that of images/ref_merged/{fovID}.tif, the grid
+    The molecule grid is that of the FOV's reference image (the file
+    reference_image names, default images/ref_merged/{fovID}.tif), the grid
     Dataset.export gives assemble (starfinder.dataset._declared.reference_grid:
     the file's stored metadata, or the grid voxel_size_xy and voxel_size_z
     declare for a file that stores none), so the saved assignment passes
@@ -1369,8 +1373,7 @@ def _assembly_cells(path, output_root, config, fov_id, target):
     from starfinder.image import IncompatibleGeometryError
     from starfinder.segmentation import import_labels
     from ._declared import reference_grid
-    grid = reference_grid(output_root, fov_id, dataset_id=config['dataset_id'], output_id=config['output_id'],
-                          voxel_size_xy=config.get('voxel_size_xy'), voxel_size_z=config.get('voxel_size_z'))
+    grid = reference_grid(output_root, fov_id, **reference_settings(config))
     with tifffile.TiffFile(path) as tif:
         shape = tuple(int(n) for n in tif.series[0].shape)
     if len(shape) == 2 and shape == tuple(grid.shape_zyx[1:]):
@@ -1379,7 +1382,7 @@ def _assembly_cells(path, output_root, config, fov_id, target):
         label_grid = grid
     else:
         raise IncompatibleGeometryError(f'{path} has shape {shape}; the reference grid of FOV {fov_id!r} '
-                                        f'(images/ref_merged) is {grid.shape_zyx}')
+                                        f'({reference_settings(config)["reference_image"]}) is {grid.shape_zyx}')
     cells = import_labels(path, grid=label_grid, target=target,
                           label_namespace=_label_namespace(config, fov_id, _LEGACY_SEGMENTATION_RUN))
     return grid, cells
@@ -1546,7 +1549,7 @@ def _run_reads_assignment(snakemake):
 
     With an assembly block (option W1 of docs/assembly-contract.md, "Workflow
     configuration") no tile configuration is read: the molecule grid is that
-    of images/ref_merged/{fovID}.tif, as Dataset.export reads it
+    of the FOV's reference image (reference_image), as Dataset.export reads it
     (_assembly_cells), the per-FOV files are written without the overlap
     filter and without global_* columns, and the result is saved as the FOV's
     assignment folder checkpoints/{fovID}/assignment/<assembly.assignment>/
@@ -1732,6 +1735,18 @@ def _stitching_position_inputs(config, output_root, sample):
     return []
 
 
+def _reference_image_inputs(config, output_root, fov_ids):
+    """The FOVs' reference images as rule inputs: the file reference_image names (default images/ref_merged/{fov_id}.tif).
+
+    The §2.10 rules that read a FOV's reference grid (the placement rules and
+    reads_assignment with an assembly block) declare the file the adapters
+    read; a FOV ID '{fovID}' gives the rule's wildcard pattern.
+    """
+    from ._declared import reference_image_path
+    pattern = reference_settings(config)['reference_image']
+    return [str(reference_image_path(output_root, fov, pattern)) for fov in fov_ids]
+
+
 def _workflow_fov_name(config):
     """PositionID → FOV ID by the workflow's own rule, fov_id_pattern.format(i=p) (common.smk, _sample_fovs).
 
@@ -1801,13 +1816,15 @@ def _run_stitching(snakemake):
     PositionIDs are named by fov_id_pattern.format(i=p). With bigstitcher,
     the import of the engine rule's dataset.xml (input 1) with the view map
     (input 2) and the macro (input 3) of the macro rule, on the table of the
-    positions and the FOVs' reference grids (images/ref_merged/{fovID}.tif);
-    the placement is saved there and the legacy writer writes
-    output/tile_config_{sample}.csv (output 1) from the record.
+    positions and the FOVs' reference grids (of the file reference_image
+    names, default images/ref_merged/{fovID}.tif, as Dataset.stitch reads
+    them: the stored metadata, or the grid voxel_size_xy and voxel_size_z
+    declare for a file that stores none); the placement is saved there and
+    the legacy writer writes output/tile_config_{sample}.csv (output 1) from
+    the record.
     """
-    from starfinder.segmentation import reference_grid_from_file
     from starfinder.stitching import import_bigstitcher, save_placement
-    from ._paths import _FovPaths
+    from ._declared import reference_grid
     config, sample = snakemake.config, snakemake.wildcards.sample
     block = _stitching_block(config)
     dataset = _workflow_dataset(config)
@@ -1817,13 +1834,12 @@ def _run_stitching(snakemake):
         table = block.positions
         if table.get('source') == 'stage_file':
             # Named by the workflow's rule here: Dataset.stitch would format the brace pattern with %.
-            grids = {fov: reference_grid_from_file(_FovPaths(dataset.output_root, fov).ref_merged_tif)
-                     for fov in fov_ids}
+            grids = {fov: reference_grid(dataset.output_root, fov, **reference_settings(config)) for fov in fov_ids}
             table = _sample_table(block, dataset, sample, fov_ids, grids, config)
         dataset.stitch(sample, fov_ids, table=table, config=block.config, input=block.input,
                        review=block.review, fallback=block.fallback, output_dir=folder)
         return
-    grids = {fov: reference_grid_from_file(_FovPaths(dataset.output_root, fov).ref_merged_tif) for fov in fov_ids}
+    grids = {fov: reference_grid(dataset.output_root, fov, **reference_settings(config)) for fov in fov_ids}
     table = _sample_table(block, dataset, sample, fov_ids, grids, config)
     result = import_bigstitcher(snakemake.input[1], table=table, view_map=_read_view_map(snakemake.input[2]),
                                 grids=grids, config=block.config, review=block.review, fallback=block.fallback,
@@ -1847,7 +1863,7 @@ def _run_bigstitcher_macro(snakemake):
     folder = _bigstitcher_folder(block, sample)
     dataset = _workflow_dataset(config)
     fov_ids = _sample_fovs(snakemake.input[0], config, sample)
-    loaded = read_inputs(dataset.output_root, fov_ids, block.input)
+    loaded = read_inputs(dataset.output_root, fov_ids, block.input, reference=reference_settings(config))
     table = _sample_table(block, dataset, sample, fov_ids, {fov: item.grid for fov, item in loaded.items()}, config)
     text, view_map = bigstitcher_macro(table, [loaded[fov] for fov in table.fov_ids], config=block.config,
                                        tile_dir=folder / 'tiles', save_dir=folder)

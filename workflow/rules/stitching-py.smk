@@ -6,16 +6,16 @@
     Uses variables from common.smk; the block is validated there (_stitching_block).
 """
 
-from starfinder.dataset.workflow import _stitching_position_inputs
+from starfinder.dataset.workflow import _reference_image_inputs, _stitching_position_inputs
 
 STITCHING_METHOD = config['stitching'].get('method', 'bigstitcher')
 
 ### ==================== [ Helper Functions ] =========================
 
 def get_stitching_images(wildcards):
-    """The sample's reference images, whose grids Dataset.stitch and the import read."""
-    return expand("{output_dir}/images/ref_merged/{fovID}.tif", output_dir=OUTPUT_DIR,
-                  fovID=SAMPLE_TO_FOV[wildcards.sample])
+    """The sample's reference images (the files reference_image names), whose grids Dataset.stitch and the import
+    read."""
+    return _reference_image_inputs(config, OUTPUT_DIR, SAMPLE_TO_FOV[wildcards.sample])
 
 def get_stitching_positions(wildcards):
     """The position file the placement reads (a stage file or a supplied table; none for a regular grid), as

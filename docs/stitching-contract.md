@@ -293,13 +293,19 @@ class StitchingInput:
     file_sha256: str | None = None
 ```
 
-* `Dataset.stitch(input="reference_merged")` reads `images/ref_merged/{fovID}.tif`, which
-  `FOV.save_reference_image(reference_image="merged")` writes with the reference metadata
-  (the image W-323 names for the two sample datasets); `input="reference_stain"` reads the
+* `Dataset.stitch(input="reference_merged")` reads the FOV's reference image, the file the
+  dataset's `reference_image` names (a file pattern with `{fov_id}`, absolute or relative
+  to the output root; default `images/ref_merged/{fov_id}.tif`, which
+  `FOV.save_reference_image(reference_image="merged")` writes with the reference metadata,
+  the image W-323 names for the two sample datasets); `input="reference_stain"` reads the
   saved `reference_stain` of `FOV.prepare_morphology`
   (`<checkpoint dir>/<fov_id>/other_rounds/reference_stain/image.ome.tif`), the nuclear
   stain LN is stitched on. Its grid is the reference grid by the grid rule of
-  {doc}`assignment-contract`.
+  {doc}`assignment-contract`: the reference image's stored metadata, or, for a reference
+  image that stores none, the grid the dataset's `voxel_size_xy` and `voxel_size_z`
+  declare (without them `ValueError` naming them), as `Dataset.export` reads it; the
+  workflow's stitching rules read it the same way. A missing reference image raises
+  `FileNotFoundError` naming `reference_image` and the path.
 * A YX file gives a Z=1 grid; every FOV of a sample must have the same Z size and
   spacing, the unit `µm` and the identity direction, else `IncompatibleGeometryError`;
   `µm`, `um` and `micrometer` are one unit, and a grid without a direction has the
@@ -307,9 +313,10 @@ class StitchingInput:
   only if the method's spec allows it (`multiview_stitcher` does).
 * The legacy `images/DAPI/{fovID}.tif` (rotated, optionally projected DAPI) is accepted as
   `file:<path>` only when its shape equals the reference grid's; it carries no metadata, so
-  its grid is the reference grid read from `images/ref_merged/{fovID}.tif`.
-* The spacing is the reference grid's, never the YAML `voxel_size_xy` or `voxel_size_z`:
-  the stitching input files carry no calibration (W-323 `inputs.md`).
+  its grid is the reference grid read from the FOV's reference image.
+* The spacing is the reference grid's: the YAML `voxel_size_xy` and `voxel_size_z` give it
+  only for a reference image that stores no metadata, since the stitching input files
+  carry no calibration (W-323 `inputs.md`).
 
 ## Placement record
 
