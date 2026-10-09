@@ -53,9 +53,10 @@ of 2026-09-27 on §2.10:
 * **Retention** (2026-09-27): a cell is retained by its centroid; all molecules of a
   retained cell are kept wherever they lie; an unassigned molecule is retained by its own
   position. Exclusions are preserved, not dropped. Cells at a FOV border are flagged.
-  There is no matching or merging of cells across FOVs, no recovery of complete cells
-  across borders and no reassignment of molecules. The workflow is FOV-first: per-FOV
-  results are produced first, and assembly follows per sample.
+  Cells are not merged across FOVs, complete cells are not recovered across borders and
+  molecules are not reassigned; two retained observations of one cell in two FOVs are
+  matched only by the duplicate rule of 2026-10-09 (below). The workflow is FOV-first:
+  per-FOV results are produced first, and assembly follows per sample.
 * **The sample-level AnnData is a required default output of every assembled sample**
   (Jiahao, 2026-10-05, amendment), written from the sample tables through the §2.9
   AnnData code, without a second exporter. The fused image and SpatialData are W-328's.
@@ -66,8 +67,16 @@ of 2026-09-27 on §2.10:
   assemble records"); and `ownership_map` takes an optional `candidates` argument
   ("Ownership regions"). A placement from `placement_from_table`
   ({doc}`stitching-contract`, "Supplied placement") is a `PlacementResult` like any other.
+* **Decided on 2026-10-09** (Jiahao, on {doc}`cells-across-fovs-proposal`, question 3,
+  option b; implemented by W-400): the route per FOV keeps one of two observations of a
+  cell, as a part of that route for good. Two retained cells of different FOVs whose
+  territories share at least `duplicate_threshold` (default 0.5) of the smaller territory
+  on the sample grid are one candidate cell: the larger observation stays retained, and
+  the other is excluded `duplicate_observation` with its molecules ("Retention", rule 8).
+  The rule removes a second observation; it does not complete a cell cut by a FOV edge.
 
-Excluded: cross-FOV cell matching or merging, recovery of complete cells, reassignment
+Excluded: merging of cells across FOVs (the duplicate rule of "Retention", rule 8, excludes
+one of two observations and merges nothing), recovery of complete cells, reassignment
 of molecules, the fused image and label export, and any change to the placement, label or
 assignment contracts.
 
@@ -114,7 +123,7 @@ New names under A1:
 | Input per FOV | `AssemblyInput(fov_id, grid, assignment=None, molecules=None)` | frozen dataclass |
 | Config | `AssemblyConfig` | frozen dataclass |
 | Ownership | `ownership_map(placement, grids, *, config, candidates=None)` returning `OwnershipMap` with `owner(points_zyx)` | function, frozen dataclass |
-| Vocabularies | `ASSEMBLY_STATUSES = ("retained", "excluded")`; `CELL_ASSEMBLY_REASONS = ("not_owner", "fov_not_placed")`; `MOLECULE_ASSEMBLY_REASONS = ("cell_not_owner", "not_owner", "outside_grid", "fov_not_placed")`; `CELL_ASSEMBLY_FLAGS = ("fov_edge", "z_edge", "conflict", "unclaimed")`; `MOLECULE_ASSEMBLY_FLAGS = ("outside_owner_region", "cell_unclaimed")` | tuples |
+| Vocabularies | `ASSEMBLY_STATUSES = ("retained", "excluded")`; `CELL_ASSEMBLY_REASONS = ("not_owner", "fov_not_placed", "duplicate_observation")`; `MOLECULE_ASSEMBLY_REASONS = ("cell_not_owner", "not_owner", "outside_grid", "fov_not_placed", "cell_duplicate_observation")`; `CELL_ASSEMBLY_FLAGS = ("fov_edge", "z_edge", "conflict", "unclaimed")`; `MOLECULE_ASSEMBLY_FLAGS = ("outside_owner_region", "cell_unclaimed")` | tuples |
 | AnnData | `sample_anndata(result, path, *, annotation=None)`, through `write_h5ad` of `starfinder.assignment` ("Sample-level AnnData") | functions |
 | Persistence | `save_assembly(result, folder, *, table_format="csv")`, `load_assembly(folder)` | functions |
 | Coordination | The assemble part of `Dataset.export(sample, *, placement, assignment="default", config=ExportConfig(), output_dir)` ({doc}`sample-output-contract`, "The export entry") | method |
@@ -140,6 +149,7 @@ class AssemblyConfig:
     centroid: str = "territory"         # "territory" (the territory assign sampled) or "original"
     tie: str = "table_order"            # T1
     conflicts: bool = True              # compute the conflict and unclaimed flags (reads territories)
+    duplicate_threshold: float | None = 0.5   # the duplicate rule ("Retention", rule 8); None: off
 ```
 
 `assemble` checks its arguments, maps every observation into sample coordinates, computes
@@ -147,7 +157,8 @@ the ownership map from the placement, assigns one assembly status per cell and m
 computes the flags, copies the §2.9 counts of the counted cells ("Statuses and reasons"),
 and returns an
 `AssemblyResult`. It never reads or writes files except to load a saved assignment named
-by path, never runs stitch, assign or any per-FOV stage, matches no cell across FOVs and
+by path, never runs stitch, assign or any per-FOV stage, merges no cell across FOVs,
+matches observations of two FOVs only by the duplicate rule ("Retention", rule 8), and
 moves no molecule to another cell. Like `stitch`, it is a sample-level computation, not a
 multi-FOV runner ({doc}`stitching-contract`, "Not the multi-FOV runner").
 
@@ -186,7 +197,9 @@ saved result instead (`load_assembly`). `assemble` stays callable alone.
 
 In this order, before any coordinate is computed; each raises and names the FOVs:
 
-1. **Config.** `AssemblyConfig` validates its four fields in `__post_init__`.
+1. **Config.** `AssemblyConfig` validates its five fields in `__post_init__`
+   (`duplicate_threshold` is null or a number above 0 and at most 1; `ValueError` naming
+   the field).
 2. **Review.** A placement whose `record["review"]` is `required` and that holds no
    approval raises `PlacementReviewRequiredError` with the reasons
    ({doc}`stitching-contract`, "Failure policy", item 2).
@@ -245,7 +258,8 @@ The record of the result (the `assembly` section of `export.json` when saved, "P
   "frame": {"frame_id": "sample:sample1", "unit": "µm", "direction": "identity"},
   "placement": {"method": "bigstitcher", "gauge": "G1", "review": "not_needed", "approval": null,
                 "fovs_sha256": "...", "links_sha256": "..."},
-  "config": {"ownership": "nearest_center", "centroid": "territory", "tie": "table_order", "conflicts": true},
+  "config": {"ownership": "nearest_center", "centroid": "territory", "tie": "table_order", "conflicts": true,
+             "duplicate_threshold": 0.5},
   "fovs": [{"fov_id": "Position001", "placement_status": "image_supported", "origin_zyx": [0.0, 0.0, 0.0],
             "kind": "assignment", "assignment": {"name": "default", "record_sha256": "...", "tables": {}},
             "molecules_sha256": "...",
@@ -253,9 +267,11 @@ The record of the result (the `assembly` section of `export.json` when saved, "P
             "grid": {"shape_zyx": [50, 1496, 1496], "sha256": "...", "calibration_source": "grid"},
             "footprint_yx": [[-0.0972, 290.7222], [-0.0972, 290.7222]], "centre_yx": [145.3125, 145.3125],
             "owns_points": true}],
-  "counts": {"cells": {"input": 0, "retained": 0, "excluded": {"not_owner": 0, "fov_not_placed": 0}},
+  "counts": {"cells": {"input": 0, "retained": 0,
+                       "excluded": {"not_owner": 0, "fov_not_placed": 0, "duplicate_observation": 0}},
              "molecules": {"input": 0, "retained": 0,
-                           "excluded": {"cell_not_owner": 0, "not_owner": 0, "outside_grid": 0, "fov_not_placed": 0}},
+                           "excluded": {"cell_not_owner": 0, "not_owner": 0, "outside_grid": 0, "fov_not_placed": 0,
+                                        "cell_duplicate_observation": 0}},
              "flags": {"fov_edge": 0, "z_edge": 0, "conflict": 0, "unclaimed": 0, "outside_owner_region": 0}},
   "files": {"cells": {"path": "tables/cells.csv", "sha256": "..."}, "molecules": {"path": "tables/molecules.csv", "sha256": "..."},
             "counts": {"path": "tables/counts.csv", "sha256": "..."}, "fovs": {"path": "tables/fovs.csv", "sha256": "..."},
@@ -380,7 +396,7 @@ none.
 
 | Option | Rule | Effect on the golden values | Effect on existing outputs |
 | --- | --- | --- | --- |
-| **O1. Nearest footprint centre (recommended)** | A point is owned by the owning FOV whose footprint contains it and whose footprint centre `origin + (n − 1)/2 · s` is nearest in Y and X (Euclidean, µm). For tiles of one shape on a regular grid this is the midline of every overlap, the legacy midpoint without the cast; for irregular positions (stage files) and unequal shapes it is the nearest-centre partition restricted to the footprints. Every point covered by an owning FOV's footprint has exactly one owner. | None for the pins (frozen helpers). The assemble entry on the fixture (`tables/option_effects.json`): boundaries near x 59.2 (59.1 to 59.3: slightly tilted, because FOV3's origin is 0.3 µm higher than FOV1's) and y 42.2, instead of 60 and 51. 3D: scene cell 4 is retained once (by FOV2), not twice, and the background molecule at y 45 once; cell 9's molecule at x 64 stays unretained (excluded `cell_not_owner`, its retained copy flagged `fov_edge`). 2D: cell 9 is retained by FOV1 and FOV3 (FOV3's projected centroid lies at x 59.5, past the boundary at 59.1 there), and both copies are flagged `conflict`. | LN (`tables/ln_ownership.json`, 4 px raster, fractional origins of the 2024 placement): the owner differs from the 2024 rectangles on 159,040 px² (0.13 % of the 119.4 million px² covered); no covered point is unowned and none is owned twice (legacy: about 33,600 px² twice, 3,000 px² unowned). |
+| **O1. Nearest footprint centre (recommended)** | A point is owned by the owning FOV whose footprint contains it and whose footprint centre `origin + (n − 1)/2 · s` is nearest in Y and X (Euclidean, µm). For tiles of one shape on a regular grid this is the midline of every overlap, the legacy midpoint without the cast; for irregular positions (stage files) and unequal shapes it is the nearest-centre partition restricted to the footprints. Every point covered by an owning FOV's footprint has exactly one owner. | None for the pins (frozen helpers). The assemble entry on the fixture (`tables/option_effects.json`): boundaries near x 59.2 (59.1 to 59.3: slightly tilted, because FOV3's origin is 0.3 µm higher than FOV1's) and y 42.2, instead of 60 and 51. 3D: scene cell 4 is retained once (by FOV2), not twice, and the background molecule at y 45 once; cell 9's molecule at x 64 stays unretained (excluded `cell_not_owner`, its retained copy flagged `fov_edge`). 2D: cell 9 is retained by FOV1 and FOV3 (FOV3's projected centroid lies at x 59.5, past the boundary at 59.1 there), and both copies are flagged `conflict` (with the duplicate rule off; the default rule keeps FOV1's copy, "Retention", rule 8). | LN (`tables/ln_ownership.json`, 4 px raster, fractional origins of the 2024 placement): the owner differs from the 2024 rectangles on 159,040 px² (0.13 % of the 119.4 million px² covered); no covered point is unowned and none is owned twice (legacy: about 33,600 px² twice, 3,000 px² unowned). |
 | O2. Midpoint boxes of neighbour pairs | Today's rule written in µm: per FOV an axis-aligned box whose edge towards each neighbour is the middle of their overlap, with fractional origins, each FOV's own grid shape (`img_row` for Y) and the edges of neighbour pairs from the nominal grid. | None for the pins. On the fixture the same retained sets as O1 (box edges at x 59.2 and y 42.2). | LN: owner differs from 2024 on 76,608 px²; 33,760 px² owned twice and 2,576 px² unowned, at blank cells and corners, as today. Needs grid neighbours, which a stage file or supplied table without a grid does not give. |
 | O3. The legacy rectangles | Read `start/end_*_norm` of `tile_config` | Reproduces every pinned value, including the doubly owned band. | Keeps discrepancies 1, 2, 4, 8 and 12 of {doc}`assembly-baseline`; works only with BigStitcher's padded grid. |
 
@@ -432,7 +448,8 @@ As agreed on 2026-09-27, with the reasons of "Statuses and reasons":
 2. **Molecules of cells.** An `assigned` or `excluded_cell` molecule (§2.9) takes the
    assembly status of its cell: retained with a retained cell, wherever its own position
    lies, even in another FOV's ownership region; excluded with the reason
-   `cell_not_owner` when its cell is excluded.
+   `cell_not_owner` when its cell is excluded `not_owner`, and `cell_duplicate_observation`
+   when its cell is excluded `duplicate_observation` (rule 8).
 3. **Unassigned molecules** are retained when the owner of their own sample position is
    their FOV, else excluded `not_owner` (also when the position has no owner).
 4. **`outside_grid` molecules** (§2.9) are excluded with the reason `outside_grid`: their
@@ -446,6 +463,21 @@ As agreed on 2026-09-27, with the reasons of "Statuses and reasons":
    ("Statuses and reasons"): it has no row in the counts table or in the AnnData, because
    of its §2.9 status, not because of assembly; it stays in the sample cell table with its
    assembly status, and its molecules (§2.9 `excluded_cell`) take that status by rule 2.
+8. **Two observations of one cell** (the duplicate rule, decided on 2026-10-09). With
+   `duplicate_threshold` set (default 0.5), two cells of different FOVs that rule 1
+   retained are two observations of one candidate cell when their territories share at
+   least that share of the smaller territory: the voxels both territories cover on the
+   sample grid, divided by the voxels of the smaller, each territory (the one assign
+   sampled) placed as the label export places it ({doc}`assembly-algorithms`, "Duplicate
+   rule"). The retained cells are taken in the order of decreasing territory size, ties by
+   placement table order and then `cell_id`; a cell stays retained unless it is paired at
+   or above the threshold with a cell of another FOV that already stays, and then it is
+   excluded with the reason `duplicate_observation` and names in `duplicate_of` the first
+   such cell in that order. The result does not depend on the order of the inputs. Its
+   molecules are excluded with it (rule 2) and are not given to the kept cell. The rule
+   removes a second observation; it does not complete a cell cut by a FOV edge, whose kept
+   observation is still the part its FOV saw (`fov_edge`). `duplicate_threshold=None` turns
+   the rule off and gives the result of rules 1 to 7 alone.
 
 There is no other outcome, and no branch: a FOV whose molecules all miss its cells, a FOV
 without molecules and a FOV without cells go through the same rules.
@@ -457,7 +489,7 @@ Every cell and every molecule of every input FOV has exactly one assembly status
 | Status | Cells: reason | Molecules: reason |
 | --- | --- | --- |
 | `retained` | null | null |
-| `excluded` | `not_owner`: its ownership centroid is not owned by its own FOV (another FOV owns it, or, for a cell of a `placeholder`, possibly none); `fov_not_placed`: its FOV has no origin | `cell_not_owner`: its cell is excluded `not_owner`; `not_owner`: unassigned and its position is not owned by its own FOV; `outside_grid`: §2.9 `outside_grid`; `fov_not_placed` |
+| `excluded` | `not_owner`: its ownership centroid is not owned by its own FOV (another FOV owns it, or, for a cell of a `placeholder`, possibly none); `fov_not_placed`: its FOV has no origin; `duplicate_observation`: a second observation of a cell that another FOV's retained cell keeps ("Retention", rule 8) | `cell_not_owner`: its cell is excluded `not_owner`; `not_owner`: unassigned and its position is not owned by its own FOV; `outside_grid`: §2.9 `outside_grid`; `fov_not_placed`; `cell_duplicate_observation`: its cell is excluded `duplicate_observation` |
 
 **Counted cells.** The sample's **counted cells** are the cells with
 `assembly_status == "retained"` and §2.9 `status == "kept"`. They are the only cells with
@@ -489,7 +521,10 @@ Flags make visible what assembly cannot decide; they never change a status.
 is mapped into that FOV's index coordinates by the inverse rule of {doc}`stitching-contract`
 and sampled at `floor(c + 0.5)` (Y and X for a `plane`, Z, Y and X otherwise); a point
 outside its grid is in no territory. With `conflicts=False` the `conflict` and `unclaimed`
-flags are not computed and the record says so.
+flags are not computed and the record says so. "Retained" in the rules of `conflict` and
+`unclaimed` means retained after the duplicate rule ("Retention", rule 8): a cell it
+excludes is not a retained cell for either flag, so the kept observation of a pair no
+longer carries `conflict` for it. `fov_edge` and `z_edge` are not changed by the rule.
 
 **What this policy does not guarantee.** Assembly retains observations; it does not
 identify biological cells. Where neighbouring FOVs segment the same cell differently, or
@@ -501,8 +536,12 @@ guarantee one observation per biological cell where neighbouring segmentations d
 `conflict` marks some of the cells retained twice and `unclaimed` some of the cells
 retained by no FOV, because both are centroid tests ("Flags"), and `fov_edge` with
 `outside_owner_region` marks the third case. The golden fixture shows each: a cell retained twice in
-2D under O1, and a molecule of a retained cell that its owner did not image. No matching,
-merging or reassignment repairs them (excluded by the planning decisions).
+2D under O1 (with the duplicate rule off), and a molecule of a retained cell that its owner did not image.
+The duplicate rule ("Retention", rule 8) keeps one observation of a cell retained twice
+whose two territories share at least `duplicate_threshold` of the smaller one (the 2D
+golden cell's share 0.90); it removes the second observation and does not complete a cell
+cut by a FOV border. No merging or reassignment repairs the other cases (excluded by the
+planning decisions).
 
 ## Sample-level identities
 
@@ -530,8 +569,8 @@ With `F` the input FOVs, `C_f` and `M_f` the cell and molecule tables of FOV `f`
    `Σ_f |M_f| = n_molecules_retained + Σ_reason n_molecules_excluded(reason)`; per FOV
    too.
 3. **Molecules follow their cell.** Every `assigned` or `excluded_cell` molecule has its
-   cell's assembly status (and reason `cell_not_owner` when the cell's is `not_owner`, or
-   `fov_not_placed`); every `unassigned` molecule of a placed FOV is retained exactly when
+   cell's assembly status (and reason `cell_not_owner` when the cell's is `not_owner`,
+   `cell_duplicate_observation` when it is `duplicate_observation`, or `fov_not_placed`); every `unassigned` molecule of a placed FOV is retained exactly when
    its position's owner is its FOV, which is never the case for a `placeholder` ("Placeholder
    FOVs"); every `outside_grid` molecule is excluded.
 4. **Counted cells' counts equal the per-FOV counts.** For every counted cell
@@ -550,7 +589,12 @@ With `F` the input FOVs, `C_f` and `M_f` the cell and molecule tables of FOV `f`
 6. **No identity about biological cells.** The number of distinct biological cells or
    molecules is not known and is not claimed ("Flags").
 
-`record["counts"]` holds the totals of 2 per status and reason, and the flag counts.
+`record["counts"]` holds the totals of 2 per status and reason, and the flag counts; the
+reasons `duplicate_observation` and `cell_duplicate_observation` are counted when the
+duplicate rule is on (`duplicate_threshold` not null), so that a record made with the rule
+off has the counts of a record made before the rule. Identity 2 also holds that a cell
+excluded `duplicate_observation`, and only such a cell, names in `duplicate_of` a retained
+cell of another FOV.
 
 ## Sample tables
 
@@ -580,6 +624,7 @@ increasing `cell_id`:
 | `assembly_status`, `assembly_reason` | string | "Statuses and reasons". |
 | `assembly_flags` | string | `;`-joined `CELL_ASSEMBLY_FLAGS`; empty when none; `conflict` and `unclaimed` null with `conflicts=False`. |
 | `conflict_with` | string | `;`-joined `obs_name`s of the conflicting retained cells; empty when none. |
+| `duplicate_of` | string | For a cell excluded `duplicate_observation`, the `obs_name` of the retained cell of another FOV that keeps it ("Retention", rule 8); null otherwise, and null on every row with the rule off. |
 
 **`molecules`**, one row per molecule of every input FOV, in placement table order, then
 input order: `fov_id`; every column of the §2.9 molecule table, copied (for a
@@ -729,6 +774,7 @@ assembly:
   centroid: territory          # territory | original
   tie: table_order
   conflicts: true
+  duplicate_threshold: 0.5     # the duplicate rule; null: off
   table_format: csv            # csv | parquet
 ```
 
@@ -787,7 +833,8 @@ is not an ownership source.
   golden fixture's placement (boundaries near x 59.2 and y 42.2 for the fractional origins;
   every covered point one owner; T1 on a constructed exact tie); the retained sets of
   `tables/option_effects.json` on the fixture (3D: FOV1 retains scene cells 1, 2, 5, 9;
-  FOV2 4, 6; FOV3 3, 7, 8; 2D: FOV3 also 9, with both copies flagged `conflict`); every
+  FOV2 4, 6; FOV3 3, 7, 8; 2D: FOV3 also 9, with both copies flagged `conflict`, with the
+  duplicate rule off); every
   identity of "Count accounting" on the fixture and on a `molecules_only` variant; the
   `fov_not_placed` and review refusal cases; the AnnData checks above, with a retained
   `excluded_no_nucleus` cell that has no AnnData row and an expanded FOV whose
@@ -819,7 +866,8 @@ and every excluded observation is kept with its reason.
 ## Exclusions
 
 No implementation, rename, dependency or lock change; no change to the placement contract
-(W-325) or to the §2.9 label and assignment contracts; no cross-FOV cell matching or
-merging, no recovery of complete cells across borders, no reassignment of molecules; no
+(W-325) or to the §2.9 label and assignment contracts; no merging of cells across FOVs
+(the duplicate rule of "Retention", rule 8, decided on 2026-10-09, excludes one of two
+observations and merges nothing), no recovery of complete cells across borders, no reassignment of molecules; no
 fused image, label export or SpatialData (W-328); no real data (every measured number is
 from the W-324 records and the W-326 derivations cited above).

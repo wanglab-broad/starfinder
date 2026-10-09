@@ -322,9 +322,10 @@ def check_drawing(result, record, *, view=None, z=None, image=None):
 def test_the_drawing_in_the_z_maximum_view(own):
     placement, result, results = own
     image = np.arange(np.prod(OWN_SHAPE), dtype=np.float64).reshape(OWN_SHAPE)
-    # FOV2: excluded cells and molecules in both panels; FOV1: no excluded cell, one excluded molecule (m5)
+    # FOV2: excluded cells and molecules in both panels; FOV1: its cell 2 (A), excluded by the default duplicate rule
+    # as a second observation of FOV2's B (share 1.0; W-400), with its molecule m1, one more excluded molecule (m5)
     # drawn and one (m6, outside_grid) not drawn.
-    for fov, grey_cells, grey_molecules in (("FOV2", {2, 3}, {"m2", "m3", "m6"}), ("FOV1", set(), {"m5"})):
+    for fov, grey_cells, grey_molecules in (("FOV2", {2, 3}, {"m2", "m3", "m6"}), ("FOV1", {2}, {"m1", "m5"})):
         record = fov_ownership(result, fov, placement=placement)
         cells, mols = check_drawing(results[fov], record, image=image)
         assert cells & record.excluded_cells == grey_cells

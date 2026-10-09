@@ -88,6 +88,7 @@ ownership: nearest_center
 centroid: territory
 tie: table_order
 conflicts: true
+duplicate_threshold: 0.5
 table_format: csv
 """)
 EXPORT = yaml.safe_load("""
@@ -202,6 +203,10 @@ def test_wf1_every_configuration_validates(name):
     {"stitching": dict(STITCHING, method="grid_stitcher")},  # an unregistered method
     {"stitching": dict(STITCHING, tile_filter=True)},        # an unknown key
     {"assembly": dict(ASSEMBLY, ownership="voronoi")},
+    {"assembly": dict(ASSEMBLY, duplicate_threshold=0)},     # the duplicate rule: above 0 and at most 1, or null
+    {"assembly": dict(ASSEMBLY, duplicate_threshold=1.5)},
+    {"assembly": dict(ASSEMBLY, duplicate_threshold="0.5")},
+    {"assembly": dict(ASSEMBLY, duplicate_threshold=True)},
     {"export": dict(EXPORT, labels_scale=0.25)},             # the block's names, not LabelConfig's
     {"stitching": None},                                     # assembly without stitching
     {"assembly": None},                                      # export without assembly
@@ -460,6 +465,35 @@ def test_wf3_run_export_succeeds_without_multiview_stitcher(tmp_path, monkeypatc
     assert record["parts"] == {"assemble": "written", "fuse": "not_run", "fuse_labels": "off",
                                "export_spatialdata": "off"}
     assert record["fusion"]["reason"] == "extra_missing" and record["complete"] is False
+
+
+@needs_anndata
+@pytest.mark.parametrize("threshold", [None, 0.5, 1.0])
+def test_wf3_run_export_passes_the_duplicate_threshold(tmp_path, monkeypatch, synchronous, threshold):
+    """W-400: assembly.duplicate_threshold reaches assemble, and the tables equal those of the same Dataset.export
+    called from Python. The fixture's one-plane variant holds scene cell 9 twice (share 0.90 of the smaller)."""
+    calls = []
+    real = Dataset.export
+    monkeypatch.setattr(Dataset, "export", lambda self, *a, **k: calls.append(k) or real(self, *a, **k))
+    config = dataset_config(tmp_path / "workflow", stitching=MULTIVIEW,
+                            assembly=dict(ASSEMBLY, duplicate_threshold=threshold), export={"fuse": False})
+    folder = export_folder(tmp_path / "workflow" / "data", dimensions="plane")
+    output = folder.export_dir / "export.json"
+    workflow._run_export(stub(config, inputs=[folder.placement_dir / "placement.json"], outputs=[output],
+                              sample=SAMPLE))
+    record = json.loads(output.read_text())
+    expected = ExportConfig(fuse=False, assembly=AssemblyConfig(duplicate_threshold=threshold))
+    assert [k["config"] for k in calls] == [expected]
+    assert record["assembly"]["config"]["duplicate_threshold"] == threshold
+    python = export_folder(tmp_path / "python" / "data", dimensions="plane")
+    real(python.dataset, SAMPLE, placement=python.placement_dir, assignment="default", config=expected,
+         output_dir=python.export_dir)
+    again = json.loads((python.export_dir / "export.json").read_text())
+    for table in ("fovs", "cells", "molecules", "counts"):
+        assert record["assembly"]["files"][table]["sha256"] == again["assembly"]["files"][table]["sha256"]
+    cells = pd.read_csv(folder.export_dir / "tables" / "cells.csv")
+    excluded = cells[cells.assembly_reason == "duplicate_observation"]
+    assert list(excluded.obs_name) == ([] if threshold in (None, 1.0) else ["sample1_Position003_5"])
 
 
 @needs_anndata

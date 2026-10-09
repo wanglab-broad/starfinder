@@ -6,6 +6,7 @@ its expected rows, ``empty_cases``, ``status_cases``. The retained sets of AS3 a
 ``tables/option_effects.json`` (O1), written here as literals.
 """
 import dataclasses
+import json
 import os
 
 import numpy as np
@@ -19,7 +20,8 @@ from starfinder.image import IncompatibleGeometryError
 from starfinder.segmentation import ReferenceGrid
 from starfinder.stitching import PlacementReviewRequiredError, approve_placement, placement_from_table
 
-from .assembly_fixtures import (GOLDEN_GENES, GOLDEN_IDS, OWN_EXPECTED_CELLS, OWN_EXPECTED_MOLECULES, OWN_IDS,
+from .assembly_fixtures import (GOLDEN_GENES, GOLDEN_IDS, OWN_DUPLICATE_CELLS, OWN_DUPLICATE_MOLECULES,
+                                OWN_EXPECTED_CELLS, OWN_EXPECTED_MOLECULES, OWN_IDS,
                                 OWN_SHAPE, TILE_ZYX, approved, cell_namespace, check_accounting, golden_molecule_tables,
                                 golden_pieces, golden_placement, golden_results, inputs_of, metadata, molecules,
                                 own_grids, own_inputs, own_placement, own_results, own_table, placeholder_result,
@@ -27,8 +29,11 @@ from .assembly_fixtures import (GOLDEN_GENES, GOLDEN_IDS, OWN_EXPECTED_CELLS, OW
 
 pytestmark = [pytest.mark.stitching, pytest.mark.validation]
 
+# "2d" with the duplicate rule off; under the default rule FOV3's copy of scene cell 9 (its cell 5, 42 voxels on the
+# sample grid) shares 38 voxels (0.90 of the smaller) with FOV1's copy (its cell 6, 87 voxels) and is excluded (W-400).
 SCENE_RETAINED = {"3d": {"Position001": [1, 2, 5, 9], "Position002": [4, 6], "Position003": [3, 7, 8]},
-                  "2d": {"Position001": [1, 2, 5, 9], "Position002": [4, 6], "Position003": [3, 7, 8, 9]}}
+                  "2d": {"Position001": [1, 2, 5, 9], "Position002": [4, 6], "Position003": [3, 7, 8, 9]},
+                  "2d_rule": {"Position001": [1, 2, 5, 9], "Position002": [4, 6], "Position003": [3, 7, 8]}}
 # Cell 9's molecule at global (4, 8, 64): local x 9 of FOV3 (offset 55), outside FOV1.
 CELL9_MOLECULE = ("Position003", (4.0, 8.0, 9.0))
 CELL_29 = ["cell_id", "status", "exclusion_reason", "size_voxels", "expanded_size_voxels", "size_physical",
@@ -38,7 +43,8 @@ CELL_29 = ["cell_id", "status", "exclusion_reason", "size_voxels", "expanded_siz
 SAMPLE_CELL_COLUMNS = (["fov_id", "cell_namespace", "cell_id", "obs_name"] + CELL_29[1:]
                        + [f"sample_{p}_{a}" for p in ("centroid", "expanded_centroid") for a in "zyx"]
                        + ["ownership_centroid"] + [f"sample_ownership_centroid_{a}" for a in "zyx"]
-                       + ["owner_fov_id", "assembly_status", "assembly_reason", "assembly_flags", "conflict_with"])
+                       + ["owner_fov_id", "assembly_status", "assembly_reason", "assembly_flags", "conflict_with",
+                          "duplicate_of"])
 MOLECULE_29 = ["spot_namespace", "spot_id", "z", "y", "x", "gene_id", "voxel_z", "voxel_y", "voxel_x",
                "assignment_status", "cell_id", "in_expansion", "original_cell_id", "nucleus_id", "compartment"]
 SAMPLE_TAIL = ["sample_z", "sample_y", "sample_x", "owner_fov_id", "assembly_status", "assembly_reason",
@@ -56,30 +62,40 @@ def retained_scene_cells(result):
     return kept
 
 
-def golden(dimensions="3d", **kw):
+def golden(dimensions="3d", *, config=AssemblyConfig(), **kw):
     results = golden_results(dimensions, **kw)
     placement = golden_placement()
-    return assemble(placement, inputs_of(results)), results, placement
+    return assemble(placement, inputs_of(results), config=config), results, placement
 
 
 def test_the_vocabularies():
     assert ASSEMBLY_STATUSES == ("retained", "excluded")
-    assert CELL_ASSEMBLY_REASONS == ("not_owner", "fov_not_placed")
-    assert MOLECULE_ASSEMBLY_REASONS == ("cell_not_owner", "not_owner", "outside_grid", "fov_not_placed")
+    assert CELL_ASSEMBLY_REASONS == ("not_owner", "fov_not_placed", "duplicate_observation")
+    assert MOLECULE_ASSEMBLY_REASONS == ("cell_not_owner", "not_owner", "outside_grid", "fov_not_placed",
+                                         "cell_duplicate_observation")
     assert CELL_ASSEMBLY_FLAGS == ("fov_edge", "z_edge", "conflict", "unclaimed")
     assert MOLECULE_ASSEMBLY_FLAGS == ("outside_owner_region", "cell_unclaimed")
 
 
 # --- AS3: the retained sets of the golden fixture --------------------------------------------------------
 
-@pytest.mark.parametrize("dimensions", ["3d", "2d"])
+@pytest.mark.parametrize("dimensions", ["3d", "2d", "2d_rule"])
 def test_as3_retained_scene_cells(dimensions):
-    result, _, _ = golden(dimensions)
+    rule = dimensions == "2d_rule"
+    off = AssemblyConfig(duplicate_threshold=None)
+    result, _, _ = golden(dimensions[:2], config=AssemblyConfig() if dimensions != "2d" else off)
     assert retained_scene_cells(result) == SCENE_RETAINED[dimensions]
     cells = result.cells.set_index(["fov_id", "cell_id"])
     conflicts = cells[cells.assembly_flags.str.contains("conflict")]
     if dimensions == "3d":
         assert conflicts.empty
+        assert result.cells.duplicate_of.isna().all()
+        assert_frame_equal_but_config(result, golden("3d", config=off)[0])
+    elif rule:   # FOV3's copy of cell 9 is excluded naming FOV1's, which keeps no conflict; its molecule follows it
+        assert conflicts.empty
+        assert (cells.loc[("Position003", 5), "assembly_reason"], cells.loc[("Position003", 5), "duplicate_of"]) == \
+            ("duplicate_observation", "sample1_Position001_6")
+        assert result.cells.duplicate_of.notna().sum() == 1
     else:   # scene cell 9 retained twice, both copies flagged against each other
         assert sorted(conflicts.index) == [("Position001", 6), ("Position003", 5)]
         assert cells.loc[("Position001", 6), "conflict_with"] == "sample1_Position003_5"
@@ -90,23 +106,40 @@ def test_as3_retained_scene_cells(dimensions):
                     & (molecules.x == position[2])].iloc[0]
     if dimensions == "3d":
         assert (row.assembly_status, row.assembly_reason) == ("excluded", "cell_not_owner")
+    elif rule:
+        assert (row.assembly_status, row.assembly_reason) == ("excluded", "cell_duplicate_observation")
     else:
         assert (row.assembly_status, none(row.assembly_reason)) == ("retained", None)
 
 
+def assert_frame_equal_but_config(result, off):
+    """A result equals the same assembly with the rule off, apart from the config's threshold and the counts' keys
+    of the rule's reasons (all 0)."""
+    for name in ("fovs", "cells", "molecules", "counts"):
+        pd.testing.assert_frame_equal(getattr(result, name), getattr(off, name), check_exact=True)
+    counts = json.loads(json.dumps(result.record["counts"]))
+    assert counts["cells"]["excluded"].pop("duplicate_observation") == 0
+    assert counts["molecules"]["excluded"].pop("cell_duplicate_observation") == 0
+    assert counts == off.record["counts"]
+
+
 # --- AS4: retention rules and reasons, row order and columns ---------------------------------------------
 
-def test_as4_own_cases_rows_equal_the_fixture():
+@pytest.mark.parametrize("rule", [True, False])
+def test_as4_own_cases_rows_equal_the_fixture(rule):
     results = own_results()
-    result = assemble(own_placement(), own_inputs())
+    config = AssemblyConfig() if rule else AssemblyConfig(duplicate_threshold=None)
+    result = assemble(own_placement(), own_inputs(), config=config)
     assert list(result.cells.columns) == SAMPLE_CELL_COLUMNS
     assert list(result.molecules.columns) == ["fov_id"] + MOLECULE_29 + SAMPLE_TAIL
     got = {(r.fov_id, int(r.cell_id)): (r.status, r.assembly_status, none(r.assembly_reason), none(r.owner_fov_id),
                                         r.assembly_flags, r.conflict_with) for r in result.cells.itertuples()}
-    assert got == OWN_EXPECTED_CELLS
+    assert got == ({**OWN_EXPECTED_CELLS, **OWN_DUPLICATE_CELLS} if rule else OWN_EXPECTED_CELLS)
     got = {(r.fov_id, r.spot_id): (r.assignment_status, none(r.cell_id), r.assembly_status, none(r.assembly_reason),
                                    none(r.owner_fov_id), r.assembly_flags) for r in result.molecules.itertuples()}
-    assert got == OWN_EXPECTED_MOLECULES
+    assert got == ({**OWN_EXPECTED_MOLECULES, **OWN_DUPLICATE_MOLECULES} if rule else OWN_EXPECTED_MOLECULES)
+    named = {(r.fov_id, int(r.cell_id)): r.duplicate_of for r in result.cells.itertuples() if not pd.isna(r.duplicate_of)}
+    assert named == ({("FOV1", 2): "s1_FOV2_1"} if rule else {})
     # Order: placement table order, then increasing cell_id / input order.
     assert list(result.cells.fov_id) == ["FOV1"] * 4 + ["FOV2"] * 4
     assert list(result.cells.cell_id) == [1, 2, 3, 4] * 2
@@ -150,9 +183,12 @@ def test_as5_golden_flags():
             assert ("fov_edge" in flags) == (cell_id in yx) and ("z_edge" in flags) == (cell_id in z)
 
 
-def test_as5_conflicts_false_leaves_the_two_flags_uncomputed():
-    with_flags = assemble(own_placement(), own_inputs())
-    without = assemble(own_placement(), own_inputs(), config=AssemblyConfig(conflicts=False))
+@pytest.mark.parametrize("rule", [True, False])
+def test_as5_conflicts_false_leaves_the_two_flags_uncomputed(rule):
+    threshold = 0.5 if rule else None
+    with_flags = assemble(own_placement(), own_inputs(), config=AssemblyConfig(duplicate_threshold=threshold))
+    without = assemble(own_placement(), own_inputs(), config=AssemblyConfig(conflicts=False,
+                                                                            duplicate_threshold=threshold))
     assert without.cells.conflict_with.isna().all()
     flags = {f for v in without.cells.assembly_flags for f in v.split(";") if f}
     assert flags == {"fov_edge", "z_edge"}
@@ -161,8 +197,11 @@ def test_as5_conflicts_false_leaves_the_two_flags_uncomputed():
                                        "conflicts": False}
     assert without.record["counts"]["flags"]["conflict"] is None
     assert without.record["counts"]["flags"]["unclaimed"] is None
-    assert with_flags.record["counts"]["flags"] == {"fov_edge": 3, "z_edge": 1, "conflict": 2, "unclaimed": 1,
-                                                    "outside_owner_region": 2, "cell_unclaimed": 1}
+    # W-400: under the default rule A (FOV1 cell 2) is excluded as a second observation of B (share 1.0), so neither
+    # keeps conflict and A's molecule m1 is no longer a retained molecule outside its owner's region.
+    assert with_flags.record["counts"]["flags"] == {"fov_edge": 3, "z_edge": 1, "conflict": 0 if rule else 2,
+                                                    "unclaimed": 1, "outside_owner_region": 1 if rule else 2,
+                                                    "cell_unclaimed": 1}
     for name in ("cells", "molecules"):
         a, b = getattr(with_flags, name), getattr(without, name)
         assert a.assembly_status.tolist() == b.assembly_status.tolist()

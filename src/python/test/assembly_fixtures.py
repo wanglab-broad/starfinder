@@ -249,6 +249,17 @@ OWN_EXPECTED_MOLECULES = {
     ("FOV2", "m7"): ("outside_grid", None, "excluded", "outside_grid", None, ""),
 }
 
+# Under the default duplicate rule (duplicate_threshold 0.5): FOV1's A (18 voxels) lies whole inside FOV2's B
+# (56 voxels of its expanded territory), a share of 1.0 of the smaller, so A is excluded duplicate_observation naming
+# B and its molecule m1 with it; B keeps no conflict. The other rows are those above (the rule off).
+OWN_DUPLICATE_CELLS = {
+    ("FOV1", 2): ("kept", "excluded", "duplicate_observation", "FOV1", "", ""),
+    ("FOV2", 1): ("kept", "retained", None, "FOV2", "fov_edge", ""),
+}
+OWN_DUPLICATE_MOLECULES = {
+    ("FOV1", "m1"): ("assigned", 2, "excluded", "cell_duplicate_observation", "FOV2", ""),
+}
+
 
 def paint(shape, boxes):
     labels = np.zeros(shape, np.uint32)
@@ -411,14 +422,27 @@ def check_accounting(result, inputs, placement):
             reasons = rows[rows.assembly_status == "excluded"].assembly_reason.value_counts()
             assert n == len(rows) == int((rows.assembly_status == "retained").sum()) + int(reasons.sum())
     record = result.record["counts"]
-    for name, frame, reasons in (("cells", cells, ("not_owner", "fov_not_placed")),
-                                 ("molecules", mols, ("cell_not_owner", "not_owner", "outside_grid",
-                                                      "fov_not_placed"))):
+    # The duplicate rule's reasons are counted when the rule is on (duplicate_threshold not None).
+    duplicates = result.record["config"].get("duplicate_threshold") is not None
+    for name, frame, reasons in (("cells", cells, ("not_owner", "fov_not_placed")
+                                  + (("duplicate_observation",) if duplicates else ())),
+                                 ("molecules", mols, ("cell_not_owner", "not_owner", "outside_grid", "fov_not_placed")
+                                  + (("cell_duplicate_observation",) if duplicates else ()))):
         excluded = frame[frame.assembly_status == "excluded"]
         assert record[name] == {"input": len(frame), "retained": int((frame.assembly_status == "retained").sum()),
                                 "excluded": {r: int((excluded.assembly_reason == r).sum()) for r in reasons}}
         assert set(excluded.assembly_reason) <= set(reasons) and frame[frame.assembly_status == "retained"
                                                                         ].assembly_reason.isna().all()
+    # 2 (continued): a cell excluded duplicate_observation, and only such a cell, names a retained cell of another
+    # FOV in duplicate_of.
+    if "duplicate_of" in cells:
+        state = {r.obs_name: (r.fov_id, r.assembly_status) for r in cells.itertuples()}
+        for r in cells.itertuples():
+            named = _none(r.duplicate_of)
+            if _none(r.assembly_reason) == "duplicate_observation":
+                assert named in state and state[named][1] == "retained" and state[named][0] != r.fov_id
+            else:
+                assert named is None
     # 3. Molecules follow their cell; unassigned ones their own position; outside_grid is excluded.
     cell_of = {(r.fov_id, int(r.cell_id)): (r.assembly_status, _none(r.assembly_reason)) for r in cells.itertuples()}
     for r in mols.itertuples():
@@ -430,7 +454,8 @@ def check_accounting(result, inputs, placement):
             cell_status, cell_reason = cell_of[(r.fov_id, int(r.cell_id))]
             assert status == cell_status
             assert reason == (None if cell_status == "retained" else
-                              "cell_not_owner" if cell_reason == "not_owner" else cell_reason)
+                              "cell_not_owner" if cell_reason == "not_owner" else
+                              "cell_duplicate_observation" if cell_reason == "duplicate_observation" else cell_reason)
         elif a_status == "outside_grid" or reason == "outside_grid":
             assert (status, reason) == ("excluded", "outside_grid")
         else:
@@ -501,3 +526,72 @@ def own_states_results():
         grid=grid, config=AssignmentConfig(exclude_cells_without_nucleus=False),
         nuclei=label_run(paint(OWN_SHAPE, OWN_STATES_NUCLEI), fov, grid, target="nucleus", run="nucleus"))
     return results
+
+
+# --- The duplicate rule recomputed in the test, on the whole sample grid --------------------------------------
+
+def placed_on_grid(territory, origin, spacing, grid_origin, grid_shape):
+    """A ZYX territory placed on a sample grid by the nearest voxel, computed here on the whole grid.
+
+    Grid voxel ``v`` (at ``grid_origin + v·s``) shows the FOV voxel ``floor(c + ½)`` with ``c = (grid_origin +
+    v·s − origin)/s`` where ``0 ≤ c ≤ n − 1`` (a margin of 1e-9 voxel), and 0 elsewhere; a one-plane territory is
+    placed in Y and X on a grid of one plane.
+    """
+    out = np.zeros(grid_shape, np.int64)
+    grid_index, fov_index = [], []
+    for a in range(3):
+        if a == 0 and territory.shape[0] == 1:
+            grid_index.append(np.zeros(1, np.int64))
+            fov_index.append(np.zeros(1, np.int64))
+            continue
+        v = np.arange(grid_shape[a])
+        c = (grid_origin[a] + v * spacing[a] - origin[a]) / spacing[a]
+        inside = (c >= -1e-9) & (c <= territory.shape[a] - 1 + 1e-9)
+        grid_index.append(v[inside])
+        fov_index.append(np.floor(c[inside] + 0.5).astype(np.int64))
+    out[np.ix_(*grid_index)] = territory[np.ix_(*fov_index)]
+    return out
+
+
+def duplicate_oracle(territories, retained, origins, spacing, order, threshold=0.5):
+    """The duplicate rule of docs/assembly-algorithms.md recomputed from the territories, for the tests.
+
+    ``territories`` maps each FOV with a retained cell to its ZYX territory (1×Y×X for ``plane``), ``retained`` each
+    of them to its retained ``cell_id`` set, ``origins`` every included FOV (``image_supported``,
+    ``metadata_only``) to its origin, ``order`` the FOVs in placement table order. Each FOV's retained cells are
+    placed alone on one grid (spacing ``spacing``, origin the smallest included origin per axis, up to the last voxel
+    centre), and two cells of two FOVs share the grid voxels where both show. Returns ``(sizes, shares, excluded)``:
+    voxels per (fov, cell), ``{((f, a), (g, b)): (shared voxels, share of the smaller)}`` for every pair with a shared
+    voxel, ``f`` before ``g`` in ``order``, and ``{excluded (fov, cell): kept (fov, cell)}``.
+    """
+    plane = all(t.shape[0] == 1 for t in territories.values())
+    grid_origin = [min(o[a] for o in origins.values()) for a in range(3)]
+    shape = []
+    for a in range(3):
+        last = max(origins[f][a] + (territories[f].shape[a] - 1) * spacing[a] for f in territories)
+        shape.append(1 if a == 0 and plane else int(np.floor((last - grid_origin[a]) / spacing[a] + 1e-9)) + 1)
+    fovs = [f for f in order if f in territories]
+    canvases = {f: placed_on_grid(np.where(np.isin(territories[f], sorted(retained[f])), territories[f], 0),
+                                  origins[f], spacing, grid_origin, shape) for f in fovs}
+    sizes = {(f, c): int((canvases[f] == c).sum()) for f in fovs for c in retained[f]}
+    shares = {}
+    for k, f in enumerate(fovs):
+        for g in fovs[k + 1:]:
+            both = (canvases[f] > 0) & (canvases[g] > 0)
+            pairs, counts = np.unique(np.stack([canvases[f][both], canvases[g][both]]), axis=1, return_counts=True)
+            for (a, b), n in zip(pairs.T.tolist(), counts.tolist()):
+                shares[((f, a), (g, b))] = (n, n / min(sizes[(f, a)], sizes[(g, b)]))
+    partners = {}
+    for (a, b), (_, share) in shares.items():
+        if share >= threshold:
+            partners.setdefault(a, set()).add(b)
+            partners.setdefault(b, set()).add(a)
+    rank = sorted(sizes, key=lambda cell: (-sizes[cell], order.index(cell[0]), cell[1]))
+    kept, excluded = [], {}
+    for cell in rank:
+        staying = [p for p in kept if p in partners.get(cell, ())]
+        if staying:
+            excluded[cell] = staying[0]
+        else:
+            kept.append(cell)
+    return sizes, shares, excluded

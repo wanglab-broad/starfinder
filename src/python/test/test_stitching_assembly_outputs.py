@@ -311,7 +311,7 @@ def test_as12_the_record(tmp_path):
     assert record["placement"]["fovs_sha256"] == table_sha256(placement.fovs)
     assert record["placement"]["links_sha256"] == table_sha256(placement.links)
     assert record["config"] == {"ownership": "nearest_center", "centroid": "territory", "tie": "table_order",
-                                "conflicts": True}
+                                "conflicts": True, "duplicate_threshold": 0.5}
     assert record["counts"] == by_path.record["counts"] and record["format_version"] == 1
     for entry, row in zip(record["fovs"], by_path.fovs.itertuples()):
         assert entry["fov_id"] == row.fov_id and entry["placement_status"] == "image_supported"

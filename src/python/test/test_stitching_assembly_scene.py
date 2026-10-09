@@ -24,7 +24,7 @@ from starfinder.assignment import assign_molecules, molecule_table_from_csv
 from starfinder.segmentation import ReferenceGrid, import_labels
 from starfinder.stitching import approve_placement, placement_from_table, positions_from_table
 
-from .assembly_fixtures import check_accounting
+from .assembly_fixtures import check_accounting, duplicate_oracle
 
 pytestmark = [pytest.mark.stitching, pytest.mark.validation]
 
@@ -102,7 +102,11 @@ def oracle_owner(points_yx, truth, ids):
 
 
 def oracle(case):
-    """Per (fov, cell) and per (fov, csv_row): the expected status, reason, owner, fov_edge and z_edge."""
+    """Per (fov, cell) and per (fov, csv_row): the expected status, reason, owner, fov_edge and z_edge.
+
+    After the retention by ownership centroid, the default duplicate rule (0.5) is applied by
+    ``duplicate_oracle`` to the truth labels of the retained cells (W-400).
+    """
     scene, truth, ids, tables = case["scene"], case["truth"], case["ids"], case["tables"]
     cells = {}
     for fov in ids:
@@ -119,6 +123,16 @@ def oracle(case):
             z_edge = labels.shape[0] > 1 and bool(np.isin(value, labels[[0, -1]].ravel()))
             cells[(fov, value)] = ("retained" if owner == fov else "excluded", None if owner == fov else "not_owner",
                                    owner, yx_edge, z_edge)
+    retained = {}
+    for (fov, value), expected in cells.items():
+        if expected[0] == "retained":
+            retained.setdefault(fov, set()).add(value)
+    origins = {fov: tuple(truth.loc[fov, ["true_origin_z", "true_origin_y", "true_origin_x"]]) for fov in ids}
+    spacing = tuple(truth.loc[ids[0], ["spacing_z", "spacing_y", "spacing_x"]])
+    _, _, excluded = duplicate_oracle({fov: scene.fov_labels[fov]["cell"] for fov in retained}, retained, origins,
+                                      spacing, list(ids))
+    for key in excluded:
+        cells[key] = ("excluded", "duplicate_observation", *cells[key][2:])
     molecules = {}
     for r in tables["molecule_fovs"].itertuples():
         row = truth.loc[r.fov_id]
@@ -128,7 +142,8 @@ def oracle(case):
             expected = ("excluded", "outside_grid")
         elif r.fov_cell_label > 0:
             status, reason = cells[(r.fov_id, int(r.fov_cell_label))][:2]
-            expected = (status, None if status == "retained" else "cell_not_owner")
+            expected = (status, None if status == "retained" else
+                        {"not_owner": "cell_not_owner", "duplicate_observation": "cell_duplicate_observation"}[reason])
         else:
             expected = ("retained", None) if owner == r.fov_id else ("excluded", "not_owner")
         molecules[(r.fov_id, int(r.csv_row))] = (*expected, owner)

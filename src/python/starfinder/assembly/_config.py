@@ -1,7 +1,9 @@
 """Vocabularies, the per-FOV input and the config of the assemble entry (docs/assembly-contract.md, "Names")."""
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
+from numbers import Real
 from pathlib import Path
 
 import numpy as np
@@ -10,8 +12,11 @@ from starfinder.assignment import AssignmentResult, MoleculeTable
 from starfinder.segmentation import ReferenceGrid
 
 ASSEMBLY_STATUSES = ("retained", "excluded")
-CELL_ASSEMBLY_REASONS = ("not_owner", "fov_not_placed")
-MOLECULE_ASSEMBLY_REASONS = ("cell_not_owner", "not_owner", "outside_grid", "fov_not_placed")
+CELL_ASSEMBLY_REASONS = ("not_owner", "fov_not_placed", "duplicate_observation")
+MOLECULE_ASSEMBLY_REASONS = ("cell_not_owner", "not_owner", "outside_grid", "fov_not_placed",
+                             "cell_duplicate_observation")
+# The reasons of the duplicate rule, which the record counts only when the rule is on (duplicate_threshold not None).
+DUPLICATE_REASONS = ("duplicate_observation", "cell_duplicate_observation")
 CELL_ASSEMBLY_FLAGS = ("fov_edge", "z_edge", "conflict", "unclaimed")
 MOLECULE_ASSEMBLY_FLAGS = ("outside_owner_region", "cell_unclaimed")
 
@@ -47,6 +52,7 @@ class AssemblyConfig:
     centroid: str = "territory"
     tie: str = "table_order"
     conflicts: bool = True
+    duplicate_threshold: float | None = 0.5
 
     def __post_init__(self):
         for name, allowed in (("ownership", OWNERSHIP), ("centroid", CENTROIDS), ("tie", TIES)):
@@ -57,6 +63,13 @@ class AssemblyConfig:
         if self.tie == "half_open" and self.ownership != "midpoint_box":
             raise ValueError("AssemblyConfig.tie='half_open' (T2) needs ownership='midpoint_box'; "
                              "nearest_center ties go by table_order")
+        threshold = self.duplicate_threshold
+        if threshold is not None:
+            if isinstance(threshold, (bool, np.bool_)) or not isinstance(threshold, Real) or \
+                    not math.isfinite(float(threshold)) or not 0.0 < float(threshold) <= 1.0:
+                raise ValueError("AssemblyConfig.duplicate_threshold must be None (the duplicate rule off) or a number "
+                                 f"above 0 and at most 1; got {threshold!r}")
+            object.__setattr__(self, "duplicate_threshold", float(threshold))
 
 
 @dataclass(frozen=True)

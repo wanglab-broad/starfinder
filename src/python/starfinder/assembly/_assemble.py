@@ -28,8 +28,8 @@ from starfinder.stitching._placement import PLACED, grid_problems, same_frame_gr
 from starfinder.stitching._positions import _names
 from starfinder.stitching._review import require_approval
 
-from ._config import (ASSEMBLY_STATUSES, CELL_ASSEMBLY_FLAGS, CELL_ASSEMBLY_REASONS, MOLECULE_ASSEMBLY_FLAGS,
-                      MOLECULE_ASSEMBLY_REASONS, AssemblyConfig, AssemblyInput)
+from ._config import (ASSEMBLY_STATUSES, CELL_ASSEMBLY_FLAGS, CELL_ASSEMBLY_REASONS, DUPLICATE_REASONS,
+                      MOLECULE_ASSEMBLY_FLAGS, MOLECULE_ASSEMBLY_REASONS, AssemblyConfig, AssemblyInput)
 from ._ownership import OWNING, OwnershipMap, ownership_map, recorded_grid
 
 FORMAT_VERSION = 1
@@ -59,7 +59,7 @@ CELL_DTYPES = {"fov_id": "string", "cell_namespace": "string", "cell_id": "UInt3
                "ownership_centroid": "string",
                **{f"sample_ownership_centroid_{a}": "float64" for a in AXES},
                "owner_fov_id": "string", "assembly_status": "string", "assembly_reason": "string",
-               "assembly_flags": "string", "conflict_with": "string"}
+               "assembly_flags": "string", "conflict_with": "string", "duplicate_of": "string"}
 TAIL_DTYPES = {"sample_z": "float64", "sample_y": "float64", "sample_x": "float64", "owner_fov_id": "string",
                "assembly_status": "string", "assembly_reason": "string", "assembly_flags": "string"}
 COUNT_DTYPES = {"fov_id": "string", "cell_namespace": "string", "cell_id": "UInt32", "gene_id": "string",
@@ -70,6 +70,8 @@ FOV_DTYPES = {"fov_id": "string", "placement_status": "string", "origin_z": "flo
               "owns_points": "bool", "n_cells": "int64", "n_cells_retained": "int64", "n_molecules": "int64",
               "n_molecules_retained": "int64"}
 MODES = {"assignment": "cells", "molecules": "molecules_only"}
+# The reason of a molecule of a cell excluded for a reason that is not fov_not_placed.
+CELL_TO_MOLECULE_REASON = {"not_owner": "cell_not_owner", "duplicate_observation": "cell_duplicate_observation"}
 
 
 def molecule_dtypes(mode: str) -> dict:
@@ -119,13 +121,20 @@ def _tally(frame, columns, weights=None):
             for k, n in grouped.items()}
 
 
-def _counts_record(cells, molecules, fovs, flags_computed):
+def _duplicates_on(record):
+    """Whether the record's configuration has the duplicate rule on (a record without the field has it off)."""
+    return (record.get("config") or {}).get("duplicate_threshold") is not None
+
+
+def _counts_record(cells, molecules, fovs, flags_computed, duplicates=True):
     cell_flags = [_split(v) for v in cells["assembly_flags"]]
     molecule_flags = [_split(v) for v in molecules["assembly_flags"]]
 
-    def population(frame, reasons):
+    def population(frame, reasons, column):
         excluded = frame[frame["assembly_status"].eq("excluded").to_numpy(dtype=bool)]
-        return {"input": int(fovs["n_cells" if reasons is CELL_ASSEMBLY_REASONS else "n_molecules"].sum()),
+        # The reasons of the duplicate rule are counted when it is on; with it off the record is as without the rule.
+        reasons = [r for r in reasons if duplicates or r not in DUPLICATE_REASONS]
+        return {"input": int(fovs[column].sum()),
                 "retained": int(frame["assembly_status"].eq("retained").sum()),
                 "excluded": {r: int(excluded["assembly_reason"].eq(r).sum()) for r in reasons}}
 
@@ -133,8 +142,8 @@ def _counts_record(cells, molecules, fovs, flags_computed):
     for flag, rows in (*((f, cell_flags) for f in CELL_ASSEMBLY_FLAGS),
                        *((f, molecule_flags) for f in MOLECULE_ASSEMBLY_FLAGS)):
         flags[flag] = sum(flag in r for r in rows) if flag in flags_computed else None
-    return {"cells": population(cells, CELL_ASSEMBLY_REASONS),
-            "molecules": population(molecules, MOLECULE_ASSEMBLY_REASONS), "flags": flags}
+    return {"cells": population(cells, CELL_ASSEMBLY_REASONS, "n_cells"),
+            "molecules": population(molecules, MOLECULE_ASSEMBLY_REASONS, "n_molecules"), "flags": flags}
 
 
 def check_identities(result: AssemblyResult) -> None:
@@ -176,7 +185,21 @@ def check_identities(result: AssemblyResult) -> None:
         differ = [f for f, n in zip(fovs["fov_id"], fovs[column]) if retained.get(f, 0) != int(n)]
         if differ:
             _fail(2, f"fovs.{column} equals the retained {name}s per FOV", differ[0])
-    expected = _counts_record(cells, molecules, fovs, set(record.get("flags", {}).get("computed", [])))
+    # 2 (continued): a cell excluded duplicate_observation names a retained cell of another FOV, and no other names one.
+    if "duplicate_of" in cells:
+        named = cells["duplicate_of"].astype(object)
+        has = named.notna().to_numpy(dtype=bool)
+        duplicate = cells["assembly_reason"].eq("duplicate_observation").fillna(False).to_numpy(dtype=bool)
+        state = dict(zip(cells["obs_name"].astype(object), zip(cells["fov_id"].astype(object),
+                                                               cells["assembly_status"].astype(object))))
+        wrong = [i for i in np.flatnonzero(has | duplicate)
+                 if not (has[i] and duplicate[i]) or state.get(named.iloc[i], (None, None))[1] != "retained"
+                 or state[named.iloc[i]][0] == cells["fov_id"].iloc[i]]
+        if wrong:
+            _fail(2, "a cell excluded duplicate_observation, and only such a cell, names in duplicate_of a retained "
+                     "cell of another FOV", tuple(cells[["cell_namespace", "cell_id"]].iloc[wrong[0]]))
+    expected = _counts_record(cells, molecules, fovs, set(record.get("flags", {}).get("computed", [])),
+                              _duplicates_on(record))
     recorded = record.get("counts")
     if recorded is not None:
         for population in ("cells", "molecules"):
@@ -216,7 +239,7 @@ def check_identities(result: AssemblyResult) -> None:
                   tuple(molecules[["spot_namespace", "spot_id"]].iloc[first]))
         cell_reason = joined["_reason"].to_numpy(dtype=object)
         want_status[in_cell] = joined["_status"].to_numpy(dtype=object)
-        want_reason[in_cell] = np.where(cell_reason == "not_owner", "cell_not_owner", cell_reason)
+        want_reason[in_cell] = np.array([CELL_TO_MOLECULE_REASON.get(r, r) for r in cell_reason], dtype=object)
     want_status[~placed], want_reason[~placed] = "excluded", "fov_not_placed"
     wrong = np.flatnonzero((status != want_status) | (reason != want_reason))
     if len(wrong):
@@ -607,6 +630,47 @@ def _edge_values(labels, plane):
     return set(yx[yx > 0].tolist()), set(z[z > 0].tolist())
 
 
+def _duplicate_rule(placement, by_fov, state, order, threshold):
+    """The duplicate rule (docs/assembly-algorithms.md, "Duplicate rule") over the cells retained so far.
+
+    Returns ``(excluded, sizes, shared)``: ``{(fov_id, cell_id): (kept fov_id,
+    kept cell_id)}``, each retained cell's territory voxels on the sample grid
+    and the shared voxels of every pair of retained cells of two FOVs that
+    share one (``_duplicates.measure``).
+    """
+    from starfinder.sample_output._grid import INCLUDED
+
+    from . import _duplicates
+    fovs = [f for f in order if state[f]["placed"] and any(state[f]["retained"].values())]
+    if len(fovs) < 2:
+        return {}, {}, {}
+    spacings, kinds = {}, {}
+    for f in fovs:
+        grid = by_fov[f].grid
+        spacings.setdefault(tuple(float(v) for v in grid.metadata.spacing_zyx), []).append(f)
+        kinds.setdefault("plane" if state[f]["plane"] or grid.shape_zyx[0] == 1 else "volume", []).append(f)
+    if len(spacings) > 1:
+        raise ValueError("the duplicate rule places the territories on one sample grid, so the FOVs with a retained "
+                         "cell must share one spacing (or set duplicate_threshold to None); " +
+                         "; ".join(f"{_names(f)}: {key!r}" for key, f in spacings.items()))
+    if len(kinds) > 1:
+        raise ValueError("the duplicate rule needs the territories of the FOVs with a retained cell to be all plane or "
+                         f"all volume (or set duplicate_threshold to None); plane: {_names(kinds['plane'])}, "
+                         f"volume: {_names(kinds['volume'])}")
+    rows = placement.fovs.set_index("fov_id")
+    origin = {f: tuple(float(rows.loc[f, f"origin_{a}"]) for a in AXES) for f in rows.index}
+    # The label export's grid at scale 1: the smallest origin of the included FOVs per axis, their spacing.
+    included = [f for f, status in zip(placement.fovs["fov_id"], placement.fovs["status"]) if status in INCLUDED]
+    grid = {"origin": tuple(min(origin[f][a] for f in included) for a in range(3)),
+            "spacing": next(iter(spacings)), "two_d": next(iter(kinds)) == "plane"}
+    items = [{"fov_id": f, "origin": origin[f], "shape": by_fov[f].grid.shape_zyx,
+              "cells": np.array(sorted(c for c, kept in state[f]["retained"].items() if kept), np.int64)}
+             for f in fovs]
+    sizes, shared = _duplicates.measure(items, lambda f: _territory(by_fov[f]), grid)
+    position = {f: k for k, f in enumerate(order)}
+    return _duplicates.decide(sizes, shared, threshold, position), sizes, shared
+
+
 def _sha256_json(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, default=str).encode()).hexdigest()
 
@@ -624,14 +688,19 @@ def assemble(placement: PlacementResult, inputs: Sequence[AssemblyInput], *,
     applies") in order, then maps every observation into sample coordinates
     (``origin + p ⊙ spacing``, float64, never rounded), computes the ownership
     regions from the placement (:func:`ownership_map`), gives every cell and
-    molecule one assembly status with its reason, computes the flags, and
-    copies the §2.9 counts of the counted cells. A cell is retained when the
-    owner of its ownership centroid is its own FOV; the molecules of a cell
-    follow it wherever they lie; an unassigned molecule is retained by its own
-    position; ``outside_grid`` molecules and every observation of a FOV without
-    an origin are excluded; a ``placeholder`` owns no point. No cell is matched
-    across FOVs and no molecule moves to another cell. It reads no file except
-    a saved assignment named by path, and writes none.
+    molecule one assembly status with its reason, applies the duplicate rule,
+    computes the flags, and copies the §2.9 counts of the counted cells. A cell
+    is retained when the owner of its ownership centroid is its own FOV; the
+    molecules of a cell follow it wherever they lie; an unassigned molecule is
+    retained by its own position; ``outside_grid`` molecules and every
+    observation of a FOV without an origin are excluded; a ``placeholder`` owns
+    no point. Then, with ``config.duplicate_threshold`` set, two retained cells
+    of different FOVs whose territories share at least that share of the
+    smaller territory on the sample grid are two observations of one cell: the
+    larger stays and the other is excluded ``duplicate_observation`` with its
+    molecules, naming the kept cell in ``duplicate_of``. No cell is merged and
+    no molecule moves to another cell. It reads no file except a saved
+    assignment named by path, and writes none.
 
     Parameters
     ----------
@@ -641,8 +710,9 @@ def assemble(placement: PlacementResult, inputs: Sequence[AssemblyInput], *,
         One per FOV of the placement that has observations; every
         ``image_supported`` and ``metadata_only`` FOV needs one.
     config : AssemblyConfig
-        Ownership rule, centroid, tie rule and whether to compute the
-        ``conflict`` and ``unclaimed`` flags.
+        Ownership rule, centroid, tie rule, whether to compute the
+        ``conflict`` and ``unclaimed`` flags, and the duplicate rule's
+        threshold.
 
     Returns
     -------
@@ -658,7 +728,9 @@ def assemble(placement: PlacementResult, inputs: Sequence[AssemblyInput], *,
         A repeated or unknown FOV, an owning FOV without an input, inputs of
         both kinds or of neither, observations of another FOV, sample or a
         subtile, different gene lists, placed FOVs of different ``nominal_z``,
-        a placement without an owning FOV, or a repeated ``obs_name``.
+        a placement without an owning FOV, or a repeated ``obs_name``; with the
+        duplicate rule on, FOVs with retained cells of different spacings or
+        of mixed plane and volume territories.
     IncompatibleGeometryError
         An input grid that is not the grid the placement (or the assignment)
         recorded, or one without known spacing, unit µm and identity direction.
@@ -776,6 +848,24 @@ def assemble(placement: PlacementResult, inputs: Sequence[AssemblyInput], *,
         state[fov_id]["molecule_cells"] = cell_of
         state[fov_id]["molecule_status"] = status
 
+    # The duplicate rule, among the cells retained by their ownership centroid; the flags follow, among the cells
+    # retained after it, and the molecules of an excluded observation are excluded with it.
+    duplicate_of = {}
+    if mode == "cells" and config.duplicate_threshold is not None:
+        duplicate_of = _duplicate_rule(placement, by_fov, state, order, config.duplicate_threshold)[0]
+    for fov_id, cell in duplicate_of:
+        sf = state[fov_id]
+        i = sf["row_of"][cell]
+        frame = sf["frame"]
+        frame.iloc[i, frame.columns.get_loc("assembly_status")] = "excluded"
+        frame.iloc[i, frame.columns.get_loc("assembly_reason")] = "duplicate_observation"
+        sf["retained"][cell] = False
+        rows = np.isin(sf["molecule_status"], ("assigned", "excluded_cell"))
+        rows[rows] = [int(c) == cell for c in sf["molecule_cells"][rows]]
+        molecules = sf["molecules"]
+        molecules.loc[rows, "assembly_status"] = "excluded"
+        molecules.loc[rows, "assembly_reason"] = "cell_duplicate_observation"
+
     # Flags across FOVs: conflict and unclaimed (centroid tests in the other FOV's territory). The territory of
     # each FOV b is read once and every test in it is made then, so at most two territory images are in memory.
     conflict_with = {fov_id: [set() for _ in range(len(state[fov_id].get("frame", ())))] for fov_id in order}
@@ -838,6 +928,9 @@ def assemble(placement: PlacementResult, inputs: Sequence[AssemblyInput], *,
                                 if config.conflicts else None)
             frame["assembly_flags"] = texts
             frame["conflict_with"] = pd.array(partners, dtype="string")
+            kept = [duplicate_of.get((fov_id, int(c))) for c in frame["cell_id"]]
+            frame["duplicate_of"] = pd.array([None if k is None else state[k[0]]["frame"]["obs_name"].iloc[
+                state[k[0]]["row_of"][k[1]]] for k in kept], dtype="string")
             cell_parts.append(frame)
             flagged = {int(c) for c, f in zip(frame["cell_id"], texts) if "unclaimed" in f.split(";")}
             # Counts of the counted cells.
@@ -969,7 +1062,7 @@ def _record(placement, config, mode, genes, ownership: OwnershipMap, by_fov, fov
         "flags": {"computed": list(computed), "conflicts": bool(config.conflicts)},
         "fovs": [_fov_record(row, geometry.get(row.fov_id), by_fov.get(row.fov_id), config, mode)
                  for row in fovs.itertuples(index=False)],
-        "counts": _counts_record(cells, molecules, fovs, set(computed)),
+        "counts": _counts_record(cells, molecules, fovs, set(computed), config.duplicate_threshold is not None),
         "files": {},
         "software": _software(),
     })

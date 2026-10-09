@@ -1799,6 +1799,14 @@ $defs:
         enum: ["table_order", "half_open"]
       conflicts:
         type: boolean
+      duplicate_threshold:
+        description: >-
+          The duplicate rule (default 0.5): two retained cells of different FOVs whose territories
+          share at least this share of the smaller one are one cell, and the smaller observation is
+          excluded; null turns the rule off
+        type: [number, "null"]
+        exclusiveMinimum: 0
+        maximum: 1
       table_format:
         enum: ["csv", "parquet"]
     additionalProperties: false

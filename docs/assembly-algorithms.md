@@ -3,9 +3,9 @@
 Status: Accepted (W-329, 2026-10-07, at 9033d46)
 
 This page specifies the numerical behavior of each element of {doc}`assembly-contract`:
-the coordinate rule, the ownership regions, retention, the flags and the count accounting,
-and the sample-level AnnData built from them. Each has its parameters, units, defaults,
-failure behavior and a resource estimate. The current behavior is in
+the coordinate rule, the ownership regions, retention, the duplicate rule, the flags and
+the count accounting, and the sample-level AnnData built from them. Each has its
+parameters, units, defaults, failure behavior and a resource estimate. The current behavior is in
 {doc}`assembly-baseline`; the placement it starts from is specified in
 {doc}`stitching-contract` and {doc}`stitching-algorithms`, and the per-FOV tables in
 {doc}`assignment-contract` and {doc}`assignment-algorithms`. Each element is implemented in
@@ -35,6 +35,7 @@ magnitude from the array sizes, for planning.
 | Coordinate rule | 1 integer offsets, 2 truncated centroids, 11 pixel XYZ units |
 | Ownership | 3 XY only, 4 `img_col` for Y, 8 grid indices and blanks, 12 rectangles past the tile, 18 order-dependent MATLAB merge |
 | Retention | 5 empty branch, 6 molecules of dropped cells, 16 `outside_grid` molecules, 19 unplaced FOVs |
+| Duplicate rule | 14 duplicates (decided on 2026-10-09) |
 | Flags | 14 invisible duplicates and losses |
 | Accounting | 9 no status or reason, 7 diagnostics before the filter |
 | AnnData | 13 shared keys, 15 `create_sample_h5ad.py` |
@@ -116,9 +117,12 @@ FOV3 `(−0.3, 55.4)`, in the fixture's unit voxels): the FOV1/FOV3 boundary run
 x 59.12 at y 8 to x 59.26 at y 34, the FOV1/FOV2 boundary near y 42.2. The retained scene
 cells (`tables/option_effects.json`) are, in 3D, FOV1: 1, 2, 5, 9; FOV2: 4, 6; FOV3: 3, 7,
 8, every cell once; in 2D FOV3 also retains 9 (its projected centroid lies at x 59.5,
-FOV1's at 54.6), so cell 9 is retained twice and both copies get `conflict`. In both, cell
-9's molecule at x 64 (outside FOV1's tile) is excluded `cell_not_owner` in 3D, where FOV3's
-copy of the cell is not the owner, and retained in 2D with FOV3's copy. The legacy pins
+FOV1's at 54.6), so cell 9 is retained twice by ownership and both copies get `conflict`
+with the duplicate rule off; with the default rule FOV3's copy (42 voxels, sharing 0.90 of
+them with FOV1's 87) is excluded `duplicate_observation` and neither is flagged. In both,
+cell 9's molecule at x 64 (outside FOV1's tile) is excluded `cell_not_owner` in 3D, where
+FOV3's copy of the cell is not the owner, and retained in 2D with FOV3's copy (with the
+rule off; excluded `cell_duplicate_observation` with the default rule). The legacy pins
 keep cell 4 twice and lose that molecule in both.
 
 **On LN** (`tables/ln_ownership.json`): every covered point has exactly one owner, and no
@@ -190,6 +194,60 @@ neighbour.
 Failure: none beyond the entry's checks; every row gets a status. Cost: one owner query
 per cell and per unassigned molecule, one join of molecules to cells by `cell_id`.
 
+## Duplicate rule
+
+Decided by Jiahao on 2026-10-09 ({doc}`cells-across-fovs-proposal`, question 3, option b)
+and implemented by W-400: rule 8 of {doc}`assembly-contract`, "Retention". **Order of the
+steps inside `assemble`:** retention by the ownership centroid (steps 1 and 2 above); then
+the duplicate rule among the cells retained so far; then the flags ("Flags"), among the
+cells retained after the rule, by their definitions; then the molecules, which follow
+their cell (step 3), so that the molecules of an observation the rule excludes are
+excluded `cell_duplicate_observation`.
+
+**The measure.** Each FOV's retained-cell territory (the territory assign sampled, with
+every value that is not one of its retained cells set to 0) is placed on the sample grid
+at scale 1 as the label export places it ({doc}`sample-output-contract`, "Assembled label
+export"): in Y and X the label grid at factor 1 (spacing `s`, origin the smallest origin
+of the included FOVs), in Z the fusion grid's Z (spacing `s_z`, origin the smallest
+`origin_z`; Y and X only when the territories are `plane` or the FOVs have one plane), each
+FOV at its origin, a grid voxel `v` showing the FOV voxel `floor(c + ½)`, `c = (o_grid +
+v·s − origin)/s`, where `0 ≤ c ≤ n − 1` (a margin of 1e-9 voxel). A cell's size is the
+number of grid voxels it shows; two cells of two FOVs share the grid voxels that show both.
+The share of a pair is its shared voxels divided by the size of the smaller cell (0 when
+that size is 0), computed in float64 and compared with the threshold as `share ≥ t`.
+
+**The decision.** The retained cells are taken in the order of decreasing size, ties by
+placement table order and then `cell_id`. A cell stays unless it is paired, at a share of
+at least `t`, with a cell of another FOV that already stays; then it is excluded
+`duplicate_observation` and `duplicate_of` names the first such cell in that order. A
+cell paired with several cells (one cell of FOV A over two of FOV B, a cell seen by three
+or four FOVs at a corner, a chain in which A's cell pairs with B's and B's with C's) is
+decided by the same order: in a chain whose first cell is the largest, the middle cell is
+excluded and the third stays, because its only partner does not stay. Neither the order of
+the inputs nor the order of the FOV pairs changes the result.
+
+| Parameter | Unit | Default | Rule |
+| --- | --- | --- | --- |
+| `duplicate_threshold` | share of the smaller territory's voxels | `0.5` | a number above 0 and at most 1, or null (the rule off); a bool, a string or any other value raises `ValueError` naming the field |
+
+On the two cellular blocks of W-399, 0.5 picks exactly the cells that `conflict` marked
+({doc}`cells-across-fovs-proposal`, measurement 1 and question 3). The kept observation is
+the larger: a cut observation is smaller than an uncut one. The rule removes a second
+observation; it does not complete a cell cut by a FOV edge.
+
+Failure: with the rule on and retained cells in two or more FOVs, FOVs of different
+spacings or of mixed `plane` and `volume` territories among them raise `ValueError` (the
+label export refuses the same inputs); a territory file missing or with another SHA-256
+raises as for the flags. Cost: the territories are read two FOVs at a time (each FOV
+once, and once more for each earlier FOV in table order whose extent overlaps it), the
+shared voxels counted plane by plane on the box where both extents overlap, so at most two
+territory images and one plane of each box are in memory; time `O(voxels of the overlap
+boxes)`. The rule reads the territories also when `conflicts=False`. Measured by W-400 on
+the implementation, unlike the estimates elsewhere on this page, on a synthetic 3 × 3 grid
+of 16×256×256 tiles with cells along every seam (1,158 cell observations, 45,775 molecule
+observations, saved assignment folders, one CPU): `assemble` took 1.58 s without the rule
+and 2.08 s with it, with a peak RSS of 254 MB to 264 MB in both.
+
 ## Flags
 
 | Flag | Computation | Cost |
@@ -207,17 +265,20 @@ record (the `assembly` section of `export.json`) holds, per FOV, the path of the
 read, as the §2.9 loader resolved it, beside that SHA-256 ({doc}`assembly-contract`, "What assemble records"), so a
 later reader, such as the label export, opens the file directly. Pairs of
 FOVs are processed so that at most two territory images are in memory: 4 bytes per voxel
-(`uint32`), 8.95 MB per plane of a 1496 × 1496 grid.
+(`uint32`), 8.95 MB per plane of a 1496 × 1496 grid. A retained cell is one the cell
+table retains after the duplicate rule: a cell the rule excluded is neither flagged
+`conflict` nor tested as a retained cell of its FOV.
 
 | Parameter | Unit | Default | Rule |
 | --- | --- | --- | --- |
-| `conflicts` | – | `True` | `False` skips `conflict` and `unclaimed` (no label image is read); the columns are then null and the record says so |
+| `conflicts` | – | `True` | `False` skips `conflict` and `unclaimed` (no label image is read for them; the duplicate rule, when on, still reads the territories); the columns are then null and the record says so |
 
 Failure: a territory file missing or with another SHA-256 raises `ValueError` naming the
 path and both hashes (the §2.9 loader's rule).
 
 On the fixture under O1: in 2D FOV1's cell 6 and FOV3's cell 5 (both scene cell 9) are
-flagged `conflict`; in 3D FOV3's cell 5 is excluded `not_owner` and not `unclaimed`
+flagged `conflict` with the duplicate rule off (with the default rule FOV3's cell 5 is
+excluded `duplicate_observation` and neither is flagged); in 3D FOV3's cell 5 is excluded `not_owner` and not `unclaimed`
 (FOV1 retains a cell at its ownership centroid), and FOV1's cell 6 is flagged `fov_edge` (it touches
 x 63).
 
@@ -297,6 +358,8 @@ Cost: `X` and each layer are dense float64, as in `raw.h5ad`: 8 bytes × cells �
   stage positions and placeholder FOVs are covered by the rule, not by a pinned case.
 * Nearest-centre ownership is a geometric rule. It does not decide which FOV saw a cell
   better (focus, completeness), and no quality-weighted ownership is proposed.
-* Duplicates and losses are flagged, not counted as biological cells; their frequency on
-  real samples is not known and is a question for the validation design (W-331).
+* Losses are flagged, and duplicates are flagged or, at or above the duplicate threshold,
+  resolved by the duplicate rule; neither is counted as biological cells, and their
+  frequency on real samples is not known and is a question for the validation design
+  (W-331).
 * The resource figures are estimates from array sizes, not measurements.

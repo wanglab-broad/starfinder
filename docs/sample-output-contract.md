@@ -150,8 +150,10 @@ is promised for a whole-sample stack; and what W-354 did not measure is marked a
 assumption ("Assumptions").
 
 Excluded: viewer sessions, BigStitcher's fusion in Fiji, reassignment of molecules or
-recomputation of counts from a fused image or a label raster, cross-FOV cell matching,
-and any change to the placement or §2.9 contracts or to the assembly contract beyond its
+recomputation of counts from a fused image or a label raster, merging of cells across
+FOVs (the assembly's duplicate rule, decided on 2026-10-09, excludes one of two
+observations of a cell before these parts read the cell table: {doc}`assembly-contract`,
+"Retention", rule 8), and any change to the placement or §2.9 contracts or to the assembly contract beyond its
 `Dataset` method, saved layout and workflow configuration, which move to the export
 entry.
 
@@ -1341,8 +1343,13 @@ holds the other's centroid and neither row is flagged (W-359 `scripts/labels_ret
 `tables/label_pair_flags.txt`). The conflict count of the `labels` section counts flagged
 cells only: the cell rows flagged `conflict` whose `instance_id` is in the label image,
 not the cells retained by two FOVs, or null for an assembly made with `conflicts=False`.
-On the two-FOV fixture it is 0, although cell 6 shows two IDs. No cell is merged and no
-observation is matched across FOVs.
+On the two-FOV fixture it is 0, although cell 6 shows two IDs (its two views share 0.24 of
+the smaller territory, below the duplicate rule's default 0.5). No cell is merged across
+FOVs. The duplicate rule of the assembly ({doc}`assembly-contract`, "Retention", rule 8)
+excludes the second observation of a cell whose two territories share at least its
+threshold of the smaller one, so that observation is not retained and is not drawn; the
+label export applies no rule of its own. The rule removes a second observation; it does
+not complete a cell cut by a FOV edge.
 
 **Cells retained by no FOV.** The label image does not show such a cell (above). The flag
 `unclaimed` is the cell table's, by the rule of {doc}`assembly-contract`, "Flags": a cell

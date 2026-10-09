@@ -464,7 +464,11 @@ def conflict_count(r):
 def test_lb5_conflict_count(runs):
     pair, conflict = runs("label_pair", 1), runs("label_pair_conflict", 1)
     assert conflict_count(pair) == pair.section["n_conflict"] == 0
-    assert conflict_count(conflict) == conflict.section["n_conflict"] == 2
+    # W-400: under the default duplicate rule B's view of cell 6 is excluded (share 0.53 with A's), so no cell keeps
+    # the flag; with the rule off both views are retained and flagged, as before.
+    assert conflict_count(conflict) == conflict.section["n_conflict"] == 0
+    off = runs("label_pair_conflict", 1, duplicate_threshold=None)
+    assert conflict_count(off) == off.section["n_conflict"] == 2
 
 
 def test_lb5_section(runs):
@@ -591,8 +595,14 @@ def test_lb7_1_a_retained_cell(runs):
             exceptions.add((fov, cell))
             continue
         assert np.array_equal(shows(quad, fov, cell), own), (fov, cell)
-    assert exceptions == {("L4", 1)}
-    assert shows(quad, "L4", 1).sum() == (feet["L4"] == 1).sum() - 1
+    # W-400: under the default duplicate rule FOV 1's 1 × 1 px cell lies whole on FOV 4's box 1 (share 1.0) and is
+    # excluded, so box 1 is drawn whole; with the rule off it is retained and drawn over box 1, as before.
+    assert exceptions == set() and ("L1", lf.QUAD_DOT_ID) not in retained
+    assert shows(quad, "L4", 1).sum() == (feet["L4"] == 1).sum()
+    off = runs("label_quad", 1, duplicate_threshold=None)
+    _, retained = instance_map(off.case)
+    assert ("L1", lf.QUAD_DOT_ID) in retained
+    assert shows(off, "L4", 1).sum() == (footprint_view(off, "L4") == 1).sum() - 1
 
 
 def test_lb7_2_an_excluded_cell(runs):
@@ -633,10 +643,18 @@ def test_lb7_4_a_cell_retained_by_two_fovs(runs, scale):
     if scale == 1:
         assert np.array_equal(a, footprint_view(r, "A") == 6) and a.sum() == 49
         assert np.array_equal(b, (library_single(r, "B") == 6) & ~a) and b.sum() == 37
-    conflict = runs("label_pair_conflict", 1)
+    # W-400: with the rule off, label_pair_conflict retains both views of cell 6, flagged conflict and both drawn;
+    # under the default rule B's view (share 0.53, equal sizes, B second in table order) is excluded.
+    conflict = runs("label_pair_conflict", 1, duplicate_threshold=None)
     flags = conflict.case.assembly.cells.set_index(["fov_id", "cell_id"]).assembly_flags
     assert all("conflict" in flags[(fov, 6)].split(";") for fov in ("A", "B"))
     assert shows(conflict, "A", 6).any() and shows(conflict, "B", 6).any()
+    ruled = runs("label_pair_conflict", 1)
+    cells = ruled.case.assembly.cells.set_index(["fov_id", "cell_id"])
+    assert (cells.loc[("B", 6), "assembly_reason"], cells.loc[("B", 6), "duplicate_of"]) == \
+        ("duplicate_observation", "label_pair_conflict_A_6")
+    assert "conflict" not in cells.loc[("A", 6), "assembly_flags"].split(";")
+    assert shows(ruled, "A", 6).any() and not shows(ruled, "B", 6).any()
 
 
 @pytest.mark.parametrize("scale", SCALES)
@@ -753,6 +771,66 @@ def test_lb7_12_a_cell_retained_by_no_fov_without_a_flag(runs):
     # Its area shows the owner's merged cell.
     a31 = library_single(r, "A") == 31
     assert (r.image[a31] == instance_map(r.case)[0][("B", 32)]).all()
+    check_export(r.folder)
+
+
+# --- W-400: the duplicate rule, the label image and the flags ------------------------------------------------------
+
+def page_flags(case):
+    """(fov_edge, unclaimed) of every cell by the definitions of docs/assembly-contract.md ("Flags"), over the cells
+    the cell table retains (after the duplicate rule): fov_edge from the territory's first and last Y and X index;
+    unclaimed for a cell excluded not_owner whose ownership centroid has no owner, or whose owner's territory there
+    holds 0 or a cell the owner does not retain (sampled at floor(c + ½), Y and X for these plane territories)."""
+    cells = case.assembly.cells
+    status = {(f, int(c)): s for f, c, s in zip(cells.fov_id, cells.cell_id, cells.assembly_status)}
+    out = {}
+    for r in cells.itertuples():
+        t = case.territories[r.fov_id]
+        edge = int(r.cell_id) in set(np.unique(np.concatenate([t[:, [0, -1], :].ravel(), t[:, :, [0, -1]].ravel()])))
+        unclaimed = False
+        if not pd.isna(r.assembly_reason) and r.assembly_reason == "not_owner":
+            unclaimed = True
+            if not pd.isna(r.owner_fov_id):
+                owner = case.territories[r.owner_fov_id]
+                origin, spacing = np.asarray(case.origins[r.owner_fov_id], float), case.spacing(r.owner_fov_id)
+                q = np.array([r.sample_ownership_centroid_y, r.sample_ownership_centroid_x])
+                iy, ix = np.floor((q - origin[1:]) / spacing[1:] + 0.5).astype(int)
+                inside = 0 <= iy < owner.shape[1] and 0 <= ix < owner.shape[2]
+                value = int(owner[0, iy, ix]) if inside else 0
+                unclaimed = value == 0 or status.get((r.owner_fov_id, value)) != "retained"
+        out[(r.fov_id, int(r.cell_id))] = (edge, unclaimed)
+    return out
+
+
+@pytest.mark.parametrize("name", ["label_pair", "label_pair_conflict"])
+def test_w400_the_excluded_observation_is_not_drawn(runs, name):
+    """label_pair (no pair at 0.5 or above) and label_pair_conflict (cell 6's views share 0.53; B's is excluded)."""
+    r, off = runs(name, 1), runs(name, 1, duplicate_threshold=None)
+    ids, retained = instance_map(r.case)
+    cells = r.case.assembly.cells.set_index(["fov_id", "cell_id"])
+    duplicate = cells.assembly_reason.eq("duplicate_observation").fillna(False)
+    excluded = [key for key in ids if duplicate[key]]
+    assert excluded == ([("B", 6)] if name == "label_pair_conflict" else [])
+    drawn = {int(v) for v in np.unique(r.image) if v > 0}
+    ids_input, _ = recomputed_ids(r)
+    assert r.section["n_ids_input"] == len(ids_input) == len(retained)
+    assert drawn == ids_input - set(r.section["absent_ids"])
+    for key in excluded:
+        assert ids[key] not in drawn and ids[key] not in ids_input and ids[key] not in r.section["absent_ids"]
+        assert not shows(r, *key).any() and shows(off, *key).any()
+    n_retained = {e["fov_id"]: e["n_retained"] for e in r.section["fovs"]}
+    assert n_retained == {f: n - sum(k[0] == f for k in excluded)
+                          for f, n in ((e["fov_id"], e["n_retained"]) for e in off.section["fovs"])}
+    # The image changes only where the excluded observation was drawn, which now shows nothing.
+    changed = r.image != off.image
+    assert (off.image[changed] == ids[("B", 6)]).all() if excluded else not changed.any()
+    assert (r.image[changed] == 0).all()
+    # conflict no longer marks the kept cell; fov_edge and unclaimed are as the pages define them after the rule.
+    assert r.section["n_conflict"] == 0
+    assert "conflict" not in cells.loc[("A", 6), "assembly_flags"].split(";")
+    got = {key: ("fov_edge" in cells.loc[key, "assembly_flags"].split(";"),
+                 "unclaimed" in cells.loc[key, "assembly_flags"].split(";")) for key in ids}
+    assert got == page_flags(r.case)
     check_export(r.folder)
 
 

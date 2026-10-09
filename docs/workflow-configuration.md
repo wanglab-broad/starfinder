@@ -469,7 +469,12 @@ sample-level rules for a configuration that has them. The specification is the
   `assembly` block there.
 * **`assembly`** (needs `stitching`). The keys are the `AssemblyConfig` fields,
   `assignment` (the assignment name read per FOV, default `default`; null for molecules
-  only) and `table_format` (`csv` or `parquet`). With the block, `reads_assignment` writes
+  only) and `table_format` (`csv` or `parquet`). `duplicate_threshold` (default 0.5; null
+  turns it off) is the duplicate rule of the route per FOV: two retained cells of different
+  FOVs whose territories share at least that share of the smaller one are one cell, the
+  larger observation stays and the other is excluded `duplicate_observation` with its
+  molecules; it removes a second observation and does not complete a cell cut by a FOV
+  edge ({doc}`assembly-contract`, "Retention", rule 8). With the block, `reads_assignment` writes
   the per-FOV `raw.h5ad` and `reads_assignment.csv` without the tile filter and without
   `global_*` columns, on the grid of the FOV's reference image (`reference_image`, default
   `images/ref_merged/{fov_id}.tif`; its stored metadata, or for a file that stores none the
@@ -509,6 +514,7 @@ stitching:
 assembly:
   assignment: default
   ownership: nearest_center
+  duplicate_threshold: 0.5       # null: the duplicate rule off
   table_format: csv
 export:
   dimensionality: stack          # dense 3D tissue; the default is projection

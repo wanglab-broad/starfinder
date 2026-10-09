@@ -12,14 +12,19 @@ returns an :class:`AssemblyResult`: every cell and molecule in sample coordinate
 (:class:`OwnershipMap`): nearest footprint centre among the owning FOVs, ties by table
 order, decided in Y and X; a placeholder owns no point. A cell is retained when its
 ownership centroid lies in its own FOV's region, with every molecule assigned to it.
-There is no matching or merging of observations across FOVs. :func:`sample_anndata`
+With ``AssemblyConfig.duplicate_threshold`` set (default 0.5), two retained cells of
+different FOVs whose territories share at least that share of the smaller one are two
+observations of one cell: the larger stays and the other is excluded
+``duplicate_observation`` with its molecules. No observation is merged across FOVs.
+:func:`sample_anndata`
 writes ``sample.h5ad`` through :func:`starfinder.assignment.write_h5ad`, and
 :func:`save_assembly` and :func:`load_assembly` write and read the sample's export folder
 (``tables/`` and the ``assembly`` section of ``export.json``). :func:`fov_ownership`
 gives one FOV's ownership region and excluded observations as the
 :class:`~starfinder.assignment.FOVOwnership` that
 :func:`~starfinder.assignment.plot_assignment` draws. :class:`AssemblyConfig`
-selects the ownership rule, the centroid, the tie rule and the conflict flags. See
+selects the ownership rule, the centroid, the tie rule, the conflict flags and the
+duplicate rule. See
 docs/assembly-contract.md and docs/assembly-algorithms.md.
 """
 from ._anndata import sample_anndata

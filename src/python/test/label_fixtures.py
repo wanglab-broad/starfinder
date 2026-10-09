@@ -82,13 +82,14 @@ def _table(ids, origins):
 
 
 def build(tmp_path, name, territories, origins, spacing=(1.0, 1.0, 1.0), *, grid_shapes=None, statuses=None,
-          conflicts=True, true_px=None, assignment="default"):
+          conflicts=True, true_px=None, assignment="default", duplicate_threshold=0.5):
     """Write a label fixture as a dataset and assemble it from the saved assignment folders.
 
     ``territories`` maps each FOV (in placement table order) to its uint32 ZYX
     territory (1×Y×X for ``plane``); ``grid_shapes`` the FOV grids (default the
     territories' shapes); ``statuses`` FOVs given another placement status
-    (``placeholder``: a constructed placement with the same origins, approved).
+    (``placeholder``: a constructed placement with the same origins, approved);
+    ``duplicate_threshold`` the assembly's duplicate rule (default 0.5, None off).
     """
     ids = list(territories)
     root = tmp_path / name / "output"
@@ -122,7 +123,8 @@ def build(tmp_path, name, territories, origins, spacing=(1.0, 1.0, 1.0), *, grid
         save_volume(np.zeros(grid.shape_zyx, np.uint8), root / "images" / "ref_merged" / f"{fov}.tif",
                     metadata=grid.metadata)
         inputs.append(AssemblyInput(fov, grid, assignment=folder))
-    result = assemble(placement, inputs, config=AssemblyConfig(conflicts=conflicts))
+    result = assemble(placement, inputs, config=AssemblyConfig(conflicts=conflicts,
+                                                               duplicate_threshold=duplicate_threshold))
     saved = {f: np.ascontiguousarray(territories[f], np.uint32) for f in ids}
     return LabelCase(name, dataset, placement, result, saved, dict(origins), grids, dict(true_px or {}))
 
@@ -150,14 +152,19 @@ def quad_territory(fov, n_z=1):
     return np.broadcast_to(labels, (n_z, 40, 40)).copy()
 
 
-def label_quad(tmp_path, *, volume=False, placeholder=False, conflicts=True, name=None):
-    """Four FOVs of 1×40×40 (``volume``: 4×40×40, each box through all planes), unit spacing; grid 1 × 70 × 70."""
+def label_quad(tmp_path, *, volume=False, placeholder=False, conflicts=True, name=None, duplicate_threshold=0.5):
+    """Four FOVs of 1×40×40 (``volume``: 4×40×40, each box through all planes), unit spacing; grid 1 × 70 × 70.
+
+    Under the default duplicate rule FOV 1's 1 × 1 px cell at (34, 34) is excluded ``duplicate_observation``: it lies
+    whole on FOV 4's retained box 1 (share 1.0 of the smaller territory), which stays.
+    """
     n_z = 4 if volume else 1
     territories = {f: quad_territory(f, n_z) for f in QUAD_IDS}
     name = name or ("label_quad_volume" if volume else "label_quad") + ("_placeholder" if placeholder else "") \
-        + ("" if conflicts else "_noconflicts")
+        + ("" if conflicts else "_noconflicts") + ("_rule_off" if duplicate_threshold is None else "")
     statuses = {"L4": "placeholder"} if placeholder else None
-    return build(tmp_path, name, territories, QUAD_ORIGINS, statuses=statuses, conflicts=conflicts)
+    return build(tmp_path, name, territories, QUAD_ORIGINS, statuses=statuses, conflicts=conflicts,
+                 duplicate_threshold=duplicate_threshold)
 
 
 # --- label_pair (W-359's two-FOV fixture) -------------------------------------------------------------------
@@ -215,11 +222,15 @@ def pair_origins():
     return {f: (0.0, oy * LN_XY, ox * LN_XY) for f, (oy, ox) in zip(PAIR_IDS, PAIR_ORIGINS_PX)}
 
 
-def label_pair(tmp_path, variant="label_pair", *, conflicts=True):
+def label_pair(tmp_path, variant="label_pair", *, conflicts=True, duplicate_threshold=0.5):
     """W-359's two FOVs of 1×64×96 at 0.194398 µm, A at (0, 0) px and B at (0, 64) px; 13 cells, 21 views.
 
     Variants: ``label_pair_conflict`` (B's view of cell 6 at x 80), ``label_pair_empty``
-    (every label 0) and ``label_pair_merged`` (W-362's cells 31 and 32 alone).
+    (every label 0) and ``label_pair_merged`` (W-362's cells 31 and 32 alone). Under the
+    default duplicate rule the two views of cell 6 in ``label_pair_conflict`` share 26 of
+    their 49 px (0.53 of the smaller territory, equal sizes), so A's, first in table order,
+    stays and B's is excluded ``duplicate_observation``; in ``label_pair`` they share 12 px
+    (0.24) and both stay.
     """
     cells = PAIR_CELLS
     if variant == "label_pair_conflict":
@@ -230,9 +241,9 @@ def label_pair(tmp_path, variant="label_pair", *, conflicts=True):
         territories, true_px = pair_territories(cells)
     if variant == "label_pair_empty":
         territories, true_px = {f: np.zeros_like(v) for f, v in territories.items()}, {}
-    name = variant + ("" if conflicts else "_noconflicts")
+    name = variant + ("" if conflicts else "_noconflicts") + ("_rule_off" if duplicate_threshold is None else "")
     return build(tmp_path, name, territories, pair_origins(), (LN_XY, LN_XY, LN_XY), conflicts=conflicts,
-                 true_px=true_px)
+                 true_px=true_px, duplicate_threshold=duplicate_threshold)
 
 
 # --- label_scene (W-354's label fixture) --------------------------------------------------------------------

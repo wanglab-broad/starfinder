@@ -18,7 +18,7 @@ from functools import lru_cache
 import pandas as pd
 import pytest
 
-from starfinder.assembly import AssemblyResult, assemble
+from starfinder.assembly import AssemblyConfig, AssemblyResult, assemble
 
 from .assembly_fixtures import (check_accounting, golden_placement, golden_results, inputs_of, own_grids,
                                 own_placement, own_results, own_states_results, placeholder_result)
@@ -28,7 +28,13 @@ pytestmark = [pytest.mark.stitching, pytest.mark.validation]
 
 @lru_cache(maxsize=None)
 def valid(fixture):
-    """(result, inputs, placement) of a valid assembly; callers change copies only."""
+    """(result, inputs, placement) of a valid assembly; callers change copies only.
+
+    ``own_states_rule_off`` is ``own_states`` assembled with the duplicate rule off, for the cases that change FOV1's
+    cell 2 (A), which the default rule excludes as a second observation of FOV2's B (share 1.0; W-400).
+    """
+    config = AssemblyConfig(duplicate_threshold=None) if fixture.endswith("_rule_off") else AssemblyConfig()
+    fixture = fixture.removesuffix("_rule_off")
     if fixture == "own_states":
         inputs, placement = own_states_results(), own_placement()
     elif fixture == "own_cases":
@@ -37,7 +43,7 @@ def valid(fixture):
         inputs = {**golden_results(), "Position002": placeholder_result()}
         placement = golden_placement(statuses={"Position002": "placeholder"})
     grids = own_grids() if fixture != "status_cases" else None
-    return assemble(placement, inputs_of(inputs, grids)), inputs, placement
+    return assemble(placement, inputs_of(inputs, grids), config=config), inputs, placement
 
 
 def row(frame, fov, key, value):
@@ -222,6 +228,19 @@ def c_nucleus_and_cytoplasm_labels_swapped(t):
     c.loc[a, "compartment"], c.loc[b, "compartment"] = "cytoplasm", "nucleus"
 
 
+def c_duplicate_of_names_an_excluded_cell(t):
+    set_rows(t["cells"], row(t["cells"], "FOV1", "cell_id", 2), duplicate_of="s1_FOV2_2")    # E2: not_owner
+
+
+def c_duplicate_of_on_a_retained_cell(t):
+    set_rows(t["cells"], row(t["cells"], "FOV1", "cell_id", 1), duplicate_of="s1_FOV2_1")
+
+
+def c_cell_duplicate_observation_reason_replaced(t):
+    m = t["molecules"]     # m1 of FOV1's A (excluded duplicate_observation) and m5 (excluded not_owner)
+    swap(m, molecule(m, "FOV1", "m1"), molecule(m, "FOV1", "m5"), columns=("assembly_reason",))
+
+
 CASES = {
     "repeated_cell_key": (1, "own_states", c_repeated_cell_key),
     "repeated_molecule_key": (1, "own_states", c_repeated_molecule_key),
@@ -244,7 +263,7 @@ CASES = {
     "count_rows_for_an_uncounted_cell": (4, "own_states", c_count_rows_for_an_uncounted_cell),
     "count_rows_for_a_retained_excluded_no_nucleus_cell": (4, "own_cases",
                                                            c_count_rows_for_a_retained_excluded_no_nucleus_cell),
-    "whole_count_changed_by_one": (4, "own_states", c_whole_count_changed_by_one),
+    "whole_count_changed_by_one": (4, "own_states_rule_off", c_whole_count_changed_by_one),
     "counted_cell_row_missing": (4, "own_states", c_counted_cell_row_missing),
     "n_molecules_changed": (4, "own_states", c_n_molecules_changed),
     "whole_ne_nucleus_plus_cytoplasm": (5, "own_states", c_whole_ne_nucleus_plus_cytoplasm),
@@ -258,7 +277,10 @@ CASES = {
     "compartment_not_allowed_in_an_available_cell": (5, "own_states",
                                                      c_compartment_not_allowed_in_an_available_cell),
     "compartment_on_an_unassigned_molecule": (5, "own_states", c_compartment_on_an_unassigned_molecule),
-    "nucleus_and_cytoplasm_labels_swapped": (5, "own_states", c_nucleus_and_cytoplasm_labels_swapped),
+    "nucleus_and_cytoplasm_labels_swapped": (5, "own_states_rule_off", c_nucleus_and_cytoplasm_labels_swapped),
+    "duplicate_of_names_an_excluded_cell": (2, "own_cases", c_duplicate_of_names_an_excluded_cell),
+    "duplicate_of_on_a_retained_cell": (2, "own_cases", c_duplicate_of_on_a_retained_cell),
+    "cell_duplicate_observation_reason_replaced": (3, "own_cases", c_cell_duplicate_observation_reason_replaced),
 }
 # A key that is not an input's: only the inputs say which keys exist, so only the checker can refuse it.
 VALIDATOR_CANNOT_DECIDE = {"molecule_key_not_an_input"}
@@ -300,7 +322,7 @@ def refusals(name):
     return validator, checker
 
 
-@pytest.mark.parametrize("fixture", ["own_states", "own_cases", "status_cases"])
+@pytest.mark.parametrize("fixture", ["own_states", "own_states_rule_off", "own_cases", "status_cases"])
 def test_the_valid_results_pass_both(fixture):
     result, inputs, placement = valid(fixture)
     check_accounting(result, inputs, placement)
@@ -329,7 +351,7 @@ def test_as6_a_broken_result_is_refused(name):
 def test_the_changes_leave_the_valid_results_alone():
     for name in CASES:
         broken(name)
-    for fixture in ("own_states", "own_cases", "status_cases"):
+    for fixture in ("own_states", "own_states_rule_off", "own_cases", "status_cases"):
         result, inputs, placement = valid(fixture)
         check_accounting(result, inputs, placement)
         dataclasses.replace(result)

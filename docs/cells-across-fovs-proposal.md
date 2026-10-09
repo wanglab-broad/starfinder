@@ -379,6 +379,9 @@ fused stack, block by block with StarDist's present blocks (all planes × 256 ×
 
 ## Question 3: if cells of several FOVs stay a route, the rule that keeps one observation
 
+**Decided on 2026-10-09** (Jiahao): option (b), as a part of the route per FOV for good;
+implemented by W-400 ({doc}`assembly-contract`, "Retention", rule 8).
+
 **Options.**
 
 * **(a) No rule** (the present state): both observations stay; `conflict` marks them.

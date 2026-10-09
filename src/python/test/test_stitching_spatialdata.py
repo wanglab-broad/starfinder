@@ -882,6 +882,33 @@ def test_sd8_lookup_source(tmp_path):
         lookup_source(f.export_dir, spot=(loaded.molecules.spot_namespace.iloc[0], loaded.molecules.spot_id.iloc[0]))
 
 
+@needs_library
+def test_w400_the_readers_accept_the_duplicate_rule(tmp_path):
+    """export_folder's one-plane variant holds scene cell 9 twice (FOV3's copy shares 0.90 of its territory with
+    FOV1's); the default rule excludes FOV3's. The store, the record's counts, lookup_source and check_export
+    accept the new reasons and the column duplicate_of."""
+    f = export_folder(tmp_path, dimensions="plane")
+    export(f, sd_config(fuse=False))
+    assembly = load_assembly(f.export_dir)
+    cells = assembly.cells.set_index("obs_name")
+    assert (cells.loc["sample1_Position003_5", "assembly_reason"], cells.loc["sample1_Position003_5", "duplicate_of"]) \
+        == ("duplicate_observation", "sample1_Position001_6")
+    record = record_of(f.export_dir)
+    counts = record["spatialdata"]["counts"]
+    assert counts["cells"]["assembly"]["excluded"]["duplicate_observation"] == 1
+    molecules = assembly.molecules
+    assert counts["molecules"]["assembly"]["excluded"]["cell_duplicate_observation"] == int(
+        molecules.assembly_reason.eq("cell_duplicate_observation").sum()) > 0
+    store = read_store(f.export_dir)
+    table = store.tables["cells"].obs
+    assert table.loc["sample1_Position003_5", "duplicate_of"] == "sample1_Position001_6"
+    assert table.loc["sample1_Position003_5", "assembly_reason"] == "duplicate_observation"
+    namespace, cell_id = cells.loc["sample1_Position003_5", ["cell_namespace", "cell_id"]]
+    found = lookup_source(f.export_dir, cell=(namespace, int(cell_id)))
+    assert found["fov_id"] == "Position003" and found["row"] == 4
+    check_export(f.export_dir)
+
+
 #: Every SHA-256 of a section that another section records when it reads it: (recording section, field, section).
 RECORDED = [("fusion", "assembly_sha256", "assembly"), ("labels", "assembly_sha256", "assembly"),
             ("spatialdata", "assembly_sha256", "assembly"), ("spatialdata", "fusion_sha256", "fusion"),
