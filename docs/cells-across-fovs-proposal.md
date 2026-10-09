@@ -260,6 +260,11 @@ no status is changed.
 
 ## Question 1: one route for every sample?
 
+**Decided on 2026-10-09** (Jiahao): both routes stay, segmentation per FOV followed by
+assembly and segmentation of the fused image (option C, not the recommendation A); the
+route after fusion is built for projection samples, specified by W-401
+({doc}`sample-segmentation-contract`), and the 3D block-wise route is not built now.
+
 **Options.**
 
 * **(A) After fusion for every sample.** Each sample's stain images are fused, the fused
@@ -328,6 +333,10 @@ label file of question 2 first; until those exist, the duplicate rule of questio
 interim for 3D samples, not a second route kept for good.
 
 ## Question 2: how to segment after fusion
+
+**Decided on 2026-10-09** (Jiahao): for projection samples, the fused Z maximum reduced
+in Y and X is segmented in one call (specified by W-401); the block-by-block segmentation
+of a fused 3D stack with a chunked label file is not built now.
 
 **Options and measurements.**
 
@@ -479,6 +488,10 @@ The parts that exist for cells of several FOVs are the cellular assembly (`assem
 assignment inputs, mode `cells`, retention by ownership centroid), the flags `fov_edge`,
 `z_edge`, `conflict`, `unclaimed`, `outside_owner_region` and `cell_unclaimed`, and the
 fused label image drawn by retained cells (rule LR4, `fuse_labels`).
+
+**Decided on 2026-10-09** (Jiahao): both routes stay (question 1), so these parts stay
+with the route per FOV, with the duplicate rule of question 3, and the route after fusion
+uses the `molecules_only` assembly; the 3D block-wise route is not built now.
 
 **Options.**
 

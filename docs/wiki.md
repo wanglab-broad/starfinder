@@ -44,6 +44,8 @@ Sample-output baseline (proposed) <sample-output-baseline>
 Sample-output contract (proposed) <sample-output-contract>
 §2.10 validation design (proposed) <stitching-assembly-validation>
 Cells across FOVs (proposed) <cells-across-fovs-proposal>
+Sample segmentation contract (proposed) <sample-segmentation-contract>
+Sample segmentation validation (proposed) <sample-segmentation-validation>
 Learned detectors <learned-detectors>
 Coordination <coordination>
 Checkpoints <checkpoints>
