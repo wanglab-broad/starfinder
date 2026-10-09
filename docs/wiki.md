@@ -43,6 +43,7 @@ Assembly algorithms (proposed) <assembly-algorithms>
 Sample-output baseline (proposed) <sample-output-baseline>
 Sample-output contract (proposed) <sample-output-contract>
 §2.10 validation design (proposed) <stitching-assembly-validation>
+Cells across FOVs (proposed) <cells-across-fovs-proposal>
 Learned detectors <learned-detectors>
 Coordination <coordination>
 Checkpoints <checkpoints>
