@@ -2,6 +2,13 @@
 
 Status: Accepted (W-329, 2026-10-07, at 9033d46)
 
+## Amendments after acceptance
+
+* 2026-10-10: L6 ("Read-back checks") points to the rule of the route after fusion, where
+  the number of cells is first known after the part `segment`, so a fresh export of that
+  route cannot refuse before anything is written. Found by W-428 and its review. Operator
+  decision, pending Jiahao's confirmation.
+
 This page specifies what a sample has on disk after spatial assembly: the one sample-level
 export entry `Dataset.export` and its parts; the folder `export/<sample>/` and its output
 profiles; the fused image, made by multiview-stitcher's `fuse` from the placement of
@@ -1550,7 +1557,8 @@ accepts.
   origin, and `floor((N − 1)·S / (k·s) + 1e-9) + 1` pixels for territories of `N` pixels
   of spacing `S`, Z the segmentation grid's slab.
 * L6. **ID bound.** A sample with more than 16,777,216 cell rows (2^24) is refused before
-  anything is written.
+  anything is written (on the route after fusion, when the number of cells is first known:
+  {doc}`sample-segmentation-contract`, "The label images").
 
 **The sample segmentation** of the route after fusion, when the part `segment` is
 `written` or `reused`: the conditions T1 to T5 of {doc}`sample-segmentation-contract`

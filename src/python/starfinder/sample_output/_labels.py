@@ -93,7 +93,12 @@ def check_label_ids(cells) -> None:
 
     Reads the number of rows only. Raises ValueError naming the count.
     """
-    n = len(cells)
+    check_label_count(len(cells))
+
+
+def check_label_count(n: int) -> None:
+    """L6 for ``n`` cell rows: ValueError naming the count above 2^24. On the route after fusion ``Dataset.export``
+    calls it with the number of labels of the cell run, one cell row each, when that number is first known."""
     if n > LABEL_ID_BOUND:
         raise ValueError(f"the sample cell table has {n} rows, above 2^24 = {LABEL_ID_BOUND}: its instance_id values "
                          "would not be exact in float32, so the label export is refused")

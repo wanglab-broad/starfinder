@@ -24,7 +24,7 @@ from starfinder.stitching import PlacementResult
 from ._config import ExportConfig, image_name
 from ._fuse import FusionInput, check_assembly, check_fusion, fuse
 from ._grid import INCLUDED
-from ._labels import check_label_ids, fuse_labels
+from ._labels import check_label_count, check_label_ids, fuse_labels
 from ._record import (
     PARTS,
     SECTIONS,
@@ -340,20 +340,6 @@ def _reuse(dataset, placement, config, output_dir, held):
     held["assembly"] = result
 
 
-def _fuse_labels_part(placement, result, config, output_dir):
-    """``fuse_labels`` of the route after fusion. Check 6 (at most 2^24 cell rows) is made here when the cells were
-    made by this export, which knows them only after the part ``segment``: a refusal records the part ``failed``
-    and is raised, and the files of the earlier parts stay."""
-    try:
-        check_label_ids(result.cells)
-    except ValueError as error:
-        update_section(output_dir, result.sample, "fuse_labels",
-                       {"status": "failed", "outputs": [], "error": {"type": type(error).__name__,
-                                                                     "message": str(error)}}, fill=False)
-        raise
-    fuse_labels(placement, result, config=config.labels, output_dir=output_dir)
-
-
 def _export_after_fusion(dataset, sample, placement, assignment, config, output_dir, route_source) -> ExportRecord:
     """``Dataset.export`` on the route after fusion with an assignment: checks 4 to 7, then the parts in order."""
     from starfinder.assembly import assemble, save_assembly
@@ -373,9 +359,10 @@ def _export_after_fusion(dataset, sample, placement, assignment, config, output_
     if config.fuse:
         fusion = fusion_inputs(dataset, placement, config)
         check_fusion(placement, fusion, config=config.fusion, assembly=None)
-    # 6. Label IDs, when the cells are known before anything is written (the tables reused).
-    if config.fuse_labels and "assembly" in held:
-        check_label_ids(held["assembly"].cells)
+    # 6. Label IDs (L6): with a reused segmentation the saved cell run gives the number of cells, one row per label,
+    # so the bound is checked before anything is written. A fresh export knows it only after the part segment.
+    if config.fuse_labels and "segmentation" in held:
+        check_label_count(held["segmentation"].cells.n_labels)
 
     record = read_export(output_dir)
     if record.get("sample") not in (None, sample):
@@ -402,6 +389,8 @@ def _export_after_fusion(dataset, sample, placement, assignment, config, output_
     if config.segment:
         segmentation = segment_fused(output_dir, config=config.segmentation, sample=sample,
                                      identity=(dataset.dataset_id, dataset.sample_id))
+        if config.fuse_labels and segmentation.status == "written":
+            _check_label_bound(output_dir, sample, segmentation)
     else:
         saved = held["segmentation"]
         section = dict(saved.record, status="reused", assignment=as_json(asdict(assignment_settings)))
@@ -439,7 +428,7 @@ def _export_after_fusion(dataset, sample, placement, assignment, config, output_
         update_section(output_dir, sample, "assemble", result.record, status="reused", fill=False)
     # Part fuse_labels: the sample's territories as the one view.
     if config.fuse_labels:
-        _fuse_labels_part(placement, result, config, output_dir)
+        fuse_labels(placement, result, config=config.labels, output_dir=output_dir)
     else:
         update_section(output_dir, sample, "fuse_labels", {"status": "off"}, fill=False)
     # Part export_spatialdata, from the saved assembly and the sections of fuse and fuse_labels.
@@ -448,3 +437,17 @@ def _export_after_fusion(dataset, sample, placement, assignment, config, output_
     else:
         update_section(output_dir, sample, "export_spatialdata", {"status": "off"}, fill=False)
     return ExportRecord(output_dir, read_export(output_dir))
+
+
+def _check_label_bound(output_dir, sample, segmentation):
+    """L6 on a fresh export of the route after fusion, directly after the part ``segment`` and before ``assemble``
+    writes (docs/sample-segmentation-contract.md, "The label images"): the number of labels of the cell run, one cell
+    row each. A refusal records the part ``fuse_labels`` ``failed`` with the error of L6 and raises; the files of
+    ``fuse`` and ``segment`` stay, and no table, ``sample.h5ad``, label image or store is written."""
+    try:
+        check_label_count(segmentation.cells.n_labels)
+    except ValueError as error:
+        update_section(output_dir, sample, "fuse_labels",
+                       {"status": "failed", "outputs": [], "error": {"type": type(error).__name__,
+                                                                     "message": str(error)}}, fill=False)
+        raise

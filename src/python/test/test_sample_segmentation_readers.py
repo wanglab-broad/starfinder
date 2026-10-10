@@ -350,23 +350,44 @@ def test_so4_with_the_expanded_territories(so4):
 @needs_anndata
 @needs_library
 def test_so4_l6_the_id_bound(tmp_path, monkeypatch):
-    """L6 with the bound lowered to 1 cell row: refused before anything is written when the tables are reused
-    (``segment`` and ``assemble`` off); when this export made the cells, known only after ``segment``, the part
-    ``fuse_labels`` is recorded ``failed`` and the error raised, and the files of the earlier parts stay."""
+    """L6 on the route after fusion (the row SO4 as amended on 2026-10-10), the bound lowered to 1 cell row on
+    ``fused_pair`` (3 cells). With a reused segmentation (``segment: false``, with ``assemble`` on and off) it is
+    refused before anything is written: the folder is byte for byte unchanged. On a fresh export it is refused
+    directly after ``segment``, before ``assemble`` writes: the fused files and the segmentation's files stay with
+    their recorded SHA-256, and no table, ``sample.h5ad``, territories, ``cell_labels.ome.tif`` or store exists; the
+    record names the part ``fuse_labels`` with the error, ``complete`` is false. The error is the one L6 raises on
+    the route per FOV (``check_label_ids`` of the sample cell table)."""
     import starfinder.sample_output._labels as labels_module
     folder = write_folder(tmp_path, "fused_pair")
     segmentation = truth_config(folder, export_grid(folder))
     export(folder, route_config(segmentation=segmentation))
+    cells = load_assembly(folder.export_dir).cells
+    assert len(cells) == 3
     monkeypatch.setattr(labels_module, "LABEL_ID_BOUND", 1)
-    before = listing(folder.root)
-    with pytest.raises(ValueError, match="above 2\\^24"):
-        export(folder, with_outputs(route_config(segmentation=segmentation, segment=False, assemble=False),
-                                    spatialdata=False))
-    assert listing(folder.root) == before
-    with pytest.raises(ValueError, match="above 2\\^24"):
-        export(folder, with_outputs(route_config(segmentation=segmentation), spatialdata=False))
+    with pytest.raises(ValueError) as per_fov:
+        labels_module.check_label_ids(cells)
+    # A reused segmentation: refused before anything is written.
+    for assemble_on in (True, False):
+        before = listing(folder.root)
+        with pytest.raises(ValueError) as caught:
+            export(folder, with_outputs(route_config(segmentation=segmentation, segment=False,
+                                                     assemble=assemble_on)))
+        assert str(caught.value) == str(per_fov.value)
+        assert listing(folder.root) == before
+    # A fresh export: refused after segment, before assemble writes.
+    with pytest.raises(ValueError) as caught:
+        export(folder, with_outputs(route_config(segmentation=segmentation)))
+    assert str(caught.value) == str(per_fov.value)
     record = record_of(folder.export_dir)
-    assert record["parts"]["fuse_labels"] == "failed" and record["labels"]["error"]["type"] == "ValueError"
-    assert record["parts"]["assemble"] == "written" and record["parts"]["segment"] == "written"
-    assert record["complete"] is False and not (folder.export_dir / "cell_labels.ome.tif").exists()
-    assert all((folder.export_dir / e["path"]).is_file() for e in record["assembly"]["segmentation_files"])
+    assert record["parts"]["fuse"] == "written" and record["parts"]["segment"] == "written"
+    assert record["parts"]["fuse_labels"] == "failed" and record["complete"] is False
+    assert record["labels"]["error"] == {"type": "ValueError", "message": str(per_fov.value)}
+    for part in ("assemble", "export_spatialdata"):
+        assert record["parts"][part] == "not_run" and record[{"assemble": "assembly"}.get(part, "spatialdata")] == \
+            {"status": "not_run", "reason": "export_not_finished"}
+    kept = {o["path"]: o["sha256"] for o in record["fusion"]["outputs"] + record["segmentation"]["outputs"]}
+    assert any(p.startswith("segmentation_") for p in kept) and any(p.startswith("dapi_") for p in kept)
+    assert {p: d for p, d in listing(folder.export_dir).items() if p != "export.json"} == kept
+    assert not any((folder.export_dir / "tables").glob("*"))   # the earlier export's tables were removed
+    for absent in ("sample.h5ad", "territories.ome.tif", "cell_labels.ome.tif", "sample.zarr"):
+        assert not (folder.export_dir / absent).exists()

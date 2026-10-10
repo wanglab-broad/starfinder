@@ -24,6 +24,11 @@ Status: Accepted (W-377, 2026-10-09, at 779ea77)
   reused ("The record"), because `assemble(..., segmentation=…)` has no other argument
   that holds them. Found by W-427 and its review. Operator decision, pending Jiahao's
   confirmation.
+* 2026-10-10: L6 on the route after fusion is checked when the number of cells is first
+  known, after `segment` and before `assemble` writes on a fresh export, before anything
+  is written with a reused segmentation ("The label images"), in place of "L6 holds as
+  stated", because the cells do not exist before the segmentation. Found by W-428 and its
+  review. Operator decision, pending Jiahao's confirmation.
 
 This page specifies the second route to a sample's cells, so that it can be implemented
 after Jiahao approves it: the fused Z maximum of a projection sample is segmented once,
@@ -662,7 +667,12 @@ Call C25 passed the sample cell labels of the synthetic input as one view to tha
 twice the spacing: it returned every second pixel of the input, uint32, with no value
 outside the input's. The grid therefore has the label scale's spacing and the
 territories' origin; the `labels` section records the rule
-`segmentation`, and conditions L1, L2, L4 and L6 hold as stated. L3 reads the sample's
+`segmentation`, and conditions L1, L2 and L4 hold as stated. L6 is checked when the
+number of cells is first known, because no cell exists before the segmentation: on a fresh
+export directly after the part `segment`, from the number of labels of the cell run, and
+before `assemble` writes any file (the files of `fuse` and `segment` stay, as for a part
+that fails, and the record names the part `fuse_labels` and the error); with a reused
+segmentation (`segment: false`) before anything is written. L3 reads the sample's
 territories instead of each FOV's, and L5 checks the spacing and origin of this grid.
 
 The relation of the two route's label images: on the route per FOV `cell_labels.ome.tif`
