@@ -2,6 +2,7 @@
 import json
 from dataclasses import MISSING, asdict, dataclass, field, fields, replace
 from pathlib import Path
+from types import SimpleNamespace
 
 from .config import ExternalReference, PipelineConfig, ExecutionConfig, RegistrationRecipe, RegistrationStep, RecoveryConfig
 from ._declared import reference_settings
@@ -2043,14 +2044,40 @@ def _export_config(config):
     return export, block
 
 
-def _export_dataset(config, block):
-    """The Dataset of export_sample; for molecules only (assignment null) with the codebook loaded for its genes.
+def _after_fusion(export, block):
+    """Whether export_sample runs the route after fusion: the route resolved by Dataset.export's rule (set, or by
+    default after_fusion for dimensionality projection) with an assignment name; without one the export is
+    molecules_only on either route (docs/sample-segmentation-contract.md, "The route setting")."""
+    from starfinder.sample_output._segment import resolve_route
+    return block.assignment is not None and resolve_route(export)[0] == 'after_fusion'
+
+
+def _check_export_route(config):
+    """Check 7 of Dataset.export as far as the configuration alone decides it, when the rule files are parsed.
+
+    The route value, the stack and sum refusals, the default without
+    export.segmentation (RD1), the runs' image names, fuse and assemble with
+    segment on, and the runs themselves raise here naming the key. The reuse
+    conditions (segment: false) and the models are checked by Dataset.export
+    before anything is written: they need the export folder and the model
+    files, and a model is not hashed at every parse.
+    """
+    from starfinder.sample_output._segment import check_route
+    export, block = _export_config(config)
+    check_route(export, block.assignment, models=False)
+
+
+def _export_dataset(config, block, export=None):
+    """The Dataset of export_sample; with the codebook loaded for its genes when the export reads the FOVs'
+    molecule tables: molecules only (assignment null), or the route after fusion (``export``, the ExportConfig;
+    None reads it from the configuration).
 
     The codebook is the sequencing rules' input genes.csv (the direct panel in
     readout_mode direct), loaded with the encoding and layout of the first
     Python rule the configuration names (rsf_single_fov when none).
     """
-    if block.assignment is not None:
+    if block.assignment is not None and not _after_fusion(_export_config(config)[0] if export is None else export,
+                                                          block):
         return _workflow_dataset(config)
     rule = next((r for r in _RULES if r in config.get('rules', {})), 'rsf_single_fov')
     adapted = from_workflow_config(config, rule)
@@ -2067,16 +2094,34 @@ def _export_sample_files(config, output_root, fov_ids, sample='{sample}'):
     """(inputs, output) of the export_sample rule for one sample (export.smk builds the rule from them).
 
     The inputs are the sample's placement stitching/<sample>/placement.json,
-    then the per-FOV assignment outputs of reads_assignment (raw.h5ad,
-    reads_assignment.csv and the saved folder's assignment.json), or with
-    assembly.assignment null the goodSpots tables. The output, export.json, is
-    the one declared file: it lists every other file of export/<sample>/.
+    then by route (docs/sample-segmentation-contract.md, "The entry"). On the
+    route per FOV, the per-FOV assignment outputs of reads_assignment
+    (raw.h5ad, reads_assignment.csv and the saved folder's assignment.json),
+    or with assembly.assignment null the goodSpots tables (on either route).
+    On the route after fusion, no reads_assignment output: the goodSpots
+    tables, the reference images (the files reference_image names, whose
+    grids place the molecules) and, with fuse on, the source images of
+    export.images that are files of the workflow (reference_merged, the
+    reference image, and each <name>=file:<pattern>); the saved form of
+    reference_stain under checkpoints/ is no declared output of any rule, so
+    it is read and not declared, as by stitch_sample. The output, export.json,
+    is the one declared file: it lists every other file of export/<sample>/.
     """
     block = _assembly_block(config)
+    export = _export_config(config)[0] if block.assignment is not None else None
     root = Path(output_root)
     inputs = [str(root / 'stitching' / sample / 'placement.json')]
     if block.assignment is None:
         inputs += [str(root / 'signal' / f'{fov}_goodSpots.csv') for fov in fov_ids]
+    elif _after_fusion(export, block):
+        from starfinder.sample_output._export import source_path
+        inputs += [str(root / 'signal' / f'{fov}_goodSpots.csv') for fov in fov_ids]
+        inputs += _reference_image_inputs(config, root, fov_ids)
+        # The files Dataset.export's fuse part reads, by the same expression (source_path).
+        files = SimpleNamespace(output_root=root, reference_image=reference_settings(config)['reference_image'])
+        for entry in export.fusion.images if export.fuse else ():
+            if entry != 'reference_stain':
+                inputs += [p for p in (str(source_path(files, fov, entry)) for fov in fov_ids) if p not in inputs]
     else:
         inputs += [str(root / 'expr' / fov / 'raw.h5ad') for fov in fov_ids]
         inputs += [str(root / 'expr' / fov / 'reads_assignment.csv') for fov in fov_ids]
@@ -2089,28 +2134,34 @@ def _run_export(snakemake):
     """export_sample: Dataset.export of one sample into <OUTPUT>/export/{sample}/ (its export.json is output 0).
 
     Input 0 is the sample's saved placement, stitching/{sample}/placement.json;
-    the other inputs are the per-FOV outputs export reads (the assignment
-    outputs of reads_assignment, or the goodSpots tables for molecules only).
-    The parts and their settings are those of the export block and the
-    assembly block (_export_config); the assignment name is the assembly
-    block's. A part that cannot run (an extra not installed, an input missing)
-    is recorded not_run in export.json and does not fail the rule.
+    the other inputs are the per-FOV files export reads, by route
+    (_export_sample_files: the assignment outputs of reads_assignment on the
+    route per FOV; the goodSpots tables for molecules only and, with the
+    reference and source images, on the route after fusion, where the
+    codebook gives the genes, as for molecules only). The parts and their
+    settings are those of the export block and the assembly block
+    (_export_config); the assignment name is the assembly block's. A part
+    that cannot run (an extra not installed, an input missing) is recorded
+    not_run in export.json and does not fail the rule.
 
-    After the export, with an assignment name and an assembly in the folder
-    (assemble written or reused), it draws expr/{fovID}/assignment.png and,
-    for a ZYX label image, assignment_single_layer.png again for each FOV of
-    the sample that has a saved assignment (its folder's assignment.json, an
-    input of the rule, and an input of the assembly), with the FOV's ownership
+    After the export on the route per FOV, with an assignment name and an
+    assembly in the folder (assemble written or reused), it draws
+    expr/{fovID}/assignment.png and, for a ZYX label image,
+    assignment_single_layer.png again for each FOV of the sample that has a
+    saved assignment (its folder's assignment.json, an input of the rule, and
+    an input of the assembly), with the FOV's ownership
     (_write_ownership_figures). They are not declared outputs: reads_assignment
-    writes them first, without ownership.
+    writes them first, without ownership. On the route after fusion no figure
+    is drawn: the sample's cells come from no per-FOV assignment.
     """
     config, sample = snakemake.config, snakemake.wildcards.sample
     export, block = _export_config(config)
-    dataset = _export_dataset(config, block)
+    dataset = _export_dataset(config, block, export)
     placement = Path(snakemake.input[0]).parent
     record = dataset.export(sample, placement=placement, assignment=block.assignment, config=export,
                             output_dir=Path(snakemake.output[0]).parent)
-    if block.assignment is not None and record.parts.get('assemble') in ('written', 'reused'):
+    if block.assignment is not None and not _after_fusion(export, block) \
+            and record.parts.get('assemble') in ('written', 'reused'):
         output_root = Path(config['root_output_path']) / config['dataset_id'] / config['output_id']
         _write_ownership_figures(output_root, block.assignment, placement, record.folder, snakemake.input)
 

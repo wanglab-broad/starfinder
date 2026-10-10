@@ -2,7 +2,8 @@
 
 Status: Accepted (W-329, 2026-10-07, at 9033d46)
 
-This page is the task-group-6 validation design for the whole of §2.10: the engineering
+This page is the task-group-6 validation design for the whole of §2.10 (for the route after
+fusion, see {doc}`sample-segmentation-validation`): the engineering
 checks of placement ({doc}`stitching-contract`, {doc}`stitching-algorithms`), of assembly
 ({doc}`assembly-contract`, {doc}`assembly-algorithms`) and of the export entry with its
 fused image, label export and SpatialData export ({doc}`sample-output-contract`), the

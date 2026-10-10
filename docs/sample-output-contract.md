@@ -1706,8 +1706,10 @@ the gate's choice 7; the defaults are Z2.
 
 The Python-only `export` block, read by `_run_export` in the workflow adapter and run by
 one per-sample rule `export_sample`, which runs `Dataset.export` after the placement
-exists and after `reads_assignment` of every FOV of the sample. The assemble part takes
-its keys from the `assembly` block ({doc}`assembly-contract`, "Workflow configuration"):
+exists and, on the route per FOV, after `reads_assignment` of every FOV of the sample; on
+the route after fusion the rule needs the molecule tables and the source images
+({doc}`sample-segmentation-contract`, "The route setting"). The assemble part takes its
+keys from the `assembly` block ({doc}`assembly-contract`, "Workflow configuration"):
 
 ```yaml
 export:
@@ -1724,6 +1726,9 @@ export:
   pyramid_levels: 0
   labels_scale_yx: 0.25       # 1/k
   spatialdata_zarr_format: 3  # 3 | 2
+  route: null                 # per_fov | after_fusion; null: by dimensionality
+  segment: true               # false: reuse the saved sample segmentation
+  segmentation: null          # the settings of the route after fusion
 ```
 
 * The rule runs for every sample of a configuration with `stitching` and `assembly`
@@ -1745,7 +1750,8 @@ export:
   and `assignment_single_layer.png` again, with the FOV's ownership region
   ({doc}`assembly-contract`, "Workflow configuration"; W-330). They lie outside
   `export/<sample>/`, are not declared outputs and are not listed in `export.json`;
-  `Dataset.export` itself writes no figure.
+  `Dataset.export` itself writes no figure. On the route after fusion the assignment
+  figures are not redrawn.
 * A default-tier test keeps the static schema equal to the fields of `ExportConfig`,
   `FusionConfig`, `LabelConfig` and `SpatialDataExportConfig`, as for the other blocks.
 

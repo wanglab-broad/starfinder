@@ -834,7 +834,8 @@ a grid declared from `voxel_size_xy` and `voxel_size_z`.
 The rule `export_sample` reads `stitching/{sample}/placement.json`, the saved assignment
 folders (or molecule tables) of the sample's FOVs and their reference grids, and writes
 the files of "Persistence" and of the other parts it runs. It runs once per sample, after
-`reads_assignment` of every FOV of the sample and after the placement exists; unlike
+`reads_assignment` of every FOV of the sample on the route per FOV
+({doc}`sample-segmentation-contract`, "The route setting") and after the placement exists; unlike
 `reads_assignment` today, no rule reads another sample's placement.
 
 **The assignment figures with ownership** (W-330, added after the implementation). With an

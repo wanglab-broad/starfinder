@@ -204,3 +204,6 @@ One line per implemented check: its identifier and the test that implements it, 
 | CR4 | `test_sample_segmentation_compare.py::test_cr4_determinism` |
 | CR5 | `test_sample_segmentation_compare.py::test_cr5_the_whole_of_a_larger_scene` (`slow`) |
 | CR, the measure | `test_sample_segmentation_compare.py::test_cr_the_measure_is_the_duplicate_rule_s`: the share of `compare_routes` equals the duplicate rule's for the same two territories; both take it from `starfinder.assembly._duplicates.share` |
+| RS5 | `test_sample_segmentation_workflow.py::test_rs5_configuration_schema`, with `test_rs5_a_run_s_method_keys_equal_the_config_fields`, `test_rs5_every_init_field_of_a_method_config_translates`, `test_rs5_route_configs_validate_and_translate`, `test_rs5_invalid_route_keys_fail_the_schema` and `test_rs5_the_example_configuration_of_each_route` |
+| WF1 | `test_sample_segmentation_workflow.py::test_wf1_the_rule_s_inputs_by_route`, with `test_wf1_the_inputs_follow_reference_image_and_the_named_images` and `test_wf1_existing_configurations_without_the_new_keys`; the Snakemake dry run (`-n`, starfinder-v9 Snakemake) is recorded in the W-430 worker notes |
+| WF2 | `test_sample_segmentation_workflow.py::test_wf2_the_assignment_figures` |

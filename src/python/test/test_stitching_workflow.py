@@ -398,7 +398,8 @@ def test_wf3_the_placement_rules_use_the_position_input_function():
 
 
 def test_wf3_export_sample_inputs_and_declared_output(tmp_path):
-    config = dataset_config(tmp_path, stitching=MULTIVIEW, assembly=ASSEMBLY)
+    """The inputs of the route per FOV; those of the route after fusion are WF1 of test_sample_segmentation_workflow.py."""
+    config = dataset_config(tmp_path, stitching=MULTIVIEW, assembly=ASSEMBLY, export={"route": "per_fov"})
     root = Path("/out")
     inputs, output = workflow._export_sample_files(config, root, ["Position001", "Position002"], SAMPLE)
     assert inputs == ["/out/stitching/sample1/placement.json",

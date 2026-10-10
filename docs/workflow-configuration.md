@@ -482,23 +482,57 @@ sample-level rules for a configuration that has them. The specification is the
   `tile_config_{sample}.csv`, and saves the FOV's assignment folder
   `checkpoints/{fovID}/assignment/<assignment>/`; `create_sample_h5ad` and
   `create_sample_reads_assignment` do not run. One rule per sample, `export_sample`, runs
-  every part of `Dataset.export` after the placement and every FOV's `reads_assignment`;
-  its declared output is `export/<sample>/export.json`, which lists every other file of
-  the folder, so a part that cannot run (an extra not installed) is recorded `not_run`
-  and does not fail the rule. With an `assignment` name it then draws
+  every part of `Dataset.export` after the placement and, on the route per FOV, every
+  FOV's `reads_assignment`; on the route after fusion it needs no output of
+  `reads_assignment`, but the FOVs' molecule tables `signal/{fovID}_goodSpots.csv`, their
+  reference images (the files `reference_image` names) and, with `fuse` on, the source
+  images of `images` that are files of the workflow (`reference_merged` and each
+  `<name>=file:<pattern>`; the saved form of `reference_stain` is read but is no declared
+  output of any rule, so it is not declared, as for `stitch_sample`); `reads_assignment`
+  still runs while its `run` flag is on, and can be turned off on that route. Its declared output
+  is `export/<sample>/export.json`, which lists every other file of the folder, so a part
+  that cannot run (an extra not installed) is recorded `not_run` and does not fail the
+  rule. On the route per FOV, with an `assignment` name, it then draws
   `expr/{fovID}/assignment.png` (and `assignment_single_layer.png` for a ZYX label image)
   again for each FOV with a saved assignment, with the FOV's ownership region; the two
-  files are not declared outputs.
+  files are not declared outputs. On the route after fusion it draws no figure: the
+  sample's cells come from no per-FOV assignment.
 * **`export`** (needs `assembly`). The parts of `Dataset.export` and their settings: the
   flags `assemble`, `fuse`, `fuse_labels` and `export_spatialdata`, the `FusionConfig`
   fields (`images`, `dimensionality`, `projection`, `scale_yx`, `ome_zarr`,
   `ome_zarr_version`, `pyramid_levels`), `labels_scale_yx` (`LabelConfig.scale_yx`) and
-  `spatialdata_zarr_format` (`SpatialDataExportConfig.zarr_format`). Without the block the
-  defaults apply.
+  `spatialdata_zarr_format` (`SpatialDataExportConfig.zarr_format`), and the route
+  ({doc}`sample-segmentation-contract`): `route` (`per_fov`, `after_fusion`, or null for the
+  default by `dimensionality`: `projection` gives `after_fusion`, `stack` and `both` give
+  `per_fov`), `segment` (default true; false reuses the saved sample segmentation) and
+  `segmentation`, the settings of the route after fusion (`SampleSegmentationConfig`):
+  `device`, `cells`, `nuclei` and `runs`, each run with `name`, `target`, `inputs` (a list
+  of `{role, image}`, each `image` a name of `images`), optional `seeds` and a `method`, a
+  `SEGMENTATION_METHODS` name whose config fields are the run's other keys, or `import`
+  with the `LabelImportConfig` fields. The pixel lengths of a method (Cellpose's `diameter`
+  and `min_size`, StarDist's `scale`, `block_size`, `min_overlap` and `context`) are given
+  for the acquired grid, as
+  for the route per FOV; the route divides them by the scale factor of `scale_yx` and
+  records both values. The assignment settings are those of the top-level `assignment`
+  block (its `AssignmentConfig` fields; the defaults without one). Without the block the
+  defaults apply, so a configuration with an assignment name that exports the default
+  projection takes the route after fusion and is refused until it sets
+  `export.segmentation` or `route: per_fov`; the route after fusion also refuses
+  `dimensionality: stack` and `projection: sum`.
+* **The device of the route after fusion.** On that route the part `segment` runs inside
+  `export_sample`, so that rule needs the device and memory of the segmentation methods:
+  with a learned model on `cuda` (`segmentation.device: cuda`) the rule must run on a GPU
+  node (choice E1 of
+  {doc}`sample-segmentation-contract`, whose stated cost this is; the GPU resource of the
+  rule belongs to §2.13 and is not set by this block). The whole fused projection is
+  segmented in one call, so its size, set by `scale_yx`, must fit that device.
 
 Default-tier tests keep the method list equal to `STITCHING_METHODS` plus `bigstitcher`
-and the `assembly` and `export` keys equal to those fields. The blocks raise naming the
-key when the rule files are parsed.
+and the `assembly` and `export` keys equal to those fields, and the methods of a
+`segmentation` run equal to `SEGMENTATION_METHODS`. The blocks raise naming the key when
+the rule files are parsed; so does a route the configuration alone refuses (check 7 of
+`Dataset.export` without the conditions of a reused segmentation and without the models,
+which `export_sample` checks before anything is written).
 
 ```yaml
 stitching:
@@ -518,6 +552,51 @@ assembly:
   table_format: csv
 export:
   dimensionality: stack          # dense 3D tissue; the default is projection
+```
+
+One example configuration for each route ({doc}`workflow-downstream`, "Two routes to a
+sample's cells", says which to choose). The route per FOV, for a projection sample that
+keeps the per-FOV segmentation and assignment of `reads_assignment`:
+
+```yaml
+assembly:
+  assignment: default
+export:
+  route: per_fov                 # the default for dimensionality stack and both
+  dimensionality: projection
+```
+
+The route after fusion, for a projection sample (the culture's two stains, segmented at
+1/4 with Cellpose on a GPU; the values illustrate the layout and are not recommended
+settings):
+
+```yaml
+assembly:
+  assignment: default
+export:
+  route: after_fusion            # the default for dimensionality projection
+  images:
+    - reference_stain
+    - "dapi=file:images/organelle/DAPI/{fov_id}.tif"
+    - "flamingo=file:images/organelle/Flamingo/{fov_id}.tif"
+  scale_yx: 0.25
+  segmentation:
+    device: cuda
+    cells: cell
+    nuclei: nucleus
+    runs:
+      - name: nucleus
+        target: nucleus
+        inputs: [{role: nuclear, image: dapi}]
+        method: cellpose
+        model: cpsam_v2
+        diameter: 60             # pixels of the acquired grid: 15 at 1/4
+      - name: cell
+        target: cell
+        inputs: [{role: cytoplasm, image: flamingo}, {role: nuclear, image: dapi}]
+        method: cellpose
+        model: cpsam_v2
+        diameter: 240            # 60 at 1/4
 ```
 
 ## Downstream parameter blocks

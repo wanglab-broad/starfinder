@@ -574,8 +574,8 @@ class Dataset:
         reuse rule, checked before anything is written); ``assemble`` on each
         FOV's molecule table ``signal/{fovID}_goodSpots.csv`` with the sample
         segmentation (the ``molecules_only`` assembly when ``segment`` could
-        not run); and ``fuse_labels`` and ``export_spatialdata``, recorded
-        ``not_run`` on that route in this version.
+        not run); then ``fuse_labels`` (the sample's territories as its one
+        view) and ``export_spatialdata``, as on the route per FOV.
 
         Parameters
         ----------
@@ -608,9 +608,6 @@ class Dataset:
         MissingModelError, ModelHashMismatchError
             Check 7: a model of ``config.segmentation`` is missing or has
             another SHA-256, with the folder unchanged.
-        NotImplementedError
-            A resolved route ``after_fusion`` with an assignment, after check
-            7 and before anything is written.
         """
         from starfinder.sample_output import ExportConfig
         from starfinder.sample_output._export import export_sample

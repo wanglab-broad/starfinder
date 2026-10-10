@@ -99,10 +99,12 @@ anything is written the route after fusion with ``dimensionality: stack`` or
 :py:class:`~starfinder.sample_output.SampleSegmentationRun`), with an image that is not in
 ``images``, with ``fuse`` or ``assemble`` off while ``segment`` is on, or with a model that
 is missing or whose SHA-256 differs. On the route per FOV the part ``segment`` is recorded
-``off`` (reason ``route_per_fov``; ``no_cells`` without an assignment). The export does not
-run the route after fusion yet: a resolved route ``after_fusion`` with an assignment is
-refused after check 7. :py:func:`~starfinder.sample_output.segment_fused`, called alone on a
-folder whose ``fuse`` ran, segments the fused projection of each input image on the
+``off`` (reason ``route_per_fov``; ``no_cells`` without an assignment). On the route after
+fusion with an assignment the parts run in the order ``fuse``, ``segment``, ``assemble``
+(:py:func:`~starfinder.assembly.assemble` with ``segmentation``: the sample's molecules
+assigned to the sample segmentation), ``fuse_labels`` and ``export_spatialdata``.
+:py:func:`~starfinder.sample_output.segment_fused`, the part ``segment``, also callable alone
+on a folder whose ``fuse`` ran, segments the fused projection of each input image on the
 segmentation grid (the fused file's grid, frame ``sample:<sample>``), with the method's pixel
 lengths given for the acquired grid and divided by the scale factor (both values recorded),
 and writes one ``segmentation_<run>.ome.tif`` per run (uint32) and the ``segmentation``

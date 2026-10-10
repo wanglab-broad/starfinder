@@ -1460,6 +1460,33 @@ placement is built, with `fallback=None` and with `fallback="nominal"`; before, 
 view could become `metadata_only` under `fallback="nominal"`. Files with finite affines
 import as before. No signature changes.
 
+### Sample segmentation: the route after fusion and the route setting
+
+A second route to a sample's cells beside the route per FOV: the fused Z maximum of a
+projection sample is segmented once and the sample's molecules are assigned to those
+cells ({doc}`sample-segmentation-contract`; for users, {doc}`workflow-downstream`, "Two
+routes to a sample's cells"). New names in `starfinder.sample_output`, one keyword of
+`assemble`, three fields of `ExportConfig`, three keys of the workflow `export` block and
+one column of the sample molecule table; no existing name, module or format version
+changes. The route per FOV keeps its rules, the duplicate rule of W-400 included.
+
+| Need | New name |
+| --- | --- |
+| Choose the route of a sample | `ExportConfig(route=…)`: a value of `ROUTES = ("per_fov", "after_fusion")`, or None (the default) for the route by `dimensionality`: `projection` gives `after_fusion`, `stack` and `both` give `per_fov`; the `assembly` section of `export.json` records `route` and `route_source` (`set` or `default`) |
+| The settings of the route after fusion | `ExportConfig(segmentation=SampleSegmentationConfig(runs, cells, nuclei=None, assignment=AssignmentConfig(), device="cpu"))` with one `SampleSegmentationRun(name, target, inputs, method, seeds=None)` per run: `inputs` are `(role, image)` pairs of image names of `FusionConfig.images`, `method` a `SEGMENTATION_METHODS` config or a `LabelImportConfig`, its pixel lengths given for the acquired grid |
+| Segment the fused projection | The new part `segment` of `Dataset.export`, after `fuse`; alone, `segment_fused(output_dir, *, config, sample, identity=None)` on a folder whose `fuse` ran returns a `SampleSegmentation(grid, runs, record)` and writes `segmentation_<run>.ome.tif` per run and the `segmentation` section; `load_sample_segmentation(output_dir)` reads them back; `ExportConfig(segment=False)` reuses them |
+| Assign the sample's molecules to the sample's cells | `assemble(placement, inputs, config=…, segmentation=…)` with molecule-table inputs: the `molecules_only` assembly, then one `assign_molecules` call on the segmentation grid; `territories.ome.tif` when the assignment expands the cells |
+| Compare the two routes of one sample | `compare_routes(per_fov, after_fusion, *, threshold=0.5, output=None)` returns a `RouteComparison`; it reads two export folders, writes nothing unless `output` names a folder outside both, and decides nothing |
+| Link a molecule to its cell | The new column `cell_namespace` of `tables/molecules` on both routes (the cell's namespace for a molecule with a `cell_id`, null otherwise); `check_identities`, `cell_links` and `check_export` link by `(cell_namespace, cell_id)`. A folder saved before the column existed still loads: the column is filled from the cell table |
+| The workflow | The `export` block's keys `route`, `segment` and `segmentation` ({doc}`workflow-configuration`, "Stitching, assembly and export"); on the route after fusion `export_sample` needs the molecule tables and the source images instead of the outputs of `reads_assignment`, and draws no assignment figure again |
+
+`export.json` gains the part `segment` in `parts` on both routes (`off`, reason
+`route_per_fov`, on the route per FOV; `no_cells` without an assignment) and the
+`segmentation` section; on the route after fusion the `assembly` and `labels` sections
+record `segmentation_files`, and `lookup_source(cell=…)` returns `assignment_folder` null,
+the cell's row in the sample cell table, `label_file` and `label_value`. The SHA-256 of
+`tables/molecules` changes on the route per FOV because of the new column.
+
 ## Intentional behavior changes — not mechanical equivalence
 
 | Area | Change and consequence |
@@ -1477,6 +1504,7 @@ import as before. No signature changes.
 | Benchmark / recipes | Failures retain requested/actual method identity. Evaluation/reporting reuse saved artifacts. Optional legacy experiments remain recipes with prerequisites, not validated research results. |
 | Segmentation / assignment workflow | The shared rules call the package under both backends: `uint32` labels, `rescale` on the input grid, no foreground gate, cells kept without molecules, `outside_grid` molecules, unknown genes and a double expansion raise, new `raw.h5ad` and `reads_assignment.csv` columns; MATLAB-backend runs need the package and its `stardist` and `anndata` extras. |
 | Sample assembly workflow (configurations with an `assembly` block only) | Option W1 of {doc}`assembly-contract`: the per-FOV `raw.h5ad` and `reads_assignment.csv` are not box-filtered and have no `global_*` columns (every kept cell, and every molecule in input order); the label file is imported on the grid of `images/ref_merged/{fovID}.tif` instead of one declared from `voxel_size_xy` and `voxel_size_z`; the sample outputs are in `export/<sample>/` instead of `expr/{sample}_raw.h5ad` and `expr/{sample}_reads_assignment.csv`; cells and molecules are retained by the ownership regions of the placement instead of the `tile_config` rectangles, and every excluded observation is kept with its reason. Configurations without the block are unchanged. |
+| Sample segmentation route (configurations and calls that export a projection with an assignment) | Rule RD1 of {doc}`sample-segmentation-contract`: without `route`, a sample exported as a projection (the default `dimensionality`) takes the route after fusion, and `Dataset.export`, and the workflow when the rules are parsed, refuse it before anything is written, naming `export.segmentation` and `route: per_fov`, unless the settings of that route are given. Set `route: per_fov` (`ExportConfig(route="per_fov")`) to keep the earlier per-FOV assembly. The route after fusion also refuses `dimensionality: stack` and `projection: sum`. Exports with `dimensionality` `stack` or `both`, and samples without segmentation (`assignment` null), keep their route; their outputs change only by the column `cell_namespace`, the part `segment` recorded `off` with its `segmentation` section, and the keys `route` and `route_source` of the `assembly` section. |
 
 Detailed numerical policies, tolerances and edge cases remain canonical in
 [contracts](api/contracts.md), [evaluation](api/evaluation.registration.rst),

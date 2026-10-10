@@ -129,7 +129,7 @@ def check_models(segmentation: SampleSegmentationConfig) -> list[dict]:
     return resolved
 
 
-def check_route(config: ExportConfig, assignment, *, reuse=None) -> tuple[str, str]:
+def check_route(config: ExportConfig, assignment, *, reuse=None, models=True) -> tuple[str, str]:
     """Check 7 of ``Dataset.export`` (docs/sample-segmentation-contract.md, "The entry"); returns the route.
 
     In this order: the route is a value of :data:`ROUTES` or None; the route
@@ -140,9 +140,11 @@ def check_route(config: ExportConfig, assignment, *, reuse=None) -> tuple[str, s
     are on unless ``segment`` is off, the reuse conditions hold when
     ``segment`` is off (``reuse``, a callable that ``Dataset.export`` passes
     and that raises ``ValueError``), the runs validate (their seeds name
-    earlier runs, ``cells`` and ``nuclei`` name runs of their targets) and
-    every model resolves with its SHA-256. Each failure raises ``ValueError``
-    (or ``MissingModelError``, ``ModelHashMismatchError``) naming the key.
+    earlier runs, ``cells`` and ``nuclei`` name runs of their targets) and,
+    with ``models`` (the workflow's parse-time check passes False and leaves
+    them to ``Dataset.export``), every model resolves with its SHA-256. Each
+    failure raises ``ValueError`` (or ``MissingModelError``,
+    ``ModelHashMismatchError``) naming the key.
     """
     if config.route is not None and config.route not in ROUTES:
         raise ValueError(f"export.route must be one of {list(ROUTES)} or null; got {config.route!r}")
@@ -180,7 +182,8 @@ def check_route(config: ExportConfig, assignment, *, reuse=None) -> tuple[str, s
     if not config.segment and reuse is not None:
         reuse()
     segmentation.__post_init__()
-    check_models(segmentation)
+    if models:
+        check_models(segmentation)
     return route, source
 
 

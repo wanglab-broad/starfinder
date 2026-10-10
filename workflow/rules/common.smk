@@ -336,9 +336,11 @@ if BACKEND == "python":
                         "lrsf_single_fov_subtile", "deep_create_subtile", "deep_rsf_subtile"):
         if is_rule_enabled(python_rule):
             from_workflow_config(config, python_rule)
-    # The §2.10 blocks raise here, naming the key, rather than when their rules run.
-    from starfinder.dataset.workflow import _export_config, _stitching_block
+    # The §2.10 blocks raise here, naming the key, rather than when their rules run; so does the route
+    # (check 7 of docs/sample-segmentation-contract.md, without the reuse conditions and the models).
+    from starfinder.dataset.workflow import _check_export_route, _export_config, _stitching_block
     if STITCHING_BLOCK:
         _stitching_block(config)
     if ASSEMBLY_BLOCK:
         _export_config(config)
+        _check_export_route(config)
