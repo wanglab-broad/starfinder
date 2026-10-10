@@ -131,7 +131,8 @@ def test_as4_own_cases_rows_equal_the_fixture(rule):
     config = AssemblyConfig() if rule else AssemblyConfig(duplicate_threshold=None)
     result = assemble(own_placement(), own_inputs(), config=config)
     assert list(result.cells.columns) == SAMPLE_CELL_COLUMNS
-    assert list(result.molecules.columns) == ["fov_id"] + MOLECULE_29 + SAMPLE_TAIL
+    # cell_namespace: the cell key's namespace of a molecule's cell (W-425; docs/sample-segmentation-contract.md, CK1).
+    assert list(result.molecules.columns) == ["fov_id"] + MOLECULE_29 + ["cell_namespace"] + SAMPLE_TAIL
     got = {(r.fov_id, int(r.cell_id)): (r.status, r.assembly_status, none(r.assembly_reason), none(r.owner_fov_id),
                                         r.assembly_flags, r.conflict_with) for r in result.cells.itertuples()}
     assert got == ({**OWN_EXPECTED_CELLS, **OWN_DUPLICATE_CELLS} if rule else OWN_EXPECTED_CELLS)

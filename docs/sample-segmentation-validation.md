@@ -144,3 +144,12 @@ not decide, and would not be an accuracy.
 
 The checks above are assigned to implementation issues in the W-401 worker notes, each
 naming the checks it must pass.
+
+## Implemented checks
+
+One line per implemented check: its identifier and the test that implements it, under
+`src/python/test/`.
+
+| # | Test |
+| --- | --- |
+| SO3 | `test_sample_segmentation_cell_key.py::test_so3_the_column_on_the_route_per_fov`, with the tests `test_so3_*` of the same file for the saved and reloaded column, a folder saved before the column, and the readers that link a molecule to its cell by the cell key |

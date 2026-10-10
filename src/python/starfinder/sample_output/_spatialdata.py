@@ -123,30 +123,27 @@ def instance_ids(cells) -> np.ndarray:
 def cell_links(assembly) -> pd.array:
     """``cell_instance_id`` of each molecule: the ``instance_id`` of its ``(cell_namespace, cell_id)``.
 
-    A molecule's cell key is the §2.9 ``cell_id`` in the cell namespace of its FOV;
-    null without a cell (and for every molecule of a ``molecules_only`` sample).
+    A molecule's cell key is its own ``(cell_namespace, cell_id)`` columns, the
+    §2.9 key of a row of the sample cell table; null without a cell (and for
+    every molecule of a ``molecules_only`` sample).
     """
     molecules, cells = assembly.molecules, assembly.cells
     if "cell_id" not in molecules.columns or not len(molecules):
         return pd.array([None] * len(molecules), dtype="UInt32")
-    namespaces = cells.groupby(cells["fov_id"].astype(object), sort=False)["cell_namespace"].nunique()
-    if (namespaces > 1).any():
-        raise ValueError(f"FOVs {sorted(namespaces[namespaces > 1].index)} hold cells of more than one namespace, so "
-                         "a molecule's cell_id does not name one cell")
     ids = instance_ids(cells)
-    of = {(f, int(c)): int(i) for f, c, i in zip(cells["fov_id"].astype(object), cells["cell_id"].astype("int64"),
-                                                 ids)}
+    of = {(ns, int(c)): int(i) for ns, c, i in zip(cells["cell_namespace"].astype(object),
+                                                   cells["cell_id"].astype("int64"), ids)}
     linked = molecules["cell_id"].notna().to_numpy(dtype=bool)
-    keys = zip(molecules["fov_id"].astype(object)[linked], molecules["cell_id"][linked].astype("int64"))
+    keys = zip(molecules["cell_namespace"].astype(object)[linked], molecules["cell_id"][linked].astype("int64"))
     values = np.zeros(len(molecules), np.uint32)
     found = []
-    for fov, cell in keys:
-        found.append(of.get((fov, int(cell))))
+    for namespace, cell in keys:
+        found.append(of.get((namespace, int(cell))))
     if any(v is None for v in found):
         first = next(i for i, v in zip(np.flatnonzero(linked), found) if v is None)
         raise ValueError(f"molecule {molecules['spot_namespace'].iloc[first]} {molecules['spot_id'].iloc[first]} "
-                         f"links to cell {molecules['cell_id'].iloc[first]} of FOV {molecules['fov_id'].iloc[first]}, "
-                         "which the sample cell table does not hold")
+                         f"links to cell {molecules['cell_id'].iloc[first]} of namespace "
+                         f"{molecules['cell_namespace'].iloc[first]}, which the sample cell table does not hold")
     values[linked] = np.array(found, np.uint32)
     return pd.arrays.IntegerArray(values, ~linked)
 

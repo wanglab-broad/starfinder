@@ -50,6 +50,10 @@ MOLECULE_DTYPES_29 = {"spot_namespace": "string", "spot_id": "string", "z": "flo
                       "compartment": "string"}
 MOLECULE_ONLY_DTYPES = {"spot_namespace": "string", "spot_id": "string", "z": "float64", "y": "float64",
                         "x": "float64", "gene_id": "string", "assignment_status": "string"}
+# The namespace of a molecule's cell, so that (cell_namespace, cell_id) names the cell in the sample (choice 7, CK1 of
+# docs/sample-segmentation-contract.md); null for a molecule without a cell_id.
+CELL_KEY = ["cell_namespace", "cell_id"]
+CELL_KEY_DTYPES = {"cell_namespace": "string"}
 SAMPLE_COORDINATES = [f"sample_{name}_{a}" for name in ("centroid", "expanded_centroid", "ownership_centroid")
                       for a in AXES]
 CELL_DTYPES = {"fov_id": "string", "cell_namespace": "string", "cell_id": "UInt32", "obs_name": "string",
@@ -76,7 +80,38 @@ CELL_TO_MOLECULE_REASON = {"not_owner": "cell_not_owner", "duplicate_observation
 
 def molecule_dtypes(mode: str) -> dict:
     """The sample molecule table's columns and dtypes in a mode (``cells`` or ``molecules_only``)."""
-    return {"fov_id": "string", **(MOLECULE_DTYPES_29 if mode == "cells" else MOLECULE_ONLY_DTYPES), **TAIL_DTYPES}
+    if mode == "cells":
+        return {"fov_id": "string", **MOLECULE_DTYPES_29, **CELL_KEY_DTYPES, **TAIL_DTYPES}
+    return {"fov_id": "string", **MOLECULE_ONLY_DTYPES, **TAIL_DTYPES}
+
+
+def fill_cell_namespace(molecules: pd.DataFrame, cells: pd.DataFrame) -> pd.DataFrame:
+    """A sample molecule table saved without ``cell_namespace``, with the column filled from the cell table.
+
+    A molecule with a ``cell_id`` takes the ``cell_namespace`` of the one cell row
+    of its ``fov_id`` and ``cell_id`` (on the route per FOV a molecule's cell is a
+    cell of its own FOV); a molecule without a ``cell_id``, or whose ``fov_id`` and
+    ``cell_id`` name no cell row or more than one namespace, gets null. The column
+    is inserted where :func:`molecule_dtypes` places it, before ``sample_z``. A
+    table that has the column, or no ``cell_id`` (``molecules_only``), is
+    returned unchanged.
+    """
+    if "cell_namespace" in molecules or "cell_id" not in molecules:
+        return molecules
+    named = {}
+    for fov, cell, namespace in zip(cells["fov_id"].astype(object), cells["cell_id"].astype("Int64"),
+                                    cells["cell_namespace"].astype(object)):
+        if not (pd.isna(fov) or pd.isna(cell) or pd.isna(namespace)):
+            named.setdefault((fov, int(cell)), set()).add(namespace)
+    values = []
+    for fov, cell in zip(molecules["fov_id"].astype(object), molecules["cell_id"].astype("Int64")):
+        found = None if pd.isna(cell) else named.get((fov, int(cell)), set())
+        values.append(next(iter(found)) if found is not None and len(found) == 1 else None)
+    columns = list(molecules.columns)
+    out = molecules.copy()
+    out.insert(columns.index("sample_z") if "sample_z" in columns else len(columns), "cell_namespace",
+               pd.array(values, dtype="string"))
+    return out
 
 
 def _empty(dtypes):
@@ -149,6 +184,8 @@ def _counts_record(cells, molecules, fovs, flags_computed, duplicates=True):
 def check_identities(result: AssemblyResult) -> None:
     """The identities 1 to 5 of docs/assembly-contract.md ("Count accounting") on a result.
 
+    Cells are keyed by the cell key ``(cell_namespace, cell_id)``, and a molecule
+    links to its cell, and counts in it, by the same key in its own columns.
     Raises ValueError naming the identity and the first differing key.
     """
     fovs, cells, molecules, counts = result.fovs, result.cells, result.molecules, result.counts
@@ -210,7 +247,18 @@ def check_identities(result: AssemblyResult) -> None:
                 _fail(2, f"the {population} sum to the inputs", population)
         if recorded.get("flags") != expected["flags"]:
             _fail(2, "record['counts']['flags'] equals the tables' flag counts", "flags")
-    # 3: molecules follow their cell; unassigned ones their own position.
+    # 3: molecules follow their cell, the cell of their cell key (cell_namespace, cell_id); unassigned ones their own
+    # position.
+    cell_mode = "cell_id" in molecules
+    if cell_mode:
+        if "cell_namespace" not in molecules:
+            _fail(3, "a molecule names its cell by the cell key (cell_namespace, cell_id), but the molecule table has "
+                     "no column cell_namespace")
+        named = molecules["cell_namespace"].notna().to_numpy(dtype=bool)
+        wrong = np.flatnonzero(named != molecules["cell_id"].notna().to_numpy(dtype=bool))
+        if len(wrong):
+            _fail(3, "a molecule has a cell_namespace exactly when it has a cell_id",
+                  tuple(molecules[["spot_namespace", "spot_id"]].iloc[int(wrong[0])]))
     placed = molecules["fov_id"].map(dict(zip(fovs["fov_id"], fovs["placement_status"].isin(PLACED))))
     placed = placed.fillna(False).to_numpy(dtype=bool)
     a_status = molecules["assignment_status"].astype(object).fillna("").to_numpy()
@@ -226,15 +274,16 @@ def check_identities(result: AssemblyResult) -> None:
     outside = a_status == "outside_grid"
     want_status[outside], want_reason[outside] = "excluded", "outside_grid"
     if in_cell.any():
-        cell_state = pd.DataFrame({"fov_id": cells["fov_id"].astype(object),
+        cell_state = pd.DataFrame({"cell_namespace": cells["cell_namespace"].astype(object),
                                    "cell_id": cells["cell_id"].astype("int64"),
                                    "_status": cells["assembly_status"].astype(object),
                                    "_reason": cells["assembly_reason"].astype(object).fillna("")})
-        rows = pd.DataFrame({"fov_id": molecules["fov_id"].astype(object)[in_cell],
+        rows = pd.DataFrame({"cell_namespace": molecules["cell_namespace"].astype(object)[in_cell],
                              "cell_id": molecules["cell_id"].astype("Int64")[in_cell].astype("int64")})
-        joined = rows.merge(cell_state, on=["fov_id", "cell_id"], how="left")
-        if joined["_status"].isna().any():
-            first = int(np.flatnonzero(in_cell)[np.flatnonzero(joined["_status"].isna().to_numpy())[0]])
+        joined = rows.merge(cell_state, on=CELL_KEY, how="left")
+        missing = joined["_status"].isna().to_numpy() | rows["cell_namespace"].isna().to_numpy()
+        if missing.any():
+            first = int(np.flatnonzero(in_cell)[np.flatnonzero(missing)[0]])
             _fail(3, "every assigned or excluded_cell molecule's cell is a row of the cell table",
                   tuple(molecules[["spot_namespace", "spot_id"]].iloc[first]))
         cell_reason = joined["_reason"].to_numpy(dtype=object)
@@ -272,10 +321,11 @@ def check_identities(result: AssemblyResult) -> None:
                                                       counts["cell_id"].astype("int64"))}
     if not count_keys <= counted_keys:
         _fail(4, "only counted cells (retained, §2.9 kept) have count rows", _first(count_keys - counted_keys))
-    tally_key = ["fov_id", "cell_id", "gene_id"]
+    # The counts and the molecules meet at the cell key (cell_namespace, cell_id), so a molecule counts in its cell
+    # whichever FOV observed it.
+    tally_key = ["cell_namespace", "cell_id", "gene_id"]
     whole = counts[compartment.eq("whole").to_numpy(dtype=bool)]
     whole_tally = _tally(whole.assign(cell_id=whole["cell_id"].astype("int64")), tally_key, "count")
-    cell_mode = "cell_id" in molecules
     if cell_mode:
         assigned = molecules[(molecules["assignment_status"].eq("assigned")
                               & molecules["assembly_status"].eq("retained")).to_numpy(dtype=bool)]
@@ -288,19 +338,20 @@ def check_identities(result: AssemblyResult) -> None:
         _fail(4, "the whole counts are the retained assigned molecules per cell and gene",
               _first(set(whole_tally.items()) ^ set(molecule_tally.items())))
     per_cell = {}
-    for (f, c, _), n in whole_tally.items():
-        per_cell[(f, c)] = per_cell.get((f, c), 0) + n
-    n_molecules = {(f, int(c)): int(n) for f, c, n in zip(counted["fov_id"], counted["cell_id"].astype("int64"),
-                                                          counted["n_molecules"]) if n}
+    for (ns, c, _), n in whole_tally.items():
+        per_cell[(ns, c)] = per_cell.get((ns, c), 0) + n
+    n_molecules = {(ns, int(c)): int(n) for ns, c, n in zip(counted["cell_namespace"],
+                                                            counted["cell_id"].astype("int64"),
+                                                            counted["n_molecules"]) if n}
     if per_cell != n_molecules:
         _fail(4, "the whole counts sum to n_molecules over the counted cells",
               _first(set(per_cell.items()) ^ set(n_molecules.items())))
     # 5: the §2.9 compartment identities over the counted cells and the retained assigned molecules.
-    state = {(f, int(c)): a for f, c, a in zip(counted["fov_id"], counted["cell_id"].astype("int64"),
-                                               counted["compartments"].astype(object))}
+    state = {(ns, int(c)): a for ns, c, a in zip(counted["cell_namespace"], counted["cell_id"].astype("int64"),
+                                                 counted["compartments"].astype(object))}
     available = {k for k, a in state.items() if a == "available"}
     parts = counts[compartment.isin(("nucleus", "cytoplasm")).to_numpy(dtype=bool)]
-    part_keys = {(f, int(c)) for f, c in zip(parts["fov_id"], parts["cell_id"].astype("int64"))}
+    part_keys = {(ns, int(c)) for ns, c in zip(parts["cell_namespace"], parts["cell_id"].astype("int64"))}
     if not part_keys <= available:
         _fail(5, "only counted cells whose compartments are available have nucleus and cytoplasm rows",
               _first(part_keys - available))
@@ -319,8 +370,8 @@ def check_identities(result: AssemblyResult) -> None:
     if (has != is_assigned).any():
         _fail(5, "every assigned molecule, and only those, has a compartment",
               tuple(keys.iloc[int(np.flatnonzero(has != is_assigned)[0])]))
-    cell_state = pd.Series([state.get((f, int(c))) for f, c in zip(assigned["fov_id"], assigned["cell_id"])],
-                           dtype=object)
+    cell_state = pd.Series([state.get((ns, int(c))) for ns, c in zip(assigned["cell_namespace"],
+                                                                     assigned["cell_id"])], dtype=object)
     value = assigned["compartment"].astype(object).reset_index(drop=True)
     allowed = ((cell_state == "available") & value.isin(("nucleus", "cytoplasm"))) | (
         (cell_state != "available") & (value == cell_state))
@@ -345,7 +396,8 @@ class AssemblyResult:
     ``fovs`` has one row per FOV of the placement; ``cells`` one row per cell of
     every input FOV, in placement table order then increasing ``cell_id``;
     ``molecules`` one row per molecule of every input FOV, in placement table
-    order then input order; ``counts`` the §2.9 long counts of the counted
+    order then input order, naming its cell by ``(cell_namespace, cell_id)``
+    (``cells`` mode); ``counts`` the §2.9 long counts of the counted
     cells (retained, §2.9 ``kept``) with ``fov_id`` and ``cell_namespace``.
     ``record`` is the ``assembly`` section of ``export.json``. See
     docs/assembly-contract.md ("Sample tables", "What assemble records").
@@ -821,6 +873,10 @@ def assemble(placement: PlacementResult, inputs: Sequence[AssemblyInput], *,
             cell_status = dict(zip(cell_ids.tolist(), zip(frame["assembly_status"], reason)))
             status = table["assignment_status"].astype(object).to_numpy()
             cell_of = table["cell_id"].astype(object).to_numpy()
+            # The cell key of a molecule's cell: a §2.9 cell_id is a label of this FOV's cell run.
+            molecules["cell_namespace"] = pd.array(
+                np.where(table["cell_id"].notna().to_numpy(dtype=bool), result.cell_namespace, None),
+                dtype="string")
         else:
             status = np.full(len(table), None, dtype=object)
             shape = np.asarray(fov.grid.shape_zyx, np.float64)

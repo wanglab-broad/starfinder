@@ -568,17 +568,19 @@ With `F` the input FOVs, `C_f` and `M_f` the cell and molecule tables of FOV `f`
    `Σ_f |C_f| = n_cells_retained + Σ_reason n_cells_excluded(reason)` and
    `Σ_f |M_f| = n_molecules_retained + Σ_reason n_molecules_excluded(reason)`; per FOV
    too.
-3. **Molecules follow their cell.** Every `assigned` or `excluded_cell` molecule has its
-   cell's assembly status (and reason `cell_not_owner` when the cell's is `not_owner`,
+3. **Molecules follow their cell.** Every `assigned` or `excluded_cell` molecule has the
+   assembly status of its cell, the row of the sample cell table keyed by the molecule's
+   own `(cell_namespace, cell_id)` (and reason `cell_not_owner` when the cell's is `not_owner`,
    `cell_duplicate_observation` when it is `duplicate_observation`, or `fov_not_placed`); every `unassigned` molecule of a placed FOV is retained exactly when
    its position's owner is its FOV, which is never the case for a `placeholder` ("Placeholder
    FOVs"); every `outside_grid` molecule is excluded.
 4. **Counted cells' counts equal the per-FOV counts.** For every counted cell
-   ("Statuses and reasons"), its rows in the sample `counts` equal its rows in its FOV's
-   §2.9 `counts`, compartment by compartment; no other cell has rows, so a retained cell
-   that §2.9 excluded has none. Hence
+   ("Statuses and reasons"), keyed by `(cell_namespace, cell_id)`, its rows in the sample
+   `counts` equal its rows in its FOV's §2.9 `counts`, compartment by compartment; no
+   other cell has rows, so a retained cell that §2.9 excluded has none. Hence
    `Σ counts(whole) = #{retained molecules with assignment_status assigned}
-   = Σ n_molecules over counted cells`, and the AnnData has one row per counted cell
+   = Σ n_molecules over counted cells`, also cell by cell, each molecule counted in the
+   cell of its own `(cell_namespace, cell_id)`, and the AnnData has one row per counted cell
    ("Sample-level AnnData").
 5. **§2.9 identities carry over.** Each counted cell keeps its §2.9 counts, so
    `whole = nucleus + cytoplasm` holds for every counted cell whose `compartments` is
@@ -629,8 +631,12 @@ increasing `cell_id`:
 **`molecules`**, one row per molecule of every input FOV, in placement table order, then
 input order: `fov_id`; every column of the §2.9 molecule table, copied (for a
 `molecules_only` sample, the `MoleculeTable` columns and `assignment_status` null);
-`sample_z`, `sample_y`, `sample_x` (float64, µm); `owner_fov_id`; `assembly_status`;
-`assembly_reason`; `assembly_flags`.
+`cell_namespace` (string, a sample with cells only: the namespace of the molecule's cell,
+so that `(cell_namespace, cell_id)` is the cell key of a row of `cells`; null for a
+molecule without a `cell_id`; `load_assembly` fills it for a table saved before the column
+existed from the `cells` row of the molecule's `fov_id` and `cell_id`, null where no single
+row holds them); `sample_z`, `sample_y`, `sample_x` (float64, µm); `owner_fov_id`;
+`assembly_status`; `assembly_reason`; `assembly_flags`.
 
 **`counts`**, the long table of {doc}`assignment-contract` with `fov_id` and
 `cell_namespace` added: one row per nonzero (counted cell, gene, compartment), with

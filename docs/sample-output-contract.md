@@ -1518,7 +1518,9 @@ recorded as `omitted` is tested by check S1 only.
   sample molecule table's rows with finite sample coordinates, column by column: `x`,
   `y`, `z` equal `sample_x`, `sample_y`, `sample_z` exactly, `fov_index_z/y/x` equal the
   §2.9 `z`, `y`, `x`, every other source column equals its source (NaN equals NaN, null
-  equals null), `cell_instance_id` follows S5, and no `sample_x/y/z` column remains; the
+  equals null), the column `cell_namespace` of the molecule's cell key among them (a
+  table saved before that column existed has none, and neither has its store),
+  `cell_instance_id` follows S5, and no `sample_x/y/z` column remains; the
   dtypes equal those the section lists. Together with `molecules_unplaced` (each where
   written), every row of the sample molecule table appears exactly once; a sample
   molecule table without rows has both omitted.

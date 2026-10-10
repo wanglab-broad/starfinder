@@ -14,7 +14,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from ._anndata import sample_anndata
-from ._assemble import AssemblyResult
+from ._assemble import AssemblyResult, fill_cell_namespace
 
 EXPORT_FILE = "export.json"
 SECTION = "assembly"
@@ -109,7 +109,10 @@ def load_assembly(folder) -> AssemblyResult:
     Every file of the section's ``files`` and every territory label file a
     FOV's entry records beside its SHA-256 (``conflicts=True`` with a saved
     assignment folder; the inputs of the assembly, read again by the label
-    export) must exist with that SHA-256.
+    export) must exist with that SHA-256. A molecule table saved without the
+    column ``cell_namespace`` (before it existed) gets it from the cell table:
+    a molecule with a ``cell_id`` takes the namespace of the cell row of its
+    ``fov_id`` and ``cell_id``, null where no single row holds them.
 
     Raises
     ------
@@ -139,5 +142,7 @@ def load_assembly(folder) -> AssemblyResult:
         if territories.get("path"):
             check_file(territories["path"], territories["sha256"], f"territory file (FOV {entry.get('fov_id')})")
     frames = {name: _read_table(folder / files[name]["path"], files[name]["dtypes"]) for name in TABLES}
+    # A molecule table saved before the column cell_namespace existed gets it from the cell table.
+    frames["molecules"] = fill_cell_namespace(frames["molecules"], frames["cells"])
     return AssemblyResult(record["sample"], frames["fovs"], frames["cells"], frames["molecules"], frames["counts"],
                           tuple(record["genes"]), record)

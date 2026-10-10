@@ -589,6 +589,11 @@ def _check_spatialdata(folder, record):
     entries = section.get("elements") or []
     assembly = load_assembly(folder)
     cells, molecules = assembly.cells, assembly.molecules
+    # The source columns of the molecule elements are those of the saved table: cell_namespace among them, unless the
+    # table was saved before the column existed and load_assembly filled it (then the store was written without it).
+    saved = ((assembly.record.get("files") or {}).get("molecules") or {}).get("dtypes") or {}
+    if "cell_namespace" in molecules and "cell_namespace" not in saved:
+        molecules = molecules.drop(columns="cell_namespace")
     placed_c, placed_m = placed_cells(cells), placed_molecules(molecules)
     counted = int((cells["assembly_status"].eq("retained") & cells["status"].eq("kept")).fillna(False).sum()) \
         if len(cells) else 0
@@ -657,6 +662,9 @@ def _check_spatialdata(folder, record):
             for column in source.columns:
                 if column in ("sample_x", "sample_y", "sample_z"):
                     continue
+                if INDEX_RENAMES.get(column, column) not in points.columns:
+                    _fail("S2", f"molecules has no column {INDEX_RENAMES.get(column, column)!r} for its source "
+                                f"{column!r}")
                 if _values(points[INDEX_RENAMES.get(column, column)]) != _values(source[column]):
                     _fail("S2", f"molecules: column {INDEX_RENAMES.get(column, column)!r} differs from its source "
                                 f"{column!r}")
@@ -862,7 +870,8 @@ def check_export(folder) -> None:
     ``spatialdata.read_zarr`` (the ``spatialdata`` extra): S1 elements,
     omissions with their reasons recomputed, ``store: null`` exactly when
     every element is omitted, no standalone OME-Zarr, the Zarr format and the
-    raster version strings; S2 points against the sample molecule table; S3
+    raster version strings; S2 points against the sample molecule table,
+    ``cell_namespace`` among its columns; S3
     tables against the sample cell table and ``sample.h5ad``, with the
     recorded dtypes; S4 the export's metadata; S5 links, circles and counts;
     S6 transforms and extents; S7 values against the OME-TIFF files; S8 the
