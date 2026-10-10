@@ -437,17 +437,19 @@ def run_export(tmp_path, config):
 @needs_anndata
 @needs_library
 def test_wf3_run_export_writes_the_export_folder_with_the_defaults(tmp_path, monkeypatch, synchronous):
-    """Without an export block the defaults run, on the constructed placement saved in stitching/<sample>/."""
+    """With an export block that sets only route: per_fov the defaults run, on the constructed placement saved in
+    stitching/<sample>/."""
     calls = []
     real = Dataset.export
     monkeypatch.setattr(Dataset, "export", lambda self, *a, **k: calls.append((a, k)) or real(self, *a, **k))
-    config = dataset_config(tmp_path, stitching=MULTIVIEW, assembly={"table_format": "csv"})
+    config = dataset_config(tmp_path, stitching=MULTIVIEW, assembly={"table_format": "csv"},
+                            export={"route": "per_fov"})
     folder, record = run_export(tmp_path, config)
     (args, kwargs), = calls
     assert args == (SAMPLE,)
-    assert kwargs == {"placement": folder.placement_dir, "assignment": "default", "config": ExportConfig(),
-                      "output_dir": folder.export_dir}
-    assert record["parts"] == {"assemble": "written", "fuse": "written", "fuse_labels": "off",
+    assert kwargs == {"placement": folder.placement_dir, "assignment": "default",
+                      "config": ExportConfig(route="per_fov"), "output_dir": folder.export_dir}
+    assert record["parts"] == {"assemble": "written", "fuse": "written", "segment": "off", "fuse_labels": "off",
                                "export_spatialdata": "off"}
     assert sorted(p.relative_to(folder.export_dir).as_posix() for p in folder.export_dir.rglob("*") if p.is_file()) \
         == ["export.json", "reference_stain_projection.ome.tif", "sample.h5ad", "tables/cells.csv",
@@ -462,7 +464,7 @@ def test_wf3_run_export_succeeds_without_multiview_stitcher(tmp_path, monkeypatc
     config = dataset_config(tmp_path, stitching=MULTIVIEW, assembly=ASSEMBLY, export={"dimensionality": "stack"})
     with pytest.warns(ExportIncompleteWarning, match="fuse could not run: extra_missing"):
         _, record = run_export(tmp_path, config)
-    assert record["parts"] == {"assemble": "written", "fuse": "not_run", "fuse_labels": "off",
+    assert record["parts"] == {"assemble": "written", "fuse": "not_run", "segment": "off", "fuse_labels": "off",
                                "export_spatialdata": "off"}
     assert record["fusion"]["reason"] == "extra_missing" and record["complete"] is False
 
@@ -476,13 +478,14 @@ def test_wf3_run_export_passes_the_duplicate_threshold(tmp_path, monkeypatch, sy
     real = Dataset.export
     monkeypatch.setattr(Dataset, "export", lambda self, *a, **k: calls.append(k) or real(self, *a, **k))
     config = dataset_config(tmp_path / "workflow", stitching=MULTIVIEW,
-                            assembly=dict(ASSEMBLY, duplicate_threshold=threshold), export={"fuse": False})
+                            assembly=dict(ASSEMBLY, duplicate_threshold=threshold),
+                            export={"route": "per_fov", "fuse": False})
     folder = export_folder(tmp_path / "workflow" / "data", dimensions="plane")
     output = folder.export_dir / "export.json"
     workflow._run_export(stub(config, inputs=[folder.placement_dir / "placement.json"], outputs=[output],
                               sample=SAMPLE))
     record = json.loads(output.read_text())
-    expected = ExportConfig(fuse=False, assembly=AssemblyConfig(duplicate_threshold=threshold))
+    expected = ExportConfig(route="per_fov", fuse=False, assembly=AssemblyConfig(duplicate_threshold=threshold))
     assert [k["config"] for k in calls] == [expected]
     assert record["assembly"]["config"]["duplicate_threshold"] == threshold
     python = export_folder(tmp_path / "python" / "data", dimensions="plane")
@@ -505,7 +508,7 @@ def test_wf3_run_export_molecules_only_loads_the_codebook(tmp_path, synchronous)
     codebook.parent.mkdir(parents=True)
     golden_codebook().table[["entry_id", "gene_id", "color_sequence"]].to_csv(codebook, index=False)
     _, record = run_export(tmp_path, config)
-    assert record["parts"] == {"assemble": "written", "fuse": "off", "fuse_labels": "off",
+    assert record["parts"] == {"assemble": "written", "fuse": "off", "segment": "off", "fuse_labels": "off",
                                "export_spatialdata": "off"}
     assert record["assembly"]["mode"] == "molecules_only"
     assert record["assembly"]["genes"] == list(golden_codebook().genes)

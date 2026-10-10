@@ -208,7 +208,7 @@ def test_the_moved_layout_gives_the_default_layouts_tables_and_image(scene_layou
                                           config=EXPORT, output_dir=tmp_path / key).record
             check_export(tmp_path / key)
     assert records["moved"]["parts"] == records["default"]["parts"] == {
-        "assemble": "written", "fuse": "written", "fuse_labels": "off", "export_spatialdata": "off"}
+        "assemble": "written", "fuse": "written", "segment": "off", "fuse_labels": "off", "export_spatialdata": "off"}
     compare_tables(load_assembly(tmp_path / "default"), load_assembly(tmp_path / "moved"))
     names = [o["path"] for o in records["moved"]["fusion"]["outputs"]]
     assert names == [o["path"] for o in records["default"]["fusion"]["outputs"]] == [

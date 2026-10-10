@@ -18,9 +18,11 @@ from typing import Any
 EXPORT_FILE = "export.json"
 FORMAT_VERSION = 1
 STAGE = "export"
-#: The parts in the order Dataset.export calls them, with the section each writes.
-PARTS = ("assemble", "fuse", "fuse_labels", "export_spatialdata")
-SECTIONS = {"assemble": "assembly", "fuse": "fusion", "fuse_labels": "labels", "export_spatialdata": "spatialdata"}
+#: The parts in the order Dataset.export calls them, with the section each writes. ``segment`` is the part of the
+#: route after fusion (docs/sample-segmentation-contract.md, "The entry"); on the route per FOV it is ``off``.
+PARTS = ("assemble", "fuse", "segment", "fuse_labels", "export_spatialdata")
+SECTIONS = {"assemble": "assembly", "fuse": "fusion", "segment": "segmentation", "fuse_labels": "labels",
+            "export_spatialdata": "spatialdata"}
 STATUSES = ("written", "reused", "off", "empty", "not_run", "failed")
 #: Statuses of a part that list no file.
 NO_FILES = ("off", "not_run", "empty")
@@ -245,7 +247,8 @@ class ExportRecord:
     ``format_version``, ``stage``, ``sample``, ``frame_id``, ``complete``,
     ``parts`` (each part's status: ``written``, ``reused``, ``off``,
     ``empty``, ``not_run`` or ``failed``), ``viewer_qualification`` and one
-    section per part (``assembly``, ``fusion``, ``labels``, ``spatialdata``).
+    section per part (``assembly``, ``fusion``, ``segmentation``, ``labels``,
+    ``spatialdata``).
     """
 
     folder: Path

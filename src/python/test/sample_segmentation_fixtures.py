@@ -1,0 +1,301 @@
+"""Fixtures of docs/sample-segmentation-validation.md ("Fixtures"), rebuilt in the test.
+
+``fused_pair``: the fixture of W-401's grounding calls (``scripts/grounding_calls.py``, read,
+not copied), two FOVs of 3 × 24 × 24 voxels at spacing (1.0, 0.5, 0.5) µm and origins (0, 0,
+0) and (0, 0, 8) µm, cut from one scene of 24 × 40 pixels with three disc cells (cell 1
+across the seam, cells 2 and 3 inside one FOV each) and smaller disc nuclei; the stains
+``dapi`` (nuclei) and ``flamingo`` (cells), each FOV the scene cut at its origin and
+repeated over its three planes; the molecules of the grounding calls. ``fused_quad``: four
+FOVs of 3 × 40 × 40 voxels at the origins of the page (fractional offsets, a four-FOV
+overlap), cut from one scene of 72 × 72 pixels: one cell at the crossing of the four FOVs,
+two across a side seam, one cut by the sample's outer border, one wholly inside each FOV,
+four molecules per cell (the border cell's second beyond the union grid, within the far
+voxel of FOV 4's footprint), each seen by every FOV whose footprint holds it; two cell IDs
+are at and above 2^31. A FOV pixel takes the scene pixel nearest its centre, as
+``truth_import`` samples the scene on the segmentation grid.
+
+:func:`write_scene` writes a scene as a dataset (the saved placement, ``images/<stain>/``
+ZYX TIFFs with their axes, ``images/ref_merged/`` with the grid, ``signal/`` goodSpots
+tables, the codebook); :func:`fuse_scene` calls ``fuse`` alone on it at a factor ``k``.
+:func:`truth_import`, :func:`seeded_runs`, :func:`truth_runs`, :func:`length_configs` and
+:func:`route_config` follow the rows of the same names. Nothing is read from a run
+directory.
+"""
+import json
+from dataclasses import dataclass, field
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import tifffile
+
+from starfinder.barcode import Codebook
+from starfinder.dataset import Dataset
+from starfinder.image import ImageMetadata
+from starfinder.io import save_volume
+from starfinder.sample_output import (ExportConfig, FusionConfig, FusionInput, SampleSegmentationConfig,
+                                      SampleSegmentationRun, fuse)
+from starfinder.segmentation import (CellposeConfig, LabelImportConfig, ReferenceGrid, SeededWatershedConfig,
+                                     StarDistConfig)
+from starfinder.stitching import approve_placement, placement_from_table, positions_from_table, save_placement
+
+DS, SAMPLE = "data", "s1"
+GENES = ("A", "B")
+SPACING = (1.0, 0.5, 0.5)
+IDENTITY = ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))
+STAINS = ("dapi", "flamingo")
+IMAGES = tuple(f"{name}=file:images/{name}/{{fov_id}}.tif" for name in STAINS)
+BIG = 2 ** 31
+
+
+@dataclass
+class Scene:
+    """A hand-built scene: FOV shape and origins, the scene's cell and nucleus labels (0.5 µm pixels from 0) and
+    the molecules of each FOV, ``((z, y, x) index on the FOV grid, gene)``."""
+    name: str
+    shape: tuple
+    origins: dict
+    cells: np.ndarray
+    nuclei: np.ndarray
+    molecules: dict
+
+    @property
+    def ids(self):
+        return list(self.origins)
+
+    def grid(self):
+        return ReferenceGrid(self.shape, ImageMetadata("fov", SPACING, (0.0, 0.0, 0.0), IDENTITY, "µm"), "declared")
+
+    def stain(self, name):
+        if name == "dapi":
+            return np.where(self.nuclei > 0, 300, 5).astype(np.uint16)
+        return np.where(self.cells > 0, 200, 10).astype(np.uint16)
+
+    def cut(self, scene2d, fov):
+        """The FOV's ZYX image: at each pixel the scene pixel nearest its centre, repeated over the planes."""
+        origin = self.origins[fov]
+        index = [scene_index(origin[a] + np.arange(self.shape[a]) * SPACING[a], scene2d.shape[a - 1])
+                 for a in (1, 2)]
+        tile = np.where((index[0][:, None] >= 0) & (index[1][None, :] >= 0),
+                        scene2d[index[0].clip(0)[:, None], index[1].clip(0)[None, :]], 0).astype(scene2d.dtype)
+        return np.repeat(tile[np.newaxis], self.shape[0], axis=0)
+
+
+def scene_index(position_um, size):
+    """The scene pixel nearest a position (µm), ``floor(p / 0.5 + 1/2)``, or −1 outside the scene."""
+    index = np.floor(np.asarray(position_um, np.float64) / SPACING[1] + 0.5).astype(np.int64)
+    return np.where((index >= 0) & (index < size), index, -1)
+
+
+def _discs(shape, cells, shrink=0):
+    labels = np.zeros(shape, np.uint32)
+    yy, xx = np.indices(shape)
+    for cell, ((cy, cx), radius) in cells.items():
+        labels[(yy - cy) ** 2 + (xx - cx) ** 2 <= max(2, radius - shrink) ** 2] = cell
+    return labels
+
+
+# --- fused_pair -----------------------------------------------------------------------------------------------
+
+PAIR_CELLS = {1: ((12, 20), 5), 2: ((6, 6), 3), 3: ((17, 33), 3)}
+PAIR_MOLECULES = {
+    # FOV1: x 8.5 µm in cell 1 (owned by FOV1); x 3 µm in cell 2; x 11 µm in cell 1 but owned by FOV2.
+    "FOV1": [((1, 12, 17), "A"), ((1, 6, 6), "B"), ((1, 12, 22), "A")],
+    # FOV2 (origin x 8 µm): x 11 µm in cell 1 (the same molecule as FOV1's third); x 9.5 µm (owned by FOV1);
+    # x 16.5 µm in cell 3.
+    "FOV2": [((1, 12, 6), "A"), ((1, 12, 3), "B"), ((1, 17, 17), "B")]}
+
+
+def fused_pair() -> Scene:
+    shape = (24, 40)
+    return Scene("fused_pair", (3, 24, 24), {"FOV1": (0.0, 0.0, 0.0), "FOV2": (0.0, 0.0, 8.0)},
+                 _discs(shape, PAIR_CELLS), _discs(shape, PAIR_CELLS, shrink=2), PAIR_MOLECULES)
+
+
+# --- fused_quad -----------------------------------------------------------------------------------------------
+
+#: cell → ((centre y, x) in scene pixels, radius in pixels): the crossing (2^31), a cell across the FOV1 | FOV3
+#: seam and one across the FOV1 | FOV2 seam, the border cell (2^32 − 1), one inside each FOV.
+QUAD_CELLS = {BIG: ((35, 35), 5), 2: ((14, 35), 4), 3: ((35, 14), 4), 2 ** 32 - 1: ((67, 55), 5),
+              11: ((8, 8), 4), 12: ((58, 10), 4), 13: ((10, 58), 4), 14: ((54, 54), 4)}
+QUAD_ORIGINS = {"FOV1": (0.0, 0.0, 0.0), "FOV2": (0.0, 15.25, 0.25), "FOV3": (0.0, 0.25, 15.25),
+                "FOV4": (0.0, 15.25, 15.25)}
+#: The four molecules of a cell, offsets (y, x) in µm from its centre; the border cell's second lies at y 34.9 µm,
+#: beyond the union grid's last voxel (34.75 µm) and inside FOV4's footprint (35.0 µm).
+QUAD_OFFSETS = ((-1.0, 0.0), (1.0, 0.0), (0.0, -1.0), (0.0, 1.0))
+QUAD_BORDER_OFFSETS = ((-1.0, 0.0), (1.4, 0.0), (0.0, -1.0), (0.0, 1.0))
+
+
+def quad_molecules(shape=(3, 40, 40), origins=QUAD_ORIGINS, cells=QUAD_CELLS):
+    """Per FOV ``((z, y, x) index, gene)`` of every cell molecule whose position the FOV's footprint holds."""
+    out = {fov: [] for fov in origins}
+    for n, (cell, ((cy, cx), _)) in enumerate(cells.items()):
+        offsets = QUAD_BORDER_OFFSETS if cell == 2 ** 32 - 1 else QUAD_OFFSETS
+        for m, (dy, dx) in enumerate(offsets):
+            y, x = cy * SPACING[1] + dy, cx * SPACING[2] + dx
+            for fov, origin in origins.items():
+                iy, ix = (y - origin[1]) / SPACING[1], (x - origin[2]) / SPACING[2]
+                if -0.5 <= iy < shape[1] - 0.5 and -0.5 <= ix < shape[2] - 0.5:
+                    out[fov].append(((1.0, iy, ix), GENES[(n + m) % 2]))
+    return out
+
+
+def fused_quad() -> Scene:
+    shape = (72, 72)
+    return Scene("fused_quad", (3, 40, 40), dict(QUAD_ORIGINS), _discs(shape, QUAD_CELLS),
+                 _discs(shape, QUAD_CELLS, shrink=2), quad_molecules())
+
+
+SCENES = {"fused_pair": fused_pair, "fused_quad": fused_quad}
+
+
+# --- The scene as a dataset -----------------------------------------------------------------------------------
+
+@dataclass
+class SceneFolder:
+    """A scene written as a dataset: the Dataset, its approved placement and FOV grids."""
+    scene: Scene
+    dataset: Dataset
+    placement: object
+    grids: dict
+    extra: dict = field(default_factory=dict)
+
+    @property
+    def root(self) -> Path:
+        return Path(self.dataset.output_root)
+
+    @property
+    def placement_dir(self) -> Path:
+        return self.root / "stitching" / SAMPLE
+
+    @property
+    def export_dir(self) -> Path:
+        return self.root / "export" / SAMPLE
+
+    def image_path(self, name, fov) -> Path:
+        return self.root / "images" / name / f"{fov}.tif"
+
+
+def codebook():
+    return Codebook(pd.DataFrame({"entry_id": ["111", "112"], "gene_id": list(GENES),
+                                  "color_sequence": ["111", "112"]}),
+                    round_labels=("round1", "round2", "round3"), channel_labels=("ch00", "ch01", "ch02", "ch03"))
+
+
+def scene_placement(scene):
+    table = positions_from_table(pd.DataFrame({"fov_id": scene.ids,
+                                               "nominal_z": [o[0] for o in scene.origins.values()],
+                                               "nominal_y": [o[1] for o in scene.origins.values()],
+                                               "nominal_x": [o[2] for o in scene.origins.values()]}))
+    result = placement_from_table(table, {f: scene.grid() for f in scene.ids}, sample=SAMPLE,
+                                  origins=dict(scene.origins))
+    return approve_placement(result, reviewer="test", note=scene.name)
+
+
+def write_scene(tmp_path, scene) -> SceneFolder:
+    """The dataset of a scene under ``tmp_path``: placement, stains, reference images and molecule tables."""
+    dataset = Dataset(tmp_path / "input", tmp_path / "output", DS, SAMPLE, "output", codebook=codebook())
+    root = Path(dataset.output_root)
+    placement = scene_placement(scene)
+    save_placement(placement, root / "stitching" / SAMPLE)
+    grids = {f: scene.grid() for f in scene.ids}
+    for fov in scene.ids:
+        save_volume(scene.cut(scene.stain("dapi"), fov), root / "images" / "ref_merged" / f"{fov}.tif",
+                    metadata=grids[fov].metadata)
+        for name in STAINS:
+            path = root / "images" / name / f"{fov}.tif"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tifffile.imwrite(path, scene.cut(scene.stain(name), fov), photometric="minisblack",
+                             metadata={"axes": "ZYX"})
+        rows = scene.molecules[fov]
+        csv = root / "signal" / f"{fov}_goodSpots.csv"
+        csv.parent.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame({"x": [p[2] + 1 for p, _ in rows], "y": [p[1] + 1 for p, _ in rows],
+                      "z": [p[0] + 1 for p, _ in rows], "gene": [g for _, g in rows]}).to_csv(csv, index=False)
+    return SceneFolder(scene, dataset, placement, grids)
+
+
+def fusion_config(k, **changes):
+    return FusionConfig(images=IMAGES, scale_yx=1.0 / k, **changes)
+
+
+def fuse_scene(folder, k=1, **changes):
+    """``fuse`` called alone on the scene's stains, as projections at ``scale_yx = 1/k``."""
+    inputs = [FusionInput(f, folder.grids[f], {n: folder.image_path(n, f) for n in STAINS}) for f in folder.scene.ids]
+    return fuse(folder.placement, inputs, config=fusion_config(k, **changes), output_dir=folder.export_dir)
+
+
+def segmentation_grid(export_dir, image="dapi") -> ReferenceGrid:
+    """The grid of a fused projection as the fusion section records it, frame ``sample:<sample>``."""
+    record = json.loads((Path(export_dir) / "export.json").read_text())
+    entry = next(o for o in record["fusion"]["outputs"] if o["image"] == image and o["format"] == "ome_tiff"
+                 and o["dimensionality"] == "projection")
+    metadata = ImageMetadata(f"sample:{record['sample']}", tuple(entry["spacing_zyx"]), tuple(entry["origin_zyx"]),
+                             IDENTITY, "µm")
+    return ReferenceGrid(tuple(entry["shape_zyx"]), metadata, "declared")
+
+
+# --- truth_import, seeded_runs, length_configs, route_configs ---------------------------------------------------
+
+def truth_labels(scene, grid, target="cell") -> np.ndarray:
+    """The scene's labels on a grid: each pixel the scene label nearest its centre (0 outside the scene)."""
+    labels = scene.cells if target == "cell" else scene.nuclei
+    n_y, n_x = grid.shape_zyx[1:]
+    (_, sy, sx), (_, oy, ox) = grid.metadata.spacing_zyx, grid.metadata.origin_zyx
+    iy = scene_index(oy + np.arange(n_y) * sy, labels.shape[0])
+    ix = scene_index(ox + np.arange(n_x) * sx, labels.shape[1])
+    out = np.where((iy[:, None] >= 0) & (ix[None, :] >= 0), labels[iy.clip(0)[:, None], ix.clip(0)[None, :]], 0)
+    return np.ascontiguousarray(out[np.newaxis].astype(np.uint32))
+
+
+def truth_import(folder, grid, target="cell", *, path=None, labels=None) -> Path:
+    """The truth labels on the grid written as a uint32 OME-TIFF with the grid's metadata, for an import run."""
+    from starfinder.sample_output._tiff import write_ome_tiff
+    path = Path(path or folder.root / "truth" / f"{target}.ome.tif")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    labels = truth_labels(folder.scene, grid, target) if labels is None else labels
+    write_ome_tiff(path, labels[0], metadata=grid.metadata, annotation={"truth": target})
+    return path
+
+
+def truth_runs(cells_path, nuclei_path, **changes) -> SampleSegmentationConfig:
+    """Both runs imported (``relabel: false``), so that ``cell_id`` is the truth ID."""
+    runs = (SampleSegmentationRun("nucleus", "nucleus", (), LabelImportConfig(str(nuclei_path), "nucleus")),
+            SampleSegmentationRun("cell", "cell", (), LabelImportConfig(str(cells_path), "cell")))
+    return SampleSegmentationConfig(runs, "cell", "nucleus", **changes)
+
+
+def seeded_runs(nuclei_path, **changes) -> SampleSegmentationConfig:
+    """``nucleus`` imported from the truth nuclei; ``cell`` a seeded watershed (sigma 1 µm) on the fused flamingo."""
+    runs = (SampleSegmentationRun("nucleus", "nucleus", (), LabelImportConfig(str(nuclei_path), "nucleus")),
+            SampleSegmentationRun("cell", "cell", (("cytoplasm", "flamingo"),), SeededWatershedConfig(sigma_um=1.0),
+                                  seeds="nucleus"))
+    return SampleSegmentationConfig(runs, "cell", "nucleus", **changes)
+
+
+def model_files(tmp_path):
+    """A Cellpose model file and a StarDist model folder written by the test (never loaded)."""
+    cellpose = Path(tmp_path) / "models" / "cpsam_test"
+    cellpose.parent.mkdir(parents=True, exist_ok=True)
+    cellpose.write_bytes(b"not a model")
+    stardist = Path(tmp_path) / "models" / "stardist_test"
+    stardist.mkdir(parents=True, exist_ok=True)
+    for name in ("config.json", "thresholds.json", "weights_best.h5"):
+        (stardist / name).write_text("{}")
+    return cellpose, stardist
+
+
+def length_configs(tmp_path) -> dict:
+    cellpose, stardist = model_files(tmp_path)
+    return {"cellpose": CellposeConfig(diameter=240, min_size=15, model_path=str(cellpose)),
+            "stardist": StarDistConfig(scale=0.25, model_path=str(stardist)),
+            "stardist_blocks": StarDistConfig(scale=1.0, block_size=(1, 256, 256), min_overlap=(0, 64, 64),
+                                              context=(0, 52, 52), model_path=str(stardist)),
+            "seeded_watershed": SeededWatershedConfig(sigma_um=1.5)}
+
+
+def route_config(*, route=None, dimensionality="projection", projection="max", segment=True, fuse=True,
+                 assemble=True, segmentation=None, k=1) -> ExportConfig:
+    """One ``route_configs`` combination: the scene's stains fused at ``1/k``, the route and the segment settings."""
+    return ExportConfig(assemble=assemble, fuse=fuse, route=route, segment=segment, segmentation=segmentation,
+                        fusion=fusion_config(k, dimensionality=dimensionality, projection=projection))

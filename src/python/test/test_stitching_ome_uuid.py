@@ -97,7 +97,8 @@ from test.assembly_fixtures import SAMPLE
 from test.fusion_fixtures import export_folder
 folder = export_folder(Path(sys.argv[2]))
 with dask.config.set(scheduler="synchronous"):
-    folder.dataset.export(SAMPLE, placement=folder.placement_dir, config=ExportConfig(fuse_labels=True),
+    folder.dataset.export(SAMPLE, placement=folder.placement_dir,
+                          config=ExportConfig(route="per_fov", fuse_labels=True),
                           output_dir=folder.export_dir)
 print(json.dumps({"root": str(folder.root), "files": {
     p.relative_to(folder.root).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()

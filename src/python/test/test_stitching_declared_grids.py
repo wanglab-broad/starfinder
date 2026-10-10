@@ -187,7 +187,7 @@ def test_declared_grid_export_equals_the_stored_one(scene_folders, scene_exports
     statuses = b.molecules["assembly_reason"].value_counts(dropna=False).to_dict()
     assert b.molecules["assembly_status"].eq("retained").any() and statuses.get("not_owner", 0) > 0
     for record in scene_exports.values():
-        assert record["parts"] == {"assemble": "written", "fuse": "written", "fuse_labels": "off",
+        assert record["parts"] == {"assemble": "written", "fuse": "written", "segment": "off", "fuse_labels": "off",
                                    "export_spatialdata": "off"}
     outputs = [o["path"] for o in scene_exports["stored"]["fusion"]["outputs"]]
     assert outputs == [o["path"] for o in scene_exports["plain"]["fusion"]["outputs"]] == [
@@ -239,7 +239,8 @@ def test_without_metadata_and_voxel_sizes_the_export_raises(scene_folders):
         assert "stores no calibration" in str(error.value) and "Dataset fields" in str(error.value)
         with pytest.raises(ValueError, match="stores no calibration"):
             dataset.export(SAMPLE, placement=plain.output_root / "stitching" / SAMPLE,
-                           config=ExportConfig(assemble=False, fusion=FusionConfig(images=("reference_merged",))),
+                           config=ExportConfig(route="per_fov", assemble=False,
+                                               fusion=FusionConfig(images=("reference_merged",))),
                            output_dir=export_dir)
     assert not export_dir.exists()
 

@@ -68,7 +68,8 @@ def folder(tmp_path):
 
 
 def export(f, config=None, **kwargs):
-    return f.dataset.export(SAMPLE, placement=kwargs.pop("placement", f.placement_dir), config=config,
+    return f.dataset.export(SAMPLE, placement=kwargs.pop("placement", f.placement_dir),
+                            config=ExportConfig(route="per_fov") if config is None else config,
                             output_dir=kwargs.pop("output_dir", f.export_dir), **kwargs)
 
 
@@ -97,7 +98,7 @@ def test_default_export(folder, monkeypatch):
     assert not (folder.root / "images" / "fused").exists()
     exported = record_of(folder)
     assert exported == dict(record.record) and record.complete and exported["complete"] is True
-    assert exported["parts"] == {"assemble": "written", "fuse": "written", "fuse_labels": "off",
+    assert exported["parts"] == {"assemble": "written", "fuse": "written", "segment": "off", "fuse_labels": "off",
                                  "export_spatialdata": "off"}
     assert exported["labels"] == {"status": "off"} and exported["spatialdata"] == {"status": "off"}
     entry = exported["fusion"]["outputs"][0]
@@ -113,7 +114,8 @@ def test_default_export(folder, monkeypatch):
 
 @needs_library
 def test_two_image_names(folder):
-    record = export(folder, ExportConfig(fusion=FusionConfig(images=("reference_stain", "reference_merged"))))
+    record = export(folder, ExportConfig(route="per_fov",
+                                         fusion=FusionConfig(images=("reference_stain", "reference_merged"))))
     outputs = record.record["fusion"]["outputs"]
     assert [o["path"] for o in outputs] == ["reference_stain_projection.ome.tif",
                                             "reference_merged_projection.ome.tif"]
@@ -160,7 +162,7 @@ def test_assemble_part(folder, monkeypatch):
         return labels, metadata
 
     monkeypatch.setattr(assignment_persist, "read_labels", tracked)
-    record = export(folder, ExportConfig(fuse=False))
+    record = export(folder, ExportConfig(route="per_fov", fuse=False))
     assert calls[0] >= 2 * 3 and peak[0] <= 2                       # each territory read, at most two at a time
     monkeypatch.setattr(assignment_persist, "read_labels", original)
     placement = load_placement(folder.placement_dir)
@@ -176,17 +178,17 @@ def test_assemble_part(folder, monkeypatch):
     assert record.parts["assemble"] == "written" and record.record["fusion"] == {"status": "off"}
     check_export(folder.export_dir)
     # A rerun with assemble off reuses the saved assembly, checking every SHA-256.
-    record = export(folder, ExportConfig(assemble=False, fuse=False))
+    record = export(folder, ExportConfig(route="per_fov", assemble=False, fuse=False))
     assert record.parts["assemble"] == "reused" and sorted(listing(folder.export_dir)) == TABLE_FILES
     check_export(folder.export_dir)
     table = folder.export_dir / "tables" / "cells.csv"
     table.write_text(table.read_text() + "\n")
     with pytest.raises(ValueError, match="cells.csv"):
-        export(folder, ExportConfig(assemble=False, fuse=False))
+        export(folder, ExportConfig(route="per_fov", assemble=False, fuse=False))
 
 
 def test_assemble_off_without_a_saved_assembly(folder):
-    record = export(folder, ExportConfig(assemble=False, fuse=False))
+    record = export(folder, ExportConfig(route="per_fov", assemble=False, fuse=False))
     assert record.parts["assemble"] == "off" and record.record["assembly"] == {"status": "off"}
     assert sorted(listing(folder.export_dir)) == ["export.json"]
     check_export(folder.export_dir)
@@ -198,17 +200,17 @@ def test_assemble_part_input_files(folder):
     original = target.read_bytes()
     target.unlink()
     with pytest.raises(ValueError, match=f"{re.escape(str(target))}.*missing.*recorded SHA-256"):
-        export(folder, ExportConfig(fuse=False))
+        export(folder, ExportConfig(route="per_fov", fuse=False))
     labels = tifffile.imread(folder.assignment_dir("Position001") / "cell_labels.tif")
     save_volume(labels.astype(np.uint32), target)
     with pytest.raises(ValueError, match=f"{re.escape(str(target))} has SHA-256 [0-9a-f]{{64}}, the record "
                                          "[0-9a-f]{64}"):
-        export(folder, ExportConfig(fuse=False))
+        export(folder, ExportConfig(route="per_fov", fuse=False))
     target.write_bytes(original)
     table = folder.assignment_dir("Position003") / "cells.csv"
     table.write_text(table.read_text().replace("\n", "\n", 1) + "\n")
     with pytest.raises(ValueError, match=re.escape(str(table))):
-        export(folder, ExportConfig(fuse=False))
+        export(folder, ExportConfig(route="per_fov", fuse=False))
     assert not folder.export_dir.exists()
 
 
@@ -265,7 +267,7 @@ def test_molecule_tables_are_the_goodspots_rows(folder):
         write_assignment(folder.assignment_dir(fov, "from_csv"), with_record(result, name="from_csv"),
                          metadata=grid.metadata)
     other = folder.root / "export" / "from_csv"
-    export(folder, ExportConfig(fuse=False), assignment="from_csv", output_dir=other)
+    export(folder, ExportConfig(route="per_fov", fuse=False), assignment="from_csv", output_dir=other)
     assigned = load_assembly(other).molecules
     keys = set(zip(molecules.spot_namespace, molecules.spot_id))
     assert keys == set(zip(assigned.spot_namespace, assigned.spot_id)) and len(keys) == len(molecules)
@@ -304,16 +306,17 @@ def test_checks_before_writing(folder, monkeypatch, tmp_path):
               "'checkpoint' extra")
     monkeypatch.setattr(builtins, "__import__", real_import)
     # 4. Assembly: assemble off with a later part that needs it and no saved assembly.
-    unchanged(folder, lambda: export(folder, ExportConfig(assemble=False, fuse_labels=True)), ValueError,
+    unchanged(folder, lambda: export(folder, ExportConfig(route="per_fov", assemble=False, fuse_labels=True)),
+              ValueError,
               "holds no saved assembly")
 
 
 def test_check_saved_assembly_of_another_placement(folder):
-    export(folder, ExportConfig(fuse=False))
+    export(folder, ExportConfig(route="per_fov", fuse=False))
     moved = dict(golden_origins(), Position003=(-0.6, -0.3, 55.5))
     other = golden_placement(origins=moved)
     save_placement(other, folder.root / "other")
-    unchanged(folder, lambda: export(folder, ExportConfig(assemble=False, fuse_labels=True),
+    unchanged(folder, lambda: export(folder, ExportConfig(route="per_fov", assemble=False, fuse_labels=True),
                                      placement=folder.root / "other"), ValueError, "another placement")
     case = load_placement(folder.root / "other")
     saved = load_assembly(folder.export_dir)
@@ -335,7 +338,7 @@ def test_check_fusion_inputs(folder):
     save_volume(np.zeros(grid.shape_zyx, np.uint8), folder.root / "images" / "ref_merged" / "Position002.tif",
                 metadata=other)
     unchanged(folder, lambda: export(folder), IncompatibleGeometryError, "Position002")
-    unchanged(folder, lambda: export(folder, ExportConfig(assemble=False)), IncompatibleGeometryError,
+    unchanged(folder, lambda: export(folder, ExportConfig(route="per_fov", assemble=False)), IncompatibleGeometryError,
               "Position002.*not the grid the placement recorded")
 
 
@@ -343,7 +346,7 @@ def test_check_file_source_shape(folder):
     for fov in ("Position001", "Position002", "Position003"):
         save_volume(np.ones((8, 48, 64), np.uint8), folder.root / "extra" / f"{fov}.tif")
     save_volume(np.ones((8, 48, 60), np.uint8), folder.root / "extra" / "Position003.tif")
-    config = ExportConfig(fusion=FusionConfig(images=("dapi=file:extra/{fov_id}.tif",)))
+    config = ExportConfig(route="per_fov", fusion=FusionConfig(images=("dapi=file:extra/{fov_id}.tif",)))
     unchanged(folder, lambda: export(folder, config), IncompatibleGeometryError,
               "source image 'dapi' of FOV Position003.*\\(8, 48, 60\\)")
 
@@ -373,7 +376,7 @@ def test_fuse_without_the_extra(folder, monkeypatch):
         record = export(folder)
     assert len([w for w in caught if w.category is ExportIncompleteWarning]) == 1
     exported = record.record
-    assert exported["parts"] == {"assemble": "written", "fuse": "not_run", "fuse_labels": "off",
+    assert exported["parts"] == {"assemble": "written", "fuse": "not_run", "segment": "off", "fuse_labels": "off",
                                  "export_spatialdata": "off"}
     assert exported["complete"] is False and not record.complete
     fusion = exported["fusion"]
@@ -386,7 +389,7 @@ def test_fuse_without_the_extra(folder, monkeypatch):
 def test_fuse_with_a_source_image_missing(folder):
     """(b) one FOV without its reference_stain: fuse is not_run (source_image_missing), no image for any name."""
     folder.stain_path("Position002").unlink()
-    config = ExportConfig(fusion=FusionConfig(images=("reference_stain", "reference_merged")))
+    config = ExportConfig(route="per_fov", fusion=FusionConfig(images=("reference_stain", "reference_merged")))
     with pytest.warns(ExportIncompleteWarning, match="source_image_missing \\(Position002 reference_stain\\)"):
         record = export(folder, config)
     fusion = record.record["fusion"]
@@ -406,7 +409,7 @@ def test_folder_equals_its_record(folder, monkeypatch):
     check_export(folder.export_dir)
     unrelated = folder.export_dir / "notes.txt"
     unrelated.write_text("kept")
-    export(folder, ExportConfig(fusion=FusionConfig(dimensionality="projection")))
+    export(folder, ExportConfig(route="per_fov", fusion=FusionConfig(dimensionality="projection")))
     assert not (folder.export_dir / "reference_stain_stack.ome.tif").exists() and unrelated.read_text() == "kept"
     with pytest.raises(ValueError, match="R2: the file notes.txt is not listed"):
         check_export(folder.export_dir)
@@ -438,7 +441,7 @@ def test_interrupted_export(folder, monkeypatch):
         return real(*args, **kwargs)
 
     monkeypatch.setattr(tiff_module, "write_ome_tiff", interrupted)
-    config = ExportConfig(fusion=FusionConfig(images=("reference_stain", "reference_merged")))
+    config = ExportConfig(route="per_fov", fusion=FusionConfig(images=("reference_stain", "reference_merged")))
     with pytest.raises(RuntimeError, match="interrupted by the test"):
         export(folder, config)
     exported = record_of(folder)
@@ -454,7 +457,7 @@ def test_interrupted_export(folder, monkeypatch):
 @needs_library
 def test_assemble_off_and_fuse_on(folder):
     """With the assemble part off and no saved assembly: no table, no sample.h5ad, R3 holds; fuse runs alone."""
-    record = export(folder, ExportConfig(assemble=False))
+    record = export(folder, ExportConfig(route="per_fov", assemble=False))
     assert record.parts["assemble"] == "off" and record.parts["fuse"] == "written"
     assert record.record["fusion"]["assembly_sha256"] is None
     assert sorted(listing(folder.export_dir)) == ["export.json", "reference_stain_projection.ome.tif"]

@@ -532,7 +532,10 @@ class Dataset:
         reads only saved files. After the checks before anything is written
         (the configs; the placement's review; the ``anndata`` extra, and
         ``checkpoint`` for Parquet tables; the assembly; the fusion inputs; the
-        label IDs) it removes the files the previous ``export.json`` lists for
+        label IDs; the route, check 7 of docs/sample-segmentation-contract.md:
+        ``config.route``, or by default ``after_fusion`` for
+        ``dimensionality: projection`` and ``per_fov`` for ``stack`` and
+        ``both``) it removes the files the previous ``export.json`` lists for
         each part that runs or is off, then calls the parts in order, writing
         ``export.json`` after each: ``assemble`` on one
         :class:`~starfinder.assembly.AssemblyInput` per FOV of the placement
@@ -560,7 +563,11 @@ class Dataset:
         cannot run is recorded ``not_run`` with
         :class:`~starfinder.sample_output.ExportIncompleteWarning`; any other
         error inside the SpatialData part records it ``failed`` and is raised
-        again.
+        again. The part ``segment`` of the route after fusion is recorded
+        ``off`` on the route per FOV (reason ``route_per_fov``, or ``no_cells``
+        with ``assignment=None``); the route after fusion with an assignment
+        is not run by this version: it is refused after check 7, before
+        anything is written (``segment_fused`` can be called alone).
 
         Parameters
         ----------
@@ -590,6 +597,12 @@ class Dataset:
             anything is written"), in their order, with the folder unchanged;
             a reference image without stored metadata while ``voxel_size_xy``
             or ``voxel_size_z`` is None raises ``ValueError`` naming them.
+        MissingModelError, ModelHashMismatchError
+            Check 7: a model of ``config.segmentation`` is missing or has
+            another SHA-256, with the folder unchanged.
+        NotImplementedError
+            A resolved route ``after_fusion`` with an assignment, after check
+            7 and before anything is written.
         """
         from starfinder.sample_output import ExportConfig
         from starfinder.sample_output._export import export_sample

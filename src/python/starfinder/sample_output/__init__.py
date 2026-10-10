@@ -19,18 +19,31 @@ in the entry). :func:`export_spatialdata` writes the SpatialData store ``sample.
 (:class:`SpatialDataExportConfig`; off by default in the entry): the sample tables as
 points, shapes and tables, and each fused and label image once, read from its OME-TIFF,
 with one level; :func:`lookup_source` traces a molecule or cell back to its FOV's §2.9
-assignment. :func:`check_export` checks a folder against its record.
+assignment. :func:`check_export` checks a folder against its record. :func:`segment_fused`
+segments the fused projection of a sample on the route after fusion (:data:`ROUTES`,
+:class:`SampleSegmentationConfig`, :class:`SampleSegmentationRun`) and writes one label
+image per run and the ``segmentation`` section (:class:`SampleSegmentation`,
+:func:`load_sample_segmentation`); see docs/sample-segmentation-contract.md.
 Importing this module imports neither multiview-stitcher, zarr nor spatialdata. See
 docs/sample-output-contract.md.
 """
 from ._check import check_export
-from ._config import ExportConfig, FusionConfig, LabelConfig, SpatialDataExportConfig
+from ._config import ROUTES as _ROUTES
+from ._config import (ExportConfig, FusionConfig, LabelConfig, SampleSegmentationConfig, SampleSegmentationRun,
+                      SpatialDataExportConfig)
 from ._fuse import FusionInput, FusionRecord, fuse
 from ._grid import FusedGrid, fused_grid
 from ._labels import LabelRecord, fuse_labels
 from ._record import ExportIncompleteWarning, ExportRecord
+from ._segment import SampleSegmentation, load_sample_segmentation, segment_fused
 from ._spatialdata import export_spatialdata, lookup_source
+
+#: The values of ``ExportConfig.route``: ``per_fov`` (segmentation per FOV followed by assembly) and
+#: ``after_fusion`` (segmentation of the fused projection); None takes the default by ``dimensionality``.
+ROUTES = _ROUTES
 
 __all__ = ["ExportConfig", "FusionConfig", "LabelConfig", "SpatialDataExportConfig", "fuse", "fused_grid",
            "FusionInput", "FusedGrid", "FusionRecord", "fuse_labels", "LabelRecord", "ExportRecord",
-           "ExportIncompleteWarning", "export_spatialdata", "lookup_source", "check_export"]
+           "ExportIncompleteWarning", "export_spatialdata", "lookup_source", "check_export", "ROUTES",
+           "SampleSegmentationConfig", "SampleSegmentationRun", "segment_fused", "SampleSegmentation",
+           "load_sample_segmentation"]

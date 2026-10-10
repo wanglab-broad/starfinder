@@ -102,7 +102,8 @@ def synchronous():
 # --- Helpers -----------------------------------------------------------------------------------------------------
 
 def export(f, config=None, **kwargs):
-    return f.dataset.export(SAMPLE, placement=kwargs.pop("placement", f.placement_dir), config=config,
+    return f.dataset.export(SAMPLE, placement=kwargs.pop("placement", f.placement_dir),
+                            config=ExportConfig(route="per_fov") if config is None else config,
                             output_dir=kwargs.pop("output_dir", f.export_dir), **kwargs)
 
 
@@ -111,7 +112,8 @@ def record_of(folder):
 
 
 def sd_config(zarr_format=3, **fields):
-    return ExportConfig(export_spatialdata=True, spatialdata=SpatialDataExportConfig(zarr_format=zarr_format),
+    return ExportConfig(route="per_fov", export_spatialdata=True,
+                        spatialdata=SpatialDataExportConfig(zarr_format=zarr_format),
                         **fields)
 
 
@@ -327,7 +329,7 @@ def test_sd1_a_sample_name_outside_the_rule_is_refused_before_anything_is_writte
             f.dataset.export("sample one", placement=f.placement_dir, config=sd_config(), output_dir=f.export_dir)
         assert listing(f.root) == before
         return
-    export(f, ExportConfig(fuse=False))
+    export(f, ExportConfig(route="per_fov", fuse=False))
     saved = load_assembly(f.export_dir)
     renamed = replace(saved, sample="sample one")
     before = listing(f.root)
@@ -420,7 +422,7 @@ def test_sd3_tables_preserve_their_source(case, tmp_path, monkeypatch):
 
 def test_sd3_a_table_key_equal_ignoring_case_is_refused(tmp_path):
     f = export_folder(tmp_path)
-    export(f, ExportConfig(fuse=False))
+    export(f, ExportConfig(route="per_fov", fuse=False))
     saved = load_assembly(f.export_dir)
     cells = saved.cells.assign(Size=saved.cells["size_voxels"], size=saved.cells["size_voxels"])
     before = listing(f.root)
@@ -471,7 +473,7 @@ def test_sd4_export_metadata(case, tmp_path, monkeypatch):
 def test_sd4_a_table_that_already_has_spatialdata_attrs_is_refused(tmp_path):
     import anndata
     f = export_folder(tmp_path)
-    export(f, ExportConfig(fuse=False))
+    export(f, ExportConfig(route="per_fov", fuse=False))
     path = f.export_dir / "sample.h5ad"
     with pd.option_context("future.infer_string", False):
         adata = anndata.read_h5ad(path)
@@ -573,7 +575,7 @@ def test_sd5_links_accounting_and_circles(dimensions, tmp_path):
 
 def test_sd5_a_cell_of_zero_voxels_is_refused(tmp_path):
     f = export_folder(tmp_path)
-    export(f, ExportConfig(fuse=False))
+    export(f, ExportConfig(route="per_fov", fuse=False))
     saved = load_assembly(f.export_dir)
     cells = saved.cells.copy()
     i = int(np.flatnonzero(cells.assembly_status.eq("retained").to_numpy(dtype=bool))[0])
@@ -831,7 +833,7 @@ def test_sd8_hashes_and_section(tmp_path):
 def test_sd8_an_interrupted_export_publishes_nothing(tmp_path, monkeypatch):
     import spatialdata
     f = export_folder(tmp_path)
-    export(f, ExportConfig(fuse_labels=True))
+    export(f, ExportConfig(route="per_fov", fuse_labels=True))
     before = {k: v for k, v in listing(f.export_dir).items() if k != "export.json"}
     real, calls = spatialdata.SpatialData._write_element, []
 
@@ -950,8 +952,9 @@ def test_sd8_lookup_source_verifies_every_recorded_section_hash(tmp_path):
 def test_sd8_lookup_source_with_the_spatialdata_part_off(tmp_path):
     """A folder whose spatialdata (and fusion, labels) parts were off: the lookup works from the assembly section."""
     f = export_folder(tmp_path)
-    record = export(f, ExportConfig(fuse=False))
-    assert record.parts == {"assemble": "written", "fuse": "off", "fuse_labels": "off", "export_spatialdata": "off"}
+    record = export(f, ExportConfig(route="per_fov", fuse=False))
+    assert record.parts == {"assemble": "written", "fuse": "off", "segment": "off", "fuse_labels": "off",
+                            "export_spatialdata": "off"}
     saved = load_assembly(f.export_dir)
     fov = saved.cells.fov_id.iloc[0]
     folder = f.assignment_dir(fov)
@@ -980,7 +983,7 @@ def test_ex1_the_part_runs_fourth(tmp_path, monkeypatch):
                         real_sd(*a, **k))
     record = export(f, sd_config(fuse_labels=True))
     assert calls == ["assemble", "fuse", "fuse_labels", "export_spatialdata"]
-    assert record.parts == {"assemble": "written", "fuse": "written", "fuse_labels": "written",
+    assert record.parts == {"assemble": "written", "fuse": "written", "segment": "off", "fuse_labels": "written",
                             "export_spatialdata": "written"} and record.complete
     files = sorted(listing(f.export_dir))
     assert [p for p in files if not p.startswith("sample.zarr/")] == sorted(
@@ -994,7 +997,7 @@ def test_ex1_the_part_runs_fourth(tmp_path, monkeypatch):
 def test_ex1_the_part_called_alone(tmp_path):
     """Called alone with the saved files of the parts before it: its section only changes."""
     f = export_folder(tmp_path)
-    export(f, ExportConfig(fuse_labels=True))
+    export(f, ExportConfig(route="per_fov", fuse_labels=True))
     before = record_of(f.export_dir)
     assert before["spatialdata"] == {"status": "off"}
     export_spatialdata(load_assembly(f.export_dir), fused=FusionRecord("written", before["fusion"], ()),
@@ -1023,7 +1026,7 @@ def test_ex3_a_fuse_not_run(tmp_path, monkeypatch):
     messages = [str(w.message) for w in caught if w.category is ExportIncompleteWarning]
     assert len(messages) == 2 and "fuse could not run: extra_missing" in messages[0]
     assert "fuse_labels could not run: extra_missing" in messages[1]
-    assert record.parts == {"assemble": "written", "fuse": "not_run", "fuse_labels": "not_run",
+    assert record.parts == {"assemble": "written", "fuse": "not_run", "segment": "off", "fuse_labels": "not_run",
                             "export_spatialdata": "written"} and record.record["complete"] is False
     assert statuses(record.record)[IMAGE] == ("omitted", "part_not_run")
     assert statuses(record.record)["cell_labels"] == ("omitted", "part_not_run")
@@ -1052,13 +1055,13 @@ def test_ex3_d_spatialdata_not_importable(tmp_path, monkeypatch):
 @needs_library
 def test_ex3_g_a_territory_missing_without_conflicts(tmp_path):
     f = export_folder(tmp_path)
-    export(f, ExportConfig(fuse=False, assembly=AssemblyConfig(conflicts=False)))
+    export(f, ExportConfig(route="per_fov", fuse=False, assembly=AssemblyConfig(conflicts=False)))
     territory = f.assignment_dir("Position002") / "cell_labels.tif"
     territory.unlink()
     with pytest.warns(ExportIncompleteWarning, match="fuse_labels could not run: territory_missing") as caught:
         record = export(f, sd_config(assemble=False, fuse=False, fuse_labels=True))
     assert len([w for w in caught if w.category is ExportIncompleteWarning]) == 1
-    assert record.parts == {"assemble": "reused", "fuse": "off", "fuse_labels": "not_run",
+    assert record.parts == {"assemble": "reused", "fuse": "off", "segment": "off", "fuse_labels": "not_run",
                             "export_spatialdata": "written"} and record.record["complete"] is False
     assert statuses(record.record)["cell_labels"] == ("omitted", "part_not_run")
     assert statuses(record.record)[IMAGE] == ("omitted", "not_requested")

@@ -155,6 +155,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.barcode.load_direct_panel`
 * :py:obj:`starfinder.stitching.load_placement`
 * :py:obj:`starfinder.io.load_round`
+* :py:obj:`starfinder.sample_output.load_sample_segmentation`
 * :py:obj:`starfinder.io.load_volume`
 * :py:obj:`starfinder.io.load_volume_zyxc`
 * :py:obj:`starfinder.barcode.LocalBackgroundConfig`
@@ -249,6 +250,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.stitching.ReviewPolicy`
 * :py:obj:`starfinder.registration.RigidConfig`
 * :py:obj:`starfinder.dataset.RoundState`
+* :py:obj:`starfinder.sample_output.ROUTES`
 * :py:obj:`starfinder.benchmark.run_benchmark`
 * :py:obj:`starfinder.preprocessing.run_step`
 * :py:obj:`starfinder.assembly.sample_anndata`
@@ -259,6 +261,9 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.synthetic.SAMPLE_TRUTH_VERSION`
 * :py:obj:`starfinder.synthetic.SampleScene`
 * :py:obj:`starfinder.synthetic.SampleSceneConfig`
+* :py:obj:`starfinder.sample_output.SampleSegmentation`
+* :py:obj:`starfinder.sample_output.SampleSegmentationConfig`
+* :py:obj:`starfinder.sample_output.SampleSegmentationRun`
 * :py:obj:`starfinder.assembly.save_assembly`
 * :py:obj:`starfinder.synthetic.save_formed_scene`
 * :py:obj:`starfinder.stitching.save_placement`
@@ -272,6 +277,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.segmentation.SeededWatershedConfig`
 * :py:obj:`starfinder.barcode.Segment`
 * :py:obj:`starfinder.segmentation.segment`
+* :py:obj:`starfinder.sample_output.segment_fused`
 * :py:obj:`starfinder.segmentation.SEGMENTATION_METHODS`
 * :py:obj:`starfinder.segmentation.SegmentationBackendUnavailableError`
 * :py:obj:`starfinder.segmentation.SegmentationInput`

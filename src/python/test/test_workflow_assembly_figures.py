@@ -44,7 +44,8 @@ FIGURES = {"3d": ["assignment.png", "assignment_single_layer.png"], "2d": ["assi
 def assembly_config(root, assignment="default"):
     return {**_config(root), "n_rounds": 3, "ref_round": "round1", "seq_channel_order": ["ch00", "ch01", "ch02",
                                                                                           "ch03"],
-            "stitching": MULTIVIEW, "assembly": {"assignment": assignment}, "export": {"fuse": False}}
+            "stitching": MULTIVIEW, "assembly": {"assignment": assignment},
+            "export": {"route": "per_fov", "fuse": False}}
 
 
 def build(root, dimensions):

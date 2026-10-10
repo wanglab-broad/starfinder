@@ -25,7 +25,7 @@ needs_parts = pytest.mark.skipif(importlib.util.find_spec("multiview_stitcher") 
                                  or importlib.util.find_spec("anndata") is None,
                                  reason="the multiview-stitcher extra (starfinder[multiview-stitcher]) or the anndata "
                                         "extra (starfinder[anndata]) is not installed")
-EXPORT = ExportConfig(fusion=FusionConfig(images=("reference_merged",)))
+EXPORT = ExportConfig(route="per_fov", fusion=FusionConfig(images=("reference_merged",)))
 TIMES = ("wall_s", "cpu_s", "peak_rss_kib")
 PENDING = {"status": "not_run", "reason": "export_not_finished"}
 
@@ -82,7 +82,7 @@ def test_an_interrupted_export_is_not_complete_and_the_next_run_completes_it(sce
             export(scene, folder)
     record = read_export(folder)
     assert record["complete"] is False
-    assert record["parts"] == {"assemble": "written", "fuse": "not_run", "fuse_labels": "off",
+    assert record["parts"] == {"assemble": "written", "fuse": "not_run", "segment": "off", "fuse_labels": "off",
                                "export_spatialdata": "off"}
     assert record["fusion"] == PENDING
     assert without_times(record["assembly"]) == without_times(read_export(reference)["assembly"])
@@ -119,7 +119,7 @@ def test_only_the_parts_that_will_run_are_pending(scene, tmp_path, monkeypatch, 
     """Stopped in its first part, the record holds the entry for each part that will run and off for the others;
     a part that is off is recorded off at the end, as before."""
     import starfinder.assembly as assembly
-    config = ExportConfig(fuse_labels=True, fusion=FusionConfig(images=("reference_merged",)))
+    config = ExportConfig(route="per_fov", fuse_labels=True, fusion=FusionConfig(images=("reference_merged",)))
     folder = tmp_path / "labels"
     with monkeypatch.context() as patch:
         patch.setattr(assembly, "save_assembly", interrupt)
@@ -127,15 +127,15 @@ def test_only_the_parts_that_will_run_are_pending(scene, tmp_path, monkeypatch, 
             export(scene, folder, config)
     record = read_export(folder)
     assert record["complete"] is False
-    assert record["parts"] == {"assemble": "not_run", "fuse": "not_run", "fuse_labels": "not_run",
+    assert record["parts"] == {"assemble": "not_run", "fuse": "not_run", "segment": "off", "fuse_labels": "not_run",
                                "export_spatialdata": "off"}
     assert [record[name] for name in ("assembly", "fusion", "labels")] == [PENDING] * 3
     assert record["spatialdata"] == {"status": "off"}
     with pytest.raises(ValueError, match="part assemble was not finished"):
         check_export(folder)
-    off = export(scene, tmp_path / "off", ExportConfig(fuse=False)).record
-    assert off["complete"] is True and off["parts"] == {"assemble": "written", "fuse": "off", "fuse_labels": "off",
-                                                        "export_spatialdata": "off"}
+    off = export(scene, tmp_path / "off", ExportConfig(route="per_fov", fuse=False)).record
+    assert off["complete"] is True and off["parts"] == {"assemble": "written", "fuse": "off", "segment": "off",
+                                                        "fuse_labels": "off", "export_spatialdata": "off"}
     assert [off[name] for name in ("fusion", "labels", "spatialdata")] == [{"status": "off"}] * 3
     assert [k for k in off if k in ("assembly", "fusion", "labels", "spatialdata")] == [
         "assembly", "fusion", "labels", "spatialdata"]

@@ -218,7 +218,10 @@ def segment(segmentation_input: SegmentationInput, *, config, target: str, seeds
         ``"cpu"`` (default) or ``"cuda"``; the method must support it.
     label_namespace : str
         The identity scope of the labels, a JSON list ``[dataset_id,
-        sample_id, fov_id, subtile_id, run name]`` for a FOV run.
+        sample_id, fov_id, subtile_id, run name]`` for a FOV run, or
+        ``[dataset_id, sample_id, null, null, run name]`` for a run of the
+        sample segmentation of the route after fusion, whose ``fov_id`` and
+        ``subtile_id`` are null.
 
     Returns
     -------

@@ -119,8 +119,8 @@ def test_reads_assignment_and_export_sample_on_declared_grids(tmp_path, dimensio
     records = {key: json.loads((folder / "export.json").read_text()) for key, folder in folders.items()}
     for key, folder in folders.items():
         assert records[key]["complete"] is True, key
-        assert records[key]["parts"] == {"assemble": "written", "fuse": "written", "fuse_labels": "off",
-                                         "export_spatialdata": "off"}
+        assert records[key]["parts"] == {"assemble": "written", "fuse": "written", "segment": "off",
+                                         "fuse_labels": "off", "export_spatialdata": "off"}
         assert [o["path"] for o in records[key]["fusion"]["outputs"]] == FUSED
         check_export(folder)
     compare_tables(load_assembly(folders["stored"]), load_assembly(folders["plain"]))

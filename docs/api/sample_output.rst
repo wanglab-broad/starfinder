@@ -88,6 +88,29 @@ position in the §2.9 table, after verifying the record's hashes.
 :py:func:`~starfinder.sample_output.check_export` reads the store back and evaluates the
 SpatialData conditions S1 to S8.
 
+The route to a sample's cells is ``ExportConfig.route``, a value of
+:py:data:`~starfinder.sample_output.ROUTES` (``per_fov``: segmentation per FOV followed by
+assembly; ``after_fusion``: segmentation of the fused projection) or None for the default by
+``dimensionality`` (``projection`` gives ``after_fusion``, ``stack`` and ``both`` give
+``per_fov``). Check 7 of :py:meth:`~starfinder.dataset.Dataset.export` refuses before
+anything is written the route after fusion with ``dimensionality: stack`` or
+``projection: sum``, and, with an assignment, without ``ExportConfig.segmentation`` (a
+:py:class:`~starfinder.sample_output.SampleSegmentationConfig` of
+:py:class:`~starfinder.sample_output.SampleSegmentationRun`), with an image that is not in
+``images``, with ``fuse`` or ``assemble`` off while ``segment`` is on, or with a model that
+is missing or whose SHA-256 differs. On the route per FOV the part ``segment`` is recorded
+``off`` (reason ``route_per_fov``; ``no_cells`` without an assignment). The export does not
+run the route after fusion yet: a resolved route ``after_fusion`` with an assignment is
+refused after check 7. :py:func:`~starfinder.sample_output.segment_fused`, called alone on a
+folder whose ``fuse`` ran, segments the fused projection of each input image on the
+segmentation grid (the fused file's grid, frame ``sample:<sample>``), with the method's pixel
+lengths given for the acquired grid and divided by the scale factor (both values recorded),
+and writes one ``segmentation_<run>.ome.tif`` per run (uint32) and the ``segmentation``
+section of ``export.json``, whose inputs are the fused files' SHA-256 and the grid;
+:py:func:`~starfinder.sample_output.load_sample_segmentation` reads them back as a
+:py:class:`~starfinder.sample_output.SampleSegmentation`, each label file checked against its
+SHA-256. See :doc:`../sample-segmentation-contract`.
+
 .. currentmodule:: starfinder.sample_output
 
 .. autosummary::
@@ -107,5 +130,11 @@ SpatialData conditions S1 to S8.
    FusionRecord
    LabelConfig
    LabelRecord
+   load_sample_segmentation
    lookup_source
+   ROUTES
+   SampleSegmentation
+   SampleSegmentationConfig
+   SampleSegmentationRun
+   segment_fused
    SpatialDataExportConfig

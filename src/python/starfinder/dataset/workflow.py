@@ -890,6 +890,8 @@ _READS_ASSIGNMENT_KEYS = ('expand_labels', 'dilation_distance')
 _LEGACY_SEGMENTATION_RUN = 'stardist_segmentation'
 # Keys of a segmentation block run besides the method config's fields.
 _SEGMENTATION_RUN_KEYS = ('name', 'target', 'inputs', 'seeds', 'projection', 'operations', 'method')
+# Keys of a run of the export block's segmentation besides its method's config fields.
+_SAMPLE_SEGMENTATION_RUN_KEYS = ('name', 'target', 'inputs', 'seeds', 'method')
 # Keys of the assignment block besides the AssignmentConfig fields: the FOV.assign arguments.
 _ASSIGNMENT_CALL_KEYS = ('cells', 'nuclei', 'name', 'population', 'correspondence', 'checkpoints')
 
@@ -1129,28 +1131,33 @@ def _input_channel(values):
     return InputChannel(**values, prepare=prepare)
 
 
+def _run_method(values, name, method, target, what='segmentation run'):
+    """The method config of one run: import with the LabelImportConfig fields, or a SEGMENTATION_METHODS name whose
+    config fields are the run's other keys."""
+    from starfinder.segmentation import SEGMENTATION_METHODS, LabelImportConfig
+    if method == 'import':
+        names = [f.name for f in fields(LabelImportConfig) if f.init and f.name != 'target']
+        _known(values, names, f'{what} {name!r} (import)')
+        return LabelImportConfig(target=target, **values)
+    config_type = config_type_for(SEGMENTATION_METHODS, method, 'segmentation method')
+    _known(values, [f.name for f in fields(config_type) if f.init], f'{what} {name!r} ({method})')
+    missing = [f.name for f in fields(config_type)
+               if f.init and f.default is MISSING and f.default_factory is MISSING and f.name not in values]
+    if missing:
+        raise ValueError(f'{what} {name!r}: method {method!r} requires {", ".join(missing)}')
+    return config_type(**{k: _tuples(v) for k, v in values.items()})
+
+
 def _segmentation_run(values):
     """SegmentationRun of one segmentation block run (docs/segmentation-contract.md, "Workflow configuration")."""
     from starfinder.preprocessing import ProjectionConfig
-    from starfinder.segmentation import (SEGMENTATION_METHODS, ExpandLabelsConfig, LabelImportConfig, SegmentationRun,
-                                         ZExtensionConfig)
+    from starfinder.segmentation import ExpandLabelsConfig, SegmentationRun, ZExtensionConfig
     if not isinstance(values, dict) or 'method' not in values or 'name' not in values:
         raise ValueError('each segmentation run must be a mapping with a name and a method')
     values = dict(values)
     run = {key: values.pop(key) for key in _SEGMENTATION_RUN_KEYS if key in values}
     name, method = run['name'], run['method']
-    if method == 'import':
-        names = [f.name for f in fields(LabelImportConfig) if f.init and f.name != 'target']
-        _known(values, names, f'segmentation run {name!r} (import)')
-        config = LabelImportConfig(target=run.get('target'), **values)
-    else:
-        config_type = config_type_for(SEGMENTATION_METHODS, method, 'segmentation method')
-        _known(values, [f.name for f in fields(config_type) if f.init], f'segmentation run {name!r} ({method})')
-        missing = [f.name for f in fields(config_type)
-                   if f.init and f.default is MISSING and f.default_factory is MISSING and f.name not in values]
-        if missing:
-            raise ValueError(f'segmentation run {name!r}: method {method!r} requires {", ".join(missing)}')
-        config = config_type(**{k: _tuples(v) for k, v in values.items()})
+    config = _run_method(values, name, method, run.get('target'))
     projection = run.get('projection')
     if projection is True:
         projection = ProjectionConfig()
@@ -1965,12 +1972,47 @@ def _export_keys():
     return keys
 
 
+def _sample_segmentation_block(values, config):
+    """SampleSegmentationConfig of the export block's segmentation (docs/sample-segmentation-contract.md, "Where the
+    settings live"): device, cells, nuclei and runs, each run with name, target, inputs (a list of {role, image}),
+    seeds and method, whose config fields are the run's other keys (import: the LabelImportConfig fields); the
+    assignment settings are those of the top-level assignment block."""
+    from starfinder.assignment import AssignmentConfig
+    from starfinder.sample_output import SampleSegmentationConfig, SampleSegmentationRun
+    if not isinstance(values, dict):
+        raise TypeError('export.segmentation must be a mapping')
+    _known(values, ('device', 'cells', 'nuclei', 'runs'), 'export.segmentation')
+    runs = values.get('runs')
+    if not isinstance(runs, list) or not runs:
+        raise ValueError('export.segmentation.runs must be a nonempty list')
+    parsed = []
+    for entry in runs:
+        if not isinstance(entry, dict) or 'method' not in entry or 'name' not in entry:
+            raise ValueError('each export.segmentation run must be a mapping with a name and a method')
+        entry = dict(entry)
+        run = {key: entry.pop(key) for key in _SAMPLE_SEGMENTATION_RUN_KEYS if key in entry}
+        inputs = run.get('inputs') or []
+        if not isinstance(inputs, list) or not all(isinstance(i, dict) for i in inputs):
+            raise TypeError(f"export.segmentation run {run['name']!r}: inputs must be a list of {{role, image}}")
+        for item in inputs:
+            _known(item, ('role', 'image'), f"export.segmentation run {run['name']!r} input")
+        method = _run_method(entry, run['name'], run['method'], run.get('target'), 'export.segmentation run')
+        parsed.append(SampleSegmentationRun(run['name'], run.get('target'),
+                                            tuple((i.get('role'), i.get('image')) for i in inputs), method,
+                                            run.get('seeds')))
+    assignment = _assignment_block(config)[0] if config.get('assignment') is not None else AssignmentConfig()
+    return SampleSegmentationConfig(tuple(parsed), values.get('cells'), values.get('nuclei'), assignment,
+                                    values.get('device', 'cpu'))
+
+
 def _export_config(config):
     """(ExportConfig, assembly block) of the export block and the assembly block (docs/sample-output-contract.md).
 
     The export block's keys turn the parts on and off and set FusionConfig,
     LabelConfig (labels_scale_yx) and SpatialDataExportConfig
-    (spatialdata_zarr_format); without the block the defaults apply. The
+    (spatialdata_zarr_format), the route (route, segment) and the settings of
+    the route after fusion (segmentation, a SampleSegmentationConfig); without
+    the block the defaults apply. The
     assembly and table_format of the ExportConfig come from the assembly block,
     which the export block needs.
     """
@@ -1991,6 +2033,9 @@ def _export_config(config):
     flags = {}
     for key, value in values.items():
         part, name = keys[key]
+        if key == 'segmentation':
+            flags[name] = None if value is None else _sample_segmentation_block(value, config)
+            continue
         (flags if part is None else parts[part])[name] = _tuples(value)
     export = ExportConfig(**flags, assembly=block.config, table_format=block.table_format,
                           fusion=FusionConfig(**parts['fusion']), labels=LabelConfig(**parts['labels']),

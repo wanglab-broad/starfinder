@@ -467,7 +467,8 @@ def test_so3_the_export_readers_on_a_folder_with_the_column(assignment, tmp_path
     f = export_folder(tmp_path)
     with dask.config.set(scheduler="synchronous"):
         f.dataset.export(SAMPLE, placement=f.placement_dir, output_dir=f.export_dir, assignment=assignment,
-                         config=ExportConfig(export_spatialdata=True, spatialdata=SpatialDataExportConfig()))
+                         config=ExportConfig(route="per_fov", export_spatialdata=True,
+                                             spatialdata=SpatialDataExportConfig()))
         check_export(f.export_dir)
         assembly = load_assembly(f.export_dir)
         assert json.loads((f.export_dir / "export.json").read_text())["assembly"]["files"]["molecules"][

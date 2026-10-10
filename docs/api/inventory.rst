@@ -299,7 +299,13 @@ starfinder.sample_output
 * :py:obj:`starfinder.sample_output.FusionRecord`
 * :py:obj:`starfinder.sample_output.LabelConfig`
 * :py:obj:`starfinder.sample_output.LabelRecord`
+* :py:obj:`starfinder.sample_output.load_sample_segmentation`
 * :py:obj:`starfinder.sample_output.lookup_source`
+* :py:obj:`starfinder.sample_output.ROUTES`
+* :py:obj:`starfinder.sample_output.SampleSegmentation`
+* :py:obj:`starfinder.sample_output.SampleSegmentationConfig`
+* :py:obj:`starfinder.sample_output.SampleSegmentationRun`
+* :py:obj:`starfinder.sample_output.segment_fused`
 * :py:obj:`starfinder.sample_output.SpatialDataExportConfig`
 
 starfinder.segmentation

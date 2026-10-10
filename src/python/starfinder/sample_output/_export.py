@@ -5,7 +5,10 @@ lists for the parts that run or are off, records each part that will run as ``no
 with the reason ``export_not_finished`` (and each part that is off as ``off``), and calls
 the parts in order: ``assemble`` (then ``save_assembly``), ``fuse``, ``fuse_labels`` and
 ``export_spatialdata``, writing ``export.json`` after each part, whose section replaces
-its entry.
+its entry. The part ``segment`` of the route after fusion is recorded ``off`` on the route
+per FOV (reason ``route_per_fov``, or ``no_cells`` without an assignment); the route after
+fusion with an assignment is refused after check 7, before anything is written, until its
+parts are available.
 """
 from __future__ import annotations
 
@@ -29,6 +32,7 @@ from ._record import (
     update_section,
     write_export,
 )
+from ._segment import check_route, resolve_route, segment_off_section
 
 REFERENCE_STAIN_FILE = Path("other_rounds") / "reference_stain" / "image.ome.tif"
 MOLECULE_CSV = "signal/{fov_id}_goodSpots.csv"
@@ -161,15 +165,18 @@ def export_sample(dataset, sample: str, *, placement, assignment: str | None = "
     if placement.sample != sample:
         raise ValueError(f"the placement is of sample {placement.sample!r}, not {sample!r}")
     output_dir = Path(output_dir)
+    route, route_source = resolve_route(config)
+    after_fusion = route == "after_fusion" and assignment is not None
     # 2. Review.
     require_approval(placement)
     # 3. Required extras.
     _require_extras(config)
-    # 4. Assembly: computed in memory (assemble applies its own checks), or the saved one.
+    # 4. Assembly: computed in memory (assemble applies its own checks), or the saved one. Not on the route after
+    # fusion with an assignment, whose cells come from the sample segmentation, not from per-FOV assignments.
     result, status = None, None
-    if config.assemble:
+    if not after_fusion and config.assemble:
         result = assemble(placement, assembly_inputs(dataset, placement, assignment), config=config.assembly)
-    else:
+    elif not after_fusion:
         needed = config.fuse_labels or config.export_spatialdata
         if needed and read_export(output_dir).get("assembly", {}).get("stage") != "assembly":
             raise ValueError(f"assemble is off and fuse_labels or export_spatialdata is on, but {output_dir} holds no "
@@ -186,6 +193,15 @@ def export_sample(dataset, sample: str, *, placement, assignment: str | None = "
     # 6. Label IDs.
     if config.fuse_labels and result is not None:
         check_label_ids(result.cells)
+    # 7. The route (docs/sample-segmentation-contract.md, "The entry").
+    check_route(config, assignment)
+    if after_fusion:
+        raise NotImplementedError(
+            f"the route after fusion (route: after_fusion, {route_source}) is not available yet: the parts segment "
+            "and the assembly of the sample segmentation's cells are not part of this version of Dataset.export; "
+            "segment_fused can be called alone on a folder whose fuse ran. Set route: per_fov to assemble the "
+            "per-FOV assignments")
+    segmentation = segment_off_section(route, route_source, assignment)
 
     record = read_export(output_dir)
     if record.get("sample") not in (None, sample):
@@ -195,7 +211,7 @@ def export_sample(dataset, sample: str, *, placement, assignment: str | None = "
     # Each part that will run is recorded not_run (export_not_finished) until it writes its own section, so a record
     # left by an export stopped during a part is not complete; a part that is off is recorded off, as at its turn.
     output_dir.mkdir(parents=True, exist_ok=True)
-    runs = {"assemble": config.assemble, "fuse": config.fuse, "fuse_labels": config.fuse_labels,
+    runs = {"assemble": config.assemble, "fuse": config.fuse, "segment": False, "fuse_labels": config.fuse_labels,
             "export_spatialdata": config.export_spatialdata}
     for part in PARTS:
         if part == "assemble" and status == "reused":
@@ -203,7 +219,8 @@ def export_sample(dataset, sample: str, *, placement, assignment: str | None = "
         remove_listed(output_dir, listed_files(record, part))
         record.pop(SECTIONS[part], None)
         (record.get("parts") or {}).pop(part, None)
-        record[SECTIONS[part]] = pending_section() if runs[part] else {"status": "off"}
+        record[SECTIONS[part]] = pending_section() if runs[part] else \
+            (segmentation if part == "segment" else {"status": "off"})
     write_export(output_dir, record, sample=sample)
 
     # Part 1: assemble.
@@ -219,6 +236,8 @@ def export_sample(dataset, sample: str, *, placement, assignment: str | None = "
         fuse(placement, inputs, assembly=result, config=config.fusion, output_dir=output_dir)
     else:
         update_section(output_dir, sample, "fuse", {"status": "off"}, fill=False)
+    # The part segment of the route after fusion: off on this route.
+    update_section(output_dir, sample, "segment", segmentation, fill=False)
     # Part 3: fuse_labels.
     if config.fuse_labels:
         fuse_labels(placement, result, config=config.labels, output_dir=output_dir)

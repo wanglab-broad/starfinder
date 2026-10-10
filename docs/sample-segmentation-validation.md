@@ -153,3 +153,10 @@ One line per implemented check: its identifier and the test that implements it, 
 | # | Test |
 | --- | --- |
 | SO3 | `test_sample_segmentation_cell_key.py::test_so3_the_column_on_the_route_per_fov`, with the tests `test_so3_*` of the same file for the saved and reloaded column, a folder saved before the column, and the readers that link a molecule to its cell by the cell key |
+| RS2 | `test_sample_segmentation_segment.py::test_rs2_a_stack_and_a_sum_are_refused` |
+| RS3 | `test_sample_segmentation_segment.py::test_rs3_the_default_without_settings` |
+| RS4 | `test_sample_segmentation_segment.py::test_rs4_check_7`, with the tests `test_rs4_*` of the same file for the refusals at construction, an unknown method key of the workflow block, the order of check 7 and a valid configuration |
+| SG1 | `test_sample_segmentation_segment.py::test_sg1_the_input_is_the_fused_projection`, with `test_sg1_channels_in_the_run_s_role_order` |
+| SG2 | `test_sample_segmentation_segment.py::test_sg2_lengths_in_pixels`, with `test_sg2_the_table_of_pixel_fields_equals_the_registered_methods` |
+| SG3 | `test_sample_segmentation_segment.py::test_sg3_label_files_and_the_section`, with the tests `test_sg3_*` of the same file for `load_sample_segmentation`'s checks, a second call and a folder without a fusion |
+| SG6 | `test_sample_segmentation_segment.py::test_sg6_import_runs` |

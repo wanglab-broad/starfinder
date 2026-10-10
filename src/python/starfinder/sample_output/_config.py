@@ -9,7 +9,11 @@ from numbers import Integral, Real
 import numpy as np
 
 from starfinder.assembly import AssemblyConfig
+from starfinder.assignment import AssignmentConfig
 
+#: The routes to a sample's cells (docs/sample-segmentation-contract.md, "The route setting"): segmentation per
+#: FOV followed by assembly, and segmentation of the fused projection.
+ROUTES = ("per_fov", "after_fusion")
 DIMENSIONALITIES = ("projection", "stack", "both")
 PROJECTIONS = ("max", "sum")
 OME_ZARR_VERSIONS = ("0.5", "0.4")
@@ -174,6 +178,170 @@ class SpatialDataExportConfig:
                              f"got {self.zarr_format!r}")
 
 
+def _segmentation_spec(method):
+    """The SEGMENTATION_METHODS spec of a run's method, or None for a LabelImportConfig."""
+    from starfinder._registry import spec_for
+    from starfinder.segmentation import SEGMENTATION_METHODS, LabelImportConfig
+    if isinstance(method, LabelImportConfig):
+        return None
+    return spec_for(SEGMENTATION_METHODS, method, "segmentation method", TypeError,
+                    f"no segmentation method is registered for {type(method).__qualname__}; a run's method is a "
+                    "SEGMENTATION_METHODS config or a LabelImportConfig")
+
+
+@dataclass(frozen=True)
+class SampleSegmentationRun:
+    """One run of the segmentation of the fused projection: a named label image from one method, or one import.
+
+    ``name`` (snake_case) names the label file ``segmentation_<name>.ome.tif``
+    and the run of the label namespace; ``target`` is ``nucleus`` or
+    ``cell``; ``inputs`` are ``(role, image)`` pairs in channel order, each
+    image a name of ``FusionConfig.images`` whose fused projection is read
+    (none for an import); ``method`` is a ``SEGMENTATION_METHODS`` config or a
+    :class:`~starfinder.segmentation.LabelImportConfig` whose target equals the
+    run's, with its pixel lengths given for the acquired grid (LS2: the route
+    divides them by the scale factor); ``seeds`` names an earlier run of the
+    same config. See docs/sample-segmentation-contract.md ("Where the settings
+    live").
+
+    Raises
+    ------
+    ValueError
+        A name that is not snake_case, an unknown target, a role or image name
+        that is not valid, repeated roles, inputs missing or given to an
+        import, a target, role or seed requirement the method does not
+        accept, or seeds on an import.
+    TypeError
+        A field of the wrong type or an unregistered method config.
+    """
+
+    name: str
+    target: str
+    inputs: tuple[tuple[str, str], ...]
+    method: object
+    seeds: str | None = None
+
+    def __post_init__(self):
+        from starfinder._registry import check_name
+        from starfinder.segmentation._labels import _check_target
+        from starfinder.segmentation._methods import ROLES
+        check_name(self.name, "sample segmentation run")
+        _check_target(self.target)
+        if isinstance(self.inputs, str) or not isinstance(self.inputs, (tuple, list)):
+            raise TypeError(f"run {self.name!r}: inputs must be a sequence of (role, image) pairs")
+        inputs = []
+        for item in self.inputs:
+            if isinstance(item, str) or not isinstance(item, (tuple, list)) or len(item) != 2 \
+                    or not all(isinstance(v, str) for v in item):
+                raise TypeError(f"run {self.name!r}: each input is a (role, image) pair of strings; got {item!r}")
+            role, image = item
+            if role not in ROLES:
+                raise ValueError(f"run {self.name!r}: unknown channel role {role!r}; roles are {', '.join(ROLES)}")
+            if not _NAME.fullmatch(image):
+                raise ValueError(f"run {self.name!r}: image name {image!r} may use letters, digits, '_', '-' and "
+                                 "'.' only")
+            inputs.append((role, image))
+        object.__setattr__(self, "inputs", tuple(inputs))
+        roles = [role for role, _ in self.inputs]
+        if len(set(roles)) != len(roles):
+            raise ValueError(f"run {self.name!r} repeats a channel role: {roles}")
+        if self.seeds is not None and (not isinstance(self.seeds, str) or not self.seeds):
+            raise TypeError(f"run {self.name!r}: seeds must name an earlier run or be None")
+        spec = _segmentation_spec(self.method)
+        if spec is None:
+            if self.inputs:
+                raise ValueError(f"run {self.name!r} imports a mask and takes no inputs")
+            if self.method.target != self.target:
+                raise ValueError(f"run {self.name!r} has target {self.target!r}, its import {self.method.target!r}")
+            if self.seeds is not None:
+                raise ValueError(f"run {self.name!r} imports a mask and takes no seeds")
+            return
+        if not self.inputs:
+            raise ValueError(f"run {self.name!r} needs at least one input")
+        if self.target not in spec.targets:
+            raise ValueError(f"run {self.name!r}: method {spec.name!r} produces "
+                             f"{', '.join(sorted(spec.targets))}, not {self.target!r}")
+        refused = [role for role in roles if role not in spec.roles]
+        if refused:
+            raise ValueError(f"run {self.name!r}: method {spec.name!r} does not accept the roles {refused}")
+        for required in spec.required_roles:
+            if not required & set(roles):
+                raise ValueError(f"run {self.name!r}: method {spec.name!r} needs one of the roles "
+                                 f"{sorted(required)}")
+        if spec.seeds == "required" and self.seeds is None:
+            raise ValueError(f"run {self.name!r}: method {spec.name!r} needs seeds, an earlier nucleus run")
+        if spec.seeds == "none" and self.seeds is not None:
+            raise ValueError(f"run {self.name!r}: method {spec.name!r} takes no seeds")
+
+
+@dataclass(frozen=True)
+class SampleSegmentationConfig:
+    """The settings of the route after fusion: the runs, which labels are the cells, and the assignment.
+
+    ``runs`` are the :class:`SampleSegmentationRun` in order (a run's seeds
+    name an earlier run, of target ``nucleus``); ``cells`` names the run whose
+    labels are the cells (a ``cell`` run, or a ``nucleus`` run as territories);
+    ``nuclei`` the ``nucleus`` run for correspondence and compartments, or
+    None; ``assignment`` the dataset's
+    :class:`~starfinder.assignment.AssignmentConfig`; ``device`` ``cpu`` or
+    ``cuda``, which every method of the runs must support. See
+    docs/sample-segmentation-contract.md ("Where the settings live").
+
+    Raises
+    ------
+    ValueError
+        No run, a repeated run name, seeds that do not name an earlier
+        nucleus run, ``cells`` or ``nuclei`` that do not name a run of the
+        targets they take, or a device a method does not run on.
+    TypeError
+        A field of the wrong type.
+    """
+
+    runs: tuple[SampleSegmentationRun, ...]
+    cells: str
+    nuclei: str | None = None
+    assignment: AssignmentConfig = field(default_factory=AssignmentConfig)
+    device: str = "cpu"
+
+    def __post_init__(self):
+        if isinstance(self.runs, list):
+            object.__setattr__(self, "runs", tuple(self.runs))
+        if not isinstance(self.runs, tuple) or not all(isinstance(r, SampleSegmentationRun) for r in self.runs):
+            raise TypeError("SampleSegmentationConfig.runs must be a tuple of SampleSegmentationRun")
+        if not self.runs:
+            raise ValueError("SampleSegmentationConfig.runs needs at least one run")
+        targets = {}
+        for run in self.runs:
+            run.__post_init__()
+            if run.name in targets:
+                raise ValueError(f"run name {run.name!r} appears more than once")
+            if run.seeds is not None:
+                if run.seeds not in targets:
+                    raise ValueError(f"run {run.name!r}: seeds {run.seeds!r} is not an earlier run")
+                if targets[run.seeds] != "nucleus":
+                    raise ValueError(f"run {run.name!r}: seeds {run.seeds!r} is a {targets[run.seeds]} run, not a "
+                                     "nucleus run")
+            targets[run.name] = run.target
+        if not isinstance(self.cells, str) or self.cells not in targets:
+            raise ValueError(f"SampleSegmentationConfig.cells must name a run ({sorted(targets)}); "
+                             f"got {self.cells!r}")
+        if self.nuclei is not None and (not isinstance(self.nuclei, str) or targets.get(self.nuclei) != "nucleus"):
+            raise ValueError(f"SampleSegmentationConfig.nuclei must name a nucleus run "
+                             f"({sorted(n for n, t in targets.items() if t == 'nucleus')}) or be None; "
+                             f"got {self.nuclei!r}")
+        if not isinstance(self.assignment, AssignmentConfig):
+            raise TypeError(f"SampleSegmentationConfig.assignment must be an AssignmentConfig; "
+                            f"got {self.assignment!r}")
+        self.assignment.__post_init__()
+        if self.device not in ("cpu", "cuda"):
+            raise ValueError(f"SampleSegmentationConfig.device must be 'cpu' or 'cuda'; got {self.device!r}")
+        for run in self.runs:
+            spec = _segmentation_spec(run.method)
+            if spec is not None and self.device not in spec.devices:
+                raise ValueError(f"run {run.name!r}: method {spec.name!r} runs on "
+                                 f"{', '.join(sorted(spec.devices))}, not device {self.device!r}")
+
+
 @dataclass(frozen=True)
 class ExportConfig:
     """Which parts ``Dataset.export`` runs and the configuration of each.
@@ -183,13 +351,22 @@ class ExportConfig:
     ``assembly`` and ``table_format`` (``csv`` or ``parquet``) configure the
     assemble part, ``fusion``, ``labels`` and ``spatialdata`` the others. See
     docs/sample-output-contract.md ("The export entry", "Configuration").
+    ``route`` chooses the route to the sample's cells (a value of
+    :data:`ROUTES`, or None for the default by ``fusion.dimensionality``:
+    ``after_fusion`` for ``projection``, ``per_fov`` for ``stack`` and
+    ``both``); ``segment`` turns the part ``segment`` of the route after
+    fusion on or off (off reuses the saved sample segmentation); and
+    ``segmentation`` (a :class:`SampleSegmentationConfig`, or None) holds the
+    settings of that route (docs/sample-segmentation-contract.md, "The route
+    setting").
 
     Raises
     ------
     ValueError
-        A part key that is not a bool, an unknown ``table_format``, a nested
-        config of another type, or ``fusion.ome_zarr`` together with
-        ``export_spatialdata`` (the store holds the one OME-Zarr copy).
+        A part key that is not a bool, an unknown ``table_format`` or
+        ``route``, a nested config of another type, or ``fusion.ome_zarr``
+        together with ``export_spatialdata`` (the store holds the one OME-Zarr
+        copy).
     """
 
     assemble: bool = True
@@ -201,10 +378,18 @@ class ExportConfig:
     fusion: FusionConfig = field(default_factory=FusionConfig)
     labels: LabelConfig = field(default_factory=LabelConfig)
     spatialdata: SpatialDataExportConfig = field(default_factory=SpatialDataExportConfig)
+    route: str | None = None
+    segment: bool = True
+    segmentation: SampleSegmentationConfig | None = None
 
     def __post_init__(self):
-        for name in ("assemble", "fuse", "fuse_labels", "export_spatialdata"):
+        for name in ("assemble", "fuse", "fuse_labels", "export_spatialdata", "segment"):
             _bool(getattr(self, name), f"ExportConfig.{name}")
+        if self.route is not None and self.route not in ROUTES:
+            raise ValueError(f"ExportConfig.route must be one of {list(ROUTES)} or None; got {self.route!r}")
+        if self.segmentation is not None and not isinstance(self.segmentation, SampleSegmentationConfig):
+            raise ValueError(f"ExportConfig.segmentation must be a SampleSegmentationConfig or None; "
+                             f"got {self.segmentation!r}")
         if self.table_format not in TABLE_FORMATS:
             raise ValueError(f"ExportConfig.table_format must be one of {list(TABLE_FORMATS)}; "
                              f"got {self.table_format!r}")

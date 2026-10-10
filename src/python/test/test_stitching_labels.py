@@ -269,7 +269,7 @@ def check_drawn_by_retained_cells(r):
 @pytest.mark.parametrize("variant", ["plane", "volume"])
 def test_lb1_label_export_at_scale_025(cases, variant):
     case = cases("label_quad", volume=variant == "volume")
-    config = ExportConfig(fuse=False, fuse_labels=True)
+    config = ExportConfig(route="per_fov", fuse=False, fuse_labels=True)
     assert config.labels.scale_yx == 0.25
     exported = case.dataset.export(case.name, placement=case.placement_dir, config=config, output_dir=case.export_dir)
     section = exported.record["labels"]
@@ -562,8 +562,8 @@ def test_lb6_id_bound_through_the_entry(tmp_path, monkeypatch):
     monkeypatch.setattr(starfinder.assembly, "assemble", lambda *a, **k: stand_in)
     before = listing(folder.root)
     with pytest.raises(ValueError, match="16777217 rows"):
-        folder.dataset.export("sample1", placement=folder.placement_dir, config=ExportConfig(fuse=False,
-                                                                                             fuse_labels=True),
+        folder.dataset.export("sample1", placement=folder.placement_dir,
+                              config=ExportConfig(route="per_fov", fuse=False, fuse_labels=True),
                               output_dir=folder.export_dir)
     assert listing(folder.root) == before and not folder.export_dir.exists()
 
@@ -864,7 +864,8 @@ TABLE_FILES = ["export.json", "sample.h5ad", "tables/cells.csv", "tables/counts.
 
 
 def export(f, config=None, **kwargs):
-    return f.dataset.export("sample1", placement=kwargs.pop("placement", f.placement_dir), config=config,
+    return f.dataset.export("sample1", placement=kwargs.pop("placement", f.placement_dir),
+                            config=ExportConfig(route="per_fov") if config is None else config,
                             output_dir=kwargs.pop("output_dir", f.export_dir), **kwargs)
 
 
@@ -882,10 +883,10 @@ def test_ex1_the_label_part_runs_third(tmp_path, monkeypatch):
     monkeypatch.setattr(export_module, "fuse", lambda *a, **k: calls.append("fuse") or real_fuse(*a, **k))
     monkeypatch.setattr(export_module, "fuse_labels", lambda *a, **k: calls.append("fuse_labels") or
                         real_labels(*a, **k))
-    record = export(folder, ExportConfig(fuse_labels=True))
+    record = export(folder, ExportConfig(route="per_fov", fuse_labels=True))
     assert calls == ["assemble", "fuse", "fuse_labels"]
     assert sorted(listing(folder.export_dir)) == sorted(DEFAULT_FILES + ["cell_labels.ome.tif"])
-    assert record.parts == {"assemble": "written", "fuse": "written", "fuse_labels": "written",
+    assert record.parts == {"assemble": "written", "fuse": "written", "segment": "off", "fuse_labels": "written",
                             "export_spatialdata": "off"} and record.complete
     labels = record.record["labels"]
     assert labels["assembly_sha256"] == section_sha256(record.record["assembly"])
@@ -920,7 +921,7 @@ def replace_territory(folder, fov="Position002"):
 def test_ex3_c_e_the_saved_assembly_meets_a_changed_territory(tmp_path, change):
     """(c) and (e): with conflicts true and assemble off, check 4's load_assembly meets the fault first."""
     folder = export_folder(tmp_path)
-    export(folder, ExportConfig(fuse=False))
+    export(folder, ExportConfig(route="per_fov", fuse=False))
     if change == "removed":
         territory_of(folder).unlink()
         match = f"{re.escape(str(territory_of(folder)))} is missing"
@@ -929,31 +930,32 @@ def test_ex3_c_e_the_saved_assembly_meets_a_changed_territory(tmp_path, change):
         match = f"{re.escape(str(territory_of(folder)))} has SHA-256 [0-9a-f]{{64}}, the record [0-9a-f]{{64}}"
     before = listing(folder.root)
     with pytest.raises(ValueError, match=match):
-        export(folder, ExportConfig(assemble=False, fuse=False, fuse_labels=True))
+        export(folder, ExportConfig(route="per_fov", assemble=False, fuse=False, fuse_labels=True))
     assert listing(folder.root) == before
 
 
 @needs_anndata
 def test_ex3_f_the_assemble_part_meets_a_changed_territory(tmp_path):
     folder = export_folder(tmp_path)
-    export(folder, ExportConfig(fuse=False))
+    export(folder, ExportConfig(route="per_fov", fuse=False))
     territory_of(folder).unlink()
     tables = listing(folder.export_dir)
     with pytest.raises(ValueError, match=re.escape(str(territory_of(folder)))):
-        export(folder, ExportConfig(fuse=False, fuse_labels=True))
+        export(folder, ExportConfig(route="per_fov", fuse=False, fuse_labels=True))
     assert listing(folder.export_dir) == tables
 
 
 @needs_anndata
 def test_ex3_g_a_territory_missing_without_conflicts(tmp_path):
     folder = export_folder(tmp_path)
-    export(folder, ExportConfig(fuse=False, assembly=AssemblyConfig(conflicts=False)))
+    export(folder, ExportConfig(route="per_fov", fuse=False, assembly=AssemblyConfig(conflicts=False)))
     assert all(e["territories"] == {"path": None, "sha256": None} for e in record_of(folder)["assembly"]["fovs"])
     territory_of(folder).unlink()
     with pytest.warns(ExportIncompleteWarning, match="fuse_labels could not run: territory_missing") as caught:
-        record = export(folder, ExportConfig(assemble=False, fuse=False, fuse_labels=True))
+        record = export(folder, ExportConfig(route="per_fov", assemble=False, fuse=False, fuse_labels=True))
     assert len([w for w in caught if w.category is ExportIncompleteWarning]) == 1
-    assert record.parts == {"assemble": "reused", "fuse": "off", "fuse_labels": "not_run", "export_spatialdata": "off"}
+    assert record.parts == {"assemble": "reused", "fuse": "off", "segment": "off", "fuse_labels": "not_run",
+                            "export_spatialdata": "off"}
     labels = record.record["labels"]
     assert labels["reason"] == "territory_missing" and labels["outputs"] == []
     assert labels["missing"] == [{"fov_id": "Position002", "path": str(territory_of(folder))}]
@@ -964,10 +966,10 @@ def test_ex3_g_a_territory_missing_without_conflicts(tmp_path):
 @needs_anndata
 def test_ex3_h_a_replaced_territory_without_conflicts(tmp_path):
     folder = export_folder(tmp_path)
-    export(folder, ExportConfig(fuse=False, assembly=AssemblyConfig(conflicts=False)))
+    export(folder, ExportConfig(route="per_fov", fuse=False, assembly=AssemblyConfig(conflicts=False)))
     target = replace_territory(folder)
     with pytest.raises(ValueError, match=f"{re.escape(str(target))} has SHA-256"):
-        export(folder, ExportConfig(assemble=False, fuse=False, fuse_labels=True))
+        export(folder, ExportConfig(route="per_fov", assemble=False, fuse=False, fuse_labels=True))
     exported = record_of(folder)
     assert exported["parts"]["assemble"] == "reused" and exported["parts"]["fuse_labels"] == "failed"
     assert exported["labels"]["error"]["type"] == "ValueError"

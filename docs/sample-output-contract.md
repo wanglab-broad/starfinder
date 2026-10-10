@@ -229,6 +229,16 @@ New names under N1:
 | Warning | `ExportIncompleteWarning`, issued when a part could not run | `UserWarning` subclass |
 | Check | `check_export(folder)` | function; raises `ValueError` naming the first failed condition |
 | Lookup | `lookup_source(folder, *, spot=None, cell=None)` | function |
+| Route values | `ROUTES = ("per_fov", "after_fusion")` | tuple |
+| Settings of the route | `SampleSegmentationConfig(runs, cells, nuclei=None, assignment=AssignmentConfig(), device="cpu")` | frozen dataclass |
+| One run | `SampleSegmentationRun(name, target, inputs, method, seeds=None)` | frozen dataclass |
+| The segment part | `segment_fused(output_dir, *, config, sample)` returning `SampleSegmentation` | function |
+| Its result | `SampleSegmentation(grid, runs, record)` | frozen dataclass |
+| Its loader | `load_sample_segmentation(output_dir)` | function |
+| The assembly of this route | the keyword `segmentation: SampleSegmentation | None = None` of `assemble` (`starfinder.assembly`) | keyword |
+| The consistency check | `compare_routes(per_fov, after_fusion, *, threshold=0.5, output=None)` returning `RouteComparison` | function, frozen dataclass |
+| Export settings | `ExportConfig.route`, `ExportConfig.segment`, `ExportConfig.segmentation` | fields |
+| Record | the `segmentation` section of `export.json`; the key `route` in the `assembly` section | JSON |
 
 ## The export entry
 
@@ -295,6 +305,17 @@ In this order; each raises, names the FOVs or keys, and leaves the folder unchan
 6. **Label IDs**, when `fuse_labels` is on: the sample cell table has at most
    16,777,216 rows (2^24), so every `instance_id` fits in float32 exactly ("Assembled
    label export", "IDs and float32"; `ValueError` naming the count).
+7. **Route** ({doc}`sample-segmentation-contract`, "The entry", check 7): the route is a
+   value of `ROUTES` or null; `route: after_fusion` with `dimensionality: stack` or with
+   `projection: sum` is refused, for a set route and for the default alike; on the route
+   after fusion with an `assignment` name, `segmentation` is given, each run's input
+   images are names of `images`, `dimensionality` writes the projection, `fuse` is on
+   unless `segment` is off, `assemble` is on unless `segment` is off, the reuse conditions
+   hold when `segment` is off, the runs' configs validate, their seeds name earlier runs,
+   `cells` and `nuclei` name runs of the targets `cell` (or `nucleus` as territories) and
+   `nucleus`, and every model resolves with its SHA-256 (`resolve_model`, which imports no
+   segmentation library). Each failure raises `ValueError` (or the model errors of
+   {doc}`segmentation-contract`) naming the key.
 
 ### When a part cannot run
 
@@ -1595,6 +1616,9 @@ class ExportConfig:
     fusion: FusionConfig = FusionConfig()
     labels: LabelConfig = LabelConfig()
     spatialdata: SpatialDataExportConfig = SpatialDataExportConfig()
+    route: str | None = None                         # "per_fov" | "after_fusion"; None: by dimensionality
+    segment: bool = True                             # the part segment of the route after fusion
+    segmentation: SampleSegmentationConfig | None = None  # its settings (sample-segmentation-contract)
 ```
 
 `__post_init__` refuses unknown values, a scale whose reciprocal is not whole, a negative

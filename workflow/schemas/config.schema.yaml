@@ -1853,4 +1853,50 @@ $defs:
         maximum: 1
       spatialdata_zarr_format:
         enum: [3, 2]
+      route:
+        description: "per_fov or after_fusion; null: by dimensionality (projection: after_fusion; stack, both: per_fov)"
+        enum: ["per_fov", "after_fusion", null]
+      segment:
+        description: "The part segment of the route after fusion; false reuses the saved sample segmentation"
+        type: boolean
+      segmentation:
+        description: >-
+          The segmentation of the fused projection on the route after fusion (SampleSegmentationConfig):
+          device, cells, nuclei and runs, each with name, target, inputs ({role, image}), seeds and method,
+          whose config fields are the run's other keys (pixel lengths of the acquired grid)
+        type: ["object", "null"]
+        properties:
+          device:
+            enum: ["cpu", "cuda"]
+          cells:
+            type: string
+          nuclei:
+            type: ["string", "null"]
+          runs:
+            type: array
+            minItems: 1
+            items:
+              type: object
+              required: [name, target, method]
+              properties:
+                name:
+                  type: string
+                target:
+                  enum: ["nucleus", "cell"]
+                inputs:
+                  type: array
+                  items:
+                    type: object
+                    required: [role, image]
+                    properties:
+                      role:
+                        type: string
+                      image:
+                        type: string
+                    additionalProperties: false
+                seeds:
+                  type: ["string", "null"]
+                method:
+                  type: string
+        additionalProperties: false
     additionalProperties: false
