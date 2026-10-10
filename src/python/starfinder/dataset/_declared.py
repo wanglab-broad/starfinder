@@ -84,33 +84,62 @@ def reference_grid(output_root, fov_id, *, dataset_id, output_id, voxel_size_xy=
     ``declared`` and no hash. Without stored metadata and without both voxel
     sizes it raises ``ValueError`` naming what to configure; a missing file
     raises ``FileNotFoundError`` naming the setting and the path.
+
+    The shape of a file without stored metadata is taken from its TIFF header,
+    and no pixel is read; a file with stored metadata (whose grid holds the
+    SHA-256 of its pixels) and a file whose header does not settle the shape
+    ``load_volume`` gives (a floating-point file, or one it refuses) are read
+    whole, as :func:`reference_volume` reads them.
     """
-    return reference_volume(output_root, fov_id, dataset_id=dataset_id, output_id=output_id,
-                            voxel_size_xy=voxel_size_xy, voxel_size_z=voxel_size_z,
-                            reference_image=reference_image)[0]
-
-
-def reference_volume(output_root, fov_id, *, dataset_id, output_id, voxel_size_xy=None, voxel_size_z=None,
-                     reference_image=REFERENCE_IMAGE):
-    """(grid, the loaded file, its path) of :func:`reference_grid`, for a caller that also needs the pixels."""
-    from starfinder.io import load_volume
+    from starfinder.io.tiff import _volume_header
     from starfinder.segmentation import ReferenceGrid
-    from starfinder.segmentation._labels import grid_sha256
 
+    settings = {"dataset_id": dataset_id, "output_id": output_id, "voxel_size_xy": voxel_size_xy,
+                "voxel_size_z": voxel_size_z}
+    path = _existing_reference(output_root, fov_id, reference_image)
+    header = _volume_header(path)
+    if header is None or header[1] or header[0] is None:
+        return reference_volume(output_root, fov_id, reference_image=reference_image, **settings)[0]
+    return ReferenceGrid(header[0], _declared_grid_metadata(path, fov_id, **settings), "declared")
+
+
+def _existing_reference(output_root, fov_id, reference_image):
+    """The path of the FOV's reference image; FileNotFoundError naming the setting and the path if it is missing."""
     path = reference_image_path(output_root, fov_id, reference_image)
     if not path.is_file():
         raise FileNotFoundError(f"the reference image of FOV {fov_id!r} is missing: {path} (the file the setting "
                                 f"{REFERENCE_IMAGE_KEY} {reference_image!r} names)")
-    loaded = load_volume(path)
-    if loaded.diagnostics["metadata_source"] == "stored":
-        return (ReferenceGrid(loaded.image.shape, loaded.metadata, f"file:{Path(path).resolve()}",
-                              grid_sha256(loaded.image)), loaded, path)
+    return path
+
+
+def _declared_grid_metadata(path, fov_id, *, dataset_id, output_id, voxel_size_xy, voxel_size_z):
+    """The declared metadata of a file without stored metadata; ValueError naming what to configure without both
+    voxel sizes."""
     missing = [key for key, value in zip(VOXEL_KEYS, (voxel_size_xy, voxel_size_z)) if value is None]
     if missing:
         raise ValueError(f"{path} stores no calibration (no starfinder_metadata description), so its grid is declared "
                          f"by the dataset configuration, which lacks {' and '.join(missing)}: set "
                          f"{' and '.join(missing)} (µm) in the workflow configuration, or the Dataset fields of the "
                          "same names")
-    metadata = declared_metadata(dataset_id, output_id, fov_id, voxel_size_xy=voxel_size_xy,
-                                 voxel_size_z=voxel_size_z)
+    return declared_metadata(dataset_id, output_id, fov_id, voxel_size_xy=voxel_size_xy, voxel_size_z=voxel_size_z)
+
+
+def reference_volume(output_root, fov_id, *, dataset_id, output_id, voxel_size_xy=None, voxel_size_z=None,
+                     reference_image=REFERENCE_IMAGE):
+    """(grid, the loaded file, its path) of :func:`reference_grid`, for a caller that also needs the pixels.
+
+    The file is loaded whole with ``load_volume``; the grid is the one
+    :func:`reference_grid` returns.
+    """
+    from starfinder.io import load_volume
+    from starfinder.segmentation import ReferenceGrid
+    from starfinder.segmentation._labels import grid_sha256
+
+    path = _existing_reference(output_root, fov_id, reference_image)
+    loaded = load_volume(path)
+    if loaded.diagnostics["metadata_source"] == "stored":
+        return (ReferenceGrid(loaded.image.shape, loaded.metadata, f"file:{Path(path).resolve()}",
+                              grid_sha256(loaded.image)), loaded, path)
+    metadata = _declared_grid_metadata(path, fov_id, dataset_id=dataset_id, output_id=output_id,
+                                       voxel_size_xy=voxel_size_xy, voxel_size_z=voxel_size_z)
     return ReferenceGrid(loaded.image.shape, metadata, "declared"), loaded, path
