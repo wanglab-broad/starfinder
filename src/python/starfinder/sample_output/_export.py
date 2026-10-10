@@ -3,16 +3,20 @@
 It runs the checks before anything is written, removes the files the previous record
 lists for the parts that run or are off, records each part that will run as ``not_run``
 with the reason ``export_not_finished`` (and each part that is off as ``off``), and calls
-the parts in order: ``assemble`` (then ``save_assembly``), ``fuse``, ``fuse_labels`` and
-``export_spatialdata``, writing ``export.json`` after each part, whose section replaces
-its entry. The part ``segment`` of the route after fusion is recorded ``off`` on the route
-per FOV (reason ``route_per_fov``, or ``no_cells`` without an assignment); the route after
-fusion with an assignment is refused after check 7, before anything is written, until its
-parts are available.
+the parts in order, writing ``export.json`` after each part, whose section replaces its
+entry. On the route per FOV: ``assemble`` (then ``save_assembly``), ``fuse``,
+``fuse_labels`` and ``export_spatialdata``, with the part ``segment`` recorded ``off``
+(reason ``route_per_fov``, or ``no_cells`` without an assignment, on either route). On the
+route after fusion with an assignment (docs/sample-segmentation-contract.md, "The parts on
+each route"): ``fuse``, ``segment`` (``segment_fused``, or the saved sample segmentation
+``reused``), ``assemble`` with the sample segmentation (or the ``molecules_only`` assembly
+when ``segment`` could not run), then ``fuse_labels`` and ``export_spatialdata``, which are
+recorded ``not_run`` on that route until their readers of the route exist.
 """
 from __future__ import annotations
 
 import json
+from dataclasses import asdict
 from pathlib import Path
 
 from starfinder.stitching import PlacementResult
@@ -25,6 +29,7 @@ from ._record import (
     PARTS,
     SECTIONS,
     ExportRecord,
+    as_json,
     listed_files,
     pending_section,
     read_export,
@@ -171,12 +176,13 @@ def export_sample(dataset, sample: str, *, placement, assignment: str | None = "
     require_approval(placement)
     # 3. Required extras.
     _require_extras(config)
-    # 4. Assembly: computed in memory (assemble applies its own checks), or the saved one. Not on the route after
-    # fusion with an assignment, whose cells come from the sample segmentation, not from per-FOV assignments.
+    if after_fusion:
+        return _export_after_fusion(dataset, sample, placement, assignment, config, output_dir, route_source)
+    # 4. Assembly: computed in memory (assemble applies its own checks), or the saved one.
     result, status = None, None
-    if not after_fusion and config.assemble:
+    if config.assemble:
         result = assemble(placement, assembly_inputs(dataset, placement, assignment), config=config.assembly)
-    elif not after_fusion:
+    else:
         needed = config.fuse_labels or config.export_spatialdata
         if needed and read_export(output_dir).get("assembly", {}).get("stage") != "assembly":
             raise ValueError(f"assemble is off and fuse_labels or export_spatialdata is on, but {output_dir} holds no "
@@ -195,12 +201,6 @@ def export_sample(dataset, sample: str, *, placement, assignment: str | None = "
         check_label_ids(result.cells)
     # 7. The route (docs/sample-segmentation-contract.md, "The entry").
     check_route(config, assignment)
-    if after_fusion:
-        raise NotImplementedError(
-            f"the route after fusion (route: after_fusion, {route_source}) is not available yet: the parts segment "
-            "and the assembly of the sample segmentation's cells are not part of this version of Dataset.export; "
-            "segment_fused can be called alone on a folder whose fuse ran. Set route: per_fov to assemble the "
-            "per-FOV assignments")
     segmentation = segment_off_section(route, route_source, assignment)
 
     record = read_export(output_dir)
@@ -225,7 +225,7 @@ def export_sample(dataset, sample: str, *, placement, assignment: str | None = "
 
     # Part 1: assemble.
     if config.assemble:
-        result = save_assembly(result, output_dir, table_format=config.table_format)
+        result = save_assembly(with_route(result, route, route_source), output_dir, table_format=config.table_format)
         update_section(output_dir, sample, "assemble", result.record, status="written", fill=False)
     elif status == "reused":
         update_section(output_dir, sample, "assemble", result.record, status="reused", fill=False)
@@ -268,3 +268,174 @@ def _spatialdata_part(result, config, output_dir):
                            {"status": "failed", "store": None, "outputs": [],
                             "error": {"type": type(error).__name__, "message": str(error)}})
         raise
+
+
+# --- The route after fusion (docs/sample-segmentation-contract.md, "The entry") -------------------------------------
+
+#: The reason ``fuse_labels`` and ``export_spatialdata`` are recorded ``not_run`` on the route after fusion: their
+#: readers of the sample segmentation (the label export by the rule ``segmentation``, the radii on the segmentation
+#: grid) are not part of this version.
+NOT_ON_ROUTE = "not_available_on_route_after_fusion"
+GRID_TOLERANCE_UM = 1e-9
+
+
+def with_route(result, route, route_source, **extra):
+    """The assembly with the record's ``route`` and ``route_source`` (and ``extra`` keys) set by the export."""
+    from dataclasses import replace
+
+    from starfinder.assembly._fused import territories_of, with_territories
+    return with_territories(replace(result, record=dict(result.record, route=route, route_source=route_source,
+                                                        **extra)), territories_of(result))
+
+
+def _input_grids(dataset, placement):
+    return {fov: _reference_grid(dataset, fov) for fov, status in zip(placement.fovs["fov_id"],
+                                                                     placement.fovs["status"]) if status in INCLUDED}
+
+
+def _reuse(dataset, placement, config, output_dir, held):
+    """The reuse conditions of ``segment: false`` (and ``assemble: false``), before anything is written."""
+    from starfinder.stitching._placement import table_sha256
+
+    from ._grid import fused_grid
+    from ._segment import load_sample_segmentation
+    where = f"export.segment: false reuses the saved sample segmentation of {output_dir}"
+    try:
+        saved = load_sample_segmentation(output_dir)
+    except ValueError as error:
+        raise ValueError(f"{where}, but {error}") from error
+    recorded = saved.record["inputs"].get("placement") or {}
+    current = {"fovs_sha256": table_sha256(placement.fovs), "links_sha256": table_sha256(placement.links)}
+    differ = [key for key in current if recorded.get(key) != current[key]]
+    if differ:
+        raise ValueError(f"{where}, but it was made from another placement: {differ[0]} recorded "
+                         f"{recorded.get(differ[0])}, the placement {current[differ[0]]}")
+    spacing, origin, shape = fused_grid(placement, _input_grids(dataset, placement),
+                                        config=config.fusion).level("projection")
+    grid = saved.grid
+    same = tuple(grid.shape_zyx) == tuple(shape) and all(
+        abs(a - b) <= GRID_TOLERANCE_UM for a, b in zip((*grid.metadata.spacing_zyx, *grid.metadata.origin_zyx),
+                                                        (*spacing, *origin)))
+    if not same:
+        raise ValueError(f"{where}, but it is on another grid ({grid.shape_zyx}, spacing "
+                         f"{grid.metadata.spacing_zyx}, origin {grid.metadata.origin_zyx}) than this export's "
+                         f"placement and scale_yx give ({tuple(shape)}, spacing {spacing}, origin {origin})")
+    names = config.fusion.image_names
+    missing = sorted({e["image"] for e in saved.record["inputs"].get("images") or []} - set(names))
+    if missing:
+        raise ValueError(f"{where}, but it was made from the images {missing}, which are not names of export.images "
+                         f"{list(names)}")
+    held["segmentation"] = saved
+    if config.assemble:
+        return
+    from starfinder.assembly import load_assembly
+    section = read_export(output_dir).get("assembly")
+    if not isinstance(section, dict) or section.get("stage") != "assembly":
+        raise ValueError(f"export.assemble: false reuses the saved tables of {output_dir}, but it holds no saved "
+                         "assembly")
+    files = [{"run": run["name"], "path": run["path"], "sha256": run["sha256"]} for run in saved.record["runs"]]
+    used = [e for e in section.get("segmentation_files") or [] if e.get("run") is not None]
+    if section.get("route") != "after_fusion" or used != files:
+        raise ValueError(f"export.assemble: false reuses the saved tables of {output_dir}, but they were not made "
+                         "from the reused sample segmentation: the assembly section's segmentation_files differ "
+                         "from its label files")
+    result = load_assembly(output_dir)
+    check_assembly(placement, result)
+    held["assembly"] = result
+
+
+def _not_on_route(output_dir, sample, part):
+    import warnings
+
+    from ._record import ExportIncompleteWarning
+    update_section(output_dir, sample, part, {"status": "not_run", "reason": NOT_ON_ROUTE}, fill=False)
+    warnings.warn(f"export part {part} could not run: {NOT_ON_ROUTE}", ExportIncompleteWarning, stacklevel=4)
+
+
+def _export_after_fusion(dataset, sample, placement, assignment, config, output_dir, route_source) -> ExportRecord:
+    """``Dataset.export`` on the route after fusion with an assignment: checks 4 to 7, then the parts in order."""
+    from starfinder.assembly import assemble, save_assembly
+
+    from ._segment import SampleSegmentation, segment_fused
+    # 7. The route, with the reuse conditions when segment is off. On this route it comes before checks 4 and 5, so
+    # that a configuration without the route's settings is refused naming them (RD1), not for its inputs.
+    held = {}
+    check_route(config, assignment, reuse=lambda: _reuse(dataset, placement, config, output_dir, held))
+    # 4. Assembly: the molecule tables of every FOV; their molecules_only assembly is computed in memory, so that
+    # every check of assemble runs before anything is written.
+    inputs = assembly_inputs(dataset, placement, None)
+    if config.assemble:
+        assemble(placement, inputs, config=config.assembly)
+    # 5. Fusion inputs.
+    fusion = None
+    if config.fuse:
+        fusion = fusion_inputs(dataset, placement, config)
+        check_fusion(placement, fusion, config=config.fusion, assembly=None)
+
+    record = read_export(output_dir)
+    if record.get("sample") not in (None, sample):
+        raise ValueError(f"{output_dir} holds the export of sample {record.get('sample')!r}, not {sample!r}")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    runs = {"assemble": config.assemble, "fuse": config.fuse, "segment": config.segment,
+            "fuse_labels": config.fuse_labels, "export_spatialdata": config.export_spatialdata}
+    for part in PARTS:
+        if (part == "assemble" and not config.assemble) or (part == "segment" and not config.segment):
+            continue   # reused: its files and section stay until the part's turn
+        remove_listed(output_dir, listed_files(record, part))
+        record.pop(SECTIONS[part], None)
+        (record.get("parts") or {}).pop(part, None)
+        record[SECTIONS[part]] = pending_section() if runs[part] else {"status": "off"}
+    write_export(output_dir, record, sample=sample)
+
+    # Part fuse.
+    if config.fuse:
+        fuse(placement, fusion, assembly=None, config=config.fusion, output_dir=output_dir)
+    else:
+        update_section(output_dir, sample, "fuse", {"status": "off"}, fill=False)
+    # Part segment.
+    assignment_settings = config.segmentation.assignment
+    if config.segment:
+        segmentation = segment_fused(output_dir, config=config.segmentation, sample=sample,
+                                     identity=(dataset.dataset_id, dataset.sample_id))
+    else:
+        saved = held["segmentation"]
+        section = dict(saved.record, status="reused", assignment=as_json(asdict(assignment_settings)))
+        fused = read_export(output_dir).get("fusion") or {}
+        if fused.get("status") == "written":
+            outputs = {o["image"]: o for o in fused.get("outputs") or []
+                       if o.get("format") == "ome_tiff" and o.get("dimensionality") == "projection"}
+            for entry in saved.record["inputs"].get("images") or []:
+                now = outputs.get(entry["image"], {}).get("sha256")
+                if now != entry["sha256"]:
+                    failed = dict(section, status="failed", reason="fused_input_changed", image=entry["image"],
+                                  recorded_sha256=entry["sha256"], fused_sha256=now)
+                    message = (f"the reused sample segmentation was made from the fused projection of image "
+                               f"{entry['image']!r} with SHA-256 {entry['sha256']}; this export fused it with "
+                               f"SHA-256 {now} (fused_input_changed)")
+                    failed["error"] = {"type": "ValueError", "message": message}
+                    update_section(output_dir, sample, "segment", failed, fill=False)
+                    raise ValueError(message)
+        update_section(output_dir, sample, "segment", section, fill=False)
+        segmentation = SampleSegmentation(saved.grid, saved.runs, as_json(section))
+    # Part assemble.
+    if config.assemble:
+        if segmentation.status in ("written", "reused"):
+            result = with_route(assemble(placement, inputs, config=config.assembly, segmentation=segmentation),
+                                "after_fusion", route_source)
+        else:
+            # The part segment could not run: the molecules_only assembly, so that the files of the parts that ran
+            # exist; the record says why.
+            result = with_route(assemble(placement, inputs, config=config.assembly), "after_fusion", route_source,
+                                reason=f"segment_{segmentation.status}")
+        result = save_assembly(result, output_dir, table_format=config.table_format)
+        update_section(output_dir, sample, "assemble", result.record, status="written", fill=False)
+    else:
+        result = held["assembly"]
+        update_section(output_dir, sample, "assemble", result.record, status="reused", fill=False)
+    # Parts fuse_labels and export_spatialdata: not on this route yet.
+    for part, on in (("fuse_labels", config.fuse_labels), ("export_spatialdata", config.export_spatialdata)):
+        if on:
+            _not_on_route(output_dir, sample, part)
+        else:
+            update_section(output_dir, sample, part, {"status": "off"}, fill=False)
+    return ExportRecord(output_dir, read_export(output_dir))

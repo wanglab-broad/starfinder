@@ -173,7 +173,10 @@ with `expansion`. The record says how the territories were obtained
     gives each row the identity `spot_id = "csv:<row>"`; its source record names the file
     and its SHA-256. It exists for the workflow adapter.
   * Validation, in both constructors: unique, non-null keys; one FOV identity (the
-    `spot_namespace` list `[dataset_id, sample_id, fov_id, subtile_id]`); finite
+    `spot_namespace` list `[dataset_id, sample_id, fov_id, subtile_id]`, or the sample
+    identity `[dataset_id, sample_id, null, null]` with null `fov_id` and `subtile_id`,
+    which the constructor accepts and the route after fusion of
+    {doc}`sample-segmentation-contract` uses); finite
     coordinates (`ValueError` naming the first bad row); every `gene_id` non-null and in
     `genes` (`ValueError` naming the unknown genes; today they are dropped silently,
     {doc}`assignment-baseline` discrepancy 11).
@@ -785,7 +788,9 @@ reload raise `ValueError` naming the path and both hashes.
 ## Boundary with §2.10
 
 Assignment is FOV-local: it reads one FOV's molecules and label images on that FOV's
-reference grid, and nothing else. It reads no tile configuration, computes no global
+reference grid, and nothing else. The function stays as it is; the route after fusion
+({doc}`sample-segmentation-contract`) calls it once on the segmentation grid with the
+sample's molecules in one sample-level namespace. It reads no tile configuration, computes no global
 coordinate, decides no overlap ownership, matches no cell across FOVs and filters nothing
 by position.
 

@@ -13,7 +13,7 @@ import json
 import math
 import warnings
 from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -129,7 +129,7 @@ def check_models(segmentation: SampleSegmentationConfig) -> list[dict]:
     return resolved
 
 
-def check_route(config: ExportConfig, assignment) -> tuple[str, str]:
+def check_route(config: ExportConfig, assignment, *, reuse=None) -> tuple[str, str]:
     """Check 7 of ``Dataset.export`` (docs/sample-segmentation-contract.md, "The entry"); returns the route.
 
     In this order: the route is a value of :data:`ROUTES` or None; the route
@@ -137,7 +137,9 @@ def check_route(config: ExportConfig, assignment) -> tuple[str, str]:
     ``projection: sum``; on the route after fusion with an ``assignment``
     name, ``segmentation`` is given (RD1), each run's input images are names
     of ``fusion.images``, the projection is written, ``fuse`` and ``assemble``
-    are on unless ``segment`` is off, the runs validate (their seeds name
+    are on unless ``segment`` is off, the reuse conditions hold when
+    ``segment`` is off (``reuse``, a callable that ``Dataset.export`` passes
+    and that raises ``ValueError``), the runs validate (their seeds name
     earlier runs, ``cells`` and ``nuclei`` name runs of their targets) and
     every model resolves with its SHA-256. Each failure raises ``ValueError``
     (or ``MissingModelError``, ``ModelHashMismatchError``) naming the key.
@@ -175,6 +177,8 @@ def check_route(config: ExportConfig, assignment) -> tuple[str, str]:
     if config.segment and not config.assemble:
         raise ValueError("export.assemble: false with segment: true is refused: the cells may change, so the tables "
                          "are made again")
+    if not config.segment and reuse is not None:
+        reuse()
     segmentation.__post_init__()
     check_models(segmentation)
     return route, source
@@ -351,8 +355,10 @@ def segment_fused(output_dir, *, config: SampleSegmentationConfig, sample: str,
     SHA-256 and the placement's SHA-256 values, no hash of the ``fusion``
     section), per run its method record, its lengths as given and as used,
     its label file's path and SHA-256 and its counts, ``cells``, ``nuclei``,
-    ``device``, the software, the times and the peak RSS. The files of the
-    earlier section are removed first.
+    ``device``, the assignment settings ``assignment`` (the
+    :class:`~starfinder.assignment.AssignmentConfig` of ``config``, which
+    ``assemble`` with this segmentation uses), the software, the times and
+    the peak RSS. The files of the earlier section are removed first.
 
     When ``fuse`` did not run, it writes no label file and records
     ``not_run`` (``part_not_run``) with :class:`ExportIncompleteWarning`;
@@ -414,6 +420,7 @@ def segment_fused(output_dir, *, config: SampleSegmentationConfig, sample: str,
                        "grid": _grid_record(plan.grid, plan.k), "images": list(plan.images.values()),
                        "placement": plan.placement},
                    "runs": list(runs), "cells": config.cells, "nuclei": config.nuclei, "device": config.device,
+                   "assignment": asdict(config.assignment),
                    "outputs": list(outputs), "software": _software(), **timer.record()}
         section = as_json(section)
         update_section(output_dir, sample, "segment", section)

@@ -52,7 +52,9 @@ of 2026-09-27 on §2.10:
 * **Placement from either backend** enters as one `PlacementResult` (D1, D2).
 * **Retention** (2026-09-27): a cell is retained by its centroid; all molecules of a
   retained cell are kept wherever they lie; an unassigned molecule is retained by its own
-  position. Exclusions are preserved, not dropped. Cells at a FOV border are flagged.
+  position. This holds for the route per FOV; on the route after fusion
+  ({doc}`sample-segmentation-contract`) every cell of the sample segmentation is retained
+  and molecules are retained by their position. Exclusions are preserved, not dropped. Cells at a FOV border are flagged.
   Cells are not merged across FOVs, complete cells are not recovered across borders and
   molecules are not reassigned; two retained observations of one cell in two FOVs are
   matched only by the duplicate rule of 2026-10-09 (below). The workflow is FOV-first:
@@ -134,7 +136,8 @@ New names under A1:
 
 ```python
 def assemble(placement: PlacementResult, inputs: Sequence[AssemblyInput], *,
-             config: AssemblyConfig = AssemblyConfig()) -> AssemblyResult: ...
+             config: AssemblyConfig = AssemblyConfig(),
+             segmentation: SampleSegmentation | None = None) -> AssemblyResult: ...
 
 @dataclass(frozen=True)
 class AssemblyInput:
@@ -157,7 +160,9 @@ the ownership map from the placement, assigns one assembly status per cell and m
 computes the flags, copies the §2.9 counts of the counted cells ("Statuses and reasons"),
 and returns an
 `AssemblyResult`. It never reads or writes files except to load a saved assignment named
-by path, never runs stitch, assign or any per-FOV stage, merges no cell across FOVs,
+by path, never runs stitch, assign or any per-FOV stage (with a `segmentation`, the route
+after fusion of {doc}`sample-segmentation-contract`, it calls `assign_molecules` once on
+the sample), merges no cell across FOVs,
 matches observations of two FOVs only by the duplicate rule ("Retention", rule 8), and
 moves no molecule to another cell. Like `stitch`, it is a sample-level computation, not a
 multi-FOV runner ({doc}`stitching-contract`, "Not the multi-FOV runner").
@@ -167,7 +172,8 @@ multi-FOV runner ({doc}`stitching-contract`, "Not the multi-FOV runner").
 * **Placement**: a `PlacementResult` from `stitch` (`multiview_stitcher`) or from
   `import_bigstitcher`; the two are one type, so assemble does not know the backend except
   from the method record, which it copies.
-* **Per FOV, one of two kinds**, the same kind for every FOV of the sample:
+* **Per FOV, one of two kinds**, the same kind for every FOV of the sample (with a
+  `segmentation`, the inputs are molecule tables):
   * `assignment`: the §2.9 `AssignmentResult` of that FOV, in memory, or the path of its
     saved folder (`<checkpoint dir>/<fov_id>/assignment/<name>/`), loaded with the §2.9
     loader, which checks every recorded SHA-256. Assemble reads its molecule table, cell
@@ -250,7 +256,13 @@ The record of the result (the `assembly` section of `export.json` when saved, "P
 * the config, the ownership geometry with each FOV's footprint, centre and whether it is an
   owning FOV (`owns_points`), the counts of
   "Count accounting", and the SHA-256 of every table and file it writes;
-* `format_version` 1 and `software` as in `run.json` ({doc}`checkpoints`).
+* `format_version` 1 and `software` as in `run.json` ({doc}`checkpoints`);
+* `route` (`per_fov`, or `after_fusion` with a `segmentation`) and `route_source` (`set` or
+  `default` as `Dataset.export` resolved the route; null when `assemble` is called alone),
+  and on the route after fusion `segmentation_files` (per run the label file's name and
+  SHA-256 that it read, and `territories.ome.tif` when it wrote one) and the sample
+  assignment's §2.9 record as `assignment` ({doc}`sample-segmentation-contract`, "The
+  record").
 
 ```json
 {
@@ -547,7 +559,9 @@ planning decisions).
 
 * **Cells** keep the §2.9 key `(cell_namespace, cell_id)`. `cell_namespace` already names
   `[dataset_id, sample_id, fov_id, subtile_id, run]`, so the key is unique in the sample and
-  traces back to the FOV, the segmentation run and the label value in its label file.
+  traces back to the FOV, the segmentation run and the label value in its label file. On
+  the route after fusion it names `[dataset_id, sample_id, null, null, run]`, the run of
+  the sample segmentation, with a null FOV.
 * **Molecules** keep `(spot_namespace, spot_id)`, unique in the sample, tracing back to the
   FOV's read and spot rows; their cell link is the §2.9 nullable `(cell_namespace, cell_id)`.
 * **Readable names**: `obs_name = "<sample>_<fov_id>_<cell_id>"`, the format of today's
@@ -563,7 +577,8 @@ With `F` the input FOVs, `C_f` and `M_f` the cell and molecule tables of FOV `f`
 1. **One assembly status each.** Every row of every `C_f` appears exactly once in the
    sample cell table, keyed by `(cell_namespace, cell_id)`, with one status from
    `ASSEMBLY_STATUSES`; likewise every row of every `M_f` in the sample molecule table,
-   keyed by `(spot_namespace, spot_id)`.
+   keyed by `(spot_namespace, spot_id)`. On the route after fusion the cells are compared
+   with the sample segmentation's labels instead: one row per label of the cell run.
 2. **The populations sum to the inputs.**
    `Σ_f |C_f| = n_cells_retained + Σ_reason n_cells_excluded(reason)` and
    `Σ_f |M_f| = n_molecules_retained + Σ_reason n_molecules_excluded(reason)`; per FOV
@@ -573,7 +588,10 @@ With `F` the input FOVs, `C_f` and `M_f` the cell and molecule tables of FOV `f`
    own `(cell_namespace, cell_id)` (and reason `cell_not_owner` when the cell's is `not_owner`,
    `cell_duplicate_observation` when it is `duplicate_observation`, or `fov_not_placed`); every `unassigned` molecule of a placed FOV is retained exactly when
    its position's owner is its FOV, which is never the case for a `placeholder` ("Placeholder
-   FOVs"); every `outside_grid` molecule is excluded.
+   FOVs"); every `outside_grid` molecule is excluded. On the route after fusion molecules
+   follow their own position only, by the rule of the `molecules_only` assembly (a
+   retained molecule outside the segmentation grid in Y or X is excluded `outside_grid`),
+   and only a retained molecule has a sample assignment.
 4. **Counted cells' counts equal the per-FOV counts.** For every counted cell
    ("Statuses and reasons"), keyed by `(cell_namespace, cell_id)`, its rows in the sample
    `counts` equal its rows in its FOV's §2.9 `counts`, compartment by compartment; no
@@ -610,7 +628,10 @@ footprint_y1, footprint_x0, footprint_x1` and `centre_y, centre_x` (µm); `owns_
 `n_cells_retained`, `n_molecules`, `n_molecules_retained`.
 
 **`cells`**, one row per cell of every input FOV, in placement table order, then
-increasing `cell_id`:
+increasing `cell_id` (on the route after fusion, one row per cell of the sample
+segmentation, in increasing `cell_id`, whose `fov_id` is the owning FOV of its ownership
+centroid, or where no owning footprint holds that point the owning FOV with the nearest
+footprint centre: {doc}`sample-segmentation-contract`, "The cells"):
 
 | Column | Type | Content |
 | --- | --- | --- |
@@ -706,7 +727,7 @@ The content of `sample.h5ad`:
 | `obs` | One row per counted cell ("Statuses and reasons": `assembly_status == "retained"` and §2.9 `status == "kept"`), in the cell table's order. `obs_names` are the cells' `obs_name`. Columns: `sample`, `fov_id`, `cell_namespace`, `cell_id`, the §2.9 cell columns that `raw.h5ad` carries (`size_voxels`, `expanded_size_voxels`, `size_physical`, `centroid_*`, `n_molecules`, `n_nuclei`, `correspondence`, `correspondence_flags`, `compartments`), `sample_centroid_z/y/x`, `sample_expanded_centroid_z/y/x`, `ownership_centroid`, `sample_ownership_centroid_z/y/x`, `assembly_flags`, `conflict_with`, and with `annotation` the columns of that sample's annotation row (the workflow passes `documents/sample-annotation.csv` without `fov_start`, `fov_end`). |
 | `var` | The sample's `genes`, in order (`var_names`). |
 | `X` | float64 whole-cell counts: row `i` equals the `whole` rows of cell `i` in the sample `counts`, which equal its §2.9 counts (identity 4). |
-| `layers` | When the inputs gave nuclei: `nucleus` and `cytoplasm`, float64, 0.0 for a measured zero and NaN for every gene of a cell whose `compartments` is not `available`, as in `raw.h5ad`; a FOV assigned without nuclei contributes NaN rows. Without nuclei in any FOV: no layer. |
+| `layers` | When the inputs gave nuclei (on the route after fusion: when the sample segmentation has a nucleus run): `nucleus` and `cytoplasm`, float64, 0.0 for a measured zero and NaN for every gene of a cell whose `compartments` is not `available`, as in `raw.h5ad`; a FOV assigned without nuclei contributes NaN rows. Without nuclei in any FOV: no layer. |
 | `obsm["spatial"]` | `(n, 2)` float64 in µm, the X and Y of the ownership centroid: `[sample_ownership_centroid_x, sample_ownership_centroid_y]` of the cell table. On a row whose `ownership_centroid` is `expanded` (`centroid="territory"` and assign expanded) these equal `sample_expanded_centroid_x, sample_expanded_centroid_y`; on a row where it is `original` (`centroid="original"`, or no expansion) they equal `sample_centroid_x, sample_centroid_y`. X, Y is the order of the scanpy and squidpy convention; the ZYX values are the `obs` columns. |
 | `uns` | `assembly`: the record as JSON text (the per-FOV assignment record hashes included); `spatial_unit`: `"µm"`; `frame_id`; `spatial_centroid`: which centroid `obsm["spatial"]` holds, as JSON text: the columns it copies (`sample_ownership_centroid_x`, `sample_ownership_centroid_y`), the `centroid` setting, and the number of rows whose `ownership_centroid` is `expanded` and `original`. |
 

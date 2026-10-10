@@ -565,9 +565,17 @@ class Dataset:
         error inside the SpatialData part records it ``failed`` and is raised
         again. The part ``segment`` of the route after fusion is recorded
         ``off`` on the route per FOV (reason ``route_per_fov``, or ``no_cells``
-        with ``assignment=None``); the route after fusion with an assignment
-        is not run by this version: it is refused after check 7, before
-        anything is written (``segment_fused`` can be called alone).
+        with ``assignment=None``). On the route after fusion with an
+        assignment (docs/sample-segmentation-contract.md) the parts run in the
+        order ``fuse``; ``segment``
+        (:func:`~starfinder.sample_output.segment_fused` on the fused
+        projection, with the dataset's ``(dataset_id, sample_id)``; with
+        ``segment`` off the saved sample segmentation is ``reused`` under the
+        reuse rule, checked before anything is written); ``assemble`` on each
+        FOV's molecule table ``signal/{fovID}_goodSpots.csv`` with the sample
+        segmentation (the ``molecules_only`` assembly when ``segment`` could
+        not run); and ``fuse_labels`` and ``export_spatialdata``, recorded
+        ``not_run`` on that route in this version.
 
         Parameters
         ----------

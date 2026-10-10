@@ -58,6 +58,7 @@ class Scene:
     cells: np.ndarray
     nuclei: np.ndarray
     molecules: dict
+    statuses: dict = field(default_factory=dict)
 
     @property
     def ids(self):
@@ -146,7 +147,47 @@ def fused_quad() -> Scene:
                  _discs(shape, QUAD_CELLS, shrink=2), quad_molecules())
 
 
-SCENES = {"fused_pair": fused_pair, "fused_quad": fused_quad}
+# --- fused_quad_notch (W-427) -------------------------------------------------------------------------------------
+
+#: The L-shaped cell around the notch that the placeholder FOV4 leaves: an arm down x 17–19.5 µm (scene columns 34 to
+#: 39, rows 34 to 66) and an arm along y 17–19.5 µm (rows 34 to 39, columns 40 to 58). Its centroid, about (22.5,
+#: 20.5) µm, lies where no owning footprint covers it (FOV2 ends at x 20 µm, FOV3 at y 20 µm); the nearest footprint
+#: centre is FOV2's (25, 10) µm.
+NOTCH_CELL = BIG + 5
+NOTCH_DISCS = {cell: value for cell, value in QUAD_CELLS.items() if cell in (2, 3, 11, 12, 13)}
+#: The four molecules of the L-shaped cell (y, x in µm), each seen by every FOV whose footprint holds it.
+NOTCH_MOLECULES = ((25.0, 18.25), (30.0, 18.25), (18.25, 22.0), (18.25, 27.0))
+
+
+def _seen_by(points, genes, origins, shape):
+    """Per FOV ``((z, y, x) index, gene)`` of each point (µm) whose position the FOV's footprint holds."""
+    out = {fov: [] for fov in origins}
+    for (y, x), gene in zip(points, genes):
+        for fov, origin in origins.items():
+            iy, ix = (y - origin[1]) / SPACING[1], (x - origin[2]) / SPACING[2]
+            if -0.5 <= iy < shape[1] - 0.5 and -0.5 <= ix < shape[2] - 0.5:
+                out[fov].append(((1.0, iy, ix), gene))
+    return out
+
+
+def fused_quad_notch() -> Scene:
+    """``fused_quad`` with FOV4 a placeholder, so the covered region is L-shaped, and an L-shaped cell around the
+    notch in place of the cells at the crossing, inside FOV4 and at the outer border."""
+    shape = (72, 72)
+    cells, nuclei = _discs(shape, NOTCH_DISCS), _discs(shape, NOTCH_DISCS, shrink=2)
+    cells[34:67, 34:40] = NOTCH_CELL
+    cells[34:40, 40:59] = NOTCH_CELL
+    yy, xx = np.indices(shape)
+    nuclei[(yy - 50) ** 2 + (xx - 36.5) ** 2 <= 4] = NOTCH_CELL
+    molecules = quad_molecules(cells=NOTCH_DISCS)
+    extra = _seen_by(NOTCH_MOLECULES, [GENES[m % 2] for m in range(len(NOTCH_MOLECULES))], QUAD_ORIGINS, (3, 40, 40))
+    for fov, rows in extra.items():
+        molecules[fov] = molecules[fov] + rows
+    return Scene("fused_quad_notch", (3, 40, 40), dict(QUAD_ORIGINS), cells, nuclei, molecules,
+                 statuses={"FOV4": "placeholder"})
+
+
+SCENES = {"fused_pair": fused_pair, "fused_quad": fused_quad, "fused_quad_notch": fused_quad_notch}
 
 
 # --- The scene as a dataset -----------------------------------------------------------------------------------
@@ -189,6 +230,11 @@ def scene_placement(scene):
                                                "nominal_x": [o[2] for o in scene.origins.values()]}))
     result = placement_from_table(table, {f: scene.grid() for f in scene.ids}, sample=SAMPLE,
                                   origins=dict(scene.origins))
+    if scene.statuses:
+        from starfinder.stitching import PlacementResult
+        fovs = result.fovs.assign(status=[scene.statuses.get(f, s) for f, s in zip(result.fovs.fov_id,
+                                                                                   result.fovs.status)])
+        result = PlacementResult(result.sample, fovs, result.links, result.record)
     return approve_placement(result, reviewer="test", note=scene.name)
 
 
@@ -299,3 +345,136 @@ def route_config(*, route=None, dimensionality="projection", projection="max", s
     """One ``route_configs`` combination: the scene's stains fused at ``1/k``, the route and the segment settings."""
     return ExportConfig(assemble=assemble, fuse=fuse, route=route, segment=segment, segmentation=segmentation,
                         fusion=fusion_config(k, dimensionality=dimensionality, projection=projection))
+
+
+# --- scene_plane (W-427) ----------------------------------------------------------------------------------------
+
+def scene_plane_config():
+    """The single-plane case of docs/synthetic-sample-scene.md on ``sample-tiny-v1`` (seed 42): FOVs of 1 × 36 × 36
+    and jitter (0, 1.5, 1.5) voxels, everything else unchanged; no preset is added."""
+    from dataclasses import replace
+
+    from starfinder.synthetic import sample_scene_preset
+    book, config = sample_scene_preset("sample-tiny-v1")
+    return book, replace(config, acquisition=replace(config.acquisition, fov_shape_zyx=(1, 36, 36),
+                                                     jitter_max_zyx=(0.0, 1.5, 1.5)),
+                         fov=replace(config.fov, shape_zyx=(1, 36, 36)))
+
+
+def write_scene_plane(tmp_path) -> SceneFolder:
+    """``scene_plane`` generated and written as a dataset: its truth placement (approved), its stain as both
+    ``dapi`` and ``flamingo`` (float32 ZYX TIFFs), the reference images with each FOV's grid, the molecule tables of
+    the saved scene as ``signal/`` goodSpots tables and the codebook. ``extra["scene"]`` is the generated scene."""
+    from starfinder.synthetic import generate_sample_scene, save_sample_scene
+    book, config = scene_plane_config()
+    generated = generate_sample_scene(book, config=config)
+    saved = save_sample_scene(generated, Path(tmp_path) / "scene_plane")
+    dataset = Dataset(tmp_path / "input", tmp_path / "output", DS, SAMPLE, "output", codebook=book)
+    root = Path(dataset.output_root)
+    truth = generated.placement.set_index("fov_id")
+    ids = list(generated.positions.fov_id)
+    grids = {f: ReferenceGrid(config.acquisition.fov_shape_zyx, generated.fov_metadata[f], "declared") for f in ids}
+    origins = {f: tuple(float(v) for v in truth.loc[f, ["true_origin_z", "true_origin_y", "true_origin_x"]])
+               for f in ids}
+    table = positions_from_table(generated.positions)
+    placement = approve_placement(placement_from_table(table, grids, sample=SAMPLE, origins=origins),
+                                  reviewer="test", note="scene_plane truth placement")
+    save_placement(placement, root / "stitching" / SAMPLE)
+    for fov in ids:
+        save_volume(generated.stains[fov], root / "images" / "ref_merged" / f"{fov}.tif",
+                    metadata=grids[fov].metadata)
+        for name in STAINS:
+            path = root / "images" / name / f"{fov}.tif"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tifffile.imwrite(path, np.asarray(generated.stains[fov], np.float32), photometric="minisblack",
+                             metadata={"axes": "ZYX"})
+        csv = root / "signal" / f"{fov}_goodSpots.csv"
+        csv.parent.mkdir(parents=True, exist_ok=True)
+        csv.write_bytes((Path(saved) / "fovs" / fov / "molecules.csv").read_bytes())
+    plane = PlaneScene("scene_plane", tuple(config.acquisition.fov_shape_zyx), origins, generated)
+    return SceneFolder(plane, dataset, placement, grids, extra={"scene": generated, "book": book})
+
+
+@dataclass
+class PlaneScene:
+    """``scene_plane`` as the helpers of this module read a scene: its FOVs, origins and the generated scene."""
+    name: str
+    shape: tuple
+    origins: dict
+    generated: object
+
+    @property
+    def ids(self):
+        return list(self.origins)
+
+
+def plane_truth_labels(scene: PlaneScene, grid, target="cell") -> np.ndarray:
+    """``truth_import`` for a generated scene: each pixel of the grid takes the sample label grid's value nearest
+    its centre (0 outside that grid)."""
+    labels = scene.generated.sample_labels[target][0]
+    record = scene.generated.record["sample_grid"]
+    (_, sy, sx), (_, oy, ox) = record["spacing_zyx"], record["origin_zyx"]
+    n_y, n_x = grid.shape_zyx[1:]
+    (_, gy, gx), (_, py, px) = grid.metadata.spacing_zyx, grid.metadata.origin_zyx
+    iy = np.floor((py + np.arange(n_y) * gy - oy) / sy + 0.5).astype(np.int64)
+    ix = np.floor((px + np.arange(n_x) * gx - ox) / sx + 0.5).astype(np.int64)
+    inside_y, inside_x = (iy >= 0) & (iy < labels.shape[0]), (ix >= 0) & (ix < labels.shape[1])
+    out = np.where(inside_y[:, None] & inside_x[None, :], labels[iy.clip(0, labels.shape[0] - 1)[:, None],
+                                                                 ix.clip(0, labels.shape[1] - 1)[None, :]], 0)
+    return np.ascontiguousarray(out[np.newaxis].astype(np.uint32))
+
+
+def scene_truth_labels(folder, grid, target="cell") -> np.ndarray:
+    """The truth labels of any scene of this module on a grid."""
+    if isinstance(folder.scene, PlaneScene):
+        return plane_truth_labels(folder.scene, grid, target)
+    return truth_labels(folder.scene, grid, target)
+
+
+def fov_label_image(folder, fov, target="cell") -> np.ndarray:
+    """A FOV's truth labels: the scene cut at its origin (hand-built), or the generated FOV label image."""
+    if isinstance(folder.scene, PlaneScene):
+        return np.ascontiguousarray(folder.scene.generated.fov_labels[fov][target], np.uint32)
+    scene = folder.scene
+    return np.ascontiguousarray(scene.cut(scene.cells if target == "cell" else scene.nuclei, fov), np.uint32)
+
+
+def write_folder(tmp_path, name) -> SceneFolder:
+    """A fixture of this module written as a dataset by its name."""
+    return write_scene_plane(tmp_path) if name == "scene_plane" else write_scene(tmp_path, SCENES[name]())
+
+
+# --- per_fov_routes (W-427) ---------------------------------------------------------------------------------------
+
+def per_fov_routes(folder, *, assignment=None, name="default"):
+    """The route per FOV of the same fixture: per FOV the truth labels cut at its origin imported (``relabel``
+    false), assigned with ``assignment`` (the AssignmentConfig of the route after fusion) and saved as the §2.9
+    assignment folder ``checkpoints/<fov>/assignment/<name>/``. Returns the AssignmentResults by FOV."""
+    import json as json_module
+
+    from starfinder.assignment import AssignmentConfig, assign_molecules, molecule_table_from_csv
+    from starfinder.assignment._persist import assignment_directory, write_assignment
+    from starfinder.segmentation import import_labels
+    assignment = AssignmentConfig() if assignment is None else assignment
+    root = folder.root
+    genes = tuple(folder.dataset.codebook.genes)
+    results = {}
+    for fov in folder.scene.ids:
+        grid = folder.grids[fov]
+        labels = {}
+        for target in ("cell", "nucleus"):
+            path = root / "truth_fov" / fov / f"{target}.tif"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tifffile.imwrite(path, fov_label_image(folder, fov, target), photometric="minisblack",
+                             metadata={"axes": "ZYX"})
+            namespace = json_module.dumps([DS, SAMPLE, fov, None, target], separators=(",", ":"))
+            labels[target] = import_labels(path, grid=grid, target=target, relabel=False, label_namespace=namespace)
+        molecules = molecule_table_from_csv(root / "signal" / f"{fov}_goodSpots.csv",
+                                            spot_namespace=json_module.dumps([DS, SAMPLE, fov, None],
+                                                                             separators=(",", ":")), genes=genes)
+        result = assign_molecules(molecules, labels["cell"], grid=grid, nuclei=labels["nucleus"], config=assignment)
+        from dataclasses import replace
+        result = replace(result, record=dict(result.record, name=name))
+        write_assignment(assignment_directory(root / "checkpoints" / fov, name), result, metadata=grid.metadata)
+        results[fov] = result
+    return results

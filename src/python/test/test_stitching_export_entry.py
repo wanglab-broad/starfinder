@@ -172,8 +172,12 @@ def test_assemble_part(folder, monkeypatch):
         assert_frame_equal(getattr(saved, name), getattr(direct, name), check_exact=True)
     section = record.record["assembly"]
     unsaved = ("files", "table_format")                       # what save_assembly adds; no timing field differs
+    # The export records whether the route was set or taken from the default (docs/sample-segmentation-contract.md,
+    # "The route setting"); assemble alone records the route per FOV with route_source null.
+    assert (section["route"], section["route_source"]) == ("per_fov", "set")
+    assert (direct.record["route"], direct.record["route_source"]) == ("per_fov", None)
     assert {k: v for k, v in section.items() if k not in unsaved} == \
-        {k: v for k, v in json.loads(json.dumps(direct.record)).items() if k not in unsaved}
+        {k: v for k, v in json.loads(json.dumps(dict(direct.record, route_source="set"))).items() if k not in unsaved}
     assert sorted(listing(folder.export_dir)) == TABLE_FILES
     assert record.parts["assemble"] == "written" and record.record["fusion"] == {"status": "off"}
     check_export(folder.export_dir)

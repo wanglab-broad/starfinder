@@ -208,6 +208,13 @@ def check_identities(result: AssemblyResult) -> None:
         differ += sorted(set(per_fov) - set(fovs["fov_id"]))
         if differ:
             _fail(1, f"the sample {name} table holds every input row exactly once (fovs.{column})", differ[0])
+    # 1 on the route after fusion: one cell row per label of the cell run, as the sample assignment counted them.
+    after_fusion = record.get("route") == "after_fusion" and record.get("mode") == "cells"
+    if after_fusion:
+        labelled = ((record.get("assignment") or {}).get("counts") or {}).get("cells")
+        if labelled != len(cells):
+            _fail(1, f"the sample cell table holds one row per label of the cell run ({labelled} labels, "
+                     f"{len(cells)} rows)")
     # 2: the populations sum to the inputs, per FOV and in total; reasons belong to their status.
     for name, frame, reasons, key in (("cell", cells, CELL_ASSEMBLY_REASONS, ["cell_namespace", "cell_id"]),
                                       ("molecule", molecules, MOLECULE_ASSEMBLY_REASONS,
@@ -288,9 +295,17 @@ def check_identities(result: AssemblyResult) -> None:
             first = int(np.flatnonzero(in_cell)[np.flatnonzero(missing)[0]])
             _fail(3, "every assigned or excluded_cell molecule's cell is a row of the cell table",
                   tuple(molecules[["spot_namespace", "spot_id"]].iloc[first]))
-        cell_reason = joined["_reason"].to_numpy(dtype=object)
-        want_status[in_cell] = joined["_status"].to_numpy(dtype=object)
-        want_reason[in_cell] = np.array([CELL_TO_MOLECULE_REASON.get(r, r) for r in cell_reason], dtype=object)
+        # On the route per FOV a molecule follows its cell; after fusion it keeps its own position's status.
+        if not after_fusion:
+            cell_reason = joined["_reason"].to_numpy(dtype=object)
+            want_status[in_cell] = joined["_status"].to_numpy(dtype=object)
+            want_reason[in_cell] = np.array([CELL_TO_MOLECULE_REASON.get(r, r) for r in cell_reason], dtype=object)
+    if after_fusion:
+        # Only the retained molecules are assigned; an excluded one has no sample assignment.
+        assigned_excluded = (status == "excluded") & pd.notna(molecules["assignment_status"]).to_numpy(dtype=bool)
+        if assigned_excluded.any():
+            _fail(3, "on the route after fusion only retained molecules have a sample assignment",
+                  tuple(molecules[["spot_namespace", "spot_id"]].iloc[int(np.flatnonzero(assigned_excluded)[0])]))
     want_status[~placed], want_reason[~placed] = "excluded", "fov_not_placed"
     wrong = np.flatnonzero((status != want_status) | (reason != want_reason))
     if len(wrong):
@@ -735,8 +750,8 @@ def _software():
 
 
 def assemble(placement: PlacementResult, inputs: Sequence[AssemblyInput], *,
-             config: AssemblyConfig = AssemblyConfig()) -> AssemblyResult:
-    """Assemble a sample from its placement and its per-FOV §2.9 results.
+             config: AssemblyConfig = AssemblyConfig(), segmentation=None) -> AssemblyResult:
+    """Assemble a sample from its placement and its per-FOV §2.9 results, or on the route after fusion.
 
     Applies the checks of docs/assembly-contract.md ("Checks the entry
     applies") in order, then maps every observation into sample coordinates
@@ -754,7 +769,30 @@ def assemble(placement: PlacementResult, inputs: Sequence[AssemblyInput], *,
     larger stays and the other is excluded ``duplicate_observation`` with its
     molecules, naming the kept cell in ``duplicate_of``. No cell is merged and
     no molecule moves to another cell. It reads no file except a saved
-    assignment named by path, and writes none.
+    assignment named by path, and writes none. The record's ``route`` is
+    ``per_fov`` (``route_source`` null; ``Dataset.export`` records whether the
+    route was set or taken from the default).
+
+    With ``segmentation`` (the route after fusion,
+    docs/sample-segmentation-contract.md) the inputs are molecule tables: it
+    computes their ``molecules_only`` assembly by the rules above, converts
+    its retained molecules to one molecule table on the segmentation grid
+    (``spot_namespace`` ``[dataset_id, sample_id, null, null]``, ``z, y, x =
+    (sample_zyx − O) ⊘ S``), calls
+    :func:`~starfinder.assignment.assign_molecules` once on the sample with
+    the cell run, the nucleus run and the AssignmentConfig of the
+    segmentation's record (an expansion in pixels divided by the scale
+    factor), and maps its rows back to the original keys by position. Every
+    cell of the cell run is one retained row with its label as ``cell_id``;
+    its ``fov_id`` is the owner of its ownership centroid or, where no owning
+    footprint holds it, the owning FOV with the nearest footprint centre
+    (``owner_fov_id`` null); no cell flag and no duplicate rule applies. A
+    molecule keeps its rule (a position belongs to one FOV); a retained one
+    outside the segmentation grid in Y or X is excluded ``outside_grid``. The
+    record holds ``route`` ``after_fusion``, ``segmentation_files`` (each
+    run's label file and SHA-256) and the sample assignment's record as
+    ``assignment``; with an expansion :func:`save_assembly` writes the
+    territories as ``territories.ome.tif``.
 
     Parameters
     ----------
@@ -767,6 +805,11 @@ def assemble(placement: PlacementResult, inputs: Sequence[AssemblyInput], *,
         Ownership rule, centroid, tie rule, whether to compute the
         ``conflict`` and ``unclaimed`` flags, and the duplicate rule's
         threshold.
+    segmentation : SampleSegmentation, optional
+        The sample segmentation of the route after fusion
+        (:func:`~starfinder.sample_output.segment_fused` or
+        :func:`~starfinder.sample_output.load_sample_segmentation`), status
+        ``written`` or ``reused``.
 
     Returns
     -------
@@ -784,11 +827,19 @@ def assemble(placement: PlacementResult, inputs: Sequence[AssemblyInput], *,
         subtile, different gene lists, placed FOVs of different ``nominal_z``,
         a placement without an owning FOV, or a repeated ``obs_name``; with the
         duplicate rule on, FOVs with retained cells of different spacings or
-        of mixed plane and volume territories.
+        of mixed plane and volume territories; with a segmentation, inputs
+        that are not molecule tables, a segmentation without cells, of
+        another frame or placement, or whose labels are of another
+        ``[dataset_id, sample_id]`` than the molecules.
     IncompatibleGeometryError
         An input grid that is not the grid the placement (or the assignment)
         recorded, or one without known spacing, unit µm and identity direction.
     """
+    if segmentation is not None:
+        from ._fused import _check, assemble_after_fusion
+        base = assemble(placement, inputs, config=config)
+        _check(placement, list(inputs), segmentation)
+        return assemble_after_fusion(placement, list(inputs), config, segmentation, base)
     loaded, mode, genes = _check_inputs(placement, inputs, config)
     by_fov = {fov.fov_id: fov for fov in loaded}
     ownership = ownership_map(placement, {fov.fov_id: fov.grid for fov in loaded}, config=config)
@@ -1109,6 +1160,7 @@ def _record(placement, config, mode, genes, ownership: OwnershipMap, by_fov, fov
     geometry = {row["fov_id"]: row for row in ownership.geometry.to_dict("records")}
     return json_record({
         "format_version": FORMAT_VERSION, "stage": STAGE, "sample": placement.sample, "mode": mode,
+        "route": "per_fov", "route_source": None,
         "frame": placement.record.get("frame"), "genes": list(genes),
         "placement": {"sample": placement.sample, "method": method.get("method"),
                       "implementation": method.get("implementation"), "config": method.get("config"),

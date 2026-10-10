@@ -267,6 +267,7 @@ def test_rs4_check_7_order(tmp_path, case):
 
 
 @needs_anndata
+@needs_library
 def test_rs4_a_valid_configuration_passes_check_7(tmp_path):
     folder = write_scene(tmp_path, SCENES["fused_pair"]())
     molecules_only_export(folder)
@@ -276,11 +277,31 @@ def test_rs4_a_valid_configuration_passes_check_7(tmp_path):
     assert check_route(dataclasses.replace(config, route="after_fusion"), "default") == ("after_fusion", "set")
     assert check_route(route_config(dimensionality="both"), "default") == ("per_fov", "default")
     assert check_route(route_config(dimensionality="stack"), "default") == ("per_fov", "default")
-    # Until the route after fusion is part of Dataset.export, a valid configuration is refused after check 7,
-    # before anything is written, naming the part that is not available yet.
-    with pytest.raises(NotImplementedError, match="not available yet"):
-        export(folder, config)
     assert listing(folder.root) == before
+    # Dataset.export passes check 7 with it and runs the route after fusion: fuse, then the part segment (here a
+    # stand-in for segment, so that no model is loaded), whose nucleus import is written on the fused grid.
+    from starfinder.image import ImageMetadata
+    from starfinder.sample_output import fused_grid
+    from starfinder.segmentation import ReferenceGrid
+    direction = ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))
+    spacing, origin, shape = fused_grid(folder.placement, folder.grids,
+                                        config=config.fusion).level("projection")
+    grid = ReferenceGrid(tuple(shape), ImageMetadata(f"sample:{SAMPLE}", spacing, origin, direction, "µm"),
+                         "declared")
+    truth_import(folder, grid, "nucleus", path=tmp_path / "truth" / "nucleus.ome.tif")
+
+    class Reached(Exception):
+        pass
+
+    def stand_in(*args, **kwargs):
+        raise Reached("the part segment was reached")
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(segment_module, "segment", stand_in)
+        with pytest.raises(Reached):
+            export(folder, config)
+    record = record_of(folder.export_dir)
+    assert record["parts"]["fuse"] == "written" and record["parts"]["segment"] == "failed"
+    assert record["parts"]["assemble"] == "not_run" and record["assembly"]["reason"] == "export_not_finished"
 
 
 # --- The route per FOV is untouched ----------------------------------------------------------------------------
@@ -315,7 +336,10 @@ def test_the_route_per_fov_is_untouched(tmp_path, case):
     loaded = load_assembly(folder.export_dir)
     for table in ("fovs", "cells", "molecules", "counts"):
         pd.testing.assert_frame_equal(getattr(loaded, table), getattr(expected, table), check_exact=True)
-    assert "route" not in record["assembly"] and "route" not in record["fusion"]
+    # The assembly section records the route and its source (docs/sample-segmentation-contract.md, "The record");
+    # the fusion section does not name it.
+    assert (record["assembly"]["route"], record["assembly"]["route_source"]) == ("per_fov", source)
+    assert "route" not in record["fusion"]
     check_export(folder.export_dir)
     # Without an assignment the part is off with the reason no_cells, on the route per FOV too.
     record = folder.dataset.export(GOLDEN_SAMPLE, placement=folder.placement_dir, assignment=None,

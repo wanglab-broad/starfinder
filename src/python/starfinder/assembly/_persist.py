@@ -13,8 +13,11 @@ import json
 from dataclasses import replace
 from pathlib import Path
 
+import numpy as np
+
 from ._anndata import sample_anndata
 from ._assemble import AssemblyResult, fill_cell_namespace
+from ._fused import TERRITORIES_FILE, territories_of, with_territories
 
 EXPORT_FILE = "export.json"
 SECTION = "assembly"
@@ -46,7 +49,11 @@ def save_assembly(result: AssemblyResult, folder, *, table_format: str = "csv") 
     left by an earlier save is removed. Then it replaces only the ``assembly``
     section of ``folder/export.json`` (created when absent) with the record,
     whose ``files`` lists each file's path, SHA-256 and, for a table, its
-    dtypes. ``sample.h5ad`` holds the record without its ``files``.
+    dtypes. ``sample.h5ad`` holds the record without its ``files``. A result
+    of the route after fusion whose assignment expanded the cells also writes
+    the territories as ``territories.ome.tif`` (uint32, values ``cell_id``, on
+    the segmentation grid), listed in ``files`` and in the record's
+    ``segmentation_files``.
 
     Parameters
     ----------
@@ -87,6 +94,21 @@ def save_assembly(result: AssemblyResult, folder, *, table_format: str = "csv") 
             raise ValueError(f"{export} is not a JSON object")
     tables = folder / TABLE_DIR
     files = {}
+    territories = territories_of(result)
+    if territories is not None:
+        # The route after fusion with an expansion: the territories assign sampled, on the segmentation grid.
+        from starfinder.sample_output._tiff import write_ome_tiff
+        labels, metadata = territories
+        folder.mkdir(parents=True, exist_ok=True)
+        write_ome_tiff(folder / TERRITORIES_FILE, labels[0], metadata=metadata,
+                       annotation={"sample": result.sample, "image": TERRITORIES_FILE[:-len(".ome.tif")],
+                                   "values": "cell_id"})
+        digest = file_sha256(folder / TERRITORIES_FILE)
+        files["territories"] = {"path": TERRITORIES_FILE, "sha256": digest}
+        entries = [e for e in result.record.get("segmentation_files") or [] if e.get("run") is not None]
+        result = with_territories(replace(result, record=dict(
+            result.record, segmentation_files=entries + [{"run": None, "path": TERRITORIES_FILE, "sha256": digest}])),
+            territories)
     for name in TABLES:
         file_name, dtypes = _write_table(getattr(result, name), tables, name, table_format)
         files[name] = {"path": f"{TABLE_DIR}/{file_name}", "sha256": file_sha256(tables / file_name),
@@ -100,7 +122,7 @@ def save_assembly(result: AssemblyResult, folder, *, table_format: str = "csv") 
     record = json_record(dict(record, files=files))
     sections[SECTION] = record
     write_json(sections, export)
-    return replace(result, record=record)
+    return with_territories(replace(result, record=record), territories)
 
 
 def load_assembly(folder) -> AssemblyResult:
@@ -112,7 +134,9 @@ def load_assembly(folder) -> AssemblyResult:
     export) must exist with that SHA-256. A molecule table saved without the
     column ``cell_namespace`` (before it existed) gets it from the cell table:
     a molecule with a ``cell_id`` takes the namespace of the cell row of its
-    ``fov_id`` and ``cell_id``, null where no single row holds them.
+    ``fov_id`` and ``cell_id``, null where no single row holds them. The
+    ``territories.ome.tif`` of the route after fusion is read with the result,
+    so that it can be saved again.
 
     Raises
     ------
@@ -144,5 +168,19 @@ def load_assembly(folder) -> AssemblyResult:
     frames = {name: _read_table(folder / files[name]["path"], files[name]["dtypes"]) for name in TABLES}
     # A molecule table saved before the column cell_namespace existed gets it from the cell table.
     frames["molecules"] = fill_cell_namespace(frames["molecules"], frames["cells"])
-    return AssemblyResult(record["sample"], frames["fovs"], frames["cells"], frames["molecules"], frames["counts"],
-                          tuple(record["genes"]), record)
+    result = AssemblyResult(record["sample"], frames["fovs"], frames["cells"], frames["molecules"], frames["counts"],
+                            tuple(record["genes"]), record)
+    if "territories" in files:
+        # The territories of the route after fusion, kept with the result so that it can be saved again.
+        import tifffile
+
+        from starfinder.image import ImageMetadata
+        from starfinder.io.tiff import METADATA_NAMESPACE
+        from starfinder.sample_output._tiff import read_ome_layout
+        path = folder / files["territories"]["path"]
+        labels = np.ascontiguousarray(tifffile.imread(path), dtype=np.uint32)
+        stored = read_ome_layout(path)["annotations"][METADATA_NAMESPACE]
+        metadata = ImageMetadata(stored["frame_id"], tuple(stored["spacing_zyx"]), tuple(stored["origin_zyx"]),
+                                 tuple(tuple(row) for row in stored["direction_zyx"]), stored["spatial_unit"])
+        result = with_territories(result, (labels[np.newaxis] if labels.ndim == 2 else labels, metadata))
+    return result

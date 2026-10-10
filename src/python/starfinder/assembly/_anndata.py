@@ -40,7 +40,9 @@ def sample_anndata(result: AssemblyResult, path, *, annotation: Mapping | pd.Ser
     §2.9 cell columns ``raw.h5ad`` carries, every sample-coordinate column,
     ``ownership_centroid``, ``assembly_flags``, ``conflict_with`` and, with
     ``annotation``, the columns of the sample's annotation row. ``X`` is the
-    float64 whole-cell counts in ``genes`` order; when some FOV gave nuclei, the
+    float64 whole-cell counts in ``genes`` order; when some FOV gave nuclei (on
+    the route after fusion: when the sample segmentation's nucleus run entered
+    the sample assignment, as its record ``assignment`` says), the
     ``nucleus`` and ``cytoplasm`` layers (NaN rows where ``compartments`` is
     not ``available``). ``obsm["spatial"]`` is ``[sample_ownership_centroid_x,
     sample_ownership_centroid_y]`` (µm); ``uns`` holds the record as JSON
@@ -96,7 +98,11 @@ def sample_anndata(result: AssemblyResult, path, *, annotation: Mapping | pd.Ser
                 if isinstance(value, str) or value is None else np.full(n, value)
         obs = pd.DataFrame(columns, index=pd.Index([str(v) for v in rows["obs_name"]], dtype=object))
     keys = rows[["cell_namespace", "cell_id"]]
-    layers = any(entry.get("nuclei") for entry in result.record.get("fovs", []))
+    if result.record.get("route") == "after_fusion" and result.mode == "cells":
+        # The route after fusion: from the sample segmentation, through the sample assignment's record.
+        layers = ((result.record.get("assignment") or {}).get("inputs") or {}).get("nuclei") is not None
+    else:
+        layers = any(entry.get("nuclei") for entry in result.record.get("fovs", []))
     var = None
     if result.mode == "molecules_only":
         retained = result.molecules[result.molecules["assembly_status"].eq("retained").to_numpy(dtype=bool)]

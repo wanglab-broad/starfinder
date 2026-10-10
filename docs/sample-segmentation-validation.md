@@ -168,6 +168,18 @@ One line per implemented check: its identifier and the test that implements it, 
 | RS3 | `test_sample_segmentation_segment.py::test_rs3_the_default_without_settings` |
 | RS4 | `test_sample_segmentation_segment.py::test_rs4_check_7`, with the tests `test_rs4_*` of the same file for the refusals at construction, an unknown method key of the workflow block, the order of check 7 and a valid configuration |
 | SG1 | `test_sample_segmentation_segment.py::test_sg1_the_input_is_the_fused_projection`, with `test_sg1_channels_in_the_run_s_role_order` |
-| SG2 | `test_sample_segmentation_segment.py::test_sg2_lengths_in_pixels`, with `test_sg2_the_table_of_pixel_fields_equals_the_registered_methods` |
+| SG2 | `test_sample_segmentation_segment.py::test_sg2_lengths_in_pixels`, with `test_sg2_the_table_of_pixel_fields_equals_the_registered_methods`; the assignment's expansion distance (the last row of the LS2 table): `test_sample_segmentation_route.py::test_sg2_the_assignment_expansion_at_factor_k` and `test_sg2_the_assignment_expansion_in_the_export` |
 | SG3 | `test_sample_segmentation_segment.py::test_sg3_label_files_and_the_section`, with the tests `test_sg3_*` of the same file for `load_sample_segmentation`'s checks, a second call and a folder without a fusion |
 | SG6 | `test_sample_segmentation_segment.py::test_sg6_import_runs` |
+| RS1 | `test_sample_segmentation_route.py::test_rs1_defaults_and_the_recorded_route` |
+| SG4 | `test_sample_segmentation_route.py::test_sg4_reuse`, with `test_sg4_reuse_refused_before_anything_is_written`, `test_sg4_reuse_refused_for_tables_of_another_segmentation` and `test_sg4_a_changed_fused_input` |
+| SG5 | `test_sample_segmentation_route.py::test_sg5_fuse_cannot_run`, with `test_sg5_the_method_backend_cannot_run`, `test_sg5_no_included_fov` (the parts called alone; `Dataset.export` refuses such a placement by `assemble`'s own check) and `test_sg5_a_method_that_raises` |
+| SA1 | `test_sample_segmentation_route.py::test_sa1_the_conversion` |
+| SA2 | `test_sample_segmentation_route.py::test_sa2_mapping_back` |
+| SA3 | `test_sample_segmentation_route.py::test_sa3_each_cell_once_and_whole`, with `test_sa3_seam_cells_on_both_routes` |
+| SA4 | `test_sample_segmentation_route.py::test_sa4_once_and_whole_with_a_method` |
+| SA5 | `test_sample_segmentation_route.py::test_sa5_assigned_where_it_lies` |
+| SA6 | `test_sample_segmentation_route.py::test_sa6_fov_id_of_a_cell` |
+| SA7 | `test_sample_segmentation_route.py::test_sa7_identities` |
+| SA8 | `test_sample_segmentation_route.py::test_sa8_molecules_keep_their_rule` |
+| SO1 | `test_sample_segmentation_route.py::test_so1_same_columns_keys_and_files`, with `test_so1_the_saved_territories_reload_and_save_again` |
