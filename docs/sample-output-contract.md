@@ -1203,7 +1203,10 @@ is the `instance_id` of its `(cell_namespace, cell_id)`. `lookup_source(folder, 
 `(cell=…)` reads `export.json`, verifies each section hash that `export.json` records and
 the files of the assembly, finds the row and returns its FOV, the FOV's assignment folder,
 its `assignment.json` SHA-256 and the row's position in the §2.9 table, from the `assembly`
-section. It does not verify the files of the store, which `check_export` verifies.
+section; for a cell of the route after fusion, its FOV, no assignment folder, the row's
+position in the sample cell table, and `label_file` (the cell run's label file) and
+`label_value` (its `cell_id`) ({doc}`sample-segmentation-contract`, "Readers that change").
+It does not verify the files of the store, which `check_export` verifies.
 
 **What it takes from the reference-branch exporter** ({doc}`sample-output-baseline`): the
 store-once rule; writing into a sibling staging folder and renaming it into place, so a
@@ -1228,7 +1231,9 @@ renames; and the SHA-256 of every file of the store.
 
 Part of the first delivery (`fuse_labels`), at a default scale factor of 0.25 in Y and X.
 The label image is an inspection product: it shows the retained cells of the sample, each
-drawn whole as its FOV segmented it, placed without blending.
+drawn whole as its FOV segmented it (on the route after fusion, each drawn as the sample
+segmentation holds it: {doc}`sample-segmentation-contract`, "The label images"), placed
+without blending.
 
 **Inputs**: the placement; the assembly's sample cell table, whose `assembly_status` says
 which cells are retained and whose row order gives each cell's `instance_id`; and, per FOV
@@ -1241,7 +1246,12 @@ SHA-256 the §2.9 record holds. A FOV without a retained cell is not read; a `pl
 is one, because it owns no point and its cells are excluded. A `molecules_only` sample has
 no territories: the part writes no label image and records `empty`, reason `no_cells`. A
 `cells` sample without a retained cell gets a label image of zeros. Without an included
-FOV it records `empty`, reason `no_included_fov`.
+FOV it records `empty`, reason `no_included_fov`. On the route after fusion the input is
+the sample's territories in place of each FOV's: the cell run's label image, or the
+expanded territories `territories.ome.tif` when assign expanded, with each `cell_id`
+mapped to its `instance_id` as the one view of the same library call; the `labels`
+section records the rule `segmentation` and `segmentation_files`
+({doc}`sample-segmentation-contract`, "The label images").
 
 **Values.** The value of a voxel is the `instance_id` ("SpatialData export", "Identities")
 of the retained cell drawn there; 0 is background, an uncovered voxel, or a voxel where no
@@ -1456,7 +1466,8 @@ accepts.
   before the part ended (the condition names the part);
   `complete` is true exactly when no requested part is `not_run` or `failed`; each section
   that records the SHA-256 of another section equals that section's current SHA-256 (the
-  SHA-256 of its canonical JSON: sorted keys, no spaces, UTF-8).
+  SHA-256 of its canonical JSON: sorted keys, no spaces, UTF-8). The parts include
+  `segment` of the route after fusion ({doc}`sample-segmentation-contract`, "The entry").
 * R2. Every file the record lists exists with its SHA-256; every file under
   `export/<sample>/` (the store's files included) is listed. A part with status `off`,
   `not_run` or `empty` lists no file.
@@ -1525,16 +1536,40 @@ accepts.
   more IDs, absent, values in no input) are reproduced exactly at scale 1 and 0.25, and
   the cells of the two-FOV fixture show the outcomes of `tables/two_fov_cells.csv`: cell 6
   two IDs, cell 7 absent, cell 5 one ID and whole, cell 9 one voxel under cell 8 at scale
-  1, cell 10 cut.
+  1, cell 10 cut. By the rule `segmentation` of the route after fusion, L3 reads the
+  sample's territories instead of each FOV's: at every voxel of value `v`, the sample's
+  territories, sampled at the voxel's centre by `floor(c + ½)`, hold `v`'s cell.
 * L4. **Absent IDs.** The record's `ids_input`, `ids_output` and `absent_ids` equal their
   recomputation: `ids_input` from the territory files, the `instance_id` map and the cell
   table's `assembly_status`, `ids_output` from the label file, and
   `absent_ids = ids_input − ids_output` (empty in the example).
 * L5. **Grid.** The label file's spacing, origin and size equal the formulas of "Scale
   factor 0.25" within 1e-9 µm (W-354 `tables/reduced.csv`, `geometry_matches_formula` of
-  the `spacing` rows).
+  the `spacing` rows). By the rule `segmentation`, the grid is that of "The label images"
+  of {doc}`sample-segmentation-contract`: the label scale's spacing, the territories'
+  origin, and `floor((N − 1)·S / (k·s) + 1e-9) + 1` pixels for territories of `N` pixels
+  of spacing `S`, Z the segmentation grid's slab.
 * L6. **ID bound.** A sample with more than 16,777,216 cell rows (2^24) is refused before
   anything is written.
+
+**The sample segmentation** of the route after fusion, when the part `segment` is
+`written` or `reused`: the conditions T1 to T5 of {doc}`sample-segmentation-contract`
+("The record").
+
+* T1. The `segmentation` section's label files exist with their SHA-256, are uint32 and
+  have the recorded grid's shape and metadata; when the `fusion` section is `written`,
+  for each input image it lists the fused projection, whose SHA-256 equals the recorded
+  input SHA-256 and whose grid equals the recorded grid within 1e-9 µm; when it is `off`,
+  `not_run` or `empty`, the label files alone.
+* T2. The positive values of the cell run's label image are exactly the `cell_id`s of the
+  sample cell table, one row each, all with the run's namespace.
+* T3. Every retained molecule's `cell_id` is the territory value at the pixel
+  `floor(j + ½)` of `j = (sample_yx − O_yx) ⊘ S_yx` (0 for an `unassigned` molecule), and
+  a molecule outside the grid is excluded `outside_grid`.
+* T4. Every cell's `fov_id` and `owner_fov_id` follow the rule of "The cells", recomputed
+  with the ownership regions.
+* T5. The `assembly` and `labels` sections' `segmentation_files` equal the label files and
+  SHA-256 values of the `segmentation` section (and of `territories.ome.tif`).
 
 **SpatialData** round trip, with `spatialdata.read_zarr` of the written store. Each check
 below applies to the elements the `spatialdata` section records as `written`; an element

@@ -109,7 +109,12 @@ and writes one ``segmentation_<run>.ome.tif`` per run (uint32) and the ``segment
 section of ``export.json``, whose inputs are the fused files' SHA-256 and the grid;
 :py:func:`~starfinder.sample_output.load_sample_segmentation` reads them back as a
 :py:class:`~starfinder.sample_output.SampleSegmentation`, each label file checked against its
-SHA-256. See :doc:`../sample-segmentation-contract`.
+SHA-256. On the route after fusion ``fuse_labels`` passes the sample's territories as its one
+view (rule ``segmentation``), ``lookup_source`` returns for a cell its row in the sample cell
+table, ``label_file`` and ``label_value`` and no assignment folder, the circles of the
+SpatialData store take their radii from the segmentation grid's spacing, and
+``check_export`` adds the conditions T1 to T5 and checks the label image against the sample's
+territories. See :doc:`../sample-segmentation-contract`.
 
 .. currentmodule:: starfinder.sample_output
 

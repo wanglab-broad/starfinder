@@ -7,7 +7,9 @@ image position"), F2 (dtype), F3 (uncovered voxels), F7 (projection and stack gr
 tests. For the label image of the ``labels`` section: L1 (layout, uint32), L2 (no new
 value), L3 (drawn by retained cells), L4 (absent IDs) and L5 (grid); L6 is a check of the
 entry before anything is written. For the store of the ``spatialdata`` section, read back
-with ``spatialdata.read_zarr``: S1 (elements, omissions, format) to S8 (store hashes).
+with ``spatialdata.read_zarr``: S1 (elements, omissions, format) to S8 (store hashes). On the
+route after fusion (docs/sample-segmentation-contract.md, "The record"): R1 with the part
+``segment``, T1 to T5 for the sample segmentation, and L3 and L5 by the rule ``segmentation``.
 """
 from __future__ import annotations
 
@@ -166,7 +168,7 @@ def _input_dtype(section, output):
     return next(iter(dtypes)) if len(dtypes) == 1 else None
 
 
-def _check_tiff(folder, name, output, section):
+def _check_tiff(folder, name, output, section, condition="F1"):
     from starfinder.io.tiff import METADATA_NAMESPACE
 
     from ._tiff import ANNOTATION_NAMESPACE, read_ome_layout
@@ -175,51 +177,51 @@ def _check_tiff(folder, name, output, section):
     axes = "YX" if one_plane else "ZYX"
     # Layout check 1.
     if not (layout["is_bigtiff"] and layout["is_ome"]):
-        _fail("F1", f"{name} is not a BigTIFF OME-TIFF")
+        _fail(condition, f"{name} is not a BigTIFF OME-TIFF")
     if layout["n_series"] != 1 or layout["axes"] != axes or layout["channels"] != 1:
-        _fail("F1", f"{name} has {layout['n_series']} series of axes {layout['axes']} and {layout['channels']} "
+        _fail(condition, f"{name} has {layout['n_series']} series of axes {layout['axes']} and {layout['channels']} "
                     f"channels; expected one series of axes {axes} and one channel")
     # Layout check 2.
     shape = output["shape_zyx"][1:] if one_plane else output["shape_zyx"]
     if layout["shape"] != list(shape) or layout["dtype"] != output["dtype"]:
-        _fail("F1", f"{name} has shape {layout['shape']} and dtype {layout['dtype']}; the record {shape} and "
+        _fail(condition, f"{name} has shape {layout['shape']} and dtype {layout['dtype']}; the record {shape} and "
                     f"{output['dtype']}")
     if layout["pixels"].get("Type") != OME_TYPES.get(output["dtype"]):
-        _fail("F1", f"{name}: the OME pixel type {layout['pixels'].get('Type')} is not that of {output['dtype']}")
+        _fail(condition, f"{name}: the OME pixel type {layout['pixels'].get('Type')} is not that of {output['dtype']}")
     if layout["tile_yx"] != output["tile_yx"] or layout["tile_yx"] != [512, 512] \
             or layout["compression"] not in ("adobe_deflate", "deflate", "zlib"):
-        _fail("F1", f"{name} has tiles {layout['tile_yx']} and compression {layout['compression']}; expected "
+        _fail(condition, f"{name} has tiles {layout['tile_yx']} and compression {layout['compression']}; expected "
                     "512 × 512 tiles and zlib")
     recorded_levels = [level["shape_zyx"][1:] if one_plane else level["shape_zyx"] for level in output["levels"]]
     if layout["level_shapes"] != [list(s) for s in recorded_levels]:
-        _fail("F1", f"{name} has SubIFD levels {layout['level_shapes']}; the record {recorded_levels}")
+        _fail(condition, f"{name} has SubIFD levels {layout['level_shapes']}; the record {recorded_levels}")
     # Layout check 3 and condition 1.
     spacing, origin = output["spacing_zyx"], output["origin_zyx"]
     pixels = layout["pixels"]
     physical = [float(pixels.get(f"PhysicalSize{a}", "nan")) for a in "ZYX"]
     units = [pixels.get(f"PhysicalSize{a}Unit") for a in "ZYX"]
     if not _close(physical, spacing, TOLERANCE_TIFF_UM) or set(units) != {"µm"}:
-        _fail("F1", f"{name}: PhysicalSize {physical} {units} is not the recorded spacing {spacing} µm")
+        _fail(condition, f"{name}: PhysicalSize {physical} {units} is not the recorded spacing {spacing} µm")
     n_z = output["shape_zyx"][0]
     if len(layout["planes"]) != n_z:
-        _fail("F1", f"{name} has {len(layout['planes'])} Plane elements for {n_z} planes")
+        _fail(condition, f"{name} has {len(layout['planes'])} Plane elements for {n_z} planes")
     for i, plane in enumerate(layout["planes"]):
         position = [float(plane.get(f"Position{a}", "nan")) for a in "ZYX"]
         expected = [origin[0] + i * spacing[0], origin[1], origin[2]]
         if not _close(position, expected, TOLERANCE_TIFF_UM):
-            _fail("F1", f"{name}: plane {i} is at {position}, not at {expected}")
+            _fail(condition, f"{name}: plane {i} is at {position}, not at {expected}")
     stored = layout["annotations"].get(METADATA_NAMESPACE)
     if not stored or not _close(stored["spacing_zyx"], spacing, TOLERANCE_TIFF_UM) \
             or not _close(stored["origin_zyx"], origin, TOLERANCE_TIFF_UM):
-        _fail("F1", f"{name}: the stored ImageMetadata {stored} does not have the recorded spacing and origin")
+        _fail(condition, f"{name}: the stored ImageMetadata {stored} does not have the recorded spacing and origin")
     if layout["annotations"].get(ANNOTATION_NAMESPACE) != output.get("annotation"):
-        _fail("F1", f"{name}: the {ANNOTATION_NAMESPACE} annotation differs from the record")
+        _fail(condition, f"{name}: the {ANNOTATION_NAMESPACE} annotation differs from the record")
     for level in output["levels"]:
         f = level["factors_zyx"]
         if not (_close(level["spacing_zyx"], [a * b for a, b in zip(f, spacing)], TOLERANCE_TIFF_UM)
                 and _close(level["origin_zyx"], [o + s * (k - 1) / 2 for k, s, o in zip(f, spacing, origin)],
                            TOLERANCE_TIFF_UM)):
-            _fail("F1", f"{name}: level {level['level']} geometry is not S·f and O + S·(f − 1)/2")
+            _fail(condition, f"{name}: level {level['level']} geometry is not S·f and O + S·(f − 1)/2")
 
 
 def _covered(section, output):
@@ -390,6 +392,212 @@ def _check_fusion(folder, record):
                 _fail("F7", f"the projection and the stack of {image} have different Y and X grids")
 
 
+# --- The sample segmentation of the route after fusion: T1 to T5 ---------------------------------------------
+
+def _after_fusion(section) -> bool:
+    """Whether an ``assembly`` section holds the cells of a sample segmentation."""
+    return isinstance(section, Mapping) and section.get("route") == "after_fusion" and section.get("mode") == "cells"
+
+
+def _same_grid(output, grid) -> bool:
+    return list(output["shape_zyx"]) == list(grid["shape_zyx"]) \
+        and _close(output["spacing_zyx"], grid["spacing_zyx"], TOLERANCE_TIFF_UM) \
+        and _close(output["origin_zyx"], grid["origin_zyx"], TOLERANCE_TIFF_UM)
+
+
+def _t1(folder, record, section):
+    """T1: the label files with their SHA-256, uint32, on the recorded grid; with the fusion written, the fused
+    projection of each input image with the recorded SHA-256 and grid."""
+    import tifffile
+
+    from starfinder.segmentation._persist import file_sha256
+    grid = section["inputs"]["grid"]
+    outputs = {o.get("path"): o for o in section.get("outputs") or []}
+    for run in section.get("runs") or []:
+        path = folder / run["path"]
+        if not path.is_file():
+            _fail("T1", f"the label file {run['path']} of run {run['name']!r} is missing")
+        actual = file_sha256(path)
+        if actual != run["sha256"]:
+            _fail("T1", f"the label file {run['path']} of run {run['name']!r} has SHA-256 {actual}, the segmentation "
+                        f"section {run['sha256']}")
+        output = outputs.get(run["path"])
+        if output is None or output.get("sha256") != run["sha256"] or output.get("dtype") != "uint32" \
+                or not _same_grid(output, grid):
+            _fail("T1", f"the segmentation section's output entry of {run['path']} is not a uint32 file of its SHA-256 "
+                        f"on the recorded grid {grid['shape_zyx']}")
+        _check_tiff(folder, run["path"], output, section, condition="T1")
+        labels = tifffile.imread(path)
+        if labels.dtype != np.uint32 or [1, *labels.shape[-2:]] != list(grid["shape_zyx"]) or labels.ndim != 2:
+            _fail("T1", f"the label file {run['path']} holds {labels.dtype} of shape {labels.shape}, not uint32 of the "
+                        f"grid's shape {grid['shape_zyx']}")
+    if part_status(record, "fuse") != "written":
+        return   # the fused files are absent; the recorded input SHA-256 values are provenance only
+    fused = {o["image"]: o for o in (record.get("fusion") or {}).get("outputs") or []
+             if o.get("format") == "ome_tiff" and o.get("dimensionality") == "projection"}
+    for entry in section["inputs"].get("images") or []:
+        output = fused.get(entry["image"])
+        if output is None:
+            _fail("T1", f"the fusion section lists no fused projection of image {entry['image']!r}, which the "
+                        "segmentation was made from")
+        path = folder / output["path"]
+        actual = file_sha256(path) if path.is_file() else None
+        if output["sha256"] != entry["sha256"] or actual != entry["sha256"]:
+            _fail("T1", f"the fused projection of image {entry['image']!r} has SHA-256 {actual}, but the segmentation "
+                        f"was made from {entry['sha256']}: a segmentation made from another fusion")
+        if not _same_grid(output, grid):
+            _fail("T1", f"the fused projection of image {entry['image']!r} is on the grid {output['shape_zyx']}, "
+                        f"spacing {output['spacing_zyx']}, origin {output['origin_zyx']}; the segmentation grid "
+                        f"{grid['shape_zyx']}, {grid['spacing_zyx']}, {grid['origin_zyx']}")
+
+
+def _t5(record, section):
+    """T5: the assembly and labels sections' segmentation_files are the segmentation section's label files (and
+    territories.ome.tif)."""
+    expected = [{"run": r["name"], "path": r["path"], "sha256": r["sha256"]} for r in section.get("runs") or []]
+    assembly = record.get("assembly") or {}
+    territories = (assembly.get("files") or {}).get("territories")
+    if territories:
+        expected.append({"run": None, "path": territories["path"], "sha256": territories["sha256"]})
+    if assembly.get("segmentation_files") != expected:
+        _fail("T5", f"the assembly section's segmentation_files {assembly.get('segmentation_files')} are not the "
+                    f"label files of the segmentation section {expected}: tables made from another segmentation")
+    labels = record.get("labels") or {}
+    if part_status(record, "fuse_labels") == "written" and labels.get("segmentation_files") != expected:
+        _fail("T5", f"the labels section's segmentation_files {labels.get('segmentation_files')} are not the label "
+                    f"files of the segmentation section {expected}: a label image made from another segmentation")
+
+
+def _label_image(path):
+    import tifffile
+    labels = tifffile.imread(path)
+    return labels[np.newaxis] if labels.ndim == 2 else labels
+
+
+def _t2(folder, section, cells):
+    """T2: the positive values of the cell run's labels are exactly the cell_ids of the sample cell table, one row
+    each, all with the run's namespace."""
+    run = next((r for r in section.get("runs") or [] if r["name"] == section.get("cells")), None)
+    if run is None:
+        _fail("T2", f"the segmentation section has no run named by cells {section.get('cells')!r}")
+    values = np.unique(_label_image(folder / run["path"]))
+    values = values[values > 0].astype(np.int64).tolist()
+    ids = cells["cell_id"].astype("int64").to_numpy().tolist() if len(cells) else []
+    if len(set(ids)) != len(ids) or sorted(ids) != values:
+        _fail("T2", f"the cell run's labels hold {len(values)} cells; the sample cell table has {len(ids)} rows of "
+                    f"{len(set(ids))} cell_ids, not one row per label")
+    namespaces = set(cells["cell_namespace"].astype(object)) if len(cells) else set()
+    if namespaces - {run["label_namespace"]}:
+        _fail("T2", f"cell rows have the namespaces {sorted(map(str, namespaces))}, not the run's "
+                    f"{run['label_namespace']}")
+
+
+def _t3(folder, record, section, molecules):
+    """T3: every retained molecule's cell_id is the territory value at the pixel floor(j + ½) of j = (sample_yx −
+    O_yx) ⊘ S_yx (0 for no cell); a molecule outside the grid is not retained, and excluded outside_grid when its
+    position's owner is its FOV."""
+    grid = section["inputs"]["grid"]
+    files = record["assembly"].get("files") or {}
+    if "territories" in files:
+        territories = _label_image(folder / files["territories"]["path"])
+    else:
+        run = next(r for r in section["runs"] if r["name"] == section.get("cells"))
+        territories = _label_image(folder / run["path"])
+    if not len(molecules):
+        return
+    yx = molecules[["sample_y", "sample_x"]].to_numpy(np.float64)
+    finite = np.isfinite(yx).all(axis=1)
+    j = (yx - np.asarray(grid["origin_zyx"][1:], np.float64)) / np.asarray(grid["spacing_zyx"][1:], np.float64)
+    with np.errstate(invalid="ignore"):
+        pixel = np.floor(j + 0.5)
+    pixel = np.where(np.isfinite(pixel), pixel, -1).astype(np.int64)
+    inside = finite & (pixel >= 0).all(axis=1) & (pixel < np.asarray(territories.shape[1:])).all(axis=1)
+    retained = molecules["assembly_status"].astype(object).eq("retained").to_numpy(dtype=bool)
+    owner, fov = molecules["owner_fov_id"].astype(object), molecules["fov_id"].astype(object)
+    own = (owner.notna() & owner.eq(fov)).fillna(False).to_numpy(dtype=bool)
+    outside_grid = molecules["assembly_reason"].eq("outside_grid").fillna(False).to_numpy(dtype=bool)
+    outside = finite & ~inside & (retained | (own & ~outside_grid))
+    if outside.any():
+        i = int(np.flatnonzero(outside)[0])
+        _fail("T3", f"{int(outside.sum())} molecules outside the segmentation grid are not excluded outside_grid, "
+                    f"the first {molecules['spot_namespace'].iloc[i]} {molecules['spot_id'].iloc[i]}")
+    check = retained & inside
+    values = territories[0, pixel[check, 0], pixel[check, 1]].astype(np.int64)
+    cells = molecules["cell_id"].astype("Int64").fillna(0).to_numpy(np.int64)[check]
+    wrong = values != cells
+    if wrong.any():
+        i = int(np.flatnonzero(check)[np.flatnonzero(wrong)[0]])
+        _fail("T3", f"{int(wrong.sum())} retained molecules have a cell_id that their pixel of the territories does "
+                    f"not hold, the first {molecules['spot_namespace'].iloc[i]} {molecules['spot_id'].iloc[i]} "
+                    f"(cell_id {cells[np.flatnonzero(wrong)[0]]}, the pixel {values[np.flatnonzero(wrong)[0]]})")
+
+
+def _recorded_ownership(section):
+    """The ownership map of the placement as the assembly section records it (footprints, centres, owning FOVs and
+    boxes, with ``ownership`` and ``tie``); the same point test as ``ownership_map`` gives."""
+    from starfinder.assembly import AssemblyConfig
+    from starfinder.assembly._ownership import GEOMETRY_COLUMNS, OwnershipMap
+    config = AssemblyConfig(ownership=section["ownership"]["rule"], tie=section["ownership"]["tie"])
+    nan = float("nan")
+    rows = []
+    for entry in section["fovs"]:
+        (y0, y1), (x0, x1) = entry.get("footprint_yx") or ((nan, nan), (nan, nan))
+        cy, cx = entry.get("centre_yx") or (nan, nan)
+        (by0, by1), (bx0, bx1) = entry.get("box_yx") or ((nan, nan), (nan, nan))
+        closed = config.tie == "table_order"
+        rows.append({"fov_id": entry["fov_id"], "placement_status": entry["placement_status"], "footprint_y0": y0,
+                     "footprint_y1": y1, "footprint_x0": x0, "footprint_x1": x1, "centre_y": cy, "centre_x": cx,
+                     "owns_points": bool(entry["owns_points"]), "candidate": bool(entry["owns_points"]),
+                     "box_y0": by0, "box_y1": by1, "box_x0": bx0, "box_x1": bx1,
+                     # an upper box edge set at a neighbour's midpoint is closed under table_order
+                     "box_y1_closed": closed and by1 != y1, "box_x1_closed": closed and bx1 != x1})
+    geometry = pd.DataFrame(rows, columns=list(GEOMETRY_COLUMNS)).astype(
+        {"fov_id": "string", "placement_status": "string", "owns_points": bool, "candidate": bool,
+         "box_y1_closed": bool, "box_x1_closed": bool})
+    return OwnershipMap(section["sample"], geometry, config)
+
+
+def _t4(section, cells):
+    """T4: every cell's owner_fov_id is the owner of its ownership centroid and its fov_id that owner, or where none
+    owns it the owning FOV with the nearest footprint centre (F1)."""
+    from starfinder.assembly._fused import _nearest_owner
+    if not len(cells):
+        return
+    ownership = _recorded_ownership(section)
+    points = cells[["sample_ownership_centroid_z", "sample_ownership_centroid_y",
+                    "sample_ownership_centroid_x"]].to_numpy(np.float64)
+    owner = ownership.owner(points)
+    expected = owner.copy()
+    none = np.array([v is None for v in owner], dtype=bool)
+    if none.any():
+        expected[none] = _nearest_owner(points[none][:, 1:], ownership.geometry)
+    recorded_owner = [None if v is None or v is pd.NA else str(v) for v in cells["owner_fov_id"].astype(object)]
+    fov = [str(v) for v in cells["fov_id"].astype(object)]
+    for i, (a, b, c, d) in enumerate(zip(recorded_owner, owner, fov, expected)):
+        if a != b or c != d:
+            _fail("T4", f"cell {cells['obs_name'].iloc[i]}: fov_id {c!r} and owner_fov_id {a!r}; the rule of the "
+                        f"cells gives {d!r} and {b!r}")
+
+
+def _check_segmentation(folder, record):
+    """T1 to T5 for the sample segmentation of the ``segmentation`` section (docs/sample-segmentation-contract.md,
+    "The record"), when the part ``segment`` is ``written`` or ``reused``."""
+    from starfinder.assembly import load_assembly
+    section = record.get("segmentation")
+    if part_status(record, "segment") not in ("written", "reused") or not isinstance(section, dict):
+        return
+    _t1(folder, record, section)
+    if part_status(record, "assemble") not in ("written", "reused"):
+        return
+    _t5(record, section)
+    if not _after_fusion(record.get("assembly")):
+        return
+    assembly = load_assembly(folder)
+    _t2(folder, section, assembly.cells)
+    _t3(folder, record, section, assembly.molecules)
+    _t4(record["assembly"], assembly.cells)
+
+
 # --- Labels ------------------------------------------------------------------------------------------------
 
 def _formula_grid(assembly_section, k, two_d):
@@ -433,6 +641,14 @@ def _check_labels(folder, record):
     if output["dtype"] != "uint32":
         _fail("L1", f"{LABEL_FILE} is recorded as {output['dtype']}, not uint32")
     _check_tiff(folder, LABEL_FILE, output, section)
+    from ._labels import SEGMENTATION_RULE
+    if (section.get("rule") == SEGMENTATION_RULE) != _after_fusion(record.get("assembly")):
+        _fail("L3", f"the labels section has the rule {section.get('rule')!r}, but the assembly is of the route "
+                    f"{(record.get('assembly') or {}).get('route')!r} with mode "
+                    f"{(record.get('assembly') or {}).get('mode')!r}")
+    if section.get("rule") == SEGMENTATION_RULE:
+        _check_sample_labels(folder, record, section, output)
+        return
     # L5: the grid.
     two_d = bool(output["inputs_2d"])
     spacing, origin, shape = _formula_grid(record["assembly"], int(output["factor_yx"]), two_d)
@@ -490,6 +706,68 @@ def _check_labels(folder, record):
         _fail("L4", f"the labels section records {section.get('n_ids_input')} IDs in, {section.get('n_ids_output')} "
                     f"out and absent {section.get('absent_ids')}; recomputed {len(ids_input)}, {len(ids_output)} "
                     f"and {absent}")
+
+
+def _check_sample_labels(folder, record, section, output):
+    """L2 to L5 by the rule ``segmentation`` (docs/sample-segmentation-contract.md, "The label images"): L3 reads
+    the sample's territories, L5 checks the grid of the label scale's spacing and the territories' origin."""
+    from starfinder.assembly import load_assembly
+
+    from ._labels import (LABEL_FILE, read_sample_territory, retained_ids, retained_image, sample_label_grid,
+                          sample_territory_source)
+    assembly = load_assembly(folder)
+    territory_grid = assembly.record["assignment"]["grid"]
+    shape = territory_grid["shape_zyx"]
+    spacing, origin = territory_grid["metadata"]["spacing_zyx"], territory_grid["metadata"]["origin_zyx"]
+    # L5: spacing k·s (s the FOVs' acquired spacing), the territories' origin, the size of the formula; Z the slab.
+    from ._grid import INCLUDED
+    acquired = {tuple(float(v) for v in e["grid"]["metadata"]["spacing_zyx"][1:]) for e in record["assembly"]["fovs"]
+                if e["placement_status"] in INCLUDED and e.get("grid")}
+    if len(acquired) != 1:
+        _fail("L5", f"the included FOVs of the assembly section have the Y and X spacings {sorted(acquired)}")
+    s_y, s_x = next(iter(acquired))
+    k = int(output["factor_yx"])
+    formula = sample_label_grid(shape, spacing, origin, (k * s_y, k * s_x))
+    expected = ([float(spacing[0]), formula["spacing"]["y"], formula["spacing"]["x"]],
+                [float(origin[0]), formula["origin"]["y"], formula["origin"]["x"]],
+                [1, formula["shape"]["y"], formula["shape"]["x"]])
+    if list(output["shape_zyx"]) != expected[2] or not _close(output["spacing_zyx"], expected[0], TOLERANCE_TIFF_UM) \
+            or not _close(output["origin_zyx"], expected[1], TOLERANCE_TIFF_UM):
+        _fail("L5", f"{LABEL_FILE} has spacing {output['spacing_zyx']}, origin {output['origin_zyx']} and shape "
+                    f"{output['shape_zyx']}; the label scale's spacing and the territories' origin give "
+                    f"{expected[0]}, {expected[1]} and {expected[2]}")
+    # L2 to L4: the values, against the sample's territories, the instance_id map and assembly_status.
+    relative, sha256, _ = sample_territory_source(assembly)
+    territory = read_sample_territory(folder / relative, sha256)
+    cell_ids, ids = retained_ids(assembly.cells)
+    mapped = retained_image(territory[0], cell_ids, ids)
+    image = _label_image(folder / LABEL_FILE)[0]
+    ids_input = {int(v) for v in np.unique(mapped) if v > 0}
+    ids_output = {int(v) for v in np.unique(image) if v > 0}
+    # L3: at every pixel showing a cell, the territories sampled at its centre by floor(c + 1/2) hold that cell.
+    index = [np.floor((output["origin_zyx"][a] + np.arange(output["shape_zyx"][a]) * output["spacing_zyx"][a]
+                       - float(origin[a])) / float(spacing[a]) + 0.5).astype(np.int64) for a in (1, 2)]
+    y, x = np.nonzero(image)
+    iy, ix = index[0][y], index[1][x]
+    ok = (iy >= 0) & (iy < mapped.shape[0]) & (ix >= 0) & (ix < mapped.shape[1])
+    sampled = np.zeros(len(y), np.uint32)
+    sampled[ok] = mapped[iy[ok], ix[ok]]
+    if np.any(sampled != image[y, x]):
+        bad = int(np.count_nonzero(sampled != image[y, x]))
+        _fail("L3", f"{bad} pixels of {LABEL_FILE} show a cell that the sample's territories {relative}, sampled at "
+                    "the pixel centre by floor(c + 1/2), do not hold there")
+    retained = {int(v) for v in ids}
+    new = sorted(ids_output - retained) + sorted((ids_output & retained) - ids_input)
+    if new:
+        _fail("L2", f"{LABEL_FILE} holds values that are not the instance_id of a retained cell in ids_input: "
+                    f"{new[:10]}")
+    absent = sorted(ids_input - ids_output)
+    if section.get("fovs") != [] or section.get("n_ids_input") != len(ids_input) \
+            or section.get("n_ids_output") != len(ids_output) or section.get("absent_ids") != absent \
+            or section.get("n_absent_ids") != len(absent):
+        _fail("L4", f"the labels section records {section.get('n_ids_input')} IDs in, {section.get('n_ids_output')} "
+                    f"out and absent {section.get('absent_ids')}; recomputed from the sample's territories "
+                    f"{len(ids_input)}, {len(ids_output)} and {absent}")
 
 
 # --- SpatialData ---------------------------------------------------------------------------------------------
@@ -877,6 +1155,25 @@ def check_export(folder) -> None:
     S6 transforms and extents; S7 values against the OME-TIFF files; S8 the
     SHA-256 of every store file.
 
+    On the route after fusion (docs/sample-segmentation-contract.md, "The
+    record"), R1 includes the part ``segment``, and when that part is
+    ``written`` or ``reused``: T1 the ``segmentation`` section's label files
+    with their SHA-256, uint32, the OME-TIFF layout checks and the recorded
+    grid, and, when the ``fusion`` section is ``written``, each input image's
+    fused projection with the recorded SHA-256 and grid within 1e-9 µm (with
+    the fusion ``off``, ``not_run`` or ``empty`` the label files alone); with
+    the assembly ``written`` or ``reused``, T5 the ``assembly`` and
+    ``labels`` sections' ``segmentation_files`` equal to those label files
+    (and ``territories.ome.tif``); for an assembly of that route, T2 the cell
+    run's label values exactly the ``cell_id``s of the cell table, one row
+    each, with the run's namespace, T3 every retained molecule's ``cell_id``
+    the territory value at its pixel ``floor(j + ½)`` and a molecule outside
+    the grid excluded ``outside_grid``, and T4 every cell's ``fov_id`` and
+    ``owner_fov_id`` by the rule of the cells, recomputed from the ownership
+    the ``assembly`` section records. A label image of the rule
+    ``segmentation`` is checked against the sample's territories (L3) and
+    the grid of the label scale's spacing and the territories' origin (L5).
+
     Parameters
     ----------
     folder : str or Path
@@ -885,13 +1182,14 @@ def check_export(folder) -> None:
     Raises
     ------
     ValueError
-        The first condition that fails, named (``R1`` … ``F9``, ``L1`` …
-        ``L5``, ``S1`` … ``S8``).
+        The first condition that fails, named (``R1`` … ``F9``, ``T1`` …
+        ``T5``, ``L1`` … ``L5``, ``S1`` … ``S8``).
     """
     folder = Path(folder)
     record = _r1(folder)
     _r2(folder, record)
     _r3(folder, record)
     _check_fusion(folder, record)
+    _check_segmentation(folder, record)
     _check_labels(folder, record)
     _check_spatialdata(folder, record)

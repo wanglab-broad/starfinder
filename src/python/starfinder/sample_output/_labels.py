@@ -9,6 +9,11 @@ requested by ``output_spacing`` at ``LabelConfig.scale_yx``. Labels are never bl
 no owner mask is used and no ID is shifted. The result is written as ``cell_labels.ome.tif``
 (uint32) with the ``labels`` section of ``export.json``. The library is imported only when
 :func:`fuse_labels` fuses.
+
+On the route after fusion (docs/sample-segmentation-contract.md, "The label images") the
+one view passed to the same library call is the sample's territories (the cell run's label
+file, or ``territories.ome.tif`` when assign expanded) with ``cell_id`` mapped to
+``instance_id``; the section records the rule ``segmentation`` and ``segmentation_files``.
 """
 from __future__ import annotations
 
@@ -42,6 +47,8 @@ from ._record import (
 EXTRA = "multiview-stitcher"
 TRANSFORM_KEY = "placed"
 RULE = "retained_cells"
+#: The rule of the route after fusion: the sample's territories as the one view.
+SEGMENTATION_RULE = "segmentation"
 FUSION_FUNC = "_first_positive"
 INTERPOLATION_ORDER = 0
 ROUTE = "output_spacing"
@@ -231,20 +238,73 @@ def _check(placement, assembly, config):
     check_label_ids(assembly.cells)
 
 
+def after_fusion(assembly) -> bool:
+    """Whether an assembly holds the cells of a sample segmentation (the route after fusion, ``mode`` ``cells``)."""
+    return assembly.record.get("route") == "after_fusion" and assembly.record.get("mode") == "cells"
+
+
 def _section(status, placement, assembly, config, timer, **extra):
     from starfinder.stitching._placement import table_sha256
 
     from ._fuse import _software
     flags = assembly.record.get("flags") or {}
+    segmentation = after_fusion(assembly)
     section = {"status": status, **extra,
-               "assembly_sha256": section_sha256(as_json(assembly.record)), "rule": RULE,
+               "assembly_sha256": section_sha256(as_json(assembly.record)),
+               "rule": SEGMENTATION_RULE if segmentation else RULE,
                "placement": {"fovs_sha256": table_sha256(placement.fovs),
                              "links_sha256": table_sha256(placement.links)},
-               "conflicts_computed": bool(flags.get("conflicts", False)), "labels_scale_yx": config.scale_yx,
+               "conflicts_computed": bool(flags.get("conflicts", False)) and not segmentation,
+               "labels_scale_yx": config.scale_yx,
                "factor_yx": config.factor_yx, "software": _software(), **timer.record(),
                "viewer_qualification": "deferred"}
+    if segmentation:
+        # The label files the assembly read (each run's, and territories.ome.tif when assign expanded): T5.
+        section["segmentation_files"] = list(assembly.record.get("segmentation_files") or [])
     section.setdefault("outputs", [])
     return as_json(section)
+
+
+def sample_territory_source(assembly):
+    """``(path, sha256, run)`` of the sample's territories, relative to the export folder, on the route after fusion.
+
+    ``territories.ome.tif`` when the sample assignment expanded the cells
+    (its entry of ``segmentation_files`` has run null), else the label file of
+    the cell run (the run the sample assignment's ``territory_source`` names).
+    Raises ValueError when the assembly record names neither.
+    """
+    files = list(assembly.record.get("segmentation_files") or [])
+    expanded = [e for e in files if e.get("run") is None]
+    if expanded:
+        return expanded[0]["path"], expanded[0]["sha256"], None
+    run = ((assembly.record.get("assignment") or {}).get("territory_source") or {}).get("run")
+    entry = next((e for e in files if e.get("run") == run), None)
+    if run is None or entry is None:
+        raise ValueError(f"the assembly record names no label file of its cell run {run!r} among its "
+                         f"segmentation_files {[e.get('path') for e in files]}")
+    return entry["path"], entry["sha256"], run
+
+
+def sample_label_grid(shape_zyx, spacing_zyx, origin_zyx, output_spacing_yx) -> dict:
+    """The label grid of the route after fusion in Y and X: the output spacing (``k·s`` at the label scale, ``s``
+    the acquired spacing), the territories' origin ``O``, size ``floor((N − 1)·S / (k·s) + 1e-9) + 1`` for
+    territories of ``N`` pixels of spacing ``S`` (docs/sample-segmentation-contract.md, "The label images")."""
+    grid = {"spacing": {}, "origin": {}, "shape": {}}
+    for i, a, out in ((1, "y", output_spacing_yx[0]), (2, "x", output_spacing_yx[1])):
+        grid["spacing"][a] = float(out)
+        grid["origin"][a] = float(origin_zyx[i])
+        grid["shape"][a] = int(math.floor((int(shape_zyx[i]) - 1) * float(spacing_zyx[i]) / float(out) + 1e-9)) + 1
+    return grid
+
+
+def _acquired_spacing(placement, assembly):
+    """The acquired Y and X spacing ``s`` of the included FOVs (the grid the placement or the assembly records)."""
+    ids = included_fovs(placement)
+    grids = _grids(placement, assembly, ids)
+    spacings = {tuple(float(v) for v in grids[f].metadata.spacing_zyx[1:]) for f in ids}
+    if len(spacings) != 1:
+        raise ValueError(f"fuse_labels needs one Y and X spacing of the included FOVs; they have {sorted(spacings)}")
+    return next(iter(spacings))
 
 
 def fuse_labels(placement: PlacementResult, assembly, *, config: LabelConfig = LabelConfig(),
@@ -270,6 +330,19 @@ def fuse_labels(placement: PlacementResult, assembly, *, config: LabelConfig = L
     the slab for a 2D image), and the ``labels`` section of
     ``output_dir/export.json`` is replaced, leaving the other sections
     unchanged, after removing the files the earlier section listed.
+
+    On the route after fusion (an assembly with ``route`` ``after_fusion``
+    and ``mode`` ``cells``; docs/sample-segmentation-contract.md, "The label
+    images") the one view is the sample's territories, the file of
+    ``output_dir`` that the assembly record lists in ``segmentation_files``
+    (``territories.ome.tif`` when assign expanded, else the cell run's
+    ``segmentation_<run>.ome.tif``), its SHA-256 checked, with each retained
+    cell's ``cell_id`` mapped to its ``instance_id``, passed to the same
+    library call on the segmentation grid at the same ``output_spacing``
+    ``k·s`` (``s`` the FOVs' acquired spacing). The grid is checked against
+    the formula of that page (the territories' origin) and Z is the
+    segmentation grid's slab. The section records the rule ``segmentation``,
+    ``segmentation_files`` (the assembly's) and no FOV entry.
 
     A ``molecules_only`` sample writes no image and records ``empty``
     (``no_cells``); a placement without an included FOV records ``empty``
@@ -341,6 +414,16 @@ def fuse_labels(placement: PlacementResult, assembly, *, config: LabelConfig = L
                "interpolation_order": INTERPOLATION_ORDER, "route": ROUTE, "transform_key": TRANSFORM_KEY}
     fovs, missing, outputs = [], [], []
     try:
+        if after_fusion(assembly):
+            # The route after fusion: the sample's territories as the one view.
+            relative, sha256, _ = sample_territory_source(assembly)
+            if not (output_dir / relative).is_file():
+                missing.append({"fov_id": None, "path": str(output_dir / relative)})
+                return finish("not_run", reason="territory_missing", missing=missing, library=library,
+                              warn=f"territory_missing (the sample's territories {output_dir / relative})")
+            image, entry = _fuse_sample_and_write(placement, assembly, config, output_dir, relative, sha256)
+            outputs.append(entry)
+            return finish("written", library=library, fovs=fovs, outputs=outputs, **image)
         retained = retained_by_fov(assembly.cells)
         recorded = _assembly_fovs(assembly)
         for fov in ids:
@@ -481,6 +564,96 @@ def _fuse_and_write(placement, assembly, config, ids, retained, fovs, output_dir
              "n_ids_input": len(ids_input), "n_ids_output": len(ids_output), "absent_ids": absent,
              "n_absent_ids": len(absent), "n_conflict": conflicts}
     return image, entry
+
+
+def read_sample_territory(path, sha256) -> np.ndarray:
+    """The sample's territories of the route after fusion (ZYX, one plane), the file's SHA-256 checked first."""
+    import tifffile
+
+    from starfinder.segmentation._persist import check_file
+    check_file(path, sha256, "territory file")
+    labels = tifffile.imread(path)
+    return np.ascontiguousarray(labels[np.newaxis] if labels.ndim == 2 else labels)
+
+
+def retained_ids(cells) -> tuple[np.ndarray, np.ndarray]:
+    """The ``cell_id`` of every retained cell of the sample (sorted, int64) and their ``instance_id`` (uint32)."""
+    if len(cells) == 0:
+        return np.zeros(0, np.int64), np.zeros(0, np.uint32)
+    keep = cells["assembly_status"].eq("retained").fillna(False).to_numpy(dtype=bool)
+    cell_ids = cells["cell_id"].astype("int64").to_numpy()[keep]
+    order = np.argsort(cell_ids, kind="stable")
+    return cell_ids[order], instance_ids(cells)[keep][order]
+
+
+def _fuse_sample_and_write(placement, assembly, config, output_dir, relative, sha256):
+    """The route after fusion: the sample's territories mapped to ``instance_id``, fused as one view, written."""
+    from multiview_stitcher import fusion
+    from multiview_stitcher import spatial_image_utils as si_utils
+
+    from starfinder.segmentation._persist import file_sha256
+    from starfinder.stitching._placement import table_sha256
+
+    from ._fuse import _library_grid
+    grid = assembly.record["assignment"]["grid"]
+    shape, spacing, origin = grid["shape_zyx"], grid["metadata"]["spacing_zyx"], grid["metadata"]["origin_zyx"]
+    path = output_dir / relative
+    territory = read_sample_territory(path, sha256)
+    if territory.shape != tuple(shape) or territory.shape[0] != 1:
+        raise IncompatibleGeometryError(f"the sample's territories {path} have shape {territory.shape}; the "
+                                        f"segmentation grid {tuple(shape)}")
+    cell_ids, values = retained_ids(assembly.cells)
+    image = retained_image(territory[0], cell_ids, values)
+    del territory
+    s_y, s_x = _acquired_spacing(placement, assembly)
+    k = config.factor_yx
+    output_spacing = {"y": k * s_y, "x": k * s_x}
+    sim = si_utils.get_sim_from_array(image, dims=["y", "x"], scale={"y": float(spacing[1]), "x": float(spacing[2])},
+                                      translation={"y": float(origin[1]), "x": float(origin[2])},
+                                      transform_key=TRANSFORM_KEY)
+    chunks = CHUNKS["plane"]
+    fused = fusion.fuse([sim], transform_key=TRANSFORM_KEY, fusion_func=_first_positive,
+                        interpolation_order=INTERPOLATION_ORDER, output_spacing=output_spacing,
+                        output_chunksize=chunks)
+    returned = _library_grid(fused)
+    formula = sample_label_grid(shape, spacing, origin, (output_spacing["y"], output_spacing["x"]))
+    for a in ("y", "x"):
+        if returned["shape"][a] != formula["shape"][a] or \
+                abs(returned["spacing"][a] - formula["spacing"][a]) > TOLERANCE_UM or \
+                abs(returned["origin"][a] - formula["origin"][a]) > TOLERANCE_UM:
+            raise ValueError(f"the label grid the library returned ({returned}) is not the formula grid ({formula}) "
+                             f"in {a} within {TOLERANCE_UM} µm")
+    # Z: the slab of the segmentation grid, as for the projection.
+    z_spacing, z_origin = float(spacing[0]), float(origin[0])
+    spacing_zyx = [z_spacing, returned["spacing"]["y"], returned["spacing"]["x"]]
+    origin_zyx = [z_origin, returned["origin"]["y"], returned["origin"]["x"]]
+    shape_zyx = [1, returned["shape"]["y"], returned["shape"]["x"]]
+    data = fused.data[0, 0]
+    if np.dtype(data.dtype) != np.uint32:
+        raise ValueError(f"the library returned the label image as {data.dtype}, not uint32")
+    metadata = ImageMetadata(f"sample:{placement.sample}", tuple(spacing_zyx), tuple(origin_zyx), IDENTITY, "µm")
+    annotation = {"sample": placement.sample, "image": "cell_labels", "rule": SEGMENTATION_RULE, "factor_yx": k,
+                  "placement_fovs_sha256": table_sha256(placement.fovs),
+                  "placement_links_sha256": table_sha256(placement.links)}
+    out = output_dir / LABEL_FILE
+    layout = _tiff.write_ome_tiff(out, data, metadata=metadata, annotation=annotation)
+    written = _tiff_values(out)
+    ids_input = sorted(int(v) for v in np.unique(image) if v > 0)
+    ids_output = sorted(int(v) for v in written if v > 0)
+    absent = sorted(set(ids_input) - set(ids_output))
+    entry = {"path": LABEL_FILE, "format": "ome_tiff", "image": "cell_labels", "dimensionality": "projection",
+             "inputs_2d": True, "factor_yx": k, "shape_zyx": shape_zyx, "dtype": "uint32",
+             "spacing_zyx": spacing_zyx, "origin_zyx": origin_zyx,
+             "slab_z": [z_origin - z_spacing / 2, z_origin + z_spacing / 2], "levels": [], "tile_yx": layout["tile_yx"],
+             "compression": layout["compression"], "axes": layout["axes"], "annotation": annotation,
+             "output_spacing": output_spacing, "output_chunksize": chunks, "sha256": file_sha256(out)}
+    image_record = {"territory_geometry": "plane",
+                    "grid": {"territories": {"path": relative, "sha256": sha256, "shape_zyx": list(shape),
+                                             "spacing_zyx": list(spacing), "origin_zyx": list(origin)},
+                             "library": returned, "formula": formula},
+                    "n_ids_input": len(ids_input), "n_ids_output": len(ids_output), "absent_ids": absent,
+                    "n_absent_ids": len(absent), "n_conflict": None}
+    return image_record, entry
 
 
 def _tiff_values(path) -> np.ndarray:

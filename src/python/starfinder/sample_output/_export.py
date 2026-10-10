@@ -10,8 +10,8 @@ entry. On the route per FOV: ``assemble`` (then ``save_assembly``), ``fuse``,
 route after fusion with an assignment (docs/sample-segmentation-contract.md, "The parts on
 each route"): ``fuse``, ``segment`` (``segment_fused``, or the saved sample segmentation
 ``reused``), ``assemble`` with the sample segmentation (or the ``molecules_only`` assembly
-when ``segment`` could not run), then ``fuse_labels`` and ``export_spatialdata``, which are
-recorded ``not_run`` on that route until their readers of the route exist.
+when ``segment`` could not run), then ``fuse_labels`` (the sample's territories as its one
+view) and ``export_spatialdata``.
 """
 from __future__ import annotations
 
@@ -272,10 +272,6 @@ def _spatialdata_part(result, config, output_dir):
 
 # --- The route after fusion (docs/sample-segmentation-contract.md, "The entry") -------------------------------------
 
-#: The reason ``fuse_labels`` and ``export_spatialdata`` are recorded ``not_run`` on the route after fusion: their
-#: readers of the sample segmentation (the label export by the rule ``segmentation``, the radii on the segmentation
-#: grid) are not part of this version.
-NOT_ON_ROUTE = "not_available_on_route_after_fusion"
 GRID_TOLERANCE_UM = 1e-9
 
 
@@ -344,12 +340,18 @@ def _reuse(dataset, placement, config, output_dir, held):
     held["assembly"] = result
 
 
-def _not_on_route(output_dir, sample, part):
-    import warnings
-
-    from ._record import ExportIncompleteWarning
-    update_section(output_dir, sample, part, {"status": "not_run", "reason": NOT_ON_ROUTE}, fill=False)
-    warnings.warn(f"export part {part} could not run: {NOT_ON_ROUTE}", ExportIncompleteWarning, stacklevel=4)
+def _fuse_labels_part(placement, result, config, output_dir):
+    """``fuse_labels`` of the route after fusion. Check 6 (at most 2^24 cell rows) is made here when the cells were
+    made by this export, which knows them only after the part ``segment``: a refusal records the part ``failed``
+    and is raised, and the files of the earlier parts stay."""
+    try:
+        check_label_ids(result.cells)
+    except ValueError as error:
+        update_section(output_dir, result.sample, "fuse_labels",
+                       {"status": "failed", "outputs": [], "error": {"type": type(error).__name__,
+                                                                     "message": str(error)}}, fill=False)
+        raise
+    fuse_labels(placement, result, config=config.labels, output_dir=output_dir)
 
 
 def _export_after_fusion(dataset, sample, placement, assignment, config, output_dir, route_source) -> ExportRecord:
@@ -371,6 +373,9 @@ def _export_after_fusion(dataset, sample, placement, assignment, config, output_
     if config.fuse:
         fusion = fusion_inputs(dataset, placement, config)
         check_fusion(placement, fusion, config=config.fusion, assembly=None)
+    # 6. Label IDs, when the cells are known before anything is written (the tables reused).
+    if config.fuse_labels and "assembly" in held:
+        check_label_ids(held["assembly"].cells)
 
     record = read_export(output_dir)
     if record.get("sample") not in (None, sample):
@@ -432,10 +437,14 @@ def _export_after_fusion(dataset, sample, placement, assignment, config, output_
     else:
         result = held["assembly"]
         update_section(output_dir, sample, "assemble", result.record, status="reused", fill=False)
-    # Parts fuse_labels and export_spatialdata: not on this route yet.
-    for part, on in (("fuse_labels", config.fuse_labels), ("export_spatialdata", config.export_spatialdata)):
-        if on:
-            _not_on_route(output_dir, sample, part)
-        else:
-            update_section(output_dir, sample, part, {"status": "off"}, fill=False)
+    # Part fuse_labels: the sample's territories as the one view.
+    if config.fuse_labels:
+        _fuse_labels_part(placement, result, config, output_dir)
+    else:
+        update_section(output_dir, sample, "fuse_labels", {"status": "off"}, fill=False)
+    # Part export_spatialdata, from the saved assembly and the sections of fuse and fuse_labels.
+    if config.export_spatialdata:
+        _spatialdata_part(result, config, output_dir)
+    else:
+        update_section(output_dir, sample, "export_spatialdata", {"status": "off"}, fill=False)
     return ExportRecord(output_dir, read_export(output_dir))

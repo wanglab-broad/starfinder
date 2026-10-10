@@ -15,6 +15,7 @@ export writes.
 """
 from __future__ import annotations
 
+import json
 import math
 import shutil
 import warnings
@@ -149,18 +150,30 @@ def cell_links(assembly) -> pd.array:
 
 
 def _fov_spacing(assembly) -> dict:
+    """``fov_id`` → the spacing of the grid a cell of that ``fov_id`` was counted on.
+
+    The FOV's grid on the route per FOV; on the route after fusion (``route``
+    ``after_fusion``, ``mode`` ``cells``) the segmentation grid's spacing for
+    every FOV, the grid of ``size_voxels`` there, which the sample assignment
+    records (docs/sample-segmentation-contract.md, "Readers that change").
+    """
+    after_fusion = assembly.record.get("route") == "after_fusion" and assembly.record.get("mode") == "cells"
+    segmentation = ((assembly.record.get("assignment") or {}).get("grid") or {}) if after_fusion else None
     out = {}
     for entry in assembly.record.get("fovs") or []:
-        grid = entry.get("grid") or {}
+        grid = segmentation if after_fusion else (entry.get("grid") or {})
         spacing = (grid.get("metadata") or {}).get("spacing_zyx")
         out[entry["fov_id"]] = None if spacing is None else tuple(float(v) for v in spacing)
     return out
 
 
 def equivalent_radii(cells, spacings) -> np.ndarray:
-    """The equivalent radius of each cell's original territory, from ``size_voxels`` and its FOV's grid spacing.
+    """The equivalent radius of each cell's original territory, from ``size_voxels`` and its grid's spacing.
 
-    A ``volume`` territory as a sphere, ``(3·size·s_z·s_y·s_x / (4π))^(1/3)``; a
+    ``spacings`` maps ``fov_id`` to the spacing of the grid the cells of that
+    ``fov_id`` were counted on: the FOV's grid on the route per FOV, the
+    segmentation grid on the route after fusion (``_fov_spacing``). A
+    ``volume`` territory as a sphere, ``(3·size·s_z·s_y·s_x / (4π))^(1/3)``; a
     ``plane`` territory, which the sample cell table marks with a NaN
     ``sample_centroid_z`` (docs/assembly-contract.md, "Sample tables"), as a disc,
     ``(size·s_y·s_x / π)^(1/2)``. Raises ValueError naming a cell of zero voxels,
@@ -442,8 +455,17 @@ def _population(frame, reasons):
 
 def export_counts(assembly) -> dict:
     """The counts of "Read-back checks" (S5): molecules by ``assignment_status`` and by ``assembly_status`` and
-    reason, cells by ``assembly_status`` and reason, and the counted cells."""
-    from starfinder.assembly._config import CELL_ASSEMBLY_REASONS, MOLECULE_ASSEMBLY_REASONS
+    reason, cells by ``assembly_status`` and reason, and the counted cells.
+
+    The reasons are those the assembly record counts: without the duplicate
+    rule (``duplicate_threshold`` null, as on the route after fusion) its
+    reasons are not listed, as in the record.
+    """
+    from starfinder.assembly._config import CELL_ASSEMBLY_REASONS, DUPLICATE_REASONS, MOLECULE_ASSEMBLY_REASONS
+    config = assembly.record.get("config") or {}
+    rule_off = "duplicate_threshold" in config and config["duplicate_threshold"] is None
+    cell_reasons = tuple(r for r in CELL_ASSEMBLY_REASONS if not (rule_off and r in DUPLICATE_REASONS))
+    molecule_reasons = tuple(r for r in MOLECULE_ASSEMBLY_REASONS if not (rule_off and r in DUPLICATE_REASONS))
     molecules, cells = assembly.molecules, assembly.cells
     statuses = molecules["assignment_status"].astype(object).value_counts() if len(molecules) else pd.Series()
     by_assignment = {s: int(statuses.get(s, 0)) for s in ASSIGNMENT_STATUSES}
@@ -451,8 +473,8 @@ def export_counts(assembly) -> dict:
     counted = int((cells["assembly_status"].eq("retained") & cells["status"].eq("kept")).fillna(False).sum()) \
         if len(cells) else 0
     return {"molecules": {"n": int(len(molecules)), "assignment_status": by_assignment,
-                          "assembly": _population(molecules, MOLECULE_ASSEMBLY_REASONS)},
-            "cells": {"n": int(len(cells)), "assembly": _population(cells, CELL_ASSEMBLY_REASONS),
+                          "assembly": _population(molecules, molecule_reasons)},
+            "cells": {"n": int(len(cells)), "assembly": _population(cells, cell_reasons),
                       "counted": counted}}
 
 
@@ -710,6 +732,16 @@ def lookup_source(folder, *, spot=None, cell=None) -> dict:
     position in the FOV's §2.9 table (molecules in input order, cells in
     increasing ``cell_id``); and ``kind``.
 
+    On the route after fusion (an assembly with ``route`` ``after_fusion`` and
+    ``mode`` ``cells``) a cell has no §2.9 table of a FOV:
+    ``assignment_folder`` and ``assignment_record_sha256`` are None, ``row``
+    is the cell's position in the sample cell table, and two keys are added,
+    ``label_file`` (the cell run's label file, relative to the folder, as the
+    ``assembly`` section's ``segmentation_files`` lists it) and
+    ``label_value`` (its ``cell_id``) (docs/sample-segmentation-contract.md,
+    "Readers that change"). A molecule is found as in a ``molecules_only``
+    sample.
+
     The hashes verified are those ``export.json`` records about its own
     sections and the assembly's files: each SHA-256 of a section that another
     section recorded when it read it (``fusion.assembly_sha256``,
@@ -750,6 +782,15 @@ def lookup_source(folder, *, spot=None, cell=None) -> dict:
         raise ValueError(f"the sample holds {len(rows)} rows of {kind} key ({namespace!r}, {ident!r})")
     i = int(rows[0])
     fov = frame["fov_id"].iloc[i]
+    if kind == "cell" and assembly.record.get("route") == "after_fusion" and assembly.record.get("mode") == "cells":
+        # The route after fusion: the cell of the sample segmentation, in its run's label file.
+        run = json.loads(namespace)[-1]
+        files = [e for e in assembly.record.get("segmentation_files") or [] if e.get("run") == run]
+        if len(files) != 1:
+            raise ValueError(f"the assembly section lists {len(files)} label files of the cell run {run!r} in its "
+                             "segmentation_files")
+        return {"kind": kind, "key": [namespace, ident], "fov_id": str(fov), "assignment_folder": None,
+                "assignment_record_sha256": None, "row": i, "label_file": files[0]["path"], "label_value": ident}
     position = int(np.count_nonzero(frame["fov_id"].astype(object).to_numpy()[:i] == fov))
     entry = next(e for e in assembly.record["fovs"] if e["fov_id"] == fov)
     assignment = entry.get("assignment") or {}
