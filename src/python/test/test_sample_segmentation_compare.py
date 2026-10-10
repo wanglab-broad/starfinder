@@ -22,19 +22,15 @@ import pandas as pd
 import pytest
 
 from starfinder.assembly import load_assembly
-from starfinder.barcode import Codebook
-from starfinder.dataset import Dataset
 from starfinder.sample_output import RouteComparison, compare_routes
-from starfinder.stitching import save_placement
+from starfinder.stitching import approve_placement, placement_from_table, positions_from_table, save_placement
 
 from .sample_segmentation_fixtures import (
     BIG,
-    DS,
     SAMPLE,
     SceneFolder,
     per_fov_routes,
     route_config,
-    scene_placement,
     seam_spot_ids,
     write_folder,
 )
@@ -334,37 +330,76 @@ def test_cr2_the_report_decides_nothing(cr, scene, tmp_path, monkeypatch):
 
 # --- CR3 ------------------------------------------------------------------------------------------------------
 
+CR3_SCENES = ["fused_pair", "fused_pair_seams", "fused_quad", "scene_plane"]
+
+
+def with_extra_gene(book):
+    """The codebook with one more gene, ``extra_gene``, on the first colour sequence it does not use."""
+    import itertools
+    table = book.table
+    used = set(table["color_sequence"])
+    length = len(table["color_sequence"].iloc[0])
+    sequence = next("".join(p) for p in itertools.product("1234", repeat=length) if "".join(p) not in used)
+    row = table.iloc[[-1]].assign(entry_id="extra", gene_id="extra_gene", color_sequence=sequence)
+    return dataclasses.replace(book, table=pd.concat([table, row], ignore_index=True))
+
+
+def shifted_placement(folder, path):
+    """The fixture's placement with its last FOV 0.5 µm further in x, approved and saved at ``path``."""
+    origins = dict(folder.scene.origins)
+    last = list(origins)[-1]
+    z, y, x = origins[last]
+    origins[last] = (z, y, x + 0.5)
+    table = positions_from_table(pd.DataFrame({"fov_id": list(origins),
+                                               "nominal_z": [o[0] for o in origins.values()],
+                                               "nominal_y": [o[1] for o in origins.values()],
+                                               "nominal_x": [o[2] for o in origins.values()]}))
+    placement = placement_from_table(table, folder.grids, sample=SAMPLE, origins=origins)
+    save_placement(approve_placement(placement, reviewer="test", note="CR3 another placement"), path)
+    return path
+
+
 @pytest.fixture(scope="module")
-def cr3(tmp_path_factory):
-    """``fused_pair_seams`` on both routes, and folders with one difference each: another placement (FOV2 0.5 µm
-    further in x, the route per FOV), another gene list (a codebook with a third gene, the route per FOV) and
-    another molecule key set (FOV2's last goodSpots row removed, the route after fusion)."""
-    tmp = tmp_path_factory.mktemp("cr3")
-    case = build(tmp, "fused_pair_seams")
-    folder = case.folder
-    out = {"per_fov": per_fov_dir(folder), "after_fusion": folder.export_dir}
-    # Another placement.
-    scene = dataclasses.replace(folder.scene, origins={**folder.scene.origins, "FOV2": (0.0, 0.0, 8.5)})
-    shifted = tmp / "shifted_placement"
-    save_placement(scene_placement(scene), shifted)
-    out["placement"] = folder.root / "export_placement" / SAMPLE
-    export(folder, route_config(route="per_fov"), output_dir=out["placement"], placement=shifted)
-    # Another gene list.
-    book = Codebook(pd.DataFrame({"entry_id": ["111", "112", "113"], "gene_id": ["A", "B", "C"],
-                                  "color_sequence": ["111", "112", "113"]}),
-                    round_labels=("round1", "round2", "round3"), channel_labels=("ch00", "ch01", "ch02", "ch03"))
-    dataset = Dataset(tmp / "input", tmp / "output", DS, SAMPLE, "output", codebook=book)
-    genes = SceneFolder(folder.scene, dataset, folder.placement, folder.grids)
-    per_fov_routes(genes, name="genes")
-    out["genes"] = folder.root / "export_genes" / SAMPLE
-    genes.dataset.export(SAMPLE, placement=folder.placement_dir, assignment="genes", config=route_config(
-        route="per_fov"), output_dir=out["genes"])
-    # Another molecule key set.
-    csv = folder.root / "signal" / "FOV2_goodSpots.csv"
-    pd.read_csv(csv).iloc[:-1].to_csv(csv, index=False)
-    out["molecules"] = folder.root / "export_molecules" / SAMPLE
-    export(folder, route_config(segmentation=case.segmentation), output_dir=out["molecules"])
-    return SimpleNamespace(case=case, folders=out)
+def cr3(cr, tmp_path_factory):
+    """``cr3(scene)``: the fixture's two folders of ``cr`` (built once for the module) and folders with one difference
+    each, built once per fixture beside them: another placement (the last FOV 0.5 µm further in x, the route per
+    FOV), another gene list (the codebook with one more gene, the route per FOV) and another molecule key set (the
+    last FOV's last goodSpots row removed, the route after fusion; the table is restored afterwards, so the fixture's
+    files are as ``cr`` built them)."""
+    cache = {}
+
+    def get(scene):
+        if scene in cache:
+            return cache[scene]
+        case = cr(scene)
+        folder = case.folder
+        out = {"per_fov": per_fov_dir(folder), "after_fusion": folder.export_dir}
+        # Another placement.
+        shifted = shifted_placement(folder, tmp_path_factory.mktemp(f"{scene}_placement") / "stitching")
+        out["placement"] = folder.root / "export_placement" / SAMPLE
+        export(folder, route_config(route="per_fov"), output_dir=out["placement"], placement=shifted)
+        # Another gene list.
+        genes = SceneFolder(folder.scene, dataclasses.replace(folder.dataset,
+                                                              codebook=with_extra_gene(folder.dataset.codebook)),
+                            folder.placement, folder.grids)
+        per_fov_routes(genes, name="genes")
+        out["genes"] = folder.root / "export_genes" / SAMPLE
+        genes.dataset.export(SAMPLE, placement=folder.placement_dir, assignment="genes",
+                             config=route_config(route="per_fov"), output_dir=out["genes"])
+        # Another molecule key set.
+        csv = folder.root / "signal" / f"{folder.scene.ids[-1]}_goodSpots.csv"
+        original = csv.read_bytes()
+        table = pd.read_csv(csv)
+        assert len(table) >= 1
+        try:
+            table.iloc[:-1].to_csv(csv, index=False)
+            out["molecules"] = folder.root / "export_molecules" / SAMPLE
+            export(folder, route_config(segmentation=case.segmentation), output_dir=out["molecules"])
+        finally:
+            csv.write_bytes(original)
+        cache[scene] = SimpleNamespace(case=case, folders=out)
+        return cache[scene]
+    return get
 
 
 CR3_CASES = {
@@ -386,18 +421,22 @@ CR3_CASES = {
 @needs_anndata
 @needs_library
 @pytest.mark.parametrize("case", CR3_CASES)
-def test_cr3_refusals(cr3, case, tmp_path):
+@pytest.mark.parametrize("scene", CR3_SCENES)
+def test_cr3_refusals(cr3, scene, case, tmp_path):
+    fixture = cr3(scene)
     a, b, output, words = CR3_CASES[case]
-    root = cr3.case.folder.root
+    root = fixture.case.folder.root
     before = digests(root)
-    target = None if output is None else (cr3.folders[output[0]] / output[1] if output[1] else cr3.folders[output[0]])
+    target = None if output is None else (fixture.folders[output[0]] / output[1] if output[1]
+                                          else fixture.folders[output[0]])
     with pytest.raises(ValueError, match=words.replace("(", r"\(")):
-        compare_routes(cr3.folders[a], cr3.folders[b], output=target)
+        compare_routes(fixture.folders[a], fixture.folders[b], output=target)
+    # Nothing written: every file of both folders (and of the whole fixture) keeps its SHA-256, and no file is added.
     assert digests(root) == before
     if target is not None and output[1]:
         assert not target.exists()
     # The same folders without the difference are accepted.
-    compare_routes(cr3.folders["per_fov"], cr3.folders["after_fusion"], output=tmp_path / "accepted")
+    compare_routes(fixture.folders["per_fov"], fixture.folders["after_fusion"], output=tmp_path / "accepted")
 
 
 def test_cr3_a_threshold_outside_0_1_is_refused(tmp_path):
