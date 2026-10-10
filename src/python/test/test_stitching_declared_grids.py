@@ -475,8 +475,9 @@ def tile_placement():
 
 @needs_library
 def test_paged_tiles_fuse_as_their_zyx_twins(tmp_path, monkeypatch):
-    """IYX and QYX pages read as ZYX: the header check and the lazy reader agree, every file is read through
-    tifffile's Zarr store and never whole, and the fused images equal the ZYX file's pixel for pixel."""
+    """IYX and QYX pages read as ZYX: the header check and the lazy reader agree, every file is read by its pages,
+    neither through tifffile's Zarr store (W-432) nor whole, and the fused images equal the ZYX file's pixel for
+    pixel."""
     from starfinder.sample_output._fuse import _source_shape
     placed, grid = tile_placement()
     config = FusionConfig(images=("reference_merged",), dimensionality="both", scale_yx=0.5)
@@ -493,7 +494,7 @@ def test_paged_tiles_fuse_as_their_zyx_twins(tmp_path, monkeypatch):
         reads.clear()
         record = fuse(placed, [FusionInput(fov, grid, {"reference_merged": paths[fov]}) for fov in OWN_IDS],
                       config=config, output_dir=tmp_path / f"out_{form}")
-        assert reads == [("imread", True)] * len(OWN_IDS), (form, reads)
+        assert reads == [], (form, reads)
         assert record.status == "written"
         assert [e["images"]["reference_merged"]["path"] for e in record.section["fovs"]] == [
             str(paths[f].resolve()) for f in OWN_IDS]

@@ -392,13 +392,15 @@ def _section(status, placement, plan, config, assembly, outputs, timer, *, versi
 class _Reader:
     """Starfinder's reading of the source files of one ``fuse`` call (docs/sample-output-contract.md, "Memory").
 
-    A file is one task per page (a page is a Z plane), or one task for the
-    whole file when its pages are not its Z planes; its projection along Z is
-    one task that reads the file's pages and projects them. The tasks open
-    nothing but the file's header before the fused array is computed. A task's
-    result is held from its first call until :meth:`plan` says no later band
-    of the writer needs it, then released; a task the plan does not count is
-    read at each call. Nothing is staged on disk.
+    A file is one task per page (a page is a Z plane), as one chunk per page
+    whatever strips the page is stored in, or one task for the whole file, in
+    the chunks of tifffile's Zarr view, when its pages are not its Z planes;
+    its projection along Z is one task that reads the file's pages and
+    projects them. The tasks open nothing but the file's header before the
+    fused array is computed. A task's result is held from its first call
+    until :meth:`plan` says no later band of the writer needs it, then
+    released; a task the plan does not count is read at each call. Nothing
+    is staged on disk.
     """
 
     def __init__(self):
@@ -430,21 +432,21 @@ class _Reader:
                                shape=shape, dtype=dtype)
 
     def stack(self, source, stack):
-        """The ZYX dask array of a source file, in the chunks of tifffile's Zarr view (the reader before W-397)."""
+        """The ZYX dask array of a source file: one chunk per page when its pages are its Z planes (W-432), else
+        one task for the whole file in the chunks of tifffile's Zarr view (the reader before W-397)."""
         import dask.array as da
         import tifffile
         import zarr
         tif, lock = self._file(source.path, stack)
         n_z, n_y, n_x = source.shape
-        with tifffile.imread(source.path, aszarr=True) as store:
-            chunks = da.from_zarr(zarr.open(store, mode="r")).reshape(source.shape).chunks
         if _paged(tif, source.shape):
             planes = [self._task(self._key(source, "page", i), partial(_read_page, tif, lock, i, (1, n_y, n_x)),
                                  (1, n_y, n_x), source.dtype) for i in range(n_z)]
-            array = da.concatenate(planes, axis=0) if n_z > 1 else planes[0]
-        else:
-            array = self._task(self._key(source, "file"), partial(_read_file, tif, lock, source.shape),
-                               source.shape, source.dtype)
+            return da.concatenate(planes, axis=0) if n_z > 1 else planes[0]
+        with tifffile.imread(source.path, aszarr=True) as store:
+            chunks = da.from_zarr(zarr.open(store, mode="r")).reshape(source.shape).chunks
+        array = self._task(self._key(source, "file"), partial(_read_file, tif, lock, source.shape),
+                           source.shape, source.dtype)
         return array.rechunk(chunks) if array.chunks != chunks else array
 
     def projection(self, source, stack, projection):

@@ -821,7 +821,12 @@ LN fusion's time goes and tried one change to how `fuse` builds a source's array
 `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-431/20261010T090737Z-e03e2c65`
 (`worker-notes.md`, `results/manifest.json`, `results/profile/`); the change did not meet
 that issue's rule and was taken out again, so the package is as before; the sentences marked
-W-431 are from that run.
+W-431 are from that run. W-432 tried the change W-431's measurements point to, one task and
+one chunk per page with no split into strips, under the same rule, on 2026-10-10, at revision
+`afe8272` with the change applied, in the run directory
+`/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-432/20261010T173323Z-ecdf51b6`
+(`worker-notes.md`, `results/manifest.json`, `results/profile/`); the change met the rule and
+stays in the package; the sentences marked W-432 are from that run.
 
 * **Inventory.** The 190 molecule tables (LN sample1 64, 3,782,580 rows; tissue-2D 56,
   5,353,714; cell-culture-3D 70, 2,458,865) equal the operator's inventory of 2026-10-07 in
@@ -920,6 +925,21 @@ W-431 are from that run.
   read one chunk per page, not one per file; that run's copies were not read again. With the
   change, the cell-culture-3D projection, whose reading the change does not touch, took
   36.3 s and equals W-376's pixel for pixel.
+* **One chunk per page (W-432).** The fusion's reader gives the library each page of a file
+  read by pages as one chunk, its one task, without the rechunk to the 23-row strips, and
+  opens no Zarr view of such a file; a file read as one task for the whole file is read as
+  before. On the same 26 bands, one CPU, run one after the other: the graph of the fused stack
+  holds 197,455 tasks against the present code's 4,093,517 (171 for one output chunk against
+  6,267), and the bands took 91.9 s against 172.7 s (W-431's present code: 163.9 s), of which
+  28.2 s outside the tasks against 104.5 s; the bands are equal pixel for pixel, and building
+  the graph read 5.1 GB instead of 10.2 GB. Each page is still decoded once, and the pages
+  held at one time are those of the present code (at most 207 on the LN stack by the plan's
+  walk; 28 and 25 on the 16-plane grid of the reading tests). The whole stack from the share:
+  fusion part 1,511 s and 2,469 CPU s, 3.27 GiB at peak, the run 6.92 GiB, 36.6 GB read during
+  the export call (W-398: 5,903 s; W-431, one piece per file: 5,010 s; W-376 from local copies:
+  1,468 s); the stack equals W-376's pixel for pixel. The rule is met, so the change stays.
+  The cell-culture-3D projection, whose reading the change does not touch, took 39.4 s and
+  equals W-376's pixel for pixel.
 
 Measured resources, in place of the estimates of "Resources per sample and step" (the wall
 time each run recorded for its work, without its closing `check_export`, and the run's peak
@@ -928,8 +948,8 @@ the others at four threads):
 
 | Sample | Placement | Assembly (`molecules_only`; cellular block) | Default outputs | Stack and export |
 | --- | --- | --- | --- | --- |
-| LN sample1 | import: under 2 s; `multiview_stitcher`: 140.6 s, 7.57 GiB (one thread: 151.1 s) | BigStitcher: 121.7 s, 2.90 GiB; `multiview_stitcher`: 124.0 s, 2.91 GiB; blocks 46.7 and 47.2 s, 1.96 GiB; W-391 (BigStitcher, link root): 180.4 s, 2.91 GiB; block 51.8 s, 1.97 GiB; W-398 (BigStitcher, own folder): 183.6 s, 2.90 GiB | none: LN writes no projection | the stack OME-TIFF from each placement, zlib, with `check_export`: BigStitcher 66 × 6,167 × 5,435, fusion 1,468 s, 2.53 GiB, 662,701,545 bytes, and the store 141.5 s, 729,704,694 bytes (run 1,955 s, 6.00 GiB); `multiview_stitcher` 68 × 6,166 × 5,441, fusion 1,564 s, 2.53 GiB, 669,758,230 bytes (run 1,708 s, 6.08 GiB); the two ran side by side; the blocks' label exports 54 s, 4.6 GiB each; W-391, from the FOV-named images read lazily from the share: stopped by the worker after 2,911 s (295 GB read, about 45 % of the stack's size written, 3.82 GiB), not retried; W-398, from the same images, each read once: fusion 5,903 s, 4.74 GiB, 662,701,545 bytes (run 6,142 s, 7.62 GiB, 41.7 GB read); W-431, each source file as one piece (tried, then taken out): fusion 5,010 s, 13.13 GiB, 662,701,545 bytes (run 5,251 s, 13.13 GiB, 36.6 GB read) |
-| cell-culture-3D | 55.2 s, 4.77 GiB | 79.1 s, 2.18 GiB; block 28.4 s, 1.02 GiB; W-391: 92.3 s, 2.18 GiB; block (link root) 31.1 s, 1.02 GiB | 6,818 × 4,788 projection: 52.0 s, 2.15 GiB; W-391, from the `IYX` tiles as saved: 229.9 s, 2.21 GiB; W-398, each tile read once: 41.2 s, 2.21 GiB; W-431, with the change: 36.3 s, 2.39 GiB | the block's stack, 33 × 2,844 × 2,842, with its label export: 66.6 s, 2.98 GiB, 31,008,462 bytes |
+| LN sample1 | import: under 2 s; `multiview_stitcher`: 140.6 s, 7.57 GiB (one thread: 151.1 s) | BigStitcher: 121.7 s, 2.90 GiB; `multiview_stitcher`: 124.0 s, 2.91 GiB; blocks 46.7 and 47.2 s, 1.96 GiB; W-391 (BigStitcher, link root): 180.4 s, 2.91 GiB; block 51.8 s, 1.97 GiB; W-398 (BigStitcher, own folder): 183.6 s, 2.90 GiB | none: LN writes no projection | the stack OME-TIFF from each placement, zlib, with `check_export`: BigStitcher 66 × 6,167 × 5,435, fusion 1,468 s, 2.53 GiB, 662,701,545 bytes, and the store 141.5 s, 729,704,694 bytes (run 1,955 s, 6.00 GiB); `multiview_stitcher` 68 × 6,166 × 5,441, fusion 1,564 s, 2.53 GiB, 669,758,230 bytes (run 1,708 s, 6.08 GiB); the two ran side by side; the blocks' label exports 54 s, 4.6 GiB each; W-391, from the FOV-named images read lazily from the share: stopped by the worker after 2,911 s (295 GB read, about 45 % of the stack's size written, 3.82 GiB), not retried; W-398, from the same images, each read once: fusion 5,903 s, 4.74 GiB, 662,701,545 bytes (run 6,142 s, 7.62 GiB, 41.7 GB read); W-431, each source file as one piece (tried, then taken out): fusion 5,010 s, 13.13 GiB, 662,701,545 bytes (run 5,251 s, 13.13 GiB, 36.6 GB read); W-432, one chunk per page (kept): fusion 1,511 s, 3.27 GiB, 662,701,545 bytes (run 1,752 s, 6.92 GiB, 36.6 GB read) |
+| cell-culture-3D | 55.2 s, 4.77 GiB | 79.1 s, 2.18 GiB; block 28.4 s, 1.02 GiB; W-391: 92.3 s, 2.18 GiB; block (link root) 31.1 s, 1.02 GiB | 6,818 × 4,788 projection: 52.0 s, 2.15 GiB; W-391, from the `IYX` tiles as saved: 229.9 s, 2.21 GiB; W-398, each tile read once: 41.2 s, 2.21 GiB; W-431, with the change: 36.3 s, 2.39 GiB; W-432, with its change: 39.4 s, 2.38 GiB | the block's stack, 33 × 2,844 × 2,842, with its label export: 66.6 s, 2.98 GiB, 31,008,462 bytes |
 | tissue-2D | `multiview_stitcher`: 37.4 s (loading 8.0 s), 0.88 GiB | 160.7 s, 5.38 GiB; W-391: 164.9 s, 3.86 GiB | 11,291 × 9,845 projection (max, 0.5), 77,776,028 bytes: 86.4 s, 4.76 GiB; W-391: 89.1 s, 3.59 GiB | none |
 
 No run reached its limit; the largest export folder holds 2.13 GB. Assumptions
@@ -958,11 +978,10 @@ tissue-2D and the cell-culture-3D whole sample (W-391) and for LN sample1, its a
 its stack, from its own folder with the configured reference image (W-398). Both cellular
 blocks went through links: the export finds an assignment folder only at
 `checkpoints/<fov>/assignment/<name>/` under the dataset's root, so the route from the
-W-382 folders where they are saved is not shown. The LN fusion from the share stays about
-four times W-376's from local copies: W-431 shows that with the present reader's chunks of
-23 rows the handling of each band's graph is the largest part of the time, and that one
-piece per source file does not shorten it; a fusion from the share in W-376's time is not
-shown. No store was written from the files as
+W-382 folders where they are saved is not shown. The LN fusion from the share took about
+four times W-376's time from local copies while the reader rebuilt the chunks of 23 rows
+(W-398, W-431); with one chunk per page it took about W-376's time (W-432: 1,511 s against
+1,468 s), in one run on one host. No store was written from the files as
 saved. No cells exist for tissue-2D. A9 is not verified, because no store holds
 `cell_labels`. A4 stays open.
 

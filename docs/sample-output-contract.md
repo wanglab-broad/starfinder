@@ -623,7 +623,8 @@ This page does not promise bounded memory for a whole-sample stack. `fuse` reads
 source image as a lazy dask array from its file; that this keeps the peak of a stack well
 below the loaded tiles is assumption A1. In one fusion each page of a source file is read
 and decoded at most once: Starfinder's reading of the file gives the library one task per
-page (a Z plane; a file whose pages are not its Z planes is one task), and for the
+page, as one chunk per page whatever strips the page is stored in (a Z plane; a file whose
+pages are not its Z planes is one task, in the chunks of tifffile's Zarr view), and for the
 projection one task per file that reads its pages and projects them; a task's result is
 kept from the first band of the OME-TIFF writer that needs it until the last, then
 released, so the stack holds a few pages of each FOV rather than whole tiles. No source
