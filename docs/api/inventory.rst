@@ -286,6 +286,7 @@ starfinder.sample_output
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
 * :py:obj:`starfinder.sample_output.check_export`
+* :py:obj:`starfinder.sample_output.compare_routes`
 * :py:obj:`starfinder.sample_output.export_spatialdata`
 * :py:obj:`starfinder.sample_output.ExportConfig`
 * :py:obj:`starfinder.sample_output.ExportIncompleteWarning`
@@ -301,6 +302,7 @@ starfinder.sample_output
 * :py:obj:`starfinder.sample_output.LabelRecord`
 * :py:obj:`starfinder.sample_output.load_sample_segmentation`
 * :py:obj:`starfinder.sample_output.lookup_source`
+* :py:obj:`starfinder.sample_output.RouteComparison`
 * :py:obj:`starfinder.sample_output.ROUTES`
 * :py:obj:`starfinder.sample_output.SampleSegmentation`
 * :py:obj:`starfinder.sample_output.SampleSegmentationConfig`

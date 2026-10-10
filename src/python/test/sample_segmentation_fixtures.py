@@ -12,7 +12,10 @@ two across a side seam, one cut by the sample's outer border, one wholly inside 
 four molecules per cell (the border cell's second beyond the union grid, within the far
 voxel of FOV 4's footprint), each seen by every FOV whose footprint holds it; two cell IDs
 are at and above 2^31. A FOV pixel takes the scene pixel nearest its centre, as
-``truth_import`` samples the scene on the segmentation grid.
+``truth_import`` samples the scene on the segmentation grid. ``fused_pair_seams`` (W-429):
+the two seam cases of the comparison on ``fused_pair``'s two FOVs, with the molecules
+``m_a`` to ``m_g`` (:func:`seam_spot_ids` names their rows). ``scene_plane_small`` (W-429):
+the change of ``scene_plane`` applied to ``sample-small-v1``.
 
 :func:`write_scene` writes a scene as a dataset (the saved placement, ``images/<stain>/``
 ZYX TIFFs with their axes, ``images/ref_merged/`` with the grid, ``signal/`` goodSpots
@@ -187,7 +190,42 @@ def fused_quad_notch() -> Scene:
                  statuses={"FOV4": "placeholder"})
 
 
-SCENES = {"fused_pair": fused_pair, "fused_quad": fused_quad, "fused_quad_notch": fused_quad_notch}
+# --- fused_pair_seams (W-429) -------------------------------------------------------------------------------------
+
+#: The molecules of the two seam cases, name → ((y, x) µm at z 1 µm, gene); each seen by every FOV whose grid holds it.
+SEAM_MOLECULES = {"m_a": ((3.0, 8.0), "A"), "m_b": ((3.0, 11.5), "A"), "m_c": ((3.0, 12.0), "B"),
+                  "m_d": ((8.0, 2.0), "A"), "m_e": ((8.0, 10.0), "B"), "m_f": ((8.0, 17.0), "A"),
+                  "m_g": ((11.0, 10.0), "B")}
+SEAM_ORIGINS = {"FOV1": (0.0, 0.0, 0.0), "FOV2": (0.0, 0.0, 8.0)}
+
+
+def seam_spot_ids() -> dict:
+    """``{(fov_id, molecule name): spot_id}``: the row of each molecule in its FOV's goodSpots table, ``csv:<row>``."""
+    out = {}
+    for fov, origin in SEAM_ORIGINS.items():
+        names = [n for n, ((y, x), _) in SEAM_MOLECULES.items() if -0.5 <= (x - origin[2]) / SPACING[2] < 23.5]
+        out.update({(fov, name): f"csv:{row}" for row, name in enumerate(names)})
+    return out
+
+
+def fused_pair_seams() -> Scene:
+    """The two seam cases on ``fused_pair``'s two FOVs: case high, cell 1, a disc of radius 5 pixels at (6, 19.5)
+    pixels; case low, cell 2, the box of rows 15 to 18 and columns 2 to 37; the molecules ``m_a`` to ``m_g``. The
+    page names no nuclei; each cell is its own nucleus, so that under the default exclusion no cell of either route
+    is ``excluded_no_nucleus`` and no number of the page changes."""
+    shape = (24, 40)
+    yy, xx = np.indices(shape)
+    cells = np.zeros(shape, np.uint32)
+    cells[(yy - 6) ** 2 + (xx - 19.5) ** 2 <= 25] = 1
+    cells[15:19, 2:38] = 2
+    names = list(SEAM_MOLECULES)
+    molecules = _seen_by([SEAM_MOLECULES[n][0] for n in names], [SEAM_MOLECULES[n][1] for n in names],
+                         SEAM_ORIGINS, (3, 24, 24))
+    return Scene("fused_pair_seams", (3, 24, 24), dict(SEAM_ORIGINS), cells, cells.copy(), molecules)
+
+
+SCENES = {"fused_pair": fused_pair, "fused_quad": fused_quad, "fused_quad_notch": fused_quad_notch,
+          "fused_pair_seams": fused_pair_seams}
 
 
 # --- The scene as a dataset -----------------------------------------------------------------------------------
@@ -361,12 +399,36 @@ def scene_plane_config():
                          fov=replace(config.fov, shape_zyx=(1, 36, 36)))
 
 
-def write_scene_plane(tmp_path) -> SceneFolder:
-    """``scene_plane`` generated and written as a dataset: its truth placement (approved), its stain as both
-    ``dapi`` and ``flamingo`` (float32 ZYX TIFFs), the reference images with each FOV's grid, the molecule tables of
-    the saved scene as ``signal/`` goodSpots tables and the codebook. ``extra["scene"]`` is the generated scene."""
+def scene_plane_small_config():
+    """``scene_plane_small`` (W-429): the change of ``scene_plane`` applied to ``sample-small-v1`` (3 × 3 FOVs of
+    1 × 96 × 96, jitter (0, 4.5, 4.5) voxels, seed 42), by ``dataclasses.replace``; no preset is added.
+
+    Two further changes, because the generator refuses a one-plane scene with anything in Z: the background
+    regions of the preset's appearance lie at z ≠ 0 of its 3D layout ("Z=1 requires region z=0"), so their z is set
+    to 0, the rule the package's appearance applies to a one-plane shape (``synthetic._presets._appearance``); and
+    the per-round translation bound (1.0, 2.0, 2.0) voxels becomes (0.0, 2.0, 2.0) ("Z=1 requires zero Z
+    translation"), as ``sample-tiny-v1``'s is 0 in Z. Y and X are unchanged. The route after fusion imports the
+    truth labels, so neither change reaches a compared value."""
+    from dataclasses import replace
+
+    from starfinder.synthetic import sample_scene_preset
+    book, config = sample_scene_preset("sample-small-v1")
+    background = config.fov.background
+    background = replace(background, region_centers=tuple((0.0, y, x) for _, y, x in background.region_centers))
+    geometry = config.fov.geometry
+    geometry = replace(geometry, translation_max_zyx=(0.0, *geometry.translation_max_zyx[1:]))
+    return book, replace(config, acquisition=replace(config.acquisition, fov_shape_zyx=(1, 96, 96),
+                                                     jitter_max_zyx=(0.0, 4.5, 4.5)),
+                         fov=replace(config.fov, shape_zyx=(1, 96, 96), background=background, geometry=geometry))
+
+
+def write_scene_plane(tmp_path, name="scene_plane") -> SceneFolder:
+    """``scene_plane`` (or ``scene_plane_small``) generated and written as a dataset: its truth placement
+    (approved), its stain as both ``dapi`` and ``flamingo`` (float32 ZYX TIFFs), the reference images with each
+    FOV's grid, the molecule tables of the saved scene as ``signal/`` goodSpots tables and the codebook.
+    ``extra["scene"]`` is the generated scene."""
     from starfinder.synthetic import generate_sample_scene, save_sample_scene
-    book, config = scene_plane_config()
+    book, config = scene_plane_small_config() if name == "scene_plane_small" else scene_plane_config()
     generated = generate_sample_scene(book, config=config)
     saved = save_sample_scene(generated, Path(tmp_path) / "scene_plane")
     dataset = Dataset(tmp_path / "input", tmp_path / "output", DS, SAMPLE, "output", codebook=book)
@@ -391,7 +453,7 @@ def write_scene_plane(tmp_path) -> SceneFolder:
         csv = root / "signal" / f"{fov}_goodSpots.csv"
         csv.parent.mkdir(parents=True, exist_ok=True)
         csv.write_bytes((Path(saved) / "fovs" / fov / "molecules.csv").read_bytes())
-    plane = PlaneScene("scene_plane", tuple(config.acquisition.fov_shape_zyx), origins, generated)
+    plane = PlaneScene(name, tuple(config.acquisition.fov_shape_zyx), origins, generated)
     return SceneFolder(plane, dataset, placement, grids, extra={"scene": generated, "book": book})
 
 
@@ -441,7 +503,9 @@ def fov_label_image(folder, fov, target="cell") -> np.ndarray:
 
 def write_folder(tmp_path, name) -> SceneFolder:
     """A fixture of this module written as a dataset by its name."""
-    return write_scene_plane(tmp_path) if name == "scene_plane" else write_scene(tmp_path, SCENES[name]())
+    if name in ("scene_plane", "scene_plane_small"):
+        return write_scene_plane(tmp_path, name)
+    return write_scene(tmp_path, SCENES[name]())
 
 
 # --- per_fov_routes (W-427) ---------------------------------------------------------------------------------------

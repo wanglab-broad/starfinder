@@ -198,3 +198,9 @@ One line per implemented check: its identifier and the test that implements it, 
 | SO1 | `test_sample_segmentation_route.py::test_so1_same_columns_keys_and_files`, with `test_so1_the_saved_territories_reload_and_save_again` |
 | SO2 | `test_sample_segmentation_readers.py::test_so2_readers`, with `test_so2_check_export_fails_t1_on_a_fused_input_fused_again`, `test_so2_check_export_fails_t5_on_a_label_file_the_assembly_does_not_record`, `test_so2_check_export_after_a_reuse` and `test_so2_lookup_source_of_identifiers_at_and_above_2_31` |
 | SO4 | `test_sample_segmentation_readers.py::test_so4_the_label_export_on_the_route_after_fusion`, with `test_so4_with_the_expanded_territories` and `test_so4_l6_the_id_bound` |
+| CR1 | `test_sample_segmentation_compare.py::test_cr1_two_routes_from_one_truth` (also on `fused_pair` at `k = 2`), with `test_cr1_the_placement_at_factor_2` |
+| CR2 | `test_sample_segmentation_compare.py::test_cr2_the_report_decides_nothing` |
+| CR3 | `test_sample_segmentation_compare.py::test_cr3_refusals`, with `test_cr3_a_threshold_outside_0_1_is_refused` |
+| CR4 | `test_sample_segmentation_compare.py::test_cr4_determinism` |
+| CR5 | `test_sample_segmentation_compare.py::test_cr5_the_whole_of_a_larger_scene` (`slow`) |
+| CR, the measure | `test_sample_segmentation_compare.py::test_cr_the_measure_is_the_duplicate_rule_s`: the share of `compare_routes` equals the duplicate rule's for the same two territories; both take it from `starfinder.assembly._duplicates.share` |

@@ -23,11 +23,14 @@ assignment. :func:`check_export` checks a folder against its record. :func:`segm
 segments the fused projection of a sample on the route after fusion (:data:`ROUTES`,
 :class:`SampleSegmentationConfig`, :class:`SampleSegmentationRun`) and writes one label
 image per run and the ``segmentation`` section (:class:`SampleSegmentation`,
-:func:`load_sample_segmentation`); see docs/sample-segmentation-contract.md.
+:func:`load_sample_segmentation`); :func:`compare_routes` reports how the cells and
+molecules of an export folder of each route correspond (:class:`RouteComparison`) and
+decides nothing; see docs/sample-segmentation-contract.md.
 Importing this module imports neither multiview-stitcher, zarr nor spatialdata. See
 docs/sample-output-contract.md.
 """
 from ._check import check_export
+from ._compare import RouteComparison, compare_routes
 from ._config import ROUTES as _ROUTES
 from ._config import (ExportConfig, FusionConfig, LabelConfig, SampleSegmentationConfig, SampleSegmentationRun,
                       SpatialDataExportConfig)
@@ -46,4 +49,4 @@ __all__ = ["ExportConfig", "FusionConfig", "LabelConfig", "SpatialDataExportConf
            "FusionInput", "FusedGrid", "FusionRecord", "fuse_labels", "LabelRecord", "ExportRecord",
            "ExportIncompleteWarning", "export_spatialdata", "lookup_source", "check_export", "ROUTES",
            "SampleSegmentationConfig", "SampleSegmentationRun", "segment_fused", "SampleSegmentation",
-           "load_sample_segmentation"]
+           "load_sample_segmentation", "compare_routes", "RouteComparison"]

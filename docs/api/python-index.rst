@@ -43,6 +43,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.evaluation.spot_finding.classify_detections`
 * :py:obj:`starfinder.barcode.Codebook`
 * :py:obj:`starfinder.barcode.CodebookAwareDecoderConfig`
+* :py:obj:`starfinder.sample_output.compare_routes`
 * :py:obj:`starfinder.assignment.COMPARTMENT_STATES`
 * :py:obj:`starfinder.segmentation.composite_nuclei_amplicon`
 * :py:obj:`starfinder.segmentation.CompositeConfig`
@@ -250,6 +251,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.stitching.ReviewPolicy`
 * :py:obj:`starfinder.registration.RigidConfig`
 * :py:obj:`starfinder.dataset.RoundState`
+* :py:obj:`starfinder.sample_output.RouteComparison`
 * :py:obj:`starfinder.sample_output.ROUTES`
 * :py:obj:`starfinder.benchmark.run_benchmark`
 * :py:obj:`starfinder.preprocessing.run_step`

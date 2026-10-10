@@ -114,7 +114,14 @@ view (rule ``segmentation``), ``lookup_source`` returns for a cell its row in th
 table, ``label_file`` and ``label_value`` and no assignment folder, the circles of the
 SpatialData store take their radii from the segmentation grid's spacing, and
 ``check_export`` adds the conditions T1 to T5 and checks the label image against the sample's
-territories. See :doc:`../sample-segmentation-contract`.
+territories. :py:func:`~starfinder.sample_output.compare_routes` reads an export folder of each
+route for the same sample and reports, as a
+:py:class:`~starfinder.sample_output.RouteComparison`, how their cells and molecules
+correspond: both routes' counted cells on the segmentation grid, the share of every pair by
+the measure of the duplicate rule, the matched pairs, the counts per matched pair and one of
+six categories per molecule. It decides nothing, changes no file of either folder and writes
+its tables only into a folder ``output`` outside both. See
+:doc:`../sample-segmentation-contract`.
 
 .. currentmodule:: starfinder.sample_output
 
@@ -122,6 +129,7 @@ territories. See :doc:`../sample-segmentation-contract`.
    :toctree: generated
 
    check_export
+   compare_routes
    export_spatialdata
    ExportConfig
    ExportIncompleteWarning
@@ -137,6 +145,7 @@ territories. See :doc:`../sample-segmentation-contract`.
    LabelRecord
    load_sample_segmentation
    lookup_source
+   RouteComparison
    ROUTES
    SampleSegmentation
    SampleSegmentationConfig
