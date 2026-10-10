@@ -80,9 +80,8 @@ CELL_TO_MOLECULE_REASON = {"not_owner": "cell_not_owner", "duplicate_observation
 
 def molecule_dtypes(mode: str) -> dict:
     """The sample molecule table's columns and dtypes in a mode (``cells`` or ``molecules_only``)."""
-    if mode == "cells":
-        return {"fov_id": "string", **MOLECULE_DTYPES_29, **CELL_KEY_DTYPES, **TAIL_DTYPES}
-    return {"fov_id": "string", **MOLECULE_ONLY_DTYPES, **TAIL_DTYPES}
+    return {"fov_id": "string", **(MOLECULE_DTYPES_29 if mode == "cells" else MOLECULE_ONLY_DTYPES),
+            **CELL_KEY_DTYPES, **TAIL_DTYPES}
 
 
 def fill_cell_namespace(molecules: pd.DataFrame, cells: pd.DataFrame) -> pd.DataFrame:
@@ -91,20 +90,23 @@ def fill_cell_namespace(molecules: pd.DataFrame, cells: pd.DataFrame) -> pd.Data
     A molecule with a ``cell_id`` takes the ``cell_namespace`` of the one cell row
     of its ``fov_id`` and ``cell_id`` (on the route per FOV a molecule's cell is a
     cell of its own FOV); a molecule without a ``cell_id``, or whose ``fov_id`` and
-    ``cell_id`` name no cell row or more than one namespace, gets null. The column
-    is inserted where :func:`molecule_dtypes` places it, before ``sample_z``. A
-    table that has the column, or no ``cell_id`` (``molecules_only``), is
-    returned unchanged.
+    ``cell_id`` name no cell row or more than one namespace, gets null; so every
+    molecule of a table without ``cell_id`` (``molecules_only``) gets null. The
+    column is inserted where :func:`molecule_dtypes` places it, before
+    ``sample_z``. A table that has the column is returned unchanged.
     """
-    if "cell_namespace" in molecules or "cell_id" not in molecules:
+    if "cell_namespace" in molecules:
         return molecules
+    has_cells = "cell_id" in molecules
     named = {}
-    for fov, cell, namespace in zip(cells["fov_id"].astype(object), cells["cell_id"].astype("Int64"),
-                                    cells["cell_namespace"].astype(object)):
-        if not (pd.isna(fov) or pd.isna(cell) or pd.isna(namespace)):
-            named.setdefault((fov, int(cell)), set()).add(namespace)
+    if has_cells:
+        for fov, cell, namespace in zip(cells["fov_id"].astype(object), cells["cell_id"].astype("Int64"),
+                                        cells["cell_namespace"].astype(object)):
+            if not (pd.isna(fov) or pd.isna(cell) or pd.isna(namespace)):
+                named.setdefault((fov, int(cell)), set()).add(namespace)
+    cell_ids = molecules["cell_id"].astype("Int64") if has_cells else [None] * len(molecules)
     values = []
-    for fov, cell in zip(molecules["fov_id"].astype(object), molecules["cell_id"].astype("Int64")):
+    for fov, cell in zip(molecules["fov_id"].astype(object), cell_ids):
         found = None if pd.isna(cell) else named.get((fov, int(cell)), set())
         values.append(next(iter(found)) if found is not None and len(found) == 1 else None)
     columns = list(molecules.columns)
@@ -250,15 +252,15 @@ def check_identities(result: AssemblyResult) -> None:
     # 3: molecules follow their cell, the cell of their cell key (cell_namespace, cell_id); unassigned ones their own
     # position.
     cell_mode = "cell_id" in molecules
-    if cell_mode:
-        if "cell_namespace" not in molecules:
-            _fail(3, "a molecule names its cell by the cell key (cell_namespace, cell_id), but the molecule table has "
-                     "no column cell_namespace")
-        named = molecules["cell_namespace"].notna().to_numpy(dtype=bool)
-        wrong = np.flatnonzero(named != molecules["cell_id"].notna().to_numpy(dtype=bool))
-        if len(wrong):
-            _fail(3, "a molecule has a cell_namespace exactly when it has a cell_id",
-                  tuple(molecules[["spot_namespace", "spot_id"]].iloc[int(wrong[0])]))
+    if "cell_namespace" not in molecules:
+        _fail(3, "a molecule names its cell by the cell key (cell_namespace, cell_id), but the molecule table has no "
+                 "column cell_namespace")
+    named = molecules["cell_namespace"].notna().to_numpy(dtype=bool)
+    has_cell = molecules["cell_id"].notna().to_numpy(dtype=bool) if cell_mode else np.zeros(len(molecules), bool)
+    wrong = np.flatnonzero(named != has_cell)
+    if len(wrong):
+        _fail(3, "a molecule has a cell_namespace exactly when it has a cell_id",
+              tuple(molecules[["spot_namespace", "spot_id"]].iloc[int(wrong[0])]))
     placed = molecules["fov_id"].map(dict(zip(fovs["fov_id"], fovs["placement_status"].isin(PLACED))))
     placed = placed.fillna(False).to_numpy(dtype=bool)
     a_status = molecules["assignment_status"].astype(object).fillna("").to_numpy()
@@ -397,7 +399,7 @@ class AssemblyResult:
     every input FOV, in placement table order then increasing ``cell_id``;
     ``molecules`` one row per molecule of every input FOV, in placement table
     order then input order, naming its cell by ``(cell_namespace, cell_id)``
-    (``cells`` mode); ``counts`` the §2.9 long counts of the counted
+    (null without a cell); ``counts`` the §2.9 long counts of the counted
     cells (retained, §2.9 ``kept``) with ``fov_id`` and ``cell_namespace``.
     ``record`` is the ``assembly`` section of ``export.json``. See
     docs/assembly-contract.md ("Sample tables", "What assemble records").
@@ -885,6 +887,8 @@ def assemble(placement: PlacementResult, inputs: Sequence[AssemblyInput], *,
             status[outside] = "outside_grid"
             cell_of = np.full(len(table), None, dtype=object)
             cell_status = {}
+            # No molecule of a molecules_only sample has a cell: its cell key is null.
+            molecules["cell_namespace"] = pd.array([None] * len(table), dtype="string")
         # Molecule retention (rules 2 to 6).
         own_position = molecule_owner == fov_id
         m_status = np.where(own_position, "retained", "excluded").astype(object)

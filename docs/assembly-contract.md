@@ -631,11 +631,11 @@ increasing `cell_id`:
 **`molecules`**, one row per molecule of every input FOV, in placement table order, then
 input order: `fov_id`; every column of the §2.9 molecule table, copied (for a
 `molecules_only` sample, the `MoleculeTable` columns and `assignment_status` null);
-`cell_namespace` (string, a sample with cells only: the namespace of the molecule's cell,
-so that `(cell_namespace, cell_id)` is the cell key of a row of `cells`; null for a
-molecule without a `cell_id`; `load_assembly` fills it for a table saved before the column
-existed from the `cells` row of the molecule's `fov_id` and `cell_id`, null where no single
-row holds them); `sample_z`, `sample_y`, `sample_x` (float64, µm); `owner_fov_id`;
+`cell_namespace` (string: the namespace of the molecule's cell, so that
+`(cell_namespace, cell_id)` is the cell key of a row of `cells`; null for a molecule
+without a `cell_id`, so null on every row of a `molecules_only` sample; `load_assembly`
+fills it for a table saved before the column existed from the `cells` row of the
+molecule's `fov_id` and `cell_id`, null where no single row holds them); `sample_z`, `sample_y`, `sample_x` (float64, µm); `owner_fov_id`;
 `assembly_status`; `assembly_reason`; `assembly_flags`.
 
 **`counts`**, the long table of {doc}`assignment-contract` with `fov_id` and

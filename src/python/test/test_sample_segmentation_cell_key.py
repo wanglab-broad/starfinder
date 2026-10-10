@@ -219,6 +219,7 @@ BASE_TABLES = {
 
 MOLECULE_COLUMNS_29 = ["spot_namespace", "spot_id", "z", "y", "x", "gene_id", "voxel_z", "voxel_y", "voxel_x",
                        "assignment_status", "cell_id", "in_expansion", "original_cell_id", "nucleus_id", "compartment"]
+MOLECULE_ONLY_COLUMNS = ["spot_namespace", "spot_id", "z", "y", "x", "gene_id", "assignment_status"]
 TAIL = ["sample_z", "sample_y", "sample_x", "owner_fov_id", "assembly_status", "assembly_reason", "assembly_flags"]
 
 
@@ -248,12 +249,13 @@ def old_rule_links(result):
 def test_so3_the_column_on_the_route_per_fov(case):
     result, inputs = build(case)
     molecules = result.molecules
+    assert str(molecules[KEY].dtype) == "string"
     if case == "empty_molecules_only":
-        # A molecules_only table has no cell_id, so no cell key: its columns are those before the change.
-        assert KEY not in molecules and "cell_id" not in molecules
+        # A molecules_only table has no cell_id: no molecule has a cell, so the column is null on every row.
+        assert list(molecules.columns) == ["fov_id", *MOLECULE_ONLY_COLUMNS, KEY, *TAIL]
+        assert len(molecules) and molecules[KEY].isna().all()
     else:
         assert list(molecules.columns) == ["fov_id", *MOLECULE_COLUMNS_29, KEY, *TAIL]
-        assert str(molecules[KEY].dtype) == "string"
         expected = [None if pd.isna(c) else namespace_of(inputs, f) for f, c in zip(molecules.fov_id,
                                                                                    molecules.cell_id)]
         assert [None if pd.isna(v) else v for v in molecules[KEY]] == expected
@@ -273,10 +275,13 @@ def test_so3_save_and_load_keep_the_column(case, table_format, tmp_path):
     pytest.importorskip("anndata", reason="the anndata extra (starfinder[anndata]) is not installed")
     result, _ = build(case)
     saved = save_assembly(result, tmp_path, table_format=table_format)
-    assert (KEY in saved.record["files"]["molecules"]["dtypes"]) == (case != "empty_molecules_only")
+    assert saved.record["files"]["molecules"]["dtypes"][KEY] == "string"
     loaded = load_assembly(tmp_path)
     for name in TABLES:
         assert_frame_equal(getattr(loaded, name), getattr(result, name), check_exact=True)
+    assert str(loaded.molecules[KEY].dtype) == "string"
+    if case == "empty_molecules_only":
+        assert loaded.molecules[KEY].isna().all()
 
 
 def _as_saved_before_the_column(folder):
@@ -295,7 +300,8 @@ def _as_saved_before_the_column(folder):
 
 @pytest.mark.parametrize("table_format", ["csv", "parquet"])
 @pytest.mark.parametrize("case", ["golden_3d", "golden_expanded", "big_ids", "own_cases",
-                                  "status_placeholder_with_input", "status_failed", "empty_no_cell_row"])
+                                  "status_placeholder_with_input", "status_failed", "empty_no_cell_row",
+                                  "empty_molecules_only"])
 def test_so3_a_folder_saved_before_the_column_loads(case, table_format, tmp_path):
     pytest.importorskip("anndata", reason="the anndata extra (starfinder[anndata]) is not installed")
     result, _ = build(case)
@@ -322,8 +328,10 @@ def test_so3_the_fill_rule():
     # The cell of the molecule's own FOV; null without a cell_id, for a cell no row holds, and for two namespaces.
     assert [None if pd.isna(v) else v for v in filled[KEY]] == ["n1", None, "n2", None, None, "n1"]
     assert fill_cell_namespace(filled, cells) is filled
-    only = molecules.drop(columns="cell_id")
-    assert fill_cell_namespace(only, cells) is only
+    # A molecules_only table (no cell_id): null on every row, at its place.
+    only = fill_cell_namespace(molecules.drop(columns="cell_id"), cells.iloc[:0])
+    assert list(only.columns) == ["fov_id", KEY, "sample_z"] and str(only[KEY].dtype) == "string"
+    assert only[KEY].isna().all()
 
 
 # --- The readers that link a molecule to its cell, by the cell key -------------------------------------------
@@ -380,6 +388,17 @@ def test_so3_identities_link_by_the_cell_key(case):
         dataclasses.replace(result, molecules=molecules.drop(columns=KEY))
 
 
+def test_so3_identities_on_a_molecules_only_table():
+    """A molecules_only table holds the column, null on every row: a namespace on a row, or no column, fails."""
+    result, _ = build("empty_molecules_only")
+    named = result.molecules.copy()
+    named.loc[0, KEY] = '["data","sample","Position001",null,"cell"]'
+    with pytest.raises(ValueError, match="identity 3: a molecule has a cell_namespace exactly when"):
+        dataclasses.replace(result, molecules=named)
+    with pytest.raises(ValueError, match="identity 3: .*no column cell_namespace"):
+        dataclasses.replace(result, molecules=result.molecules.drop(columns=KEY))
+
+
 def test_so3_identity_4_counts_a_molecule_in_the_cell_of_its_key():
     """Identity 4 tallies the retained assigned molecules by the cell key: moving one molecule's key to another
     counted cell of another FOV, with the same cell_id and status, breaks the counts though identity 3 holds."""
@@ -397,7 +416,8 @@ def test_so3_identity_4_counts_a_molecule_in_the_cell_of_its_key():
         dataclasses.replace(result, molecules=moved)
 
 
-@pytest.mark.parametrize("case", ["golden_3d", "big_ids", "own_cases", "status_placeholder_with_input"])
+@pytest.mark.parametrize("case", ["golden_3d", "big_ids", "own_cases", "status_placeholder_with_input",
+                                  "empty_molecules_only"])
 def test_so3_readers_that_do_not_read_the_key_give_the_same_results(case, tmp_path):
     """sample_anndata, export_counts and fov_ownership on the table with the column and on the table before it."""
     anndata = pytest.importorskip("anndata", reason="the anndata extra (starfinder[anndata]) is not installed")
@@ -424,10 +444,12 @@ def test_so3_readers_that_do_not_read_the_key_give_the_same_results(case, tmp_pa
         assert a.excluded_molecules == b.excluded_molecules
 
 
-def test_so3_the_export_readers_on_a_folder_with_the_column(tmp_path):
-    """Dataset.export of assembly_golden with the SpatialData store: check_export passes S1 to S8 with the column
-    (S2 compares it), the points carry it, cell_instance_id follows the cell key, and lookup_source finds a
-    molecule and a cell as before."""
+@pytest.mark.parametrize("assignment", ["default", None])
+def test_so3_the_export_readers_on_a_folder_with_the_column(assignment, tmp_path):
+    """Dataset.export of assembly_golden with the SpatialData store, with cells and molecules_only
+    (assignment=None, the column null on every row): check_export passes S1 to S8 with the column (S2 compares
+    it), the points carry it, cell_instance_id follows the cell key, and lookup_source finds a molecule (and a
+    cell) as before."""
     import importlib.util
     for name, extra in (("multiview_stitcher", "multiview-stitcher"), ("spatialdata", "spatialdata"),
                         ("anndata", "anndata")):
@@ -444,22 +466,29 @@ def test_so3_the_export_readers_on_a_folder_with_the_column(tmp_path):
     from .fusion_fixtures import export_folder
     f = export_folder(tmp_path)
     with dask.config.set(scheduler="synchronous"):
-        f.dataset.export(SAMPLE, placement=f.placement_dir, output_dir=f.export_dir,
+        f.dataset.export(SAMPLE, placement=f.placement_dir, output_dir=f.export_dir, assignment=assignment,
                          config=ExportConfig(export_spatialdata=True, spatialdata=SpatialDataExportConfig()))
         check_export(f.export_dir)
         assembly = load_assembly(f.export_dir)
-        assert KEY in json.loads((f.export_dir / "export.json").read_text())["assembly"]["files"]["molecules"][
-            "dtypes"]
+        assert json.loads((f.export_dir / "export.json").read_text())["assembly"]["files"]["molecules"][
+            "dtypes"][KEY] == "string"
         with pd.option_context("future.infer_string", False):
             points = spatialdata.read_zarr(f.export_dir / "sample.zarr").points["molecules"].compute()
+    assert assembly.mode == ("cells" if assignment else "molecules_only")
     points = points.set_index(["spot_namespace", "spot_id"])
     source = assembly.molecules.set_index(["spot_namespace", "spot_id"]).loc[points.index]
     assert [None if pd.isna(v) else v for v in points[KEY]] == [None if pd.isna(v) else v for v in source[KEY]]
     links = pd.Series(cell_links(assembly), index=assembly.molecules.set_index(["spot_namespace", "spot_id"]).index)
     assert [None if pd.isna(v) else int(v) for v in points["cell_instance_id"]] == \
         [None if pd.isna(v) else int(v) for v in links.loc[points.index]]
-    assert [None if pd.isna(v) else int(v) for v in links] == old_rule_links(assembly)
     fov = "Position002"
+    if assignment is None:
+        assert assembly.molecules[KEY].isna().all() and points[KEY].isna().all() and links.isna().all()
+        rows = assembly.molecules[assembly.molecules.fov_id == fov]
+        found = lookup_source(f.export_dir, spot=(rows.spot_namespace.iloc[0], rows.spot_id.iloc[0]))
+        assert (found["fov_id"], found["row"], found["assignment_folder"]) == (fov, 0, None)
+        return
+    assert [None if pd.isna(v) else int(v) for v in links] == old_rule_links(assembly)
     loaded = read_assignment(f.assignment_dir(fov), "default")
     row = loaded.molecules.iloc[0]
     found = lookup_source(f.export_dir, spot=(row.spot_namespace, row.spot_id))
