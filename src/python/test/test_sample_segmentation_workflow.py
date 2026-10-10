@@ -346,10 +346,11 @@ def wf_config(name):
 
 @pytest.mark.parametrize("name", ["workflow-full.yaml", "workflow-minimal.yaml", "workflow-recipe-2.yaml"])
 def test_wf1_existing_configurations_without_the_new_keys(name):
-    """The examples have no assembly block, so export_sample is not included; their copies with the blocks and
-    without the new keys keep the inputs they had where the route resolves to per_fov (stack, both) or the export
-    is molecules only, and the copy that exports a projection with an assignment is refused when the rules are
-    parsed, naming export.segmentation and route: per_fov (RD1)."""
+    """The amended row WF1. The examples have no assembly block, so export_sample is not included. Their copies with
+    the blocks and without the new keys that RD1 accepts (a stack, both, a projection without an assignment) keep
+    the inputs they had at the base revision; the copy that RD1 refuses (a projection with an assignment and no
+    export.segmentation) is refused when the rules are parsed, naming export.segmentation and route: per_fov, and
+    with route: per_fov added it has the inputs it had at the base revision, as has any copy with route: per_fov."""
     config = wf_config(name)
     assert "assembly" not in config and "export" not in config
     common = (ROOT / "workflow/rules/common.smk").read_text()
@@ -366,10 +367,34 @@ def test_wf1_existing_configurations_without_the_new_keys(name):
         if expected is None:
             with pytest.raises(ValueError, match=r"export\.segmentation.*route: per_fov"):
                 workflow._check_export_route(copied)
-            continue
+            copied["export"] = {"route": "per_fov"}  # the one line that restores the earlier behaviour
+            expected = "per_fov"
+            VALIDATOR.validate(copied)
         workflow._check_export_route(copied)
         inputs = workflow._export_sample_files(copied, OUT, FOVS, SAMPLE)[0]
         assert inputs == (per_fov_inputs() if expected == "per_fov" else molecule_inputs())
+
+
+# The route_configs without the new key route that RD1 refuses by its default.
+RD1_REFUSED = [c for c in COMBINATIONS if c[0] is None and refused(*c) == r"export\.segmentation"]
+
+
+@pytest.mark.parametrize("combination", RD1_REFUSED, ids=lambda c: "-".join(map(str, c)))
+def test_wf1_a_configuration_rd1_refuses_plans_its_earlier_jobs_with_route_per_fov(combination):
+    """The amended row WF1, second part, on route_configs: every configuration RD1 refuses (no route, a projection,
+    an assignment, no export.segmentation) is refused when the rules are parsed, naming export.segmentation and
+    route: per_fov; with route: per_fov added it passes and export_sample has the inputs of the base revision (the
+    planned jobs are compared in the dry run, case default_projection_per_fov, in the W-430 worker notes)."""
+    route, dimensionality, segment, fuse, segmentation, assignment = combination
+    assert (route, dimensionality, segmentation, assignment) == (None, "projection", False, "default")
+    config = route_workflow_config(*combination)
+    with pytest.raises(ValueError) as refusal:
+        workflow._check_export_route(config)
+    assert "export.segmentation" in str(refusal.value) and "route: per_fov" in str(refusal.value)
+    config["export"]["route"] = "per_fov"
+    VALIDATOR.validate(config)
+    workflow._check_export_route(config)
+    assert workflow._export_sample_files(config, OUT, FOVS, SAMPLE)[0] == per_fov_inputs()
 
 
 # --- WF2: the assignment figures --------------------------------------------------------------------------------

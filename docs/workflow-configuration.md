@@ -509,11 +509,14 @@ sample-level rules for a configuration that has them. The specification is the
   `device`, `cells`, `nuclei` and `runs`, each run with `name`, `target`, `inputs` (a list
   of `{role, image}`, each `image` a name of `images`), optional `seeds` and a `method`, a
   `SEGMENTATION_METHODS` name whose config fields are the run's other keys, or `import`
-  with the `LabelImportConfig` fields. The pixel lengths of a method (Cellpose's `diameter`
-  and `min_size`, StarDist's `scale`, `block_size`, `min_overlap` and `context`) are given
-  for the acquired grid, as
-  for the route per FOV; the route divides them by the scale factor of `scale_yx` and
-  records both values. The assignment settings are those of the top-level `assignment`
+  with the `LabelImportConfig` fields. The pixel settings of a method are given for the
+  acquired grid, as for the route per FOV, and the route converts them to the segmentation
+  grid at the factor `k` of `scale_yx = 1/k` by the table of
+  {doc}`sample-segmentation-contract` ("Lengths in pixels"), recording both values:
+  Cellpose's `diameter` becomes `diameter / k` and its area `min_size` becomes
+  `max(1, round(min_size / k²))`; StarDist's `scale` is multiplied by `k` in Y and X, and its
+  `block_size`, `min_overlap` and `context` are divided by `k` and rounded up, so block runs
+  are possible at `k = 1` only; `n_tiles` and lengths in µm (`sigma_um`) do not change. The assignment settings are those of the top-level `assignment`
   block (its `AssignmentConfig` fields; the defaults without one). Without the block the
   defaults apply, so a configuration with an assignment name that exports the default
   projection takes the route after fusion and is refused until it sets

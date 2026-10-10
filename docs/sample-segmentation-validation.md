@@ -25,6 +25,13 @@ Status: Accepted (W-377, 2026-10-09, at 779ea77)
   with a reused segmentation), as the contract's amended "The label images" states, in
   place of "L6 holds". Found by W-428 and its review. Operator decision, pending Jiahao's
   confirmation.
+* 2026-10-10: the row WF1 states what the default RD1 implies for an existing configuration
+  without the new keys, in place of "existing configurations without the new keys give the
+  same jobs as before": one that RD1 accepts plans the jobs it planned before; one that RD1
+  refuses (a projection with an assignment and no `export.segmentation`) is refused when the
+  workflow is read, naming `export.segmentation` and `route: per_fov`, and plans its earlier
+  jobs once `route: per_fov` is added. The two could not both hold as written, and RD1 was
+  decided. Found by W-430 and its review. Operator decision, pending Jiahao's confirmation.
 
 This page is the validation design of {doc}`sample-segmentation-contract`: the fixtures
 and the checks an implementation of the route after fusion, the route setting and
@@ -130,7 +137,7 @@ the same conditions is SO2. SG1 to SG3 and SG6 call `segment_fused` on a folder 
 
 | # | Check | Fixture | Metric | Pass/fail tolerance | Needs |
 | --- | --- | --- | --- | --- | --- |
-| WF1 | The rule's inputs by route | `route_configs` workflow copies | Snakemake dry run (`-n`) with the starfinder-v9 Snakemake, read-only | With `route: per_fov` `export_sample` needs `reads_assignment` of every FOV of the sample, as today; with `route: after_fusion` it needs the molecule tables and the source images and no `reads_assignment` output; existing configurations without the new keys give the same jobs as before. Exact. | H |
+| WF1 | The rule's inputs by route | `route_configs` workflow copies | Snakemake dry run (`-n`) with the starfinder-v9 Snakemake, read-only | With `route: per_fov` `export_sample` needs `reads_assignment` of every FOV of the sample, as today; with `route: after_fusion` it needs the molecule tables and the source images and no `reads_assignment` output; an existing configuration without the new keys that the default RD1 accepts (a stack; a projection without an assignment; any configuration with `route: per_fov`) plans exactly the jobs it planned at the base revision; one that RD1 refuses is refused when the workflow is read, before any job is planned, with the error that names `export.segmentation` and `route: per_fov`, and the same configuration with `route: per_fov` added plans exactly the jobs it planned at the base revision. Exact. | H |
 | WF2 | The assignment figures | the same | Files | On the route after fusion `export_sample` draws no `expr/{fovID}/assignment.png` again; on the route per FOV it does, as W-330 specifies. Exact. | H |
 
 ### What the default tier covers and what it does not
@@ -205,5 +212,5 @@ One line per implemented check: its identifier and the test that implements it, 
 | CR5 | `test_sample_segmentation_compare.py::test_cr5_the_whole_of_a_larger_scene` (`slow`) |
 | CR, the measure | `test_sample_segmentation_compare.py::test_cr_the_measure_is_the_duplicate_rule_s`: the share of `compare_routes` equals the duplicate rule's for the same two territories; both take it from `starfinder.assembly._duplicates.share` |
 | RS5 | `test_sample_segmentation_workflow.py::test_rs5_configuration_schema`, with `test_rs5_a_run_s_method_keys_equal_the_config_fields`, `test_rs5_every_init_field_of_a_method_config_translates`, `test_rs5_route_configs_validate_and_translate`, `test_rs5_invalid_route_keys_fail_the_schema` and `test_rs5_the_example_configuration_of_each_route` |
-| WF1 | `test_sample_segmentation_workflow.py::test_wf1_the_rule_s_inputs_by_route`, with `test_wf1_the_inputs_follow_reference_image_and_the_named_images` and `test_wf1_existing_configurations_without_the_new_keys`; the Snakemake dry run (`-n`, starfinder-v9 Snakemake) is recorded in the W-430 worker notes |
+| WF1 | `test_sample_segmentation_workflow.py::test_wf1_the_rule_s_inputs_by_route`, with `test_wf1_the_inputs_follow_reference_image_and_the_named_images` and `test_wf1_existing_configurations_without_the_new_keys` and `test_wf1_a_configuration_rd1_refuses_plans_its_earlier_jobs_with_route_per_fov`; the Snakemake dry run (`-n`, starfinder-v9 Snakemake) is recorded in the W-430 worker notes |
 | WF2 | `test_sample_segmentation_workflow.py::test_wf2_the_assignment_figures` |
