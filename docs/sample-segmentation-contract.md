@@ -2,6 +2,18 @@
 
 Status: Accepted (W-377, 2026-10-09, at 779ea77)
 
+## Amendments after acceptance
+
+* 2026-10-09: `segment_fused` gains the keyword-only `identity=None`, the pair
+  `(dataset_id, sample_id)` of its label namespaces ("Names", "The parts on each route"),
+  because nothing the function was given holds the dataset's identity; without it the
+  labels do not carry that identity. Found by W-426. Operator decision, pending Jiahao's
+  confirmation.
+* 2026-10-09: check 7 states that `cells` may name a run of either target and `nuclei`
+  only a run of the target `nucleus` ("The entry"), in so many words, as the row RS4 of
+  {doc}`sample-segmentation-validation` now refuses. Found by W-426. Operator decision,
+  pending Jiahao's confirmation.
+
 This page specifies the second route to a sample's cells, so that it can be implemented
 after Jiahao approves it: the fused Z maximum of a projection sample is segmented once,
 and the sample's molecules are assigned to those cells. It states how the route is called,
@@ -137,7 +149,7 @@ All new names are additions; no existing public name, module or format version c
 | Route values | `ROUTES = ("per_fov", "after_fusion")` | tuple | `starfinder.sample_output` |
 | Settings of the route | `SampleSegmentationConfig(runs, cells, nuclei=None, assignment=AssignmentConfig(), device="cpu")` | frozen dataclass | `starfinder.sample_output` |
 | One run | `SampleSegmentationRun(name, target, inputs, method, seeds=None)` | frozen dataclass | `starfinder.sample_output` |
-| The segment part | `segment_fused(output_dir, *, config, sample)` returning `SampleSegmentation` | function | `starfinder.sample_output` |
+| The segment part | `segment_fused(output_dir, *, config, sample, identity=None)` returning `SampleSegmentation` | function | `starfinder.sample_output` |
 | Its result | `SampleSegmentation(grid, runs, record)` | frozen dataclass | `starfinder.sample_output` |
 | Its loader | `load_sample_segmentation(output_dir)` | function | `starfinder.sample_output` |
 | The assembly of this route | the keyword `segmentation: SampleSegmentation | None = None` of `assemble` | keyword | `starfinder.assembly` |
@@ -192,7 +204,7 @@ nothing in the fused files.
   (`reference_stain`, `reference_merged` or `<name>=file:<pattern>`), so they are fused
   like any other channel, with the same placement, grid and blending (call C4 fused two
   named stains as projections at `k = 2` in one call).
-* **`segment`** (`segment_fused(output_dir, *, config, sample)`) reads the fused
+* **`segment`** (`segment_fused(output_dir, *, config, sample, identity=None)`) reads the fused
   projection of each input image from the `fusion` section (path and SHA-256), builds one
   `SegmentationInput` per run on the segmentation grid, calls `segment` (or
   `import_labels` with that grid for a run whose method is `import`: `segment` refuses a
@@ -206,6 +218,10 @@ nothing in the fused files.
   on the segmentation grid, `seeded_watershed` with nuclei on the same grid as seeds and
   the namespace `[dataset_id, sample_id, null, null, "cell"]` gave a `plane` label image;
   the µm setting `sigma_um` 1.5 became 1.5 pixels at 1 µm spacing and 0 in Z.
+  `identity` is the pair `(dataset_id, sample_id)` of the label namespaces
+  `[dataset_id, sample_id, null, null, <run>]`; `Dataset.export` always passes the
+  dataset's. Called without it, the namespace is `[null, <sample>, null, null, <run>]`:
+  such labels do not carry the dataset's identity and are for use outside a dataset.
 * **`assemble`** with `segmentation` given and molecule-table inputs: it computes the
   `molecules_only` assembly (unchanged rules), converts its retained molecules to one
   `MoleculeTable` on the segmentation grid ("The sample's molecule table"), calls
@@ -266,7 +282,8 @@ projection, `fuse` is on unless `segment` is off, `assemble` is on unless `segme
 off, the reuse conditions of the table above hold when `segment` is off, the runs' configs
 validate, their
 seeds name earlier runs, `cells` and `nuclei` name runs of the targets `cell` (or
-`nucleus` as territories) and `nucleus`, and every model resolves with its SHA-256
+`nucleus` as territories) and `nucleus` (`cells` may name a run of either target, `nuclei`
+only a run of the target `nucleus`), and every model resolves with its SHA-256
 (`resolve_model` called by check 7 itself, not through `segment`: called alone in a fresh
 process it refused a missing model and imported neither Cellpose nor torch, call C15c; a
 missing file and a SHA-256 mismatch are refused, calls C15 and C15b). Each failure raises `ValueError` (or the

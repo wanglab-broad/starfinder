@@ -232,7 +232,7 @@ New names under N1:
 | Route values | `ROUTES = ("per_fov", "after_fusion")` | tuple |
 | Settings of the route | `SampleSegmentationConfig(runs, cells, nuclei=None, assignment=AssignmentConfig(), device="cpu")` | frozen dataclass |
 | One run | `SampleSegmentationRun(name, target, inputs, method, seeds=None)` | frozen dataclass |
-| The segment part | `segment_fused(output_dir, *, config, sample)` returning `SampleSegmentation` | function |
+| The segment part | `segment_fused(output_dir, *, config, sample, identity=None)` returning `SampleSegmentation` | function |
 | Its result | `SampleSegmentation(grid, runs, record)` | frozen dataclass |
 | Its loader | `load_sample_segmentation(output_dir)` | function |
 | The assembly of this route | the keyword `segmentation: SampleSegmentation | None = None` of `assemble` (`starfinder.assembly`) | keyword |

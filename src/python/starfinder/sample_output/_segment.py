@@ -372,7 +372,10 @@ def segment_fused(output_dir, *, config: SampleSegmentationConfig, sample: str,
         The sample of the export folder.
     identity : tuple or None
         ``(dataset_id, sample_id)`` of the label namespaces ``[dataset_id,
-        sample_id, null, null, <run>]``; None takes ``(None, sample)``.
+        sample_id, null, null, <run>]``. ``Dataset.export`` always passes the
+        dataset's. None gives ``[null, <sample>, null, null, <run>]``: such
+        labels do not carry the dataset's identity and are for use outside a
+        dataset.
 
     Returns
     -------
