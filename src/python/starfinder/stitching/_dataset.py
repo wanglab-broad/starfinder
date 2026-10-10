@@ -35,9 +35,11 @@ def read_inputs(output_root, fov_ids, input_name, *, reference) -> dict[str, Sti
     the workflow configuration): the file ``reference_image`` names (default
     ``images/ref_merged/{fovID}.tif``), its stored metadata, or the grid the
     voxel sizes declare for a file that stores none. With ``reference_merged``
-    that file is read once and is also the image.
+    that file is read once and is also the image; with another input only its
+    grid is read (:func:`~starfinder.dataset._declared.reference_grid`: the
+    header of a file that stores none).
     """
-    from starfinder.dataset._declared import reference_volume
+    from starfinder.dataset._declared import reference_grid, reference_volume
     from starfinder.dataset._paths import _FovPaths
     from starfinder.io import load_volume, load_volume_zyxc
     from starfinder.segmentation._persist import file_sha256
@@ -46,11 +48,11 @@ def read_inputs(output_root, fov_ids, input_name, *, reference) -> dict[str, Sti
     loaded = {}
     for fov in fov_ids:
         paths = _FovPaths(output_root, fov)
-        grid, volume, reference_path = reference_volume(output_root, fov, **reference)
         if input_name == "reference_merged":
+            grid, volume, reference_path = reference_volume(output_root, fov, **reference)
             loaded[fov] = StitchingInput(fov, volume.image, grid, input_name, file_sha256(reference_path))
             continue
-        del volume
+        grid = reference_grid(output_root, fov, **reference)
         if input_name == "reference_stain":
             path, source = paths.checkpoint_dir / REFERENCE_STAIN_FILE, input_name
         else:
