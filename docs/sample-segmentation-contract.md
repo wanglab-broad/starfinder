@@ -7,28 +7,28 @@ Status: Accepted (W-377, 2026-10-09, at 779ea77)
 * 2026-10-09: `segment_fused` gains the keyword-only `identity=None`, the pair
   `(dataset_id, sample_id)` of its label namespaces ("Names", "The parts on each route"),
   because nothing the function was given holds the dataset's identity; without it the
-  labels do not carry that identity. Found by W-426. Operator decision, pending Jiahao's
-  confirmation.
+  labels do not carry that identity. Found by W-426. Operator decision, confirmed by Jiahao on
+  2026-10-10.
 * 2026-10-09: check 7 states that `cells` may name a run of either target and `nuclei`
   only a run of the target `nucleus` ("The entry"), in so many words, as the row RS4 of
   {doc}`sample-segmentation-validation` now refuses. Found by W-426. Operator decision,
-  pending Jiahao's confirmation.
+  confirmed by Jiahao on 2026-10-10.
 * 2026-10-10: the status `empty` of `segment` is recorded when the part is called alone;
   through `Dataset.export` with the assemble part on, a placement without an included FOV
   is refused before anything is written, as the accepted "No included FOV" of
   {doc}`sample-output-contract` settles for `fuse`; the `molecules_only` fallback with
   `complete` false is about `not_run`, and `complete` keeps its one rule ("The entry").
-  Found by W-427 and its review. Operator decision, pending Jiahao's confirmation.
+  Found by W-427 and its review. Operator decision, confirmed by Jiahao on 2026-10-10.
 * 2026-10-10: the `segmentation` section holds `assignment`, the assignment settings the
   sample's tables are made with, set to the current export's when the segmentation is
   reused ("The record"), because `assemble(..., segmentation=…)` has no other argument
-  that holds them. Found by W-427 and its review. Operator decision, pending Jiahao's
-  confirmation.
+  that holds them. Found by W-427 and its review. Operator decision, confirmed by Jiahao on
+  2026-10-10.
 * 2026-10-10: L6 on the route after fusion is checked when the number of cells is first
   known, after `segment` and before `assemble` writes on a fresh export, before anything
   is written with a reused segmentation ("The label images"), in place of "L6 holds as
   stated", because the cells do not exist before the segmentation. Found by W-428 and its
-  review. Operator decision, pending Jiahao's confirmation.
+  review. Operator decision, confirmed by Jiahao on 2026-10-10.
 
 This page specifies the second route to a sample's cells, so that it can be implemented
 after Jiahao approves it: the fused Z maximum of a projection sample is segmented once,

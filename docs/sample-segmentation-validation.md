@@ -7,31 +7,31 @@ Status: Accepted (W-377, 2026-10-09, at 779ea77)
 * 2026-10-09: the row RS4 refuses `nuclei` naming a run of the target `cell` and `cells`
   naming no run of the configuration, in place of "`cells` naming a nucleus-only run of
   another target", which check 7 of {doc}`sample-segmentation-contract` allows (`cells`
-  may name a nucleus run as territories). Found by W-426. Operator decision, pending
-  Jiahao's confirmation.
+  may name a nucleus run as territories). Found by W-426. Operator decision, confirmed by Jiahao
+  on 2026-10-10.
 * 2026-10-09: the row SG1 calls `segment_fused` with `identity=(dataset_id, sample_id)`,
   the keyword the contract gained, and its expected namespace follows. Found by W-426.
-  Operator decision, pending Jiahao's confirmation.
+  Operator decision, confirmed by Jiahao on 2026-10-10.
 * 2026-10-10: the row SG5 expects `empty` (`no_included_fov`) for a sample without an
   included FOV with the parts called alone, and the refusal of such a placement by
   `Dataset.export` before anything is written, as the contract's amended "The entry"
-  states. Found by W-427 and its review. Operator decision, pending Jiahao's confirmation.
+  states. Found by W-427 and its review. Operator decision, confirmed by Jiahao on 2026-10-10.
 * 2026-10-10: the row SG4 adds a reuse with changed assignment settings: the
   `segmentation` section's `assignment` holds the new settings and the tables are made
   with them, as the contract's amended "The record" states. Found by W-427 and its
-  review. Operator decision, pending Jiahao's confirmation.
+  review. Operator decision, confirmed by Jiahao on 2026-10-10.
 * 2026-10-10: the row SO4 checks L6 by the rule of the route after fusion (after
   `segment` and before `assemble` writes on a fresh export, before anything is written
   with a reused segmentation), as the contract's amended "The label images" states, in
-  place of "L6 holds". Found by W-428 and its review. Operator decision, pending Jiahao's
-  confirmation.
+  place of "L6 holds". Found by W-428 and its review. Operator decision, confirmed by Jiahao on
+  2026-10-10.
 * 2026-10-10: the row WF1 states what the default RD1 implies for an existing configuration
   without the new keys, in place of "existing configurations without the new keys give the
   same jobs as before": one that RD1 accepts plans the jobs it planned before; one that RD1
   refuses (a projection with an assignment and no `export.segmentation`) is refused when the
   workflow is read, naming `export.segmentation` and `route: per_fov`, and plans its earlier
   jobs once `route: per_fov` is added. The two could not both hold as written, and RD1 was
-  decided. Found by W-430 and its review. Operator decision, pending Jiahao's confirmation.
+  decided. Found by W-430 and its review. Operator decision, confirmed by Jiahao on 2026-10-10.
 
 This page is the validation design of {doc}`sample-segmentation-contract`: the fixtures
 and the checks an implementation of the route after fusion, the route setting and
