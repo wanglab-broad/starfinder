@@ -356,9 +356,13 @@ def segment_fused(output_dir, *, config: SampleSegmentationConfig, sample: str,
     section), per run its method record, its lengths as given and as used,
     its label file's path and SHA-256 and its counts, ``cells``, ``nuclei``,
     ``device``, the assignment settings ``assignment`` (the
-    :class:`~starfinder.assignment.AssignmentConfig` of ``config``, which
-    ``assemble`` with this segmentation uses), the software, the times and
-    the peak RSS. The files of the earlier section are removed first.
+    :class:`~starfinder.assignment.AssignmentConfig` of ``config``, which the
+    sample's tables are made with: ``assemble`` with this segmentation reads
+    them; when ``Dataset.export`` reuses the segmentation with ``segment:
+    false`` it records the current export's settings there, because the
+    labels do not depend on them and the tables do; the ``assembly``
+    section's ``assignment`` is the §2.9 record of the assignment made), the
+    software, the times and the peak RSS. The files of the earlier section are removed first.
 
     When ``fuse`` did not run, it writes no label file and records
     ``not_run`` (``part_not_run``) with :class:`ExportIncompleteWarning`;

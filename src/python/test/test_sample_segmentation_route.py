@@ -365,6 +365,31 @@ def test_sg4_reuse(tmp_path, fuse_on):
 
 @needs_anndata
 @needs_library
+def test_sg4_reuse_with_changed_assignment_settings(tmp_path):
+    """A reused segmentation takes the current export's assignment settings: the segmentation section's assignment
+    holds them, and the tables are made with them (here an expansion of 1 µm, which the first export did not have)."""
+    from starfinder.sample_output import load_sample_segmentation
+    folder, segmentation, first = first_export(tmp_path)
+    assert first["segmentation"]["assignment"]["expansion"] is None
+    labels = {run["path"]: run["sha256"] for run in first["segmentation"]["runs"]}
+    changed = dataclasses.replace(segmentation, assignment=EXPANSION)
+    record = export(folder, route_config(segmentation=changed, segment=False))
+    assert record["parts"]["segment"] == "reused" and record["parts"]["assemble"] == "written"
+    assert record["segmentation"]["assignment"] == json.loads(json.dumps(dataclasses.asdict(EXPANSION)))
+    assert {run["path"]: run["sha256"] for run in record["segmentation"]["runs"]} == labels
+    assert record["assembly"]["assignment"]["config"]["expansion"]["distance"] == 1.0
+    assert "territories" in record["assembly"]["files"]
+    t5(record)
+    tables = load_assembly(folder.export_dir)
+    assert tables.cells["expanded_size_voxels"].notna().all()
+    expected = assemble(folder.placement, assembly_inputs(folder.dataset, folder.placement, None),
+                        segmentation=load_sample_segmentation(folder.export_dir))
+    for name in ("fovs", "cells", "molecules", "counts"):
+        pd.testing.assert_frame_equal(getattr(tables, name), getattr(expected, name), check_exact=True)
+
+
+@needs_anndata
+@needs_library
 @pytest.mark.parametrize("case", SG4_REFUSALS)
 def test_sg4_reuse_refused_before_anything_is_written(tmp_path, case):
     folder, segmentation, first = first_export(tmp_path)

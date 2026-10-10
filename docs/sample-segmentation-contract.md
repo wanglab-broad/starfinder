@@ -13,6 +13,17 @@ Status: Accepted (W-377, 2026-10-09, at 779ea77)
   only a run of the target `nucleus` ("The entry"), in so many words, as the row RS4 of
   {doc}`sample-segmentation-validation` now refuses. Found by W-426. Operator decision,
   pending Jiahao's confirmation.
+* 2026-10-10: the status `empty` of `segment` is recorded when the part is called alone;
+  through `Dataset.export` with the assemble part on, a placement without an included FOV
+  is refused before anything is written, as the accepted "No included FOV" of
+  {doc}`sample-output-contract` settles for `fuse`; the `molecules_only` fallback with
+  `complete` false is about `not_run`, and `complete` keeps its one rule ("The entry").
+  Found by W-427 and its review. Operator decision, pending Jiahao's confirmation.
+* 2026-10-10: the `segmentation` section holds `assignment`, the assignment settings the
+  sample's tables are made with, set to the current export's when the segmentation is
+  reused ("The record"), because `assemble(..., segmentation=…)` has no other argument
+  that holds them. Found by W-427 and its review. Operator decision, pending Jiahao's
+  confirmation.
 
 This page specifies the second route to a sample's cells, so that it can be implemented
 after Jiahao approves it: the fused Z maximum of a projection sample is segmented once,
@@ -261,17 +272,22 @@ read-back checks (T1 and T5 of "The record") and the validation (SG4) follow:
 
 **The statuses of `segment`.** `written`, `reused`, `off` (route per FOV, reason
 `route_per_fov`; or a sample without cells, `assignment=None`, reason `no_cells`),
-`empty` (no included FOV, reason `no_included_fov`, as `fuse` records), `not_run`
+`empty` (no included FOV, reason `no_included_fov`, as `fuse` records, when the part is
+called alone on a folder without an included FOV; through `Dataset.export` with the
+assemble part on, such a placement has no owning FOV and is refused before anything is
+written, as on the route per FOV: {doc}`sample-output-contract`, "No included FOV"), `not_run`
 (`part_not_run` when `fuse` did not run; `extra_missing` naming the method's extra, for
 example `cellpose`, when its backend is not importable) and `failed`. A model that is
 missing or whose SHA-256 differs is a setting error: it is refused before anything is
 written (check 7 below). `segment` itself refuses it too, before any inference but after
 importing the method's libraries (calls C15, C15b and C15c).
 
-When `segment` is `not_run` or `empty`, `assemble` still writes the tables of the
+When `segment` is `not_run`, `assemble` still writes the tables of the
 `molecules_only` assembly, `sample.h5ad` without a row and its section with `mode`
 `molecules_only` and the reason, so that the files of the parts that ran exist, as
 {doc}`sample-output-contract` ("When a part cannot run") asks; `complete` is false.
+`complete` keeps its one rule (no part `not_run` or `failed`), so a part that is `empty`
+does not by itself make it false, as for `fuse`.
 
 **Check 7 before anything is written** (after checks 1 to 6 of
 {doc}`sample-output-contract`, "Checks before anything is written"): the route is a value
@@ -670,6 +686,11 @@ The `segmentation` section of `export.json`, written by `segment_fused`:
   import), `lengths` (each pixel field as given and as used, LS2), the label file's path
   and SHA-256, `n_labels`, `max_label` and the outcome;
 * `cells`, `nuclei`, `device`;
+* `assignment`: the assignment settings (the `AssignmentConfig` of
+  `SampleSegmentationConfig`) that the sample's tables are made with, which `assemble`
+  reads; with `segment: false` it holds the settings of the current export, because the
+  labels do not depend on them and the tables do. The `assembly` section's `assignment`
+  stays the §2.9 record of the assignment that was made;
 * `software` as in `run.json` ({doc}`checkpoints`), wall and CPU time and peak RSS.
 
 The `assembly` section records `route`, `route_source` and, on this route,
