@@ -548,3 +548,72 @@ These are named, not edited:
 * Any second segmentation method or parameter set, and the tissue-2D sample.
 * The behaviour of the after-fusion route where FOVs differ in brightness or focus, beyond
   what the two blocks show.
+
+## Cells retained by no FOV, measured (this issue)
+
+W-434 (2026-10-10) measured, on the same two blocks, the cells that their own FOV
+excludes `not_owner` and whether any FOV retains them. It measures; it decides and
+implements no rule. Its run directory is
+`/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-434/20261010T234018Z-ca5cf87f`;
+its worker notes, tables (`results/tables/`), figures (`results/figures/`) and manifest
+(`results/manifest.json`) are there.
+
+**Method.** The present `assemble` was run on W-376's block inputs and placements, once
+with the duplicate rule off (every cell then has the status, reason and flags of W-376's
+block export, which W-399 measured) and once at its default 0.5, which excludes 8 culture
+and 4 LN observations `duplicate_observation`, one per candidate pair of W-399. Every cell
+excluded `not_owner` in the second assembly is put in one class by the owner FOV's
+territory at its ownership centroid, read as the package reads it for `unclaimed`: the
+owner retains a cell there; the owner has no cell there; the owner's cell there is
+excluded `duplicate_observation`; or it is excluded `not_owner` and owned by this cell's
+FOV (the two observations exclude each other). The classes without a retained cell equal
+the `unclaimed` flag in both blocks, with no disagreement. A cell has **no counterpart**
+when it shares less than 0.5 of the smaller territory, the duplicate rule's measure, with
+every retained cell of any FOV. A synthetic pair of FOVs with a known answer gave the
+expected class and counterpart for each of its cells.
+
+| Class (assembly with the duplicate rule on) | Culture: excluded | Culture: no counterpart (0.3 / 0.5 / 0.7) | LN: excluded | LN: no counterpart (0.3 / 0.5 / 0.7) |
+| --- | --- | --- | --- | --- |
+| Owner retains a cell there | 32 | 0 / 1 / 3 | 547 | 1 / 24 / 109 |
+| Owner has no cell there | 4 | 2 / 3 / 3 | 348 | 339 / 346 / 347 |
+| Owner's cell there excluded `duplicate_observation` | 3 | 0 / 0 / 1 | 0 | — |
+| Both observations exclude each other | 2 | 2 / 2 / 2 | 13 | 13 / 13 / 13 |
+| All (`unclaimed`: culture 9, LN 361) | 41 | 4 / 6 / 9 | 908 | 353 / 383 / 469 |
+
+* **What they are.** In the culture, 5 of the 6 cells without a counterpart carry
+  `fov_edge`: they are parts of cells cut by their own FOV's edge, which the owner
+  segmented differently. In LN they are nuclei of ordinary size (median 0.98 of the
+  retained median), spread over the whole overlap past the boundary (median 7.0 µm into
+  the owner's region) and over Z. They carry `fov_edge` and `z_edge` less often than the
+  excluded cells that have a counterpart (9% against 12%, and 30% against 41%). What
+  distinguishes them is that the owner's segmentation has no
+  nucleus there; in the panels the owner's stain often shows one. The segmentation of
+  the fused block (W-399, scale 1/1) has a cell sharing at least 0.5 with 114 of the 383,
+  against 464 of the 525 excluded LN cells that have a counterpart. That segmentation is
+  a second observation, not a truth.
+* **Molecules and counts.** Every molecule a FOV assigned to such a cell is excluded with
+  it (`cell_not_owner`). In LN they are 3,390 molecules, 4.7% of the molecules in
+  retained cells, and the cells are 383 of the 8,190 cells (4.7%) and 4.7% of the counts
+  of `sample.h5ad`. The owner FOV's own molecules at those places are mostly retained
+  without a cell (3,241 of 4,311). In the culture they are 3,494 molecules (2.0%) and
+  5 of 150 cells with 2.1% of the counts.
+* **What two rules would bring back** (counted, not built). Rule r1 keeps an excluded
+  observation that no retained cell shares at least 0.5 with, and keeps one of such
+  observations that share at least 0.5 with each other by the duplicate rule's order.
+  Rule r2 does the same for observations without `fov_edge` only. In the culture, r1
+  returns 5 cells (4 cut by a FOV edge, 1.3% of the counts) and r2 returns 1. In LN, r1
+  returns 369 nuclei (33 cut by a FOV edge, 4.5% of the counts) and r2 returns 337 (4.2%).
+  Neither creates a pair at or above 0.5 among the cells it returns.
+
+**Limits of these numbers.**
+
+* They are counts on two 2 × 2 blocks. A whole sample has more seam per FOV
+  (2 − 1/N − 1/M side lengths against 1), so the shares are expected to be larger there.
+  This is an expectation, not a measurement.
+* No annotation says whether a label is a real cell. These are counts, not accuracies.
+* Jiahao considers the culture's nucleus labels faulty (one label over the nuclei of two
+  cells). The LN nucleus segmentation is incomplete, which is a likely reason why an owner
+  has no nucleus where a neighbour has one. Whether a returned observation is a real
+  nucleus was not measured.
+* Not measured: a whole sample, and which rule, if any, is right. Jiahao decides on a
+  rule.
