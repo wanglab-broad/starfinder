@@ -25,7 +25,8 @@ An em dash in the default column means the schema defines no default.
 | `rotate_angle` | number | Yes | —; degrees, 0 for no rotation |
 | `img_col`, `img_row` | integers >=1 | Yes | —; width X and height Y; subtile windows use these values |
 | `img_z` | integer >=1 | No | —; downstream 3-D metadata/preview uses it; `reads_assignment` needs it for a YX label image (the Z size of the molecule grid) |
-| `voxel_size_xy`, `voxel_size_z` | numbers >0 | No | —; physical microns for stitching and the declared calibration of the files the segmentation and assignment rules read; **not** extraction window radii |
+| `voxel_size_xy`, `voxel_size_z` | numbers >0 | No | —; physical microns for stitching and the declared calibration of the files the segmentation and assignment rules read, and of a FOV's reference image (`reference_image`) that stores no metadata when the stitching rules, `reads_assignment` (with an `assembly` block) and `export_sample` read its grid; **not** extraction window radii |
+| `reference_image` | string with `{fov_id}` | No | `images/ref_merged/{fov_id}.tif`; Python only: the file pattern of a FOV's reference image, absolute or relative to the output root, whose grid the stitching rules, `reads_assignment` (with an `assembly` block) and `export_sample` read and which `reference_merged` names (`Dataset.reference_image`); a pattern without `{fov_id}` raises `ValueError`, a missing file `FileNotFoundError`, each naming the key. The processing rules still write `images/ref_merged/` |
 | `maximum_projection` | boolean | No | `false`; reference-image/DAPI output projection; does not turn sequencing into a 2-D algorithm |
 | `seq_channel_order` | array of strings, or of objects with `wavelength`, `channel`, `name` | No | —; set explicit patterns for Python, e.g. `[ch00, ch02, ch01, ch03]`, or MATLAB's `channel_order_dict` entries; see [channels](#channels) |
 | `additional_round` | array of objects with string `round_name` and optional `channel_order` | No | —; supply `[]` when unused; accessed at parse time; `channel_order` lists the round's `wavelength`/`channel`/`name` entries, see [channels](#channels) |
@@ -437,6 +438,168 @@ assignment:
   expansion: {distance: 0.78, unit: um, mode: planar}
   correspondence: {match_fraction: 0.5, outside_tolerance: 0.1}
   exclude_cells_without_nucleus: null
+```
+
+## Stitching, assembly and export
+
+Three Python-only top-level blocks (rejected unless `backend: python`) replace the legacy
+sample-level rules for a configuration that has them. The specification is the
+"Workflow configuration" section of the
+[stitching contract](stitching-contract.md#workflow-configuration), the
+[assembly contract](assembly-contract.md#workflow-configuration) and the
+[sample-output contract](sample-output-contract.md#workflow-configuration).
+
+* **`stitching`.** With the block, `rules/stitching-py.smk` is included instead of the
+  four legacy stitching rules, which then do not run whatever their `run` flags. One rule
+  per sample, `stitch_sample`, writes `<OUTPUT>/stitching/<sample>/` (`placement.json`,
+  `fovs.csv`, `links.csv`). `method` is a `STITCHING_METHODS` name, run in process by
+  `Dataset.stitch` (`multiview_stitcher`), or `bigstitcher`, the default: then
+  `bigstitcher_macro_sample` writes the tiles, the macro and the view map into
+  `<bigstitcher_save_dir>/<sample>/` (a local folder, required with `bigstitcher`),
+  `bigstitcher_engine` runs Fiji on the macro, and `stitch_sample` imports BigStitcher's
+  `dataset.xml`, saves the placement and writes `output/tile_config_{sample}.csv` with the
+  legacy writer from the record's raw translations and view map. `fiji_path` is read by
+  `bigstitcher_engine` when it runs, not when the rules are parsed, and the rule fails
+  unless `dataset.xml` holds a `Stitching Transform` for every view, whatever Fiji's exit
+  status. `positions` is the positions mapping of `Dataset.stitch`; `stage_axes` is
+  required with `source: stage_file` and is never inferred from `rotate_angle`. `config`
+  holds the fields of `MultiviewStitcherConfig` or `BigStitcherConfig`, `review` the
+  `ReviewPolicy` fields, and `fallback` is null or `nominal`. With `multiview_stitcher`
+  no `tile_config_{sample}.csv` is written, so the legacy `reads_assignment` rule needs an
+  `assembly` block there.
+* **`assembly`** (needs `stitching`). The keys are the `AssemblyConfig` fields,
+  `assignment` (the assignment name read per FOV, default `default`; null for molecules
+  only) and `table_format` (`csv` or `parquet`). `duplicate_threshold` (default 0.5; null
+  turns it off) is the duplicate rule of the route per FOV: two retained cells of different
+  FOVs whose territories share at least that share of the smaller one are one cell, the
+  larger observation stays and the other is excluded `duplicate_observation` with its
+  molecules; it removes a second observation and does not complete a cell cut by a FOV
+  edge ({doc}`assembly-contract`, "Retention", rule 8). With the block, `reads_assignment` writes
+  the per-FOV `raw.h5ad` and `reads_assignment.csv` without the tile filter and without
+  `global_*` columns, on the grid of the FOV's reference image (`reference_image`, default
+  `images/ref_merged/{fov_id}.tif`; its stored metadata, or for a file that stores none the
+  grid `voxel_size_xy` and `voxel_size_z` declare, as `export_sample` reads it), reads no
+  `tile_config_{sample}.csv`, and saves the FOV's assignment folder
+  `checkpoints/{fovID}/assignment/<assignment>/`; `create_sample_h5ad` and
+  `create_sample_reads_assignment` do not run. One rule per sample, `export_sample`, runs
+  every part of `Dataset.export` after the placement and, on the route per FOV, every
+  FOV's `reads_assignment`; on the route after fusion it needs no output of
+  `reads_assignment`, but the FOVs' molecule tables `signal/{fovID}_goodSpots.csv`, their
+  reference images (the files `reference_image` names) and, with `fuse` on, the source
+  images of `images` that are files of the workflow (`reference_merged` and each
+  `<name>=file:<pattern>`; the saved form of `reference_stain` is read but is no declared
+  output of any rule, so it is not declared, as for `stitch_sample`); `reads_assignment`
+  still runs while its `run` flag is on, and can be turned off on that route. Its declared output
+  is `export/<sample>/export.json`, which lists every other file of the folder, so a part
+  that cannot run (an extra not installed) is recorded `not_run` and does not fail the
+  rule. On the route per FOV, with an `assignment` name, it then draws
+  `expr/{fovID}/assignment.png` (and `assignment_single_layer.png` for a ZYX label image)
+  again for each FOV with a saved assignment, with the FOV's ownership region; the two
+  files are not declared outputs. On the route after fusion it draws no figure: the
+  sample's cells come from no per-FOV assignment.
+* **`export`** (needs `assembly`). The parts of `Dataset.export` and their settings: the
+  flags `assemble`, `fuse`, `fuse_labels` and `export_spatialdata`, the `FusionConfig`
+  fields (`images`, `dimensionality`, `projection`, `scale_yx`, `ome_zarr`,
+  `ome_zarr_version`, `pyramid_levels`), `labels_scale_yx` (`LabelConfig.scale_yx`) and
+  `spatialdata_zarr_format` (`SpatialDataExportConfig.zarr_format`), and the route
+  ({doc}`sample-segmentation-contract`): `route` (`per_fov`, `after_fusion`, or null for the
+  default by `dimensionality`: `projection` gives `after_fusion`, `stack` and `both` give
+  `per_fov`), `segment` (default true; false reuses the saved sample segmentation) and
+  `segmentation`, the settings of the route after fusion (`SampleSegmentationConfig`):
+  `device`, `cells`, `nuclei` and `runs`, each run with `name`, `target`, `inputs` (a list
+  of `{role, image}`, each `image` a name of `images`), optional `seeds` and a `method`, a
+  `SEGMENTATION_METHODS` name whose config fields are the run's other keys, or `import`
+  with the `LabelImportConfig` fields. The pixel settings of a method are given for the
+  acquired grid, as for the route per FOV, and the route converts them to the segmentation
+  grid at the factor `k` of `scale_yx = 1/k` by the table of
+  {doc}`sample-segmentation-contract` ("Lengths in pixels"), recording both values:
+  Cellpose's `diameter` becomes `diameter / k` and its area `min_size` becomes
+  `max(1, round(min_size / k²))`; StarDist's `scale` is multiplied by `k` in Y and X, and its
+  `block_size`, `min_overlap` and `context` are divided by `k` and rounded up, so block runs
+  are possible at `k = 1` only; `n_tiles` and lengths in µm (`sigma_um`) do not change. The assignment settings are those of the top-level `assignment`
+  block (its `AssignmentConfig` fields; the defaults without one). Without the block the
+  defaults apply, so a configuration with an assignment name that exports the default
+  projection takes the route after fusion and is refused until it sets
+  `export.segmentation` or `route: per_fov`; the route after fusion also refuses
+  `dimensionality: stack` and `projection: sum`.
+* **The device of the route after fusion.** On that route the part `segment` runs inside
+  `export_sample`, so that rule needs the device and memory of the segmentation methods:
+  with a learned model on `cuda` (`segmentation.device: cuda`) the rule must run on a GPU
+  node (choice E1 of
+  {doc}`sample-segmentation-contract`, whose stated cost this is; the GPU resource of the
+  rule belongs to §2.13 and is not set by this block). The whole fused projection is
+  segmented in one call, so its size, set by `scale_yx`, must fit that device.
+
+Default-tier tests keep the method list equal to `STITCHING_METHODS` plus `bigstitcher`
+and the `assembly` and `export` keys equal to those fields, and the methods of a
+`segmentation` run equal to `SEGMENTATION_METHODS`. The blocks raise naming the key when
+the rule files are parsed; so does a route the configuration alone refuses (check 7 of
+`Dataset.export` without the conditions of a reused segmentation and without the models,
+which `export_sample` checks before anything is written).
+
+```yaml
+stitching:
+  method: bigstitcher            # or multiview_stitcher
+  input: reference_merged        # or reference_stain, or file:<pattern>
+  positions:
+    source: stage_file           # stage_file | regular_grid | table
+    stage_axes: {x: "+x", y: "+y"}
+    snap_to_grid: {overlap: 0.1}
+  review: {max_correction_fraction: 0.5, max_residual_um: 1.0}
+  fallback: null
+  bigstitcher_save_dir: /local/scratch/bigstitcher
+assembly:
+  assignment: default
+  ownership: nearest_center
+  duplicate_threshold: 0.5       # null: the duplicate rule off
+  table_format: csv
+export:
+  dimensionality: stack          # dense 3D tissue; the default is projection
+```
+
+One example configuration for each route ({doc}`workflow-downstream`, "Two routes to a
+sample's cells", says which to choose). The route per FOV, for a projection sample that
+keeps the per-FOV segmentation and assignment of `reads_assignment`:
+
+```yaml
+assembly:
+  assignment: default
+export:
+  route: per_fov                 # the default for dimensionality stack and both
+  dimensionality: projection
+```
+
+The route after fusion, for a projection sample (the culture's two stains, segmented at
+1/4 with Cellpose on a GPU; the values illustrate the layout and are not recommended
+settings):
+
+```yaml
+assembly:
+  assignment: default
+export:
+  route: after_fusion            # the default for dimensionality projection
+  images:
+    - reference_stain
+    - "dapi=file:images/organelle/DAPI/{fov_id}.tif"
+    - "flamingo=file:images/organelle/Flamingo/{fov_id}.tif"
+  scale_yx: 0.25
+  segmentation:
+    device: cuda
+    cells: cell
+    nuclei: nucleus
+    runs:
+      - name: nucleus
+        target: nucleus
+        inputs: [{role: nuclear, image: dapi}]
+        method: cellpose
+        model: cpsam_v2
+        diameter: 60             # pixels of the acquired grid: 15 at 1/4
+      - name: cell
+        target: cell
+        inputs: [{role: cytoplasm, image: flamingo}, {role: nuclear, image: dapi}]
+        method: cellpose
+        model: cpsam_v2
+        diameter: 240            # 60 at 1/4
 ```
 
 ## Downstream parameter blocks

@@ -9,7 +9,7 @@ validation are outside this example.
 ## Prerequisites and installation
 
 Use a STARfinder checkout, `uv`, and Python 3.12 for the validated route below.
-The package supports Python 3.10 or newer; other interpreters have not been
+The package requires Python 3.11 or newer; other interpreters have not been
 validated for this quickstart. A first installation needs package-registry access
 or an existing uv cache. No downloaded microscopy data, MATLAB, Snakemake, GPU,
 SimpleITK, or SpatialData is needed.

@@ -1216,6 +1216,277 @@ changes its result:
   `save_processing_log("nr")` lists only registered rounds, so the reference stain, which
   has no registration, is not in `log/{fovID}_nr.txt`.
 
+### Multi-FOV synthetic sample scene
+
+New, opt-in names in `starfinder.synthetic`; nothing existing changes. No
+generator function, config, preset, registry, version or stream descriptor is
+modified, so every existing preset, digest and saved file stays as it was.
+
+| Need | New name |
+| --- | --- |
+| One sample scene acquired as a grid of FOVs at true, fractional offsets, with placement, cell and per-FOV truth | `generate_sample_scene(codebook, config=SampleSceneConfig(), on_fov=None)` returns `SampleScene` |
+| The grid, jitter, cellular scene and nuclear stain | `AcquisitionConfig`, `CellularSceneConfig`, `StainConfig`, composed in `SampleSceneConfig` with a `FormedSceneConfig` template |
+| Files: `sample.json`, truth tables, label TIFFs, per-FOV formed scenes, stains, labels and legacy molecule CSVs | `save_sample_scene(scene, directory)` |
+| Presets, separate from `SCENE_PRESETS` | `sample_scene_preset(name)`, `SAMPLE_PRESETS` (`sample-tiny-v1`, `sample-small-v1`), `SAMPLE_PRESET_VERSION` (`sample-presets-v1`) |
+| Version of the sample-level truth files | `SAMPLE_TRUTH_VERSION` (`"1"`) |
+
+Every FOV is rendered by `generate_formed_scene` and records generator version 6;
+the sample-level draws use new `sample.*` and `stain.noise.*` stream components.
+The specification is {doc}`synthetic-sample-scene`.
+
+### Stitching: tile positions, the placement record and the stitch entry
+
+New names in a new module, `starfinder.stitching`, and one new method,
+`Dataset.stitch`; nothing existing changes. The four legacy stitching rules,
+`workflow/scripts/` and `tile_config_{sample}.csv` stay as they are, and no
+workflow key is added yet.
+
+| Need | New name |
+| --- | --- |
+| Nominal FOV positions from a Leica stage file, a regular grid or a supplied table | `positions_from_leica(path, stage_axes=StageAxisMapping(...), fov_ids=..., snap_to_grid=GridSnap(...) or None)`, `positions_from_grid(...)`, `positions_from_table(...)` return `TilePositionTable` |
+| Pairs of FOVs whose nominal boxes overlap | `neighbor_pairs(table, grids, tolerance_um=0.0)` returns `NeighborPair` |
+| One placement record for every backend | `PlacementResult` (`fovs`, `links`, `record`); `placed_metadata(result, fov_id)` |
+| Place a sample with a registered method | `stitch(inputs, table, config=...)` with `StitchingInput`; `STITCHING_METHODS` (the first method, `multiview_stitcher`, is below), `StitchingSpec`, `MethodPlacement` |
+| A known placement, such as a synthetic scene's truth | `placement_from_table(table, grids, sample=..., origins=None)` |
+| Review before sample assembly | `ReviewPolicy`, `review_placement`, `approve_placement`, `PlacementReviewRequiredError` |
+| Save and read `stitching/<sample>/` | `save_placement(result, directory)`, `load_placement(directory)` |
+| Place a dataset's sample from its saved per-FOV images | `Dataset.stitch(sample, fov_ids, table=..., config=..., input="reference_merged", output_dir=None)` |
+| A stitching method's missing extra | `StitchingBackendUnavailableError` |
+
+Origins are float64 in µm in the sample frame `sample:<sample>`, never truncated to
+pixels as `tile_config_{sample}.csv` is; the gauge is zero mean correction over the
+`image_supported` FOVs. The specification is {doc}`stitching-contract` and
+{doc}`stitching-algorithms`.
+
+### Stitching: the BigStitcher macro and the import of `dataset.xml`
+
+New names in `starfinder.stitching`; nothing existing changes. The legacy rules
+`create_BigStitcher_macro`, `run_BigStitcher_macro` and `create_tile_config` and their
+scripts stay as they are, and Fiji is still run only by the workflow.
+
+| Legacy step | New name |
+| --- | --- |
+| `create_BigStitcher_macro_1.py` writes the macro from `grid.csv`; `stitching_preparation.py` copies the tiles and blanks | `bigstitcher_macro(table, inputs, config=BigStitcherConfig(...), tile_dir=..., save_dir=...)` writes `tile_{j}.tif` and returns the macro text and the view map; `BigStitcherConfig` holds today's parameters as defaults, and `pad_missing=True` (off by default) turns an acquired FOV without an image into a placeholder view |
+| `create_tile_config.py` reads `dataset.xml` (lines 19-58) | `import_bigstitcher(dataset_xml, table=..., view_map=..., grids=..., config=..., fallback=None)` returns a `PlacementResult` |
+| `create_tile_config.py` casts, shifts and draws the rectangles (lines 43-130) | `legacy_tile_config_view(result, img_col=..., img_row=...)`, whose `to_csv()` is today's `tile_config_{sample}.csv` |
+| `dataset.xml` beside the tiles | `save_placement` of an import also writes `view_map.csv` and records the SHA-256 of the macro and of `dataset.xml` |
+
+The macro text equals today's except for the two folders, which are arguments, and the
+voxel size, which is the reference grids' spacing instead of `voxel_size_xy` and
+`voxel_size_z`. The import keeps BigStitcher's raw translations unrounded
+(`method_translation_*`, world units) and gives origins in µm, z divided by the
+calibration's z scale; a view without a link into the reference component is `failed`,
+or `metadata_only` at its nominal position with `fallback="nominal"`, and review is then
+required. The specification is {doc}`stitching-contract` ("BigStitcher") and
+{doc}`stitching-algorithms` ("Import arithmetic").
+
+### Sample assembly and the shared AnnData writer
+
+New names in a new module, `starfinder.assembly`, and one new function in
+`starfinder.assignment`; nothing existing changes. The legacy overlap filter of the
+workflow adapter, `create_sample_h5ad.py`, `create_sample_reads_assignment.py` and
+`tile_config_{sample}.csv` stay as they are, and no workflow key is added yet: the
+`assembly` block and `Dataset.export` belong to the export entry.
+
+| Legacy step | New name |
+| --- | --- |
+| `reads_assignment` adds integer `global_x/y/z` from `tile_config` offsets | `assemble(placement, inputs, config=AssemblyConfig())` with one `AssemblyInput(fov_id, grid, assignment=… or molecules=…)` per FOV returns an `AssemblyResult` whose `sample_*` columns are float64 µm in the sample frame |
+| The overlap filter keeps cells and background molecules inside the `start/end_*_norm` rectangles | Ownership from the placement, `ownership_map(placement, grids, config=…, candidates=None)` returning `OwnershipMap`: nearest footprint centre among the owning FOVs, ties by table order; placeholders own no point |
+| Dropped cells and molecules are not written | Every cell and molecule keeps a row with `assembly_status`, `assembly_reason` and `assembly_flags` (`ASSEMBLY_STATUSES`, `CELL_ASSEMBLY_REASONS`, `MOLECULE_ASSEMBLY_REASONS`, `CELL_ASSEMBLY_FLAGS`, `MOLECULE_ASSEMBLY_FLAGS`) |
+| `create_sample_h5ad.py` concatenates the per-FOV `raw.h5ad` | `sample_anndata(result, path, annotation=None)` writes `sample.h5ad` from the sample tables, one row per counted cell |
+| `create_sample_reads_assignment.py` concatenates the per-FOV CSVs | `save_assembly(result, folder, table_format="csv")` writes `tables/fovs`, `tables/cells`, `tables/molecules`, `tables/counts`, `sample.h5ad` and the `assembly` section of `export.json`; `load_assembly(folder)` reads it back |
+| The adapter's `_write_raw_h5ad` builds the AnnData itself | `write_h5ad(path, obs, keys, counts, genes, layers=…, uns=…, var=None, obsm=None)` in `starfinder.assignment`, which the adapter now calls; `raw.h5ad` has the same rows, columns, values and `uns` |
+
+Once a configuration adopts the `assembly` block (a later issue), its per-FOV `raw.h5ad`
+and `reads_assignment.csv` are not box-filtered and have no `global_*` columns, the
+sample outputs move to `export/<sample>/`, cells and molecules are retained by the
+ownership regions of the placement instead of the `tile_config` rectangles, and every
+excluded observation is kept with its reason. The specification is
+{doc}`assembly-contract` and {doc}`assembly-algorithms`.
+
+### Stitching: the `multiview_stitcher` placement method
+
+One new name in `starfinder.stitching`, `MultiviewStitcherConfig`, the first method of
+`STITCHING_METHODS`; nothing existing changes. BigStitcher stays the default, the legacy
+rules stay as they are, and no workflow key is added yet. The method needs the optional
+extra `starfinder[multiview-stitcher]` (multiview-stitcher 0.1.62, Python 3.11 to 3.13);
+without it, `stitch` raises `StitchingBackendUnavailableError` naming the extra, and
+importing `starfinder.stitching` never imports the library.
+
+| Need | New name |
+| --- | --- |
+| Place a sample in process, without Fiji | `stitch(inputs, table, config=MultiviewStitcherConfig())` returns a `PlacementResult` |
+| The contract's starting configuration | the defaults: `binning_zyx=(4, 4, 4)`, `pairwise="phase_correlation"`, `upsample_factor=None` (the library's), `quality_threshold=0.7`, `drop_nan_quality=True`, `pruning="alternating_pattern"`, `overlap_tolerance_um=0.0`, `groupwise="global_optimization"`, `abs_tol_um`, `rel_tol` and `max_iter` `None` (the library's) |
+
+A Z=1 tile is registered as a plane, so its z translation is exactly 0. Links follow rule
+L1: a link below 0.7 or with NaN quality (which the library itself keeps) is not kept. A
+neighbour pair the library does not register is `pruned`; a link its optimizer removes is
+`optimizer_removed` and requires review. When no link is left, every FOV is `failed`
+(the library's `NotEnoughOverlapError`), and the result is still returned and can be
+saved. The specification is {doc}`stitching-contract` ("Method registry") and
+{doc}`stitching-algorithms` ("`multiview_stitcher`").
+
+### Sample outputs: the export entry and the fused image
+
+New names in a new module, `starfinder.sample_output`, one new method, `Dataset.export`,
+and one new folder, `<OUTPUT>/export/<sample>/`; nothing existing changes.
+`Dataset.stitch` and `stitching/<sample>/` stay as they are, the legacy rules and
+`images/fused/{sample}/` (BigStitcher's inputs and `dataset.xml`) are untouched, and no
+workflow key or rule is added yet: the `export` block and the `export_sample` rule come
+with the workflow issue. The label export (`fuse_labels`) and the SpatialData export
+(`export_spatialdata`) are described in the next sections.
+
+| Need | New name |
+| --- | --- |
+| One sample-level export: the sample tables, `sample.h5ad` and the fused image | `Dataset.export(sample, placement=…, assignment="default", config=ExportConfig(), output_dir=<OUTPUT>/export/<sample>/)` returns an `ExportRecord`; it calls `assemble` (saved with `save_assembly`) and `fuse` in order, each turned off by `ExportConfig(assemble=False)` or `ExportConfig(fuse=False)` |
+| The record of the folder | `export.json`: `parts` (`written`, `reused`, `off`, `empty`, `not_run`, `failed`), `complete`, one section per part (`assembly`, `fusion`, `labels`, `spatialdata`) with the SHA-256 of every file; `check_export(folder)` checks the folder against it |
+| A part that cannot run | `ExportIncompleteWarning`; the part is `not_run` with `extra_missing` (`multiview-stitcher` not installed) or `source_image_missing`, the earlier files are written and `complete` is false |
+| The fused image of a sample, from either backend's placement | `fuse(placement, inputs, assembly=None, config=FusionConfig(), output_dir)` with one `FusionInput(fov_id, grid, images)` per included FOV, returning a `FusionRecord`; multiview-stitcher's `fusion.fuse` with `weighted_average_fusion` at order 1 |
+| Today's `MAX_*_05.tif` overview | `<image>_projection.ome.tif`: the 2D maximum projection at `scale_yx` 0.5 (the default), OME-TIFF (BigTIFF, 512 × 512 zlib tiles, calibration and origin) in the input dtype |
+| A 3D fused stack, such as LN sample1's | `FusionConfig(dimensionality="stack")` (the stack alone) or `"both"`: `<image>_stack.ome.tif`, Y and X reduced by `scale_yx`, Z as acquired; the middle plane `n_z // 2` reads alone with `tifffile.imread(path, key=i)` |
+| Other options | `FusionConfig(images=(…), projection="sum", scale_yx=1/k, ome_zarr=True, ome_zarr_version="0.5", pyramid_levels=L)`; `fused_grid(placement, grids, config=…)` gives the output grid (`FusedGrid`) |
+
+`fuse` and `Dataset.export`'s fuse part need the optional extra
+`starfinder[multiview-stitcher]`; the assemble part needs `starfinder[anndata]`.
+Importing `starfinder.sample_output` imports neither multiview-stitcher, zarr nor
+spatialdata. With `assemble` on, `assemble` now keeps at most two territory images in
+memory: a saved assignment's territories are read again from its folder, with their
+SHA-256 checked, when the flags need them; its results are unchanged. The specification
+is {doc}`sample-output-contract`.
+
+### Sample outputs: the assembled label export
+
+One new function, `starfinder.sample_output.fuse_labels`, with `LabelRecord`, and one new
+file, `export/<sample>/cell_labels.ome.tif`; nothing existing changes, and the part is
+off by default (`ExportConfig(fuse_labels=True)` turns it on).
+
+| Need | New name |
+| --- | --- |
+| A label image of the assembled sample, for inspection | `fuse_labels(placement, assembly, config=LabelConfig(), output_dir)` returns a `LabelRecord`; `Dataset.export` calls it third, after `assemble` and `fuse` |
+| What the image holds | The retained cells of the sample cell table (`assembly_status == "retained"`), each drawn whole as its FOV segmented it, with its `instance_id` (`1..N` in cell table order); 0 elsewhere. A cell retained by two FOVs shows two IDs, a cell retained by no FOV is absent; nothing is matched or merged across FOVs |
+| How it is placed | multiview-stitcher's `fusion.fuse` at interpolation order 0 with the first positive view in placement table order (`_first_positive`, a small function passed to the library); labels are never blended |
+| Its scale | `LabelConfig(scale_yx=1/k)`, 0.25 by default, requested with `output_spacing`; the grid starts at the smallest FOV origin, so it does not nest with the fused image's |
+| The `labels` section of `export.json` | The territory files read and their SHA-256, the library's grid and the formula grid, the counts of `ids_input` and `ids_output`, `absent_ids` (cells too small for the output scale) and the conflict count; `check_export` checks L1 to L5 |
+
+`fuse_labels` needs `starfinder[multiview-stitcher]`; without it, or when a territory file
+of a FOV with a retained cell is missing, the part is `not_run` with
+`ExportIncompleteWarning`. A sample with more than 16,777,216 cell rows is refused before
+anything is written. `load_assembly` now also checks the SHA-256 of each territory file the
+`assembly` section records (assemblies made with `conflicts=True` from saved assignment
+folders), as {doc}`assembly-contract` ("Persistence") states; an export whose territory
+files were changed after assembly now raises `ValueError` naming the file.
+
+### Sample outputs: the SpatialData export
+
+Two new functions, `starfinder.sample_output.export_spatialdata` and `lookup_source`, and
+one new store, `export/<sample>/sample.zarr/`; nothing existing changes, and the part is
+off by default (`ExportConfig(export_spatialdata=True)` turns it on). The reference
+branch's `sample_export` API is not adopted, and no code is brought over from it.
+
+| Need | New name |
+| --- | --- |
+| A SpatialData view of the assembled sample | `export_spatialdata(load_assembly(folder), fused=None, labels=None, config=SpatialDataExportConfig(), output_dir=folder)` returns the store path; `Dataset.export` calls it fourth, after `assemble`, `fuse` and `fuse_labels` |
+| What the store holds | One coordinate system named after the sample, in µm. Points `molecules`, shapes `cell_centroids` (circles at the ownership centroid, equivalent radius), tables `cells` and `expression` (annotating `cell_centroids` by `region` and `instance_id`), `cells_unplaced` and `molecules_unplaced`; one image element per fused OME-TIFF (`<image>_projection`, `<image>_stack`) and `cell_labels`, each read from its file and written once with one level |
+| Values | Taken from `tables/`, `sample.h5ad` and the image files unchanged: nothing is filtered, reassigned or recounted; `instance_id` is `1..N` over the sample cell table, `cell_instance_id` links each molecule to its cell |
+| Empty populations | An element without a row, or whose image does not exist, is left out and recorded `omitted` with `empty`, `no_cells`, `no_included_fov`, `not_requested` or `part_not_run`; with every element omitted no store is written (`store: null`) |
+| Format | Zarr format 3, spatialdata's default container (`SpatialDataExportConfig(zarr_format=3)`), or Zarr format 2 (`zarr_format=2`); no standalone OME-Zarr beside the store |
+| The `spatialdata` section of `export.json` | Every element with its status, reason or path, rows or shape, transform, `spatialdata_attrs` and column dtypes after the round trip; the counts, the column renames, the formats and the SHA-256 of every store file; `check_export` reads the store back and checks S1 to S8 |
+| Where a row came from | `lookup_source(folder, spot=(spot_namespace, spot_id))` or `cell=(cell_namespace, cell_id)` returns its FOV, the §2.9 assignment folder, its `assignment.json` SHA-256 and the row's position in the §2.9 table |
+
+`export_spatialdata` needs `starfinder[spatialdata]`; without it the part is `not_run`
+(`extra_missing`) with `ExportIncompleteWarning`, and the earlier files are written. A
+sample name outside spatialdata's element naming rule (letters, digits, `_`, `-`, `.`), a
+table key that breaks it or equals another ignoring case, a cell of zero voxels and a
+`sample.h5ad` that already has `uns["spatialdata_attrs"]` are refused, and no store is
+written. The store is written into a staging folder and renamed into place, so an
+interrupted export leaves none.
+
+### Stitching, assembly and export workflow rules
+
+Three Python-only YAML blocks, `stitching`, `assembly` and `export`
+({doc}`workflow-configuration`, "Stitching, assembly and export"), new rule files
+`workflow/rules/stitching-py.smk` and `workflow/rules/export.smk`, and the folders
+`<OUTPUT>/stitching/<sample>/` and `<OUTPUT>/export/<sample>/` written by the workflow. A
+configuration without the blocks runs the four legacy stitching rules, `reads_assignment`
+with its tile filter, `create_sample_h5ad` and `create_sample_reads_assignment`
+unchanged; its outputs, including `images/fused/{sample}/`, do not change.
+
+| Legacy rule | With the blocks |
+| --- | --- |
+| `stitching_preparation`, `create_BigStitcher_macro`, `run_BigStitcher_macro` | With `method: bigstitcher` (the default): `bigstitcher_macro_sample` (`bigstitcher_macro`, the tiles in `<bigstitcher_save_dir>/<sample>/tiles/`) and `bigstitcher_engine` (Fiji on the macro; `fiji_path` read when it runs; fails unless `dataset.xml` holds a `Stitching Transform` for every view). With `method: multiview_stitcher`: none |
+| `create_tile_config` | `stitch_sample`: `Dataset.stitch`, or `import_bigstitcher` of the engine's `dataset.xml`, saved to `stitching/<sample>/`; with `bigstitcher` also `output/tile_config_{sample}.csv` from the record (`legacy_tile_config_view`), byte for byte today's file |
+| `reads_assignment` (with an `assembly` block) | The same rule without the tile filter and without `global_*`, on the grid of `images/ref_merged/{fovID}.tif`, also saving `checkpoints/{fovID}/assignment/<assignment>/` |
+| `create_sample_h5ad`, `create_sample_reads_assignment` | `export_sample`: `Dataset.export` with the `assembly` and `export` blocks into `export/<sample>/` (declared output `export.json`) |
+
+The adapter's translation of a legacy configuration is `StageAxisMapping(x="+x", y="+y",
+source="legacy")` with the `rotate_angle` it ran with; a configuration with a
+`stitching` block and a stage file names `stage_axes` itself.
+
+### The ownership region on the assignment figures
+
+`plot_assignment` gains the keyword `ownership=None` (W-330): a `FOVOwnership` of
+`starfinder.assignment` (a boolean Y, X region mask, the excluded `cell_id` and `spot_id`),
+built for one FOV of an assembled sample by the new `starfinder.assembly.fov_ownership(result,
+fov_id, *, placement)`. With it, panels 1 and 2 draw the FOV's ownership region as a yellow
+line and the cells and molecules the assembly excluded grey, with the legend entries
+`ownership region` and `excluded from sample` and the retained counts as x-axis labels. It
+gives back the view of the legacy tile box of `reads_assignment.py`, from the ownership
+regions instead of the tile configuration; no tile box is drawn. Without
+`ownership` the figure is unchanged. With an `assembly` block and an assignment name,
+`export_sample` rewrites `expr/{fovID}/assignment.png` and `assignment_single_layer.png`
+with ownership after the sample is assembled; `reads_assignment` writes them first, as
+before. No table, record, count or `export/<sample>/` file changes.
+
+### A deterministic UUID in the package's OME-TIFF files
+
+`save_volume` (a ZYXC OME-TIFF, and a ZYX volume on a `*.ome.*` name, which tifffile
+writes as OME-TIFF) and the OME-TIFF writer of `starfinder.sample_output` (the fused
+images and `cell_labels.ome.tif`) now write a name-based (version 5) `urn:uuid:` in the
+OME-XML header, derived from the pixel data and the metadata written, instead of
+tifffile's time-based UUID. The same array and metadata therefore give the same bytes in
+any process, and a recorded file SHA-256 (for example in `sample.json` or a
+`registration.json`) repeats between two runs of the same input; another voxel or
+another metadata value gives another UUID. Nothing else in the files changes: pixel data,
+compression, tiling, calibration and annotations are as before, readers ignore the UUID
+as before, and existing files are not rewritten. No signature changes.
+
+### The BigStitcher import refuses a non-finite affine
+
+`import_bigstitcher` raises `ValueError` for a `dataset.xml` in which a view's
+`ViewTransform` affine (the `Stitching Transform`, the `Translation to Regular Grid`, the
+calibration or any other) holds a non-finite number (`NaN`, `inf`), naming the file, the
+setup and the transform. The file is refused while it is parsed, before any link or
+placement is built, with `fallback=None` and with `fallback="nominal"`; before, such a
+view could become `metadata_only` under `fallback="nominal"`. Files with finite affines
+import as before. No signature changes.
+
+### Sample segmentation: the route after fusion and the route setting
+
+A second route to a sample's cells beside the route per FOV: the fused Z maximum of a
+projection sample is segmented once and the sample's molecules are assigned to those
+cells ({doc}`sample-segmentation-contract`; for users, {doc}`workflow-downstream`, "Two
+routes to a sample's cells"). New names in `starfinder.sample_output`, one keyword of
+`assemble`, three fields of `ExportConfig`, three keys of the workflow `export` block and
+one column of the sample molecule table; no existing name, module or format version
+changes. The route per FOV keeps its rules, the duplicate rule of W-400 included.
+
+| Need | New name |
+| --- | --- |
+| Choose the route of a sample | `ExportConfig(route=…)`: a value of `ROUTES = ("per_fov", "after_fusion")`, or None (the default) for the route by `dimensionality`: `projection` gives `after_fusion`, `stack` and `both` give `per_fov`; the `assembly` section of `export.json` records `route` and `route_source` (`set` or `default`) |
+| The settings of the route after fusion | `ExportConfig(segmentation=SampleSegmentationConfig(runs, cells, nuclei=None, assignment=AssignmentConfig(), device="cpu"))` with one `SampleSegmentationRun(name, target, inputs, method, seeds=None)` per run: `inputs` are `(role, image)` pairs of image names of `FusionConfig.images`, `method` a `SEGMENTATION_METHODS` config or a `LabelImportConfig`, its pixel lengths given for the acquired grid |
+| Segment the fused projection | The new part `segment` of `Dataset.export`, after `fuse`; alone, `segment_fused(output_dir, *, config, sample, identity=None)` on a folder whose `fuse` ran returns a `SampleSegmentation(grid, runs, record)` and writes `segmentation_<run>.ome.tif` per run and the `segmentation` section; `load_sample_segmentation(output_dir)` reads them back; `ExportConfig(segment=False)` reuses them |
+| Assign the sample's molecules to the sample's cells | `assemble(placement, inputs, config=…, segmentation=…)` with molecule-table inputs: the `molecules_only` assembly, then one `assign_molecules` call on the segmentation grid; `territories.ome.tif` when the assignment expands the cells |
+| Compare the two routes of one sample | `compare_routes(per_fov, after_fusion, *, threshold=0.5, output=None)` returns a `RouteComparison`; it reads two export folders, writes nothing unless `output` names a folder outside both, and decides nothing |
+| Link a molecule to its cell | The new column `cell_namespace` of `tables/molecules` on both routes (the cell's namespace for a molecule with a `cell_id`, null otherwise); `check_identities`, `cell_links` and `check_export` link by `(cell_namespace, cell_id)`. A folder saved before the column existed still loads: the column is filled from the cell table |
+| The workflow | The `export` block's keys `route`, `segment` and `segmentation` ({doc}`workflow-configuration`, "Stitching, assembly and export"); on the route after fusion `export_sample` needs the molecule tables and the source images instead of the outputs of `reads_assignment`, and draws no assignment figure again |
+
+`export.json` gains the part `segment` in `parts` on both routes (`off`, reason
+`route_per_fov`, on the route per FOV; `no_cells` without an assignment) and the
+`segmentation` section; on the route after fusion the `assembly` and `labels` sections
+record `segmentation_files`, and `lookup_source(cell=…)` returns `assignment_folder` null,
+the cell's row in the sample cell table, `label_file` and `label_value`. The SHA-256 of
+`tables/molecules` changes on the route per FOV because of the new column.
+
 ## Intentional behavior changes — not mechanical equivalence
 
 | Area | Change and consequence |
@@ -1232,6 +1503,8 @@ changes its result:
 | Evaluation | Centered NCC has no epsilon bias. Missing/failed shifts, zero denominators and constant images are undefined rather than zero/passing. Shift errors preserve floats; matching thresholds/policies are explicit. |
 | Benchmark / recipes | Failures retain requested/actual method identity. Evaluation/reporting reuse saved artifacts. Optional legacy experiments remain recipes with prerequisites, not validated research results. |
 | Segmentation / assignment workflow | The shared rules call the package under both backends: `uint32` labels, `rescale` on the input grid, no foreground gate, cells kept without molecules, `outside_grid` molecules, unknown genes and a double expansion raise, new `raw.h5ad` and `reads_assignment.csv` columns; MATLAB-backend runs need the package and its `stardist` and `anndata` extras. |
+| Sample assembly workflow (configurations with an `assembly` block only) | Option W1 of {doc}`assembly-contract`: the per-FOV `raw.h5ad` and `reads_assignment.csv` are not box-filtered and have no `global_*` columns (every kept cell, and every molecule in input order); the label file is imported on the grid of `images/ref_merged/{fovID}.tif` instead of one declared from `voxel_size_xy` and `voxel_size_z`; the sample outputs are in `export/<sample>/` instead of `expr/{sample}_raw.h5ad` and `expr/{sample}_reads_assignment.csv`; cells and molecules are retained by the ownership regions of the placement instead of the `tile_config` rectangles, and every excluded observation is kept with its reason. Configurations without the block are unchanged. |
+| Sample segmentation route (configurations and calls that export a projection with an assignment) | Rule RD1 of {doc}`sample-segmentation-contract`: without `route`, a sample exported as a projection (the default `dimensionality`) takes the route after fusion. Every existing configuration with `stitching` and `assembly` blocks whose `assembly.assignment` is a name (the default `default`) and whose `export` block has no `route` and no `segmentation` while `dimensionality` is `projection` (also when the block is absent) stops at once: the workflow refuses it when the rules are parsed, before any job is planned, and `Dataset.export` with the same `ExportConfig` refuses it before anything is written, with `ValueError: the route after fusion (route: after_fusion, the default for dimensionality 'projection') segments the fused projection and needs export.segmentation, the settings of that segmentation; set export.segmentation, or route: per_fov to assemble the per-FOV assignments`. The one line `route: per_fov` in the `export` block (`ExportConfig(route="per_fov")` in Python) restores the earlier behaviour: the same jobs and the route per FOV. The route after fusion also refuses `dimensionality: stack` and `projection: sum`. Exports with `route: per_fov` or `dimensionality` `stack` or `both`, and samples without segmentation (`assignment` null), keep their route; their outputs change only by the column `cell_namespace`, the part `segment` recorded `off` with its `segmentation` section, and the keys `route` and `route_source` of the `assembly` section. |
 
 Detailed numerical policies, tolerances and edge cases remain canonical in
 [contracts](api/contracts.md), [evaluation](api/evaluation.registration.rst),

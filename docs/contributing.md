@@ -2,7 +2,7 @@
 
 ## Install the documentation environment
 
-The package supports Python 3.10 or newer; documentation CI uses **Python 3.12**
+The package requires Python 3.11 or newer; documentation CI uses **Python 3.12**
 and **uv 0.9.28** with the committed lockfile. From the repository root:
 
 ```bash
@@ -272,7 +272,7 @@ Markers are registered in `src/python/pyproject.toml` and checked with
 
 | Group | Markers | Set on |
 | --- | --- | --- |
-| Subsystem | `core`, `io`, `dataset`, `preprocessing`, `registration`, `spot_finding`, `barcode`, `segmentation`, `synthetic`, `evaluation`, `benchmark`, `workflow`, `integration` | the file, with `pytestmark` |
+| Subsystem | `core`, `io`, `dataset`, `preprocessing`, `registration`, `spot_finding`, `barcode`, `segmentation`, `stitching`, `synthetic`, `evaluation`, `benchmark`, `workflow`, `integration` | the file, with `pytestmark` |
 | Cost and requirement | `slow`, `learned` | the test or the parameter |
 | Kind | `contract`, `golden`, `validation`, `e2e` | the file or the test |
 

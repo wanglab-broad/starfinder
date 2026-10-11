@@ -557,10 +557,12 @@ explicit = true
   both together add 43 packages, 1.07 GB. No locked package changed in the spike
   environment, which holds exactly this set (torch 2.7.1+cpu, torchvision
   0.22.1+cpu, spotiflow 0.6.5, piscis 1.1.0).
-* **Python marker.** The lock covers Python ≥ 3.10 up to 3.14, and torch 2.7.1 has
-  wheels for cp39 to cp313 only. The extras therefore carry `python_version <
-  "3.14"` (W-266 choice 1, accepted). On 3.14 the learned methods raise
-  `SpotFindingBackendUnavailableError` with the note above.
+* **Python marker.** The lock of that commit (2026-09-30) covered Python ≥ 3.10 up
+  to 3.14; since the §2.10 batch-preparation commit of 2026-10-07 the package
+  requires Python 3.11 or newer and the lock covers Python ≥ 3.11 up to 3.14. torch
+  2.7.1 has wheels for cp39 to cp313 only. The extras therefore carry
+  `python_version < "3.14"` (W-266 choice 1, accepted). On 3.14 the learned methods
+  raise `SpotFindingBackendUnavailableError` with the note above.
 * **GPU users** on GP099 replace torch with the same version's `+cu118` build in
   their own environment (W-265). The constraint keeps the version aligned. The
   lock stays CPU.

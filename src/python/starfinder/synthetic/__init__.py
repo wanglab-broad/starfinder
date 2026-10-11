@@ -17,6 +17,9 @@ from ._datasets import (SyntheticDataset, forward_displacement, generate_dataset
                         generate_registration_pair)
 from ._calibrated import (CALIBRATED_CONDITIONS as _CALIBRATED_CONDITIONS, calibrated_scene_preset,
                           development_codebook)
+from ._sample import (SAMPLE_PRESET_VERSION, SAMPLE_PRESETS as _SAMPLE_PRESETS, SAMPLE_TRUTH_VERSION,
+                      AcquisitionConfig, CellularSceneConfig, SampleScene, SampleSceneConfig, StainConfig,
+                      generate_sample_scene, sample_scene_preset, save_sample_scene)
 
 #: Named single-factor controls available on demand from development_scene_preset.
 DEVELOPMENT_FACTORS = _DEVELOPMENT_FACTORS
@@ -33,6 +36,8 @@ BENCHMARK_PRESETS = _BENCHMARK_PRESETS
 DEFORMATION_PRESETS = _DEFORMATION_PRESETS
 #: The single scene preset registry, with fixture, development_fixture and benchmark tiers.
 SCENE_PRESETS = _registry()
+#: Multi-FOV sample scene presets (sample-presets-v1), separate from SCENE_PRESETS.
+SAMPLE_PRESETS = _SAMPLE_PRESETS
 
 __all__ = ['BackgroundConfig', 'CALIBRATED_CONDITIONS', 'calibrated_scene_preset', 'DEVELOPMENT_FACTORS',
            'DEVELOPMENT_FIXTURES', 'DEVELOPMENT_SIZES', 'development_codebook', 'development_preset_factors',
@@ -42,4 +47,7 @@ __all__ = ['BackgroundConfig', 'CALIBRATED_CONDITIONS', 'calibrated_scene_preset
            'ScalarDistribution', 'TextureConfig', 'BENCHMARK_PRESETS', 'DEFORMATION_PRESETS',
            'PRESET_VERSION', 'SCENE_PRESETS', 'SyntheticDataset', 'benchmark_scene_preset',
            'deformation_geometry', 'forward_displacement', 'generate_codebook', 'generate_dataset',
-           'generate_registration_pair', 'registration_scene_preset']
+           'generate_registration_pair', 'registration_scene_preset',
+           'AcquisitionConfig', 'CellularSceneConfig', 'generate_sample_scene', 'SAMPLE_PRESET_VERSION',
+           'SAMPLE_PRESETS', 'SAMPLE_TRUTH_VERSION', 'SampleScene', 'SampleSceneConfig', 'sample_scene_preset',
+           'save_sample_scene', 'StainConfig']

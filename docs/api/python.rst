@@ -18,6 +18,7 @@ Modules (alphabetical)
 .. toctree::
    :maxdepth: 1
 
+   assembly
    assignment
    barcode
    benchmark
@@ -27,8 +28,10 @@ Modules (alphabetical)
    io
    preprocessing
    registration
+   sample_output
    segmentation
    spot_finding
+   stitching
    synthetic
 
 Previous reference locations

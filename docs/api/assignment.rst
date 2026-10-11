@@ -67,7 +67,14 @@ outlines and centre dots of a fixed size in points whatever the image size;
 the same with the molecules, ``assigned`` blue, ``unassigned`` red and ``excluded_cell``
 orange with the legend entry ``excluded`` (``outside_grid`` not drawn); and the histograms
 of voxels and of molecules per cell. ``view="z_max"`` draws the Z maximum, ``view="single_layer"`` one plane ``z``
-(default ``Z // 2``) of a volumetric result.
+(default ``Z // 2``) of a volumetric result. With ``ownership``, a
+:py:class:`~starfinder.assignment.FOVOwnership` built by
+:py:func:`~starfinder.assembly.fov_ownership` from an assembled sample (a boolean Y, X
+region mask and the ``cell_id`` and ``spot_id`` the assembly excluded), panels 1 and 2 also
+draw the closed boundary of the FOV's ownership region as a yellow line, the excluded cells
+and molecules grey (legend entries ``ownership region`` and ``excluded from sample``), and
+state in each x-axis label how many of the cells or molecules drawn the assembly retained; a
+region of another Y, X or an identity the result does not have raises ``ValueError``.
 
 ``FOV.assign(config, cells="cell", nuclei=None, name="default", population="final")``
 builds the molecule table from the FOV's spot and read results and the codebook's genes,
@@ -78,6 +85,14 @@ writes ``<checkpoint dir>/<fov_id>/assignment/<name>/``: the four tables, ``assi
 and every label image it used that is not saved under its run, linking the saved ones;
 ``FOV.load_assignment(name)`` reads the folder and the linked files back, checking every
 recorded SHA-256 (see :doc:`../checkpoints`).
+
+:py:func:`~starfinder.assignment.write_h5ad` builds an AnnData from long counts and writes
+it: ``X`` the float64 whole-cell counts in ``genes`` order, optional ``nucleus`` and
+``cytoplasm`` layers (NaN for a row whose ``compartments`` is not ``available``), strings
+as anndata expects; with no row, ``X`` has shape ``(0, len(genes))``. The workflow
+adapter writes ``expr/{fovID}/raw.h5ad`` with it, and
+:py:func:`~starfinder.assembly.sample_anndata` the sample-level ``sample.h5ad``. It needs
+the ``anndata`` extra.
 
 .. currentmodule:: starfinder.assignment
 
@@ -92,6 +107,7 @@ recorded SHA-256 (see :doc:`../checkpoints`).
    CELL_STATUSES
    COMPARTMENT_STATES
    CorrespondenceConfig
+   FOVOwnership
    match_nuclei
    molecule_table
    molecule_table_from_csv
@@ -100,3 +116,4 @@ recorded SHA-256 (see :doc:`../checkpoints`).
    plot_assignment
    sample_labels
    summarize_assignment
+   write_h5ad

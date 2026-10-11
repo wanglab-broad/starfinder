@@ -41,6 +41,25 @@ Root exports refer to the same objects as their owning namespaces; modules and
 Owning namespaces (alphabetical)
 --------------------------------
 
+starfinder.assembly
+~~~~~~~~~~~~~~~~~~~
+
+* :py:obj:`starfinder.assembly.assemble`
+* :py:obj:`starfinder.assembly.ASSEMBLY_STATUSES`
+* :py:obj:`starfinder.assembly.AssemblyConfig`
+* :py:obj:`starfinder.assembly.AssemblyInput`
+* :py:obj:`starfinder.assembly.AssemblyResult`
+* :py:obj:`starfinder.assembly.CELL_ASSEMBLY_FLAGS`
+* :py:obj:`starfinder.assembly.CELL_ASSEMBLY_REASONS`
+* :py:obj:`starfinder.assembly.fov_ownership`
+* :py:obj:`starfinder.assembly.load_assembly`
+* :py:obj:`starfinder.assembly.MOLECULE_ASSEMBLY_FLAGS`
+* :py:obj:`starfinder.assembly.MOLECULE_ASSEMBLY_REASONS`
+* :py:obj:`starfinder.assembly.ownership_map`
+* :py:obj:`starfinder.assembly.OwnershipMap`
+* :py:obj:`starfinder.assembly.sample_anndata`
+* :py:obj:`starfinder.assembly.save_assembly`
+
 starfinder.assignment
 ~~~~~~~~~~~~~~~~~~~~~
 
@@ -52,6 +71,7 @@ starfinder.assignment
 * :py:obj:`starfinder.assignment.CELL_STATUSES`
 * :py:obj:`starfinder.assignment.COMPARTMENT_STATES`
 * :py:obj:`starfinder.assignment.CorrespondenceConfig`
+* :py:obj:`starfinder.assignment.FOVOwnership`
 * :py:obj:`starfinder.assignment.match_nuclei`
 * :py:obj:`starfinder.assignment.molecule_table`
 * :py:obj:`starfinder.assignment.molecule_table_from_csv`
@@ -60,6 +80,7 @@ starfinder.assignment
 * :py:obj:`starfinder.assignment.plot_assignment`
 * :py:obj:`starfinder.assignment.sample_labels`
 * :py:obj:`starfinder.assignment.summarize_assignment`
+* :py:obj:`starfinder.assignment.write_h5ad`
 
 starfinder.barcode
 ~~~~~~~~~~~~~~~~~~
@@ -261,6 +282,34 @@ starfinder.registration
 * :py:obj:`starfinder.registration.UnsupportedTransformOperationError`
 * :py:obj:`starfinder.registration.WarpConfig`
 
+starfinder.sample_output
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+* :py:obj:`starfinder.sample_output.check_export`
+* :py:obj:`starfinder.sample_output.compare_routes`
+* :py:obj:`starfinder.sample_output.export_spatialdata`
+* :py:obj:`starfinder.sample_output.ExportConfig`
+* :py:obj:`starfinder.sample_output.ExportIncompleteWarning`
+* :py:obj:`starfinder.sample_output.ExportRecord`
+* :py:obj:`starfinder.sample_output.fuse`
+* :py:obj:`starfinder.sample_output.fuse_labels`
+* :py:obj:`starfinder.sample_output.fused_grid`
+* :py:obj:`starfinder.sample_output.FusedGrid`
+* :py:obj:`starfinder.sample_output.FusionConfig`
+* :py:obj:`starfinder.sample_output.FusionInput`
+* :py:obj:`starfinder.sample_output.FusionRecord`
+* :py:obj:`starfinder.sample_output.LabelConfig`
+* :py:obj:`starfinder.sample_output.LabelRecord`
+* :py:obj:`starfinder.sample_output.load_sample_segmentation`
+* :py:obj:`starfinder.sample_output.lookup_source`
+* :py:obj:`starfinder.sample_output.RouteComparison`
+* :py:obj:`starfinder.sample_output.ROUTES`
+* :py:obj:`starfinder.sample_output.SampleSegmentation`
+* :py:obj:`starfinder.sample_output.SampleSegmentationConfig`
+* :py:obj:`starfinder.sample_output.SampleSegmentationRun`
+* :py:obj:`starfinder.sample_output.segment_fused`
+* :py:obj:`starfinder.sample_output.SpatialDataExportConfig`
+
 starfinder.segmentation
 ~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -326,14 +375,48 @@ starfinder.spot_finding
 * :py:obj:`starfinder.spot_finding.WeightsFile`
 * :py:obj:`starfinder.spot_finding.WeightsHashMismatchError`
 
+starfinder.stitching
+~~~~~~~~~~~~~~~~~~~~
+
+* :py:obj:`starfinder.stitching.approve_placement`
+* :py:obj:`starfinder.stitching.bigstitcher_macro`
+* :py:obj:`starfinder.stitching.BigStitcherConfig`
+* :py:obj:`starfinder.stitching.GridSnap`
+* :py:obj:`starfinder.stitching.import_bigstitcher`
+* :py:obj:`starfinder.stitching.legacy_tile_config_view`
+* :py:obj:`starfinder.stitching.load_placement`
+* :py:obj:`starfinder.stitching.MethodPlacement`
+* :py:obj:`starfinder.stitching.MultiviewStitcherConfig`
+* :py:obj:`starfinder.stitching.neighbor_pairs`
+* :py:obj:`starfinder.stitching.NeighborPair`
+* :py:obj:`starfinder.stitching.placed_metadata`
+* :py:obj:`starfinder.stitching.placement_from_table`
+* :py:obj:`starfinder.stitching.PlacementResult`
+* :py:obj:`starfinder.stitching.PlacementReviewRequiredError`
+* :py:obj:`starfinder.stitching.positions_from_grid`
+* :py:obj:`starfinder.stitching.positions_from_leica`
+* :py:obj:`starfinder.stitching.positions_from_table`
+* :py:obj:`starfinder.stitching.review_placement`
+* :py:obj:`starfinder.stitching.ReviewPolicy`
+* :py:obj:`starfinder.stitching.save_placement`
+* :py:obj:`starfinder.stitching.StageAxisMapping`
+* :py:obj:`starfinder.stitching.stitch`
+* :py:obj:`starfinder.stitching.STITCHING_METHODS`
+* :py:obj:`starfinder.stitching.StitchingBackendUnavailableError`
+* :py:obj:`starfinder.stitching.StitchingInput`
+* :py:obj:`starfinder.stitching.StitchingSpec`
+* :py:obj:`starfinder.stitching.TilePositionTable`
+
 starfinder.synthetic
 ~~~~~~~~~~~~~~~~~~~~
 
+* :py:obj:`starfinder.synthetic.AcquisitionConfig`
 * :py:obj:`starfinder.synthetic.BackgroundConfig`
 * :py:obj:`starfinder.synthetic.BENCHMARK_PRESETS`
 * :py:obj:`starfinder.synthetic.benchmark_scene_preset`
 * :py:obj:`starfinder.synthetic.CALIBRATED_CONDITIONS`
 * :py:obj:`starfinder.synthetic.calibrated_scene_preset`
+* :py:obj:`starfinder.synthetic.CellularSceneConfig`
 * :py:obj:`starfinder.synthetic.deformation_geometry`
 * :py:obj:`starfinder.synthetic.DEFORMATION_PRESETS`
 * :py:obj:`starfinder.synthetic.development_codebook`
@@ -350,14 +433,23 @@ starfinder.synthetic
 * :py:obj:`starfinder.synthetic.generate_dataset`
 * :py:obj:`starfinder.synthetic.generate_formed_scene`
 * :py:obj:`starfinder.synthetic.generate_registration_pair`
+* :py:obj:`starfinder.synthetic.generate_sample_scene`
 * :py:obj:`starfinder.synthetic.GeometryConfig`
 * :py:obj:`starfinder.synthetic.NoiseConfig`
 * :py:obj:`starfinder.synthetic.PRESET_VERSION`
 * :py:obj:`starfinder.synthetic.ReadoutEffectsConfig`
 * :py:obj:`starfinder.synthetic.registration_scene_preset`
+* :py:obj:`starfinder.synthetic.SAMPLE_PRESET_VERSION`
+* :py:obj:`starfinder.synthetic.SAMPLE_PRESETS`
+* :py:obj:`starfinder.synthetic.sample_scene_preset`
+* :py:obj:`starfinder.synthetic.SAMPLE_TRUTH_VERSION`
+* :py:obj:`starfinder.synthetic.SampleScene`
+* :py:obj:`starfinder.synthetic.SampleSceneConfig`
 * :py:obj:`starfinder.synthetic.save_formed_scene`
+* :py:obj:`starfinder.synthetic.save_sample_scene`
 * :py:obj:`starfinder.synthetic.ScalarDistribution`
 * :py:obj:`starfinder.synthetic.SCENE_PRESETS`
+* :py:obj:`starfinder.synthetic.StainConfig`
 * :py:obj:`starfinder.synthetic.SyntheticDataset`
 * :py:obj:`starfinder.synthetic.TextureConfig`
 

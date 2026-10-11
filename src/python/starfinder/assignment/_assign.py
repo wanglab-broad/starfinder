@@ -431,7 +431,9 @@ def assign_molecules(molecules: MoleculeTable, cells: SegmentationResult, *, gri
     table = molecules.table
     positions = table[["z", "y", "x"]].to_numpy(np.float64)
     values, voxels, inside = sample_labels(sampled, positions, geometry=geometry)
-    if geometry == "plane":
+    # Plane labels on a grid of several planes: z is checked against that grid. A one-plane grid samples y and x
+    # only, so z never puts a molecule outside it (voxel_z is the plane, 0).
+    if geometry == "plane" and grid.shape_zyx[0] > 1:
         z_index = np.floor(positions[:, 0] + 0.5)
         z_inside = (z_index >= 0) & (z_index < grid.shape_zyx[0])
         inside = inside & z_inside

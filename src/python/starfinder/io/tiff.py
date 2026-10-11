@@ -1,7 +1,10 @@
 """TIFF persistence with explicit selection, conversion and geometry."""
 from dataclasses import asdict, dataclass, field
+import hashlib
 import json
+import os
 from pathlib import Path
+import uuid
 import warnings
 from xml.etree import ElementTree
 
@@ -13,6 +16,49 @@ from starfinder.io.conversion import ImageConversionConfig, convert_image
 
 # Namespace of the OME-XML CommentAnnotation holding ImageMetadata as JSON.
 METADATA_NAMESPACE = "starfinder.image.ImageMetadata"
+# Namespace of the name-based OME UUIDs: the UUID of a file is uuid5 of the SHA-256 of what is written.
+_UUID_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_URL, "starfinder.io.ome_uuid")
+
+
+def _ome_digest(header: dict):
+    """A SHA-256 of an OME-TIFF's content, started with its header (shape, dtype, layout, metadata) as JSON.
+
+    The caller adds the pixel data in the order it writes them.
+    """
+    return hashlib.sha256(json.dumps(header, sort_keys=True).encode())
+
+
+def _ome_uuid(digest) -> str:
+    """The ``urn:uuid:`` of the content ``digest``, so that equal content gives equal bytes (not time-based)."""
+    return f"urn:uuid:{uuid.uuid5(_UUID_NAMESPACE, digest.hexdigest())}"
+
+
+def _content_uuid(array: np.ndarray, header: dict) -> str:
+    """The OME UUID of an in-memory array written with ``header``."""
+    digest = _ome_digest(dict(header, dtype=array.dtype.str, shape=list(array.shape)))
+    digest.update(np.ascontiguousarray(array))
+    return _ome_uuid(digest)
+
+
+def _stamp_uuid(path, placeholder: str, value: str) -> None:
+    """Replace the ``placeholder`` UUID of an OME-TIFF's OME-XML by ``value``, in place (same length)."""
+    old, new = placeholder.encode("ascii"), value.encode("ascii")
+    with tifffile.TiffFile(path) as tif:
+        tag = tif.pages.first.tags["ImageDescription"]
+        offset, count = tag.valueoffset, tag.count
+    with open(path, "r+b") as handle:
+        handle.seek(offset)
+        description = handle.read(count)
+        if description.count(old) != 1 or len(old) != len(new):
+            raise RuntimeError(f"{path}: the OME-XML does not hold the placeholder UUID once")
+        handle.seek(offset + description.index(old))
+        handle.write(new)
+
+
+def _writes_ome(path: Path) -> bool:
+    """Whether tifffile writes OME-XML by default to ``path``: a ``*.ome.<ext>`` name."""
+    name, ext = os.path.splitext(path.name.lower())
+    return bool(ext) and name.endswith(".ome")
 
 
 @dataclass(frozen=True)
@@ -166,6 +212,47 @@ def load_volume(path: Path | str, *, config: ImageLoadConfig = ImageLoadConfig()
     return ImageLoadResult(data, metadata, config.channel_labels, (path,), diagnostics)
 
 
+def _volume_header(path: Path | str) -> tuple[tuple[int, int, int] | None, bool] | None:
+    """(ZYX shape, whether metadata is stored) that load_volume with the default config gives, from the header alone.
+
+    No pixel is read. The shape follows load_volume's rules (the series'
+    axes, singleton T and C dropped for an OME, ImageJ or axis-declaring file,
+    any other file read as ZYX, YX gaining a singleton Z). It is None where
+    the header does not settle what load_volume gives: a floating-point file,
+    whose finiteness only its pixels show, and every file load_volume refuses
+    (a T or C axis longer than one, other axes, not two or three dimensions,
+    an empty dimension, a dtype that is not an integer). The whole result is
+    None for a file of several series (load_volume asks for an index).
+    Missing paths raise FileNotFoundError as load_volume does. The file is
+    read without a buffer, so that only the bytes tifffile asks for are read:
+    a buffered file reads a whole block (st_blksize, 1 MiB on an SMB share)
+    at each seek to a page's header.
+    """
+    path = Path(path)
+    if not path.is_file():
+        raise FileNotFoundError(f"TIFF file not found: {path}")
+    with open(path, "rb", buffering=0) as handle, tifffile.TiffFile(handle) as tif:
+        if len(tif.series) != 1:
+            return None
+        series = tif.series[0]
+        stored = _stored(tif, 0)
+        shape, axes = tuple(int(n) for n in series.shape), series.axes
+        if tif.is_ome or tif.is_imagej or "axes" in stored:
+            for axis in "TC":
+                if axis in axes:
+                    pos = axes.index(axis)
+                    if shape[pos] != 1:
+                        return None, "starfinder_metadata" in stored
+                    shape, axes = shape[:pos] + shape[pos + 1:], axes[:pos] + axes[pos + 1:]
+            if axes not in ("YX", "ZYX"):
+                shape = None
+        if shape is not None and len(shape) == 2:
+            shape = (1, *shape)
+        if shape is None or len(shape) != 3 or 0 in shape or np.dtype(series.dtype).kind not in "ui":
+            shape = None
+        return shape, "starfinder_metadata" in stored
+
+
 def load_round(round_dir: Path | str, *, config: ImageLoadConfig) -> ImageLoadResult:
     """Load unique ordered channel TIFFs into ZYXC.
 
@@ -255,7 +342,10 @@ def save_volume(image: np.ndarray, path: Path | str, compress: bool = False, *, 
     hyperstack. Preserves dtype, including float64, unless conversion is
     supplied. Overwrites an existing file; creates parents. No input mutation.
     ZYXC can be read one channel at a time using an explicit channel_index in
-    load_volume, or whole with load_volume_zyxc.
+    load_volume, or whole with load_volume_zyxc. The UUID of the OME-XML is a
+    name-based UUID of the pixel data and the metadata written, so the same
+    array and metadata give the same bytes (also for ZYX on a ``*.ome.*`` name,
+    which tifffile writes as OME-TIFF).
     """
     image = _validate_image(image)
     if conversion is not None:
@@ -267,10 +357,13 @@ def save_volume(image: np.ndarray, path: Path | str, compress: bool = False, *, 
         info = {"axes": "ZYX"}
         if metadata is not None:
             info["starfinder_metadata"] = asdict(metadata)
+        if _writes_ome(path):
+            info["UUID"] = _content_uuid(image, dict(info, compression=compression))
         tifffile.imwrite(path, image, compression=compression, photometric="minisblack", metadata=info)
         return
     info = {"axes": "ZCYX"}
     if metadata is not None:
         info["CommentAnnotation"] = {"Namespace": METADATA_NAMESPACE, "Value": json.dumps(asdict(metadata))}
+    info["UUID"] = _content_uuid(image, dict(info, compression=compression))
     tifffile.imwrite(path, np.moveaxis(image, 3, 1), ome=True, compression=compression,
                      photometric="minisblack", metadata=info)

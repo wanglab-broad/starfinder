@@ -117,6 +117,12 @@ properties:
     exclusiveMinimum: 0
     description: "Z step size in microns"
 
+  reference_image:
+    type: string
+    pattern: "\\{fov_id\\}"
+    default: "images/ref_merged/{fov_id}.tif"
+    description: "File pattern of a FOV's reference image with {fov_id}, absolute or relative to the output root; the §2.10 stitching, assembly and export read its grid there (Python only)"
+
   maximum_projection:
     type: boolean
     default: false
@@ -170,6 +176,16 @@ properties:
 
   assignment:
     $ref: "#/$defs/assignment_block"
+
+  # ==================== Stitching, assembly and export (Python only) ====================
+  stitching:
+    $ref: "#/$defs/stitching_block"
+
+  assembly:
+    $ref: "#/$defs/assembly_block"
+
+  export:
+    $ref: "#/$defs/export_block"
 
   # ==================== Backend Selection ====================
   backend:
@@ -304,6 +320,12 @@ dependentRequired:
     - subset_end
   subset_random:
     - n_random_tests
+  # The assembly block reads the stitching block's placement; the export block configures
+  # the export_sample rule, which runs with an assembly block only.
+  assembly:
+    - stitching
+  export:
+    - assembly
 
 allOf:
   # If subset_range is true, require subset_start and subset_end
@@ -328,8 +350,8 @@ allOf:
   # The explicit preprocessing and registration recipes, the spot-finding method, channel
   # overrides and rounds, the execution device, readout_mode direct, scoring,
   # deduplication, reads_extraction.background, load_codebook.encoding.pair_to_color, the
-  # segmentation and assignment blocks and the stardist_segmentation target are
-  # Python-only (backend defaults to matlab)
+  # segmentation, assignment, stitching, assembly and export blocks and the
+  # stardist_segmentation target are Python-only (backend defaults to matlab)
   - if:
       not:
         required: [backend]
@@ -341,6 +363,9 @@ allOf:
         anyOf:
           - required: [segmentation]
           - required: [assignment]
+          - required: [stitching]
+          - required: [assembly]
+          - required: [export]
       properties:
         readout_mode:
           const: multiplexed
@@ -1643,4 +1668,243 @@ $defs:
       checkpoints:
         description: "CheckpointConfig fields, or null"
         type: [object, "null"]
+    additionalProperties: false
+
+  # ==================== Stitching, assembly and export blocks (Python only) ====================
+  # docs/stitching-contract.md, docs/assembly-contract.md and docs/sample-output-contract.md,
+  # "Workflow configuration". Tests keep the method names, the assembly keys and the export keys
+  # equal to STITCHING_METHODS plus bigstitcher, AssemblyConfig and ExportConfig.
+  stitching_block:
+    description: >-
+      Python only. The per-sample placement: Dataset.stitch for an in-process method, or the
+      BigStitcher macro, engine and import rules for bigstitcher; without the block the four legacy
+      stitching rules run unchanged.
+    type: object
+    required: [positions]
+    properties:
+      method:
+        description: "A STITCHING_METHODS name (kept equal to the registry by a test), or bigstitcher (the default)"
+        enum: ["multiview_stitcher", "bigstitcher"]
+        default: "bigstitcher"
+      input:
+        description: "reference_merged (default), reference_stain, or file:<pattern> with {fovID}"
+        anyOf:
+          - enum: ["reference_merged", "reference_stain"]
+          - type: string
+            pattern: "^file:.+"
+      positions:
+        $ref: "#/$defs/stitching_positions"
+      config:
+        description: "Fields of MultiviewStitcherConfig or BigStitcherConfig; the Python adapter validates them"
+        type: object
+      review:
+        description: "ReviewPolicy fields"
+        type: object
+        properties:
+          max_correction_fraction:
+            type: number
+            minimum: 0
+          max_residual_um:
+            type: number
+            minimum: 0
+        additionalProperties: false
+      fallback:
+        description: "null (default) or nominal; for multiview_stitcher and the BigStitcher import alike"
+        enum: [null, "nominal"]
+      bigstitcher_save_dir:
+        description: "A local folder for BigStitcher's tiles, macro and dataset.xml; required with method bigstitcher"
+        type: [string, "null"]
+    additionalProperties: false
+
+  stitching_positions:
+    description: "The positions mapping of Dataset.stitch; stage_axes is required with source stage_file"
+    type: object
+    required: [source]
+    properties:
+      source:
+        enum: ["stage_file", "regular_grid", "table"]
+      stage_axes:
+        type: object
+        required: [x, y]
+        properties:
+          x:
+            enum: ["+x", "-x", "+y", "-y"]
+          y:
+            enum: ["+x", "-x", "+y", "-y"]
+        additionalProperties: false
+      snap_to_grid:
+        type: [object, "null"]
+        required: [overlap]
+        properties:
+          overlap:
+            type: [number, array]
+        additionalProperties: false
+      regular_grid:
+        type: object
+        required: [columns, rows, order, overlap]
+        properties:
+          columns:
+            type: integer
+            minimum: 1
+          rows:
+            type: integer
+            minimum: 1
+          order:
+            enum: ["column_major_down_right", "column_major_down_right_serpentine", "row_major_right_down",
+                   "row_major_right_down_serpentine"]
+          overlap:
+            type: [number, array]
+        additionalProperties: false
+      tile_shape_yx:
+        type: [array, "null"]
+        items:
+          type: integer
+          minimum: 1
+        minItems: 2
+        maxItems: 2
+      spacing_yx:
+        type: [array, "null"]
+        items:
+          type: number
+        minItems: 2
+        maxItems: 2
+      table:
+        description: "A CSV path with source table"
+        type: [string, "null"]
+      unit:
+        description: "The unit of the table (µm, um, nm or mm)"
+        type: string
+      stage_file:
+        description: "The stage file; default documents/maf/<sample>.maf under the output root"
+        type: [string, "null"]
+    additionalProperties: false
+
+  assembly_block:
+    description: >-
+      Python only, with a stitching block. The assemble part of Dataset.export, run by the
+      export_sample rule: the AssemblyConfig fields, the assignment name of Dataset.export and its
+      table_format (keys kept equal to them by a test). With the block, reads_assignment writes the
+      per-FOV files without the legacy filter and create_sample_h5ad and
+      create_sample_reads_assignment do not run.
+    type: object
+    properties:
+      assignment:
+        description: "The assignment name read per FOV (default default); null: molecules only"
+        type: [string, "null"]
+      ownership:
+        enum: ["nearest_center", "midpoint_box"]
+      centroid:
+        enum: ["territory", "original"]
+      tie:
+        enum: ["table_order", "half_open"]
+      conflicts:
+        type: boolean
+      duplicate_threshold:
+        description: >-
+          The duplicate rule (default 0.5): two retained cells of different FOVs whose territories
+          share at least this share of the smaller one are one cell, and the smaller observation is
+          excluded; null turns the rule off
+        type: [number, "null"]
+        exclusiveMinimum: 0
+        maximum: 1
+      table_format:
+        enum: ["csv", "parquet"]
+    additionalProperties: false
+
+  export_block:
+    description: >-
+      Python only, with an assembly block. The parts of Dataset.export and their settings, run by the
+      export_sample rule; without the block the defaults apply (keys kept equal to ExportConfig,
+      FusionConfig, LabelConfig and SpatialDataExportConfig by a test).
+    type: object
+    properties:
+      assemble:
+        type: boolean
+      fuse:
+        type: boolean
+      fuse_labels:
+        type: boolean
+      export_spatialdata:
+        type: boolean
+      images:
+        description: "Source-image names: reference_stain, reference_merged or <name>=file:<pattern>"
+        type: array
+        minItems: 1
+        items:
+          type: string
+      dimensionality:
+        enum: ["projection", "stack", "both"]
+      projection:
+        enum: ["max", "sum"]
+      scale_yx:
+        type: number
+        exclusiveMinimum: 0
+        maximum: 1
+      ome_zarr:
+        type: boolean
+      ome_zarr_version:
+        enum: ["0.5", "0.4"]
+      pyramid_levels:
+        type: integer
+        minimum: 0
+      labels_scale_yx:
+        type: number
+        exclusiveMinimum: 0
+        maximum: 1
+      spatialdata_zarr_format:
+        enum: [3, 2]
+      route:
+        description: "per_fov or after_fusion; null: by dimensionality (projection: after_fusion; stack, both: per_fov)"
+        enum: ["per_fov", "after_fusion", null]
+      segment:
+        description: "The part segment of the route after fusion; false reuses the saved sample segmentation"
+        type: boolean
+      segmentation:
+        description: >-
+          The segmentation of the fused projection on the route after fusion (SampleSegmentationConfig):
+          device, cells, nuclei and runs, each with name, target, inputs ({role, image}), seeds and method,
+          whose config fields are the run's other keys (pixel lengths of the acquired grid)
+        type: ["object", "null"]
+        properties:
+          device:
+            enum: ["cpu", "cuda"]
+          cells:
+            type: string
+          nuclei:
+            type: ["string", "null"]
+          runs:
+            type: array
+            minItems: 1
+            items:
+              description: >-
+                One run. Keys besides name, target, inputs, seeds and method are the init fields of the
+                method's config (or of LabelImportConfig with method import); the Python adapter validates them.
+              type: object
+              required: [name, target, method]
+              properties:
+                name:
+                  type: string
+                target:
+                  enum: ["nucleus", "cell"]
+                inputs:
+                  type: array
+                  items:
+                    type: object
+                    required: [role, image]
+                    properties:
+                      role:
+                        enum: ["nuclear", "cytoplasm", "membrane", "amplicon", "composite"]
+                      image:
+                        description: "An image name of export.images"
+                        type: string
+                    additionalProperties: false
+                seeds:
+                  type: ["string", "null"]
+                method:
+                  description: "A SEGMENTATION_METHODS name (the first list, kept equal to the registry by a test), or import"
+                  anyOf:
+                    - enum: ["stardist", "cellpose", "seeded_watershed"]
+                    - const: import
+              additionalProperties: true
+        additionalProperties: false
     additionalProperties: false

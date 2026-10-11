@@ -173,7 +173,10 @@ with `expansion`. The record says how the territories were obtained
     gives each row the identity `spot_id = "csv:<row>"`; its source record names the file
     and its SHA-256. It exists for the workflow adapter.
   * Validation, in both constructors: unique, non-null keys; one FOV identity (the
-    `spot_namespace` list `[dataset_id, sample_id, fov_id, subtile_id]`); finite
+    `spot_namespace` list `[dataset_id, sample_id, fov_id, subtile_id]`, or the sample
+    identity `[dataset_id, sample_id, null, null]` with null `fov_id` and `subtile_id`,
+    which the constructor accepts and the route after fusion of
+    {doc}`sample-segmentation-contract` uses); finite
     coordinates (`ValueError` naming the first bad row); every `gene_id` non-null and in
     `genes` (`ValueError` naming the unknown genes; today they are dropped silently,
     {doc}`assignment-baseline` discrepancy 11).
@@ -393,12 +396,15 @@ Rules that hold for every option:
   outside.
 * **Non-finite coordinates** are refused when the `MoleculeTable` is built.
 * **Plane labels.** For a label image with geometry `plane` (Z=1), the territory is read
-  at `y, x`; `z` does not select it, and the record says `"sampled_axes": "yx"`. `z` is
-  still checked against the molecule run's grid (its Z size, before any projection), so a
-  molecule off that grid in Z is `outside_grid`. For `volume` and `extended` labels,
-  `z, y, x` are sampled (`"zyx"`).
-* **Z=1 grids.** When the molecule run's grid itself has Z=1 (a projected FOV), molecules
-  have `z = 0` and the labels are a `plane`; the rule is the same.
+  at `y, x`; `z` does not select it, and the record says `"sampled_axes": "yx"`. When the
+  molecule run's grid has more than one plane, `z` is still checked against that grid (its
+  Z size, before any projection), so a molecule off that grid in Z is `outside_grid`. For
+  `volume` and `extended` labels, `z, y, x` are sampled (`"zyx"`).
+* **Z=1 grids.** When the molecule run's grid itself has Z=1 (a projected FOV), the labels
+  are a `plane` and a molecule is sampled at its `y, x` only: its `z` is not considered, so
+  no molecule is `outside_grid` because of its `z`, its `voxel_z` is 0 (the plane) and its
+  recorded `z` stays in the column `z`; a molecule outside the grid in `y` or `x` is
+  `outside_grid`.
 * **Nuclei** are sampled at the same voxel as the cells.
 
 ## Direct assignment and statuses
@@ -782,7 +788,9 @@ reload raise `ValueError` naming the path and both hashes.
 ## Boundary with §2.10
 
 Assignment is FOV-local: it reads one FOV's molecules and label images on that FOV's
-reference grid, and nothing else. It reads no tile configuration, computes no global
+reference grid, and nothing else. The function stays as it is; the route after fusion
+({doc}`sample-segmentation-contract`) calls it once on the segmentation grid with the
+sample's molecules in one sample-level namespace. It reads no tile configuration, computes no global
 coordinate, decides no overlap ownership, matches no cell across FOVs and filters nothing
 by position.
 
@@ -839,6 +847,24 @@ On demand, never by `FOV.assign`:
   it. A plane or Z=1 result has the `z_max` view only, and asking it for the other raises
   `ValueError`. The figure replaces the four legacy PNGs and their hard-coded plane; the
   workflow adapter writes both views of a ZYX label image ({doc}`workflow-downstream`).
+
+  `plot_assignment` also takes the keyword `ownership=None` (W-330, added after §2.10): a
+  `FOVOwnership` of `starfinder.assignment`, plain data that
+  `starfinder.assembly.fov_ownership` builds for one FOV of an assembled sample: a boolean
+  Y, X mask of the pixels whose centres the FOV owns ({doc}`assembly-contract`, "Ownership
+  regions"), and the `cell_id` and `spot_id` of the FOV's cells and molecules whose
+  assembly status is `excluded`. With it, panels 1 and 2 of both views draw the closed
+  boundary of the mask as a yellow line, the colour of the legacy tile box, the image
+  border included where the region reaches it; the centre of an excluded cell and an
+  excluded molecule are grey, and every other keeps the colour of its status (a retained
+  molecule flagged `outside_owner_region` too); the legend gains `ownership region` and,
+  when the panel draws one, `excluded from sample`; and each panel's x-axis label states how
+  many of the cells (panel 1) or molecules (panel 2) drawn the assembly retained; the titles
+  do not change. Panels 3 and 4 do
+  not change. The figure shows what assemble decided and does not apply the retention rule
+  again. A mask of another Y, X than the territories, or an identity the result does not
+  have, raises `ValueError`, and a value that is not a `FOVOwnership` `TypeError`, before
+  any figure is made. Without `ownership` the figure is as described above.
 
 ## Workflow configuration
 

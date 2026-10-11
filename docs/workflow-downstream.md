@@ -119,10 +119,59 @@ FOV, `assignment_single_layer.png` (the middle plane `Z // 2`) when the label im
 ZYX, not for a YX one, and `log.txt`: one line of totals, then the assignment ratio,
 assigned molecules over all molecules of the table with both counts
 (`assignment ratio: 61.11% (11 of 18 molecules assigned)`), or
-`assignment ratio: none (no molecule)` when the FOV has none.
+`assignment ratio: none (no molecule)` when the FOV has none. With an `assembly` block,
+on the route per FOV (below), the sample's `export_sample` rule draws the two figures
+again once the sample is assembled, with the FOV's ownership region as a yellow line, the cells and molecules the
+assembly excluded in grey and, as each panel's x-axis label, how many of those drawn it retained
+({doc}`assignment-contract`, "Diagnostics"); `log.txt` is not rewritten, and without the
+block the figures stay as `reads_assignment` draws them.
 
 Assignment needs the `anndata` extra for `raw.h5ad`; sample H5AD aggregation uses
 Scanpy, which the base package does not install. The matrix counts decoded genes
 inside labels. It does not establish segmentation quality, biological identity, or
 cross-FOV equivalence. Dry-running the sequencing examples does not exercise these
 downstream scripts, models, acquisition metadata or coordinate checks.
+
+## Two routes to a sample's cells
+
+With `stitching` and `assembly` blocks, `export_sample` reaches the sample's cells by one
+of two routes, set by `export.route` ({doc}`sample-segmentation-contract`):
+
+* **Per FOV** (`per_fov`). Each FOV is segmented and assigned on its own
+  (`reads_assignment`), and the export assembles the FOVs: a cell is kept by the FOV that owns its centroid. Two
+  kept cells of different FOVs whose territories share at least `duplicate_threshold` of
+  the smaller one are taken as two observations of one cell: the larger stays and the
+  other is removed as a second observation. A cell cut by a FOV edge is not completed from
+  the other FOV, and nothing is merged across FOVs.
+* **After fusion** (`after_fusion`), for projection samples only. The fused Z maximum of
+  the sample, at `scale_yx`, is segmented once, and the sample's molecules are assigned to
+  those cells, each molecule kept by the FOV that owns its position. A cell across a FOV
+  seam is one cell of one segmentation. The whole fused projection is segmented in one
+  call, so it must fit the memory of the segmentation's device, and with a learned model
+  on `cuda` the export rule needs a GPU node.
+
+**The default** follows `dimensionality`: `projection` takes the route after fusion;
+`stack` and `both` take the route per FOV. A stack is segmented per FOV: the route after
+fusion refuses `dimensionality: stack` (with `both` and `route: after_fusion` it segments
+the projection), and refuses `projection: sum` as well, because it segments the Z
+maximum. A configuration with an assignment name that exports a projection must
+therefore set `export.segmentation` (the runs of the route after fusion) or
+`route: per_fov`; until it does, the workflow refuses it when the rules are parsed, naming
+both, so that no run changes route without a key that says so.
+
+**Which to choose.** The route per FOV for a 3D stack, for a sample that cannot be fused,
+or whose fused projection cannot be segmented in one call, on the hardware at hand, and to
+stay comparable with samples processed per FOV before. The route after fusion for a
+projection sample whose fused projection can be segmented in one call, where cells across
+FOV seams should be segmented once.
+
+**The same outputs.** Both routes write the same files of `export/<sample>/`: the same
+tables with the same columns, the same `sample.h5ad` and the same fused images, so that
+what reads them need not know the route; the record names it (`route` in the `assembly`
+section of `export.json`). The route after fusion adds the label image of each
+segmentation run, `segmentation_<run>.ome.tif` (and `territories.ome.tif` when the
+assignment expands the cells), and the `segmentation` section. Whether the two routes find
+the same cells in a sample is what `compare_routes` reports: it reads an export folder of
+each route for the same sample, says how their cells and molecules correspond, and decides
+nothing (it is not an accuracy, and neither route is a truth). An example configuration
+of each route is in {doc}`workflow-configuration` ("Stitching, assembly and export").
