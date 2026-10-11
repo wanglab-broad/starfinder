@@ -622,3 +622,7 @@ expected class and counterpart for each of its cells.
   nucleus was not measured.
 * Not measured: a whole sample, and which rule, if any, is right. Jiahao decides on a
   rule.
+
+**Decided on 2026-10-10** (Jiahao): no rule is added for now. The flag `unclaimed` keeps
+marking these cells, and the findings above stand as a record. The nuclei that one FOV
+alone found are a matter of the nucleus segmentation, which is left for later.
