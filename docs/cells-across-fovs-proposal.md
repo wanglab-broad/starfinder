@@ -598,12 +598,17 @@ expected class and counterpart for each of its cells.
   without a cell (3,241 of 4,311). In the culture they are 3,494 molecules (2.0%) and
   5 of 150 cells with 2.1% of the counts.
 * **What two rules would bring back** (counted, not built). Rule r1 keeps an excluded
-  observation that no retained cell shares at least 0.5 with, and keeps one of such
-  observations that share at least 0.5 with each other by the duplicate rule's order.
-  Rule r2 does the same for observations without `fov_edge` only. In the culture, r1
+  observation that no retained cell shares at least 0.5 with, and where two such
+  observations share at least 0.5 with each other it keeps one by the duplicate rule's
+  order, whether or not they exclude each other at their centroids. Rule r2 does the same
+  for observations without `fov_edge` only. In the culture, r1
   returns 5 cells (4 cut by a FOV edge, 1.3% of the counts) and r2 returns 1. In LN, r1
   returns 369 nuclei (33 cut by a FOV edge, 4.5% of the counts) and r2 returns 337 (4.2%).
-  Neither creates a pair at or above 0.5 among the cells it returns.
+  Neither creates a pair at or above 0.5 among the cells it returns. If the order were
+  applied only to observations that exclude each other at their centroids, LN would get
+  377 and 342 cells back, and 9 and 5 pairs at or above 0.5 would remain among them.
+  Of the 383 LN cells without a counterpart, 27 are one of two excluded observations of
+  the same place, and 356 were seen by one FOV only. In the culture the figures are 2 and 4.
 
 **Limits of these numbers.**
 
