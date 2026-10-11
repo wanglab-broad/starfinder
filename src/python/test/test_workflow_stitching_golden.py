@@ -34,6 +34,7 @@ docs/stitching-contract.md names which pinned values the package functions must
 reproduce.
 """
 import hashlib
+import importlib.util
 import io
 import runpy
 import sys
@@ -148,6 +149,12 @@ def run_stitching_preparation(tmp_path, monkeypatch, maf_text):
     maf.write_text(maf_text)
     # pandas 3 removed pd.value_counts (stitching_preparation.py:21); restore the pandas 2 function.
     monkeypatch.setattr(pd, "value_counts", lambda values: pd.Series(values).value_counts(), raising=False)
+    # The script imports tqdm (stitching_preparation.py:9) and never calls it; where tqdm is not installed,
+    # the import gets a stand-in.
+    if importlib.util.find_spec("tqdm") is None:
+        stand_in = types.ModuleType("tqdm")
+        stand_in.tqdm = lambda iterable=None, *args, **kwargs: iterable
+        monkeypatch.setitem(sys.modules, "tqdm", stand_in)
     snakemake = SimpleNamespace(input=[str(annotation), str(maf)], config=_config(tmp_path),
                                 wildcards=_Wildcards(sample="sample1"))
     try:

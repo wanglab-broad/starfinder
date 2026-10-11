@@ -226,6 +226,7 @@ def test_a_file_with_stored_metadata_is_read_as_before(scene_folders, tmp_path):
             assert grid.source.startswith("file:") and grid.sha256 is not None
 
 
+@needs_anndata
 def test_without_metadata_and_voxel_sizes_the_export_raises(scene_folders):
     """A plain reference image and no configured voxel size: ValueError naming the keys; nothing is written."""
     plain = scene_folders["plain"]

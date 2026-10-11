@@ -164,6 +164,7 @@ def test_without_the_setting_the_default_path_is_read(scene_layouts, monkeypatch
         assert _reference_grid(moved, fov).source == f"file:{path.resolve()}" and opened[-1] == path
 
 
+@needs_anndata
 @pytest.mark.parametrize("form", ["stored", "plain"])
 def test_a_missing_file_raises_naming_the_setting_and_the_path(scene_layouts, tmp_path, form):
     """A pattern naming a file that does not exist: FileNotFoundError naming reference_image and the path; the
