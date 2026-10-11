@@ -985,6 +985,28 @@ four times W-376's time from local copies while the reader rebuilt the chunks of
 saved. No cells exist for tissue-2D. A9 is not verified, because no store holds
 `cell_labels`. A4 stays open.
 
+**Both routes on the cell-culture block (W-435).** W-435 ran both routes to the cells of the
+cell-culture-3D 2 × 2 block on 2026-10-11, at revision `d0fcaf4`, with the package unchanged, in
+the run directory
+`/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-435/20261011T015921Z-1f511925`
+(`worker-notes.md`, `results/manifest.json`, `results/compare/`). The route per FOV gave
+W-434's cells: 177 retained, 8 excluded `duplicate_observation`, 150 counted. The route after
+fusion ran by its parts, because no environment holds both multiview-stitcher and a GPU: the
+fusion, `segment_fused` alone on the GPU, then `Dataset.export` with `segment` off.
+`check_export` passes on all three folders. After fusion, Cellpose found 175 cells at scale 1
+and 177 at 0.5, of which 149 and 148 are counted, each cell once. `compare_routes` at its
+default threshold matched 140 pairs at scale 1 and 139 at 0.5. At scale 1, 10 cells per FOV
+and 9 after fusion are in no matched pair. For 16 of these 19 the other route has the same
+cell (share 0.95 or more) but does not count it: 14 times because no nucleus matched it, twice
+because the route per FOV excluded it `not_owner`. Of the other 3, two are part of one cell
+after fusion that the route per FOV holds as two, and one has no counterpart. The unmatched cells do not lie closer to the seams than the matched ones. 4 of the 5
+cells that W-434 found missing from the per-FOV `sample.h5ad` are counted after fusion. The
+limits: one 2 × 2 block; no annotation says
+which route is right; Jiahao considers this dataset's nucleus labels faulty, and they decide
+which cells are counted; the two routes segment different images (each FOV's own Z maxima
+against the fused projection) as well as fusing at different times. None of this is an
+accuracy, a statement about a whole sample or a preferred route.
+
 ## Limitations
 
 * The tolerances for `multiview_stitcher` come from two cut fixtures with integer offsets
