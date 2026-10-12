@@ -200,9 +200,10 @@ class SampleSegmentationRun:
     (none for an import); ``method`` is a ``SEGMENTATION_METHODS`` config or a
     :class:`~starfinder.segmentation.LabelImportConfig` whose target equals the
     run's, with its pixel lengths given for the acquired grid (LS2: the route
-    divides them by the scale factor); ``seeds`` names an earlier run of the
-    same config. See docs/sample-segmentation-contract.md ("Where the settings
-    live").
+    converts them to the segmentation grid by the table "Lengths in pixels" of
+    docs/sample-segmentation-contract.md and records both values); ``seeds``
+    names an earlier run of the same config. See
+    docs/sample-segmentation-contract.md ("Where the settings live").
 
     Raises
     ------

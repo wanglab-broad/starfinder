@@ -410,8 +410,10 @@ class SampleSegmentationConfig:
 export:
   route: null                  # per_fov | after_fusion; null: by dimensionality ("The route setting")
   segment: true                # false: reuse the saved sample segmentation
-  images: [reference_stain, dapi=file:images/organelle/DAPI/{fov_id}.tif,
-           flamingo=file:images/organelle/Flamingo/{fov_id}.tif]
+  images:
+    - reference_stain
+    - "dapi=file:images/organelle/DAPI/{fov_id}.tif"
+    - "flamingo=file:images/organelle/Flamingo/{fov_id}.tif"
   scale_yx: 0.25
   segmentation:
     device: cuda
