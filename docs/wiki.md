@@ -46,6 +46,8 @@ Sample-output contract (proposed) <sample-output-contract>
 Cells across FOVs (proposed) <cells-across-fovs-proposal>
 Sample segmentation contract (proposed) <sample-segmentation-contract>
 Sample segmentation validation (proposed) <sample-segmentation-validation>
+Processing-report baseline (proposed) <report-baseline>
+Processing-report contract (proposed) <report-contract>
 Learned detectors <learned-detectors>
 Coordination <coordination>
 Checkpoints <checkpoints>
