@@ -1,6 +1,6 @@
 # Processing-report algorithms, layout and validation design
 
-Status: Proposed (W-386, 2026-10-12, at de438ad; corrected by W-448, 2026-10-12; amended by W-449, 2026-10-12)
+Status: Proposed (W-386, 2026-10-12, at de438ad; corrected by W-448, 2026-10-12; amended by W-449, 2026-10-12; amended by W-450, 2026-10-12)
 
 This page fixes how every value and figure of the §2.11 processing report is computed and
 drawn, how the page is laid out and built, how the delivery is validated, and the plan of
@@ -1220,6 +1220,7 @@ Rules:
 | RC10 | Collection, FOVs with equal values | `report_records` `equal` (none) | Residuals, rules, the example draw | Every residual 0; no FOV marked by any rule on values; `example_1` is F1 (`N` holds the `ceil(4/5) = 1` FOV first in the order `(distance, list_index)`). Exact. |
 | RC11 | Collection, an older run record | `report_records` `older` (both copies) | Columns of R1 to R4 | Without `transforms.json`: every shift and residual null with `not_recorded`, `transform_source` null, the registration example unavailable with `not_recorded`; with F1's `transforms.json`: F1's shifts equal those of `report_records` (nothing left out) and `transform_source` is `transforms.json`; `correct_form` null with `not_recorded`; the Files codebook and workflow entries `not_recorded`. Exact. |
 | RC12 | Null cells and the closed lists | every `report_records` and `report_cells` case of RC1 to RC11 | Each null cell of each table and each null `summary` key | Each is either n/a by its column's null rule or named by exactly one row of `unavailable.csv` (table, column, row key), with a reason its part can have ({doc}`report-contract`, "Parts, their inputs and their reasons"); no row names two values; every reason is in `UNAVAILABLE_REASONS` and every part in `REPORT_PARTS` or `rule:<rule>`. Exact. |
+| RC13 | Collection, a round that did not finish ("Outcome", choice A13) | `report_records` `failed`, three copies, in each of which the test writes F3's `registration.round3` as `FOV._register_round` leaves it and no `transforms.round3`: `applying`, a `succeeded` estimation entry with its QC (`ncc_after` 0.8) and then the application entry left `applying` with `qc` null, F3 `status` `failed`; `estimating`, one estimation entry left `estimating` with `qc` null, F3 `status` `interrupted`; `succeeded`, one `succeeded` estimation entry with its QC (`ncc_after` 0.8) as the last entry, F3 `status` `failed`; `error` `{step: register, round: round3}` in each (none) | F3's round3 `outcome` and `alignment_score` and their rows of `unavailable.csv`; the round3 residual medians | `outcome` `application_failed`, `failed` and `failed`, each non-null and named by no row of `unavailable.csv`; `alignment_score` null with `step_failed` in each copy, named by exactly one row (`registration.csv`, `alignment_score`, (F3, `round3`)): the round's `outcome` is not `succeeded` ("Alignment score"), so neither the leftover `applying` entry's null QC (not `undefined`) nor the estimation entry's 0.8 is read; round3 medians over F1, F2 and F4 only, F3 in no median, F4's residual `x` 8. The strings and reasons exact; the residual within 1e-9 absolute. |
 | DF1 | Read levels | `hand_tables` (none) | Counts and fractions | Each fraction equals `count / spots`; `matched > correct_form` is kept (not nested); `spots = 0` gives four nulls with `undefined`; a null count gives a null fraction with the count's reason. Exact. |
 | DF2 | Shift | `hand_tables` (none) | `shift_z/y/x` | Translations `(0, 1, 2)` and `(0, −1, 0)` give `(0, 0, 2)`; the affine alone gives `(0, 0.5, 0.0)`; the translation as `T₁` and the affine as `T₂` give `(0, 1.5, 2.0)`, the reverse order `(0, 1.5, 2.2)`; a chain whose last step is dense gives the global steps' shift; a dense step alone gives n/a. The translations exact; every value that involves the affine within 1e-12 absolute, because its float64 bits depend on the order of the operations (in the order of `results/check_expectations.py` of the W-386 run directory the reverse order gives x = 2.200000000000001). |
 | DF3 | Shift residual | `hand_tables` (none) | `residual_*` | Medians of an odd and an even count as stated; one succeeded FOV gives 0; two give `±d/2`; a FOV whose round is `rejected`, `failed` or `application_failed` has no residual and is not in the median; no succeeded FOV gives every residual null with `undefined`. Exact. |
@@ -1264,7 +1265,7 @@ Rules:
 
 ### What the default tier covers and what it does not
 
-RC1 to RC12, DF1 to DF12, PR1 to PR5, EF1, EF2 (without its `scene_no_run_json` part),
+RC1 to RC13, DF1 to DF12, PR1 to PR5, EF1, EF2 (without its `scene_no_run_json` part),
 PG1 to PG7 on the hand-written pages, RR1, RR2, WF1 and DT1 on `report_cells` run in the
 routine tier on hand-written records. RP1 to RP3, CH1 to CH3, RT1, RT2, Z1, A2, CP1 and
 DT1 on `scene_chain` run the synthetic chain and are `slow`. The cases with an export need
@@ -1364,10 +1365,9 @@ measured a complete `FOV.run` of an LN FOV at 618 to 634 s wall and 22.5 GiB pea
 the registration QC as it is (`results/tables/real_fovs.csv`); three at once are 67.5 GiB,
 and `sizing_64.csv` gives 3.82 h for the 64 FOVs three at a time. Reducing the memory of the
 registration QC (W-384: 6.4 GiB per FOV without it) was not chosen; it stays possible as
-later work outside §2.11. **The time bound** covers the whole batch, Part 1 and Part 2
-together: Jiahao allowed on 2026-10-12 that it be relaxed if the time is not enough, to the
-total of the slower route below rounded up to the next full hour, at most 9 hours. That is
-**8 hours**, and both routes are within it.
+later work outside §2.11. **The time bound** is **9 hours** for the whole batch, Part 1 and
+Part 2 together, as Jiahao decided on 2026-10-12; both routes below are within it, the slower
+in 7.9 h.
 
 **Two routes for the fused DAPI stack.** Route A fuses from uncompressed local copies, as
 W-376 did in 1,468 s (W-398 notes, the table of fusion runs); route B fuses from the share,
@@ -1414,8 +1414,8 @@ The total of the wall time, step by step, for each route:
 | 8: manifest | 120 | 120 |
 | **Total** | **23,974 (6.7 h)** | **28,279 (7.9 h)** |
 
-Both routes are within the 8 hours Jiahao allowed (the slower, 7.9 h, rounded up to the next
-full hour), and the new artifacts, about 16 GiB, within 20 GiB. The order puts the report that
+Both routes are within the 9 hours Jiahao set on 2026-10-12 (the slower takes 7.9 h), and the
+new artifacts, about 16 GiB, within 20 GiB. The order puts the report that
 needs only the run records first, so a stop at a later step still leaves it.
 
 ### Part 2: the three real samples from their exports, with no run record
