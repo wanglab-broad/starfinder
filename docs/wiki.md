@@ -48,6 +48,7 @@ Sample segmentation contract (proposed) <sample-segmentation-contract>
 Sample segmentation validation (proposed) <sample-segmentation-validation>
 Processing-report baseline (proposed) <report-baseline>
 Processing-report contract (proposed) <report-contract>
+Processing-report algorithms (proposed) <report-algorithms>
 Learned detectors <learned-detectors>
 Coordination <coordination>
 Checkpoints <checkpoints>
