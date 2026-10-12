@@ -1,6 +1,6 @@
 # Processing-report baseline: the legacy QC notebook, today's diagnostics, the records the report reads and their gaps
 
-Status: Proposed (W-385, 2026-10-12, at dc5fc3c)
+Status: Accepted (W-387, 2026-10-12, at c0aa8b0)
 
 This page records what exists for the §2.11 processing report before {doc}`report-contract`
 specifies it: the legacy QC notebook and the logs it reads, the diagnostics and figures each

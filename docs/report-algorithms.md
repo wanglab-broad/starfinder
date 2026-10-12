@@ -1,6 +1,6 @@
 # Processing-report algorithms, layout and validation design
 
-Status: Proposed (W-386, 2026-10-12, at de438ad; corrected by W-448, 2026-10-12; amended by W-449, 2026-10-12; amended by W-450, 2026-10-12)
+Status: Accepted (W-387, 2026-10-12, at c0aa8b0; the grid-edge mark of the reads along Z written on at 06466ec)
 
 This page fixes how every value and figure of the §2.11 processing report is computed and
 drawn, how the page is laid out and built, how the delivery is validated, and the plan of

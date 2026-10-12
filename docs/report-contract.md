@@ -1,6 +1,6 @@
 # Processing-report contract: the sample report, the comparison page, their inputs, tables and record, and the records added to `run.json`
 
-Status: Proposed (W-385, 2026-10-12, at dc5fc3c; corrected by W-447, 2026-10-12; amended by W-449, 2026-10-12)
+Status: Accepted (W-387, 2026-10-12, at c0aa8b0)
 
 This page specifies the §2.11 processing report so that it can be implemented after Jiahao
 approves it: the entry that writes one sample's report, the entry that writes the comparison
