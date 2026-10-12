@@ -1,6 +1,6 @@
 # Processing-report contract: the sample report, the comparison page, their inputs, tables and record, and the records added to `run.json`
 
-Status: Proposed (W-385, 2026-10-12, at dc5fc3c; corrected by W-447, 2026-10-12)
+Status: Proposed (W-385, 2026-10-12, at dc5fc3c; corrected by W-447, 2026-10-12; amended by W-449, 2026-10-12)
 
 This page specifies the §2.11 processing report so that it can be implemented after Jiahao
 approves it: the entry that writes one sample's report, the entry that writes the comparison
@@ -495,7 +495,7 @@ inputs are in "Where each record is looked for".
 | `sample.markers` | Sample measurements | `tables/molecules.csv` (`gene_id`, `sample_x`, `sample_y`, `assembly_status`); the fused image of `export.json` `fusion.outputs` | | `no_export`, `part_not_written` (`fuse`, `assemble`) |
 | `sample.marker_zoom` | Sample measurements | As `sample.markers`, and the example FOVs' footprints; for XZ a fused stack | | as `sample.markers`, and `no_stack` (XZ only); when no example could be chosen, the reason of that choice (`no_run_record`, `run_not_finished`, `step_failed` or `not_configured`; "The example FOVs") |
 | `sample.mecr` | Sample measurements | `sample.h5ad` `X`, `var`; `marker_pairs`; `positive_threshold` | | `no_markers`, `no_export`, `no_segmentation`, `undefined` (per pair) |
-| `sample.reads_along_z` | Sample measurements | `tables/molecules.csv` `fov_id`, `z` | | `no_export`, `part_not_written` |
+| `sample.reads_along_z` | Sample measurements | `tables/molecules.csv` `fov_id`, `z`; the grid shape of each FOV, `export.json` `assembly.fovs[*].grid.shape_zyx` | | `no_export`, `part_not_written` |
 | `files.input` | Files | `run.json` `inputs`, `codebook` (R2); `placement.json` `table` | | `no_run_record`, `not_recorded`, `no_placement` |
 | `files.configuration` | Files | `run.json` `workflow_config` (R4); the report's `config` | | `no_run_record`, `not_recorded` |
 | `files.output` | Files | The fixed places that exist | | none |
@@ -870,8 +870,8 @@ list order, then the rule order of `PROBLEM_RULES`, then rounds and axes; key (`
 | `rule` | string | — | One of `PROBLEM_RULES`. | never |
 | `round` | string | — | The round. | n/a: a rule that is not per round |
 | `axis` | string | — | `z`, `y` or `x`. | n/a: a rule that is not per axis |
-| `measured` | float64 | `unit` | The FOV's value. | n/a: a categorical rule |
-| `sample_median` | float64 | `unit` | The median the rule compares with. | n/a: a categorical rule, or an absolute limit |
+| `measured` | float64 | `unit` | The FOV's value; for `shift_residual`, the FOV's shift on the row's axis in the row's round (`registration.csv` `shift_<axis>`), under the relative form and under an absolute limit alike. | n/a: a categorical rule |
+| `sample_median` | float64 | `unit` | The median the rule compares with; for `shift_residual`, the round's median shift on the row's axis, under the relative form and under an absolute limit alike, so that `measured − sample_median` is the residual the limit is compared with. | n/a: a categorical rule, or an absolute limit of a rule other than `shift_residual` |
 | `limit` | float64 | `unit` | The limit applied: `max(k × 1.4826 × MAD, floor)` or `absolute`. | n/a: a categorical rule |
 | `unit` | string | — | `voxels`, `fraction`, `reads` or `dimensionless`. | n/a: a categorical rule |
 | `reason` | string | — | The text the table shows, for example "residual above the limit" or "fell back to the stage position". | never |
@@ -899,12 +899,18 @@ Not embedded in the page.
 | `mecr` | float64 | fraction | `both / either`. | unavailable: the first reason, in the order of the reasons, of `both` and `either`; `undefined` when `either` is 0, for that pair only |
 
 **`reads_along_z.csv`**: one row per FOV of the export and plane, in list order, then `z`
-ascending; key (`fov_id`, `z`).
+ascending; key (`fov_id`, `z`). Every molecule of the sample table is counted on the plane
+its own `z` gives, whether or not that plane lies in the FOV's grid: the rows of a FOV run
+without a gap from the lower of plane 0 and the lowest plane one of its molecules has, to
+the higher of plane `n_z − 1` of its grid (`export.json` `assembly.fovs[*].grid.shape_zyx`,
+`n_z` its first entry) and the highest plane one of its molecules has, with 0 where no
+molecule lies. A FOV whose molecules all lie in its grid, or that has none, has the `n_z`
+rows 0 to `n_z − 1`. A FOV's rows sum to its molecules of the table.
 
 | Column | Type | Unit | Content | Null when |
 | --- | --- | --- | --- | --- |
 | `fov_id` | string | — | The FOV. | never |
-| `z` | int64 | voxel plane | The plane of the FOV's grid (`tables/molecules.csv` `z`, rounded as the algorithms page states). | never |
+| `z` | int64 | voxel plane | A plane of the FOV's Z axis (`tables/molecules.csv` `z`, rounded as the algorithms page states); it may lie below 0 or above `n_z − 1`, outside the FOV's grid, when a molecule lies there (a projected sample whose spots were found in 3D). | never |
 | `reads` | int64 | molecules | The FOV's molecules of the sample table on that plane, retained or not. | never |
 
 **`intensity.csv`**: the intensity distribution of the main example after each step of the

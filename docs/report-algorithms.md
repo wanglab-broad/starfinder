@@ -1,6 +1,6 @@
 # Processing-report algorithms, layout and validation design
 
-Status: Proposed (W-386, 2026-10-12, at de438ad; corrected by W-448, 2026-10-12)
+Status: Proposed (W-386, 2026-10-12, at de438ad; corrected by W-448, 2026-10-12; amended by W-449, 2026-10-12)
 
 This page fixes how every value and figure of the §2.11 processing report is computed and
 drawn, how the page is laid out and built, how the delivery is validated, and the plan of
@@ -339,11 +339,11 @@ Rows and key, as {doc}`report-contract` states them: one row per FOV, rule, roun
 
 Its rows are made by the rules of "Problematic FOVs". For a rule evaluated on values:
 `measured` is the FOV's value, `sample_median` the median of the rule's values over the
-FOVs that enter it (n/a for an absolute limit), `limit` the limit applied, `unit` the rule's
-unit. For the shift-residual rule under the relative form, `measured` is the shift and
+FOVs that enter it (n/a for an absolute limit of a rule other than the shift residual),
+`limit` the limit applied, `unit` the rule's unit. For the shift-residual rule, under the
+relative form and under an absolute limit alike, `measured` is the shift and
 `sample_median` the round's median shift, so that `measured − sample_median` is the
-residual; under an absolute limit, `measured` is the residual the limit is compared with and
-`sample_median` is n/a, as the contract has it for every absolute limit. `reason` is the text
+residual the limit is compared with, as {doc}`report-contract` has it. `reason` is the text
 of the rule ("The reason texts").
 
 ### `cells.csv`
@@ -400,16 +400,41 @@ the report states no expected value and draws no conclusion from it.
 
 Rows and key, as {doc}`report-contract` states them: one row per FOV of the export and plane, in list order, then `z` ascending; key (`fov_id`, `z`).
 
-The FOVs of the export are the entries of `export.json` `assembly.fovs`, in list order; the
-planes of FOV `f` are `k = 0 … n_z − 1`, with `n_z = assembly.fovs[f].grid.shape_zyx[0]`
-(the FOV's grid, which the contract's "plane of the FOV's grid" needs). A molecule's plane is
-`floor(z + 0.5)` of its `tables/molecules.csv` `z` (float64; the §2.9 sampling rule of
-{doc}`assignment-algorithms`, "Sampling"). `reads(f, k) = #{m : m.fov_id = f, plane(m) = k}`,
-over every molecule of the table, retained or not; a plane without a molecule has 0, and a FOV
-without molecules has `n_z` rows of 0. A molecule whose plane lies outside `[0, n_z − 1]` (an
-`outside_grid` molecule in Z) is on no plane of the grid and in no row; the population
-accounting counts it (`excluded_outside_grid`). `Σ_k reads(f, k)` equals the FOV's molecules
-whose plane lies in the grid.
+The FOVs of the export are the entries of `export.json` `assembly.fovs`, in list order;
+`n_z = assembly.fovs[f].grid.shape_zyx[0]` is the number of planes of FOV `f`'s grid. A
+molecule's plane is `floor(z + 0.5)` of its `tables/molecules.csv` `z` (float64; the §2.9
+sampling rule of {doc}`assignment-algorithms`, "Sampling"). Every molecule of the table,
+retained or not, is counted on its own plane, whether or not that plane lies in the FOV's
+grid, so that a projected sample whose spots were found in 3D shows where its reads lie:
+
+```text
+P(f)        = {plane(m) : m.fov_id = f}
+k_lo(f)     = min(0, min P(f))            (0 when f has no molecule)
+k_hi(f)     = max(n_z − 1, max P(f))      (n_z − 1 when f has no molecule)
+reads(f, k) = #{m : m.fov_id = f, plane(m) = k}      one row for each k = k_lo(f) … k_hi(f)
+```
+
+The rows of a FOV run without a gap, with 0 where no molecule lies; a FOV whose molecules all
+lie in `[0, n_z − 1]`, or that has none, has the `n_z` rows 0 to `n_z − 1`. `Σ_k reads(f, k)`
+equals the FOV's molecules of the table. A row outside `[0, n_z − 1]` is not marked as such
+(an open choice, in the W-449 notes).
+
+A molecule whose plane lies outside its FOV's grid is not for that reason excluded
+`outside_grid`: in `assembly/_assemble.py`: `assemble`, a FOV whose grid has one plane gives
+every molecule the index z 0 before any test (`positions[:, 0] = 0.0`; the column `z` keeps
+the recorded value), so on a one-plane grid no route excludes a molecule by its `z`. On a grid
+of several planes, a `molecules_only` export excludes `outside_grid` the molecule whose
+`floor(z + 0.5)` lies outside `[0, n_z − 1]` (`assemble` tests every axis against the FOV's
+grid); on the route per FOV a molecule is `outside_grid` when its §2.9 status is
+(`assignment/_assign.py`: `assign_molecules`, which tests `z` against a grid of several
+planes for volume and for plane labels); the route after fusion starts from the
+`molecules_only` assembly, with its test, and `assembly/_fused.py`:
+`assemble_after_fusion` adds the retained molecules that `assign_molecules` places outside
+the segmentation grid, a grid of one plane, so by Y or X only. The tissue-2D export of W-391,
+a `molecules_only` export of 56 FOVs of grid 1 × 3072 × 3072 whose molecule tables span 30
+planes ({doc}`stitching-assembly-validation`, "Results of the real examples"), has 5,353,714
+molecules in its `export.json` `assembly.counts`, 4,703,832 retained, 649,882 `not_owner` and
+none `outside_grid`.
 
 ### `intensity.csv`
 
@@ -559,10 +584,12 @@ shift residual:       relative form: v_f = shift_a(f, r), m = its round's median
 says so, and one row of `unavailable.csv` (`part` `rule:<rule>`, `table` null) names it
 with `not_configured`. The comparison is strict, so a value equal to the limit is not
 marked. The limit written to `problematic_fovs.csv` is `max(k' × s, floor')` or `absolute`,
-in the rule's unit. With an absolute limit `sample_median` is n/a for every rule, the shift
-residual included ({doc}`report-contract`, `problematic_fovs.csv`); under the relative form
-the shift-residual row shows the shift and the round's median shift (the mockup's
-"dx +38.0 px" beside "+2.1 px").
+in the rule's unit. With an absolute limit `sample_median` is n/a for every rule but the
+shift residual ({doc}`report-contract`, `problematic_fovs.csv`); under both forms the
+shift-residual row shows the shift as `measured` and the round's median shift as
+`sample_median` (the mockup's "dx +38.0 px" beside "+2.1 px"), so that the residual
+`residual_a(f, r)` the formula above compares with the limit is `measured − sample_median`.
+Which FOVs a rule marks does not depend on these columns.
 `report.json` `rules.<rule>` records `k`, `floor`, `absolute`, the unit, whether it was
 evaluated, the FOVs that entered (per round and axis for the residual), and the number of
 FOVs it marks.
@@ -1010,9 +1037,13 @@ the residual map uses arrows and colour as below.
    "undefined" when `either` is 0). Without `marker_pairs` the block is unavailable with
    `no_markers`. The heatmap: one row per FOV, one column per plane, the colour the FOV's
    fraction of its molecules on that plane (`reads / Σ_k reads` of the FOV), on a sequential
-   scale from 0 to the largest fraction, with its colour bar; the columns run from plane 0 to
-   the largest `n_z − 1` of the FOVs, and a plane beyond a FOV's own grid is hatched in its
-   row. With `Z = 1`, one column.
+   scale from 0 to the largest fraction, with its colour bar; the columns run from the
+   lowest to the highest `z` of the table's rows, over all FOVs (from the lower of plane 0
+   and the lowest plane a molecule has, to the higher of the largest `n_z − 1` of the FOVs
+   and the highest plane a molecule has), and a plane outside a FOV's own rows is hatched in
+   its row. A row outside a FOV's grid is drawn like the others (whether to mark it is the
+   open choice of `reads_along_z.csv`). With `Z = 1` and every molecule on plane 0, one
+   column; a projected sample whose molecules lie on several planes has a column per plane.
 
 ### Files
 
@@ -1198,12 +1229,12 @@ Rules:
 | DF7 | Reads assigned to cells | `report_cells`, `report_cells` `mismatch` (none) | `reads_in_cells` per FOV and in total; the `summary` check | Per FOV, the retained `assigned` molecules of counted cells as the test counts them from `molecules.csv` and `cells.csv` (the molecules of the retained `excluded_no_nucleus` cell and of the `not_owner` cell left out); the total equals `Σ X` (two integers); with `mismatch` the two sums differ by 1, `reads_in_cells_equal` is false, and the report is written without an error. Exact. |
 | DF8 | MECR | `hand_tables`: a count matrix of six cells and genes A, B, C, D, with A = (2, 1, 0, 0, 0, 0), B = (0, 3, 1, 1, 0, 0) and C = D = 0 (none) | `mecr.csv` | With threshold 1, pair (A, B): `cells_a` 2, `cells_b` 3, `both` 1, `either` 4, `mecr` 0.25; with threshold 2, pair (A, B): `cells_a` 1, `cells_b` 1, `both` 0, `either` 2, `mecr` 0.0; with threshold 1, pair (A, C): `cells_a` 2, `cells_b` 0, `both` 0, `either` 2, `mecr` 0.0; pair (C, D): four zeros and `mecr` null with `undefined`, the other pairs unaffected. Exact. |
 | DF9 | Cell size and unit | `report_cells`; `report_cells` `nocal`; a sample with a volume and a plane FOV (none) | `cells.csv`; histograms | `size` equals `obs.size_physical` with `µm³` or `µm²` by the record's `size_unit`, `size_voxels` with `voxels` when NaN; a sample with two units gets two histograms in the order µm³, µm², voxels. Exact. |
-| DF10 | Reads along Z | `report_cells` molecule `z` values (none) | `reads_along_z.csv` | Planes `floor(z + 0.5)`: −0.5 → 0, 0.4999 → 0, 0.5 → 1 counted on their planes; −0.6 → −1 and 3.5 → 4 lie outside the grid of 4 planes and are in no row; each FOV has the four rows `z` 0 to 3, with 0 where no molecule lies; each FOV's rows sum to its molecules whose plane lies in 0 to 3. Exact. |
+| DF10 | Reads along Z | `report_cells` molecule `z` values, the test writing −0.6, −0.5, 0.4999, 0.5 and 3.5 on molecules of F1 and every other molecule's `z` in [−0.5, 3.5); `hand_tables` molecule `z` values on three FOVs whose grids have one plane: A (−1.2, 0.0, 0.3, 2.4, 2.6), B (2.0, 3.0), C none (none) | `reads_along_z.csv` | Planes `floor(z + 0.5)`: −0.6 → −1, −0.5 → 0, 0.4999 → 0, 0.5 → 1, 3.5 → 4, each counted on its plane, inside the grid of 4 planes or not; F1 has the 6 rows `z` −1 to 4, the rows −1 and 4 with 1 molecule each; F2, F3 and F4 each have the 4 rows `z` 0 to 3, with 0 where no molecule lies; on the one-plane grids, A has the 5 rows `z` −1 to 3 with 1, 2, 0, 1, 1 molecules, B the 4 rows 0 to 3 with 0, 0, 1, 1, and C the 1 row 0 with 0; each FOV's rows sum to its molecules of the table (A 5, B 2, C 0; the `report_cells` FOVs as the test counts them from `molecules.csv`); no cell is null. Exact. |
 | DF11 | Intensity bins | `hand_tables` step outputs (none) | `intensity.csv` rows | uint8 with values 3 to 250: 248 bins of width 1 from 3; uint16 with values 0 to 1000: width `ceil(1001 / 256) = 4`; float32 over [0.25, 0.75]: 256 equal bins, the last closed; a constant float output: one bin; bool: two bins; each channel's counts sum to its voxels and the channels of one entry share their edges. Exact. |
 | DF12 | Summary keys and other values | `report_records`, `report_cells` (none) | `report.json` `summary`; configuration check; acquisition; time per step | `spots_median_per_fov` 1000; `matched_fraction` 2800 / 4000 = 0.7; `fovs_succeeded` 4; the medians of `cells.csv` as the test computes them; the configuration check "identical for all FOVs", and "differs: 2 groups" naming `pipeline` when F2's `config.pipeline.spot_finding` is changed; acquisition "3 rounds × 4 channels, 3D"; each FOV's time per step name is the sum of its rows of that name. Exact. |
 | PR1 | The rule form | `hand_tables` values (0.80, 0.80, 0.50, 0.80) (none) | Rows and limits | Low side, `k = 3`, floor 0.05: the third FOV only, limit 0.05, median 0.8; with `absolute = 0.6`: the third FOV only, `sample_median` n/a, limit 0.6; with `absolute = 0.5`: none (strict); with `k`, `floor`, `absolute` all `None`: not evaluated, one row `rule:<rule>` with `not_configured`, `report.json` `rules.<rule>.evaluated` false. Exact. |
 | PR2 | One FOV, two FOVs, equal and undefined values | `hand_tables` (none) | Rows | One value: no mark with `k = 0.1` and floor 0; two values (0.2, 0.8) with `k = 1` and floor 0: no mark; median 0.5; the two absolute deviations from it, as the exact float64 values, `abs(0.2 − 0.5)` = 0.3 and `abs(0.8 − 0.5)` = 0.30000000000000004, and their median, the MAD, 0.30000000000000004 (the mean of the two); limit 0.44478 within 1e-12 absolute, since the float64 product `1 × 1.4826 × MAD` is 0.44478000000000006; equal values: no mark with `k = 0` and floor 0, and under an absolute limit 0.6 on the low side all four of four values 0.5 marked and none of four values 0.7; null values: not entered and not evaluated, no rule row; all null: one `rule:` row with the values' first reason. Exact, except the limit as stated. |
-| PR3 | Shift residual per round and axis | `report_records` (none) | `problematic_fovs.csv` | Default limit: only (F4, round3, `x`); with `k = 0`, floor 0.5: (F2, round2, `x`), (F3, round2, `y`), (F3, round3, `z`), (F4, round3, `x`), in list order, then rounds, then axes; `measured` is the shift and `sample_median` the round's median shift. Exact. |
+| PR3 | Shift residual per round and axis | `report_records` (none) | `problematic_fovs.csv` rows and their `measured`, `sample_median` and `limit` | Default limit: only (F4, round3, `x`); with `k = 0`, floor 0.5: (F2, round2, `x`), (F3, round2, `y`), (F3, round3, `z`), (F4, round3, `x`), in list order, then rounds, then axes; under both forms `measured` is the shift and `sample_median` the round's median shift. With the absolute limit `absolute = 0.5` (`k` and `floor` `None`): the same four rows, with `measured`, `sample_median` and `limit` (3, 2, 0.5), (2, 1, 0.5), (1, 0, 0.5) and (8, 0, 0.5), whose differences 1, 1, 1 and 8 are the residuals the limit is compared with; with `absolute = 8`: no row (strict). The rows exact; `measured`, `sample_median` and `limit` within 1e-9 absolute. |
 | PR4 | Categorical rules | `report_records` with F2 `interrupted` and F3 `running`; `not_run`; `placement_states`; `report_cells`; registration entries with a rejected attempt followed by a succeeded fallback (none) | Rows | `fov_failed` marks F2 (interrupted) and not F3 (running); `fov_not_run` marks F4 when F1 to F3 have run records, and is not evaluated (`no_run_record`) when none has; the rejected-then-fallback round gives one `registration_rejected` and one `registration_fallback` row; `not_placed` marks F4 (`failed`); `stage_position_fallback` marks F3 (`fallback`) and no FOV of the `supplied` copy; `reads_no_cell` marks F2. Exact. |
 | PR5 | Spots close to zero | `hand_tables` spots (1000, 1200, 40, 1000); (0, 0, 0) (none) | Rows | The third FOV (40 < 0.05 × 1000 = 50); with every count 0 the limit is 0 and nothing is marked. Exact. |
 | EF1 | Automatic example choice | `report_records`; `report_cells`; a 10-FOV table with `passed_filter` 100, 200, …, 1000 (none) | `report.json` `examples`; `fovs.csv` `example` | Before a segmentation: `example_1` F1 (median 645, distances 5, 155, 145, 5, the tie of F1 and F4 broken by list order, `q = 1`), `example_2` F3 (`fewest_reads`, 500), `example_3` F2 (`most_reads`, 800); with cells: `example_2` F2 (`fewest_cells`, 0), `example_3` F4 (`most_cells`, 14); for the 10-FOV table `N` holds the FOVs of 500 and 600 (`q = 2`) and `example_1` is `N[default_rng(0).integers(2)]`, recorded with `seed` 0. Exact. |
@@ -1421,8 +1452,8 @@ written to the new run directory (`output_dir`), never into the run directory of
 * Jiahao inspects: the pages of a sample without run records; the marker patterns of LN
   and the three most abundant genes of the others; the reads along Z of tissue-2D, whose
   molecules span 30 planes over a one-plane grid ({doc}`stitching-assembly-validation`,
-  "Results of the real examples"), so that under the contract's rows only its molecules on
-  plane 0 are counted (a gap of the contract, in the W-386 notes); cells, MECR and the per-cell distributions of the blocks;
+  "Results of the real examples"), so that its rows run over the planes its molecules have,
+  beyond the grid's plane 0 (the rule of `reads_along_z.csv`, amended by W-449); cells, MECR and the per-cell distributions of the blocks;
   the comparison page.
 
 ## Limitations
