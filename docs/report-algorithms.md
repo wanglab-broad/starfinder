@@ -416,8 +416,9 @@ reads(f, k) = #{m : m.fov_id = f, plane(m) = k}      one row for each k = k_lo(f
 
 The rows of a FOV run without a gap, with 0 where no molecule lies; a FOV whose molecules all
 lie in `[0, n_z − 1]`, or that has none, has the `n_z` rows 0 to `n_z − 1`. `Σ_k reads(f, k)`
-equals the FOV's molecules of the table. A row outside `[0, n_z − 1]` is not marked as such
-(an open choice, in the W-449 notes).
+equals the FOV's molecules of the table. A row outside `[0, n_z − 1]` is not marked in the
+table; the figure of the reads along Z marks the edges of each FOV's grid (decided at the gate
+W-387 on 2026-10-12: a mark in the figure, no new column).
 
 A molecule whose plane lies outside its FOV's grid is not for that reason excluded
 `outside_grid`: in `assembly/_assemble.py`: `assemble`, a FOV whose grid has one plane gives
@@ -1041,8 +1042,10 @@ the residual map uses arrows and colour as below.
    lowest to the highest `z` of the table's rows, over all FOVs (from the lower of plane 0
    and the lowest plane a molecule has, to the higher of the largest `n_z − 1` of the FOVs
    and the highest plane a molecule has), and a plane outside a FOV's own rows is hatched in
-   its row. A row outside a FOV's grid is drawn like the others (whether to mark it is the
-   open choice of `reads_along_z.csv`). With `Z = 1` and every molecule on plane 0, one
+   its row. A row outside a FOV's grid is drawn like the others, and each FOV's row carries a
+   thin line at the two edges of its grid, between the columns of `z = −1` and 0 and between
+   those of `n_z − 1` and `n_z`, wherever the figure has a column on both sides (decided at the
+   gate W-387 on 2026-10-12; the lines need only the grid shape the part already reads). With `Z = 1` and every molecule on plane 0, one
    column; a projected sample whose molecules lie on several planes has a column per plane.
 
 ### Files
