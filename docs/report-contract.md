@@ -513,8 +513,12 @@ inputs are in "Where each record is looked for".
     count). No row of `unavailable.csv` names it.
   * **unavailable** ("unavailable" in the null rule): exactly one row of `unavailable.csv`
     names it, by its `table`, its `column` and the `row_key` of its row. A value computed from
-    other values (a fraction, a residual, a density) gets its own row, with the reason of the
-    input it lacks, or `undefined` for a zero denominator.
+    other values (a fraction, a residual, a density, a time, a sum over FOVs) gets its own row.
+    Its reason is the first, in the order of the reasons, of the reasons of its own missing
+    inputs and of the values it is computed from that are unavailable; `undefined` only when
+    none is missing and the denominator is 0. A value computed from one other value is
+    unavailable whenever that value is; a sum or median over FOVs only when no FOV has the
+    value. The same order holds for every computed column.
 
   A part with no table cell for what it lacks (an example image, a figure of a table that has
   no row, a Files block, a rule not evaluated for the whole sample) has one row with `table`
@@ -588,17 +592,33 @@ What the examples of Preprocessing and Registration show, rebuilt from the run r
    SHA-256 is checked against the recorded one (written by `_RunRecord.add_inputs`; null
    with `hash_inputs=False`, in which case the file is read unverified and
    `report.json` `replay.verified` is false).
-2. **Loading and rotation.** With `config.pipeline.load` and `config.pipeline.rotation_degrees`
-   of `run.json`, as `FOV.run` loads them.
-3. **The recipe.** Each step of `preprocessing.rounds[<round>]` (written by
-   `FOV._preprocess` into `preprocessing_record`, saved by `_RunRecord.write`), rebuilt from
-   its `step` and `config` with `preprocessing.step_config_type` and run with
-   `preprocessing.run_step`; a step with `fit="supplied"` reads the file
-   `preprocessing.supplied_statistics` names, checked against its SHA-256. The replayed
-   fitted values are compared with each step's recorded `fitted`; a difference makes the
-   examples unavailable with `replay_differs`. The intensity distribution after each step is
-   taken from these images.
-4. **The transforms.** Each result of the round is rebuilt with `io/_checkpoint.py`:
+2. **Loading and rotation**, as `FOV.run` does first for each round (`dataset/fov.py` lines
+   1312–1313 in batch mode, 1323–1324 in streaming mode, then 1327–1328, at `dc5fc3c`): the
+   round is loaded with `config.pipeline.load` through `io/tiff.py`: `load_round`, which
+   applies the configuration's `conversion` when it has one (`io/tiff.py` line 300), and
+   rotated by `config.pipeline.rotation_degrees` with the code of `FOV._rotate_round`
+   (`_rotated`).
+3. **The `steps` phase.** The entries of `preprocessing.rounds[<round>]` whose `stage` is
+   `steps`, in `index` order. `FOV._preprocess` records each entry with `stage` set to its
+   phase (`steps` or `post_registration`) and `step` set to the step's name (`dataset/fov.py`
+   lines 521–524), and `FOV.run` runs the `steps` entries of a round right after its rotation
+   (lines 1329–1332); `stage` is the field that tells the two phases apart. Each entry is
+   rebuilt from its `step` and `config` with `preprocessing.step_config_type` and run with
+   `preprocessing.run_step`; an entry with `save_as` keeps its output as that snapshot, as
+   `FOV._preprocess` does (lines 526–528). A step with `fit="supplied"` reads the file
+   `preprocessing.supplied_statistics` names, checked against its SHA-256. A step whose scope is
+   `needs_reference` (histogram matching with `fit="fov"`) takes the reference round's input to
+   that same step, channel `reference_channel` (lines 507–517): to replay it on a moving
+   round, the replay first replays the reference round's `steps` entries up to that step. The
+   replayed fitted values are compared with each entry's recorded `fitted`; a difference makes
+   the examples unavailable with `replay_differs`.
+4. **Registration, a moving round only.** `FOV.run` registers a moving round after its `steps`
+   phase and before its `post_registration` phase (`dataset/fov.py` lines 1336–1344); the
+   reference round is not registered and not transformed, and has no entry in R1. The replay
+   applies the round's transforms to the image the `steps` phase left, and to each of the
+   round's snapshots, as `FOV._register_round` resamples them once (line 813); it estimates
+   nothing, so it needs neither the registration signals nor the reference image that the
+   estimation reads (lines 1337–1339, 549–566). Each result of the round is rebuilt with `io/_checkpoint.py`:
    `_restore_result`, which reads an entry of the form `_transform_json` writes (`step`,
    `transform`, `diagnostics`) and, for a dense or B-spline result, one array of a field
    file. The entries come from `run.json` `transforms.<round>.results` (R1), or, for a run
@@ -617,9 +637,33 @@ What the examples of Preprocessing and Registration show, rebuilt from the run r
    | `bspline` | `bspline` (`grid_size_xyz`, `grid_origin_xyz`, `grid_spacing_xyz`, `grid_direction_xyz`, `order`, `spacing_zyx`: the control grid, inline in the entry) and `coefficients` (the name of the field file) | the entry's record, and the array `result_<i>` (`i` the result's index) of `registered/<round>_field.npz`, which holds only the coefficients | the entry as above; the NPZ by `write_registered_header` | No field file, or `coefficients` null in R1: unavailable, `field_not_saved` (choice 4). |
    | `dense` | `field` (the name of the field file) | the entry's record, and the array `result_<i>` of `registered/<round>_field.npz`, the displacement field | as for `bspline` | as for `bspline` |
 
-5. **The registered images** (`registered/<round>.ome.tif`) are not read: the replay is the
-   same image when the field and the input are at hand, and needs neither the 447 MB per
-   round of an LN FOV that the stage writes (W-384 `real_fovs.csv`) nor the stage itself.
+5. **The `post_registration` phase.** The entries whose `stage` is `post_registration`, in
+   `index` order, run on the registered image, as `FOV.run` runs them after the registration
+   (lines 1345–1352); the reference round runs them too, after its `steps` phase.
+6. **The registered images** (`registered/<round>.ome.tif`) are not read. `FOV.run` writes
+   a round's image after its `post_registration` phase (lines 1353–1355, through
+   `FOV._write_registered_round` and `io/_checkpoint.py`: `write_registered_round`), with
+   `io/tiff.py`: `save_volume` called without `conversion`, so the saved image keeps the
+   dtype and the values of the round at that point (`io/tiff.py` lines 350–352). The image
+   the replay ends with after step 5 is therefore the image the checkpoint saves; the
+   validation compares the two where the stage was written (W-384 did:
+   `results/replay/replay.csv`), and the report itself needs neither the 447 MB per round of
+   an LN FOV that the stage writes (W-384 `real_fovs.csv`) nor the stage.
+
+Which state of the round each thing the replay produces shows:
+
+| What the replay produces | State of the round's image |
+| --- | --- |
+| The intensity distribution and the image of `intensity.csv` `step_index` 0 | Loaded and rotated (after step 2) |
+| The same for each `steps` entry | After that entry, in the `steps` phase (step 3) |
+| The image the transforms are applied to; the "before" of the Registration example | After the whole `steps` phase, before registration (end of step 3) |
+| The "after" of the Registration example | After the transforms (step 4), before the `post_registration` phase |
+| The same for each `post_registration` entry (`intensity.csv` `phase` `post_registration`) | After that entry (step 5); on a moving round, after the transforms |
+| The image that equals the saved registered image | After the whole `post_registration` phase (end of step 5); without `post_registration` entries, the end of step 4 (a moving round) or of step 3 (the reference round) |
+
+The reference image of the Registration example (green) is the reference round after its
+`steps` phase, the state against which `FOV.run` registered the moving round when the recipe
+has `post_registration` entries (lines 1337–1339 and 1348–1349).
 
 | Option | Registration example without a saved field | Note |
 | --- | --- | --- |
@@ -687,27 +731,29 @@ no row names it; "never" means that the cell is never null. A row key is written
 | --- | --- | --- | --- | --- |
 | `fov_id` | string | — | The FOV. | never |
 | `list_index` | int64 | — | Its zero-based position in the list. | never |
-| `example` | string | — | The FOV's example roles, `;`-joined in role order (`example_1`, `example_2`, `example_3`; a FOV holds several only when two roles fall on one FOV, as in a sample of fewer than three FOVs). | n/a: not an example FOV |
+| `example` | string | — | The FOV's example roles, `;`-joined in role order (`example_1`, `example_2`, `example_3`; a FOV holds several only when two roles fall on one FOV, as in a sample of fewer than three FOVs). | n/a: not an example FOV, also when no example could be chosen (the example parts then have rows of their own) |
 | `run_record` | boolean | — | Whether its run record exists. | never |
 | `status` | string | — | `run.json` `status`: `running`, `succeeded`, `failed`, `interrupted`. | unavailable (`no_run_record`) |
-| `failed_step`, `failed_round` | string | — | `run.json` `error.step`, `error.round`; `error` is null unless the run failed or was interrupted (`dataset/_run_record.py`: `_RunRecord.finish`). | unavailable (`no_run_record`); n/a: the run did not fail, or (`failed_round`) failed outside a round |
-| `started_at`, `ended_at` | string | ISO 8601, UTC | From `run.json`. | unavailable (`no_run_record`); n/a: `ended_at` while the status is `running` |
-| `run_seconds` | float64 | s | `ended_at − started_at`. | unavailable (`no_run_record`); n/a: while the status is `running` |
+| `failed_step` | string | — | `run.json` `error.step`, `error.round`; `error` is null unless the run failed or was interrupted (`dataset/_run_record.py`: `_RunRecord.finish`). | unavailable (`no_run_record`); n/a: the run did not fail |
+| `failed_round` | string | — | `run.json` `error.step`, `error.round`; `error` is null unless the run failed or was interrupted (`dataset/_run_record.py`: `_RunRecord.finish`). | unavailable (`no_run_record`); n/a: the run did not fail, or failed outside a round |
+| `started_at` | string | ISO 8601, UTC | From `run.json`. | unavailable (`no_run_record`) |
+| `ended_at` | string | ISO 8601, UTC | From `run.json`. | unavailable (`no_run_record`); n/a: while the status is `running` |
+| `run_seconds` | float64 | s | `ended_at − started_at`. | unavailable: the first reason, in the order of the reasons, of `started_at` and `ended_at`; n/a: while the status is `running` |
 | `placement_status` | string | — | `stitching/<sample>/fovs.csv` `status` (`image_supported`, `metadata_only`, `placeholder`, `missing`, `failed`), else the export's `placement_status`. | unavailable (`no_placement`, when there is no export either) |
 | `correction_z`, `correction_y`, `correction_x` | float64 | µm | `stitching/<sample>/fovs.csv` `correction_*`: origin minus the stage position. | unavailable (`no_placement`; `fov_not_placed` for the status `missing` or `failed`) |
-| `footprint_y0`, `footprint_y1`, `footprint_x0`, `footprint_x1`, `centre_y`, `centre_x` | float64 | µm | The export's `tables/fovs.csv`, else from the placement's origin and the grid `placement.json` `inputs.<fov>.grid` records. | unavailable (`no_placement` when neither record exists; `fov_not_placed`) |
-| `spots` | int64 | reads | `counts.spots`. | unavailable (`no_run_record`, `run_not_finished`, `step_failed`) |
-| `correct_form` | int64 | reads | `counts.filtering.endpoint_valid` (R3). | unavailable (`no_run_record`, `run_not_finished`, `step_failed`, `not_configured`, `not_recorded`) |
-| `matched` | int64 | reads | `counts.call_status.assigned` (0 when `call_status` exists without the key). | unavailable (`no_run_record`, `run_not_finished`, `step_failed`, `not_configured`) |
-| `merged_by_deduplication` | int64 | reads | `counts.deduplication.merged_reads`, present when the run deduplicated (`PipelineConfig.deduplication` set; `_RunRecord.write`). | unavailable (`no_run_record`, `run_not_finished`, `step_failed`, `not_configured`) |
-| `passed_filter` | int64 | reads | `counts.filtering.accepted`. | unavailable (`no_run_record`, `run_not_finished`, `step_failed`, `not_configured`) |
-| `correct_form_fraction`, `matched_fraction`, `merged_fraction`, `passed_filter_fraction` | float64 | fraction of `spots` | The count over `spots`, each fraction on its own. | unavailable: the reason of its count, or of `spots`; `undefined` when `spots` is 0 |
-| `n_cells`, `n_cells_retained` | int64 | cells | The export's `tables/fovs.csv`, with the route's meaning. | unavailable (`no_export`, `part_not_written`, `no_segmentation`) |
-| `n_molecules`, `n_molecules_retained` | int64 | molecules | The export's `tables/fovs.csv`. | unavailable (`no_export`, `part_not_written`) |
-| `reads_in_cells` | int64 | molecules | The FOV's retained molecules whose cell is counted (`tables/molecules.csv`, `tables/cells.csv`). | unavailable (`no_export`, `part_not_written`, `no_segmentation`) |
-| `reads_in_cells_fraction` | float64 | fraction of `n_molecules_retained` | `reads_in_cells / n_molecules_retained`. | unavailable: the reason of either; `undefined` when `n_molecules_retained` is 0 |
-| `owned_area_um2` | float64 | µm² | The area of the region the FOV owns. | unavailable (`no_placement`, `fov_not_placed`, `no_export`); n/a: not an owning FOV (a `placeholder`) |
-| `cell_density_per_mm2` | float64 | cells per mm² | `n_cells_retained / owned_area_um2 × 10⁶`. | unavailable: the reason of either; `undefined` when the area is 0; n/a: not an owning FOV |
+| `footprint_y0`, `footprint_y1`, `footprint_x0`, `footprint_x1`, `centre_y`, `centre_x` | float64 | µm | The export's `tables/fovs.csv`, else from the placement's origin and the grid `placement.json` `inputs.<fov>.grid` records. | unavailable (`no_placement` when neither the placement nor the export exists; `fov_not_placed`) |
+| `spots` | int64 | reads | `counts.spots`. | unavailable (`no_run_record`; `run_not_finished` or `step_failed` when the run did not get to detection) |
+| `correct_form` | int64 | reads | `counts.filtering.endpoint_valid` (R3). | unavailable (`no_run_record`; `run_not_finished` or `step_failed` when the run did not get to the filter; `not_configured` without an endpoint check; `not_recorded` in a run record without R3) |
+| `matched` | int64 | reads | `counts.call_status.assigned` (0 when `call_status` exists without the key). | unavailable (`no_run_record`; `run_not_finished` or `step_failed` when the run did not get to decoding; `not_configured` without decoding) |
+| `merged_by_deduplication` | int64 | reads | `counts.deduplication.merged_reads`, present when the run deduplicated (`PipelineConfig.deduplication` set; `_RunRecord.write`). | unavailable (`no_run_record`; `run_not_finished` or `step_failed` when the run did not get to deduplication; `not_configured` without deduplication) |
+| `passed_filter` | int64 | reads | `counts.filtering.accepted`. | unavailable (`no_run_record`; `run_not_finished` or `step_failed` when the run did not get to the filter; `not_configured` without a filter) |
+| `correct_form_fraction`, `matched_fraction`, `merged_fraction`, `passed_filter_fraction` | float64 | fraction of `spots` | The count over `spots`, each fraction on its own. | unavailable: the first reason, in the order of the reasons, of its count and of `spots`; `undefined` when `spots` is 0 |
+| `n_cells`, `n_cells_retained` | int64 | cells | The export's `tables/fovs.csv`, with the route's meaning. | unavailable (`no_export`; `part_not_written` when the assemble part wrote nothing; `no_segmentation` for an export without cells) |
+| `n_molecules`, `n_molecules_retained` | int64 | molecules | The export's `tables/fovs.csv`. | unavailable (`no_export`; `part_not_written` when the assemble part wrote nothing) |
+| `reads_in_cells` | int64 | molecules | The FOV's retained molecules whose cell is counted (`tables/molecules.csv`, `tables/cells.csv`). | unavailable (`no_export`; `part_not_written` when the assemble part wrote nothing; `no_segmentation` for an export without cells) |
+| `reads_in_cells_fraction` | float64 | fraction of `n_molecules_retained` | `reads_in_cells / n_molecules_retained`. | unavailable: the first reason, in the order of the reasons, of `reads_in_cells` and `n_molecules_retained`; `undefined` when `n_molecules_retained` is 0 |
+| `owned_area_um2` | float64 | µm² | The area of the region the FOV owns. | unavailable (`no_placement`; `fov_not_placed`; `no_export`, whose record holds the ownership rule); n/a: not an owning FOV (a `placeholder`) |
+| `cell_density_per_mm2` | float64 | cells per mm² | `n_cells_retained / owned_area_um2 × 10⁶`. | unavailable: the first reason, in the order of the reasons, of `n_cells_retained` and `owned_area_um2`; `undefined` when the area is 0; n/a: not an owning FOV |
 
 **`registration.csv`**: one row per FOV of the list and moving round, in list order, then
 the rounds in the order of the run records' `registration` keys (the union over the run
@@ -716,13 +762,13 @@ records, in first-seen order); key (`fov_id`, `round`).
 | Column | Type | Unit | Content | Null when |
 | --- | --- | --- | --- | --- |
 | `fov_id`, `round` | string | — | The FOV and the moving round. | never |
-| `outcome` | string | — | The outcome of the round's last attempt in `run.json` `registration.<round>` (`succeeded`, `rejected`, `failed`, `application_failed`). | unavailable (`no_run_record`, `run_not_finished`, `step_failed` when the run failed before the round, `not_configured` without registration) |
-| `fallback` | boolean | — | Whether a succeeded estimation attempt has `fallback` true. | unavailable (as `outcome`) |
-| `methods` | string | — | The `actual_method` of the succeeded estimation attempts, in step order, `;`-joined. | unavailable (as `outcome`); n/a: no estimation attempt succeeded |
-| `transform_source` | string | — | `run.json` or `transforms.json`. | unavailable (as `outcome`; `step_failed` when the round's registration failed; `not_recorded`) |
-| `shift_z`, `shift_y`, `shift_x` | float64 | voxels | The displacement of the round's composed global steps, in the convention of `displacement_zyx` ({doc}`registration-contract`); for an affine step the definition is on the algorithms page. | unavailable (as `transform_source`); n/a: the round's chain has no global step |
-| `residual_z`, `residual_y`, `residual_x` | float64 | voxels | The shift minus its median over the FOVs whose round succeeded. | unavailable: the reason of the shift; `undefined` when no FOV's round succeeded; n/a: as the shift |
-| `alignment_score` | float64 | dimensionless | The application entry's `qc.values.ncc_after` (masked NCC of the reference and the registered moving round, the whole chain; `evaluation/registration.py`: `registration_qc`). | unavailable (as `transform_source`; `undefined` when the QC holds null, its reason in the detail) |
+| `outcome` | string | — | The outcome of the round's last attempt in `run.json` `registration.<round>` (`succeeded`, `rejected`, `failed`, `application_failed`). | unavailable (`no_run_record`; `run_not_finished` or `step_failed` when the run did not get to the round; `not_configured` without registration) |
+| `fallback` | boolean | — | Whether a succeeded estimation attempt has `fallback` true. | unavailable (`no_run_record`; `run_not_finished` or `step_failed` when the run did not get to the round; `not_configured` without registration) |
+| `methods` | string | — | The `actual_method` of the succeeded estimation attempts, in step order, `;`-joined. | unavailable (`no_run_record`; `run_not_finished` or `step_failed` when the run did not get to the round; `not_configured` without registration); n/a: no estimation attempt of the round succeeded |
+| `transform_source` | string | — | `run.json` or `transforms.json`. | unavailable (`no_run_record`; `run_not_finished` or `step_failed` when the run did not get to the round; `not_configured` without registration; `step_failed` when the round's registration failed; `not_recorded` when neither R1 nor `registered/transforms.json` holds the round) |
+| `shift_z`, `shift_y`, `shift_x` | float64 | voxels | The displacement of the round's composed global steps, in the convention of `displacement_zyx` ({doc}`registration-contract`); for an affine step the definition is on the algorithms page. | unavailable (`no_run_record`; `run_not_finished` or `step_failed` when the run did not get to the round; `not_configured` without registration; `step_failed` when the round's registration failed; `not_recorded` when neither R1 nor `registered/transforms.json` holds the round; n/a: the round's chain has no global step |
+| `residual_z`, `residual_y`, `residual_x` | float64 | voxels | The shift minus its median over the FOVs whose round succeeded. | unavailable: the reason of the shift on the same axis; `undefined` when no FOV's round succeeded; n/a: as the shift |
+| `alignment_score` | float64 | dimensionless | The application entry's `qc.values.ncc_after` (masked NCC of the reference and the registered moving round, the whole chain; `evaluation/registration.py`: `registration_qc`). | unavailable (`no_run_record`; `run_not_finished` or `step_failed` when the run did not get to the round; `not_configured` without registration; `step_failed` when the round's registration failed); `undefined` when the application entry's QC holds null (its reason in the detail). It needs no transform record |
 
 **`steps.csv`**: one row per step; key (`scope`, `fov_id`, `index`). Order: the FOVs in list
 order, each with its run record's `steps` in record order, then its segmentation and
@@ -738,7 +784,7 @@ order of `export.json` `parts`).
 | `round` | string | — | `steps[*].round`. | n/a: not a per-round step |
 | `method` | string | — | The step's method: from `steps[*].methods` (detection), the preprocessing step name, the succeeded registration methods, the decoder, `segmentation.json` or `assignment.json` `inputs.cells`, `placement.json` `method.method`. | n/a: the step has none |
 | `status` | string | — | `succeeded`, `failed`, or the export part's status (`written`, `reused`, `off`, `not_run`, `failed`). | never |
-| `seconds` | float64 | s | `steps[*].seconds`; an export part's `wall_s`. | unavailable (`not_recorded`); n/a: an export part that did not run (`off`, `not_run`) |
+| `seconds` | float64 | s | `steps[*].seconds`; an export part's `wall_s`. | unavailable (`not_recorded`: stitching, an export part without `wall_s`, the per-FOV segmentation and assignment); n/a: an export part that did not run (`off`, `not_run`) |
 
 **`readout_totals.csv`**: one row per level, in the order `spots`, `correct_form`, `matched`,
 `merged_by_deduplication`, `passed_filter`, `reads_in_cells`; key `level`.
@@ -746,8 +792,8 @@ order of `export.json` `parts`).
 | Column | Type | Unit | Content | Null when |
 | --- | --- | --- | --- | --- |
 | `level` | string | — | The level. | never |
-| `count` | int64 | reads | The sum over the FOVs with a value; for `reads_in_cells` the retained molecules with a counted cell, which the report checks against the sum of `sample.h5ad`'s whole counts. | unavailable when no FOV has the value: `no_run_record` when no FOV has a run record, else the reason of the first FOV in list order (the others in the detail) |
-| `fraction_of_spots` | float64 | fraction | `count` over the `spots` of the same FOVs. | unavailable: the reason of `count`; `undefined` when the spots are 0 |
+| `count` | int64 | reads | The sum over the FOVs with a value; for `reads_in_cells` the retained molecules with a counted cell, which the report checks against the sum of `sample.h5ad`'s whole counts. | unavailable when no FOV has the value: the first reason, in the order of the reasons, of the FOVs' cells of that level |
+| `fraction_of_spots` | float64 | fraction | `count` over the `spots` of the same FOVs. | unavailable: the first reason, in the order of the reasons, of `count` and of the `count` of the level `spots`; `undefined` when the spots are 0 |
 | `fovs` | int64 | FOVs | How many FOVs the sum covers. | never |
 | `overlaps_counted_per_fov` | boolean | — | True for every level but `reads_in_cells`: a read in an overlap counts once per FOV that saw it (D5). | never |
 
@@ -763,8 +809,8 @@ deduplication runs before the filter (discrepancy 2).
 | Column | Type | Unit | Content | Null when |
 | --- | --- | --- | --- | --- |
 | `population` | string | — | The population. | never |
-| `cells` | int64 | cells | `export.json` `assembly.counts.cells` (`input`, `retained`, `excluded.<reason>`); `counted` is the rows of `sample.h5ad`. | unavailable (`no_export`, `part_not_written`, `no_segmentation` for an export without cells); n/a: a population of molecules only (`excluded_cell_not_owner`, `excluded_cell_duplicate_observation`, `excluded_outside_grid`), or a reason `assembly.counts.cells.excluded` does not hold on the sample's route (`duplicate_observation` after fusion or with the rule off) |
-| `molecules` | int64 | molecules | `assembly.counts.molecules`; `counted` is the retained molecules with a counted cell. | unavailable (`no_export`, `part_not_written`; `no_segmentation` for `counted`); n/a: `excluded_duplicate_observation` (a reason of cells only), or a reason `assembly.counts.molecules.excluded` does not hold on the sample's route (`cell_duplicate_observation` after fusion or with the rule off) |
+| `cells` | int64 | cells | `export.json` `assembly.counts.cells` (`input`, `retained`, `excluded.<reason>`); `counted` is the rows of `sample.h5ad`. | unavailable (`no_export`; `part_not_written` when the assemble part wrote nothing; `no_segmentation` for an export without cells); n/a: a population of molecules only (`excluded_cell_not_owner`, `excluded_cell_duplicate_observation`, `excluded_outside_grid`), or a reason the export's `assembly.counts.cells.excluded` does not hold (`duplicate_observation` on the route after fusion, with the rule off, or in a `molecules_only` export) |
+| `molecules` | int64 | molecules | `assembly.counts.molecules`; `counted` is the retained molecules with a counted cell. | unavailable (`no_export`; `part_not_written` when the assemble part wrote nothing; `no_segmentation` for `counted` in an export without cells); n/a: `excluded_duplicate_observation` (a reason of cells only), or a reason the export's `assembly.counts.molecules.excluded` does not hold (`cell_duplicate_observation` on the route after fusion, with the rule off, or in a `molecules_only` export) |
 
 **`problematic_fovs.csv`**: one row per FOV, rule, round and axis that the rule marks, in
 list order, then the rule order of `PROBLEM_RULES`, then rounds and axes; key (`fov_id`,
@@ -805,8 +851,8 @@ Not embedded in the page.
 | --- | --- | --- | --- | --- |
 | `gene_a`, `gene_b` | string | — | The pair. | never |
 | `threshold` | int64 | molecules | `positive_threshold`. | never |
-| `cells_a`, `cells_b`, `both`, `either` | int64 | cells | Counted cells positive for A, for B, for both, for either. | unavailable (`no_export`, `part_not_written`, `no_segmentation`), each cell of each pair on its own |
-| `mecr` | float64 | fraction | `both / either`. | unavailable: the reason of its counts; `undefined` when `either` is 0, for that pair only |
+| `cells_a`, `cells_b`, `both`, `either` | int64 | cells | Counted cells positive for A, for B, for both, for either. | unavailable (`no_export`; `part_not_written` when the assemble part wrote nothing; `no_segmentation` for an export without cells), each cell of each pair on its own |
+| `mecr` | float64 | fraction | `both / either`. | unavailable: the first reason, in the order of the reasons, of `both` and `either`; `undefined` when `either` is 0, for that pair only |
 
 **`reads_along_z.csv`**: one row per FOV of the export and plane, in list order, then `z`
 ascending; key (`fov_id`, `z`).
@@ -818,14 +864,15 @@ ascending; key (`fov_id`, `z`).
 | `reads` | int64 | molecules | The FOV's molecules of the sample table on that plane, retained or not. | never |
 
 **`intensity.csv`**: the intensity distribution of the main example after each step of the
-recipe; one row per round, step, channel and bin, in that order; key (`round`,
-`step_index`, `channel`, `bin`). Not embedded in the page.
+recipe, in the order `FOV.run` runs them ("The replay"); one row per round, step, channel and
+bin, in that order; key (`round`, `step_index`, `channel`, `bin`). Not embedded in the page.
 
 | Column | Type | Unit | Content | Null when |
 | --- | --- | --- | --- | --- |
 | `round` | string | — | The round. | never |
-| `step_index` | int64 | — | 0 for the loaded input, `i + 1` after recipe step `i`. | never |
-| `step` | string | — | `input` or the step name. | never |
+| `step_index` | int64 | — | 0 for the loaded and rotated input; then 1, 2, … for the round's recorded entries in the order `FOV.run` runs them: the `steps` entries, then the `post_registration` entries. | never |
+| `phase` | string | — | `input`, `steps` or `post_registration` (the entry's `stage`). | never |
+| `step` | string | — | `input` or the entry's `step`. | never |
 | `channel` | string | — | The channel label. | never |
 | `bin` | int64 | — | Zero-based bin index. | never |
 | `bin_low`, `bin_high` | float64 | grey levels of the step's output dtype | The bin's edges (their rule is on the algorithms page). | never |
@@ -859,11 +906,12 @@ key `sample`.
 | `report_sha256` | string | — | The SHA-256 of its `report.json`. | n/a: `report` is `missing` |
 | `generated_at` | string | ISO 8601, UTC | `report.json` `generated_at`. | n/a: `report` is `missing` |
 | `route` | string | — | `report.json` `route`. | n/a: `report` is `missing`, or the sample has no export |
-| `fovs_expected`, `fovs_succeeded` | int64 | FOVs | `report.json` `summary`. | n/a: `report` is `missing`; unavailable in the sample (`fovs_succeeded`) |
-| `spots_median_per_fov` | float64 | reads | `summary.spots_median_per_fov`. | n/a: `report` is `missing`; unavailable in the sample: the sample's own `unavailable.csv` names the key (`table` `summary`), and `samples.csv` repeats no row |
-| `matched_fraction` | float64 | fraction | `summary.matched_fraction`. | as above |
-| `counted_cells` | int64 | cells | `summary.counted_cells`. | as above |
-| `cells_median_per_fov` | float64 | cells | `summary.cells_median_per_fov`. | as above |
+| `fovs_expected` | int64 | FOVs | `report.json` `summary`. | n/a: `report` is `missing` |
+| `fovs_succeeded` | int64 | FOVs | `report.json` `summary`. | n/a: `report` is `missing`; unavailable in the sample, named by the sample's own `unavailable.csv` (`table` `summary`), and `samples.csv` repeats no row |
+| `spots_median_per_fov` | float64 | reads | `summary.spots_median_per_fov`. | n/a: `report` is `missing`; unavailable in the sample, named by the sample's own `unavailable.csv` (`table` `summary`), and `samples.csv` repeats no row |
+| `matched_fraction` | float64 | fraction | `summary.matched_fraction`. | n/a: `report` is `missing`; unavailable in the sample, named by the sample's own `unavailable.csv` (`table` `summary`), and `samples.csv` repeats no row |
+| `counted_cells` | int64 | cells | `summary.counted_cells`. | n/a: `report` is `missing`; unavailable in the sample, named by the sample's own `unavailable.csv` (`table` `summary`), and `samples.csv` repeats no row |
+| `cells_median_per_fov` | float64 | cells | `summary.cells_median_per_fov`. | n/a: `report` is `missing`; unavailable in the sample, named by the sample's own `unavailable.csv` (`table` `summary`), and `samples.csv` repeats no row |
 
 The three box plots read each present sample's `tables/fovs.csv` (`spots`,
 `matched_fraction`, `n_cells_retained`), checked against the SHA-256 its `report.json`
