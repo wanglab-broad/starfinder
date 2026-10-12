@@ -1,6 +1,6 @@
 # Processing-report algorithms, layout and validation design
 
-Status: Proposed (W-386, 2026-10-12, at de438ad)
+Status: Proposed (W-386, 2026-10-12, at de438ad; corrected by W-448, 2026-10-12)
 
 This page fixes how every value and figure of the §2.11 processing report is computed and
 drawn, how the page is laid out and built, how the delivery is validated, and the plan of
@@ -74,6 +74,7 @@ in "Problematic FOVs".
 | A9 | The size budget of the page | SB1: `6 MiB + 16 KiB × FOVs + 3 MiB × marker figures` | "Size budget" |
 | A10 | How `sample.h5ad` is read | H1: with h5py, which the package requires | "Inputs read as arrays" |
 | A11 | The subsystem marker of the report's tests | TM1: register `report` in the first issue that adds the module | "Validation design" |
+| A13 | The `outcome` of a round that did not finish (last entry `applying`, `estimating`, or a `succeeded` estimation) | OU1: the contract's outcome of the part that did not finish | "Outcome" |
 
 The bounds of the real example are not a choice of this page: Jiahao decided them on
 2026-10-12 (three FOVs at a time, 32 GiB per FOV process; "The real example").
@@ -165,13 +166,48 @@ record exists and holds the key `r`. A FOV without a run record, or whose record
 
 | Column | Definition | Unit | Empty or undefined input |
 | --- | --- | --- | --- |
-| `outcome` | The `outcome` of the last entry of `A` (`succeeded`, `rejected`, `failed`, `application_failed`); an `estimating` last entry is read as `failed` when `R_f.status` is not `running`. | — | the contract's reasons |
+| `outcome` | "Outcome", below: one of `succeeded`, `rejected`, `failed`, `application_failed`, from the `record` and `outcome` of the last entry of `A`. | — | the contract's reasons; `run_not_finished` as "Outcome" states |
 | `fallback` | Some entry `e` of `A` with `e.record == "estimation"`, `e.outcome == "succeeded"` and `e.fallback` true. | — | as `outcome` |
 | `methods` | The `actual_method` of the succeeded estimation entries in `step` order, `;`-joined. | — | n/a when none succeeded |
 | `transform_source` | `run.json` when `R_f.transforms[r]` exists (R1), else `transforms.json` when `registered/transforms.json` holds `r` with `format_version` 2. | — | as the contract states |
 | `shift_z/y/x` | "Shift", below. | voxels | as the contract states; n/a when the chain has no global step |
 | `residual_z/y/x` | "Shift residual", below. | voxels | the reason of the shift; `undefined` when no FOV's round succeeded |
 | `alignment_score` | "Alignment score", below. | dimensionless | as the contract states; `undefined` when the value is null |
+
+#### Outcome
+
+`FOV._register_round` (`dataset/fov.py`) writes six values into the `outcome` of a
+registration entry, and `run.json` is written only when the run starts, with `registration`
+empty, and when it ends (`dataset/_run_record.py`: `_RunRecord.finish`). A saved round whose
+last entry is `applying`, `estimating` or a `succeeded` estimation did not finish: its run
+ended `failed` or `interrupted` inside that round. The report's `outcome` is read from the
+last entry `e` of `A`:
+
+| `e.record` | `e.outcome` | When the source leaves it last | Report's `outcome` |
+| --- | --- | --- | --- |
+| `application` | `succeeded` | The round's transforms were applied and the application QC recorded | `succeeded` |
+| `application` | `application_failed` | Applying the transforms raised | `application_failed` |
+| `application` | `applying` | The run was interrupted while it applied the transforms, or the registered signal or the application QC raised after them (`status` `failed` or `interrupted`) | `application_failed` |
+| `estimation` | `rejected` | A QC criterion refused the last attempt and no recovery followed | `rejected` |
+| `estimation` | `failed` | The estimation of the last attempt raised and no recovery followed | `failed` |
+| `estimation` | `estimating` | The run was interrupted during an estimation (`status` `interrupted`) | `failed` |
+| `estimation` | `succeeded` | The run ended after an estimation succeeded and before the application entry was added: the resampling for the next step, or the chain or warp of the application, raised or was interrupted (`status` `failed` or `interrupted`) | `failed` |
+
+The source writes no other value. A record with `status` `running` holds an empty
+`registration` at this revision (the record of the run's start); should a later writer save
+entries during a run, a round whose last entry is not a finished one (`applying`,
+`estimating`, or a `succeeded` estimation) is null with `run_not_finished` while `status` is
+`running`. The run's own end (`failed` or `interrupted`, its step and round) is in
+`fovs.csv` `status`, `failed_step` and `failed_round`.
+
+The table is choice A13. **OU1 (recommended)**, the table: an unfinished last entry is read as
+the contract's outcome of the part that did not finish, so the maps, the heatmap, the medians
+and the rules treat the round as one that did not succeed. OU2: the row is null with
+`step_failed`, which {doc}`report-contract` reserves in the null rule of `outcome` for a run
+that did not get to the round. A round whose `outcome` is not
+`succeeded` has no transform record (`dataset/fov.py`: `FOV._record_transforms` runs after the
+application), so its transform, shift and score are null as the contract states for a
+registration that failed.
 
 #### Shift
 
@@ -228,9 +264,11 @@ residual_a(f, r) = shift_a(f, r) − median_r,a          for every f with a non-
 `alignment_score(f, r) = e.qc.values.ncc_after` of the entry `e` of `A` with
 `e.record == "application"` (the masked NCC of the reference and the registered moving
 round under the whole chain; `evaluation/registration.py`: `registration_qc`). It is null
-with `undefined` when `e.qc` or `ncc_after` is null, the QC record's `reasons.ncc_after` in
-the detail; `step_failed` when the round has no application entry because the estimation
-failed. The score of an estimation entry is not read: it scores one step, not the chain
+with `step_failed` when the round's `outcome` ("Outcome") is not `succeeded`: the round has
+no application entry because the estimation failed, or its application entry ended
+`application_failed` or was left `applying`. Otherwise it is null with `undefined` when
+`e.qc` or `ncc_after` is null, the QC record's `reasons.ncc_after` in the detail. The score
+of an estimation entry is not read: it scores one step, not the chain
 (the estimation entries and the application entry hold equal values when the chain has one
 step).
 
@@ -1164,7 +1202,7 @@ Rules:
 | DF11 | Intensity bins | `hand_tables` step outputs (none) | `intensity.csv` rows | uint8 with values 3 to 250: 248 bins of width 1 from 3; uint16 with values 0 to 1000: width `ceil(1001 / 256) = 4`; float32 over [0.25, 0.75]: 256 equal bins, the last closed; a constant float output: one bin; bool: two bins; each channel's counts sum to its voxels and the channels of one entry share their edges. Exact. |
 | DF12 | Summary keys and other values | `report_records`, `report_cells` (none) | `report.json` `summary`; configuration check; acquisition; time per step | `spots_median_per_fov` 1000; `matched_fraction` 2800 / 4000 = 0.7; `fovs_succeeded` 4; the medians of `cells.csv` as the test computes them; the configuration check "identical for all FOVs", and "differs: 2 groups" naming `pipeline` when F2's `config.pipeline.spot_finding` is changed; acquisition "3 rounds × 4 channels, 3D"; each FOV's time per step name is the sum of its rows of that name. Exact. |
 | PR1 | The rule form | `hand_tables` values (0.80, 0.80, 0.50, 0.80) (none) | Rows and limits | Low side, `k = 3`, floor 0.05: the third FOV only, limit 0.05, median 0.8; with `absolute = 0.6`: the third FOV only, `sample_median` n/a, limit 0.6; with `absolute = 0.5`: none (strict); with `k`, `floor`, `absolute` all `None`: not evaluated, one row `rule:<rule>` with `not_configured`, `report.json` `rules.<rule>.evaluated` false. Exact. |
-| PR2 | One FOV, two FOVs, equal and undefined values | `hand_tables` (none) | Rows | One value: no mark with `k = 0.1` and floor 0; two values (0.2, 0.8) with `k = 1` and floor 0: no mark (deviation 0.3, exact; limit 0.44478 within 1e-12 absolute, since the float64 product `1 × 1.4826 × 0.3` is 0.44478000000000006); equal values: no mark with `k = 0` and floor 0, and under an absolute limit 0.6 on the low side all four of four values 0.5 marked and none of four values 0.7; null values: not entered and not evaluated, no rule row; all null: one `rule:` row with the values' first reason. Exact, except the limit as stated. |
+| PR2 | One FOV, two FOVs, equal and undefined values | `hand_tables` (none) | Rows | One value: no mark with `k = 0.1` and floor 0; two values (0.2, 0.8) with `k = 1` and floor 0: no mark; median 0.5; the two absolute deviations from it, as the exact float64 values, `abs(0.2 − 0.5)` = 0.3 and `abs(0.8 − 0.5)` = 0.30000000000000004, and their median, the MAD, 0.30000000000000004 (the mean of the two); limit 0.44478 within 1e-12 absolute, since the float64 product `1 × 1.4826 × MAD` is 0.44478000000000006; equal values: no mark with `k = 0` and floor 0, and under an absolute limit 0.6 on the low side all four of four values 0.5 marked and none of four values 0.7; null values: not entered and not evaluated, no rule row; all null: one `rule:` row with the values' first reason. Exact, except the limit as stated. |
 | PR3 | Shift residual per round and axis | `report_records` (none) | `problematic_fovs.csv` | Default limit: only (F4, round3, `x`); with `k = 0`, floor 0.5: (F2, round2, `x`), (F3, round2, `y`), (F3, round3, `z`), (F4, round3, `x`), in list order, then rounds, then axes; `measured` is the shift and `sample_median` the round's median shift. Exact. |
 | PR4 | Categorical rules | `report_records` with F2 `interrupted` and F3 `running`; `not_run`; `placement_states`; `report_cells`; registration entries with a rejected attempt followed by a succeeded fallback (none) | Rows | `fov_failed` marks F2 (interrupted) and not F3 (running); `fov_not_run` marks F4 when F1 to F3 have run records, and is not evaluated (`no_run_record`) when none has; the rejected-then-fallback round gives one `registration_rejected` and one `registration_fallback` row; `not_placed` marks F4 (`failed`); `stage_position_fallback` marks F3 (`fallback`) and no FOV of the `supplied` copy; `reads_no_cell` marks F2. Exact. |
 | PR5 | Spots close to zero | `hand_tables` spots (1000, 1200, 40, 1000); (0, 0, 0) (none) | Rows | The third FOV (40 < 0.05 × 1000 = 50); with every count 0 the limit is 0 and nothing is marked. Exact. |
@@ -1258,7 +1296,7 @@ reads of Position048 and Position049 lie within 3 voxels of an earlier read
 
 | # | Step | What it writes | Stop rule |
 | --- | --- | --- | --- |
-| 1 | Inventory of the inputs (path, size; the images' SHA-256 are recorded in `run.json` by `hash_inputs`) | `results/inventory/` | — |
+| 1 | Inventory of the inputs of both parts, before step 2: path, size and SHA-256 of every file a later step reads (the 1,024 raw images, the codebook, the configuration and `markers.yaml`, the placement import, the W-382 labels and assignment record, the 64 DAPI source images of step 6, and the files of Part 2's exports that a report reads: `export.json`, `sample.h5ad`, `tables/` and the fused image); a file found later to have been read is added with the time of the addition. The SHA-256 that `hash_inputs` writes into `run.json` are a second record, not a replacement | `results/inventory/` | — |
 | 2 | Position048 and Position049 through the workflow's processing rule, side by side; then the frame check of W-384 on their reads | two FOVs' records (kept: they are two of the 64) | Fewer than 50 % of a FOV's reads within 3 voxels of an earlier read, or a share of reads inside a W-382 nucleus label more than 0.02 from the earlier table's (0.129, 0.125; W-384 `frame_check.csv`): stop before step 3 and report |
 | 3 | The other 62 FOVs, three at a time | 64 run records and the rule outputs | A FOV that reaches a limit is `resource_stop`, not retried larger, and is a failed FOV of the report |
 | 4 | **Report after the per-FOV processing**: `Dataset.report("ln_sample1", <the 64 FOVs>, assignment=None, config=<the report block>)`, with the run records and the placement | `report/ln_sample1/` | — |
@@ -1315,6 +1353,7 @@ ends. They fit the disk: the root filesystem had 44 GB free on 2026-10-12 (batch
 
 | Step | Parallel | Limit per process | Estimate and its basis | New artifacts |
 | --- | --- | --- | --- | --- |
+| 1: inventory of the inputs | 1 | 1 CPU, 4 GiB, 3600 s | 122,412,640,023 bytes: the 1,024 raw images of 112,014,708 bytes (the size of each of the 32 W-384 hashed, W-384 `results/inventory/inputs.csv`; one shape for all, W-383 `inputs.md`), the DAPI source images 4,721,387,720 bytes (W-398), the files of Part 2's exports 2,961,471,379 bytes (W-384 `inputs.csv`, W-391 `results/manifest.json`), the labels of four FOVs and the small files about 27 MB (Position057 and 058 at the size of the larger label file, and 10 MB for the small files, both assumed); at the rate of W-384's inventory step, 5,486,212,411 bytes from the share in 71.82 s at one CPU (76.39 MB/s; `results/inventory/inputs.json`): 1,603 s, with 10 % for the listing and the share's variation 1,770 s | below 1 MB |
 | 2, 3: the 64 FOVs | 2 in step 2, then 3 | 1 CPU, 32 GiB RSS, 3600 s | one wave of two and 21 waves of three (62 FOVs), about 634 s each (W-384 `real_fovs.csv`, the slower FOV): 22 × 634 s = 13,948 s; about 68 GiB on the host (W-384 `sizing_64.csv`, three in parallel: 67.5 GiB, 3.82 h) | records with `candidates` and `pre_qc` 4.25 GiB; rule outputs 6.8 GiB (W-384 `sizing_64.csv`) |
 | 4: report after the FOVs | 1 | 1 CPU, 16 GiB, 3600 s | 64 run records of about 43 kB; the replay of two rounds of one FOV, 447 MB per round as uint8: about 600 s, below 4 GiB (code-derived) | below 50 MB |
 | 5: block import and assignment | 1 | 1 CPU, 16 GiB, 3600 s per FOV | a 50 × 1496 × 1496 uint32 label image is 448 MB ({doc}`assignment-algorithms`, "Evidence"): about 120 s per FOV, 480 s | labels and territories, about 3.6 GB |
@@ -1327,6 +1366,7 @@ The total of the wall time, step by step, for each route:
 
 | Step | Route A (local copies), s | Route B (share), s |
 | --- | --- | --- |
+| 1: inventory of the inputs, 122.4 GB at 76.39 MB/s and 10 % | 1,770 | 1,770 |
 | 2, 3: 22 waves of 634 s | 13,948 | 13,948 |
 | 4: report after the FOVs | 600 | 600 |
 | 5: block import and assignment, 4 × 120 s | 480 | 480 |
@@ -1341,9 +1381,9 @@ The total of the wall time, step by step, for each route:
 | Part 2: `tissue_2d` report | 1,274 | 1,274 |
 | Part 2: comparison page | 120 | 120 |
 | 8: manifest | 120 | 120 |
-| **Total** | **22,204 (6.2 h)** | **26,509 (7.4 h)** |
+| **Total** | **23,974 (6.7 h)** | **28,279 (7.9 h)** |
 
-Both routes are within the 8 hours Jiahao allowed (the slower, 7.4 h, rounded up to the next
+Both routes are within the 8 hours Jiahao allowed (the slower, 7.9 h, rounded up to the next
 full hour), and the new artifacts, about 16 GiB, within 20 GiB. The order puts the report that
 needs only the run records first, so a stop at a later step still leaves it.
 
