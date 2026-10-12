@@ -203,7 +203,7 @@ One line per implemented check: its identifier and the test that implements it, 
 | SA7 | `test_sample_segmentation_route.py::test_sa7_identities` |
 | SA8 | `test_sample_segmentation_route.py::test_sa8_molecules_keep_their_rule` |
 | SO1 | `test_sample_segmentation_route.py::test_so1_same_columns_keys_and_files`, with `test_so1_the_saved_territories_reload_and_save_again` |
-| SO2 | `test_sample_segmentation_readers.py::test_so2_readers`, with `test_so2_check_export_fails_t1_on_a_fused_input_fused_again`, `test_so2_check_export_fails_t5_on_a_label_file_the_assembly_does_not_record`, `test_so2_check_export_after_a_reuse` and `test_so2_lookup_source_of_identifiers_at_and_above_2_31` |
+| SO2 | `test_sample_segmentation_readers.py::test_so2_readers`, with `test_so2_check_export_fails_t1_on_a_fused_input_fused_again`, `test_so2_check_export_fails_t5_on_a_label_file_the_assembly_does_not_record`, `test_so2_check_export_t4_under_midpoint_box` and `test_so2_check_export_fails_t4_on_a_cell_the_recorded_rule_gives_another_owner` (T4 on `fused_quad` under `ownership="midpoint_box"`, ties `table_order` and `half_open`), `test_so2_check_export_after_a_reuse` and `test_so2_lookup_source_of_identifiers_at_and_above_2_31` |
 | SO4 | `test_sample_segmentation_readers.py::test_so4_the_label_export_on_the_route_after_fusion`, with `test_so4_with_the_expanded_territories` and `test_so4_l6_the_id_bound` |
 | CR1 | `test_sample_segmentation_compare.py::test_cr1_two_routes_from_one_truth` (also on `fused_pair` at `k = 2`), with `test_cr1_the_placement_at_factor_2` |
 | CR2 | `test_sample_segmentation_compare.py::test_cr2_the_report_decides_nothing` |

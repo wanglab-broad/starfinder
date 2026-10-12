@@ -5,7 +5,9 @@ and ``export_spatialdata`` with its round trip, on ``fused_pair`` exported on bo
 route after fusion at ``k = 1`` and at ``k = 2`` (where the segmentation grid's spacing differs from a FOV's, so the
 radii tell the two apart), each built once; ``check_export`` fails T1 on a folder whose fused input was fused
 again with other bytes after the segmentation, fails T5 on one whose label file the ``assembly`` section does not
-record, and passes after a reuse with ``fuse`` on and off. SO4: the label export on the route after fusion, ``fused_pair`` and ``fused_quad``
+record, and passes after a reuse with ``fuse`` on and off; on ``fused_quad`` under ``ownership="midpoint_box"`` with
+each tie, T4 passes, and fails on a copy whose ``assembly`` section records the other tie (W-446). SO4: the label
+export on the route after fusion, ``fused_pair`` and ``fused_quad``
 with ``truth_import``, ``fuse_labels`` at ``labels_scale_yx`` 1, 0.5 and 0.25; the expected label image is
 recomputed in the test from the sample's territories by ``floor(c + ½)``.
 
@@ -17,15 +19,17 @@ import dataclasses
 import importlib.util
 import json
 import math
+import shutil
 
 import numpy as np
 import pandas as pd
 import pytest
 import tifffile
 
-from starfinder.assembly import load_assembly
+from starfinder.assembly import AssemblyConfig, load_assembly, ownership_map
 from starfinder.assembly._anndata import sample_anndata
 from starfinder.sample_output import LabelConfig, check_export, lookup_source, segment_fused
+from starfinder.stitching import load_placement
 
 from .fusion_fixtures import listing
 from .sample_segmentation_fixtures import (
@@ -34,6 +38,7 @@ from .sample_segmentation_fixtures import (
     QUAD_CELLS,
     SAMPLE,
     per_fov_routes,
+    quad_grid_placement,
     route_config,
     scene_truth_labels,
     seeded_runs,
@@ -52,6 +57,9 @@ needs_anndata = pytest.mark.skipif(importlib.util.find_spec("anndata") is None,
 needs_spatialdata = pytest.mark.skipif(importlib.util.find_spec("spatialdata") is None,
                                        reason="the spatialdata extra (starfinder[spatialdata]) is not installed")
 ROUTE_CASES = ("per_fov", "after_fusion_k1", "after_fusion_k2")
+#: The tie of ``midpoint_box`` → the owner of ``fused_quad``'s cell at the crossing, whose ownership centroid (17.5,
+#: 17.5) µm lies on FOV2's upper X box edge (closed under ``table_order``) and on FOV4's lower box edges.
+CROSSING_OWNER = {"table_order": "FOV2", "half_open": "FOV4"}
 
 
 @pytest.fixture(autouse=True)
@@ -204,6 +212,82 @@ def test_so2_check_export_fails_t5_on_a_label_file_the_assembly_does_not_record(
                   sample=SAMPLE, identity=(DS, SAMPLE))
     with pytest.raises(ValueError, match="check_export T5:.*assembly section's segmentation_files"):
         check_export(folder.export_dir)
+
+
+@pytest.fixture(scope="module")
+def so2_midpoint(tmp_path_factory):
+    """``so2_midpoint(tie)``: ``fused_quad`` exported on the route after fusion at ``k = 1`` with ``truth_import`` and
+    ``AssemblyConfig(ownership="midpoint_box", tie=tie)``, on the placement of ``quad_grid_placement`` (built once
+    per tie). Returns the export folder, the scene folder and the placement folder."""
+    cache = {}
+
+    def get(tie):
+        if "scene" not in cache:
+            folder = write_folder(tmp_path_factory.mktemp("fused_quad_midpoint"), "fused_quad")
+            cache["scene"] = (folder, quad_grid_placement(folder), truth_config(folder, export_grid(folder)))
+        folder, placement, segmentation = cache["scene"]
+        if tie not in cache:
+            out = folder.root / f"export_{tie}" / SAMPLE
+            config = dataclasses.replace(route_config(segmentation=segmentation),
+                                         assembly=AssemblyConfig(ownership="midpoint_box", tie=tie))
+            export(folder, config, output_dir=out, placement=placement)
+            cache[tie] = out
+        return cache[tie], folder, placement
+    return get
+
+
+@needs_anndata
+@needs_library
+@pytest.mark.parametrize("tie", list(CROSSING_OWNER))
+def test_so2_check_export_t4_under_midpoint_box(so2_midpoint, tie):
+    """T4 under ``midpoint_box``: ``check_export`` rebuilds the boxes from the ``assembly`` section, the upper edges
+    set at a neighbour's midpoint closed under ``table_order`` and open under ``half_open``. The cell at the crossing
+    has its ownership centroid inside all four footprints, so the boxes decide its owner, and the tie decides which."""
+    out, folder, placement = so2_midpoint(tie)
+    section = record_of(out)["assembly"]
+    assert section["ownership"]["rule"] == "midpoint_box" and section["ownership"]["tie"] == tie
+    check_export(out)
+    cells = load_assembly(out).cells
+    points = cells[["sample_ownership_centroid_z", "sample_ownership_centroid_y",
+                    "sample_ownership_centroid_x"]].to_numpy(np.float64)
+    # The half-open footprints the assembly section records holding each centroid.
+    holding = np.zeros(len(cells), np.int64)
+    for entry in section["fovs"]:
+        (y0, y1), (x0, x1) = entry["footprint_yx"]
+        holding += (points[:, 1] >= y0) & (points[:, 1] < y1) & (points[:, 2] >= x0) & (points[:, 2] < x1)
+    assert (holding > 1).any()
+    crossing = cells["cell_id"].astype("int64").eq(BIG).to_numpy()
+    assert holding[crossing].tolist() == [4]
+    # The owners the assembly gave are those of the ownership map of the placement it read, not of the record.
+    owners = ownership_map(load_placement(placement), folder.grids,
+                           config=AssemblyConfig(ownership="midpoint_box", tie=tie)).owner(points).tolist()
+    assert None not in owners
+    assert cells["owner_fov_id"].astype(object).tolist() == owners == cells["fov_id"].astype(object).tolist()
+    assert cells["owner_fov_id"][crossing].tolist() == [CROSSING_OWNER[tie]]
+
+
+@needs_anndata
+@needs_library
+@pytest.mark.parametrize("tie", list(CROSSING_OWNER))
+def test_so2_check_export_fails_t4_on_a_cell_the_recorded_rule_gives_another_owner(so2_midpoint, tie, tmp_path):
+    """A copy of the export of one tie whose ``assembly`` section is edited to record the other tie: the tables keep
+    the owners the assembly gave, and the recorded rule gives the cell at the crossing the other FOV. Only
+    ``export.json`` changes and no other section records the ``assembly`` section's SHA-256 (no label or SpatialData
+    export), so R1 to R3, T1, T5, T2 and T3 pass and T4 is the first condition that fails."""
+    out, _, _ = so2_midpoint(tie)
+    copy = tmp_path / SAMPLE
+    shutil.copytree(out, copy)
+    check_export(copy)
+    path = copy / "export.json"
+    record = json.loads(path.read_text())
+    assert all((record.get(name) or {}).get("assembly_sha256") is None for name in ("fusion", "labels", "spatialdata"))
+    other = next(t for t in CROSSING_OWNER if t != tie)
+    record["assembly"]["ownership"]["tie"] = other
+    path.write_text(json.dumps(record, indent=2))
+    got, rule = CROSSING_OWNER[tie], CROSSING_OWNER[other]
+    with pytest.raises(ValueError, match=f"^check_export T4: cell {SAMPLE}_{got}_{BIG}: fov_id '{got}' and "
+                                         f"owner_fov_id '{got}'; the rule of the cells gives '{rule}' and '{rule}'$"):
+        check_export(copy)
 
 
 @needs_anndata

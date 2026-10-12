@@ -19,7 +19,8 @@ the change of ``scene_plane`` applied to ``sample-small-v1``.
 
 :func:`write_scene` writes a scene as a dataset (the saved placement, ``images/<stain>/``
 ZYX TIFFs with their axes, ``images/ref_merged/`` with the grid, ``signal/`` goodSpots
-tables, the codebook); :func:`fuse_scene` calls ``fuse`` alone on it at a factor ``k``.
+tables, the codebook); :func:`fuse_scene` calls ``fuse`` alone on it at a factor ``k``;
+:func:`quad_grid_placement` (W-446) saves ``fused_quad``'s placement with grid cells.
 :func:`truth_import`, :func:`seeded_runs`, :func:`truth_runs`, :func:`length_configs` and
 :func:`route_config` follow the rows of the same names. Nothing is read from a run
 directory.
@@ -40,7 +41,8 @@ from starfinder.sample_output import (ExportConfig, FusionConfig, FusionInput, S
                                       SampleSegmentationRun, fuse)
 from starfinder.segmentation import (CellposeConfig, LabelImportConfig, ReferenceGrid, SeededWatershedConfig,
                                      StarDistConfig)
-from starfinder.stitching import approve_placement, placement_from_table, positions_from_table, save_placement
+from starfinder.stitching import (approve_placement, placement_from_table, positions_from_grid, positions_from_table,
+                                  save_placement)
 
 DS, SAMPLE = "data", "s1"
 GENES = ("A", "B")
@@ -274,6 +276,22 @@ def scene_placement(scene):
                                                                                    result.fovs.status)])
         result = PlacementResult(result.sample, fovs, result.links, result.record)
     return approve_placement(result, reviewer="test", note=scene.name)
+
+
+def quad_grid_placement(folder) -> Path:
+    """``fused_quad``'s placement with the grid cells ``ownership="midpoint_box"`` needs (W-446), saved under
+    ``stitching_grid/<sample>/``: the same FOVs, grids and origins, from a ``positions_from_grid`` table of 2 × 2
+    cells, column-major (FOV1 and FOV2 in column 0), step 15 µm = (1 − 0.25) × 40 × 0.5 µm, so each FOV's cell is
+    its origin over the step rounded. The scene's own table is supplied and has no cells."""
+    scene = folder.scene
+    table = positions_from_grid(columns=2, rows=2, order="column_major_down_right", tile_shape_yx=scene.shape[1:],
+                                spacing_yx=SPACING[1:], overlap=0.25, fov_ids=scene.ids)
+    placement = approve_placement(placement_from_table(table, folder.grids, sample=SAMPLE,
+                                                       origins=dict(scene.origins)),
+                                  reviewer="test", note=f"{scene.name} with grid cells")
+    path = folder.root / "stitching_grid" / SAMPLE
+    save_placement(placement, path)
+    return path
 
 
 def write_scene(tmp_path, scene) -> SceneFolder:
