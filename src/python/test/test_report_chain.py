@@ -35,6 +35,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
+import tifffile
 
 from starfinder.report import REPORT_PARTS, MarkerGroup, ReportConfig, read_report
 
@@ -317,14 +318,13 @@ def stage_rows(chain: Chain, *, placement, assignment, export):
     if placement:
         rows.append(collection_checks.STITCH_TIME)  # no record holds the time of stitching
     else:
-        # The FOV maps and the placement block; the placement rules; the placement table of Files; the Z size, which
-        # the records that hold a grid give (the export's or the placement's FOV grids: W-453, W-456).
+        # The FOV maps and the placement block; the placement rules; the placement table of Files. The Z size is the
+        # reference image's (test_ch1_ch2_ch3_the_report_at_each_stage checks it), so no row names it.
         rows += [("registration.maps", None, None, "", "no_placement"),
                  ("readout.per_fov", None, None, "", "no_placement"),
                  ("rule:not_placed", None, None, "", "no_placement"),
                  ("rule:stage_position_fallback", None, None, "", "no_placement"),
-                 ("files.input", None, None, "entry=positions", "no_placement"),
-                 ("summary.identity", None, None, "entry=z_size", "not_recorded")]
+                 ("files.input", None, None, "entry=positions", "no_placement")]
         rows += [("assembly.placement", "fovs", c, f"fov_id={f}", "no_placement")
                  for c in collection_checks.PLACEMENT_COLUMNS for f in fovs]
     if assignment:
@@ -371,6 +371,18 @@ def test_ch1_ch2_ch3_the_report_at_each_stage(stages, tmp_path):
         lane = steps[steps["scope"].eq("fov").to_numpy(bool) & steps["name"].isin(["segment", "assign"]).to_numpy(bool)]
         assert len(lane) == (2 * len(chain.fov_ids) if stage["assignment"] else 0), name
         check_page(page, chain, tmp_path / name)
+    # The Z size at every stage: without an export or a placement, the shape of the first FOV's reference image, read
+    # from its header and listed in inputs; the acquisition says "3D" for the scene's 5 planes.
+    reference = f"images/ref_merged/{chain.fov_ids[0]}.tif"
+    planes = tifffile.imread(chain.root / reference).shape[0]
+    assert planes == 5
+    for name, page in pages.items():
+        facts = re.search(r'<section[^>]* id="summary".*?</section>', page.text, re.S).group(0)
+        assert re.search(r"<dt>Acquisition</dt><dd>4 rounds × 4 channels, 3D</dd>", facts), name
+        listed = {e["path"]: e for e in page.record["inputs"]}
+        if name == "ch1_unplaced":
+            assert listed[reference]["kind"] == "reference_image" and listed[reference]["sha256"] == \
+                hashlib.sha256((chain.root / reference).read_bytes()).hexdigest()
     # The placement block with the placement: every placement column holds a value.
     for name in ("ch1", "ch2", "ch3"):
         fovs = pages[name].tables["fovs"]
@@ -764,6 +776,44 @@ def test_dt1_the_chain_in_two_single_thread_processes(scene_chain, tmp_path):  #
     # The chain's report holds every part: the replayed examples, the segmentation examples and the marker figures.
     assert records[1]["replay"]["fov_id"] in chain.fov_ids
     assert [u["part"] for u in records[1]["unavailable"] if u["table"] is None] == ["rule:alignment_score"]
+
+
+# --- The Z size from a reference image (DF12; docs/report-contract.md, "Where each record is looked for") ---------
+
+def test_z_size_from_a_reference_image_without_an_export_or_a_placement(tmp_path):
+    """``report_records`` ``no_placement`` (run records only): no record holds a grid. Without a reference image the Z
+    size is unavailable (``not_recorded``); with reference images it is the shape of the first FOV in list order whose
+    image exists and whose header settles its shape, and that file is listed in ``inputs``."""
+    from .report_fixtures import report_records
+    case = report_records(tmp_path / "root", "no_placement")
+    _, record = case.collect()
+    rows = [(u["part"], u["row_key"], u["reason"]) for u in record["unavailable"] if u["row_key"] == "entry=z_size"]
+    assert rows == [("summary.identity", "entry=z_size", "not_recorded")]
+    assert not [e for e in record["inputs"] if e["kind"] == "reference_image"]
+    page = (case.folder / "report.html").read_text(encoding="utf-8")
+    assert re.search(r"<dt>Acquisition</dt><dd>3 rounds × 4 channels <span", page)
+    # F1 has none, F2's is floating point (its header does not settle the shape load_volume gives), F3's has 3 planes
+    # and F4's 7: F3's is read.
+    images = case.root / "images" / "ref_merged"
+    images.mkdir(parents=True)
+    tifffile.imwrite(images / "F2.tif", np.zeros((2, 16, 16), np.float32), photometric="minisblack")
+    tifffile.imwrite(images / "F3.tif", np.zeros((3, 16, 16), np.uint16), photometric="minisblack")
+    tifffile.imwrite(images / "F4.tif", np.zeros((7, 16, 16), np.uint16), photometric="minisblack")
+    _, record = case.collect()
+    assert not [u for u in record["unavailable"] if u["row_key"] == "entry=z_size"]
+    listed = [(e["path"], e["kind"], e["sha256"], e["bytes"], e["verified"]) for e in record["inputs"]
+              if e["kind"] == "reference_image"]
+    assert listed == [(f"images/ref_merged/{f}.tif", "reference_image",
+                       hashlib.sha256((images / f"{f}.tif").read_bytes()).hexdigest(),
+                       (images / f"{f}.tif").stat().st_size, False) for f in ("F2", "F3")]
+    page = (case.folder / "report.html").read_text(encoding="utf-8")
+    assert re.search(r"<dt>Acquisition</dt><dd>3 rounds × 4 channels, 3D</dd>", page)
+    # One plane: 2D (Z = 1).
+    (images / "F3.tif").unlink()
+    tifffile.imwrite(images / "F3.tif", np.zeros((16, 16), np.uint16))
+    _, record = case.collect()
+    page = (case.folder / "report.html").read_text(encoding="utf-8")
+    assert re.search(r"<dt>Acquisition</dt><dd>3 rounds × 4 channels, 2D \(Z = 1\)</dd>", page)
 
 
 # --- The table "Implemented checks (W-459)" -------------------------------------------------------------------------

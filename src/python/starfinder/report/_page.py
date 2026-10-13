@@ -31,7 +31,8 @@ import numpy as np
 import pandas as pd
 
 from ._schema import READOUT_LEVELS
-from ._values import Unavailable, acquisition, configuration_check, is_value, run_time, software, time_per_step, z_size
+from ._values import (Unavailable, acquisition, configuration_check, is_value, reference_image_z_size, run_time,
+                      software, time_per_step, z_size)
 
 TEMPLATE = "report.html"
 #: The slots of the template, in document order; each is filled exactly once.
@@ -708,9 +709,10 @@ class _Page:
 def identity_facts(collection) -> tuple[dict, list]:
     """The facts of the Summary that the run records and the export hold (configuration check, acquisition with the
     Z size, software, run time) and the rows of ``unavailable.csv`` of the part ``summary.identity``: one per fact
-    that is unavailable (``entry=<fact>``), and ``entry=z_size`` (``not_recorded``) when no record holds a grid."""
+    that is unavailable (``entry=<fact>``), and ``entry=z_size`` (``not_recorded``) when no record holds a grid and
+    no FOV has a reference image."""
     c = collection
-    planes = z_size(c.export, c.placement)
+    planes = z_size(c.export, c.placement, lambda: reference_image_z_size(c.inputs, c.root, c.fov_ids))
     facts = {"acquisition": acquisition(c.records, planes), "z_size": planes,
              "configuration": configuration_check(c.records),
              "software": software(c.records, _get(c.assembly, "software")),
@@ -721,8 +723,9 @@ def identity_facts(collection) -> tuple[dict, list]:
         if name == "z_size":
             if value is None:
                 rows.append(("summary.identity", Unavailable(
-                    "not_recorded", "no record holds a grid: export.json fusion.fovs or assembly.fovs, "
-                                    "placement.json inputs"), "entry=z_size"))
+                    "not_recorded", "no record holds a grid (export.json fusion.fovs or assembly.fovs, "
+                                    "placement.json inputs) and no FOV has a reference image "
+                                    "(images/ref_merged/<fov>.tif)"), "entry=z_size"))
         elif isinstance(value, Unavailable):
             rows.append(("summary.identity", value, f"entry={name}"))
     return facts, rows

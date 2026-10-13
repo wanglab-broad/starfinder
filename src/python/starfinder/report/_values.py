@@ -304,10 +304,11 @@ def configuration_check(records):
     return {"text": text, "groups": list(groups.values()), "differing_keys": differing}
 
 
-def z_size(export, placement):
+def z_size(export, placement, reference_images=None):
     """The Z size of the acquisition: the fused grid's (``export.json`` ``fusion.fovs[*].grid.shape_zyx[0]``),
-    else the FOVs' reference grids as the export's assembly or the placement records them (the reference
-    image's shape, recorded); None when no record holds a grid."""
+    else the FOVs' reference grids as the export's assembly or the placement records them, else the shape of a
+    reference image (``reference_images``, a callable called only then: :func:`reference_image_z_size`); None
+    when none of these exists."""
     sources = (_get_list(export, "fusion", "fovs"), _get_list(export, "assembly", "fovs"),
                [{"grid": g.get("grid")} for g in ((placement or {}).get("inputs") or {}).values()
                 if isinstance(g, dict)])
@@ -316,6 +317,26 @@ def z_size(export, placement):
                  if isinstance(e, dict) and isinstance(e.get("grid"), dict) and e["grid"].get("shape_zyx")]
         if sizes:
             return max(sizes)
+    return None if reference_images is None else reference_images()
+
+
+def reference_image_z_size(inputs, root, fov_ids):
+    """The Z size from the reference image ``images/ref_merged/<fov>.tif`` of the first FOV in list order whose
+    image exists and whose TIFF header settles its shape (``io.tiff._volume_header``: no pixel is decoded); the file
+    is hashed in blocks and listed in ``report.json`` ``inputs`` (kind ``reference_image``). None when no FOV has one.
+    """
+    from pathlib import Path
+
+    from starfinder.io.tiff import _volume_header
+    for fov in fov_ids:
+        path = Path(root) / "images" / "ref_merged" / f"{fov}.tif"
+        if not path.is_file():
+            continue
+        if inputs.verify(path, "reference_image") is not None:
+            continue
+        header = _volume_header(path)
+        if header is not None and header[0] is not None:
+            return int(header[0][0])
     return None
 
 
