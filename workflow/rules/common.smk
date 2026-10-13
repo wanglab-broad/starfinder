@@ -29,6 +29,8 @@ ASSEMBLY_BLOCK = "assembly" in config
 LEGACY_STITCHING_RULES = ('stitching_preparation', 'create_BigStitcher_macro', 'run_BigStitcher_macro',
                           'create_tile_config')
 LEGACY_SAMPLE_RULES = ('create_sample_h5ad', 'create_sample_reads_assignment')
+# The Python-only §2.11 report block: with it, report.smk adds report_sample and report_dataset (option WR1).
+REPORT_BLOCK = "report" in config
 
 ### ==================== [ Workflow Mode Configuration ] =========================
 
@@ -255,6 +257,9 @@ def get_overall_output(wildcards):
         output_list += [f"{OUTPUT_DIR}/stitching/{sample}/placement.json" for sample in SAMPLE]
     if ASSEMBLY_BLOCK:
         output_list += [f"{OUTPUT_DIR}/export/{sample}/export.json" for sample in SAMPLE]
+    if REPORT_BLOCK:
+        output_list += [f"{OUTPUT_DIR}/report/{sample}/report.json" for sample in SAMPLE]
+        output_list += [f"{OUTPUT_DIR}/report/samples.csv"]
     for current_rule in config['rules']:
         if STITCHING_BLOCK and current_rule in LEGACY_STITCHING_RULES:
             continue
@@ -338,9 +343,11 @@ if BACKEND == "python":
             from_workflow_config(config, python_rule)
     # The §2.10 blocks raise here, naming the key, rather than when their rules run; so does the route
     # (check 7 of docs/sample-segmentation-contract.md, without the reuse conditions and the models).
-    from starfinder.dataset.workflow import _check_export_route, _export_config, _stitching_block
+    from starfinder.dataset.workflow import _check_export_route, _export_config, _report_block, _stitching_block
     if STITCHING_BLOCK:
         _stitching_block(config)
     if ASSEMBLY_BLOCK:
         _export_config(config)
         _check_export_route(config)
+    if REPORT_BLOCK:
+        _report_block(config)

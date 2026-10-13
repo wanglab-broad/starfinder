@@ -187,6 +187,10 @@ properties:
   export:
     $ref: "#/$defs/export_block"
 
+  # ==================== Processing report (Python only) ====================
+  report:
+    $ref: "#/$defs/report_block"
+
   # ==================== Backend Selection ====================
   backend:
     type: string
@@ -350,7 +354,7 @@ allOf:
   # The explicit preprocessing and registration recipes, the spot-finding method, channel
   # overrides and rounds, the execution device, readout_mode direct, scoring,
   # deduplication, reads_extraction.background, load_codebook.encoding.pair_to_color, the
-  # segmentation, assignment, stitching, assembly and export blocks, the
+  # segmentation, assignment, stitching, assembly, export and report blocks, the
   # stardist_segmentation target and the rules' checkpoints are Python-only (backend
   # defaults to matlab)
   - if:
@@ -367,6 +371,7 @@ allOf:
           - required: [stitching]
           - required: [assembly]
           - required: [export]
+          - required: [report]
       properties:
         readout_mode:
           const: multiplexed
@@ -1923,4 +1928,103 @@ $defs:
                     - const: import
               additionalProperties: true
         additionalProperties: false
+    additionalProperties: false
+
+  report_block:
+    description: >-
+      Python only. The processing report (docs/report-contract.md, "Workflow configuration"): the
+      ReportConfig fields (keys kept equal to ReportConfig, MarkerGroup, ReportLimits and RuleLimit by a
+      test). With the block, report_sample writes report/{sample}/ after the sample's last per-sample
+      output and report_dataset writes report/index.html and report/samples.csv; an empty block gives
+      the defaults.
+    type: object
+    properties:
+      markers:
+        description: "Groups of one to four genes, each one figure of the marker patterns (MarkerGroup)"
+        type: array
+        items:
+          type: object
+          required: [name, genes]
+          properties:
+            name:
+              type: string
+              minLength: 1
+            genes:
+              type: array
+              minItems: 1
+              maxItems: 4
+              uniqueItems: true
+              items:
+                type: string
+                minLength: 1
+          additionalProperties: false
+      marker_pairs:
+        description: "Pairs of two distinct genes for MECR; none makes MECR unavailable"
+        type: array
+        items:
+          type: array
+          minItems: 2
+          maxItems: 2
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+      positive_threshold:
+        description: "The whole count at which a cell is positive for a gene (default 1)"
+        type: integer
+        minimum: 1
+      example_fovs:
+        description: "Three distinct FOV IDs; null (default): the automatic choice"
+        type: ["array", "null"]
+        minItems: 3
+        maxItems: 3
+        uniqueItems: true
+        items:
+          type: string
+          minLength: 1
+      limits:
+        description: "The limits of the problematic-FOV rules (ReportLimits); an omitted rule keeps its default"
+        type: object
+        properties:
+          shift_residual:
+            $ref: "#/$defs/report_rule_limit"
+          alignment_score:
+            $ref: "#/$defs/report_rule_limit"
+          correct_form_fraction:
+            $ref: "#/$defs/report_rule_limit"
+          matched_fraction:
+            $ref: "#/$defs/report_rule_limit"
+          spots_near_zero:
+            description: "A spot count below this share of the sample median (default 0.05)"
+            type: number
+            exclusiveMinimum: 0
+            exclusiveMaximum: 1
+        additionalProperties: false
+      figure_width_px:
+        description: "The width of the whole-sample figures (default 1600)"
+        type: integer
+        minimum: 1
+      jpeg_quality:
+        description: "The JPEG quality of the whole-sample figures (default 85)"
+        type: integer
+        minimum: 1
+        maximum: 95
+    additionalProperties: false
+
+  report_rule_limit:
+    description: >-
+      The limit of one problematic-FOV rule (RuleLimit): absolute alone, or k and floor (a deviation from
+      the sample median larger than max(k * 1.4826 * MAD, floor)); an omitted key is null, all three null
+      leave the rule unevaluated
+    type: object
+    properties:
+      k:
+        type: ["number", "null"]
+        minimum: 0
+      floor:
+        type: ["number", "null"]
+        minimum: 0
+      absolute:
+        type: ["number", "null"]
+        minimum: 0
     additionalProperties: false

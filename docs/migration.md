@@ -1516,6 +1516,13 @@ run.json"):
   `<output_root>/report/index.html` and `report/samples.csv` from the finished sample reports
   only and returns a `ComparisonRecord` ({doc}`report-contract`, "The comparison entry"); a
   sample without a report is a row marked `missing`. Nothing existing changes.
+* **New: the workflow's `report` block and rules.** A Python-only top-level `report` block
+  whose keys are the `ReportConfig` fields ({doc}`workflow-configuration`, "Processing
+  report"), and with it the new rule file `workflow/rules/report.smk`: `report_sample` per
+  sample (`Dataset.report`, declared output `report/<sample>/report.json`, after the sample's
+  `export_sample`, else its `stitch_sample`, else its FOVs' processing rule) and
+  `report_dataset` (`Dataset.compare_samples` over every sample, declared output
+  `report/samples.csv`). A configuration without the block gains no rule and no output.
 
 ## Intentional behavior changes — not mechanical equivalence
 
