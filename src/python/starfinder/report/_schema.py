@@ -124,11 +124,8 @@ class Pending(NamedTuple):
     rows a later issue writes. ``rows`` restricts a table entry to the rows of these row keys (None: every row).
     ``inputs`` are what the value is computed from: a column of the same row (non-null), ``export`` (the export
     exists and its part ``assemble`` was written), ``cells`` (the sample has cells: an assignment and an export
-    that is not ``molecules_only``), ``placed`` (the FOV has a position in the placement: ``correction_z``
-    non-null), ``any:<column>[,<column>]`` (some row of ``fovs.csv`` with these columns non-null),
-    ``spots_total`` (the ``count`` of ``readout_totals`` level ``spots`` non-null), ``outcome=succeeded``,
-    ``choice`` (the example choice can be made: example FOVs named, or some ``passed_filter`` non-null) and
-    ``configured`` (the rule has a limit, or is categorical).
+    that is not ``molecules_only``) and ``spots_total`` (the ``count`` of ``readout_totals`` level ``spots``
+    non-null).
 
     A pending value is null with no row of ``unavailable.csv`` only while every input is available; with an
     input unavailable it is unavailable with that input's reason, as every other value.
@@ -141,48 +138,26 @@ class Pending(NamedTuple):
     rows: tuple[str, ...] | None = None
 
 
-_LEVELS_FROM_RECORDS = tuple(f"level={level}" for level in READOUT_LEVELS[:-1])
-#: The closed list of the values this staged delivery leaves to the issue that computes them (W-453 to W-456).
+#: The closed list of the values this staged delivery leaves to the issue that computes them (W-454 to W-456).
 #: Each later issue removes the entries it computes when it fills them; the list is empty when the report is
 #: complete. A pending value is a third state of a cell only until then, never a state of the finished report.
 PENDING_VALUES = (
-    Pending("fovs", "example", "W-453", ("choice",)),
-    Pending("fovs", "run_seconds", "W-453", ("started_at", "ended_at")),
-    Pending("fovs", "correct_form_fraction", "W-453", ("correct_form", "spots")),
-    Pending("fovs", "matched_fraction", "W-453", ("matched", "spots")),
-    Pending("fovs", "merged_fraction", "W-453", ("merged_by_deduplication", "spots")),
-    Pending("fovs", "passed_filter_fraction", "W-453", ("passed_filter", "spots")),
     Pending("fovs", "reads_in_cells", "W-455", ("export", "cells")),
     Pending("fovs", "reads_in_cells_fraction", "W-455", ("export", "cells", "n_molecules_retained")),
-    Pending("fovs", "owned_area_um2", "W-453", ("placed", "export")),
-    Pending("fovs", "cell_density_per_mm2", "W-453", ("placed", "export", "n_cells_retained")),
-    *(Pending("registration", f"shift_{a}", "W-453", ("transform_source",)) for a in "zyx"),
-    *(Pending("registration", f"residual_{a}", "W-453", ("transform_source",)) for a in "zyx"),
-    Pending("registration", "alignment_score", "W-453", ("outcome=succeeded",)),
     Pending("readout_totals", "count", "W-455", ("export", "cells"), ("level=reads_in_cells",)),
-    Pending("readout_totals", "fraction_of_spots", "W-453", ("count", "spots_total"), _LEVELS_FROM_RECORDS),
     Pending("readout_totals", "fraction_of_spots", "W-455", ("export", "cells", "spots_total"),
             ("level=reads_in_cells",)),
     Pending("population", "cells", "W-455", ("export", "cells"), ("population=counted",)),
     Pending("population", "molecules", "W-455", ("export", "cells"), ("population=counted",)),
-    Pending("problematic_fovs", None, "W-453"),
     Pending("cells", None, "W-455"),
     Pending("mecr", None, "W-455"),
     Pending("reads_along_z", None, "W-455"),
     Pending("intensity", None, "W-454"),
-    Pending("report.json", "examples", "W-453"),
     Pending("report.json", "replay", "W-454"),
-    Pending("report.json", "summary.spots_median_per_fov", "W-453", ("any:spots",)),
-    Pending("report.json", "summary.matched_fraction", "W-453", ("any:matched,spots",)),
     *(Pending("report.json", f"summary.{key}", "W-455", ("export", "cells"))
       for key in ("counted_cells", "reads_per_cell_median", "genes_per_cell_median")),
-    Pending("report.json", "summary.cells_median_per_fov", "W-453", ("any:n_cells_retained",)),
     *(Pending("report.json", f"summary.{key}", "W-455", ("export", "cells"))
       for key in ("reads_in_cells", "h5ad_whole_count_sum", "reads_in_cells_equal")),
-    *(Pending("report.json", f"rules.{rule}.{key}", "W-453", ("configured",))
-      for rule in PROBLEM_RULES for key in ("evaluated", "fovs_marked")),
-    Pending("unavailable", "rule:<rule>", "W-453"),
-    Pending("unavailable", "summary.problematic_fovs", "W-453"),
     Pending("unavailable", "preprocessing.example", "W-454"),
     Pending("unavailable", "preprocessing.intensity", "W-454"),
     Pending("unavailable", "registration.example", "W-454"),

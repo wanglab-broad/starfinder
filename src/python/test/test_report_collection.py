@@ -33,8 +33,9 @@ from starfinder.report import (PROBLEM_RULES, REPORT_PARTS, REPORT_TABLES, UNAVA
 from starfinder.report import _collect as collect_module
 from starfinder.report._schema import PENDING_VALUES, RULE_KEYS, RULE_UNITS, SUMMARY_KEYS, pending_value
 
-from .report_fixtures import (CELLS_RETAINED, CHANNELS, COUNTS, ENDED, FOVS, MOVING, NOMINAL, ORIGINS, RECORD_VARIANTS,
-                              SAMPLE, STARTED, raw_path, report_cells, report_records, write_inputs)
+from .report_fixtures import (CELLS_RETAINED, CHANNELS, COUNTS, ENDED, FOVS, MOVING, NCC_AFTER, NOMINAL, ORIGINS,
+                              RECORD_VARIANTS, SAMPLE, STARTED, TRANSLATIONS, raw_path, report_cells, report_records,
+                              write_inputs)
 
 pytestmark = [pytest.mark.report, pytest.mark.validation]
 
@@ -111,7 +112,8 @@ PART_REASONS = {
     "files.input": {"no_run_record", "not_recorded", "no_placement"},
     "files.configuration": {"no_run_record", "not_recorded"},
     # "rule:<rule>": a rule not evaluated for the whole sample (summary.problematic_fovs).
-    "rule:": {"no_run_record", "not_configured", "no_placement", "no_export", "no_segmentation"},
+    "rule:": {"no_run_record", "run_not_finished", "step_failed", "not_configured", "not_recorded", "no_placement",
+              "no_export", "part_not_written", "no_segmentation", "input_missing", "input_changed", "undefined"},
 }
 # "The tables": each column's type, and whether its null rule is "never".
 CONTRACT_COLUMNS = {
@@ -178,9 +180,9 @@ def expected_fovs():
     rows = []
     for i, fov in enumerate(FOVS):
         (oz, oy, ox), (nz, ny, nx) = ORIGINS[fov], NOMINAL[fov]
-        rows.append({"fov_id": fov, "list_index": i, "example": None, "run_record": True, "status": "succeeded",
-                     "failed_step": None, "failed_round": None, "started_at": STARTED[fov], "ended_at": ENDED[fov],
-                     "run_seconds": None, "placement_status": "image_supported",
+        rows.append({"fov_id": fov, "list_index": i, "example": EXAMPLES[fov], "run_record": True,
+                     "status": "succeeded", "failed_step": None, "failed_round": None, "started_at": STARTED[fov],
+                     "ended_at": ENDED[fov], "run_seconds": 8.0, "placement_status": "image_supported",
                      "correction_z": oz - nz, "correction_y": oy - ny, "correction_x": ox - nx,
                      # footprint_yx: [o − s/2, o + (n − ½)·s), centre o + (n − 1)/2 · s; s = 0.25, n = 16.
                      "footprint_y0": oy - 0.125, "footprint_y1": oy + 15.5 * 0.25,
@@ -188,8 +190,8 @@ def expected_fovs():
                      "centre_y": oy + 7.5 * 0.25, "centre_x": ox + 7.5 * 0.25,
                      "spots": COUNTS["spots"][fov], "correct_form": COUNTS["endpoint_valid"][fov],
                      "matched": COUNTS["assigned"][fov], "merged_by_deduplication": COUNTS["merged_reads"][fov],
-                     "passed_filter": COUNTS["accepted"][fov], "correct_form_fraction": None,
-                     "matched_fraction": None, "merged_fraction": None, "passed_filter_fraction": None,
+                     "passed_filter": COUNTS["accepted"][fov],
+                     **{f: COUNTS[k][fov] / COUNTS["spots"][fov] for f, k in FRACTIONS.items()},
                      **{c: None for c in EXPORT_COLUMNS}})
     return rows
 
@@ -201,8 +203,12 @@ def frame_of(table, rows):
 
 
 def expected_registration(source="run.json"):
+    # The residuals: each shift minus the median of the round's four shifts on that axis.
+    medians = {(r, a): sorted(TRANSLATIONS[r][f][a] for f in FOVS)[1:3] for r in MOVING for a in range(3)}
     return [{"fov_id": fov, "round": name, "outcome": "succeeded", "fallback": False, "methods": "translation",
-             "transform_source": source, **{c: None for c in REGISTRATION_COLUMNS[4:]}}
+             "transform_source": source, **{f"shift_{x}": float(TRANSLATIONS[name][fov][a]) for a, x in enumerate("zyx")},
+             **{f"residual_{x}": TRANSLATIONS[name][fov][a] - sum(medians[(name, a)]) / 2 for a, x in enumerate("zyx")},
+             "alignment_score": NCC_AFTER[name][fov]}
             for fov in FOVS for name in MOVING]
 
 
@@ -236,8 +242,10 @@ def expected_totals(fovs=FOVS, merged=True):
     for level, key in (("spots", "spots"), ("correct_form", "endpoint_valid"), ("matched", "assigned"),
                        ("merged_by_deduplication", "merged_reads"), ("passed_filter", "accepted")):
         present = merged or level != "merged_by_deduplication"
-        rows.append({"level": level, "count": sum(COUNTS[key][f] for f in fovs) if present else None,
-                     "fraction_of_spots": None, "fovs": len(fovs) if present else 0,
+        total = sum(COUNTS[key][f] for f in fovs)
+        rows.append({"level": level, "count": total if present else None,
+                     "fraction_of_spots": total / sum(COUNTS["spots"][f] for f in fovs) if present else None,
+                     "fovs": len(fovs) if present else 0,
                      "overlaps_counted_per_fov": True})
     rows.append({"level": "reads_in_cells", "count": None, "fraction_of_spots": None, "fovs": 0,
                  "overlaps_counted_per_fov": False})
@@ -263,6 +271,12 @@ def no_export_rows(fovs=FOVS):
 
 
 STITCH_TIME = ("workflow.time", "steps", "seconds", "scope=sample;fov_id=;index=0", "not_recorded")
+# The roles of the example FOVs before a segmentation (EF1), the fractions of the read levels and the rule of the
+# reads without a cell, which needs the export.
+EXAMPLES = {"F1": "example_1", "F2": "example_3", "F3": "example_2", "F4": None}
+FRACTIONS = {"correct_form_fraction": "endpoint_valid", "matched_fraction": "assigned",
+             "merged_fraction": "merged_reads", "passed_filter_fraction": "accepted"}
+READS_NO_CELL_RULE = ("rule:reads_no_cell", None, None, "", "no_export")
 # The default configuration sets no alignment-score limit: the rule is not evaluated (PR1).
 ALIGNMENT_RULE = ("rule:alignment_score", None, None, "", "not_configured")
 
@@ -288,10 +302,15 @@ def test_rc1_normal_sample(records):
     same(tables["steps"], frame_of("steps", expected_steps()))
     same(tables["readout_totals"], frame_of("readout_totals", expected_totals()))
     assert tables["readout_totals"]["count"].tolist()[:5] == [4000, 2960, 2800, 40, 2590]
-    # Placeholder of W-453 (the rules): the table is written with its header only.
-    assert list(tables["problematic_fovs"].columns) == [c for c, _, _ in CONTRACT_COLUMNS["problematic_fovs"]]
-    assert tables["problematic_fovs"].empty
-    assert keyed(tables["unavailable"]) == ordered([STITCH_TIME, ALIGNMENT_RULE] + no_export_rows())
+    # The two rows of the rules (W-453).
+    same(tables["problematic_fovs"], frame_of("problematic_fovs", [
+        {"fov_id": "F3", "section": "Readout", "rule": "correct_form_fraction", "round": None, "axis": None,
+         "measured": 0.5, "sample_median": 0.8, "limit": 0.05, "unit": "fraction",
+         "reason": "correct-form fraction below the limit"},
+        {"fov_id": "F4", "section": "Registration", "rule": "shift_residual", "round": "round3", "axis": "x",
+         "measured": 8.0, "sample_median": 0.0, "limit": 5.0, "unit": "voxels",
+         "reason": "shift residual above the limit (x, round3)"}]))
+    assert keyed(tables["unavailable"]) == ordered([STITCH_TIME, ALIGNMENT_RULE, READS_NO_CELL_RULE] + no_export_rows())
     assert all(isinstance(d, str) and d for d in tables["unavailable"]["detail"])
 
 
@@ -493,7 +512,7 @@ def _not_applicable(table, column, row, case, context):
         record = case.run_record(row["fov_id"]) if row["run_record"] else None
         error = (record or {}).get("error")
         running = record is not None and record["status"] == "running"
-        return {"example": not context.available("choice"), "failed_step": record is not None and error is None,
+        return {"example": True, "failed_step": record is not None and error is None,
                 "failed_round": record is not None and (error is None or error.get("round") is None),
                 "ended_at": running, "run_seconds": running}.get(column, False)
     if table == "registration":
@@ -576,12 +595,9 @@ def check_null_values(case, record, tables):
         configured = context.configured(rule)
         assert (entry["limit"] is None) == (rule in CATEGORICAL)  # n/a: a categorical rule has no limit
         assert (entry["unit"] is None) == (rule in CATEGORICAL)
-        assert (entry["evaluated"] is False) == (not configured) == ((f"rule:{rule}", "") in part_rows)
-        for key in ("evaluated", "fovs_marked"):
-            if entry[key] is None and configured:
-                assert context.pending(pending_value("report.json", f"rules.{rule}.{key}"), rule=rule)
-            elif entry[key] is None:
-                assert key == "fovs_marked"  # n/a: a rule that is not evaluated marks no FOV
+        assert (entry["evaluated"] is False) == ((f"rule:{rule}", "") in part_rows)
+        assert configured or entry["evaluated"] is False
+        assert (entry["fovs_marked"] is None) == (entry["evaluated"] is False)  # n/a: a rule not evaluated
     assert found == set(named), set(named) - found
     return pending
 
@@ -675,7 +691,8 @@ def test_inputs_export_table(tmp_path, inputs_base, reason, edit):
     case, _, record, tables = inputs_case(tmp_path / "root", edit)
     base_rows, rows = keyed(base_tables["unavailable"]), keyed(tables["unavailable"])
     # The median of n_cells_retained over FOVs: no FOV has the value, so it takes the cells' reason.
-    expected = [("summary.key_numbers", "summary", "cells_median_per_fov", "", reason)]
+    expected = [("summary.key_numbers", "summary", "cells_median_per_fov", "", reason),
+                ("rule:reads_no_cell", None, None, "", reason)]
     expected += [("assembly.cells_per_fov", "fovs", c, f"fov_id={f}", reason)
                  for c in ("n_cells", "n_cells_retained", "n_molecules", "n_molecules_retained",
                            "reads_in_cells_fraction", "cell_density_per_mm2") for f in FOVS]
@@ -766,6 +783,7 @@ def test_inputs_placement_table(tmp_path, reason):
     _, record, tables = collect(case)
     rows, base_rows = keyed(tables["unavailable"]), keyed(base["unavailable"])
     assert [r for r in rows if r not in base_rows] == [
+        (f"rule:{rule}", None, None, "", reason) for rule in ("not_placed", "stage_position_fallback")] + [
         ("assembly.placement", "fovs", c, f"fov_id={f}", reason) for c in PLACEMENT_COLUMNS for f in FOVS]
     # The area a FOV owns needs the export first (no_export), so its row and the density's keep their reason.
     assert [r for r in base_rows if r not in rows] == []
@@ -960,7 +978,7 @@ def test_pg6_schema(tmp_path, maker, variant):
     text = (folder / "report.json").read_text()
     strict = json.loads(text, parse_constant=lambda c: pytest.fail(f"report.json holds {c}"))
     absent = {e.name for e in PENDING_VALUES if e.where == "report.json" and "." not in e.name}
-    assert absent == {"examples", "replay"}
+    assert absent == {"replay"}
     assert list(strict) == [k for k in CONTRACT_RECORD_KEYS if k not in absent]
     assert (strict["format_version"], strict["stage"]) == (1, "report")
     # The keys of every level the contract lists.

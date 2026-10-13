@@ -5,14 +5,17 @@ records at their fixed places under the output root (the run records,
 ``registered/transforms.json`` for a run record without ``transforms``, the
 placement, the per-FOV assignment and segmentation records and the export), checks
 each file against the SHA-256 a record holds for it, and writes the tables that copy
-record fields, ``unavailable.csv`` and ``report.json`` into a staging folder that
-replaces the report folder when it is complete (RP1).
+record fields or compute values from them (``_values``: the read fractions, the shifts
+and their residuals, the alignment score, the area a FOV owns and the cell density; the
+summary keys; the example FOVs), the problematic FOVs (``_rules``), ``unavailable.csv``
+and ``report.json`` into a staging folder that replaces the report folder when it is
+complete (RP1).
 
 A cell is a value, not applicable (null, no row of ``unavailable.csv``), unavailable
 (null, one row with its reason) or, in this staged delivery, pending: a computed value
-of ``_schema.PENDING_VALUES`` whose inputs are all available (a fraction, a shift, an
-area, the reads in cells) is left null here and filled by the later issue that computes
-it; a pending cell outside that closed list is an error of the collection.
+of ``_schema.PENDING_VALUES`` whose inputs are all available (the reads in cells) is
+left null here and filled by the later issue that computes it; a pending cell outside
+that closed list is an error of the collection.
 """
 from __future__ import annotations
 
@@ -26,14 +29,16 @@ import uuid
 from collections.abc import Sequence
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import NamedTuple
 
 import pandas as pd
 
 from ._config import ReportConfig, marker_genes
+from ._rules import RuleInputs, evaluate_rules
 from ._schema import (FORMAT_VERSION, POPULATIONS, PROBLEM_RULES, READOUT_LEVELS, REPORT_FILE, REPORT_PARTS,
-                      REPORT_TABLES, RULE_UNITS, STAGE, SUMMARY_KEYS, TABLE_DIR, TABLE_DTYPES, UNAVAILABLE_REASONS,
-                      pending_value, row_key)
+                      REPORT_TABLES, RULE_UNITS, STAGE, SUMMARY_KEYS, TABLE_DIR, TABLE_DTYPES, pending_value, row_key)
+from ._values import (NA, PENDING, ROLES, Unavailable, _Marker, alignment_score, chain_shift, choose_examples,
+                      density, derived, first, fraction, is_value, median, over_fovs, owned_pixels, residuals,
+                      run_seconds)
 
 RUN_RECORD = "run.json"
 _UNPLACED = ("missing", "failed")
@@ -75,45 +80,8 @@ _OUTCOMES = {("application", "succeeded"): "succeeded", ("application", "applica
 _UNFINISHED = {("application", "applying"), ("estimation", "estimating"), ("estimation", "succeeded")}
 _SECTIONS = {"assemble": "assembly", "fuse": "fusion", "segment": "segmentation", "fuse_labels": "labels",
              "export_spatialdata": "spatialdata"}
-_GLOBAL_KINDS = ("translation", "affine")
 # The R1 to R4 keys a run record holds since docs/report-contract.md ("Records added to run.json").
 _ADDED_KEYS = ("transforms", "codebook", "workflow_config")
-
-
-class Unavailable(NamedTuple):
-    """A null value named by one row of ``unavailable.csv``."""
-
-    reason: str
-    detail: str | None = None
-
-
-class _Marker:
-    def __init__(self, name):
-        self.name = name
-
-    def __repr__(self):
-        return self.name
-
-
-#: A null value that does not exist in its case; no row names it.
-NA = _Marker("NA")
-#: A null value computed from available inputs by a definition this collection does not make.
-PENDING = _Marker("PENDING")
-
-
-def _rank(reason):
-    return UNAVAILABLE_REASONS.index(reason)
-
-
-def first(*values):
-    """The unavailable value whose reason comes first in the closed list, or None when none is unavailable (P1)."""
-    found = [v for v in values if isinstance(v, Unavailable)]
-    return min(found, key=lambda v: _rank(v.reason)) if found else None
-
-
-def derived(*inputs):
-    """A value computed from ``inputs``: the first unavailable input, else :data:`PENDING`."""
-    return first(*inputs) or PENDING
 
 
 def _sha256(data: bytes) -> str:
@@ -488,24 +456,44 @@ class _Collection:
         return Unavailable("not_recorded", f"{self._record_path(fov)}: no record of {step}")
 
     def fovs_rows(self):
-        # The example roles are W-453's: pending while a choice can be made (named FOVs, or a read count of some
-        # FOV), else n/a ("also when no example could be chosen").
-        choosable = self.config.example_fovs is not None or any(
-            isinstance(self.count(f, "passed_filter"), int) for f in self.fov_ids)
-        self._example = PENDING if choosable else NA
         rows = []
         for index, fov in enumerate(self.fov_ids):
             record = self.records[fov]
-            row = {"fov_id": fov, "list_index": index, "example": self._example, "run_record": record is not None}
+            row = {"fov_id": fov, "list_index": index, "example": NA, "run_record": record is not None}
             row.update(self._status(fov, record))
             row.update(self._placement_columns(fov))
             for level in _COUNTS:
                 row[level] = self.count(fov, level)
             for column, level in _FRACTIONS.items():
-                row[column] = derived(row[level], row["spots"])
+                row[column] = fraction(row[level], row["spots"], "spots")
             row.update(self._export_columns(fov, row))
             rows.append({c: row[c] for c in TABLE_DTYPES["fovs"]})
+        self.examples = self._choose_examples(rows)
+        if isinstance(self.examples, list):
+            for row in rows:
+                roles = [e.role for e in self.examples if e.fov_id == row["fov_id"]]
+                row["example"] = ";".join(roles) if roles else NA
         return rows
+
+    def examples_record(self):
+        """``report.json`` ``examples``: per role its FOV and how it was chosen; each role null when no example
+        could be chosen (the reason of the read counts is in ``example_reason``)."""
+        if isinstance(self.examples, Unavailable):
+            return {role: None for role in ROLES}
+        return {e.role: e.record() for e in self.examples}
+
+    @property
+    def example_reason(self):
+        """The reason no example could be chosen, or None."""
+        return self.examples if isinstance(self.examples, Unavailable) else None
+
+    def _choose_examples(self, rows):
+        """The example FOVs ("The example FOVs"): the named three, or the automatic choice from the read counts
+        and the counted cells of the owning FOVs; the reason of the read counts when none can be chosen."""
+        return choose_examples(self.fov_ids, {r["fov_id"]: r["passed_filter"] for r in rows},
+                               {r["fov_id"]: r["n_cells_retained"] for r in rows},
+                               owning={r["fov_id"] for r in rows if r["owned_area_um2"] is not NA},
+                               named=self.config.example_fovs)
 
     def _status(self, fov, record):
         names = ("status", "failed_step", "failed_round", "started_at", "ended_at", "run_seconds")
@@ -519,8 +507,8 @@ class _Collection:
                 "failed_round": error.get("round") if error and error.get("round") is not None else NA,
                 "started_at": record.get("started_at") or not_recorded,
                 "ended_at": NA if running else (record.get("ended_at") or not_recorded),
-                "run_seconds": NA if running else derived(record.get("started_at") or not_recorded,
-                                                          record.get("ended_at") or not_recorded)}
+                "run_seconds": NA if running else run_seconds(record.get("started_at") or not_recorded,
+                                                              record.get("ended_at") or not_recorded)}
 
     def _p_row(self, fov):
         return None if self.p_missing is not None else self.p_rows.get(fov)
@@ -589,9 +577,46 @@ class _Collection:
             out["owned_area_um2"] = out["cell_density_per_mm2"] = NA
             return out
         unplaced = Unavailable("fov_not_placed", f"placement status {status}") if status in _UNPLACED else None
-        out["owned_area_um2"] = first(self.p_missing, unplaced, self.e_state) or PENDING
-        out["cell_density_per_mm2"] = derived(out["n_cells_retained"], out["owned_area_um2"])
+        out["owned_area_um2"] = first(self.p_missing, unplaced, self.e_state) or self._owned_area(fov)
+        out["cell_density_per_mm2"] = density(out["n_cells_retained"], out["owned_area_um2"])
         return out
+
+    def _ownership(self):
+        """The export's ownership regions: ``assembly.ownership_map`` of the placement, the grids of the export's
+        FOVs and ``AssemblyConfig(**export.json assembly.config)``, the call ``assemble`` makes; or the reason
+        the placement cannot be loaded."""
+        if not hasattr(self, "_ownership_map"):
+            from starfinder.assembly import AssemblyConfig, ownership_map
+            from starfinder.image import ImageMetadata
+            from starfinder.segmentation import ReferenceGrid
+            from starfinder.stitching import load_placement
+            from starfinder.stitching._persist import TABLE_FILES
+            tables = self.placement.get("tables") or {}
+            for name, file_name in TABLE_FILES.items():
+                entry = tables.get(name) or {}
+                data = self.inputs.read(self.stitching_dir / entry.get("path", file_name), "placement_table",
+                                        entry.get("sha256"))
+                if isinstance(data, Unavailable):
+                    self._ownership_map = data
+                    return data
+            self.grids = {e["fov_id"]: ReferenceGrid(tuple(e["grid"]["shape_zyx"]),
+                                                     ImageMetadata(**e["grid"]["metadata"]), "declared")
+                          for e in self.assembly.get("fovs") or [] if isinstance(e.get("grid"), dict)}
+            self._ownership_map = ownership_map(load_placement(self.stitching_dir), self.grids,
+                                                config=AssemblyConfig(**self.assembly.get("config") or {}))
+        return self._ownership_map
+
+    def _owned_area(self, fov):
+        """"The area a FOV owns" (OA1): the FOV's pixels whose centre it owns, times the pixel area, µm²."""
+        ownership = self._ownership()
+        if isinstance(ownership, Unavailable):
+            return ownership
+        if fov not in self.grids:
+            return NA  # a FOV the export holds without an input owns no point (ownership_map needs its grid)
+        p, grid = self.p_rows[fov], self.grids[fov]
+        spacing = grid.metadata.spacing_zyx
+        pixels = owned_pixels(ownership, fov, (p["origin_z"], p["origin_y"], p["origin_x"]), grid.shape_zyx, spacing)
+        return pixels * spacing[1] * spacing[2]
 
     # registration.csv --------------------------------------------------------------------------------------
 
@@ -611,13 +636,15 @@ class _Collection:
         return self._transform_files[fov]
 
     def _transform(self, fov, record, name):
-        """``(source, results)`` of a succeeded round's transforms (R1, else transforms.json), or Unavailable."""
+        """``(source, results, application_config)`` of a succeeded round's transforms (R1, else
+        transforms.json), or Unavailable."""
         results = _get(record, "transforms", name, "results")
         if results:
-            return "run.json", results
+            return "run.json", results, _get(record, "transforms", name, "application_config")
         saved = self._transforms_file(fov)
         if saved is not None and saved.get("format_version") == 2 and _get(saved, "transforms", name):
-            return "transforms.json", saved["transforms"][name]
+            return "transforms.json", saved["transforms"][name], _get(saved, "applications", name,
+                                                                       "application_config")
         return Unavailable("not_recorded", f"neither {self._record_path(fov)} transforms.{name} nor "
                                            f"checkpoints/{fov}/registered/transforms.json holds the round")
 
@@ -626,6 +653,7 @@ class _Collection:
         for fov in self.fov_ids:
             for name in self.moving_rounds():
                 rows.append(self._registration_row(fov, name))
+        self.shift_medians = residuals(rows)
         return rows
 
     def _registration_row(self, fov, name):
@@ -658,15 +686,15 @@ class _Collection:
         transform = self._transform(fov, record, name)
         if isinstance(transform, Unavailable):
             row["transform_source"] = transform
-            shift = transform
+            shift = (transform,) * 3
         else:
             row["transform_source"] = transform[0]
-            kinds = [_get(entry, "transform", "kind") for entry in transform[1]]
-            shift = PENDING if any(k in _GLOBAL_KINDS for k in kinds) else NA
-        for axis in "zyx":
-            row[f"shift_{axis}"] = shift
-            row[f"residual_{axis}"] = shift
-        row["alignment_score"] = PENDING
+            shift = chain_shift(transform[1], transform[2])
+            shift = (NA,) * 3 if shift is NA else shift
+        for axis, value in zip("zyx", shift):
+            row[f"shift_{axis}"] = value
+            row[f"residual_{axis}"] = value  # replaced by residuals() once every row of the round exists
+        row["alignment_score"] = alignment_score(entries, outcome)
         return row
 
     # steps.csv ---------------------------------------------------------------------------------------------
@@ -749,6 +777,8 @@ class _Collection:
 
     @staticmethod
     def readout_rows(fovs):
+        """``readout_totals.csv``: per level the sum over the FOVs with a value, and its fraction of the spots of
+        the same FOVs (``count / Σ_{F_L ∩ F_spots} spots``)."""
         rows = []
         spots = None
         for level in READOUT_LEVELS:
@@ -762,8 +792,13 @@ class _Collection:
                 count = first(*cells)
             if level == "spots":
                 spots = count
-            fraction = derived(count, spots)
-            rows.append({"level": level, "count": count, "fraction_of_spots": fraction, "fovs": len(values),
+            if level == "reads_in_cells" or not isinstance(count, int) or not isinstance(spots, int):
+                share = derived(count, spots)  # the reads in cells are W-455's
+            else:
+                share = fraction(count, sum(row["spots"] for row in fovs
+                                            if isinstance(row[level], int) and isinstance(row["spots"], int)),
+                                 "spots")
+            rows.append({"level": level, "count": count, "fraction_of_spots": share, "fovs": len(values),
                          "overlaps_counted_per_fov": level != "reads_in_cells"})
         return rows
 
@@ -798,17 +833,20 @@ class _Collection:
 
     # Parts with no cell ------------------------------------------------------------------------------------
 
+    def no_rounds_reason(self):
+        """The reason ``registration.csv`` has no round: no run record, or the first reason of the run records'
+        registration (not configured, not reached)."""
+        if not any(r is not None for r in self.records.values()):
+            return Unavailable("no_run_record", "no FOV of the list has a run record")
+        return first(*(self._not_reached(f, r, _get(r, "config", "pipeline", "registration") is not None,
+                                         "registration")
+                       for f, r in self.records.items() if r is not None))
+
     def part_rows_for(self, registration):
         rows = [("workflow.steps", reason, f"fov_id={fov}") for fov, reason in self.lane_missing.items()]
-        any_record = any(r is not None for r in self.records.values())
         maps_missing = None if self.placement is not None or self.export is not None else self.p_missing
         if not registration:
-            if not any_record:
-                reason = Unavailable("no_run_record", "no FOV of the list has a run record")
-            else:
-                reason = first(*(self._not_reached(f, r, _get(r, "config", "pipeline", "registration") is not None,
-                                                   "registration")
-                                 for f, r in self.records.items() if r is not None))
+            reason = self.no_rounds_reason()
             rows.append(("registration.maps", first(reason, maps_missing), ""))
             rows.append(("registration.heatmap", reason, ""))
         elif maps_missing is not None:
@@ -830,47 +868,58 @@ class _Collection:
     # report.json --------------------------------------------------------------------------------------------
 
     def summary(self, fovs):
-        """``report.json`` ``summary``: the keys the records give, the later definitions' keys pending or with the
-        reason of their inputs (a median or sum over FOVs is unavailable only when no FOV has the value)."""
+        """``report.json`` ``summary``: a median or sum over FOVs is unavailable only when no FOV has the value,
+        with the first reason of their cells; the keys of the sample's cells are W-455's."""
         records = [r for r in self.records.values() if r is not None]
 
-        def over(columns, rows=fovs):
-            cells = [row[c] for row in rows for c in columns]
-            if any(all(isinstance(row[c], int) for c in columns) for row in rows) or any(v is PENDING for v in cells):
-                return PENDING
-            return first(*cells) or Unavailable("undefined", "no FOV")
+        def matched_fraction():
+            both = [row for row in fovs if is_value(row["matched"]) and is_value(row["spots"])]
+            if not both:
+                return first(*(row[c] for row in fovs for c in ("matched", "spots"))) or Unavailable("undefined",
+                                                                                                   "no FOV")
+            return fraction(sum(row["matched"] for row in both), sum(row["spots"] for row in both), "spots")
+
+        def reads_in_cells():
+            cells = [row["reads_in_cells"] for row in fovs]
+            return PENDING if any(is_value(v) or v is PENDING for v in cells) else (
+                first(*cells) or Unavailable("undefined", "no FOV"))
 
         cells = first(self.e_state, self.no_cells) or PENDING
         owning = [row for row in fovs if row["owned_area_um2"] is not NA]
         summary = {"fovs_expected": len(self.fov_ids), "fovs_with_run_record": len(records),
                    "fovs_succeeded": sum(r.get("status") == "succeeded" for r in records) if records else
                    Unavailable("no_run_record", "no FOV of the list has a run record"),
-                   "spots_median_per_fov": over(["spots"]), "matched_fraction": over(["matched", "spots"]),
+                   "spots_median_per_fov": over_fovs([row["spots"] for row in fovs], median),
+                   "matched_fraction": matched_fraction(),
                    "counted_cells": cells, "reads_per_cell_median": cells, "genes_per_cell_median": cells,
-                   "cells_median_per_fov": over(["n_cells_retained"], owning),
-                   "reads_in_cells": over(["reads_in_cells"]), "h5ad_whole_count_sum": cells}
+                   "cells_median_per_fov": over_fovs([row["n_cells_retained"] for row in owning], median),
+                   "reads_in_cells": reads_in_cells(), "h5ad_whole_count_sum": cells}
         summary["reads_in_cells_equal"] = derived(summary["reads_in_cells"], summary["h5ad_whole_count_sum"])
         return {key: summary[key] for key in SUMMARY_KEYS}
 
-    def rules(self):
-        """``report.json`` ``rules`` with what the configuration gives; a rule with no limit is not evaluated."""
-        limits, rules, rows = self.config.limits, {}, []
+    def rules(self, fovs, registration, rounds_reason):
+        """The problematic FOVs: the rows of ``problematic_fovs.csv``, ``report.json`` ``rules`` (the limit, the
+        unit, whether the rule was evaluated, the FOVs it marks) and the ``rule:<rule>`` rows of the rules not
+        evaluated for the sample."""
+        limits = self.config.limits
+        if self.placement is None or self.p_missing is not None:
+            flags = self.p_missing
+        else:
+            flags = {fov: ("" if pd.isna(row["flags"]) else row["flags"]) for fov, row in self.p_rows.items()}
+        rows, evaluated, part_rows = evaluate_rules(
+            fovs, registration, limits, RuleInputs(self.fov_ids, self.records, flags, rounds_reason,
+                                                   self.shift_medians))
+        rules = {}
         for rule in PROBLEM_RULES:
-            configured = True
             if rule == "spots_near_zero":
                 limit = {"fraction_of_median": limits.spots_near_zero}
             elif rule in RULE_UNITS:
                 setting = getattr(limits, rule)
                 limit = {"k": setting.k, "floor": setting.floor, "absolute": setting.absolute}
-                configured = any(v is not None for v in limit.values())
             else:
                 limit = NA  # a categorical rule
-            rules[rule] = {"limit": limit, "unit": RULE_UNITS.get(rule, NA),
-                           "evaluated": PENDING if configured else False, "fovs_marked": PENDING if configured else NA}
-            if not configured:
-                rows.append((f"rule:{rule}", Unavailable("not_configured", f"config.limits.{rule} sets no limit"),
-                             ""))
-        return rules, rows
+            rules[rule] = {"limit": limit, "unit": RULE_UNITS.get(rule, NA), **evaluated[rule]}
+        return rows, rules, part_rows
 
     def resolved_runs(self):
         assignment = {"name": self.assignment,
@@ -1026,8 +1075,9 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
     tables = {"fovs": fovs, "registration": registration, "steps": collection.steps_rows(registration),
               "readout_totals": collection.readout_rows(fovs), "population": collection.population_rows(),
               "problematic_fovs": []}
+    tables["problematic_fovs"], rules, rule_rows = collection.rules(
+        fovs, registration, None if registration else collection.no_rounds_reason())
     summary = collection.summary(fovs)
-    rules, rule_rows = collection.rules()
     for key, value in summary.items():
         if value is PENDING:
             _check_pending("report.json", f"summary.{key}")
@@ -1059,6 +1109,7 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
                        "parts": dict((export or {}).get("parts") or {})},
             "inputs": list(inputs.entries.values()), "files": files,
             "unavailable": [_plain(row) for row in unavailable],
+            "examples": collection.examples_record(),
             "rules": {rule: _plain(entry) for rule, entry in rules.items()}, "summary": _plain(summary),
             **timer.record()}
         write_json(record, staging / REPORT_FILE)
