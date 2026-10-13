@@ -12,7 +12,8 @@ with ``end_bases``. The transform entries are made by ``io/_checkpoint.py``:
 +0.25 µm in X), review ``not_needed``. The run records name raw inputs whose bytes are
 fixed here; the files are written only on request (the page's fixture writes no image).
 
-``report_cells``: ``report_records`` with an export folder: ``export/s1/tables/fovs.csv``,
+``report_cells``: ``report_records`` with each FOV's saved assignment ``default`` (and its cell run) and an
+export folder that records their SHA-256 as the assembly does: ``export/s1/tables/fovs.csv``,
 ``cells.csv``, ``molecules.csv``, ``counts.csv`` through the checkpoint table writer and
 ``sample.h5ad`` through ``assignment.write_h5ad``, with ``export.json`` written through
 ``sample_output/_record.py`` so that ``verify_section_hashes`` passes; route ``per_fov``.
@@ -562,8 +563,7 @@ def write_export(case: ReportCase, variant=None) -> None:
         "flags": {"computed": [], "conflicts": True},
         "fovs": [{"fov_id": f["fov_id"], "placement_status": f["placement_status"],
                   "origin_zyx": list(ORIGINS[f["fov_id"]]), "kind": "assignment",
-                  "assignment": {"name": "default", "folder": None, "source": "folder", "record_sha256": None,
-                                 "tables": {}},
+                  "assignment": assignment_entry(case, f["fov_id"]),
                   "grid": grid, "owns_points": True} for f in fovs],
         "counts": {"cells": population(cell_frame, CELL_ASSEMBLY_REASONS, "n_cells"),
                    "molecules": population(molecule_frame, MOLECULE_ASSEMBLY_REASONS, "n_molecules"),
@@ -578,6 +578,47 @@ def cells_config() -> ReportConfig:
                         marker_pairs=(("G1", "G2"), ("G4", "G5")))
 
 
+def write_assignment_folder(case: ReportCase, fov) -> Path:
+    """The saved assignment ``default`` of a FOV and its cell run ``cell``, in the layout of assignment/_persist.py.
+
+    Hand-written: ``segmentation/cell/segmentation.json`` (a computed run, method ``watershed``) and
+    ``assignment/default/`` with ``cells.csv`` and ``assignment.json``, whose ``inputs.cells`` holds the run's
+    record and its record SHA-256 (``assignment/_assign.py``: ``_label_input``) and whose ``files`` the SHA-256
+    of ``cells.csv``.
+    """
+    from starfinder.assignment._assign import _sha256_json
+    run = case.checkpoint(fov) / "segmentation" / "cell"
+    run.mkdir(parents=True, exist_ok=True)
+    segmentation = {"format_version": 1, "stage": "segmentation", "run": "cell", "target": "cell",
+                    "geometry": "volume", "methods": [{"stage": "segmentation", "method": "watershed"}],
+                    "import": None, "operations": [], "outcome": "ok"}
+    (run / "segmentation.json").write_text(json.dumps(segmentation, indent=2) + "\n")
+    folder = case.checkpoint(fov) / "assignment" / "default"
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "cells.csv").write_text("cell_id,status\n1,kept\n")
+    record = {"format_version": 1, "stage": "assignment", "name": "default",
+              "inputs": {"cells": {"run": "cell", "target": "cell", "geometry": "volume",
+                                   "record_sha256": _sha256_json(segmentation), "saved_under_run": True,
+                                   "file": {"path": "../../segmentation/cell/labels.tif", "sha256": None},
+                                   "record": segmentation},
+                         "nuclei": None},
+              "files": {"cells": {"path": "cells.csv", "sha256": sha256((folder / "cells.csv").read_bytes()),
+                                  "dtypes": {}}}}
+    (folder / "assignment.json").write_text(json.dumps(record, indent=2) + "\n")
+    return folder
+
+
+def assignment_entry(case: ReportCase, fov) -> dict:
+    """``assembly.fovs[*].assignment`` of a folder source, as ``assembly/_assemble.py``: ``_fov_record`` writes it."""
+    from starfinder.segmentation._persist import file_sha256
+    folder = case.checkpoint(fov) / "assignment" / "default"
+    record = json.loads((folder / "assignment.json").read_text())
+    return {"name": "default", "folder": str(folder), "source": "folder",
+            "record_sha256": file_sha256(folder / "assignment.json"),
+            "tables": {t: record["files"][t]["sha256"] for t in ("molecules", "cells", "counts")
+                       if t in record["files"]}}
+
+
 def report_cells(root, variant=None) -> ReportCase:
     """``report_records`` with the export folder of ``report_cells`` (or a variant); needs the anndata extra."""
     if variant is not None and variant not in CELL_VARIANTS:
@@ -585,6 +626,8 @@ def report_cells(root, variant=None) -> ReportCase:
     case = report_records(root)
     if variant != "no_markers":
         case.config = cells_config()
+    for fov in case.fov_ids:
+        write_assignment_folder(case, fov)
     write_export(case, variant)
     return case
 

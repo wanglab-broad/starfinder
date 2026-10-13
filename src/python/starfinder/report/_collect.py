@@ -9,9 +9,10 @@ record fields, ``unavailable.csv`` and ``report.json`` into a staging folder tha
 replaces the report folder when it is complete (RP1).
 
 A cell is a value, not applicable (null, no row of ``unavailable.csv``), unavailable
-(null, one row with its reason) or not computed yet: a computed value whose inputs
-are all available (a fraction, a shift, an area, the reads in cells) is left null
-here and filled by the definition of docs/report-algorithms.md that computes it.
+(null, one row with its reason) or, in this staged delivery, pending: a computed value
+of ``_schema.PENDING_VALUES`` whose inputs are all available (a fraction, a shift, an
+area, the reads in cells) is left null here and filled by the later issue that computes
+it; a pending cell outside that closed list is an error of the collection.
 """
 from __future__ import annotations
 
@@ -31,7 +32,8 @@ import pandas as pd
 
 from ._config import ReportConfig, marker_genes
 from ._schema import (FORMAT_VERSION, POPULATIONS, PROBLEM_RULES, READOUT_LEVELS, REPORT_FILE, REPORT_PARTS,
-                      REPORT_TABLES, STAGE, TABLE_DIR, TABLE_DTYPES, UNAVAILABLE_REASONS, row_key)
+                      REPORT_TABLES, RULE_UNITS, STAGE, SUMMARY_KEYS, TABLE_DIR, TABLE_DTYPES, UNAVAILABLE_REASONS,
+                      pending_value, row_key)
 
 RUN_RECORD = "run.json"
 _UNPLACED = ("missing", "failed")
@@ -173,6 +175,27 @@ class _Inputs:
             if not strict:
                 return None
             raise ValueError(f"{path} is not a JSON file: {error}") from error
+
+    def record(self, path, kind, recorded):
+        """A JSON record checked against the SHA-256 of its canonical content that another record holds.
+
+        ``assignment.json`` ``inputs.cells.record_sha256`` hashes the segmentation record the assignment read
+        (``assignment/_assign.py``: ``_sha256_json``), not the file's bytes. Returns the record, None when it
+        does not parse, or :class:`Unavailable` (``input_missing``, ``input_changed``).
+        """
+        from starfinder.assignment._assign import _sha256_json
+        path = Path(path)
+        name = self.relative(path)
+        if not path.is_file():
+            return Unavailable("input_missing", f"{name} (recorded record SHA-256 {recorded})")
+        record = self.json(path, kind, strict=False)
+        if recorded is not None:
+            self.entries[name]["verified"] = True
+            digest = _sha256_json(record) if record is not None else None
+            if digest != recorded:
+                return Unavailable("input_changed", f"{name} holds a record of SHA-256 {digest}, the assignment's "
+                                                    f"record {recorded}")
+        return record
 
     def table(self, path, kind, recorded, dtypes):
         """A recorded table read with its dtypes, or :class:`Unavailable`."""
@@ -383,15 +406,30 @@ class _Collection:
         return None
 
     def _assignments(self):
-        """FOV → its assignment record (route per FOV, or no export), with the segmentation record it read."""
-        found = {}
+        """FOV → its assignment record (route per FOV, or no export), with the segmentation record it read.
+
+        ``assignment.json`` is checked against the SHA-256 the export records for it
+        (``assembly.fovs[*].assignment.record_sha256`` of a folder source), and the cell run's
+        ``segmentation.json`` against the record SHA-256 ``assignment.json`` holds for it; a FOV whose record is
+        missing or changed has no segmentation and assignment rows, and ``lane_missing`` holds its reason.
+        """
+        found, self.lane_missing = {}, {}
         if self.assignment is None or self.route == "after_fusion":
             return found
+        recorded = {}
+        for entry in (self.assembly or {}).get("fovs") or []:
+            saved = entry.get("assignment") or {}
+            if saved.get("source") == "folder" and saved.get("name") == self.assignment and saved.get("record_sha256"):
+                recorded[entry.get("fov_id")] = saved["record_sha256"]
         for fov in self.fov_ids:
-            folder = self.root / "checkpoints" / fov / "assignment" / self.assignment
-            if not (folder / "assignment.json").is_file():
+            path = self.root / "checkpoints" / fov / "assignment" / self.assignment / "assignment.json"
+            if not path.is_file() and fov not in recorded:
                 continue
-            record = self.inputs.json(folder / "assignment.json", "assignment_record", strict=False)
+            data = self.inputs.read(path, "assignment_record", recorded.get(fov))
+            if isinstance(data, Unavailable):
+                self.lane_missing[fov] = data
+                continue
+            record = self.inputs.json(path, "assignment_record", strict=False)
             if not isinstance(record, dict):
                 continue
             cells = _get(record, "inputs", "cells") or {}
@@ -399,8 +437,13 @@ class _Collection:
             seg = None
             if run is not None:
                 path = self.root / "checkpoints" / fov / "segmentation" / run / "segmentation.json"
-                if path.is_file():
-                    seg = self.inputs.json(path, "segmentation_record", strict=False)
+                # The run's record exists when the run was saved under it (its labels linked from there); an
+                # import or a run kept in memory has none, and the assignment's own copy of the record is read.
+                if path.is_file() or cells.get("saved_under_run"):
+                    seg = self.inputs.record(path, "segmentation_record", cells.get("record_sha256"))
+            if isinstance(seg, Unavailable):
+                self.lane_missing[fov] = seg
+                continue
             found[fov] = (record, seg if isinstance(seg, dict) else cells.get("record"))
         return found
 
@@ -445,10 +488,15 @@ class _Collection:
         return Unavailable("not_recorded", f"{self._record_path(fov)}: no record of {step}")
 
     def fovs_rows(self):
+        # The example roles are W-453's: pending while a choice can be made (named FOVs, or a read count of some
+        # FOV), else n/a ("also when no example could be chosen").
+        choosable = self.config.example_fovs is not None or any(
+            isinstance(self.count(f, "passed_filter"), int) for f in self.fov_ids)
+        self._example = PENDING if choosable else NA
         rows = []
         for index, fov in enumerate(self.fov_ids):
             record = self.records[fov]
-            row = {"fov_id": fov, "list_index": index, "example": NA, "run_record": record is not None}
+            row = {"fov_id": fov, "list_index": index, "example": self._example, "run_record": record is not None}
             row.update(self._status(fov, record))
             row.update(self._placement_columns(fov))
             for level in _COUNTS:
@@ -751,7 +799,7 @@ class _Collection:
     # Parts with no cell ------------------------------------------------------------------------------------
 
     def part_rows_for(self, registration):
-        rows = []
+        rows = [("workflow.steps", reason, f"fov_id={fov}") for fov, reason in self.lane_missing.items()]
         any_record = any(r is not None for r in self.records.values())
         maps_missing = None if self.placement is not None or self.export is not None else self.p_missing
         if not registration:
@@ -781,6 +829,49 @@ class _Collection:
 
     # report.json --------------------------------------------------------------------------------------------
 
+    def summary(self, fovs):
+        """``report.json`` ``summary``: the keys the records give, the later definitions' keys pending or with the
+        reason of their inputs (a median or sum over FOVs is unavailable only when no FOV has the value)."""
+        records = [r for r in self.records.values() if r is not None]
+
+        def over(columns, rows=fovs):
+            cells = [row[c] for row in rows for c in columns]
+            if any(all(isinstance(row[c], int) for c in columns) for row in rows) or any(v is PENDING for v in cells):
+                return PENDING
+            return first(*cells) or Unavailable("undefined", "no FOV")
+
+        cells = first(self.e_state, self.no_cells) or PENDING
+        owning = [row for row in fovs if row["owned_area_um2"] is not NA]
+        summary = {"fovs_expected": len(self.fov_ids), "fovs_with_run_record": len(records),
+                   "fovs_succeeded": sum(r.get("status") == "succeeded" for r in records) if records else
+                   Unavailable("no_run_record", "no FOV of the list has a run record"),
+                   "spots_median_per_fov": over(["spots"]), "matched_fraction": over(["matched", "spots"]),
+                   "counted_cells": cells, "reads_per_cell_median": cells, "genes_per_cell_median": cells,
+                   "cells_median_per_fov": over(["n_cells_retained"], owning),
+                   "reads_in_cells": over(["reads_in_cells"]), "h5ad_whole_count_sum": cells}
+        summary["reads_in_cells_equal"] = derived(summary["reads_in_cells"], summary["h5ad_whole_count_sum"])
+        return {key: summary[key] for key in SUMMARY_KEYS}
+
+    def rules(self):
+        """``report.json`` ``rules`` with what the configuration gives; a rule with no limit is not evaluated."""
+        limits, rules, rows = self.config.limits, {}, []
+        for rule in PROBLEM_RULES:
+            configured = True
+            if rule == "spots_near_zero":
+                limit = {"fraction_of_median": limits.spots_near_zero}
+            elif rule in RULE_UNITS:
+                setting = getattr(limits, rule)
+                limit = {"k": setting.k, "floor": setting.floor, "absolute": setting.absolute}
+                configured = any(v is not None for v in limit.values())
+            else:
+                limit = NA  # a categorical rule
+            rules[rule] = {"limit": limit, "unit": RULE_UNITS.get(rule, NA),
+                           "evaluated": PENDING if configured else False, "fovs_marked": PENDING if configured else NA}
+            if not configured:
+                rows.append((f"rule:{rule}", Unavailable("not_configured", f"config.limits.{rule} sets no limit"),
+                             ""))
+        return rules, rows
+
     def resolved_runs(self):
         assignment = {"name": self.assignment,
                       "folders": {fov: f"checkpoints/{fov}/assignment/{self.assignment}" for fov in self.assignments}}
@@ -799,8 +890,18 @@ class _Collection:
 
 # --- Tables ------------------------------------------------------------------------------------------------------
 
+def _check_pending(where, name, key=None):
+    """A pending value must be an entry of the closed list ``_schema.PENDING_VALUES``."""
+    if pending_value(where, name, key) is None:
+        raise RuntimeError(f"the collection left {where} {name} [{key}] pending, which PENDING_VALUES does not list")
+
+
 def _frame(name, rows):
     dtypes = TABLE_DTYPES[name]
+    for row in rows:
+        for column, value in row.items():
+            if value is PENDING:
+                _check_pending(name, column, row_key(name, _plain(row)))
     data = {c: pd.Series([None if isinstance(r[c], (Unavailable, _Marker)) else r[c] for r in rows],
                          dtype=object).astype(dtypes[c]) for c in dtypes}
     return pd.DataFrame(data, columns=list(dtypes))
@@ -817,9 +918,14 @@ def _part_rank(part):
 _TABLE_RANK = {name: i for i, name in enumerate(REPORT_TABLES)} | {"summary": len(REPORT_TABLES)}
 
 
-def _unavailable_rows(tables, part_rows):
-    """The rows of ``unavailable.csv``, in the contract's order."""
+def _unavailable_rows(tables, part_rows, summary):
+    """The rows of ``unavailable.csv``, in the contract's order (``summary`` keys after the tables)."""
     entries = []
+    for k_index, (key, value) in enumerate(summary.items()):
+        if isinstance(value, Unavailable):
+            entries.append(((*_part_rank("summary.key_numbers"), _TABLE_RANK["summary"], k_index, 0),
+                            {"part": "summary.key_numbers", "table": "summary", "column": key, "row_key": "",
+                             "reason": value.reason, "detail": value.detail}))
     for position, (part, value, key) in enumerate(part_rows):
         entries.append(((*_part_rank(part), -1, 0, position),
                         {"part": part, "table": None, "column": None, "row_key": key, "reason": value.reason,
@@ -920,7 +1026,16 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
     tables = {"fovs": fovs, "registration": registration, "steps": collection.steps_rows(registration),
               "readout_totals": collection.readout_rows(fovs), "population": collection.population_rows(),
               "problematic_fovs": []}
-    unavailable = _unavailable_rows(tables, collection.part_rows_for(registration))
+    summary = collection.summary(fovs)
+    rules, rule_rows = collection.rules()
+    for key, value in summary.items():
+        if value is PENDING:
+            _check_pending("report.json", f"summary.{key}")
+    for rule, entry in rules.items():
+        for key, value in entry.items():
+            if value is PENDING:
+                _check_pending("report.json", f"rules.{rule}.{key}")
+    unavailable = _unavailable_rows(tables, collection.part_rows_for(registration) + rule_rows, summary)
     tables["unavailable"] = unavailable
     resolved_assignment, resolved_segmentation = collection.resolved_runs()
 
@@ -944,7 +1059,8 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
                        "parts": dict((export or {}).get("parts") or {})},
             "inputs": list(inputs.entries.values()), "files": files,
             "unavailable": [_plain(row) for row in unavailable],
-            "rules": {}, "summary": {}, **timer.record()}
+            "rules": {rule: _plain(entry) for rule, entry in rules.items()}, "summary": _plain(summary),
+            **timer.record()}
         write_json(record, staging / REPORT_FILE)
         _replace(folder, staging, [entry["path"] for entry in files])
     finally:

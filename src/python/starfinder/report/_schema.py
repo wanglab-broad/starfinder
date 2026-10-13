@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import NamedTuple
 
 #: The reasons a value or a part can be unavailable, in the order that decides which one a value gets (P1).
 UNAVAILABLE_REASONS = (
@@ -100,6 +101,107 @@ POPULATIONS = ("input", "retained", "excluded_not_owner", "excluded_fov_not_plac
 RECORD_KEYS = ("format_version", "stage", "sample", "dataset_id", "sample_id", "fov_ids", "route", "assignment",
                "segmentation", "generated_at", "software", "config", "stages", "inputs", "files", "unavailable",
                "examples", "replay", "rules", "summary", "wall_s", "cpu_s", "peak_rss_kib")
+
+#: The keys of ``report.json`` ``summary``, in the contract's order.
+SUMMARY_KEYS = ("fovs_expected", "fovs_with_run_record", "fovs_succeeded", "spots_median_per_fov", "matched_fraction",
+                "counted_cells", "reads_per_cell_median", "genes_per_cell_median", "cells_median_per_fov",
+                "reads_in_cells", "h5ad_whole_count_sum", "reads_in_cells_equal")
+#: The keys of each rule's entry of ``report.json`` ``rules``: the limit applied, the unit, whether it was
+#: evaluated and the number of FOVs it marks.
+RULE_KEYS = ("limit", "unit", "evaluated", "fovs_marked")
+#: The unit of each rule on values (docs/report-algorithms.md, "The rules of the first delivery"); the
+#: categorical rules have none.
+RULE_UNITS = {"shift_residual": "voxels", "alignment_score": "dimensionless", "correct_form_fraction": "fraction",
+              "matched_fraction": "fraction", "spots_near_zero": "reads"}
+
+
+class Pending(NamedTuple):
+    """A value of the report that a later issue of the §2.11 implementation computes (staged delivery).
+
+    ``where`` is a table (``fovs``, ``registration``, …), ``report.json`` or ``report.html``; ``name`` the column
+    of the table or the key of ``report.json`` (``summary.<key>``, ``rules.<rule>.<key>``, a top-level key), or
+    None for a whole table or file that is not written yet; for ``where`` ``unavailable`` it is the part whose
+    rows a later issue writes. ``rows`` restricts a table entry to the rows of these row keys (None: every row).
+    ``inputs`` are what the value is computed from: a column of the same row (non-null), ``export`` (the export
+    exists and its part ``assemble`` was written), ``cells`` (the sample has cells: an assignment and an export
+    that is not ``molecules_only``), ``placed`` (the FOV has a position in the placement: ``correction_z``
+    non-null), ``any:<column>[,<column>]`` (some row of ``fovs.csv`` with these columns non-null),
+    ``spots_total`` (the ``count`` of ``readout_totals`` level ``spots`` non-null), ``outcome=succeeded``,
+    ``choice`` (the example choice can be made: example FOVs named, or some ``passed_filter`` non-null) and
+    ``configured`` (the rule has a limit, or is categorical).
+
+    A pending value is null with no row of ``unavailable.csv`` only while every input is available; with an
+    input unavailable it is unavailable with that input's reason, as every other value.
+    """
+
+    where: str
+    name: str | None
+    issue: str
+    inputs: tuple[str, ...] = ()
+    rows: tuple[str, ...] | None = None
+
+
+_LEVELS_FROM_RECORDS = tuple(f"level={level}" for level in READOUT_LEVELS[:-1])
+#: The closed list of the values this staged delivery leaves to the issue that computes them (W-453 to W-456).
+#: Each later issue removes the entries it computes when it fills them; the list is empty when the report is
+#: complete. A pending value is a third state of a cell only until then, never a state of the finished report.
+PENDING_VALUES = (
+    Pending("fovs", "example", "W-453", ("choice",)),
+    Pending("fovs", "run_seconds", "W-453", ("started_at", "ended_at")),
+    Pending("fovs", "correct_form_fraction", "W-453", ("correct_form", "spots")),
+    Pending("fovs", "matched_fraction", "W-453", ("matched", "spots")),
+    Pending("fovs", "merged_fraction", "W-453", ("merged_by_deduplication", "spots")),
+    Pending("fovs", "passed_filter_fraction", "W-453", ("passed_filter", "spots")),
+    Pending("fovs", "reads_in_cells", "W-455", ("export", "cells")),
+    Pending("fovs", "reads_in_cells_fraction", "W-455", ("export", "cells", "n_molecules_retained")),
+    Pending("fovs", "owned_area_um2", "W-453", ("placed", "export")),
+    Pending("fovs", "cell_density_per_mm2", "W-453", ("placed", "export", "n_cells_retained")),
+    *(Pending("registration", f"shift_{a}", "W-453", ("transform_source",)) for a in "zyx"),
+    *(Pending("registration", f"residual_{a}", "W-453", ("transform_source",)) for a in "zyx"),
+    Pending("registration", "alignment_score", "W-453", ("outcome=succeeded",)),
+    Pending("readout_totals", "count", "W-455", ("export", "cells"), ("level=reads_in_cells",)),
+    Pending("readout_totals", "fraction_of_spots", "W-453", ("count", "spots_total"), _LEVELS_FROM_RECORDS),
+    Pending("readout_totals", "fraction_of_spots", "W-455", ("export", "cells", "spots_total"),
+            ("level=reads_in_cells",)),
+    Pending("population", "cells", "W-455", ("export", "cells"), ("population=counted",)),
+    Pending("population", "molecules", "W-455", ("export", "cells"), ("population=counted",)),
+    Pending("problematic_fovs", None, "W-453"),
+    Pending("cells", None, "W-455"),
+    Pending("mecr", None, "W-455"),
+    Pending("reads_along_z", None, "W-455"),
+    Pending("intensity", None, "W-454"),
+    Pending("report.json", "examples", "W-453"),
+    Pending("report.json", "replay", "W-454"),
+    Pending("report.json", "summary.spots_median_per_fov", "W-453", ("any:spots",)),
+    Pending("report.json", "summary.matched_fraction", "W-453", ("any:matched,spots",)),
+    *(Pending("report.json", f"summary.{key}", "W-455", ("export", "cells"))
+      for key in ("counted_cells", "reads_per_cell_median", "genes_per_cell_median")),
+    Pending("report.json", "summary.cells_median_per_fov", "W-453", ("any:n_cells_retained",)),
+    *(Pending("report.json", f"summary.{key}", "W-455", ("export", "cells"))
+      for key in ("reads_in_cells", "h5ad_whole_count_sum", "reads_in_cells_equal")),
+    *(Pending("report.json", f"rules.{rule}.{key}", "W-453", ("configured",))
+      for rule in PROBLEM_RULES for key in ("evaluated", "fovs_marked")),
+    Pending("unavailable", "rule:<rule>", "W-453"),
+    Pending("unavailable", "summary.problematic_fovs", "W-453"),
+    Pending("unavailable", "preprocessing.example", "W-454"),
+    Pending("unavailable", "preprocessing.intensity", "W-454"),
+    Pending("unavailable", "registration.example", "W-454"),
+    Pending("unavailable", "assembly.examples", "W-454"),
+    *(Pending("unavailable", part, "W-455") for part in ("sample.per_cell", "sample.markers", "sample.marker_zoom",
+                                                          "sample.mecr", "sample.reads_along_z")),
+    *(Pending("unavailable", part, "W-456") for part in ("summary.identity", "readout.distributions",
+                                                          "readout.table")),
+    Pending("report.html", None, "W-456"),
+)
+
+
+def pending_value(where, name, key=None):
+    """The entry of :data:`PENDING_VALUES` for a value (a table column with its row key, or a report.json key)."""
+    for entry in PENDING_VALUES:
+        if entry.where == where and entry.name == name and (entry.rows is None or key in entry.rows):
+            return entry
+    return None
+
 
 #: The kinds of a file of ``report.json`` ``inputs``.
 INPUT_KINDS = ("run_record", "transforms", "field", "raw_image", "supplied_statistics", "codebook",

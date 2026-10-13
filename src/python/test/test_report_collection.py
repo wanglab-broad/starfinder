@@ -7,12 +7,12 @@ for the columns the collection copies from the records, the record of unavailabl
 schema (PG6) and the determinism of two single-thread processes (DT1). Expected values are
 written here by hand from the fixtures' own numbers.
 
-The computed values of the later definitions (the fractions, ``run_seconds``, the shifts,
-residuals and scores, the area a FOV owns and the density, the reads in cells and the
-``counted`` population; ``report.json`` ``summary`` and ``rules``) are not made by the
-collection: such a cell is null here exactly when every input it is computed from is
-available (``PENDING`` below), and every other null cell is not applicable or named by one
-row of ``unavailable.csv``. The tests that pin those placeholders say so.
+The computed values of the later definitions are not made by the collection. They are the
+closed list ``_schema.PENDING_VALUES`` (each entry with the issue that computes it): such a
+value is null with no row only while every input it is computed from is available, and is
+unavailable with its input's reason otherwise. Every other null cell, ``summary`` key and
+``rules`` key is not applicable or named by exactly one row of ``unavailable.csv``
+(``check_null_values``). The tests that pin the pending values say so.
 """
 from __future__ import annotations
 
@@ -30,6 +30,8 @@ import pytest
 from starfinder.io._checkpoint import _read_table
 from starfinder.report import (PROBLEM_RULES, REPORT_PARTS, REPORT_TABLES, UNAVAILABLE_REASONS, MarkerGroup,
                                ReportConfig, ReportLimits, RuleLimit, read_report)
+from starfinder.report import _collect as collect_module
+from starfinder.report._schema import PENDING_VALUES, RULE_KEYS, RULE_UNITS, SUMMARY_KEYS, pending_value
 
 from .report_fixtures import (CELLS_RETAINED, CHANNELS, COUNTS, ENDED, FOVS, MOVING, NOMINAL, ORIGINS, RECORD_VARIANTS,
                               SAMPLE, STARTED, raw_path, report_cells, report_records, write_inputs)
@@ -108,6 +110,8 @@ PART_REASONS = {
     "assembly.accounting": {"no_export", "part_not_written", "no_segmentation"},
     "files.input": {"no_run_record", "not_recorded", "no_placement"},
     "files.configuration": {"no_run_record", "not_recorded"},
+    # "rule:<rule>": a rule not evaluated for the whole sample (summary.problematic_fovs).
+    "rule:": {"no_run_record", "not_configured", "no_placement", "no_export", "no_segmentation"},
 }
 # "The tables": each column's type, and whether its null rule is "never".
 CONTRACT_COLUMNS = {
@@ -147,9 +151,15 @@ CONTRACT_COLUMNS = {
 KEYS = {"fovs": ["fov_id"], "registration": ["fov_id", "round"], "steps": ["scope", "fov_id", "index"],
         "readout_totals": ["level"], "population": ["population"],
         "problematic_fovs": ["fov_id", "rule", "round", "axis"], "unavailable": ["part", "table", "column", "row_key"]}
-RECORD_KEYS = ["format_version", "stage", "sample", "dataset_id", "sample_id", "fov_ids", "route", "assignment",
-               "segmentation", "generated_at", "software", "config", "stages", "inputs", "files", "unavailable",
-               "rules", "summary", "wall_s", "cpu_s", "peak_rss_kib"]
+# "report.json": every key, and the keys of summary; examples and replay are absent until W-453 and W-454 write
+# them (PENDING_VALUES).
+CONTRACT_RECORD_KEYS = ["format_version", "stage", "sample", "dataset_id", "sample_id", "fov_ids", "route",
+                        "assignment", "segmentation", "generated_at", "software", "config", "stages", "inputs",
+                        "files", "unavailable", "examples", "replay", "rules", "summary", "wall_s", "cpu_s",
+                        "peak_rss_kib"]
+CONTRACT_SUMMARY_KEYS = ["fovs_expected", "fovs_with_run_record", "fovs_succeeded", "spots_median_per_fov",
+                         "matched_fraction", "counted_cells", "reads_per_cell_median", "genes_per_cell_median",
+                         "cells_median_per_fov", "reads_in_cells", "h5ad_whole_count_sum", "reads_in_cells_equal"]
 
 
 def pandas_dtype(kind, never):
@@ -245,17 +255,29 @@ def no_export_rows(fovs=FOVS):
                  "excluded_cell_duplicate_observation", "excluded_outside_grid", "counted")
     rows += [("assembly.accounting", "population", "cells", f"population={p}", "no_export") for p in cells]
     rows += [("assembly.accounting", "population", "molecules", f"population={p}", "no_export") for p in molecules]
+    # The summary keys of the cells and of sample.h5ad: no FOV has a cell value, and no export.
+    rows += [("summary.key_numbers", "summary", k, "", "no_export")
+             for k in ("counted_cells", "reads_per_cell_median", "genes_per_cell_median", "cells_median_per_fov",
+                       "reads_in_cells", "h5ad_whole_count_sum", "reads_in_cells_equal")]
     return rows
 
 
 STITCH_TIME = ("workflow.time", "steps", "seconds", "scope=sample;fov_id=;index=0", "not_recorded")
+# The default configuration sets no alignment-score limit: the rule is not evaluated (PR1).
+ALIGNMENT_RULE = ("rule:alignment_score", None, None, "", "not_configured")
 
 
 def ordered(rows):
-    """Rows in the contract's order: parts, rows without a table first, tables, columns, rows."""
-    tables = {name: i for i, name in enumerate(REPORT_TABLES)}
-    columns = {t: [c for c, _, _ in cols] for t, cols in CONTRACT_COLUMNS.items()}
-    return sorted(rows, key=lambda r: (REPORT_PARTS.index(r[0]), -1 if r[1] is None else tables[r[1]],
+    """Rows in the contract's order: parts (a rule:<rule> with the problematic FOVs), rows without a table first,
+    the tables with summary last, columns, rows."""
+    tables = {name: i for i, name in enumerate(REPORT_TABLES)} | {"summary": len(REPORT_TABLES)}
+    columns = {t: [c for c, _, _ in cols] for t, cols in CONTRACT_COLUMNS.items()} | {"summary": CONTRACT_SUMMARY_KEYS}
+
+    def part(name):
+        if name.startswith("rule:"):
+            return REPORT_PARTS.index("summary.problematic_fovs"), PROBLEM_RULES.index(name[5:])
+        return REPORT_PARTS.index(name), -1
+    return sorted(rows, key=lambda r: (*part(r[0]), -1 if r[1] is None else tables[r[1]],
                                        0 if r[1] is None else columns[r[1]].index(r[2])))
 
 
@@ -269,7 +291,7 @@ def test_rc1_normal_sample(records):
     # Placeholder of W-453 (the rules): the table is written with its header only.
     assert list(tables["problematic_fovs"].columns) == [c for c, _, _ in CONTRACT_COLUMNS["problematic_fovs"]]
     assert tables["problematic_fovs"].empty
-    assert keyed(tables["unavailable"]) == ordered([STITCH_TIME] + no_export_rows())
+    assert keyed(tables["unavailable"]) == ordered([STITCH_TIME, ALIGNMENT_RULE] + no_export_rows())
     assert all(isinstance(d, str) and d for d in tables["unavailable"]["detail"])
 
 
@@ -418,45 +440,60 @@ def test_rc11_older_record(tmp_path, variant):
     assert ("checkpoints/F1/registered/transforms.json" in kinds) == (variant == "older_transforms")
 
 
-# --- RC12: every null cell is n/a or named once -------------------------------------------------------------
+# --- RC12: every null cell is n/a, named once, or pending by the closed list ---------------------------------
 
-def _pending(table, row, frame, has_export):
-    """Whether a null cell is a computed value of a later definition whose inputs are all available."""
-    def available(column):
-        return not pd.isna(row[column])
-    if table == "fovs":
-        fractions = {"correct_form_fraction": "correct_form", "matched_fraction": "matched",
-                     "merged_fraction": "merged_by_deduplication", "passed_filter_fraction": "passed_filter"}
-        owned = available("correction_z") and has_export
-        return {"run_seconds": available("started_at") and available("ended_at"),
-                **{c: available(fractions[c]) and available("spots") for c in fractions},
-                "reads_in_cells": available("n_cells"),
-                "reads_in_cells_fraction": available("n_cells") and available("n_molecules_retained"),
-                "owned_area_um2": owned, "cell_density_per_mm2": owned and available("n_cells_retained")}
-    if table == "registration":
-        return {c: available("transform_source") for c in REGISTRATION_COLUMNS[4:10]} | {
-            "alignment_score": row["outcome"] == "succeeded"}
-    if table == "readout_totals":
-        spots = frame.set_index("level").loc["spots", "count"]
-        in_cells = row["level"] == "reads_in_cells"
-        return {"count": in_cells and has_export,
-                "fraction_of_spots": (available("count") or (in_cells and has_export)) and not pd.isna(spots)}
-    if table == "population":
-        return {"cells": row["population"] == "counted" and has_export,
-                "molecules": row["population"] == "counted" and has_export}
-    return {}
+CATEGORICAL = [r for r in PROBLEM_RULES if r not in RULE_UNITS]
+
+
+class Context:
+    """What the inputs of a pending value (``Pending.inputs``) are evaluated on, read from the case and the tables."""
+
+    def __init__(self, case, record, tables):
+        parts = (json.loads((case.root / EXPORT).read_text()).get("parts") or {}) if (case.root / EXPORT).is_file() \
+            else {}
+        self.export = parts.get("assemble") in ("written", "reused")
+        mode = (json.loads((case.root / EXPORT).read_text()).get("assembly") or {}).get("mode") if self.export else None
+        self.cells = self.export and mode == "cells"
+        self.fovs, self.config = tables["fovs"], case.config
+        totals = tables["readout_totals"].set_index("level")
+        self.spots_total = not pd.isna(totals.loc["spots", "count"])
+
+    def configured(self, rule):
+        if rule == "spots_near_zero" or rule in CATEGORICAL:
+            return True
+        limit = getattr(self.config.limits, rule)
+        return any(v is not None for v in (limit.k, limit.floor, limit.absolute))
+
+    def available(self, token, row=None, rule=None):
+        if token in ("export", "cells", "spots_total"):
+            return getattr(self, token)
+        if token == "placed":
+            return not pd.isna(row["correction_z"])
+        if token == "outcome=succeeded":
+            return row["outcome"] == "succeeded"
+        if token == "choice":
+            return self.config.example_fovs is not None or bool(self.fovs["passed_filter"].notna().any())
+        if token == "configured":
+            return self.configured(rule)
+        if token.startswith("any:"):
+            columns = token[4:].split(",")
+            return bool(self.fovs[columns].notna().all(axis=1).any())
+        return not pd.isna(row[token])
+
+    def pending(self, entry, row=None, rule=None):
+        return entry is not None and all(self.available(t, row, rule) for t in entry.inputs)
 
 
 WITHOUT_METHOD = ("load_images", "extract_round", "score_reads", "deduplicate_reads")
 
 
-def _not_applicable(table, column, row, case):
+def _not_applicable(table, column, row, case, context):
     """The column's null rule names this case n/a (docs/report-contract.md, "The tables"), read from the records."""
     if table == "fovs":
         record = case.run_record(row["fov_id"]) if row["run_record"] else None
         error = (record or {}).get("error")
         running = record is not None and record["status"] == "running"
-        return {"example": True, "failed_step": record is not None and error is None,
+        return {"example": not context.available("choice"), "failed_step": record is not None and error is None,
                 "failed_round": record is not None and (error is None or error.get("round") is None),
                 "ended_at": running, "run_seconds": running}.get(column, False)
     if table == "registration":
@@ -491,46 +528,96 @@ CASES = [("report_records", None)] + [("report_records", v) for v in RECORD_VARI
     ("report_cells", None), ("report_cells", "nocal"), ("report_cells", "mismatch"), ("report_cells", "no_markers")]
 
 
+def check_null_values(case, record, tables):
+    """RC12 on one collection: every null cell, null summary key and null rule key is n/a by its rule, named by
+    exactly one row of unavailable.csv, or a value of PENDING_VALUES whose every input is available."""
+    unavailable = tables["unavailable"]
+    named, part_rows = {}, set()
+    for row in unavailable.to_dict("records"):
+        assert row["reason"] in UNAVAILABLE_REASONS
+        assert row["part"] in REPORT_PARTS or (row["part"].startswith("rule:") and row["part"][5:] in PROBLEM_RULES)
+        assert row["reason"] in PART_REASONS[row["part"].split(":")[0] + ":" if row["part"].startswith("rule:")
+                                             else row["part"]], row
+        if pd.isna(row["table"]):
+            part_rows.add((row["part"], row["row_key"]))
+            continue
+        key = (row["table"], row["column"], row["row_key"])
+        assert key not in named, f"two rows name {key}"
+        named[key] = row
+    assert len(set(keyed(unavailable))) == len(unavailable)
+    context, found, pending = Context(case, record, tables), set(), []
+    present = set(record["stages"]["run_records"])
+    for table in ("fovs", "registration", "steps", "readout_totals", "population"):
+        for row in tables[table].to_dict("records"):
+            key = key_of(table, row)
+            row["run_record_present"] = row.get("fov_id") in present
+            for column in tables[table].columns:
+                if not pd.isna(row[column]):
+                    assert (table, column, key) not in named, f"{table}.{column} [{key}] holds a value and a row"
+                elif (table, column, key) in named:
+                    found.add((table, column, key))
+                elif context.pending(pending_value(table, column, key), row):
+                    pending.append((table, column, key))
+                else:
+                    assert _not_applicable(table, column, row, case, context), (
+                        f"{table}.{column} [{key}] is null, not applicable by no rule, named by no row and not a "
+                        "pending value with its inputs available")
+    summary = record["summary"]
+    assert list(summary) == list(SUMMARY_KEYS)
+    for key, value in summary.items():
+        if value is not None:
+            assert ("summary", key, "") not in named
+        elif ("summary", key, "") in named:
+            found.add(("summary", key, ""))
+        else:
+            assert context.pending(pending_value("report.json", f"summary.{key}")), f"summary.{key} is null"
+            pending.append(("summary", key, ""))
+    for rule, entry in record["rules"].items():
+        configured = context.configured(rule)
+        assert (entry["limit"] is None) == (rule in CATEGORICAL)  # n/a: a categorical rule has no limit
+        assert (entry["unit"] is None) == (rule in CATEGORICAL)
+        assert (entry["evaluated"] is False) == (not configured) == ((f"rule:{rule}", "") in part_rows)
+        for key in ("evaluated", "fovs_marked"):
+            if entry[key] is None and configured:
+                assert context.pending(pending_value("report.json", f"rules.{rule}.{key}"), rule=rule)
+            elif entry[key] is None:
+                assert key == "fovs_marked"  # n/a: a rule that is not evaluated marks no FOV
+    assert found == set(named), set(named) - found
+    return pending
+
+
 @pytest.mark.parametrize("maker,variant", CASES, ids=[f"{m}-{v}" for m, v in CASES])
 def test_rc12_null_cells_and_closed_lists(tmp_path, maker, variant):
     if maker == "report_cells":
         anndata_or_skip()
     case = (report_cells if maker == "report_cells" else report_records)(tmp_path / "root", variant)
     _, record, tables = collect(case)
-    unavailable = tables["unavailable"]
-    named = {}
-    for row in unavailable.to_dict("records"):
-        assert row["reason"] in UNAVAILABLE_REASONS
-        assert row["part"] in REPORT_PARTS or (row["part"].startswith("rule:") and row["part"][5:] in PROBLEM_RULES)
-        assert row["reason"] in PART_REASONS[row["part"]], row
-        if not pd.isna(row["table"]):
-            key = (row["table"], row["column"], row["row_key"])
-            assert key not in named, f"two rows name {key}"
-            named[key] = row
-    assert len(set(keyed(unavailable))) == len(unavailable)
-    found = set()
-    has_export = (case.root / EXPORT).is_file()
-    present = set(record["stages"]["run_records"])
-    for table in ("fovs", "registration", "steps", "readout_totals", "population"):
-        frame = tables[table]
-        for row in frame.to_dict("records"):
-            key = key_of(table, row)
-            pending = _pending(table, row, frame, has_export)
-            row["run_record_present"] = row.get("fov_id") in present
-            for column in frame.columns:
-                if not pd.isna(row[column]):
-                    assert (table, column, key) not in named, f"{table}.{column} [{key}] holds a value and a row"
-                    continue
-                if (table, column, key) in named:
-                    found.add((table, column, key))
-                elif pending.get(column, False):
-                    continue  # computed by a later definition from available inputs
-                else:
-                    assert _not_applicable(table, column, row, case), (
-                        f"{table}.{column} [{key}] is null, not applicable by no rule and named by no row")
-    assert found == set(named), set(named) - found
-    # Placeholders of W-453 and W-455 in report.json, pinned here: no summary key and no rule yet.
-    assert record["summary"] == {} and record["rules"] == {}
+    check_null_values(case, record, tables)
+    summary = record["summary"]
+    assert (summary["fovs_expected"], summary["fovs_with_run_record"]) == (len(case.fov_ids),
+                                                                            len(record["stages"]["run_records"]))
+    statuses = tables["fovs"]["status"]
+    assert summary["fovs_succeeded"] == (int(statuses.eq("succeeded").sum()) if statuses.notna().any() else None)
+
+
+def test_pending_values_are_a_closed_list(tmp_path):
+    """Every entry names a table or report.json key of the contract and the issue that computes it; the collector
+    refuses a pending value the list does not hold."""
+    tables = {t: [c for c, _, _ in cols] for t, cols in CONTRACT_COLUMNS.items()}
+    for entry in PENDING_VALUES:
+        assert entry.issue in ("W-453", "W-454", "W-455", "W-456"), entry
+        if entry.where == "unavailable":
+            assert entry.name in REPORT_PARTS or entry.name == "rule:<rule>", entry
+        elif entry.where in tables:
+            assert entry.name is None or entry.name in tables[entry.where], entry
+        elif entry.where == "report.json":
+            head, _, rest = entry.name.partition(".")
+            assert (head in ("examples", "replay") and not rest) or (head == "summary" and rest in SUMMARY_KEYS) or (
+                head == "rules" and rest.split(".")[0] in PROBLEM_RULES and rest.split(".")[1] in RULE_KEYS), entry
+        else:
+            assert entry.where in ("cells", "mecr", "reads_along_z", "intensity", "unavailable", "report.html"), entry
+    with pytest.raises(RuntimeError, match="PENDING_VALUES does not list"):
+        collect_module._check_pending("fovs", "spots", "fov_id=F1")
 
 
 # --- Inputs and their hashes ----------------------------------------------------------------------------------
@@ -541,29 +628,10 @@ def change_byte(path: Path):
     path.write_bytes(bytes(data))
 
 
-def write_assignment_folder(case, fov):
-    """A saved assignment folder of the route per FOV, as assignment/_persist.py lays it out (hand-written)."""
-    folder = case.checkpoint(fov) / "assignment" / "default"
-    folder.mkdir(parents=True)
-    (folder / "cells.csv").write_text("cell_id,status\n1,kept\n")
-    digest = hashlib.sha256((folder / "cells.csv").read_bytes()).hexdigest()
-    record = {"format_version": 1, "stage": "assignment", "name": "default",
-              "inputs": {"cells": {"run": "cell", "file": {"path": "cell_labels.tif", "sha256": None}},
-                         "nuclei": None},
-              "files": {"cells": {"path": "cells.csv", "sha256": digest, "dtypes": {}}}}
-    (folder / "assignment.json").write_text(json.dumps(record))
-    run = case.checkpoint(fov) / "segmentation" / "cell"
-    run.mkdir(parents=True)
-    (run / "segmentation.json").write_text(json.dumps({"run": "cell", "methods": [{"method": "watershed"}]}))
-    return folder
-
-
 def inputs_case(root, edit=None):
-    """report_cells with its raw inputs and an assignment folder per FOV, one file edited; its collection."""
+    """report_cells (with its assignment folders) and its raw inputs, one file edited; its collection."""
     case = report_cells(root)
     write_inputs(case.root)
-    for fov in FOVS:
-        write_assignment_folder(case, fov)
     if edit is not None:
         edit(case)
     return case, *collect(case)
@@ -587,8 +655,11 @@ def test_inputs_lists_every_file_read(inputs_base):
     assert kinds["stitching/s1/fovs.csv"] == ("placement_table", True)
     assert kinds["codebook.csv"] == ("codebook", True)
     assert kinds["checkpoints/F1/run.json"] == ("run_record", False)
-    assert kinds["checkpoints/F1/assignment/default/assignment.json"] == ("assignment_record", False)
-    assert kinds["checkpoints/F1/segmentation/cell/segmentation.json"] == ("segmentation_record", False)
+    # Verified against assembly.fovs[*].assignment.record_sha256 and assignment.json inputs.cells.record_sha256.
+    assert kinds["checkpoints/F1/assignment/default/assignment.json"] == ("assignment_record", True)
+    assert kinds["checkpoints/F1/segmentation/cell/segmentation.json"] == ("segmentation_record", True)
+    assert kinds["export/s1/export.json"] == ("export_record", False)
+    assert kinds["stitching/s1/placement.json"] == ("placement", False)
     steps = tables["steps"]
     lane = steps[steps["scope"].eq("fov").to_numpy(bool) & steps["name"].isin(["segment", "assign"]).to_numpy(bool)]
     assert lane[["fov_id", "name", "method"]].values.tolist() == [
@@ -603,9 +674,11 @@ def test_inputs_export_table(tmp_path, inputs_base, reason, edit):
     _, _, _, base_tables = inputs_base
     case, _, record, tables = inputs_case(tmp_path / "root", edit)
     base_rows, rows = keyed(base_tables["unavailable"]), keyed(tables["unavailable"])
-    expected = [("assembly.cells_per_fov", "fovs", c, f"fov_id={f}", reason)
-                for c in ("n_cells", "n_cells_retained", "n_molecules", "n_molecules_retained",
-                          "reads_in_cells_fraction", "cell_density_per_mm2") for f in FOVS]
+    # The median of n_cells_retained over FOVs: no FOV has the value, so it takes the cells' reason.
+    expected = [("summary.key_numbers", "summary", "cells_median_per_fov", "", reason)]
+    expected += [("assembly.cells_per_fov", "fovs", c, f"fov_id={f}", reason)
+                 for c in ("n_cells", "n_cells_retained", "n_molecules", "n_molecules_retained",
+                           "reads_in_cells_fraction", "cell_density_per_mm2") for f in FOVS]
     # The footprints and centres read the export's fovs table first (the placement status, the placement).
     expected += [("assembly.placement", "fovs", c, f"fov_id={f}", reason) for c in PLACEMENT_COLUMNS[4:]
                  for f in FOVS]
@@ -631,7 +704,7 @@ def test_inputs_export_table(tmp_path, inputs_base, reason, edit):
     lambda c: raw_path(c.root, "round1", "F1", CHANNELS[0]).unlink(),
     lambda c: change_byte(c.checkpoint("F1") / "assignment/default/cells.csv"),
     lambda c: (c.checkpoint("F1") / "assignment/default/cells.csv").unlink()],
-    ids=["raw_changed", "raw_missing", "assignment_changed", "assignment_missing"])
+    ids=["raw_changed", "raw_missing", "assignment_table_changed", "assignment_table_missing"])
 def test_inputs_files_no_collected_part_reads(tmp_path, inputs_base, edit):
     """A run record's raw input and an assignment folder's table: no collected part reads them (the replay and the
     segmentation examples do), so the tables, the rows and the inputs are those of the unchanged records."""
@@ -644,17 +717,72 @@ def test_inputs_files_no_collected_part_reads(tmp_path, inputs_base, edit):
                                                                  for e in base_record["inputs"]]
 
 
-def test_inputs_placement_table(tmp_path):
+ASSIGNMENT_RECORD = "checkpoints/F1/assignment/default/assignment.json"
+SEGMENTATION_RECORD = "checkpoints/F1/segmentation/cell/segmentation.json"
+
+
+@pytest.mark.parametrize("path,reason", [(ASSIGNMENT_RECORD, "input_changed"), (ASSIGNMENT_RECORD, "input_missing"),
+                                         (SEGMENTATION_RECORD, "input_changed"),
+                                         (SEGMENTATION_RECORD, "input_missing")],
+                         ids=["assignment_changed", "assignment_missing", "segmentation_changed",
+                              "segmentation_missing"])
+def test_inputs_assignment_and_segmentation_records(tmp_path, inputs_base, path, reason):
+    """``assignment.json``, checked against the SHA-256 the export records for it, and the cell run's
+    ``segmentation.json``, checked against the record SHA-256 ``assignment.json`` holds: a changed or removed
+    record makes F1's segmentation and assignment of the per-FOV lane (part ``workflow.steps``) unavailable, and
+    nothing else changes."""
+    _, _, _, base_tables = inputs_base
+    edit = (lambda c: change_byte(c.root / path)) if reason == "input_changed" else (lambda c: (c.root / path).unlink())
+    case, _, record, tables = inputs_case(tmp_path / "root", edit)
+    base_rows, rows = keyed(base_tables["unavailable"]), keyed(tables["unavailable"])
+    assert [r for r in rows if r not in base_rows] == [("workflow.steps", None, None, "fov_id=F1", reason)]
+    # F1's segment and assign rows are not written, and with them the rows of their times.
+    assert [r for r in base_rows if r not in rows] == [
+        ("workflow.time", "steps", "seconds", f"scope=fov;fov_id=F1;index={i}", "not_recorded") for i in (17, 18)]
+    steps, base_steps = tables["steps"], base_tables["steps"]
+    lane = base_steps["fov_id"].eq("F1").fillna(False).to_numpy(bool) & \
+        base_steps["name"].isin(["segment", "assign"]).to_numpy(bool)
+    same(steps, base_steps[~lane].reset_index(drop=True))
+    for table in ("fovs", "registration", "readout_totals", "population"):
+        same(tables[table], base_tables[table])
+    assert "F1" not in record["segmentation"]["runs"] and "F2" in record["segmentation"]["runs"]
+    entry = {e["path"]: e for e in record["inputs"]}.get(path)
+    if reason == "input_changed":
+        data = (case.root / path).read_bytes()
+        kind = "assignment_record" if path == ASSIGNMENT_RECORD else "segmentation_record"
+        assert entry == {"path": path, "kind": kind, "sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data),
+                         "verified": True}
+    else:
+        assert entry is None
+
+
+@pytest.mark.parametrize("reason", ["input_changed", "input_missing"])
+def test_inputs_placement_table(tmp_path, reason):
     """The placement table, read without an export: the placement columns, on no other part."""
     case = report_records(tmp_path / "root")
     _, _, base = collect(report_records(tmp_path / "base"))
-    change_byte(case.root / "stitching/s1/fovs.csv")
-    _, _, tables = collect(case)
+    table = case.root / "stitching/s1/fovs.csv"
+    change_byte(table) if reason == "input_changed" else table.unlink()
+    _, record, tables = collect(case)
     rows, base_rows = keyed(tables["unavailable"]), keyed(base["unavailable"])
     assert [r for r in rows if r not in base_rows] == [
-        ("assembly.placement", "fovs", c, f"fov_id={f}", "input_changed") for c in PLACEMENT_COLUMNS for f in FOVS]
+        ("assembly.placement", "fovs", c, f"fov_id={f}", reason) for c in PLACEMENT_COLUMNS for f in FOVS]
     # The area a FOV owns needs the export first (no_export), so its row and the density's keep their reason.
     assert [r for r in base_rows if r not in rows] == []
+    entry = {e["path"]: e for e in record["inputs"]}.get("stitching/s1/fovs.csv")
+    assert (entry is None) == (reason == "input_missing")
+    assert entry is None or entry["verified"] is True
+
+
+def test_codebook_missing_falls_back_to_the_export_genes(tmp_path):
+    anndata_or_skip()
+    case = report_cells(tmp_path / "root")
+    (case.root / "codebook.csv").unlink()
+    _, record, _ = collect(case)
+    assert "codebook.csv" not in {e["path"] for e in record["inputs"]}
+    case.config = ReportConfig(markers=(MarkerGroup("x", ("G9",)),))
+    with pytest.raises(ValueError, match=r"'G9' is not in the gene list of .*export\.json"):
+        collect(case)
 
 
 def test_codebook_changed_falls_back_to_the_export_genes(tmp_path):
@@ -831,9 +959,24 @@ def test_pg6_schema(tmp_path, maker, variant):
         assert len(keys) == len(set(keys)), name
     text = (folder / "report.json").read_text()
     strict = json.loads(text, parse_constant=lambda c: pytest.fail(f"report.json holds {c}"))
-    assert list(strict) == RECORD_KEYS
+    absent = {e.name for e in PENDING_VALUES if e.where == "report.json" and "." not in e.name}
+    assert absent == {"examples", "replay"}
+    assert list(strict) == [k for k in CONTRACT_RECORD_KEYS if k not in absent]
     assert (strict["format_version"], strict["stage"]) == (1, "report")
+    # The keys of every level the contract lists.
+    assert list(strict["summary"]) == CONTRACT_SUMMARY_KEYS
+    assert list(strict["rules"]) == list(PROBLEM_RULES)
+    for rule, entry in strict["rules"].items():
+        assert list(entry) == ["limit", "unit", "evaluated", "fovs_marked"], rule
+        if rule in ("shift_residual", "alignment_score", "correct_form_fraction", "matched_fraction"):
+            assert list(entry["limit"]) == ["k", "floor", "absolute"]
+    assert list(strict["software"]) == ["code", "environment"]
     assert set(strict["stages"]) == {"run_records", "placement", "export", "parts"}
+    assert list(strict["assignment"]) == ["name", "folders"] and list(strict["segmentation"]) == ["name", "runs"]
+    for entry in strict["inputs"]:
+        assert list(entry) == ["path", "kind", "sha256", "bytes", "verified"]
+    for entry in strict["files"]:
+        assert list(entry) == ["path", "sha256", "bytes", "dtypes"]
     for entry in strict["unavailable"]:
         assert list(entry) == ["part", "table", "column", "row_key", "reason", "detail"]
     same(pd.DataFrame(strict["unavailable"], columns=list(tables["unavailable"].columns))
