@@ -692,3 +692,41 @@ class Dataset:
         from starfinder.report._collect import report_sample
         return report_sample(self, sample, fov_ids, assignment=assignment, segmentation=segmentation, config=config,
                              output_dir=output_dir)
+
+    def compare_samples(self, samples, *, report_root=None):
+        """Write the dataset's comparison page ``index.html`` and ``samples.csv`` from finished sample reports.
+
+        The comparison entry (docs/report-contract.md, "The comparison
+        entry"). It reads only the sample reports: each sample's
+        ``<report_root>/<sample>/report.json`` and the tables it lists, each
+        checked against its recorded SHA-256, and draws one row per sample and
+        three box plots by sample (spots per FOV, fraction matched to the
+        codebook, cells per FOV) from them. A sample whose folder or
+        ``report.json`` is missing is a row marked ``missing``. It reads no run
+        record, placement or export, recomputes nothing a sample report holds
+        and writes nothing under a sample's folder; ``index.html`` and
+        ``samples.csv`` replace earlier ones.
+
+        Parameters
+        ----------
+        samples : Sequence[str]
+            The samples, nonempty and unique, in the order of the page.
+        report_root : str or Path or None
+            None is ``<output_root>/report/``, where ``Dataset.report`` writes
+            each sample's report.
+
+        Returns
+        -------
+        ComparisonRecord
+            The report root and the record of what was written.
+
+        Raises
+        ------
+        ValueError
+            samples is empty or repeats a sample, or a sample's report.json or
+            one of the files it lists differs from its record (naming the
+            file); nothing is written then.
+        """
+        from starfinder.report._compare import compare_samples
+        root = Path(self.output_root) / "report" if report_root is None else report_root
+        return compare_samples(root, samples, dataset_id=self.dataset_id)

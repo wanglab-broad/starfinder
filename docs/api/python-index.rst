@@ -44,6 +44,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.barcode.Codebook`
 * :py:obj:`starfinder.barcode.CodebookAwareDecoderConfig`
 * :py:obj:`starfinder.sample_output.compare_routes`
+* :py:obj:`starfinder.report.ComparisonRecord`
 * :py:obj:`starfinder.assignment.COMPARTMENT_STATES`
 * :py:obj:`starfinder.segmentation.composite_nuclei_amplicon`
 * :py:obj:`starfinder.segmentation.CompositeConfig`

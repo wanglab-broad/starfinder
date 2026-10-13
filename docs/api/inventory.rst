@@ -285,6 +285,7 @@ starfinder.registration
 starfinder.report
 ~~~~~~~~~~~~~~~~~
 
+* :py:obj:`starfinder.report.ComparisonRecord`
 * :py:obj:`starfinder.report.MarkerGroup`
 * :py:obj:`starfinder.report.PROBLEM_RULES`
 * :py:obj:`starfinder.report.read_report`

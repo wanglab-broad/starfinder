@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><!--slot:title--></title>
+<!--slot:style-->
+<style>
+/* The comparison page (docs/report-algorithms.md, "The comparison page"): the CSS of report.html, one column. */
+.wrap>main{gap:36px}
+td a{color:var(--accent)}
+td.miss{color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head"><!--slot:heading--></div>
+
+  <main>
+    <section class="sec" id="samples">
+      <h2>Samples</h2>
+      <div class="blk" id="b-samples"><!--slot:samples--></div>
+    </section>
+
+    <section class="sec" id="by-sample">
+      <h2>By sample</h2>
+      <div class="blk" id="b-box-spots"><h3>Spots per FOV</h3>
+        <!--slot:box_spots--></div>
+      <div class="blk" id="b-box-matched"><h3>Fraction matched to the codebook</h3>
+        <!--slot:box_matched--></div>
+      <div class="blk" id="b-box-cells"><h3>Cells per FOV</h3>
+        <!--slot:box_cells--></div>
+    </section>
+  </main>
+</div>
+
+<script type="application/json" id="report-data"><!--slot:data--></script>
+<script>
+(function(){
+  'use strict';
+  // ---- the samples table: more than 20 rows are paged, 20 rows per page
+  var PER_PAGE = 20;
+  var host = document.getElementById('t-samples'); if (!host) return;
+  var rows = [].slice.call(host.querySelectorAll('tbody tr'));
+  if (rows.length <= PER_PAGE) return;
+  var page = 0, pages = Math.ceil(rows.length / PER_PAGE);
+  var bar = document.createElement('div'); bar.className = 'pager'; host.appendChild(bar);
+  function render(){
+    rows.forEach(function(r, i){ r.hidden = Math.floor(i / PER_PAGE) !== page; });
+    bar.innerHTML = '<span>' + (page * PER_PAGE + 1) + ' to ' + Math.min(rows.length, (page + 1) * PER_PAGE) + ' of ' +
+      rows.length + '</span><button type="button">Previous</button><button type="button">Next</button>';
+    var bs = bar.querySelectorAll('button');
+    bs[0].disabled = page === 0; bs[1].disabled = page >= pages - 1;
+    bs[0].onclick = function(){ page--; render(); }; bs[1].onclick = function(){ page++; render(); };
+  }
+  render();
+})();
+</script>
+</body>
+</html>

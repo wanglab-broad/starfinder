@@ -34,7 +34,9 @@ reference stains), and ``Dataset.channel_index(round, key)`` is the one lookup b
 index, pattern or name; see :doc:`../coordination`, "Channels".
 
 ``Dataset.report(sample, fov_ids, …)`` writes a sample's processing report from the saved
-records, without running a stage; see :doc:`report`.
+records, without running a stage, and ``Dataset.compare_samples(samples)`` writes the
+dataset's comparison page (``report/index.html`` and ``report/samples.csv``) from the finished
+sample reports only; see :doc:`report`.
 
 .. currentmodule:: starfinder.dataset
 

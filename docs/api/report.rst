@@ -56,11 +56,30 @@ light theme only and loads nothing, so it opens offline. ``report.json`` records
 bytes and its size budget (6 MiB + 16 KiB per FOV + 3 MiB per marker figure); a page above the
 budget is still written.
 
+``Dataset.compare_samples(samples, *, report_root=None)`` is the second entry: from finished
+sample reports only (by default under ``<OUTPUT>/report/``) it writes the dataset's comparison
+page ``index.html`` and the table ``samples.csv`` beside the sample folders, replacing earlier
+ones, and returns a :py:class:`~starfinder.report.ComparisonRecord`, the report root and the
+record of the rows and files it wrote. ``samples.csv`` has one row per sample, in the given order:
+a present sample's columns copy the keys of its ``report.json`` (``generated_at``, ``route`` and
+six ``summary`` keys) with the SHA-256 of that file; a sample whose folder or ``report.json`` is
+missing is a row marked ``missing`` with every other column null. The page holds the table, with a
+relative link to each present sample's ``report.html``, and three box plots by sample (spots per
+FOV, fraction matched to the codebook, cells per FOV) drawn from each present sample's
+``tables/fovs.csv``; a sample with no value in a column is an empty slot labelled with the reason
+("missing", "no run record", "no cells"). Each report is read with
+:py:func:`~starfinder.report.read_report`, so a ``report.json`` or a file it lists that differs
+from its record raises ``ValueError`` naming the file before anything is written. The entry reads
+no run record, placement or export, recomputes nothing a sample report holds and writes nothing
+under a sample's folder; the page is built from ``starfinder/report/templates/index.html`` with
+the CSS of the sample page and, like it, loads nothing.
+
 .. currentmodule:: starfinder.report
 
 .. autosummary::
    :toctree: generated
 
+   ComparisonRecord
    MarkerGroup
    PROBLEM_RULES
    read_report

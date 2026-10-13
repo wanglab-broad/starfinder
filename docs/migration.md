@@ -1512,6 +1512,10 @@ run.json"):
   `ReportRecord` ({doc}`report-contract`, "The sample entry"); `starfinder.report.read_report`
   reads a report back. The entry reads the saved records only and calls no processing stage.
   Nothing existing changes.
+* **New: the comparison page.** `Dataset.compare_samples(samples, *, report_root=None)` writes
+  `<output_root>/report/index.html` and `report/samples.csv` from the finished sample reports
+  only and returns a `ComparisonRecord` ({doc}`report-contract`, "The comparison entry"); a
+  sample without a report is a row marked `missing`. Nothing existing changes.
 
 ## Intentional behavior changes — not mechanical equivalence
 

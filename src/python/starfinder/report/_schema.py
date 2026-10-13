@@ -115,6 +115,14 @@ RULE_UNITS = {"shift_residual": "voxels", "alignment_score": "dimensionless", "c
               "matched_fraction": "fraction", "spots_near_zero": "reads"}
 
 
+#: The columns and dtypes of the comparison page's ``samples.csv``, in column order (docs/report-contract.md,
+#: "``samples.csv``"); every column but ``sample`` and ``report`` is null for a missing report.
+SAMPLES_DTYPES = {"sample": "string", "report": "string", "report_sha256": "string", "generated_at": "string",
+                  "route": "string", "fovs_expected": "Int64", "fovs_succeeded": "Int64",
+                  "spots_median_per_fov": "float64", "matched_fraction": "float64", "counted_cells": "Int64",
+                  "cells_median_per_fov": "float64"}
+
+
 #: The values the staged delivery of the report (W-452 to W-456) left to a later issue: none, since the report is
 #: complete. Every null cell is not applicable by its column's rule or named by one row of ``unavailable.csv``.
 PENDING_VALUES = ()
@@ -137,6 +145,16 @@ def row_key(table: str, row) -> str:
 @dataclass(frozen=True)
 class ReportRecord:
     """The result of ``Dataset.report``: the report folder and the content of its ``report.json``."""
+
+    path: Path
+    record: dict
+
+
+@dataclass(frozen=True)
+class ComparisonRecord:
+    """The result of ``Dataset.compare_samples``: the report root holding ``index.html`` and ``samples.csv``, and
+    the record of what was written (``samples``: the rows of ``samples.csv``; ``files``: each file with its SHA-256,
+    bytes and, for ``samples.csv``, its dtypes; ``box_plots``: per box plot, its slots in sample order)."""
 
     path: Path
     record: dict

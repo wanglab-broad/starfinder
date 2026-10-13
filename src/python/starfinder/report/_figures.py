@@ -7,7 +7,7 @@ DejaVu Sans font: the image figures as JPEG at the configuration's quality, the 
 (whose metadata holds no time). Each figure is laid out in pixels, so that its size is the
 one of "Figure sizes" (PX1): the Preprocessing grid 256 px per tile, the Registration and
 segmentation examples 512 px per tile, the plots of a full column (the time per step, the
-intensity panels) 1,200 × 400, the heatmaps (the residuals, the reads along Z) 1,200 ×
+intensity panels, the comparison page's box plots by sample) 1,200 × 400, the heatmaps (the residuals, the reads along Z) 1,200 ×
 ``min(1,200, max(300, 12 per row))`` and the plots of a third or a half column (the
 distributions across FOVs and per cell) 600 × 340.
 
@@ -571,6 +571,45 @@ def distribution_figure(values, name, label, *, integer, empty=None) -> FigureIm
     axes.tick_params(labelsize=7)
     tile["xlabel"] = text
     return FigureImage(_save(figure, "png"), "png", width, height, None, [tile])
+
+
+#: Above this many samples the labels under the boxes of the comparison page are turned upright.
+BOX_UPRIGHT_LABELS = 16
+
+
+def sample_box_figure(name, label, slots) -> FigureImage:
+    """A box plot by sample of the comparison page (1,200 × 400 PNG, a plot of a full column): one slot per sample in
+    the order of ``slots``, each a dict with ``sample``, ``values`` (the FOVs' values, nulls left out) and ``label``
+    (the reason a slot without a value shows). A slot with values is a box, whiskers at 1.5 × the interquartile range
+    and each FOV beyond drawn as a point, with the number of FOVs with a value under it; a slot without one is an
+    empty hatched slot labelled with its reason."""
+    from matplotlib.transforms import blended_transform_factory
+    width, height = PLOT_SIZE
+    figure = _figure(width, height)
+    upright = len(slots) > BOX_UPRIGHT_LABELS
+    bottom = 110 if upright else 56
+    axes = figure.add_axes((80 / width, bottom / height, (width - 104) / width, (height - bottom - 16) / height))
+    boxes = [(i, slot) for i, slot in enumerate(slots, 1) if slot["values"]]
+    if boxes:
+        axes.boxplot([slot["values"] for _, slot in boxes], positions=[i for i, _ in boxes], whis=1.5, widths=0.5,
+                     flierprops={"marker": "o", "markersize": 3}, medianprops={"color": "#1f4fae"})
+    across = blended_transform_factory(axes.transData, axes.transAxes)
+    tiles, ticks = [], []
+    for i, slot in enumerate(slots, 1):
+        n = len(slot["values"])
+        if n:
+            ticks.append(f"{slot['sample']}\nn = {n}")
+        else:
+            axes.axvspan(i - 0.3, i + 0.3, facecolor="#eeeeee", edgecolor="#999999", hatch="//", linewidth=0.5)
+            axes.text(i, 0.5, slot["label"], transform=across, ha="center", va="center", rotation=90, fontsize=8,
+                      color="#5b6878")
+            ticks.append(f"{slot['sample']}\n{slot['label']}")
+        tiles.append({"sample": slot["sample"], "fovs": n, "label": None if n else slot["label"]})
+    axes.set_xticks(range(1, len(slots) + 1), ticks, rotation=90 if upright else 0)
+    axes.set_xlim(0.5, len(slots) + 0.5)
+    axes.set_ylabel(label, fontsize=8)
+    axes.tick_params(labelsize=7)
+    return FigureImage(_save(figure, "png"), "png", width, height, None, [{"name": name, "slots": tiles}])
 
 
 def fused_range(values):

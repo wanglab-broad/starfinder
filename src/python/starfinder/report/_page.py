@@ -62,9 +62,9 @@ _LEVELS = {"spots": "Spots detected", "correct_form": "Correct barcode form", "m
            "reads_in_cells": "Reads assigned to cells"}
 
 
-def template_text() -> str:
-    """The shipped template ``starfinder/report/templates/report.html``."""
-    return resources.files("starfinder.report").joinpath("templates", TEMPLATE).read_text(encoding="utf-8")
+def template_text(name=TEMPLATE) -> str:
+    """A shipped template: ``starfinder/report/templates/report.html``, or the one named."""
+    return resources.files("starfinder.report").joinpath("templates", name).read_text(encoding="utf-8")
 
 
 def _script_constant(template, name):
@@ -83,16 +83,16 @@ def budget_bytes(n_fovs, marker_figures) -> int:
     return 6 * MIB + 16 * KIB * n_fovs + 3 * MIB * marker_figures
 
 
-def fill(template, values) -> str:
-    """The template with each slot replaced once, in the order :data:`SLOTS`; a slot the template lacks or holds
-    twice, or a value without its slot, raises ValueError before anything is written."""
+def fill(template, values, slots=SLOTS) -> str:
+    """The template with each slot replaced once, in the order ``slots`` (:data:`SLOTS` for ``report.html``); a slot
+    the template lacks or holds twice, or a value without its slot, raises ValueError before anything is written."""
     pieces = _SLOT.split(template)
     names = pieces[1::2]
-    if names != list(SLOTS):
-        raise ValueError(f"the template's slots {names} are not {list(SLOTS)}, each once in this order")
-    if set(values) != set(SLOTS):
-        raise ValueError(f"slots without a value {sorted(set(SLOTS) - set(values))}, values without a slot "
-                         f"{sorted(set(values) - set(SLOTS))}")
+    if names != list(slots):
+        raise ValueError(f"the template's slots {names} are not {list(slots)}, each once in this order")
+    if set(values) != set(slots):
+        raise ValueError(f"slots without a value {sorted(set(slots) - set(values))}, values without a slot "
+                         f"{sorted(set(values) - set(slots))}")
     out = [pieces[0]]
     for name, text in zip(names, pieces[2::2]):
         out += [values[name], text]
