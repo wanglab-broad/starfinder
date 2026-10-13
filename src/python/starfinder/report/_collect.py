@@ -1,0 +1,968 @@
+"""The collection of one sample's records into the report's tables and record (docs/report-contract.md).
+
+:func:`collect_report` applies the checks before anything is written, reads the
+records at their fixed places under the output root (the run records,
+``registered/transforms.json`` for a run record without ``transforms``, the
+placement, the per-FOV assignment and segmentation records and the export), checks
+each file against the SHA-256 a record holds for it, and writes the tables that copy
+record fields, ``unavailable.csv`` and ``report.json`` into a staging folder that
+replaces the report folder when it is complete (RP1).
+
+A cell is a value, not applicable (null, no row of ``unavailable.csv``), unavailable
+(null, one row with its reason) or not computed yet: a computed value whose inputs
+are all available (a fraction, a shift, an area, the reads in cells) is left null
+here and filled by the definition of docs/report-algorithms.md that computes it.
+"""
+from __future__ import annotations
+
+import csv
+import hashlib
+import io
+import json
+import os
+import shutil
+import uuid
+from collections.abc import Sequence
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import NamedTuple
+
+import pandas as pd
+
+from ._config import ReportConfig, marker_genes
+from ._schema import (FORMAT_VERSION, POPULATIONS, PROBLEM_RULES, READOUT_LEVELS, REPORT_FILE, REPORT_PARTS,
+                      REPORT_TABLES, STAGE, TABLE_DIR, TABLE_DTYPES, UNAVAILABLE_REASONS, row_key)
+
+RUN_RECORD = "run.json"
+_UNPLACED = ("missing", "failed")
+_WRITTEN = ("written", "reused")
+#: The tables this collection writes, in folder order; the others are written by the parts that make them.
+COLLECTED_TABLES = ("fovs", "registration", "steps", "readout_totals", "population", "problematic_fovs",
+                    "unavailable")
+#: The parts of the columns of the collected tables (docs/report-contract.md, "Parts, their inputs and their reasons").
+COLUMN_PARTS = {
+    "fovs": {**{c: "workflow.fov_status" for c in ("example", "status", "failed_step", "failed_round", "started_at",
+                                                    "ended_at", "run_seconds")},
+             **{c: "assembly.placement" for c in ("placement_status", "correction_z", "correction_y",
+                                                   "correction_x", "footprint_y0", "footprint_y1", "footprint_x0",
+                                                   "footprint_x1", "centre_y", "centre_x")},
+             **{c: "readout.per_fov" for c in ("spots", "correct_form", "matched", "merged_by_deduplication",
+                                                "passed_filter", "correct_form_fraction", "matched_fraction",
+                                                "merged_fraction", "passed_filter_fraction")},
+             **{c: "assembly.cells_per_fov" for c in ("n_cells", "n_cells_retained", "n_molecules",
+                                                       "n_molecules_retained", "reads_in_cells",
+                                                       "reads_in_cells_fraction", "owned_area_um2",
+                                                       "cell_density_per_mm2")}},
+    "registration": {c: "registration.heatmap" for c in TABLE_DTYPES["registration"]},
+    "steps": {"seconds": "workflow.time"},
+    "readout_totals": {"count": "readout.totals", "fraction_of_spots": "readout.totals"},
+    "population": {"cells": "assembly.accounting", "molecules": "assembly.accounting"},
+}
+# The read levels of a run record: the count's place in counts and the pipeline config that makes it.
+_COUNTS = {"spots": (("spots",), "spot_finding"), "matched": (("call_status", "assigned"), "decoding"),
+           "merged_by_deduplication": (("deduplication", "merged_reads"), "deduplication"),
+           "passed_filter": (("filtering", "accepted"), "filtering"),
+           "correct_form": (("filtering", "endpoint_valid"), "filtering")}
+_FRACTIONS = {"correct_form_fraction": "correct_form", "matched_fraction": "matched",
+              "merged_fraction": "merged_by_deduplication", "passed_filter_fraction": "passed_filter"}
+# The report's outcome of a round from its last entry (docs/report-algorithms.md, "Outcome", choice A13).
+_OUTCOMES = {("application", "succeeded"): "succeeded", ("application", "application_failed"): "application_failed",
+             ("application", "applying"): "application_failed", ("estimation", "rejected"): "rejected",
+             ("estimation", "failed"): "failed", ("estimation", "estimating"): "failed",
+             ("estimation", "succeeded"): "failed"}
+_UNFINISHED = {("application", "applying"), ("estimation", "estimating"), ("estimation", "succeeded")}
+_SECTIONS = {"assemble": "assembly", "fuse": "fusion", "segment": "segmentation", "fuse_labels": "labels",
+             "export_spatialdata": "spatialdata"}
+_GLOBAL_KINDS = ("translation", "affine")
+# The R1 to R4 keys a run record holds since docs/report-contract.md ("Records added to run.json").
+_ADDED_KEYS = ("transforms", "codebook", "workflow_config")
+
+
+class Unavailable(NamedTuple):
+    """A null value named by one row of ``unavailable.csv``."""
+
+    reason: str
+    detail: str | None = None
+
+
+class _Marker:
+    def __init__(self, name):
+        self.name = name
+
+    def __repr__(self):
+        return self.name
+
+
+#: A null value that does not exist in its case; no row names it.
+NA = _Marker("NA")
+#: A null value computed from available inputs by a definition this collection does not make.
+PENDING = _Marker("PENDING")
+
+
+def _rank(reason):
+    return UNAVAILABLE_REASONS.index(reason)
+
+
+def first(*values):
+    """The unavailable value whose reason comes first in the closed list, or None when none is unavailable (P1)."""
+    found = [v for v in values if isinstance(v, Unavailable)]
+    return min(found, key=lambda v: _rank(v.reason)) if found else None
+
+
+def derived(*inputs):
+    """A value computed from ``inputs``: the first unavailable input, else :data:`PENDING`."""
+    return first(*inputs) or PENDING
+
+
+def _sha256(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _now():
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _get(mapping, *keys):
+    for key in keys:
+        if not isinstance(mapping, dict) or key not in mapping:
+            return None
+        mapping = mapping[key]
+    return mapping
+
+
+class _Inputs:
+    """Reads the files of the report, listing each in ``report.json`` ``inputs`` once, in the order first read."""
+
+    def __init__(self, root: Path):
+        self.root = root
+        self.entries = {}
+
+    def relative(self, path) -> str:
+        path = Path(path)
+        try:
+            return path.resolve().relative_to(self.root.resolve()).as_posix()
+        except ValueError:
+            return str(path.resolve())
+
+    def read(self, path, kind, recorded=None):
+        """The file's bytes, or :class:`Unavailable` (``input_missing``, or ``input_changed`` against ``recorded``)."""
+        path = Path(path)
+        name = self.relative(path)
+        if not path.is_file():
+            return Unavailable("input_missing", name if recorded is None else f"{name} (recorded SHA-256 {recorded})")
+        data = path.read_bytes()
+        digest = _sha256(data)
+        self.entries.setdefault(name, {"path": name, "kind": kind, "sha256": digest, "bytes": len(data),
+                                       "verified": recorded is not None})
+        if recorded is not None and digest != recorded:
+            return Unavailable("input_changed", f"{name} has SHA-256 {digest}, the record {recorded}")
+        return data
+
+    def json(self, path, kind, *, strict=True):
+        """A JSON file's content; one that does not parse raises ValueError, or is None with ``strict`` False.
+
+        The entry checks read their records strictly; a record read after them that does not parse is read as
+        absent, so that the parts it feeds are unavailable instead of the entry raising.
+        """
+        data = self.read(path, kind)
+        if isinstance(data, Unavailable):
+            return data
+        try:
+            return json.loads(data.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            if not strict:
+                return None
+            raise ValueError(f"{path} is not a JSON file: {error}") from error
+
+    def table(self, path, kind, recorded, dtypes):
+        """A recorded table read with its dtypes, or :class:`Unavailable`."""
+        from starfinder.io._checkpoint import _read_table
+        data = self.read(path, kind, recorded)
+        if isinstance(data, Unavailable):
+            return data
+        return _read_table(path, dtypes)
+
+
+# --- The checks before anything is written ------------------------------------------------------------------
+
+def _check_arguments(sample, fov_ids, config):
+    if config is None:
+        config = ReportConfig()
+    if not isinstance(config, ReportConfig):
+        raise TypeError(f"config must be a ReportConfig or None; got {type(config).__name__}")
+    if isinstance(fov_ids, str) or not isinstance(fov_ids, Sequence):
+        raise ValueError(f"fov_ids must be a sequence of FOV IDs; got {fov_ids!r}")
+    fov_ids = list(fov_ids)
+    if not fov_ids or not all(isinstance(f, str) and f for f in fov_ids) or len(set(fov_ids)) != len(fov_ids):
+        raise ValueError(f"fov_ids must be a nonempty sequence of unique nonempty strings; got {fov_ids!r}")
+    if not isinstance(sample, str) or not sample:
+        raise ValueError(f"sample must be a nonempty string; got {sample!r}")
+    return fov_ids, config
+
+
+def _check_run_records(inputs, root, fov_ids, dataset_id, sample_id):
+    records = {}
+    for fov in fov_ids:
+        path = root / "checkpoints" / fov / RUN_RECORD
+        if not path.is_file():
+            records[fov] = None
+            continue
+        record = inputs.json(path, "run_record")
+        if not isinstance(record, dict):
+            raise ValueError(f"{path} is not a JSON object")
+        for key, expected in (("format_version", 1), ("dataset_id", dataset_id), ("sample_id", sample_id),
+                              ("fov_id", fov)):
+            if record.get(key) != expected:
+                raise ValueError(f"{path}: {key} is {record.get(key)!r}, expected {expected!r}")
+        records[fov] = record
+    return records
+
+
+def _check_export(inputs, export_dir, sample, fov_ids, assignment):
+    from starfinder.sample_output._record import verify_section_hashes
+    path = export_dir / "export.json"
+    if not path.is_file():
+        return None
+    record = inputs.json(path, "export_record")
+    if not isinstance(record, dict):
+        raise ValueError(f"{path} is not a JSON object")
+    verify_section_hashes(record, where=str(path))
+    if record.get("sample") != sample:
+        raise ValueError(f"{path}: sample is {record.get('sample')!r}, expected {sample!r}")
+    assembly = record.get("assembly")
+    if isinstance(assembly, dict) and isinstance(assembly.get("fovs"), list):
+        exported = {entry.get("fov_id") for entry in assembly["fovs"]}
+        if exported != set(fov_ids):
+            raise ValueError(f"{path}: assembly.fovs holds the FOVs {sorted(map(str, exported))}, the FOV list "
+                             f"{sorted(fov_ids)}")
+        if (assembly.get("route") or "per_fov") == "per_fov":
+            names = {(entry.get("assignment") or {}).get("name") for entry in assembly["fovs"]} - {None}
+            if names and names != {assignment}:
+                raise ValueError(f"{path}: the route per FOV assembled the assignment {sorted(names)}, "
+                                 f"the report reads {assignment!r}")
+    return record
+
+
+def _check_placement(inputs, stitching_dir, fov_ids):
+    path = stitching_dir / "placement.json"
+    if not path.is_file():
+        return None
+    record = inputs.json(path, "placement")
+    placed = set((record.get("inputs") or {}) if isinstance(record, dict) else ())
+    if placed != set(fov_ids):
+        raise ValueError(f"{path}: the placement holds the FOVs {sorted(placed)}, the FOV list {sorted(fov_ids)}")
+    return record
+
+
+def _codebook_genes(data: bytes, kind) -> list[str]:
+    """The gene names of a codebook or direct panel file (the gene column of the forms the loaders read)."""
+    rows = [r for r in csv.reader(io.StringIO(data.decode("utf-8-sig"), newline="")) if r]
+    if not rows:
+        return []
+    header = [v.strip() for v in rows[0]]
+    if kind == "direct_panel" or header[0] in ("gene", "gene_id", "entry_id"):
+        column = header.index("gene_id") if "gene_id" in header else header.index("gene")
+        rows = rows[1:]
+    else:
+        column = 0
+    return [r[column].strip() for r in rows if len(r) > column]
+
+
+def _check_markers(inputs, config, records, export, export_dir):
+    genes = marker_genes(config)
+    if not genes:
+        return
+    source = None
+    for record in records.values():
+        codebook = (record or {}).get("codebook")
+        if isinstance(codebook, dict) and codebook.get("path"):
+            data = inputs.read(codebook["path"], "codebook", codebook.get("sha256"))
+            if not isinstance(data, Unavailable):
+                source = (codebook["path"], set(_codebook_genes(data, codebook.get("kind"))))
+            break
+    if source is None and isinstance(_get(export, "assembly", "genes"), list):
+        source = (str(export_dir / "export.json"), set(export["assembly"]["genes"]))
+    if source is None:
+        raise ValueError("the configuration names marker genes, but there is no gene list to check them against: "
+                         "no run record names a readable codebook (run.json codebook) and there is no "
+                         f"{export_dir / 'export.json'} assembly.genes")
+    for gene in genes:
+        if gene not in source[1]:
+            raise ValueError(f"marker gene {gene!r} is not in the gene list of {source[0]}")
+
+
+def _check_examples(config, fov_ids):
+    if config.example_fovs is not None:
+        outside = [f for f in config.example_fovs if f not in fov_ids]
+        if outside:
+            raise ValueError(f"example_fovs {outside} are not FOVs of the list")
+
+
+def own_files(folder: Path) -> list[str]:
+    """The files of an existing report folder, all of them the report's own; FileExistsError naming another one."""
+    if not folder.exists():
+        return []
+    if not folder.is_dir():
+        raise FileExistsError(f"the report folder {folder} is a file")
+    files = sorted(p.relative_to(folder).as_posix() for p in folder.rglob("*") if not p.is_dir())
+    if not files:
+        return []
+    if REPORT_FILE not in files:
+        raise FileExistsError(f"{folder / files[0]} is not a file of a report (the folder has no {REPORT_FILE}); "
+                              "the report is written only into its own folder")
+    try:
+        record = json.loads((folder / REPORT_FILE).read_text(encoding="utf-8"))
+        listed = {entry["path"] for entry in record["files"]}
+    except (ValueError, KeyError, TypeError) as error:
+        raise FileExistsError(f"{folder / REPORT_FILE} is not a report record ({error}); "
+                              "the report is written only into its own folder") from error
+    foreign = [f for f in files if f != REPORT_FILE and f not in listed]
+    if foreign:
+        raise FileExistsError(f"{folder / foreign[0]} is not a file of the report {folder / REPORT_FILE} lists; "
+                              "the report is written only into its own folder")
+    return files
+
+
+# --- The collection --------------------------------------------------------------------------------------------
+
+class _Collection:
+    def __init__(self, inputs, root, sample, fov_ids, records, export, placement, assignment, segmentation,
+                 config):
+        self.inputs, self.root, self.sample, self.fov_ids = inputs, root, sample, fov_ids
+        self.records, self.export, self.placement = records, export, placement
+        self.assignment, self.segmentation, self.config = assignment, segmentation, config
+        self.export_dir = root / "export" / sample
+        self.stitching_dir = root / "stitching" / sample
+        self._transform_files = {}
+        self.assembly = (export or {}).get("assembly") if isinstance((export or {}).get("assembly"), dict) else None
+        self.route = None if export is None else ((self.assembly or {}).get("route") or "per_fov")
+        self._placement_frame()
+        self._export_frame()
+        self.assignments = self._assignments()
+
+    # The sources -------------------------------------------------------------------------------------------
+
+    def _placement_frame(self):
+        self.p_missing = None
+        if self.placement is None:
+            self.p_missing = Unavailable("no_placement", f"{self.inputs.relative(self.stitching_dir)}/placement.json")
+            return
+        entry = _get(self.placement, "tables", "fovs") or {}
+        frame = self.inputs.table(self.stitching_dir / entry.get("path", "fovs.csv"), "placement_table",
+                                  entry.get("sha256"), entry.get("dtypes") or {})
+        if isinstance(frame, Unavailable):
+            self.p_missing = frame
+        else:
+            self.p_rows = {row["fov_id"]: row for row in frame.to_dict("records")}
+
+    def _export_frame(self):
+        # The export's state (no_export, part_not_written) and its fovs table's (input_missing, input_changed).
+        self.e_state = self.e_table = None
+        if self.export is None:
+            self.e_state = Unavailable("no_export", f"{self.inputs.relative(self.export_dir)}/export.json")
+            return
+        from starfinder.sample_output._record import part_status
+        status = part_status(self.export, "assemble")
+        if status not in _WRITTEN or self.assembly is None:
+            self.e_state = Unavailable("part_not_written", f"assemble: {status}")
+            return
+        entry = _get(self.assembly, "files", "fovs") or {}
+        frame = self.inputs.table(self.export_dir / entry.get("path", "tables/fovs.csv"), "export_table",
+                                  entry.get("sha256"), entry.get("dtypes") or {})
+        if isinstance(frame, Unavailable):
+            self.e_table = frame
+        else:
+            self.e_rows = {row["fov_id"]: row for row in frame.to_dict("records")}
+
+    @property
+    def no_cells(self):
+        """``no_segmentation`` for a sample without cells (an export ``molecules_only``, or no assignment)."""
+        if self.assignment is None or (self.assembly or {}).get("mode") == "molecules_only":
+            return Unavailable("no_segmentation", "no assignment" if self.assignment is None else
+                               "export assembled molecules_only")
+        return None
+
+    def _assignments(self):
+        """FOV → its assignment record (route per FOV, or no export), with the segmentation record it read."""
+        found = {}
+        if self.assignment is None or self.route == "after_fusion":
+            return found
+        for fov in self.fov_ids:
+            folder = self.root / "checkpoints" / fov / "assignment" / self.assignment
+            if not (folder / "assignment.json").is_file():
+                continue
+            record = self.inputs.json(folder / "assignment.json", "assignment_record", strict=False)
+            if not isinstance(record, dict):
+                continue
+            cells = _get(record, "inputs", "cells") or {}
+            run = cells.get("run")
+            seg = None
+            if run is not None:
+                path = self.root / "checkpoints" / fov / "segmentation" / run / "segmentation.json"
+                if path.is_file():
+                    seg = self.inputs.json(path, "segmentation_record", strict=False)
+            found[fov] = (record, seg if isinstance(seg, dict) else cells.get("record"))
+        return found
+
+    # fovs.csv ----------------------------------------------------------------------------------------------
+
+    def _record_path(self, fov):
+        return f"checkpoints/{fov}/{RUN_RECORD}"
+
+    def count(self, fov, level):
+        """A read level of a FOV's run record, or the reason it has none."""
+        record = self.records[fov]
+        if record is None:
+            return Unavailable("no_run_record", self._record_path(fov))
+        keys, step = _COUNTS[level]
+        counts = record.get("counts") or {}
+        value = _get(counts, *keys)
+        if level == "matched" and value is None and isinstance(counts.get("call_status"), dict):
+            value = 0
+        if value is not None:
+            return int(value)
+        pipeline = _get(record, "config", "pipeline") or {}
+        if level == "correct_form" and isinstance(counts.get("filtering"), dict):
+            # The filter ran: no endpoint check, or a run record written before R3.
+            # A record with R3 holds the count exactly when the filter checked endpoints; an older one never does,
+            # and only its end_bases tell that the filter checked them (a layout's segment ends are not in run.json).
+            if any(key in record for key in _ADDED_KEYS) or _get(pipeline, "filtering", "end_bases") is None:
+                return Unavailable("not_configured", "the filter checked no endpoints")
+            return Unavailable("not_recorded", f"{self._record_path(fov)}: written before "
+                                               "counts.filtering.endpoint_valid")
+        return self._not_reached(fov, record, pipeline.get(step) is not None, step)
+
+    def _not_reached(self, fov, record, configured, step):
+        status = record.get("status")
+        if status == "running":
+            return Unavailable("run_not_finished", f"{self._record_path(fov)}: status running")
+        if status in ("failed", "interrupted"):
+            error = record.get("error") or {}
+            where = error.get("step") if error.get("round") is None else f"{error.get('step')}, {error.get('round')}"
+            return Unavailable("step_failed", f"run {status} at {where}")
+        if not configured:
+            return Unavailable("not_configured", f"config.pipeline.{step} is null")
+        return Unavailable("not_recorded", f"{self._record_path(fov)}: no record of {step}")
+
+    def fovs_rows(self):
+        rows = []
+        for index, fov in enumerate(self.fov_ids):
+            record = self.records[fov]
+            row = {"fov_id": fov, "list_index": index, "example": NA, "run_record": record is not None}
+            row.update(self._status(fov, record))
+            row.update(self._placement_columns(fov))
+            for level in _COUNTS:
+                row[level] = self.count(fov, level)
+            for column, level in _FRACTIONS.items():
+                row[column] = derived(row[level], row["spots"])
+            row.update(self._export_columns(fov, row))
+            rows.append({c: row[c] for c in TABLE_DTYPES["fovs"]})
+        return rows
+
+    def _status(self, fov, record):
+        names = ("status", "failed_step", "failed_round", "started_at", "ended_at", "run_seconds")
+        if record is None:
+            return {c: Unavailable("no_run_record", self._record_path(fov)) for c in names}
+        status, error = record.get("status"), record.get("error")
+        running = status == "running"
+        not_recorded = Unavailable("not_recorded", f"{self._record_path(fov)}: no value")
+        return {"status": status if status is not None else not_recorded,
+                "failed_step": error.get("step") if error else NA,
+                "failed_round": error.get("round") if error and error.get("round") is not None else NA,
+                "started_at": record.get("started_at") or not_recorded,
+                "ended_at": NA if running else (record.get("ended_at") or not_recorded),
+                "run_seconds": NA if running else derived(record.get("started_at") or not_recorded,
+                                                          record.get("ended_at") or not_recorded)}
+
+    def _p_row(self, fov):
+        return None if self.p_missing is not None else self.p_rows.get(fov)
+
+    def _e_row(self, fov):
+        return None if self.e_state is not None or self.e_table is not None else self.e_rows.get(fov)
+
+    def _placement_columns(self, fov):
+        """The placement columns: each from its first source that exists, with that source's reasons.
+
+        ``placement_status`` and ``correction_*`` read the placement, the status the export when there is no
+        placement; the footprint and centre read the export's fovs table, else the placement's origin and grid.
+        """
+        from starfinder.assembly._ownership import footprint_yx
+        p, e = self._p_row(fov), self._e_row(fov)
+        out = {}
+        if self.placement is not None:
+            out["placement_status"] = self.p_missing or p["status"]
+        elif self.e_state is None:
+            out["placement_status"] = self.e_table or e["placement_status"]
+        else:
+            out["placement_status"] = first(self.p_missing, self.e_state)
+        for axis in "zyx":
+            out[f"correction_{axis}"] = (self.p_missing if p is None else
+                                         Unavailable("fov_not_placed", f"placement status {p['status']}")
+                                         if p["status"] in _UNPLACED else float(p[f"correction_{axis}"]))
+        columns = ("footprint_y0", "footprint_y1", "footprint_x0", "footprint_x1", "centre_y", "centre_x")
+        if self.e_state is None:
+            if e is None:
+                values = [self.e_table] * len(columns)
+            elif e["placement_status"] in _UNPLACED or pd.isna(e["footprint_y0"]):
+                values = [Unavailable("fov_not_placed", f"placement status {e['placement_status']}")] * len(columns)
+            else:
+                values = [float(e[c]) for c in columns]
+        elif self.placement is not None:
+            if p is None:
+                values = [self.p_missing] * len(columns)
+            elif p["status"] in _UNPLACED:
+                values = [Unavailable("fov_not_placed", f"placement status {p['status']}")] * len(columns)
+            else:
+                grid = self.placement["inputs"][fov]["grid"]
+                (y0, y1, x0, x1), (cy, cx) = footprint_yx((p["origin_y"], p["origin_x"]), grid["shape_zyx"][1:],
+                                                          grid["metadata"]["spacing_zyx"][1:])
+                values = [float(v) for v in (y0, y1, x0, x1, cy, cx)]
+        else:
+            values = [first(self.p_missing, self.e_state)] * len(columns)
+        out.update(zip(columns, values))
+        return out
+
+    def _export_columns(self, fov, row):
+        e = self._e_row(fov)
+        no_cells = self.no_cells
+        out = {}
+        for column in ("n_cells", "n_cells_retained", "n_molecules", "n_molecules_retained"):
+            cells = column.startswith("n_cells")
+            missing = first(self.e_state, no_cells if cells else None, self.e_table)
+            out[column] = missing or int(e[column])
+        out["reads_in_cells"] = first(self.e_state, no_cells) or PENDING
+        out["reads_in_cells_fraction"] = derived(out["reads_in_cells"], out["n_molecules_retained"])
+        # The area a FOV owns: the placement, its status, and the ownership rule of the export.
+        p = self._p_row(fov)
+        status = p["status"] if p is not None else row["placement_status"]
+        owns = (p["status"] != "placeholder") if p is not None else (
+            bool(e["owns_points"]) if e is not None else True)
+        if not owns:
+            out["owned_area_um2"] = out["cell_density_per_mm2"] = NA
+            return out
+        unplaced = Unavailable("fov_not_placed", f"placement status {status}") if status in _UNPLACED else None
+        out["owned_area_um2"] = first(self.p_missing, unplaced, self.e_state) or PENDING
+        out["cell_density_per_mm2"] = derived(out["n_cells_retained"], out["owned_area_um2"])
+        return out
+
+    # registration.csv --------------------------------------------------------------------------------------
+
+    def moving_rounds(self):
+        rounds = []
+        for fov in self.fov_ids:
+            for name in (self.records[fov] or {}).get("registration") or {}:
+                if name not in rounds:
+                    rounds.append(name)
+        return rounds
+
+    def _transforms_file(self, fov):
+        if fov not in self._transform_files:
+            path = self.root / "checkpoints" / fov / "registered" / "transforms.json"
+            record = self.inputs.json(path, "transforms", strict=False) if path.is_file() else None
+            self._transform_files[fov] = record if isinstance(record, dict) else None
+        return self._transform_files[fov]
+
+    def _transform(self, fov, record, name):
+        """``(source, results)`` of a succeeded round's transforms (R1, else transforms.json), or Unavailable."""
+        results = _get(record, "transforms", name, "results")
+        if results:
+            return "run.json", results
+        saved = self._transforms_file(fov)
+        if saved is not None and saved.get("format_version") == 2 and _get(saved, "transforms", name):
+            return "transforms.json", saved["transforms"][name]
+        return Unavailable("not_recorded", f"neither {self._record_path(fov)} transforms.{name} nor "
+                                           f"checkpoints/{fov}/registered/transforms.json holds the round")
+
+    def registration_rows(self):
+        rows = []
+        for fov in self.fov_ids:
+            for name in self.moving_rounds():
+                rows.append(self._registration_row(fov, name))
+        return rows
+
+    def _registration_row(self, fov, name):
+        record = self.records[fov]
+        row = {"fov_id": fov, "round": name}
+        columns = [c for c in TABLE_DTYPES["registration"] if c not in row]
+        if record is None:
+            return row | {c: Unavailable("no_run_record", self._record_path(fov)) for c in columns}
+        entries = (record.get("registration") or {}).get(name) or []
+        if not entries:
+            configured = _get(record, "config", "pipeline", "registration") is not None
+            missing = self._not_reached(fov, record, configured, "registration")
+            return row | {c: missing for c in columns}
+        last = entries[-1]
+        key = (last.get("record"), last.get("outcome"))
+        if record.get("status") == "running" and key in _UNFINISHED:
+            missing = Unavailable("run_not_finished", f"{self._record_path(fov)}: status running")
+            return row | {c: missing for c in columns}
+        outcome = _OUTCOMES.get(key)
+        if outcome is None:
+            return row | {c: Unavailable("not_recorded", f"registration.{name}: last entry {key}") for c in columns}
+        succeeded = [e for e in entries if e.get("record") == "estimation" and e.get("outcome") == "succeeded"]
+        row["outcome"] = outcome
+        row["fallback"] = any(bool(e.get("fallback")) for e in succeeded)
+        methods = [e.get("actual_method") for e in sorted(succeeded, key=lambda e: e.get("step", 0))]
+        row["methods"] = ";".join(str(m) for m in methods) if methods else NA
+        if outcome != "succeeded":
+            missing = Unavailable("step_failed", f"registration.{name}: outcome {outcome}")
+            return row | {c: missing for c in columns if c not in row}
+        transform = self._transform(fov, record, name)
+        if isinstance(transform, Unavailable):
+            row["transform_source"] = transform
+            shift = transform
+        else:
+            row["transform_source"] = transform[0]
+            kinds = [_get(entry, "transform", "kind") for entry in transform[1]]
+            shift = PENDING if any(k in _GLOBAL_KINDS for k in kinds) else NA
+        for axis in "zyx":
+            row[f"shift_{axis}"] = shift
+            row[f"residual_{axis}"] = shift
+        row["alignment_score"] = PENDING
+        return row
+
+    # steps.csv ---------------------------------------------------------------------------------------------
+
+    def steps_rows(self, registration):
+        methods = {(r["fov_id"], r["round"]): r["methods"] for r in registration}
+        rows = []
+        for fov in self.fov_ids:
+            record = self.records[fov]
+            steps = (record or {}).get("steps") or []
+            for index, step in enumerate(steps):
+                name = step.get("name")
+                rows.append({"scope": "fov", "fov_id": fov, "index": index, "name": name,
+                             "round": step.get("round") if step.get("round") is not None else NA,
+                             "method": self._step_method(record, step, methods.get((fov, step.get("round")))),
+                             "status": step.get("status"),
+                             "seconds": float(step["seconds"]) if step.get("seconds") is not None else
+                             Unavailable("not_recorded", f"{self._record_path(fov)}: steps[{index}].seconds")})
+            if fov in self.assignments:
+                saved, segmentation = self.assignments[fov]
+                cells = _get(saved, "inputs", "cells") or {}
+                # The methods of the cell run's record; an imported mask has none (baseline G13 (a)).
+                methods_of = [m.get("method") for m in (segmentation or {}).get("methods") or []
+                              if isinstance(m, dict) and m.get("method")]
+                method = ";".join(methods_of) if methods_of else "imported"
+                for offset, (name, step_method) in enumerate((("segment", method), ("assign", cells.get("run") or NA))):
+                    rows.append({"scope": "fov", "fov_id": fov, "index": len(steps) + offset, "name": name,
+                                 "round": NA, "method": step_method, "status": "succeeded",
+                                 "seconds": Unavailable("not_recorded", f"no record holds the time of {name}")})
+        index = 0
+        if self.placement is not None:
+            rows.append({"scope": "sample", "fov_id": NA, "index": index, "name": "stitch", "round": NA,
+                         "method": _get(self.placement, "method", "method") or NA, "status": "succeeded",
+                         "seconds": Unavailable("not_recorded", "no record holds the time of stitch")})
+            index += 1
+        for part, status in ((self.export or {}).get("parts") or {}).items():
+            section = (self.export or {}).get(_SECTIONS.get(part)) or {}
+            if status in ("off", "not_run"):
+                seconds = NA
+            elif isinstance(section.get("wall_s"), (int, float)):
+                seconds = float(section["wall_s"])
+            else:
+                seconds = Unavailable("not_recorded", f"export.json {_SECTIONS.get(part)} records no wall_s")
+            rows.append({"scope": "sample", "fov_id": NA, "index": index, "name": part, "round": NA,
+                         "method": self._part_method(part, section), "status": status, "seconds": seconds})
+            index += 1
+        return rows
+
+    @staticmethod
+    def _step_method(record, step, registration_methods):
+        name = step.get("name") or ""
+        if name.startswith("preprocess:"):
+            return name.split(":", 1)[1]
+        if name == "register":
+            return registration_methods if isinstance(registration_methods, str) else NA
+        if name == "find_spots":
+            methods = list(dict.fromkeys(m.get("method") for m in step.get("methods") or [] if m.get("method")))
+            return ";".join(methods) if methods else NA
+        if name == "decode_barcodes":
+            method = _get(record, "config", "pipeline", "decoding", "method")
+            mode = _get(record, "config", "readout_mode")
+            return NA if method is None else (f"{method} ({mode})" if mode else method)
+        if name == "filter_reads":
+            return "filter"
+        return NA
+
+    @staticmethod
+    def _part_method(part, section):
+        if part != "segment":
+            return NA
+        names = []
+        for run in section.get("runs") or []:
+            method = run.get("method")
+            names.append(method.get("method") if isinstance(method, dict) and method.get("method") else
+                         "imported" if run.get("import") else None)
+        names = [n for n in names if n]
+        return ";".join(names) if names else NA
+
+    # readout_totals.csv and population.csv ---------------------------------------------------------------------
+
+    @staticmethod
+    def readout_rows(fovs):
+        rows = []
+        spots = None
+        for level in READOUT_LEVELS:
+            cells = [row[level] for row in fovs]
+            values = [v for v in cells if isinstance(v, int)]
+            if values:
+                count = sum(values)
+            elif any(v is PENDING for v in cells):
+                count = PENDING
+            else:
+                count = first(*cells)
+            if level == "spots":
+                spots = count
+            fraction = derived(count, spots)
+            rows.append({"level": level, "count": count, "fraction_of_spots": fraction, "fovs": len(values),
+                         "overlaps_counted_per_fov": level != "reads_in_cells"})
+        return rows
+
+    def population_rows(self):
+        counts = (self.assembly or {}).get("counts") if self.e_state is None else None
+        no_cells = self.no_cells
+        rows = []
+        for population in POPULATIONS:
+            reason = population[len("excluded_"):] if population.startswith("excluded_") else None
+            row = {"population": population}
+            for column in ("cells", "molecules"):
+                held = _get(counts, column, "excluded") or {}
+                if reason in (("cell_not_owner", "cell_duplicate_observation", "outside_grid") if column == "cells"
+                              else ("duplicate_observation",)):
+                    row[column] = NA  # a population of the other kind only
+                elif self.e_state is not None:
+                    row[column] = self.e_state
+                elif reason is not None and reason not in held:
+                    row[column] = NA  # a reason the record does not hold (the route, the duplicate rule)
+                elif no_cells is not None and (column == "cells" or population == "counted"):
+                    row[column] = no_cells
+                elif population == "counted":
+                    row[column] = PENDING
+                elif reason is not None:
+                    row[column] = int(held[reason])
+                else:
+                    value = _get(counts, column, population)
+                    row[column] = int(value) if value is not None else Unavailable(
+                        "not_recorded", f"export.json assembly.counts.{column}.{population}")
+            rows.append(row)
+        return rows
+
+    # Parts with no cell ------------------------------------------------------------------------------------
+
+    def part_rows_for(self, registration):
+        rows = []
+        any_record = any(r is not None for r in self.records.values())
+        maps_missing = None if self.placement is not None or self.export is not None else self.p_missing
+        if not registration:
+            if not any_record:
+                reason = Unavailable("no_run_record", "no FOV of the list has a run record")
+            else:
+                reason = first(*(self._not_reached(f, r, _get(r, "config", "pipeline", "registration") is not None,
+                                                   "registration")
+                                 for f, r in self.records.items() if r is not None))
+            rows.append(("registration.maps", first(reason, maps_missing), ""))
+            rows.append(("registration.heatmap", reason, ""))
+        elif maps_missing is not None:
+            rows.append(("registration.maps", maps_missing, ""))
+        if maps_missing is not None:
+            rows.append(("readout.per_fov", maps_missing, ""))
+        records = [r for r in self.records.values() if r is not None]
+        none = Unavailable("no_run_record", "no FOV of the list has a run record")
+        rows.append(("files.input", none if not records else None, "entry=images"))
+        rows.append(("files.input", none if not records else None if any("codebook" in r for r in records) else
+                     Unavailable("not_recorded", "no run record holds codebook"), "entry=codebook"))
+        rows.append(("files.input", self.p_missing if self.placement is None else None, "entry=positions"))
+        rows.append(("files.configuration", none if not records else None if any(
+            "workflow_config" in r for r in records) else Unavailable("not_recorded",
+                                                                      "no run record holds workflow_config"),
+            "entry=workflow"))
+        return [(part, value, key) for part, value, key in rows if value is not None]
+
+    # report.json --------------------------------------------------------------------------------------------
+
+    def resolved_runs(self):
+        assignment = {"name": self.assignment,
+                      "folders": {fov: f"checkpoints/{fov}/assignment/{self.assignment}" for fov in self.assignments}}
+        if self.route == "after_fusion":
+            section = (self.export or {}).get("segmentation") or {}
+            runs = {"cells": self.segmentation or section.get("cells"),
+                    "nuclei": None if self.segmentation else section.get("nuclei")}
+        else:
+            runs = {}
+            for fov, (saved, _) in self.assignments.items():
+                inputs = saved.get("inputs") or {}
+                runs[fov] = {"cells": self.segmentation or _get(inputs, "cells", "run"),
+                             "nuclei": None if self.segmentation else _get(inputs, "nuclei", "run")}
+        return assignment, {"name": self.segmentation, "runs": runs}
+
+
+# --- Tables ------------------------------------------------------------------------------------------------------
+
+def _frame(name, rows):
+    dtypes = TABLE_DTYPES[name]
+    data = {c: pd.Series([None if isinstance(r[c], (Unavailable, _Marker)) else r[c] for r in rows],
+                         dtype=object).astype(dtypes[c]) for c in dtypes}
+    return pd.DataFrame(data, columns=list(dtypes))
+
+
+def _part_rank(part):
+    """A part's place in the order of ``unavailable.csv``; ``rule:<rule>`` sorts with the problematic FOVs."""
+    if part.startswith("rule:"):
+        return REPORT_PARTS.index("summary.problematic_fovs"), PROBLEM_RULES.index(part[len("rule:"):])
+    return REPORT_PARTS.index(part), -1
+
+
+#: The tables in the order of the rows of ``unavailable.csv``: rows without a table first, ``summary`` last.
+_TABLE_RANK = {name: i for i, name in enumerate(REPORT_TABLES)} | {"summary": len(REPORT_TABLES)}
+
+
+def _unavailable_rows(tables, part_rows):
+    """The rows of ``unavailable.csv``, in the contract's order."""
+    entries = []
+    for position, (part, value, key) in enumerate(part_rows):
+        entries.append(((*_part_rank(part), -1, 0, position),
+                        {"part": part, "table": None, "column": None, "row_key": key, "reason": value.reason,
+                         "detail": value.detail}))
+    for table, rows in tables.items():
+        parts = COLUMN_PARTS.get(table, {})
+        for c_index, column in enumerate(TABLE_DTYPES[table]):
+            for r_index, row in enumerate(rows):
+                value = row[column]
+                if isinstance(value, Unavailable):
+                    entries.append(((*_part_rank(parts[column]), _TABLE_RANK[table], c_index, r_index),
+                                    {"part": parts[column], "table": table, "column": column,
+                                     "row_key": row_key(table, _plain(row)), "reason": value.reason,
+                                     "detail": value.detail}))
+    entries.sort(key=lambda e: e[0])
+    return [row for _, row in entries]
+
+
+def _plain(row):
+    return {k: (None if isinstance(v, (Unavailable, _Marker)) else v) for k, v in row.items()}
+
+
+# --- The entry -----------------------------------------------------------------------------------------------------
+
+def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_id: str, sample_id: str,
+                   assignment: str | None = "default", segmentation: str | None = None,
+                   config: ReportConfig | None = None, output_dir=None) -> tuple[Path, dict]:
+    """Collect one sample's records into its report folder; return the folder and the ``report.json`` content.
+
+    The checks 1 to 7 of docs/report-contract.md ("Checks before anything is
+    written") run first, in order, each raising with the folder unchanged. The
+    tables ``fovs``, ``registration``, ``steps``, ``readout_totals``,
+    ``population``, ``problematic_fovs`` and ``unavailable`` and the record are
+    written into a staging folder beside the report folder, which then replaces
+    the earlier report's own files (RP1).
+
+    Parameters
+    ----------
+    output_root : str or Path
+        The dataset's output root.
+    sample : str
+        The sample: ``stitching/<sample>/``, ``export/<sample>/`` and ``report/<sample>/``.
+    fov_ids : Sequence[str]
+        The FOV list, nonempty and unique, in report order.
+    dataset_id, sample_id : str
+        The ``Dataset``'s IDs, which every run record must hold.
+    assignment : str or None
+        The §2.9 assignment name of the route per FOV; None for a sample without cells.
+    segmentation : str or None
+        The segmentation run the examples show; None for the runs the assignment or export read.
+    config : ReportConfig or None
+        None is ``ReportConfig()``.
+    output_dir : str or Path or None
+        None is ``<output_root>/report/<sample>/``.
+
+    Raises
+    ------
+    TypeError
+        config is not a ReportConfig.
+    ValueError
+        Arguments of the wrong form, a run record, export or placement that does
+        not belong to the sample or the FOV list, a marker gene not in the gene
+        list, example FOVs outside the list.
+    FileNotFoundError
+        No FOV of the list has a run record and there is no export.
+    FileExistsError
+        The report folder holds a file that is not the report's own.
+    """
+    from starfinder.dataset._run_record import _code, _environment
+    from starfinder.io._checkpoint import _jsonable, _write_table, write_json
+    from starfinder.sample_output._record import Timer
+    timer = Timer()
+    root = Path(output_root)
+    fov_ids, config = _check_arguments(sample, fov_ids, config)
+    if assignment is not None and (not isinstance(assignment, str) or not assignment):
+        raise ValueError(f"assignment must be a saved assignment name or None; got {assignment!r}")
+    if segmentation is not None and (not isinstance(segmentation, str) or not segmentation):
+        raise ValueError(f"segmentation must be a run name or None; got {segmentation!r}")
+    inputs = _Inputs(root)
+    export_dir, stitching_dir = root / "export" / sample, root / "stitching" / sample
+    if not any((root / "checkpoints" / f / RUN_RECORD).is_file() for f in fov_ids) and \
+            not (export_dir / "export.json").is_file():
+        raise FileNotFoundError(f"nothing to report for sample {sample!r}: no FOV of the list has a run record "
+                                f"({root / 'checkpoints'}/<fov>/{RUN_RECORD}) and there is no "
+                                f"{export_dir / 'export.json'}")
+    records = _check_run_records(inputs, root, fov_ids, dataset_id, sample_id)
+    export = _check_export(inputs, export_dir, sample, fov_ids, assignment)
+    placement = _check_placement(inputs, stitching_dir, fov_ids)
+    _check_markers(inputs, config, records, export, export_dir)
+    _check_examples(config, fov_ids)
+    folder = Path(output_dir) if output_dir is not None else root / "report" / sample
+    own_files(folder)
+
+    collection = _Collection(inputs, root, sample, fov_ids, records, export, placement, assignment, segmentation,
+                             config)
+    fovs = collection.fovs_rows()
+    registration = collection.registration_rows()
+    tables = {"fovs": fovs, "registration": registration, "steps": collection.steps_rows(registration),
+              "readout_totals": collection.readout_rows(fovs), "population": collection.population_rows(),
+              "problematic_fovs": []}
+    unavailable = _unavailable_rows(tables, collection.part_rows_for(registration))
+    tables["unavailable"] = unavailable
+    resolved_assignment, resolved_segmentation = collection.resolved_runs()
+
+    folder.parent.mkdir(parents=True, exist_ok=True)
+    staging = folder.parent / f".{folder.name}.{uuid.uuid4().hex}.tmp"
+    try:
+        (staging / TABLE_DIR).mkdir(parents=True)
+        files = []
+        for name in COLLECTED_TABLES:
+            file_name, dtypes = _write_table(_frame(name, tables[name]), staging / TABLE_DIR, name, "csv")
+            data = (staging / TABLE_DIR / file_name).read_bytes()
+            files.append({"path": f"{TABLE_DIR}/{file_name}", "sha256": _sha256(data), "bytes": len(data),
+                          "dtypes": dtypes})
+        record = {
+            "format_version": FORMAT_VERSION, "stage": STAGE, "sample": sample, "dataset_id": dataset_id,
+            "sample_id": sample_id, "fov_ids": fov_ids, "route": collection.route,
+            "assignment": resolved_assignment, "segmentation": resolved_segmentation, "generated_at": _now(),
+            "software": {"code": _code(), "environment": _environment()}, "config": _jsonable(config),
+            "stages": {"run_records": [f for f in fov_ids if records[f] is not None],
+                       "placement": placement is not None, "export": export is not None,
+                       "parts": dict((export or {}).get("parts") or {})},
+            "inputs": list(inputs.entries.values()), "files": files,
+            "unavailable": [_plain(row) for row in unavailable],
+            "rules": {}, "summary": {}, **timer.record()}
+        write_json(record, staging / REPORT_FILE)
+        _replace(folder, staging, [entry["path"] for entry in files])
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+    return folder, json.loads((folder / REPORT_FILE).read_text(encoding="utf-8"))
+
+
+def _replace(folder: Path, staging: Path, paths):
+    """Remove the earlier report's own files and move the new ones in, ``report.json`` last (RP1)."""
+    if not folder.exists():
+        os.replace(staging, folder)
+        return
+    earlier = own_files(folder)
+    for relative in [REPORT_FILE] + [p for p in earlier if p != REPORT_FILE]:
+        (folder / relative).unlink(missing_ok=True)
+    for directory in sorted({(folder / p).parent for p in earlier}, key=lambda d: len(d.parts), reverse=True):
+        if directory != folder and directory.is_dir() and not any(directory.iterdir()):
+            directory.rmdir()
+    for relative in list(paths) + [REPORT_FILE]:
+        (folder / relative).parent.mkdir(parents=True, exist_ok=True)
+        os.replace(staging / relative, folder / relative)
