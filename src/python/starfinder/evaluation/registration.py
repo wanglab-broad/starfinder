@@ -67,13 +67,23 @@ def evaluate_translation(detected, truth, *, reference_metadata, observed_metada
                    status="failed" if failed else "missing" if any(k != "passed" for k in reasons) else None)
 
 
+def _finite(a):
+    """Whether every value of a is finite, checked one Z plane at a time for a volume."""
+    return all(np.isfinite(p).all() for p in a) if a.ndim >= 3 else bool(np.isfinite(a).all())
+
+
 def _images(ref, observed):
+    return [a.astype(np.float64) for a in _signals(ref, observed)]
+
+
+def _signals(ref, observed):
+    """The two arrays, checked for one shape and finite real values; registration_qc reads them by plane."""
     arrays = [np.asarray(x) for x in (ref, observed)]
     if arrays[0].shape != arrays[1].shape:
         raise ValueError("images must have the same shape")
-    if any(a.dtype.kind not in "uif" or not np.isfinite(a).all() for a in arrays):
+    if any(a.dtype.kind not in "uif" or not _finite(a) for a in arrays):
         raise ValueError("images must contain finite real values")
-    return [a.astype(np.float64) for a in arrays]
+    return arrays
 
 
 def _mask(mask, shape):
@@ -222,43 +232,134 @@ def evaluate_registration(ref, before, after, *, reference_spots, before_spots, 
     return _result(values, metric_units, counts, configs, reasons=reasons)
 
 
-def _pull_displacement(transform):
-    """Pull displacement u (ZYX3, float64) of a translation, affine, B-spline, dense or chain-like transform."""
+def _pull_planes(transform):
+    """z -> pull displacement u (YX3, float64) of reference plane z of a translation, affine, B-spline, dense or
+    chain-like transform.
+
+    A translation is one displacement broadcast over the plane, and a chain is
+    evaluated one plane at a time with the arithmetic of its pull_field. An
+    affine or B-spline transform is evaluated whole by dense(), as before.
+    """
     if hasattr(transform, "displacement_zyx"):
-        u = np.asarray(transform.displacement_zyx, dtype=np.float64)
+        u = np.asarray(transform.displacement_zyx)
         if u.shape == (3,):  # a translation: one displacement for every voxel
-            return np.broadcast_to(u, (*tuple(transform.reference_shape_zyx), 3))
-        return u
+            plane = np.broadcast_to(u.astype(np.float64), (*tuple(transform.reference_shape_zyx)[1:], 3))
+            return lambda z: plane
+        return lambda z: np.asarray(u[z], dtype=np.float64)
     if hasattr(transform, "dense"):
-        return np.asarray(transform.dense().displacement_zyx, dtype=np.float64)
+        u = np.asarray(transform.dense().displacement_zyx, dtype=np.float64)
+        return lambda z: u[z]
+    if hasattr(transform, "pull_points"):
+        shape = tuple(transform.reference_shape_zyx)
+        grid = np.stack(np.meshgrid(*(np.arange(n, dtype=np.float64) for n in shape[1:]), indexing="ij"))
+
+        def plane(z):
+            # TransformChain.pull_field, row z.
+            points = transform.pull_points(z)
+            u = np.empty((*shape[1:], 3), dtype=np.float64)
+            u[..., 0] = points[0] - z
+            u[..., 1:] = np.moveaxis(points[1:] - grid, 0, -1)
+            return u
+        return plane
     if hasattr(transform, "pull_field"):
-        return np.asarray(transform.pull_field().displacement_zyx, dtype=np.float64)
+        u = np.asarray(transform.pull_field().displacement_zyx, dtype=np.float64)
+        return lambda z: u[z]
     raise TypeError(f"registration QC does not support {type(transform).__qualname__}")
 
 
 def _valid_overlap(u, shape):
-    """Reference voxels whose pull point lies inside the closed box [0, n-1] of the moving grid on every axis."""
-    valid = np.ones(shape, dtype=bool)
-    for axis, n in enumerate(shape):
-        index = np.arange(n, dtype=np.float64).reshape([-1 if a == axis else 1 for a in range(3)])
-        point = index + u[..., axis]
-        valid &= (point >= 0) & (point <= n - 1)
+    """Reference voxels whose pull point lies inside the closed box [0, n-1] of the moving grid on every axis.
+
+    u is the pull field (ZYX3) or a function that returns its plane z (YX3);
+    the mask is filled one plane at a time.
+    """
+    planes = u if callable(u) else lambda z: u[z]
+    index = [np.arange(n, dtype=np.float64).reshape([-1 if a == axis else 1 for a in range(2)])
+             for axis, n in enumerate(shape[1:])]
+    valid = np.empty(shape, dtype=bool)
+    for z in range(shape[0]):
+        plane = planes(z)
+        point = np.float64(z) + plane[..., 0]
+        valid[z] = (point >= 0) & (point <= shape[0] - 1)
+        for axis, n in enumerate(shape[1:], start=1):
+            point = index[axis - 1] + plane[..., axis]
+            valid[z] &= (point >= 0) & (point <= n - 1)
     return valid
 
 
-def _statistics(magnitude):
-    return {"median": float(np.median(magnitude)), "p95": float(np.percentile(magnitude, 95)),
-            "max": float(magnitude.max())}
+def _overlap_ncc(reference, images, valid):
+    """The NCC of reference with each image over valid, as _masked_ncc computes it, one plane at a time.
+
+    The sums of each plane's masked float64 voxels are added in Z order, so a
+    volume of one plane gets _masked_ncc's value exactly and a larger one
+    differs from it only by the order of the additions. None when fewer than
+    two voxels are valid or either side is constant there.
+    """
+    n = int(valid.sum())
+    if n < 2:
+        return [None] * len(images)
+    planes = [z for z in range(valid.shape[0]) if valid[z].any()]
+
+    def masked(image, z):
+        return np.asarray(image[z], dtype=np.float64)[valid[z]]
+
+    signals = (reference, *images)
+    sums, low, high = [0.0] * len(signals), [np.inf] * len(signals), [-np.inf] * len(signals)
+    for z in planes:
+        for k, image in enumerate(signals):
+            a = masked(image, z)
+            sums[k] += a.sum()
+            low[k], high[k] = min(low[k], a.min()), max(high[k], a.max())
+    means = [s / n for s in sums]
+    products, squares = [0.0] * len(images), [0.0] * len(signals)
+    for z in planes:
+        a = masked(reference, z) - means[0]
+        squares[0] += a.dot(a)
+        for k, image in enumerate(images, start=1):
+            b = masked(image, z) - means[k]
+            products[k - 1] += np.sum(a * b)
+            squares[k] += b.dot(b)
+    return [None if low[0] == high[0] or low[k] == high[k] else
+            float(products[k - 1] / (np.sqrt(squares[0]) * np.sqrt(squares[k]))) for k in range(1, len(signals))]
 
 
-def _fold_fraction(u):
-    """Fraction of voxels with det(I + grad u) <= 0; central differences, zero along singleton axes."""
-    jacobian = np.zeros(u.shape + (3,))
-    for j, n in enumerate(u.shape[:3]):
-        if n > 1:
-            jacobian[..., j] = np.gradient(u, axis=j)
-    jacobian += np.eye(3)
-    return float(np.mean(np.linalg.det(jacobian) <= 0))
+def _statistics(magnitude, overwrite=False):
+    """Median, 95th percentile and maximum; overwrite lets the median and percentile partition magnitude in place."""
+    return {"median": float(np.median(magnitude, overwrite_input=overwrite)),
+            "p95": float(np.percentile(magnitude, 95, overwrite_input=overwrite)), "max": float(magnitude.max())}
+
+
+def _field_summary(planes, shape, spacing):
+    """Displacement statistics and fold fraction of the pull field, read one plane at a time.
+
+    The fold fraction is the fraction of voxels with det(I + grad u) <= 0,
+    by np.gradient's arithmetic: central differences, one-sided at the ends,
+    zero along singleton axes; along Z from the neighbouring planes. Only
+    the |u| of every voxel is held whole, for the median and percentile.
+    """
+    nz = shape[0]
+    magnitude = np.empty(shape)
+    folded = 0
+    previous, u, following = None, planes(0), planes(1) if nz > 1 else None
+    for z in range(nz):
+        magnitude[z] = np.linalg.norm(u, axis=-1)
+        jacobian = np.zeros(u.shape + (3,))
+        if nz > 1:
+            jacobian[..., 0] = ((following - previous) / 2.0 if 0 < z < nz - 1 else
+                                following - u if z == 0 else u - previous)
+        for j, n in enumerate(shape[1:], start=1):
+            if n > 1:
+                jacobian[..., j] = np.gradient(u, axis=j - 1)
+        jacobian += np.eye(3)
+        folded += int(np.count_nonzero(np.linalg.det(jacobian) <= 0))
+        previous, u, following = u, following, planes(z + 2) if z + 2 < nz else None
+    summary = {"displacement_voxels": _statistics(magnitude, overwrite=True), "displacement_physical": None,
+               "fold_fraction": folded / magnitude.size}
+    if spacing is not None:
+        for z in range(nz):
+            magnitude[z] = np.linalg.norm(planes(z) * np.asarray(spacing, dtype=float), axis=-1)
+        summary["displacement_physical"] = _statistics(magnitude, overwrite=True)
+    return summary
 
 
 def _rotation_angle(physical):
@@ -271,7 +372,7 @@ def _rotation_angle(physical):
     return float(np.arccos(np.clip((np.trace(m) - 1) / 2, -1, 1)))
 
 
-def _transform_summary(transform, u):
+def _transform_summary(transform, planes, shape):
     if isinstance(getattr(transform, "displacement_zyx", None), tuple):
         return {"kind": "translation", "displacement_zyx": [float(v) for v in transform.displacement_zyx]}
     if hasattr(transform, "matrix_zyx"):
@@ -281,12 +382,9 @@ def _transform_summary(transform, u):
                 "reflection_or_collapse": det <= 0,
                 "max_singular_value_a_minus_i": float(np.linalg.svd(a - np.eye(3), compute_uv=False)[0]),
                 "rotation_angle": _rotation_angle(getattr(transform, "physical", None))}
-    summary = {"kind": "bspline" if hasattr(transform, "coefficients") else "dense", "displacement_voxels": _statistics(np.linalg.norm(u, axis=-1)),
-               "displacement_physical": None, "fold_fraction": _fold_fraction(u)}
     spacing = getattr(getattr(transform, "reference_metadata", None), "spacing_zyx", None)
-    if spacing is not None:
-        summary["displacement_physical"] = _statistics(np.linalg.norm(u * np.asarray(spacing, dtype=float), axis=-1))
-    return summary
+    return {"kind": "bspline" if hasattr(transform, "coefficients") else "dense",
+            **_field_summary(planes, shape, spacing)}
 
 
 def _optimizer(diagnostics):
@@ -322,18 +420,19 @@ def registration_qc(reference, before, after, transform, *, config=None, diagnos
     if config is not None and (not is_dataclass(config) or isinstance(config, type)
                                or not isinstance(getattr(config, "projections", None), bool)):
         raise TypeError("config must be a RegistrationQcConfig")
-    reference, before = _images(reference, before)
-    after = _images(reference, after)[1]
+    # The signals are read one Z plane at a time and never copied whole (W-461).
+    reference, before = _signals(reference, before)
+    after = _signals(reference, after)[1]
     shape = tuple(getattr(transform, "reference_shape_zyx", ()))
     if reference.ndim != 3 or reference.shape != shape:
         raise ValueError(f"signals must be ZYX arrays on the transform's reference grid {shape}")
-    u = _pull_displacement(transform)
-    valid = _valid_overlap(u, shape)
+    planes = _pull_planes(transform)
+    valid = _valid_overlap(planes, shape)
     n_valid = int(valid.sum())
     values, reasons = {"coverage": n_valid / valid.size}, {}
-    for label, image in (("before", before), ("after", after)):
-        values["ncc_" + label], reason = _masked_ncc(reference, image, valid)
-        if reason:
+    for label, value in zip(("before", "after"), _overlap_ncc(reference, (before, after), valid)):
+        values["ncc_" + label] = value
+        if value is None:
             reasons["ncc_" + label] = ("no valid overlap" if n_valid == 0 else
                                        "fewer than two valid voxels" if n_valid < 2 else
                                        "constant signal over the valid overlap")
@@ -342,7 +441,8 @@ def registration_qc(reference, before, after, transform, *, config=None, diagnos
     values["ncc_gain"] = gain
     if gain is None:
         reasons["ncc_gain"] = "ncc_before or ncc_after is undefined"
-    projections = {label: image.max(axis=0) for label, image in
+    # The maximum commutes with the exact, monotonic cast to float64.
+    projections = {label: image.max(axis=0).astype(np.float64) for label, image in
                    (("reference", reference), ("before", before), ("after", after))}
     columns = valid.all(axis=0)
     data_range, eroded = None, np.zeros_like(columns)
@@ -363,7 +463,7 @@ def registration_qc(reference, before, after, transform, *, config=None, diagnos
             values["ssim_" + label] = structural_similarity(
                 projections["reference"], projections[label], data_range=data_range, policy="plane",
                 win_size=_QC_WINDOW, mask=eroded).values["ssim"]
-    details = {"transform": _transform_summary(transform, u), "optimizer": _optimizer(diagnostics)}
+    details = {"transform": _transform_summary(transform, planes, shape), "optimizer": _optimizer(diagnostics)}
     if config is not None and config.projections:
         details["projections"] = projections
     return _result(values, {"coverage": "fraction", "ncc_before": "dimensionless", "ncc_after": "dimensionless",
