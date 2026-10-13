@@ -1292,8 +1292,9 @@ The checks are in the modules of `src/python/test/` listed below. The issues tha
 the report (W-451 to W-458) added most of them with their code; `test_report_chain.py` adds
 CH1 to CH3, RT1 and RT2 through `Dataset.report`, Z1, A2, CP1 on the chain, DT1 on
 `scene_chain`, PG1 to PG6 with RC12 on every page it writes, DF12's Z size from a reference
-image when no record holds a grid, and the test that keeps this table true, `test_every_check_names_collected_tests`. That test reads the rows of the table
-"Checks" from this page and checks that this table has exactly those rows, in that order;
+image when no record holds a grid (at the place of the `Dataset`'s `reference_image`
+pattern), and the test that keeps this table true, `test_every_check_names_collected_tests`.
+That test reads the rows of the table "Checks" from this page and checks that this table has exactly those rows, in that order;
 that every row names at least one test of its module that pytest collects (a name ending in
 `*` stands for every test whose name starts so); that none of them is marked as an expected
 failure; and that a row whose tier is `default` names no `slow` test, a row whose tier is
@@ -1344,7 +1345,7 @@ present at a stage when no row of `unavailable.csv` names it with a reason other
 | DF9 | `test_report_measurements.py`, `test_df9_rc7_cells_and_the_unknown_calibration`, `test_df9_a_volume_and_a_plane_fov`, `test_size_unit_of_the_records` | default | exact |
 | DF10 | `test_report_measurements.py`, `test_df10_reads_along_z_report_cells`, `test_df10_reads_along_z_hand_tables` | default | none compared |
 | DF11 | `test_report_replay.py`, `test_df11_intensity_bins` | default | within 1e-9 (the bin edges) |
-| DF12 | `test_report_values.py`, `test_df12_summary_keys`, `test_df12_cells_median_per_fov`, `test_df12_configuration_acquisition_software_and_time`, `test_df12_acquisition_from_the_export`; `test_report_chain.py`, `test_z_size_from_a_reference_image_without_an_export_or_a_placement` | default | within 1e-9 |
+| DF12 | `test_report_values.py`, `test_df12_summary_keys`, `test_df12_cells_median_per_fov`, `test_df12_configuration_acquisition_software_and_time`, `test_df12_acquisition_from_the_export`; `test_report_chain.py`, `test_z_size_*` | default | within 1e-9 |
 | PR1 | `test_report_rules.py`, `test_pr1_rule_form`, `test_pr1_rows_and_records` | default | within 1e-9 |
 | PR2 | `test_report_rules.py`, `test_pr2_edge_cases`, `test_pr2_null_values` | default | the limit within 1e-12 (as stated) |
 | PR3 | `test_report_rules.py`, `test_pr3_shift_residual` | default | within 1e-9 (as stated) |

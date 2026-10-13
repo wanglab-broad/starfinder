@@ -780,40 +780,156 @@ def test_dt1_the_chain_in_two_single_thread_processes(scene_chain, tmp_path):  #
 
 # --- The Z size from a reference image (DF12; docs/report-contract.md, "Where each record is looked for") ---------
 
-def test_z_size_from_a_reference_image_without_an_export_or_a_placement(tmp_path):
-    """``report_records`` ``no_placement`` (run records only): no record holds a grid. Without a reference image the Z
-    size is unavailable (``not_recorded``); with reference images it is the shape of the first FOV in list order whose
-    image exists and whose header settles its shape, and that file is listed in ``inputs``."""
+def z_size_case(tmp_path):
+    """``report_records`` ``no_placement``: run records only, so no record holds a grid."""
     from .report_fixtures import report_records
-    case = report_records(tmp_path / "root", "no_placement")
-    _, record = case.collect()
-    rows = [(u["part"], u["row_key"], u["reason"]) for u in record["unavailable"] if u["row_key"] == "entry=z_size"]
-    assert rows == [("summary.identity", "entry=z_size", "not_recorded")]
-    assert not [e for e in record["inputs"] if e["kind"] == "reference_image"]
-    page = (case.folder / "report.html").read_text(encoding="utf-8")
-    assert re.search(r"<dt>Acquisition</dt><dd>3 rounds × 4 channels <span", page)
-    # F1 has none, F2's is floating point (its header does not settle the shape load_volume gives), F3's has 3 planes
-    # and F4's 7: F3's is read.
-    images = case.root / "images" / "ref_merged"
-    images.mkdir(parents=True)
-    tifffile.imwrite(images / "F2.tif", np.zeros((2, 16, 16), np.float32), photometric="minisblack")
-    tifffile.imwrite(images / "F3.tif", np.zeros((3, 16, 16), np.uint16), photometric="minisblack")
-    tifffile.imwrite(images / "F4.tif", np.zeros((7, 16, 16), np.uint16), photometric="minisblack")
-    _, record = case.collect()
-    assert not [u for u in record["unavailable"] if u["row_key"] == "entry=z_size"]
+    return report_records(tmp_path / "root", "no_placement")
+
+
+def z_size_rows(record):
+    return [(u["part"], u["row_key"], u["reason"], u["detail"]) for u in record["unavailable"]
+            if u["row_key"] == "entry=z_size"]
+
+
+def reference_inputs(record, root):
+    """(path, kind, sha256, bytes, verified) of every reference_image input, with the hash expected of its file."""
     listed = [(e["path"], e["kind"], e["sha256"], e["bytes"], e["verified"]) for e in record["inputs"]
               if e["kind"] == "reference_image"]
-    assert listed == [(f"images/ref_merged/{f}.tif", "reference_image",
-                       hashlib.sha256((images / f"{f}.tif").read_bytes()).hexdigest(),
-                       (images / f"{f}.tif").stat().st_size, False) for f in ("F2", "F3")]
+    expected = [(e[0], "reference_image", hashlib.sha256((Path(root) / e[0]).read_bytes()).hexdigest(),
+                 (Path(root) / e[0]).stat().st_size, False) for e in listed]
+    assert listed == expected
+    return [e[0] for e in listed]
+
+
+def acquisition_text(case):
     page = (case.folder / "report.html").read_text(encoding="utf-8")
-    assert re.search(r"<dt>Acquisition</dt><dd>3 rounds × 4 channels, 3D</dd>", page)
-    # One plane: 2D (Z = 1).
-    (images / "F3.tif").unlink()
-    tifffile.imwrite(images / "F3.tif", np.zeros((16, 16), np.uint16))
+    return re.search(r"<dt>Acquisition</dt><dd>(.*?)</dd>", page, re.S).group(1)
+
+
+def direct_z_size(root, fov_ids, pattern=None):
+    """reference_image_z_size called on its own, with a fresh register of inputs."""
+    from starfinder.report._collect import _Inputs
+    from starfinder.report._values import reference_image_z_size
+    return reference_image_z_size(_Inputs(Path(root)), Path(root), fov_ids, pattern)
+
+
+def stack(path, planes, dtype):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    shape = (planes, 16, 16) if planes > 1 else (16, 16)
+    tifffile.imwrite(path, np.zeros(shape, dtype), photometric="minisblack")
+
+
+def test_z_size_without_a_reference_image_is_not_recorded(tmp_path):
+    """No record holds a grid and no FOV has a reference image: the Z size is unavailable with not_recorded."""
+    case = z_size_case(tmp_path)
     _, record = case.collect()
-    page = (case.folder / "report.html").read_text(encoding="utf-8")
-    assert re.search(r"<dt>Acquisition</dt><dd>3 rounds × 4 channels, 2D \(Z = 1\)</dd>", page)
+    assert [r[:3] for r in z_size_rows(record)] == [("summary.identity", "entry=z_size", "not_recorded")]
+    assert reference_inputs(record, case.root) == []
+    assert acquisition_text(case).startswith("3 rounds × 4 channels <span")
+    assert direct_z_size(case.root, case.fov_ids) is None
+
+
+@pytest.mark.parametrize("dtype", [np.float32, np.uint16], ids=["float32", "uint16"])
+def test_z_size_from_a_reference_image_without_a_grid(tmp_path, dtype):
+    """Only F1 has a reference image (3 planes; float32 or uint16), no record holds a grid: the Z size is its shape,
+    read from the header, and the file is listed in inputs. With one plane, 2D (Z = 1)."""
+    case = z_size_case(tmp_path)
+    image = case.root / "images" / "ref_merged" / "F1.tif"
+    stack(image, 3, dtype)
+    assert direct_z_size(case.root, case.fov_ids) == 3
+    _, record = case.collect()
+    assert z_size_rows(record) == []
+    assert reference_inputs(record, case.root) == ["images/ref_merged/F1.tif"]
+    assert acquisition_text(case) == "3 rounds × 4 channels, 3D"
+    image.unlink()
+    stack(image, 1, dtype)
+    assert direct_z_size(case.root, case.fov_ids) == 1
+    case.collect()
+    assert acquisition_text(case) == "3 rounds × 4 channels, 2D (Z = 1)"
+
+
+def test_z_size_from_the_first_fov_with_a_reference_image(tmp_path):
+    """F1 has none, F2 a uint16 image of 7 planes, F3 a float32 image of 3: F2's, the first in list order, is read and
+    is the only reference image listed."""
+    case = z_size_case(tmp_path)
+    images = case.root / "images" / "ref_merged"
+    stack(images / "F2.tif", 7, np.uint16)
+    stack(images / "F3.tif", 3, np.float32)
+    assert direct_z_size(case.root, case.fov_ids) == 7
+    _, record = case.collect()
+    assert z_size_rows(record) == [] and reference_inputs(record, case.root) == ["images/ref_merged/F2.tif"]
+
+
+def test_z_size_when_no_reference_image_can_be_read(tmp_path):
+    """F1's file is not a TIFF and F2's is a TIFF of three channels (not a ZYX or YX image): the Z size is unavailable
+    with input_changed naming F1's file, and both files are listed. With a readable F3, F3's is read."""
+    from starfinder.report._values import Unavailable
+    case = z_size_case(tmp_path)
+    images = case.root / "images" / "ref_merged"
+    images.mkdir(parents=True)
+    (images / "F1.tif").write_bytes(b"not a tiff\n" * 8)
+    tifffile.imwrite(images / "F2.tif", np.zeros((2, 3, 16, 16), np.uint16), imagej=True, metadata={"axes": "ZCYX"})
+    found = direct_z_size(case.root, case.fov_ids)
+    assert isinstance(found, Unavailable) and found.reason == "input_changed"
+    _, record = case.collect()
+    (row,) = z_size_rows(record)
+    assert row[:3] == ("summary.identity", "entry=z_size", "input_changed")
+    assert row[3].startswith("images/ref_merged/F1.tif cannot be read as a TIFF")
+    assert reference_inputs(record, case.root) == ["images/ref_merged/F1.tif", "images/ref_merged/F2.tif"]
+    (images / "F1.tif").unlink()
+    (row,) = z_size_rows(case.collect()[1])
+    assert row[2] == "input_changed" and row[3].startswith("images/ref_merged/F2.tif is not a ZYX or YX image")
+    stack(images / "F3.tif", 5, np.uint16)
+    _, record = case.collect()
+    assert z_size_rows(record) == [] and acquisition_text(case) == "3 rounds × 4 channels, 3D"
+    assert reference_inputs(record, case.root) == ["images/ref_merged/F2.tif", "images/ref_merged/F3.tif"]
+
+
+def test_z_size_from_a_tiff_of_several_series_or_a_file_gone_while_read(tmp_path):
+    """A TIFF of two series (load_volume asks for an index, so the header gives no image) is input_changed; a file that
+    is gone between the look-up and its hash is input_missing, the reason the register of inputs gives."""
+    from starfinder.report._collect import _Inputs
+    from starfinder.report._values import Unavailable, reference_image_z_size
+    case = z_size_case(tmp_path)
+    image = case.root / "images" / "ref_merged" / "F1.tif"
+    image.parent.mkdir(parents=True)
+    with tifffile.TiffWriter(image) as writer:
+        writer.write(np.zeros((2, 16, 16), np.uint16), photometric="minisblack")
+        writer.write(np.zeros((8, 8), np.uint8), photometric="minisblack")
+    with tifffile.TiffFile(image) as tif:
+        assert len(tif.series) == 2
+    (row,) = z_size_rows(case.collect()[1])
+    assert row[2] == "input_changed" and row[3].startswith("images/ref_merged/F1.tif is not a ZYX or YX image")
+
+    class Gone(_Inputs):
+        def verify(self, path, kind, recorded=None):
+            return Unavailable("input_missing", self.relative(path))
+    found = reference_image_z_size(Gone(case.root), case.root, case.fov_ids)
+    assert found == Unavailable("input_missing", "images/ref_merged/F1.tif")
+
+
+def test_z_size_from_the_dataset_reference_image_pattern(tmp_path):
+    """Through Dataset.report with ``reference_image="refs/{fov_id}_ref.tif"``: the Z size comes from F2's float32
+    image of 4 planes there, and that file is listed; a one-plane image under images/ref_merged is not read. Without
+    the pattern's files the Z size is not_recorded, although images/ref_merged holds an image."""
+    from starfinder.dataset import Dataset
+
+    from .report_fixtures import DATASET, SAMPLE_ID
+    case = z_size_case(tmp_path)
+    stack(case.root / "refs" / "F2_ref.tif", 4, np.float32)
+    stack(case.root / "images" / "ref_merged" / "F1.tif", 1, np.uint16)
+    dataset = Dataset(case.root / "input", case.root, DATASET, SAMPLE_ID, "output",
+                      reference_image="refs/{fov_id}_ref.tif")
+    result = dataset.report(case.sample, list(case.fov_ids), config=case.config)
+    assert z_size_rows(result.record) == []
+    assert reference_inputs(result.record, case.root) == ["refs/F2_ref.tif"]
+    assert acquisition_text(case) == "3 rounds × 4 channels, 3D"
+    assert direct_z_size(case.root, case.fov_ids, "refs/{fov_id}_ref.tif") == 4
+    shutil.rmtree(case.root / "refs")
+    result = dataset.report(case.sample, list(case.fov_ids), config=case.config)
+    assert [r[2] for r in z_size_rows(result.record)] == ["not_recorded"]
+    assert "refs/{fov_id}_ref.tif" in z_size_rows(result.record)[0][3]
+    assert reference_inputs(result.record, case.root) == []
 
 
 # --- The table "Implemented checks (W-459)" -------------------------------------------------------------------------

@@ -1066,7 +1066,8 @@ def _plain(row):
 
 def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_id: str, sample_id: str,
                    assignment: str | None = "default", segmentation: str | None = None,
-                   config: ReportConfig | None = None, output_dir=None) -> tuple[Path, dict]:
+                   config: ReportConfig | None = None, output_dir=None,
+                   reference_image: str | None = None) -> tuple[Path, dict]:
     """Collect one sample's records into its report folder; return the folder and the ``report.json`` content.
 
     The checks 1 to 7 of docs/report-contract.md ("Checks before anything is
@@ -1093,6 +1094,9 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
         None is ``ReportConfig()``.
     output_dir : str or Path or None
         None is ``<output_root>/report/<sample>/``.
+    reference_image : str or None
+        The ``Dataset``'s ``reference_image`` pattern, where the Summary's Z size is read when no record holds a grid;
+        None is its default ``images/ref_merged/{fov_id}.tif``.
 
     Raises
     ------
@@ -1115,6 +1119,7 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
     folder, collection = _prepare(output_root, sample, fov_ids, dataset_id=dataset_id, sample_id=sample_id,
                                   assignment=assignment, segmentation=segmentation, config=config,
                                   output_dir=output_dir)
+    collection.reference_image = reference_image
     inputs, records, placement, export = collection.inputs, collection.records, collection.placement, collection.export
     fov_ids, config = collection.fov_ids, collection.config
     fovs = collection.fovs_rows()
@@ -1185,7 +1190,7 @@ def report_sample(dataset, sample: str, fov_ids: Sequence[str], *, assignment: s
     """``Dataset.report``: :func:`collect_report` on the dataset's output root and IDs, as a :class:`ReportRecord`."""
     folder, record = collect_report(dataset.output_root, sample, fov_ids, dataset_id=dataset.dataset_id,
                                     sample_id=dataset.sample_id, assignment=assignment, segmentation=segmentation,
-                                    config=config, output_dir=output_dir)
+                                    config=config, output_dir=output_dir, reference_image=dataset.reference_image)
     return ReportRecord(Path(folder), record)
 
 

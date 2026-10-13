@@ -307,8 +307,8 @@ def configuration_check(records):
 def z_size(export, placement, reference_images=None):
     """The Z size of the acquisition: the fused grid's (``export.json`` ``fusion.fovs[*].grid.shape_zyx[0]``),
     else the FOVs' reference grids as the export's assembly or the placement records them, else the shape of a
-    reference image (``reference_images``, a callable called only then: :func:`reference_image_z_size`); None
-    when none of these exists."""
+    reference image (``reference_images``, a callable called only then: :func:`reference_image_z_size`, whose
+    :class:`Unavailable` is returned as it is); None when none of these exists."""
     sources = (_get_list(export, "fusion", "fovs"), _get_list(export, "assembly", "fovs"),
                [{"grid": g.get("grid")} for g in ((placement or {}).get("inputs") or {}).values()
                 if isinstance(g, dict)])
@@ -320,24 +320,43 @@ def z_size(export, placement, reference_images=None):
     return None if reference_images is None else reference_images()
 
 
-def reference_image_z_size(inputs, root, fov_ids):
-    """The Z size from the reference image ``images/ref_merged/<fov>.tif`` of the first FOV in list order whose
-    image exists and whose TIFF header settles its shape (``io.tiff._volume_header``: no pixel is decoded); the file
-    is hashed in blocks and listed in ``report.json`` ``inputs`` (kind ``reference_image``). None when no FOV has one.
-    """
-    from pathlib import Path
+def reference_image_z_size(inputs, root, fov_ids, pattern=None):
+    """The Z size from a reference image: the file ``pattern`` names for a FOV (the ``Dataset``'s
+    ``reference_image``, resolved by ``dataset._declared.reference_image_path``; None is its default
+    ``images/ref_merged/{fov_id}.tif``), of the first FOV in list order whose file exists and whose TIFF header gives
+    a ZYX or YX image (``io.tiff._volume_header`` with ``floating=True``: an integer or a floating-point file, no pixel
+    decoded). Each file opened is hashed in blocks and listed in ``report.json`` ``inputs`` (kind
+    ``reference_image``).
 
+    Returns the Z size; None when no FOV of the list has a file at its place; or :class:`Unavailable`
+    (``input_changed``, or ``input_missing`` for a file gone while it is read) when files exist and none of them can
+    be read as a reference image, naming the first.
+    """
+    import tifffile
+
+    from starfinder.dataset._declared import REFERENCE_IMAGE, reference_image_path
     from starfinder.io.tiff import _volume_header
+    failed = None
     for fov in fov_ids:
-        path = Path(root) / "images" / "ref_merged" / f"{fov}.tif"
+        path = reference_image_path(root, fov, REFERENCE_IMAGE if pattern is None else pattern)
         if not path.is_file():
             continue
-        if inputs.verify(path, "reference_image") is not None:
+        missing = inputs.verify(path, "reference_image")
+        if missing is not None:
+            failed = failed or missing
             continue
-        header = _volume_header(path)
-        if header is not None and header[0] is not None:
-            return int(header[0][0])
-    return None
+        name = inputs.relative(path)
+        try:
+            header = _volume_header(path, floating=True)
+        except (tifffile.TiffFileError, OSError, ValueError) as error:
+            failed = failed or Unavailable("input_changed", f"{name} cannot be read as a TIFF: {error}")
+            continue
+        if header is None or header[0] is None:
+            failed = failed or Unavailable("input_changed", f"{name} is not a ZYX or YX image as load_volume reads "
+                                                            "one (its TIFF header)")
+            continue
+        return int(header[0][0])
+    return failed
 
 
 def _get_list(mapping, *keys):

@@ -212,7 +212,7 @@ def load_volume(path: Path | str, *, config: ImageLoadConfig = ImageLoadConfig()
     return ImageLoadResult(data, metadata, config.channel_labels, (path,), diagnostics)
 
 
-def _volume_header(path: Path | str) -> tuple[tuple[int, int, int] | None, bool] | None:
+def _volume_header(path: Path | str, *, floating: bool = False) -> tuple[tuple[int, int, int] | None, bool] | None:
     """(ZYX shape, whether metadata is stored) that load_volume with the default config gives, from the header alone.
 
     No pixel is read. The shape follows load_volume's rules (the series'
@@ -223,6 +223,9 @@ def _volume_header(path: Path | str) -> tuple[tuple[int, int, int] | None, bool]
     (a T or C axis longer than one, other axes, not two or three dimensions,
     an empty dimension, a dtype that is not an integer). The whole result is
     None for a file of several series (load_volume asks for an index).
+    With ``floating`` true a floating-point file gets its shape by the same
+    rules, for a caller that needs the shape and not the pixels (the report's
+    Z size); the default keeps the rule above for every other caller.
     Missing paths raise FileNotFoundError as load_volume does. The file is
     read without a buffer, so that only the bytes tifffile asks for are read:
     a buffered file reads a whole block (st_blksize, 1 MiB on an SMB share)
@@ -248,7 +251,8 @@ def _volume_header(path: Path | str) -> tuple[tuple[int, int, int] | None, bool]
                 shape = None
         if shape is not None and len(shape) == 2:
             shape = (1, *shape)
-        if shape is None or len(shape) != 3 or 0 in shape or np.dtype(series.dtype).kind not in "ui":
+        if shape is None or len(shape) != 3 or 0 in shape or \
+                np.dtype(series.dtype).kind not in ("uif" if floating else "ui"):
             shape = None
         return shape, "starfinder_metadata" in stored
 

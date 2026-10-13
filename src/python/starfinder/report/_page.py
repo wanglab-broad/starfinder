@@ -709,10 +709,13 @@ class _Page:
 def identity_facts(collection) -> tuple[dict, list]:
     """The facts of the Summary that the run records and the export hold (configuration check, acquisition with the
     Z size, software, run time) and the rows of ``unavailable.csv`` of the part ``summary.identity``: one per fact
-    that is unavailable (``entry=<fact>``), and ``entry=z_size`` (``not_recorded``) when no record holds a grid and
-    no FOV has a reference image."""
+    that is unavailable (``entry=<fact>``), and ``entry=z_size``: ``not_recorded`` when no record holds a grid and
+    no FOV has a reference image, or the reason no reference image could be read (``input_changed``)."""
     c = collection
-    planes = z_size(c.export, c.placement, lambda: reference_image_z_size(c.inputs, c.root, c.fov_ids))
+    pattern = getattr(c, "reference_image", None)
+    planes = z_size(c.export, c.placement, lambda: reference_image_z_size(c.inputs, c.root, c.fov_ids, pattern))
+    unread = planes if isinstance(planes, Unavailable) else None
+    planes = None if unread is not None else planes
     facts = {"acquisition": acquisition(c.records, planes), "z_size": planes,
              "configuration": configuration_check(c.records),
              "software": software(c.records, _get(c.assembly, "software")),
@@ -722,10 +725,10 @@ def identity_facts(collection) -> tuple[dict, list]:
         value = facts[name]
         if name == "z_size":
             if value is None:
-                rows.append(("summary.identity", Unavailable(
+                rows.append(("summary.identity", unread or Unavailable(
                     "not_recorded", "no record holds a grid (export.json fusion.fovs or assembly.fovs, "
                                     "placement.json inputs) and no FOV has a reference image "
-                                    "(images/ref_merged/<fov>.tif)"), "entry=z_size"))
+                                    f"({pattern or 'images/ref_merged/{fov_id}.tif'})"), "entry=z_size"))
         elif isinstance(value, Unavailable):
             rows.append(("summary.identity", value, f"entry={name}"))
     return facts, rows
