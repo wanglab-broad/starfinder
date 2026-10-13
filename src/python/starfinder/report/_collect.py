@@ -8,16 +8,18 @@ each file against the SHA-256 a record holds for it, and writes the tables that 
 record fields or compute values from them (``_values``: the read fractions, the shifts
 and their residuals, the alignment score, the area a FOV owns and the cell density; the
 summary keys; the example FOVs), the problematic FOVs (``_rules``), the replay of the
-main example (``_replay``: ``intensity.csv``, ``report.json`` ``replay``) and the
-segmentation previews of the example FOVs (``_previews``), ``unavailable.csv`` and
+main example (``_replay``: ``intensity.csv``, ``report.json`` ``replay``), the
+segmentation previews of the example FOVs (``_previews``), the sample measurements
+(``_measurements``: the reads assigned to cells, ``cells.csv``, ``mecr.csv``,
+``reads_along_z.csv`` and the summary keys of the sample's cells), ``unavailable.csv`` and
 ``report.json`` into a staging folder that replaces the report folder when it is complete
-(RP1).
+(RP1). :func:`report_examples` and :func:`report_measurements` make the static figures
+without writing anything.
 
-A cell is a value, not applicable (null, no row of ``unavailable.csv``), unavailable
-(null, one row with its reason) or, in this staged delivery, pending: a computed value
-of ``_schema.PENDING_VALUES`` whose inputs are all available (the reads in cells) is
-left null here and filled by the later issue that computes it; a pending cell outside
-that closed list is an error of the collection.
+A cell is a value, not applicable (null, no row of ``unavailable.csv``) or unavailable
+(null, one row with its reason). In this staged delivery a value of
+``_schema.PENDING_VALUES`` (what the page adds, W-456) is the third state of a pending
+value; a pending value outside that closed list is an error of the collection.
 """
 from __future__ import annotations
 
@@ -35,13 +37,14 @@ from pathlib import Path
 import pandas as pd
 
 from ._config import ReportConfig, marker_genes
+from ._measurements import _Measurements
 from ._previews import _Previews
 from ._replay import reference_round, replay_example, round_transform
 from ._rules import RuleInputs, evaluate_rules
 from ._schema import (FORMAT_VERSION, POPULATIONS, PROBLEM_RULES, READOUT_LEVELS, REPORT_FILE, REPORT_PARTS,
                       REPORT_TABLES, RULE_UNITS, STAGE, SUMMARY_KEYS, TABLE_DIR, TABLE_DTYPES, pending_value, row_key)
 from ._values import (NA, PENDING, ROLES, Unavailable, _Marker, alignment_score, chain_shift, choose_examples,
-                      density, derived, first, fraction, is_value, median, over_fovs, owned_pixels, residuals,
+                      density, first, fraction, is_value, median, over_fovs, owned_pixels, residuals,
                       run_seconds)
 
 RUN_RECORD = "run.json"
@@ -49,7 +52,7 @@ _UNPLACED = ("missing", "failed")
 _WRITTEN = ("written", "reused")
 #: The tables this collection writes, in folder order; the others are written by the parts that make them.
 COLLECTED_TABLES = ("fovs", "registration", "steps", "readout_totals", "population", "problematic_fovs",
-                    "intensity", "unavailable")
+                    "cells", "mecr", "reads_along_z", "intensity", "unavailable")
 #: The parts the replay of the main example makes (docs/report-contract.md, "The replay").
 REPLAY_PARTS = ("preprocessing.example", "preprocessing.intensity", "registration.example")
 #: The parts of the columns of the collected tables (docs/report-contract.md, "Parts, their inputs and their reasons").
@@ -70,6 +73,9 @@ COLUMN_PARTS = {
     "steps": {"seconds": "workflow.time"},
     "readout_totals": {"count": "readout.totals", "fraction_of_spots": "readout.totals"},
     "population": {"cells": "assembly.accounting", "molecules": "assembly.accounting"},
+    "cells": {c: "sample.per_cell" for c in TABLE_DTYPES["cells"]},
+    "mecr": {c: "sample.mecr" for c in TABLE_DTYPES["mecr"]},
+    "reads_along_z": {c: "sample.reads_along_z" for c in TABLE_DTYPES["reads_along_z"]},
 }
 # The read levels of a run record: the count's place in counts and the pipeline config that makes it.
 _COUNTS = {"spots": (("spots",), "spot_finding"), "matched": (("call_status", "assigned"), "decoding"),
@@ -133,6 +139,20 @@ class _Inputs:
         if recorded is not None and digest != recorded:
             return Unavailable("input_changed", f"{name} has SHA-256 {digest}, the record {recorded}")
         return data
+
+    def verify(self, path, kind, recorded=None):
+        """As :meth:`read`, the file hashed in blocks without holding its bytes: None, or :class:`Unavailable`."""
+        from starfinder.segmentation._persist import file_sha256
+        path = Path(path)
+        name = self.relative(path)
+        if not path.is_file():
+            return Unavailable("input_missing", name if recorded is None else f"{name} (recorded SHA-256 {recorded})")
+        digest = file_sha256(path)
+        self.entries.setdefault(name, {"path": name, "kind": kind, "sha256": digest, "bytes": path.stat().st_size,
+                                       "verified": recorded is not None})
+        if recorded is not None and digest != recorded:
+            return Unavailable("input_changed", f"{name} has SHA-256 {digest}, the record {recorded}")
+        return None
 
     def json(self, path, kind, *, strict=True):
         """A JSON file's content; one that does not parse raises ValueError, or is None with ``strict`` False.
@@ -336,6 +356,7 @@ class _Collection:
         self._placement_frame()
         self._export_frame()
         self.assignments = self._assignments()
+        self.measurements = _Measurements(self)
 
     # The sources -------------------------------------------------------------------------------------------
 
@@ -573,8 +594,9 @@ class _Collection:
             cells = column.startswith("n_cells")
             missing = first(self.e_state, no_cells if cells else None, self.e_table)
             out[column] = missing or int(e[column])
-        out["reads_in_cells"] = first(self.e_state, no_cells) or PENDING
-        out["reads_in_cells_fraction"] = derived(out["reads_in_cells"], out["n_molecules_retained"])
+        out["reads_in_cells"] = first(self.e_state, no_cells) or self.measurements.reads_in_cells_of(fov)
+        out["reads_in_cells_fraction"] = fraction(out["reads_in_cells"], out["n_molecules_retained"],
+                                                  "n_molecules_retained")
         # The area a FOV owns: the placement, its status, and the ownership rule of the export.
         p = self._p_row(fov)
         status = p["status"] if p is not None else row["placement_status"]
@@ -777,7 +799,8 @@ class _Collection:
     @staticmethod
     def readout_rows(fovs):
         """``readout_totals.csv``: per level the sum over the FOVs with a value, and its fraction of the spots of
-        the same FOVs (``count / Σ_{F_L ∩ F_spots} spots``)."""
+        the same FOVs (``count / Σ_{F_L ∩ F_spots} spots``; for ``reads_in_cells`` the FOVs whose ``spots`` and
+        ``reads_in_cells`` are both values)."""
         rows = []
         spots = None
         for level in READOUT_LEVELS:
@@ -785,14 +808,12 @@ class _Collection:
             values = [v for v in cells if isinstance(v, int)]
             if values:
                 count = sum(values)
-            elif any(v is PENDING for v in cells):
-                count = PENDING
             else:
                 count = first(*cells)
             if level == "spots":
                 spots = count
-            if level == "reads_in_cells" or not isinstance(count, int) or not isinstance(spots, int):
-                share = derived(count, spots)  # the reads in cells are W-455's
+            if not isinstance(count, int) or not isinstance(spots, int):
+                share = first(count, spots)
             else:
                 share = fraction(count, sum(row["spots"] for row in fovs
                                             if isinstance(row[level], int) and isinstance(row["spots"], int)),
@@ -820,7 +841,9 @@ class _Collection:
                 elif no_cells is not None and (column == "cells" or population == "counted"):
                     row[column] = no_cells
                 elif population == "counted":
-                    row[column] = PENDING
+                    # n_obs of sample.h5ad, and the retained molecules of counted cells ("Reads assigned to cells").
+                    row[column] = (self.measurements.counted_cells() if column == "cells" else
+                                   self.measurements.total(self.fovs))
                 elif reason is not None:
                     row[column] = int(held[reason])
                 else:
@@ -925,7 +948,8 @@ class _Collection:
 
     def summary(self, fovs):
         """``report.json`` ``summary``: a median or sum over FOVs is unavailable only when no FOV has the value,
-        with the first reason of their cells; the keys of the sample's cells are W-455's."""
+        with the first reason of their cells; the keys of the sample's cells from ``sample.h5ad``, ``cells.csv`` and
+        the reads assigned to cells (``_measurements``)."""
         records = [r for r in self.records.values() if r is not None]
 
         def matched_fraction():
@@ -935,22 +959,14 @@ class _Collection:
                                                                                                    "no FOV")
             return fraction(sum(row["matched"] for row in both), sum(row["spots"] for row in both), "spots")
 
-        def reads_in_cells():
-            cells = [row["reads_in_cells"] for row in fovs]
-            return PENDING if any(is_value(v) or v is PENDING for v in cells) else (
-                first(*cells) or Unavailable("undefined", "no FOV"))
-
-        cells = first(self.e_state, self.no_cells) or PENDING
         owning = [row for row in fovs if row["owned_area_um2"] is not NA]
         summary = {"fovs_expected": len(self.fov_ids), "fovs_with_run_record": len(records),
                    "fovs_succeeded": sum(r.get("status") == "succeeded" for r in records) if records else
                    Unavailable("no_run_record", "no FOV of the list has a run record"),
                    "spots_median_per_fov": over_fovs([row["spots"] for row in fovs], median),
                    "matched_fraction": matched_fraction(),
-                   "counted_cells": cells, "reads_per_cell_median": cells, "genes_per_cell_median": cells,
                    "cells_median_per_fov": over_fovs([row["n_cells_retained"] for row in owning], median),
-                   "reads_in_cells": reads_in_cells(), "h5ad_whole_count_sum": cells}
-        summary["reads_in_cells_equal"] = derived(summary["reads_in_cells"], summary["h5ad_whole_count_sum"])
+                   **self.measurements.summary(fovs)}
         return {key: summary[key] for key in SUMMARY_KEYS}
 
     def rules(self, fovs, registration, rounds_reason):
@@ -1110,9 +1126,14 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
     fov_ids, config = collection.fov_ids, collection.config
     fovs = collection.fovs_rows()
     registration = collection.registration_rows()
+    measurements = collection.measurements
+    cells = measurements.cells_rows()
     tables = {"fovs": fovs, "registration": registration, "steps": collection.steps_rows(registration),
               "readout_totals": collection.readout_rows(fovs), "population": collection.population_rows(),
-              "problematic_fovs": []}
+              "problematic_fovs": [], "cells": [] if isinstance(cells, Unavailable) else cells,
+              "mecr": measurements.mecr_rows()}
+    along = measurements.reads_along_z_rows()
+    tables["reads_along_z"] = [] if isinstance(along, Unavailable) else along
     tables["problematic_fovs"], rules, rule_rows = collection.rules(
         fovs, registration, None if registration else collection.no_rounds_reason())
     example_rows = collection.examples_parts()
@@ -1125,8 +1146,8 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
         for key, value in entry.items():
             if value is PENDING:
                 _check_pending("report.json", f"rules.{rule}.{key}")
-    unavailable = _unavailable_rows(tables, collection.part_rows_for(registration) + example_rows + rule_rows,
-                                    summary)
+    unavailable = _unavailable_rows(tables, collection.part_rows_for(registration) + example_rows + rule_rows
+                                    + measurements.part_rows(), summary)
     tables["unavailable"] = unavailable
     resolved_assignment, resolved_segmentation = collection.resolved_runs()
 
@@ -1175,6 +1196,20 @@ def report_examples(output_root, sample: str, fov_ids: Sequence[str], *, dataset
     collection.registration_rows()
     collection.examples_parts()
     return collection.replay, collection.previews
+
+
+def report_measurements(output_root, sample: str, fov_ids: Sequence[str], *, dataset_id: str, sample_id: str,
+                        assignment: str | None = "default", segmentation: str | None = None,
+                        config: ReportConfig | None = None):
+    """The static figures of "Sample measurements" as the report makes them, without writing anything
+    (:class:`._measurements.SampleFigures`): the per-cell distributions, the marker figures with the data of the
+    group selector, and the reads along Z; a part that cannot be drawn is its :class:`._values.Unavailable`, the
+    reason its row of ``unavailable.csv`` holds. The checks before anything is written apply, as for the report."""
+    _, collection = _prepare(output_root, sample, fov_ids, dataset_id=dataset_id, sample_id=sample_id,
+                             assignment=assignment, segmentation=segmentation, config=config, output_dir=None,
+                             check_folder=False)
+    collection.fovs_rows()
+    return collection.measurements.figures()
 
 
 def _prepare(output_root, sample, fov_ids, *, dataset_id, sample_id, assignment, segmentation, config, output_dir,

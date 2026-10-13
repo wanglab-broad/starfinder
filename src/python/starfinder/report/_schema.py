@@ -138,26 +138,11 @@ class Pending(NamedTuple):
     rows: tuple[str, ...] | None = None
 
 
-#: The closed list of the values this staged delivery leaves to the issue that computes them (W-455, W-456).
-#: Each later issue removes the entries it computes when it fills them; the list is empty when the report is
-#: complete. A pending value is a third state of a cell only until then, never a state of the finished report.
+#: The closed list of the values this staged delivery leaves to the issue that computes them (W-456: the page's
+#: bytes and what the page adds to ``report.json``). Each later issue removes the entries it computes when it fills
+#: them; the list is empty when the report is complete. A pending value is a third state of a cell only until then,
+#: never a state of the finished report.
 PENDING_VALUES = (
-    Pending("fovs", "reads_in_cells", "W-455", ("export", "cells")),
-    Pending("fovs", "reads_in_cells_fraction", "W-455", ("export", "cells", "n_molecules_retained")),
-    Pending("readout_totals", "count", "W-455", ("export", "cells"), ("level=reads_in_cells",)),
-    Pending("readout_totals", "fraction_of_spots", "W-455", ("export", "cells", "spots_total"),
-            ("level=reads_in_cells",)),
-    Pending("population", "cells", "W-455", ("export", "cells"), ("population=counted",)),
-    Pending("population", "molecules", "W-455", ("export", "cells"), ("population=counted",)),
-    Pending("cells", None, "W-455"),
-    Pending("mecr", None, "W-455"),
-    Pending("reads_along_z", None, "W-455"),
-    *(Pending("report.json", f"summary.{key}", "W-455", ("export", "cells"))
-      for key in ("counted_cells", "reads_per_cell_median", "genes_per_cell_median")),
-    *(Pending("report.json", f"summary.{key}", "W-455", ("export", "cells"))
-      for key in ("reads_in_cells", "h5ad_whole_count_sum", "reads_in_cells_equal")),
-    *(Pending("unavailable", part, "W-455") for part in ("sample.per_cell", "sample.markers", "sample.marker_zoom",
-                                                          "sample.mecr", "sample.reads_along_z")),
     *(Pending("unavailable", part, "W-456") for part in ("summary.identity", "readout.distributions",
                                                           "readout.table")),
     Pending("report.html", None, "W-456"),

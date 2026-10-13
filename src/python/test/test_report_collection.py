@@ -39,8 +39,8 @@ from .report_fixtures import (CELLS_RETAINED, CHANNELS, COUNTS, ENDED, FOVS, MOV
 
 pytestmark = [pytest.mark.report, pytest.mark.validation]
 
-COLLECTED = ("fovs", "registration", "steps", "readout_totals", "population", "problematic_fovs", "intensity",
-             "unavailable")
+COLLECTED = ("fovs", "registration", "steps", "readout_totals", "population", "problematic_fovs", "cells", "mecr",
+             "reads_along_z", "intensity", "unavailable")
 EXPORT_COLUMNS = ("n_cells", "n_cells_retained", "n_molecules", "n_molecules_retained", "reads_in_cells",
                   "reads_in_cells_fraction", "owned_area_um2", "cell_density_per_mm2")
 PLACEMENT_COLUMNS = ("placement_status", "correction_z", "correction_y", "correction_x", "footprint_y0",
@@ -119,6 +119,14 @@ PART_REASONS = {
                              "input_missing", "input_changed", "field_not_saved", "replay_differs"},
     "assembly.examples": {"no_run_record", "run_not_finished", "step_failed", "not_configured", "no_export",
                           "part_not_written", "no_segmentation", "input_missing", "input_changed"},
+    # The parts of the sample measurements (W-455), with the reasons of the example choice for the zoom-in regions.
+    "sample.per_cell": {"no_export", "part_not_written", "no_segmentation", "input_missing", "input_changed"},
+    "sample.markers": {"no_export", "part_not_written", "input_missing", "input_changed"},
+    "sample.marker_zoom": {"no_export", "part_not_written", "no_stack", "input_missing", "input_changed",
+                           "no_run_record", "run_not_finished", "step_failed", "not_configured", "fov_not_placed"},
+    "sample.mecr": {"no_markers", "no_export", "part_not_written", "no_segmentation", "input_missing",
+                    "input_changed", "undefined"},
+    "sample.reads_along_z": {"no_export", "part_not_written", "input_missing", "input_changed"},
     "files.input": {"no_run_record", "not_recorded", "no_placement"},
     "files.configuration": {"no_run_record", "not_recorded"},
     # "rule:<rule>": a rule not evaluated for the whole sample (summary.problematic_fovs).
@@ -157,6 +165,11 @@ CONTRACT_COLUMNS = {
                          ("round", "string", False), ("axis", "string", False), ("measured", "float64", False),
                          ("sample_median", "float64", False), ("limit", "float64", False),
                          ("unit", "string", False), ("reason", "string", True)],
+    "cells": [("obs_name", "string", True), ("fov_id", "string", True), ("reads", "int64", True),
+              ("genes", "int64", True), ("size", "float64", True), ("size_unit", "string", True)],
+    "mecr": [("gene_a", "string", True), ("gene_b", "string", True), ("threshold", "int64", True),
+             *((c, "int64", False) for c in ("cells_a", "cells_b", "both", "either")), ("mecr", "float64", False)],
+    "reads_along_z": [("fov_id", "string", True), ("z", "int64", True), ("reads", "int64", True)],
     "intensity": [("round", "string", True), ("step_index", "int64", True), ("phase", "string", True),
                   ("step", "string", True), ("channel", "string", True), ("bin", "int64", True),
                   ("bin_low", "float64", True), ("bin_high", "float64", True), ("count", "int64", True)],
@@ -165,7 +178,8 @@ CONTRACT_COLUMNS = {
 }
 KEYS = {"fovs": ["fov_id"], "registration": ["fov_id", "round"], "steps": ["scope", "fov_id", "index"],
         "readout_totals": ["level"], "population": ["population"],
-        "problematic_fovs": ["fov_id", "rule", "round", "axis"], "intensity": ["round", "step_index", "channel", "bin"],
+        "problematic_fovs": ["fov_id", "rule", "round", "axis"], "cells": ["obs_name"], "mecr": ["gene_a", "gene_b"],
+        "reads_along_z": ["fov_id", "z"], "intensity": ["round", "step_index", "channel", "bin"],
         "unavailable": ["part", "table", "column", "row_key"]}
 # "report.json": every key, and the keys of summary.
 CONTRACT_RECORD_KEYS = ["format_version", "stage", "sample", "dataset_id", "sample_id", "fov_ids", "route",
@@ -280,6 +294,10 @@ def no_export_rows(fovs=FOVS):
     rows += [("summary.key_numbers", "summary", k, "", "no_export")
              for k in ("counted_cells", "reads_per_cell_median", "genes_per_cell_median", "cells_median_per_fov",
                        "reads_in_cells", "h5ad_whole_count_sum", "reads_in_cells_equal")]
+    # The sample measurements (W-455): every part, without a table row (no export, no marker pair configured).
+    rows += [(part, None, None, "", "no_export") for part in ("sample.per_cell", "sample.markers",
+                                                              "sample.marker_zoom", "sample.mecr",
+                                                              "sample.reads_along_z")]
     return rows
 
 
