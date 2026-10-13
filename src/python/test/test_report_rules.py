@@ -357,3 +357,53 @@ def test_reason_text_of_the_matched_fraction():
     rows, _, _ = evaluate("matched_fraction", [0.8, 0.8, 0.5, 0.8])
     assert [(r["section"], r["reason"]) for r in rows] == [("Readout", "matched fraction below the limit")]
     assert list(RULE_SECTIONS) == list(PROBLEM_RULES)
+
+
+# --- A rule without a limit, through the collection --------------------------------------------------------------
+
+#: The rules whose limit is a RuleLimit, which can be left empty (k, floor and absolute all None).
+LIMIT_RULES = ("shift_residual", "alignment_score", "correct_form_fraction", "matched_fraction")
+#: Not applicable here: the categorical rules take no limit, and the limit of spots_near_zero is a fraction in
+#: (0, 1) that cannot be left empty.
+CATEGORICAL_RULES = ("fov_failed", "fov_not_run", "registration_rejected", "registration_fallback", "not_placed",
+                     "stage_position_fallback", "reads_no_cell")
+NO_EMPTY_LIMIT = ("spots_near_zero",)
+
+
+def test_every_rule_is_named_once():
+    assert sorted(LIMIT_RULES + CATEGORICAL_RULES + NO_EMPTY_LIMIT) == sorted(PROBLEM_RULES)
+    with pytest.raises(TypeError):
+        ReportLimits(spots_near_zero=None)
+
+
+@pytest.fixture(scope="module")
+def default_report(tmp_path_factory):
+    _, record, tables = collect(report_records(tmp_path_factory.mktemp("default") / "root"))
+    return record, tables
+
+
+@pytest.mark.parametrize("rule", LIMIT_RULES)
+def test_rule_without_a_limit_is_not_configured(tmp_path, default_report, rule):
+    """A report of report_records with this rule's limit empty and every other limit at its default completes,
+    records the rule as not evaluated with not_configured, and leaves the other rules as they are."""
+    base_record, base_tables = default_report
+    case = report_records(tmp_path / "root")
+    case.config = ReportConfig(limits=ReportLimits(**{rule: RuleLimit()}))
+    _, record, tables = collect(case)
+    assert record["rules"][rule] == {"limit": {"k": None, "floor": None, "absolute": None},
+                                     "unit": base_record["rules"][rule]["unit"], "evaluated": False,
+                                     "fovs_marked": None}
+    rows = keyed(tables["unavailable"])
+    assert [r for r in rows if r[0] == f"rule:{rule}"] == [(f"rule:{rule}", None, None, "", "not_configured")]
+    assert rule not in {r[1] for r in rows_of(tables)}
+    # Every other rule: its record, its rows and its rule: rows as with the default limits.
+    for other in PROBLEM_RULES:
+        if other != rule:
+            assert record["rules"][other] == base_record["rules"][other], other
+    assert rows_of(tables) == [r for r in rows_of(base_tables) if r[1] != rule]
+    frame, base = tables["problematic_fovs"], base_tables["problematic_fovs"]
+    pd.testing.assert_frame_equal(frame.reset_index(drop=True),
+                                  base[base["rule"].ne(rule).to_numpy(bool)].reset_index(drop=True))
+    assert [r for r in rows if r[0] != f"rule:{rule}"] == [r for r in keyed(base_tables["unavailable"])
+                                                           if r[0] != f"rule:{rule}"]
+    completed(case, record, tables)

@@ -204,7 +204,10 @@ def evaluate_rules(fovs, registration, limits: ReportLimits, inputs: RuleInputs)
 
 def _shift_residual(registration, rounds, limit, medians, add, state):
     """Per round and axis, over the FOVs whose round succeeded with a shift; both sides. A row holds the shift as
-    ``measured`` and the round's median shift as ``sample_median`` under both forms of the limit."""
+    ``measured`` and the round's median shift as ``sample_median`` under both forms of the limit. A limit with
+    ``k``, ``floor`` and ``absolute`` all None is not evaluated (``evaluate_rules`` records ``not_configured``)."""
+    if all(v is None for v in (limit.k, limit.floor, limit.absolute)):
+        return
     cells = [row[f"shift_{a}"] for row in registration for a in AXES]
     if not any(is_value(c) for c in cells):
         state["shift_residual"] = _not_evaluated(cells, Unavailable("undefined", "no FOV has a shift"))
@@ -217,6 +220,8 @@ def _shift_residual(registration, rounds, limit, medians, add, state):
                 continue
             deviations = {row["fov_id"]: row[f"residual_{axis}"] for row in rows if is_value(row[f"shift_{axis}"])}
             form = rule_form(values, limit, "both", deviations)
+            if form is None:
+                continue
             shift = dict(values)
             for fov in form.marked:
                 add("shift_residual", fov, f"shift residual above the limit ({axis}, {name})", (r_index, a_index),
