@@ -1286,6 +1286,97 @@ synthetic FOV took 0.8 to 1.2 s. Each chain fixture is built once per module (a 
 fixture) and every `slow` test stays within one CPU, 4 GiB and 1800 s. Each run records wall
 time and peak RSS with `/usr/bin/time -v`.
 
+### Implemented checks (W-459)
+
+The checks are in the modules of `src/python/test/` listed below. The issues that delivered
+the report (W-451 to W-458) added most of them with their code; `test_report_chain.py` adds
+CH1 to CH3, RT1 and RT2 through `Dataset.report`, Z1, A2, CP1 on the chain, DT1 on
+`scene_chain`, and PG1 to PG6 with RC12 on every page it writes, and the test that keeps this
+table true, `test_every_check_names_collected_tests`. That test reads the rows of the table
+"Checks" from this page and checks that this table has exactly those rows, in that order;
+that every row names at least one test of its module that pytest collects (a name ending in
+`*` stands for every test whose name starts so); that none of them is marked as an expected
+failure; and that a row whose tier is `default` names no `slow` test, a row whose tier is
+`slow` names only `slow` tests, and a row whose tier is `default and slow` names both. A test
+of a module that is not named here is an additional check of the code it tests.
+
+Every tolerance is the one of the table "Checks", unchanged. Where a row says "Exact" for a
+number that is not an integer, its tests compare it within an absolute 1e-9 (the project's
+default float tolerance), or within the bound the row itself states; the column "Floats" says
+which. Counts, strings, reasons, row orders, dtypes, hashes, images and JSON structure are
+compared exactly. The tests that write or read an export skip without the `anndata` extra, and
+the chains also without `multiview-stitcher`, naming the extra; RP2's `demons` step needs
+`local-registration`. The `slow` tests of the report carry the subsystem marker `report` and
+run in `pytest-slow-other` (`slow and not learned and not (benchmark or synthetic or
+registration or spot_finding)`); the default tier runs the others.
+
+The chain checks read the table "The report at each stage of a sample's processing" of
+{doc}`report-contract` part by part, with the reasons of "Parts, their inputs and their
+reasons": the same `Dataset.report` call (the default `assignment`) reports each stage into
+the sample's default folder, so before the assignment exists the segmentation examples, which
+read the assignment folder on the route per FOV, are `input_missing`; and without a placement
+the Summary's Z size is `not_recorded`, since the report reads it from the records that hold a
+grid (the export's or the placement's FOV grids, as W-453 and W-456 decided). A part counts as
+present at a stage when no row of `unavailable.csv` names it with a reason other than
+`not_configured` and `not_recorded`.
+
+| # | Module and tests | Tier | Floats |
+| --- | --- | --- | --- |
+| RC1 | `test_report_collection.py`, `test_rc1_normal_sample`; `test_report_values.py`, `test_df1_rc1_fractions_and_totals`, `test_rc1_residuals`, `test_df4_rc1_scores_and_a_null_qc`; `test_report_rules.py`, `test_rc1_rows`; `test_report_page.py`, `test_pg1_embedded_data_equal_the_tables` | default | within 1e-9 (the fractions); the dyadic tables exact |
+| RC2 | `test_report_collection.py`, `test_rc2_failed_fov`; `test_report_values.py`, `test_rc2_rc13_round3_medians_over_the_succeeded_fovs`; `test_report_rules.py`, `test_pr4_rc2_failed_reason` | default | within 1e-9 (the medians) |
+| RC3 | `test_report_collection.py`, `test_rc3_fov_not_run`; `test_report_rules.py`, `test_pr4_fov_not_run`, `test_pr4_no_run_record_at_all` | default | exact |
+| RC4 | `test_report_collection.py`, `test_rc4_stage_not_run`; `test_report_page.py`, `test_pg3_every_unavailable_part_carries_its_reason` | default | none compared |
+| RC5 | `test_report_collection.py`, `test_rc5_no_placement`; `test_report_rules.py`, `test_rc5_placement_rules_not_evaluated` | default | none compared |
+| RC6 | `test_report_measurements.py`, `test_rc6_no_markers` | default | none compared |
+| RC7 | `test_report_measurements.py`, `test_df9_rc7_cells_and_the_unknown_calibration` | default | exact |
+| RC8 | `test_report_values.py`, `test_rc8_fov_with_no_spot`; `test_report_rules.py`, `test_rc8_rc9_rc10` | default | within 1e-9; the limit 45 of `spots_near_zero` with `pytest.approx`'s default (relative 1e-6) in `test_rc8_rc9_rc10` |
+| RC9 | `test_report_values.py`, `test_ef2_rc9_one_fov`; `test_report_rules.py`, `test_rc8_rc9_rc10` | default | exact |
+| RC10 | `test_report_values.py`, `test_rc10_equal_values`; `test_report_rules.py`, `test_rc8_rc9_rc10` | default | exact |
+| RC11 | `test_report_collection.py`, `test_rc11_older_record` | default | exact |
+| RC12 | `test_report_collection.py`, `test_rc12_null_cells_and_closed_lists`, `test_closed_lists_equal_the_contract`, `test_no_pending_value`; `test_report_chain.py`, `test_ch1_ch2_ch3_the_report_at_each_stage`, `test_rt1_segmentation_and_assembly_on_both_routes`, `test_a2_an_export_and_no_run_json`, `test_cp1_the_comparison_page` | default and slow | none compared |
+| RC13 | `test_report_collection.py`, `test_rc13_round_that_did_not_finish`; `test_report_values.py`, `test_rc2_rc13_round3_medians_over_the_succeeded_fovs` | default | within 1e-9 (as stated) |
+| DF1 | `test_report_values.py`, `test_df1_fraction_definition`, `test_df1_rc1_fractions_and_totals`, `test_df1_null_count_gives_its_reason` | default | within 1e-9 |
+| DF2 | `test_report_values.py`, `test_df2_shift_of_the_global_steps`, `test_df2_affine_and_dense_through_the_collection` | default | within 1e-12 (as stated) |
+| DF3 | `test_report_values.py`, `test_df3_residual_definition`, `test_rc1_residuals` | default | exact |
+| DF4 | `test_report_values.py`, `test_df4_alignment_score`, `test_df4_rc1_scores_and_a_null_qc` | default | exact |
+| DF5 | `test_report_values.py`, `test_df5_df6_area_and_density`, `test_df5_df6_unplaced_placeholder_and_zero_area` | default | within 1e-9 |
+| DF6 | `test_report_values.py`, `test_df5_df6_area_and_density`, `test_df5_df6_unplaced_placeholder_and_zero_area` | default | within 1e-9 |
+| DF7 | `test_report_measurements.py`, `test_df7_reads_assigned_to_cells`, `test_reads_in_cells_without_the_inputs` | default | within 1e-9 (the fraction) |
+| DF8 | `test_report_measurements.py`, `test_df8_mecr_hand_tables`, `test_df8_mecr_report_cells` | default | exact |
+| DF9 | `test_report_measurements.py`, `test_df9_rc7_cells_and_the_unknown_calibration`, `test_df9_a_volume_and_a_plane_fov`, `test_size_unit_of_the_records` | default | exact |
+| DF10 | `test_report_measurements.py`, `test_df10_reads_along_z_report_cells`, `test_df10_reads_along_z_hand_tables` | default | none compared |
+| DF11 | `test_report_replay.py`, `test_df11_intensity_bins` | default | within 1e-9 (the bin edges) |
+| DF12 | `test_report_values.py`, `test_df12_summary_keys`, `test_df12_cells_median_per_fov`, `test_df12_configuration_acquisition_software_and_time`, `test_df12_acquisition_from_the_export` | default | within 1e-9 |
+| PR1 | `test_report_rules.py`, `test_pr1_rule_form`, `test_pr1_rows_and_records` | default | within 1e-9 |
+| PR2 | `test_report_rules.py`, `test_pr2_edge_cases`, `test_pr2_null_values` | default | the limit within 1e-12 (as stated) |
+| PR3 | `test_report_rules.py`, `test_pr3_shift_residual` | default | within 1e-9 (as stated) |
+| PR4 | `test_report_rules.py`, `test_pr4_failed_and_running`, `test_pr4_fov_not_run`, `test_pr4_no_run_record_at_all`, `test_pr4_rejected_then_fallback`, `test_pr4_placement_rules`, `test_pr4_reads_no_cell` | default | none compared |
+| PR5 | `test_report_rules.py`, `test_pr5_spots_near_zero` | default | exact |
+| EF1 | `test_report_values.py`, `test_ef1_automatic_choice`, `test_ef1_ten_fovs` | default | exact |
+| EF2 | `test_report_values.py`, `test_ef2_rc9_one_fov`, `test_ef2_two_fovs`, `test_ef2_named_examples`, `test_ef2_no_read_count`; `test_report_chain.py`, `test_a2_an_export_and_no_run_json` | default and slow | none compared |
+| RP1 | `test_report_replay.py`, `test_rp1_replay_equals_the_saved_registered_image` | slow | exact (bit-identical) |
+| RP2 | `test_report_replay.py`, `test_rp2_replay_failures`, `test_rp2_field_not_saved` | slow | none compared |
+| RP3 | `test_report_replay.py`, `test_rp3_two_sources_of_the_transforms` | slow | exact (bit-identical) |
+| PG1 | `test_report_page.py`, `test_pg1_embedded_data_equal_the_tables`, `test_page_with_every_figure`; `test_report_comparison.py`, `test_page_loads_nothing_and_embeds_samples_csv`; `test_report_chain.py`, `test_ch1_ch2_ch3_the_report_at_each_stage`, `test_rt1_segmentation_and_assembly_on_both_routes`, `test_a2_an_export_and_no_run_json`, `test_cp1_the_comparison_page` | default and slow | within 1e-9 |
+| PG2 | `test_report_page.py`, `test_pg2_sections_and_blocks`, `test_page_with_every_figure`; `test_report_chain.py`, `test_ch1_ch2_ch3_the_report_at_each_stage`, `test_rt1_segmentation_and_assembly_on_both_routes`, `test_a2_an_export_and_no_run_json`, `test_cp1_the_comparison_page` | default and slow | none compared |
+| PG3 | `test_report_page.py`, `test_pg3_every_unavailable_part_carries_its_reason`, `test_pg3_cells_drawn_by_the_script`, `test_page_with_every_figure`; `test_report_chain.py`, `test_ch1_ch2_ch3_the_report_at_each_stage`, `test_rt1_segmentation_and_assembly_on_both_routes`, `test_a2_an_export_and_no_run_json`, `test_cp1_the_comparison_page` | default and slow | none compared |
+| PG4 | `test_report_page.py`, `test_pg4_no_external_resource`, `test_page_with_every_figure`; `test_report_comparison.py`, `test_page_loads_nothing_and_embeds_samples_csv`; `test_report_chain.py`, `test_ch1_ch2_ch3_the_report_at_each_stage`, `test_rt1_segmentation_and_assembly_on_both_routes`, `test_a2_an_export_and_no_run_json`, `test_cp1_the_comparison_page` | default and slow | none compared |
+| PG5 | `test_report_page.py`, `test_pg5_size_budget_and_figure_sizes`, `test_page_with_every_figure`; `test_report_chain.py`, `test_ch1_ch2_ch3_the_report_at_each_stage`, `test_rt1_segmentation_and_assembly_on_both_routes`, `test_rt2_sample_measurements_on_both_routes`, `test_a2_an_export_and_no_run_json`, `test_cp1_the_comparison_page` | default and slow | none compared |
+| PG6 | `test_report_page.py`, `test_pg6_no_verdict_and_no_score`, `test_page_with_every_figure`; `test_report_collection.py`, `test_pg6_schema`; `test_report_chain.py`, `test_ch1_ch2_ch3_the_report_at_each_stage`, `test_rt1_segmentation_and_assembly_on_both_routes`, `test_a2_an_export_and_no_run_json`, `test_cp1_the_comparison_page` | default and slow | none compared |
+| PG7 | `test_report_collection.py`, `test_pg7_*`, `test_read_report_checks_the_listed_files`; `test_report_page.py`, `test_pg7_checks_through_dataset_report`, `test_pg7_entry_on_the_dataset` | default | none compared |
+| CH1 | `test_report_chain.py`, `test_ch1_ch2_ch3_the_report_at_each_stage` | slow | none compared |
+| CH2 | `test_report_chain.py`, `test_ch1_ch2_ch3_the_report_at_each_stage` | slow | none compared |
+| CH3 | `test_report_chain.py`, `test_ch1_ch2_ch3_the_report_at_each_stage`, `test_ch3_the_reads_assigned_to_cells`; `test_report_measurements.py`, `test_markers_on_the_stack` | slow | exact (the tables); the marker figures' geometry within 1e-9 |
+| RT1 | `test_report_chain.py`, `test_rt1_segmentation_and_assembly_on_both_routes`; `test_report_replay.py`, `test_rt1_segmentation_previews` | slow | within 1e-9 (the owned area and the density) |
+| RT2 | `test_report_chain.py`, `test_rt2_sample_measurements_on_both_routes`; `test_report_measurements.py`, `test_rt2_z1_sample_measurements_on_both_routes` | slow | exact (the tables); the marker figures' geometry within 1e-9 |
+| Z1 | `test_report_chain.py`, `test_z1_one_plane`, `test_rt1_segmentation_and_assembly_on_both_routes`; `test_report_measurements.py`, `test_rt2_z1_sample_measurements_on_both_routes` | slow | within 1e-9 (`shift_z`, `residual_z`) |
+| A2 | `test_report_chain.py`, `test_a2_an_export_and_no_run_json` | slow | exact |
+| CP1 | `test_report_chain.py`, `test_cp1_the_comparison_page`; `test_report_comparison.py`, `test_samples_csv_copies_each_report`, `test_box_plots`, `test_a_changed_report_raises_naming_the_file`, `test_reads_the_reports_only` | default and slow | within 1e-9 |
+| RR1 | `test_report_run_record_additions.py`, `test_r1_*`, `test_r2_*`, `test_r4_r5_the_rule_writes_run_json_alone_and_its_logs_are_unchanged`, `test_r5_*` | default | none compared |
+| RR2 | `test_report_records_golden.py`, `test_run_record_holds_every_pinned_key_and_value`, `test_checkpoint_folder_holds_every_pinned_file`, `test_the_comparison_accepts_additions_and_finds_removals_and_changes`; `test_report_run_record_additions.py`, `test_an_older_record_and_the_format_version`; `test_report_collection.py`, `test_rc11_older_record` | default | exact |
+| WF1 | `test_report_workflow.py`, `test_wf1_*` | default | none compared |
+| DT1 | `test_report_collection.py`, `test_dt1_two_single_thread_processes`; `test_report_chain.py`, `test_dt1_the_chain_in_two_single_thread_processes` | default and slow | exact (bytes) |
+
 ## The real example
 
 The real example runs as a batch of its own after the implementation (D7), under its own
