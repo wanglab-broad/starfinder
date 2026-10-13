@@ -577,24 +577,70 @@ def no_processing(monkeypatch):
         monkeypatch.setattr(owner, name, stage(f"{owner.__name__}.{name}"))
 
 
+ENTRY_FIXTURES = ("report_records", "report_cells")
+
+
+def entry_case(root, maker):
+    """``report_records`` (run records and a placement, no export) or ``report_cells`` (with the export)."""
+    if maker == "report_cells":
+        anndata_or_skip()
+        return report_cells(root)
+    return report_records(root)
+
+
+def _check4_placement(case):
+    path = case.root / "stitching" / SAMPLE / "placement.json"
+    record = json.loads(path.read_text())
+    del record["inputs"]["F4"]
+    path.write_text(json.dumps(record))
+
+
+def checks_for(maker):
+    """CHECKS of test_report_collection.py for a fixture: without an export, check 2 removes no export folder and
+    check 4's violation is a placement that does not hold the FOV list."""
+    if maker == "report_cells":
+        return CHECKS
+    checks = []
+    for number, error, message, edit, changes in CHECKS:
+        if number == 2:
+            edit = None
+        if number == 4:
+            message, edit = r"placement\.json: the placement holds the FOVs \['F1', 'F2', 'F3'\]", _check4_placement
+        checks.append((number, error, message, edit, changes))
+    return checks
+
+
+@pytest.mark.parametrize("maker", ENTRY_FIXTURES)
 @pytest.mark.parametrize("number", [c[0] for c in CHECKS])
-def test_pg7_checks_through_dataset_report(tmp_path, no_processing, number):
-    anndata_or_skip()
-    case = report_cells(tmp_path / "root")
+def test_pg7_checks_through_dataset_report(tmp_path, no_processing, number, maker):
+    case = entry_case(tmp_path / "root", maker)
     report_through(case)
     arguments = {}
-    for later, _, _, edit, changes in CHECKS[number - 1:]:
+    checks = checks_for(maker)
+    for later, _, _, edit, changes in checks[number - 1:]:
         if number <= 2 and later in (3, 4):
             continue
         if edit is not None:
             edit(case)
         arguments = changes | arguments
-    _, error, message, _, _ = CHECKS[number - 1]
+    _, error, message, _, _ = checks[number - 1]
     earlier = snapshot(case.folder)
     with pytest.raises(error, match=message):
         report_through(case, **arguments)
     assert snapshot(case.folder) == earlier
     assert [p.name for p in case.folder.parent.iterdir()] == [SAMPLE]
+
+
+def input_hashes(root):
+    """The SHA-256 of every file under the output root but the report folder."""
+    import hashlib
+    return {p.relative_to(root).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+            for p in sorted(root.rglob("*")) if p.is_file() and (root / "report") not in p.parents}
+
+
+# The parts that need the export, unavailable for the whole sample of report_records with no_export.
+EXPORT_PARTS = ("sample.per_cell", "sample.markers", "sample.marker_zoom", "sample.mecr", "sample.reads_along_z")
+EXPORT_COLUMNS = ("n_cells", "n_cells_retained", "n_molecules", "n_molecules_retained", "reads_in_cells")
 
 
 def _read_only(root, keep):
@@ -621,10 +667,11 @@ PLACES = [r"checkpoints/[^/]+/run\.json", r"checkpoints/[^/]+/registered/.+", r"
 
 
 @pytest.mark.skipif(hasattr(os, "geteuid") and os.geteuid() == 0, reason="root ignores read-only permissions")
-def test_pg7_entry_on_the_dataset(tmp_path, no_processing):
-    anndata_or_skip()
-    case = report_cells(tmp_path / "root")
+@pytest.mark.parametrize("maker", ENTRY_FIXTURES)
+def test_pg7_entry_on_the_dataset(tmp_path, no_processing, maker):
+    case = entry_case(tmp_path / "root", maker)
     (case.root / "report").mkdir()
+    inputs_before = input_hashes(case.root)
     opened = []
     record_opens = {"on": False}
 
@@ -644,6 +691,11 @@ def test_pg7_entry_on_the_dataset(tmp_path, no_processing):
     assert result.record == read_report(result.path)
     assert (result.record["dataset_id"], result.record["sample_id"]) == (DATASET, SAMPLE_ID)
     assert sorted(p.name for p in result.path.iterdir()) == ["report.html", "report.json", "tables"]
+    assert sorted(p.name for p in (result.path / "tables").iterdir()) == sorted(
+        f"{t}.csv" for t in ("fovs", "registration", "steps", "readout_totals", "population", "problematic_fovs",
+                             "cells", "mecr", "reads_along_z", "intensity", "unavailable"))
+    # No input file changed: the hashes of every file outside the report folder are those before the entry.
+    assert input_hashes(case.root) == inputs_before
     # Every file opened under the output root is at a place of "Where each record is looked for", or a file the run
     # records name (the codebook), or the report's own folder.
     named = {str(Path(case.run_record(f)["codebook"]["path"]).resolve()) for f in FOVS} | {
@@ -664,6 +716,30 @@ def test_pg7_entry_on_the_dataset(tmp_path, no_processing):
         path = Path(entry["path"]) if Path(entry["path"]).is_absolute() else case.root / entry["path"]
         if str(path.resolve()) not in named:
             assert any(re.fullmatch(p, entry["path"]) for p in PLACES), entry
+    if maker == "report_records":
+        # A sample with run records and no export: the record says so, the parts that need the export are
+        # unavailable with no_export (named once each), and the page is still written with their boxes.
+        record = result.record
+        assert record["route"] is None and record["stages"]["export"] is False
+        assert record["stages"]["run_records"] == list(case.fov_ids) and record["stages"]["placement"] is True
+        rows = record["unavailable"]
+        page = (result.path / "report.html").read_text(encoding="utf-8")
+        for part in EXPORT_PARTS:
+            assert [r["reason"] for r in rows if r["part"] == part and r["table"] is None] == ["no_export"], part
+            assert re.search(rf'data-part="{re.escape(part)}" data-key="" data-reason="no_export"[^>]*>'
+                             r"<span>Unavailable: no export for this sample</span>", page), part
+        for column in EXPORT_COLUMNS:
+            assert [(r["row_key"], r["reason"]) for r in rows if r["table"] == "fovs" and r["column"] == column] == [
+                (f"fov_id={f}", "no_export") for f in case.fov_ids], column
+        for key in ("counted_cells", "reads_in_cells", "h5ad_whole_count_sum"):
+            assert record["summary"][key] is None
+            assert [r["reason"] for r in rows if r["table"] == "summary" and r["column"] == key] == ["no_export"]
+        assert re.search(r'data-cell="summary\|counted_cells\|" data-t="Unavailable: no export for this sample',
+                         page)
+        assert all(r["reason"] == "no_export" for r in rows if r["table"] == "population" and r["column"] == "cells")
+        # The parts from the run records are present: the readout table and the registration heatmap.
+        assert '<div id="t-reads"></div>' in page and 'data-figure="heatmap"' in page
+        assert record["summary"]["fovs_succeeded"] == len(case.fov_ids)
     # A second report through the entry replaces the first; an output_dir elsewhere is allowed.
     again = report_through(case)
     assert again.path == result.path and read_report(again.path) == again.record
