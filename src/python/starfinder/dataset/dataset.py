@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import hashlib
 from numbers import Integral
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -115,6 +116,11 @@ class Dataset:
     # channels. An init field so that dataclasses.replace hands it to the copy, which keeps the ChannelInfo of
     # every round whose patterns the call leaves as they are (__post_init__).
     _channels: dict = field(default_factory=dict, repr=False, kw_only=True)
+    # The files load_codebook and load_direct_panel read, by kind (codebook, direct_panel): the loaded object,
+    # the absolute path and the SHA-256 of its bytes; and the workflow configuration file from_workflow_config
+    # translated. run.json records them (docs/checkpoints.md, "run.json").
+    _reference_files: dict = field(default_factory=dict, repr=False, compare=False, kw_only=True)
+    _workflow_config: Path | None = field(default=None, repr=False, compare=False, kw_only=True)
 
     def __post_init__(self):
         if self.readout_mode not in READOUT_MODES:
@@ -404,9 +410,10 @@ class Dataset:
         Returns
         -------
         None
-            Stores the canonical barcode Codebook. Sequencing round labels and
-            channel_order must be configured explicitly. Errors propagate from
-            :func:`starfinder.barcode.load_codebook`.
+            Stores the canonical barcode Codebook, and keeps the file's
+            absolute path and SHA-256 for ``run.json`` ``codebook``. Sequencing
+            round labels and channel_order must be configured explicitly.
+            Errors propagate from :func:`starfinder.barcode.load_codebook`.
         """
         if encoding is None:
             encoding = EncodingConfig(reverse_bases=reverse_bases, split_index=split_index)
@@ -414,6 +421,7 @@ class Dataset:
             raise ValueError("give encoding, or split_index and reverse_bases, not both")
         self.codebook = load_codebook(path, round_labels=tuple(self.rounds.sequencing_rounds),
             channel_labels=tuple(self.channel_order), encoding=encoding, layout=layout)
+        self._keep_reference_file("codebook", self.codebook, path)
 
     def load_direct_panel(self, path: Path | str) -> None:
         """Load the direct-readout panel from CSV and store it on self.direct_panel.
@@ -428,11 +436,19 @@ class Dataset:
         Returns
         -------
         None
-            Stores the DirectPanel. Errors propagate from
+            Stores the DirectPanel, and keeps the file's absolute path and
+            SHA-256 for ``run.json`` ``codebook``. Errors propagate from
             :func:`starfinder.barcode.load_direct_panel`.
         """
         self.direct_panel = load_direct_panel(path, round_labels=tuple(self.rounds.sequencing_rounds),
                                               channel_labels=tuple(self.channel_order))
+        self._keep_reference_file("direct_panel", self.direct_panel, path)
+
+    def _keep_reference_file(self, kind, loaded, path):
+        """Keep the path and SHA-256 of the file a codebook or panel was loaded from (a new dict: replace shares it)."""
+        path = Path(path).absolute()
+        sha256 = hashlib.sha256(path.read_bytes()).hexdigest()
+        self._reference_files = {**self._reference_files, kind: (loaded, str(path), sha256)}
 
     def stitch(self, sample: str, fov_ids, *, table, config, input: str = "reference_merged", review=None,
                fallback: str | None = None, output_dir: Path | str | None = None):

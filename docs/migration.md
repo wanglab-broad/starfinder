@@ -1487,6 +1487,24 @@ record `segmentation_files`, and `lookup_source(cell=…)` returns `assignment_f
 the cell's row in the sample cell table, `label_file` and `label_value`. The SHA-256 of
 `tables/molecules` changes on the route per FOV because of the new column.
 
+### Records added to `run.json`
+
+The records the processing report reads ({doc}`report-contract`, "Records added to
+run.json"):
+
+* **`run.json` gains `transforms`, `codebook`, `workflow_config` and
+  `counts.filtering.endpoint_valid`** (with `endpoint_valid_segments`); `format_version`
+  stays 1, and a `run.json` without them still loads. `transforms` holds, per registered
+  moving round, the entries of `registered/transforms.json` and the round's
+  `WarpConfig`; a dense field or B-spline coefficients are named only when the stage
+  `registered` wrote them, and no array is written into `run.json`.
+* **The workflow writes `checkpoints/<fov>/run.json`** for the processing rules, alone by
+  default, with `overwrite` on; `rules.<rule>.parameters.checkpoints` adds stages
+  ({doc}`workflow-configuration`, "Run records of the processing rules"). The logs the
+  rules write do not change.
+* **`Dataset.load_codebook` and `load_direct_panel` keep the file's path and SHA-256**,
+  which `run.json` records as `codebook`.
+
 ## Intentional behavior changes — not mechanical equivalence
 
 | Area | Change and consequence |

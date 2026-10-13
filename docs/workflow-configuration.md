@@ -174,6 +174,7 @@ is specifically for the Python batch/direct wrapper.
 | `decoding` | Python-only `method` (`wta`, `codebook_aware` or `direct`) and that config's fields | Python rules only: the decoder used with `reads_filtration.run`; default `WtaDecoderConfig(diagnostics=True)`, or `DirectAssignmentConfig()` with `readout_mode: direct`; the adapter sets `diagnostics` true and `allow_rescue` false unless given; a method that does not support the readout mode raises `TypeError` |
 | `scoring` | Python-only boolean `run` (default true) and `method` (`bgcorr_probability`) | Python rules only (the schema rejects it unless `backend: python`): the adapter adds the shared read-QC score (`ReadScoreConfig`, {doc}`readout-contract`, "Shared read-QC score") whenever it decodes; `run: false` turns it off. It ranks calls, sets no cutoff and never changes a call. Giving the block without `reads_filtration.run`, or scoring with `reads_extraction.background: false`, raises `ValueError` |
 | `deduplication` | Python-only boolean `run` (default false), `distance_voxels` (default 1.0, voxel index space) and `compatibility` (`same_sequence`) | Python rules only (the schema rejects it unless `backend: python`): with `run: true` the adapter sets `PipelineConfig.deduplication` ({doc}`readout-contract`, "Optional deduplication"), which marks cross-channel reads of one amplicon within the distance with the same WTA sequence as duplicates of one representative; the read filter then rejects them (`ReadFilterConfig.exclude_duplicates`, default true). Off without the block. It needs `reads_filtration.run` and raises `ValueError` with `readout_mode: direct` |
+| `checkpoints` | Python-only mapping with the one key `stages` (a list of `registered`, `candidates`, `pre_qc`), or null | Python rules only: the checkpoint stages the five processing rules (`rsf_single_fov`, `gr_single_fov_subtile`, `lrsf_single_fov_subtile`, `deep_create_subtile`, `deep_rsf_subtile`) write besides `run.json`; absent or null is `{stages: []}`, `run.json` alone. See [run records of the processing rules](#run-records-of-the-processing-rules) |
 
 Always pair `intensity_estimation` with `intensity_threshold`. Python `noise`
 uses a k-sigma threshold (e.g. 5), whereas `adaptive` is a fraction of channel
@@ -199,6 +200,33 @@ shared MATLAB keys remain unchanged. See [coordination](coordination.md).
 `from_workflow_config` chooses the relevant subtile creation settings; image
 sizes must match arrays after rotation. Rectangular and remainder dimensions
 are partitioned independently with complete edge coverage.
+
+### Run records of the processing rules
+
+Each Python processing rule runs its FOV (or subtile) with
+`CheckpointConfig(stages=<stages>, overwrite=True)`, so every run writes
+`<output_root>/checkpoints/<fov>/run.json` (`subtile_<n>/run.json` below it for a
+subtile rule; {doc}`checkpoints`, "run.json"). The stages come from
+`rules.<rule>.parameters.checkpoints`, a mapping with the one key `stages`; absent
+or null it is `{stages: []}`, which writes `run.json` alone. For example, the
+stages that let the processing report read the candidates and the reads:
+
+```yaml
+rules:
+  rsf_single_fov:
+    parameters:
+      checkpoints:
+        stages: [candidates, pre_qc]
+```
+
+`overwrite` is on because a rerun of the rule replaces its record: it removes the
+earlier stage files of the FOV directory and leaves `other_rounds/`,
+`segmentation/` and `assignment/`. The inputs are hashed (`hash_inputs`), so each
+raw image is read once more. `run.json` records the configuration file the rule ran
+with (`workflow_config`: the top-level `config_path` and the SHA-256 of its bytes)
+and the codebook or panel file the rule loaded (`codebook`). `run.json` and the
+stage files are not declared outputs of the rules, and the logs the rules write do
+not change. The key is Python-only: with another backend it raises `ValueError`.
 
 ## Codebook segment layout
 

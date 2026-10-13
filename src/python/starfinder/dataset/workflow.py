@@ -562,6 +562,9 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
     candidates need spot_finding.rounds, and the barcode keys
     load_codebook.split_index and encoding and reads_filtration.end_base,
     split_index, n_barcode_segments and exclude_invalid_endpoints raise.
+    The Python-only checkpoints key ({stages: [...]}) is checked here and read
+    by the rule's runner (_rule_checkpoints); the top-level config_path is kept
+    on the Dataset, whose run.json records it as workflow_config.
     Direct Python callers construct Dataset/PipelineConfig (no legacy aliases).
     """
     if rule not in _RULES:
@@ -575,8 +578,12 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
     _known(params, ('streaming', 'snr_threshold', 'load_codebook', 'load_raw_images', 'enhance_contrast',
         'hist_equalize', 'morph_recon', 'tophat', 'preprocessing', 'registration', 'global_registration', 'local_registration',
         'spot_finding', 'reads_extraction', 'reads_filtration', 'decoding', 'scoring', 'deduplication',
-        'create_subtiles', 'device'),
+        'create_subtiles', 'device', 'checkpoints'),
         'Python workflow parameter')
+    _rule_checkpoints(config, rule)
+    if config.get('config_path') is not None:
+        # run.json records the configuration file a rule ran with (workflow_config).
+        dataset._workflow_config = Path(config['config_path']).absolute()
     legacy = [key for key in _LEGACY_PREPROCESSING if key in params]
     if 'preprocessing' in params and legacy:
         raise ValueError(f'preprocessing is mutually exclusive with the legacy keys {legacy}')
@@ -660,8 +667,28 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
         encoding=encoding, layout=layout)
 
 
+def _rule_checkpoints(config, rule):
+    """The CheckpointConfig of a processing rule: run.json alone, or the stages of rules.<rule>.parameters.checkpoints.
+
+    The Python-only key is a mapping with the one key stages (absent or null:
+    {stages: []}). overwrite is on, so a rerun of the rule replaces its record;
+    the directory is <output_root>/checkpoints and the inputs are hashed.
+    """
+    from .config import CheckpointConfig
+    context = f'rules.{rule}.parameters.checkpoints'
+    values = _rule_parameters(config, rule).get('checkpoints')
+    if values is None:
+        values = {}
+    else:
+        _python_only(config, [context])
+        if not isinstance(values, dict):
+            raise TypeError(f'{context} must be a mapping')
+        _known(values, ('stages',), context)
+    return CheckpointConfig(stages=_tuples(values.get('stages', [])), overwrite=True)
+
+
 def _run_workflow(snakemake, rule):
-    """Thin common runner used by the five Snakemake script adapters."""
+    """Thin common runner used by the five Snakemake script adapters; each run writes the FOV's run.json."""
     from .fov import FOV
     adapted = from_workflow_config(snakemake.config, rule)
     dataset = adapted.dataset
@@ -673,7 +700,7 @@ def _run_workflow(snakemake, rule):
     elif adapted.pipeline.decoding:
         dataset.load_codebook(Path(snakemake.input[1]), encoding=adapted.encoding, layout=adapted.layout)
     fov = FOV.from_subtile(Path(snakemake.input[2]), dataset, fov_id) if resident else dataset.fov(fov_id)
-    fov.run(adapted.pipeline, execution=adapted.execution)
+    fov.run(adapted.pipeline, execution=adapted.execution, checkpoints=_rule_checkpoints(snakemake.config, rule))
     if resident:
         number = snakemake.wildcards.n_subtile
         fov.save_spots(path=Path(snakemake.input[2]).parent / f'subtile_goodSpots_{number}.csv')

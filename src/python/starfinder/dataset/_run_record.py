@@ -66,6 +66,52 @@ def _sha256(path, chunk=1 << 20):
     return digest.hexdigest()
 
 
+def _codebook_record(dataset):
+    """The codebook (multiplexed) or direct panel (direct) of the run: kind, file, SHA-256, entries, genes; or None.
+
+    path and sha256 are those Dataset.load_codebook or load_direct_panel kept for
+    the object the dataset holds now; null for one set without a file.
+    """
+    kind = "codebook" if dataset.readout_mode == "multiplexed" else "direct_panel"
+    reference = dataset.codebook if kind == "codebook" else dataset.direct_panel
+    if reference is None:
+        return None
+    source = dataset._reference_files.get(kind)
+    path, sha256 = (source[1], source[2]) if source is not None and source[0] is reference else (None, None)
+    entries = reference.n_entries if kind == "codebook" else len(reference.table)
+    return {"kind": kind, "path": path, "sha256": sha256, "entries": entries, "genes": reference.n_genes}
+
+
+def _workflow_config_record(dataset):
+    """Path and SHA-256 of the workflow configuration file from_workflow_config translated; None outside the workflow."""
+    path = dataset._workflow_config
+    if path is None:
+        return None
+    # A configuration whose config_path names no readable file keeps its path with a null hash.
+    return {"path": str(path), "sha256": _sha256(path) if Path(path).is_file() else None}
+
+
+def _transforms(fov, written):
+    """R1: per registered moving round, the entries of transforms.json (_transform_json) and its WarpConfig.
+
+    written lists the files the stage registered wrote; a dense field or B-spline
+    coefficients are named only when that stage wrote the round's field file.
+    """
+    from starfinder.io._checkpoint import _transform_json
+    rounds = set(fov._pipeline_rounds())
+    applications = fov.registration_record.get("application", {})
+    transforms = {}
+    for name, results in fov.registration_results.items():
+        # Other rounds (prepare_morphology, register_rounds) are not processed by FOV.run.
+        if name not in rounds or not results:
+            continue
+        field_name = f"{name}_field.npz" if f"registered/{name}_field.npz" in written else None
+        transforms[name] = {"reference": fov.rounds.reference_round,
+                            "results": [_transform_json(r, i, field_name) for i, r in enumerate(results)],
+                            "application_config": applications.get(name, results[-1].application_config)}
+    return transforms
+
+
 class _RunRecord:
     """Mutable run.json content; rewritten atomically at step boundaries."""
 
@@ -88,9 +134,12 @@ class _RunRecord:
             # The dataset's readout mode (docs/readout-contract.md) is recorded with the configs.
             "config": {"pipeline": config, "execution": execution, "checkpoints": checkpoints,
                        "readout_mode": dataset.readout_mode, "encoding": encoding},
+            # The workflow configuration file of a workflow rule (null outside the workflow).
+            "workflow_config": _workflow_config_record(dataset),
             # Channel pattern, name and wavelength per round (docs/checkpoints.md, "run.json").
             "channels": dataset.channel_record(),
-            "inputs": [], "steps": [], "preprocessing": None, "registration": {}, "counts": {},
+            "inputs": [], "codebook": _codebook_record(dataset), "steps": [], "preprocessing": None,
+            "registration": {}, "transforms": {}, "counts": {},
             "checkpoint_directory": str(self.directory), "checkpoints": {},
         }
 
@@ -136,14 +185,22 @@ class _RunRecord:
         if fov.deduplication_result is not None:
             counts["deduplication"] = fov.deduplication_result.counts
         if fov.filtering_result is not None:
-            counts["filtering"] = fov.filtering_result.counts
+            # A copy: the result's counts are also written to the rule's logs.
+            counts["filtering"] = dict(fov.filtering_result.counts)
+            diagnostics = fov.filtering_result.diagnostics
+            # Present exactly when the filter checked endpoints (end_bases or a layout's segment ends).
+            if "endpoint_valid_count" in diagnostics:
+                counts["filtering"]["endpoint_valid"] = diagnostics["endpoint_valid_count"]
+            if "endpoint_valid_segment_counts" in diagnostics:
+                counts["filtering"]["endpoint_valid_segments"] = dict(diagnostics["endpoint_valid_segment_counts"])
         if fov.scoring_result is not None or fov.deduplication_result is not None:
             # The §2.8 population summary (docs/readout-contract.md, "Diagnostics") of the scored or
             # deduplicated reads; runs without those stages keep the earlier counts only.
             from starfinder.barcode import summarize_reads
             counts["summary"] = summarize_reads(fov.results)
         self.data.update(preprocessing=fov.preprocessing_record or None,
-                         registration=fov.registration_attempts, counts=counts)
+                         registration=fov.registration_attempts,
+                         transforms=_transforms(fov, self.data["checkpoints"].get("registered", [])), counts=counts)
         write_json(self.data, self.path)
 
     def finish(self, status, error=None, round_name=None):

@@ -827,6 +827,20 @@ $defs:
     properties:
       device:
         enum: ["cpu"]
+      checkpoints:
+        description: >-
+          Python only (backend python). The checkpoint stages the rule writes besides
+          checkpoints/<fov>/run.json, as {stages: [...]}; absent or null is {stages: []}, run.json
+          alone. A rerun replaces the FOV's earlier record (overwrite); the declared outputs do not
+          change.
+        type: [object, "null"]
+        properties:
+          stages:
+            type: array
+            items:
+              enum: ["registered", "candidates", "pre_qc"]
+            uniqueItems: true
+        additionalProperties: false
     allOf:
       - if: {required: [preprocessing]}
         then:
