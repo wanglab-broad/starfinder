@@ -226,7 +226,7 @@ raw image is read once more. `run.json` records the configuration file the rule 
 with (`workflow_config`: the top-level `config_path` and the SHA-256 of its bytes)
 and the codebook or panel file the rule loaded (`codebook`). `run.json` and the
 stage files are not declared outputs of the rules, and the logs the rules write do
-not change. The key is Python-only: with another backend it raises `ValueError`.
+not change. The key is allowed with `backend: python` only: the schema refuses it with `backend: matlab` or without `backend` (whose default is `matlab`), and the adapter raises `ValueError`.
 
 ## Codebook segment layout
 

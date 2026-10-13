@@ -350,8 +350,9 @@ allOf:
   # The explicit preprocessing and registration recipes, the spot-finding method, channel
   # overrides and rounds, the execution device, readout_mode direct, scoring,
   # deduplication, reads_extraction.background, load_codebook.encoding.pair_to_color, the
-  # segmentation, assignment, stitching, assembly and export blocks and the
-  # stardist_segmentation target are Python-only (backend defaults to matlab)
+  # segmentation, assignment, stitching, assembly and export blocks, the
+  # stardist_segmentation target and the rules' checkpoints are Python-only (backend
+  # defaults to matlab)
   - if:
       not:
         required: [backend]
@@ -381,6 +382,7 @@ allOf:
                     - required: [target]
                     - required: [scoring]
                     - required: [deduplication]
+                    - required: [checkpoints]
                     - required: [reads_extraction]
                       properties:
                         reads_extraction:

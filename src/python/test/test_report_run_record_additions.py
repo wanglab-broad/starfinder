@@ -350,3 +350,27 @@ def test_r5_the_checkpoints_key_is_checked(tmp_path):
     assert from_workflow_config(config).dataset._workflow_config == tmp_path / "config.yaml"
     assert from_workflow_config({k: v for k, v in config.items() if k != "config_path"}).dataset._workflow_config \
         is None
+
+
+PROCESSING_RULES = ("rsf_single_fov", "gr_single_fov_subtile", "lrsf_single_fov_subtile", "deep_create_subtile",
+                    "deep_rsf_subtile")
+
+
+@pytest.mark.parametrize("rule", PROCESSING_RULES)
+def test_r5_the_schema_allows_the_checkpoints_key_with_the_python_backend_only(tmp_path, rule):
+    # The workflow validates its configuration with this schema (workflow/Snakefile) before any rule runs; a
+    # MATLAB run never reaches the adapter's own check, so the schema must refuse the key there.
+    base = workflow_config(tmp_path, "out")
+    without = {k: v for k, v in base.items() if k != "backend"}
+    keyed = {"rules": {rule: {"run": True, "parameters": {"checkpoints": {"stages": ["pre_qc"]}}}}}
+    plain = {"rules": {rule: {"run": True, "parameters": {}}}}
+    jsonschema.validate(dict(base, **keyed), SCHEMA)
+    # backend: matlab refuses it; without the key the same configuration is valid.
+    jsonschema.validate(dict(base, backend="matlab", **plain), SCHEMA)
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(dict(base, backend="matlab", **keyed), SCHEMA)
+    # The backend omitted is the schema's default, matlab: refused as well.
+    assert SCHEMA["properties"]["backend"]["default"] == "matlab"
+    jsonschema.validate(dict(without, **plain), SCHEMA)
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(dict(without, **keyed), SCHEMA)
