@@ -292,6 +292,7 @@ starfinder.report
 * :py:obj:`starfinder.report.REPORT_TABLES`
 * :py:obj:`starfinder.report.ReportConfig`
 * :py:obj:`starfinder.report.ReportLimits`
+* :py:obj:`starfinder.report.ReportRecord`
 * :py:obj:`starfinder.report.RuleLimit`
 * :py:obj:`starfinder.report.UNAVAILABLE_REASONS`
 

@@ -31,12 +31,30 @@ pairs, the positive threshold, the example FOVs, the provisional limits of the p
 rules and the size of the whole-sample figures. :py:func:`~starfinder.report.read_report`
 reads a report's ``report.json`` back, checking every file it lists against its SHA-256.
 
-The tables written so far are ``fovs``, ``registration``, ``steps``, ``readout_totals``,
-``population``, ``problematic_fovs`` (header only) and ``unavailable``, with the columns that
-copy record fields; the computed values (the fractions, the shifts and residuals, the
-alignment score, the area a FOV owns, the reads in cells), the example FOVs, the replay, the
-sample measurements, the page and the entry ``Dataset.report`` are added by the definitions of
-:doc:`../report-algorithms` that make them.
+``Dataset.report(sample, fov_ids, *, assignment="default", segmentation=None, config=None,
+output_dir=None)`` is the entry: it writes the folder (by default ``<OUTPUT>/report/<sample>/``)
+and returns a :py:class:`~starfinder.report.ReportRecord`, the folder and its ``report.json``.
+It is a reader, not a runner: it calls no processing stage, reads the saved records at the places
+of :doc:`../report-contract` ("Where each record is looked for") and the raw input of the main
+example for its replay, and writes only its own folder. The folder holds every table of
+:py:data:`~starfinder.report.REPORT_TABLES` (the values each definition of
+:doc:`../report-algorithms` computes: the read fractions, the shifts and their residuals, the
+alignment score, the area a FOV owns and the cell density, the problematic FOVs, the example
+FOVs, the intensity distributions of the replayed main example, the reads assigned to cells,
+the per-cell values, MECR and the reads along Z), ``report.json`` and the page
+``report.html``.
+
+The page is built from the template shipped with the package
+(``starfinder/report/templates/report.html``): eight sections (Summary, Workflow overview,
+Preprocessing, Registration, Readout, Segmentation and assembly, Sample measurements, Files) in
+the layout of :doc:`../report-algorithms` ("Layout of the page"). The tables are embedded as one
+JSON block, from which the page's inline script draws the FOV maps (plain SVG), their tooltips
+and the paged tables; the static figures are matplotlib PNG and JPEG images embedded as
+``data:`` addresses; a part that is unavailable shows "Unavailable:" and its reason in its
+place, and a value unavailable for one FOV a dash with its reason in the tooltip. The page has a
+light theme only and loads nothing, so it opens offline. ``report.json`` records the page's
+bytes and its size budget (6 MiB + 16 KiB per FOV + 3 MiB per marker figure); a page above the
+budget is still written.
 
 .. currentmodule:: starfinder.report
 
@@ -50,5 +68,6 @@ sample measurements, the page and the entry ``Dataset.report`` are added by the 
    REPORT_TABLES
    ReportConfig
    ReportLimits
+   ReportRecord
    RuleLimit
    UNAVAILABLE_REASONS

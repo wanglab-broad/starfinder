@@ -33,6 +33,9 @@ Each channel is a ``ChannelInfo`` (file pattern, content name, wavelength in nm)
 reference stains), and ``Dataset.channel_index(round, key)`` is the one lookup by
 index, pattern or name; see :doc:`../coordination`, "Channels".
 
+``Dataset.report(sample, fov_ids, …)`` writes a sample's processing report from the saved
+records, without running a stage; see :doc:`report`.
+
 .. currentmodule:: starfinder.dataset
 
 .. autosummary::

@@ -42,7 +42,8 @@ FIGURE_HEADER, FIGURE_STRIP = 28, 34
 
 
 def tables(folder, record):
-    return {e["path"].split("/")[-1][:-4]: _read_table(folder / e["path"], e["dtypes"]) for e in record["files"]}
+    return {e["path"].split("/")[-1][:-4]: _read_table(folder / e["path"], e["dtypes"]) for e in record["files"]
+            if "dtypes" in e}
 
 
 def rows_of(record, parts=REPLAY_PARTS):

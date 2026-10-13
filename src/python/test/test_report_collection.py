@@ -7,18 +7,15 @@ for the columns the collection copies from the records, the record of unavailabl
 schema (PG6) and the determinism of two single-thread processes (DT1). Expected values are
 written here by hand from the fixtures' own numbers.
 
-The computed values of the later definitions are not made by the collection. They are the
-closed list ``_schema.PENDING_VALUES`` (each entry with the issue that computes it): such a
-value is null with no row only while every input it is computed from is available, and is
-unavailable with its input's reason otherwise. Every other null cell, ``summary`` key and
-``rules`` key is not applicable or named by exactly one row of ``unavailable.csv``
-(``check_null_values``). The tests that pin the pending values say so.
+Every null cell, ``summary`` key and ``rules`` key is not applicable or named by exactly one
+row of ``unavailable.csv`` (``check_null_values``); ``_schema.PENDING_VALUES`` is empty.
 """
 from __future__ import annotations
 
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -30,8 +27,7 @@ import pytest
 from starfinder.io._checkpoint import _read_table
 from starfinder.report import (PROBLEM_RULES, REPORT_PARTS, REPORT_TABLES, UNAVAILABLE_REASONS, MarkerGroup,
                                ReportConfig, ReportLimits, RuleLimit, read_report)
-from starfinder.report import _collect as collect_module
-from starfinder.report._schema import PENDING_VALUES, RULE_KEYS, RULE_UNITS, SUMMARY_KEYS, pending_value
+from starfinder.report._schema import PENDING_VALUES, RULE_UNITS, SUMMARY_KEYS
 
 from .report_fixtures import (CELLS_RETAINED, CHANNELS, COUNTS, ENDED, FOVS, MOVING, NCC_AFTER, NOMINAL, ORIGINS,
                               RECORD_VARIANTS, SAMPLE, STARTED, TRANSLATIONS, raw_path, report_cells, report_records,
@@ -64,7 +60,8 @@ def same(actual, expected):
 
 def tables_of(folder, record):
     """Every table of the record's files, read back with the dtypes it lists."""
-    return {Path(e["path"]).stem: _read_table(Path(folder) / e["path"], e["dtypes"]) for e in record["files"]}
+    return {Path(e["path"]).stem: _read_table(Path(folder) / e["path"], e["dtypes"]) for e in record["files"]
+            if "dtypes" in e}
 
 
 def keyed(rows):
@@ -106,6 +103,8 @@ PART_REASONS = {
                        "no_export", "no_segmentation"},
     "readout.per_fov": {"no_run_record", "run_not_finished", "step_failed", "not_configured", "not_recorded",
                         "no_placement", "fov_not_placed", "undefined"},
+    "readout.distributions": {"no_run_record"},
+    "readout.table": {"no_run_record"},
     "assembly.cells_per_fov": {"no_export", "part_not_written", "no_segmentation", "no_placement", "undefined",
                                "fov_not_placed", "input_missing", "input_changed"},
     "assembly.placement": {"no_placement", "fov_not_placed", "input_missing", "input_changed"},
@@ -497,48 +496,22 @@ def test_rc11_older_record(tmp_path, variant):
     assert ("checkpoints/F1/registered/transforms.json" in kinds) == (variant == "older_transforms")
 
 
-# --- RC12: every null cell is n/a, named once, or pending by the closed list ---------------------------------
+# --- RC12: every null cell is n/a or named once ---------------------------------------------------------------
 
 CATEGORICAL = [r for r in PROBLEM_RULES if r not in RULE_UNITS]
 
 
 class Context:
-    """What the inputs of a pending value (``Pending.inputs``) are evaluated on, read from the case and the tables."""
+    """What the null rules and the rules' entries are checked against, read from the case."""
 
     def __init__(self, case, record, tables):
-        parts = (json.loads((case.root / EXPORT).read_text()).get("parts") or {}) if (case.root / EXPORT).is_file() \
-            else {}
-        self.export = parts.get("assemble") in ("written", "reused")
-        mode = (json.loads((case.root / EXPORT).read_text()).get("assembly") or {}).get("mode") if self.export else None
-        self.cells = self.export and mode == "cells"
-        self.fovs, self.config = tables["fovs"], case.config
-        totals = tables["readout_totals"].set_index("level")
-        self.spots_total = not pd.isna(totals.loc["spots", "count"])
+        self.config = case.config
 
     def configured(self, rule):
         if rule == "spots_near_zero" or rule in CATEGORICAL:
             return True
         limit = getattr(self.config.limits, rule)
         return any(v is not None for v in (limit.k, limit.floor, limit.absolute))
-
-    def available(self, token, row=None, rule=None):
-        if token in ("export", "cells", "spots_total"):
-            return getattr(self, token)
-        if token == "placed":
-            return not pd.isna(row["correction_z"])
-        if token == "outcome=succeeded":
-            return row["outcome"] == "succeeded"
-        if token == "choice":
-            return self.config.example_fovs is not None or bool(self.fovs["passed_filter"].notna().any())
-        if token == "configured":
-            return self.configured(rule)
-        if token.startswith("any:"):
-            columns = token[4:].split(",")
-            return bool(self.fovs[columns].notna().all(axis=1).any())
-        return not pd.isna(row[token])
-
-    def pending(self, entry, row=None, rule=None):
-        return entry is not None and all(self.available(t, row, rule) for t in entry.inputs)
 
 
 WITHOUT_METHOD = ("load_images", "extract_round", "score_reads", "deduplicate_reads")
@@ -586,8 +559,8 @@ CASES = [("report_records", None)] + [("report_records", v) for v in RECORD_VARI
 
 
 def check_null_values(case, record, tables):
-    """RC12 on one collection: every null cell, null summary key and null rule key is n/a by its rule, named by
-    exactly one row of unavailable.csv, or a value of PENDING_VALUES whose every input is available."""
+    """RC12 on one collection: every null cell, null summary key and null rule key is n/a by its rule or named by
+    exactly one row of unavailable.csv."""
     unavailable = tables["unavailable"]
     named, part_rows = {}, set()
     for row in unavailable.to_dict("records"):
@@ -602,7 +575,7 @@ def check_null_values(case, record, tables):
         assert key not in named, f"two rows name {key}"
         named[key] = row
     assert len(set(keyed(unavailable))) == len(unavailable)
-    context, found, pending = Context(case, record, tables), set(), []
+    context, found = Context(case, record, tables), set()
     present = set(record["stages"]["run_records"])
     for table in ("fovs", "registration", "steps", "readout_totals", "population"):
         for row in tables[table].to_dict("records"):
@@ -613,22 +586,17 @@ def check_null_values(case, record, tables):
                     assert (table, column, key) not in named, f"{table}.{column} [{key}] holds a value and a row"
                 elif (table, column, key) in named:
                     found.add((table, column, key))
-                elif context.pending(pending_value(table, column, key), row):
-                    pending.append((table, column, key))
                 else:
                     assert _not_applicable(table, column, row, case, context), (
-                        f"{table}.{column} [{key}] is null, not applicable by no rule, named by no row and not a "
-                        "pending value with its inputs available")
+                        f"{table}.{column} [{key}] is null, not applicable by no rule and named by no row")
     summary = record["summary"]
     assert list(summary) == list(SUMMARY_KEYS)
     for key, value in summary.items():
         if value is not None:
             assert ("summary", key, "") not in named
-        elif ("summary", key, "") in named:
-            found.add(("summary", key, ""))
         else:
-            assert context.pending(pending_value("report.json", f"summary.{key}")), f"summary.{key} is null"
-            pending.append(("summary", key, ""))
+            assert ("summary", key, "") in named, f"summary.{key} is null and named by no row"
+            found.add(("summary", key, ""))
     for rule, entry in record["rules"].items():
         configured = context.configured(rule)
         assert (entry["limit"] is None) == (rule in CATEGORICAL)  # n/a: a categorical rule has no limit
@@ -637,7 +605,6 @@ def check_null_values(case, record, tables):
         assert configured or entry["evaluated"] is False
         assert (entry["fovs_marked"] is None) == (entry["evaluated"] is False)  # n/a: a rule not evaluated
     assert found == set(named), set(named) - found
-    return pending
 
 
 @pytest.mark.parametrize("maker,variant", CASES, ids=[f"{m}-{v}" for m, v in CASES])
@@ -654,24 +621,9 @@ def test_rc12_null_cells_and_closed_lists(tmp_path, maker, variant):
     assert summary["fovs_succeeded"] == (int(statuses.eq("succeeded").sum()) if statuses.notna().any() else None)
 
 
-def test_pending_values_are_a_closed_list(tmp_path):
-    """Every entry names a table or report.json key of the contract and the issue that computes it; the collector
-    refuses a pending value the list does not hold."""
-    tables = {t: [c for c, _, _ in cols] for t, cols in CONTRACT_COLUMNS.items()}
-    for entry in PENDING_VALUES:
-        assert entry.issue in ("W-453", "W-454", "W-455", "W-456"), entry
-        if entry.where == "unavailable":
-            assert entry.name in REPORT_PARTS or entry.name == "rule:<rule>", entry
-        elif entry.where in tables:
-            assert entry.name is None or entry.name in tables[entry.where], entry
-        elif entry.where == "report.json":
-            head, _, rest = entry.name.partition(".")
-            assert (head in ("examples", "replay") and not rest) or (head == "summary" and rest in SUMMARY_KEYS) or (
-                head == "rules" and rest.split(".")[0] in PROBLEM_RULES and rest.split(".")[1] in RULE_KEYS), entry
-        else:
-            assert entry.where in ("cells", "mecr", "reads_along_z", "intensity", "unavailable", "report.html"), entry
-    with pytest.raises(RuntimeError, match="PENDING_VALUES does not list"):
-        collect_module._check_pending("fovs", "spots", "fov_id=F1")
+def test_no_pending_value():
+    """The staged delivery is complete: no value is left to a later issue."""
+    assert PENDING_VALUES == ()
 
 
 # --- Inputs and their hashes ----------------------------------------------------------------------------------
@@ -991,14 +943,14 @@ def test_pg7_markers_without_a_gene_list(tmp_path):
 
 def test_pg7_folder_rules_and_replacement(records, monkeypatch):
     folder, first, _ = collect(records)
-    assert sorted(snapshot(folder)) == sorted(["report.json"] + [f"tables/{t}.csv" for t in COLLECTED])
+    assert sorted(snapshot(folder)) == sorted(["report.html", "report.json"] + [f"tables/{t}.csv" for t in COLLECTED])
     # A second collection replaces the first as a whole, once it is complete.
     record = records.run_record("F1")
     record["counts"]["spots"] = 1001
     records.write_run_record("F1", record)
     _, second, tables = collect(records)
     assert tables["fovs"].set_index("fov_id").loc["F1", "spots"] == 1001
-    assert sorted(snapshot(folder)) == sorted(["report.json"] + [f"tables/{t}.csv" for t in COLLECTED])
+    assert sorted(snapshot(folder)) == sorted(["report.html", "report.json"] + [f"tables/{t}.csv" for t in COLLECTED])
     assert read_report(folder) == second
     # An error after the checks leaves the earlier report as it was, and no staging folder.
     earlier = snapshot(folder)
@@ -1044,20 +996,18 @@ def test_pg6_schema(tmp_path, maker, variant):
         anndata_or_skip()
     case = (report_cells if maker == "report_cells" else report_records)(tmp_path / "root", variant)
     folder, record, tables = collect(case)
-    assert [Path(e["path"]).stem for e in record["files"]] == list(COLLECTED)
+    assert [e["path"] for e in record["files"]] == ["report.html"] + [f"tables/{t}.csv" for t in COLLECTED]
     for name in COLLECTED:
         columns = CONTRACT_COLUMNS[name]
         assert list(tables[name].columns) == [c for c, _, _ in columns]
-        dtypes = {e["path"]: e["dtypes"] for e in record["files"]}[f"tables/{name}.csv"]
+        dtypes = {e["path"]: e.get("dtypes") for e in record["files"]}[f"tables/{name}.csv"]
         assert dtypes == {c: pandas_dtype(k, n) for c, k, n in columns}
         assert {c: str(d) for c, d in tables[name].dtypes.items()} == dtypes
         keys = [key_of(name, row) for row in tables[name].to_dict("records")]
         assert len(keys) == len(set(keys)), name
     text = (folder / "report.json").read_text()
     strict = json.loads(text, parse_constant=lambda c: pytest.fail(f"report.json holds {c}"))
-    absent = {e.name for e in PENDING_VALUES if e.where == "report.json" and "." not in e.name}
-    assert absent == set()
-    assert list(strict) == [k for k in CONTRACT_RECORD_KEYS if k not in absent]
+    assert list(strict) == CONTRACT_RECORD_KEYS
     assert (strict["format_version"], strict["stage"]) == (1, "report")
     # The keys of every level the contract lists.
     assert list(strict["summary"]) == CONTRACT_SUMMARY_KEYS
@@ -1072,7 +1022,8 @@ def test_pg6_schema(tmp_path, maker, variant):
     for entry in strict["inputs"]:
         assert list(entry) == ["path", "kind", "sha256", "bytes", "verified"]
     for entry in strict["files"]:
-        assert list(entry) == ["path", "sha256", "bytes", "dtypes"]
+        assert list(entry) == ["path", "sha256", "bytes"] + (["budget_bytes"] if entry["path"] == "report.html" else
+                                                             ["dtypes"])
     for entry in strict["unavailable"]:
         assert list(entry) == ["part", "table", "column", "row_key", "reason", "detail"]
     same(pd.DataFrame(strict["unavailable"], columns=list(tables["unavailable"].columns))
@@ -1146,6 +1097,8 @@ from test.report_fixtures import ReportCase, cells_config
 ReportCase(Path(sys.argv[1]), config=cells_config()).collect()
 """
 LEFT_OUT = ("generated_at", "wall_s", "cpu_s", "peak_rss_kib")
+# The Summary's Generated fact: its text is left out when two pages are compared (DT1).
+GENERATED = re.compile(r'(<dd id="generated"[^>]*>).*?(</dd>)', re.S)
 
 
 def test_dt1_two_single_thread_processes(tmp_path):
@@ -1162,17 +1115,22 @@ def test_dt1_two_single_thread_processes(tmp_path):
         shutil.copytree(case.folder, aside)
         copies.append(aside)
     first, second = (snapshot(c) for c in copies)
-    assert sorted(first) == sorted(second) == sorted(["report.json"] + [f"tables/{t}.csv" for t in COLLECTED])
+    assert sorted(first) == sorted(second) == sorted(["report.html", "report.json"]
+                                                     + [f"tables/{t}.csv" for t in COLLECTED])
     for name in first:
-        if name != "report.json":
+        if name not in ("report.json", "report.html"):
             assert first[name] == second[name], name
     records = [json.loads(s["report.json"]) for s in (first, second)]
     assert records[0]["generated_at"] != records[1]["generated_at"]
     for record in records:
         for key in LEFT_OUT:
             del record[key]
-        # No report.html is written yet, so the files list has no entry of it to leave out.
-        assert not any(e["path"] == "report.html" for e in record["files"])
+        # The files entry of report.html: its SHA-256 and bytes depend on the generation time the page shows.
+        page = next(e for e in record["files"] if e["path"] == "report.html")
+        del page["sha256"], page["bytes"]
     assert records[0] == records[1]
+    # The page, without the text of the Summary's Generated fact (DT1).
+    pages = [GENERATED.sub(r"\1\2", s["report.html"].decode("utf-8")) for s in (first, second)]
+    assert pages[0] != (first["report.html"].decode("utf-8")) and pages[0] == pages[1]
     assert {c: CELLS_RETAINED[c] for c in FOVS} == dict(
         tables_of(case.folder, json.loads(second["report.json"]))["fovs"][["fov_id", "n_cells_retained"]].values)

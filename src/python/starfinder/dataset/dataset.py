@@ -629,3 +629,66 @@ class Dataset:
         from starfinder.sample_output._export import export_sample
         return export_sample(self, sample, placement=placement, assignment=assignment,
                              config=ExportConfig() if config is None else config, output_dir=output_dir)
+
+    def report(self, sample: str, fov_ids, *, assignment: str | None = "default", segmentation: str | None = None,
+               config=None, output_dir=None):
+        """Write a sample's processing report: ``report.html``, ``report.json`` and ``tables/``.
+
+        The one sample report entry (docs/report-contract.md, "The sample
+        entry"). A sample-level reader, not a runner: it calls no processing
+        stage, reads only the saved records at their fixed places under the
+        output root ("Where each record is looked for": the FOVs'
+        ``checkpoints/{fovID}/run.json`` and saved transforms, segmentation and
+        assignment records, the reference images, ``stitching/<sample>/`` and
+        ``export/<sample>/``) and the raw input of the main example for its
+        replay, and writes only its output folder. The report describes the
+        run and judges nothing. After the checks before anything is written
+        (the arguments; a run record or an export to report; each run record's
+        IDs; the export and the placement against the FOV list; the marker
+        genes against the gene list; the example FOVs; the output folder) the
+        report is written into a staging folder that replaces the earlier
+        report of the sample once it is complete. A part whose input is
+        missing or changed is unavailable with its reason, recorded in
+        ``tables/unavailable.csv``; the entry does not raise for it.
+
+        Parameters
+        ----------
+        sample : str
+            The sample, as ``stitch`` and ``export`` name it.
+        fov_ids : Sequence[str]
+            The sample's FOVs, nonempty and unique, in the order the report
+            shows them.
+        assignment : str or None
+            The §2.9 assignment name of the route per FOV, read at
+            ``checkpoints/{fovID}/assignment/<assignment>/``; None for a sample
+            without cells.
+        segmentation : str or None
+            The segmentation run whose outlines the examples show; None is the
+            run the assignment (route per FOV) or the export (route after
+            fusion) read.
+        config : ReportConfig or None
+            None is ``ReportConfig()``.
+        output_dir : str or Path or None
+            None is ``<output_root>/report/<sample>/``.
+
+        Returns
+        -------
+        ReportRecord
+            The folder and the content of its ``report.json``.
+
+        Raises
+        ------
+        TypeError
+            config is not a ReportConfig.
+        ValueError
+            Arguments of the wrong form, a run record, export or placement
+            that does not belong to the sample or the FOV list, a marker gene
+            not in the gene list, or example FOVs outside the list.
+        FileNotFoundError
+            No FOV of the list has a run record and there is no export.
+        FileExistsError
+            The output folder holds a file that is not one of the report's own.
+        """
+        from starfinder.report._collect import report_sample
+        return report_sample(self, sample, fov_ids, assignment=assignment, segmentation=segmentation, config=config,
+                             output_dir=output_dir)

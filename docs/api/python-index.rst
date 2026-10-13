@@ -251,6 +251,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.report.REPORT_TABLES`
 * :py:obj:`starfinder.report.ReportConfig`
 * :py:obj:`starfinder.report.ReportLimits`
+* :py:obj:`starfinder.report.ReportRecord`
 * :py:obj:`starfinder.segmentation.rescale_input`
 * :py:obj:`starfinder.segmentation.resolve_model`
 * :py:obj:`starfinder.spot_finding.resolve_weights`

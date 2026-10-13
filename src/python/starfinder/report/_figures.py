@@ -1,11 +1,15 @@
-"""The static figures of the examples (docs/report-algorithms.md, "Preprocessing", "Registration", "Segmentation
-and assembly", "The replay of the examples", "Figure sizes").
+"""The static figures of the report page (docs/report-algorithms.md, "Workflow overview", "Preprocessing",
+"Registration", "Readout", "Segmentation and assembly", "Sample measurements", "The replay of the examples",
+"Figure sizes").
 
 Drawn with matplotlib's ``Agg`` canvas at 100 dpi and saved to memory, with the bundled
 DejaVu Sans font: the image figures as JPEG at the configuration's quality, the plots as PNG
 (whose metadata holds no time). Each figure is laid out in pixels, so that its size is the
 one of "Figure sizes" (PX1): the Preprocessing grid 256 px per tile, the Registration and
-segmentation examples 512 px per tile, the intensity panels 1,200 × 400.
+segmentation examples 512 px per tile, the plots of a full column (the time per step, the
+intensity panels) 1,200 × 400, the heatmaps (the residuals, the reads along Z) 1,200 ×
+``min(1,200, max(300, 12 per row))`` and the plots of a third or a half column (the
+distributions across FOVs and per cell) 600 × 340.
 
 The displayed signal of a tile is reduced to the tile's pixel size by the mean over blocks of
 ``b × b`` pixels, ``b = ceil(n_x / w)`` (partial blocks averaged over their pixels); its grey
@@ -434,6 +438,139 @@ def reads_along_z_figure(rows, planes) -> FigureImage:
     bar.tick_params(labelsize=7)
     bar.set_ylabel("fraction of the FOV's molecules", fontsize=7)
     return FigureImage(_save(figure, "png"), "png", width, height, None, tiles)
+
+
+# --- Workflow overview, Registration, Readout -------------------------------------------------------------------
+
+#: The bins of a distribution across FOVs: ``min(30, max(5, ceil(sqrt(n))))``.
+FOV_BINS = (5, 30)
+#: The heatmap of the residuals labels every k-th row above this many rows.
+HEATMAP_LABELLED_ROWS = 64
+
+
+def heatmap_height(rows):
+    """The height of a heatmap of ``rows`` rows ("Figure sizes"): ``min(1,200, max(300, 12 per row))``."""
+    return min(1200, max(300, 12 * rows))
+
+
+def time_per_step_figure(times, fov_names, sample_names, not_recorded) -> FigureImage:
+    """"Time per step" (1,200 × 400 PNG): a horizontal box plot of the seconds per FOV of each per-FOV step name
+    (log scale, whiskers at 1.5 × the interquartile range, every FOV beyond drawn as a point), then, below a divider,
+    each sample step as a single point on the same axis; the steps without a time are listed in the axis label as
+    "not recorded". ``times`` is :func:`._values.time_per_step`."""
+    width, height = PLOT_SIZE
+    figure = _figure(width, height)
+    left = 200
+    axes = figure.add_axes((left / width, 52 / height, (width - left - 24) / width, (height - 68) / height))
+    names = list(fov_names) + list(sample_names)
+    positions = {name: len(names) - i for i, name in enumerate(names)}
+    tiles = []
+    boxes = [name for name in fov_names if times.get(name)]
+    if boxes:
+        axes.boxplot([list(times[n].values()) for n in boxes], positions=[positions[n] for n in boxes],
+                     orientation="horizontal", whis=1.5, widths=0.6, flierprops={"marker": "o", "markersize": 3},
+                     medianprops={"color": "#1f4fae"})
+    for name in sample_names:
+        if times.get(name):
+            axes.plot([times[name]["sample"]], [positions[name]], "o", color="#17263a", markersize=4)
+    if fov_names and sample_names:
+        axes.axhline(len(sample_names) + 0.5, color="#999999", linewidth=0.8)
+    for name in names:
+        tiles.append({"name": name, "scope": "sample" if name in sample_names else "fov",
+                      "values": dict(times.get(name, {}))})
+    shown = [v for name in names for v in times.get(name, {}).values() if v > 0]
+    if shown:
+        from matplotlib.ticker import FuncFormatter, NullFormatter
+        axes.set_xscale("log")
+        # Plain tick labels (1, 10, 0.1 s): the default labels of a log axis are typeset as mathtext.
+        axes.xaxis.set_major_formatter(FuncFormatter(lambda value, _: f"{value:g}"))
+        axes.xaxis.set_minor_formatter(NullFormatter())
+    axes.set_yticks([positions[n] for n in names], names)
+    axes.set_ylim(0.5, max(1, len(names)) + 0.5)
+    label = "seconds (log scale)" if shown else "seconds (no step has a time)"
+    if not_recorded:
+        label += " · not recorded: " + ", ".join(not_recorded)
+    axes.set_xlabel(label, fontsize=8)
+    axes.tick_params(labelsize=7)
+    return FigureImage(_save(figure, "png"), "png", width, height, None, tiles)
+
+
+def residual_heatmap_figure(rows, fov_ids, rounds) -> FigureImage:
+    """"All FOVs and rounds" (PNG, 1,200 × ``min(1,200, max(300, 12 per row))``): one row per FOV in list order, one
+    column per (round, axis) of the residual, a diverging scale symmetric about 0 with range ``[−a, a]``, ``a`` the
+    largest absolute residual (at least 1 voxel); null cells hatched grey; every k-th row label above 64 rows."""
+    from matplotlib.patches import Rectangle
+    columns = [(name, axis) for name in rounds for axis in ("z", "y", "x")]
+    by_key = {(r["fov_id"], r["round"]): r for r in rows}
+    values = np.full((len(fov_ids), len(columns)), np.nan)
+    for i, fov in enumerate(fov_ids):
+        for j, (name, axis) in enumerate(columns):
+            value = (by_key.get((fov, name)) or {}).get(f"residual_{axis}")
+            if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value):
+                values[i, j] = float(value)
+    finite = np.abs(values[np.isfinite(values)])
+    a = max(1.0, float(finite.max())) if finite.size else 1.0
+    width, height = PLOT_SIZE[0], heatmap_height(len(fov_ids))
+    figure = _figure(width, height)
+    left, right, bottom, top = 110, 110, 56, 16
+    axes = figure.add_axes((left / width, bottom / height, (width - left - right) / width,
+                            (height - bottom - top) / height))
+    image = axes.imshow(np.ma.masked_invalid(values), cmap="RdBu_r", vmin=-a, vmax=a, aspect="auto",
+                        interpolation="nearest", extent=(-0.5, len(columns) - 0.5, len(fov_ids) - 0.5, -0.5))
+    for i, j in zip(*np.nonzero(~np.isfinite(values))):
+        axes.add_patch(Rectangle((j - 0.5, i - 0.5), 1, 1, facecolor="#dddddd", edgecolor="#999999", hatch="//",
+                                 linewidth=0))
+    axes.set_xlim(-0.5, len(columns) - 0.5)
+    axes.set_ylim(len(fov_ids) - 0.5, -0.5)
+    axes.set_xticks(range(len(columns)), [f"{name}\n{axis}" for name, axis in columns])
+    every = 1 if len(fov_ids) <= HEATMAP_LABELLED_ROWS else math.ceil(len(fov_ids) / HEATMAP_LABELLED_ROWS)
+    axes.set_yticks(range(0, len(fov_ids), every), list(fov_ids)[::every])
+    axes.tick_params(labelsize=7)
+    axes.set_xlabel("residual per round and axis (voxels; hatched: unavailable)", fontsize=8)
+    bar = figure.add_axes(((width - right + 24) / width, bottom / height, 12 / width,
+                           (height - bottom - top) / height))
+    figure.colorbar(image, cax=bar)
+    bar.set_yticks([-a, a], [f"{-a:.3g}", f"{a:.3g}"])
+    bar.tick_params(labelsize=7)
+    bar.set_ylabel("residual (voxels)", fontsize=7)
+    tile = {"name": "residuals", "columns": [list(c) for c in columns], "rows": list(fov_ids), "range": a,
+            "null_cells": int((~np.isfinite(values)).sum()), "labelled_every": every}
+    return FigureImage(_save(figure, "png"), "png", width, height, None, [tile])
+
+
+def fov_bins(values, integer):
+    """The bins of a distribution across FOVs: ``min(30, max(5, ceil(sqrt(n))))`` equal bins from the smallest to
+    the largest value; when they are equal, one bin of width 1 read (``integer``) or 0.01. Returns the edges."""
+    values = np.asarray(values, dtype=np.float64)
+    low, high = float(values.min()), float(values.max())
+    if low == high:
+        return [low, low + (1.0 if integer else 0.01)]
+    n = min(FOV_BINS[1], max(FOV_BINS[0], math.ceil(math.sqrt(len(values)))))
+    return [float(e) for e in np.linspace(low, high, n + 1)]
+
+
+def distribution_figure(values, name, label, *, integer, empty=None) -> FigureImage:
+    """A distribution across FOVs (600 × 340 PNG): a histogram of the bins of :func:`fov_bins`, the median as a
+    vertical line with its value in the axis label. ``empty`` is the axis label's text when no FOV has a value."""
+    width, height = SMALL_PLOT
+    figure = _figure(width, height)
+    axes = figure.add_axes((64 / width, 52 / height, (width - 80) / width, (height - 80) / height))
+    tile = {"name": name, "n": len(values)}
+    if len(values):
+        edges = fov_bins(values, integer)
+        counts, _ = np.histogram(np.asarray(values, dtype=np.float64), bins=edges)
+        centre = median(values)
+        axes.stairs(counts, edges, fill=True, color="#4c72b0", edgecolor="white")
+        axes.axvline(centre, color="#c44e52", linewidth=1.2)
+        text = f"{label} · median {centre:.4g}"
+        tile.update(edges=edges, counts=[int(c) for c in counts], median=centre)
+    else:
+        text = f"{label} · {empty or 'no FOV has a value'}"
+    axes.set_xlabel(text, fontsize=8)
+    axes.set_ylabel("FOVs", fontsize=8)
+    axes.tick_params(labelsize=7)
+    tile["xlabel"] = text
+    return FigureImage(_save(figure, "png"), "png", width, height, None, [tile])
 
 
 def fused_range(values):

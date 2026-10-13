@@ -1505,6 +1505,14 @@ run.json"):
 * **`Dataset.load_codebook` and `load_direct_panel` keep the file's path and SHA-256**,
   which `run.json` records as `codebook`.
 
+### The processing report
+
+* **New: the processing report.** `Dataset.report(sample, fov_ids, …)` writes
+  `<output_root>/report/<sample>/` (`report.html`, `report.json`, `tables/`) and returns a
+  `ReportRecord` ({doc}`report-contract`, "The sample entry"); `starfinder.report.read_report`
+  reads a report back. The entry reads the saved records only and calls no processing stage.
+  Nothing existing changes.
+
 ## Intentional behavior changes — not mechanical equivalence
 
 | Area | Change and consequence |

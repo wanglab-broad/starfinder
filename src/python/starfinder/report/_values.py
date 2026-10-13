@@ -1,10 +1,9 @@
 """The values the report computes from its records (docs/report-algorithms.md, "Values of the tables").
 
-A value is a number or string, :data:`NA` (it does not exist in its case), an
-:class:`Unavailable` (null, named by one row of ``unavailable.csv``) or, while the staged
-delivery lasts, :data:`PENDING`. Each definition here is a function of record fields or of
-cells of the report's tables, so that the tests compute the same definitions on hand-written
-tables; :mod:`._collect` applies them to a sample's records.
+A value is a number or string, :data:`NA` (it does not exist in its case) or an
+:class:`Unavailable` (null, named by one row of ``unavailable.csv``). Each definition here is a
+function of record fields or of cells of the report's tables, so that the tests compute the
+same definitions on hand-written tables; :mod:`._collect` applies them to a sample's records.
 """
 from __future__ import annotations
 
@@ -35,8 +34,6 @@ class _Marker:
 
 #: A null value that does not exist in its case; no row names it.
 NA = _Marker("NA")
-#: A null value computed from available inputs by a definition this collection does not make.
-PENDING = _Marker("PENDING")
 
 #: The seed of the draw of the main example ("The example FOVs"); part of the algorithm.
 EXAMPLE_SEED = 0
@@ -56,13 +53,8 @@ def first(*values):
     return min(found, key=lambda v: _rank(v.reason)) if found else None
 
 
-def derived(*inputs):
-    """A value computed from ``inputs``: the first unavailable input, else :data:`PENDING`."""
-    return first(*inputs) or PENDING
-
-
 def is_value(value) -> bool:
-    """A cell that holds a value (not NA, Unavailable or PENDING)."""
+    """A cell that holds a value (not NA or Unavailable)."""
     return value is not None and not isinstance(value, (Unavailable, _Marker))
 
 
@@ -85,8 +77,6 @@ def over_fovs(cells, statistic, empty="no FOV"):
     values = [v for v in cells if is_value(v)]
     if values:
         return statistic(values)
-    if any(v is PENDING for v in cells):
-        return PENDING
     return first(*cells) or Unavailable("undefined", empty)
 
 
@@ -98,8 +88,6 @@ def fraction(count, total, detail):
     missing = first(count, total)
     if missing is not None:
         return missing
-    if count is PENDING or total is PENDING:
-        return PENDING
     if total == 0:
         return Unavailable("undefined", detail)
     return count / total
@@ -134,8 +122,6 @@ def density(cells, area):
     missing = first(cells, area)
     if missing is not None:
         return missing
-    if cells is PENDING or area is PENDING:
-        return PENDING
     if area == 0:
         return Unavailable("undefined", "the area")
     return cells / area * 1e6

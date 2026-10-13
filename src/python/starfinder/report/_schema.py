@@ -8,8 +8,8 @@ never null of the plain one (``int64``, ``bool``); strings are ``string`` and fl
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
-from typing import NamedTuple
 
 #: The reasons a value or a part can be unavailable, in the order that decides which one a value gets (P1).
 UNAVAILABLE_REASONS = (
@@ -115,46 +115,9 @@ RULE_UNITS = {"shift_residual": "voxels", "alignment_score": "dimensionless", "c
               "matched_fraction": "fraction", "spots_near_zero": "reads"}
 
 
-class Pending(NamedTuple):
-    """A value of the report that a later issue of the §2.11 implementation computes (staged delivery).
-
-    ``where`` is a table (``fovs``, ``registration``, …), ``report.json`` or ``report.html``; ``name`` the column
-    of the table or the key of ``report.json`` (``summary.<key>``, ``rules.<rule>.<key>``, a top-level key), or
-    None for a whole table or file that is not written yet; for ``where`` ``unavailable`` it is the part whose
-    rows a later issue writes. ``rows`` restricts a table entry to the rows of these row keys (None: every row).
-    ``inputs`` are what the value is computed from: a column of the same row (non-null), ``export`` (the export
-    exists and its part ``assemble`` was written), ``cells`` (the sample has cells: an assignment and an export
-    that is not ``molecules_only``) and ``spots_total`` (the ``count`` of ``readout_totals`` level ``spots``
-    non-null).
-
-    A pending value is null with no row of ``unavailable.csv`` only while every input is available; with an
-    input unavailable it is unavailable with that input's reason, as every other value.
-    """
-
-    where: str
-    name: str | None
-    issue: str
-    inputs: tuple[str, ...] = ()
-    rows: tuple[str, ...] | None = None
-
-
-#: The closed list of the values this staged delivery leaves to the issue that computes them (W-456: the page's
-#: bytes and what the page adds to ``report.json``). Each later issue removes the entries it computes when it fills
-#: them; the list is empty when the report is complete. A pending value is a third state of a cell only until then,
-#: never a state of the finished report.
-PENDING_VALUES = (
-    *(Pending("unavailable", part, "W-456") for part in ("summary.identity", "readout.distributions",
-                                                          "readout.table")),
-    Pending("report.html", None, "W-456"),
-)
-
-
-def pending_value(where, name, key=None):
-    """The entry of :data:`PENDING_VALUES` for a value (a table column with its row key, or a report.json key)."""
-    for entry in PENDING_VALUES:
-        if entry.where == where and entry.name == name and (entry.rows is None or key in entry.rows):
-            return entry
-    return None
+#: The values the staged delivery of the report (W-452 to W-456) left to a later issue: none, since the report is
+#: complete. Every null cell is not applicable by its column's rule or named by one row of ``unavailable.csv``.
+PENDING_VALUES = ()
 
 
 #: The kinds of a file of ``report.json`` ``inputs``.
@@ -169,6 +132,14 @@ def row_key(table: str, row) -> str:
     A null key value is written empty (``scope=sample;fov_id=;index=0``).
     """
     return ";".join(f"{name}={'' if row.get(name) is None else row[name]}" for name in TABLE_KEYS[table])
+
+
+@dataclass(frozen=True)
+class ReportRecord:
+    """The result of ``Dataset.report``: the report folder and the content of its ``report.json``."""
+
+    path: Path
+    record: dict
 
 
 def read_report(folder) -> dict:

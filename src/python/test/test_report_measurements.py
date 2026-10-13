@@ -47,7 +47,8 @@ def anndata_or_skip():
 
 def collect(case, **changes):
     folder, record = case.collect(**changes)
-    tables = {Path(e["path"]).stem: _read_table(Path(folder) / e["path"], e["dtypes"]) for e in record["files"]}
+    tables = {Path(e["path"]).stem: _read_table(Path(folder) / e["path"], e["dtypes"]) for e in record["files"]
+              if "dtypes" in e}
     return folder, record, tables
 
 
@@ -452,7 +453,8 @@ def pixel_range(low, high, origin, spacing, size):
 
 def chain_figures(chain, config):
     folder, record = chain.collect(config=config)
-    tables = {Path(e["path"]).stem: _read_table(Path(folder) / e["path"], e["dtypes"]) for e in record["files"]}
+    tables = {Path(e["path"]).stem: _read_table(Path(folder) / e["path"], e["dtypes"]) for e in record["files"]
+              if "dtypes" in e}
     drawn = report_measurements(chain.root, chain.sample, chain.fov_ids, dataset_id=chain.dataset_id,
                                 sample_id=chain.sample, config=config)
     return record, tables, drawn

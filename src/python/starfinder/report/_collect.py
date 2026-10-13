@@ -11,15 +11,14 @@ summary keys; the example FOVs), the problematic FOVs (``_rules``), the replay o
 main example (``_replay``: ``intensity.csv``, ``report.json`` ``replay``), the
 segmentation previews of the example FOVs (``_previews``), the sample measurements
 (``_measurements``: the reads assigned to cells, ``cells.csv``, ``mecr.csv``,
-``reads_along_z.csv`` and the summary keys of the sample's cells), ``unavailable.csv`` and
-``report.json`` into a staging folder that replaces the report folder when it is complete
-(RP1). :func:`report_examples` and :func:`report_measurements` make the static figures
-without writing anything.
+``reads_along_z.csv`` and the summary keys of the sample's cells), ``unavailable.csv``, the
+page ``report.html`` (``_page``) and ``report.json`` into a staging folder that replaces the
+report folder when it is complete (RP1). :func:`report_sample` is the entry
+``Dataset.report``; :func:`report_examples` and :func:`report_measurements` make the static
+figures without writing anything.
 
 A cell is a value, not applicable (null, no row of ``unavailable.csv``) or unavailable
-(null, one row with its reason). In this staged delivery a value of
-``_schema.PENDING_VALUES`` (what the page adds, W-456) is the third state of a pending
-value; a pending value outside that closed list is an error of the collection.
+(null, one row with its reason).
 """
 from __future__ import annotations
 
@@ -42,12 +41,13 @@ from ._previews import _Previews
 from ._replay import reference_round, replay_example, round_transform
 from ._rules import RuleInputs, evaluate_rules
 from ._schema import (FORMAT_VERSION, POPULATIONS, PROBLEM_RULES, READOUT_LEVELS, REPORT_FILE, REPORT_PARTS,
-                      REPORT_TABLES, RULE_UNITS, STAGE, SUMMARY_KEYS, TABLE_DIR, TABLE_DTYPES, pending_value, row_key)
-from ._values import (NA, PENDING, ROLES, Unavailable, _Marker, alignment_score, chain_shift, choose_examples,
+                      REPORT_TABLES, RULE_UNITS, STAGE, SUMMARY_KEYS, TABLE_DIR, TABLE_DTYPES, ReportRecord, row_key)
+from ._values import (NA, ROLES, Unavailable, _Marker, alignment_score, chain_shift, choose_examples,
                       density, first, fraction, is_value, median, over_fovs, owned_pixels, residuals,
                       run_seconds)
 
 RUN_RECORD = "run.json"
+PAGE_FILE = "report.html"
 _UNPLACED = ("missing", "failed")
 _WRITTEN = ("written", "reused")
 #: The tables this collection writes, in folder order; the others are written by the parts that make them.
@@ -938,6 +938,9 @@ class _Collection:
         rows.append(("files.input", none if not records else None if any("codebook" in r for r in records) else
                      Unavailable("not_recorded", "no run record holds codebook"), "entry=codebook"))
         rows.append(("files.input", self.p_missing if self.placement is None else None, "entry=positions"))
+        if not records:
+            # The distributions and the per-FOV table read the counts of the run records ("Parts, their inputs").
+            rows += [("readout.distributions", none, ""), ("readout.table", none, "")]
         rows.append(("files.configuration", none if not records else None if any(
             "workflow_config" in r for r in records) else Unavailable("not_recorded",
                                                                       "no run record holds workflow_config"),
@@ -1011,18 +1014,8 @@ class _Collection:
 
 # --- Tables ------------------------------------------------------------------------------------------------------
 
-def _check_pending(where, name, key=None):
-    """A pending value must be an entry of the closed list ``_schema.PENDING_VALUES``."""
-    if pending_value(where, name, key) is None:
-        raise RuntimeError(f"the collection left {where} {name} [{key}] pending, which PENDING_VALUES does not list")
-
-
 def _frame(name, rows):
     dtypes = TABLE_DTYPES[name]
-    for row in rows:
-        for column, value in row.items():
-            if value is PENDING:
-                _check_pending(name, column, row_key(name, _plain(row)))
     data = {c: pd.Series([None if isinstance(r[c], (Unavailable, _Marker)) else r[c] for r in rows],
                          dtype=object).astype(dtypes[c]) for c in dtypes}
     return pd.DataFrame(data, columns=list(dtypes))
@@ -1078,8 +1071,7 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
 
     The checks 1 to 7 of docs/report-contract.md ("Checks before anything is
     written") run first, in order, each raising with the folder unchanged. The
-    tables ``fovs``, ``registration``, ``steps``, ``readout_totals``,
-    ``population``, ``problematic_fovs`` and ``unavailable`` and the record are
+    tables of ``REPORT_TABLES``, the page ``report.html`` and the record are
     written into a staging folder beside the report folder, which then replaces
     the earlier report's own files (RP1).
 
@@ -1118,6 +1110,7 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
     from starfinder.dataset._run_record import _code, _environment
     from starfinder.io._checkpoint import _jsonable, _write_table, write_json
     from starfinder.sample_output._record import Timer
+    from ._page import budget_bytes, build_page, identity_facts
     timer = Timer()
     folder, collection = _prepare(output_root, sample, fov_ids, dataset_id=dataset_id, sample_id=sample_id,
                                   assignment=assignment, segmentation=segmentation, config=config,
@@ -1139,33 +1132,37 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
     example_rows = collection.examples_parts()
     tables["intensity"] = collection.intensity_rows()
     summary = collection.summary(fovs)
-    for key, value in summary.items():
-        if value is PENDING:
-            _check_pending("report.json", f"summary.{key}")
-    for rule, entry in rules.items():
-        for key, value in entry.items():
-            if value is PENDING:
-                _check_pending("report.json", f"rules.{rule}.{key}")
-    unavailable = _unavailable_rows(tables, collection.part_rows_for(registration) + example_rows + rule_rows
-                                    + measurements.part_rows(), summary)
+    identity, identity_rows = identity_facts(collection)
+    unavailable = _unavailable_rows(tables, identity_rows + collection.part_rows_for(registration) + example_rows
+                                    + rule_rows + measurements.part_rows(), summary)
     tables["unavailable"] = unavailable
     resolved_assignment, resolved_segmentation = collection.resolved_runs()
+    frames = {name: _frame(name, tables[name]) for name in COLLECTED_TABLES}
+    generated_at = _now()
+    config_json = _jsonable(config)
+    page, _ = build_page(collection, tables, frames, [_plain(row) for row in unavailable], _plain(summary), identity,
+                         generated_at, config_json, folder)
+    page_bytes = page.encode("utf-8")
+    marker_figures = len(config.markers) or 1
 
     folder.parent.mkdir(parents=True, exist_ok=True)
     staging = folder.parent / f".{folder.name}.{uuid.uuid4().hex}.tmp"
     try:
         (staging / TABLE_DIR).mkdir(parents=True)
-        files = []
+        (staging / PAGE_FILE).write_bytes(page_bytes)
+        # The page records its bytes and its budget (SB1); a page above the budget is still written.
+        files = [{"path": PAGE_FILE, "sha256": _sha256(page_bytes), "bytes": len(page_bytes),
+                  "budget_bytes": budget_bytes(len(fov_ids), marker_figures)}]
         for name in COLLECTED_TABLES:
-            file_name, dtypes = _write_table(_frame(name, tables[name]), staging / TABLE_DIR, name, "csv")
+            file_name, dtypes = _write_table(frames[name], staging / TABLE_DIR, name, "csv")
             data = (staging / TABLE_DIR / file_name).read_bytes()
             files.append({"path": f"{TABLE_DIR}/{file_name}", "sha256": _sha256(data), "bytes": len(data),
                           "dtypes": dtypes})
         record = {
             "format_version": FORMAT_VERSION, "stage": STAGE, "sample": sample, "dataset_id": dataset_id,
             "sample_id": sample_id, "fov_ids": fov_ids, "route": collection.route,
-            "assignment": resolved_assignment, "segmentation": resolved_segmentation, "generated_at": _now(),
-            "software": {"code": _code(), "environment": _environment()}, "config": _jsonable(config),
+            "assignment": resolved_assignment, "segmentation": resolved_segmentation, "generated_at": generated_at,
+            "software": {"code": _code(), "environment": _environment()}, "config": config_json,
             "stages": {"run_records": [f for f in fov_ids if records[f] is not None],
                        "placement": placement is not None, "export": export is not None,
                        "parts": dict((export or {}).get("parts") or {})},
@@ -1180,6 +1177,16 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
     finally:
         shutil.rmtree(staging, ignore_errors=True)
     return folder, json.loads((folder / REPORT_FILE).read_text(encoding="utf-8"))
+
+
+def report_sample(dataset, sample: str, fov_ids: Sequence[str], *, assignment: str | None = "default",
+                  segmentation: str | None = None, config: ReportConfig | None = None,
+                  output_dir=None) -> ReportRecord:
+    """``Dataset.report``: :func:`collect_report` on the dataset's output root and IDs, as a :class:`ReportRecord`."""
+    folder, record = collect_report(dataset.output_root, sample, fov_ids, dataset_id=dataset.dataset_id,
+                                    sample_id=dataset.sample_id, assignment=assignment, segmentation=segmentation,
+                                    config=config, output_dir=output_dir)
+    return ReportRecord(Path(folder), record)
 
 
 def report_examples(output_root, sample: str, fov_ids: Sequence[str], *, dataset_id: str, sample_id: str,
@@ -1236,8 +1243,10 @@ def _prepare(output_root, sample, fov_ids, *, dataset_id, sample_id, assignment,
     folder = Path(output_dir) if output_dir is not None else root / "report" / sample
     if check_folder:
         own_files(folder)
-    return folder, _Collection(inputs, root, sample, fov_ids, records, export, placement, assignment, segmentation,
-                               config)
+    collection = _Collection(inputs, root, sample, fov_ids, records, export, placement, assignment, segmentation,
+                             config)
+    collection.dataset_id = dataset_id
+    return folder, collection
 
 
 def _replace(folder: Path, staging: Path, paths):
