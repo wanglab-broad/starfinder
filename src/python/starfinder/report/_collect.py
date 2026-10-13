@@ -7,9 +7,11 @@ placement, the per-FOV assignment and segmentation records and the export), chec
 each file against the SHA-256 a record holds for it, and writes the tables that copy
 record fields or compute values from them (``_values``: the read fractions, the shifts
 and their residuals, the alignment score, the area a FOV owns and the cell density; the
-summary keys; the example FOVs), the problematic FOVs (``_rules``), ``unavailable.csv``
-and ``report.json`` into a staging folder that replaces the report folder when it is
-complete (RP1).
+summary keys; the example FOVs), the problematic FOVs (``_rules``), the replay of the
+main example (``_replay``: ``intensity.csv``, ``report.json`` ``replay``) and the
+segmentation previews of the example FOVs (``_previews``), ``unavailable.csv`` and
+``report.json`` into a staging folder that replaces the report folder when it is complete
+(RP1).
 
 A cell is a value, not applicable (null, no row of ``unavailable.csv``), unavailable
 (null, one row with its reason) or, in this staged delivery, pending: a computed value
@@ -33,6 +35,8 @@ from pathlib import Path
 import pandas as pd
 
 from ._config import ReportConfig, marker_genes
+from ._previews import _Previews
+from ._replay import reference_round, replay_example, round_transform
 from ._rules import RuleInputs, evaluate_rules
 from ._schema import (FORMAT_VERSION, POPULATIONS, PROBLEM_RULES, READOUT_LEVELS, REPORT_FILE, REPORT_PARTS,
                       REPORT_TABLES, RULE_UNITS, STAGE, SUMMARY_KEYS, TABLE_DIR, TABLE_DTYPES, pending_value, row_key)
@@ -45,7 +49,9 @@ _UNPLACED = ("missing", "failed")
 _WRITTEN = ("written", "reused")
 #: The tables this collection writes, in folder order; the others are written by the parts that make them.
 COLLECTED_TABLES = ("fovs", "registration", "steps", "readout_totals", "population", "problematic_fovs",
-                    "unavailable")
+                    "intensity", "unavailable")
+#: The parts the replay of the main example makes (docs/report-contract.md, "The replay").
+REPLAY_PARTS = ("preprocessing.example", "preprocessing.intensity", "registration.example")
 #: The parts of the columns of the collected tables (docs/report-contract.md, "Parts, their inputs and their reasons").
 COLUMN_PARTS = {
     "fovs": {**{c: "workflow.fov_status" for c in ("example", "status", "failed_step", "failed_round", "started_at",
@@ -468,6 +474,7 @@ class _Collection:
                 row[column] = fraction(row[level], row["spots"], "spots")
             row.update(self._export_columns(fov, row))
             rows.append({c: row[c] for c in TABLE_DTYPES["fovs"]})
+        self.fovs = rows
         self.examples = self._choose_examples(rows)
         if isinstance(self.examples, list):
             for row in rows:
@@ -638,15 +645,7 @@ class _Collection:
     def _transform(self, fov, record, name):
         """``(source, results, application_config)`` of a succeeded round's transforms (R1, else
         transforms.json), or Unavailable."""
-        results = _get(record, "transforms", name, "results")
-        if results:
-            return "run.json", results, _get(record, "transforms", name, "application_config")
-        saved = self._transforms_file(fov)
-        if saved is not None and saved.get("format_version") == 2 and _get(saved, "transforms", name):
-            return "transforms.json", saved["transforms"][name], _get(saved, "applications", name,
-                                                                       "application_config")
-        return Unavailable("not_recorded", f"neither {self._record_path(fov)} transforms.{name} nor "
-                                           f"checkpoints/{fov}/registered/transforms.json holds the round")
+        return round_transform(record, lambda: self._transforms_file(fov), fov, name)
 
     def registration_rows(self):
         rows = []
@@ -830,6 +829,63 @@ class _Collection:
                         "not_recorded", f"export.json assembly.counts.{column}.{population}")
             rows.append(row)
         return rows
+
+    # The examples: the replay of the main example and the segmentation previews ------------------------------
+
+    def replay_rounds(self, record):
+        """The rounds the replay rebuilds (RD1): the reference round and the first moving round in the order of
+        ``registration.csv``; without a registration, the first other round the run processed."""
+        reference = reference_round(record)
+        moving = self.moving_rounds()
+        if not moving:
+            moving = [r for r in (_get(record, "preprocessing", "rounds") or {}) if r != reference]
+        return [reference, moving[0] if moving else None]
+
+    def example_replay(self):
+        """The replay of the main example (None when there is none to replay) and the rows of ``unavailable.csv``
+        of what it lacks: the three parts it makes, a moving round it cannot replay (``preprocessing.intensity``),
+        the outputs of a moving round's ``post_registration`` entries when its transforms cannot be rebuilt (PR1),
+        and the Registration example (RE1)."""
+        if self.example_reason is not None:
+            return None, [(part, self.example_reason, "") for part in REPLAY_PARTS]
+        fov = next(e.fov_id for e in self.examples if e.role == "example_1")
+        key = f"fov_id={fov};role=example_1"
+        record = self.records[fov]
+        if record is None:
+            missing = Unavailable("no_run_record", self._record_path(fov))
+            return None, [(part, missing, key) for part in REPLAY_PARTS]
+        rounds = self.replay_rounds(record)
+        replay = replay_example(self.inputs, self.root, fov, record, rounds,
+                                lambda name: self._transform(fov, record, name))
+        if replay.missing is not None:
+            return replay, [(part, replay.missing, key) for part in REPLAY_PARTS]
+        rows = [("preprocessing.intensity", missing, f"{key};round={name}")
+                for name, missing in replay.round_missing.items()]
+        for name, replayed in replay.rounds.items():
+            if replayed.post_missing is not None:
+                rows += [(part, replayed.post_missing, f"{key};round={name};phase=post_registration")
+                         for part in ("preprocessing.example", "preprocessing.intensity")]
+        moving = rounds[1]
+        if moving is None:
+            registration = Unavailable("not_configured", "the run has no moving round")
+        else:
+            registration = replay.round_missing.get(moving) or replay.rounds[moving].transform_missing
+        if registration is not None:
+            rows.append(("registration.example", registration, key))
+        return replay, rows
+
+    def examples_parts(self):
+        """The replay, the segmentation previews and the rows of the parts they make."""
+        self.replay, rows = self.example_replay()
+        self.previews, preview_rows = _Previews(self).build()
+        return rows + preview_rows
+
+    def intensity_rows(self):
+        """``intensity.csv``: the rows of the replayed rounds, the reference round first."""
+        if self.replay is None or self.replay.missing is not None:
+            return []
+        names = TABLE_DTYPES["intensity"]
+        return [dict(zip(names, row)) for replayed in self.replay.rounds.values() for row in replayed.rows]
 
     # Parts with no cell ------------------------------------------------------------------------------------
 
@@ -1047,29 +1103,11 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
     from starfinder.io._checkpoint import _jsonable, _write_table, write_json
     from starfinder.sample_output._record import Timer
     timer = Timer()
-    root = Path(output_root)
-    fov_ids, config = _check_arguments(sample, fov_ids, config)
-    if assignment is not None and (not isinstance(assignment, str) or not assignment):
-        raise ValueError(f"assignment must be a saved assignment name or None; got {assignment!r}")
-    if segmentation is not None and (not isinstance(segmentation, str) or not segmentation):
-        raise ValueError(f"segmentation must be a run name or None; got {segmentation!r}")
-    inputs = _Inputs(root)
-    export_dir, stitching_dir = root / "export" / sample, root / "stitching" / sample
-    if not any((root / "checkpoints" / f / RUN_RECORD).is_file() for f in fov_ids) and \
-            not (export_dir / "export.json").is_file():
-        raise FileNotFoundError(f"nothing to report for sample {sample!r}: no FOV of the list has a run record "
-                                f"({root / 'checkpoints'}/<fov>/{RUN_RECORD}) and there is no "
-                                f"{export_dir / 'export.json'}")
-    records = _check_run_records(inputs, root, fov_ids, dataset_id, sample_id)
-    export = _check_export(inputs, export_dir, sample, fov_ids, assignment)
-    placement = _check_placement(inputs, stitching_dir, fov_ids)
-    _check_markers(inputs, config, records, export, export_dir)
-    _check_examples(config, fov_ids)
-    folder = Path(output_dir) if output_dir is not None else root / "report" / sample
-    own_files(folder)
-
-    collection = _Collection(inputs, root, sample, fov_ids, records, export, placement, assignment, segmentation,
-                             config)
+    folder, collection = _prepare(output_root, sample, fov_ids, dataset_id=dataset_id, sample_id=sample_id,
+                                  assignment=assignment, segmentation=segmentation, config=config,
+                                  output_dir=output_dir)
+    inputs, records, placement, export = collection.inputs, collection.records, collection.placement, collection.export
+    fov_ids, config = collection.fov_ids, collection.config
     fovs = collection.fovs_rows()
     registration = collection.registration_rows()
     tables = {"fovs": fovs, "registration": registration, "steps": collection.steps_rows(registration),
@@ -1077,6 +1115,8 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
               "problematic_fovs": []}
     tables["problematic_fovs"], rules, rule_rows = collection.rules(
         fovs, registration, None if registration else collection.no_rounds_reason())
+    example_rows = collection.examples_parts()
+    tables["intensity"] = collection.intensity_rows()
     summary = collection.summary(fovs)
     for key, value in summary.items():
         if value is PENDING:
@@ -1085,7 +1125,8 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
         for key, value in entry.items():
             if value is PENDING:
                 _check_pending("report.json", f"rules.{rule}.{key}")
-    unavailable = _unavailable_rows(tables, collection.part_rows_for(registration) + rule_rows, summary)
+    unavailable = _unavailable_rows(tables, collection.part_rows_for(registration) + example_rows + rule_rows,
+                                    summary)
     tables["unavailable"] = unavailable
     resolved_assignment, resolved_segmentation = collection.resolved_runs()
 
@@ -1110,6 +1151,7 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
             "inputs": list(inputs.entries.values()), "files": files,
             "unavailable": [_plain(row) for row in unavailable],
             "examples": collection.examples_record(),
+            "replay": None if collection.replay is None else collection.replay.record,
             "rules": {rule: _plain(entry) for rule, entry in rules.items()}, "summary": _plain(summary),
             **timer.record()}
         write_json(record, staging / REPORT_FILE)
@@ -1117,6 +1159,50 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
     finally:
         shutil.rmtree(staging, ignore_errors=True)
     return folder, json.loads((folder / REPORT_FILE).read_text(encoding="utf-8"))
+
+
+def report_examples(output_root, sample: str, fov_ids: Sequence[str], *, dataset_id: str, sample_id: str,
+                    assignment: str | None = "default", segmentation: str | None = None,
+                    config: ReportConfig | None = None):
+    """The images of the examples as :func:`collect_report` makes them, without writing anything: the replay of
+    the main example (:class:`._replay.Replay`, or None when there is none to replay) and the segmentation preview
+    of each example role (:class:`._previews.Preview`, or :class:`._values.Unavailable`). The checks before
+    anything is written apply, as for the report."""
+    _, collection = _prepare(output_root, sample, fov_ids, dataset_id=dataset_id, sample_id=sample_id,
+                             assignment=assignment, segmentation=segmentation, config=config, output_dir=None,
+                             check_folder=False)
+    collection.fovs_rows()
+    collection.registration_rows()
+    collection.examples_parts()
+    return collection.replay, collection.previews
+
+
+def _prepare(output_root, sample, fov_ids, *, dataset_id, sample_id, assignment, segmentation, config, output_dir,
+             check_folder=True):
+    """The checks 1 to 7 before anything is written, in order; the report folder and the collection."""
+    root = Path(output_root)
+    fov_ids, config = _check_arguments(sample, fov_ids, config)
+    if assignment is not None and (not isinstance(assignment, str) or not assignment):
+        raise ValueError(f"assignment must be a saved assignment name or None; got {assignment!r}")
+    if segmentation is not None and (not isinstance(segmentation, str) or not segmentation):
+        raise ValueError(f"segmentation must be a run name or None; got {segmentation!r}")
+    inputs = _Inputs(root)
+    export_dir, stitching_dir = root / "export" / sample, root / "stitching" / sample
+    if not any((root / "checkpoints" / f / RUN_RECORD).is_file() for f in fov_ids) and \
+            not (export_dir / "export.json").is_file():
+        raise FileNotFoundError(f"nothing to report for sample {sample!r}: no FOV of the list has a run record "
+                                f"({root / 'checkpoints'}/<fov>/{RUN_RECORD}) and there is no "
+                                f"{export_dir / 'export.json'}")
+    records = _check_run_records(inputs, root, fov_ids, dataset_id, sample_id)
+    export = _check_export(inputs, export_dir, sample, fov_ids, assignment)
+    placement = _check_placement(inputs, stitching_dir, fov_ids)
+    _check_markers(inputs, config, records, export, export_dir)
+    _check_examples(config, fov_ids)
+    folder = Path(output_dir) if output_dir is not None else root / "report" / sample
+    if check_folder:
+        own_files(folder)
+    return folder, _Collection(inputs, root, sample, fov_ids, records, export, placement, assignment, segmentation,
+                               config)
 
 
 def _replace(folder: Path, staging: Path, paths):

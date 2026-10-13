@@ -39,7 +39,8 @@ from .report_fixtures import (CELLS_RETAINED, CHANNELS, COUNTS, ENDED, FOVS, MOV
 
 pytestmark = [pytest.mark.report, pytest.mark.validation]
 
-COLLECTED = ("fovs", "registration", "steps", "readout_totals", "population", "problematic_fovs", "unavailable")
+COLLECTED = ("fovs", "registration", "steps", "readout_totals", "population", "problematic_fovs", "intensity",
+             "unavailable")
 EXPORT_COLUMNS = ("n_cells", "n_cells_retained", "n_molecules", "n_molecules_retained", "reads_in_cells",
                   "reads_in_cells_fraction", "owned_area_um2", "cell_density_per_mm2")
 PLACEMENT_COLUMNS = ("placement_status", "correction_z", "correction_y", "correction_x", "footprint_y0",
@@ -109,6 +110,15 @@ PART_REASONS = {
                                "fov_not_placed", "input_missing", "input_changed"},
     "assembly.placement": {"no_placement", "fov_not_placed", "input_missing", "input_changed"},
     "assembly.accounting": {"no_export", "part_not_written", "no_segmentation"},
+    # The parts of the replay and of the segmentation previews (W-454), with the reasons of the example choice.
+    "preprocessing.example": {"no_run_record", "run_not_finished", "step_failed", "not_configured", "not_recorded",
+                              "input_missing", "input_changed", "field_not_saved", "replay_differs"},
+    "preprocessing.intensity": {"no_run_record", "run_not_finished", "step_failed", "not_configured", "not_recorded",
+                                "input_missing", "input_changed", "field_not_saved", "replay_differs"},
+    "registration.example": {"no_run_record", "run_not_finished", "step_failed", "not_configured", "not_recorded",
+                             "input_missing", "input_changed", "field_not_saved", "replay_differs"},
+    "assembly.examples": {"no_run_record", "run_not_finished", "step_failed", "not_configured", "no_export",
+                          "part_not_written", "no_segmentation", "input_missing", "input_changed"},
     "files.input": {"no_run_record", "not_recorded", "no_placement"},
     "files.configuration": {"no_run_record", "not_recorded"},
     # "rule:<rule>": a rule not evaluated for the whole sample (summary.problematic_fovs).
@@ -147,14 +157,17 @@ CONTRACT_COLUMNS = {
                          ("round", "string", False), ("axis", "string", False), ("measured", "float64", False),
                          ("sample_median", "float64", False), ("limit", "float64", False),
                          ("unit", "string", False), ("reason", "string", True)],
+    "intensity": [("round", "string", True), ("step_index", "int64", True), ("phase", "string", True),
+                  ("step", "string", True), ("channel", "string", True), ("bin", "int64", True),
+                  ("bin_low", "float64", True), ("bin_high", "float64", True), ("count", "int64", True)],
     "unavailable": [("part", "string", True), ("table", "string", False), ("column", "string", False),
                     ("row_key", "string", True), ("reason", "string", True), ("detail", "string", False)],
 }
 KEYS = {"fovs": ["fov_id"], "registration": ["fov_id", "round"], "steps": ["scope", "fov_id", "index"],
         "readout_totals": ["level"], "population": ["population"],
-        "problematic_fovs": ["fov_id", "rule", "round", "axis"], "unavailable": ["part", "table", "column", "row_key"]}
-# "report.json": every key, and the keys of summary; examples and replay are absent until W-453 and W-454 write
-# them (PENDING_VALUES).
+        "problematic_fovs": ["fov_id", "rule", "round", "axis"], "intensity": ["round", "step_index", "channel", "bin"],
+        "unavailable": ["part", "table", "column", "row_key"]}
+# "report.json": every key, and the keys of summary.
 CONTRACT_RECORD_KEYS = ["format_version", "stage", "sample", "dataset_id", "sample_id", "fov_ids", "route",
                         "assignment", "segmentation", "generated_at", "software", "config", "stages", "inputs",
                         "files", "unavailable", "examples", "replay", "rules", "summary", "wall_s", "cpu_s",
@@ -277,6 +290,12 @@ EXAMPLES = {"F1": "example_1", "F2": "example_3", "F3": "example_2", "F4": None}
 FRACTIONS = {"correct_form_fraction": "endpoint_valid", "matched_fraction": "assigned",
              "merged_fraction": "merged_reads", "passed_filter_fraction": "accepted"}
 READS_NO_CELL_RULE = ("rule:reads_no_cell", None, None, "", "no_export")
+# The replayed examples of the main example F1 (the fixture writes no image) and the segmentation previews of the three
+# roles (no assignment folder), W-454.
+REPLAY_ROWS = [(part, None, None, "fov_id=F1;role=example_1", "input_missing")
+               for part in ("preprocessing.example", "preprocessing.intensity", "registration.example")]
+PREVIEW_ROWS = [("assembly.examples", None, None, f"fov_id={f};role={r}", "input_missing")
+                for f, r in (("F1", "example_1"), ("F3", "example_2"), ("F2", "example_3"))]
 # The default configuration sets no alignment-score limit: the rule is not evaluated (PR1).
 ALIGNMENT_RULE = ("rule:alignment_score", None, None, "", "not_configured")
 
@@ -310,7 +329,8 @@ def test_rc1_normal_sample(records):
         {"fov_id": "F4", "section": "Registration", "rule": "shift_residual", "round": "round3", "axis": "x",
          "measured": 8.0, "sample_median": 0.0, "limit": 5.0, "unit": "voxels",
          "reason": "shift residual above the limit (x, round3)"}]))
-    assert keyed(tables["unavailable"]) == ordered([STITCH_TIME, ALIGNMENT_RULE, READS_NO_CELL_RULE] + no_export_rows())
+    assert keyed(tables["unavailable"]) == ordered([STITCH_TIME, ALIGNMENT_RULE, READS_NO_CELL_RULE] + REPLAY_ROWS
+                                                   + PREVIEW_ROWS + no_export_rows())
     assert all(isinstance(d, str) and d for d in tables["unavailable"]["detail"])
 
 
@@ -699,8 +719,13 @@ def test_inputs_export_table(tmp_path, inputs_base, reason, edit):
     # The footprints and centres read the export's fovs table first (the placement status, the placement).
     expected += [("assembly.placement", "fovs", c, f"fov_id={f}", reason) for c in PLACEMENT_COLUMNS[4:]
                  for f in FOVS]
+    # Without the cells the example choice falls back to the read counts, so the previews' roles move (W-454).
+    expected += [("assembly.examples", None, None, k, "input_missing")
+                 for k in ("fov_id=F3;role=example_2", "fov_id=F2;role=example_3")]
     assert [r for r in rows if r not in base_rows] == expected
-    assert [r for r in base_rows if r not in rows] == []
+    assert [r for r in base_rows if r not in rows] == [
+        ("assembly.examples", None, None, k, "input_missing") for k in ("fov_id=F2;role=example_2",
+                                                                         "fov_id=F4;role=example_3")]
     assert tables["fovs"][["n_cells", "n_cells_retained", "n_molecules", "n_molecules_retained",
                            *PLACEMENT_COLUMNS[4:]]].isna().all().all()
     same(tables["fovs"][list(PLACEMENT_COLUMNS[:4])],
@@ -717,14 +742,12 @@ def test_inputs_export_table(tmp_path, inputs_base, reason, edit):
 
 
 @pytest.mark.parametrize("edit", [
-    lambda c: change_byte(raw_path(c.root, "round1", "F1", CHANNELS[0])),
-    lambda c: raw_path(c.root, "round1", "F1", CHANNELS[0]).unlink(),
     lambda c: change_byte(c.checkpoint("F1") / "assignment/default/cells.csv"),
     lambda c: (c.checkpoint("F1") / "assignment/default/cells.csv").unlink()],
-    ids=["raw_changed", "raw_missing", "assignment_table_changed", "assignment_table_missing"])
+    ids=["assignment_table_changed", "assignment_table_missing"])
 def test_inputs_files_no_collected_part_reads(tmp_path, inputs_base, edit):
-    """A run record's raw input and an assignment folder's table: no collected part reads them (the replay and the
-    segmentation examples do), so the tables, the rows and the inputs are those of the unchanged records."""
+    """An assignment folder's table: no collected part reads it (the segmentation examples read the label files),
+    so the tables, the rows and the inputs are those of the unchanged records."""
     _, _, base_record, base_tables = inputs_base
     _, _, record, tables = inputs_case(tmp_path / "root", edit)
     assert keyed(tables["unavailable"]) == keyed(base_tables["unavailable"])
@@ -732,6 +755,38 @@ def test_inputs_files_no_collected_part_reads(tmp_path, inputs_base, edit):
         same(tables[table], base_tables[table])
     assert [(e["path"], e["kind"]) for e in record["inputs"]] == [(e["path"], e["kind"])
                                                                  for e in base_record["inputs"]]
+
+
+@pytest.mark.parametrize("reason,edit", [
+    ("input_changed", lambda c: change_byte(raw_path(c.root, "round1", "F1", CHANNELS[0]))),
+    ("input_missing", lambda c: raw_path(c.root, "round1", "F1", CHANNELS[0]).unlink())],
+    ids=["raw_changed", "raw_missing"])
+def test_inputs_raw_input_of_the_replay(tmp_path, inputs_base, reason, edit):
+    """A raw input of the main example F1, which the replay reads (W-454): the three parts of the replay take the
+    file's reason, and nothing else changes. The fixture's raw inputs are not images, so the replay of the unchanged
+    files is ``replay_differs`` (a recorded step that cannot be rerun on the recorded input)."""
+    _, _, base_record, base_tables = inputs_base
+    case, _, record, tables = inputs_case(tmp_path / "root", edit)
+    base_rows, rows = keyed(base_tables["unavailable"]), keyed(tables["unavailable"])
+    replay = [(part, None, None, "fov_id=F1;role=example_1")
+              for part in ("preprocessing.example", "preprocessing.intensity", "registration.example")]
+    assert [r for r in base_rows if r not in rows] == [(*key, "replay_differs") for key in replay]
+    assert [r for r in rows if r not in base_rows] == [(*key, reason) for key in replay]
+    for table in ("fovs", "registration", "steps", "readout_totals", "population", "intensity"):
+        same(tables[table], base_tables[table])
+    assert tables["intensity"].empty
+    path = raw_path(case.root, "round1", "F1", CHANNELS[0])
+    name = path.relative_to(case.root).as_posix()
+    assert {e["path"]: e for e in base_record["inputs"]}[name]["kind"] == "raw_image"
+    entry = {e["path"]: e for e in record["inputs"]}.get(name)
+    if reason == "input_changed":
+        data = path.read_bytes()
+        assert entry == {"path": name, "kind": "raw_image", "sha256": hashlib.sha256(data).hexdigest(),
+                         "bytes": len(data), "verified": True}
+    else:
+        assert entry is None
+    listed = {e["path"]: e for e in record["replay"]["inputs"]}[name]
+    assert (listed["verified"], listed["equal"]) == (True, False)
 
 
 ASSIGNMENT_RECORD = "checkpoints/F1/assignment/default/assignment.json"
@@ -752,10 +807,15 @@ def test_inputs_assignment_and_segmentation_records(tmp_path, inputs_base, path,
     edit = (lambda c: change_byte(c.root / path)) if reason == "input_changed" else (lambda c: (c.root / path).unlink())
     case, _, record, tables = inputs_case(tmp_path / "root", edit)
     base_rows, rows = keyed(base_tables["unavailable"]), keyed(tables["unavailable"])
-    assert [r for r in rows if r not in base_rows] == [("workflow.steps", None, None, "fov_id=F1", reason)]
+    # F1's segmentation preview takes the record's reason over the missing label file of the fixture (W-454).
+    preview = [("assembly.examples", None, None, "fov_id=F1;role=example_1", r) for r in ("input_missing", reason)]
+    changed = reason == "input_changed"
+    assert [r for r in rows if r not in base_rows] == [("workflow.steps", None, None, "fov_id=F1", reason)] + (
+        preview[1:] if changed else [])
     # F1's segment and assign rows are not written, and with them the rows of their times.
     assert [r for r in base_rows if r not in rows] == [
-        ("workflow.time", "steps", "seconds", f"scope=fov;fov_id=F1;index={i}", "not_recorded") for i in (17, 18)]
+        ("workflow.time", "steps", "seconds", f"scope=fov;fov_id=F1;index={i}", "not_recorded") for i in (17, 18)] + (
+        preview[:1] if changed else [])
     steps, base_steps = tables["steps"], base_tables["steps"]
     lane = base_steps["fov_id"].eq("F1").fillna(False).to_numpy(bool) & \
         base_steps["name"].isin(["segment", "assign"]).to_numpy(bool)
@@ -978,7 +1038,7 @@ def test_pg6_schema(tmp_path, maker, variant):
     text = (folder / "report.json").read_text()
     strict = json.loads(text, parse_constant=lambda c: pytest.fail(f"report.json holds {c}"))
     absent = {e.name for e in PENDING_VALUES if e.where == "report.json" and "." not in e.name}
-    assert absent == {"replay"}
+    assert absent == set()
     assert list(strict) == [k for k in CONTRACT_RECORD_KEYS if k not in absent]
     assert (strict["format_version"], strict["stage"]) == (1, "report")
     # The keys of every level the contract lists.

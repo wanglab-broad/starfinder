@@ -38,7 +38,7 @@ def completed(case, record, tables):
     assert list(frame.columns) == [c for c, _, _ in CONTRACT_COLUMNS["problematic_fovs"]]
     assert {c: str(d) for c, d in frame.dtypes.items()} == {c: pandas_dtype(k, n)
                                                            for c, k, n in CONTRACT_COLUMNS["problematic_fovs"]}
-    assert list(record) == [k for k in CONTRACT_RECORD_KEYS if k != "replay"]  # replay is W-454's
+    assert list(record) == CONTRACT_RECORD_KEYS
     assert list(record["examples"]) == ["example_1", "example_2", "example_3"]
     for entry in record["examples"].values():
         assert entry is None or set(entry) <= {"fov_id", "chosen_by", "rule", "value", "seed", "near_median",
