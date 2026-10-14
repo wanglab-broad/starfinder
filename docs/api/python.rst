@@ -28,6 +28,7 @@ Modules (alphabetical)
    io
    preprocessing
    registration
+   report
    sample_output
    segmentation
    spot_finding

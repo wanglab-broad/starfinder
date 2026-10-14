@@ -562,6 +562,9 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
     candidates need spot_finding.rounds, and the barcode keys
     load_codebook.split_index and encoding and reads_filtration.end_base,
     split_index, n_barcode_segments and exclude_invalid_endpoints raise.
+    The Python-only checkpoints key ({stages: [...]}) is checked here and read
+    by the rule's runner (_rule_checkpoints); the top-level config_path is kept
+    on the Dataset, whose run.json records it as workflow_config.
     Direct Python callers construct Dataset/PipelineConfig (no legacy aliases).
     """
     if rule not in _RULES:
@@ -575,8 +578,12 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
     _known(params, ('streaming', 'snr_threshold', 'load_codebook', 'load_raw_images', 'enhance_contrast',
         'hist_equalize', 'morph_recon', 'tophat', 'preprocessing', 'registration', 'global_registration', 'local_registration',
         'spot_finding', 'reads_extraction', 'reads_filtration', 'decoding', 'scoring', 'deduplication',
-        'create_subtiles', 'device'),
+        'create_subtiles', 'device', 'checkpoints'),
         'Python workflow parameter')
+    _rule_checkpoints(config, rule)
+    if config.get('config_path') is not None:
+        # run.json records the configuration file a rule ran with (workflow_config).
+        dataset._workflow_config = Path(config['config_path']).absolute()
     legacy = [key for key in _LEGACY_PREPROCESSING if key in params]
     if 'preprocessing' in params and legacy:
         raise ValueError(f'preprocessing is mutually exclusive with the legacy keys {legacy}')
@@ -660,8 +667,28 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
         encoding=encoding, layout=layout)
 
 
+def _rule_checkpoints(config, rule):
+    """The CheckpointConfig of a processing rule: run.json alone, or the stages of rules.<rule>.parameters.checkpoints.
+
+    The Python-only key is a mapping with the one key stages (absent or null:
+    {stages: []}). overwrite is on, so a rerun of the rule replaces its record;
+    the directory is <output_root>/checkpoints and the inputs are hashed.
+    """
+    from .config import CheckpointConfig
+    context = f'rules.{rule}.parameters.checkpoints'
+    values = _rule_parameters(config, rule).get('checkpoints')
+    if values is None:
+        values = {}
+    else:
+        _python_only(config, [context])
+        if not isinstance(values, dict):
+            raise TypeError(f'{context} must be a mapping')
+        _known(values, ('stages',), context)
+    return CheckpointConfig(stages=_tuples(values.get('stages', [])), overwrite=True)
+
+
 def _run_workflow(snakemake, rule):
-    """Thin common runner used by the five Snakemake script adapters."""
+    """Thin common runner used by the five Snakemake script adapters; each run writes the FOV's run.json."""
     from .fov import FOV
     adapted = from_workflow_config(snakemake.config, rule)
     dataset = adapted.dataset
@@ -673,7 +700,7 @@ def _run_workflow(snakemake, rule):
     elif adapted.pipeline.decoding:
         dataset.load_codebook(Path(snakemake.input[1]), encoding=adapted.encoding, layout=adapted.layout)
     fov = FOV.from_subtile(Path(snakemake.input[2]), dataset, fov_id) if resident else dataset.fov(fov_id)
-    fov.run(adapted.pipeline, execution=adapted.execution)
+    fov.run(adapted.pipeline, execution=adapted.execution, checkpoints=_rule_checkpoints(snakemake.config, rule))
     if resident:
         number = snakemake.wildcards.n_subtile
         fov.save_spots(path=Path(snakemake.input[2]).parent / f'subtile_goodSpots_{number}.csv')
@@ -2191,3 +2218,98 @@ def _write_ownership_figures(output_root, name, placement_dir, export_dir, input
         image = output_root / 'images' / 'DAPI' / f'{fov_id}.tif'
         _write_assignment_figures(result, image if image.is_file() else None, output_root / 'expr' / fov_id,
                                   ownership=fov_ownership(assembly, fov_id, placement=placement))
+
+
+# --- §2.11: the Python-only report block and the rules report_sample and report_dataset
+# --- (docs/report-contract.md, "Workflow configuration", option WR1).
+
+def _report_block(config):
+    """ReportConfig of the Python-only top-level report block (docs/report-contract.md, "Workflow configuration").
+
+    Its keys are the ReportConfig fields: markers a list of {name, genes}
+    (MarkerGroup), marker_pairs a list of gene pairs, limits the ReportLimits
+    fields with each rule a mapping of RuleLimit fields (k, floor, absolute; an
+    omitted one is null) and spots_near_zero. Lists become tuples; an empty or
+    null block is ReportConfig(). An unknown key raises ValueError naming it;
+    the block needs backend: python.
+    """
+    from starfinder.report import MarkerGroup, ReportConfig, ReportLimits, RuleLimit
+    _python_only(config, ['report'])
+    values = config['report']
+    if values is None:
+        values = {}
+    if not isinstance(values, dict):
+        raise TypeError('report must be a mapping')
+    _known(values, [f.name for f in fields(ReportConfig) if f.init], 'report')
+    options = {key: _tuples(value) for key, value in values.items() if key not in ('markers', 'limits')}
+    if values.get('markers') is not None:
+        if not isinstance(values['markers'], list):
+            raise TypeError('report.markers must be a list of {name, genes}')
+        options['markers'] = tuple(_typed(MarkerGroup, entry, 'report.markers') for entry in values['markers'])
+    if values.get('limits') is not None:
+        limits = values['limits']
+        if not isinstance(limits, dict):
+            raise TypeError('report.limits must be a mapping')
+        _known(limits, [f.name for f in fields(ReportLimits) if f.init], 'report.limits')
+        options['limits'] = ReportLimits(**{
+            key: (_typed(RuleLimit, value, f'report.limits.{key}') if key != 'spots_near_zero' else value)
+            for key, value in limits.items()})
+    return ReportConfig(**options)
+
+
+def _report_assignment(config):
+    """The assignment name report_sample reads per FOV: the assembly block's assignment; without an assembly block
+    no rule saves an assignment folder, so None (a sample without cells)."""
+    return _assembly_block(config).assignment if 'assembly' in config else None
+
+
+def _report_sample_files(config, output_root, fov_ids, sample='{sample}'):
+    """(inputs, output) of the report_sample rule for one sample (report.smk builds the rule from them).
+
+    The input is the last per-sample output the configuration has (WR1): the
+    sample's export/<sample>/export.json with an assembly block (export_sample,
+    which an export block configures); else stitching/<sample>/placement.json
+    with a stitching block; else the FOVs' log/sf_scores/{fovID}.txt. The
+    output is report/<sample>/report.json, the record that lists every other
+    file of the report's folder.
+    """
+    root = Path(output_root)
+    if 'assembly' in config:
+        inputs = [str(root / 'export' / sample / 'export.json')]
+    elif 'stitching' in config:
+        inputs = [str(root / 'stitching' / sample / 'placement.json')]
+    else:
+        inputs = [str(root / 'log' / 'sf_scores' / f'{fov}.txt') for fov in fov_ids]
+    return inputs, str(root / 'report' / sample / 'report.json')
+
+
+def _report_dataset_files(output_root, samples):
+    """(inputs, output) of the report_dataset rule: every sample's report/<sample>/report.json, and
+    report/samples.csv (beside it Dataset.compare_samples writes report/index.html)."""
+    root = Path(output_root) / 'report'
+    return [str(root / sample / 'report.json') for sample in samples], str(root / 'samples.csv')
+
+
+def _run_report_sample(snakemake):
+    """report_sample: Dataset.report of one sample into <OUTPUT>/report/{sample}/ (its report.json is output 0).
+
+    The FOVs are the sample's of the sample annotation
+    (<OUTPUT>/documents/sample-annotation.csv, as common.smk reads them), the
+    assignment name that of the assembly block (_report_assignment) and the
+    configuration the report block's (_report_block).
+    """
+    config, sample = snakemake.config, snakemake.wildcards.sample
+    report = _report_block(config)
+    dataset = _workflow_dataset(config)
+    fov_ids = _sample_fovs(_output_root(config) / 'documents' / 'sample-annotation.csv', config, sample)
+    dataset.report(sample, fov_ids, assignment=_report_assignment(config), config=report,
+                   output_dir=Path(snakemake.output[0]).parent)
+
+
+def _run_report_dataset(snakemake):
+    """report_dataset: Dataset.compare_samples of every sample whose report is an input, in the inputs' order, into
+    <OUTPUT>/report/ (index.html and samples.csv, output 0)."""
+    config = snakemake.config
+    _report_block(config)
+    samples = [Path(path).parent.name for path in snakemake.input]
+    _workflow_dataset(config).compare_samples(samples, report_root=Path(snakemake.output[0]).parent)

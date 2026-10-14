@@ -44,6 +44,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.barcode.Codebook`
 * :py:obj:`starfinder.barcode.CodebookAwareDecoderConfig`
 * :py:obj:`starfinder.sample_output.compare_routes`
+* :py:obj:`starfinder.report.ComparisonRecord`
 * :py:obj:`starfinder.assignment.COMPARTMENT_STATES`
 * :py:obj:`starfinder.segmentation.composite_nuclei_amplicon`
 * :py:obj:`starfinder.segmentation.CompositeConfig`
@@ -163,6 +164,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.evaluation.spot_finding.localization_errors`
 * :py:obj:`starfinder.spot_finding.LocalMaximaConfig`
 * :py:obj:`starfinder.sample_output.lookup_source`
+* :py:obj:`starfinder.report.MarkerGroup`
 * :py:obj:`starfinder.preprocessing.match_histogram`
 * :py:obj:`starfinder.assignment.match_nuclei`
 * :py:obj:`starfinder.evaluation.matching.match_points`
@@ -213,11 +215,13 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.preprocessing.PreprocessingSpec`
 * :py:obj:`starfinder.preprocessing.PreprocessingStep`
 * :py:obj:`starfinder.synthetic.PRESET_VERSION`
+* :py:obj:`starfinder.report.PROBLEM_RULES`
 * :py:obj:`starfinder.preprocessing.project_image`
 * :py:obj:`starfinder.preprocessing.ProjectionConfig`
 * :py:obj:`starfinder.evaluation.barcode.ranking_quality`
 * :py:obj:`starfinder.io.read_checkpoint`
 * :py:obj:`starfinder.preprocessing.read_histograms`
+* :py:obj:`starfinder.report.read_report`
 * :py:obj:`starfinder.preprocessing.read_supplied_statistics`
 * :py:obj:`starfinder.barcode.ReadDeduplicationResult`
 * :py:obj:`starfinder.barcode.ReadFilterConfig`
@@ -244,6 +248,11 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.registration.RegistrationSpec`
 * :py:obj:`starfinder.dataset.RegistrationStep`
 * :py:obj:`starfinder.benchmark.report_benchmark`
+* :py:obj:`starfinder.report.REPORT_PARTS`
+* :py:obj:`starfinder.report.REPORT_TABLES`
+* :py:obj:`starfinder.report.ReportConfig`
+* :py:obj:`starfinder.report.ReportLimits`
+* :py:obj:`starfinder.report.ReportRecord`
 * :py:obj:`starfinder.segmentation.rescale_input`
 * :py:obj:`starfinder.segmentation.resolve_model`
 * :py:obj:`starfinder.spot_finding.resolve_weights`
@@ -253,6 +262,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.dataset.RoundState`
 * :py:obj:`starfinder.sample_output.RouteComparison`
 * :py:obj:`starfinder.sample_output.ROUTES`
+* :py:obj:`starfinder.report.RuleLimit`
 * :py:obj:`starfinder.benchmark.run_benchmark`
 * :py:obj:`starfinder.preprocessing.run_step`
 * :py:obj:`starfinder.assembly.sample_anndata`
@@ -327,6 +337,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.registration.TransformChain`
 * :py:obj:`starfinder.registration.TranslationConfig`
 * :py:obj:`starfinder.registration.TranslationTransform`
+* :py:obj:`starfinder.report.UNAVAILABLE_REASONS`
 * :py:obj:`starfinder.registration.UnsupportedTransformOperationError`
 * :py:obj:`starfinder.registration.WarpConfig`
 * :py:obj:`starfinder.spot_finding.WeightsFile`

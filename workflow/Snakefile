@@ -40,6 +40,9 @@ else:
 include: "rules/reads-assignment.smk"
 if ASSEMBLY_BLOCK:
     include: "rules/export.smk"
+# The Python-only report block adds report_sample and report_dataset (report.smk).
+if REPORT_BLOCK:
+    include: "rules/report.smk"
 include: "rules/utils.smk"
 
 ### ==================== [ Dynamic Rule Order ] =========================

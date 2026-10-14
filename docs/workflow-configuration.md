@@ -32,6 +32,7 @@ An em dash in the default column means the schema defines no default.
 | `additional_round` | array of objects with string `round_name` and optional `channel_order` | No | —; supply `[]` when unused; accessed at parse time; `channel_order` lists the round's `wavelength`/`channel`/`name` entries, see [channels](#channels) |
 | `backend` | `python` or `matlab` | No | `matlab` |
 | `segmentation`, `assignment` | objects | No | —; Python only (`backend: python`): a segmentation plan and an assign call for the §2.13 rule, see [segmentation and assignment](#segmentation-and-assignment) |
+| `report` | object | No | —; Python only (`backend: python`): the `ReportConfig` of the processing report, and with it the rules `report_sample` and `report_dataset`, see [processing report](#processing-report) |
 | `readout_mode` | `multiplexed` or `direct` | No | `multiplexed`; Python only (`Dataset.readout_mode`), and `direct` only with `backend: python`; see [readout mode](#readout-mode) |
 | `matlab_launcher` | `path` or `broad` | No | `path`; how MATLAB rules start MATLAB, see [MATLAB launcher](#matlab-launcher) |
 | `matlab_single_thread` | boolean | No | `false`; `true` adds `-singleCompThread` to every MATLAB call |
@@ -174,6 +175,7 @@ is specifically for the Python batch/direct wrapper.
 | `decoding` | Python-only `method` (`wta`, `codebook_aware` or `direct`) and that config's fields | Python rules only: the decoder used with `reads_filtration.run`; default `WtaDecoderConfig(diagnostics=True)`, or `DirectAssignmentConfig()` with `readout_mode: direct`; the adapter sets `diagnostics` true and `allow_rescue` false unless given; a method that does not support the readout mode raises `TypeError` |
 | `scoring` | Python-only boolean `run` (default true) and `method` (`bgcorr_probability`) | Python rules only (the schema rejects it unless `backend: python`): the adapter adds the shared read-QC score (`ReadScoreConfig`, {doc}`readout-contract`, "Shared read-QC score") whenever it decodes; `run: false` turns it off. It ranks calls, sets no cutoff and never changes a call. Giving the block without `reads_filtration.run`, or scoring with `reads_extraction.background: false`, raises `ValueError` |
 | `deduplication` | Python-only boolean `run` (default false), `distance_voxels` (default 1.0, voxel index space) and `compatibility` (`same_sequence`) | Python rules only (the schema rejects it unless `backend: python`): with `run: true` the adapter sets `PipelineConfig.deduplication` ({doc}`readout-contract`, "Optional deduplication"), which marks cross-channel reads of one amplicon within the distance with the same WTA sequence as duplicates of one representative; the read filter then rejects them (`ReadFilterConfig.exclude_duplicates`, default true). Off without the block. It needs `reads_filtration.run` and raises `ValueError` with `readout_mode: direct` |
+| `checkpoints` | Python-only mapping with the one key `stages` (a list of `registered`, `candidates`, `pre_qc`), or null | Python rules only: the checkpoint stages the five processing rules (`rsf_single_fov`, `gr_single_fov_subtile`, `lrsf_single_fov_subtile`, `deep_create_subtile`, `deep_rsf_subtile`) write besides `run.json`; absent or null is `{stages: []}`, `run.json` alone. See [run records of the processing rules](#run-records-of-the-processing-rules) |
 
 Always pair `intensity_estimation` with `intensity_threshold`. Python `noise`
 uses a k-sigma threshold (e.g. 5), whereas `adaptive` is a fraction of channel
@@ -199,6 +201,33 @@ shared MATLAB keys remain unchanged. See [coordination](coordination.md).
 `from_workflow_config` chooses the relevant subtile creation settings; image
 sizes must match arrays after rotation. Rectangular and remainder dimensions
 are partitioned independently with complete edge coverage.
+
+### Run records of the processing rules
+
+Each Python processing rule runs its FOV (or subtile) with
+`CheckpointConfig(stages=<stages>, overwrite=True)`, so every run writes
+`<output_root>/checkpoints/<fov>/run.json` (`subtile_<n>/run.json` below it for a
+subtile rule; {doc}`checkpoints`, "run.json"). The stages come from
+`rules.<rule>.parameters.checkpoints`, a mapping with the one key `stages`; absent
+or null it is `{stages: []}`, which writes `run.json` alone. For example, the
+stages that let the processing report read the candidates and the reads:
+
+```yaml
+rules:
+  rsf_single_fov:
+    parameters:
+      checkpoints:
+        stages: [candidates, pre_qc]
+```
+
+`overwrite` is on because a rerun of the rule replaces its record: it removes the
+earlier stage files of the FOV directory and leaves `other_rounds/`,
+`segmentation/` and `assignment/`. The inputs are hashed (`hash_inputs`), so each
+raw image is read once more. `run.json` records the configuration file the rule ran
+with (`workflow_config`: the top-level `config_path` and the SHA-256 of its bytes)
+and the codebook or panel file the rule loaded (`codebook`). `run.json` and the
+stage files are not declared outputs of the rules, and the logs the rules write do
+not change. The key is allowed with `backend: python` only: the schema refuses it with `backend: matlab` or without `backend` (whose default is `matlab`), and the adapter raises `ValueError`.
 
 ## Codebook segment layout
 
@@ -600,6 +629,62 @@ export:
         method: cellpose
         model: cpsam_v2
         diameter: 240            # 60 at 1/4
+```
+
+## Processing report
+
+A Python-only top-level `report` block (rejected unless `backend: python`) makes the workflow
+write the processing reports; the specification is the "Workflow configuration" section of
+the [report contract](report-contract.md#workflow-configuration) (option WR1). A
+configuration without the block runs as before: no report rule and no report output.
+
+* **The keys** are the `ReportConfig` fields: `markers`, a list of `{name, genes}`
+  (`MarkerGroup`, one to four genes, each group one figure); `marker_pairs`, gene pairs for
+  MECR; `positive_threshold`; `example_fovs`, three FOV IDs or null for the automatic
+  choice; `limits`, the `ReportLimits` fields, each rule (`shift_residual`,
+  `alignment_score`, `correct_form_fraction`, `matched_fraction`) a mapping of the
+  `RuleLimit` fields `k`, `floor` and `absolute`, and `spots_near_zero`; `figure_width_px`
+  and `jpeg_quality`. Lists become tuples. An omitted key keeps its default, so `report: {}`
+  gives `ReportConfig()`; an omitted rule of `limits` keeps its default limit, and an omitted
+  key of a given rule is null. An unknown key, at any level, raises `ValueError` naming it
+  when the rule files are parsed.
+* **`report_sample`**, one rule per sample, calls `Dataset.report(sample, <the sample's
+  FOVs from the sample annotation>, assignment=<assembly.assignment>, config=…)` and writes
+  `<OUTPUT>/report/<sample>/`. Its declared output is `report/<sample>/report.json`, which
+  lists every other file of the folder. Its declared input is the sample's last per-sample
+  output: `export/<sample>/export.json` with an `assembly` block (the `export_sample` rule,
+  which an `export` block configures); else `stitching/<sample>/placement.json` with a
+  `stitching` block; else every FOV's `log/sf_scores/{fovID}.txt`. Without an `assembly`
+  block no rule saves a per-FOV assignment, so the report is made without cells
+  (`assignment=None`).
+* **`report_dataset`** calls `Dataset.compare_samples` on every sample of the run, in the
+  order of the sample annotation, and writes `<OUTPUT>/report/index.html` and
+  `report/samples.csv`, its declared output, after every sample's `report_sample`.
+
+A default-tier test keeps the block's keys equal to the fields of `ReportConfig`,
+`MarkerGroup`, `ReportLimits` and `RuleLimit`. The example is W-383's markers of the lymph
+node sample, shortened; the other values are the defaults:
+
+```yaml
+report:
+  markers:
+    - name: lymph node compartments
+      genes: [Cd3e, Cd79a, Lyz2, Pecam1]
+    - name: T cell subsets
+      genes: [Cd4, Cd8a, Foxp3]
+  marker_pairs:
+    - [Cd3e, Cd79a]
+    - [Cd4, Cd8a]
+  positive_threshold: 1
+  example_fovs: null              # or three FOV IDs
+  limits:
+    shift_residual: {k: 5, floor: 5, absolute: null}
+    alignment_score: {k: null, floor: null, absolute: null}
+    correct_form_fraction: {k: 3, floor: 0.05, absolute: null}
+    matched_fraction: {k: 3, floor: 0.05, absolute: null}
+    spots_near_zero: 0.05
+  figure_width_px: 1600
+  jpeg_quality: 85
 ```
 
 ## Downstream parameter blocks

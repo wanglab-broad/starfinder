@@ -523,6 +523,14 @@ for every successful step and for the round's whole chain, on signals only.
 | Truth metrics | Only when the caller supplies a truth pull field (for example `forward_displacement` of a synthetic pair): `evaluate_displacement_field(estimated, truth, *, mask, spacing_zyx=None)` gives the median, 95th percentile and maximum of `|u − u*|` over the valid overlap, in voxels and, with spacing, in physical units. Never computed from images alone. |
 | Rejection | `RegistrationQcConfig(min_coverage=None, min_ncc_gain=None, max_fold_fraction=None, max_translation_voxels=None, projections=False)`. Every criterion is `None` by default, so nothing is rejected unless the recipe sets it. A step that fails a configured criterion raises `RegistrationRejectedError`, a subclass of `RegistrationEstimationError`, naming the criterion, the value and the bound; recovery may allow it. |
 
+**Memory (W-461).** `registration_qc` reads the signals and the pull field one Z plane at a time and never copies
+a signal whole: the valid overlap, the NCC sums and the Jacobian determinants are computed plane by plane, the
+Z maximum projections are taken in the signals' own dtype and then converted to float64, and a chain's pull
+field is evaluated plane by plane as `TransformChain.pull_field` evaluates it. Only `|u|` of every voxel is held whole, for the median and the 95th percentile. Each voxel gets
+the arithmetic of the whole-volume computation, so every value is that of the earlier implementation, except
+that the NCC sums of the planes are added in Z order, which can change NCC in the last digits. An affine or
+B-spline transform is still evaluated whole by `dense()`.
+
 ## Failure and recovery records
 
 `FOV.registration_attempts[round]` stays an ordered list of dicts and keeps its

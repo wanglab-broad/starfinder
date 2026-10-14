@@ -1487,6 +1487,43 @@ record `segmentation_files`, and `lookup_source(cell=…)` returns `assignment_f
 the cell's row in the sample cell table, `label_file` and `label_value`. The SHA-256 of
 `tables/molecules` changes on the route per FOV because of the new column.
 
+### Records added to `run.json`
+
+The records the processing report reads ({doc}`report-contract`, "Records added to
+run.json"):
+
+* **`run.json` gains `transforms`, `codebook`, `workflow_config` and
+  `counts.filtering.endpoint_valid`** (with `endpoint_valid_segments`); `format_version`
+  stays 1, and a `run.json` without them still loads. `transforms` holds, per registered
+  moving round, the entries of `registered/transforms.json` and the round's
+  `WarpConfig`; a dense field or B-spline coefficients are named only when the stage
+  `registered` wrote them, and no array is written into `run.json`.
+* **The workflow writes `checkpoints/<fov>/run.json`** for the processing rules, alone by
+  default, with `overwrite` on; `rules.<rule>.parameters.checkpoints` adds stages
+  ({doc}`workflow-configuration`, "Run records of the processing rules"). The logs the
+  rules write do not change.
+* **`Dataset.load_codebook` and `load_direct_panel` keep the file's path and SHA-256**,
+  which `run.json` records as `codebook`.
+
+### The processing report
+
+* **New: the processing report.** `Dataset.report(sample, fov_ids, …)` writes
+  `<output_root>/report/<sample>/` (`report.html`, `report.json`, `tables/`) and returns a
+  `ReportRecord` ({doc}`report-contract`, "The sample entry"); `starfinder.report.read_report`
+  reads a report back. The entry reads the saved records only and calls no processing stage.
+  Nothing existing changes.
+* **New: the comparison page.** `Dataset.compare_samples(samples, *, report_root=None)` writes
+  `<output_root>/report/index.html` and `report/samples.csv` from the finished sample reports
+  only and returns a `ComparisonRecord` ({doc}`report-contract`, "The comparison entry"); a
+  sample without a report is a row marked `missing`. Nothing existing changes.
+* **New: the workflow's `report` block and rules.** A Python-only top-level `report` block
+  whose keys are the `ReportConfig` fields ({doc}`workflow-configuration`, "Processing
+  report"), and with it the new rule file `workflow/rules/report.smk`: `report_sample` per
+  sample (`Dataset.report`, declared output `report/<sample>/report.json`, after the sample's
+  `export_sample`, else its `stitch_sample`, else its FOVs' processing rule) and
+  `report_dataset` (`Dataset.compare_samples` over every sample, declared output
+  `report/samples.csv`). A configuration without the block gains no rule and no output.
+
 ## Intentional behavior changes — not mechanical equivalence
 
 | Area | Change and consequence |

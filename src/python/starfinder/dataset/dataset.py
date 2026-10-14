@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import hashlib
 from numbers import Integral
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -115,6 +116,11 @@ class Dataset:
     # channels. An init field so that dataclasses.replace hands it to the copy, which keeps the ChannelInfo of
     # every round whose patterns the call leaves as they are (__post_init__).
     _channels: dict = field(default_factory=dict, repr=False, kw_only=True)
+    # The files load_codebook and load_direct_panel read, by kind (codebook, direct_panel): the loaded object,
+    # the absolute path and the SHA-256 of its bytes; and the workflow configuration file from_workflow_config
+    # translated. run.json records them (docs/checkpoints.md, "run.json").
+    _reference_files: dict = field(default_factory=dict, repr=False, compare=False, kw_only=True)
+    _workflow_config: Path | None = field(default=None, repr=False, compare=False, kw_only=True)
 
     def __post_init__(self):
         if self.readout_mode not in READOUT_MODES:
@@ -404,9 +410,10 @@ class Dataset:
         Returns
         -------
         None
-            Stores the canonical barcode Codebook. Sequencing round labels and
-            channel_order must be configured explicitly. Errors propagate from
-            :func:`starfinder.barcode.load_codebook`.
+            Stores the canonical barcode Codebook, and keeps the file's
+            absolute path and SHA-256 for ``run.json`` ``codebook``. Sequencing
+            round labels and channel_order must be configured explicitly.
+            Errors propagate from :func:`starfinder.barcode.load_codebook`.
         """
         if encoding is None:
             encoding = EncodingConfig(reverse_bases=reverse_bases, split_index=split_index)
@@ -414,6 +421,7 @@ class Dataset:
             raise ValueError("give encoding, or split_index and reverse_bases, not both")
         self.codebook = load_codebook(path, round_labels=tuple(self.rounds.sequencing_rounds),
             channel_labels=tuple(self.channel_order), encoding=encoding, layout=layout)
+        self._keep_reference_file("codebook", self.codebook, path)
 
     def load_direct_panel(self, path: Path | str) -> None:
         """Load the direct-readout panel from CSV and store it on self.direct_panel.
@@ -428,11 +436,19 @@ class Dataset:
         Returns
         -------
         None
-            Stores the DirectPanel. Errors propagate from
+            Stores the DirectPanel, and keeps the file's absolute path and
+            SHA-256 for ``run.json`` ``codebook``. Errors propagate from
             :func:`starfinder.barcode.load_direct_panel`.
         """
         self.direct_panel = load_direct_panel(path, round_labels=tuple(self.rounds.sequencing_rounds),
                                               channel_labels=tuple(self.channel_order))
+        self._keep_reference_file("direct_panel", self.direct_panel, path)
+
+    def _keep_reference_file(self, kind, loaded, path):
+        """Keep the path and SHA-256 of the file a codebook or panel was loaded from (a new dict: replace shares it)."""
+        path = Path(path).absolute()
+        sha256 = hashlib.sha256(path.read_bytes()).hexdigest()
+        self._reference_files = {**self._reference_files, kind: (loaded, str(path), sha256)}
 
     def stitch(self, sample: str, fov_ids, *, table, config, input: str = "reference_merged", review=None,
                fallback: str | None = None, output_dir: Path | str | None = None):
@@ -613,3 +629,104 @@ class Dataset:
         from starfinder.sample_output._export import export_sample
         return export_sample(self, sample, placement=placement, assignment=assignment,
                              config=ExportConfig() if config is None else config, output_dir=output_dir)
+
+    def report(self, sample: str, fov_ids, *, assignment: str | None = "default", segmentation: str | None = None,
+               config=None, output_dir=None):
+        """Write a sample's processing report: ``report.html``, ``report.json`` and ``tables/``.
+
+        The one sample report entry (docs/report-contract.md, "The sample
+        entry"). A sample-level reader, not a runner: it calls no processing
+        stage, reads only the saved records at their fixed places under the
+        output root ("Where each record is looked for": the FOVs'
+        ``checkpoints/{fovID}/run.json`` and saved transforms, segmentation and
+        assignment records, the reference images, ``stitching/<sample>/`` and
+        ``export/<sample>/``) and the raw input of the main example for its
+        replay, and writes only its output folder. The report describes the
+        run and judges nothing. After the checks before anything is written
+        (the arguments; a run record or an export to report; each run record's
+        IDs; the export and the placement against the FOV list; the marker
+        genes against the gene list; the example FOVs; the output folder) the
+        report is written into a staging folder that replaces the earlier
+        report of the sample once it is complete. A part whose input is
+        missing or changed is unavailable with its reason, recorded in
+        ``tables/unavailable.csv``; the entry does not raise for it.
+
+        Parameters
+        ----------
+        sample : str
+            The sample, as ``stitch`` and ``export`` name it.
+        fov_ids : Sequence[str]
+            The sample's FOVs, nonempty and unique, in the order the report
+            shows them.
+        assignment : str or None
+            The §2.9 assignment name of the route per FOV, read at
+            ``checkpoints/{fovID}/assignment/<assignment>/``; None for a sample
+            without cells.
+        segmentation : str or None
+            The segmentation run whose outlines the examples show; None is the
+            run the assignment (route per FOV) or the export (route after
+            fusion) read.
+        config : ReportConfig or None
+            None is ``ReportConfig()``.
+        output_dir : str or Path or None
+            None is ``<output_root>/report/<sample>/``.
+
+        Returns
+        -------
+        ReportRecord
+            The folder and the content of its ``report.json``.
+
+        Raises
+        ------
+        TypeError
+            config is not a ReportConfig.
+        ValueError
+            Arguments of the wrong form, a run record, export or placement
+            that does not belong to the sample or the FOV list, a marker gene
+            not in the gene list, or example FOVs outside the list.
+        FileNotFoundError
+            No FOV of the list has a run record and there is no export.
+        FileExistsError
+            The output folder holds a file that is not one of the report's own.
+        """
+        from starfinder.report._collect import report_sample
+        return report_sample(self, sample, fov_ids, assignment=assignment, segmentation=segmentation, config=config,
+                             output_dir=output_dir)
+
+    def compare_samples(self, samples, *, report_root=None):
+        """Write the dataset's comparison page ``index.html`` and ``samples.csv`` from finished sample reports.
+
+        The comparison entry (docs/report-contract.md, "The comparison
+        entry"). It reads only the sample reports: each sample's
+        ``<report_root>/<sample>/report.json`` and the tables it lists, each
+        checked against its recorded SHA-256, and draws one row per sample and
+        three box plots by sample (spots per FOV, fraction matched to the
+        codebook, cells per FOV) from them. A sample whose folder or
+        ``report.json`` is missing is a row marked ``missing``. It reads no run
+        record, placement or export, recomputes nothing a sample report holds
+        and writes nothing under a sample's folder; ``index.html`` and
+        ``samples.csv`` replace earlier ones.
+
+        Parameters
+        ----------
+        samples : Sequence[str]
+            The samples, nonempty and unique, in the order of the page.
+        report_root : str or Path or None
+            None is ``<output_root>/report/``, where ``Dataset.report`` writes
+            each sample's report.
+
+        Returns
+        -------
+        ComparisonRecord
+            The report root and the record of what was written.
+
+        Raises
+        ------
+        ValueError
+            samples is empty or repeats a sample, or a sample's report.json or
+            one of the files it lists differs from its record (naming the
+            file); nothing is written then.
+        """
+        from starfinder.report._compare import compare_samples
+        root = Path(self.output_root) / "report" if report_root is None else report_root
+        return compare_samples(root, samples, dataset_id=self.dataset_id)
