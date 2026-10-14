@@ -92,7 +92,7 @@ PART_REASONS = {
     "summary.identity": {"no_run_record", "not_recorded"},
     "summary.key_numbers": {"no_run_record", "run_not_finished", "step_failed", "not_configured", "no_export",
                             "part_not_written", "no_segmentation", "undefined"},
-    "workflow.steps": {"no_run_record", "no_placement", "no_export"},
+    "workflow.steps": {"no_run_record", "no_placement", "no_export", "input_missing", "input_changed"},
     "workflow.fov_status": {"no_run_record"},
     "workflow.time": {"no_run_record", "run_not_finished", "not_recorded"},
     "registration.maps": {"no_run_record", "step_failed", "not_configured", "not_recorded", "no_placement",
