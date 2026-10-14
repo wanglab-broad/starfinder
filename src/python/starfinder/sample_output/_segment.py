@@ -3,8 +3,9 @@
 :func:`segment_fused` segments the fused projection that ``fuse`` wrote, run by run, and
 writes one label OME-TIFF per run and the ``segmentation`` section of ``export.json``;
 :func:`load_sample_segmentation` reads them back with their SHA-256 checked. The pixel
-lengths of a method's settings are given for the acquired grid and divided by the scale
-factor here (LS2, :data:`LENGTH_FIELDS`). :func:`resolve_route` gives a dataset's route,
+lengths of a method's settings are given for the acquired grid and converted here to the
+segmentation grid by the table "Lengths in pixels" of docs/sample-segmentation-contract.md,
+both values recorded (LS2, :data:`LENGTH_FIELDS`). :func:`resolve_route` gives a dataset's route,
 and :func:`check_route` is check 7 of ``Dataset.export``.
 """
 from __future__ import annotations
