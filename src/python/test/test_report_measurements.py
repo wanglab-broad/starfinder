@@ -176,6 +176,39 @@ def test_reads_in_cells_without_the_inputs(tmp_path):
     assert "export/s1/sample.h5ad" not in kinds
 
 
+def drop_cell_namespace(case):
+    """The export of ``case`` as one saved before the molecule table had ``cell_namespace``: the table written again
+    without the column by the checkpoint writer, and its entry in export.json given the new SHA-256 and dtypes."""
+    from starfinder.io._checkpoint import _write_table
+    from starfinder.sample_output._record import update_section
+    from starfinder.segmentation._persist import file_sha256
+    folder = case.root / "export" / case.sample
+    section = json.loads((folder / "export.json").read_text())["assembly"]
+    molecules = export_table(case.root, case.sample, "molecules").drop(columns="cell_namespace")
+    name, dtypes = _write_table(molecules, folder / "tables", "molecules", "csv")
+    section["files"]["molecules"] = {"path": f"tables/{name}", "sha256": file_sha256(folder / "tables" / name),
+                                     "dtypes": dtypes}
+    update_section(folder, case.sample, "assemble", section, status="written")
+
+
+def test_an_export_without_cell_namespace(tmp_path):
+    """An export whose molecule table has no cell_namespace makes the report of the same export with the column."""
+    anndata_or_skip()
+    case, older = report_cells(tmp_path / "root"), report_cells(tmp_path / "older")
+    drop_cell_namespace(older)
+    header = (older.root / "export/s1/tables/molecules.csv").read_text().splitlines()[0].split(",")
+    assert "cell_namespace" not in header and "cell_id" in header
+    (_, record, tables), (_, older_record, older_tables) = collect(case), collect(older)
+    assert list(older_tables) == list(tables)
+    for name, frame in tables.items():
+        pd.testing.assert_frame_equal(older_tables[name], frame, check_exact=False, atol=TOL, rtol=0)
+    assert older_record["summary"] == record["summary"]
+    fovs = older_tables["fovs"].set_index("fov_id")
+    assert {f: int(fovs.loc[f, "reads_in_cells"]) for f in FOVS} == {"F1": 20, "F2": 0, "F3": 14, "F4": 14}
+    assert older_record["summary"]["reads_in_cells"] == 48 and older_record["summary"]["reads_in_cells_equal"]
+    assert len(older_tables["cells"]) == 41
+
+
 # --- DF9 and RC7: the per-cell values and the unknown calibration -------------------------------------------------
 
 def expected_cells(root, sample, units):

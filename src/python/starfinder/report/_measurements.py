@@ -36,7 +36,7 @@ SIZE_UNITS = ("µm³", "µm²", "voxels")
 _WRITTEN = ("written", "reused")
 _MOLECULE_COLUMNS = ("fov_id", "z", "gene_id", "assignment_status", "cell_id", "cell_namespace", "sample_z",
                      "sample_y", "sample_x", "assembly_status")
-_CELL_COLUMNS = ("cell_namespace", "cell_id", "status", "assembly_status")
+_CELL_COLUMNS = ("fov_id", "cell_namespace", "cell_id", "status", "assembly_status")
 
 
 def _get(mapping, *keys):
@@ -332,24 +332,42 @@ class _Measurements:
         return missing if missing is not None else (path, entry)
 
     def molecules(self):
-        """The export's molecule table, the columns the definitions name, or the reason it cannot be read."""
+        """The export's molecule table, the columns the definitions name, or the reason it cannot be read.
+
+        A table with ``cell_id`` saved before the column ``cell_namespace`` existed gets it from the cell table, as
+        ``load_assembly`` does (``assembly._assemble.fill_cell_namespace``); without a readable cell table it stays
+        without it. A table without ``cell_id`` (``molecules_only``) names no cell and is read as it is."""
         def make():
             found = self._export_file("molecules", "export_table")
             if isinstance(found, Unavailable):
                 return found
             path, entry = found
-            return read_columns(path, entry.get("dtypes") or {}, _MOLECULE_COLUMNS)
+            molecules = read_columns(path, entry.get("dtypes") or {}, _MOLECULE_COLUMNS)
+            if "cell_namespace" not in molecules and "cell_id" in molecules:
+                from starfinder.assembly._assemble import fill_cell_namespace
+                cells = self.cells()
+                if not isinstance(cells, Unavailable):
+                    molecules = fill_cell_namespace(molecules, cells)
+            return molecules
         return self._once("molecules", make)
 
-    def counted_keys(self):
-        """``K``: the ``(cell_namespace, cell_id)`` of the cells of the export's cell table with ``assembly_status``
-        ``retained`` and ``status`` ``kept``."""
+    def cells(self):
+        """The export's cell table, the columns the definitions name, or the reason it cannot be read."""
         def make():
             found = self._export_file("cells", "export_table")
             if isinstance(found, Unavailable):
                 return found
             path, entry = found
-            cells = read_columns(path, entry.get("dtypes") or {}, _CELL_COLUMNS)
+            return read_columns(path, entry.get("dtypes") or {}, _CELL_COLUMNS)
+        return self._once("cells", make)
+
+    def counted_keys(self):
+        """``K``: the ``(cell_namespace, cell_id)`` of the cells of the export's cell table with ``assembly_status``
+        ``retained`` and ``status`` ``kept``."""
+        def make():
+            cells = self.cells()
+            if isinstance(cells, Unavailable):
+                return cells
             keep = cells["assembly_status"].eq("retained").fillna(False).to_numpy(bool) & \
                 cells["status"].eq("kept").fillna(False).to_numpy(bool)
             return pd.DataFrame({"cell_namespace": cells["cell_namespace"][keep].astype(object).to_numpy(),
