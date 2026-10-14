@@ -85,7 +85,7 @@ options further down and one recommendation:
 | --- | --- | --- | --- |
 | 1 | How the route is called | E1: one new part `segment` in `Dataset.export` and one keyword `segmentation` of `assemble`; on this route the parts run `fuse`, `segment`, `assemble`, `fuse_labels`, `export_spatialdata` | "The entry" |
 | 2 | The scale the route segments at | SC1: the fused projection the `fuse` part writes, at the dataset's `scale_yx` | "The stains and the scale" |
-| 3 | How pixel lengths of the method settings are given | LS2: in pixels of the acquired grid, as for the route per FOV, divided by the scale factor by the route, both values recorded | "Lengths in pixels" |
+| 3 | How pixel lengths of the method settings are given | LS2: in pixels of the acquired grid, as for the route per FOV, converted by the route to the segmentation grid by the table of "Lengths in pixels", both values recorded | "Lengths in pixels" |
 | 4 | Where the method settings live | G2: a `segmentation` block inside the `export` block, in the run format of §2.9 with fused image names as inputs | "Where the settings live" |
 | 5 | How the sample's molecules reach `assign_molecules` | MT1: a private conversion to one `MoleculeTable` on the segmentation grid; no §2.9 type changes | "The sample's molecule table" |
 | 6 | What `fov_id` of a cell holds on this route | F1: the owning FOV of the cell's ownership centroid (options F1 to F3) | "The cells" |
