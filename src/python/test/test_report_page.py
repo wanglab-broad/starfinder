@@ -39,6 +39,9 @@ from starfinder.report import _page as page_module
 
 from .report_fixtures import (CELL_VARIANTS, DATASET, FOVS, RECORD_VARIANTS, SAMPLE, SAMPLE_ID, report_cells,
                               report_records)
+from .report_sizes import (DISTRIBUTION_HALF, DISTRIBUTION_THIRD, EXAMPLE_TILE, HEATMAP_WIDTH, INTENSITY_SIZE,
+                           MAX_ROWS, PREPROCESSING_TILE, READS_Z_WIDTH, ROW_PX, THIRD, TIME_WIDTH, grid_slot,
+                           time_height_at_least, tiles_width)
 from .test_report_collection import (CHECKS, CONTRACT_COLUMNS, CONTRACT_RECORD_KEYS, CONTRACT_SUMMARY_KEYS,
                                      anndata_or_skip, snapshot)
 
@@ -454,8 +457,9 @@ def test_pg4_no_external_resource(pages, maker, variant):
 
 # --- PG5: the size budget and the figure sizes ------------------------------------------------------------------
 
-def heatmap_height(rows):
-    return min(1200, max(300, 12 * rows))
+def heatmap_rows_at_least(image, rows):
+    """A heatmap of ``rows`` FOVs (at most 64 drawn) has at least 14 px as shown per row."""
+    return image.size[1] / 2 >= ROW_PX * min(rows, MAX_ROWS)
 
 
 def check_figures(page, extra=None):
@@ -470,11 +474,20 @@ def check_figures(page, extra=None):
         image.load()
         assert image.format == {"image/png": "PNG", "image/jpeg": "JPEG"}[mime]
         assert (int(attrs["width"]), int(attrs["height"])) == image.size, name
-        expected = {"time": (1200, 400), "heatmap": (1200, heatmap_height(n_fovs))}.get(name)
-        if name.startswith(("distribution:", "per_cell:")):
-            expected = (600, 340)
-        if name == "reads_along_z":
-            expected = (1200, heatmap_height(len(set(page.tables["reads_along_z"]["fov_id"]))))
+        expected = None
+        if name == "time":
+            expected = (TIME_WIDTH, max(image.size[1], time_height_at_least(0)))
+        if name == "heatmap" and heatmap_rows_at_least(image, n_fovs):
+            expected = (HEATMAP_WIDTH, image.size[1])
+        if name.startswith("distribution:"):
+            expected = DISTRIBUTION_THIRD
+        if name.startswith("per_cell:"):
+            row = re.findall(r'data-figure="(per_cell:[^"]*)"', page.text)
+            k = row.index(name)
+            expected = DISTRIBUTION_THIRD if grid_slot(min(3, len(row) - 3 * (k // 3))) == THIRD else \
+                DISTRIBUTION_HALF
+        if name == "reads_along_z" and heatmap_rows_at_least(image, len(set(page.tables["reads_along_z"]["fov_id"]))):
+            expected = (READS_Z_WIDTH, image.size[1])
         if extra is not None and expected is None:
             expected = extra(name, image)
         assert expected is not None, f"no expected size for {name}"
@@ -780,11 +793,13 @@ def test_page_with_every_figure(scene_chain_registered):  # noqa: F811
 
     def sizes(name, image):
         if name == "preprocessing":
-            return (256 * columns, 28 + rows * (256 + 34))
+            assert image.size[1] > rows * PREPROCESSING_TILE
+            return (tiles_width(columns, PREPROCESSING_TILE), image.size[1])
         if name in ("registration", "segmentation"):
-            return (3 * 512, 28 + 512 + 34)
+            assert image.size[1] > EXAMPLE_TILE
+            return (tiles_width(3, EXAMPLE_TILE), image.size[1])
         if name == "intensity":
-            return (1200, 400)
+            return INTENSITY_SIZE
         if re.fullmatch(r"marker:\d+:whole", name):
             assert image.size[0] == config.figure_width_px
             return "checked"

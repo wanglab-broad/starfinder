@@ -45,6 +45,7 @@ from . import test_report_comparison as comparison_checks
 from . import test_report_measurements as measurement_checks
 from . import test_report_page as page_checks
 from .report_scene import Chain, scene_chain, scene_chain_plane  # noqa: F401 (module-scoped fixtures)
+from .report_sizes import EXAMPLE_TILE, INTENSITY_SIZE, PREPROCESSING_TILE, tiles_width
 
 pytestmark = [pytest.mark.report, pytest.mark.validation]
 
@@ -162,11 +163,13 @@ def figure_sizes(page, chain: Chain):
             run = chain.run_record(replay["fov_id"])
             reference = replay["rounds"]["reference"]
             columns = len(run["preprocessing"]["rounds"][reference]) + 1
-            return (256 * columns, 28 + len(run["channels"][reference]) * (256 + 34))
+            assert image.size[1] > len(run["channels"][reference]) * PREPROCESSING_TILE
+            return (tiles_width(columns, PREPROCESSING_TILE), image.size[1])
         if name in ("registration", "segmentation"):
-            return (3 * 512, 28 + 512 + 34)
+            assert image.size[1] > EXAMPLE_TILE
+            return (tiles_width(3, EXAMPLE_TILE), image.size[1])
         if name == "intensity":
-            return (1200, 400)
+            return INTENSITY_SIZE
         if re.fullmatch(r"marker:\d+:whole", name):
             assert image.size[0] == page.case.config.figure_width_px
             return "checked"

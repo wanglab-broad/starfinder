@@ -586,15 +586,16 @@ class _Measurements:
         if isinstance(cells, Unavailable):
             per_cell = cells
         else:
-            per_cell = [_figures.histogram_figure([r["reads"] for r in cells], "reads", "reads per cell",
-                                                  "molecules", integer=True),
-                        _figures.histogram_figure([r["genes"] for r in cells], "genes", "genes per cell", "genes",
-                                                  integer=True)]
+            shown = [([r["reads"] for r in cells], "reads", "reads per cell", "molecules", True),
+                     ([r["genes"] for r in cells], "genes", "genes per cell", "genes", True)]
             for unit in SIZE_UNITS:
                 values = [r["size"] for r in cells if r["size_unit"] == unit]
                 if values:
-                    per_cell.append(_figures.histogram_figure(values, f"size:{unit}", "cell size", unit,
-                                                              integer=unit == "voxels"))
+                    shown.append((values, f"size:{unit}", "cell size", unit, unit == "voxels"))
+            # Each figure is drawn for its slot: rows of three, a row of fewer in half columns (_page.grid).
+            per_cell = [_figures.histogram_figure(values, name, title, unit, integer=integer,
+                                                  slot=_figures.grid_slot(min(3, len(shown) - 3 * (k // 3))))
+                        for k, (values, name, title, unit, integer) in enumerate(shown)]
         along = self.reads_along_z_rows()
         reads_figure = along if isinstance(along, Unavailable) else _figures.reads_along_z_figure(along,
                                                                                                     self.planes())

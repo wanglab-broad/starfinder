@@ -34,6 +34,7 @@ from starfinder.report._values import Unavailable
 from .report_fixtures import (FOVS, GENES, cells_config, report_cells, report_records, write_assignment_folder,
                               write_export)
 from .report_scene import scene_chain, scene_chain_plane  # noqa: F401 (module-scoped fixtures)
+from .report_sizes import READS_Z_WIDTH
 
 pytestmark = [pytest.mark.report, pytest.mark.validation]
 
@@ -407,7 +408,7 @@ def test_df10_reads_along_z_report_cells(tmp_path):
     assert not frame.isna().any().any()
     # The figure: the columns −1 to 4 over all FOVs; each FOV's grid of 4 planes edged between −1 | 0 and 3 | 4.
     figure = figures(case).reads_along_z
-    assert (figure.width, figure.height) == (1200, 300) and decoded(figure) == (300, 1200)
+    assert figure.width == READS_Z_WIDTH and decoded(figure) == (figure.height, READS_Z_WIDTH)
     for tile in figure.tiles:
         assert tile["columns"] == [-1, 0, 1, 2, 3, 4] and tile["edges"] == [[0, 1], [4, 5]]
     assert [t["rows"] for t in figure.tiles] == [[-1, 4], [0, 3], [0, 3], [0, 3]]
@@ -431,7 +432,7 @@ def test_df10_reads_along_z_hand_tables():
     assert [(t["fov_id"], t["columns"], t["edges"]) for t in figure.tiles] == [
         (f, [-1, 0, 1, 2, 3], [[0, 1], [1, 2]]) for f in HAND_Z]
     assert [t["rows"] for t in figure.tiles] == [[-1, 3], [0, 3], [0, 0]]
-    assert decoded(figure) == (300, 1200) and figure.format == "png"
+    assert decoded(figure) == (figure.height, READS_Z_WIDTH) and figure.format == "png"
     # Each line only where the figure has a column on both sides.
     assert grid_edges([0, 1, 2, 3], 4) == [] and grid_edges([0, 1, 2, 3, 4], 4) == [(3, 4)]
     assert grid_edges([-2, -1, 0], 1) == [(1, 2)] and grid_edges([-1, 0, 1], None) == []
@@ -584,5 +585,5 @@ def test_rt2_z1_sample_measurements_on_both_routes(scene_chain_plane, route):  #
     check_marker_figures(chain, config, record, drawn, stack=False)
     for figure in drawn.per_cell:
         assert decoded(figure) == SMALL_PLOT[::-1]
-    assert decoded(drawn.reads_along_z) == (300, 1200)
+    assert decoded(drawn.reads_along_z) == (drawn.reads_along_z.height, READS_Z_WIDTH)
     assert [t["edges"] for t in drawn.reads_along_z.tiles] == [[]] * len(chain.fov_ids)

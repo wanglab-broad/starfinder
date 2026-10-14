@@ -49,8 +49,8 @@ SAMPLES_COLUMNS = [("sample", "string", None), ("report", "string", None), ("rep
                    ("cells_median_per_fov", "float64", ("summary", "cells_median_per_fov"))]
 # The three box plots: the figure's name on the page and the fovs.csv column it draws.
 BOX_COLUMNS = ["spots", "matched_fraction", "n_cells_retained"]
-# A plot of a full column ("Figure sizes"): the box plots are one per row of the page.
-BOX_SIZE = (1200, 400)
+# A plot of the comparison page's column of 1,160 px ("Figure sizes"), at twice its width: one per row of the page.
+BOX_SIZE = (2320, 773)
 TOL = 1e-9
 
 
@@ -240,8 +240,8 @@ def test_box_plots(root):
     for attrs, column in zip(images, BOX_COLUMNS):
         image = decode(attrs)
         assert image.size == BOX_SIZE == (int(attrs["width"]), int(attrs["height"])), column
-        # The axes span x = 80 to 1176 px over the slots 0.5 to 4.5.
-        centres = [round(80 + (i - 0.5) / len(samples) * (BOX_SIZE[0] - 104)) for i in range(1, len(samples) + 1)]
+        # The axes span x = 160 to 2296 px over the slots 0.5 to 4.5.
+        centres = [round(160 + (i - 0.5) / len(samples) * (BOX_SIZE[0] - 184)) for i in range(1, len(samples) + 1)]
         empty = [s["fovs"] == 0 for s in slots[column]]
         assert [hatched(image, x) for x in centres] == empty, column
     assert "s4, no cells" in images[2]["alt"] and "s1, 4 FOVs" in images[2]["alt"]

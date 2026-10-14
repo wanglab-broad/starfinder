@@ -54,9 +54,10 @@ main{display:flex;flex-direction:column;gap:44px;min-width:0}
 .g3.fixed{grid-template-columns:repeat(3,minmax(0,1fr))}
 
 .panel{border:1px solid var(--line);background:var(--surface)}
-.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:6px 24px;padding:14px 16px;margin:0}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:6px 24px;padding:14px 16px;margin:0}
 .facts div{display:flex;gap:10px;min-width:0}
 .facts dt{color:var(--muted);flex:0 0 96px} .facts dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.facts dd.one{white-space:nowrap;overflow-wrap:normal}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));overflow:hidden;border-top:1px solid var(--line)}
 .kpi{padding:12px 16px;border-right:1px solid var(--line);border-bottom:1px solid var(--line);margin:0 -1px -1px 0}
 .kpi b{display:block;font-size:20px;font-weight:600;font-variant-numeric:tabular-nums}
@@ -151,11 +152,14 @@ select{font:inherit;font-size:13px;padding:4px 6px;background:var(--surface);col
 .lg .sw.ref{background:#00c800;border-color:#00c800} .lg .sw.mov{background:#e000e0;border-color:#e000e0} .lg .sw.both{background:#ffffff}
 .lg svg{width:26px;height:12px}
 
-/* the readout levels: counts and fractions of the spots side by side, on one scale, in the order of the pipeline */
+/* the readout levels: counts and fractions of the spots side by side, on one scale, in the order of the pipeline;
+   the bar (i) is the level's width, its label (span) is written over the whole row and never clipped to the bar */
 .bars{display:flex;flex-direction:column;gap:6px}
-.bars div{box-sizing:border-box;background:var(--accent-soft);border-left:3px solid var(--accent);padding:5px 10px;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
-.bars div.cell{background:color-mix(in srgb,var(--accent) 25%,var(--bg))}
-.bars div.opt{border-left-style:dashed;background:transparent;border:1px dashed var(--off);border-left:3px dashed var(--off);color:var(--muted)}
+.bars .lv{position:relative;box-sizing:border-box;padding:5px 10px 5px 13px;font-size:13px;font-variant-numeric:tabular-nums}
+.bars .lv>i{position:absolute;left:0;top:0;bottom:0;box-sizing:border-box;background:var(--accent-soft);border-left:3px solid var(--accent)}
+.bars .lv.cell>i{background:color-mix(in srgb,var(--accent) 25%,var(--bg))}
+.bars .lv>span{position:relative}
+.bars .lv.opt{background:transparent;border:1px dashed var(--off);border-left:3px dashed var(--off);padding-left:10px;color:var(--muted)}
 .bars .chk{color:var(--muted);font-size:12.5px;padding-left:2px}
 </style>
 </head>
@@ -606,6 +610,23 @@ select{font:inherit;font-size:13px;padding:4px 6px;background:var(--surface);col
       groups.map(function(g,i){return '<option value="'+i+'">'+esc(g.getAttribute('data-group'))+'</option>';}).join('')+'</select>';
     var s=$('marker-group');
     s.onchange=function(){groups.forEach(function(g,i){g.hidden=String(i)!==s.value;});};
+  })();
+
+  // ---- Summary: the run time and the time the page was made, written again in the viewer's time zone with its
+  //      abbreviation (the filler writes them in UTC; the tooltips keep the ISO times)
+  (function(){
+    function parts(iso){
+      var d=new Date(iso), p={};
+      if(!iso||isNaN(d.getTime()))return null;
+      new Intl.DateTimeFormat('en-US',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',
+        second:'2-digit',hourCycle:'h23',timeZoneName:'short'}).formatToParts(d).forEach(function(x){p[x.type]=x.value;});
+      return {date:p.year+'-'+p.month+'-'+p.day,time:p.hour+':'+p.minute+':'+p.second,zone:p.timeZoneName};
+    }
+    var g=$('generated-at'), a=g&&parts(g.getAttribute('data-at'));
+    if(a)g.textContent=a.date+', '+a.time+' '+a.zone;
+    var r=$('run-span'), s=r&&parts(r.getAttribute('data-start')), e=r&&parts(r.getAttribute('data-end'));
+    if(s&&e)r.textContent=s.date+', '+s.time+(s.zone!==e.zone?' '+s.zone:'')+' – '+(e.date!==s.date?e.date+', ':'')+e.time+' '+e.zone;
+    else if(s)r.textContent=s.date+', '+s.time+' '+s.zone+' – not ended';
   })();
 
   // ---- side navigation follows the section in view

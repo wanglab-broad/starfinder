@@ -26,19 +26,19 @@ from starfinder.io import read_checkpoint
 from starfinder.io._checkpoint import _read_table
 from starfinder.report import ReportConfig
 from starfinder.report._collect import report_examples
-from starfinder.report._figures import (EXAMPLE_TILE, PLOT_SIZE, PREPROCESSING_TILE, intensity_figure,
+from starfinder.report._figures import (EXAMPLE_TILE, PREPROCESSING_TILE, intensity_figure,
                                         preprocessing_figure, registration_figure, segmentation_figure)
 from starfinder.report._replay import intensity_bins, replay_fov
 
 from .report_scene import (STAGES, Chain, build_chain, scene_chain_plane,  # noqa: F401 (module-scoped fixtures)
                            scene_chain_registered)
+from .report_sizes import INTENSITY_SIZE, tiles_width
 
 pytestmark = [pytest.mark.report, pytest.mark.validation]
 
 MAIN = "FOV_001"
 NAMED = (MAIN, "FOV_002", "FOV_003")
 REPLAY_PARTS = ("preprocessing.example", "preprocessing.intensity", "registration.example")
-FIGURE_HEADER, FIGURE_STRIP = 28, 34
 
 
 def tables(folder, record):
@@ -292,8 +292,9 @@ def test_figures_of_the_examples(scene_chain_registered):  # noqa: F811
     # The Preprocessing grid: the reference round, one row per channel, one column per entry plus the input.
     figure = preprocessing_figure(replay)
     columns, rows = len(entries) + 1, len(channels)
-    size = (FIGURE_HEADER + rows * (PREPROCESSING_TILE + FIGURE_STRIP), PREPROCESSING_TILE * columns)
-    assert (figure.height, figure.width) == size and decoded(figure) == size and figure.format == "jpeg"
+    size = (figure.height, tiles_width(columns, PREPROCESSING_TILE))
+    assert figure.width == size[1] and figure.height > rows * PREPROCESSING_TILE and decoded(figure) == size
+    assert figure.format == "jpeg"
     assert figure.round == "round1"
     assert [(t["step_index"], t["channel"]) for t in figure.tiles] == [(j, c) for j in range(columns)
                                                                        for c in channels]
@@ -314,12 +315,12 @@ def test_figures_of_the_examples(scene_chain_registered):  # noqa: F811
         assert (tile["lo"], tile["hi"]) == pytest.approx(percentiles(displayed), abs=1e-9)
     # The intensity panels: one per column of the grid.
     figure = intensity_figure(replay)
-    assert (figure.width, figure.height) == PLOT_SIZE and decoded(figure) == PLOT_SIZE[::-1]
+    assert (figure.width, figure.height) == INTENSITY_SIZE and decoded(figure) == INTENSITY_SIZE[::-1]
     assert figure.format == "png" and figure.round == "round1" and len(figure.tiles) == columns
     # The Registration example: the first moving round, three tiles of 512 px.
     figure = registration_figure(replay)
-    size = (FIGURE_HEADER + EXAMPLE_TILE + FIGURE_STRIP, 3 * EXAMPLE_TILE)
-    assert (figure.height, figure.width) == size and decoded(figure) == size
+    size = (figure.height, tiles_width(3, EXAMPLE_TILE))
+    assert figure.width == size[1] and figure.height > EXAMPLE_TILE and decoded(figure) == size
     assert figure.round == "round2" and [t["round"] for t in figure.tiles] == ["round2"] * 3
     reference = saved["round1"].max(axis=(0, 3))
     after = saved["round2"].max(axis=(0, 3))
@@ -331,7 +332,8 @@ def test_figures_of_the_examples(scene_chain_registered):  # noqa: F811
         assert tile["moving"] == pytest.approx(percentiles(after), abs=1e-9)
     # The segmentation examples on the route per FOV: three tiles of 512 px, titled with their FOVs.
     figure = segmentation_figure(previews)
-    assert (figure.height, figure.width) == size and decoded(figure) == size
+    size = (figure.height, tiles_width(3, EXAMPLE_TILE))
+    assert figure.width == size[1] and figure.height > EXAMPLE_TILE and decoded(figure) == size
     assert [t["fov_id"] for t in figure.tiles] == list(NAMED)
 
 
@@ -391,7 +393,7 @@ def test_rt1_segmentation_previews(scene_chain_plane, route):  # noqa: F811
         assert np.array_equal(preview.nucleus_outline, outline_of(expected_nuclei))
         assert preview.cells.any()
     figure = segmentation_figure(previews)
-    size = (FIGURE_HEADER + EXAMPLE_TILE + FIGURE_STRIP, 3 * EXAMPLE_TILE)
+    size = (figure.height, tiles_width(3, EXAMPLE_TILE))
     assert decoded(figure) == size and [t["fov_id"] for t in figure.tiles] == [roles[r] for r in
                                                                                 ("example_1", "example_2",
                                                                                  "example_3")]

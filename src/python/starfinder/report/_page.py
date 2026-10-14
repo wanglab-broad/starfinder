@@ -139,6 +139,13 @@ def image(figure, name, alt) -> str:
             f'height="{figure.height}" data-figure="{_e(name)}">')
 
 
+def grid(images) -> str:
+    """The figures of a three-figure grid, in rows of three (``g3 fixed``); a row of two figures has two columns and
+    a single figure takes a half column (``g2``), as :func:`._figures.grid_slot` draws them."""
+    rows = [images[k:k + 3] for k in range(0, len(images), 3)]
+    return "".join(f'<div class="{"g3 fixed" if len(row) == 3 else "g2"}">{"".join(row)}</div>' for row in rows)
+
+
 def unavailable_box(row, *, ratio="16/9", line=False, inline=False) -> str:
     """The box of a row of ``unavailable.csv`` without a table: "Unavailable:" and the reason's text, then
     the detail in smaller type; a box of the figure's aspect ratio, a line, or inline text (a fact, a file)."""
@@ -167,6 +174,31 @@ def _number(value) -> str:
     return f"{value:,.0f}" if value.is_integer() or abs(value) >= 1000 else f"{value:,.4g}"
 
 
+def _utc(iso):
+    from datetime import datetime, timezone
+    moment = datetime.fromisoformat(iso)
+    return (moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)).astimezone(timezone.utc)
+
+
+def moment_text(iso) -> str:
+    """A time as the Summary writes it in UTC, on one line: ``2026-10-13, 18:18:57 UTC`` (the page's script writes
+    it again in the viewer's time zone)."""
+    moment = _utc(iso)
+    return f"{moment:%Y-%m-%d, %H:%M:%S} UTC"
+
+
+def span_text(start, end) -> str:
+    """The run time as the Summary writes it in UTC, on one line: the date, the start and the end
+    (``2026-10-13, 14:19:02 – 14:42:12 UTC``), the end's date too when it is another day, "not ended" without an
+    end."""
+    first = _utc(start)
+    if not end:
+        return f"{first:%Y-%m-%d, %H:%M:%S} UTC – not ended"
+    last = _utc(end)
+    shown = f"{last:%H:%M:%S}" if last.date() == first.date() else f"{last:%Y-%m-%d, %H:%M:%S}"
+    return f"{first:%Y-%m-%d, %H:%M:%S} – {shown} UTC"
+
+
 def _get(mapping, *keys):
     for key in keys:
         if not isinstance(mapping, dict) or key not in mapping:
@@ -187,7 +219,8 @@ class PageFigures:
         quality = c.config.jpeg_quality
         self.time, self.not_recorded = self._time(tables["steps"])
         rounds = list(dict.fromkeys(r["round"] for r in tables["registration"]))
-        self.heatmap = (_figures.residual_heatmap_figure(tables["registration"], c.fov_ids, rounds)
+        marked = [r["fov_id"] for r in tables["problematic_fovs"] if r["rule"] == "shift_residual"]
+        self.heatmap = (_figures.residual_heatmap_figure(tables["registration"], c.fov_ids, rounds, marked)
                         if tables["registration"] else None)
         self.distributions = self._distributions(tables["fovs"])
         replay = c.replay if c.replay is not None and c.replay.missing is None else None
@@ -223,17 +256,18 @@ class PageFigures:
 
     @staticmethod
     def _distributions(fovs):
-        from ._figures import distribution_figure
+        from ._figures import distribution_figure, grid_slot
         from ._values import first
         figures = []
-        for column, label, integer in (("spots", "spots per FOV", True),
-                                       ("correct_form_fraction", "fraction with correct form", False),
-                                       ("matched_fraction", "fraction matched to the codebook", False)):
+        shown = (("spots", "spots per FOV", True), ("correct_form_fraction", "fraction with correct form", False),
+                 ("matched_fraction", "fraction matched to the codebook", False))
+        for column, label, integer in shown:
             cells = [row[column] for row in fovs]
             values = [v for v in cells if is_value(v)]
             missing = first(*cells)
             empty = f"no value (Unavailable: {REASON_TEXTS[missing.reason]})" if missing is not None else None
-            figures.append((column, label, distribution_figure(values, column, label, integer=integer, empty=empty)))
+            figures.append((column, label, distribution_figure(values, column, label, integer=integer, empty=empty,
+                                                               slot=grid_slot(len(shown)))))
         return figures
 
 
@@ -317,18 +351,23 @@ class _Page:
             version = "; ".join(parts)
         timing = identity["run_time"]
         if isinstance(timing, Unavailable):
-            run = ["Run time", f"Unavailable: {REASON_TEXTS[timing.reason]}"]
+            run = fact("Run time", unavailable_box(rows["entry=run_time"], inline=True))
         else:
-            run = ["Run time", f"{timing['started_at']} to {timing['ended_at'] or 'not ended'}",
-                   f"{timing['seconds']:.1f} s" if timing["seconds"] is not None else None]
-        generated = fact("Generated", f"<code>{_e(self.generated_at)}</code>",
-                         attrs=f' id="generated" data-t="{_tip(run)}"')
-        if "entry=run_time" in rows:
-            generated += fact("Run time", unavailable_box(rows["entry=run_time"], inline=True))
+            tip = _tip(["Run time", f"{timing['started_at']} to {timing['ended_at'] or 'not ended'}",
+                        f"{timing['seconds']:.1f} s" if timing["seconds"] is not None else None])
+            end = f' data-end="{_e(timing["ended_at"])}"' if timing["ended_at"] else ""
+            run = fact("Run time", f'<span id="run-span" data-start="{_e(timing["started_at"])}"{end} data-t="{tip}">'
+                                   f'{_e(span_text(timing["started_at"], timing["ended_at"]))}</span>',
+                       attrs=' id="run-time" class="one"')
+        # The text of Generated, its tooltip and its time are inside the element (DT1 leaves the element's text out).
+        generated = fact("Generated", f'<span id="generated-at" data-at="{_e(self.generated_at)}" '
+                                      f'data-t="{_tip(["Generated", self.generated_at])}">'
+                                      f'{_e(moment_text(self.generated_at))}</span>',
+                         attrs=' id="generated" class="one"')
         route = c.route if c.route is not None else "no export"
         return "".join([fact("Dataset", f"<code>{_e(c.dataset_id)}</code>"),
                         fact("Sample", f"<code>{_e(c.sample)}</code>"), fact("Route", _e(route)),
-                        fact("Acquisition", text), configuration, fact("starfinder", version), generated])
+                        fact("Acquisition", text), configuration, fact("Version", version), run, generated])
 
     def key_numbers(self) -> str:
         summary = self.summary
@@ -541,7 +580,7 @@ class _Page:
                 if ("readout_totals", "fraction_of_spots", key) in self.named:
                     dash += " · " + self.dash("readout_totals", "fraction_of_spots", key)
                 after = f" · {state}" if state else ""
-                bars.append(f'<div class="opt" style="width:100%">{_e(label)} · {dash}{after}</div>')
+                bars.append(f'<div class="lv opt"><span>{_e(label)} · {dash}{after}</span></div>')
                 continue
             width = 100.0 if not spots["count"] else min(100.0, 100.0 * row["count"] / spots["count"])
             if row["fraction_of_spots"] is not None:
@@ -551,9 +590,10 @@ class _Page:
             else:
                 share = ""
             cover = f" · {row['fovs']} of {n_fovs} FOVs" if row["fovs"] < n_fovs else ""
-            cls = ' class="cell"' if level == "reads_in_cells" else ""
+            cls = "lv cell" if level == "reads_in_cells" else "lv"
             text = f"{_e(label)} · {_int(row['count'])} · {share}{_e(cover)}"
-            bars.append(f'<div{cls} style="width:{width:.2f}%">{text}</div>')
+            # The bar is the level's fraction of the spots; its label is written over the whole row, not clipped.
+            bars.append(f'<div class="{cls}"><i style="width:{width:.2f}%"></i><span>{text}</span></div>')
         summary = self.summary
         if summary["reads_in_cells_equal"] is True:
             check = "= sum of sample.h5ad"
@@ -571,9 +611,8 @@ class _Page:
         if distributions:
             dist = "".join(unavailable_box(u, ratio="3/1") for u in distributions)
         else:
-            dist = '<div class="g3 fixed">' + "".join(
-                image(figure, f"distribution:{column}", f"Distribution across FOVs: {label}")
-                for column, label, figure in self.figures.distributions) + "</div>"
+            dist = grid([image(figure, f"distribution:{column}", f"Distribution across FOVs: {label}")
+                         for column, label, figure in self.figures.distributions])
         table = self.parts("readout.table")
         return {"read_totals": totals_html, "read_map": self._map(("m-reads", "lg-reads"), "readout.per_fov"),
                 "read_distributions": dist,
@@ -595,9 +634,8 @@ class _Page:
         figures = self.figures.sample
         per_cell_rows = self.parts("sample.per_cell")
         if isinstance(figures.per_cell, list):
-            per_cell = '<div class="g3 fixed">' + "".join(
-                image(fig, f"per_cell:{fig.tiles[0]['name']}", f"Per-cell distribution: {fig.tiles[0]['name']}")
-                for fig in figures.per_cell) + "</div>"
+            per_cell = grid([image(fig, f"per_cell:{fig.tiles[0]['name']}",
+                                   f"Per-cell distribution: {fig.tiles[0]['name']}") for fig in figures.per_cell])
             per_cell += "".join(unavailable_box(u, line=True) for u in per_cell_rows)
         else:
             per_cell = "".join(unavailable_box(u, ratio="3/1") for u in per_cell_rows)

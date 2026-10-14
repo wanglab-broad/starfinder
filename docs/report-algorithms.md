@@ -863,8 +863,16 @@ the residual map uses arrows and colour as below.
 
 1. **Facts panel.** Dataset (`dataset_id`); Sample; Route (`per_fov`, `after_fusion`, or
    "no export"); Acquisition ("Other values of the page"); Configuration (the configuration
-   check); starfinder (software); Generated (`generated_at`, UTC). The run time is in the
-   tooltip of Generated.
+   check); Version (software); Run time (the earliest `started_at` to the latest `ended_at` of
+   the run records); Generated (`generated_at`). Run time and Generated are each one line:
+   the date, the start and the end of the run and the time zone (`2026-10-13, 14:19:02 –
+   14:42:12 UTC`; an end on another date shows its date too, `2026-10-13, 23:50:00 –
+   2026-10-14, 00:10:00 UTC`, and a run without an end reads "not ended"), and the date, the
+   time and the time zone (`2026-10-13, 18:18:57 UTC`). The filler writes both in UTC; the
+   page's inline script writes them again in the viewer's time zone with its abbreviation
+   (`2026-10-13, 14:19:02 – 14:42:12 EDT`). Their tooltips keep the full ISO times and the
+   run's seconds; an unavailable run time shows its reason. The panel's columns are at least
+   340 px wide, so that both values fit on their line.
 2. **Key numbers** (`report.json` `summary`): FOVs succeeded (`fovs_succeeded / fovs_expected`),
    median spots per FOV, spots matched to the codebook (`matched_fraction`, %), counted cells,
    median reads per cell, median genes per cell. An unavailable number shows "—" with the
@@ -894,7 +902,9 @@ the residual map uses arrows and colour as below.
    categories; the time is a horizontal box plot per step name (log scale in seconds,
    whiskers at 1.5 × the interquartile range, every FOV beyond drawn as a point), the sample
    steps as single points on the same axis below a divider, steps without a time listed in
-   the axis label as "not recorded".
+   the axis label as "not recorded". Time per step is drawn for the half column it sits in
+   ("Figure sizes"): 26 px as shown per step name and at least 280 px high; over less than
+   two decades its axis is labelled at 1, 2 and 5 × 10ⁿ s.
 
 ### Preprocessing
 
@@ -902,11 +912,14 @@ the residual map uses arrows and colour as below.
    reference round (the channel labels of `run.json` `channels`), one column per state
    (raw input, then each recorded entry in the order `FOV.run` runs them, headed by the
    step's name). Each tile is the maximum over Z of that channel ("The replay of the
-   examples"), with its own grey range and colour bar.
+   examples"), with its own grey range and colour bar. Two adjacent tiles, side by side or one
+   above the other, are separated by a white gap of at least 8 px as shown ("Figure sizes").
 2. **Intensity after each step** (one static PNG). One panel per column of the grid, side by
    side and sharing nothing but the figure; in each, one curve per channel, the counts of
    `intensity.csv` against the bin centres, the count axis logarithmic (a bin of count 0 is
-   left out of the line), channels in the colours of the legend.
+   left out of the line), channels in the colours of the legend. Each panel keeps its own
+   count axis, with room for its labels between it and the panel before it; the legend is
+   one row above the panels.
 
 ### Registration
 
@@ -922,9 +935,16 @@ the residual map uses arrows and colour as below.
    FOVs' rounds succeeded. Outline: the FOV has a `shift_residual` (residual and absolute) or
    `alignment_score` (score) row for that round.
 2. **All FOVs and rounds** (static PNG). A heatmap: one row per FOV in list order, one column
-   per (round, axis) of the residual, a diverging scale symmetric about 0 with range
-   `[−a, a]`, `a` the largest absolute residual (at least 1 voxel); null cells hatched grey.
-   Row labels are the FOV IDs, every k-th label for more than 64 rows.
+   per (round, axis) of the residual (the axes under each round, the round's name below
+   them), a diverging scale symmetric about 0 with range `[−a, a]`, `a` the largest absolute
+   residual of the FOVs drawn (at least 1 voxel); null cells hatched grey. Every row drawn is
+   labelled with its FOV and is at least 14 px high as shown (15 px). At most 64 rows are
+   drawn: a sample of `N ≤ 64` FOVs draws every FOV; a sample of `N > 64` draws 64 of them,
+   in list order: first the FOVs that have a row of the `shift_residual` rule in
+   `problematic_fovs.csv` (the first 64 in list order if there are more), then, for the `k`
+   rows left, the FOVs at the positions `floor(i × u / k)`, `i = 0 … k − 1`, of the `u` other
+   FOVs in list order. The axis of the rows then reads "64 of N FOVs shown; every FOV in
+   `registration.csv`". The tables are not sampled.
 3. **Example FOV · `<fov>`, `<round>`** (one static JPEG of three tiles). "before
    registration", "after registration", "after registration, centre × 4": the reference
    round after its `steps` phase in green and the moving round in magenta, each the maximum
@@ -932,15 +952,20 @@ the residual map uses arrows and colour as below.
    the RGB pixel is `(m, g, m)`, so the overlap is white. Before: the moving round after its
    `steps` phase; after: after its transforms ("The replay" of {doc}`report-contract`, the
    table of states). The third tile is the central quarter (in Y and X) of the "after" tile,
-   enlarged four times by nearest-neighbour repetition. The legend: reference round, moving
-   round, overlap.
+   enlarged four times by nearest-neighbour repetition; on the "before" and "after" tiles a
+   yellow (`#ffd21f`) rectangle at least 2 px wide as shown bounds that quarter, its inner
+   edge on the quarter's edge. Two adjacent tiles are separated by a white gap of at least
+   8 px as shown. The legend: reference round, moving round, overlap, on a row above the
+   tiles' titles.
 
 ### Readout
 
 1. **Sample totals** (HTML bars from `readout_totals`), beside **Per FOV** (SVG map). The
    bars, one per level in the table's order, share one scale from 0 to the spots; each is
    labelled with its count and fraction of the spots and, when fewer FOVs have the level
-   than the spots, "n of N FOVs". A level that was not configured is a dashed bar with
+   than the spots, "n of N FOVs". The label is written over the whole row and is never
+   clipped to its bar: the bar's width states the fraction, the label is readable in full
+   whatever that width. A level that was not configured is a dashed bar with
    "not run"; an unavailable level, a dashed bar with "—" and the reason in its tooltip.
    Legend categories: "counted once per FOV that saw it" (every level above) and "after the
    overlaps are removed" (`reads_in_cells`, drawn in another fill); beside the last bar,
@@ -970,7 +995,8 @@ the residual map uses arrows and colour as below.
    nucleus outlines in yellow (`#ffd21f`), as the mockup draws them. An outline is a pixel
    of the label image whose label differs from one of its four neighbours, computed at full
    resolution and reduced to the tile by the maximum over blocks, so that no outline is
-   lost. The legend: nucleus outline, cell outline.
+   lost. Two adjacent tiles are separated by a white gap of at least 8 px as shown. The
+   legend: nucleus outline, cell outline, on a row above the tiles' titles.
 3. **Population accounting** (table from `population`): Population, Cells, Molecules, the
    rows of `population.csv` whose two cells are not both n/a, labelled "Input, all FOVs",
    "Retained", "Excluded: not owner", "Excluded: FOV not placed", "Excluded: duplicate
@@ -983,8 +1009,12 @@ the residual map uses arrows and colour as below.
    size (from `cells.csv`). Equal bins over `[0, p99]` of the values, `p99` the 99th
    percentile, at most 30 bins and for integer values bins of integer width
    `max(1, ceil((p99 + 1) / 30))`; the cells above `p99` in one last bar labelled
-   "> p99 (n cells)"; the median as a vertical line with its value in the axis label; the
-   cell size's unit in its axis label (one histogram per unit, "Cell size").
+   "> p99: n cells" at the top right of the plot; the median as a vertical line with its value
+   in the axis label; the cell size's unit in its axis label (one histogram per unit, "Cell
+   size"). The figures stand in rows of three, each in a third of the column; a row of two
+   figures has two columns and a single figure takes a half column, and each figure is drawn
+   for the slot it gets ("Figure sizes"). The distributions across FOVs (Readout) are three,
+   one row of thirds.
 2. **Marker patterns** (static JPEGs), one figure per marker group, with a group selector in
    the title row when there is more than one group; without markers, one figure of the three
    genes with the most retained molecules, titled "Most abundant genes (no markers
@@ -1001,9 +1031,14 @@ the residual map uses arrows and colour as below.
      grid (`(q − O) / S` per axis, `O` and `S` the origin and spacing `fusion.outputs`
      records), one colour per gene in the group's order (Okabe–Ito orange `#E69F00`, sky
      blue `#56B4E9`, bluish green `#009E73`, yellow `#F0E442`), drawn in group order so the
-     last gene is on top, opacity 0.8. The footprints of the three example FOVs are drawn as
-     white rectangles numbered 1 to 3. A scale bar of 1, 2 or 5 × 10ⁿ µm, at most a fifth of
-     the width, in the lower right.
+     last gene is on top, opacity 0.8. The footprints of the three example FOVs (the zoom-in
+     regions) are drawn as yellow (`#ffd21f`) rectangles at least 2 px wide as shown, their
+     inner edge on the footprint, numbered 1 to 3: each number in text of 12 px as shown,
+     white on a dark backing, inside its own rectangle at the first corner (top left, top
+     right, bottom left, bottom right) where it covers no number already placed and lies in no
+     other region's rectangle (else the first where it covers no number). A scale bar of
+     1, 2 or 5 × 10ⁿ µm, at most a fifth of the width, in the lower right, its label on a dark
+     backing.
    * **The zoom-in regions** (three columns, regions 1 to 3 = `example_1` to `example_3`).
      The XY view of each region is the example FOV's footprint, cut from the fused image at
      its full resolution and drawn at the zoom tile's width. **The slab** (choice A6): a slab
@@ -1036,9 +1071,13 @@ the residual map uses arrows and colour as below.
 3. **Marker co-expression** (table from `mecr`), beside **Reads along Z** (static PNG). The
    table: Pair (`A / B`), Cells with A, Cells with B, Both, Either, MECR (three decimals;
    "undefined" when `either` is 0). Without `marker_pairs` the block is unavailable with
-   `no_markers`. The heatmap: one row per FOV, one column per plane, the colour the FOV's
+   `no_markers`. The heatmap (drawn for its half column): one row per FOV, each labelled with
+   its FOV and at least 14 px high as shown, at most 64 rows by the rule of "All FOVs and
+   rounds" without marked FOVs (the axis of the rows then reads "64 of N FOVs shown; every
+   FOV in `reads_along_z.csv`"), one column per plane, labelled every 1, 2, 5, 10, … planes
+   so that the labels do not meet, the colour the FOV's
    fraction of its molecules on that plane (`reads / Σ_k reads` of the FOV), on a sequential
-   scale from 0 to the largest fraction, with its colour bar; the columns run from the
+   scale from 0 to the largest fraction of the FOVs drawn, with its colour bar; the columns run from the
    lowest to the highest `z` of the table's rows, over all FOVs (from the lower of plane 0
    and the lowest plane a molecule has, to the higher of the largest `n_z − 1` of the FOVs
    and the highest plane a molecule has), and a plane outside a FOV's own rows is hatched in
@@ -1097,18 +1136,51 @@ Three tables of two columns, as the mockup, without the marker row (D4):
 
 ### Figure sizes
 
-Proposed pixel sizes (choice A7), at 100 dpi; the page's content column is about 940 px wide
-(the mockup's 1,200 px less the side rail and gaps), and a figure is drawn at 1.25 times its
-column width for sharpness on a dense screen, up to the widths below.
+Every static figure of `report.html` and `index.html` is drawn for its slot, the width at
+which the page shows it in a window 1,200 px wide (choice A7, PX1, with Jiahao's review of
+2026-10-13). The slots follow from the page's CSS: the content column is 1,160 px (the
+`.wrap`'s 1,200 px less its padding), the full column of `report.html` 932 px (less the side
+rail of 200 px and its gap of 28 px), a half column (`.g2`, gap 48 px) 442 px and a third
+(`.g3`, gap 16 px) 300 px; `index.html` has no side rail. The widths are the constants
+`FULL_COLUMN`, `HALF_COLUMN`, `THIRD_COLUMN` and `COMPARISON_COLUMN` of
+`starfinder/report/_figures.py`:
 
-| Figure | Width × height (px) | Format |
+| Slot | Width (px) | Figures |
 | --- | --- | --- |
-| A plot of a full column (time per step, heatmaps, intensity panels) | 1,200 × 400; heatmaps 1,200 × `min(1,200, max(300, 12 per row))` | PNG |
-| A plot of a third or a half column (distributions, reads along Z) | 600 × 340 | PNG |
-| Preprocessing example grid | 256 px per tile | JPEG |
-| Registration and segmentation examples | 512 px per tile | JPEG |
-| Whole-sample marker view | `figure_width_px` (1,600; contract choice 15) | JPEG |
-| Marker zoom-in tile, XY and XZ | 512 px wide | JPEG |
+| Full column | 932 | Intensity panels, All FOVs and rounds, Preprocessing grid, Registration and segmentation examples, whole-sample marker view |
+| Half column | 442 | Time per step, Reads along Z; a figure of the three-figure grid in a row of one or two |
+| Third of the column | 300 | A figure of the three-figure grid in a row of three (distributions across FOVs and per cell); marker zoom-in tiles |
+| Comparison page column | 1,160 | The box plots by sample of `index.html` |
+
+The rules:
+
+* **Size.** A plot (PNG) is drawn at twice the width of its slot, so that it is sharp on a
+  dense screen. An image figure (JPEG) keeps its tiles and is shown scaled to its slot.
+* **Text.** No text of a figure, plot or image, is smaller than 11 px as shown: a figure
+  `w` px wide in a slot of `s` px is shown at the scale `s / w`, and its texts are written at
+  12 px as shown (titles 13 px), that is `12 · w / s` px in the figure, at 100 dpi with the
+  bundled DejaVu Sans. Texts that would not fit their place are broken into lines.
+* **No overlap.** The layout of each plot is measured on the drawn figure: no text overlaps
+  another axes, another text or the edge of the figure.
+* **Tiles.** Two adjacent tiles, side by side or one above the other, are separated by a
+  white gap of at least 8 px as shown: `n` tiles of `t` px side by side have the smallest
+  whole gap `g` with `g · s / (n · t + (n − 1) · g) ≥ 8`.
+* **Heatmap rows.** A row is at least 14 px high as shown (15 px), every row drawn has its
+  FOV label, and at most 64 rows are drawn ("Registration").
+* **Marks.** A region's mark is a yellow (`#ffd21f`) rectangle at least 2 px wide as shown.
+
+| Figure | Slot | Width × height (px) | Format |
+| --- | --- | --- | --- |
+| Time per step | half | 884 × `max(560, 52 per step name + its labels)` (26 px per step name and at least 280 px as shown) | PNG |
+| Intensity after each step | full | 1,864 × 720 (360 px as shown) | PNG |
+| All FOVs and rounds | full | 1,864 × (30 px per row drawn, at least the colour bar's label, + its labels) | PNG |
+| Reads along Z | half | 884 × (30 px per row drawn, at least the colour bar's label, + its labels) | PNG |
+| Distributions across FOVs and per cell | third or half | 600 × 340 in a third, 884 × 501 in a half (the proportion 600 : 340) | PNG |
+| Box plots by sample (`index.html`) | comparison | 2,320 × 773 | PNG |
+| Preprocessing example grid | full | 256 px per tile with its gaps; the headers and strips sized to their text | JPEG |
+| Registration and segmentation examples | full | 512 px per tile with its gaps (1,564 px wide); the header and strip sized to their text | JPEG |
+| Whole-sample marker view | full | `figure_width_px` (1,600; contract choice 15) | JPEG |
+| Marker zoom-in tile, XY and XZ | third | 512 px wide | JPEG |
 
 PX1 (recommended) is this table; PX2 halves every width (half the bytes, less detail in the
 example tiles); PX3 renders every figure at its column width (1×), which is soft on a dense
@@ -1250,7 +1322,7 @@ Rules:
 | PG2 | Every section and block present | as PG1 | Element ids of `report.html` | The eight sections in the order of "Layout of the page" and, in each, the blocks listed there in order (each id written in the test from this page). Exact. |
 | PG3 | Every unavailable part carries its reason | as PG1 | Placeholders and tooltips | For each row of `unavailable.csv` with `table` null, the page has, in the part's place, a placeholder with "Unavailable:" and the reason's text of "How an unavailable part is shown"; each null cell named by a row has "—" and its reason in the cell's tooltip data; the reason texts of the template's script equal that table, and the page holds no `application/json` block other than `report-data`. Exact. |
 | PG4 | No external resource | as PG1, and `index.html` of CP1 | The text of each page | No match of `https?:`, of `(src\|href)="//`, of `<link`, `<iframe`, `<object` or `@import`; every `src` attribute starts with `data:`; every `url(` is followed by `data:`; every `href` is `#…` or, on `index.html`, a relative `<sample>/report.html`; no `prefers-color-scheme` rule (light theme only). Exact. |
-| PG5 | Size budget | as PG1 | Bytes of `report.html` | At most `6 MiB + 16 KiB × FOVs + 3 MiB × marker figures`, and equal to the bytes `report.json` records for it (both taken from the same written file); every static figure decodes and has the pixel size of "Figure sizes". Exact. |
+| PG5 | Size budget | as PG1 | Bytes of `report.html` | At most `6 MiB + 16 KiB × FOVs + 3 MiB × marker figures`, and equal to the bytes `report.json` records for it (both taken from the same written file); every static figure decodes and has the pixel size of "Figure sizes". The rules of "Figure sizes" (W-475), on the figures as drawn, of these pages, the comparison page, a hand-written sample of 64 FOVs and hand-written examples: no text below 11 px as shown, each PNG twice the width of its slot and the slots those of the page's CSS and table, no text over another, another axes or the edge, heatmaps of at most 64 labelled rows of at least 14 px as shown chosen by the rule of "Registration" with the tables unsampled, white gaps of at least 8 px as shown between tiles, the yellow marks of the zoomed quarter and of the regions with their numbers, readout labels never clipped to their bar, and the Summary's Version, Run time and Generated in UTC and in the viewer's time zone. Exact; a width as shown compared as a float. |
 | PG6 | No verdict and no score | as PG1 | Column names of every table and keys of `report.json` | Equal to the lists of {doc}`report-contract` exactly, as sets and in order: no added column or key, so none holds a verdict or a score; `alignment_score` is the quantity of D5. Exact. |
 | PG7 | Output folder and entry checks | `report_records` (none) | Raised errors; the folder | Checks 1 to 7 of {doc}`report-contract` each raise their error, in that order, with the folder unchanged (a marker gene not in the codebook among them); a second report replaces the first; a file the first `report.json` does not list stops the entry with `FileExistsError` before anything is written. Exact. |
 | CH1 | The chain after the per-FOV processing | `scene_chain` with the export and assignment folders removed, once also without the placement (42) | Parts present and unavailable | As the first two rows of {doc}`report-contract` ("The report at each stage of a sample's processing"): without the placement the maps `no_placement`; with it the maps and the placement block; Segmentation and assembly and Sample measurements `no_export`; RC12's condition holds. Exact. |
@@ -1360,7 +1432,7 @@ present at a stage when no row of `unavailable.csv` names it with a reason other
 | PG2 | `test_report_page.py`, `test_pg2_sections_and_blocks`, `test_page_with_every_figure`; `test_report_chain.py`, `test_ch1_ch2_ch3_the_report_at_each_stage`, `test_rt1_segmentation_and_assembly_on_both_routes`, `test_a2_an_export_and_no_run_json`, `test_cp1_the_comparison_page` | default and slow | none compared |
 | PG3 | `test_report_page.py`, `test_pg3_every_unavailable_part_carries_its_reason`, `test_pg3_cells_drawn_by_the_script`, `test_page_with_every_figure`; `test_report_chain.py`, `test_ch1_ch2_ch3_the_report_at_each_stage`, `test_rt1_segmentation_and_assembly_on_both_routes`, `test_a2_an_export_and_no_run_json`, `test_cp1_the_comparison_page` | default and slow | none compared |
 | PG4 | `test_report_page.py`, `test_pg4_no_external_resource`, `test_page_with_every_figure`; `test_report_comparison.py`, `test_page_loads_nothing_and_embeds_samples_csv`; `test_report_chain.py`, `test_ch1_ch2_ch3_the_report_at_each_stage`, `test_rt1_segmentation_and_assembly_on_both_routes`, `test_a2_an_export_and_no_run_json`, `test_cp1_the_comparison_page` | default and slow | none compared |
-| PG5 | `test_report_page.py`, `test_pg5_size_budget_and_figure_sizes`, `test_page_with_every_figure`; `test_report_chain.py`, `test_ch1_ch2_ch3_the_report_at_each_stage`, `test_rt1_segmentation_and_assembly_on_both_routes`, `test_rt2_sample_measurements_on_both_routes`, `test_a2_an_export_and_no_run_json`, `test_cp1_the_comparison_page` | default and slow | none compared |
+| PG5 | `test_report_page.py`, `test_pg5_size_budget_and_figure_sizes`, `test_page_with_every_figure`; `test_report_chain.py`, `test_ch1_ch2_ch3_the_report_at_each_stage`, `test_rt1_segmentation_and_assembly_on_both_routes`, `test_rt2_sample_measurements_on_both_routes`, `test_a2_an_export_and_no_run_json`, `test_cp1_the_comparison_page`; `test_report_figure_rules.py`, `test_text_size_and_slots_on_every_page`, `test_no_overlap_on_the_pages`, `test_slots_are_the_page_columns_and_the_table`, `test_a_row_of_two_and_one_figure`, `test_comparison_page_figures`, `test_heatmap_rows`, `test_heatmap_tables_are_not_sampled`, `test_a_hand_written_sample_of_64_fovs`, `test_intensity_panels_do_not_overlap`, `test_time_per_step_with_the_steps_of_a_run_record`, `test_preprocessing_grid_gaps`, `test_registration_example_gaps_and_zoom_mark`, `test_segmentation_examples_gaps`, `test_whole_view_regions`, `test_readout_bar_labels_are_not_clipped`, `test_summary_rows`, `test_summary_text_forms`, `test_report_json_does_not_depend_on_the_page` | default and slow | none compared |
 | PG6 | `test_report_page.py`, `test_pg6_no_verdict_and_no_score`, `test_page_with_every_figure`; `test_report_collection.py`, `test_pg6_schema`; `test_report_chain.py`, `test_ch1_ch2_ch3_the_report_at_each_stage`, `test_rt1_segmentation_and_assembly_on_both_routes`, `test_a2_an_export_and_no_run_json`, `test_cp1_the_comparison_page` | default and slow | none compared |
 | PG7 | `test_report_collection.py`, `test_pg7_*`, `test_read_report_checks_the_listed_files`; `test_report_page.py`, `test_pg7_checks_through_dataset_report`, `test_pg7_entry_on_the_dataset` | default | none compared |
 | CH1 | `test_report_chain.py`, `test_ch1_ch2_ch3_the_report_at_each_stage` | slow | none compared |
