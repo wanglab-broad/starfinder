@@ -7,12 +7,14 @@ DejaVu Sans font: the image figures as JPEG at the configuration's quality, the 
 (whose metadata holds no time). Each figure is drawn for its slot, the width at which the page
 shows it ("Figure sizes"): the full column (932 px), a half column (442 px), a third (300 px)
 or the comparison page's column (1,160 px). A plot is drawn at twice the width of its slot;
-an image figure keeps its tiles (256 px per tile in the Preprocessing grid, 512 px in the
-Registration and segmentation examples and the marker zoom-in tiles, ``figure_width_px`` for
-the whole-sample view). Every text is written so that it is at least 11 px as shown (12 px,
-titles 13 px), every layout is measured so that no text overlaps another, another axes or
-the edge, and two tiles side by side or one above the other are separated by a white gap of
-at least 8 px as shown.
+an image figure keeps its tiles (512 px in the Registration and segmentation examples and the
+marker zoom-in tiles, ``figure_width_px`` for the whole-sample view; the Preprocessing grid's
+tiles are 256 px or larger, :func:`preprocessing_tile`), and no figure is shown wider than
+two thirds of its drawn width. Every text is written so that it is at least 11 px as shown
+(12 px, titles 13 px), every layout is measured so that no text overlaps another, another
+axes or the edge, two tiles side by side or one above the other are separated by a white gap
+of at least 8 px as shown, and a figure's legend is a row below its plots or tiles, at its
+left margin.
 
 The displayed signal of a tile is reduced to the tile's pixel size by the mean over blocks of
 ``b × b`` pixels, ``b = ceil(n_x / w)`` (partial blocks averaged over their pixels); its grey
@@ -42,6 +44,8 @@ EXAMPLE_TILE = 512
 FULL_COLUMN, HALF_COLUMN, THIRD_COLUMN, COMPARISON_COLUMN = 932, 442, 300, 1160
 #: A plot (PNG) is drawn at this many times the width of its slot.
 PLOT_SCALE = 2
+#: No figure is shown wider than SHOWN_AT_MOST[0] / SHOWN_AT_MOST[1] of its drawn width (two thirds).
+SHOWN_AT_MOST = (2, 3)
 #: Text as shown, px: no text below MIN_TEXT_PX; labels, ticks and legends at TEXT_PX, titles at TITLE_PX.
 MIN_TEXT_PX, TEXT_PX, TITLE_PX = 11, 12, 13
 #: The white gap between adjacent tiles, and the width of a yellow region mark, px as shown.
@@ -58,6 +62,10 @@ GREY_PERCENTILES = (0.1, 99.9)
 CELL_OUTLINE = "#22d3ee"
 NUCLEUS_OUTLINE = "#ffd21f"
 REFERENCE_COLOUR, MOVING_COLOUR = "#00ff00", "#ff00ff"
+#: The FOV maps of the page's inline script ("The FOV maps"): a rectangle's half-widths are MAP_SHRINK times half the
+#: median distance between neighbouring centres, the drawing is padded by MAP_PAD of its larger side on every side,
+#: and the map is at most MAP_MAX_WIDTH px wide (``.map svg`` of the template's CSS).
+MAP_SHRINK, MAP_PAD, MAP_MAX_WIDTH = 0.94, 0.04, 480
 #: The backing of a region's number on the whole-sample view.
 _BACKING = "#05070a"
 _DPI = 100
@@ -151,6 +159,16 @@ def tile_gap(n, tile, slot):
     return g
 
 
+def preprocessing_tile(columns, slot=FULL_COLUMN):
+    """The tile of a Preprocessing grid of ``columns`` states shown in ``slot``: 256 px, or the smallest whole size
+    above it at which the grid with its gaps is shown at no more than two thirds of its drawn width
+    (``3 · slot ≤ 2 · (n · t + (n − 1) · g)``)."""
+    size = PREPROCESSING_TILE
+    while SHOWN_AT_MOST[1] * slot > SHOWN_AT_MOST[0] * (columns * size + (columns - 1) * tile_gap(columns, size, slot)):
+        size += 1
+    return size
+
+
 def _pt(px):
     """Points of a size in figure pixels at 100 dpi."""
     return px * 72.0 / _DPI
@@ -175,16 +193,25 @@ class _Scale:
         return TITLE_PX * self.u
 
 
+def _inches(px):
+    """The size in inches of ``px`` whole pixels at 100 dpi, never a float just below them: Agg draws
+    ``floor(inches · dpi)`` pixels, so that ``1606 / 100`` would draw 1,605."""
+    inches = px / _DPI
+    while inches * _DPI < px:
+        inches = math.nextafter(inches, math.inf)
+    return inches
+
+
 def _figure(width, height):
     from matplotlib.backends.backend_agg import FigureCanvasAgg
     from matplotlib.figure import Figure
-    figure = Figure(figsize=(width / _DPI, height / _DPI), dpi=_DPI, facecolor="white")
+    figure = Figure(figsize=(_inches(width), _inches(height)), dpi=_DPI, facecolor="white")
     FigureCanvasAgg(figure)
     return figure
 
 
 def _resize(figure, width, height):
-    figure.set_size_inches(width / _DPI, height / _DPI)
+    figure.set_size_inches(_inches(width), _inches(height))
 
 
 def _place(axes, x, y, w, h):
@@ -423,13 +450,18 @@ def _legend_width(figure, items, s):
     return sum(s(10) + s(4) + text_width(figure, label, s.text) + s(12) for label, _ in items) - s(12)
 
 
-def _legend(figure, items, y, s, *, right=None, after=None):
-    """Legend squares and their labels on one row at ``y`` (its top), right-aligned at ``right`` pixels (the
-    figure's width less a margin by default); ``after`` a grey text written after the items."""
+def _legend_height(s):
+    """The height in pixels of a legend below a figure's plots or tiles: a margin above, one row and a margin below."""
+    return s(4) + _lines(s.text, 1) + s(6)
+
+
+def _legend(figure, items, x, y, s, *, after=None):
+    """Legend squares and their labels on one row, its left edge at ``x`` and its top at ``y`` (pixels); ``after``
+    a grey text written after the items. Returns the legend's box (x0, y0, x1, y1) in pixels from the top left."""
     from matplotlib.patches import Rectangle
     width, height = _figure_size(figure)
     total = _legend_width(figure, items, s) + (s(12) + text_width(figure, after, s.text) if after else 0)
-    x = (width - s(6) if right is None else right) - total
+    left = x
     square = s(10)
     middle = y + _lines(s.text, 1) / 2
     for label, colour in items:
@@ -440,6 +472,13 @@ def _legend(figure, items, y, s, *, right=None, after=None):
         x += square + s(4) + text_width(figure, label, s.text) + s(12)
     if after:
         _text(figure, x, middle, after, s.text, ha="left", va="center_baseline", color="#555555")
+    return (float(left), float(y), float(left + total), float(y + _lines(s.text, 1)))
+
+
+def _legend_below(figure, items, x, bottom, s, *, after=None):
+    """The legend of a figure as a row below its plots or tiles, whose lowest edge is at ``bottom`` pixels: its left
+    edge at ``x``, the figure's left margin. Returns the legend's box."""
+    return _legend(figure, items, x, bottom + s(4), s, after=after)
 
 
 def _title(figure, x, y, text, s):
@@ -456,22 +495,17 @@ def _unavailable_tile(figure, x, y, size, text, s):
               bbox={"boxstyle": "square,pad=0.3", "facecolor": "#eeeeee", "edgecolor": "none"})
 
 
-def _header(figure, s, titles, width, legend_items=None):
-    """The header of an image figure: its legend on one row (right-aligned), then the tiles' titles, each wrapped
-    to its tile; ``titles`` is [(x, text)]. Returns the wrapped titles and the header's height in pixels."""
+def _header(figure, s, titles, width):
+    """The header of an image figure: the tiles' titles, each wrapped to its tile; ``titles`` is [(x, text)].
+    Returns the wrapped titles and the header's height in pixels."""
     wrapped = [(x, wrap(figure, t, s.title, width - s(8))) for x, t in titles]
     lines = max((t.count("\n") + 1 for _, t in wrapped), default=0)
-    legend = _lines(s.text, 1) + s(4) if legend_items else 0
-    return wrapped, s(4) + legend + _lines(s.title, lines) + s(4)
+    return wrapped, s(4) + _lines(s.title, lines) + s(4)
 
 
-def _draw_header(figure, s, wrapped, legend_items=None, legend_after=None):
-    y = s(4)
-    if legend_items:
-        _legend(figure, legend_items, y, s, after=legend_after)
-        y += _lines(s.text, 1) + s(4)
+def _draw_header(figure, s, wrapped):
     for x, text in wrapped:
-        _title(figure, x, y, text, s)
+        _title(figure, x, s(4), text, s)
 
 
 # --- Preprocessing ----------------------------------------------------------------------------------------------
@@ -479,11 +513,12 @@ def _draw_header(figure, s, wrapped, legend_items=None, legend_after=None):
 def preprocessing_figure(replay, *, quality=85) -> FigureImage:
     """"Example FOV · <fov>, <round>": the reference round's grid, one row per channel, one column per state (the
     raw input, then each recorded entry in the order ``FOV.run`` runs them, headed by the step's name), tiles of
-    256 px separated by white gaps of at least 8 px as shown in the full column."""
+    :func:`preprocessing_tile` px separated by white gaps of at least 8 px as shown in the full column."""
     name = replay.reference
     replayed = replay.rounds[name]
     rows, columns = len(replayed.channels), len(replayed.states)
-    size, slot = PREPROCESSING_TILE, FULL_COLUMN
+    slot = FULL_COLUMN
+    size = preprocessing_tile(columns, slot)
     gap = tile_gap(columns, size, slot)
     width = size * columns + gap * (columns - 1)
     s = _Scale(width, slot)
@@ -519,7 +554,7 @@ def preprocessing_figure(replay, *, quality=85) -> FigureImage:
 def intensity_figure(replay) -> FigureImage:
     """"Intensity after each step": one panel per column of the Preprocessing grid, in each one curve per channel,
     the counts of ``intensity.csv`` against the bin centres, the count axis logarithmic (a bin of count 0 is left
-    out of the line); each panel with its own count axis, the legend of the channels above the panels."""
+    out of the line); each panel with its own count axis, the legend of the channels a row below the panels."""
     name = replay.reference
     replayed = replay.rounds[name]
     slot = FULL_COLUMN
@@ -547,9 +582,9 @@ def intensity_figure(replay) -> FigureImage:
         panels.append(axes)
         tiles.append({"name": state.step, "step_index": state.step_index, "round": name})
     pad, between = s(6), s(10)
-    legend = _lines(s.text, 1) + s(6)
+    legend = _legend_height(s)
     n = len(panels)
-    top = pad + legend
+    top = pad
     for _ in range(3):
         over = [_overhangs(a) for a in panels]
         inner = width - 2 * pad - sum(o[0] + o[2] for o in over) - between * (n - 1)
@@ -560,14 +595,14 @@ def intensity_figure(replay) -> FigureImage:
         x = pad
         for axes, o, title in zip(panels, over, titles):
             x += o[0]
-            _place(axes, x, top + title_h, panel, height - top - title_h - bottom - pad)
+            _place(axes, x, top + title_h, panel, height - top - title_h - bottom - legend - pad)
             x += panel + o[2] + between
         for axes in panels:
             _thin(axes.xaxis, s(6), (5, 4, 3, 2))
     for axes, title in zip(panels, titles):
         axes.set_title(title, fontsize=_pt(s.title), pad=_pt(s(4)))
-    _legend(figure, list(zip(replayed.channels, colours)), pad, s, right=width - pad)
-    return _finish(figure, "png", slot, shows=name, tiles=tiles)
+    box = _legend_below(figure, list(zip(replayed.channels, colours)), pad, height - legend - pad, s)
+    return _finish(figure, "png", slot, shows=name, tiles=tiles, marks={"legend": box})
 
 
 # --- Registration -----------------------------------------------------------------------------------------------
@@ -624,7 +659,8 @@ def registration_figure(replay, *, quality=85) -> FigureImage:
     centre × 4" of the first moving round (magenta) against the reference round after its ``steps`` phase
     (green), each the maximum over channels and over Z; the third tile is the central quarter, in Y and X, of
     the "after" tile enlarged four times by nearest-neighbour repetition, and a yellow rectangle bounds that
-    quarter on the first two tiles. The tiles are separated by white gaps of at least 8 px as shown."""
+    quarter on the first two tiles. The tiles are separated by white gaps of at least 8 px as shown; the legend is a
+    row below the tiles and their ranges."""
     reference = replay.rounds[replay.reference].before
     moving = replay.rounds[replay.moving[0]]
     size, slot = EXAMPLE_TILE, FULL_COLUMN
@@ -641,11 +677,11 @@ def registration_figure(replay, *, quality=85) -> FigureImage:
     shown = (("before registration", before, g0, m0), ("after registration", after, g1, m1),
              ("after registration, centre × 4", centre, g1, m1))
     items = (("reference round", REFERENCE_COLOUR), ("moving round", MOVING_COLOUR), ("overlap", "#ffffff"))
-    titles, header = _header(figure, s, [(j * (size + gap), t[0]) for j, t in enumerate(shown)], size, items)
+    titles, header = _header(figure, s, [(j * (size + gap), t[0]) for j, t in enumerate(shown)], size)
     lines = _strip_lines(figure, size + s(8), s, [_registration_text(g, m) for _, _, g, m in shown])
     strip = s(4) + _lines(s.text, lines) + s(4)
-    _resize(figure, width, int(math.ceil(header + size + strip)))
-    _draw_header(figure, s, titles, items)
+    _resize(figure, width, int(math.ceil(header + size + strip + _legend_height(s))))
+    _draw_header(figure, s, titles)
     line = math.ceil(s(MARK_PX))
     tiles, boxes, marks = [], [], []
     for j, (title, image, g_range, m_range) in enumerate(shown):
@@ -659,8 +695,9 @@ def registration_figure(replay, *, quality=85) -> FigureImage:
         boxes.append((x, header, x + size, header + size))
         tiles.append({"name": title, "round": moving.name, "reference_round": replay.reference,
                       "reference": g_range, "moving": m_range})
+    legend = _legend_below(figure, items, s(4), header + size + strip, s)
     return _finish(figure, "jpeg", slot, quality=quality, shows=moving.name, tiles=tiles,
-                   marks={"tiles": boxes, "zoom": marks, "zoom_line_px": line})
+                   marks={"tiles": boxes, "zoom": marks, "zoom_line_px": line, "legend": legend})
 
 
 # --- Segmentation and assembly ----------------------------------------------------------------------------------
@@ -676,7 +713,7 @@ def segmentation_figure(previews, *, quality=85, reasons=None) -> FigureImage:
     """"Example FOVs": one tile per role ``example_1`` to ``example_3``, titled with its FOV and role: the
     background in grey with its own range, the cell outlines in cyan and the nucleus outlines in yellow. A role
     without a preview is drawn as a hatched tile with its reason (``reasons`` maps a reason to its text). The tiles
-    are separated by white gaps of at least 8 px as shown."""
+    are separated by white gaps of at least 8 px as shown; the legend is a row below the tiles and their grey bars."""
     size, slot = EXAMPLE_TILE, FULL_COLUMN
     roles = ("example_1", "example_2", "example_3")
     gap = tile_gap(3, size, slot)
@@ -693,10 +730,10 @@ def segmentation_figure(previews, *, quality=85, reasons=None) -> FigureImage:
         background = block_mean(preview.background, size)
         ranges[role] = (background, *grey_range(background))
         named.append((j * (size + gap), f"{preview.fov_id} · {role}"))
-    titles, header = _header(figure, s, named, size, items)
+    titles, header = _header(figure, s, named, size)
     strip = _strip_height(_strip_lines(figure, size, s, [_range_text(lo, hi) for _, lo, hi in ranges.values()]), s)
-    _resize(figure, width, int(math.ceil(header + size + strip)))
-    _draw_header(figure, s, titles, items)
+    _resize(figure, width, int(math.ceil(header + size + strip + _legend_height(s))))
+    _draw_header(figure, s, titles)
     tiles, boxes = [], []
     for j, role in enumerate(roles):
         preview = previews.get(role)
@@ -720,7 +757,8 @@ def segmentation_figure(previews, *, quality=85, reasons=None) -> FigureImage:
         axes.set_ylim(max(y1, preview.label_extent[2]), min(y0, preview.label_extent[3]))
         _grey_bar(figure, x, header + size, size, lo, hi, s)
         tiles.append({"name": role, "fov_id": preview.fov_id, "route": preview.route, "lo": lo, "hi": hi})
-    return _finish(figure, "jpeg", slot, quality=quality, tiles=tiles, marks={"tiles": boxes})
+    legend = _legend_below(figure, items, s(4), header + size + strip, s)
+    return _finish(figure, "jpeg", slot, quality=quality, tiles=tiles, marks={"tiles": boxes, "legend": legend})
 
 
 # --- Sample measurements ----------------------------------------------------------------------------------------
@@ -948,12 +986,81 @@ def reads_along_z_figure(rows, planes) -> FigureImage:
 FOV_BINS = (5, 30)
 
 
-def time_per_step_figure(times, fov_names, sample_names, not_recorded) -> FigureImage:
-    """"Time per step" (PNG twice the half column's width, 26 px as shown per step name and at least 280 px): a
-    horizontal box plot of the seconds per FOV of each per-FOV step name (log scale, whiskers at 1.5 × the
-    interquartile range, every FOV beyond drawn as a point), then, below a divider, each sample step as a single
-    point on the same axis; the steps without a time are listed in the axis label as "not recorded". ``times`` is
-    :func:`._values.time_per_step`."""
+def _coordinate(value):
+    """A finite number of a ``fovs`` row as a float; None for a missing or unavailable cell (null in the data
+    block)."""
+    if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, float, np.integer, np.floating)):
+        return None
+    return float(value) if math.isfinite(value) else None
+
+
+def map_geometry(fovs):
+    """The geometry of the page's FOV maps, as the inline script computes it from the rows of ``fovs`` ("The FOV
+    maps"): ``{"hx", "hy", "box", "rects"}``, the half-widths of a rectangle, the drawing's box ``(x, y, w, h)`` (the
+    SVG's viewBox) and the extent ``(x0, y0, x1, y1)`` of the FOV rectangles, in the sample frame; None without a
+    placed FOV."""
+    placed = [r for r in fovs if _coordinate(r.get("centre_x")) is not None
+              and _coordinate(r.get("centre_y")) is not None]
+    if not placed:
+        return None
+
+    def step(a, b):
+        found = []
+        for p in placed:
+            best = None
+            for q in placed:
+                if q is p:
+                    continue
+                da, db = abs(_coordinate(q[a]) - _coordinate(p[a])), abs(_coordinate(q[b]) - _coordinate(p[b]))
+                if da > 0 and db <= da:
+                    dist = math.sqrt(da * da + db * db)
+                    if best is None or dist < best[0]:
+                        best = (dist, da)
+            if best is not None:
+                found.append(best[1])
+        return median(found) if found else None
+    sx, sy, first = step("centre_x", "centre_y"), step("centre_y", "centre_x"), placed[0]
+    hx = sx / 2 * MAP_SHRINK if sx is not None else None
+    hy = sy / 2 * MAP_SHRINK if sy is not None else None
+    fx0, fx1, fy0, fy1 = (_coordinate(first.get(f"footprint_{c}")) for c in ("x0", "x1", "y0", "y1"))
+    fw = (fx1 - fx0) / 2 if fx1 is not None and fx0 is not None else None
+    fh = (fy1 - fy0) / 2 if fy1 is not None and fy0 is not None else None
+    if hx is None and hy is None:
+        hx = fw if fw is not None else (fh if fh is not None else 1.0)
+        hy = fh if fh is not None else hx
+    elif hx is None:
+        hx = hy
+    elif hy is None:
+        hy = hx
+    xs = [_coordinate(r["centre_x"]) for r in placed]
+    ys = [_coordinate(r["centre_y"]) for r in placed]
+    x0, x1, y0, y1 = min(xs) - hx, max(xs) + hx, min(ys) - hy, max(ys) + hy
+    pad = MAP_PAD * max(x1 - x0, y1 - y0)
+    return {"hx": hx, "hy": hy, "box": (x0 - pad, y0 - pad, x1 - x0 + 2 * pad, y1 - y0 + 2 * pad),
+            "rects": (x0, y0, x1, y1)}
+
+
+def map_extent(fovs, slot=HALF_COLUMN):
+    """The top and bottom in px as shown of the FOV rectangles of a page's map in ``slot``: the map is
+    ``min(slot, 480)`` px wide and as high as its viewBox gives; None without a placed FOV."""
+    geometry = map_geometry(fovs)
+    if geometry is None:
+        return None
+    bx, by, bw, bh = geometry["box"]
+    k = min(slot, MAP_MAX_WIDTH) / bw
+    return ((geometry["rects"][1] - by) * k, (geometry["rects"][3] - by) * k)
+
+
+def time_per_step_figure(times, fov_names, sample_names, not_recorded, fovs=None) -> FigureImage:
+    """"Time per step" (PNG twice the half column's width, 26 px as shown per step name): a horizontal box plot of
+    the seconds per FOV of each per-FOV step name (log scale, whiskers at 1.5 × the interquartile range, every FOV
+    beyond drawn as a point), then, below a divider, each sample step as a single point on the same axis; the steps
+    without a time are listed in the axis label as "not recorded". ``times`` is :func:`._values.time_per_step`.
+
+    With the rows ``fovs`` of a placed sample, the plot's axes span, as shown, the FOV rectangles of the FOV status
+    map beside it (:func:`map_extent`): from their top to their bottom, or, when 26 px per step name need more, from
+    their top down by 26 px per step name. Without a placed FOV the figure is at least 280 px high as shown and its
+    axes fill it."""
     slot = HALF_COLUMN
     width = PLOT_SCALE * slot
     s = _Scale(width, slot)
@@ -996,14 +1103,29 @@ def time_per_step_figure(times, fov_names, sample_names, not_recorded) -> Figure
     _style(axes, s)
     pad = s(6)
     data_h = s(STEP_ROW_PX) * max(1, len(names))
+    extent = map_extent(fovs, slot) if fovs is not None else None
+    if extent is None:
+        for _ in range(3):
+            frame = _fit(axes, (0, 0, width, figure.bbox.height), pad)
+            axes.set_xlabel(wrap(figure, label, s.text, frame[2]), fontsize=_pt(s.text))
+            left, top, right, bottom = _overhangs(axes)
+            height = int(math.ceil(max(PLOT_SCALE * TIME_MIN_PX, 2 * pad + top + data_h + bottom)))
+            _resize(figure, width, height)
+        _fit(axes, (0, 0, width, height), pad)
+        return _finish(figure, "png", slot, tiles=tiles)
+    # The axes span the map's FOV rectangles as shown, or 26 px per step name from their top when that is more.
+    span = max(s(extent[1] - extent[0]), data_h)
     for _ in range(3):
         frame = _fit(axes, (0, 0, width, figure.bbox.height), pad)
         axes.set_xlabel(wrap(figure, label, s.text, frame[2]), fontsize=_pt(s.text))
         left, top, right, bottom = _overhangs(axes)
-        height = int(math.ceil(max(PLOT_SCALE * TIME_MIN_PX, 2 * pad + top + data_h + bottom)))
+        start = max(s(extent[0]), pad + top)
+        height = int(math.ceil(start + span + bottom + pad))
         _resize(figure, width, height)
-    _fit(axes, (0, 0, width, height), pad)
-    return _finish(figure, "png", slot, tiles=tiles)
+    frame = _fit(axes, (0, 0, width, height), pad)
+    _place(axes, frame[0], start, frame[2], span)
+    return _finish(figure, "png", slot, tiles=tiles,
+                   marks={"map": (s(extent[0]), s(extent[1])), "axes": (start, start + span)})
 
 
 def residual_heatmap_figure(rows, fov_ids, rounds, marked=()) -> FigureImage:
@@ -1395,10 +1517,10 @@ def _whole_view(group, view, molecules, retained, regions, width, quality):
     s = _Scale(width, slot)
     figure = _figure(width, h)
     items = list(zip(group.genes, group.colours))
-    titles, header = _header(figure, s, [(0, group.title)], width, items)
+    titles, header = _header(figure, s, [(0, group.title)], width)
     lo, hi = fused_range(block_mean(image, width))
     strip = _strip_height(_strip_lines(figure, width, s, [_range_text(lo, hi, view.image)]), s)
-    _resize(figure, width, int(math.ceil(header + h + strip)))
+    _resize(figure, width, int(math.ceil(header + h + strip + _legend_height(s))))
     axes, (x0, x1, y0, y1) = _image_axes(figure, 0, header, width, h, image, ((oy, ox), (sy, sx)), lo, hi)
     um_per_px = width_um / width
     diameter = _point_diameter(um_per_px)
@@ -1421,13 +1543,15 @@ def _whole_view(group, view, molecules, retained, regions, width, quality):
         axes.text(xr - length / 2, yr - (y1 - y0) * 0.015, f"{length:g} µm", color="white", fontsize=_pt(s.text),
                   ha="center", va="bottom", bbox={"boxstyle": "square,pad=0.2", "facecolor": _BACKING,
                                                   "edgecolor": "none", "alpha": 0.6})
-    _draw_header(figure, s, titles, items, view.image)
+    _draw_header(figure, s, titles)
     _grey_bar(figure, 0, header + h, width, lo, hi, s, view.image)
+    legend = _legend_below(figure, items, s(4), header + h + strip, s, after=view.image)
     tile = {"name": "whole", "title": group.title, "image": view.image,
             "genes": {g: int(len(r)) for g, r in drawn.items()},
             "point_diameter_px": diameter, "um_per_px": um_per_px, "lo": lo, "hi": hi, "scale_bar_um": length}
     return _finish(figure, "jpeg", slot, quality=quality, tiles=[tile],
-                   marks={"regions": numbers, "line_px": line, "image": (0, header, width, header + h)})
+                   marks={"regions": numbers, "line_px": line, "image": (0, header, width, header + h),
+                          "legend": legend})
 
 
 def _point_diameter(um_per_px):

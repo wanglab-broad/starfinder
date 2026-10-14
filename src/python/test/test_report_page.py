@@ -40,7 +40,7 @@ from starfinder.report import _page as page_module
 from .report_fixtures import (CELL_VARIANTS, DATASET, FOVS, RECORD_VARIANTS, SAMPLE, SAMPLE_ID, report_cells,
                               report_records)
 from .report_sizes import (DISTRIBUTION_HALF, DISTRIBUTION_THIRD, EXAMPLE_TILE, HEATMAP_WIDTH, INTENSITY_SIZE,
-                           MAX_ROWS, PREPROCESSING_TILE, READS_Z_WIDTH, ROW_PX, THIRD, TIME_WIDTH, grid_slot,
+                           MAX_ROWS, READS_Z_WIDTH, ROW_PX, THIRD, TIME_WIDTH, grid_slot, preprocessing_tile,
                            time_height_at_least, tiles_width)
 from .test_report_collection import (CHECKS, CONTRACT_COLUMNS, CONTRACT_RECORD_KEYS, CONTRACT_SUMMARY_KEYS,
                                      anndata_or_skip, snapshot)
@@ -793,8 +793,8 @@ def test_page_with_every_figure(scene_chain_registered):  # noqa: F811
 
     def sizes(name, image):
         if name == "preprocessing":
-            assert image.size[1] > rows * PREPROCESSING_TILE
-            return (tiles_width(columns, PREPROCESSING_TILE), image.size[1])
+            assert image.size[1] > rows * preprocessing_tile(columns)
+            return (tiles_width(columns, preprocessing_tile(columns)), image.size[1])
         if name in ("registration", "segmentation"):
             assert image.size[1] > EXAMPLE_TILE
             return (tiles_width(3, EXAMPLE_TILE), image.size[1])

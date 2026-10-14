@@ -45,7 +45,7 @@ from . import test_report_comparison as comparison_checks
 from . import test_report_measurements as measurement_checks
 from . import test_report_page as page_checks
 from .report_scene import Chain, scene_chain, scene_chain_plane  # noqa: F401 (module-scoped fixtures)
-from .report_sizes import EXAMPLE_TILE, INTENSITY_SIZE, PREPROCESSING_TILE, tiles_width
+from .report_sizes import EXAMPLE_TILE, INTENSITY_SIZE, preprocessing_tile, tiles_width
 
 pytestmark = [pytest.mark.report, pytest.mark.validation]
 
@@ -163,8 +163,8 @@ def figure_sizes(page, chain: Chain):
             run = chain.run_record(replay["fov_id"])
             reference = replay["rounds"]["reference"]
             columns = len(run["preprocessing"]["rounds"][reference]) + 1
-            assert image.size[1] > len(run["channels"][reference]) * PREPROCESSING_TILE
-            return (tiles_width(columns, PREPROCESSING_TILE), image.size[1])
+            assert image.size[1] > len(run["channels"][reference]) * preprocessing_tile(columns)
+            return (tiles_width(columns, preprocessing_tile(columns)), image.size[1])
         if name in ("registration", "segmentation"):
             assert image.size[1] > EXAMPLE_TILE
             return (tiles_width(3, EXAMPLE_TILE), image.size[1])

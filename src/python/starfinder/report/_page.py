@@ -217,7 +217,7 @@ class PageFigures:
         from . import _figures
         c = self.c = collection
         quality = c.config.jpeg_quality
-        self.time, self.not_recorded = self._time(tables["steps"])
+        self.time, self.not_recorded = self._time(tables["steps"], tables["fovs"])
         rounds = list(dict.fromkeys(r["round"] for r in tables["registration"]))
         marked = [r["fov_id"] for r in tables["problematic_fovs"] if r["rule"] == "shift_residual"]
         self.heatmap = (_figures.residual_heatmap_figure(tables["registration"], c.fov_ids, rounds, marked)
@@ -238,7 +238,9 @@ class PageFigures:
         self.sample = c.measurements.figures()
 
     @staticmethod
-    def _time(steps):
+    def _time(steps, fovs):
+        """Time per step, its axes spanning the FOV rectangles of the FOV status map beside it (drawn from the same
+        rows of ``fovs`` as the page's script draws the map)."""
         from ._figures import time_per_step_figure
         from ._values import NA
         times = time_per_step(steps)
@@ -251,7 +253,7 @@ class PageFigures:
             if name not in times:
                 not_recorded.append(name)
         figure = time_per_step_figure(times, [n for n in fov_names if n in times],
-                                      [n for n in sample_names if n in times], not_recorded)
+                                      [n for n in sample_names if n in times], not_recorded, fovs)
         return figure, not_recorded
 
     @staticmethod
@@ -298,8 +300,8 @@ class _Page:
         title = f"Processing report · {c.sample}"
         values = {
             "title": _e(title),
-            "heading": f'<h1>Processing report</h1><span class="sub"><code>{_e(c.dataset_id)}</code> · '
-                       f'sample <code>{_e(c.sample)}</code></span>',
+            # The heading alone: the Summary's facts name the dataset and the sample.
+            "heading": "<h1>Processing report</h1>",
             "facts": self.facts(), "key_numbers": self.key_numbers(), "problematic": self.problematic(),
             "chart": self.chart(), "fov_status": self.fov_status(),
             "time": image(self.figures.time, "time", "Time per step" + (

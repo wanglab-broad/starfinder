@@ -789,7 +789,9 @@ The page follows the agreed mockup section by section. Where the mockup and the 
 decisions differ, the decisions win: the Files section has no marker file (D4), the
 page has a light theme only (D3; the mockup's dark-scheme rules are left out), the
 Summary names the route ({doc}`report-contract`, "The two routes"), and the cell values
-and the segmentation preview follow the route (A1).
+and the segmentation preview follow the route (A1). The page header is the heading
+"Processing report" alone (Jiahao's review of 2026-10-14): the Summary's facts name the
+dataset and the sample, and the page's title stays "Processing report · `<sample>`".
 
 ### How the page is built
 
@@ -903,8 +905,14 @@ the residual map uses arrows and colour as below.
    whiskers at 1.5 × the interquartile range, every FOV beyond drawn as a point), the sample
    steps as single points on the same axis below a divider, steps without a time listed in
    the axis label as "not recorded". Time per step is drawn for the half column it sits in
-   ("Figure sizes"): 26 px as shown per step name and at least 280 px high; over less than
-   two decades its axis is labelled at 1, 2 and 5 × 10ⁿ s.
+   ("Figure sizes"), 26 px as shown per step name; over less than two decades its axis is
+   labelled at 1, 2 and 5 × 10ⁿ s. Its axes are aligned with the FOV status map on their left
+   (Jiahao's review of 2026-10-14): as shown, they span the map's FOV rectangles from their
+   top line to their bottom line, the map's geometry computed from the rows of `fovs` as the
+   inline script computes it ("The FOV maps") for a map as wide as the half column (at most
+   480 px); when 26 px per step name need more height than the rectangles give, the axes
+   start on the rectangles' top line and are 26 px per step name high. A sample without a
+   placed FOV has no map: the figure is then at least 280 px high and its axes fill it.
 
 ### Preprocessing
 
@@ -914,12 +922,16 @@ the residual map uses arrows and colour as below.
    step's name). Each tile is the maximum over Z of that channel ("The replay of the
    examples"), with its own grey range and colour bar. Two adjacent tiles, side by side or one
    above the other, are separated by a white gap of at least 8 px as shown ("Figure sizes").
+   The grid is drawn at least 1,398 px wide, so that it is shown at no more than two thirds of
+   its drawn width (Jiahao's review of 2026-10-14): its tiles are 256 px, or the smallest whole
+   size above at which the grid with its gaps is 1,398 px wide (693 px for two states, 458 px
+   for three); its text is sized for that scale.
 2. **Intensity after each step** (one static PNG). One panel per column of the grid, side by
    side and sharing nothing but the figure; in each, one curve per channel, the counts of
    `intensity.csv` against the bin centres, the count axis logarithmic (a bin of count 0 is
    left out of the line), channels in the colours of the legend. Each panel keeps its own
    count axis, with room for its labels between it and the panel before it; the legend is
-   one row above the panels.
+   one row below the panels and their axis labels, at the figure's left margin.
 
 ### Registration
 
@@ -955,8 +967,8 @@ the residual map uses arrows and colour as below.
    enlarged four times by nearest-neighbour repetition; on the "before" and "after" tiles a
    yellow (`#ffd21f`) rectangle at least 2 px wide as shown bounds that quarter, its inner
    edge on the quarter's edge. Two adjacent tiles are separated by a white gap of at least
-   8 px as shown. The legend: reference round, moving round, overlap, on a row above the
-   tiles' titles.
+   8 px as shown. The legend: reference round, moving round, overlap, on a row below the
+   tiles and their ranges, at the figure's left margin.
 
 ### Readout
 
@@ -996,7 +1008,8 @@ the residual map uses arrows and colour as below.
    of the label image whose label differs from one of its four neighbours, computed at full
    resolution and reduced to the tile by the maximum over blocks, so that no outline is
    lost. Two adjacent tiles are separated by a white gap of at least 8 px as shown. The
-   legend: nucleus outline, cell outline, on a row above the tiles' titles.
+   legend: nucleus outline, cell outline, on a row below the tiles and their grey bars, at
+   the figure's left margin.
 3. **Population accounting** (table from `population`): Population, Cells, Molecules, the
    rows of `population.csv` whose two cells are not both n/a, labelled "Input, all FOVs",
    "Retained", "Excluded: not owner", "Excluded: FOV not placed", "Excluded: duplicate
@@ -1061,7 +1074,8 @@ the residual map uses arrows and colour as below.
      applies; for an LN zoom tile of 512 px over a 291 µm footprint, about 2.6 px.
    * **`Z = 1`.** The slab is the one plane: the XY views show every retained molecule of
      the region over the plane, and the XZ views are unavailable with `no_stack`.
-   * The legend: the genes with their colours, then the image name; the scale bars.
+   * The legend: the genes with their colours, then the image name, on a row below the
+     image and its grey bar, at the figure's left margin; the scale bars.
    * Options (choice A6): **SL1 (recommended)**, a slab of 3 µm, thinner than a nucleus,
      and points of 1.5 µm with a floor of 2 px, which stay visible in the whole-sample view
      (about 1.5 µm per pixel at 1,600 px for LN); SL2, a slab of 6 µm and points of 1 µm with a floor of 1 px, which
@@ -1155,7 +1169,10 @@ rail of 200 px and its gap of 28 px), a half column (`.g2`, gap 48 px) 442 px an
 The rules:
 
 * **Size.** A plot (PNG) is drawn at twice the width of its slot, so that it is sharp on a
-  dense screen. An image figure (JPEG) keeps its tiles and is shown scaled to its slot.
+  dense screen. An image figure (JPEG) keeps its tiles and is shown scaled to its slot. No
+  figure is shown wider than two thirds of its drawn width (`s / w ≤ 2/3`, Jiahao's review
+  of 2026-10-14): the browser never enlarges a figure's text or tiles; the Preprocessing grid
+  is drawn larger to meet it.
 * **Text.** No text of a figure, plot or image, is smaller than 11 px as shown: a figure
   `w` px wide in a slot of `s` px is shown at the scale `s / w`, and its texts are written at
   12 px as shown (titles 13 px), that is `12 · w / s` px in the figure, at 100 dpi with the
@@ -1168,19 +1185,23 @@ The rules:
 * **Heatmap rows.** A row is at least 14 px high as shown (15 px), every row drawn has its
   FOV label, and at most 64 rows are drawn ("Registration").
 * **Marks.** A region's mark is a yellow (`#ffd21f`) rectangle at least 2 px wide as shown.
+* **Legends.** A figure's legend is a row below its plots or tiles (and their axis labels,
+  ranges and grey bars), its left edge at the figure's left margin, over nothing, as the
+  legends of the page's maps sit below the maps (Jiahao's review of 2026-10-14). A colour or
+  grey bar that belongs to one tile stays with its tile.
 
-| Figure | Slot | Width × height (px) | Format |
-| --- | --- | --- | --- |
-| Time per step | half | 884 × `max(560, 52 per step name + its labels)` (26 px per step name and at least 280 px as shown) | PNG |
-| Intensity after each step | full | 1,864 × 720 (360 px as shown) | PNG |
-| All FOVs and rounds | full | 1,864 × (30 px per row drawn, at least the colour bar's label, + its labels) | PNG |
-| Reads along Z | half | 884 × (30 px per row drawn, at least the colour bar's label, + its labels) | PNG |
-| Distributions across FOVs and per cell | third or half | 600 × 340 in a third, 884 × 501 in a half (the proportion 600 : 340) | PNG |
-| Box plots by sample (`index.html`) | comparison | 2,320 × 773 | PNG |
-| Preprocessing example grid | full | 256 px per tile with its gaps; the headers and strips sized to their text | JPEG |
-| Registration and segmentation examples | full | 512 px per tile with its gaps (1,564 px wide); the header and strip sized to their text | JPEG |
-| Whole-sample marker view | full | `figure_width_px` (1,600; contract choice 15) | JPEG |
-| Marker zoom-in tile, XY and XZ | third | 512 px wide | JPEG |
+| Figure | Slot | Shown width (px) | Drawn width × height (px) | Format |
+| --- | --- | --- | --- | --- |
+| Time per step | half | 442 | 884 × (beside the FOV status map: the axes span its FOV rectangles, or 52 per step name from their top when that is more, + its labels; without a map: `max(560, 52 per step name + its labels)`) (26 px per step name as shown) | PNG |
+| Intensity after each step | full | 932 | 1,864 × 720 (360 px as shown) | PNG |
+| All FOVs and rounds | full | 932 | 1,864 × (30 px per row drawn, at least the colour bar's label, + its labels) | PNG |
+| Reads along Z | half | 442 | 884 × (30 px per row drawn, at least the colour bar's label, + its labels) | PNG |
+| Distributions across FOVs and per cell | third or half | 300 or 442 | 600 or 884 wide: 600 × 340 in a third, 884 × 501 in a half (the proportion 600 : 340) | PNG |
+| Box plots by sample (`index.html`) | comparison | 1,160 | 2,320 × 773 | PNG |
+| Preprocessing example grid | full | 932 | at least 1,398 wide: tiles of 256 px, or the smallest whole size above whose grid with its gaps is 1,398 px wide; the headers and strips sized to their text | JPEG |
+| Registration and segmentation examples | full | 932 | 1,564 wide (512 px per tile with its gaps); the header, strip and legend sized to their text | JPEG |
+| Whole-sample marker view | full | 932 | `figure_width_px` wide (1,600; contract choice 15) | JPEG |
+| Marker zoom-in tile, XY and XZ | third | 300 | 512 wide | JPEG |
 
 PX1 (recommended) is this table; PX2 halves every width (half the bytes, less detail in the
 example tiles); PX3 renders every figure at its column width (1×), which is soft on a dense
@@ -1322,7 +1343,7 @@ Rules:
 | PG2 | Every section and block present | as PG1 | Element ids of `report.html` | The eight sections in the order of "Layout of the page" and, in each, the blocks listed there in order (each id written in the test from this page). Exact. |
 | PG3 | Every unavailable part carries its reason | as PG1 | Placeholders and tooltips | For each row of `unavailable.csv` with `table` null, the page has, in the part's place, a placeholder with "Unavailable:" and the reason's text of "How an unavailable part is shown"; each null cell named by a row has "—" and its reason in the cell's tooltip data; the reason texts of the template's script equal that table, and the page holds no `application/json` block other than `report-data`. Exact. |
 | PG4 | No external resource | as PG1, and `index.html` of CP1 | The text of each page | No match of `https?:`, of `(src\|href)="//`, of `<link`, `<iframe`, `<object` or `@import`; every `src` attribute starts with `data:`; every `url(` is followed by `data:`; every `href` is `#…` or, on `index.html`, a relative `<sample>/report.html`; no `prefers-color-scheme` rule (light theme only). Exact. |
-| PG5 | Size budget | as PG1 | Bytes of `report.html` | At most `6 MiB + 16 KiB × FOVs + 3 MiB × marker figures`, and equal to the bytes `report.json` records for it (both taken from the same written file); every static figure decodes and has the pixel size of "Figure sizes". The rules of "Figure sizes" (W-475), on the figures as drawn, of these pages, the comparison page, a hand-written sample of 64 FOVs and hand-written examples: no text below 11 px as shown, each PNG twice the width of its slot and the slots those of the page's CSS and table, no text over another, another axes or the edge, heatmaps of at most 64 labelled rows of at least 14 px as shown chosen by the rule of "Registration" with the tables unsampled, white gaps of at least 8 px as shown between tiles, the yellow marks of the zoomed quarter and of the regions with their numbers, readout labels never clipped to their bar, and the Summary's Version, Run time and Generated in UTC and in the viewer's time zone. Exact; a width as shown compared as a float. |
+| PG5 | Size budget | as PG1 | Bytes of `report.html` | At most `6 MiB + 16 KiB × FOVs + 3 MiB × marker figures`, and equal to the bytes `report.json` records for it (both taken from the same written file); every static figure decodes and has the pixel size of "Figure sizes". The rules of "Figure sizes" (W-475), on the figures as drawn, of these pages, the comparison page, a hand-written sample of 64 FOVs and hand-written examples: no text below 11 px as shown, each PNG twice the width of its slot and the slots those of the page's CSS and table, no text over another, another axes or the edge, heatmaps of at most 64 labelled rows of at least 14 px as shown chosen by the rule of "Registration" with the tables unsampled, white gaps of at least 8 px as shown between tiles, the yellow marks of the zoomed quarter and of the regions with their numbers, readout labels never clipped to their bar, and the Summary's Version, Run time and Generated in UTC and in the viewer's time zone. After the second review (W-478): the page header is the heading "Processing report" alone, with the dataset and the sample in the Summary's facts and the title unchanged; the axes of Time per step, as shown, start within 4 px of the top of the FOV rectangles of the map the page's script draws (FOVs on grids of 2 × 2, 8 × 8 and 1 × 4 with the step names of a workflow run record) and end within 4 px of their bottom where 26 px per step name fit, else are at least 26 px per step name high, and a sample without placement draws the figure as before; no figure of `report.html` or `index.html` is shown wider than two thirds of its drawn width; every legend is a row below every axes and tile of its figure, at its left margin, over nothing; the table of figure sizes equals the code's constants. Exact; a width as shown compared as a float, an alignment within 4 px. |
 | PG6 | No verdict and no score | as PG1 | Column names of every table and keys of `report.json` | Equal to the lists of {doc}`report-contract` exactly, as sets and in order: no added column or key, so none holds a verdict or a score; `alignment_score` is the quantity of D5. Exact. |
 | PG7 | Output folder and entry checks | `report_records` (none) | Raised errors; the folder | Checks 1 to 7 of {doc}`report-contract` each raise their error, in that order, with the folder unchanged (a marker gene not in the codebook among them); a second report replaces the first; a file the first `report.json` does not list stops the entry with `FileExistsError` before anything is written. Exact. |
 | CH1 | The chain after the per-FOV processing | `scene_chain` with the export and assignment folders removed, once also without the placement (42) | Parts present and unavailable | As the first two rows of {doc}`report-contract` ("The report at each stage of a sample's processing"): without the placement the maps `no_placement`; with it the maps and the placement block; Segmentation and assembly and Sample measurements `no_export`; RC12's condition holds. Exact. |
@@ -1432,7 +1453,7 @@ present at a stage when no row of `unavailable.csv` names it with a reason other
 | PG2 | `test_report_page.py`, `test_pg2_sections_and_blocks`, `test_page_with_every_figure`; `test_report_chain.py`, `test_ch1_ch2_ch3_the_report_at_each_stage`, `test_rt1_segmentation_and_assembly_on_both_routes`, `test_a2_an_export_and_no_run_json`, `test_cp1_the_comparison_page` | default and slow | none compared |
 | PG3 | `test_report_page.py`, `test_pg3_every_unavailable_part_carries_its_reason`, `test_pg3_cells_drawn_by_the_script`, `test_page_with_every_figure`; `test_report_chain.py`, `test_ch1_ch2_ch3_the_report_at_each_stage`, `test_rt1_segmentation_and_assembly_on_both_routes`, `test_a2_an_export_and_no_run_json`, `test_cp1_the_comparison_page` | default and slow | none compared |
 | PG4 | `test_report_page.py`, `test_pg4_no_external_resource`, `test_page_with_every_figure`; `test_report_comparison.py`, `test_page_loads_nothing_and_embeds_samples_csv`; `test_report_chain.py`, `test_ch1_ch2_ch3_the_report_at_each_stage`, `test_rt1_segmentation_and_assembly_on_both_routes`, `test_a2_an_export_and_no_run_json`, `test_cp1_the_comparison_page` | default and slow | none compared |
-| PG5 | `test_report_page.py`, `test_pg5_size_budget_and_figure_sizes`, `test_page_with_every_figure`; `test_report_chain.py`, `test_ch1_ch2_ch3_the_report_at_each_stage`, `test_rt1_segmentation_and_assembly_on_both_routes`, `test_rt2_sample_measurements_on_both_routes`, `test_a2_an_export_and_no_run_json`, `test_cp1_the_comparison_page`; `test_report_figure_rules.py`, `test_text_size_and_slots_on_every_page`, `test_no_overlap_on_the_pages`, `test_slots_are_the_page_columns_and_the_table`, `test_a_row_of_two_and_one_figure`, `test_comparison_page_figures`, `test_heatmap_rows`, `test_heatmap_tables_are_not_sampled`, `test_a_hand_written_sample_of_64_fovs`, `test_intensity_panels_do_not_overlap`, `test_time_per_step_with_the_steps_of_a_run_record`, `test_preprocessing_grid_gaps`, `test_registration_example_gaps_and_zoom_mark`, `test_segmentation_examples_gaps`, `test_whole_view_regions`, `test_readout_bar_labels_are_not_clipped`, `test_summary_rows`, `test_summary_text_forms`, `test_report_json_does_not_depend_on_the_page` | default and slow | none compared |
+| PG5 | `test_report_page.py`, `test_pg5_size_budget_and_figure_sizes`, `test_page_with_every_figure`; `test_report_chain.py`, `test_ch1_ch2_ch3_the_report_at_each_stage`, `test_rt1_segmentation_and_assembly_on_both_routes`, `test_rt2_sample_measurements_on_both_routes`, `test_a2_an_export_and_no_run_json`, `test_cp1_the_comparison_page`; `test_report_figure_rules.py`, `test_text_size_and_slots_on_every_page`, `test_no_overlap_on_the_pages`, `test_slots_are_the_page_columns_and_the_table`, `test_a_row_of_two_and_one_figure`, `test_comparison_page_figures`, `test_heatmap_rows`, `test_heatmap_tables_are_not_sampled`, `test_a_hand_written_sample_of_64_fovs`, `test_intensity_panels_do_not_overlap`, `test_time_per_step_with_the_steps_of_a_run_record`, `test_preprocessing_grid_gaps`, `test_registration_example_gaps_and_zoom_mark`, `test_segmentation_examples_gaps`, `test_whole_view_regions`, `test_readout_bar_labels_are_not_clipped`, `test_summary_rows`, `test_summary_text_forms`, `test_report_json_does_not_depend_on_the_page`; `test_report_second_review.py`, `test_header`, `test_time_per_step_aligned_with_a_hand_written_map`, `test_time_per_step_aligned_on_the_page`, `test_time_per_step_without_placement`, `test_no_figure_shown_enlarged_on_every_page`, `test_preprocessing_grid_is_drawn_larger`, `test_comparison_page_not_enlarged`, `test_legends_of_the_hand_written_figures`, `test_legend_of_the_whole_sample_view`, `test_figures_table_equals_the_constants`, `test_second_review_on_the_chain_page` | default and slow | within 4 px (the alignment of Time per step), 1e-3 px (the map the script draws against `map_extent`); the ratios as floats |
 | PG6 | `test_report_page.py`, `test_pg6_no_verdict_and_no_score`, `test_page_with_every_figure`; `test_report_collection.py`, `test_pg6_schema`; `test_report_chain.py`, `test_ch1_ch2_ch3_the_report_at_each_stage`, `test_rt1_segmentation_and_assembly_on_both_routes`, `test_a2_an_export_and_no_run_json`, `test_cp1_the_comparison_page` | default and slow | none compared |
 | PG7 | `test_report_collection.py`, `test_pg7_*`, `test_read_report_checks_the_listed_files`; `test_report_page.py`, `test_pg7_checks_through_dataset_report`, `test_pg7_entry_on_the_dataset` | default | none compared |
 | CH1 | `test_report_chain.py`, `test_ch1_ch2_ch3_the_report_at_each_stage` | slow | none compared |

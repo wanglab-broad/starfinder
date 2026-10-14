@@ -26,13 +26,13 @@ from starfinder.io import read_checkpoint
 from starfinder.io._checkpoint import _read_table
 from starfinder.report import ReportConfig
 from starfinder.report._collect import report_examples
-from starfinder.report._figures import (EXAMPLE_TILE, PREPROCESSING_TILE, intensity_figure,
-                                        preprocessing_figure, registration_figure, segmentation_figure)
+from starfinder.report._figures import (EXAMPLE_TILE, intensity_figure, preprocessing_figure,
+                                        registration_figure, segmentation_figure)
 from starfinder.report._replay import intensity_bins, replay_fov
 
 from .report_scene import (STAGES, Chain, build_chain, scene_chain_plane,  # noqa: F401 (module-scoped fixtures)
                            scene_chain_registered)
-from .report_sizes import INTENSITY_SIZE, tiles_width
+from .report_sizes import INTENSITY_SIZE, preprocessing_tile, tiles_width
 
 pytestmark = [pytest.mark.report, pytest.mark.validation]
 
@@ -292,8 +292,8 @@ def test_figures_of_the_examples(scene_chain_registered):  # noqa: F811
     # The Preprocessing grid: the reference round, one row per channel, one column per entry plus the input.
     figure = preprocessing_figure(replay)
     columns, rows = len(entries) + 1, len(channels)
-    size = (figure.height, tiles_width(columns, PREPROCESSING_TILE))
-    assert figure.width == size[1] and figure.height > rows * PREPROCESSING_TILE and decoded(figure) == size
+    size = (figure.height, tiles_width(columns, preprocessing_tile(columns)))
+    assert figure.width == size[1] and figure.height > rows * preprocessing_tile(columns) and decoded(figure) == size
     assert figure.format == "jpeg"
     assert figure.round == "round1"
     assert [(t["step_index"], t["channel"]) for t in figure.tiles] == [(j, c) for j in range(columns)

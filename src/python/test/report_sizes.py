@@ -1,10 +1,10 @@
-"""The figure sizes of the report page, written from docs/report-algorithms.md ("Figure sizes", W-475).
+"""The figure sizes of the report page, written from docs/report-algorithms.md ("Figure sizes", W-475, W-478).
 
 The slots are the widths in px at which the page shows a figure in a window 1,200 px wide: the
 full column, a half column, a third, and the column of the comparison page. A plot (PNG) is
 drawn at twice the width of its slot; tiles side by side are separated by the smallest whole
-gap that is at least 8 px as shown. The numbers are written here from the page, never read
-from the package.
+gap that is at least 8 px as shown; no figure is shown wider than two thirds of its drawn
+width. The numbers are written here from the page, never read from the package.
 """
 from __future__ import annotations
 
@@ -31,6 +31,19 @@ def tile_gap(n, tile, slot=FULL):
 def tiles_width(n, tile, slot=FULL):
     """The width of ``n`` tiles side by side with their gaps."""
     return n * tile + (n - 1) * tile_gap(n, tile, slot)
+
+
+# W-478: no figure is shown wider than two thirds of its drawn width.
+SHOWN_AT_MOST = 2 / 3
+
+
+def preprocessing_tile(columns, slot=FULL):
+    """The tile of a Preprocessing grid of ``columns`` states: 256 px, or the smallest whole size above it whose grid
+    with its gaps is at least 3/2 of the slot wide (at least 1,398 px for the full column)."""
+    tile = PREPROCESSING_TILE
+    while tiles_width(columns, tile, slot) < 3 * slot / 2:
+        tile += 1
+    return tile
 
 
 def time_height_at_least(names):

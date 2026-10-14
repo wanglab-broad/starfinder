@@ -41,8 +41,8 @@ from starfinder.report._measurements import GroupFigureData
 
 from .report_fixtures import CELL_VARIANTS, RECORD_VARIANTS, report_cells, report_records
 from .report_sizes import (BOX_SIZE, COMPARISON, DISTRIBUTION_HALF, DISTRIBUTION_THIRD, EXAMPLE_TILE, FULL, HALF,
-                           INTENSITY_SIZE, MARK_PX, MAX_ROWS, MIN_TEXT_PX, PREPROCESSING_TILE, ROW_PX, THIRD,
-                           TILE_GAP_PX, tile_gap, tiles_width, time_height_at_least)
+                           INTENSITY_SIZE, MARK_PX, MAX_ROWS, MIN_TEXT_PX, ROW_PX, THIRD, TILE_GAP_PX,
+                           preprocessing_tile, tile_gap, tiles_width, time_height_at_least)
 from .test_report_collection import anndata_or_skip
 from .test_report_page import SHIM
 
@@ -559,7 +559,7 @@ def check_jpeg(figure):
 def test_preprocessing_grid_gaps(keep):
     replay = hand_replay(("input", "min_max_normalization", "white_tophat"))
     figure = _figures.preprocessing_figure(replay)
-    assert figure.width == tiles_width(3, PREPROCESSING_TILE) and figure.slot == FULL
+    assert figure.width == tiles_width(3, preprocessing_tile(3)) and figure.slot == FULL
     assert check_gaps(figure) == 2 * 4 + 3 * 3  # two gaps in each of four rows, three in each of three columns
     check_text_size("preprocessing", figure)
     assert overlaps(figure) == []
