@@ -19,6 +19,7 @@ directory and no image is committed.
 """
 from __future__ import annotations
 
+import base64
 import html
 import io
 import json
@@ -136,10 +137,29 @@ def shown(figure):
     return figure.slot / figure.width
 
 
+def glyph_runs(text, nominal_px):
+    """The size in figure px of each glyph run of a text drawn at ``nominal_px``: the size itself for plain text; for
+    mathtext (an even number of unescaped "$"), the size of each glyph Matplotlib's mathtext parser lays out, so that a
+    superscript counts at its own size."""
+    from matplotlib import cbook
+    from matplotlib.font_manager import FontProperties
+    from matplotlib.mathtext import MathTextParser
+    if not cbook.is_math_text(text):
+        return [nominal_px]
+    parsed = MathTextParser("path").parse(text, dpi=72, prop=FontProperties(size=nominal_px * 72 / 100))
+    return [glyph[1] * 100 / 72 for glyph in parsed.glyphs]
+
+
 def smallest_text(figure):
-    """The smallest text of a figure in px as shown."""
+    """The smallest glyph run of a figure's texts in px as shown, measured here from each text and its font size (and
+    equal to the size the figure records)."""
     assert figure.texts, "a figure without text"
-    return min(t["size_px"] for t in figure.texts) * shown(figure)
+    sizes = []
+    for t in figure.texts:
+        runs = glyph_runs(t["text"], t["nominal_px"])
+        assert min(runs) == pytest.approx(t["size_px"], abs=1e-9), t["text"]
+        sizes += runs
+    return min(sizes) * shown(figure)
 
 
 def intersect(a, b):
@@ -193,6 +213,7 @@ def test_text_size_and_slots_on_every_page(drawn, maker, variant):
         assert f'data-figure="{name}"' in page.text, name
         assert figure.canvas is not None and figure.canvas.shape[:2] == (figure.height, figure.width), name
     assert "time" in names
+    check_declared_sizes(page.text)
     # A row of the three-figure grid: three figures in thirds; the distributions across FOVs are three.
     distributions = [f for n, f in page_figures(page.figures) if n.startswith("distribution:")]
     assert all((f.width, f.height) == DISTRIBUTION_THIRD and f.slot == THIRD for f in distributions)
@@ -483,6 +504,50 @@ def check_gaps(figure):
                 assert best * scale >= TILE_GAP_PX, (a, b)
                 pairs += 1
     return pairs
+
+
+def check_declared_sizes(text):
+    """Every ``<img>`` of a page declares the width and height its image decodes to."""
+    from PIL import Image
+    images = re.findall(r"<img [^>]*>", text)
+    assert images
+    for tag in images:
+        attrs = dict(re.findall(r'([a-z-]+)="([^"]*)"', tag))
+        data = base64.b64decode(re.fullmatch(r"data:image/(?:png|jpeg);base64,(.+)", attrs["src"]).group(1))
+        assert Image.open(io.BytesIO(data)).size == (int(attrs["width"]), int(attrs["height"])), attrs["data-figure"]
+
+
+def test_declared_size_is_the_drawn_size(keep):
+    """A figure's recorded size is the size of its drawn canvas and of its saved image, also for the heights whose
+    size in inches (h / 100) is a float just below h, which Agg draws h − 1 px high (the whole-sample view of the
+    block report was 1,733 declared and 1,732 drawn)."""
+    from PIL import Image
+    for height in list(range(1700, 1800)) + [1733]:
+        for form in ("jpeg", "png"):
+            figure = _figures._figure(160, height)
+            figure.text(0.5, 0.5, "x")
+            image = _figures._finish(figure, form, 80)
+            decoded = Image.open(io.BytesIO(image.data)).size
+            assert decoded == (image.width, image.height) == image.canvas.shape[1::-1], (height, form)
+
+
+def test_glyph_runs_are_measured(keep):
+    """The text records measure each glyph run: a mathtext exponent counts at its own size (0.7 of the text's), so
+    that a "10^7" label at 12 px as shown measures 8.4 px; the log axes of the figures draw no such label."""
+    figure = _figures._figure(200, 100)
+    figure.text(0.1, 0.5, r"$\mathdefault{10^{7}}$", fontsize=_figures._pt(24))
+    image = _figures._finish(figure, "png", 100)
+    assert image.texts[0]["nominal_px"] == pytest.approx(24, abs=1e-9)
+    assert image.texts[0]["size_px"] * shown(image) == pytest.approx(0.7 * 12, abs=1e-9)
+    assert smallest_text(image) == pytest.approx(8.4, abs=1e-9)
+    assert [_figures.count_label(v) for v in (1, 10, 100, 1e3, 1e4, 1e5, 1e6, 1e7, 1e9)] == [
+        "1", "10", "100", "1k", "10k", "100k", "1M", "10M", "1G"]
+    replay = hand_replay(("input", "min_max_normalization"))
+    intensity = _figures.intensity_figure(replay)
+    from matplotlib import cbook
+    assert not any(cbook.is_math_text(t["text"]) for t in intensity.texts)
+    assert {"10", "100", "1k"} <= {t["text"] for t in intensity.texts}
+    check_text_size("intensity", intensity)
 
 
 def check_jpeg(figure):

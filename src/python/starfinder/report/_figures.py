@@ -82,7 +82,8 @@ class FigureImage:
     Each tile is a dict with its ``name`` and, for an image tile, its ``round``, ``channel`` and grey range
     ``lo``, ``hi`` (or ``reference``, ``moving`` ranges for a Registration tile). ``slot`` is the width in px at
     which the page shows the figure; ``texts`` every text drawn (``text``, ``size_px`` in figure pixels, ``box``
-    ``(x0, y0, x1, y1)`` in figure pixels from the top left, ``axes`` the index of its axes in ``frames`` or None);
+    ``(x0, y0, x1, y1)`` in figure pixels from the top left, ``axes`` the index of its axes in ``frames`` or None;
+    ``size_px`` is the smallest glyph run, a mathtext superscript included, ``nominal_px`` the text's font size);
     ``frames`` the box of each axes; ``marks`` the boxes of the tiles and of the marks drawn on them; ``canvas`` the
     drawn RGB canvas when :data:`KEEP_CANVAS` is set.
     """
@@ -287,10 +288,22 @@ def _layout(figure):
     index = {id(a): i for i, a in enumerate(figure.axes)}
     texts = []
     for text, owner in _drawn_texts(figure):
-        texts.append({"text": text.get_text(), "size_px": text.get_fontsize() * _DPI / 72.0,
+        texts.append({"text": text.get_text(), "size_px": min(glyph_px(text)),
+                      "nominal_px": text.get_fontsize() * _DPI / 72.0,
                       "box": _box(text.get_window_extent(renderer), height),
                       "axes": None if owner is None else index[id(owner)]})
     return texts, frames
+
+
+def glyph_px(text):
+    """The size in figure pixels of each glyph run of a text as drawn: its font size, or, for mathtext, the size of
+    each glyph the mathtext parser lays out (a superscript at 0.7 of the text's size)."""
+    from matplotlib.mathtext import MathTextParser
+    shown, math_text = text._preprocess_math(text.get_text())
+    if not math_text:
+        return [text.get_fontsize() * _DPI / 72.0]
+    parsed = MathTextParser("path").parse(shown, dpi=72, prop=text.get_fontproperties())
+    return [glyph[1] * _DPI / 72.0 for glyph in parsed.glyphs] or [text.get_fontsize() * _DPI / 72.0]
 
 
 def _save(figure, form, quality=85):
@@ -306,7 +319,9 @@ def _finish(figure, form, slot, *, quality=85, shows=None, tiles=None, marks=Non
     """The figure saved, with its slot, its texts and frames as drawn, and its canvas when kept."""
     data = _save(figure, form, quality)
     texts, frames = _layout(figure)
-    width, height = (int(round(v)) for v in _figure_size(figure))
+    # The size of the canvas as drawn (and saved): a figure of h px whose size in inches h / 100 is a float just
+    # below h is drawn h − 1 px high.
+    height, width = np.asarray(figure.canvas.buffer_rgba()).shape[:2]
     canvas = np.asarray(figure.canvas.buffer_rgba())[..., :3].copy() if KEEP_CANVAS else None
     return FigureImage(data, form, width, height, shows, list(tiles or []), slot, texts, frames, dict(marks or {}),
                        canvas)
@@ -524,6 +539,7 @@ def intensity_figure(replay) -> FigureImage:
             counts[counts == 0] = np.nan
             axes.plot(centres, counts, color=colours[c], linewidth=_pt(s(1)), label=channel)
         axes.set_yscale("log")
+        _plain_counts(axes.yaxis)
         axes.set_xlabel("grey level", fontsize=_pt(s.text))
         if j == 0:
             axes.set_ylabel("voxels", fontsize=_pt(s.text))
@@ -555,6 +571,23 @@ def intensity_figure(replay) -> FigureImage:
 
 
 # --- Registration -----------------------------------------------------------------------------------------------
+
+def count_label(value):
+    """A count of a logarithmic axis in plain text, without superscripts (1, 10, 100, 1k, 10k, 1M, 10M, 1G):
+    every glyph is drawn at the label's own size."""
+    for scale, suffix in ((1e9, "G"), (1e6, "M"), (1e3, "k")):
+        if value >= scale:
+            return f"{value / scale:g}{suffix}"
+    return f"{value:g}"
+
+
+def _plain_counts(axis):
+    """The decades of a logarithmic count axis labelled by :func:`count_label`; the minor ticks unlabelled. The
+    default labels (``10^7``) are mathtext, whose exponent is drawn at 0.7 of the label's size."""
+    from matplotlib.ticker import FuncFormatter, NullFormatter
+    axis.set_major_formatter(FuncFormatter(lambda value, _: count_label(value)))
+    axis.set_minor_formatter(NullFormatter())
+
 
 def _overlay(reference, moving, size):
     """The RGB tile ``(m, g, m)`` of the reference (green) and the moving round (magenta), each reduced to the tile
