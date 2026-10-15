@@ -1,6 +1,6 @@
 # Synthetic cellular scene: nucleus shapes, packing, cell types, stains, the morphology round and three context presets
 
-Status: Proposed (W-394, 2026-10-15, at 943bb6b; for review at the human gate W-396)
+Status: Proposed (W-394, 2026-10-15, at 943bb6b; three defects corrected by W-480; for review at the human gate W-396)
 
 This page specifies the second delivery of §2.12: a cellular scene rich enough for the
 real §2.9 segmentation methods to run on the synthetic sample, so that the chain from
@@ -78,7 +78,7 @@ is one (W-393 `notes.md` §11).
 | # | Choice | Recommendation | Section |
 | --- | --- | --- | --- |
 | C1 | How the addition is reached | E1, a new entry and configuration beside the unchanged sample scene | "Opt-in" |
-| C2 | Nucleus shape (W-393 choice 9) | N1, a union of ellipsoids; N2, spherical harmonics, optional | "Nucleus shape" |
+| C2 | Nucleus shape (W-393 choice 9) | N1, a union of ellipsoids, with LB1's bound on the lobe offsets; N2, spherical harmonics, optional | "Nucleus shape" |
 | C3 | Touching nuclei (W-393 choice 1) | K1, a shape-aware contact distance, nuclei clipped to their power cells | "Packing" |
 | C4 | Placement at high density | P1, random sequential addition with contact proposals | "Packing" |
 | C5 | A seed that cannot be placed | F2, stop at the reached density and record it, with a floor | "Packing" |
@@ -235,7 +235,7 @@ Every new object keeps that property:
 | Nuclear stain signal (plateau, soft edge, contact faces) | `S_nuc(σ)` ("Stains") | at `true_f + p ⊙ s`, then the existing observation stages with the FOV's streams |
 | Bright regions | `T_n(σ)`, Gaussians with centres in µm | inside `S_nuc`, at the same points |
 | Unevenness | `U(σ)`, centres and widths in µm | multiplies the signal at the same points; continuous across FOVs |
-| Cytoplasm and membrane signals | `S_ter(σ)`, `S_bnd(σ)` | at `true_f + p ⊙ s` |
+| Cytoplasm and membrane signals | `S_ter(σ)`, `S_bnd(σ)` ("Stains") | at `true_f + p ⊙ s`; the band from closed forms, not from a distance transform of a label image |
 | Background components of each stain | `BackgroundConfig` records on the sample grid, as today | `evaluate_background_translated` with the FOV's offset, as `generate_sample_scene` does for the stain today |
 | Morphology round image | the stain functions above; the round's index `q` in FOV `f` images `true_f + τ_f + q ⊙ s`, with a known translation `τ_f` | at those points; no resampling ("The morphology round") |
 | 8-bit output | a scale and a cast of each voxel's value | per voxel, after the noise |
@@ -273,10 +273,59 @@ class NucleusShapeConfig:
     lobed_share: float = 0.0                       # probability that a nucleus has more than one lobe
     extra_lobes: tuple[int, int] = (1, 2)          # lobes beyond the first: an integer drawn uniformly in this range
     lobe_scale: ScalarDistribution = ScalarDistribution("uniform", (0.5, 0.8))  # semi-axes relative to lobe 1
-    lobe_offset: ScalarDistribution = ScalarDistribution("uniform", (0.5, 0.9)) # distance / lobe 1's lateral semi-axis
+    lobe_offset: ScalarDistribution = ScalarDistribution("uniform", (0.5, 0.9)) # λ: distance / lobe 1's lateral semi-axis,
+                                                                                #   bounded by the two extents (LB1)
     harmonics: int = 0                             # N2: largest degree L; 0 is off
     harmonic_amplitude: float = 0.0                # N2: Σ abs(a_lm) is scaled to this value; 0 ≤ it · max abs(Y_lm) < 1
 ```
+
+**Lobe offsets and one connected shape.** Lobe `l ≥ 2` of nucleus `n` has a direction
+`û_l`, an angle, semi-axes `k_l` times lobe 1's (`k_l` from `lobe_scale`) and the centre
+`c_n + o_l`, `o_l = D_l û_l`. With the distance written before W-480, `D_l = λ_l · a_l` (`λ_l`
+from `lobe_offset`, `a_l` lobe 1's lateral semi-axis), the two lobes need not meet: the dense 3D
+laws allow `a_z` 1.5 µm, `a_l` 3 µm, one lobe scaled by 0.6 at `0.85 · 3 = 2.55` µm along
+Z, and with the centre at z = 1.3 the two lobes occupy the Z intervals [−0.2, 2.8] and
+[2.95, 4.75], 0.15 µm apart (nearby directions fail too).
+
+| Option | Rule | Cost | Consequence |
+| --- | --- | --- | --- |
+| **LB1. Bound each offset by the two extents (recommended)** | `D_l = min(λ_l · a_l, 0.9 · (e_{n,1}(û_l) + ε_l(−û_l)))`, with `e_{n,1}(û)` the length of the ray `c_n + s û`, `s ≥ 0`, inside lobe 1 (`1 / ‖d'(û)‖`, times `r(d̂'(û))` under N2) and `ε_l(−û)` the length of the ray `c_n + o_l − s û` inside lobe `l` (the same expression in lobe `l`'s frame). | Two extents per lobe, once per nucleus. | Every drawn nucleus is one connected shape. The laws are unchanged wherever the bound does not bind: never in Y and X for the presets (below), and in 3D only where the two extents sum to less than `λ_l · a_l / 0.9`, for a lobe pointing close to a short axis. |
+| LB2. The offset as a fraction of the two extents | `D_l = λ_l · (e_{n,1}(û_l) + ε_l(−û_l))`, with `λ_l < 1` required of the law. | As LB1. | Connected by construction; `lobe_offset` changes its meaning and every lobed shape of the presets changes. |
+| LB3. No bound; narrow the claim | `D_l = λ_l · a_l`, as written before W-480. | None. | A drawn nucleus can be two shapes; the truth would record it, and the generator check would count such nuclei as a share that depends on the laws. |
+
+**Recommendation: LB1.** Lobe 1 contains the segment from `c_n` to
+`c_n + e_{n,1}(û_l) û_l` (it is convex, or star-shaped about `c_n` under N2), and lobe `l`
+the segment from `c_n + o_l` back to `c_n + (D_l − ε_l(−û_l)) û_l`. The bound gives
+`D_l − ε_l(−û_l) < e_{n,1}(û_l)`, so the two segments share a stretch of length at least
+`0.1 · (e_{n,1}(û_l) + ε_l(−û_l)) > 0`: every lobe meets lobe 1, and the union of the lobes,
+before clipping, is one connected shape for every draw the laws allow. In the case above
+the bound gives `D_2 = 0.9 · (1.5 + 0.9) = 2.16` µm, and the lobes overlap by 0.24 µm in Z.
+In Y and X (one plane or a monolayer) the bound never binds for laws with an elongation of
+at least 1, `lobe_scale` at least 0.5, `lobe_offset` at most 0.9 and N2 off (every preset):
+`e_{n,1} ≥ a_l` and `ε_l ≥ 0.5 a_l`, so the bound is at least `1.35 a_l > 0.9 a_l`. The bound
+is a function of drawn values only, so the shape stays a point function; `lobes.csv` records
+the bounded offset, from which the shape is rebuilt without the rule. Audit F of W-480
+(`results/audit/nucleus_draws.txt` in `runs/W-480/20261015T070249Z-868bf70b/`) draws 20,000
+nuclei per preset (10,000 with the preset's lobed share, 10,000 all lobed), nuclei at the
+ends of the laws and the case above, and finds none that is not one connected shape. Under
+the rule written before W-480, 504 of the 8,064 dense 3D nuclei at the ends of the laws and
+4 of the 20,000 dense 3D draws with every nucleus lobed are not.
+
+**A nucleus label with more than one piece.** The label is the drawn shape clipped to the
+nucleus's power cell and to `Ω` and sampled at voxel centres. Both clips are convex, but a
+neighbour's power face can cross the line of centres between lobe 1 and lobe `l` while part
+of lobe `l` stays on the nucleus's side, and a FOV's border or a thin neck between voxel
+centres can split a label too. A nucleus label can therefore have more than one piece. For
+the truth, the nucleus keeps one ID for all its pieces (one row of `nuclei.csv`, its lobes
+in `lobes.csv`), and the label identities (2, 3 and 11 of "Truth schema") hold voxel by
+voxel whatever the number of pieces. For the checks, a nucleus is counted and matched once,
+by its ID with all its voxels: the generator check of the non-ellipsoid share measures the
+ID, and W-395's nucleus matching (intersection over union by ID) states how it counts a
+predicted object that covers a detached piece only (an open point of W-395). On packed
+scenes of the six presets (68,967 nuclei, at least 11,278 per preset), audit F found 5
+nuclei whose label has more than one piece on a grid of a twelfth of the smallest
+semi-axis. On a grid four times finer (twice in 3D), 3 of them are one piece and 2 keep a
+sliver of one or two grid points beside the main piece.
 
 **N2 in detail.** The coefficients of nucleus `n` are drawn from the stream
 `context.nucleus.harmonics` (entity `nucleus-<n>`), one standard normal per `(l, m)` in
@@ -668,7 +717,9 @@ the signed distance to the faces of `n`'s power cell (negative inside; `pow_i �
 affine in `σ`, so this is the exact distance to each face plane). `S_nuc` is 0 only
 beyond every nucleus's cut-off (below): a FOV whose voxel centres hold no nucleus label
 can still receive the soft edge of a nucleus just outside it or between its voxel centres,
-and only a FOV beyond the cut-off of every nucleus holds the background and noise alone.
+and only a FOV beyond the cut-off of every nucleus holds the background and noise alone in
+a nuclear stain (a territory or boundary stain is lit by cells, with or without a nucleus:
+"The territory source", "The boundary source").
 The sign of the erfc argument agrees with the nucleus label: `N(σ) = n` exactly where
 `max((ρ_n − 1) · r̄_n, h_n) ≤ 0`, for `σ ∈ Ω` (a point with `ρ_n ≤ 1` passes every territory
 test, "Cell territories"), apart from a tie on a power face (ties to the smaller site
@@ -795,16 +846,66 @@ S_ter(σ) = U(σ) · Σ_k B_k · E_k^ter(σ) · (1 − (1 − q) · M(σ))
 ```
 
 with `B_k` the plateau per cell and `q` the `nuclear_ratio` (the cytoplasm stain is
-dimmer inside the nucleus, as Flamingo is). W-393 did not measure a cytoplasm stain (its real tables hold
-nuclear stains only), so `q`, `B_k` and the edge of the cytoplasm stain are development
-values for the gate.
+dimmer inside the nucleus, as Flamingo is). As for the nucleus, `E_k^ter` is set to exactly
+0 where `d_k > 4w`, the **cut-off of the territory** of cell `k` (a jump of at most
+`3 · 10⁻⁵` of the plateau). The source is lit by every cell, with or without a nucleus: an
+empty cell of radius 2.5 µm with a reach of 1 µm gives the full plateau `B_k U` at its
+centre, beyond every nucleus's cut-off. A point where `d_k > 4w` for every cell `k` holds
+no territory signal; under T3 every point of `Ω` lies in a territory, so with T3 only a
+scene without cells has such points in `Ω`. W-393 did not measure a cytoplasm stain (its
+real tables hold nuclear stains only), so `q`, `B_k` and the edge of the cytoplasm stain are
+development values for the gate.
 
-**The boundary source** (membrane). `S_bnd(σ) = U(σ) · Σ_k B_k exp(−½ (d_k(σ) / b)²)`
-with `b` the `band_width`: a band centred on each territory boundary; where two cells
-touch, both bands lie on their shared face. `d_k` is the function above, so the band's
-centre surface `d_k = 0` is the boundary of the label `C = k`; its width follows `d_k`,
-which is the distance to the nearest face or outer sphere except near corners and the
-scaled `ρ` term under T2. The band is defined by this function.
+**The boundary source** (membrane). A band of width `b` (the `band_width`) centred on
+every boundary of each cell label `C = k`:
+
+```
+S_bnd(σ) = U(σ) · Σ_k B_k · exp(−½ (β_k(σ) / b)²)
+β_k(σ)   = min( abs(d_k(σ)), g_k(σ) )
+g_k(σ)   = max( abs(h_jj'(σ)), h*_k(σ), min(o_j(σ), o_j'(σ)), −max(o_j(σ), o_j'(σ)) )   cell k with two sites j, j'
+g_k(σ)   = +∞                                                                          cell k with one site
+```
+
+with `d_k`, `h*_k` and the outer terms `o_j` of the territory source, and
+`h_jj'(σ) = (pow_j(σ) − pow_j'(σ)) / (2 ‖c_j − c_j'‖)` the signed distance to the power
+face between the two sites of a binucleate cell. The exponential is set to exactly 0 where
+`β_k > 4b`, the **cut-off of the band** of cell `k` (a jump of at most `3.4 · 10⁻⁴` of
+`B_k U`). `β_k = 0` on every boundary of `C = k` inside `Ω`, so the band reaches its peak
+`B_k U(σ)` there:
+
+* on a face between a site of `k` and a site of another cell, where `k`'s side passes its
+  territory test: `h*_k = 0` and `d_k = 0`. Where two cells touch, both bands lie on their
+  shared face;
+* on the outer limit `o_j = 0` of a site `j` of `k` inside `j`'s power cell: `d_k = 0`;
+* on the face between the two sites of a binucleate cell, where one side passes its site's
+  territory test and the other does not. The label changes from `k` to 0 there, but `d_k`
+  jumps past 0 without reaching it, so the rule written before W-480,
+  `exp(−½ (d_k / b)²)`, had no band on it: for spherical sites of radii 1 and 2 µm at
+  (0, 0, 0) and (0, 0, 2.7), reach 1, the face at y = 2 lies at x = 0.79444…, and across
+  x ± 1e-6 `C` changes from 0 to 1 while `d_k` jumps from +0.152 to −0.238. On that face
+  `h_jj' = 0`, `h*_k ≤ 0` and the two outer terms have opposite signs, so `g_k = 0`. Where
+  both sides pass (the face inside the cell) or both fail, the `min` or the `−max` of the
+  outer terms is positive, and the face carries no band.
+
+`β_k` jumps only on the face between the two sites of a binucleate cell, where `d_k` and
+`h*_k` change their site (the sign of `h*_k` does not), and at the cut-off; elsewhere every
+term is continuous. `β_k` is the distance to the face planes and, under T1, to the outer
+spheres, except near corners; under T2 its outer terms are the scaled `ρ` terms, approximate
+as for the nucleus. The edge of `Ω`, where every label becomes 0, is not a cell boundary:
+the band is not centred on it. Every term is a closed form of `σ` and the truth tables
+(centres, site radii, lobes, reach or growth), so a FOV at a fractional offset evaluates
+`S_bnd` at its voxel centres `true_f + p ⊙ s`, without a label image, a distance transform
+or resampling, and gets the band of the sample frame.
+Like the territory source, the band is lit by cells with or without a nucleus; a point
+where `β_k > 4b` for every cell `k` holds no boundary signal. Audit D of W-480
+(`results/audit/stains_vs_labels.txt` in `runs/W-480/20261015T070249Z-868bf70b/`) bisects
+18,000 label boundaries to within 1e-9 µm between nearby sample positions (the
+binucleate case above, binucleate cells with sites of unequal radii, touching cells of
+different owners, lobed nuclei under T2, a FOV at a fractional offset in Z, Y and X, and
+`Z=1`). At no boundary point does the band of a cell whose boundary it is lie below 0.99 of
+`B_k U(σ)`, at `b` 0.01 and 0.5 µm, while the rule written before W-480 lies below it at
+every such point on a binucleate face. The audit also finds no position where `g_k` alone
+lights the band without a boundary of `C = k` nearby.
 
 **8-bit output (C15).** Today the cast rounds and clips to the output dtype (`_cast`); with
 `dtype uint8` the current plateau of 200 over a baseline of 100 saturates, the
@@ -832,7 +933,7 @@ class OutputScaleConfig:
 | Option | What the first delivery holds | Cost | Consequence |
 | --- | --- | --- | --- |
 | O1. Nuclear and cytoplasm only | The `nucleus` and `territory` sources. | Least. | The interface is shown for two sources; a membrane stain needs new code later. |
-| **O2. Nuclear and cytoplasm; the boundary source implemented, used by no preset (recommended)** | The three sources, with a generator check of the band; no preset uses it. | The band function (it reuses the territory distance) and one check. | The interface of D2 is complete; a membrane stain is a configuration, as Jiahao's data sometimes have one. |
+| **O2. Nuclear and cytoplasm; the boundary source implemented, used by no preset (recommended)** | The three sources, with a generator check of the band; no preset uses it. | The band function (it reuses the territory distance and adds the term of a binucleate cell's internal face) and one check. | The interface of D2 is complete; a membrane stain is a configuration, as Jiahao's data sometimes have one. |
 | O3. A membrane stain in a preset | As O2, with a preset using it. | One more image per FOV in that preset. | No route of D2 uses a membrane stain today. |
 
 **Recommendation: O2.** ER is not done (D2).
@@ -997,7 +1098,7 @@ ranges hold for the mean.
 | Seed kinds | `PackingConfig.kind_shares` | ordinary 0.9, binucleate 0.05, empty 0.05 | Not measured by W-393; assumption, so that the `slow` presets hold cells with two nuclei and without a nucleus |
 | Empty site | `CellularSceneConfig.empty_radius` (µm) | 2.5 | Not measured by W-393; the default |
 | Crowding | `max_proposals`; `PackingConfig.on_crowded`, `floor` | 10,000; `stop`, 0.9 | Not measured by W-393; the default and C5 |
-| Lobe laws | `NucleusShapeConfig.extra_lobes`, `lobe_scale`, `lobe_offset` | 1 or 2; uniform 0.5–0.8; uniform 0.5–0.9 of lobe 1's `a_l` | Not measured by W-393; assumption: a lobe at less than one lateral semi-axis overlaps lobe 1, so a lobed nucleus is one connected shape; the generator check measures the resulting non-ellipsoid share |
+| Lobe laws | `NucleusShapeConfig.extra_lobes`, `lobe_scale`, `lobe_offset` | 1 or 2; uniform 0.5–0.8; uniform 0.5–0.9 of lobe 1's `a_l`, bounded by LB1 | Not measured by W-393; assumption. With LB1's bound every drawn nucleus is one connected shape before clipping ("Nucleus shape"; audit F of W-480 at 10,000 draws per preset and at the ends of the laws); a clipped label can have more than one piece, counted under its one ID. The generator check measures the resulting non-ellipsoid share |
 | Harmonics | `NucleusShapeConfig.harmonics` | 0 (N2 off) | C2 |
 | Overlap allowance, gap | `PackingConfig.overlap` κ, `gap` (µm) | 0.1, 0 | Not measured by W-393 as such (the nearest-surface distances are one or two pixels in every context); assumption, checked by audit A |
 | Cell types | `CellTypeConfig` | G1 (4 types, two markers each, eight shared genes, `w_m` 0.15, `w_s` 0.0875), proportions 0.25 each, 4 regions, purity 0.9, the two marker pairs of C8 | Not measured by W-393 (no measurement resolves types); C7 and C8 |
@@ -1282,9 +1383,10 @@ of a table above or recomputed from the seed and a named stream ("Random streams
 {doc}`synthetic-sample-scene`, which hold with the new label functions). A "boundary
 voxel" below is a voxel whose centre lies within 1e-9 µm of a power face, of a lobe or
 harmonic surface, of a territory limit, or of a stain's cut-off surface (`ρ_n = 1 + 4w / a_min`,
-`h_n = 4w`, where the value jumps by up to about `3 · 10⁻⁵` of the plateau, as today's stain
-does; the box of `4 s_b` of a bright region, where it jumps by up to `3.4 · 10⁻⁴` of the
-region's height); as for the aligned crop of
+`h_n = 4w` and the territory's `d_k = 4w`, where the value jumps by up to about `3 · 10⁻⁵` of
+the plateau, as today's stain does; the box of `4 s_b` of a bright region and the band's
+`β_k = 4b`, where it jumps by up to `3.4 · 10⁻⁴` of the region's height or of the band's
+peak); as for the aligned crop of
 {doc}`synthetic-sample-scene` (identity 2), a test that recomputes a label with its own
 arithmetic reports the number of boundary voxels where it differs and expects 0.
 
@@ -1314,11 +1416,19 @@ arithmetic reports the number of boundary voxels where it differs and expects 0.
    centres within 1e-9 of the image maximum; rendered again at `true_f + k ⊙ s` for an
    integer vector `k`, it equals the first image shifted by `k` on the common voxels within
    1e-12 of the maximum (the no-interpolation identity). Both hold at any fractional offset
-   in Z, Y and X and at `Z=1`, except at boundary voxels (reported). A FOV beyond the
-   cut-off of every nucleus holds the background only; a FOV whose voxel centres hold no
-   nucleus label can still hold the soft edge of a nearby or sub-voxel nucleus, which the
-   signal function gives. With float32 output or the 8-bit cast the comparison is not made: a
-   rounding near a half grey level can differ.
+   in Z, Y and X and at `Z=1`, except at boundary voxels (reported). For the nuclear
+   source, a FOV beyond the cut-off of every nucleus holds the background only; a FOV whose
+   voxel centres hold no nucleus label can still hold the soft edge of a nearby or sub-voxel
+   nucleus, which the signal function gives. The territory and boundary sources are lit by
+   cells with or without a nucleus (an empty cell lights them), so a FOV beyond every
+   nucleus's cut-off can hold them. A FOV beyond the cut-off of every cell territory
+   (`d_k > 4w` for every cell `k` at each voxel centre) holds the background only for the
+   territory source, and a FOV beyond the band's cut-off of every cell (`β_k > 4b`) holds
+   the background only for the boundary source; a FOV whose voxel centres hold no cell label
+   can still hold the soft edge or the band of a nearby cell. Under T3 every point of `Ω`
+   lies in a territory, so only a scene without cells has a FOV beyond every territory's
+   cut-off. With float32 output or the 8-bit cast the comparison is not made: a rounding
+   near a half grey level can differ.
 8. **Morphology round.** Rendered as in identity 7, the morphology image at index `q`
    equals the stain functions at `true_f + τ_f + q ⊙ s`; with a supplied `τ_f ⊘ s` that is
    a whole number of voxels on every axis, a morphology stain whose configuration equals a
