@@ -20,6 +20,9 @@ from ._calibrated import (CALIBRATED_CONDITIONS as _CALIBRATED_CONDITIONS, calib
 from ._sample import (SAMPLE_PRESET_VERSION, SAMPLE_PRESETS as _SAMPLE_PRESETS, SAMPLE_TRUTH_VERSION,
                       AcquisitionConfig, CellularSceneConfig, SampleScene, SampleSceneConfig, StainConfig,
                       generate_sample_scene, sample_scene_preset, save_sample_scene)
+from ._context import (CONTEXT_TRUTH_VERSION, CellTypeConfig, ContextScene, ContextSceneConfig, MoleculeConfig,
+                       NucleusShapeConfig, PackingConfig, TerritoryConfig, generate_context_scene,
+                       save_context_scene)
 
 #: Named single-factor controls available on demand from development_scene_preset.
 DEVELOPMENT_FACTORS = _DEVELOPMENT_FACTORS
@@ -50,4 +53,6 @@ __all__ = ['BackgroundConfig', 'CALIBRATED_CONDITIONS', 'calibrated_scene_preset
            'generate_registration_pair', 'registration_scene_preset',
            'AcquisitionConfig', 'CellularSceneConfig', 'generate_sample_scene', 'SAMPLE_PRESET_VERSION',
            'SAMPLE_PRESETS', 'SAMPLE_TRUTH_VERSION', 'SampleScene', 'SampleSceneConfig', 'sample_scene_preset',
-           'save_sample_scene', 'StainConfig']
+           'save_sample_scene', 'StainConfig', 'CellTypeConfig', 'CONTEXT_TRUTH_VERSION', 'ContextScene',
+           'ContextSceneConfig', 'generate_context_scene', 'MoleculeConfig', 'NucleusShapeConfig', 'PackingConfig',
+           'save_context_scene', 'TerritoryConfig']

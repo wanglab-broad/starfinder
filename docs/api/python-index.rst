@@ -35,6 +35,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.assignment.CELL_CORRESPONDENCE`
 * :py:obj:`starfinder.assignment.CELL_STATUSES`
 * :py:obj:`starfinder.segmentation.CellposeConfig`
+* :py:obj:`starfinder.synthetic.CellTypeConfig`
 * :py:obj:`starfinder.synthetic.CellularSceneConfig`
 * :py:obj:`starfinder.dataset.ChannelInfo`
 * :py:obj:`starfinder.spot_finding.ChannelOverride`
@@ -48,6 +49,9 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.assignment.COMPARTMENT_STATES`
 * :py:obj:`starfinder.segmentation.composite_nuclei_amplicon`
 * :py:obj:`starfinder.segmentation.CompositeConfig`
+* :py:obj:`starfinder.synthetic.CONTEXT_TRUTH_VERSION`
+* :py:obj:`starfinder.synthetic.ContextScene`
+* :py:obj:`starfinder.synthetic.ContextSceneConfig`
 * :py:obj:`starfinder.io.convert_image`
 * :py:obj:`starfinder.assignment.CorrespondenceConfig`
 * :py:obj:`starfinder.registration.CpdConfig`
@@ -120,6 +124,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.sample_output.FusionInput`
 * :py:obj:`starfinder.sample_output.FusionRecord`
 * :py:obj:`starfinder.synthetic.generate_codebook`
+* :py:obj:`starfinder.synthetic.generate_context_scene`
 * :py:obj:`starfinder.synthetic.generate_dataset`
 * :py:obj:`starfinder.synthetic.generate_formed_scene`
 * :py:obj:`starfinder.synthetic.generate_registration_pair`
@@ -180,6 +185,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.assembly.MOLECULE_ASSEMBLY_REASONS`
 * :py:obj:`starfinder.assignment.molecule_table`
 * :py:obj:`starfinder.assignment.molecule_table_from_csv`
+* :py:obj:`starfinder.synthetic.MoleculeConfig`
 * :py:obj:`starfinder.assignment.MoleculeTable`
 * :py:obj:`starfinder.dataset.MorphologyConfig`
 * :py:obj:`starfinder.stitching.MultiviewStitcherConfig`
@@ -193,9 +199,11 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.segmentation.normalize_percentiles`
 * :py:obj:`starfinder.evaluation.registration.normalized_cross_correlation`
 * :py:obj:`starfinder.assignment.NUCLEUS_STATUSES`
+* :py:obj:`starfinder.synthetic.NucleusShapeConfig`
 * :py:obj:`starfinder.barcode.OneBaseEncodingConfig`
 * :py:obj:`starfinder.assembly.ownership_map`
 * :py:obj:`starfinder.assembly.OwnershipMap`
+* :py:obj:`starfinder.synthetic.PackingConfig`
 * :py:obj:`starfinder.spot_finding.PercentileCentroidConfig`
 * :py:obj:`starfinder.preprocessing.PercentileNormalizationConfig`
 * :py:obj:`starfinder.dataset.PipelineConfig`
@@ -277,6 +285,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.sample_output.SampleSegmentationConfig`
 * :py:obj:`starfinder.sample_output.SampleSegmentationRun`
 * :py:obj:`starfinder.assembly.save_assembly`
+* :py:obj:`starfinder.synthetic.save_context_scene`
 * :py:obj:`starfinder.synthetic.save_formed_scene`
 * :py:obj:`starfinder.stitching.save_placement`
 * :py:obj:`starfinder.synthetic.save_sample_scene`
@@ -329,6 +338,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.preprocessing.supplied_section`
 * :py:obj:`starfinder.preprocessing.supplied_statistics`
 * :py:obj:`starfinder.synthetic.SyntheticDataset`
+* :py:obj:`starfinder.synthetic.TerritoryConfig`
 * :py:obj:`starfinder.synthetic.TextureConfig`
 * :py:obj:`starfinder.stitching.TilePositionTable`
 * :py:obj:`starfinder.segmentation.to_label_dtype`

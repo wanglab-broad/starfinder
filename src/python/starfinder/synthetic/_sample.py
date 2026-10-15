@@ -24,6 +24,7 @@ from starfinder.barcode import Codebook
 from starfinder.image import ImageMetadata
 from starfinder.io import save_volume
 
+from ._cellular import _labels
 from ._common import ScalarDistribution, _distribution, _draw, _integer, _json, _label, _probabilities
 from ._formed import (_GENERATOR_VERSION, _STREAM_KEY, _STREAM_NAMESPACE, FormedScene,
                       FormedSceneConfig, _plain, generate_formed_scene)
@@ -413,7 +414,13 @@ def _rho(points, centre, axial, lateral, elongation, angle):
 
 
 def _label_functions(points, sites, omega):
-    """Cell label C and nucleus label N at (..., 3) sample positions in µm (rule L1)."""
+    """Cell label C and nucleus label N at (..., 3) sample positions in µm (rule L1).
+
+    Sites of the cellular scene (docs/synthetic-cellular-scene.md) carry their nucleus shapes and territory
+    rule and are labelled by that page's rule; every other call is the rule L1 below.
+    """
+    if getattr(sites, "shapes", None) is not None:
+        return _labels(points, sites, omega, _BLOCK)
     shape = points.shape[:-1]
     flat = points.reshape(-1, 3)
     cells = np.zeros(len(flat), dtype=np.uint32)
@@ -742,6 +749,11 @@ def generate_sample_scene(codebook: Codebook, *, config: SampleSceneConfig = Sam
     """
     if not isinstance(config, SampleSceneConfig):
         raise TypeError("config must be SampleSceneConfig")
+    return _generate(codebook, config, on_fov)
+
+
+def _generate(codebook, config, on_fov, cellular=_cellular_scene, molecules=_molecules):
+    """The body of generate_sample_scene; the cellular scene passes its own placement and molecule draws."""
     if not isinstance(codebook, Codebook):
         raise TypeError("codebook must be Codebook")
     if on_fov is not None and not callable(on_fov):
@@ -767,8 +779,8 @@ def generate_sample_scene(codebook: Codebook, *, config: SampleSceneConfig = Sam
 
     nuclei = cells = sites = None
     if config.cells is not None:
-        nuclei, cells, sites = _cellular_scene(config.cells, layout, stream)
-    ids, population, sigma, genes, values, abundances = _molecules(config, layout, codebook, cells, sites, stream)
+        nuclei, cells, sites = cellular(config.cells, layout, stream)
+    ids, population, sigma, genes, values, abundances = molecules(config, layout, codebook, cells, sites, stream)
     cell_of, nucleus_of = _label_functions(sigma, sites, layout.omega)
     in_sample = _inside(sigma, layout.covered)
 

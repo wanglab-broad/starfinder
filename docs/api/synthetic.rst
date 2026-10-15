@@ -22,7 +22,11 @@ and ``starfinder synthetic generate`` writes the MATLAB-compatible layout.
    benchmark_scene_preset
    CALIBRATED_CONDITIONS
    calibrated_scene_preset
+   CellTypeConfig
    CellularSceneConfig
+   CONTEXT_TRUTH_VERSION
+   ContextScene
+   ContextSceneConfig
    deformation_geometry
    DEFORMATION_PRESETS
    development_codebook
@@ -36,12 +40,16 @@ and ``starfinder synthetic generate`` writes the MATLAB-compatible layout.
    FormedSceneConfig
    forward_displacement
    generate_codebook
+   generate_context_scene
    generate_dataset
    generate_formed_scene
    generate_registration_pair
    generate_sample_scene
    GeometryConfig
+   MoleculeConfig
    NoiseConfig
+   NucleusShapeConfig
+   PackingConfig
    PRESET_VERSION
    ReadoutEffectsConfig
    registration_scene_preset
@@ -51,12 +59,14 @@ and ``starfinder synthetic generate`` writes the MATLAB-compatible layout.
    SAMPLE_TRUTH_VERSION
    SampleScene
    SampleSceneConfig
+   save_context_scene
    save_formed_scene
    save_sample_scene
    ScalarDistribution
    SCENE_PRESETS
    StainConfig
    SyntheticDataset
+   TerritoryConfig
    TextureConfig
 
 Formed scenes
@@ -581,6 +591,38 @@ peak RSS of about 0.4 GiB). Both use ``development_codebook("balanced")``,
 seed 42 and a translation-only per-round geometry. The cellular scene is a
 development fixture: sizes and densities are not fitted to tissue, and it
 makes no claim about the accuracy of any segmenter.
+
+Cellular scenes
+---------------
+
+``generate_context_scene(codebook, config=ContextSceneConfig(), on_fov=None)``
+adds the richer cellular scene of :doc:`../synthetic-cellular-scene` beside the
+unchanged sample scene. ``ContextSceneConfig`` holds an unchanged
+``SampleSceneConfig`` and the parts, each off at its default: with every part
+off the result's ``sample`` equals ``generate_sample_scene`` of the same
+configuration, field for field. ``NucleusShapeConfig`` makes nuclei unions of
+ellipsoids whose lobe offsets are bounded so that every drawn nucleus is one
+connected shape, with an optional harmonic perturbation of lobe 1;
+``PackingConfig`` places seeds with a shape-aware contact distance, so that
+nuclei touch on the faces of their power cells, by count or up to a target
+density, optionally in a monolayer, and with ``on_crowded="stop"`` records the
+reached density and raises only below its ``floor``; ``TerritoryConfig``
+selects the cell territory (the site sphere plus a reach, a grown nucleus, or
+the whole power cell); ``CellTypeConfig`` gives cell types by region with a
+gene abundance per type and named marker pairs; ``MoleculeConfig`` sets the
+molecules per cell, the nuclear fraction of reads and the ambient genes. Every
+new draw comes from a ``context.`` stream. ``stains`` and ``morphology`` are
+reserved for the stains and the morphology round and refuse a value for now.
+
+``ContextScene`` holds the ``SampleScene`` and the new truth tables;
+``save_context_scene(scene, directory)`` writes the ``save_sample_scene``
+layout unchanged plus ``lobes.csv``, ``harmonics.csv``, ``cell_context.csv``,
+``regions.csv``, ``type_abundances.csv``, ``cell_gene_counts.csv``,
+``marker_pairs.csv`` and ``context.json`` (``CONTEXT_TRUTH_VERSION``, the
+requested and effective configuration, the placement outcome, the ``context.``
+streams drawn and the SHA-256 of every other file). The scene is a development
+fixture, not a calibrated tissue model, and makes no claim about the accuracy
+of any segmenter.
 
 Scientific limitations
 ----------------------
