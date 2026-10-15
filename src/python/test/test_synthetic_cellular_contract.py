@@ -15,9 +15,10 @@ import pytest
 
 import starfinder.synthetic as synthetic
 from starfinder.synthetic import (CONTEXT_TRUTH_VERSION, SAMPLE_PRESETS, CellTypeConfig, CellularSceneConfig,
-                                  ContextScene, ContextSceneConfig, MoleculeConfig, NucleusShapeConfig, PackingConfig,
-                                  SampleSceneConfig, ScalarDistribution, StainConfig, TerritoryConfig,
-                                  generate_context_scene, save_context_scene, save_sample_scene)
+                                  ContextScene, ContextSceneConfig, MoleculeConfig, MorphologyRoundConfig,
+                                  NucleusShapeConfig, PackingConfig, SampleSceneConfig, ScalarDistribution,
+                                  StainChannelConfig, StainConfig, TerritoryConfig, generate_context_scene,
+                                  save_context_scene, save_sample_scene)
 
 from .cellular_oracle import harmonic_bound
 from .cellular_scenes import SHAPES, config_of, plane, scene, tiny
@@ -34,6 +35,14 @@ TABLES = {
     "type_abundances": ["type", "gene_id", "weight", "role"],
     "cell_gene_counts": ["cell_id", "gene_id", "count", "nuclear_count"],
     "marker_pairs": ["gene_a", "gene_b", "relation", "cells_a", "cells_b", "both", "either", "mecr"],
+    # The tables of the stains and the morphology round (W-484), written by every scene.
+    "stain_channels": ["stain", "source", "round", "channel", "dtype", "scale", "m_A"],
+    "stain_objects": ["stain", "object", "object_id", "plateau"],
+    "bright_regions": ["region_id", "nucleus_id", "stain", "centre_z", "centre_y", "centre_x", "size", "height"],
+    "unevenness": ["stain", "bump_id", "centre_z", "centre_y", "centre_x", "z", "a", "length"],
+    "morphology_truth": ["fov_id", "round", "translation_z_um", "translation_y_um", "translation_x_um",
+                         "translation_z_vox", "translation_y_vox", "translation_x_vox", "pull_displacement_z_vox",
+                         "pull_displacement_y_vox", "pull_displacement_x_vox"],
 }
 
 
@@ -105,12 +114,16 @@ def test_gn2_new_names_and_fields():
             setattr(value, names(type(value))[0], None)
 
 
-def test_stains_and_morphology_refuse_a_value_until_their_issue():
-    """Placeholder of W-483: the stains and the morphology round are added by W-484, which may change this test."""
+def test_stains_and_morphology_take_their_configurations():
+    """W-484 replaced W-483's placeholder (a NotImplementedError for any value): stains and morphology take their
+    configuration classes and refuse any other type."""
     _, config = tiny()
-    with pytest.raises(NotImplementedError, match="W-484"):
+    stains = (StainChannelConfig("DAPI"), StainChannelConfig("DAPI", round="morphology", channel="ch00"))
+    accepted = ContextSceneConfig(sample=replace(config, stain=None), stains=stains, morphology=MorphologyRoundConfig())
+    assert accepted.stains == stains and accepted.morphology == MorphologyRoundConfig()
+    with pytest.raises(TypeError, match="StainChannelConfig"):
         ContextSceneConfig(sample=replace(config, stain=None), stains=(object(),))
-    with pytest.raises(NotImplementedError, match="W-484"):
+    with pytest.raises(TypeError, match="MorphologyRoundConfig"):
         ContextSceneConfig(sample=config, morphology=object())
 
 

@@ -26,6 +26,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.benchmark.BenchmarkTrialResult`
 * :py:obj:`starfinder.stitching.bigstitcher_macro`
 * :py:obj:`starfinder.stitching.BigStitcherConfig`
+* :py:obj:`starfinder.synthetic.BrightRegionConfig`
 * :py:obj:`starfinder.registration.BSplineConfig`
 * :py:obj:`starfinder.registration.BSplineTransform`
 * :py:obj:`starfinder.synthetic.CALIBRATED_CONDITIONS`
@@ -188,6 +189,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.synthetic.MoleculeConfig`
 * :py:obj:`starfinder.assignment.MoleculeTable`
 * :py:obj:`starfinder.dataset.MorphologyConfig`
+* :py:obj:`starfinder.synthetic.MorphologyRoundConfig`
 * :py:obj:`starfinder.stitching.MultiviewStitcherConfig`
 * :py:obj:`starfinder.stitching.neighbor_pairs`
 * :py:obj:`starfinder.barcode.NeighborhoodSumConfig`
@@ -201,6 +203,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.assignment.NUCLEUS_STATUSES`
 * :py:obj:`starfinder.synthetic.NucleusShapeConfig`
 * :py:obj:`starfinder.barcode.OneBaseEncodingConfig`
+* :py:obj:`starfinder.synthetic.OutputScaleConfig`
 * :py:obj:`starfinder.assembly.ownership_map`
 * :py:obj:`starfinder.assembly.OwnershipMap`
 * :py:obj:`starfinder.synthetic.PackingConfig`
@@ -285,6 +288,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.sample_output.SampleSegmentationConfig`
 * :py:obj:`starfinder.sample_output.SampleSegmentationRun`
 * :py:obj:`starfinder.assembly.save_assembly`
+* :py:obj:`starfinder.synthetic.save_context_dataset`
 * :py:obj:`starfinder.synthetic.save_context_scene`
 * :py:obj:`starfinder.synthetic.save_formed_scene`
 * :py:obj:`starfinder.stitching.save_placement`
@@ -315,6 +319,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.spot_finding.SpotFindingWarning`
 * :py:obj:`starfinder.spot_finding.SpotiflowConfig`
 * :py:obj:`starfinder.stitching.StageAxisMapping`
+* :py:obj:`starfinder.synthetic.StainChannelConfig`
 * :py:obj:`starfinder.synthetic.StainConfig`
 * :py:obj:`starfinder.segmentation.StarDistConfig`
 * :py:obj:`starfinder.spot_finding.StarfishLogConfig`
@@ -348,6 +353,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.registration.TranslationConfig`
 * :py:obj:`starfinder.registration.TranslationTransform`
 * :py:obj:`starfinder.report.UNAVAILABLE_REASONS`
+* :py:obj:`starfinder.synthetic.UnevennessConfig`
 * :py:obj:`starfinder.registration.UnsupportedTransformOperationError`
 * :py:obj:`starfinder.registration.WarpConfig`
 * :py:obj:`starfinder.spot_finding.WeightsFile`

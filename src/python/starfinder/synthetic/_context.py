@@ -9,7 +9,7 @@ stream, and the new truth is written beside the unchanged sample layout with its
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 import json
 import math
 from pathlib import Path
@@ -19,12 +19,16 @@ import numpy as np
 import pandas as pd
 
 from starfinder.barcode import Codebook
+from starfinder.io import save_volume
 
 from ._cellular import _contact, _extent, _harmonic_bound, _harmonic_terms, _labels, _lobe_one_extent, _shapes
-from ._common import ScalarDistribution, _draw, _integer, _label, _probabilities
+from ._common import ScalarDistribution, _draw, _integer, _json, _label, _probabilities
 from ._formed import _STREAM_KEY, _STREAM_NAMESPACE, _plain
-from ._sample import (_BLOCK, SampleScene, SampleSceneConfig, _checked_distribution, _config_payload, _generate,
+from ._observation import _noise, _observe, _prepare_background, evaluate_background_translated
+from ._sample import (_BLOCK, SampleScene, SampleSceneConfig, _cast, _checked_distribution, _config_payload, _generate,
                       _inside, _label_functions, _layout, _real, _sha256, _streams, save_sample_scene)
+from ._stains import (_ROUNDS, MorphologyRoundConfig, StainChannelConfig, _bright_regions, _bumps, _median, _model,
+                      _plateaus, _Points)
 
 #: Version of the cellular-scene truth files (context.json and its tables); any change to a column or rule bumps it.
 CONTEXT_TRUTH_VERSION = "1"
@@ -58,7 +62,43 @@ _CONTEXT_COMPONENTS = {
     "context.molecule.compartment": ("molecule ID", "one uniform (NF1)"),
     "context.identity": ("molecule ID", "one gene draw with the type's abundance"),
     "context.ambient.identity": ("molecule ID", "one gene draw with the ambient abundance"),
+    "context.stain.brightness": ("nucleus-<n> or cell-<k>", "one value; channel_label the stain name"),
+    "context.texture.count": ("nucleus-<n>", "one Poisson value; channel_label the stain name"),
+    "context.texture.placement": ("nucleus-<n>-region-<b>", "z, y, x per proposal; channel_label the stain name"),
+    "context.texture.size": ("nucleus-<n>-region-<b>", "one value; channel_label the stain name"),
+    "context.texture.height": ("nucleus-<n>-region-<b>", "one value; channel_label the stain name"),
+    "context.unevenness.count": ("field", "one Poisson value; channel_label the stain name"),
+    "context.unevenness.placement": ("bump-<q>", "z, y, x; channel_label the stain name"),
+    "context.unevenness.amplitude": ("bump-<q>", "one standard normal z_q; channel_label the stain name"),
+    **{f"context.stain.background.{name}": ("as background.{name}", "as background.{name}; channel_label the stain "
+                                            "name") for name in ("count", "placement", "width", "brightness")},
+    "context.morphology.translation": ("FOV ID", "u_z, u_y, u_x (MT1)"),
 }
+# The truth tables of the stains and the morphology round, with their columns ("Truth schema").
+_STAIN_TABLES = {
+    "stain_channels": ["stain", "source", "round", "channel", "dtype", "scale", "m_A"],
+    "stain_objects": ["stain", "object", "object_id", "plateau"],
+    "bright_regions": ["region_id", "nucleus_id", "stain", "centre_z", "centre_y", "centre_x", "size", "height"],
+    "unevenness": ["stain", "bump_id", "centre_z", "centre_y", "centre_x", "z", "a", "length"],
+    "morphology_truth": ["fov_id", "round", "translation_z_um", "translation_y_um", "translation_x_um",
+                         "translation_z_vox", "translation_y_vox", "translation_x_vox", "pull_displacement_z_vox",
+                         "pull_displacement_y_vox", "pull_displacement_x_vox"],
+}
+_STAIN_TYPES = {
+    "stain_channels": dict(stain=object, source=object, round=object, channel=object, dtype=object, scale=np.float64,
+                           m_A=np.float64),
+    "stain_objects": dict(stain=object, object=object, object_id=np.uint32, plateau=np.float64),
+    "bright_regions": dict(region_id=np.int64, nucleus_id=np.uint32, stain=object, centre_z=np.float64,
+                           centre_y=np.float64, centre_x=np.float64, size=np.float64, height=np.float64),
+    "unevenness": dict(stain=object, bump_id=np.int64, centre_z=np.float64, centre_y=np.float64, centre_x=np.float64,
+                       z=np.float64, a=np.float64, length=np.float64),
+    "morphology_truth": dict(fov_id=object, round=object,
+                             **{c: np.float64 for c in _STAIN_TABLES["morphology_truth"][2:]}),
+}
+
+
+def _stain_table(name, rows):
+    return pd.DataFrame(rows, columns=_STAIN_TABLES[name]).astype(_STAIN_TYPES[name])
 
 
 def _g1(types=4, genes=16, marker=0.15, shared=0.0875):
@@ -292,9 +332,10 @@ class ContextSceneConfig:
 
     ``sample`` is an unchanged ``SampleSceneConfig`` (template, acquisition, seeds, size laws,
     molecules, stain). ``nuclei``, ``packing``, ``territories``, ``types`` and ``molecules``
-    are described by their classes and need ``sample.cells``. ``stains`` and ``morphology``
-    exist and refuse a value until the stains and the morphology round are added (W-484).
-    Invalid combinations raise ValueError naming the field. Instances are not hashable.
+    are described by their classes and need ``sample.cells``. ``stains`` is a tuple of
+    ``StainChannelConfig`` (empty: the sample scene's stain), which requires ``sample.stain``
+    None; ``morphology`` is the round that holds the stains of round ``morphology``. Invalid
+    combinations raise ValueError naming the field. Instances are not hashable.
     """
 
     __hash__ = None
@@ -305,15 +346,15 @@ class ContextSceneConfig:
     territories: TerritoryConfig | None = None
     types: CellTypeConfig | None = None
     molecules: MoleculeConfig | None = None
-    stains: tuple = ()
-    morphology: object | None = None
+    stains: tuple[StainChannelConfig, ...] = ()
+    morphology: MorphologyRoundConfig | None = None
 
     def __post_init__(self):
         if not isinstance(self.sample, SampleSceneConfig):
             raise TypeError("sample must be SampleSceneConfig")
         for name, kind in (("nuclei", NucleusShapeConfig), ("packing", PackingConfig),
                            ("territories", TerritoryConfig), ("types", CellTypeConfig),
-                           ("molecules", MoleculeConfig)):
+                           ("molecules", MoleculeConfig), ("morphology", MorphologyRoundConfig)):
             if getattr(self, name) is not None and not isinstance(getattr(self, name), kind):
                 raise TypeError(f"{name} must be {kind.__name__} or None")
         if not isinstance(self.stains, tuple):
@@ -321,12 +362,9 @@ class ContextSceneConfig:
         if self.stains and self.sample.stain is not None:
             raise ValueError("stains: sample.stain must be None when stains is given (the context's first "
                              "nucleus stain of the reference round takes its place)")
-        if self.stains:
-            raise NotImplementedError("stains: the stain channels of the cellular scene are not implemented yet "
-                                      "(W-484); leave stains empty")
-        if self.morphology is not None:
-            raise NotImplementedError("morphology: the morphology round is not implemented yet (W-484); "
-                                      "leave morphology None")
+        if not all(isinstance(stain, StainChannelConfig) for stain in self.stains):
+            raise TypeError("stains must hold StainChannelConfig")
+        self._check_stains()
         parts = [name for name in ("nuclei", "packing", "territories", "types", "molecules")
                  if getattr(self, name) is not None]
         cells = self.sample.cells
@@ -355,16 +393,54 @@ class ContextSceneConfig:
                 raise ValueError("kind_shares: the ordinary and binucleate shares are both 0 in density mode "
                                  "(from the counts of sample.cells), so placement would not reach the density")
 
+    def _check_stains(self):
+        """Names and channels unique per round, one configuration per name, the morphology round and its bound."""
+        stains, morphology = self.stains, self.morphology
+        for round_ in _ROUNDS:
+            own = [stain for stain in stains if stain.round == round_]
+            for key in ("name", "channel"):
+                values = [getattr(stain, key) for stain in own]
+                repeated = sorted({v for v in values if values.count(v) > 1})
+                if repeated:
+                    raise ValueError(f"stains: the {key} {repeated[0]!r} occurs more than once in the {round_} round")
+        first = {}
+        for stain in stains:
+            plain = replace(stain, round="reference", channel="ch04")
+            if stain.name in first and first[stain.name] != plain:
+                raise ValueError(f"stains: the stains named {stain.name!r} differ apart from round and channel; "
+                                 "stains that share a name share their draws and must share their configuration")
+            first.setdefault(stain.name, plain)
+        held = [stain.name for stain in stains if stain.round == "morphology"]
+        if held and morphology is None:
+            raise ValueError(f"morphology: the stains {held} of round 'morphology' need a MorphologyRoundConfig")
+        if morphology is None:
+            return
+        if not held:
+            raise ValueError("morphology: the morphology round holds no stain; give stains with round='morphology'")
+        acquisition = self.sample.acquisition
+        if acquisition.fov_shape_zyx[0] == 1 and morphology.translation_max_zyx[0] != 0:
+            raise ValueError("morphology: translation_max_zyx must be 0 in z when fov_shape_zyx has one plane "
+                             "(n_z = 1)")
+        if morphology.translation == "supplied":
+            ids = acquisition.ids()
+            unknown = sorted(set(morphology.translation_zyx) - set(ids))
+            missing = [fov for fov in ids if fov not in morphology.translation_zyx]
+            if unknown or missing:
+                raise ValueError(f"morphology: translation_zyx must name exactly the FOVs of the grid; unknown "
+                                 f"{unknown}, missing {missing}")
+
 
 @dataclass
 class ContextScene:
     """A generated cellular scene: the sample scene and the new truth tables.
 
     ``sample`` is the ``SampleScene`` (its tables, labels and FOVs made with the page's
-    rules). The tables are those of docs/synthetic-cellular-scene.md ("Truth schema"); the
-    stain images and tables and the morphology round stay empty until they are added
-    (W-484). ``record`` holds versions, the requested and effective configuration, the
-    placement outcome and the context streams drawn.
+    rules). ``stains`` maps each FOV ID to its reference-round stain images by stain name
+    (ZYX, each in its output dtype) and ``morphology`` to the morphology round (ZYXC, its
+    stains in configuration order); both are filled also when the FOVs were handed to
+    ``on_fov``. The tables are those of docs/synthetic-cellular-scene.md ("Truth schema").
+    ``record`` holds versions, the requested and effective configuration, the placement
+    outcome and the context streams drawn (the stains' noise streams included).
     """
 
     sample: SampleScene
@@ -1046,8 +1122,10 @@ def _payload(config):
     for name in ("nuclei", "packing", "territories", "types", "molecules"):
         part = getattr(config, name)
         payload[name] = None if part is None else dict(_plain(asdict(part)), type=type(part).__name__)
-    payload["stains"] = []
-    payload["morphology"] = None
+    payload["stains"] = [dict(_plain(asdict(stain)), type="StainChannelConfig") for stain in config.stains]
+    morphology = config.morphology
+    payload["morphology"] = None if morphology is None else dict(_plain(asdict(morphology)),
+                                                                 type="MorphologyRoundConfig")
     return payload
 
 
@@ -1144,8 +1222,12 @@ def generate_context_scene(codebook: Codebook, *, config: ContextSceneConfig = C
     given (docs/synthetic-cellular-scene.md): lobed nuclei, packing with touching nuclei,
     territories, cell types and molecules by compartment. With every part at its default the
     result's ``sample`` equals ``generate_sample_scene(codebook, config=config.sample)``.
-    ``on_fov`` is passed on as there. Invalid input, crowding (with ``on_crowded="raise"``
-    or below the floor) and counts above ``max_count`` raise ValueError; nothing is written.
+    The stains are then rendered per FOV from the truth (the reference round's at the FOV's
+    voxel centres, the morphology round's at the centres moved by its translation); a
+    morphology round grows the scene domain by its translation bound on each side.
+    ``on_fov`` is passed on as there; the stains stay in the result. Invalid input, crowding
+    (with ``on_crowded="raise"`` or below the floor) and counts above ``max_count`` raise
+    ValueError; nothing is written.
     """
     if not isinstance(config, ContextSceneConfig):
         raise TypeError("config must be ContextSceneConfig")
@@ -1156,16 +1238,17 @@ def generate_context_scene(codebook: Codebook, *, config: ContextSceneConfig = C
     stream = _streams(template.split, template.seed, template.scene_key, log)
     parts = any(getattr(config, name) is not None for name in ("nuclei", "packing", "territories", "types",
                                                                  "molecules"))
+    _check_stain_names(config, codebook)
+    grow = None if config.morphology is None else np.asarray(config.morphology.translation_max_zyx, dtype=np.float64)
     state = None
     if parts:
         state = _Context(config, codebook, stream)
         # The molecules are placed over the territories of the selected rule and drawn by the page's laws, whichever
         # parts are set; only a scene with every part off is generate_sample_scene's by construction (O1).
-        scene = _generate(codebook, config.sample, on_fov, state.cellular, state.molecules)
+        scene = _generate(codebook, config.sample, on_fov, state.cellular, state.molecules, grow=grow)
     else:
-        scene = _generate(codebook, config.sample, on_fov)
+        scene = _generate(codebook, config.sample, on_fov, grow=grow)
     tables = _tables(config, codebook, scene, state)
-    empty = pd.DataFrame()
     effective = dict(
         type="ContextSceneConfig", territory_rule=state.rule if state is not None else "reach",
         planar=bool(state.planar) if state is not None else bool(_layout(config.sample.acquisition).flat),
@@ -1178,6 +1261,9 @@ def generate_context_scene(codebook: Codebook, *, config: ContextSceneConfig = C
         types=None if config.types is None else dict(
             names=list(config.types.types),
             proportions=_probabilities(config.types.proportions, len(config.types.types), "proportions").tolist()))
+    truth = SimpleNamespace(sample=scene, record=dict(effective_config=_plain(effective)), **tables)
+    stains = _stain_part(config, truth, stream, log)
+    effective.update(stains=stains.pop("effective"), morphology=stains.pop("morphology_effective"))
     record = dict(
         generator="starfinder.synthetic.generate_context_scene", context_truth_version=CONTEXT_TRUTH_VERSION,
         context_preset_version=_CONTEXT_PRESET_VERSION, requested_config=_payload(config),
@@ -1186,22 +1272,139 @@ def generate_context_scene(codebook: Codebook, *, config: ContextSceneConfig = C
                            digest="SHA-256, big-endian integer", bit_generator="PCG64", numpy_version=np.__version__,
                            components={k: dict(entity=e, draws=d) for k, (e, d) in _CONTEXT_COMPONENTS.items()},
                            streams=list(log.values())))
-    return ContextScene(scene, {}, {}, **tables, stain_channels=empty.copy(), stain_objects=empty.copy(),
-                        bright_regions=empty.copy(), unevenness=empty.copy(), morphology_truth=empty.copy(),
-                        record=record)
+    return ContextScene(scene, stains.pop("images"), stains.pop("morphology"), **tables, **stains, record=record)
 
 
-def _context_labels(scene, points):
-    """The point evaluator: C and N of a cellular scene at (..., 3) sample positions (µm), rebuilt from its truth
-    tables (``nuclei``, ``lobes``, ``harmonics``, ``cells``, ``cell_context``) and records, evaluated by the
-    generator's own label function."""
+def _check_stain_names(config, codebook):
+    """The stains' files beside the amplicon channels and rounds: a reference stain is not an amplicon channel, and
+    the morphology round is not an amplicon round."""
+    shared = sorted({stain.channel for stain in config.stains if stain.round == "reference"}
+                    & set(codebook.channel_labels))
+    if shared:
+        raise ValueError(f"stains: the reference-round channels {shared} are amplicon channels of the codebook; a "
+                         "reference stain is a file of its own")
+    morphology = config.morphology
+    if morphology is not None and morphology.name in (*codebook.round_labels, "reference_stain"):
+        raise ValueError(f"morphology: the round name {morphology.name!r} is an amplicon round or reserved")
+
+
+def _stain_part(config, truth, stream, log):
+    """The stains and the morphology round: draws, truth tables and per-FOV images ("Stains", "The morphology round").
+
+    Stains that share a name share every draw; each stain's noise is drawn per FOV from ``stain.noise.*`` with scene
+    key ``[scene_key, fov_id]``, the stain name as channel label and, in the morphology round, its name as round label.
+    """
+    stains, morphology = config.stains, config.morphology
+    template = config.sample.fov
+    sample = truth.sample
+    record = sample.record
+    grid = record["sample_grid"]
+    origin = np.array(grid["origin_zyx"], dtype=np.float64)
+    s = np.array(grid["spacing_zyx"], dtype=np.float64)
+    shape = np.array(grid["shape_zyx"], dtype=np.int64)
+    domain = record["domain"]["omega"]
+    omega = (np.array(domain["lo_zyx"], dtype=np.float64), np.array(domain["hi_zyx"], dtype=np.float64))
+    n = np.array(config.sample.acquisition.fov_shape_zyx, dtype=np.int64)
+    flat = bool(n[0] == 1)
+    fov_ids = list(sample.placement.fov_id)
+    true = sample.placement[["true_origin_z", "true_origin_y", "true_origin_x"]].to_numpy(dtype=np.float64)
+    sites, _ = _scene_sites(truth)
+    nuclei = sorted(int(v) for v in sample.nuclei.nucleus_id)
+    cells = sorted(int(v) for v in sample.cells.cell_id)
+    limit = config.sample.cells.max_proposals if config.sample.cells is not None else 1
+    first, parts = {}, {}
+    rows = {name: [] for name in _STAIN_TABLES}
+    for stain in stains:
+        if stain.name in first:
+            continue
+        first[stain.name] = stain
+        nucleus = stain.source == "nucleus"
+        ids = nuclei if nucleus else cells
+        values = _plateaus(stain, [f"{'nucleus' if nucleus else 'cell'}-{i}" for i in ids], stream)
+        rows["stain_objects"].extend((stain.name, "nucleus" if nucleus else "cell", i, v) for i, v in zip(ids, values))
+        if stain.texture is not None and ids:
+            rows["bright_regions"].extend((b, i, stain.name, *rest) for b, i, *rest in _bright_regions(
+                stain, ids, sites, omega, flat, limit, stream))
+        if stain.unevenness is not None:
+            bumps, length = _bumps(stain, omega, (n[1] * s[1], n[2] * s[2]), flat, stream)
+            rows["unevenness"].extend((stain.name, q, cz, cy, cx, z, float(stain.unevenness.amplitude), length)
+                                      for q, cz, cy, cx, z in bumps)
+        components, background = _prepare_background(
+            stain.background, shape, 1,
+            lambda component, entity=None, name=stain.name: stream("context.stain." + component, entity, None, name), 1)
+        parts[stain.name] = (components, background, _noise(stain.noise), values)
+    effective = []
+    for stain in stains:
+        components, background, noise, values = parts[stain.name]
+        median = _median(stain.brightness, values)
+        scale = 1.0
+        if stain.output is not None:
+            if not median > 0:
+                raise ValueError(f"stains[{stain.name!r}].output: the median brightness m_A must be positive; got "
+                                 f"{median}")
+            scale = float(stain.output.plateau) / median
+        dtype = stain.output.dtype if stain.output is not None else template.dtype
+        rows["stain_channels"].append((stain.name, stain.source, stain.round, stain.channel, dtype, scale, median))
+        effective.append(dict(name=stain.name, source=stain.source, round=stain.round, channel=stain.channel,
+                              dtype=dtype, scale=scale, m_A=median, background=background, noise=noise))
+    shift = {}
+    if morphology is not None:
+        bound = np.asarray(morphology.translation_max_zyx, dtype=np.float64)
+        for fov in fov_ids:
+            if morphology.translation == "uniform":
+                vox = bound * (2 * stream("context.morphology.translation", fov).random(3) - 1) + 0.0
+            else:
+                vox = np.asarray(morphology.translation_zyx[fov], dtype=np.float64) + 0.0
+            shift[fov] = vox * s
+            rows["morphology_truth"].append((fov, morphology.name, *shift[fov].tolist(), *vox.tolist(),
+                                             *(-vox + 0.0).tolist()))
+    tables = {name: _stain_table(name, value) for name, value in rows.items()}
+    model = _model(sites, [_plain(asdict(stain)) for stain in stains], tables["stain_objects"],
+                   tables["bright_regions"], tables["unevenness"])
+    images, rounds = {}, {}
+    for k, fov in enumerate(fov_ids):
+        fov_stream = _streams(template.split, template.seed, _json([template.scene_key, fov]), log)
+        images[fov], planes = {}, []
+        for stain, channel in zip(stains, effective):
+            components, background, noise, _ = parts[stain.name]
+            start = true[k] if stain.round == "reference" else true[k] + shift[fov]
+            label = None if stain.round == "reference" else morphology.name
+            plane = model.signal(stain.name, _Points(origin=start, spacing=s, shape=n))
+            tissue = (evaluate_background_translated(components, n, -((start - origin) / s), np.float64)[0]
+                      if components else None)
+            _observe(plane, tissue, background, 0, 0, noise, label, stain.name,
+                     lambda component, entity=None, round_label=None, channel_label=None:
+                     fov_stream("stain." + component, entity, round_label, channel_label))
+            if not np.isfinite(plane).all():
+                raise ValueError(f"nonfinite rendered stain {stain.name!r}")
+            if stain.output is not None:
+                plane *= channel["scale"]
+            image = _cast(plane, channel["dtype"])
+            if stain.round == "reference":
+                images[fov][stain.name] = image
+            else:
+                planes.append(image)
+        if planes:
+            rounds[fov] = np.stack(planes, axis=-1)
+    morphology_effective = None
+    if morphology is not None:
+        morphology_effective = dict(name=morphology.name, translation=morphology.translation,
+                                    translation_max_zyx=[float(v) for v in morphology.translation_max_zyx],
+                                    domain_growth_um=(np.asarray(morphology.translation_max_zyx) * s).tolist(),
+                                    stains=[stain.name for stain in stains if stain.round == "morphology"])
+    return dict(images={fov: own for fov, own in images.items() if own}, morphology=rounds, effective=effective,
+                morphology_effective=morphology_effective, **tables)
+
+
+def _scene_sites(scene):
+    """(sites, Ω) of a cellular scene rebuilt from its truth tables (``nuclei``, ``lobes``, ``harmonics``, ``cells``,
+    ``cell_context``) and records, as the generator's label function takes them; sites None without a cell."""
     sample = scene.sample
     effective = scene.record["effective_config"]
     domain = sample.record["domain"]["omega"]
     omega = (np.array(domain["lo_zyx"], dtype=np.float64), np.array(domain["hi_zyx"], dtype=np.float64))
-    points = np.asarray(points, dtype=np.float64)
     if not len(sample.cells):
-        return _labels(points, SimpleNamespace(centres=np.zeros((0, 3))), omega, _BLOCK)
+        return None, omega
     planar = bool(effective["planar"])
     terms = [tuple(t) for t in effective["harmonic_terms"]]
     by_nucleus = {}
@@ -1230,8 +1433,51 @@ def _context_labels(scene, points):
         sites = own.get(k) or [(np.array([cell.anchor_z, cell.anchor_y, cell.anchor_x]), empty_radius)]
         value = growth.get(k, np.nan)
         cells.append(dict(cell_id=k, reach=cell.reach, growth=None if np.isnan(value) else value, sites=sites))
-    sites = _sites(cells, nuclei, effective["territory_rule"], empty_radius, terms, planar)
+    return _sites(cells, nuclei, effective["territory_rule"], empty_radius, terms, planar), omega
+
+
+def _context_labels(scene, points):
+    """The point evaluator: C and N of a cellular scene at (..., 3) sample positions (µm), rebuilt from its truth
+    tables (``nuclei``, ``lobes``, ``harmonics``, ``cells``, ``cell_context``) and records, evaluated by the
+    generator's own label function."""
+    sites, omega = _scene_sites(scene)
+    points = np.asarray(points, dtype=np.float64)
+    if sites is None:
+        return _labels(points, SimpleNamespace(centres=np.zeros((0, 3))), omega, _BLOCK)
     return _labels(points, sites, omega, _BLOCK)
+
+
+def _context_model(scene):
+    """The stain functions of a cellular scene rebuilt from its truth tables (``stain_objects``, ``bright_regions``,
+    ``unevenness``), its label sites and the requested stain configurations."""
+    sites, _ = _scene_sites(scene)
+    return _model(sites, scene.record["requested_config"]["stains"], scene.stain_objects, scene.bright_regions,
+                  scene.unevenness)
+
+
+def _context_stain(scene, name, points):
+    """The point evaluator of the stains: the pre-noise signal of stain ``name`` (without its background) at (..., 3)
+    sample positions (µm), by the functions the generator renders with."""
+    points = np.asarray(points, dtype=np.float64)
+    return _context_model(scene).signal(name, _Points(points.reshape(-1, 3))).reshape(points.shape[:-1])
+
+
+def _context_band(scene, name, cell_id, points):
+    """(d_k, β_k) of cell ``cell_id`` for the boundary stain ``name`` at (..., 3) sample positions; NaN beyond the
+    cell's box (where its band and territory are 0)."""
+    points = np.asarray(points, dtype=np.float64)
+    d, beta = _context_model(scene).band(name, int(cell_id), _Points(points.reshape(-1, 3)))
+    return d.reshape(points.shape[:-1]), beta.reshape(points.shape[:-1])
+
+
+def _context_field(scene, name, points):
+    """U of stain ``name`` at (..., 3) sample positions (ones without a field)."""
+    points = np.asarray(points, dtype=np.float64)
+    return _context_model(scene).field(name, _Points(points.reshape(-1, 3))).reshape(points.shape[:-1])
+
+
+_CONTEXT_TABLES = ("lobes", "harmonics", "cell_context", "regions", "type_abundances", "cell_gene_counts",
+                   "marker_pairs", *_STAIN_TABLES)
 
 
 def save_context_scene(scene: ContextScene, directory: Path | str) -> Path:
@@ -1240,20 +1486,117 @@ def save_context_scene(scene: ContextScene, directory: Path | str) -> Path:
     Layout (docs/synthetic-cellular-scene.md, "Truth schema"): the ``save_sample_scene``
     layout of ``scene.sample``, unchanged, plus ``lobes.csv``, ``harmonics.csv``,
     ``cell_context.csv``, ``regions.csv``, ``type_abundances.csv``, ``cell_gene_counts.csv``,
-    ``marker_pairs.csv`` and ``context.json`` (the record with ``context_truth_version`` and
-    the SHA-256 of every other file). An empty population gives a header and no rows. A
-    scene generated with ``on_fov`` raises ValueError; an existing nonempty directory raises
-    FileExistsError, and nothing is overwritten.
+    ``marker_pairs.csv``, ``stain_channels.csv``, ``stain_objects.csv``,
+    ``bright_regions.csv``, ``unevenness.csv``, ``morphology_truth.csv``, per FOV
+    ``fovs/<fov_id>/stains/<name>.ome.tif`` (each reference-round stain, ZYX as one channel
+    of an OME-TIFF in its own dtype) and ``fovs/<fov_id>/morphology.ome.tif`` (the morphology
+    round, ZYXC), each with the FOV's metadata, and ``context.json`` (the record with
+    ``context_truth_version`` and the SHA-256 of every other file). An empty population gives
+    a header and no rows. A scene generated with ``on_fov`` raises ValueError; an existing
+    nonempty directory raises FileExistsError, and nothing is overwritten.
     """
     if not isinstance(scene, ContextScene):
         raise TypeError("scene must be ContextScene")
     directory = save_sample_scene(scene.sample, directory)
-    for name in ("lobes", "harmonics", "cell_context", "regions", "type_abundances", "cell_gene_counts",
-                 "marker_pairs"):
+    for name in _CONTEXT_TABLES:
         getattr(scene, name).to_csv(directory / f"{name}.csv", index=False)
+    for fov in scene.sample.positions.fov_id:
+        metadata = scene.sample.fov_metadata[fov]
+        for name, image in scene.stains.get(fov, {}).items():
+            save_volume(image[..., None], directory / "fovs" / fov / "stains" / f"{name}.ome.tif", metadata=metadata)
+        if fov in scene.morphology:
+            save_volume(scene.morphology[fov], directory / "fovs" / fov / "morphology.ome.tif", metadata=metadata)
     files = {path.relative_to(directory).as_posix(): _sha256(path)
              for path in sorted(directory.rglob("*")) if path.is_file()}
     record = dict(scene.record, files=files)
     (directory / "context.json").write_text(
         json.dumps(record, indent=2, ensure_ascii=False, allow_nan=False) + "\n", encoding="utf-8")
+    return directory
+
+
+def save_context_dataset(scene: ContextScene, directory: Path | str) -> Path:
+    """Write a cellular scene as a raw dataset that ``Dataset`` and ``FOV`` read; return its path.
+
+    Layout (docs/synthetic-cellular-scene.md, "Files and layout"): ``<round>/<fov_id>/<channel>.tif``
+    for each amplicon round (one ZYX file per codebook channel), the reference-round stains
+    as files of the reference round's folder (``<reference round>/<fov_id>/<channel>.tif``),
+    the morphology round's stains in ``<morphology round>/<fov_id>/<channel>.tif``, every file
+    with the FOV's reference metadata; ``codebook.csv`` (``entry_id``, ``gene_id``,
+    ``color_sequence``); and ``dataset.json`` with the ``Dataset`` fields (rounds,
+    ``channel_order``, ``other_channel_order`` and ``reference_stains`` with pattern and name,
+    the voxel sizes, the codebook's labels and FOV IDs) and the SHA-256 of every other file.
+    Each stain's channel name is its stain name, so ``FOV.prepare_morphology`` without a
+    recipe registers the morphology round on the one reference stain that shares a name
+    with one of its channels (MR1). A scene generated with ``on_fov`` raises ValueError, as
+    does a channel pattern that selects more than one file of its folder; an existing
+    nonempty directory raises FileExistsError, and nothing is overwritten.
+    """
+    if not isinstance(scene, ContextScene):
+        raise TypeError("scene must be ContextScene")
+    sample = scene.sample
+    fov_ids = list(sample.positions.fov_id)
+    if set(sample.fovs) != set(fov_ids):
+        raise ValueError("the scene holds no FOV images (generated with on_fov); save each FOV in the callback")
+    record = sample.record
+    codebook = record["codebook"]
+    reference = record["effective_config"]["reference_round"]
+    stains = scene.record["effective_config"]["stains"]
+    morphology = scene.record["effective_config"]["morphology"]
+    folders = {label: list(codebook["channel_labels"]) for label in codebook["round_labels"]}
+    folders[reference] = folders[reference] + [s["channel"] for s in stains if s["round"] == "reference"]
+    if morphology is not None:
+        folders[morphology["name"]] = [s["channel"] for s in stains if s["round"] == "morphology"]
+    for folder, channels in folders.items():
+        for channel in channels:
+            matches = [other for other in channels if channel in other]
+            if len(matches) != 1:
+                raise ValueError(f"the channel pattern {channel!r} selects {len(matches)} files of round {folder!r} "
+                                 f"({matches}); patterns must select one file each")
+    for fov in fov_ids:
+        for name in (fov, *folders):
+            if name in (".", "..") or Path(name).name != name or "\\" in name:
+                raise ValueError(f"FOV ID or round is not a plain file name: {name!r}")
+    directory = Path(directory)
+    if directory.exists() and any(directory.iterdir()):
+        raise FileExistsError(f"dataset directory is not empty: {directory}")
+    directory.mkdir(parents=True, exist_ok=True)
+    for fov in fov_ids:
+        metadata = sample.fov_metadata[fov]
+        for label in codebook["round_labels"]:
+            image = sample.fovs[fov].rounds[label]
+            for c, channel in enumerate(codebook["channel_labels"]):
+                save_volume(np.ascontiguousarray(image[..., c]), directory / label / fov / f"{channel}.tif",
+                            metadata=metadata)
+        held = 0
+        for stain in stains:
+            if stain["round"] == "reference":
+                image, folder = scene.stains[fov][stain["name"]], reference
+            else:
+                image, folder = scene.morphology[fov][..., held], morphology["name"]
+                held += 1
+            save_volume(np.ascontiguousarray(image), directory / folder / fov / f"{stain['channel']}.tif",
+                        metadata=metadata)
+    columns = [c for c in ("entry_id", "gene_id", "color_sequence") if c in pd.DataFrame(codebook["rows"]).columns]
+    pd.DataFrame(codebook["rows"])[columns].to_csv(directory / "codebook.csv", index=False)
+    spacing = record["sample_grid"]["spacing_zyx"]
+    channel = lambda s: dict(channel=s["channel"], name=s["name"])  # noqa: E731
+    files = {path.relative_to(directory).as_posix(): _sha256(path)
+             for path in sorted(directory.rglob("*")) if path.is_file()}
+    dataset = dict(
+        format="starfinder.synthetic.save_context_dataset", context_truth_version=CONTEXT_TRUTH_VERSION,
+        dataset_id=sample.record["requested_config"]["fov"]["dataset_version"], sample_id=sample.sample,
+        rounds=dict(sequencing=list(codebook["round_labels"]), reference=reference,
+                    other=[] if morphology is None else [morphology["name"]]),
+        channel_order=list(codebook["channel_labels"]),
+        other_channel_order={} if morphology is None else {
+            morphology["name"]: [channel(s) for s in stains if s["round"] == "morphology"]},
+        reference_stains=[channel(s) for s in stains if s["round"] == "reference"],
+        voxel_size_xy=spacing[1] if spacing[1] == spacing[2] else None, voxel_size_z=spacing[0],
+        spacing_zyx=list(spacing), codebook=dict(path="codebook.csv", round_labels=list(codebook["round_labels"]),
+                                                 channel_labels=list(codebook["channel_labels"]),
+                                                 color_to_channel=codebook["color_to_channel"],
+                                                 encoding=codebook["encoding"]),
+        fov_ids=fov_ids, files=files)
+    (directory / "dataset.json").write_text(
+        json.dumps(dataset, indent=2, ensure_ascii=False, allow_nan=False) + "\n", encoding="utf-8")
     return directory

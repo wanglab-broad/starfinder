@@ -6,7 +6,9 @@ imports nothing from ``starfinder.synthetic`` and reads a scene through its tabl
 It recomputes the nucleus and cell labels ``N`` and ``C`` with its own arithmetic and reports
 the positions whose decision lies within 1e-9 µm of a boundary (a power face, a lobe or
 harmonic surface, a territory limit, the edge of Ω), the extent of a nucleus along a ray and
-the contact distance of two sites. The stains are added with them (W-484).
+the contact distance of two sites. ``StainOracle`` (W-484) adds the three stain signals with
+their cut-offs, the bright regions and the field U from ``stain_objects``, ``bright_regions``,
+``unevenness`` and the requested stain configurations, with every site in every face term.
 """
 from __future__ import annotations
 
@@ -15,7 +17,7 @@ import math
 
 import numpy as np
 import pandas as pd
-from scipy.special import sph_harm_y
+from scipy.special import erfc, sph_harm_y
 
 # Decisions within this distance (µm) of 0 are boundary positions.
 EPS = 1e-9
@@ -358,3 +360,165 @@ def check_sample_identities(scene, oracle):
         np.testing.assert_array_equal(own.label_agrees[footprint].astype(bool),
                                       [truth[a] == v for a, v in zip(own.amplicon_id[footprint], labels["cell"][at])])
     return int(near.sum())
+
+
+# ---------------------------------------------------------------------- stains (W-484)
+
+# ½ erfc(2√2): the largest change of an edge whose argument stays at or below −4w (the site-skipping rule, choice V9).
+TAIL = 0.5 * math.erfc(2 * math.sqrt(2))
+
+
+class StainOracle:
+    """The signal of one stain of a scene from its tables and the requested stain configuration ("Stains").
+
+    Every face term takes every other site (no site is skipped). ``signal`` returns the pre-noise signal, the
+    positions within EPS µm of a cut-off surface (``ρ_n = 1 + 4w / a_min``, ``h_n = 4w``, the territory's
+    ``d_k = 4w``, the band's ``β_k = 4b``, the box of ``4 s_b`` of a bright region) and, for the nucleus source, the
+    V9 allowance ``½ erfc(2√2) · A_n U (1 + T_n)`` summed over the nuclei whose argument is at most −4w.
+    """
+
+    def __init__(self, oracle, scene, name):
+        self.o = oracle
+        config = next(r for r in scene.record["requested_config"]["stains"] if r["name"] == name)
+        self.name, self.source = name, config["source"]
+        self.w, self.b = float(config["edge_width"]), float(config["band_width"])
+        self.q = float(config["nuclear_ratio"])
+        own = scene.stain_objects[scene.stain_objects.stain == name]
+        self.plateau = dict(zip(own.object_id.astype(int).tolist(), own.plateau.astype(float).tolist()))
+        self.regions = {}
+        for row in scene.bright_regions[scene.bright_regions.stain == name].itertuples():
+            self.regions.setdefault(int(row.nucleus_id), []).append(
+                (np.array([row.centre_z, row.centre_y, row.centre_x]), float(row.size), float(row.height)))
+        bumps = scene.unevenness[scene.unevenness.stain == name]
+        self.bumps = bumps[["centre_z", "centre_y", "centre_x"]].to_numpy(dtype=float)
+        self.z = bumps.z.to_numpy(dtype=float)
+        self.amplitude = None if config["unevenness"] is None else float(config["unevenness"]["amplitude"])
+        self.length = float(bumps.length.iloc[0]) if len(bumps) else None
+        self.site_of = {int(n): j for j, n in enumerate(oracle.site_nuclei) if n}
+        self.cell_sites = {}
+        for j, k in enumerate(oracle.cells):
+            self.cell_sites.setdefault(int(k), []).append(j)
+
+    # ------------------------------------------------------------------ terms
+
+    def powers(self, p):
+        diff = p[:, None, :] - self.o.centres[None, :, :]
+        return np.einsum("pjk,pjk->pj", diff, diff) - self.o.radii ** 2
+
+    def faces(self, power, i, others):
+        """max over others of (pow_i − pow_j) / (2 ‖c_i − c_j‖); −∞ without a site."""
+        if not len(others):
+            return np.full(len(power), -np.inf)
+        gaps = np.linalg.norm(self.o.centres[others] - self.o.centres[i], axis=1)
+        return ((power[:, [i]] - power[:, others]) / (2 * gaps)).max(axis=1)
+
+    def _lobe_margin(self, n, p, level, grow=0.0):
+        nucleus = self.o.nuclei[n]
+        near = np.zeros(len(p), dtype=bool)
+        for l, lobe in enumerate(nucleus.lobes):
+            factor = 10.0 if (l == 0 and nucleus.coefficients and grow == 0) else 1.0
+            near |= np.abs(self.o.lobe_rho(nucleus, l, p, grow) - level) <= factor * EPS * level / float(
+                np.min(lobe.semi + grow))
+        return near
+
+    def rbar(self, n):
+        return float(np.prod(self.o.nuclei[n].lobes[0].semi) ** (1 / 3))
+
+    def nuclei(self, p, power, w):
+        """Per nucleus n: (argument, E_n, near) with edge w."""
+        result = {}
+        sites = np.arange(len(self.o.centres))
+        for n, nucleus in self.o.nuclei.items():
+            i = self.site_of[n]
+            h = self.faces(power, i, sites[sites != i])
+            rho = self.o.rho(n, p)
+            amin = float(nucleus.lobes[0].semi.min())
+            cutoff = 1 + 4 * w / amin
+            argument = np.maximum((rho - 1) * self.rbar(n), h)
+            edge = np.where((rho > cutoff) | (h > 4 * w), 0.0, .5 * erfc(argument / (math.sqrt(2) * w)))
+            near = (np.abs(h - 4 * w) <= EPS) | self._lobe_margin(n, p, cutoff)
+            result[n] = (argument, edge, near)
+        return result
+
+    def outer(self, p, j):
+        o = self.o
+        if o.rule == "power":
+            return np.full(len(p), -np.inf)
+        distance = np.linalg.norm(p - o.centres[j], axis=1)
+        if o.rule == "reach":
+            return distance - (o.radii[j] + o.reach[j])
+        n = int(o.site_nuclei[j])
+        if not n:
+            return distance - (o.empty_radius + o.growth[j])
+        rbar = self.rbar(n)
+        return np.minimum((o.rho(n, p) - 1) * rbar, (o.rho(n, p, o.growth[j]) - 1) * rbar)
+
+    def cell(self, p, power, k):
+        """(d_k, β_k) of cell k at p: d_k = max(h*_k, o_{j_k}); β_k = min(abs(d_k), g_k)."""
+        own = self.cell_sites[k]
+        others = np.array([j for j in range(len(self.o.centres)) if j not in own], dtype=int)
+        pick = np.argmin(power[:, own], axis=1)
+        rows = np.arange(len(p))
+        star = np.stack([self.faces(power, j, others) for j in own], axis=1)[rows, pick]
+        outer = np.stack([self.outer(p, j) for j in own], axis=1)
+        d = np.maximum(star, outer[rows, pick])
+        beta = np.abs(d)
+        if len(own) == 2:
+            j, jj = own
+            internal = (power[:, j] - power[:, jj]) / (2 * np.linalg.norm(self.o.centres[j] - self.o.centres[jj]))
+            g = np.max([np.abs(internal), star, outer.min(axis=1), -outer.max(axis=1)], axis=0)
+            beta = np.minimum(beta, g)
+        return d, beta
+
+    def texture(self, n, p):
+        """(T_n, near) at p: the bright regions of nucleus n, each 0 outside its box of 4 s_b."""
+        total = np.zeros(len(p))
+        near = np.zeros(len(p), dtype=bool)
+        for centre, size, height in self.regions.get(n, ()):
+            chebyshev = np.abs(p - centre).max(axis=1)
+            squared = (((p - centre) / size) ** 2).sum(axis=1)
+            total += np.where(chebyshev <= 4 * size, height * np.exp(-squared / 2), 0.0)
+            near |= np.abs(chebyshev - 4 * size) <= EPS
+        return total, near
+
+    def field(self, p):
+        """U1 at p, normalized: log U = a Σ z_q w_q / sqrt(Σ w_q²); 1 with no centre."""
+        if self.amplitude is None or not len(self.bumps):
+            return np.ones(len(p))
+        diff = p[:, None, :] - self.bumps[None, :, :]
+        squared = np.einsum("pjk,pjk->pj", diff, diff)
+        weights = np.exp(-(squared - squared.min(axis=1, keepdims=True)) / (2 * self.length ** 2))
+        return np.exp(self.amplitude * (weights @ self.z) / np.sqrt((weights ** 2).sum(axis=1)))
+
+    # ------------------------------------------------------------------ the signal
+
+    def signal(self, points):
+        """(signal, near, allowance) at (..., 3) positions."""
+        shape = points.shape[:-1]
+        p = points.reshape(-1, 3)
+        out, near, allowance = np.zeros(len(p)), np.zeros(len(p), dtype=bool), np.zeros(len(p))
+        if len(self.o.centres):
+            power = self.powers(p)
+            if self.source == "nucleus":
+                for n, (argument, edge, close) in self.nuclei(p, power, self.w).items():
+                    texture, box = self.texture(n, p)
+                    out += self.plateau[n] * edge * (1 + texture)
+                    near |= close | (box & (edge > 0))
+                    allowance += np.where(argument <= -4 * self.w, TAIL * self.plateau[n] * (1 + texture), 0.0)
+            elif self.source == "territory":
+                terms = self.nuclei(p, power, self.w)
+                indicator = np.minimum(1.0, sum(edge for _, edge, _ in terms.values()))
+                for _, _, close in terms.values():
+                    near |= close
+                for k in self.cell_sites:
+                    d, _ = self.cell(p, power, k)
+                    edge = np.where(d > 4 * self.w, 0.0, .5 * erfc(d / (math.sqrt(2) * self.w)))
+                    out += self.plateau[k] * edge * (1 - (1 - self.q) * indicator)
+                    near |= np.abs(d - 4 * self.w) <= 20 * EPS
+            else:
+                for k in self.cell_sites:
+                    _, beta = self.cell(p, power, k)
+                    out += self.plateau[k] * np.where(beta > 4 * self.b, 0.0, np.exp(-(beta / self.b) ** 2 / 2))
+                    near |= np.abs(beta - 4 * self.b) <= 20 * EPS
+        field = self.field(p)
+        return (out * field).reshape(shape), near.reshape(shape), (allowance * field).reshape(shape)

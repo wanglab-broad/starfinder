@@ -92,7 +92,8 @@ def test_gn1b_every_part_off_is_the_sample_scene(preset, tmp_path):
     extra = sorted(p.relative_to(context_root).as_posix() for p in context_root.rglob("*") if p.is_file())
     assert sorted(set(extra) - set(sample_files)) == sorted(
         ["context.json", "lobes.csv", "harmonics.csv", "cell_context.csv", "regions.csv", "type_abundances.csv",
-         "cell_gene_counts.csv", "marker_pairs.csv"])
+         "cell_gene_counts.csv", "marker_pairs.csv", "stain_channels.csv", "stain_objects.csv", "bright_regions.csv",
+         "unevenness.csv", "morphology_truth.csv"])
 
 
 # ---------------------------------------------------------------- GN4: labels against the oracle and the evaluator

@@ -20,6 +20,7 @@ and ``starfinder synthetic generate`` writes the MATLAB-compatible layout.
    BackgroundConfig
    BENCHMARK_PRESETS
    benchmark_scene_preset
+   BrightRegionConfig
    CALIBRATED_CONDITIONS
    calibrated_scene_preset
    CellTypeConfig
@@ -47,8 +48,10 @@ and ``starfinder synthetic generate`` writes the MATLAB-compatible layout.
    generate_sample_scene
    GeometryConfig
    MoleculeConfig
+   MorphologyRoundConfig
    NoiseConfig
    NucleusShapeConfig
+   OutputScaleConfig
    PackingConfig
    PRESET_VERSION
    ReadoutEffectsConfig
@@ -59,15 +62,18 @@ and ``starfinder synthetic generate`` writes the MATLAB-compatible layout.
    SAMPLE_TRUTH_VERSION
    SampleScene
    SampleSceneConfig
+   save_context_dataset
    save_context_scene
    save_formed_scene
    save_sample_scene
    ScalarDistribution
    SCENE_PRESETS
+   StainChannelConfig
    StainConfig
    SyntheticDataset
    TerritoryConfig
    TextureConfig
+   UnevennessConfig
 
 Formed scenes
 -------------
@@ -611,18 +617,41 @@ selects the cell territory (the site sphere plus a reach, a grown nucleus, or
 the whole power cell); ``CellTypeConfig`` gives cell types by region with a
 gene abundance per type and named marker pairs; ``MoleculeConfig`` sets the
 molecules per cell, the nuclear fraction of reads and the ambient genes. Every
-new draw comes from a ``context.`` stream. ``stains`` and ``morphology`` are
-reserved for the stains and the morphology round and refuse a value for now.
+new draw comes from a ``context.`` stream.
 
-``ContextScene`` holds the ``SampleScene`` and the new truth tables;
+``stains`` is a tuple of ``StainChannelConfig``, one per channel, each with a
+geometry source: ``nucleus`` (nucleus interiors with a soft edge across the
+surface and across the faces between touching nuclei, optional bright regions
+``BrightRegionConfig``), ``territory`` (cell territories, dimmer inside the
+nucleus) or ``boundary`` (a band on every boundary of a cell). Each stain has a
+plateau per object, an optional multiplicative ``UnevennessConfig`` field
+continuous across FOVs, the sample stain's background and noise controls, and
+an optional ``OutputScaleConfig`` that scales the noisy image to a plateau grey
+level before the 8-bit cast. The stains take the place of the sample scene's
+stain (``sample.stain`` must be None). Every stain is a function of the sample
+position, evaluated at each FOV's voxel centres without resampling. A stain of
+round ``morphology`` belongs to the ``MorphologyRoundConfig`` round, imaged at
+the voxel centres moved by a known translation per FOV (drawn within a bound,
+or supplied); the scene domain grows by that bound on each side, and the
+covered region does not change.
+
+``ContextScene`` holds the ``SampleScene``, the stain images of the reference
+round and of the morphology round, and the new truth tables;
 ``save_context_scene(scene, directory)`` writes the ``save_sample_scene``
 layout unchanged plus ``lobes.csv``, ``harmonics.csv``, ``cell_context.csv``,
 ``regions.csv``, ``type_abundances.csv``, ``cell_gene_counts.csv``,
-``marker_pairs.csv`` and ``context.json`` (``CONTEXT_TRUTH_VERSION``, the
-requested and effective configuration, the placement outcome, the ``context.``
-streams drawn and the SHA-256 of every other file). The scene is a development
-fixture, not a calibrated tissue model, and makes no claim about the accuracy
-of any segmenter.
+``marker_pairs.csv``, ``stain_channels.csv``, ``stain_objects.csv``,
+``bright_regions.csv``, ``unevenness.csv``, ``morphology_truth.csv``, the stain
+images per FOV and ``context.json`` (``CONTEXT_TRUTH_VERSION``, the requested
+and effective configuration, the placement outcome, the ``context.`` streams
+drawn and the SHA-256 of every other file). ``save_context_dataset(scene,
+directory)`` writes the scene as a raw dataset (``dataset.json``, the codebook
+and one TIFF per round, FOV and channel, the reference stains in the reference
+round's folder) that ``Dataset``, ``FOV.load_images`` and
+``FOV.prepare_morphology`` read; the morphology round is registered on the
+reference stain that shares its name. The scene is a development fixture, not
+a calibrated tissue model, and makes no claim about the accuracy of any
+segmenter.
 
 Scientific limitations
 ----------------------
