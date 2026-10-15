@@ -293,7 +293,8 @@ and `coefficient`, so the shape is rebuilt from `nuclei.csv`, `lobes.csv` and
 **Label rule.** The nucleus label keeps today's rule (`_label_functions`): at `σ`, take
 the site `j*` of smallest power distance (ties to the smaller site index); `N(σ) = n` when
 `j*` is a site of nucleus `n`, `σ ∈ Ω`, `σ` passes the cell's territory test ("Cell
-territories"), and `ρ_n(σ) ≤ 1`; else 0. Only `ρ_n` changes: the minimum over lobes, with
+territories"), and `ρ_n(σ) ≤ 1`; else 0. Besides the territory test, which T2 and T3
+change, only `ρ_n` changes: the minimum over lobes, with
 lobe 1 in the harmonic form `ρ_{n,1} = ‖d'‖ / r(d̂')` under N2 (and 0 at `d' = 0`).
 
 **Bounding site.** Nucleus `n`'s site sphere has centre `c_n` and radius
@@ -518,16 +519,18 @@ carry 30 % of its molecules), the exclusive pair `(balanced-01, balanced-03)` (t
 and 2) and the co-expressed pair `(balanced-01, balanced-02)` (type 1), both passed to
 the report as `marker_pairs`.
 
-**The known answers.** With A2 below (ambient molecules carry no marker gene), a marker
-gene occurs only among molecules placed by a cell of its type, and the counts per cell
-are the true counts of `cell_gene_counts.csv`:
+**The known answers.** With G1's table (a marker gene has weight 0 in every other type)
+and A2 below (ambient molecules carry no marker gene), a marker gene occurs only among
+molecules placed by a cell of its type, each placed inside that cell (accepted where
+`C = k`), and the counts per cell are the true counts of `cell_gene_counts.csv`. Another
+abundance table, or ambient abundances with marker genes, void the two answers below:
 
 * **Exclusive pair.** No cell has a true count of at least one for both genes, so the
   truth MECR of `(balanced-01, balanced-03)` is exactly 0 at every `positive_threshold`
   (when `either > 0`). An observed MECR above 0 after segmentation and assignment counts
   cells that received a molecule of another type's marker: the chain's mixing, not the
   scene's.
-* **Co-expressed pair.** Only type-1 cells hold either gene. The truth MECR is
+* **Co-expressed pair.** Under the same conditions, only type-1 cells hold either gene. The truth MECR is
   `both / either` computed from `cell_gene_counts.csv`, an integer ratio known before any
   method runs. As a design check, with a cell's marker counts approximately independent
   Poisson of mean `λ = 0.15 · n_k` each, the expected ratio at threshold 1 is
@@ -662,14 +665,27 @@ with `ρ_n` the nucleus's shape function, `r̄_n` the geometric mean of lobe 1's
 semi-axes (as today; `(ρ_n − 1) · r̄_n` is a signed distance to the surface, exact for a
 sphere and approximate otherwise), `pow_i` the power distance to `n`'s site `i`, and `h_n`
 the signed distance to the faces of `n`'s power cell (negative inside; `pow_i − pow_j` is
-affine in `σ`, so this is the exact distance to each face plane). `S_nuc` is 0 where no
-nucleus is near: a FOV without a nucleus gets the background and noise only. The **plateau** is
+affine in `σ`, so this is the exact distance to each face plane). `S_nuc` is 0 only
+beyond every nucleus's cut-off (below): a FOV whose voxel centres hold no nucleus label
+can still receive the soft edge of a nucleus just outside it or between its voxel centres,
+and only a FOV beyond the cut-off of every nucleus holds the background and noise alone.
+The sign of the erfc argument agrees with the nucleus label: `N(σ) = n` exactly where
+`max((ρ_n − 1) · r̄_n, h_n) ≤ 0`, for `σ ∈ Ω` (a point with `ρ_n ≤ 1` passes every territory
+test, "Cell territories"), apart from a tie on a power face (ties to the smaller site
+index) and rounding within 1e-9 µm of a boundary. Audit D of W-394
+(`results/audit/stains_vs_labels.txt`) evaluates both at more than 100,000 positions per
+configuration (binucleate cells with unequal radii, lobed and harmonic nuclei, touching
+nuclei, a FOV at a fractional offset in Z, Y and X, `Z=1`) and finds no disagreement
+outside that band. The **plateau** is
 `A_n` (per nucleus, lognormal); the **edge** is the Gaussian edge of width `w` across the
 nucleus surface and, where two nuclei touch, across their shared face, so the stain
 plateau coincides with the label up to the edge width at a contact too. `E_n` is set to
 exactly 0 beyond `ρ_n > 1 + 4w / a_min` (`a_min` lobe 1's smallest semi-axis) or
-`h_n > 4w`, as today's cut-off. Only
-sites whose spheres come within `R_n + 4w` of `n`'s site enter `h_n`. Then the existing
+`h_n > 4w`, as today's cut-off. Every other site enters `h_n`; an implementation may skip
+a site only where its term is below `−4w` everywhere in `n`'s evaluation box (a site whose
+sphere is merely far from `n`'s is not enough: the face with a much larger sphere can cut
+close to `c_n`), which changes `E_n` by at most the cut-off's `3 · 10⁻⁵` of the plateau and
+never the sign of its argument. Then the existing
 observation stages (tissue background, baseline, dependent and read noise, optional
 correlated noise; stages 8 to 10 of {doc}`synthetic-specification`) and the output
 (B1 below).
@@ -714,7 +730,7 @@ differ by a factor 6 between FOVs (W-393 `notes.md` §12).
 
 | Option | Rule | Cost | Consequence |
 | --- | --- | --- | --- |
-| **U1. Log-Gaussian bumps in the sample frame (recommended)** | `U(σ) = exp(Σ_q a_q exp(−½ ‖(σ − u_q) / L‖²))`, with `K_U ~ Poisson(centres_per_area · A_Ω / A_FOV)` centres uniform in `Ω` (µm; `A_Ω` and `A_FOV` the Y-X areas of `Ω` and of one FOV), amplitudes `a_q ~ N(0, a²)`, one length `L` (µm). With `K_U = 0`, `U = 1`. | `K_U` Gaussians per voxel, about 4 per FOV area. | A staining unevenness continuous across FOVs, multiplying the signal (not the background); a point function, evaluated at the voxel centres at any offset. |
+| **U1. Log-Gaussian bumps in the sample frame, normalized (recommended)** | `log U(σ) = a · Σ_q z_q w_q(σ) / sqrt(Σ_q w_q(σ)²)`, with weights `w_q(σ) = exp(−½ (‖σ − u_q‖² − min_r ‖σ − u_r‖²) / L²)` (Gaussian weights divided by the largest, which the ratio does not change and which keeps the largest weight at 1, so no `L` underflows), `K_U ~ Poisson(centres_per_area · A_Ω / A_FOV)` centres `u_q` uniform in the Y-X box of `Ω` at the z of `Ω`'s centre (µm; `A_Ω` and `A_FOV` the Y-X areas of `Ω` and of one FOV), `z_q ~ N(0, 1)`, one length `L` (µm). Given the centres, `log U(σ)` is normal with SD exactly `a` at every point, near the edges of `Ω` too (without the normalization it would fall to a fraction of `a` there; audit A of W-394 measured 25 to 70 % on the presets' domains). With `K_U = 0`, `U = 1`. | `K_U` Gaussians per voxel, about 4 per FOV area, and one square root. | A staining unevenness continuous across FOVs, multiplying the signal (not the background); a point function, evaluated at the voxel centres at any offset. |
 | U2. A low-order cosine series | `U = exp(Σ c_k cos(k·σ + φ_k))`. | As U1. | Periodic; a pattern a stitcher could lock onto. |
 | U3. A flat field per FOV | Vignetting multiplying each FOV. | Per FOV. | An illumination effect that differs between FOVs at the same sample point, which {doc}`synthetic-sample-scene` excludes ("What this addition is not"); left out. |
 
@@ -730,7 +746,7 @@ FOV width (a development value).
 @dataclass(frozen=True)
 class UnevennessConfig:
     centres_per_area: float = 4.0     # mean number of centres per FOV area of Y × X, ≥ 0
-    amplitude: float = 0.2            # a, the SD of the log amplitudes, ≥ 0
+    amplitude: float = 0.2            # a, the SD of log U at every point, ≥ 0
     length: float | None = None       # L in µm, > 0; None: the larger of n_y · s_y and n_x · s_x
 ```
 
@@ -745,28 +761,50 @@ of background) over plateau, per 128-px block"). The current stain has 0.38 and 
 (W-393 `notes.md` §6, scene `base`): higher than every context, so the presets lower it
 (W-393 `notes.md` §8, "Existing background controls": no new control).
 
-**The territory source** (cytoplasm). With `E_k^ter(σ) = ½ erfc(d_k(σ) / (√2 w))`, where
-`d_k` is the signed distance to cell `k`'s territory: the larger of the face distance
-`h` of its power cell (faces with the sites of other cells) and the outer term, which is
-`‖σ − c‖ − (R + reach)` for T1, `min((ρ_n − 1) · r̄_n, (ρ_n^{+δ} − 1) · r̄_n)` for T2,
-`‖σ − c‖ − (empty_radius + reach or δ)` for an empty cell, and absent for T3. `M(σ)` is
-the soft nucleus indicator `min(1, Σ_n E_n(σ))`:
+**The territory source** (cytoplasm). The stain of cell `k` is built from the same rule
+as its label `C` ("Cell territories"). Let `j_k(σ)` be the site of cell `k` with the
+smallest power distance at `σ` (ties to the smaller site index; for a cell with one site,
+that site), `h*_k(σ) = max over sites i of other cells of (pow_{j_k}(σ) − pow_i(σ)) /
+(2 ‖c_{j_k} − c_i‖)` the signed distance to the faces between `j_k` and the other cells'
+sites, and `o_j(σ)` the outer term of site `j`'s territory test: `‖σ − c_j‖ − (R_j + reach)`
+for T1, `min((ρ_n − 1) · r̄_n, (ρ_n^{+δ} − 1) · r̄_n)` for T2 (`n` the nucleus of `j`),
+`‖σ − c_j‖ − (empty_radius + reach)` or `− (empty_radius + δ)` for an empty cell under T1
+or T2, and `−∞` for T3. Then
+
+```
+d_k(σ) = max( h*_k(σ), o_{j_k(σ)}(σ) )
+```
+
+and `C(σ) = k` exactly where `d_k(σ) ≤ 0`, for `σ ∈ Ω`: `h*_k < 0` says that the
+power-nearest site of all is a site of `k`, which is then `j_k`, and `o_{j_k} ≤ 0` is that
+site's territory test. (Taking each site's outer term and keeping the smaller one would
+not do: in a binucleate cell, a point in the power cell of its first site but beyond that
+site's reach is outside the cell even when it lies within the second site's reach.) As
+for the nucleus, the sign agrees with the label apart from a tie on a power face and
+rounding within 1e-9 µm of a boundary (audit D: no disagreement outside it, the reviewer's
+binucleate case included, where the rule of the first repair disagreed). `d_k` is a signed
+distance to each face plane and,
+for T1, to the outer sphere; for T2 it is the scaled `ρ` term, approximate as for the
+nucleus. Across the face between the two sites of a binucleate cell, `j_k` changes and so
+does the outer term: `d_k` can jump there, as the label's own rule does. With
+`E_k^ter(σ) = ½ erfc(d_k(σ) / (√2 w))` and the soft nucleus indicator
+`M(σ) = min(1, Σ_n E_n(σ))`:
 
 ```
 S_ter(σ) = U(σ) · Σ_k B_k · E_k^ter(σ) · (1 − (1 − q) · M(σ))
 ```
 
 with `B_k` the plateau per cell and `q` the `nuclear_ratio` (the cytoplasm stain is
-dimmer inside the nucleus, as Flamingo is). For a binucleate cell, `d_k` is the smaller
-of its two sites' values. W-393 did not measure a cytoplasm stain (its real tables hold
+dimmer inside the nucleus, as Flamingo is). W-393 did not measure a cytoplasm stain (its real tables hold
 nuclear stains only), so `q`, `B_k` and the edge of the cytoplasm stain are development
 values for the gate.
 
 **The boundary source** (membrane). `S_bnd(σ) = U(σ) · Σ_k B_k exp(−½ (d_k(σ) / b)²)`
 with `b` the `band_width`: a band centred on each territory boundary; where two cells
-touch, both bands lie on their shared face. `d_k` is defined by the formula above, which
-is the exact distance to the nearest face or outer surface except near corners; the band
-is defined by this function.
+touch, both bands lie on their shared face. `d_k` is the function above, so the band's
+centre surface `d_k = 0` is the boundary of the label `C = k`; its width follows `d_k`,
+which is the distance to the nearest face or outer sphere except near corners and the
+scaled `ρ` term under T2. The band is defined by this function.
 
 **8-bit output (C15).** Today the cast rounds and clips to the output dtype (`_cast`); with
 `dtype uint8` the current plateau of 200 over a baseline of 100 saturates, the
@@ -828,7 +866,7 @@ reference round's stains (round `reference`) are rendered at `true_f + p ⊙ s`,
 The scene domain grows by `T_a · s_a` on each side when a morphology round is present
 (`T` its translation bound in voxels), so that every morphology voxel images generated
 content; the covered region `K` stays as defined by the reference rounds ("Accepted
-statements this addition changes", entries 3 and 4).
+statements this addition changes", entries 3, 4 and 11).
 
 **Its translation (C17).**
 
@@ -942,7 +980,10 @@ configuration, an accepted page, the route, or a stated assumption). Which set o
 the presets take is choice C23, C24 or C25; the values below are option PS1 of each. The
 expected numbers of nuclei and molecules are outcomes, not parameters: they come from
 audit A of W-394 (`results/audit/rules_vs_presets.txt`), which runs the page's rules with
-these values, ten trials each.
+these values (40 trials per routine preset, 80 for 2D tissue; 5, 40 and 10 for the `slow`
+presets) and measures the touching share as W-393 measures it, on the label image. A
+single routine scene holds few nuclei, so its touching share varies widely (0 to 1); the
+ranges hold for the mean.
 
 **Parameters common to the six presets.**
 
@@ -1033,8 +1074,8 @@ cells by expansion of the nuclei by 0.7776 µm, planar (W-382's setting, W-393 `
 | Elongation | `nucleus_elongation` (folded lognormal μ, τ) | 0.089, 0.151 | same | W-393 measured "elongation a1/a2" 1.21 (p95 1.47): median `exp(μ + 0.674 τ)`, p95 `exp(μ + 1.96 τ)` |
 | Lobed share | `NucleusShapeConfig.lobed_share` | 0.07 | same | W-393 measured "share of nuclei not described by one ellipsoid (IoU < 0.8), per image" 0.068 (0.064–0.074) |
 | Density | `PackingConfig.density` (nominal volume fraction of `Ω`) | 0.16 | 0.13 | W-393 measured "nucleus volume fraction, per image" 0.126 (p95 0.156); the routine preset takes the upper end so that its four FOVs hold more nuclei |
-| Contact; monolayer | `contact`; `monolayer` | 0.35; false | same | W-393 measured "share of touching nuclei, per image" 0.51 (0.44–0.57); `contact` set by audit A so that the touching share lies in that range (mean 0.50 routine, 0.48 `slow`) |
-| Expected nuclei, cells | outcome | about 7, 7 | about 150, 150 | audit A, ten trials (`‖Ω‖` 3,207 and 97,002 µm³) |
+| Contact; monolayer | `contact`; `monolayer` | 0.3; false | same | W-393 measured "share of touching nuclei, per image" 0.51 (0.44–0.57); `contact` set by audit A so that the touching share, measured on the label image, lies in that range (mean 0.51 routine, 0.53 `slow`) |
+| Expected nuclei, cells | outcome | about 7, 7 | about 150, 150 | audit A (`‖Ω‖` 3,207 and 97,002 µm³) |
 | Territory | `TerritoryConfig.rule`, `growth` (µm median, log SD) | `grown`, 0.78, 0.15 | same | Not measured by W-393: the route's expansion 0.7776 µm (W-382's setting, W-393 `notes.md` §4); W-393 measured "cell volume" 127 µm³ (90–185) for the expanded nuclei, which the generator check compares |
 | Molecules per cell | `MoleculeConfig.per_cell_median`, `per_cell_spread` (log SD) | 8, 0.45 | same | W-393 measured `real/ln/molecules.csv` "reads per cell (kept cells)" 8 (1–19); the spread fitted by audit A to the p95 (model 2–19); the lower tail is not reproduced |
 | Nuclear fraction | `MoleculeConfig.nuclear_fraction` | 0.5 | same | W-393 measured "nuclear fraction of reads, per cell with >= 10 reads" 0.50 (0.25–0.75) |
@@ -1073,12 +1114,12 @@ an open point of the route ("Open points for a later route issue").
 | Elongation | `nucleus_elongation` (μ, τ) | 0.052, 0.301 | same | W-393 measured "elongation a1/a2" 1.29 (p95 1.90) |
 | Lobed share | `lobed_share` | 0.04 | same | W-393 measured "share of nuclei not described by one ellipsoid" 0.038 (0.027–0.060) |
 | Density | `density` (area fraction of `Ω`'s Y-X box; monolayer) | 0.36 | same | W-393 measured "nucleus volume fraction, per image", an area fraction for these 2D labels, 0.365 (0.30–0.44) |
-| Contact; monolayer | `contact`; `monolayer` | 0.8; true | same | W-393 measured "share of touching nuclei, per image" 0.78 (0.76–0.82); `contact` set by audit A (mean 0.88 routine, 0.84 `slow`); the monolayer is C19 |
-| Expected nuclei | outcome | about 9 | about 20 | audit A (`‖Ω‖` 1,995 and 3,772 µm²) |
+| Contact; monolayer | `contact`; `monolayer` | 0.65; true | same | W-393 measured "share of touching nuclei, per image" 0.78 (0.76–0.82); `contact` set by audit A on the label image of the Z projection (mean 0.78 routine, 0.76 `slow`, at the lower end); the monolayer is C19 |
+| Expected nuclei | outcome | about 11 | about 20 | audit A (`‖Ω‖` 1,995 and 3,772 µm²) |
 | Territory | `TerritoryConfig.rule`, `growth` (µm median, log SD) | `grown`, 0.5, 0.15 | same | W-393 measured "cell area" 66.1 µm² and "nucleus area" 52.2 µm²: equivalent radii 4.59 and 4.08 µm, a difference of 0.51 µm |
 | Molecules per cell | `per_cell_median`, `per_cell_spread` | 85, 0.30 | 194, 0.30 | W-393 measured `real/tissue2d/molecules.csv` "reads per cell" 194 (85–310); the routine preset takes the p5 to stay in the routine tier; the spread fitted to the p95 (model 116–321 at median 194) |
 | Nuclear fraction | `nuclear_fraction` | 0.75 | same | W-393 measured "nuclear fraction of reads" 0.75 (0.43–0.93) |
-| Expected molecules | outcome | about 800 | about 4,000 | audit A |
+| Expected molecules | outcome | about 1,000 | about 4,100 | audit A |
 | Stain | `name`, `source`, `round`, `channel` | `PI`, `nucleus`, `reference`, `ch04` | same | Not measured by W-393; the route (D2) |
 | Plateau spread | `brightness` log SD | 0.20 | same | W-393 measured `real/tissue2d/stain.csv` "nucleus median over the image's median", MAD 0.135 |
 | Unevenness | `unevenness.amplitude` | 0.22 | same | W-393 measured the same row's p5–p95 0.52–1.37: `sqrt(0.296² − 0.20²)` |
@@ -1113,12 +1154,12 @@ and an area density.
 | Elongation | `nucleus_elongation` (μ, τ) | 0.117, 0.408 | same | W-393 measured "elongation a1/a2" 1.48 (p95 2.50) |
 | Lobed share | `lobed_share` | 0.24 | same | W-393 measured "share of nuclei not described by one ellipsoid" 0.24 (0.12–0.43) |
 | Density | `density` (area fraction; monolayer) | 0.26 | same | W-393 measured "nucleus volume fraction, per image", an area fraction for these 2D labels, 0.26 (0.17–0.45) |
-| Contact; monolayer | `contact`; `monolayer` | 0.4; true | same | W-393 measured "share of touching nuclei, per image" 0.48 (0.33–0.72); `contact` set by audit A (mean 0.46 routine, 0.47 `slow`) |
-| Expected nuclei | outcome | about 7 | about 13 | audit A (`‖Ω‖` 10,219 and 16,512 µm², grown by the morphology bound) |
+| Contact; monolayer | `contact`; `monolayer` | 0.4; true | same | W-393 measured "share of touching nuclei, per image" 0.48 (0.33–0.72); `contact` set by audit A on the label image of the Z projection (mean 0.55 routine, 0.61 `slow`) |
+| Expected nuclei | outcome | about 8 | about 12 | audit A (`‖Ω‖` 10,219 and 16,512 µm², grown by the morphology bound) |
 | Territory | `CellularSceneConfig.reach` (µm median, log SD); `TerritoryConfig.rule` | 5.3, 0.3; `reach` | same | W-393 measured "cell area (2D labels)" 896 µm² (202–2291): equivalent radius 16.9 µm, less "semi-axis a1" 11.6 µm |
 | Molecules per cell | `per_cell_median`, `per_cell_spread` | 120, 0.40 | 982, 0.40 | W-393 measured `real/culture/molecules.csv` "reads per cell" 982 (86–1884); the routine preset stays near the p5 for the routine tier; the spread fitted to the p95 (model 506–1901 at median 982); the lower tail is not reproduced |
 | Nuclear fraction | `nuclear_fraction` | 0.26 | same | W-393 measured "nuclear fraction of reads" 0.26 (0–0.56) |
-| Expected molecules | outcome | about 1,100 | about 14,400 | audit A |
+| Expected molecules | outcome | about 1,200 | about 12,900 | audit A |
 | Nuclear stains | `name`, `source`, `round`, `channel` | `DAPI`, `nucleus`, `reference`, `ch04`; and `DAPI`, `nucleus`, `morphology`, `ch00`, otherwise the same configuration | same | Not measured by W-393; the route (D2) and MR1 |
 | Plateau spread | `brightness` log SD | 0.53 | same | W-393 measured `real/culture/stain.csv` "nucleus median over the image's median", MAD 0.358 |
 | Unevenness | `unevenness.amplitude` | 0.74 | same | W-393 measured the same row's p5–p95 0.25–4.92: `sqrt(0.909² − 0.53²)` |
@@ -1126,7 +1167,7 @@ and an area density.
 | Bright regions | `per_nucleus`; `size`; `height` | 2; 0.17, 0.64; 2.0, 0.69 | same | W-393 measured per nucleus 2 (0–58); size 0.26 µm² (0.11–7.49); peak 3.0 (1.90–9.58) |
 | Background | `background.baseline` (float units); one region as in dense 3D tissue | 12; height 350, σ 24.9 µm | same | W-393 measured background 0.012 per image and per block p95 0.37 |
 | Read noise | `noise.sigma` | 25 | same | W-393 measured noise 0.025: `sqrt(25.3² − 12)` |
-| Output | `output` | `uint8`, `g` 30 | same | W-393 measured 8-bit plateaus 13–83; audit A: at `g` 30 under 1 % of plateaus clip (2 % at 40), given the wide plateau spread |
+| Output | `output` | `uint8`, `g` 20 | same | W-393 measured 8-bit plateaus 13–83; audit A, with U1 as written: at `g` 20, 0.03 % (routine) and 0.4 % (`slow`) of plateaus clip, and 6 to 11 % of bright-region peaks, given the wide plateau spread (at `g` 30, 1 % of plateaus clipped with U1 before its normalization) |
 | Cytoplasm stain | `name`, `source`, `round`, `channel`; `brightness` (median, log SD); `nuclear_ratio`; `edge_width` (µm); `unevenness`; background, noise, output | `Flamingo`, `territory`, `morphology`, `ch02`; 1000, 0.3; 0.3; 0.5; as DAPI's; as DAPI's | same | Not measured by W-393 (its real tables hold nuclear stains only); assumptions for the gate |
 | Morphology round | `MorphologyRoundConfig.name`, `translation`, `translation_max_zyx` (voxels) | `organelle`, `uniform`, 0.5, 6, 6 | same | Not measured by W-393; the round name of the culture data and the offsets of W-305 and W-392 ("The morphology round") |
 
@@ -1148,12 +1189,12 @@ measurements on the nearest scene.
 
 | Preset | Nearest W-393 scene: generation | Estimate of the preset's generation | Segmentation call on the nearest scene (CPU; GPU) | Within the bound |
 | --- | --- | --- | --- | --- |
-| `context-dense3d-v1` | `ln_routine`: 6.06 s, 0.28 GiB (14 nuclei, 1,887 molecules) | 2 to 4 s, below 0.4 GiB (about 7 nuclei, 70 molecules; textures and the background region add about one stain evaluation) | `3D_spleen`, 4 FOVs: 179 s, 3.1 GiB; 44 s, 1.8 GiB, 8,666 MiB GPU | routine generator checks if measured below 5 s; the model call is a `learned` and `slow` chain check |
+| `context-dense3d-v1` | `ln_routine`: 6.06 s, 0.28 GiB (14 nuclei, 1,887 molecules) | 2 to 4 s, below 0.4 GiB (about 7 nuclei, 64 molecules; textures and the background region add about one stain evaluation) | `3D_spleen`, 4 FOVs: 179 s, 3.1 GiB; 44 s, 1.8 GiB, 8,666 MiB GPU | routine generator checks if measured below 5 s; the model call is a `learned` and `slow` chain check |
 | `context-dense3d-slow-v1` | `ln_slow`: 194 s, 3.3 GiB (264 nuclei, about 40,000 molecules) | below 194 s and 3.3 GiB (about 150 nuclei, 1,500 molecules) | 779 s, 3.1 GiB; 90 s, 1.9 GiB | `slow`; within 3,600 s and 16 GiB per step |
-| `context-tissue2d-v1` | `t2_routine`: 10.4 s, 0.27 GiB (26 nuclei, about 3,900 molecules) | 3 to 6 s, below 0.4 GiB (about 9 nuclei, 800 molecules) | export after fusion 18 s, 0.92 GiB; StarDist 2D 0.94 s warm (GPU 2.9 s) | routine if measured below 5 s, else `slow` with the routine preset unchanged |
-| `context-tissue2d-slow-v1` | `t2_slow`: 53 s, 1.4 GiB (49 nuclei, about 7,400 molecules) | below 53 s and 1.4 GiB (about 20 nuclei, 4,000 molecules) | export 22 s, 0.95 GiB; seeded watershed 0.96 s | `slow`; within the bound |
-| `context-culture-v1` | `cu_routine`: 6.4 s, 0.24 GiB (8 nuclei, 2,400 molecules) | 3 to 7 s, below 0.4 GiB (about 7 nuclei, 1,100 molecules; two more stain images and the morphology round per FOV) | Cellpose nuclei, 4 FOVs: 117 s, 2.3 GiB; 31 s, 3.0 GiB, 2,284 MiB GPU; extension through z 1.0 s | as above; the cell call was not runnable on the current scene, estimated at the nucleus call's time (same model and image size) |
-| `context-culture-slow-v1` | `cu_slow`: 64 s, 1.4 GiB (44 nuclei, 13,000 molecules) | 70 to 100 s, below 2 GiB (about 13 nuclei, 14,400 molecules, two more stain images and the morphology round) | 261 s, 2.3 GiB; 59 s, 3.2 GiB; extension through z 13.7 s | `slow`; within the bound |
+| `context-tissue2d-v1` | `t2_routine`: 10.4 s, 0.27 GiB (26 nuclei, about 3,900 molecules) | 3 to 6 s, below 0.4 GiB (about 11 nuclei, 1,000 molecules) | export after fusion 18 s, 0.92 GiB; StarDist 2D 0.94 s warm (GPU 2.9 s) | routine if measured below 5 s, else `slow` with the routine preset unchanged |
+| `context-tissue2d-slow-v1` | `t2_slow`: 53 s, 1.4 GiB (49 nuclei, about 7,400 molecules) | below 53 s and 1.4 GiB (about 20 nuclei, 4,100 molecules) | export 22 s, 0.95 GiB; seeded watershed 0.96 s | `slow`; within the bound |
+| `context-culture-v1` | `cu_routine`: 6.4 s, 0.24 GiB (8 nuclei, 2,400 molecules) | 3 to 7 s, below 0.4 GiB (about 8 nuclei, 1,200 molecules; two more stain images and the morphology round per FOV) | Cellpose nuclei, 4 FOVs: 117 s, 2.3 GiB; 31 s, 3.0 GiB, 2,284 MiB GPU; extension through z 1.0 s | as above; the cell call was not runnable on the current scene, estimated at the nucleus call's time (same model and image size) |
+| `context-culture-slow-v1` | `cu_slow`: 64 s, 1.4 GiB (44 nuclei, 13,000 molecules) | 70 to 100 s, below 2 GiB (about 12 nuclei, 12,900 molecules, two more stain images and the morphology round) | 261 s, 2.3 GiB; 59 s, 3.2 GiB; extension through z 13.7 s | `slow`; within the bound |
 
 **The resource bound of the `slow` presets (C26).** They use 3 × 3 FOVs of 16 × 256 ×
 256, the bound of Jiahao's resource exception for W-393 (granted 2026-10-08, recorded on
@@ -1167,7 +1208,7 @@ into at most 3 × 3 tiles). Every final W-393 attempt lay within 3,600 s and 16 
 | RG2. Keep the §2.10 bound | One scene of at most 16 × 256 × 256 cut into 3 × 3 tiles (FOVs of about 16 × 96 × 96 to 16 × 120 × 120). | None. | The `slow` presets shrink to about a sixth of the area: about 25 dense 3D nuclei and 4 tissue-2D nuclei, and a culture nucleus (22 µm long) barely fits one FOV at 0.194 µm; the culture `slow` preset cannot keep its acquired pixel. |
 | RG3. No `slow` presets | Routine presets only. | None. | The chain checks run on 7 to 9 nuclei per scene, too few for the stitch (C20) and for thresholds with any resolution. |
 
-**Recommendation: RG1** (entry 11 of "Accepted statements this addition changes").
+**Recommendation: RG1** (entry 12 of "Accepted statements this addition changes").
 
 ## Truth schema
 
@@ -1202,7 +1243,7 @@ into at most 3 × 3 tiles). Every final W-393 attempt lay within 3,600 s and 16 
                                #   output scale), m_A
   stain_objects.csv            # stain name, object (nucleus or cell), object ID, plateau (A_n or B_k)
   bright_regions.csv           # region_id, nucleus_id, stain, centre_z/y/x (µm), size (µm), height
-  unevenness.csv               # stain, bump_id, centre_z/y/x (µm), amplitude, length (µm)
+  unevenness.csv               # stain, bump_id, centre_z/y/x (µm), z (U1's standard normal), a, length (µm)
   morphology_truth.csv         # "The morphology round"
   fovs/<fov_id>/stains/<name>.ome.tif          # each reference-round stain (ZYX, its output dtype)
   fovs/<fov_id>/morphology.ome.tif             # the morphology round (ZYXC, its stains in configuration order)
@@ -1230,7 +1271,7 @@ of a table above or recomputed from the seed and a named stream ("Random streams
 | Ambient molecules | positions, genes, abundance | `molecules.csv` (`population` `ambient`), `type_abundances.csv` row `ambient` |
 | Nuclear, territory and boundary stains | plateau per object, edge, band, nuclear ratio, scale | `stain_objects.csv`, `stain_channels.csv`, `context.json` (the configuration) |
 | Bright regions | centre, size, height | `bright_regions.csv` |
-| Unevenness field | centres, amplitudes, length | `unevenness.csv` |
+| Unevenness field | centres, `z_q`, `a`, length | `unevenness.csv` |
 | Stain background | `BackgroundConfig` components | `context.json` (effective configuration), as `sample.json` records the stain's today |
 | 8-bit cast | `k`, `g`, `m_A` | `stain_channels.csv` |
 | Stain noise | per-FOV residuals | not a table: recomputed from the seed and the streams `stain.noise.*` with scene key `[scene_key, fov_id]` |
@@ -1273,8 +1314,10 @@ arithmetic reports the number of boundary voxels where it differs and expects 0.
    centres within 1e-9 of the image maximum; rendered again at `true_f + k ⊙ s` for an
    integer vector `k`, it equals the first image shifted by `k` on the common voxels within
    1e-12 of the maximum (the no-interpolation identity). Both hold at any fractional offset
-   in Z, Y and X and at `Z=1`, except at boundary voxels (reported). A FOV without a nucleus holds the
-   background only. With float32 output or the 8-bit cast the comparison is not made: a
+   in Z, Y and X and at `Z=1`, except at boundary voxels (reported). A FOV beyond the
+   cut-off of every nucleus holds the background only; a FOV whose voxel centres hold no
+   nucleus label can still hold the soft edge of a nearby or sub-voxel nucleus, which the
+   signal function gives. With float32 output or the 8-bit cast the comparison is not made: a
    rounding near a half grey level can differ.
 8. **Morphology round.** Rendered as in identity 7, the morphology image at index `q`
    equals the stain functions at `true_f + τ_f + q ⊙ s`; with a supplied `τ_f ⊘ s` that is
@@ -1344,17 +1387,27 @@ prefixed `context.`:
    `packing` given, the uniform proposals of P1 still come from `sample.cell.placement`
    in today's order of draws, and every new draw (kind, contact, direction) comes from a
    `context.` stream.
-4. **Within a context scene**, each new draw has its own entity, so changing one cell's
-   type law changes no molecule position; changing a nucleus's lobes can move later seeds
-   (sequential placement), as changing a size does today.
+4. **Within a context scene**, each new draw has its own entity, so changing a law changes
+   no draw of any stream; what the draws produce can change. Changing a type's gene
+   abundance changes only the genes of that type's molecules. Changing a type's molecules
+   per cell or nuclear fraction changes the number of that type's molecules and which
+   compartment each is placed in, so their positions change; molecules of other cells keep
+   theirs. Changing a type's size scale, a nucleus's lobes or any size law can move later
+   seeds (sequential placement), and with them every molecule of the moved cells, as
+   changing a size does today.
 
 ## Accepted statements this addition changes
 
 Each statement of {doc}`synthetic-sample-scene` (Accepted, W-329) that the addition would
 change, with the old and the proposed wording, in the order of that page. That page is
 not edited here; an implementation issue changes each statement as written and nothing
-else. Audit B of W-394 (`results/audit/accepted_sections.txt`) lists every section of that
-page as unchanged or as changed by an entry below.
+else. Audit B of W-394 checks this list statement by statement: a scan of that page
+prints every line with a formula, a code expression with `=`, `≤`, `≥`, `⊙` or `⊘`, or the
+words "equals", "must", "raises", "never", "always", "exactly"
+(`results/audit/accepted_statements_scan.txt`, 145 lines), and its checklist marks each
+line unchanged, with the reason, or changed by an entry below
+(`results/audit/accepted_statements_checklist.md`); `accepted_sections.txt` summarizes it
+by section.
 
 1. **"What this addition is not", first item.**
    *Old:* "It does **not establish the accuracy of a learned segmenter.** No segmenter is
@@ -1417,13 +1470,16 @@ page as unchanged or as changed by an entry below.
    `context.json`, and raises `ValueError` only below a stated share of the target
    density. Nothing is dropped silently there either."
 8. **"Cell territories and the label-generation rule": "Nucleus label" and "Cell label".**
-   *Old:* "Nuclei never overlap, because their site spheres keep a positive gap.";
-   "Then `C(σ) = cell(j*)` when `σ ∈ Ω` and `‖σ − c_{j*}‖ ≤ R_{j*} + reach(cell(j*))`, else
+   *Old:* "`N(σ) = n` where `σ ∈ Ω` and `ρ_n(σ) ≤ 1`, else 0"; "Nuclei never overlap,
+   because their site spheres keep a positive gap."; "Then `C(σ) = cell(j*)` when `σ ∈ Ω` and `‖σ − c_{j*}‖ ≤ R_{j*} + reach(cell(j*))`, else
    0."; and "Because the site spheres are disjoint, each lies inside its own power cell
    (`pow_i ≤ 0` inside sphere `i`, `pow_j > 0` outside sphere `j`), so **every nucleus lies
    inside its own cell** and `N(σ) = n` implies `C(σ) = cell(n)`."
-   *Proposed:* "Nuclei never overlap: a point carries only the nucleus of its power-nearest
-   site. Here the site spheres keep a positive gap, so nuclei do not touch; the cellular
+   *Proposed:* "`N(σ) = n` where `σ ∈ Ω`, `ρ_n(σ) ≤ 1` and a site of `n` is `j*`, else 0 (with
+   disjoint site spheres every point with `ρ_n ≤ 1` has `j*` a site of `n`, so this is the
+   rule above; the cellular scene of {doc}`synthetic-cellular-scene` needs the condition,
+   because its site spheres may overlap)"; "Nuclei never overlap: a point carries only the
+   nucleus of its power-nearest site. Here the site spheres keep a positive gap, so nuclei do not touch; the cellular
    scene of {doc}`synthetic-cellular-scene` lets site spheres overlap and nuclei touch on
    the faces of their power cells."; the cell label the same, followed by "(the cellular
    scene adds two other outer limits: a grown nucleus, and none)"; and "A nucleus is
@@ -1447,13 +1503,25 @@ page as unchanged or as changed by an entry below.
     abundance (an ambient molecule's from the ambient abundance), a cell's count is
     Poisson with a mean drawn per cell, and a cell molecule is placed in its nucleus with a
     set probability, else in the rest of its territory."
-11. **"Presets and resources", "Not in either tier".**
+11. **"Identities a test can check", identity 2, "Aligned crop".**
+    *Old:* "Since `origin_sample = −J ⊙ s`, `δ_f = nominal_f ⊘ s + j_f + J`. For a nominal step
+    that is a whole number of voxels (24 in `sample-tiny-v1`, 72 in `sample-small-v1`), the
+    condition holds exactly when `j_{f,a} + J_a` is a whole number on every axis. Within the
+    bound that means `j_{f,a} ∈ {−J_a, −J_a + 1, …}` up to `+J_a`." and "Zero jitter is not
+    aligned unless `J` is whole".
+    *Proposed:* the same, followed by "With the morphology round of
+    {doc}`synthetic-cellular-scene`, `Ω` grows by `T ⊙ s` on each side, so
+    `origin_sample = −(J + T) ⊙ s` and `δ_f = nominal_f ⊘ s + j_f + J + T`; the condition then
+    holds exactly when `j_{f,a} + J_a + T_a` is a whole number on every axis, and zero jitter
+    is aligned only when `J + T` is whole. For the culture presets (`J_z = 0.8`, `T_z = 0.5`)
+    the supplied jitter `j_z = −0.8` gives `δ_z = 0.5`, not 0; `j_z = −0.3` aligns."
+12. **"Presets and resources", "Not in either tier".**
     *Old:* "Larger grids, LN-sized FOVs (50 × 1496 × 1496) and whole-sample scenes are
     outside this addition".
     *Proposed:* "Larger grids, LN-sized FOVs (50 × 1496 × 1496) and whole-sample scenes are
     outside this addition; the `slow` context presets of {doc}`synthetic-cellular-scene`
     use 3 × 3 FOVs of 16 × 256 × 256, under their own resource grant."
-12. **"Truth schema", the version rule.**
+13. **"Truth schema", the version rule.**
     *Old:* "`sample.json` names `SAMPLE_TRUTH_VERSION`; any change to a column or rule above
     bumps it."
     *Proposed:* the same, followed by "A scene of {doc}`synthetic-cellular-scene` writes the
@@ -1461,7 +1529,7 @@ page as unchanged or as changed by an entry below.
     territories, molecules by compartment); its `context.json` names
     `CONTEXT_TRUTH_VERSION`, which versions those rules, and `sample.json` keeps
     `sample_truth_version` `"1"`."
-13. **"Exclusions".**
+14. **"Exclusions".**
     *Old:* "no calibration to real tissue and no empirical profiles; no claim about
     segmentation accuracy, and no learned segmenter run on this scene as a measure of its
     quality"
@@ -1477,13 +1545,17 @@ one, and is not listed.
 ## Open points for a later route issue
 
 These are W-393 choice 7; they are not scene changes and not statements of
-{doc}`synthetic-sample-scene`. The route after fusion has no composite
-operation (a run takes fused images by name and `seeded_watershed` takes one channel, so
+{doc}`synthetic-sample-scene`. The route after fusion has no composite operation: a run
+reads the fused projections it names and stacks them as its input channels
+(`sample_output/_segment.py::segment_fused`), and `seeded_watershed` takes one channel, so
 W-393 made the nuclei–amplicon composite per FOV and fused it, where tissue-2D's legacy
-route made it from the fused images), and `SampleSegmentationConfig.device` applies to
-every run of the block, so StarDist cannot run on the GPU beside the CPU-only
-`seeded_watershed` (W-393 `notes.md` §4). Proposed: a composite made from the fused
-images, and a device per run.
+route made it from the fused images. `SampleSegmentationConfig.device` applies to every
+run of the block and is refused when a run's method does not run on it
+(`sample_output/_config.py::SampleSegmentationConfig.__post_init__`), and
+`seeded_watershed` runs on the CPU only (its entry in
+`segmentation/_methods.py::SEGMENTATION_METHODS`), so StarDist cannot run on the GPU
+beside it (W-393 `notes.md` §4). Proposed: a composite made from the fused images, and a
+device per run.
 
 ## Exclusions
 
