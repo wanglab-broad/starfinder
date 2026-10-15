@@ -1,6 +1,6 @@
 # Synthetic cellular scene: nucleus shapes, packing, cell types, stains, the morphology round and three context presets
 
-Status: Proposed (W-394, 2026-10-15, at 943bb6b; three defects corrected by W-480; for review at the human gate W-396)
+Status: Proposed (W-394, 2026-10-15, at 943bb6b; three defects corrected by W-480; two slow pixels and the shift tolerance amended by W-481 for the decisions of 2026-10-15; for review at the human gate W-396)
 
 This page specifies the second delivery of §2.12: a cellular scene rich enough for the
 real §2.9 segmentation methods to run on the synthetic sample, so that the chain from
@@ -1082,7 +1082,10 @@ the presets take is choice C23, C24 or C25; the values below are option PS1 of e
 expected numbers of nuclei and molecules are outcomes, not parameters: they come from
 audit A of W-394 (`results/audit/rules_vs_presets.txt`), which runs the page's rules with
 these values (40 trials per routine preset, 80 for 2D tissue; 5, 40 and 10 for the `slow`
-presets) and measures the touching share as W-393 measures it, on the label image. A
+presets) and measures the touching share as W-393 measures it, on the label image. For
+`context-tissue2d-slow-v1` and `context-culture-slow-v1`, whose pixel is twice the acquired
+one by Jiahao's decision of 2026-10-15, they come from its re-run by W-481 with the same trials
+(`results/audit/rules_vs_presets.txt` in `runs/W-481/20261015T160947Z-7ca392b2/`). A
 single routine scene holds few nuclei, so its touching share varies widely (0 to 1); the
 ranges hold for the mean.
 
@@ -1201,26 +1204,27 @@ Real data tissue-2D; **projection samples through the route after fusion**
 the Z maximum and segments it in one call with the settings of the `segmentation` block
 of `export` ({doc}`sample-segmentation-contract`, "Where the settings live"). Nuclear
 stain PI as a reference stain file of the reference round (`ch04`, named `PI`); nuclei by
-StarDist `2D_versatile_fluo` at the scale that gives it about 0.38 µm pixels; cells by
+StarDist `2D_versatile_fluo` at the scale that gives it about 0.38 µm pixels (1 on the
+routine preset's 0.37854 µm, 0.5 on the `slow` preset's 0.18927 µm); cells by
 `seeded_watershed` on the nuclei–amplicon composite, seeded by the nuclei. The composite is
 an open point of the route ("Open points for a later route issue").
 
 | Parameter | Field (unit) | Routine | `slow` | Set from |
 | --- | --- | --- | --- | --- |
-| Grid, FOV shape | `columns`, `rows`, `fov_shape_zyx` (voxels) | 2 × 2, 8 × 64 × 64 | 3 × 3, 16 × 256 × 256 | Not measured by W-393; its sizing scenes `t2_routine`, `t2_slow` |
-| Spacing | `spacing_zyx` (µm) | 0.346255, 0.37854, 0.37854 | 0.346255, 0.094635, 0.094635 | Not measured by W-393; the pixel StarDist sees on tissue-2D (routine) and tissue-2D's acquired pixel (`slow`), W-393 `notes.md` §7 |
+| Grid, FOV shape | `columns`, `rows`, `fov_shape_zyx` (voxels) | 2 × 2, 8 × 64 × 64 | 3 × 3, 16 × 256 × 256 | Not measured by W-393; its sizing scenes `t2_routine`, `t2_slow` (`t2_slow` at the acquired pixel, half the `slow` preset's) |
+| Spacing | `spacing_zyx` (µm) | 0.346255, 0.37854, 0.37854 | 0.346255, 0.18927, 0.18927 | Not measured by W-393; the pixel StarDist sees on tissue-2D (routine), W-393 `notes.md` §7, and twice tissue-2D's acquired pixel of 0.094635 µm (`slow`; Jiahao's decision of 2026-10-15 before the gate W-396, so that a `slow` scene holds about 76 nuclei instead of about 20 at the acquired pixel; StarDist runs at the scale 0.5) |
 | Overlap, jitter bound | `overlap`; `jitter_max_zyx` (voxels) | 0.25; 0.8, 3.0, 3.0 | 0.25; 0.8, 4.5, 4.5 | Not measured by W-393; those configurations |
 | Axial semi-axis | `nucleus_axial_radius` (µm, median, log SD) | 2.1, 0.14 | same | Not measured by W-393 (2D labels have no Z extent: `real/tissue2d/geometry.csv` "nucleus volume" has no value); assumption: LN's value |
 | Lateral semi-axis | `nucleus_lateral_radius` (µm, median, log SD) | 3.6, 0.34 | same | W-393 measured `real/tissue2d/geometry.csv` "semi-axis a2" 3.58 (1.46–4.44) |
 | Elongation | `nucleus_elongation` (μ, τ) | 0.052, 0.301 | same | W-393 measured "elongation a1/a2" 1.29 (p95 1.90) |
 | Lobed share | `lobed_share` | 0.04 | same | W-393 measured "share of nuclei not described by one ellipsoid" 0.038 (0.027–0.060) |
 | Density | `density` (area fraction of `Ω`'s Y-X box; monolayer) | 0.36 | same | W-393 measured "nucleus volume fraction, per image", an area fraction for these 2D labels, 0.365 (0.30–0.44) |
-| Contact; monolayer | `contact`; `monolayer` | 0.65; true | same | W-393 measured "share of touching nuclei, per image" 0.78 (0.76–0.82); `contact` set by audit A on the label image of the Z projection (mean 0.78 routine, 0.76 `slow`, at the lower end); the monolayer is C19 |
-| Expected nuclei | outcome | about 11 | about 20 | audit A (`‖Ω‖` 1,995 and 3,772 µm²) |
+| Contact; monolayer | `contact`; `monolayer` | 0.65; true | same | W-393 measured "share of touching nuclei, per image" 0.78 (0.76–0.82); `contact` set by audit A on the label image of the Z projection (mean 0.78 routine; 0.81 `slow` at its pixel of 0.18927 µm in W-481's re-run, within the range, so `contact` is not retuned); the monolayer is C19 |
+| Expected nuclei | outcome | about 11 | about 76 | audit A (`‖Ω‖` 1,995 µm²); for the `slow` preset its re-run by W-481 (`‖Ω‖` 15,089 µm²) |
 | Territory | `TerritoryConfig.rule`, `growth` (µm median, log SD) | `grown`, 0.5, 0.15 | same | W-393 measured "cell area" 66.1 µm² and "nucleus area" 52.2 µm²: equivalent radii 4.59 and 4.08 µm, a difference of 0.51 µm |
 | Molecules per cell | `per_cell_median`, `per_cell_spread` | 85, 0.30 | 194, 0.30 | W-393 measured `real/tissue2d/molecules.csv` "reads per cell" 194 (85–310); the routine preset takes the p5 to stay in the routine tier; the spread fitted to the p95 (model 116–321 at median 194) |
 | Nuclear fraction | `nuclear_fraction` | 0.75 | same | W-393 measured "nuclear fraction of reads" 0.75 (0.43–0.93) |
-| Expected molecules | outcome | about 1,000 | about 4,100 | audit A |
+| Expected molecules | outcome | about 1,000 | about 15,800 | audit A; for the `slow` preset its re-run by W-481 |
 | Stain | `name`, `source`, `round`, `channel` | `PI`, `nucleus`, `reference`, `ch04` | same | Not measured by W-393; the route (D2) |
 | Plateau spread | `brightness` log SD | 0.20 | same | W-393 measured `real/tissue2d/stain.csv` "nucleus median over the image's median", MAD 0.135 |
 | Unevenness | `unevenness.amplitude` | 0.22 | same | W-393 measured the same row's p5–p95 0.52–1.37: `sqrt(0.296² − 0.20²)` |
@@ -1247,20 +1251,21 @@ and an area density.
 
 | Parameter | Field (unit) | Routine | `slow` | Set from |
 | --- | --- | --- | --- | --- |
-| Grid, FOV shape | `columns`, `rows`, `fov_shape_zyx` (voxels) | 2 × 2, 16 × 64 × 64 | 3 × 3, 16 × 256 × 256 | Not measured by W-393; its sizing scenes `cu_routine`, `cu_slow` |
-| Spacing | `spacing_zyx` (µm) | 0.346255, 0.777592, 0.777592 | 0.346255, 0.194398, 0.194398 | Not measured by W-393; the culture grid binned 4 × 4 (routine: a 64-pixel FOV at 0.194 µm is smaller than one nucleus) and as acquired, W-393 `notes.md` §7 |
+| Grid, FOV shape | `columns`, `rows`, `fov_shape_zyx` (voxels) | 2 × 2, 16 × 64 × 64 | 3 × 3, 16 × 256 × 256 | Not measured by W-393; its sizing scenes `cu_routine`, `cu_slow` (`cu_slow` at the acquired pixel, half the `slow` preset's) |
+| Spacing | `spacing_zyx` (µm) | 0.346255, 0.777592, 0.777592 | 0.346255, 0.388796, 0.388796 | Not measured by W-393; the culture grid binned 4 × 4 (routine: a 64-pixel FOV at 0.194 µm is smaller than one nucleus), W-393 `notes.md` §7, and binned 2 × 2, twice the acquired pixel of 0.194398 µm (`slow`; Jiahao's decision of 2026-10-15 before the gate W-396, so that a `slow` scene holds about 42 nuclei instead of about 12 at the acquired pixel) |
+| Seed | `FormedSceneConfig.seed` | 42 | 42 | Not measured by W-393; the convention of the sample presets. The `slow` preset's own seed stays 42; the validation design runs the culture chain check at the two seeds 42 and 43 (Jiahao's decision of 2026-10-15; about 83 nuclei over the two scenes by W-481's re-run of audit A) |
 | Overlap, jitter bound | `overlap`; `jitter_max_zyx` (voxels) | 0.25; 0.8, 3.0, 3.0 | 0.25; 0.8, 4.5, 4.5 | Not measured by W-393; those configurations |
 | Axial semi-axis | `nucleus_axial_radius` (µm, median, log SD) | 2.1, 0.14 | same | W-393 measured "nucleus volume (extended 3D labels)" 1,081 µm³ and "nucleus area (2D labels)" 259 µm²: a height of 4.2 µm, half of it the semi-axis; the log SD is LN's (assumption) |
 | Lateral semi-axis | `nucleus_lateral_radius` (µm, median, log SD) | 7.5, 0.30 | same | W-393 measured `real/culture/geometry.csv` "semi-axis a2" 7.48 (1.05–16.5); the log SD is an assumption, narrower than that range because its low end is debris (W-393 `notes.md` §9) |
 | Elongation | `nucleus_elongation` (μ, τ) | 0.117, 0.408 | same | W-393 measured "elongation a1/a2" 1.48 (p95 2.50) |
 | Lobed share | `lobed_share` | 0.24 | same | W-393 measured "share of nuclei not described by one ellipsoid" 0.24 (0.12–0.43) |
 | Density | `density` (area fraction; monolayer) | 0.26 | same | W-393 measured "nucleus volume fraction, per image", an area fraction for these 2D labels, 0.26 (0.17–0.45) |
-| Contact; monolayer | `contact`; `monolayer` | 0.4; true | same | W-393 measured "share of touching nuclei, per image" 0.48 (0.33–0.72); `contact` set by audit A on the label image of the Z projection (mean 0.55 routine, 0.61 `slow`) |
-| Expected nuclei | outcome | about 8 | about 12 | audit A (`‖Ω‖` 10,219 and 16,512 µm², grown by the morphology bound) |
+| Contact; monolayer | `contact`; `monolayer` | 0.4; true | same | W-393 measured "share of touching nuclei, per image" 0.48 (0.33–0.72); `contact` set by audit A on the label image of the Z projection (mean 0.55 routine; 0.60 `slow` at its pixel of 0.388796 µm in W-481's re-run, within the range, so `contact` is not retuned) |
+| Expected nuclei | outcome | about 8 | about 42 | audit A (`‖Ω‖` 10,219 µm²); for the `slow` preset its re-run by W-481 (`‖Ω‖` 66,046 µm²); both grown by the morphology bound |
 | Territory | `CellularSceneConfig.reach` (µm median, log SD); `TerritoryConfig.rule` | 5.3, 0.3; `reach` | same | W-393 measured "cell area (2D labels)" 896 µm² (202–2291): equivalent radius 16.9 µm, less "semi-axis a1" 11.6 µm |
 | Molecules per cell | `per_cell_median`, `per_cell_spread` | 120, 0.40 | 982, 0.40 | W-393 measured `real/culture/molecules.csv` "reads per cell" 982 (86–1884); the routine preset stays near the p5 for the routine tier; the spread fitted to the p95 (model 506–1901 at median 982); the lower tail is not reproduced |
 | Nuclear fraction | `nuclear_fraction` | 0.26 | same | W-393 measured "nuclear fraction of reads" 0.26 (0–0.56) |
-| Expected molecules | outcome | about 1,200 | about 12,900 | audit A |
+| Expected molecules | outcome | about 1,200 | about 44,500 | audit A; for the `slow` preset its re-run by W-481 |
 | Nuclear stains | `name`, `source`, `round`, `channel` | `DAPI`, `nucleus`, `reference`, `ch04`; and `DAPI`, `nucleus`, `morphology`, `ch00`, otherwise the same configuration | same | Not measured by W-393; the route (D2) and MR1 |
 | Plateau spread | `brightness` log SD | 0.53 | same | W-393 measured `real/culture/stain.csv` "nucleus median over the image's median", MAD 0.358 |
 | Unevenness | `unevenness.amplitude` | 0.74 | same | W-393 measured the same row's p5–p95 0.25–4.92: `sqrt(0.909² − 0.53²)` |
@@ -1268,7 +1273,7 @@ and an area density.
 | Bright regions | `per_nucleus`; `size`; `height` | 2; 0.17, 0.64; 2.0, 0.69 | same | W-393 measured per nucleus 2 (0–58); size 0.26 µm² (0.11–7.49); peak 3.0 (1.90–9.58) |
 | Background | `background.baseline` (float units); one region as in dense 3D tissue | 12; height 350, σ 24.9 µm | same | W-393 measured background 0.012 per image and per block p95 0.37 |
 | Read noise | `noise.sigma` | 25 | same | W-393 measured noise 0.025: `sqrt(25.3² − 12)` |
-| Output | `output` | `uint8`, `g` 20 | same | W-393 measured 8-bit plateaus 13–83; audit A, with U1 as written: at `g` 20, 0.03 % (routine) and 0.4 % (`slow`) of plateaus clip, and 6 to 11 % of bright-region peaks, given the wide plateau spread (at `g` 30, 1 % of plateaus clipped with U1 before its normalization) |
+| Output | `output` | `uint8`, `g` 20 | same | W-393 measured 8-bit plateaus 13–83; audit A, with U1 as written: at `g` 20, 0.03 % (routine) and 0.2 % (`slow`, at its pixel of 0.388796 µm in W-481's re-run) of plateaus clip, and 6 to 8 % of bright-region peaks, given the wide plateau spread (at `g` 30, 1 % of plateaus clipped with U1 before its normalization) |
 | Cytoplasm stain | `name`, `source`, `round`, `channel`; `brightness` (median, log SD); `nuclear_ratio`; `edge_width` (µm); `unevenness`; background, noise, output | `Flamingo`, `territory`, `morphology`, `ch02`; 1000, 0.3; 0.3; 0.5; as DAPI's; as DAPI's | same | Not measured by W-393 (its real tables hold nuclear stains only); assumptions for the gate |
 | Morphology round | `MorphologyRoundConfig.name`, `translation`, `translation_max_zyx` (voxels) | `organelle`, `uniform`, 0.5, 6, 6 | same | Not measured by W-393; the round name of the culture data and the offsets of W-305 and W-392 ("The morphology round") |
 
@@ -1286,27 +1291,38 @@ extra stain image per FOV (about the cost of today's stain). The numbers of nucl
 molecules are audit A's. They are estimates, not measurements; the implementation
 measures each preset with `/usr/bin/time -v`, and a generator test that takes 5 s or more
 is marked `slow` ({doc}`contributing`, "Test markers"). The segmentation calls are W-393's
-measurements on the nearest scene.
+measurements on the nearest scene. For the tissue-2D and culture `slow` presets, at twice
+the acquired pixel of their nearest scenes, the arithmetic is in
+`results/audit/resources_estimate.txt` of `runs/W-481/20261015T160947Z-7ca392b2/`: the
+whole time of the nearest scene is scaled by the molecule ratio and the lobe factor (an
+over-estimate, since the voxels per FOV do not change), each extra stain image is allowed a
+seventeenth of that time (one of the 17 images per FOV the nearest scene rendered), and the
+peak RSS grows by the largest growth per molecule between W-393's `slow` generations
+(`ln_slow` against `cu_slow`, 80 KiB) plus the extra float64 stain images.
 
 | Preset | Nearest W-393 scene: generation | Estimate of the preset's generation | Segmentation call on the nearest scene (CPU; GPU) | Within the bound |
 | --- | --- | --- | --- | --- |
 | `context-dense3d-v1` | `ln_routine`: 6.06 s, 0.28 GiB (14 nuclei, 1,887 molecules) | 2 to 4 s, below 0.4 GiB (about 7 nuclei, 64 molecules; textures and the background region add about one stain evaluation) | `3D_spleen`, 4 FOVs: 179 s, 3.1 GiB; 44 s, 1.8 GiB, 8,666 MiB GPU | routine generator checks if measured below 5 s; the model call is a `learned` and `slow` chain check |
 | `context-dense3d-slow-v1` | `ln_slow`: 194 s, 3.3 GiB (264 nuclei, about 40,000 molecules) | below 194 s and 3.3 GiB (about 150 nuclei, 1,500 molecules) | 779 s, 3.1 GiB; 90 s, 1.9 GiB | `slow`; within 3,600 s and 16 GiB per step |
 | `context-tissue2d-v1` | `t2_routine`: 10.4 s, 0.27 GiB (26 nuclei, about 3,900 molecules) | 3 to 6 s, below 0.4 GiB (about 11 nuclei, 1,000 molecules) | export after fusion 18 s, 0.92 GiB; StarDist 2D 0.94 s warm (GPU 2.9 s) | routine if measured below 5 s, else `slow` with the routine preset unchanged |
-| `context-tissue2d-slow-v1` | `t2_slow`: 53 s, 1.4 GiB (49 nuclei, about 7,400 molecules) | below 53 s and 1.4 GiB (about 20 nuclei, 4,100 molecules) | export 22 s, 0.95 GiB; seeded watershed 0.96 s | `slow`; within the bound |
+| `context-tissue2d-slow-v1` | `t2_slow`, at the acquired pixel 0.094635 µm (half the preset's): 53 s, 1.4 GiB (49 nuclei, 7,010 molecules) | 130 to 155 s, about 2.1 GiB at most (about 76 nuclei, 15,800 molecules: 53 s × 2.25 × 1.1 to 1.3) | export 22 s, 0.95 GiB; seeded watershed 0.96 s (on `t2_slow` at 0.094635 µm, StarDist at the scale 0.25; at the scale 0.5 it sees four times the pixels) | `slow`; within the bound |
 | `context-culture-v1` | `cu_routine`: 6.4 s, 0.24 GiB (8 nuclei, 2,400 molecules) | 3 to 7 s, below 0.4 GiB (about 8 nuclei, 1,200 molecules; two more stain images and the morphology round per FOV) | Cellpose nuclei, 4 FOVs: 117 s, 2.3 GiB; 31 s, 3.0 GiB, 2,284 MiB GPU; extension through z 1.0 s | as above; the cell call was not runnable on the current scene, estimated at the nucleus call's time (same model and image size) |
-| `context-culture-slow-v1` | `cu_slow`: 64 s, 1.4 GiB (44 nuclei, 13,000 molecules) | 70 to 100 s, below 2 GiB (about 12 nuclei, 12,900 molecules, two more stain images and the morphology round) | 261 s, 2.3 GiB; 59 s, 3.2 GiB; extension through z 13.7 s | `slow`; within the bound |
+| `context-culture-slow-v1` | `cu_slow`, at the acquired pixel 0.194398 µm (half the preset's): 64 s, 1.4 GiB (44 nuclei, 12,732 molecules) | 250 to 300 s, about 4.0 GiB at most (about 42 nuclei, 44,500 molecules, two more stain images and the morphology round: 64 s × 3.49 × 1.1 to 1.3, plus 2 × 3.7 s for the stain images) | 261 s, 2.3 GiB; 59 s, 3.2 GiB; extension through z 13.7 s (on `cu_slow` at 0.194398 µm, nuclei twice as many pixels across as at the preset's pixel) | `slow`; within the bound; each of the two seeds of the chain check is one such scene |
 
 **The resource bound of the `slow` presets (C26).** They use 3 × 3 FOVs of 16 × 256 ×
 256, the bound of Jiahao's resource exception for W-393 (granted 2026-10-08, recorded on
 W-392), not the §2.10 bound of `sample-small-v1` (one scene of at most 16 × 256 × 256 cut
 into at most 3 × 3 tiles). Every final W-393 attempt lay within 3,600 s and 16 GiB
-(`notes.md` §7).
+(`notes.md` §7). The tissue-2D and culture `slow` presets take twice their context's
+acquired pixel (Jiahao's decision of 2026-10-15 before the gate W-396), so that a scene
+holds about 76 and 42 nuclei instead of about 20 and 12; their nearest W-393 scenes
+`t2_slow` and `cu_slow` were measured at the acquired pixel, and their estimates above
+(at most 155 s and 2.1 GiB, 300 s and 4.0 GiB) lie within the same bound.
 
 | Option | Bound for the implementation batch | Cost | Consequence |
 | --- | --- | --- | --- |
-| **RG1. Grant the W-393 bound again (recommended)** | Scenes up to 3 × 3 FOVs of 16 × 256 × 256; one CPU, 16 GiB and 3,600 s per step; the GPU for the model calls of the chain checks. | A grant at the gate. | The `slow` presets as specified; each nearest scene was measured inside it. |
-| RG2. Keep the §2.10 bound | One scene of at most 16 × 256 × 256 cut into 3 × 3 tiles (FOVs of about 16 × 96 × 96 to 16 × 120 × 120). | None. | The `slow` presets shrink to about a sixth of the area: about 25 dense 3D nuclei and 4 tissue-2D nuclei, and a culture nucleus (22 µm long) barely fits one FOV at 0.194 µm; the culture `slow` preset cannot keep its acquired pixel. |
+| **RG1. Grant the W-393 bound again (recommended)** | Scenes up to 3 × 3 FOVs of 16 × 256 × 256; one CPU, 16 GiB and 3,600 s per step; the GPU for the model calls of the chain checks. | A grant at the gate. | The `slow` presets as specified; each nearest scene was measured inside it (`t2_slow` and `cu_slow` at half the pixel of their presets), and the estimates of the presets lie inside it. |
+| RG2. Keep the §2.10 bound | One scene of at most 16 × 256 × 256 cut into 3 × 3 tiles (FOVs of about 16 × 96 × 96 to 16 × 120 × 120). | None. | The `slow` presets shrink to about a sixth of the area: about 25 dense 3D nuclei, 13 tissue-2D nuclei and 7 culture nuclei, and a culture nucleus (22 µm long) fills about half of a FOV of 96 to 120 pixels at 0.389 µm. |
 | RG3. No `slow` presets | Routine presets only. | None. | The chain checks run on 7 to 9 nuclei per scene, too few for the stitch (C20) and for thresholds with any resolution. |
 
 **Recommendation: RG1** (entry 12 of "Accepted statements this addition changes").
@@ -1415,7 +1431,12 @@ arithmetic reports the number of boundary voxels where it differs and expects 0.
    `float64`, each stain image equals its signal function (with background) at the voxel
    centres within 1e-9 of the image maximum; rendered again at `true_f + k ⊙ s` for an
    integer vector `k`, it equals the first image shifted by `k` on the common voxels within
-   1e-12 of the maximum (the no-interpolation identity). Both hold at any fractional offset
+   1e-10 of the maximum (the no-interpolation identity). The tolerance covers the rounding
+   bound that W-395's `scripts/tolerance_check.py` derives for the full stains (with the
+   field `U`, the bright regions and the territory source's nuclear factor): 7.3e-11 of the
+   maximum at a band of 0.01 µm and at most 1.3e-11 for the other sources
+   (`results/tolerances/tolerance_check.txt` in `runs/W-395/20261015T080623Z-62fad7ad/`);
+   an interpolation changes values by many orders more. Both hold at any fractional offset
    in Z, Y and X and at `Z=1`, except at boundary voxels (reported). For the nuclear
    source, a FOV beyond the cut-off of every nucleus holds the background only; a FOV whose
    voxel centres hold no nucleus label can still hold the soft edge of a nearby or sub-voxel
@@ -1434,7 +1455,8 @@ arithmetic reports the number of boundary voxels where it differs and expects 0.
    a whole number of voxels on every axis, a morphology stain whose configuration equals a
    reference stain's apart from `round` and `channel` (as the two DAPI channels of the
    culture presets) equals that reference stain shifted by `τ_f ⊘ s` on the common voxels,
-   within 1e-12 of the maximum, except at boundary voxels (reported). At `Z=1`, `τ_z = 0`.
+   within 1e-10 of the maximum (the derived bound of identity 7), except at boundary voxels
+   (reported). At `Z=1`, `τ_z = 0`.
 9. **Bright regions.** Every region's centre was accepted where `N = n` in the same
    evaluation that labels voxels, so `N(c_b) = n` exactly; a centre on a boundary is
    evaluated by the same function.
