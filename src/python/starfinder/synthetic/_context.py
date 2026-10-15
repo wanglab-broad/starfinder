@@ -23,9 +23,8 @@ from starfinder.barcode import Codebook
 from ._cellular import _contact, _extent, _harmonic_bound, _harmonic_terms, _labels, _lobe_one_extent, _shapes
 from ._common import ScalarDistribution, _draw, _integer, _label, _probabilities
 from ._formed import _STREAM_KEY, _STREAM_NAMESPACE, _plain
-from ._sample import (_BLOCK, SampleScene, SampleSceneConfig, _cellular_scene, _checked_distribution, _config_payload,
-                      _generate, _inside, _label_functions, _layout, _molecules, _real, _sha256, _streams,
-                      save_sample_scene)
+from ._sample import (_BLOCK, SampleScene, SampleSceneConfig, _checked_distribution, _config_payload, _generate,
+                      _inside, _label_functions, _layout, _real, _sha256, _streams, save_sample_scene)
 
 #: Version of the cellular-scene truth files (context.json and its tables); any change to a column or rule bumps it.
 CONTEXT_TRUTH_VERSION = "1"
@@ -711,14 +710,9 @@ class _Context:
                 if missing:
                     raise ValueError(f"marker_pairs names genes not in the codebook: {missing}")
             self._draw_regions(layout)
-        scaled = config.types is not None and config.types.size_scale is not None
-        if config.nuclei is None and packing is None and config.territories is None and not scaled:
-            nuclei, cells, sites = _cellular_scene(cells_config, layout, stream)
-            for x in nuclei:
-                x["lobes"] = [((0.0, 0.0, 0.0), x["axial"], x["lateral"], x["elongation"], x["angle"])]
-                x["coefficients"] = None
-        else:
-            nuclei, cells, sites = self._place(cells_config, layout, stream)
+        # Every scene with a part set is placed and labelled by the cellular rules; a part left None takes the rule
+        # the page gives it (one lobe, today's gap rule, T1), so no part falls back to the sample scene's code.
+        nuclei, cells, sites = self._place(cells_config, layout, stream)
         if config.types is not None:
             for cell in cells:
                 cell["type"], cell["region"] = self._type_at(cell["cell_id"], cell["anchor"])
@@ -892,13 +886,19 @@ class _Context:
     # ------------------------------------------------------------------ molecules
 
     def _abundances(self):
-        """Normalized type rows, the ambient row (None: the sample scene's draw) and each gene's role."""
+        """Normalized type rows, the ambient row (None: the sample scene's draw) and each gene's role.
+
+        Roles follow G1's layout, not the rows ("Cell types"): with K types, genes 1 to 2K are the markers (type t
+        has genes 2t − 1 and 2t) and the genes after them are shared. A2's default ambient abundance is the shared
+        genes, uniform ("Molecules"), so a change of one type's row changes no other type's genes and no ambient gene.
+        """
         types, molecules = self.config.types, self.config.molecules
         n_genes = self.codebook.n_genes
         rows = roles = None
         if types is not None:
             rows = [_probabilities(row, n_genes, f"abundances[{t}]") for t, row in enumerate(types.abundances)]
-            roles = ["shared" if all(row[g] > 0 for row in rows) else "marker" for g in range(n_genes)]
+            markers = 2 * len(types.types)
+            roles = ["marker" if g < markers else "shared" for g in range(n_genes)]
         ambient = None
         if molecules is not None and molecules.ambient_abundances is not None:
             if len(molecules.ambient_abundances) != n_genes:
@@ -908,8 +908,9 @@ class _Context:
         elif types is not None:
             shared = np.array([role == "shared" for role in roles], dtype=np.float64)
             if not shared.any():
-                raise ValueError("ambient_abundances: no gene is shared by every type, so A2 has no gene; "
-                                 "give ambient_abundances")
+                raise ValueError(f"ambient_abundances: the codebook's {n_genes} genes are all markers of the "
+                                 f"{len(types.types)} types (two per type, G1), so A2 has no shared gene; give "
+                                 "ambient_abundances")
             ambient = shared / shared.sum()
         return rows, ambient, roles
 
@@ -954,13 +955,11 @@ class _Context:
             if self.rule == "power":
                 territory = (lo, hi)
             else:
-                margin = [cell["reach"] if self.rule == "reach" else cell["growth"]] * len(cell["sites"])
-                if self.rule == "grown" and not nucleus_sites:
-                    radii = [self.empty_radius + g for g in margin]
-                else:
-                    radii = [r + m for (_, r), m in zip(cell["sites"], margin)]
-                territory = (np.maximum(np.min([c - r for (c, _), r in zip(cell["sites"], radii)], axis=0), lo),
-                             np.minimum(np.max([c + r for (c, _), r in zip(cell["sites"], radii)], axis=0), hi))
+                # The site sphere grown by the reach (T1) or by δ (T2; an empty site's radius is empty_radius) bounds
+                # the territory; summed as the sample scene sums it, so T1 proposes exactly today's points.
+                margin = cell["reach"] if self.rule == "reach" else cell["growth"]
+                territory = (np.maximum(np.min([c - r - margin for c, r in cell["sites"]], axis=0), lo),
+                             np.minimum(np.max([c + r + margin for c, r in cell["sites"]], axis=0), hi))
             nucleus_box = None
             if nucleus_sites:
                 nucleus_box = (np.maximum(np.min([c - r for c, r in nucleus_sites], axis=0), lo),
@@ -1014,8 +1013,6 @@ class _Context:
 
     @staticmethod
     def _site_nuclei(cell, sites):
-        if getattr(sites, "shapes", None) is None:
-            return [cell["n_nuclei"] > 0] * len(cell["sites"])
         rows = np.flatnonzero(sites.cell == cell["cell_id"])
         return [bool(sites.nucleus[r]) for r in rows]
 
@@ -1162,8 +1159,9 @@ def generate_context_scene(codebook: Codebook, *, config: ContextSceneConfig = C
     state = None
     if parts:
         state = _Context(config, codebook, stream)
-        drawn = config.types is not None or config.molecules is not None
-        scene = _generate(codebook, config.sample, on_fov, state.cellular, state.molecules if drawn else _molecules)
+        # The molecules are placed over the territories of the selected rule and drawn by the page's laws, whichever
+        # parts are set; only a scene with every part off is generate_sample_scene's by construction (O1).
+        scene = _generate(codebook, config.sample, on_fov, state.cellular, state.molecules)
     else:
         scene = _generate(codebook, config.sample, on_fov)
     tables = _tables(config, codebook, scene, state)

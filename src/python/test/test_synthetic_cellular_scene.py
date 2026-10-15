@@ -555,6 +555,67 @@ def test_gn12_nuclear_fraction_and_compartments():
     assert not near.any()
 
 
+# ---------------------------------------------------------------- molecules over the territory of the selected rule
+
+@pytest.mark.parametrize("rule", ["power", "grown"])
+def test_molecules_fill_the_territory_of_the_selected_rule(rule):
+    """The review's case: one nucleus of radius 0.5 µm and reach 0.1 µm. Under T3 (the whole power cell, here Ω) and
+    T2 (δ = 2 µm) the molecules are placed over that territory, not within the site sphere plus the reach, and the
+    same with or without a MoleculeConfig of the same mean."""
+    _, _, plain = scene(f"territory-{rule}")
+    _, _, configured = scene(f"territory-{rule}-molecules")
+    molecules = plain.sample.molecules
+    columns = ["amplicon_id", "population", "gene_id", "sample_z", "sample_y", "sample_x", "compartment",
+               "true_cell_id"]
+    pd.testing.assert_frame_equal(molecules[columns], configured.sample.molecules[columns], check_exact=True)
+    assert len(molecules) > 50 and (molecules.population == "cell").all() and (molecules.true_cell_id == 1).all()
+    centre = plain.sample.nuclei[["centre_z", "centre_y", "centre_x"]].to_numpy()[0]
+    sigma = molecules[["sample_z", "sample_y", "sample_x"]].to_numpy()
+    in_reach_box = np.all(np.abs(sigma - centre) <= 0.5 + 0.1, axis=1)
+    distance = np.linalg.norm(sigma - centre, axis=1)
+    if rule == "grown":
+        assert (distance <= 0.5 + 2.0 + 1e-9).all()
+    else:
+        assert distance.max() > 10  # the power cell of the one site is Ω
+    print(f"{rule}: {len(sigma)} molecules, {int(in_reach_box.sum())} inside the site sphere's box grown by the reach, "
+          f"largest distance from the centre {distance.max():.2f} µm")
+    assert in_reach_box.mean() < 0.1
+
+
+@pytest.mark.parametrize("part", ["territories", "molecules", "types"])
+def test_a_part_at_its_default_gives_the_sample_scene(part):
+    """No part falls back to the sample scene's code: with one part set to its page default (T1, M1 with NF3 and the
+    sample scene's ambient molecules, or types), the cellular path gives generate_sample_scene's placement, labels and
+    molecule positions; with types only the genes are drawn by type."""
+    from starfinder.synthetic import CellTypeConfig, MoleculeConfig, TerritoryConfig
+    book, config = sample_scene_preset("sample-tiny-v1")
+    value = dict(territories=TerritoryConfig("reach"), molecules=MoleculeConfig(), types=CellTypeConfig())[part]
+    expected = generate_sample_scene(book, config=config)
+    got = generate_context_scene(book, config=ContextSceneConfig(sample=config, **{part: value})).sample
+    pd.testing.assert_frame_equal(got.nuclei, expected.nuclei, check_exact=True)
+    pd.testing.assert_frame_equal(got.cells, expected.cells, check_exact=True)
+    for key, array in expected.sample_labels.items():
+        assert np.array_equal(got.sample_labels[key], array)
+    for fov, labels in expected.fov_labels.items():
+        for key, array in labels.items():
+            assert np.array_equal(got.fov_labels[fov][key], array)
+    columns = ["amplicon_id", "population", "sample_z", "sample_y", "sample_x", "compartment", "true_cell_id"]
+    pd.testing.assert_frame_equal(got.molecules[columns], expected.molecules[columns], check_exact=True)
+    if part == "types":
+        assert not got.molecules.gene_id.equals(expected.molecules.gene_id)
+    else:
+        assert got.molecules.gene_id.equals(expected.molecules.gene_id)
+
+
+def test_the_point_evaluator_on_a_scene_with_every_part_off():
+    """With every part off the labels are the sample scene's rule L1; the evaluator rebuilt from the tables agrees."""
+    book, config = sample_scene_preset("sample-tiny-v1")
+    generated = generate_context_scene(book, config=ContextSceneConfig(sample=config))
+    for grid, points, labels in grids(generated):
+        cell, nucleus = _context_labels(generated, points)
+        assert np.array_equal(cell, labels["cell"]) and np.array_equal(nucleus, labels["nucleus"]), grid
+
+
 # ---------------------------------------------------------------- GN21: the new random streams
 
 @pytest.mark.parametrize("name", SHAPE_SCENES + ["types", "density"])
@@ -572,18 +633,26 @@ def test_gn21_new_components_start_with_context(name):
 
 
 @pytest.mark.slow
-def test_gn21_a_type_abundance_changes_only_that_types_genes():
+@pytest.mark.parametrize("copy", ["types-abundance", "types-support"])
+def test_gn21_a_type_abundance_changes_only_that_types_genes(copy):
+    """Type 2's row changed: its positive weights ("types-abundance"), or its support, a weight set to 0 and given to
+    another gene ("types-support", the review's case). No ambient molecule and no molecule of another type changes."""
     _, _, first = scene("types")
-    _, _, changed = scene("types-abundance")
+    _, _, changed = scene(copy)
     a, b = first.sample.molecules, changed.sample.molecules
     columns = ["amplicon_id", "population", "sample_z", "sample_y", "sample_x", "compartment", "true_cell_id"]
     pd.testing.assert_frame_equal(a[columns], b[columns], check_exact=True)
     type_of = dict(zip(first.cell_context.cell_id.astype(int), first.cell_context.type))
     of_type_2 = a.amplicon_id.map(lambda i: placing_cell(i) is not None and type_of[placing_cell(i)] == "type-2")
     differs = (a.gene_id != b.gene_id).to_numpy()
+    ambient = (a.population == "ambient").to_numpy()
+    assert ambient.any() and not differs[ambient].any()
     assert not differs[~of_type_2.to_numpy()].any() and differs[of_type_2.to_numpy()].any()
-    print(f"GN21 type 2's abundance changed: {int(differs.sum())} of {int(of_type_2.sum())} type-2 molecules changed "
-          f"gene, none of the other {int((~of_type_2).sum())}")
+    # The ambient abundance (A2) and the genes' roles do not depend on a type's row.
+    other = lambda t: t[t.type != "type-2"].reset_index(drop=True)  # noqa: E731
+    pd.testing.assert_frame_equal(other(first.type_abundances), other(changed.type_abundances), check_exact=True)
+    print(f"GN21 type 2's abundance changed ({copy}): {int(differs.sum())} of {int(of_type_2.sum())} type-2 molecules "
+          f"changed gene, none of the other {int((~of_type_2).sum())}, of which {int(ambient.sum())} ambient")
 
 
 @pytest.mark.slow

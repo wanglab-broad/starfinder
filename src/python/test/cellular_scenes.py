@@ -7,7 +7,8 @@ from dataclasses import replace
 from functools import cache
 
 from starfinder.synthetic import (CellTypeConfig, ContextSceneConfig, MoleculeConfig, NucleusShapeConfig,
-                                  PackingConfig, TerritoryConfig, generate_context_scene, sample_scene_preset)
+                                  PackingConfig, ScalarDistribution, TerritoryConfig, generate_context_scene,
+                                  sample_scene_preset)
 
 from .cellular_oracle import harmonic_bound
 
@@ -61,6 +62,13 @@ def config_of(name):
         # Type 2's row: its markers lighter, the shared genes heavier.
         rows[1] = tuple(0.05 if w == 0.15 else 0.1125 if w == 0.0875 else w for w in rows[1])
         return ContextSceneConfig(sample=config, types=replace(TYPES, abundances=tuple(rows)), molecules=MOLECULES)
+    if name == "types-support":
+        # The review's case: type 2's weight of balanced-09 moves to balanced-10, a change of the row's support.
+        rows = list(TYPES.abundances)
+        row = list(rows[1])
+        row[9], row[8] = row[9] + row[8], 0.0
+        rows[1] = tuple(row)
+        return ContextSceneConfig(sample=config, types=replace(TYPES, abundances=tuple(rows)), molecules=MOLECULES)
     if name == "types-count":
         return ContextSceneConfig(sample=config, types=replace(TYPES, molecules_per_cell=(200.0, 200.0, 50.0, 200.0)),
                                   molecules=MOLECULES)
@@ -77,6 +85,20 @@ def config_of(name):
         # Density mode that reaches its target, lobed nuclei and contact proposals.
         return ContextSceneConfig(sample=config, nuclei=replace(SHAPES, lobed_share=0.5),
                                   packing=PackingConfig(density=0.15, contact=0.5, overlap=0.1, on_crowded="stop"))
+    if name.startswith("territory-"):
+        # The review's case: one spherical nucleus of radius 0.5 µm, reach 0.1 µm, a mean of 100 molecules, no ambient
+        # molecule; "territory-<rule>[-molecules]" with T3 or T2 (δ = 2 µm), and optionally MoleculeConfig(100).
+        rule = name.split("-")[1]
+        cells = replace(config.cells, nuclei=1, binucleate=0, empty=0,
+                        nucleus_axial_radius=ScalarDistribution("constant", (0.5,)),
+                        nucleus_lateral_radius=ScalarDistribution("constant", (0.5,)),
+                        nucleus_elongation=ScalarDistribution("constant", (1.0,)),
+                        reach=ScalarDistribution("constant", (0.1,)))
+        sample = replace(config, cells=cells, molecules_per_cell=100.0, ambient_density=0.0)
+        territory = (TerritoryConfig("power") if rule == "power"
+                     else TerritoryConfig("grown", growth=ScalarDistribution("constant", (2.0,))))
+        molecules = MoleculeConfig(per_cell_median=100) if name.endswith("-molecules") else None
+        return ContextSceneConfig(sample=sample, territories=territory, molecules=molecules)
     raise KeyError(name)
 
 
