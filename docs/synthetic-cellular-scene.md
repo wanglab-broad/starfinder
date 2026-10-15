@@ -1,6 +1,6 @@
 # Synthetic cellular scene: nucleus shapes, packing, cell types, stains, the morphology round and three context presets
 
-Status: Proposed (W-394, 2026-10-15, at 943bb6b; three defects corrected by W-480; two slow pixels and the shift tolerance amended by W-481 for the decisions of 2026-10-15; for review at the human gate W-396)
+Status: Accepted (W-396, 2026-10-15, at 5701cc2)
 
 This page specifies the second delivery of §2.12: a cellular scene rich enough for the
 real §2.9 segmentation methods to run on the synthetic sample, so that the chain from

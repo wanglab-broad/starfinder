@@ -1,6 +1,6 @@
 # Validation design of the synthetic cellular scene: generator checks and chain checks
 
-Status: Proposed (W-395, 2026-10-15, at 71827f0; the culture chain check on two seeds and the counts and costs of
+Status: Accepted (W-396, 2026-10-15, at 5701cc2)
 the coarser `slow` presets amended by W-482 for the decisions of 2026-10-15; for review at the human gate W-396)
 
 This page is the validation design of the second delivery of §2.12, the cellular scene of
