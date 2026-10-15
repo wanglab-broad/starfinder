@@ -16,6 +16,7 @@ API examples <api/examples>
 Synthetic model <synthetic-specification>
 Synthetic sample scene (proposed) <synthetic-sample-scene>
 Synthetic cellular scene (proposed) <synthetic-cellular-scene>
+Synthetic cellular scene validation (proposed) <synthetic-cellular-scene-validation>
 Preprocessing baseline <preprocessing-baseline>
 Preprocessing contract (proposed) <preprocessing-contract>
 Preprocessing algorithms (proposed) <preprocessing-algorithms>
