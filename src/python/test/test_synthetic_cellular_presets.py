@@ -2,6 +2,7 @@
 
 GN7 on the presets (``context_routine``, ``context_slow``): K1 for every pair of sites recomputed by the test oracle,
 the placement record, and F2's floor reached, with the reached density read back from the saved ``context.json``.
+GN5 on ``context_slow`` (W-486): the lobes and LB1 by ``cellular_checks.check_lobes``, on the module's slow scenes.
 GN23 on ``context_slow`` and ``context_slow_acquired``: W-393's measures (``cellular_measures.py``) against the target
 ranges TR1 to TR12, compared where the scene holds at least 100 objects of the quantity's kind and reported otherwise
 (choice V12); TR7 of dense 3D tissue is reported and not asserted (the page's amendment of 2026-10-15). GN24: each preset and each acquired-pixel variant generated in its own process under
@@ -22,6 +23,7 @@ import pytest
 
 from starfinder.synthetic import context_scene_preset, generate_context_scene, save_context_scene
 
+from .cellular_checks import check_lobes
 from .cellular_measures import EDGE_AND_REGIONS, MINIMUM, TARGETS, outcome, scene_targets
 from .cellular_oracle import Oracle
 
@@ -139,6 +141,14 @@ def acquired_scene(request):
 def test_gn7_slow_preset_reaches_its_floor(slow_scene, tmp_path):
     name, config, scene = slow_scene
     check_packing(name, config, scene, tmp_path)
+
+
+# ---------------------------------------------------------------- GN5 on the slow presets (W-486)
+
+@pytest.mark.slow
+def test_gn5_lobes_on_the_slow_presets(slow_scene):
+    name, config, scene = slow_scene
+    check_lobes(name, config, scene)
 
 
 # ---------------------------------------------------------------- GN23: the four cases in their target ranges

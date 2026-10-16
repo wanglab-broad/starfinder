@@ -207,6 +207,107 @@ gives the expected result.
 | GN24 | Generation cost | `context_routine`, `context_slow`, `context_slow_acquired` (42) | Each preset generated in its own process under `/usr/bin/time -v`: wall time and peak RSS, recorded in the test output. | Within the bound of C26 (one CPU, 16 GiB, 3600 s per step) for the `slow` presets and the two variants; a test that generates a routine preset in the routine tier takes less than 5 s ("Resources"). | The bound; nothing else is asserted. | `slow`; `synthetic`, `validation`, `slow`. |
 | GN25 | The existing tests unchanged | the existing files | The diff of each implementation issue against the files `test/test_synthetic_sample_scene.py`, `test/test_synthetic_sample_golden.py`, `test/report_scene.py`, `test/test_report_chain.py`, the tests {doc}`synthetic-sample-scene` names in "Opt-in, and what stays as it is", and those of {doc}`stitching-assembly-validation` and {doc}`sample-segmentation-validation` that generate a sample preset. | No edit to any of them; each passes in its tier ("Opt-in", "Existing tests that must pass unchanged"). | Exact (an empty diff). | their own tiers and markers. |
 
+## Implemented checks
+
+The generator checks are in the modules of `src/python/test/` listed below, each marked
+`synthetic` with the kind marker its row names. The implementation issues W-483 to W-485
+added most of them with the code they check. W-486 adds
+`test_synthetic_cellular_routine.py`: GN4 to GN6, GN8 to GN12, GN15 and GN19 on
+`context_routine`, and GN4 on `ctx_stains`. It also adds GN5 on `context_slow` in
+`test_synthetic_cellular_presets.py`, and `test_synthetic_cellular_checks.py`, which holds
+GN25 and the test that keeps this table true, `test_every_gn_row_names_collected_tests`.
+
+That test reads the rows GN1 to GN25 of the table "Generator checks" from this page and
+checks four things:
+
+* this table has exactly those rows, in that order;
+* every row names at least one test of its module that pytest collects, and none of them
+  is marked as an expected failure or skipped by a mark;
+* each named test carries `synthetic` and one kind marker, the one its GN row names;
+* a row whose tier is `routine` names no `slow` test, a row whose tier is `slow` names only
+  `slow` tests, and a row whose tier is `routine and slow` names both.
+
+A test of these modules that is not named here is an additional check of the code it
+tests. The helpers are:
+
+* `cellular_oracle.py`, the test oracle;
+* `cellular_scenes.py`, the tiny fixtures;
+* `cellular_measures.py`, W-393's measures for GN23;
+* `cellular_checks.py`, the GN5 check that the two preset modules share.
+
+The routine presets are generated once per session in `test_synthetic_cellular_routine.py`,
+and the `slow` presets once per module in `test_synthetic_cellular_presets.py`.
+
+Every tolerance is the one of the table "Generator checks", unchanged. Where a row says
+"Exact" for a number that is not an integer, its tests compare it within an absolute 1e-9
+(the project's default float tolerance), or within the bound the row itself states. Counts,
+IDs, labels, strings, hashes and images that the row compares exactly are compared exactly.
+No test needs an extra beyond `dev`, `local-registration` and `checkpoint`, so the CI
+environment runs them all; GN24 needs `/usr/bin/time`.
+
+Where a test differs from its row as written, the case is a finding recorded in its issue's
+worker notes, and the row is not changed:
+
+* **GN3 and GN7, `ctx_crowded` at `floor=0.9`.** The domain holds more than `0.9 · 0.6`, so
+  placement stops and records without raising (W-483, finding 1). GN7 tests the fixture as
+  written. GN3 tests the refusal below a floor on a variant at `density=0.9`, which stops
+  at the same seed.
+* **GN3, "`z_mid` outside the covered region's Z interval".** This cannot be reached,
+  because the interval is centred on `z_mid` (W-483, finding 3), so it has no case.
+* **GN6, the anchors.** Each anchor lies strictly inside its own power cell in the
+  arithmetic K1 names. An anchor that P1 placed on its partner's face within rounding, by
+  the oracle's own arithmetic, is reported (W-483, finding 2).
+* **GN6 on the presets.** These scenes need not hold a voxel inside two nuclei's shapes, so
+  that count is reported rather than required to be positive.
+* **GN11's rendering identity on the presets.** It runs under the identity's own conditions
+  in {doc}`synthetic-sample-scene`: the formed template's noise and background off and
+  float64 accumulation. The preset's readout trend and mixing are kept, through each
+  molecule's realized amplitudes.
+* **GN23, TR7 of dense 3D tissue.** This is reported and not asserted (the amendment of
+  2026-10-15 after the TR table).
+
+GN25 pins the SHA-256 of each file its row names, line endings read as LF. The pins are the
+content at 7d6c417, the base revision of the §2.12 implementation issues. For the session
+fixture `small_dataset` of `conftest.py`, the pin is the source of the fixture and of the
+two constants it reads. The files are:
+
+* the four files the row names;
+* the tests {doc}`synthetic-sample-scene` names, with their helpers and the R6 tables;
+* the tests named by {doc}`stitching-assembly-validation` and
+  {doc}`sample-segmentation-validation` that generate a sample preset, directly or through
+  `sample_segmentation_fixtures.py`.
+
+The `slow` tests carry `synthetic` and run in `pytest-slow-synthetic`; the routine tier
+runs the others.
+
+| # | Module and tests | Fixtures | Tier | Floats |
+| --- | --- | --- | --- | --- |
+| GN1 | `test_synthetic_sample_golden.py`, `test_saved_preset_outputs_equal_the_pins`; `test_synthetic_cellular_scene.py`, `test_gn1b_every_part_off_is_the_sample_scene` | `sample_presets`, `ctx_off` | routine and slow | none compared (digests, arrays and tables exact) |
+| GN2 | `test_synthetic_cellular_contract.py`, `test_gn2_existing_fields_and_presets_as_at_the_base`, `test_gn2_new_names_and_fields`; `test_synthetic_cellular_stains_contract.py`, `test_gn2_stain_names_and_fields`; `test_synthetic_cellular_presets_contract.py`, `test_registry_names_and_version`, `test_gn2_every_value_equals_the_page_table` | none (the API pages by `docs/check_reference.py`) | routine | preset values within 1e-9 |
+| GN3 | `test_synthetic_cellular_contract.py`, `test_gn3_configuration_refusals`, `test_gn3_generation_refusals`, `test_gn3_a_crowded_scene_below_its_floor`; `test_synthetic_cellular_stains_contract.py`, `test_gn3_stain_refusals`, `test_gn3_stain_generation_refusals` | none; `ctx_crowded` | routine | none compared |
+| GN4 | `test_synthetic_cellular_scene.py`, `test_gn4_labels_against_the_oracle_and_the_evaluator`; `test_synthetic_cellular_routine.py`, `test_gn4_labels_on_the_routine_presets`, `test_gn4_labels_on_ctx_stains` | `ctx_shapes`, `ctx_monolayer`, `ctx_plane`, `ctx_types`, `ctx_stains`, `context_routine` | routine | decisions within 1e-9 µm counted as boundary voxels |
+| GN5 | `test_synthetic_cellular_scene.py`, `test_gn5_harmonic_bound_is_the_largest_value`, `test_gn5_lobes_harmonics_and_one_connected_shape`; `test_synthetic_cellular_routine.py`, `test_gn5_lobes_on_the_routine_presets`; `test_synthetic_cellular_presets.py`, `test_gn5_lobes_on_the_slow_presets` | `ctx_shapes`, `ctx_monolayer`, `ctx_plane`, `context_routine`, `context_slow` | routine and slow | within 1e-9 µm (1e-9 for the sum of coefficients) |
+| GN6 | `test_synthetic_cellular_scene.py`, `test_gn6_no_overlap_and_a_nucleus_inside_its_own_cell`; `test_synthetic_cellular_routine.py`, `test_gn6_no_overlap_on_the_routine_presets` | `ctx_shapes`, `ctx_monolayer`, `ctx_plane`, `context_routine` | routine | decisions within 1e-9 µm counted |
+| GN7 | `test_synthetic_cellular_scene.py`, `test_gn7_k1_for_every_pair_and_the_record`, `test_gn7_crowded_stops_and_records_above_a_low_floor`, `test_gn7_crowded_at_the_page_floor_reaches_it`; `test_synthetic_cellular_presets.py`, `test_gn7_routine_preset_reaches_its_floor`, `test_gn7_slow_preset_reaches_its_floor` | `ctx_shapes`, `ctx_monolayer`, `ctx_crowded`, `context_routine`, `context_slow` | routine and slow | K1 within 1e-9 µm; sizes within 1e-9 |
+| GN8 | `test_synthetic_cellular_scene.py`, `test_gn8_types_and_genes`; `test_synthetic_cellular_routine.py`, `test_gn8_types_and_genes_on_the_routine_presets` | `ctx_types`, `context_routine` | routine | row sums within 1e-9; anchors within 1e-9 µm counted |
+| GN9 | `test_synthetic_cellular_scene.py`, `test_gn9_counts_and_marker_answers`; `test_synthetic_cellular_routine.py`, `test_gn9_counts_and_marker_answers_on_the_routine_presets` | `ctx_types`, `context_routine` | routine | `mecr` as the same ratio, exact |
+| GN10 | `test_synthetic_cellular_scene.py`, `test_gn10_realized_gene_abundance_of_each_type`; `test_synthetic_cellular_routine.py`, `test_gn10_realized_gene_abundance_on_the_routine_presets` | `ctx_types`, `context_routine` | routine | 4 SE |
+| GN11 | `test_synthetic_cellular_scene.py`, `test_gn11_molecules_per_cell_and_the_count_guard`, `test_gn11_molecules_reach_the_formed_generator_unchanged`, `test_gn11_rendering_identity_of_the_reference_round`; `test_synthetic_cellular_routine.py`, `test_gn11_molecules_per_cell_and_the_count_guard_on_the_routine_presets`, `test_gn11_rendering_identity_on_the_routine_presets` | `ctx_types`, `context_routine` | routine and slow | 4 SE; the rendering within the oracle tolerance of {doc}`synthetic-sample-scene` |
+| GN12 | `test_synthetic_cellular_scene.py`, `test_gn12_nuclear_fraction_and_compartments`; `test_synthetic_cellular_routine.py`, `test_gn12_nuclear_fraction_and_compartments_on_the_routine_presets` | `ctx_types`, `context_routine` | routine | 4 SE; positions within 1e-9 µm counted |
+| GN13 | `test_synthetic_cellular_stains.py`, `test_gn13_stains_against_the_oracle_and_the_evaluator`, `test_gn13_integer_shift_between_two_fovs` | `ctx_stains`, `ctx_plane` | routine | 1e-9 and 1e-10 of the image maximum; the plateau and V9 bounds |
+| GN14 | `test_synthetic_cellular_stains.py`, `test_gn14_band_cases`, `test_gn14_band_on_ctx_stains` | `band_cases`, `ctx_stains` | routine | the Lipschitz and band bounds of the row |
+| GN15 | `test_synthetic_cellular_stains.py`, `test_gn15_bright_regions`; `test_synthetic_cellular_routine.py`, `test_gn15_bright_regions_on_the_routine_presets` | `ctx_stains`, `context_routine` | routine | centres within 1e-9 µm counted |
+| GN16 | `test_synthetic_cellular_stains.py`, `test_gn16_the_field_between_fovs_and_without_centres` | `ctx_stains` and its copy with no centre | routine | the ratio within 1e-12 of 1 |
+| GN17 | `test_synthetic_cellular_stains.py`, `test_gn17_8bit_output_and_the_dtypes` | `ctx_uint8`, its no-cell copy | routine | `k` within 1e-9 relative |
+| GN18 | `test_synthetic_cellular_stains.py`, `test_gn18_truth_translation`, `test_gn18_whole_voxel_shift_identity`, `test_gn18_domain_grown_covered_region_unchanged_and_the_aligned_crop` | `ctx_stains`, `ctx_plane` | routine | 1e-9 voxels; 1e-10 of the maximum |
+| GN19 | `test_synthetic_cellular_scene.py`, `test_gn19_projection_truth_in_a_monolayer`; `test_synthetic_cellular_routine.py`, `test_gn19_projection_truth_on_the_routine_presets` | `ctx_monolayer`, `context_routine` (2D tissue and culture) | routine | columns within 1e-9 µm counted |
+| GN20 | `test_synthetic_cellular_stains.py`, `test_gn20_one_plane` | `ctx_plane` | routine | none compared (every z exactly 0) |
+| GN21 | `test_synthetic_cellular_scene.py`, `test_gn21_new_components_start_with_context`, `test_gn21_a_type_abundance_changes_only_that_types_genes`, `test_gn21_a_type_count_changes_only_that_types_molecules`; `test_synthetic_cellular_stains.py`, `test_gn21_stain_components_and_streams` | `ctx_off`, `ctx_types` and its copies, `ctx_stains` and its copy with one more stain | routine and slow | none compared |
+| GN22 | `test_synthetic_cellular_contract.py`, `test_gn22_saved_layout_tables_and_record`, `test_gn22_empty_populations`; `test_synthetic_cellular_stains_contract.py`, `test_gn22_saved_stain_tables_and_images`, `test_gn22_dataset_read_and_morphology_registered`, `test_gn22_dataset_refusals` | `ctx_stains`, `ctx_types`, `ctx_plane`, `ctx_off` | routine and slow | floats round trip exactly |
+| GN23 | `test_synthetic_cellular_presets.py`, `test_gn23_slow_preset_in_its_target_ranges`, `test_gn23_acquired_variant_edge_and_bright_regions` | `context_slow`, `context_slow_acquired` | slow | the TR ranges |
+| GN24 | `test_synthetic_cellular_presets.py`, `test_gn24_generation_cost_in_its_own_process` | `context_routine`, `context_slow`, `context_slow_acquired` | slow | the bound of C26 |
+| GN25 | `test_synthetic_cellular_checks.py`, `test_gn25_existing_tests_unchanged` | the existing files | routine | none compared (SHA-256) |
+
 ## Chain checks
 
 One chain check per context, each through the real route of its context (D2), each with
