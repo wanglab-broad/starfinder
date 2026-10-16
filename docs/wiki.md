@@ -17,6 +17,7 @@ Synthetic model <synthetic-specification>
 Synthetic sample scene (proposed) <synthetic-sample-scene>
 Synthetic cellular scene (proposed) <synthetic-cellular-scene>
 Synthetic cellular scene validation (proposed) <synthetic-cellular-scene-validation>
+Synthetic real appearance (proposed) <synthetic-real-appearance>
 Preprocessing baseline <preprocessing-baseline>
 Preprocessing contract (proposed) <preprocessing-contract>
 Preprocessing algorithms (proposed) <preprocessing-algorithms>
