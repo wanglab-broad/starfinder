@@ -11,7 +11,7 @@ MATLAB runtime or cluster execution.
 
 | Symptom | Check and supported action |
 | --- | --- |
-| `ImportError` mentioning SimpleITK from demons or `apply_deformation` | From `src/python`, install the declared extra with `uv sync --extra local-registration`, then use the same uv environment to run. Installation requires registry/cache access. Global registration does not need this extra. |
+| `ImportError` mentioning SimpleITK from demons or `apply_transform` with a `simpleitk` warp | From `src/python`, install the declared extra with `uv sync --extra local-registration`, then use the same uv environment to run. Installation requires registry/cache access. Global registration does not need this extra. |
 | TPS/CPD cannot estimate a transform | Inspect `InsufficientLandmarksError` or `RegistrationEstimationError`. FOV and direct estimation propagate errors; there is no default fallback. |
 | Installing SpatialData or napari does not change output files | These packaging extras do not enable a public SpatialData writer or automatic viewer. FOV outputs are TIFF/CSV/text/NPZ. Inspect CSVs with the [output recipe](recipes.md#inspect-molecule-outputs). |
 | MATLAB launcher fails before image processing | Read the MATLAB command line printed in the Snakemake log. With `matlab_launcher: path`, set `STARFINDER_MATLAB_EXECUTABLE` or put `matlab` on `PATH`; on the Broad cluster, set `matlab_launcher: broad` and check `/broad/software/scripts/useuse` and `use Matlab`. Then check the license and required toolboxes on the execution host. See the [MATLAB launcher](workflow-configuration.md#matlab-launcher) and [MATLAB requirements](api/matlab.md#runtime-requirements-and-validation-limits). |
@@ -25,13 +25,13 @@ imports/parses APIs; it does not execute these optional algorithms.
 
 | Symptom | Diagnosis and next check |
 | --- | --- |
-| `Directory not found` or `No TIFF file found matching channel pattern` | Inspect the resolved `input_root/round/FOV` and actual filenames. {py:func}`~starfinder.io.load_round` matches `*{pattern}*.tif`; `.tiff` is also supported, but a wrong suffix/layout will not match. The synthetic generator's FOV/round layout needs the quickstart's explicit layout conversion. |
-| `min() arg is an empty sequence` while loading | An empty `channel_order` reaches the channel loader without a default. Supply a nonempty, acquisition-correct list; check `seq_channel_order` when using {py:func}`~starfinder.dataset.from_workflow_config`. |
+| `Directory not found` or `expected one TIFF matching channel ...; found 0` | Inspect the resolved `input_root/round/FOV` and actual filenames. {py:func}`~starfinder.io.load_round` matches `*{pattern}*.tif`; `.tiff` is also supported, but a wrong suffix/layout will not match. The synthetic generator's FOV/round layout needs the quickstart's explicit layout conversion. |
+| `channel_labels must be nonempty and unique` while loading | An empty `channel_order` reaches the channel loader without a default. Supply a nonempty, acquisition-correct list; check `seq_channel_order` when using {py:func}`~starfinder.dataset.from_workflow_config`. |
 | Ambiguous-file error or unexpected channel intensities | Narrow each pattern to exactly one file, or provide explicit source paths. Check [channel order](conventions.md#channel-order) against the codebook. |
 | Channel-size mismatch warning or smaller-than-expected image | The loader crops to minimum Z/Y/X dimensions. Inspect `metadata['original_shapes']` and `metadata['cropped']`; verify acquisition/export alignment before accepting the crop. Cropping is not registration. |
 | `Expected 4D (Z, Y, X, C) image` in detection | Inspect `image.shape`. For a known single-channel ZYX volume, append a singleton channel axis with `volume[..., None]`. A YX projection or unknown axis order cannot be repaired by blindly appending dimensions. |
 | Shape unpacking/broadcast error during global registration | The single-channel registration call expects equal-shaped 3D ZYX inputs. Check both shapes and the intended channel/merge; the function does not provide full input-shape validation. |
-| `Global mode requires uint8/uint16` | The global threshold uses dtype maximum. Check whether your input is floating point and choose an explicitly justified threshold mode or scaling step; casting arbitrary floats to uint8 can discard signal. |
+| `global thresholds require uint8/uint16` | The global threshold uses dtype maximum. Check whether your input is floating point and choose an explicitly justified threshold mode or scaling step; casting arbitrary floats to uint8 can discard signal. |
 | TIFF loaded with wrong dimensions or intensity range | Plain TIFFs default to ZYX; ambiguous OME/ImageJ axes require explicit selection. Inspect `ImageLoadConfig` and result diagnostics. Dtype is preserved unless an explicit conversion is configured. |
 
 The [I/O recipe](recipes.md#read-and-write-image-stacks) checks a lossless uint16
@@ -78,7 +78,7 @@ image directories. A successful DAG does not inspect TIFF content.
 | Symptom | Check |
 | --- | --- |
 | Schema validation error | Read the failing field path. Each provided rule needs boolean `run`; unknown rule/resource keys are rejected. Subset conditionals require companion fields even for false-valued flags. See [top-level fields](workflow-configuration.md#top-level-fields). |
-| Startup `KeyError`, even with downstream flags off | Rule parsing indexes fields including `envs_path`, `fiji_path`, `additional_round` and `subset_list`. Schema-optional does not mean every script can omit a key; the minimal documentation template supplies these. |
+| Startup `KeyError`, even with downstream flags off | Rule parsing indexes fields including `fiji_path`, `additional_round` and `subset_list`. Schema-optional does not mean every script can omit a key; the minimal documentation template supplies these. |
 | Only config preparation is scheduled | Request explicit target `all`; the preparation rule occurs before it in the Snakefile. Use the [documented dry-run command](workflows.md#small-reproducible-dry-run). |
 | Missing direct/subtile/deep rule sections | Preset modes need their named sections and select them regardless of their `run` flags. See [mode selection](workflows.md#modes-and-backend-selection). |
 | Reference-round `KeyError` | Check `ref_round` belongs to the loaded rounds, and their names match exactly. In the direct API, call {py:meth}`~starfinder.dataset.RoundState.validate` explicitly; it checks membership/overlap but does not check that TIFFs exist or require a non-null reference. |
