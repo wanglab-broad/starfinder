@@ -138,7 +138,7 @@ uv run --group docs python ../../docs/examples/recipes.py "$DOCS_RUN/quickstart"
 These are the existing [quickstart](getting-started.md) and
 [recipes](recipes.md), with assertions for detected shifts, nonempty decoded
 output, TIFF round-trips and CSV coordinate conversion. The tiny preset uses
-seed **42**, two FOVs, four rounds and `(8,128,128,4)` uint8 volumes; the recipes
+seed **42**, two FOVs, four rounds and `(8,128,128,4)` uint16 volumes; the recipes
 reuse FOV_001 and a deterministic `(12,24,24)` single-spot volume. Allow one CPU,
 1 GiB RAM and 50 MiB disk. CI limits the combined smoke step to five minutes.
 Each script refuses an existing output directory. Success ends with

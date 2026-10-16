@@ -261,8 +261,8 @@ Use the explicit examples here and check the selected backend's parameters.
 The repository's `config/environment-v9.yaml` describes a Snakemake 9 environment
 (Python >=3.11,<3.13) including the cluster-generic executor. It is separate from
 the Python package's uv environment; install the package/dependencies into the
-actual compute environment when using the Python backend. StarDist uses its
-own environment at `envs_path/stardist`.
+actual compute environment when using the Python backend. StarDist runs in the
+environment that runs Snakemake, with the package's `stardist` extra; no rule reads `envs_path`.
 
 On a suitably configured Broad host, after editing paths and preparing real data:
 
