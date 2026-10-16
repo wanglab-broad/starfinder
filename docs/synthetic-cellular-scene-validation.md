@@ -371,6 +371,17 @@ each is a development target, provisional, approved at the gate W-396 with the p
 | TR11 | Cell volume (expanded nuclei, dense 3D) | 90–185 µm³ | `geometry.csv` "cell volume" |
 | TR12 | Composite signal share per cell (2D tissue) | 0.52–0.96 | `molecules.csv` "share of pixels with signal in the composite, per cell" |
 
+**Amendment of 2026-10-15 (W-485; operator decision pending Jiahao's confirmation).** GN23
+measured TR7 of dense 3D tissue on `context-dense3d-slow-v1` at seed 42 at a median
+within-nucleus CV of 0.168 on 143 nuclei, outside its range 0.25–0.41. Two trials on that
+preset, each changing one bright-region law, gave 0.212 (height median 2.0 instead of 1.35)
+and 0.206 (5 regions per nucleus instead of 3), each with TR5 inside its ranges: the Gaussian
+bright regions of Tx1, within TR5's ranges, do not reach the real within-nucleus variation.
+TR7 of dense 3D tissue is therefore a known limit of the scene: GN23 reports it with its
+measured value, range and object count and does not assert it. A texture control that
+reaches it is a candidate for a later issue. TR7 of 2D tissue and of the culture is reported,
+as V12 gives it.
+
 The tissue-2D ranges come from its densest tiles and every real label is method output
 (W-393 `notes.md` §12); the routine presets take some values outside the middle of a range
 on purpose ("Presets", PS1), and are therefore not compared with TR10.

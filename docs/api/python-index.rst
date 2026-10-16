@@ -50,6 +50,9 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.assignment.COMPARTMENT_STATES`
 * :py:obj:`starfinder.segmentation.composite_nuclei_amplicon`
 * :py:obj:`starfinder.segmentation.CompositeConfig`
+* :py:obj:`starfinder.synthetic.CONTEXT_PRESET_VERSION`
+* :py:obj:`starfinder.synthetic.CONTEXT_PRESETS`
+* :py:obj:`starfinder.synthetic.context_scene_preset`
 * :py:obj:`starfinder.synthetic.CONTEXT_TRUTH_VERSION`
 * :py:obj:`starfinder.synthetic.ContextScene`
 * :py:obj:`starfinder.synthetic.ContextSceneConfig`

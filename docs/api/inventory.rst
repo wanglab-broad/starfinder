@@ -434,6 +434,9 @@ starfinder.synthetic
 * :py:obj:`starfinder.synthetic.calibrated_scene_preset`
 * :py:obj:`starfinder.synthetic.CellTypeConfig`
 * :py:obj:`starfinder.synthetic.CellularSceneConfig`
+* :py:obj:`starfinder.synthetic.CONTEXT_PRESET_VERSION`
+* :py:obj:`starfinder.synthetic.CONTEXT_PRESETS`
+* :py:obj:`starfinder.synthetic.context_scene_preset`
 * :py:obj:`starfinder.synthetic.CONTEXT_TRUTH_VERSION`
 * :py:obj:`starfinder.synthetic.ContextScene`
 * :py:obj:`starfinder.synthetic.ContextSceneConfig`

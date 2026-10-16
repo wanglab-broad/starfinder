@@ -32,8 +32,8 @@ from ._stains import (_ROUNDS, MorphologyRoundConfig, StainChannelConfig, _brigh
 
 #: Version of the cellular-scene truth files (context.json and its tables); any change to a column or rule bumps it.
 CONTEXT_TRUTH_VERSION = "1"
-# The presets and their public version name follow with the context presets.
-_CONTEXT_PRESET_VERSION = "context-presets-v1"
+#: Version of the context presets (CONTEXT_PRESETS); any change to a preset value bumps it.
+CONTEXT_PRESET_VERSION = "context-presets-v1"
 
 _KINDS = ("ordinary", "binucleate", "empty")
 _RULES = ("reach", "grown", "power")
@@ -1266,7 +1266,7 @@ def generate_context_scene(codebook: Codebook, *, config: ContextSceneConfig = C
     effective.update(stains=stains.pop("effective"), morphology=stains.pop("morphology_effective"))
     record = dict(
         generator="starfinder.synthetic.generate_context_scene", context_truth_version=CONTEXT_TRUTH_VERSION,
-        context_preset_version=_CONTEXT_PRESET_VERSION, requested_config=_payload(config),
+        context_preset_version=CONTEXT_PRESET_VERSION, requested_config=_payload(config),
         effective_config=_plain(effective), seed=template.seed,
         stream_scheme=dict(key=list(_STREAM_KEY), namespace=_STREAM_NAMESPACE, encoding="compact UTF-8 JSON array",
                            digest="SHA-256, big-endian integer", bit_generator="PCG64", numpy_version=np.__version__,

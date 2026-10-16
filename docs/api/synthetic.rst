@@ -25,6 +25,9 @@ and ``starfinder synthetic generate`` writes the MATLAB-compatible layout.
    calibrated_scene_preset
    CellTypeConfig
    CellularSceneConfig
+   CONTEXT_PRESET_VERSION
+   CONTEXT_PRESETS
+   context_scene_preset
    CONTEXT_TRUTH_VERSION
    ContextScene
    ContextSceneConfig
@@ -652,6 +655,24 @@ round's folder) that ``Dataset``, ``FOV.load_images`` and
 reference stain that shares its name. The scene is a development fixture, not
 a calibrated tissue model, and makes no claim about the accuracy of any
 segmenter.
+
+``context_scene_preset(name)`` returns ``(Codebook, ContextSceneConfig)`` for a
+``CONTEXT_PRESETS`` name (version ``CONTEXT_PRESET_VERSION``,
+``context-presets-v1``), a registry separate from ``SAMPLE_PRESETS``: one
+routine and one ``slow`` preset per context of
+:doc:`../synthetic-cellular-scene` ("Presets"), with the values of its tables.
+``context-dense3d-v1`` and ``context-dense3d-slow-v1`` are dense 3D tissue on
+the LN grid (2 × 2 FOVs of 16×64×64 and 3 × 3 FOVs of 16×256×256);
+``context-tissue2d-v1`` and ``context-tissue2d-slow-v1`` are a monolayer for
+projection samples (8×64×64 at 0.37854 µm, and 16×256×256 at 0.18927 µm in Y
+and X); ``context-culture-v1`` and ``context-culture-slow-v1`` are the sparse
+culture, a monolayer with the morphology round ``organelle`` holding ``DAPI``
+and the cytoplasm stain ``Flamingo`` (0.777592 µm, and 0.388796 µm). Every
+preset uses ``development_codebook("balanced")``, seed 42, the cell types of
+G1, the amplicon appearance of ``sample-small-v1`` and an 8-bit nuclear stain
+on ``ch04`` of the reference round; no preset uses the ``boundary`` source.
+Each routine preset generates in a few seconds on one CPU; the ``slow``
+presets take one to three minutes and below 2 GiB.
 
 Scientific limitations
 ----------------------
