@@ -92,8 +92,9 @@ def check_packing(name, config, scene, tmp_path):
     domain = float(extent[1] * extent[2]) if planar else float(np.prod(extent))
     assert record["mode"] == "density" and record["density"] == packing.density
     assert record["placed_seeds"] == len(sample.cells) and record["placed_nuclei"] == len(sample.nuclei)
-    assert abs(record["domain_size"] - domain) <= 1e-9 * max(1.0, domain)
-    assert abs(record["nominal_size"] - nominal_size(scene, planar)) <= 1e-9 * max(1.0, record["nominal_size"])
+    # Non-integers the row compares exactly: within the default absolute 1e-9 (µm³, or µm² in a monolayer).
+    assert abs(record["domain_size"] - domain) <= 1e-9
+    assert abs(record["nominal_size"] - nominal_size(scene, planar)) <= 1e-9
     assert abs(record["reached_density"] - record["nominal_size"] / record["domain_size"]) <= 1e-12
     target = packing.density * record["domain_size"]
     if not record["stopped"]:

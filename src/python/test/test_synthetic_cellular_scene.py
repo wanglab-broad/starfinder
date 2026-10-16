@@ -19,6 +19,7 @@ from starfinder.synthetic import (ContextSceneConfig, NoiseConfig, generate_cont
                                   sample_scene_preset, save_context_scene, save_sample_scene)
 from starfinder.synthetic._context import _context_labels
 
+from .cellular_checks import check_projection
 from .cellular_oracle import Oracle, check_sample_identities, grids, harmonic_bound, real_harmonic
 from .cellular_scenes import RULES, scene
 from .formed_oracle import kernel_radius
@@ -155,7 +156,8 @@ def test_gn5_lobes_harmonics_and_one_connected_shape(name):
     first = lobes[lobes.lobe == 1].set_index("nucleus_id").loc[nuclei.nucleus_id]
     assert (first[["offset_z", "offset_y", "offset_x"]].to_numpy() == 0).all()
     for column in ("axial_radius", "lateral_radius", "elongation", "angle"):
-        np.testing.assert_array_equal(first[column].to_numpy(), nuclei[column].to_numpy())
+        # Lobe 1 repeats nuclei.csv: floats within 1e-9 (µm or radians), the row's tolerance.
+        np.testing.assert_allclose(first[column].to_numpy(), nuclei[column].to_numpy(), rtol=0, atol=1e-9)
     low, high = shape.extra_lobes
     counts = lobes.groupby("nucleus_id").size()
     assert counts.between(1 + low, 1 + high).all()  # lobed_share 1
@@ -174,7 +176,7 @@ def test_gn5_lobes_harmonics_and_one_connected_shape(name):
         margins.append(e1 - (distance - eps))
         scale = row.lateral_radius / one.lateral_radius
         assert 0.5 - 1e-9 <= scale <= 0.8 + 1e-9 and abs(row.axial_radius - scale * one.axial_radius) <= 1e-9
-        assert row.elongation == one.elongation and 0 <= row.angle < math.pi
+        assert abs(row.elongation - one.elongation) <= 1e-9 and 0 <= row.angle < math.pi
         ratio = distance / one.lateral_radius
         ratios.append(ratio)
         binding += ratio < 0.5 - 1e-9
@@ -335,34 +337,7 @@ def test_gn7_crowded_at_the_page_floor_reaches_it():
 @pytest.mark.parametrize("name", ["monolayer", "monolayer-harmonic"])
 def test_gn19_projection_truth_in_a_monolayer(name):
     _, config, generated = scene(name)
-    sample = generated.sample
-    acquisition = config.sample.acquisition
-    z_mid = (acquisition.fov_shape_zyx[0] - 1) / 2 * acquisition.spacing_zyx[0]
-    assert generated.record["effective_config"]["z_mid"] == z_mid
-    assert (sample.nuclei.centre_z == z_mid).all() and (sample.cells.anchor_z == z_mid).all()
-    assert (generated.lobes.offset_z == 0).all()
-    oracle = Oracle(generated)
-    grid = sample.record["sample_grid"]
-    shifted = (np.array(grid["origin_zyx"]) + np.array([0.3, 0.37, 0.41]) * np.array(grid["spacing_zyx"])
-               + np.moveaxis(np.indices(tuple(grid["shape_zyx"]), dtype=float), 0, -1) * np.array(grid["spacing_zyx"]))
-    cases = [(g, p, l) for g, p, l in grids(generated)]
-    cell, nucleus = _context_labels(generated, shifted)
-    cases.append(("fractional", shifted, {"cell": cell, "nucleus": nucleus}))
-    faces = 0
-    for grid_name, points, labels in cases:
-        near = oracle.labels(points)[2].any(axis=0)
-        for target in ("nucleus", "cell"):
-            volume = labels[target].astype(np.int64)
-            top = volume.max(axis=0)
-            bottom = np.where(volume > 0, volume, np.iinfo(np.int64).max).min(axis=0)
-            mixed = (top > 0) & (bottom != top)
-            assert not np.any(mixed & ~near), (name, grid_name, target)
-            faces += int((mixed & near).sum())
-            # P(y, x) is the Z maximum of the grid's labels: the one ID of the column, or 0.
-            assert np.array_equal(np.where(top > 0, bottom, 0), top)
-    print(f"GN19 {name}: {len(cases)} grids, no column holds two nucleus or cell IDs; columns within 1e-9 µm of a "
-          f"power face {faces} (expected 0)")
-    assert faces == 0
+    check_projection(name, config, generated)
 
 
 # ---------------------------------------------------------------- GN8 to GN12: types, genes and molecules
@@ -437,7 +412,7 @@ def test_gn9_counts_and_marker_answers():
         assert (row.cells_a, row.cells_b, row.both, row.either) == (values["cells_a"], values["cells_b"],
                                                                      values["both"], values["either"])
         if row.either:
-            assert row.mecr == values["mecr"]
+            assert abs(row.mecr - values["mecr"]) <= 1e-9  # the same ratio of the same integers; "exact" as 1e-9
         else:
             assert pd.isna(row.mecr)
         if row.relation == "exclusive":
@@ -488,7 +463,8 @@ def test_gn11_molecules_per_cell_and_the_count_guard():
     with pytest.raises(ValueError, match="max_count"):
         generate_context_scene(book, config=guard)
     _, zero, flat = scene("spread-zero")
-    assert (flat.cell_context.molecule_mean == 20.0).all()  # spread 0 is M1: every mean is the median
+    # Spread 0 is M1: every mean is the median ("exact" for a non-integer: within 1e-9).
+    assert np.all(np.abs(flat.cell_context.molecule_mean.to_numpy() - 20.0) <= 1e-9)
 
 
 def test_gn11_molecules_reach_the_formed_generator_unchanged():

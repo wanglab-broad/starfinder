@@ -161,7 +161,7 @@ def stain_config(name):
       ``stains-off`` (no morphology round): copies of ``stains-reach-whole``;
     * ``uint8``: ctx_uint8, noise on and OutputScaleConfig(uint8, 50) on every stain but ``membrane-thin`` (kept in
       the float32 template dtype); ``uint8-float``: its float64 rendering with the same streams; ``uint8-empty``: no
-      cell;
+      cell, and ``uint8-empty-float`` its float64 rendering;
     * ``plane-<whole|drawn>``, ``plane-uint8``, ``plane-uint8-float``: ctx_plane, the same at Z=1 (T_z = 0);
     * ``mr1``: the culture presets' layout (DAPI the one reference stain) with MT1's drawn translation.
     """
@@ -202,6 +202,8 @@ def stain_config(name):
         return replace(base, stains=stains(noise=NOISE))
     if name == "uint8-empty":
         return replace(base, sample=replace(config, stain=None, cells=empty), stains=uint8())
+    if name == "uint8-empty-float":
+        return replace(base, sample=replace(base.sample, cells=empty), stains=stains(noise=NOISE))
     if name == "mr1":
         return replace(base, stains=stains(mr1=True), morphology=morphology("drawn"))
     raise KeyError(name)

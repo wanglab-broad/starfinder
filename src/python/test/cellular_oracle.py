@@ -201,6 +201,23 @@ class Oracle:
         nucleus[hit & (rho <= 1)] = owner[hit & (rho <= 1)]
         return cell.reshape(shape), nucleus.reshape(shape), boundary.reshape(shape)
 
+    def face_distance(self, points):
+        """At (..., 3) positions, the distance (µm) to the nearest power face of the power-nearest site:
+        min over j ≠ best of (pow_j − pow_best) / (2 ‖c_j − c_best‖); inf with fewer than two sites."""
+        shape = points.shape[:-1]
+        p = points.reshape(-1, 3)
+        if len(self.centres) < 2:
+            return np.full(shape, np.inf)
+        diff = p[:, None, :] - self.centres[None, :, :]
+        power = np.einsum("pjk,pjk->pj", diff, diff) - self.radii ** 2
+        best = np.argmin(power, axis=1)
+        rows = np.arange(len(p))
+        gap = np.linalg.norm(self.centres[None, :, :] - self.centres[best][:, None, :], axis=-1)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            face = (power - power[rows, best][:, None]) / (2 * gap)
+        face[rows, best] = np.inf
+        return face.min(axis=1).reshape(shape)
+
     def label_power(self, point, sites=None):
         """Power distances of one point with the arithmetic K1 names (the label function's): the squares of the Z,
         Y and X differences summed in that order, less R²."""

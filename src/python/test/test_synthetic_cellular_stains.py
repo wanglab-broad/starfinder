@@ -129,8 +129,8 @@ def test_gn13_stains_against_the_oracle_and_the_evaluator(name):
             evaluated = _context_stain(generated, stain.name, points)
             assert not np.any((np.abs(image - expected_background - evaluated) > 1e-9 * peak) & ~skip)
             if not len(oracle.centres):
-                # No cell: every stain is its background, value for value.
-                assert np.array_equal(image, np.broadcast_to(expected_background, image.shape)), stain.name
+                # No cell: every stain is its background, within the row's 1e-9 of the image maximum.
+                assert np.all(np.abs(image - expected_background) <= 1e-9 * peak), stain.name
                 continue
             p = points.reshape(-1, 3)
             power = stain_oracle.powers(p)
@@ -142,7 +142,8 @@ def test_gn13_stains_against_the_oracle_and_the_evaluator(name):
             field = stain_oracle.field(p).reshape(image.shape)
             if stain.source == "nucleus":
                 counted["beyond every nucleus cut-off"] += int(dark.sum())
-                assert np.array_equal(image[dark], np.broadcast_to(expected_background, image.shape)[dark])
+                beyond = np.abs(image - np.broadcast_to(expected_background, image.shape))[dark]
+                assert np.all(beyond <= 1e-9 * peak), (name, fov, stain.name)
                 for n, (argument, _, _) in terms.items():
                     texture = stain_oracle.texture(n, p)[0].reshape(image.shape)
                     plateau = (nucleus == n) & (argument.reshape(image.shape) <= -4 * stain.edge_width) & ~skip
@@ -557,7 +558,7 @@ def test_gn16_the_field_between_fovs_and_without_centres():
     worst = 0.0
     for stain in {s.name: s for s in config.stains}.values():
         rows = generated.unevenness[generated.unevenness.stain == stain.name]
-        assert len(rows) and (rows.a == FIELD.amplitude).all()
+        assert len(rows) and np.all(np.abs(rows.a.to_numpy() - FIELD.amplitude) <= 1e-9)
         np.testing.assert_allclose(rows.length, 18.0, rtol=0, atol=1e-12)  # one FOV width, 36 × 0.5 µm
         so = StainOracle(oracle, generated, stain.name)
         true_1, spacing, shape = frame(generated, "FOV_001")
@@ -582,21 +583,23 @@ def test_gn16_the_field_between_fovs_and_without_centres():
 
 # ---------------------------------------------------------------- GN17: 8-bit output
 
-@pytest.mark.parametrize("pair", [("uint8", "uint8-float"), ("plane-uint8", "plane-uint8-float")],
-                         ids=["tiny", "plane"])
-def test_gn17_8bit_output_and_the_dtypes(pair, tmp_path):
-    _, config, generated = scene(pair[0])
-    _, reference_config, reference = scene(pair[1])
+def check_8bit(generated, config, reference, reference_config):
+    """Identity 10 on one scene: each stain's k against g / m_A of its configuration (within 1e-9 relative; m_A
+    = exp(μ) of the law, compared within 1e-12 relative), and each 8-bit image exactly equal to clip(rint(J · k), 0,
+    255) of its float64 rendering J with the same streams; a stain without an output scale is the float32 cast of J.
+    Returns (voxels clipped at 255, voxels compared)."""
     table = generated.stain_channels
+    assert len(table) == len(config.stains)
     for stain, row in zip(config.stains, table.itertuples()):
         assert (row.stain, row.round) == (stain.name, stain.round)
         median = math.exp(stain.brightness.parameters[0])
-        assert row.m_A == pytest.approx(median, rel=1e-12)
+        assert row.m_A == pytest.approx(median, rel=1e-12, abs=0)
         if stain.output is None:
             assert row.dtype == "float32" and row.scale == 1.0
         else:
-            assert row.dtype == "uint8" and abs(row.scale - stain.output.plateau / median) <= 1e-9 * row.scale
-    clipped = high = 0
+            # k exists and equals g / m_A, also for a FOV or a scene without a nucleus (B1).
+            assert row.dtype == "uint8" and row.scale == pytest.approx(stain.output.plateau / median, rel=1e-9, abs=0)
+    clipped = voxels = 0
     for fov in generated.sample.positions.fov_id:
         rendered = {(s.name, s.round): j for _, s, j, _, _ in channels(reference, reference_config, fov)}
         for _, stain, image, _, _ in channels(generated, config, fov):
@@ -610,22 +613,40 @@ def test_gn17_8bit_output_and_the_dtypes(pair, tmp_path):
             expected = np.clip(np.rint(j * scale), 0, 255).astype(np.uint8)
             assert image.dtype == np.uint8 and np.array_equal(image, expected), (fov, stain.name)
             clipped += int((j * scale > 255).sum())
-            high += image.size
-    _, empty_config, empty = scene("uint8-empty")
-    assert empty.sample.nuclei.empty and empty.stain_objects.empty
-    for stain, row in zip(empty_config.stains, empty.stain_channels.itertuples()):
-        if stain.output is not None:
-            assert row.scale == pytest.approx(stain.output.plateau / 1000.0, rel=1e-9)
-    root = save_context_scene(generated, tmp_path / "saved")
+            voxels += image.size
+    return clipped, voxels
+
+
+def check_round_trip(generated, root):
+    """The saved and reloaded stain images (float32 and uint8) and morphology images: dtype and values exact."""
     for fov in generated.sample.positions.fov_id:
         for stain_name, image in generated.stains[fov].items():
             loaded = load_volume_zyxc(root / "fovs" / fov / "stains" / f"{stain_name}.ome.tif")
             assert loaded.image.dtype == image.dtype and np.array_equal(loaded.image[..., 0], image)
             assert loaded.metadata == generated.sample.fov_metadata[fov]
         loaded = load_volume_zyxc(root / "fovs" / fov / "morphology.ome.tif")
-        assert loaded.image.dtype == np.uint8 and np.array_equal(loaded.image, generated.morphology[fov])
-    print(f"GN17 {pair[0]}: the 8-bit images equal clip(rint(J · k), 0, 255) of the float64 rendering; voxels "
-          f"clipped at 255: {clipped} of {high}; float32 and uint8 images round trip unchanged")
+        assert loaded.image.dtype == generated.morphology[fov].dtype
+        assert np.array_equal(loaded.image, generated.morphology[fov])
+
+
+@pytest.mark.parametrize("pair", [("uint8", "uint8-float"), ("plane-uint8", "plane-uint8-float")],
+                         ids=["tiny", "plane"])
+def test_gn17_8bit_output_and_the_dtypes(pair, tmp_path):
+    _, config, generated = scene(pair[0])
+    _, reference_config, reference = scene(pair[1])
+    clipped, voxels = check_8bit(generated, config, reference, reference_config)
+    check_round_trip(generated, save_context_scene(generated, tmp_path / "saved"))
+    report = f"GN17 {pair[0]}: voxels clipped at 255 {clipped} of {voxels}"
+    if pair[0] == "uint8":
+        # ctx_uint8's no-cell copy: the same identity against its own float64 rendering, and its round trip.
+        _, empty_config, empty = scene("uint8-empty")
+        _, empty_reference_config, empty_reference = scene("uint8-empty-float")
+        assert empty.sample.nuclei.empty and empty.stain_objects.empty
+        empty_clipped, empty_voxels = check_8bit(empty, empty_config, empty_reference, empty_reference_config)
+        check_round_trip(empty, save_context_scene(empty, tmp_path / "empty"))
+        report += f"; the no-cell copy: {empty_voxels} 8-bit voxels, {empty_clipped} clipped"
+    print(report + "; the 8-bit images equal clip(rint(J · k), 0, 255) of the float64 rendering; float32 and uint8 "
+          "images round trip unchanged")
 
 
 # ---------------------------------------------------------------- GN18: the morphology round
@@ -641,10 +662,10 @@ def test_gn18_truth_translation(name):
     vox = truth[["translation_z_vox", "translation_y_vox", "translation_x_vox"]].to_numpy()
     um = truth[["translation_z_um", "translation_y_um", "translation_x_um"]].to_numpy()
     pull = truth[["pull_displacement_z_vox", "pull_displacement_y_vox", "pull_displacement_x_vox"]].to_numpy()
-    assert np.all(np.abs(um / spacing - vox) <= 1e-9) and np.array_equal(pull, -vox)
+    assert np.all(np.abs(um / spacing - vox) <= 1e-9) and np.all(np.abs(pull + vox) <= 1e-9)
     assert np.all(np.abs(um) <= bound * spacing)
     if config.morphology.translation == "supplied":
-        assert np.array_equal(vox, np.tile(WHOLE, (len(vox), 1)))
+        assert np.all(np.abs(vox - np.tile(WHOLE, (len(vox), 1))) <= 1e-9)
     else:
         assert np.any(np.abs(vox - np.round(vox)) > 1e-3)  # MT1 draws a fractional translation
     if config.sample.acquisition.fov_shape_zyx[0] == 1:
@@ -691,12 +712,17 @@ def test_gn18_domain_grown_covered_region_unchanged_and_the_aligned_crop():
     spacing = np.array(config.sample.acquisition.spacing_zyx)
     bound = np.array(config.morphology.translation_max_zyx)
     a, b = grown.sample.record["domain"], plain.sample.record["domain"]
-    assert np.allclose(np.array(a["omega"]["lo_zyx"]), np.array(b["omega"]["lo_zyx"]) - bound * spacing, atol=1e-9)
-    assert np.allclose(np.array(a["omega"]["hi_zyx"]), np.array(b["omega"]["hi_zyx"]) + bound * spacing, atol=1e-9)
-    assert a["covered"] == b["covered"]
+    assert np.allclose(np.array(a["omega"]["lo_zyx"]), np.array(b["omega"]["lo_zyx"]) - bound * spacing,
+                       rtol=0, atol=1e-9)
+    assert np.allclose(np.array(a["omega"]["hi_zyx"]), np.array(b["omega"]["hi_zyx"]) + bound * spacing,
+                       rtol=0, atol=1e-9)
+    assert sorted(a["covered"]) == sorted(b["covered"])
+    for key in a["covered"]:
+        assert np.allclose(np.array(a["covered"][key], dtype=float), np.array(b["covered"][key], dtype=float),
+                           rtol=0, atol=1e-9), key  # K unchanged
     origin = np.array(grown.sample.record["sample_grid"]["origin_zyx"])
     jitter = np.array(config.sample.acquisition.jitter_max_zyx)
-    assert np.allclose(origin, -(jitter + bound) * spacing, atol=1e-12)
+    assert np.allclose(origin, -(jitter + bound) * spacing, rtol=0, atol=1e-12)
     # The aligned crop with T: δ_f = nominal_f ⊘ s + j_f + J + T, whole for FOV_001 and FOV_002 of the pair.
     _, pair_config, pair = scene("stains-pair")
     oracle = Oracle(pair)
@@ -705,8 +731,8 @@ def test_gn18_domain_grown_covered_region_unchanged_and_the_aligned_crop():
         delta = np.array(pair.sample.record["fovs"][fov]["delta_zyx"])
         row = pair.sample.placement.set_index("fov_id").loc[fov]
         nominal = np.array([row.nominal_z, row.nominal_y, row.nominal_x]) / spacing
-        assert np.allclose(delta, nominal + np.array(PAIR[fov]) + jitter + bound, atol=1e-9)
-        assert np.allclose(delta, expected, atol=1e-9)
+        assert np.allclose(delta, nominal + np.array(PAIR[fov]) + jitter + bound, rtol=0, atol=1e-9)
+        assert np.allclose(delta, expected, rtol=0, atol=1e-9)
         z, y, x = expected
         points = frame(pair, fov)[0] + np.moveaxis(np.indices((5, 36, 36), dtype=float), 0, -1) * spacing
         near = oracle.labels(points)[2]

@@ -24,7 +24,7 @@ from starfinder.report._measurements import mecr
 from starfinder.synthetic import BackgroundConfig, NoiseConfig, context_scene_preset, generate_context_scene
 from starfinder.synthetic._context import _context_labels
 
-from .cellular_checks import check_lobes
+from .cellular_checks import check_lobes, check_projection
 from .cellular_oracle import Oracle, check_sample_identities, grids
 from .cellular_scenes import RULES, scene
 from .formed_oracle import kernel_radius
@@ -235,7 +235,7 @@ def test_gn9_counts_and_marker_answers_on_the_routine_presets(name):
         assert (row.cells_a, row.cells_b, row.both, row.either) == (values["cells_a"], values["cells_b"],
                                                                      values["both"], values["either"])
         if row.either:
-            assert row.mecr == values["mecr"]
+            assert abs(row.mecr - values["mecr"]) <= 1e-9  # the same ratio of the same integers; "exact" as 1e-9
         else:
             assert pd.isna(row.mecr)
         if row.relation == "exclusive":
@@ -391,31 +391,4 @@ def test_gn15_bright_regions_on_the_routine_presets(name):
 @pytest.mark.parametrize("name", MONOLAYER)
 def test_gn19_projection_truth_on_the_routine_presets(name):
     _, config, generated = preset(name)
-    sample = generated.sample
-    z_mid = generated.record["effective_config"]["z_mid"]
-    acquisition = config.sample.acquisition
-    assert abs(z_mid - (acquisition.fov_shape_zyx[0] - 1) / 2 * acquisition.spacing_zyx[0]) <= 1e-9
-    assert (sample.nuclei.centre_z == z_mid).all() and (sample.cells.anchor_z == z_mid).all()
-    assert (generated.lobes.offset_z == 0).all()
-    oracle = Oracle(generated)
-    grid = sample.record["sample_grid"]
-    shifted = (np.array(grid["origin_zyx"]) + np.array([0.3, 0.37, 0.41]) * np.array(grid["spacing_zyx"])
-               + np.moveaxis(np.indices(tuple(grid["shape_zyx"]), dtype=float), 0, -1) * np.array(grid["spacing_zyx"]))
-    cases = list(grids(generated))
-    cell, nucleus = _context_labels(generated, shifted)
-    cases.append(("fractional", shifted, {"cell": cell, "nucleus": nucleus}))
-    faces = 0
-    for grid_name, points, labels in cases:
-        near = oracle.labels(points)[2].any(axis=0)
-        for target in ("nucleus", "cell"):
-            volume = labels[target].astype(np.int64)
-            top = volume.max(axis=0)
-            bottom = np.where(volume > 0, volume, np.iinfo(np.int64).max).min(axis=0)
-            mixed = (top > 0) & (bottom != top)
-            assert not np.any(mixed & ~near), (name, grid_name, target)
-            faces += int((mixed & near).sum())
-            # P(y, x) is the Z maximum of the grid's labels: the one ID of the column, or 0.
-            assert np.array_equal(np.where(top > 0, bottom, 0), top)
-    print(f"GN19 {name}: {len(cases)} grids, no column holds two nucleus or cell IDs; columns within 1e-9 µm of a "
-          f"power face {faces} (expected 0)")
-    assert faces == 0
+    check_projection(name, config, generated)

@@ -273,7 +273,7 @@ def test_gn22_dataset_read_and_morphology_registered(name, tmp_path):
             # DAPI at p, d the pull displacement of morphology_truth (here (0, −2, 3) voxels).
             moving = load_volume(root / "organelle" / fov / "ch00.tif").image.reshape(stains.shape[:3])
             fixed = load_volume(root / "round1" / fov / "ch04.tif").image.reshape(stains.shape[:3])
-            assert np.array_equal(truth, (0.0, -2.0, 3.0))
+            assert np.all(np.abs(truth - np.array((0.0, -2.0, 3.0))) <= 1e-9)  # truth columns within 1e-9 voxels
             ny, nx = fixed.shape[1:]
             peak = float(np.abs(fixed).max())
             assert np.all(np.abs(moving[:, :ny - 2, 3:] - fixed[:, 2:, :nx - 3]) <= 1e-10 * peak)

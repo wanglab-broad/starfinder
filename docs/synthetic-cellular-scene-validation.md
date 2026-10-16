@@ -238,10 +238,20 @@ tests. The helpers are:
 The routine presets are generated once per session in `test_synthetic_cellular_routine.py`,
 and the `slow` presets once per module in `test_synthetic_cellular_presets.py`.
 
-Every tolerance is the one of the table "Generator checks", unchanged. Where a row says
-"Exact" for a number that is not an integer, its tests compare it within an absolute 1e-9
-(the project's default float tolerance), or within the bound the row itself states. Counts,
-IDs, labels, strings, hashes and images that the row compares exactly are compared exactly.
+Every tolerance is the one of the table "Generator checks", unchanged, and every float
+comparison states its bound: `rtol=0` with the row's absolute bound, or the row's relative
+bound alone, never a library default. Where a row says "Exact" for a number that is not an
+integer and that the test computes itself, its tests compare it within an absolute 1e-9 (the
+project's default float tolerance), or within the bound the row itself states. Counts, IDs,
+labels, strings, hashes and dtypes are compared exactly. So are three kinds of float, each
+the same stored number on both sides:
+
+* a value with its own copy, as in GN1's arrays and tables and GN11's formed inputs;
+* a value with its saved and reloaded file (GN17, GN22);
+* a value with the same draw in a second scene (GN21).
+
+The 8-bit images of GN17 against the row's expression, the zeros a row states, and the
+configuration values of GN2 against the page's literals are also compared exactly.
 No test needs an extra beyond `dev`, `local-registration` and `checkpoint`, so the CI
 environment runs them all; GN24 needs `/usr/bin/time`.
 
@@ -290,7 +300,7 @@ runs the others.
 | GN6 | `test_synthetic_cellular_scene.py`, `test_gn6_no_overlap_and_a_nucleus_inside_its_own_cell`; `test_synthetic_cellular_routine.py`, `test_gn6_no_overlap_on_the_routine_presets` | `ctx_shapes`, `ctx_monolayer`, `ctx_plane`, `context_routine` | routine | decisions within 1e-9 µm counted |
 | GN7 | `test_synthetic_cellular_scene.py`, `test_gn7_k1_for_every_pair_and_the_record`, `test_gn7_crowded_stops_and_records_above_a_low_floor`, `test_gn7_crowded_at_the_page_floor_reaches_it`; `test_synthetic_cellular_presets.py`, `test_gn7_routine_preset_reaches_its_floor`, `test_gn7_slow_preset_reaches_its_floor` | `ctx_shapes`, `ctx_monolayer`, `ctx_crowded`, `context_routine`, `context_slow` | routine and slow | K1 within 1e-9 µm; sizes within 1e-9 |
 | GN8 | `test_synthetic_cellular_scene.py`, `test_gn8_types_and_genes`; `test_synthetic_cellular_routine.py`, `test_gn8_types_and_genes_on_the_routine_presets` | `ctx_types`, `context_routine` | routine | row sums within 1e-9; anchors within 1e-9 µm counted |
-| GN9 | `test_synthetic_cellular_scene.py`, `test_gn9_counts_and_marker_answers`; `test_synthetic_cellular_routine.py`, `test_gn9_counts_and_marker_answers_on_the_routine_presets` | `ctx_types`, `context_routine` | routine | `mecr` as the same ratio, exact |
+| GN9 | `test_synthetic_cellular_scene.py`, `test_gn9_counts_and_marker_answers`; `test_synthetic_cellular_routine.py`, `test_gn9_counts_and_marker_answers_on_the_routine_presets` | `ctx_types`, `context_routine` | routine | `mecr` within 1e-9; counts exact |
 | GN10 | `test_synthetic_cellular_scene.py`, `test_gn10_realized_gene_abundance_of_each_type`; `test_synthetic_cellular_routine.py`, `test_gn10_realized_gene_abundance_on_the_routine_presets` | `ctx_types`, `context_routine` | routine | 4 SE |
 | GN11 | `test_synthetic_cellular_scene.py`, `test_gn11_molecules_per_cell_and_the_count_guard`, `test_gn11_molecules_reach_the_formed_generator_unchanged`, `test_gn11_rendering_identity_of_the_reference_round`; `test_synthetic_cellular_routine.py`, `test_gn11_molecules_per_cell_and_the_count_guard_on_the_routine_presets`, `test_gn11_rendering_identity_on_the_routine_presets` | `ctx_types`, `context_routine` | routine and slow | 4 SE; the rendering within the oracle tolerance of {doc}`synthetic-sample-scene` |
 | GN12 | `test_synthetic_cellular_scene.py`, `test_gn12_nuclear_fraction_and_compartments`; `test_synthetic_cellular_routine.py`, `test_gn12_nuclear_fraction_and_compartments_on_the_routine_presets` | `ctx_types`, `context_routine` | routine | 4 SE; positions within 1e-9 µm counted |
