@@ -1,7 +1,6 @@
 # Validation design of the real-appearance cellular scene: target definitions, generator checks and chain checks
 
-Status: Proposed (W-514, 2026-10-16; for review at the human gate W-515 with
-{doc}`synthetic-real-appearance`)
+Status: Accepted (W-515, 2026-10-16, at 71ef8a1)
 
 This page is the validation design of the appearance model of
 {doc}`synthetic-real-appearance` (W-513): nuclei and culture cells sampled from real

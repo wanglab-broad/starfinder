@@ -1,6 +1,6 @@
 # Synthetic cellular scene with real appearance: nuclei and culture cells sampled from real images
 
-Status: Proposed (W-513, 2026-10-16; for review at the human gate W-515)
+Status: Accepted (W-515, 2026-10-16, at 71ef8a1)
 
 This page specifies an appearance model for the cellular scene of
 {doc}`synthetic-cellular-scene` (Accepted at W-396, implemented by W-483 to W-486). In that
