@@ -18,9 +18,9 @@ from scipy import ndimage as ndi
 import tifffile
 
 from starfinder.synthetic import (AppearanceSceneConfig, BankReference, CellTypeConfig, CompositionConfig,
-                                  ContextSceneConfig, MorphologyRoundConfig, OutputScaleConfig, ScalarDistribution,
-                                  StainChannelConfig, TerritoryConfig, closed_form_bank, generate_appearance_scene,
-                                  save_context_scene)
+                                  ContextSceneConfig, MorphologyRoundConfig, NoiseConfig, OutputScaleConfig,
+                                  ScalarDistribution, StainChannelConfig, TerritoryConfig, closed_form_bank,
+                                  generate_appearance_scene, save_context_scene)
 from starfinder.synthetic._appearance_layout import AugmentationConfig, LayoutConfig, _place_appearance
 
 from .cellular_scenes import float64, plane, tiny
@@ -422,8 +422,9 @@ def appearance_config(name):
     (app_tiny_uint8), ``<copy>-plane`` (app_plane), ``culture-morph-drawn``, ``culture-morph-supplied`` and
     ``tissue2d-morph-supplied`` (app_morph), ``dense3d-coarse`` (app_coarse), ``<copy>-bg1`` (app_bg1),
     ``<copy>-dn1``, ``<copy>-dn1-short-0.1`` and ``<copy>-dn1-short-0.99`` (app_dn1), ``<copy>-types`` (GA17),
-    ``<copy>-size-scale`` (app_streams, with ``ctx_types``), the same with ``-light`` (20 molecules per cell) and
-    ``culture-no-flamingo`` (app_streams' dropped stain),
+    ``<copy>-size-scale`` (app_streams, with ``ctx_types``), the same with ``-light`` (20 molecules per cell),
+    ``<copy>-types-light-spread0`` (per_cell_spread 0, GN11's M1), a ``-quiet`` suffix (no FOV noise, GN11's rendering
+    identity) and ``culture-no-flamingo`` (app_streams' dropped stain),
     with ``<copy>`` one of ``dense3d``, ``tissue2d``, ``culture``."""
     from .cellular_scenes import MOLECULES, TYPES
     copy = name.split("-")[0]
@@ -435,10 +436,15 @@ def appearance_config(name):
     elif name == "culture-plane":
         morphology = morphology_round("drawn", flat=True)
     types = molecules = None
-    if rest in ("-types", "-size-scale", "-types-light", "-size-scale-light"):
+    quiet = rest.endswith("-quiet")
+    if quiet:
+        rest = rest[:-len("-quiet")]
+    if rest in ("-types", "-size-scale", "-types-light", "-size-scale-light", "-types-light-spread0"):
         types, molecules = TYPES, MOLECULES
-        if rest.endswith("-light"):
+        if "-light" in rest:
             molecules = replace(MOLECULES, per_cell_median=LIGHT_MOLECULES)
+        if rest.endswith("-spread0"):
+            molecules = replace(molecules, per_cell_spread=0.0)
         if rest.startswith("-size-scale"):
             types = replace(TYPES, size_scale=(1.0, 1.5, 1.0, 1.0))
     if copy == "tissue2d" and morphology is not None:
@@ -449,6 +455,9 @@ def appearance_config(name):
         context = app_context(copy, flat=flat, morphology=morphology, types=types)
     if molecules is not None:
         context = replace(context, molecules=molecules)
+    if quiet:
+        # GA17's rendering identity: the amplicon images without the FOV noise (GN11's quiet copy).
+        context = replace(context, sample=replace(context.sample, fov=replace(context.sample.fov, noise=NoiseConfig())))
     if rest == "-uint8":
         context = replace(context, stains=_uint8(context.stains))
     if name == "culture-no-flamingo":
@@ -482,3 +491,27 @@ def app_scene(name):
         return book, config, generate_appearance_scene(book, config=config)
     except ValueError as error:
         return book, config, error
+
+
+def bg2_settings(preset, name):
+    """The stain background of a closed-form bank's preset as the oracle's input for BG2 (the fixture's own
+    configuration): the preset's sample grid origin −(J + T) ⊙ s and spacing, its BackgroundConfig's baseline, tissue
+    weight and regions (index units), and its output scale (the output plateau over the median of the brightness
+    law)."""
+    from starfinder.synthetic import context_scene_preset
+    _, config = context_scene_preset(preset)
+    stain = next(s for s in config.stains if s.name == name)
+    acquisition = config.sample.acquisition
+    spacing = np.asarray(acquisition.spacing_zyx, dtype=np.float64)
+    grow = np.zeros(3) if config.morphology is None else np.asarray(config.morphology.translation_max_zyx)
+    background = stain.background
+    regions = (list(zip(background.region_centers, background.region_sigma_zyx, background.region_heights))
+               if background.regions_enabled else [])
+    brightness = stain.brightness
+    median = math.exp(brightness.parameters[0]) if brightness.mode == "lognormal" else float(brightness.parameters[0])
+    return dict(origin=(-(np.asarray(acquisition.jitter_max_zyx, dtype=np.float64) + grow) * spacing).tolist(),
+                spacing=spacing.tolist(),
+                baseline=float(np.asarray(background.baseline)[0, 0]) if background.baseline_enabled else 0.0,
+                weight=float(np.asarray(background.tissue_weights)[0, 0]) if background.regions_enabled else 0.0,
+                regions=[(tuple(c), tuple(w), float(h)) for c, w, h in regions],
+                scale=float(stain.output.plateau) / median)

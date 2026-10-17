@@ -13,6 +13,7 @@ a closed-form bank or is built in the session from hand-made arrays; nothing is 
 image. A test whose run alone measures 5 s or more on one CPU (the dense 3D closed-form bank alone takes 3.5 s to
 build) is ``slow``; each check keeps a routine copy, except the dropped stain of GA20, which needs two culture scenes.
 """
+from dataclasses import replace
 import hashlib
 import json
 import math
@@ -24,8 +25,8 @@ from scipy import ndimage as ndi
 
 from starfinder.report._measurements import mecr
 from starfinder.segmentation import ReferenceGrid, import_labels
-from starfinder.synthetic import (BankReference, build_appearance_bank, load_appearance_bank,
-                                  save_appearance_scene)
+from starfinder.synthetic import (BankReference, build_appearance_bank, generate_appearance_scene,
+                                  load_appearance_bank, save_appearance_scene)
 from starfinder.synthetic._appearance import _Canvas, _Composer, _point_evaluator
 from starfinder.synthetic._appearance_layout import _labels_from_table
 from starfinder.synthetic._context import _CONTEXT_COMPONENTS
@@ -33,8 +34,9 @@ from starfinder.synthetic._formed import _COMPONENTS as _FORMED_COMPONENTS
 from starfinder.synthetic._sample import _SAMPLE_COMPONENTS
 
 from . import cellular_appearance_oracle as oracle
-from .cellular_appearance_scenes import (APP_BANKS, MORPH_WHOLE, app_scene, case_placements, cf_sources,
-                                         spheres_case, write_case)
+from .cellular_appearance_scenes import (APP_BANKS, MORPH_WHOLE, app_scene, bg2_settings, case_placements,
+                                         cf_sources, spheres_case, write_case)
+from .formed_oracle import kernel_radius
 
 pytestmark = [pytest.mark.synthetic, pytest.mark.validation]
 
@@ -83,7 +85,8 @@ def background_of(scene, bank, stain_name, points):
         _, omega, _, _ = frame_of(scene)
         table = scene.background_patches[scene.background_patches.stain == stain_name]
         return oracle.patch_background(points, bank, table, oracle.patch_lattice(bank, omega), c)[0]
-    return oracle.closed_form_background(points, bank.record["preset"], stain_name, scene.record["plateau"])
+    return oracle.closed_form_background(points, bg2_settings(bank.record["preset"], stain_name),
+                                         scene.record["plateau"])
 
 
 def growth_of(scene, bank):
@@ -435,11 +438,14 @@ GA17 = ["tissue2d-types-light", "culture-types-light", pytest.param("dense3d-typ
 
 @pytest.mark.parametrize("name", GA17)
 def test_ga17_types_genes_and_molecules(name):
-    """GN8 to GN12 with C and N of the appearance: types by the region of each cell's anchor, the abundance table, each
-    cell molecule of a gene of its cell's type and no marker among the ambient ones (GN8); cell_gene_counts and the
-    marker answers against a recount (GN9); the realized gene abundance per type (GN10), Σ n_k against Σ μ_k (GN11) and
-    the nuclear fraction (GN12) within 4 SE; every cell molecule in the cell that placed it and its compartment the
-    oracle's N and C at its position."""
+    """GN8 to GN12 with C and N of the appearance: one cell_context row per cell, the regions, each cell's region the
+    Voronoi region of its anchor (anchors within 1e-9 µm of a region boundary reported, expected 0), each abundance row
+    summing to 1 with G1's configured values and roles, each cell molecule of a gene of its cell's type and no marker
+    among the ambient ones (GN8); cell_gene_counts against a recount, its sums against cells.csv n_molecules, and the
+    marker answers against MECR recomputed (values within 1e-9, null when either is 0, 0 for the exclusive pair) (GN9);
+    the realized gene abundance per type (GN10); Σ n_k against Σ μ_k, one mean per cell, and the molecules handed to
+    the formed generator unchanged (GN11); the nuclear fraction within 4 SE, every cell molecule in the cell that placed
+    it and its compartment the oracle's N and C at its position (GN12)."""
     book, config, scene, bank = generated(name)
     ctx = scene.context
     sample, context = ctx.sample, ctx.cell_context
@@ -447,14 +453,31 @@ def test_ga17_types_genes_and_molecules(name):
     assert context.cell_id.tolist() == sample.cells.cell_id.tolist() == scene.placements.object_id.tolist()
     assert (sample.cells.kind == "ordinary").all() and (sample.cells.n_nuclei == 1).all()
     regions = ctx.regions
+    assert regions.region_id.tolist() == list(range(1, types.regions + 1))
     centres = regions[["centre_z", "centre_y", "centre_x"]].to_numpy()
     anchors = sample.cells[["anchor_z", "anchor_y", "anchor_x"]].to_numpy()
     squared = ((anchors[:, None, :] - centres[None, :, :]) ** 2).sum(axis=-1)
     region = np.argmin(squared, axis=1)
     np.testing.assert_array_equal(context.region.astype(int).to_numpy(), region + 1)
+    # Anchors within 1e-9 µm of a region boundary (the Voronoi decision's rounding), as GN8 reports them.
+    order = np.sort(squared, axis=1)
+    gap = np.linalg.norm(centres[region] - centres[np.argsort(squared, axis=1)[:, 1]], axis=1)
+    near_boundary = int(((order[:, 1] - order[:, 0]) / (2 * gap) <= 1e-9).sum())
     assert set(context.type) <= set(types.types)
     table = ctx.type_abundances
     genes = list(book.genes)
+    markers = 2 * len(types.types)
+    for t, type_name in enumerate(types.types):
+        row = table[table.type == type_name]
+        expected_row = [0.15 if g in (2 * t, 2 * t + 1) else 0.0875 if g >= markers else 0.0 for g in range(len(genes))]
+        assert row.gene_id.tolist() == genes and abs(row.weight.sum() - 1) <= 1e-9
+        assert np.all(np.abs(row.weight.to_numpy() - expected_row) <= 1e-9)
+        assert row.role.tolist() == ["marker"] * markers + ["shared"] * (len(genes) - markers)
+    ambient = table[table.type == "ambient"]
+    shared = 1.0 / (len(genes) - markers)
+    assert ambient.gene_id.tolist() == genes and abs(ambient.weight.sum() - 1) <= 1e-9
+    assert np.all(np.abs(ambient.weight.to_numpy() - np.array([0.0] * markers + [shared] * (len(genes) - markers)))
+                  <= 1e-9)
     weight = {(r.type, r.gene_id): r.weight for r in table.itertuples()}
     type_of = dict(zip(context.cell_id.astype(int), context.type))
     molecules = sample.molecules
@@ -471,15 +494,26 @@ def test_ga17_types_genes_and_molecules(name):
     counts_table = ctx.cell_gene_counts
     assert {(int(r.cell_id), r.gene_id): (int(r.count), int(r.nuclear_count))
             for r in counts_table.itertuples()} == expected
+    assert len(counts_table) == len(expected) and (counts_table["count"] > 0).all()
+    sums = counts_table.groupby("cell_id")["count"].sum()
+    assert sample.cells.n_molecules.tolist() == [int(sums.get(k, 0)) for k in sample.cells.cell_id]
     counted = sample.cells.cell_id[sample.cells.in_sample].astype(int).tolist()
     counts = {(int(r.cell_id), r.gene_id): int(r.count) for r in counts_table.itertuples()}
-    for row in ctx.marker_pairs.itertuples():
+    pairs = ctx.marker_pairs
+    assert [tuple(p) for p in pairs[["gene_a", "gene_b", "relation"]].to_numpy()] == list(types.marker_pairs)
+    answers = []
+    for row in pairs.itertuples():
         values = mecr([counts.get((c, row.gene_a), 0) for c in counted], [counts.get((c, row.gene_b), 0) for c in
                                                                           counted], 1)
         assert (row.cells_a, row.cells_b, row.both, row.either) == (values["cells_a"], values["cells_b"],
                                                                      values["both"], values["either"])
+        if row.either:
+            assert abs(row.mecr - values["mecr"]) <= 1e-9  # the same ratio of the same integers; "exact" as 1e-9
+        else:
+            assert pd.isna(row.mecr)
         if row.relation == "exclusive":
-            assert row.both == 0
+            assert row.both == 0 and (row.either == 0 or row.mecr == 0)
+        answers.append(f"{row.gene_a}/{row.gene_b} {row.relation} either {row.either} mecr {row.mecr}")
     # GN10: the realized gene abundance of each type within 4 SE.
     kinds = cell_molecules.amplicon_id.map(lambda a: type_of[placing_cell(a)])
     compared = 0
@@ -501,6 +535,16 @@ def test_ga17_types_genes_and_molecules(name):
     total, means = int(placed.sum()), float(context.molecule_mean.sum())
     assert abs(total - means) <= 4 * math.sqrt(means)
     assert context.molecule_mean.nunique() == len(context)
+    # GN11: the molecules reach the formed generator unchanged (positions, genes, properties per FOV).
+    properties = molecules.set_index("amplicon_id")[["A", "sz", "sl", "e", "theta"]]
+    gene_of = dict(zip(molecules.amplicon_id, molecules.gene_id))
+    for fov, formed_scene in sample.fovs.items():
+        rows = sample.molecule_fovs[sample.molecule_fovs.fov_id == fov].sort_values("csv_row")
+        formed = formed_scene.formed.set_index("amplicon_id").loc[rows.amplicon_id]
+        np.testing.assert_array_equal(formed[["z", "y", "x"]].to_numpy(), rows[["z", "y", "x"]].to_numpy())
+        assert formed.gene_id.tolist() == [gene_of[a] for a in rows.amplicon_id]
+        np.testing.assert_array_equal(formed[["A", "sz", "sl", "e", "theta"]].to_numpy(),
+                                      properties.loc[rows.amplicon_id].to_numpy())
     # GN12: the nuclear fraction within 4 SE, and each cell molecule's cell and compartment against the oracle.
     fraction = config.context.molecules.nuclear_fraction
     nuclear = (cell_molecules.compartment == "nucleus").to_numpy()
@@ -518,8 +562,58 @@ def test_ga17_types_genes_and_molecules(name):
     print(f"GA17 {name}: {len(context)} cells of types {context.type.value_counts().to_dict()}, {len(cell_molecules)} "
           f"cell molecules, {compared} gene shares within 4 SE; Σ n_k {total} against Σ μ_k {means:.1f}; nuclear "
           f"fraction {share:.4f} against {fraction} (4 SE {4 * se:.4f}); molecule positions at a boundary "
-          f"{int(near.sum())} (expected 0), at a growth edge {int(edge.sum())}")
-    assert not near.any()
+          f"{int(near.sum())} (expected 0), at a growth edge {int(edge.sum())}; anchors within 1e-9 µm of a region "
+          f"boundary {near_boundary} (expected 0); marker answers: " + "; ".join(answers))
+    assert not near.any() and near_boundary == 0
+
+
+@pytest.mark.parametrize("copy", ["tissue2d", "culture", pytest.param("dense3d", marks=slow)])
+def test_ga17_the_count_guard(copy):
+    """GN11: max_count guards the total; the appearance scene with max_count one below its molecule count raises."""
+    book, config, scene, _ = generated(f"{copy}-types-light")
+    count = len(scene.context.sample.molecules)
+    guard = replace(config, context=replace(config.context, sample=replace(config.context.sample,
+                                                                            max_count=count - 1)))
+    with pytest.raises(ValueError, match="max_count"):
+        generate_appearance_scene(book, config=guard)
+    print(f"GA17 {copy}: max_count {count - 1} refuses the scene's {count} molecules")
+
+
+@pytest.mark.parametrize("copy", ["tissue2d", "culture", pytest.param("dense3d", marks=slow)])
+def test_ga17_zero_spread_gives_the_median_mean(copy):
+    """GN11: with per_cell_spread 0 (M1) every cell's molecule mean is the median ("exact" for a non-integer: within
+    1e-9)."""
+    _, config, scene, _ = generated(f"{copy}-types-light-spread0")
+    means = scene.context.cell_context.molecule_mean.to_numpy()
+    median = config.context.molecules.per_cell_median
+    assert len(means) and np.all(np.abs(means - median) <= 1e-9)
+    print(f"GA17 {copy}: spread 0 gives every one of {len(means)} cells the mean {median}")
+
+
+@pytest.mark.parametrize("copy", ["tissue2d", "culture", pytest.param("dense3d", marks=slow)])
+def test_ga17_rendering_identity_of_the_reference_round(copy):
+    """GN11: the amplicon images of the reference round, without FOV noise, equal the rendering identity of
+    docs/synthetic-sample-scene.md: each molecule's Gaussian kernel (formed_oracle.kernel_radius, cut at a normalized
+    radius² of 16) times its brightness, summed into its colour's channel; the formed generator renders the appearance
+    scene's molecules unchanged."""
+    book, config, scene, _ = generated(f"{copy}-types-light-quiet")
+    reference = config.context.sample.fov.geometry.reference_round
+    r = book.round_labels.index(reference)
+    shape = np.array(config.context.sample.acquisition.fov_shape_zyx)
+    points = np.moveaxis(np.indices(tuple(shape), dtype=float), 0, -1)
+    rendered = 0
+    for fov, formed_scene in scene.context.sample.fovs.items():
+        expected = np.zeros((*shape, len(book.channel_labels)))
+        for row in formed_scene.formed.itertuples():
+            radius = kernel_radius(points, np.array([row.z, row.y, row.x]), row.sz, row.sl, row.e, row.theta)
+            expected[..., book.color_to_channel[row.color_sequence[r]]] += np.where(radius <= 16, np.exp(-radius / 2),
+                                                                                    0) * row.A
+            rendered += 1
+        image = formed_scene.rounds[reference]
+        bound = np.maximum(1e-6, np.abs(expected) * np.finfo(np.float32).eps / 2 + 2e-10)
+        assert expected.max() > 0 and np.all(np.abs(image.astype(np.float64) - expected) <= bound), fov
+    print(f"GA17 {copy}: the reference round of {len(scene.context.sample.fovs)} FOVs equals the kernel sum of its "
+          f"{rendered} rendered molecules (float32 rounding)")
 
 
 @pytest.mark.parametrize("copy", ["tissue2d", pytest.param("culture", marks=slow), pytest.param("dense3d",

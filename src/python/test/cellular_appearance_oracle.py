@@ -523,8 +523,9 @@ def widening(bank, entry_id, scale_z, scale_yx):
 # ------------------------------------------------------------------------------------------------ the composition part
 # (W-518) Written from docs/synthetic-real-appearance.md ("Composition": I = B + κH + S, H2, BG1, BG2, OB1, O8;
 # "Augmentation": IN2's prefilter) and the truth alone: placements.csv, the bank's stored arrays, background_patches.csv
-# with the lattice the bank's patch settings and Ω give, the closed-form preset's own BackgroundConfig for BG2, and the
-# recorded κ. Each object's excess and its H2 copy are linear interpolators on the entry frame in µm (scipy's
+# with the lattice the bank's patch settings and Ω give, the closed-form preset's stain background for BG2 given as
+# input (read by the fixtures from their own configuration; this part imports nothing from ``starfinder.synthetic``),
+# and the recorded κ. Each object's excess and its H2 copy are linear interpolators on the entry frame in µm (scipy's
 # RegularGridInterpolator), the prefilter and the blur are scipy.ndimage's Gaussian filter, the patch weights are the
 # prototype's ramp array (proto.py::quilt) interpolated with np.interp.
 
@@ -696,30 +697,17 @@ def patch_background(points, bank, table, lattice, channel):
     return num / den, count, den
 
 
-def closed_form_background(points, preset, name, plateau):
-    """BG2 at (P, 3) points: the preset's stain background (its BackgroundConfig's baseline and regions in the index of
-    the preset's sample grid, whose origin is −(J + T) ⊙ s), multiplied by its output scale (the output plateau over
-    the median of the brightness law), over the scene's plateau ``g``."""
-    from starfinder.synthetic import context_scene_preset
-    _, config = context_scene_preset(preset)
-    stain = next(s for s in config.stains if s.name == name)
-    acquisition = config.sample.acquisition
-    spacing = np.asarray(acquisition.spacing_zyx, dtype=np.float64)
-    grow = np.zeros(3) if config.morphology is None else np.asarray(config.morphology.translation_max_zyx)
-    origin = -(np.asarray(acquisition.jitter_max_zyx, dtype=np.float64) + grow) * spacing
-    index = (np.asarray(points, dtype=np.float64).reshape(-1, 3) - origin) / spacing
-    background = stain.background
+def closed_form_background(points, settings, plateau):
+    """BG2 at (P, 3) points from ``settings``, the closed-form bank's preset stain background given as input (the
+    fixture's own configuration, ``cellular_appearance_scenes.bg2_settings``): ``origin`` and ``spacing`` of the
+    preset's sample grid, ``baseline``, the tissue ``weight``, the ``regions`` (centre, σ, height in the grid's index)
+    and the output ``scale``. B is ``scale (baseline + weight Σ_r h_r exp(−½ ‖(index − c_r) / σ_r‖²)) / g``."""
+    index = (np.asarray(points, dtype=np.float64).reshape(-1, 3) - np.asarray(settings["origin"])) \
+        / np.asarray(settings["spacing"])
     tissue = np.zeros(len(index))
-    if background.regions_enabled:
-        for centre, sigma, height in zip(background.region_centers, background.region_sigma_zyx,
-                                         background.region_heights):
-            tissue += height * np.exp(-0.5 * (((index - np.asarray(centre)) / np.asarray(sigma)) ** 2).sum(axis=1))
-    weight = np.asarray(background.tissue_weights, dtype=np.float64)[0, 0] if background.regions_enabled else 0.0
-    baseline = np.asarray(background.baseline, dtype=np.float64)[0, 0] if background.baseline_enabled else 0.0
-    brightness = stain.brightness
-    median = math.exp(brightness.parameters[0]) if brightness.mode == "lognormal" else float(brightness.parameters[0])
-    scale = stain.output.plateau / median
-    return scale * (baseline + weight * tissue) / plateau
+    for centre, sigma, height in settings["regions"]:
+        tissue += height * np.exp(-0.5 * (((index - np.asarray(centre)) / np.asarray(sigma)) ** 2).sum(axis=1))
+    return settings["scale"] * (settings["baseline"] + settings["weight"] * tissue) / plateau
 
 
 def rim(mask, column):
