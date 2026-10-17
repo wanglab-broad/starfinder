@@ -4,6 +4,9 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.synthetic.AcquisitionConfig`
 * :py:obj:`starfinder.registration.AffineConfig`
 * :py:obj:`starfinder.registration.AffineTransform`
+* :py:obj:`starfinder.synthetic.APPEARANCE_TRUTH_VERSION`
+* :py:obj:`starfinder.synthetic.AppearanceScene`
+* :py:obj:`starfinder.synthetic.AppearanceSceneConfig`
 * :py:obj:`starfinder.registration.apply_transform`
 * :py:obj:`starfinder.stitching.approve_placement`
 * :py:obj:`starfinder.assembly.assemble`
@@ -16,6 +19,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.assignment.ASSIGNMENT_STATUSES`
 * :py:obj:`starfinder.assignment.AssignmentConfig`
 * :py:obj:`starfinder.assignment.AssignmentResult`
+* :py:obj:`starfinder.synthetic.AugmentationConfig`
 * :py:obj:`starfinder.preprocessing.Background3DConfig`
 * :py:obj:`starfinder.synthetic.BackgroundConfig`
 * :py:obj:`starfinder.synthetic.BankReference`
@@ -53,6 +57,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.assignment.COMPARTMENT_STATES`
 * :py:obj:`starfinder.segmentation.composite_nuclei_amplicon`
 * :py:obj:`starfinder.segmentation.CompositeConfig`
+* :py:obj:`starfinder.synthetic.CompositionConfig`
 * :py:obj:`starfinder.synthetic.CONTEXT_PRESET_VERSION`
 * :py:obj:`starfinder.synthetic.CONTEXT_PRESETS`
 * :py:obj:`starfinder.synthetic.context_scene_preset`
@@ -130,6 +135,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.sample_output.FusionConfig`
 * :py:obj:`starfinder.sample_output.FusionInput`
 * :py:obj:`starfinder.sample_output.FusionRecord`
+* :py:obj:`starfinder.synthetic.generate_appearance_scene`
 * :py:obj:`starfinder.synthetic.generate_codebook`
 * :py:obj:`starfinder.synthetic.generate_context_scene`
 * :py:obj:`starfinder.synthetic.generate_dataset`
@@ -163,6 +169,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.segmentation.LabelImportConfig`
 * :py:obj:`starfinder.sample_output.LabelRecord`
 * :py:obj:`starfinder.segmentation.labels_to_grid`
+* :py:obj:`starfinder.synthetic.LayoutConfig`
 * :py:obj:`starfinder.stitching.legacy_tile_config_view`
 * :py:obj:`starfinder.synthetic.load_appearance_bank`
 * :py:obj:`starfinder.assembly.load_assembly`
@@ -294,6 +301,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.sample_output.SampleSegmentation`
 * :py:obj:`starfinder.sample_output.SampleSegmentationConfig`
 * :py:obj:`starfinder.sample_output.SampleSegmentationRun`
+* :py:obj:`starfinder.synthetic.save_appearance_scene`
 * :py:obj:`starfinder.assembly.save_assembly`
 * :py:obj:`starfinder.synthetic.save_context_dataset`
 * :py:obj:`starfinder.synthetic.save_context_scene`

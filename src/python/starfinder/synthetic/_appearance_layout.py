@@ -473,6 +473,38 @@ class _Labels:
             return where, values
         return self._run(shape, parts)
 
+    def axes(self, coords):
+        """(C, N) on the outer grid of the increasing 1-D sample coordinates ``coords`` (z, y, x), each object
+        evaluated at the coordinates within its box, with the point evaluator's arithmetic; equal to ``grid`` on the
+        same voxel centres."""
+        coords = [np.asarray(v, dtype=np.float64) for v in coords]
+        shape = tuple(len(v) for v in coords)
+
+        def parts(obj):
+            window = _axes_window(obj.lo, obj.hi, coords)
+            if window is None:
+                return None
+            where = tuple(slice(start, stop) for start, stop in window)
+            sub = [v[start:stop] for v, (start, stop) in zip(coords, window)]
+
+            def values(array, chosen=None):
+                return obj.grid_values(sub, array)
+            return where, values
+        return self._run(shape, parts)
+
+
+def _axes_window(lo, hi, coords):
+    """The index range [start, stop) per axis of the increasing coordinates ``coords`` within [lo, hi]; None when
+    empty."""
+    window = []
+    for a in range(3):
+        start = int(np.searchsorted(coords[a], lo[a], side="left"))
+        stop = int(np.searchsorted(coords[a], hi[a], side="right"))
+        if stop <= start:
+            return None
+        window.append((start, stop))
+    return window
+
 
 # ------------------------------------------------------------------------------------------------ the layout
 

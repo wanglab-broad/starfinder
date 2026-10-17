@@ -27,6 +27,9 @@ from ._context import (CONTEXT_PRESET_VERSION, CONTEXT_TRUTH_VERSION, CellTypeCo
                        save_context_dataset, save_context_scene)
 from ._context_presets import CONTEXT_PRESETS as _CONTEXT_PRESETS, context_scene_preset
 from ._appearance_bank import BankReference, build_appearance_bank, closed_form_bank, load_appearance_bank
+from ._appearance_layout import AugmentationConfig, LayoutConfig
+from ._appearance import (APPEARANCE_TRUTH_VERSION, AppearanceScene, AppearanceSceneConfig, CompositionConfig,
+                          generate_appearance_scene, save_appearance_scene)
 
 #: Named single-factor controls available on demand from development_scene_preset.
 DEVELOPMENT_FACTORS = _DEVELOPMENT_FACTORS
@@ -64,4 +67,6 @@ __all__ = ['BackgroundConfig', 'CALIBRATED_CONDITIONS', 'calibrated_scene_preset
            'save_context_scene', 'TerritoryConfig', 'BrightRegionConfig', 'MorphologyRoundConfig',
            'OutputScaleConfig', 'save_context_dataset', 'StainChannelConfig', 'UnevennessConfig',
            'CONTEXT_PRESET_VERSION', 'CONTEXT_PRESETS', 'context_scene_preset', 'BankReference',
-           'build_appearance_bank', 'closed_form_bank', 'load_appearance_bank']
+           'build_appearance_bank', 'closed_form_bank', 'load_appearance_bank', 'APPEARANCE_TRUTH_VERSION',
+           'AppearanceScene', 'AppearanceSceneConfig', 'AugmentationConfig', 'CompositionConfig', 'LayoutConfig',
+           'generate_appearance_scene', 'save_appearance_scene']

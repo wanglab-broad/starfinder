@@ -518,3 +518,219 @@ def widening(bank, entry_id, scale_z, scale_yx):
     info = bank.entries.iloc[bank.entry(entry_id)]
     lateral = math.hypot(info.shape_y * info.spacing_y, info.shape_x * info.spacing_x) * scale_yx
     return WIDEN * np.array([info.shape_z * info.spacing_z * scale_z, lateral, lateral])
+
+
+# ------------------------------------------------------------------------------------------------ the composition part
+# (W-518) Written from docs/synthetic-real-appearance.md ("Composition": I = B + κH + S, H2, BG1, BG2, OB1, O8;
+# "Augmentation": IN2's prefilter) and the truth alone: placements.csv, the bank's stored arrays, background_patches.csv
+# with the lattice the bank's patch settings and Ω give, the closed-form preset's own BackgroundConfig for BG2, and the
+# recorded κ. Each object's excess and its H2 copy are linear interpolators on the entry frame in µm (scipy's
+# RegularGridInterpolator), the prefilter and the blur are scipy.ndimage's Gaussian filter, the patch weights are the
+# prototype's ramp array (proto.py::quilt) interpolated with np.interp.
+
+HAZE_UM = (2.0, 1.0, 1.0)
+
+
+def prefilter_sigma(target, scale_zyx, spacing, shape):
+    """IN2: max(0, t_a / (m_a s_e,a) − 1) / 2 source voxels per axis, 0 along an axis of one voxel."""
+    return [0.0 if n == 1 else max(0.0, t / (m * s) - 1.0) / 2.0 for t, m, s, n in zip(target, scale_zyx, spacing,
+                                                                                      shape)]
+
+
+def haze_sigma(light_um, scale_zyx, spacing, shape):
+    """H2's deviations (2 / s_z, 1 / s, 1 / s) µm in the entry frame, in source voxels; 0 along an axis of one voxel."""
+    return [0.0 if n == 1 else h / m / s for h, m, s, n in zip(light_um, scale_zyx, spacing, shape)]
+
+
+class Terms:
+    """One placed object's terms of the composition for one channel: its excess after IN2's prefilter and its H2 copy
+    on the entry box grown by three deviations, each a linear interpolator on the entry frame (µm), 0 outside."""
+
+    def __init__(self, frame, bank, entry_id, channel, target, light_um=HAZE_UM, light=True):
+        self.frame = frame
+        self.X = stored(bank, entry_id)[1][channel]
+        self.target = target
+        self.light_um = light_um
+        self.light = light
+
+    def build(self, scale_z):
+        """The interpolators for the object's scale (``scale_z`` in Z, the frame's ``m`` in Y and X)."""
+        frame, X = self.frame, self.X
+        scale = (scale_z, frame.m, frame.m)
+        sigma = prefilter_sigma(self.target, scale, frame.spacing, frame.shape)
+        self.prefilter = sigma
+        filtered = ndi.gaussian_filter(X, sigma, mode="nearest") if any(v > 0 for v in sigma) else X
+        self.filtered = filtered
+        self.E = self._interpolator(filtered, [0, 0, 0])
+        self.haze_sigma = haze_sigma(self.light_um, scale, frame.spacing, frame.shape)
+        pad = [int(math.ceil(3 * v)) for v in self.haze_sigma]
+        self.pad = pad
+        self.blurred = ndi.gaussian_filter(np.pad(X, [(p, p) for p in pad]), self.haze_sigma, mode="constant", cval=0.0)
+        self.H = self._interpolator(self.blurred, pad) if self.light else None
+        return self
+
+    def _interpolator(self, values, pad):
+        frame = self.frame
+        axes = [(np.arange(values.shape[a]) - pad[a]) * frame.spacing[a] for a in range(3)]
+        if frame.shape[0] == 1:
+            return RegularGridInterpolator(axes[1:], values[0], bounds_error=False, fill_value=0.0)
+        return RegularGridInterpolator(axes, values, bounds_error=False, fill_value=0.0)
+
+    def value(self, interpolator, x):
+        if self.frame.shape[0] == 1:
+            x = x[:, 1:]
+        return interpolator(x)
+
+
+def object_terms(bank, placements, channel, target, light=True):
+    """The Terms of every placed object (placement order) for bank channel ``channel`` on a grid of ``target``
+    spacing."""
+    out = []
+    for row in placements.sort_values("object_id").itertuples():
+        frame = Frame(bank, row)
+        terms = Terms(frame, bank, row.entry_id, channel, target, light=light)
+        out.append(terms.build(float(row.scale_z)))
+    return out
+
+
+def compose(points, terms, kappa, background):
+    """I = B + κH + S at (P, 3) points: S the first holder's gain · ε inside a placed mask, Σ_k gain_k ε_k elsewhere;
+    H = Σ_k gain_k (G_k * ε_k); with the boundary voxels (a D_e within BOUNDARY of 0), the parts and the term count
+    per point (the owner, the fall-offs and blurred copies within reach)."""
+    points = np.asarray(points, dtype=np.float64).reshape(-1, 3)
+    P = len(points)
+    held = np.zeros(P, dtype=bool)
+    owner, total, haze = np.zeros(P), np.zeros(P), np.zeros(P)
+    boundary = np.zeros(P, dtype=bool)
+    count = np.zeros(P, dtype=np.int64)
+    for t in terms:
+        f = t.frame
+        pad = np.asarray(t.pad if t.H is not None else [0, 0, 0], dtype=np.float64)
+        q = np.array([[a, b, c] for a in (-pad[0], f.shape[0] - 1 + pad[0]) for b in (-pad[1], f.shape[1] - 1 + pad[1])
+                      for c in (-pad[2], f.shape[2] - 1 + pad[2])])
+        corners = f.forward(q * f.spacing)
+        lo, hi = corners.min(axis=0) - 1e-6, corners.max(axis=0) + 1e-6
+        if f.shape[0] == 1:
+            lo[0], hi[0] = -np.inf, np.inf
+        rows = np.flatnonzero(np.all((points >= lo) & (points <= hi), axis=1))
+        if not len(rows):
+            continue
+        sub = points[rows]
+        x = f.entry_frame(sub)
+        d = f.d(sub)
+        boundary[rows] |= np.abs(d) <= BOUNDARY
+        mask = d <= 0
+        e = f.gain * t.value(t.E, x)
+        fresh = mask & ~held[rows]
+        owner[rows[fresh]] = e[fresh]
+        held[rows[mask]] = True
+        total[rows] += e
+        count[rows] += np.isfinite(d)
+        if t.H is not None:
+            h = f.gain * t.value(t.H, x)
+            haze[rows] += h
+            count[rows] += h != 0
+    signal = np.where(held, owner, total)
+    background = np.broadcast_to(np.asarray(background, dtype=np.float64).reshape(-1), (P,))
+    return dict(image=background + kappa * haze + signal, held=held, signal=signal, haze=haze, owner=owner,
+                total=total, boundary=boundary, terms=count)
+
+
+def ramp(n, overlap):
+    """The prototype's ramp weights of a patch axis of n voxels overlapping by ``overlap`` (proto.py::quilt)."""
+    r = np.ones(n)
+    if overlap > 0 and n > 1:
+        k = np.arange(1, overlap + 1) / (overlap + 1)
+        r[:overlap] = np.minimum(r[:overlap], k)
+        r[-overlap:] = np.minimum(r[-overlap:], k[::-1])
+    return r
+
+
+def patch_lattice(bank, omega):
+    """BG1's lattice: (origin, period, patch shape, overlap, cells per axis): Ω's lower corner; the patch size less
+    its overlap, in µm, from the bank's patch settings; enough cells to cover Ω (one along an axis of one voxel)."""
+    configuration = bank.record["configuration"]
+    spacing = np.asarray(configuration["spacing_zyx"], dtype=np.float64)
+    shape = np.array(bank.arrays["patch"].shape[2:], dtype=np.int64)
+    overlap = np.array([0 if n == 1 else min(int(v), int(n) - 1)
+                        for v, n in zip(configuration["patches"]["overlap_zyx"], shape)], dtype=np.int64)
+    period = (shape - overlap) * spacing
+    origin = np.asarray(omega[0], dtype=np.float64)
+    extent = np.asarray(omega[1], dtype=np.float64) - origin
+    cells = [1 if shape[a] == 1 else int(math.ceil(extent[a] / period[a])) + 1 for a in range(3)]
+    return origin, period, shape, overlap, cells, spacing
+
+
+def patch_background(points, bank, table, lattice, channel):
+    """B = Σ_p w_p(σ) P_p(σ − o_p) / Σ_p w_p(σ) at (P, 3) points: each patch interpolated linearly on its voxels (edge
+    values beyond them), its weight the ramp array per axis interpolated over the index with 0 one voxel beyond each
+    end; returns (B, the patch count per point, the weight sum Σ_p w_p per point)."""
+    origin, period, shape, overlap, _, spacing = lattice
+    points = np.asarray(points, dtype=np.float64).reshape(-1, 3)
+    num, den = np.zeros(len(points)), np.zeros(len(points))
+    count = np.zeros(len(points), dtype=np.int64)
+    weights = [(np.concatenate([[-1.0], np.arange(n, dtype=np.float64), [float(n)]]),
+                np.concatenate([[0.0], ramp(int(n), int(v)), [0.0]])) for n, v in zip(shape, overlap)]
+    for row in table.itertuples():
+        cell = np.array([row.lattice_z, row.lattice_y, row.lattice_x], dtype=np.float64)
+        o = origin + cell * period
+        u = (points - o) / spacing
+        w = np.ones(len(points))
+        for a in range(3):
+            if shape[a] == 1:
+                u[:, a] = 0.0
+                continue
+            w = w * np.interp(u[:, a], *weights[a], left=0.0, right=0.0)
+        rows = np.flatnonzero(w > 0)
+        if not len(rows):
+            continue
+        patch = bank.arrays["patch"][int(row.patch_id), channel].astype(np.float64)
+        axes = [np.arange(n, dtype=np.float64) for n in shape]
+        q = np.clip(u[rows], 0, shape - 1)
+        keep = [a for a in range(3) if shape[a] > 1]
+        values = RegularGridInterpolator([axes[a] for a in keep], patch[tuple(slice(None) if shape[a] > 1 else 0
+                                                                               for a in range(3))])(q[:, keep])
+        num[rows] += w[rows] * values
+        den[rows] += w[rows]
+        count[rows] += 1
+    return num / den, count, den
+
+
+def closed_form_background(points, preset, name, plateau):
+    """BG2 at (P, 3) points: the preset's stain background (its BackgroundConfig's baseline and regions in the index of
+    the preset's sample grid, whose origin is −(J + T) ⊙ s), multiplied by its output scale (the output plateau over
+    the median of the brightness law), over the scene's plateau ``g``."""
+    from starfinder.synthetic import context_scene_preset
+    _, config = context_scene_preset(preset)
+    stain = next(s for s in config.stains if s.name == name)
+    acquisition = config.sample.acquisition
+    spacing = np.asarray(acquisition.spacing_zyx, dtype=np.float64)
+    grow = np.zeros(3) if config.morphology is None else np.asarray(config.morphology.translation_max_zyx)
+    origin = -(np.asarray(acquisition.jitter_max_zyx, dtype=np.float64) + grow) * spacing
+    index = (np.asarray(points, dtype=np.float64).reshape(-1, 3) - origin) / spacing
+    background = stain.background
+    tissue = np.zeros(len(index))
+    if background.regions_enabled:
+        for centre, sigma, height in zip(background.region_centers, background.region_sigma_zyx,
+                                         background.region_heights):
+            tissue += height * np.exp(-0.5 * (((index - np.asarray(centre)) / np.asarray(sigma)) ** 2).sum(axis=1))
+    weight = np.asarray(background.tissue_weights, dtype=np.float64)[0, 0] if background.regions_enabled else 0.0
+    baseline = np.asarray(background.baseline, dtype=np.float64)[0, 0] if background.baseline_enabled else 0.0
+    brightness = stain.brightness
+    median = math.exp(brightness.parameters[0]) if brightness.mode == "lognormal" else float(brightness.parameters[0])
+    scale = stain.output.plateau / median
+    return scale * (baseline + weight * tissue) / plateau
+
+
+def rim(mask, column):
+    """The mask less its face-connected erosion (in the plane for 2D entries or one plane)."""
+    structure = face_structure((1,) if column else mask.shape)
+    return mask & ~ndi.binary_erosion(mask, structure=structure)
+
+
+def visible_share(image, threshold, form):
+    """The share of the image (or its Z maximum) whose Gaussian of one voxel lies above ``threshold``; with the
+    voxels within 1e-9 of it."""
+    plane = image.max(axis=0) if form == "zmax" else image
+    smooth = ndi.gaussian_filter(plane, [1.0 if n > 1 else 0.0 for n in plane.shape])
+    return float(np.mean(smooth > threshold)), int((np.abs(smooth - threshold) <= 1e-9).sum())

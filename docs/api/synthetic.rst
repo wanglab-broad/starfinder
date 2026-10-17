@@ -17,6 +17,10 @@ and ``starfinder synthetic generate`` writes the MATLAB-compatible layout.
    :toctree: generated
 
    AcquisitionConfig
+   APPEARANCE_TRUTH_VERSION
+   AppearanceScene
+   AppearanceSceneConfig
+   AugmentationConfig
    BackgroundConfig
    BankReference
    BENCHMARK_PRESETS
@@ -28,6 +32,7 @@ and ``starfinder synthetic generate`` writes the MATLAB-compatible layout.
    CellTypeConfig
    CellularSceneConfig
    closed_form_bank
+   CompositionConfig
    CONTEXT_PRESET_VERSION
    CONTEXT_PRESETS
    context_scene_preset
@@ -46,6 +51,7 @@ and ``starfinder synthetic generate`` writes the MATLAB-compatible layout.
    FormedScene
    FormedSceneConfig
    forward_displacement
+   generate_appearance_scene
    generate_codebook
    generate_context_scene
    generate_dataset
@@ -53,6 +59,7 @@ and ``starfinder synthetic generate`` writes the MATLAB-compatible layout.
    generate_registration_pair
    generate_sample_scene
    GeometryConfig
+   LayoutConfig
    load_appearance_bank
    MoleculeConfig
    MorphologyRoundConfig
@@ -69,6 +76,7 @@ and ``starfinder synthetic generate`` writes the MATLAB-compatible layout.
    SAMPLE_TRUTH_VERSION
    SampleScene
    SampleSceneConfig
+   save_appearance_scene
    save_context_dataset
    save_context_scene
    save_formed_scene
@@ -696,6 +704,22 @@ runs the same build in memory on ``n − 1`` scenes of an accepted context prese
 a closed-form bank, or ``<name>.npz`` from the directory that
 ``STARFINDER_APPEARANCE_BANKS`` names, refused when its SHA-256 differs from the
 reference's.
+
+``generate_appearance_scene(codebook, config=AppearanceSceneConfig(...))``
+places the entries of that bank on the acquisition layout of an unchanged
+``ContextSceneConfig`` (``AugmentationConfig`` for the rotation, flips, scale
+and gain; ``LayoutConfig`` for the placement, the visible-stain density or a
+fixed count, and the stop) and returns an ``AppearanceScene``. Its cells are
+the placed objects, one nucleus each, with the accepted cell types and
+molecules; each stain is the bank channel of its name, composed as background
+plus out-of-focus light plus the placed signal (``CompositionConfig``: real
+background patches or a closed-form bank's background, no noise, an 8-bit
+stain scaled by the bank's median plateau). ``save_appearance_scene`` writes
+the ``save_context_scene`` layout with the shape columns empty, plus
+``appearance.json`` (version ``APPEARANCE_TRUTH_VERSION``),
+``placements.csv`` and ``background_patches.csv``; ``save_context_dataset``
+of ``scene.context`` writes its dataset. See
+:doc:`../synthetic-real-appearance`.
 
 Scientific limitations
 ----------------------

@@ -426,6 +426,10 @@ starfinder.synthetic
 ~~~~~~~~~~~~~~~~~~~~
 
 * :py:obj:`starfinder.synthetic.AcquisitionConfig`
+* :py:obj:`starfinder.synthetic.APPEARANCE_TRUTH_VERSION`
+* :py:obj:`starfinder.synthetic.AppearanceScene`
+* :py:obj:`starfinder.synthetic.AppearanceSceneConfig`
+* :py:obj:`starfinder.synthetic.AugmentationConfig`
 * :py:obj:`starfinder.synthetic.BackgroundConfig`
 * :py:obj:`starfinder.synthetic.BankReference`
 * :py:obj:`starfinder.synthetic.BENCHMARK_PRESETS`
@@ -437,6 +441,7 @@ starfinder.synthetic
 * :py:obj:`starfinder.synthetic.CellTypeConfig`
 * :py:obj:`starfinder.synthetic.CellularSceneConfig`
 * :py:obj:`starfinder.synthetic.closed_form_bank`
+* :py:obj:`starfinder.synthetic.CompositionConfig`
 * :py:obj:`starfinder.synthetic.CONTEXT_PRESET_VERSION`
 * :py:obj:`starfinder.synthetic.CONTEXT_PRESETS`
 * :py:obj:`starfinder.synthetic.context_scene_preset`
@@ -455,6 +460,7 @@ starfinder.synthetic
 * :py:obj:`starfinder.synthetic.FormedScene`
 * :py:obj:`starfinder.synthetic.FormedSceneConfig`
 * :py:obj:`starfinder.synthetic.forward_displacement`
+* :py:obj:`starfinder.synthetic.generate_appearance_scene`
 * :py:obj:`starfinder.synthetic.generate_codebook`
 * :py:obj:`starfinder.synthetic.generate_context_scene`
 * :py:obj:`starfinder.synthetic.generate_dataset`
@@ -462,6 +468,7 @@ starfinder.synthetic
 * :py:obj:`starfinder.synthetic.generate_registration_pair`
 * :py:obj:`starfinder.synthetic.generate_sample_scene`
 * :py:obj:`starfinder.synthetic.GeometryConfig`
+* :py:obj:`starfinder.synthetic.LayoutConfig`
 * :py:obj:`starfinder.synthetic.load_appearance_bank`
 * :py:obj:`starfinder.synthetic.MoleculeConfig`
 * :py:obj:`starfinder.synthetic.MorphologyRoundConfig`
@@ -478,6 +485,7 @@ starfinder.synthetic
 * :py:obj:`starfinder.synthetic.SAMPLE_TRUTH_VERSION`
 * :py:obj:`starfinder.synthetic.SampleScene`
 * :py:obj:`starfinder.synthetic.SampleSceneConfig`
+* :py:obj:`starfinder.synthetic.save_appearance_scene`
 * :py:obj:`starfinder.synthetic.save_context_dataset`
 * :py:obj:`starfinder.synthetic.save_context_scene`
 * :py:obj:`starfinder.synthetic.save_formed_scene`

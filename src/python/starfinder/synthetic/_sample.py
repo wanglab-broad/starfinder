@@ -422,8 +422,13 @@ def _label_functions(points, sites, omega):
     """Cell label C and nucleus label N at (..., 3) sample positions in µm (rule L1).
 
     Sites of the cellular scene (docs/synthetic-cellular-scene.md) carry their nucleus shapes and territory
-    rule and are labelled by that page's rule; every other call is the rule L1 below.
+    rule and are labelled by that page's rule; sites of the real-appearance scene
+    (docs/synthetic-real-appearance.md) carry their own label function, the placed objects in placement order; every
+    other call is the rule L1 below.
     """
+    appearance = getattr(sites, "appearance", None)
+    if appearance is not None:
+        return appearance(points)
     if getattr(sites, "shapes", None) is not None:
         return _labels(points, sites, omega, _BLOCK)
     shape = points.shape[:-1]
