@@ -54,6 +54,11 @@ _WIDEN = 0.3
 _LADDER = tuple(0.5 + 0.04 * m for m in range(23))  # 0.5, 0.54, ..., 1.38: below 1.4, as np.arange(0.5, 1.4, 0.04)
 # Bounding boxes are widened by this much (µm) so that a voxel centre on a box corner is never culled by rounding.
 _PAD = 1e-6
+# Interpolation cells of padding beyond each end of an entry axis in the mask test's cell status (outside the box), and
+# the distance (entry voxels) from a cell boundary within which a position's cell is left open: the mask test computes
+# a position in another order of operations than ``ndi.affine_transform``, which differs by far less (about 1e-13).
+_STATUS_PAD = 2
+_STATUS_EPS = 1e-7
 
 
 def _range(value, name):
@@ -164,7 +169,7 @@ class _Entries:
     def __init__(self, bank):
         self.bank = bank
         self.kind = _bank_kind(bank)
-        self._distance, self._nucleus, self._core, self._deepest = {}, {}, {}, {}
+        self._distance, self._nucleus, self._core, self._deepest, self._status = {}, {}, {}, {}, {}
         table = bank.entries
         self.shapes = table[["shape_z", "shape_y", "shape_x"]].to_numpy(dtype=np.int64)
         self.spacings = table[["spacing_z", "spacing_y", "spacing_x"]].to_numpy(dtype=np.float64)
@@ -186,6 +191,27 @@ class _Entries:
                                np.array([min(int(w.max()) + 1, n - 1) for w, n in zip(where, shape)],
                                         dtype=np.float64))
         return self._core[row]
+
+    def status(self, row):
+        """What a linear interpolation of ``D_e`` can give in each interpolation cell, for the mask test's bounds:
+        per cell of the entry box (the voxels ``c`` to ``c + 1`` along each axis of more than one voxel; an axis of one
+        voxel is its plane), padded by ``_STATUS_PAD`` cells beyond each end (outside the box, where the interpolation
+        gives +inf), 1 where every corner of the cell is at or below 0, so that any interpolated value in it is at most
+        0 (a weighted sum of values at most 0); 2 where every corner is above 0 or the cell lies outside the box (the
+        value is above 0, or +inf); 0 otherwise."""
+        if row not in self._status:
+            D = self.distance(row)
+            low = high = D
+            for a in range(3):
+                if D.shape[a] > 1:
+                    first, second = [slice(None)] * 3, [slice(None)] * 3
+                    first[a], second[a] = slice(0, -1), slice(1, None)
+                    low = np.minimum(low[tuple(first)], low[tuple(second)])
+                    high = np.maximum(high[tuple(first)], high[tuple(second)])
+            pad = [(_STATUS_PAD, _STATUS_PAD) if n > 1 else (0, 0) for n in D.shape]
+            status = np.pad(np.where(high <= 0, 1, np.where(low > 0, 2, 0)).astype(np.int8), pad, constant_values=2)
+            self._status[row] = status
+        return self._status[row]
 
     def deepest(self, row):
         """The voxel index of the entry's smallest ``D_e``; among equal values (a culture cell through every plane has
@@ -235,6 +261,7 @@ class _Object:
         self.D = entries.distance(row)
         self.ND = entries.nucleus(row)
         self.deepest = entries.deepest(row)
+        self.status = entries.status(row)
         self.theta, self.flip_z, self.flip_y = float(theta), int(flip_z), int(flip_y)
         self.scale_z, self.scale_yx, self.gain = float(scale_z), float(scale_yx), float(gain)
         self.m = self.scale_yx
@@ -623,14 +650,67 @@ class _Lattice:
             if obj.n[a] > 1:
                 matrix[a] = B[a] * self.s / obj.s_e[a]
                 offset[a] = (obj.xbar[a] + B[a, 0] * base[0] + B[a, 1] * base[1] + B[a, 2] * base[2]) / obj.s_e[a]
-        held = ndi.affine_transform(obj.D, matrix, offset=offset, output_shape=shape, order=1, mode="constant",
-                                    cval=np.inf, prefilter=False) <= 0
         window = self._window(first, shape)
         within = [(c >= self.omega[0][a]) & (c < self.omega[1][a]) for a, c in enumerate(coords)]
-        inside = int((held & within[0][:, None, None] & within[1][None, :, None] & within[2][None, None, :]).sum())
+        within = within[0][:, None, None] & within[1][None, :, None] & within[2][None, None, :]
+        decided = self._bounds(obj, matrix, offset, shape, window, within)
+        if decided is not None:
+            return SimpleNamespace(decided=decided, counts=None)
+        held = ndi.affine_transform(obj.D, matrix, offset=offset, output_shape=shape, order=1, mode="constant",
+                                    cval=np.inf, prefilter=False) <= 0
+        inside = int((held & within).sum())
         overlap = 0 if window is None else int((self.canvas[window[0]] & held[window[1]]).sum())
         return SimpleNamespace(first=np.array(first), held=held, window=window, obj=obj, matrix=matrix,
-                               offset=offset, shape=shape, counts=(int(held.sum()), inside, overlap), _nucleus=None)
+                               offset=offset, shape=shape, counts=(int(held.sum()), inside, overlap), _nucleus=None,
+                               decided=None)
+
+    @staticmethod
+    def _state(obj, matrix, offset, shape):
+        """Per window voxel, the status (``_Entries.status``) of the interpolation cell its entry index ``M i +
+        offset`` falls in: 1 certainly in the mask, 2 certainly not, 0 open; a voxel within ``_STATUS_EPS`` of a cell
+        boundary along any axis is left open, since its cell may differ in the exact computation."""
+        status = obj.status
+        index, near = np.zeros((1, 1, 1), dtype=np.int64), np.zeros((1, 1, 1), dtype=bool)
+        for a in range(3):
+            if obj.n[a] == 1:
+                continue
+            # Only the window axes the index depends on are spanned (the others broadcast): Z alone and Y-X together
+            # for every transform of AU1.
+            q = np.full((1, 1, 1), float(offset[a]))
+            for b in range(3):
+                if matrix[a, b] != 0:
+                    view = [1, 1, 1]
+                    view[b] = shape[b]
+                    q = (np.arange(shape[b], dtype=np.float64) * matrix[a, b]).reshape(view) + q
+            below = np.floor(q - _STATUS_EPS)
+            near = near | (below != np.floor(q + _STATUS_EPS))
+            cell = np.clip(below.astype(np.int64) + _STATUS_PAD, 0, status.shape[a] - 1)
+            index = index + cell * int(np.prod(status.shape[a + 1:]))
+        state = np.take(status.ravel(), np.broadcast_to(index, shape))
+        state[np.broadcast_to(near, shape)] = 0
+        return state
+
+    def _bounds(self, obj, matrix, offset, shape, window, within):
+        """PL2's refusal of a proposal when bounds on its counts already decide it, else None.
+
+        The voxels whose cell status (``_state``) says that the interpolated ``D_e`` is certainly at most 0 are in the
+        mask, those where it is certainly above 0 are not; they bound the mask's voxels, its voxels in Ω and its
+        overlap with earlier masks from below and above. A refusal ("domain" or "overlap") that the bounds prove is the
+        one the exact counts give, so the mask itself is computed only for a proposal that may be accepted or that the
+        bounds leave open; every outcome, count and record is unchanged."""
+        state = self._state(obj, matrix, offset, shape)
+        held = state == 1
+        maybe = state != 2
+        voxels_low, voxels_high = int(held.sum()), int(maybe.sum())
+        inside_low, inside_high = int((held & within).sum()), int((maybe & within).sum())
+        if voxels_high == 0 or 100 * inside_high < _DOMAIN_SHARE * voxels_low:
+            return "domain"
+        if voxels_low == 0 or 100 * inside_low < _DOMAIN_SHARE * voxels_high or window is None:
+            return None
+        canvas = self.canvas[window[0]]
+        if 100 * int((canvas & held[window[1]]).sum()) > _OVERLAP_MAX * voxels_high:
+            return "overlap"
+        return None
 
     @staticmethod
     def verdict(cut):
@@ -638,6 +718,8 @@ class _Lattice:
         1 % of it on earlier masks of the sample grid) or ``ok``."""
         if cut is None:
             return "domain"
+        if cut.decided is not None:
+            return cut.decided
         voxels, inside, overlap = cut.counts
         if voxels == 0 or 100 * inside < _DOMAIN_SHARE * voxels:
             return "domain"

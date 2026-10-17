@@ -840,6 +840,21 @@ that assert them are W-514's.
 
 **Recommendation: PR1**, on the accepted grids.
 
+**Amendment of 2026-10-17 (W-519; operator decision pending Jiahao's confirmation).** The
+culture's whole cell masks saturate below DN1's target. Its target, the median over the
+bank's sources of the Flamingo visible share on the middle 16 planes, is 0.501 (0.291,
+0.505 and 0.501 for Position398, 407 and 408). With at most 1 % overlap per mask, placement
+reached 0.480 after 65 cells, and every later cell took hundreds of proposals. With the
+prototype's stop of 4,000 refused proposals in a row, and with the mask test made faster
+without changing any outcome, one generation of `appearance-culture-slow-v1` placed 68
+cells in 10,184 proposals and reached 0.499. It took 27 min 41 s on one CPU, with a peak
+RSS of 13,844,268 KiB, and stopped by its refusals. Because a generation of more than
+15 minutes is too long for the checks that repeat it, `appearance-culture-slow-v1` stops after
+500 refused proposals in a row. Every other rule and its target stay unchanged. It then
+places 65 cells in 2,419 proposals, reaches 0.480 (above its floor, 0.9 · 0.501 = 0.451)
+and records that share without raising, in 11 min 19 s with a peak RSS of 13,424,852 KiB.
+The other presets keep 4,000.
+
 **Resources.** These are estimates, not measurements. The basis is the prototype's
 measured steps (one CPU, `/usr/bin/time -v`, `round10/logs/<context>.run.log`): LN
 669.5 s and 3,987,588 KiB; tissue-2D 228.5 s and 1,970,664 KiB; culture 235.8 s and

@@ -524,11 +524,13 @@ def _build(name, sources, held_out, cfg, inputs):
             box = boxes[row.label][1]
             arrays = _entry(source, row.label, box, row.nucleus_label, cfg)
             shape = tuple(s.stop - s.start for s in box)
-            flats.append(arrays["distance"].ravel())
+            # Each entry's arrays are cast to their float32 storage at once, which holds the build's memory to one
+            # float32 copy of the entries (the same values as casting the concatenation).
+            flats.append(arrays["distance"].ravel().astype(np.float32))
             for c in range(channels):
-                excess_flats[c].append((arrays["excess"][c] / plateau).ravel())
+                excess_flats[c].append((arrays["excess"][c] / plateau).ravel().astype(np.float32))
             if "nucleus_distance" in arrays:
-                nucleus_flats.append(arrays["nucleus_distance"].ravel())
+                nucleus_flats.append(arrays["nucleus_distance"].ravel().astype(np.float32))
             rows.append(dict(entry_id=f"{source['image']}/{row.label}", source_image=source["image"],
                              source_label=int(row.label),
                              plateau=plateau, box_origin=[s.start for s in box], box_shape=list(shape),
@@ -564,9 +566,11 @@ def _build(name, sources, held_out, cfg, inputs):
         nucleus_voxels=column("nucleus_voxels", np.int64),
         local_background=column("local_background", np.float64, channels),
         rim_level=column("rim_level", np.float64, channels),
-        distance=(np.concatenate(flats) if flats else np.zeros(0)).astype(np.float32),
-        excess=np.stack([np.concatenate(f) if f else np.zeros(0) for f in excess_flats]).astype(np.float32),
-        nucleus_distance=(np.concatenate(nucleus_flats) if nucleus_flats else np.zeros(0)).astype(np.float32),
+        distance=(np.concatenate(flats) if flats else np.zeros(0)).astype(np.float32, copy=False),
+        excess=np.stack([np.concatenate(f) if f else np.zeros(0, dtype=np.float32)
+                         for f in excess_flats]).astype(np.float32, copy=False),
+        nucleus_distance=(np.concatenate(nucleus_flats) if nucleus_flats else np.zeros(0)).astype(np.float32,
+                                                                                                  copy=False),
         images=np.asarray(images, dtype=str), image_plateau=np.asarray(plateaus, dtype=np.float64),
         image_visible_median=np.asarray(visible, dtype=np.float64),
         patch=(np.stack(patches) if patches else np.zeros(patch_shape)).astype(np.float32),
@@ -616,15 +620,25 @@ def _read(spec, crop):
     return image, path
 
 
+def _regions_meet(a, b):
+    """Whether two crops (y0, x0, height, width) of one file share a pixel; a whole file (None) meets every crop."""
+    if a is None or b is None:
+        return True
+    (ya, xa, ha, wa), (yb, xb, hb, wb) = ([int(v) for v in a], [int(v) for v in b])
+    return ya < yb + hb and yb < ya + ha and xa < xb + wb and xb < xa + wa
+
+
 def _file_record(path, role, image):
     return dict(image=image, role=role, path=str(Path(path).resolve()), size=Path(path).stat().st_size,
                 sha256=_sha256(path))
 
 
 def _label_array(labels, what):
+    """Labels as signed integers: int32 where every value fits, else int64 (the values are kept)."""
     if not np.issubdtype(labels.dtype, np.integer) or (labels < 0).any():
         raise ValueError(f"{what}: labels must be non-negative integers")
-    return labels.astype(np.int64)
+    narrow = not labels.size or int(labels.max()) <= np.iinfo(np.int32).max
+    return labels.astype(np.int32 if narrow else np.int64)
 
 
 def _source(image, stains, labels, nucleus_labels, spacing, project_z=False):
@@ -652,7 +666,9 @@ def build_appearance_bank(config: Mapping | str | Path, path: str | Path) -> dic
     cells with ``nucleus_labels``), ``sources`` (each with ``image``, ``stains`` mapping each
     channel to a TIFF file, ``labels``, for cells ``nucleus_labels``, an optional ``crop_yx``
     (y0, x0, height, width) and ``project_z``), ``held_out`` (each ``image`` with its
-    ``files``, hashed and never a source), and optional ``keep_z``, ``margin_um``,
+    ``files``, hashed and never a source, and an optional ``crop_yx``: a source may read a
+    held-out file only by a crop that shares no pixel with the held-out crop), and optional
+    ``keep_z``, ``margin_um``,
     ``selection``, ``fall_off``, ``patches``, ``guard`` and ``seed``. A file is a path or a
     mapping with ``path`` and ``channel``. The rules are those of
     docs/synthetic-real-appearance.md: SEL1 on every label, BR1 with BR4's guard (a refused
@@ -681,11 +697,16 @@ def build_appearance_bank(config: Mapping | str | Path, path: str | Path) -> dic
     inputs, sources, seen = [], [], {}
     held_out = []
     for held in config.get("held_out") or []:
+        unknown = sorted(set(held) - {"image", "files", "crop_yx"})
+        if unknown:
+            raise ValueError(f"held_out {held.get('image')!r}: unknown keys {unknown}")
         image = _plain_name(held.get("image"), "held_out image")
         files = [_file_record(f, "held_out", image) for f in held.get("files") or []]
-        held_out.append(dict(image=image, inputs=files))
+        region = None if held.get("crop_yx") is None else [int(v) for v in held["crop_yx"]]
+        held_out.append(dict(image=image, inputs=files) if region is None
+                        else dict(image=image, inputs=files, crop_yx=region))
         for f in files:
-            seen[f["sha256"]] = f"held-out image {image}"
+            seen.setdefault(f["sha256"], []).append((image, region))
     for given in sources_given:
         unknown = sorted(set(given) - {"image", "stains", "labels", "nucleus_labels", "crop_yx", "project_z"})
         if unknown:
@@ -706,9 +727,11 @@ def build_appearance_bank(config: Mapping | str | Path, path: str | Path) -> dic
                 raise ValueError(f"source {image}: no {role} file")
             array, file = _read(spec, crop)
             entry = _file_record(file, role, image)
-            if entry["sha256"] in seen and seen[entry["sha256"]].startswith("held-out"):
-                raise ValueError(f"source {image}: {file} is a file of the {seen[entry['sha256']]}; a held-out "
-                                 "image is never a source")
+            for held_image, region in seen.get(entry["sha256"], []):
+                if _regions_meet(region, crop):
+                    where = "" if region is None else f" (crop_yx {region})"
+                    raise ValueError(f"source {image}: {file} is a file of the held-out image {held_image}{where}; "
+                                     "a held-out image is never a source")
             inputs.append(dict(entry, channel=spec.get("channel") if isinstance(spec, Mapping) else None,
                                crop_yx=None if crop is None else [int(v) for v in crop]))
             arrays.append(array)

@@ -17,6 +17,9 @@ and ``starfinder synthetic generate`` writes the MATLAB-compatible layout.
    :toctree: generated
 
    AcquisitionConfig
+   APPEARANCE_PRESET_VERSION
+   APPEARANCE_PRESETS
+   appearance_scene_preset
    APPEARANCE_TRUTH_VERSION
    AppearanceScene
    AppearanceSceneConfig
@@ -720,6 +723,23 @@ the ``save_context_scene`` layout with the shape columns empty, plus
 ``placements.csv`` and ``background_patches.csv``; ``save_context_dataset``
 of ``scene.context`` writes its dataset. See
 :doc:`../synthetic-real-appearance`.
+
+``appearance_scene_preset(name)`` returns ``(codebook, AppearanceSceneConfig)``
+for the six ``APPEARANCE_PRESETS`` (version ``APPEARANCE_PRESET_VERSION``,
+``appearance-presets-v1``), which sit beside the six context presets and leave
+them unchanged. Each takes the accepted context preset of its context and tier
+(grid, spacing, jitter, overlap, seed 42, cell types, molecules, stains and
+morphology round) with its own name as dataset version and scene key. The
+routine presets ``appearance-dense3d-v1``, ``appearance-tissue2d-v1`` and
+``appearance-culture-v1`` place a fixed count of entries of their context's
+closed-form bank and read no real data. The ``slow`` presets
+``appearance-dense3d-slow-v1``, ``appearance-tissue2d-slow-v1`` and
+``appearance-culture-slow-v1`` place entries of the real banks
+``ln-sample1-v1``, ``tissue2d-v1`` and ``culture3d-v1``, named by name and
+SHA-256 and read from ``STARFINDER_APPEARANCE_BANKS``, until the visible-stain
+share reaches its target or placement stops after a run of refused proposals
+(500 in the culture, whose cells saturate below its target; 4,000 otherwise).
+The banks are built outside the repository.
 
 Scientific limitations
 ----------------------

@@ -515,3 +515,164 @@ def bg2_settings(preset, name):
                 weight=float(np.asarray(background.tissue_weights)[0, 0]) if background.regions_enabled else 0.0,
                 regions=[(tuple(c), tuple(w), float(h)) for c, w, h in regions],
                 scale=float(stain.output.plateau) / median)
+
+
+# -------------------------------------------------------------------------------------------------- the presets' part
+# (W-519) docs/synthetic-real-appearance-validation.md, "Fixtures": ``app_routine`` (the three routine appearance
+# presets on their closed-form banks, DN3, as generated), ``real_banks`` (the three bank files with their build
+# records and configurations, read through STARFINDER_APPEARANCE_BANKS), ``app_slow`` and ``app_slow_acquired`` (the
+# ``slow`` presets on the real banks, and the 2D tissue and culture presets at the acquired pixel, each generated in its
+# own process under /usr/bin/time -v, GA24). A real-bank fixture skips with a reason naming the variable or the file
+# where either is missing; the routine fixture reads no real data.
+
+ROUTINE_PRESETS = ("appearance-dense3d-v1", "appearance-tissue2d-v1", "appearance-culture-v1")
+SLOW_PRESETS = ("appearance-dense3d-slow-v1", "appearance-tissue2d-slow-v1", "appearance-culture-slow-v1")
+# The real bank of each slow preset (PR1).
+SLOW_BANKS = {"appearance-dense3d-slow-v1": "ln-sample1-v1", "appearance-tissue2d-slow-v1": "tissue2d-v1",
+              "appearance-culture-slow-v1": "culture3d-v1"}
+# app_slow_acquired: the acquired pixel of 2D tissue and the culture (context_slow_acquired's), every other value the
+# preset's. Not presets.
+ACQUIRED_SPACING = {"appearance-tissue2d-slow-v1": (0.346255, 0.094635, 0.094635),
+                    "appearance-culture-slow-v1": (0.346255, 0.194398, 0.194398)}
+# RG1 (one CPU, 16 GiB, 3,600 s per step) for the slow presets, their variants and the bank builds; the project's
+# 4 GiB for a routine step.
+RG1_SECONDS = 3600.0
+RG1_RSS_KIB = 16 * 1024 * 1024
+ROUTINE_RSS_KIB = 4 * 1024 * 1024
+TIME = Path("/usr/bin/time")
+
+
+@cache
+def app_routine(name):
+    """``app_routine``: a routine appearance preset as generated, with its closed-form bank and its placement (the
+    layout's namespace of ``_place_appearance`` for the preset's configuration, the same draws as the generation).
+    Returns (codebook, config, scene, bank, placed)."""
+    from starfinder.synthetic import appearance_scene_preset, load_appearance_bank
+    book, config = appearance_scene_preset(name)
+    scene = generate_appearance_scene(book, config=config)
+    bank = load_appearance_bank(config.bank)
+    placed = _place_appearance(config.context, bank, config.augmentation, config.layout)
+    return book, config, scene, bank, placed
+
+
+def real_bank_missing(name):
+    """Why the real bank ``name`` cannot be read here, naming STARFINDER_APPEARANCE_BANKS or the missing file; None
+    when the bank file, its build record and its build configuration are all in that directory."""
+    import os
+    from starfinder.synthetic._appearance_bank import BANK_DIRECTORY_VARIABLE
+    directory = os.environ.get(BANK_DIRECTORY_VARIABLE)
+    if not directory:
+        return f"{BANK_DIRECTORY_VARIABLE} is not set: the real bank {name} is read from the directory it names (ST1)"
+    for suffix in (".npz", ".record.json", ".config.json"):
+        path = Path(directory) / f"{name}{suffix}"
+        if not path.is_file():
+            return f"no file {path}: the real bank {name} with its record and configuration ({BANK_DIRECTORY_VARIABLE})"
+    return None
+
+
+def real_bank(name):
+    """``real_banks``: the bank ``name`` read through STARFINDER_APPEARANCE_BANKS (its file, build record, build
+    configuration and the SHA-256 its preset names), or a pytest skip naming the variable or the missing file."""
+    import os
+    import pytest
+    from types import SimpleNamespace
+    from starfinder.synthetic import APPEARANCE_PRESETS
+    from starfinder.synthetic._appearance_bank import BANK_DIRECTORY_VARIABLE
+    reason = real_bank_missing(name)
+    if reason is not None:
+        pytest.skip(reason)
+    directory = Path(os.environ[BANK_DIRECTORY_VARIABLE])
+    preset = next(p for p, b in SLOW_BANKS.items() if b == name)
+    return SimpleNamespace(name=name, preset=preset, sha256=APPEARANCE_PRESETS[preset]["bank_sha256"],
+                           path=directory / f"{name}.npz", record_path=directory / f"{name}.record.json",
+                           config_path=directory / f"{name}.config.json",
+                           record=json.loads((directory / f"{name}.record.json").read_text(encoding="utf-8")),
+                           config=json.loads((directory / f"{name}.config.json").read_text(encoding="utf-8")))
+
+
+def _measured(script, directory, arguments):
+    """Run ``script`` (Python source) with ``arguments`` in its own process under /usr/bin/time -v, one thread, the
+    package of this test run first on the path; returns its wall time (s), peak RSS (KiB), exit status, the JSON
+    summary it writes to ``directory/summary.json`` and its output."""
+    import os
+    import re
+    import subprocess
+    import sys
+    import pytest
+    from types import SimpleNamespace
+    import starfinder
+    if not TIME.is_file():
+        pytest.skip(f"no file {TIME}: GA24 measures each step under /usr/bin/time -v")
+    directory = Path(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+    env = dict(os.environ, **{k: "1" for k in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
+                                               "NUMEXPR_NUM_THREADS", "NUMBA_NUM_THREADS")})
+    package = str(Path(starfinder.__file__).resolve().parents[1])
+    env["PYTHONPATH"] = os.pathsep.join([package, *([env["PYTHONPATH"]] if env.get("PYTHONPATH") else [])])
+    log = directory / "time.log"
+    done = subprocess.run([str(TIME), "-v", "-o", str(log), sys.executable, "-c", script, str(directory),
+                           *arguments], env=env, capture_output=True, text=True)
+    text = log.read_text(encoding="utf-8")
+    clock = re.search(r"Elapsed \(wall clock\) time \(h:mm:ss or m:ss\): (\S+)", text).group(1)
+    seconds = 0.0
+    for part in clock.split(":"):
+        seconds = 60 * seconds + float(part)
+    rss = int(re.search(r"Maximum resident set size \(kbytes\): (\d+)", text).group(1))
+    summary = directory / "summary.json"
+    return SimpleNamespace(wall_s=seconds, peak_rss_kib=rss, exit=done.returncode,
+                           summary=json.loads(summary.read_text(encoding="utf-8")) if summary.is_file() else None,
+                           output=(done.stdout + done.stderr)[-4000:], directory=directory)
+
+
+_GENERATE = """
+import json, sys, time
+from dataclasses import replace
+from pathlib import Path
+from starfinder.synthetic import appearance_scene_preset, generate_appearance_scene, save_appearance_scene
+directory, name = Path(sys.argv[1]), sys.argv[2]
+book, config = appearance_scene_preset(name)
+if len(sys.argv) > 3:
+    spacing = tuple(float(v) for v in sys.argv[3].split(","))
+    sample = config.context.sample
+    config = replace(config, context=replace(config.context, sample=replace(
+        sample, acquisition=replace(sample.acquisition, spacing_zyx=spacing))))
+t0 = time.perf_counter()
+scene = generate_appearance_scene(book, config=config)
+seconds = time.perf_counter() - t0
+save_appearance_scene(scene, directory / "scene")
+record = scene.record
+(directory / "summary.json").write_text(json.dumps(dict(
+    preset=name, spacing_zyx=list(config.context.sample.acquisition.spacing_zyx), generation_s=seconds,
+    placed=record["placed"], proposals=record["proposals"], density=record["density"], bank=record["bank"],
+    kappa=record["kappa"], plateau=record["plateau"])))
+"""
+
+
+def generate_measured(name, directory, spacing=None):
+    """GA24's generation of a preset in its own process under /usr/bin/time -v, the scene saved by
+    ``save_appearance_scene`` under ``directory/scene`` (``app_slow``, ``app_slow_acquired`` with ``spacing``, and the
+    routine presets' cost)."""
+    arguments = [name] + ([",".join(repr(float(v)) for v in spacing)] if spacing is not None else [])
+    return _measured(_GENERATE, directory, arguments)
+
+
+_REBUILD = """
+import json, sys, time
+from pathlib import Path
+from starfinder.synthetic import build_appearance_bank
+directory, config = Path(sys.argv[1]), json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+t0 = time.perf_counter()
+record = build_appearance_bank(config, directory / f"{config['bank']}.npz")
+(directory / "summary.json").write_text(json.dumps(dict(
+    build_s=time.perf_counter() - t0, digest=record["digest"], counts=record["counts"], images=record["images"],
+    file=record["file"])))
+"""
+
+
+def rebuild_measured(bank, directory):
+    """GA27's rebuild of a real bank (``real_bank``) from its build configuration into ``directory``, in its own
+    process under /usr/bin/time -v (GA24's cost of a build); the rebuilt bank file is deleted once it is measured."""
+    result = _measured(_REBUILD, directory, [str(bank.config_path)])
+    for suffix in (".npz", ".record.json"):
+        (Path(directory) / f"{bank.name}{suffix}").unlink(missing_ok=True)
+    return result

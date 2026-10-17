@@ -426,6 +426,9 @@ starfinder.synthetic
 ~~~~~~~~~~~~~~~~~~~~
 
 * :py:obj:`starfinder.synthetic.AcquisitionConfig`
+* :py:obj:`starfinder.synthetic.APPEARANCE_PRESET_VERSION`
+* :py:obj:`starfinder.synthetic.APPEARANCE_PRESETS`
+* :py:obj:`starfinder.synthetic.appearance_scene_preset`
 * :py:obj:`starfinder.synthetic.APPEARANCE_TRUTH_VERSION`
 * :py:obj:`starfinder.synthetic.AppearanceScene`
 * :py:obj:`starfinder.synthetic.AppearanceSceneConfig`

@@ -415,9 +415,18 @@ def _density_target(bank, extent_um, channel, form):
                          "because a stored bank holds no source image to measure them on")
     from ._appearance_bank import _closed_form_source
     plateaus = {row["image"]: float(row["plateau"]) for row in bank.record["images"]}
+    sources = (_closed_form_source(preset, int(seed)) for seed in bank.record["seeds"][:-1])
+    rows = _density_rows(sources, plateaus, extent_um, channel, form)
+    target = float(np.median([r["visible_share"] for r in rows]))
+    threshold = float(np.median([r["threshold_over_plateau"] for r in rows]))
+    return target, threshold, rows
+
+
+def _density_rows(sources, plateaus, extent_um, channel, form):
+    """Per source image (a loaded source of the build step): DN1's visible-stain share and Otsu threshold over the
+    image's plateau ``plateaus[image]`` on its middle planes matching the Z extent ``extent_um``."""
     rows = []
-    for seed in bank.record["seeds"][:-1]:
-        source = _closed_form_source(preset, int(seed))
+    for source in sources:
         stain = source["stains"][channel]
         depth = stain.shape[0]
         planes = min(max(int(round(extent_um / float(source["spacing"][0]))), 1), depth)
@@ -429,9 +438,7 @@ def _density_target(bank, extent_um, channel, form):
         plateau = plateaus[source["image"]]
         rows.append(dict(image=source["image"], planes=[start, start + planes], visible_share=float(np.mean(
             smooth > threshold)), threshold=threshold, plateau=plateau, threshold_over_plateau=threshold / plateau))
-    target = float(np.median([r["visible_share"] for r in rows]))
-    threshold = float(np.median([r["threshold_over_plateau"] for r in rows]))
-    return target, threshold, rows
+    return rows
 
 
 # ------------------------------------------------------------------------------------------------ the background
