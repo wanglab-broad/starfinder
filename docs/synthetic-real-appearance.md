@@ -171,15 +171,16 @@ A scene without the new settings is exactly the accepted cellular scene. The six
 fields and values.
 
 `ContextSceneConfig`'s payload is the `requested_config` of every saved `context.json`
-(`synthetic/_context.py::_payload`, called by `generate_context_scene`). A new field on
-it, even one that defaults to None, would add a key to `context.json` of every accepted
-preset.
+(`synthetic/_context.py::_payload`, called by `generate_context_scene`). `_payload` writes
+`sample`, `nuclei`, `packing`, `territories`, `types`, `molecules`, `stains` and
+`morphology` by name, so a new field on `ContextSceneConfig` changes `context.json` only if
+`_payload` is changed to write it. Options E2 and E3 each need such a change.
 
 | Option | Rule | Cost | Consequence |
 | --- | --- | --- | --- |
 | **E1. A new entry and configuration (recommended)** | `generate_appearance_scene(codebook, *, config=AppearanceSceneConfig(...), on_fov=None)`; `AppearanceSceneConfig` holds an unchanged `ContextSceneConfig` and the new parts. | One more entry; shared private functions, as W-483 shared those of the sample scene. | The accepted presets' outputs stay unchanged by construction; the new truth lives in new files ("Truth"). |
-| E2. A new optional field `appearance` on `ContextSceneConfig`, left out of the payload when None | As named. | A special case in `_payload`. | `requested_config` no longer equals the configuration's fields; every reader must know the case. |
-| E3. A new field and a new context truth version | As named. | Least code. | Every accepted preset's `context.json` changes, against the exclusions of this batch. |
+| E2. A new optional field `appearance` on `ContextSceneConfig`, left out of the payload when None | As named. | A special case in `_payload`. | With `_payload` changed to write the field only when it is set, the accepted presets' `context.json` stays as it is, but `requested_config` holds the field for some configurations and not for others; every reader must know the case. |
+| E3. A new field and a new context truth version | As named. | Least code. | With `_payload` changed to write the field for every configuration, every accepted preset's `context.json` gains a key and a new version, against the exclusions of this batch. |
 
 **Recommendation: E1.**
 
