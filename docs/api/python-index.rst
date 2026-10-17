@@ -18,6 +18,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.assignment.AssignmentResult`
 * :py:obj:`starfinder.preprocessing.Background3DConfig`
 * :py:obj:`starfinder.synthetic.BackgroundConfig`
+* :py:obj:`starfinder.synthetic.BankReference`
 * :py:obj:`starfinder.barcode.BarcodeDecodingResult`
 * :py:obj:`starfinder.barcode.BarcodeLayout`
 * :py:obj:`starfinder.synthetic.BENCHMARK_PRESETS`
@@ -29,6 +30,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.synthetic.BrightRegionConfig`
 * :py:obj:`starfinder.registration.BSplineConfig`
 * :py:obj:`starfinder.registration.BSplineTransform`
+* :py:obj:`starfinder.synthetic.build_appearance_bank`
 * :py:obj:`starfinder.synthetic.CALIBRATED_CONDITIONS`
 * :py:obj:`starfinder.synthetic.calibrated_scene_preset`
 * :py:obj:`starfinder.assembly.CELL_ASSEMBLY_FLAGS`
@@ -43,6 +45,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.sample_output.check_export`
 * :py:obj:`starfinder.dataset.CheckpointConfig`
 * :py:obj:`starfinder.evaluation.spot_finding.classify_detections`
+* :py:obj:`starfinder.synthetic.closed_form_bank`
 * :py:obj:`starfinder.barcode.Codebook`
 * :py:obj:`starfinder.barcode.CodebookAwareDecoderConfig`
 * :py:obj:`starfinder.sample_output.compare_routes`
@@ -161,6 +164,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.sample_output.LabelRecord`
 * :py:obj:`starfinder.segmentation.labels_to_grid`
 * :py:obj:`starfinder.stitching.legacy_tile_config_view`
+* :py:obj:`starfinder.synthetic.load_appearance_bank`
 * :py:obj:`starfinder.assembly.load_assembly`
 * :py:obj:`starfinder.barcode.load_codebook`
 * :py:obj:`starfinder.barcode.load_direct_panel`

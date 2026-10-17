@@ -427,13 +427,16 @@ starfinder.synthetic
 
 * :py:obj:`starfinder.synthetic.AcquisitionConfig`
 * :py:obj:`starfinder.synthetic.BackgroundConfig`
+* :py:obj:`starfinder.synthetic.BankReference`
 * :py:obj:`starfinder.synthetic.BENCHMARK_PRESETS`
 * :py:obj:`starfinder.synthetic.benchmark_scene_preset`
 * :py:obj:`starfinder.synthetic.BrightRegionConfig`
+* :py:obj:`starfinder.synthetic.build_appearance_bank`
 * :py:obj:`starfinder.synthetic.CALIBRATED_CONDITIONS`
 * :py:obj:`starfinder.synthetic.calibrated_scene_preset`
 * :py:obj:`starfinder.synthetic.CellTypeConfig`
 * :py:obj:`starfinder.synthetic.CellularSceneConfig`
+* :py:obj:`starfinder.synthetic.closed_form_bank`
 * :py:obj:`starfinder.synthetic.CONTEXT_PRESET_VERSION`
 * :py:obj:`starfinder.synthetic.CONTEXT_PRESETS`
 * :py:obj:`starfinder.synthetic.context_scene_preset`
@@ -459,6 +462,7 @@ starfinder.synthetic
 * :py:obj:`starfinder.synthetic.generate_registration_pair`
 * :py:obj:`starfinder.synthetic.generate_sample_scene`
 * :py:obj:`starfinder.synthetic.GeometryConfig`
+* :py:obj:`starfinder.synthetic.load_appearance_bank`
 * :py:obj:`starfinder.synthetic.MoleculeConfig`
 * :py:obj:`starfinder.synthetic.MorphologyRoundConfig`
 * :py:obj:`starfinder.synthetic.NoiseConfig`

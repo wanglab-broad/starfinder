@@ -18,13 +18,16 @@ and ``starfinder synthetic generate`` writes the MATLAB-compatible layout.
 
    AcquisitionConfig
    BackgroundConfig
+   BankReference
    BENCHMARK_PRESETS
    benchmark_scene_preset
    BrightRegionConfig
+   build_appearance_bank
    CALIBRATED_CONDITIONS
    calibrated_scene_preset
    CellTypeConfig
    CellularSceneConfig
+   closed_form_bank
    CONTEXT_PRESET_VERSION
    CONTEXT_PRESETS
    context_scene_preset
@@ -50,6 +53,7 @@ and ``starfinder synthetic generate`` writes the MATLAB-compatible layout.
    generate_registration_pair
    generate_sample_scene
    GeometryConfig
+   load_appearance_bank
    MoleculeConfig
    MorphologyRoundConfig
    NoiseConfig
@@ -673,6 +677,25 @@ G1, the amplicon appearance of ``sample-small-v1`` and an 8-bit nuclear stain
 on ``ch04`` of the reference round; no preset uses the ``boundary`` source.
 Each routine preset generates in a few seconds on one CPU; the ``slow``
 presets take one to three minutes and below 2 GiB.
+
+The appearance bank of :doc:`../synthetic-real-appearance` holds nuclei (in
+the culture, cells with their nucleus and both stains) cut from source images
+with their method labels, and background patches.
+``build_appearance_bank(config, path)`` is its build step: it keeps the labels
+that pass the four selection rules, stores per entry the signed distance of its
+mask, its excess over the local background inside the mask and its own capped
+fall-off outside, relative to its source image's plateau, refuses a source
+whose plateau lies outside a factor 1.5 of the bank's median (or of its median
+over the visible stain), and writes ``<bank>.npz`` with
+``<bank>.record.json`` (the inputs with their SHA-256, the counts per rule, the
+plateaus and a digest of the arrays). The build configuration names the real
+source images and stays outside the repository. ``closed_form_bank(preset, n)``
+runs the same build in memory on ``n − 1`` scenes of an accepted context preset
+(the last of ``n`` seeds held out), so that tests read no real data.
+``load_appearance_bank(reference)`` returns the bank a ``BankReference`` names:
+a closed-form bank, or ``<name>.npz`` from the directory that
+``STARFINDER_APPEARANCE_BANKS`` names, refused when its SHA-256 differs from the
+reference's.
 
 Scientific limitations
 ----------------------

@@ -26,6 +26,7 @@ from ._context import (CONTEXT_PRESET_VERSION, CONTEXT_TRUTH_VERSION, CellTypeCo
                        NucleusShapeConfig, PackingConfig, TerritoryConfig, generate_context_scene,
                        save_context_dataset, save_context_scene)
 from ._context_presets import CONTEXT_PRESETS as _CONTEXT_PRESETS, context_scene_preset
+from ._appearance_bank import BankReference, build_appearance_bank, closed_form_bank, load_appearance_bank
 
 #: Named single-factor controls available on demand from development_scene_preset.
 DEVELOPMENT_FACTORS = _DEVELOPMENT_FACTORS
@@ -62,4 +63,5 @@ __all__ = ['BackgroundConfig', 'CALIBRATED_CONDITIONS', 'calibrated_scene_preset
            'ContextSceneConfig', 'generate_context_scene', 'MoleculeConfig', 'NucleusShapeConfig', 'PackingConfig',
            'save_context_scene', 'TerritoryConfig', 'BrightRegionConfig', 'MorphologyRoundConfig',
            'OutputScaleConfig', 'save_context_dataset', 'StainChannelConfig', 'UnevennessConfig',
-           'CONTEXT_PRESET_VERSION', 'CONTEXT_PRESETS', 'context_scene_preset']
+           'CONTEXT_PRESET_VERSION', 'CONTEXT_PRESETS', 'context_scene_preset', 'BankReference',
+           'build_appearance_bank', 'closed_form_bank', 'load_appearance_bank']
