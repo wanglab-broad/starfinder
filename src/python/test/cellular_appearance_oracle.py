@@ -11,10 +11,14 @@ margins, the fall-off length and blurs, the bins, the patch rule) are read from 
 """
 from __future__ import annotations
 
+import copy
+import hashlib
+import json
 import math
 
 import numpy as np
 from scipy import ndimage as ndi
+from scipy.interpolate import RegularGridInterpolator
 from skimage.filters import threshold_otsu
 
 # Labels whose rim share or size lies within this distance of a rule's limit are reported (GA5).
@@ -229,3 +233,282 @@ def stored(bank, entry_id):
     nucleus = (bank.arrays["nucleus_distance"][start:start + size].reshape(shape).astype(np.float64)
                if bank.record["entry"] == "cell" else None)
     return distance, excess, nucleus
+
+
+# ------------------------------------------------------------------------------------------------ the label part
+# (W-517) Written from docs/synthetic-real-appearance.md ("Terms", "Augmentation", "Layout", "Truth", "Random
+# streams") and the layout's own record of its draw order; it reads the bank through ``stored`` and recomputes the
+# transforms with its own matrices and inverse, the entries' distances with ``scipy.interpolate``'s linear
+# interpolator on the entry frame (µm), the streams from their descriptors and the labels, territories, masks and
+# placement draws from those.
+
+# A voxel whose interpolated D_e lies within this distance (µm) of 0, or where two objects' δ tie within it under CT1,
+# is a boundary voxel ("Identities a test can check").
+BOUNDARY = 1e-9
+# PL2: the ladder of f, the widening of Ω for a uniform proposal, the 35 % in Ω and the 1 % overlap.
+LADDER = [0.5 + 0.04 * m for m in range(23)]
+WIDEN = 0.3
+
+
+def stream(scheme, component, entity):
+    """The generator of one descriptor (namespace, split, seed, scene key, component, entity, round, channel): its
+    compact UTF-8 JSON array, hashed by SHA-256 and read as a big-endian integer, seeds PCG64."""
+    descriptor = [scheme["namespace"], scheme["split"], scheme["seed"], scheme["scene_key"], component, entity, None,
+                  None]
+    encoded = json.dumps(descriptor, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+    return np.random.Generator(np.random.PCG64(int(hashlib.sha256(encoded.encode("utf-8")).hexdigest(), 16)))
+
+
+def kind_of(bank):
+    """``cell`` (culture cells, CU1), ``column`` (2D entries, TZ1) or ``nucleus`` (dense 3D, CT1)."""
+    if bank.record["entry"] == "cell":
+        return "cell"
+    return "column" if (bank.arrays["box_shape"][:, 0] == 1).all() else "nucleus"
+
+
+def matrix(theta, flip_z, flip_y, scale_z, scale_yx):
+    """A = S R F ("Augmentation", the transform)."""
+    rotation = np.array([[1, 0, 0], [0, math.cos(theta), -math.sin(theta)], [0, math.sin(theta), math.cos(theta)]])
+    return np.diag([scale_z, scale_yx, scale_yx]) @ rotation @ np.diag([flip_z, flip_y, 1.0])
+
+
+class Frame:
+    """One placed object of a placements row: T(x) = c + A (x − x̄_e), its entry's D_e (and nucleus D_e) as linear
+    interpolators on the entry frame in µm, +inf outside the box; a 2D entry is evaluated in its plane whatever z."""
+
+    def __init__(self, bank, row):
+        self.k = int(row.object_id)
+        info = bank.entries.iloc[bank.entry(row.entry_id)]
+        self.shape = np.array([info.shape_z, info.shape_y, info.shape_x], dtype=np.int64)
+        self.spacing = np.array([info.spacing_z, info.spacing_y, info.spacing_x], dtype=np.float64)
+        self.xbar = (self.shape - 1) / 2 * self.spacing
+        self.c = np.array([row.centre_z, row.centre_y, row.centre_x], dtype=np.float64)
+        self.A = matrix(row.theta, row.flip_z, row.flip_y, row.scale_z, row.scale_yx)
+        self.Ainv = np.linalg.inv(self.A)
+        self.m = float(row.scale_yx)
+        self.gain = float(row.gain)
+        distance, _, nucleus = stored(bank, row.entry_id)
+        self.D = self._interpolator(distance)
+        self.ND = None if nucleus is None else self._interpolator(nucleus)
+        self.distance = distance
+        self.box_origin = np.array([info.box_origin_z, info.box_origin_y, info.box_origin_x], dtype=np.float64)
+
+    def _interpolator(self, values):
+        axes = [np.arange(n) * s for n, s in zip(self.shape, self.spacing)]
+        if self.shape[0] == 1:
+            return RegularGridInterpolator(axes[1:], values[0], bounds_error=False, fill_value=np.inf)
+        return RegularGridInterpolator(axes, values, bounds_error=False, fill_value=np.inf)
+
+    def at(self, centre):
+        """The same object with its centre moved to ``centre`` (its entry and transform shared)."""
+        moved = copy.copy(self)
+        moved.c = np.asarray(centre, dtype=np.float64)
+        return moved
+
+    def entry_frame(self, points):
+        return self.xbar + (np.asarray(points, dtype=np.float64).reshape(-1, 3) - self.c) @ self.Ainv.T
+
+    def forward(self, x):
+        return self.c + (np.asarray(x, dtype=np.float64) - self.xbar) @ self.A.T
+
+    def value(self, interpolator, points):
+        x = self.entry_frame(points)
+        if self.shape[0] == 1:
+            x = x[:, 1:]
+        extent = ((self.shape - 1) * self.spacing)[1:] if self.shape[0] == 1 else (self.shape - 1) * self.spacing
+        box = np.all((x >= 0) & (x <= extent), axis=1)
+        out = np.full(len(x), np.inf)
+        if box.any():
+            out[box] = interpolator(x[box])
+        return out
+
+    def d(self, points):
+        return self.value(self.D, points)
+
+    def nd(self, points):
+        return self.value(self.ND, points)
+
+    def deepest(self):
+        """The entry's voxel of smallest D_e, transformed: the anchor PL2 records (of equal values, the one nearest the
+        box centre, then the first in C order)."""
+        candidates = np.argwhere(self.distance == self.distance.min())
+        # The offset from the box centre per axis from the index, so that mirror-image voxels tie exactly.
+        squared = (((candidates - (self.shape - 1) / 2) * self.spacing) ** 2).sum(axis=1)
+        return self.forward(candidates[int(np.argmin(squared))] * self.spacing)
+
+    def corners(self, core=False):
+        """The transformed corners of the entry box, or with ``core`` of the box of its mask voxels grown by one voxel
+        (outside it every interpolation cell has corners outside the mask only, so D_e > 0 there)."""
+        if core:
+            where = np.nonzero(self.distance <= 0)
+            lo = [max(int(w.min()) - 1, 0) for w in where]
+            hi = [min(int(w.max()) + 1, n - 1) for w, n in zip(where, self.shape)]
+        else:
+            lo, hi = [0, 0, 0], list(self.shape - 1)
+        q = np.array([[a, b, c] for a in (lo[0], hi[0]) for b in (lo[1], hi[1]) for c in (lo[2], hi[2])],
+                     dtype=np.float64)
+        return self.forward(q * self.spacing)
+
+
+def frames(bank, placements):
+    return [Frame(bank, row) for row in placements.sort_values("object_id").itertuples()]
+
+
+def labels(points, objects, kind, growth=None):
+    """N and C at (P, 3) sample positions by one placement order ("Truth"; "One ownership rule for nuclei and
+    cells"), and the boundary voxels: a D_e (or, in the culture, the owner's nucleus D_e) within BOUNDARY of 0, or two
+    smallest δ within BOUNDARY of each other under CT1; also the voxels whose smallest δ lies within BOUNDARY of its
+    growth (reported)."""
+    points = np.asarray(points, dtype=np.float64).reshape(-1, 3)
+    P = len(points)
+    ids = np.array([o.k for o in objects], dtype=np.int64)
+    D = np.full((P, len(objects)), np.inf)
+    for i, o in enumerate(objects):
+        corners = o.corners()
+        lo, hi = corners.min(axis=0) - 1e-6, corners.max(axis=0) + 1e-6
+        if o.shape[0] == 1:
+            lo[0], hi[0] = -np.inf, np.inf
+        rows = np.flatnonzero(np.all((points >= lo) & (points <= hi), axis=1))
+        D[rows, i] = o.d(points[rows])
+    held = D <= 0
+    anyheld = held.any(axis=1)
+    first = np.argmax(held, axis=1)
+    boundary = (np.abs(D) <= BOUNDARY).any(axis=1)
+    edge = np.zeros(P, dtype=bool)
+    N = np.zeros(P, dtype=np.int64)
+    C = np.zeros(P, dtype=np.int64)
+    if kind == "cell":
+        C[anyheld] = ids[first[anyheld]]
+        for i, o in enumerate(objects):
+            mine = np.flatnonzero(anyheld & (first == i))
+            if len(mine):
+                nd = o.nd(points[mine])
+                N[mine[nd <= 0]] = o.k
+                boundary[mine[np.abs(nd) <= BOUNDARY]] = True
+        return N, C, boundary, edge
+    N[anyheld] = ids[first[anyheld]]
+    C[:] = N
+    if objects:
+        delta = D * np.array([o.m for o in objects])
+        free = np.flatnonzero(~anyheld)
+        part = delta[free]
+        nearest = np.argmin(part, axis=1)
+        best = part[np.arange(len(free)), nearest]
+        g = np.asarray(growth, dtype=np.float64)
+        hit = np.isfinite(best) & (best <= g[nearest])
+        C[free[hit]] = ids[nearest[hit]]
+        if part.shape[1] > 1:
+            two = np.sort(part, axis=1)[:, :2]
+            finite = np.flatnonzero(np.isfinite(two).all(axis=1))
+            boundary[free[finite[np.abs(two[finite, 1] - two[finite, 0]) <= BOUNDARY]]] = True
+        edge[free[np.isfinite(best) & (np.abs(best - g[nearest]) <= BOUNDARY)]] = True
+    return N, C, boundary, edge
+
+
+def grid_points(origin, spacing, shape):
+    """The voxel centres origin + p ⊙ spacing of a ZYX grid, (*shape, 3)."""
+    return np.asarray(origin, dtype=np.float64) + np.moveaxis(np.indices(tuple(shape), dtype=np.float64), 0, -1) \
+        * np.asarray(spacing, dtype=np.float64)
+
+
+def lattice_mask(o, origin, spacing, plane_z=None):
+    """The object's mask on the unbounded lattice origin + p ⊙ spacing (one plane at z = plane_z for a planar
+    placement), over the lattice points around its transformed mask core: (first index, mask, nucleus mask or None,
+    points)."""
+    origin = np.asarray(origin, dtype=np.float64).copy()
+    spacing = np.asarray(spacing, dtype=np.float64)
+    corners = o.corners(core=True)
+    lo = np.floor((corners.min(axis=0) - origin) / spacing).astype(np.int64) - 1
+    hi = np.ceil((corners.max(axis=0) - origin) / spacing).astype(np.int64) + 1
+    if plane_z is not None:
+        origin[0] = plane_z
+        lo[0] = hi[0] = 0
+    shape = hi - lo + 1
+    points = origin + (np.moveaxis(np.indices(tuple(shape), dtype=np.float64), 0, -1) + lo) * spacing
+    flat = points.reshape(-1, 3)
+    mask = (o.d(flat) <= 0).reshape(tuple(shape))
+    nucleus = None
+    if o.ND is not None:
+        nucleus = np.zeros(len(flat), dtype=bool)
+        chosen = mask.ravel()
+        nucleus[chosen] = o.nd(flat[chosen]) <= 0
+        nucleus = nucleus.reshape(tuple(shape))
+    return lo, mask, nucleus, points
+
+
+def on_grid(lo, mask, shape):
+    """The part of a lattice mask on a grid of ``shape``: (grid slices, mask slices) or None."""
+    target, source = [], []
+    for a in range(3):
+        start, stop = max(lo[a], 0), min(lo[a] + mask.shape[a], shape[a])
+        if stop <= start:
+            return None
+        target.append(slice(start, stop))
+        source.append(slice(start - lo[a], stop - lo[a]))
+    return tuple(target), tuple(source)
+
+
+def inside(points, omega):
+    """Points in Ω, half-open [lo, hi) per axis."""
+    return np.all((points >= omega[0]) & (points < omega[1]), axis=-1)
+
+
+def augment_draws(scheme, k, j, augmentation, kind):
+    """AU1's draws of proposal j of object k, in the layout's order: five uniforms θ, Y flip, Z flip, scale, gain."""
+    u = stream(scheme, "context.appearance.augment", f"object-{k}-proposal-{j}").random(5)
+    theta = 2 * math.pi * u[0]
+    scale = augmentation["scale"][0] + (augmentation["scale"][1] - augmentation["scale"][0]) * u[3]
+    return dict(theta=theta if theta < 2 * math.pi else 0.0, flip_y=-1 if u[1] < augmentation["flip_y"] else 1,
+                flip_z=-1 if kind == "nucleus" and u[2] < augmentation["flip_z"] else 1,
+                scale_z=scale if kind == "nucleus" else 1.0, scale_yx=scale,
+                gain=augmentation["gain"][0] + (augmentation["gain"][1] - augmentation["gain"][0]) * u[4])
+
+
+def placement_draws(scheme, k, j, contact, placed, on_circle):
+    """PL2's draws of proposal j of object k: the contact uniform; for a contact proposal the partner (0-based among
+    the placed objects) and the direction (on the circle, or two uniforms on the sphere); else three uniforms."""
+    rng = stream(scheme, "context.appearance.placement", f"object-{k}-proposal-{j}")
+    if rng.random() < contact and placed:
+        partner = int(rng.integers(placed))
+        if on_circle:
+            phi = 2 * math.pi * rng.random()
+            u = np.array([0.0, math.sin(phi), math.cos(phi)])
+        else:
+            a, b = rng.random(2)
+            z = 2 * a - 1
+            s = math.sqrt(max(0.0, 1 - z * z))
+            u = np.array([z, s * math.sin(2 * math.pi * b), s * math.cos(2 * math.pi * b)])
+        return dict(contact=True, partner=partner, direction=u)
+    return dict(contact=False, uniform=rng.random(3))
+
+
+def replay_queue(scheme, size, placed_at, last):
+    """BS2's queue replayed: the permutation of ``context.appearance.entry`` (entity ``bank``; the next permutation of
+    the same generator once the bank is exhausted); at each proposal j up to ``last`` the head is drawn, kept when
+    ``placed_at`` (proposal → placed) holds j, else moved to the end. Returns the entry row drawn at each proposal."""
+    rng = stream(scheme, "context.appearance.entry", "bank")
+    queue = list(rng.permutation(size))
+    drawn = {}
+    for j in range(1, last + 1):
+        if not queue:
+            queue = list(rng.permutation(size))
+        head = int(queue.pop(0))
+        drawn[j] = head
+        if j not in placed_at:
+            queue.append(head)
+    return drawn
+
+
+def equivalent_radius(bank, entry_id, scale_z, scale_yx):
+    """The radius (µm) of a sphere of the scaled entry's volume, or of a disc of its area for a 2D entry."""
+    info = bank.entries.iloc[bank.entry(entry_id)]
+    if int(info.shape_z) == 1:
+        return math.sqrt(info.volume * scale_yx ** 2 / math.pi)
+    return (3 * info.volume * scale_z * scale_yx ** 2 / (4 * math.pi)) ** (1 / 3)
+
+
+def widening(bank, entry_id, scale_z, scale_yx):
+    """0.3 of the scaled entry box's extent, rotation-invariant in Y and X (n_z s_z m_z; hypot(n_y s_y, n_x s_x) m)."""
+    info = bank.entries.iloc[bank.entry(entry_id)]
+    lateral = math.hypot(info.shape_y * info.spacing_y, info.shape_x * info.spacing_x) * scale_yx
+    return WIDEN * np.array([info.shape_z * info.spacing_z * scale_z, lateral, lateral])

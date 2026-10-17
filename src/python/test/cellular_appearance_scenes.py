@@ -6,16 +6,22 @@ seed 45 image held out); ``cf_bank_files`` are the same scenes written by ``save
 sources of ``build_appearance_bank``. Nothing is read from a run directory or a real image: every array is built in
 the session and every file is written under the test's temporary directory.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import cache
 import json
+import math
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 from scipy import ndimage as ndi
 import tifffile
 
-from starfinder.synthetic import closed_form_bank, save_context_scene
+from starfinder.synthetic import (CellTypeConfig, ContextSceneConfig, MorphologyRoundConfig, ScalarDistribution,
+                                  StainChannelConfig, TerritoryConfig, closed_form_bank, save_context_scene)
+from starfinder.synthetic._appearance_layout import AugmentationConfig, LayoutConfig, _place_appearance
+
+from .cellular_scenes import float64, plane, tiny
 
 ROUTINE = ("context-dense3d-v1", "context-tissue2d-v1", "context-culture-v1")
 SEEDS = (42, 43, 44, 45)
@@ -232,3 +238,152 @@ def write_config(config, path):
     """Write a build configuration as JSON and return its path."""
     Path(path).write_text(json.dumps(config, indent=1), encoding="utf-8")
     return Path(path)
+
+
+# ------------------------------------------------------------------------------------------------ the layout's part
+# (W-517) docs/synthetic-real-appearance-validation.md, "Fixtures": ``app_tiny`` (sample-tiny-v1, contact 1.0, DN3) in
+# three copies on the closed-form banks, ``app_plane`` (the same on ``scene_plane``), ``app_morph`` (the culture copy
+# with a morphology round), ``app_crowded`` and ``app_streams`` (copies of the dense 3D one), ``app_cu_offset`` and
+# ``app_cases`` (hand-made banks). Each DN3 count is the count reached by the same configuration when placement first
+# stops at a run of 50 refused proposals ("the count that fills the domain at the first refusal run"; the run of 50 is
+# app_crowded's ``max_refusals``); GA10 checks the dense 3D count against app_crowded.
+
+APP_BANKS = dict(dense3d="context-dense3d-v1", tissue2d="context-tissue2d-v1", culture="context-culture-v1")
+REFUSAL_RUN = 50
+APP_COUNTS = {"dense3d": 45, "tissue2d": 19, "culture": 2, "dense3d-plane": 21, "tissue2d-plane": 19,
+              "culture-plane": 2, "culture-morph-drawn": 4, "culture-morph-supplied": 4, "cu-offset": 16}
+# CT1's growth: the accepted growth laws of the dense 3D and 2D tissue context presets (TerritoryConfig, T2).
+GROWTH = dict(dense3d=ScalarDistribution("lognormal", (math.log(0.78), 0.15)),
+              tissue2d=ScalarDistribution("lognormal", (math.log(0.5), 0.15)))
+# app_streams: AU1's gain range changed, and type 2's size scale 1.5.
+GAIN = (0.95, 1.05)
+# app_morph: a whole-voxel supplied translation (0, 2, −3) voxels for every FOV, or MT1's drawn one.
+MORPH_WHOLE = (0.0, 2.0, -3.0)
+MORPH_BOUND = (0.4, 3.0, 3.0)
+
+
+def _stains(copy, morphology):
+    """The stain channels of a copy (names, rounds and file patterns of the bank's channels)."""
+    if copy == "tissue2d":
+        return (StainChannelConfig("PI"),)
+    dapi = StainChannelConfig("DAPI")
+    if copy == "dense3d":
+        return (dapi,)
+    flamingo = StainChannelConfig("Flamingo", source="territory", channel="ch05")
+    if morphology is None:
+        return dapi, flamingo
+    return dapi, replace(dapi, round="morphology", channel="ch00"), replace(flamingo, round="morphology",
+                                                                            channel="ch02")
+
+
+def app_context(copy, flat=False, morphology=None, planes=None, types=None):
+    """The ContextSceneConfig of an app_tiny copy: sample-tiny-v1 with float64 output and no sample-scene stain, on
+    ``scene_plane`` when ``flat``, with ``planes`` planes per FOV when given (app_cu_offset), CT1's growth law in the
+    dense contexts and the copy's stains."""
+    _, sample = tiny()
+    sample = float64(sample)
+    if flat:
+        sample = plane(sample)
+    if planes is not None:
+        shape = (planes, *sample.acquisition.fov_shape_zyx[1:])
+        sample = replace(sample, acquisition=replace(sample.acquisition, fov_shape_zyx=shape),
+                         fov=replace(sample.fov, shape_zyx=shape))
+    territories = None if copy == "culture" else TerritoryConfig("grown", growth=GROWTH[copy])
+    return ContextSceneConfig(sample=sample, territories=territories, types=types,
+                              stains=_stains(copy, morphology), morphology=morphology)
+
+
+def morphology_round(mode, flat=False):
+    """app_morph's round ``organelle``: MT1's drawn fractional translation, or the supplied whole-voxel one."""
+    bound = (0.0, *MORPH_BOUND[1:]) if flat else MORPH_BOUND
+    if mode == "drawn":
+        return MorphologyRoundConfig(translation_max_zyx=bound)
+    return MorphologyRoundConfig(translation="supplied", translation_max_zyx=bound,
+                                 translation_zyx={fov: MORPH_WHOLE for fov in ("FOV_001", "FOV_002", "FOV_003",
+                                                                               "FOV_004")})
+
+
+def app_layout(count, **changes):
+    """DN3 with ``count`` objects, contact 1.0."""
+    return LayoutConfig(density="count", count=count, contact=1.0, **changes)
+
+
+@cache
+def app_tiny(name):
+    """A placed copy by name: ``dense3d``, ``tissue2d``, ``culture`` (app_tiny), the same with ``-plane``
+    (app_plane; the culture with MT1's drawn round), ``culture-morph-drawn`` and ``culture-morph-supplied``
+    (app_morph), ``<copy>-gain`` and ``<copy>-size-scale`` (app_streams; the page's are the dense 3D ones). Returns
+    (context, bank, augmentation, layout, placed)."""
+    copy = name.split("-")[0]
+    flat = name.endswith("-plane")
+    morphology = None
+    if name.startswith("culture-morph-"):
+        morphology = morphology_round(name.rsplit("-", 1)[1])
+    elif name == "culture-plane":
+        morphology = morphology_round("drawn", flat=True)
+    types = CellTypeConfig(size_scale=(1.0, 1.5, 1.0, 1.0)) if name.endswith("-size-scale") else None
+    context = app_context(copy, flat=flat, morphology=morphology, types=types)
+    augmentation = AugmentationConfig(gain=GAIN) if name.endswith("-gain") else AugmentationConfig()
+    key = name if name in APP_COUNTS else copy
+    layout = app_layout(APP_COUNTS[key])
+    bank = cf_bank(APP_BANKS[copy])
+    return context, bank, augmentation, layout, _place_appearance(context, bank, augmentation, layout)
+
+
+@cache
+def app_crowded(variant):
+    """app_crowded: the dense 3D app_tiny with a DN3 count larger than its domain holds (100), stopping after a run of
+    50 refusals at ``floor`` 0.1 (``record``) or 0.9 (``raise``, returns the error), or after 30 proposals
+    (``proposals``)."""
+    context, bank, augmentation = app_context("dense3d"), cf_bank(APP_BANKS["dense3d"]), AugmentationConfig()
+    changes = dict(record=dict(floor=0.1, max_refusals=REFUSAL_RUN), proposals=dict(floor=0.1, max_proposals=30),
+                   **{"raise": dict(floor=0.9, max_refusals=REFUSAL_RUN)})[variant]
+    layout = app_layout(100, **changes)
+    try:
+        return context, bank, layout, _place_appearance(context, bank, augmentation, layout)
+    except ValueError as error:
+        return context, bank, layout, error
+
+
+def cu_offset_case():
+    """app_cu_offset's source image: 7 planes of 64 × 64 voxels (0.346255 × 0.4 × 0.4 µm), four cells of 16 × 16
+    voxels through every plane (box centre on plane 3), each with a nucleus of 6 × 6 voxels filling planes 3 to 5
+    (centroid on plane 4, 0.346 µm above the box centre); DAPI 100 in the nuclei and 5 elsewhere, Flamingo 50 in the
+    cells and 3 elsewhere. Every rule is set so that the four cells are kept."""
+    shape = (7, 64, 64)
+    cells = np.zeros(shape, dtype=np.uint16)
+    nucleus = np.zeros(shape, dtype=np.uint16)
+    for label, (y, x) in enumerate(((8, 8), (8, 40), (40, 8), (40, 40)), start=1):
+        _box(cells, (0, y, x), (7, y + 16, x + 16), label)
+        _box(nucleus, (3, y + 5, x + 5), (6, y + 11, x + 11), label)
+    dapi = np.where(nucleus > 0, 100.0, 5.0)
+    flamingo = np.where(cells > 0, 50.0, 3.0)
+    return Case("cu-offset", {"DAPI": dapi, "Flamingo": flamingo}, cells, nucleus, (0.346255, 0.4, 0.4),
+                dict(entry="cell", keep_z=True, margin_um=(0.0, 1.5, 1.5),
+                     selection=dict(size_percentiles=(0.0, 100.0), rim_share_max=1.0),
+                     patches=dict(shape_zyx=(0, 8, 8), overlap_zyx=(0, 4, 4), per_origin=2, max_tries=200)),
+                {1: "kept", 2: "kept", 3: "kept", 4: "kept"}, 100.0, 5.0)
+
+
+def spheres_case():
+    """app_cases' dense bank: two balls of radius 1 µm (the voxels within 10 voxels of their centre on a grid of
+    0.1 µm), each centred on a voxel with 25 voxels to every side of it, so that its box (margin 1.5 µm) is centred
+    on it; stain 100 inside, 10 outside."""
+    shape = (51, 51, 103)
+    labels = np.zeros(shape, dtype=np.uint16)
+    z, y, x = np.indices(shape)
+    for label, cx in ((1, 25), (2, 77)):
+        labels[(z - 25) ** 2 + (y - 25) ** 2 + (x - cx) ** 2 <= 100] = label
+    stain = np.where(labels > 0, 100.0, 10.0)
+    return Case("spheres", {"DAPI": stain}, labels, None, (0.1, 0.1, 0.1),
+                dict(entry="nucleus", keep_z=False, margin_um=(1.5, 1.5, 1.5),
+                     selection=dict(size_percentiles=(0.0, 100.0), rim_share_max=1.0),
+                     patches=dict(shape_zyx=(4, 8, 8), overlap_zyx=(0, 4, 4), per_origin=1, max_tries=50)),
+                {1: "kept", 2: "kept"}, 100.0, 10.0)
+
+
+def case_placements(rows):
+    """A placements table written by hand: (object_id, entry_id, centre_zyx), the identity transform and gain 1."""
+    table = pd.DataFrame([dict(object_id=k, entry_id=entry, centre_z=c[0], centre_y=c[1], centre_x=c[2], theta=0.0,
+                               flip_z=1, flip_y=1, scale_z=1.0, scale_yx=1.0, gain=1.0) for k, entry, c in rows])
+    return table.astype(dict(object_id=np.uint32))
