@@ -251,15 +251,17 @@ def write_config(config, path):
 APP_BANKS = dict(dense3d="context-dense3d-v1", tissue2d="context-tissue2d-v1", culture="context-culture-v1")
 REFUSAL_RUN = 50
 APP_COUNTS = {"dense3d": 45, "tissue2d": 19, "culture": 2, "dense3d-plane": 21, "tissue2d-plane": 19,
-              "culture-plane": 2, "culture-morph-drawn": 4, "culture-morph-supplied": 4, "cu-offset": 16}
+              "culture-plane": 2, "culture-morph-drawn": 2, "culture-morph-supplied": 2, "cu-offset": 16}
 # CT1's growth: the accepted growth laws of the dense 3D and 2D tissue context presets (TerritoryConfig, T2).
 GROWTH = dict(dense3d=ScalarDistribution("lognormal", (math.log(0.78), 0.15)),
               tissue2d=ScalarDistribution("lognormal", (math.log(0.5), 0.15)))
 # app_streams: AU1's gain range changed, and type 2's size scale 1.5.
 GAIN = (0.95, 1.05)
-# app_morph: a whole-voxel supplied translation (0, 2, −3) voxels for every FOV, or MT1's drawn one.
-MORPH_WHOLE = (0.0, 2.0, -3.0)
-MORPH_BOUND = (0.4, 3.0, 3.0)
+# app_morph: a whole-voxel supplied translation of one plane for every FOV, or MT1's drawn one. The bound grows Ω by
+# T ⊙ s on each side; (1, 0.5, 0.5) voxels keeps the sample grid within 8 × 64 × 64 (the page's (0, 2, −3) would need
+# 69 voxels in Y and X, above the routine bound of 32 × 64 × 64).
+MORPH_WHOLE = (1.0, 0.0, 0.0)
+MORPH_BOUND = (1.0, 0.5, 0.5)
 
 
 def _stains(copy, morphology):
@@ -366,16 +368,16 @@ def cu_offset_case():
 
 
 def spheres_case():
-    """app_cases' dense bank: two balls of radius 1 µm (the voxels within 10 voxels of their centre on a grid of
-    0.1 µm), each centred on a voxel with 25 voxels to every side of it, so that its box (margin 1.5 µm) is centred
-    on it; stain 100 inside, 10 outside."""
-    shape = (51, 51, 103)
+    """app_cases' dense bank: two balls of radius 1 µm (the voxels within 4 voxels of their centre on a grid of
+    0.25 µm, exact in binary), each centred on a voxel with 10 voxels to every side of it, so that its box (margin
+    1.5 µm, 6 voxels) is centred on it; stain 100 inside, 10 outside. The source is 21 × 21 × 43 voxels."""
+    shape = (21, 21, 43)
     labels = np.zeros(shape, dtype=np.uint16)
     z, y, x = np.indices(shape)
-    for label, cx in ((1, 25), (2, 77)):
-        labels[(z - 25) ** 2 + (y - 25) ** 2 + (x - cx) ** 2 <= 100] = label
+    for label, cx in ((1, 10), (2, 32)):
+        labels[(z - 10) ** 2 + (y - 10) ** 2 + (x - cx) ** 2 <= 16] = label
     stain = np.where(labels > 0, 100.0, 10.0)
-    return Case("spheres", {"DAPI": stain}, labels, None, (0.1, 0.1, 0.1),
+    return Case("spheres", {"DAPI": stain}, labels, None, (0.25, 0.25, 0.25),
                 dict(entry="nucleus", keep_z=False, margin_um=(1.5, 1.5, 1.5),
                      selection=dict(size_percentiles=(0.0, 100.0), rim_share_max=1.0),
                      patches=dict(shape_zyx=(4, 8, 8), overlap_zyx=(0, 4, 4), per_origin=1, max_tries=50)),

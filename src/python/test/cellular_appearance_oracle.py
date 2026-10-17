@@ -362,25 +362,36 @@ def labels(points, objects, kind, growth=None):
     points = np.asarray(points, dtype=np.float64).reshape(-1, 3)
     P = len(points)
     ids = np.array([o.k for o in objects], dtype=np.int64)
-    D = np.full((P, len(objects)), np.inf)
+    # One object at a time (no positions × objects array): the first object that holds each position, and in the
+    # dense contexts the smallest and second smallest δ with the object of the smallest (ties to the smaller index).
+    first = np.full(P, -1, dtype=np.int64)
+    best, second = np.full(P, np.inf), np.full(P, np.inf)
+    nearest = np.zeros(P, dtype=np.int64)
+    boundary = np.zeros(P, dtype=bool)
     for i, o in enumerate(objects):
         corners = o.corners()
         lo, hi = corners.min(axis=0) - 1e-6, corners.max(axis=0) + 1e-6
         if o.shape[0] == 1:
             lo[0], hi[0] = -np.inf, np.inf
         rows = np.flatnonzero(np.all((points >= lo) & (points <= hi), axis=1))
-        D[rows, i] = o.d(points[rows])
-    held = D <= 0
-    anyheld = held.any(axis=1)
-    first = np.argmax(held, axis=1)
-    boundary = (np.abs(D) <= BOUNDARY).any(axis=1)
+        d = o.d(points[rows])
+        boundary[rows[np.abs(d) <= BOUNDARY]] = True
+        new = rows[(d <= 0) & (first[rows] < 0)]
+        first[new] = i
+        if kind != "cell":
+            delta, b, s = o.m * d, best[rows], second[rows]
+            better = delta < b
+            second[rows] = np.where(better, b, np.minimum(s, delta))
+            best[rows] = np.where(better, delta, b)
+            nearest[rows[better]] = i
+    anyheld = first >= 0
     edge = np.zeros(P, dtype=bool)
     N = np.zeros(P, dtype=np.int64)
     C = np.zeros(P, dtype=np.int64)
     if kind == "cell":
         C[anyheld] = ids[first[anyheld]]
         for i, o in enumerate(objects):
-            mine = np.flatnonzero(anyheld & (first == i))
+            mine = np.flatnonzero(first == i)
             if len(mine):
                 nd = o.nd(points[mine])
                 N[mine[nd <= 0]] = o.k
@@ -389,19 +400,14 @@ def labels(points, objects, kind, growth=None):
     N[anyheld] = ids[first[anyheld]]
     C[:] = N
     if objects:
-        delta = D * np.array([o.m for o in objects])
         free = np.flatnonzero(~anyheld)
-        part = delta[free]
-        nearest = np.argmin(part, axis=1)
-        best = part[np.arange(len(free)), nearest]
+        near, low, next_ = nearest[free], best[free], second[free]
         g = np.asarray(growth, dtype=np.float64)
-        hit = np.isfinite(best) & (best <= g[nearest])
-        C[free[hit]] = ids[nearest[hit]]
-        if part.shape[1] > 1:
-            two = np.sort(part, axis=1)[:, :2]
-            finite = np.flatnonzero(np.isfinite(two).all(axis=1))
-            boundary[free[finite[np.abs(two[finite, 1] - two[finite, 0]) <= BOUNDARY]]] = True
-        edge[free[np.isfinite(best) & (np.abs(best - g[nearest]) <= BOUNDARY)]] = True
+        hit = np.isfinite(low) & (low <= g[near])
+        C[free[hit]] = ids[near[hit]]
+        finite = np.isfinite(low) & np.isfinite(next_)
+        boundary[free[finite][np.abs(next_[finite] - low[finite]) <= BOUNDARY]] = True
+        edge[free[np.isfinite(low) & (np.abs(low - g[near]) <= BOUNDARY)]] = True
     return N, C, boundary, edge
 
 

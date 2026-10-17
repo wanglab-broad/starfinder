@@ -20,7 +20,7 @@ import pytest
 from scipy import ndimage as ndi
 
 from starfinder.synthetic import BankReference, build_appearance_bank, load_appearance_bank
-from starfinder.synthetic._appearance_layout import (_LAYOUT_COMPONENTS, AugmentationConfig, LayoutConfig,
+from starfinder.synthetic._appearance_layout import (_LAYOUT_COMPONENTS, AugmentationConfig, LayoutConfig, _Labels,
                                                      _fov_labels, _labels_from_table, _morphology_labels,
                                                      _place_appearance, _sample_labels)
 from starfinder.synthetic._context import _CONTEXT_COMPONENTS
@@ -448,29 +448,33 @@ def test_ga11_territories(name):
     for _, origin, shape, generated in grids(placed):
         points = oracle.grid_points(origin, placed.layout.s, shape)
         N, C = generated["nucleus"], generated["cell"]
+        flat = points.reshape(-1, 3)
+        ids = table.object_id.to_numpy()
         if placed.kind == "cell":
-            # CU1: the first placed cell whose mask holds the voxel.
-            D = np.stack([o.d(points.reshape(-1, 3)) for o in objects], axis=1)
-            held = D <= 0
-            first = np.where(held.any(axis=1), table.object_id.to_numpy()[np.argmax(held, axis=1)], 0)
+            # CU1: the first placed cell whose mask holds the voxel (one object at a time).
+            first = np.zeros(len(flat), dtype=np.int64)
+            for k, o in zip(ids, objects):
+                first[(first == 0) & (o.d(flat) <= 0)] = k
             assert np.array_equal(C.ravel(), first)
             continue
         assert np.abs(cells.growth.to_numpy() - growth).max() <= 1e-9
-        delta = placed.labels.delta(points)
-        free = N == 0
-        d = delta[free]
-        nearest = np.argmin(d, axis=1)
-        best = d[np.arange(len(d)), nearest]
-        cell = C[free]
-        ids = table.object_id.to_numpy()
+        # The generator's δ_k one object at a time: the smallest, the second smallest and the object of the smallest.
+        free = (N == 0).ravel()
+        best, second = np.full(int(free.sum()), np.inf), np.full(int(free.sum()), np.inf)
+        nearest = np.zeros(int(free.sum()), dtype=np.int64)
+        for i, (obj, g) in enumerate(zip(placed.labels.objects, placed.labels.growth)):
+            d = _Labels("nucleus", [obj], [g]).delta(flat[free])[:, 0]
+            better = d < best
+            second = np.where(better, best, np.minimum(second, d))
+            best = np.where(better, d, best)
+            nearest[better] = i
+        cell = C.ravel()[free]
         territory = cell > 0
         assert np.array_equal(cell[territory], ids[nearest[territory]])
         assert np.all(best[territory] <= growth[nearest[territory]]) and np.all(best[territory] > 0)
         assert np.all(~np.isfinite(best[~territory]) | (best[~territory] > growth[nearest[~territory]]))
-        if d.shape[1] > 1:
-            two = np.sort(d, axis=1)[:, :2]
-            finite = np.isfinite(two).all(axis=1)
-            ties += int((two[finite, 1] - two[finite, 0] <= oracle.BOUNDARY).sum())
+        finite = np.isfinite(best) & np.isfinite(second)
+        ties += int((second[finite] - best[finite] <= oracle.BOUNDARY).sum())
     print(f"GA11 {name}: CT1 ties within 1e-9 µm {ties}" if placed.kind != "cell" else f"GA11 {name}: CU1")
     assert ties == 0
 
@@ -568,7 +572,7 @@ def test_ga20_a_type_size_scale_changes_no_placement_or_label(copy):
 
 @pytest.mark.validation
 def test_ga8_morphology_grid_is_the_reference_grid_moved_by_whole_voxels():
-    """With the supplied whole-voxel translation (0, 2, −3) voxels the morphology grid is the FOV grid shifted by
+    """With the supplied whole-voxel translation (one plane) the morphology grid is the FOV grid shifted by
     whole voxels, so its labels equal the reference grid's labels evaluated on the shifted grid."""
     _, _, _, _, placed = app_tiny("culture-morph-supplied")
     grid = placed.layout
