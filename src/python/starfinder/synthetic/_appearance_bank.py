@@ -738,7 +738,8 @@ def _closed_form_config(preset, seed):
 
     A source image is scaled by one number, its plateau (BR1), and BR4 refuses a source outside a factor 1.5; the
     culture preset's field (amplitude 0.74 over about 50 µm) scales a whole routine scene by more than that (its
-    plateaus at the seeds 42 to 44 are 31, 4 and 53 grey levels), so the sources are rendered as one exposure. The
+    plateaus at the seeds 42 to 44 are 31, 4 and 53 grey levels), so the sources are rendered as one exposure
+    (docs/synthetic-real-appearance.md, "The bank without real data", the amendment of 2026-10-17). The
     bank reads no molecule, and the molecule draws are streams of their own, so leaving them out changes neither its
     stains nor its labels."""
     from ._context_presets import context_scene_preset

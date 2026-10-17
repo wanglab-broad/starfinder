@@ -287,6 +287,12 @@ def test_closed_form_bank_selection_equals_the_oracle(preset):
 
 # ---------------------------------------------------------------------------------------------------- GA6
 
+def outside_bound(r, P):
+    """GA6's outside-mask tolerance over the plateau: 1e-6 of the rim level, with the project's default absolute
+    1e-9 as its floor where the rim level is 0 (the amendment of 2026-10-17 to GA6)."""
+    return max(1e-6 * r / P, 1e-9)
+
+
 def check_entries(bank, sources, report):
     """Every entry of ``bank`` against the oracle recomputed from its source arrays (GA6's tolerances)."""
     by_image = {s["image"]: s for s in sources}
@@ -318,12 +324,10 @@ def check_entries(bank, sources, report):
             inside = want["own"]
             # Inside: the source excess over the plateau, within one float32 rounding.
             assert np.all(np.abs(excess[c][inside] - X[inside] / P) <= oracle.FLOAT32 * np.abs(X[inside] / P))
-            # Outside: OUT1's four steps, within 1e-6 of r plus one float32 rounding of the value (float32 storage;
-            # the blur carries the inside excess across the rim, so the field outside is not 0 where r is); zero
-            # beyond λ + 1.0 µm.
+            # Outside: OUT1's four steps, within GA6's bound; zero beyond λ + 1.0 µm.
             outside = ~inside
             error = np.abs(excess[c][outside] - field[outside] / P)
-            assert np.all(error <= 1e-6 * r / P + oracle.FLOAT32 * np.abs(field[outside] / P))
+            assert np.all(error <= outside_bound(r, P)), (str(entry_id), c, float(error.max()), r / P)
             assert np.all(excess[c][want["d"] > reach] == 0)
             report.append((str(entry_id), c, float(np.max(error, initial=0)), r / P))
         voxel = np.prod(source["spacing"] if source["labels"].shape[0] > 1 else source["spacing"][1:])
@@ -432,7 +436,7 @@ def test_fall_off_cases(tmp_path):
     _, excess, _ = oracle.stored(bank, entry)
     outside = ~want["own"]
     assert np.allclose(want["parts"][0]["v"][outside], 1.0, rtol=0, atol=1e-12)
-    assert np.max(np.abs(excess[0][outside] - expected[outside] / P)) <= 1e-6 * r / P
+    assert np.max(np.abs(excess[0][outside] - expected[outside] / P)) <= outside_bound(r, P)
     # (b) The neighbour at 10r and at 20r: the two copies of entry 1 are equal; the neighbour's stain never enters.
     first, second = (oracle.stored(banks[n][1], f"{n}/1") for n in ("b10", "b20"))
     assert all(np.array_equal(x, y) for x, y in zip(first[:2], second[:2]))
@@ -449,7 +453,7 @@ def test_fall_off_cases(tmp_path):
     _, excess_c, _ = oracle.stored(bank_c, "c/1")
     out_c = ~want_c["own"]
     rc = want_c["r"][0]
-    assert np.max(np.abs(excess_c[0][out_c] - want_c["field"][0][out_c] / P)) <= 1e-6 * rc / P
+    assert np.max(np.abs(excess_c[0][out_c] - want_c["field"][0][out_c] / P)) <= outside_bound(rc, P)
     gap = np.max(np.abs(raw_c["field"][0][out_c] - want_c["field"][0][out_c])) / rc
     print("GA6 fall_off_cases (c): largest difference without the non-increasing step, over r:", gap)
     assert gap > 1e-3

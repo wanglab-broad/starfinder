@@ -57,16 +57,16 @@ def bank_cases():
     nucleus labels, of 80 voxels (DAPI 150) and 60 voxels (DAPI 60); 6 passes every rule. Each other nucleus has DAPI
     100, so the plateau (on the nucleus labels) is 100.
     """
-    shape = (14, 40, 120)
+    shape = (14, 40, 64)
     labels = np.zeros(shape, dtype=np.uint16)
     levels = {1: 100.0, 2: 100.0, 3: 90.0, 4: 110.0, 5: 100.0, 6: 100.0, 7: 100.0}
     _box(labels, (5, 0, 4), (8, 4, 9), 1)            # Y border
     _box(labels, (0, 10, 4), (3, 14, 9), 2)          # Z end
     _box(labels, (5, 10, 16), (7, 12, 18), 3)        # 8 voxels, the smallest
-    _box(labels, (4, 25, 16), (9, 35, 26), 4)        # 500 voxels, the largest
-    _box(labels, (5, 10, 40), (8, 12, 48), 5)        # 48 voxels, rim share 0.5 against 6
-    _box(labels, (5, 12, 40), (8, 18, 48), 6)        # 144 voxels, rim share 0.2
-    _box(labels, (5, 26, 60), (8, 31, 65), 7)        # 75 voxels, passes every rule
+    _box(labels, (4, 25, 4), (9, 35, 14), 4)         # 500 voxels, the largest
+    _box(labels, (5, 10, 28), (8, 12, 36), 5)        # 48 voxels, rim share 0.5 against 6
+    _box(labels, (5, 12, 28), (8, 18, 36), 6)        # 144 voxels, rim share 0.2
+    _box(labels, (5, 26, 24), (8, 31, 29), 7)        # 75 voxels, passes every rule
     stain = np.full(shape, 10.0)
     for label, level in levels.items():
         stain[labels == label] = level
@@ -75,22 +75,22 @@ def bank_cases():
                        patches=dict(shape_zyx=(4, 8, 8), overlap_zyx=(0, 4, 4), per_origin=5, max_tries=2000)),
                   {1: "border", 2: "border", 3: "size", 4: "size", 5: "squashed", 6: "kept", 7: "kept"}, 100.0, 10.0)
 
-    shape = (6, 30, 120)
+    shape = (6, 64, 64)
     cells = np.zeros(shape, dtype=np.uint16)
     nucleus = np.zeros(shape, dtype=np.uint16)
     _box(cells, (0, 5, 0), (6, 12, 6), 1)            # X border
     _box(cells, (0, 5, 12), (6, 11, 18), 2)          # 216 voxels, the smallest
     _box(cells, (0, 3, 24), (6, 27, 44), 3)          # 2,880 voxels, the largest
-    _box(cells, (0, 5, 50), (6, 15, 60), 4)          # 600 voxels; a nucleus of 20
-    _box(cells, (0, 5, 66), (6, 17, 80), 5)          # 1,008 voxels; nuclei of 80 and 60
-    _box(cells, (0, 5, 86), (6, 15, 96), 6)          # 600 voxels; passes every rule
+    _box(cells, (0, 35, 2), (6, 45, 12), 4)          # 600 voxels; a nucleus of 20
+    _box(cells, (0, 35, 18), (6, 47, 32), 5)         # 1,008 voxels; nuclei of 80 and 60
+    _box(cells, (0, 35, 40), (6, 45, 50), 6)         # 600 voxels; passes every rule
     _box(nucleus, (1, 7, 2), (4, 10, 4), 1)          # in cell 1
     _box(nucleus, (1, 6, 13), (4, 10, 17), 2)        # in cell 2, 48 voxels
     _box(nucleus, (1, 10, 30), (5, 15, 36), 3)       # in cell 3
-    _box(nucleus, (2, 8, 53), (3, 12, 58), 4)        # in cell 4, 20 voxels
-    _box(nucleus, (1, 7, 68), (5, 11, 73), 5)        # in cell 5, 80 voxels
-    _box(nucleus, (1, 12, 68), (4, 16, 73), 6)       # in cell 5, 60 voxels
-    _box(nucleus, (1, 7, 88), (5, 12, 92), 7)        # in cell 6, 80 voxels
+    _box(nucleus, (2, 38, 5), (3, 42, 10), 4)        # in cell 4, 20 voxels
+    _box(nucleus, (1, 37, 20), (5, 41, 25), 5)       # in cell 5, 80 voxels
+    _box(nucleus, (1, 42, 20), (4, 46, 25), 6)       # in cell 5, 60 voxels
+    _box(nucleus, (1, 37, 42), (5, 42, 46), 7)       # in cell 6, 80 voxels
     dapi = np.full(shape, 5.0)
     for label in (1, 2, 3, 4, 7):
         dapi[nucleus == label] = 100.0
@@ -120,17 +120,17 @@ def fall_off_cases():
     (``b20``). (c) Rising: (b10) with the free-side surround 0 below 0.2 µm, rising linearly to ``0.8 r`` at 0.5 µm
     and ``0.8 r`` to 1 µm, and the excess ``r`` on the inner rim of label 1 only (0 deeper inside), so that the
     smoothed surroundings near the mask stay below the cap and the per-distance median of the capped values rises
-    from about 0.37 r to 0.47 r between 0.05 and 0.25 µm before the cap brings it down. Three more balls at excess
-    ``r``, far from label 1, keep the plateau (the median of the label medians) at ``r`` plus the background in every
-    case.
+    between 0.05 and 0.25 µm before the cap brings it down. The grid is 16 × 64 × 64 voxels, so label 1's box is cut
+    by the Z ends and the Y = 0 edge. Three balls of radius 0.5 µm at excess ``r``, outside label 1's box, keep the
+    plateau (the median of the label medians) at ``r`` plus the background in every case.
     """
-    shape, spacing, r, background = (24, 80, 140), (0.2, 0.1, 0.1), 10.0, 20.0
-    centre = (11.5, 39.5, 39.5)
+    shape, spacing, r, background = (16, 64, 64), (0.2, 0.1, 0.1), 10.0, 20.0
+    centre = (7.5, 24.5, 24.5)
     one = _ball(shape, centre, 1.0, spacing)
     labels = np.zeros(shape, dtype=np.uint16)
     labels[one] = 1
-    for k, x in enumerate((95.0, 115.0, 130.0)):
-        labels[_ball(shape, (11.5, 39.5, x), 0.6, spacing)] = 3 + k
+    for k, x in enumerate((8.0, 30.0, 52.0)):
+        labels[_ball(shape, (7.5, 57.0, x), 0.5, spacing)] = 3 + k
     d = ndi.distance_transform_edt(~one, sampling=spacing)
     cases = {}
     for name, neighbour, rising in (("a", None, False), ("b10", 10.0, False), ("b20", 20.0, False),
@@ -138,7 +138,7 @@ def fall_off_cases():
         L = labels.copy()
         if neighbour is not None:
             box = np.zeros(shape, dtype=bool)
-            box[8:15, 32:47, 50:60] = True
+            box[4:11, 17:32, 35:45] = True
             box &= ~one
             # the box from the first voxel column outside ball 1 on +x, so that the two share a face
             L[box & (L == 0)] = 2

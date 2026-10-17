@@ -387,6 +387,16 @@ instead of real images.
 | CF2. A bank of hand-made arrays | Ellipsoids with a constant excess, written in the test. | Least. | The build step is not exercised. |
 | CF3. A small real bank committed as a fixture | As named. | None. | Against W-329: no array derived from real images enters the repository. |
 
+**Amendment of 2026-10-17 (W-516; operator decision pending Jiahao's confirmation).** CF1
+as written (noise off) conflicts with BR4. With the accepted unevenness field U1 kept, the
+routine culture preset `context-culture-v1` has plateaus of 31, 4 and 53 grey levels at the
+seeds 42, 43 and 44: its field scales a whole routine scene. BR4 refuses a source whose
+plateau lies outside a factor 1.5 of the bank's median (31), so two of the three sources
+are refused and no closed-form culture bank can be built. The closed-form bank's sources
+are therefore rendered with **noise and unevenness off**; BR4 stays as it is. The
+closed-form bank exercises the bank's machinery in the routine tier; the real banks keep
+the real images' own variation.
+
 **Recommendation: CF1.** **No real-data record, bank file or array derived from real
 images enters the repository.** The real banks live outside it (ST1), only `slow` tests on
 the lab machine read them, and they skip with a stated reason elsewhere.
