@@ -1126,6 +1126,14 @@ each is written where it applies:
   arithmetic, as K1 states; the unreachable monolayer refusal dropped from GN3 and kept in
   the generator as a guard; and GN9 stating that `ctx_types` holds three sample cells. The
   rows as written could not be tested as written (W-483 notes, "Findings for Jiahao").
+* **2026-10-18, W-488** (`docs/examples/context_scene.py`, {doc}`api/examples`). The example
+  keeps the two presets the issue names, `context-tissue2d-v1` and `appearance-tissue2d-v1`,
+  and its test `test_synthetic_context_example.py` is `slow` instead of routine: generating
+  and saving the two presets takes more than 5 s on one CPU, the bound of a routine test,
+  and that time is the package's. Measured on one CPU: the example 9.25 s, its test 8.57 s
+  in the `pytest-slow-synthetic` selection and 8.55 s in the CI environment. The test runs
+  in `pytest-slow-synthetic` and in the CI environment. Operator decision pending Jiahao's
+  confirmation.
 
 No threshold, tolerance, target range, preset or bank was changed by W-488.
 
