@@ -214,7 +214,7 @@ is **provisional**.
 | TR11 | **Changed: reported on the truth; compared like for like in the chain check** | Cell volume (dense 3D) | Truth: none (reported). Method labels in step 5 of CD (the method's nuclei expanded by 0.7776 µm): the accepted 90–185 µm³ | W-393 `geometry.csv` "cell volume" (StarDist labels of the real image, expanded). The truth's territories grow by CT1 among nuclei placed at the visible stain's density, so they are smaller than expansions of sparser labels | reported |
 | TR12 | **Stays** | Composite signal share per cell (2D tissue) | 0.52–0.96 | W-393 `molecules.csv` (the accepted row) | asserted where V12 allows |
 
-**Amendment of 2026-10-18 (W-520; operator decision pending Jiahao's confirmation).** The
+**Amendment of 2026-10-18 (W-520; operator decision, confirmed by Jiahao on 2026-10-18).** The
 first run of GA23 (W-520, seed 42) measured three rows outside their ranges:
 
 * TR2v of `appearance-dense3d-slow-v1`: 0.385 against 0.47–0.68;
@@ -343,7 +343,7 @@ arrays.
 | GA3 | Refusals | `cf_bank_files` and its two copies; none | `ValueError` and its message for: a bank file whose SHA-256 differs from the reference; a missing `entry_id`; an augmentation range outside its allowed interval (a scale or gain at or below 0); `floor` outside `(0, 1]`; a source refused by BR4 (both copies); a reached density below `floor` (`app_crowded`). | Each raises `ValueError` naming the field, the file or the source and its two numbers ("The appearance bank", BR4; "When placement stops"). | Exact (the type; the named values in the message). | routine; `synthetic`, `contract`. |
 | GA4 | The bank build is deterministic and recorded | `cf_banks`, `cf_bank_files` (42 to 45) | Each closed-form bank built twice in memory; each file bank built twice into two files; the digest of the arrays; the SHA-256 of each file against its record; the record's inputs (preset and seeds for CF1; path, size and SHA-256 of each source file), rules, counts per rule, plateaus and digest; `load_appearance_bank` with the recorded SHA-256 and with one byte changed. | Two builds give equal arrays and an equal digest. The recorded SHA-256 equals the file's. The record lists every input with its SHA-256 (or the preset and seeds) and the counts of "Selection of entries". Loading with a changed byte raises (ST1, CF1). | Arrays and digests exact; the file bytes are not compared, because a zip archive carries a time (ST1). | routine; `synthetic`, `validation`. |
 | GA5 | The selection rules hold | `bank_cases` (none); `cf_banks` (42 to 45) | For every label of every source: which rule leaves it out, recomputed by the oracle (border, size p5–p95 of the labels passing rule 1, a culture nucleus of at least 50 voxels, rim share at most 0.25 or 0.35 for culture cells); the kept set against the bank's entries; the counts against the record; the held-out image's labels against the bank's sources. | On `bank_cases` each hand-made label meets its known outcome. On `cf_banks` the kept set and the counts equal the oracle's, and no entry comes from the held-out image (SEL1, SRC2's held-out rule). | Exact (sets and counts); rim shares and size percentiles recomputed with the same arithmetic, labels within 1e-9 of a rule's limit reported, expected 0. | routine; `synthetic`, `validation`. |
-| GA6 | What an entry carries | `cf_banks`, `bank_cases`, `fall_off_cases` | Per entry: the stored signed distance against `EDT(not M) − EDT(M)` with the source spacing; inside the mask the stored excess against `max(I − b, 0)` relative to the plateau; the local background `b` against the 20th percentile over the unlabelled voxels of the box; the rim level `r` against the median excess over the inner rim. Outside the mask, OUT1's four steps recomputed by the oracle from the source arrays with the same library calls: (1) `min(G_0.3 * X, r · max(0, 1 − d / λ))`; (2) the weight `v`, the indicator `d ≤ d_other` smoothed by a Gaussian of 0.6 µm and set to 0 on other labels; (3) `own`, the per-distance median of the capped values where `v > 0.5`, in bins of 0.1 µm, made non-increasing; (4) `kept · v + own · (1 − v)` blurred by a Gaussian of 0.25 µm. Also: the excess beyond `λ` + 4 × 0.25 µm; on `fall_off_cases` (a) the stored field outside against the 0.25-µm blur of `r · max(0, 1 − d / λ)`, (b) the two copies with the neighbour at `10r` and `20r` against each other, (c) the stored field against the oracle with and without the non-increasing step. For a culture entry: its nucleus `D_e` against the largest nucleus label inside the cell, and its DAPI and Flamingo channels. For each patch: its share of foreground. The stored plateau, rim share and volume. | `D_e ≤ 0` exactly on the mask ("Terms"). The excess inside equals the source excess over the plateau, with no blur (BR1; "What an entry carries"). Outside, the stored field equals OUT1's four steps. Case (a) equals the capped linear fall-off blurred. Case (b)'s two copies are equal, so the neighbour's stain never enters the entry (step 2 sets `v` to 0 there and step 3 fills with `own`). Case (c) equals the oracle with the non-increasing step and differs from it without that step. Beyond `λ` + 1.0 µm, the reach of the 0.25-µm blur truncated at four deviations, the excess is 0. A culture entry's nucleus is its largest nucleus label (the 80-voxel one in `bank_cases`), and the other nucleus's DAPI stays in the excess unlabelled (EN1; "Kinds of cells"). Every patch holds at most 10 % foreground (within 1 µm of a label or above 0.7 of the plateau; BG1's patch rule). The stored values equal the recomputation. | `D_e` within 1e-6 µm (float32 storage; the same library call); the excess inside within one float32 rounding of the value (relative 2⁻²³); outside, within 1e-6 of `r` (float32 storage of the same library calls); **Amendment of 2026-10-17 (W-516; operator decision pending Jiahao's confirmation):** outside, within `max(1e-6 · r, 1e-9)` of the value over the plateau, because an entry whose rim level `r` is 0 still carries the blurred inside excess outside its mask and float32 storage cannot meet a bound of 0 (measured: `context-culture-v1` seed 43 entry 8, DAPI, error 8.2e-10); 1e-9 is the project's default absolute tolerance; case (b) exact; case (c) differs by more than 1e-3 of `r` without the step; zeros exact; counts exact. | routine; `synthetic`, `validation`. |
+| GA6 | What an entry carries | `cf_banks`, `bank_cases`, `fall_off_cases` | Per entry: the stored signed distance against `EDT(not M) − EDT(M)` with the source spacing; inside the mask the stored excess against `max(I − b, 0)` relative to the plateau; the local background `b` against the 20th percentile over the unlabelled voxels of the box; the rim level `r` against the median excess over the inner rim. Outside the mask, OUT1's four steps recomputed by the oracle from the source arrays with the same library calls: (1) `min(G_0.3 * X, r · max(0, 1 − d / λ))`; (2) the weight `v`, the indicator `d ≤ d_other` smoothed by a Gaussian of 0.6 µm and set to 0 on other labels; (3) `own`, the per-distance median of the capped values where `v > 0.5`, in bins of 0.1 µm, made non-increasing; (4) `kept · v + own · (1 − v)` blurred by a Gaussian of 0.25 µm. Also: the excess beyond `λ` + 4 × 0.25 µm; on `fall_off_cases` (a) the stored field outside against the 0.25-µm blur of `r · max(0, 1 − d / λ)`, (b) the two copies with the neighbour at `10r` and `20r` against each other, (c) the stored field against the oracle with and without the non-increasing step. For a culture entry: its nucleus `D_e` against the largest nucleus label inside the cell, and its DAPI and Flamingo channels. For each patch: its share of foreground. The stored plateau, rim share and volume. | `D_e ≤ 0` exactly on the mask ("Terms"). The excess inside equals the source excess over the plateau, with no blur (BR1; "What an entry carries"). Outside, the stored field equals OUT1's four steps. Case (a) equals the capped linear fall-off blurred. Case (b)'s two copies are equal, so the neighbour's stain never enters the entry (step 2 sets `v` to 0 there and step 3 fills with `own`). Case (c) equals the oracle with the non-increasing step and differs from it without that step. Beyond `λ` + 1.0 µm, the reach of the 0.25-µm blur truncated at four deviations, the excess is 0. A culture entry's nucleus is its largest nucleus label (the 80-voxel one in `bank_cases`), and the other nucleus's DAPI stays in the excess unlabelled (EN1; "Kinds of cells"). Every patch holds at most 10 % foreground (within 1 µm of a label or above 0.7 of the plateau; BG1's patch rule). The stored values equal the recomputation. | `D_e` within 1e-6 µm (float32 storage; the same library call); the excess inside within one float32 rounding of the value (relative 2⁻²³); outside, within 1e-6 of `r` (float32 storage of the same library calls); **Amendment of 2026-10-17 (W-516; operator decision, confirmed by Jiahao on 2026-10-18):** outside, within `max(1e-6 · r, 1e-9)` of the value over the plateau, because an entry whose rim level `r` is 0 still carries the blurred inside excess outside its mask and float32 storage cannot meet a bound of 0 (measured: `context-culture-v1` seed 43 entry 8, DAPI, error 8.2e-10); 1e-9 is the project's default absolute tolerance; case (b) exact; case (c) differs by more than 1e-3 of `r` without the step; zeros exact; counts exact. | routine; `synthetic`, `validation`. |
 | GA7 | Transforms recorded and in range | `app_tiny`, `app_streams` (42); `app_cu_offset` (42) | For every row of `placements.csv`: `entry_id` in the bank; `theta`, the flips, `scale_z`, `scale_yx` and `gain` against AU1 and against the values redrawn from `context.appearance.augment` at entity `object-<k>-proposal-<j>`; with BS2, the entries placed before the bank is exhausted, and the entry of each placed proposal against a replay of BS2's queue (the permutation from `context.appearance.entry`; at each proposal `j` up to the last recorded, the head of the queue is drawn, and moved to the end when no placed object records proposal `j`); in the culture, for each placed object, its nucleus centroid in Z in the sample frame, `centre_z + (n̄_e,z − x̄_e,z)`, with `n̄_e` the centroid of the entry's nucleus mask (its nucleus `D_e ≤ 0`) and `x̄_e` the entry box's centre. This is the Z row of `T_k(n̄_e) = c_k + A_k (n̄_e − x̄_e)` ("Augmentation", the transform), since `A_k` is the identity in Z for a culture entry and `centre_z` is `c_k`, the transformed box centre. It is compared with the same nucleus's centroid z in its source image plus the bank's one shift `Δ`. Also: `Δ` against `z_mid` less the median nucleus centroid z of the bank's source image (for a bank of several images, A2 states which median, since the page names one image), and the median over the placed objects of their transformed nucleus centroids in Z against `z_mid`. | `theta` in `[0, 2π)`; `flip_y` ±1; `flip_z` ±1 in dense 3D and 1 elsewhere; scales and gain in `[0.9, 1.1]`; `scale_z = scale_yx` in dense 3D and 1 otherwise; equal to the redrawn values; no entry placed twice before the bank is exhausted, and each placed entry the one the replayed queue gives ("Augmentation", AU1; BS2); in the culture every placed nucleus centroid is its source centroid plus one constant `Δ`, and `Δ` moves the source image's median nucleus centroid onto the middle plane ("Augmentation", the culture's Z). The median of the placed centroids lies on `z_mid` on `app_cu_offset`, whose source centroids are all equal. On `app_tiny` that median is reported, because the placed objects are a subset of the source nuclei and the page states the rule for the source image's median. | Exact for the draws, the entries and the flips; the culture's Z within 1e-9 µm, or within half a source Z step (0.173 µm) if A2 rounds the shift to whole source planes as the prototype's 6-plane shift does (A2 states which). | routine; `synthetic`, `validation`. |
 | GA8 | Labels against the placements (identity 2) | `app_tiny` (each copy), `app_plane`, `app_morph`, `app_cases`, `app_routine` (42) | `N` and `C` recomputed by the oracle from `placements.csv` and the bank at every voxel centre of every FOV, of the sample grid and of the morphology round's grid (`true_f + τ_f + q ⊙ s`), and by the point evaluator at the same positions; per grid the voxels that differ; per object the number of connected pieces of its label (26-connected in 3D, 8-connected in a plane), reported (limit L6). | Labels equal the recomputation at any fractional offset, at `Z=1` and on the morphology round's grid, except at boundary voxels ("Truth"); the evaluator equals the oracle. Each placed object's label is its entry's mask evaluated through its transform. | Exact; boundary voxels counted and reported, expected 0. | routine on the tiny fixtures; `slow` on `app_routine` if measured so; `synthetic`, `validation`. |
 | GA9 | Ownership and anchors (identity 3) | `app_cases`, `app_tiny`, `app_plane`, `app_routine` (42) | On the sample grid each object's mask voxels inside earlier objects' masks, over its volume; each recorded anchor against `T_k` of its entry's voxel of smallest `D_e`; each anchor's label; `C` on every voxel with `N = n > 0`; the review's case of the two unit spheres at the point 0.98 µm from the first centre (each sphere centred in its entry box, so its centre is its `c_k`). | Overlap at most 1 % of each object's volume (PL2); every anchor is its entry's deepest point transformed (within 1e-9 µm) and its label is its own object; `N = n > 0` implies `C = cell(n)` at every voxel, overlaps included; at the review's point `N = C = 1` ("One ownership rule for nuclei and cells"). | Exact (labels, IDs, voxel counts); the 1 % compared on voxel counts exactly. | routine; `synthetic`, `validation`. |
@@ -1018,3 +1018,126 @@ of it.
   dependency, no lock change, no marker registration.**
 * **Nothing is accepted by this page**, no accepted page is edited, and no issue is created
   in Linear.
+
+## Implementation
+
+The generator checks of this page are in the modules that "Implemented checks" names, by
+row. The chain checks of {doc}`synthetic-cellular-scene-validation`, amended as "Consequences for the
+chain checks" states, are `test_integration_cellular_chain.py` (W-487). The real-bank
+checks GA23, GA24, GA26 and GA27 run in the controller's `slow` selections with
+`STARFINDER_APPEARANCE_BANKS` set, and skip, naming the variable, where it is unset.
+
+**Issues.** The cellular scene was implemented by W-483 (geometry and molecules), W-484
+(stains and the morphology round) and W-485 (the six context presets); W-486 completed its
+generator checks. The real appearance was implemented by W-516 (the bank), W-517
+(augmentation, placement, territories and labels), W-518 (composition, output, the
+morphology round and truth), W-519 (the six appearance presets and the three real banks)
+and W-520 (the remaining generator checks, GA23 and the table of implemented checks). W-487
+ran the chain checks on the appearance presets. W-488 applied the lists of accepted
+statements, W-483's four findings and the confirmations of the dated amendments, and added
+these sections and the example `docs/examples/context_scene.py` ({doc}`api/examples`), run
+by `test_synthetic_context_example.py`.
+
+**Modules** (all in `src/python/starfinder/synthetic/`, exported by `starfinder.synthetic`
+and listed on the API page `docs/api/synthetic.rst`):
+
+* `_cellular.py` (W-483): the shape functions of lobed nuclei and harmonics, extents,
+  contact distances and the label functions;
+* `_context.py` (W-483, W-484): `ContextSceneConfig` and its parts (`NucleusShapeConfig`,
+  `PackingConfig`, `TerritoryConfig`, `CellTypeConfig`, `MoleculeConfig`),
+  `generate_context_scene`, `ContextScene`, `save_context_scene` and `save_context_dataset`;
+* `_stains.py` (W-484): `StainChannelConfig`, `BrightRegionConfig`, `UnevennessConfig`,
+  `OutputScaleConfig`, `MorphologyRoundConfig` and the stain functions;
+* `_context_presets.py` (W-485): `CONTEXT_PRESETS`, `CONTEXT_PRESET_VERSION` and
+  `context_scene_preset`;
+* `_appearance_bank.py` (W-516): `BankReference`, `build_appearance_bank`,
+  `closed_form_bank` and `load_appearance_bank`;
+* `_appearance_layout.py` (W-517): `AugmentationConfig`, `LayoutConfig`, placement by PL2
+  with DN1 and DN3, territories, ownership and the point evaluator;
+* `_appearance.py` (W-518): `AppearanceSceneConfig`, `CompositionConfig`,
+  `generate_appearance_scene`, `AppearanceScene`, `save_appearance_scene` and
+  `APPEARANCE_TRUTH_VERSION`;
+* `_appearance_presets.py` (W-519): `APPEARANCE_PRESETS`, `APPEARANCE_PRESET_VERSION` and
+  `appearance_scene_preset`;
+* `_sample.py`: the hooks by which the sample scene's generation runs with the cellular
+  scene's and the appearance scene's cells (W-483, W-484, W-518); a scene without the new
+  settings is the accepted sample scene.
+
+**Tests** (in `src/python/test/`):
+
+* the generator checks GN1 to GN25 of {doc}`synthetic-cellular-scene-validation`: `test_synthetic_cellular_contract.py`,
+  `test_synthetic_cellular_scene.py` (W-483), `test_synthetic_cellular_stains.py`,
+  `test_synthetic_cellular_stains_contract.py` (W-484), `test_synthetic_cellular_presets.py`,
+  `test_synthetic_cellular_presets_contract.py` (W-485), `test_synthetic_cellular_routine.py`
+  and `test_synthetic_cellular_checks.py` (W-486), with the helpers `cellular_oracle.py`,
+  `cellular_scenes.py`, `cellular_measures.py` and `cellular_checks.py`; each row's tests are
+  named in that page's "Implemented checks";
+* the generator checks GA1 to GA27 of {doc}`synthetic-real-appearance-validation`:
+  `test_synthetic_appearance_bank.py`, `test_synthetic_appearance_golden.py` (W-516),
+  `test_synthetic_appearance_scene.py` (W-517), `test_synthetic_appearance_stains.py`,
+  `test_synthetic_appearance_contract.py` (W-518), `test_synthetic_appearance_presets.py`,
+  `test_synthetic_appearance_presets_contract.py` (W-519, GA23 added by W-520),
+  `test_synthetic_appearance_coverage.py` and `test_synthetic_appearance_checks.py` (W-520),
+  with the helpers `cellular_appearance_oracle.py`, `cellular_appearance_scenes.py` and
+  `cellular_appearance_measures.py`; each row's tests are named in that page's "Implemented
+  checks";
+* the chain checks CD, CT and CU, steps 0 to 5, on the appearance presets:
+  `test_integration_cellular_chain.py` (W-487), marked `integration` and `validation`; the
+  chains with a model are `slow` and `learned`, the truth-label chains `slow`;
+* the example's test `test_synthetic_context_example.py` (W-488), `slow`.
+
+**Amendments during the implementation**, each with its date, its issue and its reason;
+each is written where it applies:
+
+* **2026-10-15, W-485** ({doc}`synthetic-cellular-scene-validation`, after the table of target
+  ranges). TR7 of dense 3D tissue is reported, not asserted, on `context-dense3d-slow-v1`:
+  the bright regions of Tx1, within TR5's ranges, do not reach the real within-nucleus
+  variation (0.168 against 0.25–0.41). Operator decision, confirmed by Jiahao on 2026-10-16;
+  it applies to the closed-form presets only (W-515, AM1).
+* **2026-10-17, W-516** ({doc}`synthetic-real-appearance`, after CF1's options table). The
+  closed-form bank's sources are rendered with noise and unevenness off: with the field
+  kept, BR4 refuses two of the three culture sources and no closed-form culture bank can be
+  built. Operator decision, confirmed by Jiahao on 2026-10-18.
+* **2026-10-17, W-516** ({doc}`synthetic-real-appearance-validation`, GA6's row). The stored
+  field outside a mask is compared within `max(1e-6 · r, 1e-9)` of the value over the
+  plateau: an entry whose rim level `r` is 0 still carries the blurred inside excess
+  outside its mask, and float32 storage cannot meet a bound of 0. Operator decision,
+  confirmed by Jiahao on 2026-10-18.
+* **2026-10-17, W-519** ({doc}`synthetic-real-appearance`, "Presets"). `appearance-culture-slow-v1`
+  stops after 500 refused proposals in a row: the culture's cell masks saturate below DN1's
+  target of 0.501, and a stop after 4,000 took 27 min 41 s per generation. At seed 42 it
+  places 65 cells and reaches 0.480. Operator decision, confirmed by Jiahao on 2026-10-18.
+* **2026-10-18, W-520** ({doc}`synthetic-real-appearance-validation`, after "Target
+  definitions"). TR2v of dense 3D (0.385) and TR8r of dense 3D (0.238) and of 2D tissue
+  (0.034) are reported beside their ranges, not asserted: DN1 places with a fixed threshold
+  while TR2v takes the scene's own Otsu threshold, and the real rim level holds unlabelled
+  stain that no entry carries. Operator decision, confirmed by Jiahao on 2026-10-18.
+* **2026-10-18, W-487** ({doc}`synthetic-real-appearance-validation`, "Consequences for the
+  chain checks"). CD1's TH1 on `appearance-dense3d-slow-v1` (0.570 against at least 0.9)
+  and CU1's TH3 on `appearance-culture-slow-v1` (2 splits against 0, the seeds 42 and 43
+  pooled) are reported beside their thresholds, not asserted: the dense 3D scene holds
+  about three to six times the label density of the method's labels on real LN, and the two
+  culture splits come from a mask with a detached piece and a two-lobed mask at the FOV
+  border. Every other threshold stays asserted. Operator decision pending Jiahao's
+  confirmation.
+* **2026-10-18, W-488** ({doc}`synthetic-cellular-scene-validation`). W-483's four findings are
+  applied with the options its notes recommend: the fixture `ctx_crowded` at `density=0.9`,
+  so that it raises as the page says; GN6's anchors strict in the label function's
+  arithmetic, as K1 states; the unreachable monolayer refusal dropped from GN3 and kept in
+  the generator as a guard; and GN9 stating that `ctx_types` holds three sample cells. The
+  rows as written could not be tested as written (W-483 notes, "Findings for Jiahao").
+
+No threshold, tolerance, target range, preset or bank was changed by W-488.
+
+**Accepted statements applied (W-488, 2026-10-18).** The fourteen entries of
+{doc}`synthetic-cellular-scene`'s "Accepted statements this addition changes" are applied to
+{doc}`synthetic-sample-scene`, with the completions of entry 32 of {doc}`synthetic-real-appearance`'s list; entries
+1 to 34 of {doc}`synthetic-real-appearance`'s "Accepted statements this page changes" are
+applied to {doc}`synthetic-cellular-scene`; and entries 1 to 38 of {doc}`synthetic-real-appearance-validation`'s list,
+which take the place of entries 35 to 43 of {doc}`synthetic-real-appearance`, are applied to
+{doc}`synthetic-cellular-scene-validation`. Each is applied with its proposed wording; the lists
+stay on their pages as the record of what changed.
+
+**Questions Jiahao has left open**, not answered here: whether DN1 should place with the
+scene's own Otsu threshold, the threshold TR2v measures with; and whether TR8r gets a
+control. No preset, target or check was changed for them.

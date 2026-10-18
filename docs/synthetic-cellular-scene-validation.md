@@ -15,7 +15,10 @@ truth. It implements D1 and D7 of the W-152 comment "§2.12 planning decisions (
 It builds on {doc}`synthetic-cellular-scene`, {doc}`synthetic-sample-scene`,
 {doc}`stitching-assembly-validation`, {doc}`sample-segmentation-validation` and the
 validation design of {doc}`report-algorithms`, and redefines nothing in them: every rule,
-identity, column and status a check names is used as those pages state it.
+identity, column and status a check names is used as those pages state it. The appearance
+presets of {doc}`synthetic-real-appearance` are validated by
+{doc}`synthetic-real-appearance-validation`, which amends this page as its section
+'Accepted statements this page changes' states.
 
 It is a page beside {doc}`synthetic-cellular-scene` rather than a section of it, as the
 validation designs of §2.10 ({doc}`stitching-assembly-validation`) and of the route after
@@ -51,10 +54,15 @@ did not measure, it says so and gives none.
   ranges of the generator checks come from W-393's measurements of method labels on the
   densest tiles of three samples (W-393 `notes.md` §12). They are targets for a development
   fixture. They are not a calibration of the synthetic model to tissue, and passing them
-  does not make the scene one.
+  does not make the scene one. The density and background targets of the appearance
+  presets come from W-513's measurements of the visible stain and of the background at
+  label rims; they are development targets too.
 * **No annotation.** The real labels W-393 measured are method output, read as
   measurements of shape and spacing, and nothing here is or replaces an annotation.
-  Annotation stays with W-123.
+  Annotation stays with W-123. In the appearance presets the truth masks are themselves
+  method labels of real images. A chain check reads agreement with them as a check of the
+  chain and of the method's consistency with its own kind of labels, never as accuracy
+  ({doc}`synthetic-real-appearance-validation`, 'The claim boundary').
 * **W-93 keeps the responsibility for synthetic truth and calibration.** This design adds
   checks of one generator's truth; what a synthetic truth must be and how a synthetic model
   is calibrated stay with W-93.
@@ -69,7 +77,9 @@ did not measure, it says so and gives none.
   named in its issue's notes. A check that loads a model is `learned`. Every test file sets
   one subsystem marker and a kind marker: the generator checks are `synthetic` (the
   package whose behaviour they assert), kind `validation`, `contract` for configuration and
-  interface checks, `golden` for pinned outputs; the chain checks assert the behaviour of
+  interface checks, `golden` for pinned outputs; the appearance checks GA1 to GA27 carry
+  the same markers, and those that read a bank built from real images are `slow`; the
+  chain checks assert the behaviour of
   `synthetic`, `segmentation`, `assignment`, `stitching` and `report` together, so their
   file is `integration`, kind `validation`.
 * **Tolerances.** Counts, IDs, strings, statuses, hashes and label images are compared
@@ -109,23 +119,28 @@ did not measure, it says so and gives none.
   they come from"), and **the gate W-396 approves each one** before an implementation issue
   asserts it. W-393 measured them on the current scene, not on this one (W-393 `notes.md`
   §10), so the first run of the chain checks is also their first measurement on the new
-  scene; what follows a miss is in "What a failure means".
+  scene; what follows a miss is in "What a failure means". On the appearance presets the
+  same thresholds and the target ranges of {doc}`synthetic-real-appearance-validation` are
+  provisional again, and the gate W-515 approves each one for those presets.
 * **Seeds.** Every scene uses the preset seed 42, with one exception fixed in advance: the
-  culture chain check CU runs `context-culture-slow-v1` at the two seeds 42 and 43 (the
+  culture chain check CU runs `appearance-culture-slow-v1` at the two seeds 42 and 43 (the
   preset with `FormedSceneConfig.seed` replaced by 43 for the second scene; Jiahao's decision
   of 2026-10-15, written on {doc}`synthetic-cellular-scene` by W-481). Its steps 1 and 2
   (nuclei against truth, the cell of each molecule) pool the counts of the two scenes before
   the thresholds TH1 to TH4 are applied; its steps 3 and 4 (the count identities of the
   assembly, the report) are asserted on each scene. The hand-built fixtures use no random
   number. No other seed is used, and no check is repeated with another seed to pass.
-* **Fixtures** are generated in the test session from the values stated here; no test
-  reads the network share, a run directory or a real image, and no generated image is
-  committed.
+* **Fixtures** are generated in the test session from the values stated here, and no
+  generated image is committed. No routine test and no test in the CI environment reads the
+  network share, a run directory or a real image. A `slow` test of an appearance preset
+  reads its bank file, derived from real images, by the path of
+  `STARFINDER_APPEARANCE_BANKS`, and skips, naming the variable or the file, without it.
 * **Extras.** A check that exports needs the `anndata` extra, one that fuses or stitches
   `multiview-stitcher`, one that loads a model `stardist` or `cellpose`. Each skips with a
   stated reason where its extra is not importable, so the CI environment (extras `dev`,
-  `local-registration`, `checkpoint`) runs every generator check and skips every chain
-  check, and fails none.
+  `local-registration`, `checkpoint`) runs every generator check except those that read a
+  bank built from real images, which skip there naming `STARFINDER_APPEARANCE_BANKS`,
+  skips every chain check, and fails none.
 
 ## Fixtures
 
@@ -137,17 +152,17 @@ did not measure, it says so and gives none.
 | `ctx_monolayer` | `ctx_shapes` with `monolayer=True` (five planes, `z_mid` in the covered region). | 42 | generator (I1) |
 | `ctx_plane` | `ctx_shapes` on the single-plane configuration of {doc}`stitching-assembly-validation` (`scene_plane`: FOVs of 1 × 36 × 36, jitter bound (0, 1.5, 1.5) voxels), with the stains and the morphology round of `ctx_stains` (`T_z` 0). | 42 | generator (I1, I2) |
 | `ctx_types` | `sample-tiny-v1` with the cell types of C8 (G1, four types, the two marker pairs), `MoleculeConfig(per_cell_median=200, per_cell_spread=0.3, nuclear_fraction=0.5)` and A2 ambient molecules; a copy with type 2's abundance row changed, and one with type 3's molecules per cell changed (stream checks). | 42 | generator (I1) |
-| `ctx_crowded` | `sample-tiny-v1` with `PackingConfig(density=0.6, on_crowded="stop", floor=0.9)` (more than the domain holds: raises), and with `floor=0.1` (stops and records). | 42 | generator (I1) |
+| `ctx_crowded` | `sample-tiny-v1` with `PackingConfig(density=0.9, on_crowded="stop", floor=0.9)` (more than the domain holds: raises), and with `floor=0.1` (stops and records). | 42 | generator (I1) |
 | `ctx_stains` | `ctx_shapes` (each territory rule) with noise disabled, template dtype `float64` and no output scale: a `nucleus` stain `DAPI` with bright regions and unevenness, a `territory` stain `Flamingo` (`nuclear_ratio` 0.3) with unevenness, a `boundary` stain `membrane` at `band_width` 0.01 and 0.5 µm with unevenness; the bright regions and the unevenness take the culture preset's laws, the presets' largest slopes (`BrightRegionConfig(per_nucleus=2, size` lognormal median 0.17 µm, log SD 0.64, `height` median 2.0, log SD 0.69`)`; `UnevennessConfig(centres_per_area=4, amplitude=0.74)`, length one FOV width); and a morphology round `organelle` holding `DAPI` and `Flamingo`, once with a supplied whole-voxel translation `(0, 2, −3)` voxels for every FOV and once with MT1's drawn fractional translation; a copy whose supplied jitter differs between two FOVs by whole voxels (the worked example of identity 2 of {doc}`synthetic-sample-scene`, moved by `T`), and a copy with no cell (every FOV beyond every cut-off). | 42 | generator (I1, I2) |
 | `ctx_uint8` | `ctx_stains` with noise on and `OutputScaleConfig(dtype="uint8", plateau=50)`; and its float64 rendering with the same streams. | 42 | generator (I1, I2) |
 | `band_cases` | Truth tables written by hand, as audit D of W-480 builds them (`results/audit/stains_vs_labels.py` in `runs/W-480/20261015T070249Z-868bf70b/`): the binucleate cell with spherical sites of radii 1 and 2 µm at (0, 0, 0) and (0, 0, 2.7), reach 1; binucleate cells with sites of unequal radii; touching cells of different owners; lobed nuclei under T2; the same at a FOV at a fractional offset in Z, Y and X and at `Z=1`. | none | generator point evaluator (I2) |
 | `context_routine` | The three routine presets `context-dense3d-v1`, `context-tissue2d-v1`, `context-culture-v1` as generated. | 42 | generator (I3) |
 | `context_slow` | The three `slow` presets `context-dense3d-slow-v1`, `context-tissue2d-slow-v1` (at 0.18927 µm in Y and X), `context-culture-slow-v1` (at 0.388796 µm) as generated: about 150, 76 and 42 nuclei per scene (audit A of W-394, re-run by W-481 for the two presets whose pixel is twice the acquired one). | 42 | generator (I3); `slow`; the resource grant of C26 |
 | `context_slow_acquired` | The two variants on which GN23 measures the edge width (TR4) and the bright regions (TR5) of 2D tissue and culture at the pixel W-393 measured them: `context-tissue2d-slow-v1` with `spacing_zyx` replaced by (0.346255, 0.094635, 0.094635) µm and `context-culture-slow-v1` with `spacing_zyx` replaced by (0.346255, 0.194398, 0.194398) µm (`dataclasses.replace`; every other value, jitter and bounds in voxels included, as the preset). They are the two presets as they stood before W-481: about 20 and 12 nuclei (audit A of W-394), and an estimated generation below 53 s and 1.4 GiB, and of 70 to 100 s and below 2 GiB (the estimates of {doc}`synthetic-cellular-scene`, "Resources", before W-481; estimates, not measurements). Not presets: they are built in the test and are not in `CONTEXT_PRESETS`. | 42 | generator (I3); `slow`; the resource grant of C26 |
-| `chain_dense3d` | `context_slow` (dense 3D) written by `save_context_dataset`; per FOV the nuclei by `segment(StarDistConfig(model_path=<3D_spleen>, scale=1.0))` on the reference stain `DAPI` and the cells by `assign_molecules` with `ExpandLabelsConfig(0.7776, "um", "planar")` (W-382's LN settings, W-393 `notes.md` §4); the molecules at their truth positions (each FOV's legacy CSV of the no-segmenter path read by `molecule_table_from_csv`, choice V2); `Dataset.stitch` with `MultiviewStitcherConfig()` on `DAPI`, approved, its placement used when every FOV is `image_supported` and the truth placement otherwise (`placement_from_table` with the true origins, approved; SC1 of C20); `Dataset.export` with `route: per_fov`, `dimensionality: stack`; `Dataset.report` and `read_report`. `chain_dense3d_routine`: the same on `context-dense3d-v1`. | 42 | I3; `stardist`, `anndata`, `multiview-stitcher`; `3D_spleen` |
-| `chain_tissue2d` | `context_slow` (2D tissue, at 0.18927 µm in Y and X) written by `save_context_dataset` with `PI` as the reference stain; per FOV the nuclei–amplicon composite `composite_nuclei_amplicon` of `PI` and the reference round's channel maximum saved as an image (the route has no composite of its own: W-393's workaround, W-393 `notes.md` §4); `Dataset.stitch` on `PI`; `Dataset.export` with `route: after_fusion`, `dimensionality: projection` (Z maximum), a `segmentation` block with the nucleus run StarDist `2D_versatile_fluo` at the scale that gives it about 0.38 µm pixels (0.5 on the `slow` preset's 0.18927 µm grid, 1.0 on the routine preset's 0.37854 µm grid) and the cell run `seeded_watershed` (sigma 1.5 µm, Otsu) on the fused composite seeded by the nuclei, device CPU (W-393 `notes.md` §4); `Dataset.report` and `read_report`. `chain_tissue2d_routine`: the same on `context-tissue2d-v1`. | 42 | I3; `stardist`, `anndata`, `multiview-stitcher`; `2D_versatile_fluo` |
-| `chain_culture` | `context-culture-slow-v1` (at 0.388796 µm in Y and X) generated at the two seeds 42 and 43 ("Seeds": the preset, and the preset with `FormedSceneConfig.seed` 43), each scene written by `save_context_dataset` with the reference stain `DAPI` and the morphology round `organelle` (`ch00` `DAPI`, `ch02` `Flamingo`); per FOV `FOV.prepare_morphology(MorphologyConfig())` (MR1: one translation on the shared `DAPI`); the nuclei by Cellpose `cpsam_v2` on the Z maximum of the registered morphology `DAPI`, extended through z with W-382's culture nucleus setting (`median_um` 1.94398, Otsu, `min_area_um2` 0.37791, `dilation_um` 0.97199, holes once; W-393 `notes.md` §4); the cells by Cellpose `cpsam_v2` on the `Flamingo` and `DAPI` projections, extended through z with W-382's culture cell setting (D2); molecules, stitch, export (`route: per_fov`, `dimensionality: stack`) and report as `chain_dense3d`, for each scene. Steps 1 and 2 pool the counts of the two scenes (about 83 nuclei, W-481's re-run of audit A) before TH1 to TH4; steps 3 and 4 are asserted on each scene. `chain_culture_routine`: the same on `context-culture-v1` at seed 42 only. | 42 and 43 (`slow`); 42 (routine) | I3; `cellpose`, `anndata`, `multiview-stitcher`; `cpsam_v2` |
-| `chain_*_truth` | Each chain fixture with the method replaced by the truth labels: on the route per FOV, the FOV truth labels imported with `import_labels(…, relabel=False)` (the no-segmenter path of {doc}`synthetic-sample-scene`, as EE1 to EE3 of {doc}`stitching-assembly-validation` run it); on the route after fusion, the truth nuclei and cells on the segmentation grid imported as `truth_import` and `truth_runs` of `test/sample_segmentation_fixtures.py` build them, with the truth of choice V3. No model is called. `chain_culture_truth` has the two scenes of `chain_culture`. | 42; 42 and 43 for `chain_culture_truth` | I3; `anndata`, `multiview-stitcher`; `slow` |
+| `chain_dense3d` | `appearance-dense3d-slow-v1` on the bank `ln-sample1-v1`, written by `save_context_dataset` of `scene.context`; per FOV the nuclei by `segment(StarDistConfig(model_path=<3D_spleen>, scale=1.0))` on the reference stain `DAPI` and the cells by `assign_molecules` with `ExpandLabelsConfig(0.7776, "um", "planar")` (W-382's LN settings, W-393 `notes.md` §4); the molecules at their truth positions (each FOV's legacy CSV of the no-segmenter path read by `molecule_table_from_csv`, choice V2); `Dataset.stitch` with `MultiviewStitcherConfig()` on `DAPI`, approved, its placement used when every FOV is `image_supported` and the truth placement otherwise (`placement_from_table` with the true origins, approved; SC1 of C20); `Dataset.export` with `route: per_fov`, `dimensionality: stack`; `Dataset.report` and `read_report`. `chain_dense3d_routine`: the same on `appearance-dense3d-v1` and its closed-form bank. | 42 | I3; `stardist`, `anndata`, `multiview-stitcher`; `3D_spleen` |
+| `chain_tissue2d` | `appearance-tissue2d-slow-v1` (at 0.18927 µm in Y and X) on the bank `tissue2d-v1`, written by `save_context_dataset` of `scene.context` with `PI` as the reference stain; per FOV the nuclei–amplicon composite `composite_nuclei_amplicon` of `PI` and the reference round's channel maximum saved as an image (the route has no composite of its own: W-393's workaround, W-393 `notes.md` §4); `Dataset.stitch` on `PI`; `Dataset.export` with `route: after_fusion`, `dimensionality: projection` (Z maximum), a `segmentation` block with the nucleus run StarDist `2D_versatile_fluo` at the scale that gives it about 0.38 µm pixels (0.5 on the `slow` preset's 0.18927 µm grid, 1.0 on the routine preset's 0.37854 µm grid) and the cell run `seeded_watershed` (sigma 1.5 µm, Otsu) on the fused composite seeded by the nuclei, device CPU (W-393 `notes.md` §4); `Dataset.report` and `read_report`. `chain_tissue2d_routine`: the same on `appearance-tissue2d-v1` and its closed-form bank. | 42 | I3; `stardist`, `anndata`, `multiview-stitcher`; `2D_versatile_fluo` |
+| `chain_culture` | `appearance-culture-slow-v1` (at 0.388796 µm in Y and X) on the bank `culture3d-v1`, generated at the two seeds 42 and 43 ("Seeds": the preset, and the preset with `FormedSceneConfig.seed` 43), each scene written by `save_context_dataset` with the reference stain `DAPI` and the morphology round `organelle` (`ch00` `DAPI`, `ch02` `Flamingo`); per FOV `FOV.prepare_morphology(MorphologyConfig())` (MR1: one translation on the shared `DAPI`); the nuclei by Cellpose `cpsam_v2` on the Z maximum of the registered morphology `DAPI`, extended through z with W-382's culture nucleus setting (`median_um` 1.94398, Otsu, `min_area_um2` 0.37791, `dilation_um` 0.97199, holes once; W-393 `notes.md` §4); the cells by Cellpose `cpsam_v2` on the `Flamingo` and `DAPI` projections, extended through z with W-382's culture cell setting (D2); molecules, stitch, export (`route: per_fov`, `dimensionality: stack`) and report as `chain_dense3d`, for each scene. Steps 1 and 2 pool the counts of the two scenes (about 83 nuclei, W-481's re-run of audit A) before TH1 to TH4; steps 3 and 4 are asserted on each scene. `chain_culture_routine`: the same on `appearance-culture-v1` and its closed-form bank at seed 42 only. | 42 and 43 (`slow`); 42 (routine) | I3; `cellpose`, `anndata`, `multiview-stitcher`; `cpsam_v2` |
+| `chain_*_truth` | Each chain fixture with the method replaced by the truth labels: on the route per FOV, the FOV truth labels imported with `import_labels(…, relabel=False)` (the no-segmenter path of {doc}`synthetic-sample-scene`, as EE1 to EE3 of {doc}`stitching-assembly-validation` run it); on the route after fusion, the truth nuclei and cells on the segmentation grid imported as `truth_import` and `truth_runs` of `test/sample_segmentation_fixtures.py` build them, with the truth of choice V3. In the appearance presets the truth on the segmentation grid is evaluated by the point evaluator of {doc}`synthetic-real-appearance` ('Truth'). No model is called. `chain_culture_truth` has the two scenes of `chain_culture`. | 42; 42 and 43 for `chain_culture_truth` | I3; `anndata`, `multiview-stitcher`; `slow` |
 
 **What is reused, by name.** From `test/report_scene.py`: `require_extras` (the skip
 reasons), the `Chain` record and its `collect` call, and `export_after_fusion` for the
@@ -171,39 +186,45 @@ checks compare the generator's output with it. (2) A *point evaluator* in the ge
 (a private function of `starfinder.synthetic`), which evaluates the scene's label and stain
 functions at supplied sample positions; the band check bisects boundaries with it, and the
 chain checks evaluate the truth on a segmentation grid with it (choice V3). The oracle and
-the evaluator are compared in GN4 and GN13, so neither is checked only by itself.
+the evaluator are compared in GN4 and GN13, so neither is checked only by itself. The
+appearance scene adds its own oracle (`cellular_appearance_oracle.py`) and point
+evaluator, written from {doc}`synthetic-real-appearance`
+({doc}`synthetic-real-appearance-validation`, 'Conventions').
 
 ## Generator checks
 
 Routine tier unless the row says otherwise (see "Conventions" for the 5-s rule). "Source"
 names the statement of {doc}`synthetic-cellular-scene` (by section) or of another page that
-gives the expected result.
+gives the expected result. These rows check the closed-form scene and its six presets. A
+scene of real appearance is checked by GA1 to GA27 of
+{doc}`synthetic-real-appearance-validation`, whose table 'What becomes of GN1 to GN25' says
+which of these rows applies to it.
 
 | # | Check | Fixture (seed) | What is computed | Expected result (source) | Tolerance | Tier and markers |
 | --- | --- | --- | --- | --- | --- | --- |
 | GN1 | An existing preset unchanged; O1 | `sample_presets`, `ctx_off` (42) | (a) The thirteen group digests of everything `save_sample_scene` writes for each sample preset; (b) `generate_context_scene` with every new part at its default against `generate_sample_scene`, field for field, and their saved directories file by file. | (a) The pins of `test/test_synthetic_sample_golden.py`, computed at 943bb6b (W-394); (b) identity 1 (O1, "Opt-in"): arrays equal, tables equal with `check_exact`, `record` equal, `sample.json` and every file of the sample layout equal. | Exact (SHA-256 of content, as the golden test defines it; arrays and tables exact). | (a) The existing golden test, unchanged: routine for `sample-tiny-v1`, `slow` for `sample-small-v1` (4.99 s, W-394 notes §3); `synthetic`, `golden`. (b) routine on `sample-tiny-v1`, `slow` on `sample-small-v1`; `synthetic`, `validation`. |
 | GN2 | Names, fields and preset registry | none | The fields of `SampleSceneConfig`, `CellularSceneConfig` and `StainConfig`; the keys of `SAMPLE_PRESETS`; the names exported by `starfinder.synthetic`; `CONTEXT_PRESETS`, `CONTEXT_PRESET_VERSION`, `CONTEXT_TRUTH_VERSION`; the fields of `CellTypeConfig`; each context preset's configuration. | The fields and keys as at 943bb6b, written in the test ("Opt-in"); the new names of "Names" exported and on API pages (`docs/check_reference.py`); six presets, `context-presets-v1`, `"1"`; the per-type fields of `CellTypeConfig` are exactly `molecules_per_cell`, `nuclear_fraction` and `size_scale` ("Cell types"); every preset value equals the PS1 tables of "Presets", and no preset uses the `boundary` source (O2). | Exact. | routine; `synthetic`, `contract`. |
-| GN3 | Configuration refusals | none | `ValueError` and its message for: `stains` given with `sample.stain` not None; `harmonic_amplitude · M_Y ≥ 1`; `overlap` outside `[0, 0.5)`; `gap < 0`; `contact` outside `[0, 1]`; `density` outside `(0, 1)`; ordinary and binucleate shares both 0 in density mode; `floor` outside `(0, 1]`; `monolayer` with one plane or with `z_mid` outside the covered region's Z interval; a cytoplasm molecule with no room after `max_proposals`; a crowded scene below its floor (`ctx_crowded`). | Each raises `ValueError` naming the field, the seed or the cell, and both densities for the floor ("Names", "Nucleus shape", "Packing", "Molecules"). | Exact (the type; the named values present in the message). | routine; `synthetic`, `contract`. |
+| GN3 | Configuration refusals | none | `ValueError` and its message for: `stains` given with `sample.stain` not None; `harmonic_amplitude · M_Y ≥ 1`; `overlap` outside `[0, 0.5)`; `gap < 0`; `contact` outside `[0, 1]`; `density` outside `(0, 1)`; ordinary and binucleate shares both 0 in density mode; `floor` outside `(0, 1]`; `monolayer` with one plane; a cytoplasm molecule with no room after `max_proposals`; a crowded scene below its floor (`ctx_crowded`). | Each raises `ValueError` naming the field, the seed or the cell, and both densities for the floor ("Names", "Nucleus shape", "Packing", "Molecules"). | Exact (the type; the named values present in the message). | routine; `synthetic`, `contract`. |
 | GN4 | Labels against the truth (identity 2), and identities 1 to 5 of {doc}`synthetic-sample-scene` | `ctx_shapes` (each territory rule), `ctx_monolayer`, `ctx_plane`, `ctx_stains` (its fractional and whole-voxel offsets), `context_routine` (42) | `N` and `C` recomputed by the test oracle from `nuclei.csv`, `lobes.csv`, `harmonics.csv`, `cells.csv` and `cell_context.csv` at every voxel centre of every FOV and of the sample grid, and by the generator's point evaluator at the same positions; per grid the voxels that differ; per nucleus the number of connected pieces of its label (26-connected in 3D, 8-connected in a plane); the accepted identities 1 to 5 on `molecules.csv`, `cells.csv`, `cell_fovs.csv` and `molecule_fovs.csv`. | Labels equal the recomputation except at boundary voxels, at any fractional offset and at `Z=1` (identity 2; "Nucleus shape", "Label rule", "Cell territories"); the evaluator equals the oracle; a nucleus whose label has several pieces keeps one ID and is counted once ("A nucleus label with more than one piece"); identities 1 to 5 of {doc}`synthetic-sample-scene` hold with the new label functions ("Identities a test can check"). | Exact; boundary voxels within 1e-9 µm counted and reported, expected 0; the number of multi-piece nuclei reported. | routine on the tiny fixtures; `slow` on `context_routine` if it measures 5 s or more; `synthetic`, `validation`. |
 | GN5 | Lobes, harmonics and one connected shape | `ctx_shapes` (with and without N2), `ctx_monolayer`, `ctx_plane`, `context_routine`, `context_slow` (42) | From `lobes.csv`, `nuclei.csv` and `harmonics.csv`: lobe 1's offset and its ellipsoid against `nuclei.csv`; for every lobe `l ≥ 2`, its offset `D_l` against `0.9 · (e_{n,1}(û_l) + ε_l(−û_l))`, the two extents recomputed by the test; `site_radius` against `max_l (‖o_l‖ + max semi-axis)` (with lobe 1's harmonic factor under N2); `Σ abs(a_lm)` against `harmonic_amplitude`; `offset_z` of every lobe in a plane or a monolayer; `D_l / a_l` of every lobe of the monolayer presets. | Lobe 1 has offset 0 and repeats `nuclei.csv`; `D_l ≤ 0.9 · (e + ε)`, so every lobe meets lobe 1 and every drawn nucleus is one connected shape before clipping (LB1; W-480); the site sphere contains every lobe and is today's radius for one lobe and no harmonics ("Bounding site"); `Σ abs(a_lm)` equals the amplitude (N2); lobe offsets lie in the YX plane in a plane or a monolayer; in the monolayer presets the bound does not bind, so `D_l / a_l` lies in the support `[0.5, 0.9]` of `lobe_offset` ("Lobe offsets and one connected shape"). | Exact for counts and zeros; floats within 1e-9 µm (1e-9 for the sum of coefficients). | routine on the tiny fixtures; the presets `slow` where measured so; `synthetic`, `validation`. |
-| GN6 | No overlap between nuclei of different cells; a nucleus inside its own cell (identity 3) | `ctx_shapes` (each territory rule; contact 1, overlap 0.2), `ctx_monolayer`, `ctx_plane`, `context_routine` (42) | On every label voxel of every grid: `C` where `N = n > 0`; at every voxel centre where the oracle finds two nuclei's shapes both with `ρ ≤ 1`, the nucleus the label carries; each anchor's own evaluation; each anchor's power distances to every other site. | `N = n > 0` implies `C = cell(n)`, boundary voxels included (identity 3); where two shapes overlap the label is the nucleus of the power-nearest site (ties to the smaller site index) and never the other, so no point carries nuclei of two cells ("Nuclei of different cells do not overlap"); each anchor lies strictly inside its own power cell and gives its own cell ("Packing", K1; "Cell territories"). | Exact (labels and IDs); the oracle's decisions (power faces, `ρ ≤ 1`) by float rounding: voxels whose decision quantity lies within 1e-9 µm of 0 reported, expected 0. | routine on the tiny fixtures; `synthetic`, `validation`. |
+| GN6 | No overlap between nuclei of different cells; a nucleus inside its own cell (identity 3) | `ctx_shapes` (each territory rule; contact 1, overlap 0.2), `ctx_monolayer`, `ctx_plane`, `context_routine` (42) | On every label voxel of every grid: `C` where `N = n > 0`; at every voxel centre where the oracle finds two nuclei's shapes both with `ρ ≤ 1`, the nucleus the label carries; each anchor's own evaluation; each anchor's power distances to every other site. | `N = n > 0` implies `C = cell(n)`, boundary voxels included (identity 3); where two shapes overlap the label is the nucleus of the power-nearest site (ties to the smaller site index) and never the other, so no point carries nuclei of two cells ("Nuclei of different cells do not overlap"); each anchor lies strictly inside its own power cell, in the label function's arithmetic as K1 states, and gives its own cell ("Packing", K1; "Cell territories"). | Exact (labels and IDs); the oracle's decisions (power faces, `ρ ≤ 1`) by float rounding: voxels whose decision quantity lies within 1e-9 µm of 0 reported, expected 0. | routine on the tiny fixtures; `synthetic`, `validation`. |
 | GN7 | Packing | `ctx_shapes`, `ctx_monolayer`, `ctx_crowded`, `context_routine`, `context_slow` (42) | For every pair of accepted sites within reach, the K1 condition recomputed by the test from the truth (the contact distance from the two extents, the two power tests); for the two sites of every binucleate cell, the same; the summed nominal size of the placed nuclei against `φ · ‖Ω‖`; the reached density and the placed seeds that `context.json` records; the result of `ctx_crowded` with each floor. | Every pair satisfies `‖c − c_i‖ ≥ (1 − κ) · t_ik(û) + g` and both power tests (K1, P1); placement stops at the target density, or with `on_crowded="stop"` at the first seed that cannot be placed, recorded, and raises below `floor · φ` (F2, "Density"); every preset reaches its floor (audit A of W-394; W-481's re-run for the two `slow` presets whose pixel changed). | Exact for counts and records; the K1 inequality within 1e-9 µm (the test's float64 arithmetic is not the generator's). | routine on the tiny fixtures; `slow` on the presets; `synthetic`, `validation`. |
 | GN8 | Cell types and their genes (identity 4) | `ctx_types`, `context_routine` (42) | Rows of `cell_context.csv` per cell; each cell's `region` against the region of its anchor recomputed from `regions.csv`; each cell molecule's gene weight in its cell's type; the genes of ambient molecules; each row of `type_abundances.csv`. | One row per cell; `region` is the Voronoi region of the anchor (ties to the smaller region index, Ty2); every cell molecule's gene has nonzero weight in its type, and with A2 no ambient molecule has a marker gene (identity 4); each abundance row sums to 1 and the presets hold G1's table ("Cell types"). | Exact; anchors within 1e-9 µm of a region boundary reported, expected 0 (rounding of the Voronoi decision); the row sums within 1e-9 (rounding of G1's exact sums). | routine; `synthetic`, `validation`. |
-| GN9 | Counts and the marker answers (identities 5 and 6) | `ctx_types`, `context_routine` (42) | `cell_gene_counts.csv` against `molecules.csv` grouped by `true_cell_id` and `gene_id`, its sums against `cells.csv` `n_molecules`, its `nuclear_count` against the molecules of compartment `nucleus`; `marker_pairs.csv` against MECR recomputed from `cell_gene_counts.csv` by the report's definition ({doc}`report-algorithms`, "`mecr.csv`") over the sample cells at `positive_threshold` 1. | Identity 5 and identity 6: equal; the exclusive pair has `both` 0 and `mecr` 0 when `either > 0`; `mecr` null when `either` is 0 ("The known answers"). | Exact (integers; `mecr` as the float64 ratio of the same two integers). | routine; `synthetic`, `validation`. |
+| GN9 | Counts and the marker answers (identities 5 and 6) | `ctx_types`, `context_routine` (42) | `cell_gene_counts.csv` against `molecules.csv` grouped by `true_cell_id` and `gene_id`, its sums against `cells.csv` `n_molecules`, its `nuclear_count` against the molecules of compartment `nucleus`; `marker_pairs.csv` against MECR recomputed from `cell_gene_counts.csv` by the report's definition ({doc}`report-algorithms`, "`mecr.csv`") over the sample cells at `positive_threshold` 1. | Identity 5 and identity 6: equal; the exclusive pair has `both` 0 and `mecr` 0 when `either > 0`; `mecr` null when `either` is 0 ("The known answers"). `ctx_types` holds three sample cells, none of type 1, so there its co-expressed pair has `either` 0 and `mecr` null; the co-expressed answer is exercised by the presets and the chain checks (W-483, finding 4). | Exact (integers; `mecr` as the float64 ratio of the same two integers). | routine; `synthetic`, `validation`. |
 | GN10 | The realized gene abundance of each cell type | `ctx_types`, `context_routine` (42) | For each type `t` with `n_t` cell molecules and each gene `g`: the realized share `p̂ = count / n_t` against the configured weight `w_tg`. | `p̂` equals `w_tg` within the sampling tolerance of the categorical draw of `context.identity` ("Cell types", G1; "Random streams"); a marker gene of another type has count exactly 0. | 4 SE: `abs(p̂ − w) ≤ 4 · sqrt(w (1 − w) / n_t)`; zeros exact. | routine; `synthetic`, `validation`. |
 | GN11 | Molecules per cell, and the renderer unchanged | `ctx_types`, `context_routine` (42) | `cell_context.csv` `molecule_mean` per cell; `Σ_k n_k` against `Σ_k μ_k` over the cells; the total against `max_count`; with `per_cell_spread` 0, every `molecule_mean`; the FOV amplicon images against the rendering identity of {doc}`synthetic-sample-scene` ("Tests the implementation keeps and adds"). | M2: the count of cell `k` is Poisson with mean `μ_k`, so the summed count equals the summed means within the Poisson tolerance; `max_count` guards the total; with spread 0 every mean is the median (M1) ("Molecules"); the molecules are rendered by the unchanged formed generator ("Every new object is a function of the sample position"). | 4 SE: `abs(Σ n_k − Σ μ_k) ≤ 4 · sqrt(Σ μ_k)`; the rest exact. | routine; `synthetic`, `validation`. |
 | GN12 | The realized nuclear fraction of reads | `ctx_types`, `context_routine` (42) | Over the cell molecules of cells with a nucleus: the realized share `f̂` with compartment `nucleus` against `f`; per molecule, `compartment` against `N(σ_m) > 0` and `C(σ_m)` against `true_cell_id`, both recomputed by the oracle; the compartments of the molecules of empty cells. | NF1: each cell molecule is in the nucleus with probability `f`, so `f̂` equals `f` within the binomial tolerance; `compartment` is `nucleus` exactly where the molecule's position holds a nucleus of its cell; every cell molecule lies in its own cell; an empty cell's molecules are all in its territory ("Molecules", C10). | 4 SE: `abs(f̂ − f) ≤ 4 · sqrt(f (1 − f) / N)` with `N` the molecules counted; the rest exact, boundary positions within 1e-9 µm reported, expected 0. | routine; `synthetic`, `validation`. |
-| GN13 | The stain plateau against the label; the stain identities (identity 7) | `ctx_stains` (each territory rule, both morphology translations, the whole-voxel pair and the copy with no cell), `ctx_plane` (42) | Each stain image (`nucleus`, `territory`, `boundary` sources) against the oracle's signal function with its background (`evaluate_background_translated` with the FOV's offset) at the voxel centres, and against the point evaluator; the image rendered again at `true_f + k ⊙ s` for an integer `k` against the first shifted by `k`; on the voxels with `N = n` and the erfc argument at most `−4w` (the plateau), the image less the background against `A_n U(σ) (1 + T_n(σ))`; the sign of the nuclear argument against `N` and of `d_k` against `C`; the image of a FOV beyond every cut-off. | Identity 7: equal at any fractional offset and at `Z=1`, except at boundary voxels (the cut-off surfaces included); on the plateau the image less the background is `A_n U(σ) (1 + T_n(σ)) · E_n`, with `E_n = ½ erfc(a / (√2 w))` at an argument `a ≤ −4w`, so `1 − ½ erfc(2√2) ≤ E_n ≤ 1`, and no other nucleus contributes there (its face term is at least `4w`, beyond its cut-off) ("Stains", the nuclear source); `N = n` exactly where the nuclear argument is at most 0 and `C = k` exactly where `d_k ≤ 0` ("Stains", the nuclear and territory sources); a FOV beyond the cut-off of every nucleus holds the background only in the nuclear stain, and the territory and boundary stains are lit by an empty cell; with no cell, every stain is the background. | *Identity against the oracle and the evaluator* (float rounding of an exact identity): 1e-9 of the image maximum. *Integer shift* (float rounding of an exact identity, one point function at two roundings of a position): 1e-10 of the maximum. Both are covered by a derived worst case of the full stains (with `U`, the bright regions `T_n` and, in the territory source, the factor `1 − (1 − q) M`): relative to the image maximum, the most objects contributing at a voxel, times the largest plateau and `U`, times the sum of each factor's error, which is its slope times the rounding of a position (2 ulp per axis) plus the rounding of its own evaluation: the edge or band (slope `1 / (√(2π) w)` or `e^(−½) / b`, times the argument's Lipschitz constant, plus the rounding of a face or radial term), the field (`‖∇ log U‖ ≤ 2 a ‖z‖ D_Ω / L²`, `D_Ω` the diameter of `Ω`, plus 8 ε `a Σ abs(z_q)`), the bright regions (slope `Σ_b h_b e^(−½) / s_b`, plus 8 ε `Σ_b h_b`) and `M` (the nuclear edges' slopes, weighted by `1 − q`). On the fixtures that worst case is 7.3e-11 at `b` 0.01 µm and at most 1.3e-11 for every other source; on grids of the two changed `slow` pixels in the same domain (W-482's re-run) it is 9.1e-11 at `b` 0.01 µm (0.18927 µm) and at most 1.6e-11 for every other source (0.388796 µm), still within 1e-10; observed: at most 7.1e-14 (identity) and 2.0e-13 (shift). Identity 7 of {doc}`synthetic-cellular-scene` states 1e-10 of the maximum for the shift (amended by W-481, choice V13), which covers that worst case. Positions within 1e-9 µm of a bright region's box of `4 s_b` are boundary voxels. *Plateau* (derived from `E_n` at its worst case `a = −4w`): `0 ≤ A_n U (1 + T_n) − (image − background) ≤ ½ erfc(2√2) · A_n U (1 + T_n)`, with `½ erfc(2√2)` = 3.167e-5, plus 1e-9 of the maximum for rounding. *Site skipping* (derived from the rule of "Stains": a skipped site's face term is below `−4w` over the box): at voxels where the oracle's face term `h_n` is below `−4w` and sets the argument, the identity holds within `½ erfc(2√2) · A_n U (1 + T_n)` (choice V9; counted and reported). Boundary voxels counted and reported, expected 0. | routine; `synthetic`, `validation`. |
-| GN14 | The band at every boundary | `band_cases` (none); `ctx_stains` (42) | Label boundaries bisected to 1e-9 µm between nearby positions with the point evaluator; at each, the boundary stain of each cell whose boundary it is, at `b` 0.01 and 0.5 µm; `β_k` at both ends of steps of 1e-3 and 1e-6 µm in random directions from random positions, on steps that do not cross the internal face of a binucleate cell; at positions where the internal-face term `g_k` alone lights the band (`g_k < 0.05 µm ≤ abs(d_k)`), whether a boundary of `C = k` lies within audit D's search radius. | `β_k = 0` on every boundary of `C = k` inside `Ω`, the face between the two sites of a binucleate cell included, so the band is at its peak `B_k U(σ)` there; `β_k` is continuous off that internal face ("The boundary source", W-480); `g_k` lights the band only near a boundary of `C = k` (reported: the page states no distance for "near"). | *Continuity* (derived: a Lipschitz bound of `β_k`): `abs(Δβ_k) ≤ L_k · ‖Δσ‖ + 1e-9 µm`. `β_k` is built by `max`, `min` and `abs` from face terms, which are exact distances to planes (constant 1), and from the outer terms of the cell's sites, so `L_k` is the largest constant of those: 1 under T1 and T3 and for an empty cell (a distance to a sphere, or none); under T2 `r̄_n / a_min,l` over the lobes `l` of the site's nucleus (`(ρ − 1) · r̄_n` for an ellipsoid of smallest semi-axis `a_min,l`; the grown term has larger semi-axes), and for lobe 1 under N2 that value times `sqrt(1 / r_min² + G² / r_min⁴)`, with `r_min = 1 − harmonic_amplitude · M_Y` and `G = L · harmonic_amplitude · M_Y` the bound of `‖∇_S r‖` by Bernstein's inequality for a spherical polynomial of degree `L` (in a plane, `abs(r′) ≤ L · Σ abs(a_k)`). *Band at the boundary* (derived from the same bound): at each end of a bisected pair, at most `ε` = 1e-9 µm from the boundary, `β_k ≤ L_k ε + 1e-9 µm`, so the band is at least `exp(−½ ((L_k ε + 1e-9 µm) / b)²)` of `B_k U(σ)` (above `1 − 1e-12` at `b` 0.01 µm for every `L_k` up to 12; the largest on the fixtures is 11.7). *Converse*: reported, no tolerance (the count of such positions with no boundary within `4 × 0.05 µm × F`, audit D's search, expected 0). | routine; `synthetic`, `validation`. |
-| GN15 | Bright regions (identity 9) | `ctx_stains`, `context_routine` (42) | For every row of `bright_regions.csv`, `N` at its centre by the evaluator and the oracle; its nucleus ID, stain, size and height. | `N(c_b) = n` exactly for its nucleus `n`; sizes and heights positive; regions only in a `nucleus` stain with texture (identity 9, Tx1). | Exact by the point evaluator (the generator's own function); by the oracle, float rounding of the decision: centres within 1e-9 µm of a boundary reported, expected 0. | routine; `synthetic`, `validation`. |
-| GN16 | The unevenness field | `ctx_stains`, a copy with `centres_per_area` 0 (42) | The field `U` recomputed from `unevenness.csv` with U1's normalized formula at the voxel centres (inside GN13's comparison), and on the common voxels of the whole-voxel pair of `ctx_stains` (two FOVs whose offsets differ by whole voxels, so a common voxel images one sample position at two roundings); the field with no centre. | U1: `U` is the recorded bumps' normalized log-Gaussian sum, the same at a sample position in every FOV that images it; with no centre `U = 1` ("Unevenness across the field"). The statement that `log U` has standard deviation exactly `a` at every point, given the centres, has no check of its own: it holds by the normalization (the weights are divided by `sqrt(Σ w_q²)`), which the recomputation reproduces, and audit A of W-394 measured it (0.67 to 0.73 per preset, 200 realizations). | Between FOVs, the ratio within 1e-12 of 1 (float rounding of an exact identity; the tolerance script observes at most 8.9e-16 on the dense 3D presets' spacing and 1.1e-15 on the culture `slow` preset's 0.388796 µm); with no centre exactly 1; the rest inside GN13. | routine; `synthetic`, `validation`. |
-| GN17 | 8-bit output (identity 10) and the image dtypes | `ctx_uint8`, its no-cell copy (42) | Each 8-bit stain image against `clip(rint(J · k), 0, 255)` of its float64 rendering `J` with the same streams; `k` from `stain_channels.csv` against `g / m_A` of the configuration; the saved and reloaded stain images' dtype and values. | Identity 10; `k` exists and equals `g / m_A` for a FOV or a scene without a nucleus (B1); float32 and uint8 images are written and read back unchanged ("Truth schema"). | The 8-bit image exact against the expression with the recorded `k` (the page defines the cast by it); `k` within 1e-9 relative of `g / m_A` (float rounding: `m_A = exp(μ)` of the law); the dtypes and values after reloading exact. | routine; `synthetic`, `validation`. |
+| GN13 | The stain plateau against the label; the stain identities (identity 7) | `ctx_stains` (each territory rule, both morphology translations, the whole-voxel pair and the copy with no cell), `ctx_plane` (42) | Each stain image (`nucleus`, `territory`, `boundary` sources) against the oracle's signal function with its background (`evaluate_background_translated` with the FOV's offset) at the voxel centres, and against the point evaluator; the image rendered again at `true_f + k ⊙ s` for an integer `k` against the first shifted by `k`; on the voxels with `N = n` and the erfc argument at most `−4w` (the plateau), the image less the background against `A_n U(σ) (1 + T_n(σ))`; the sign of the nuclear argument against `N` and of `d_k` against `C`; the image of a FOV beyond every cut-off. | Identity 7: equal at any fractional offset and at `Z=1`, except at boundary voxels (the cut-off surfaces included); on the plateau the image less the background is `A_n U(σ) (1 + T_n(σ)) · E_n`, with `E_n = ½ erfc(a / (√2 w))` at an argument `a ≤ −4w`, so `1 − ½ erfc(2√2) ≤ E_n ≤ 1`, and no other nucleus contributes there (its face term is at least `4w`, beyond its cut-off) ("Stains", the nuclear source); `N = n` exactly where the nuclear argument is at most 0 and `C = k` exactly where `d_k ≤ 0` ("Stains", the nuclear and territory sources); a FOV beyond the cut-off of every nucleus holds the background only in the nuclear stain, and the territory and boundary stains are lit by an empty cell; with no cell, every stain is the background. These stains are those of the closed-form presets. The stains of an appearance scene are checked by the composition identity (GA12, GA13 of {doc}`synthetic-real-appearance-validation`). | *Identity against the oracle and the evaluator* (float rounding of an exact identity): 1e-9 of the image maximum. *Integer shift* (float rounding of an exact identity, one point function at two roundings of a position): 1e-10 of the maximum. Both are covered by a derived worst case of the full stains (with `U`, the bright regions `T_n` and, in the territory source, the factor `1 − (1 − q) M`): relative to the image maximum, the most objects contributing at a voxel, times the largest plateau and `U`, times the sum of each factor's error, which is its slope times the rounding of a position (2 ulp per axis) plus the rounding of its own evaluation: the edge or band (slope `1 / (√(2π) w)` or `e^(−½) / b`, times the argument's Lipschitz constant, plus the rounding of a face or radial term), the field (`‖∇ log U‖ ≤ 2 a ‖z‖ D_Ω / L²`, `D_Ω` the diameter of `Ω`, plus 8 ε `a Σ abs(z_q)`), the bright regions (slope `Σ_b h_b e^(−½) / s_b`, plus 8 ε `Σ_b h_b`) and `M` (the nuclear edges' slopes, weighted by `1 − q`). On the fixtures that worst case is 7.3e-11 at `b` 0.01 µm and at most 1.3e-11 for every other source; on grids of the two changed `slow` pixels in the same domain (W-482's re-run) it is 9.1e-11 at `b` 0.01 µm (0.18927 µm) and at most 1.6e-11 for every other source (0.388796 µm), still within 1e-10; observed: at most 7.1e-14 (identity) and 2.0e-13 (shift). Identity 7 of {doc}`synthetic-cellular-scene` states 1e-10 of the maximum for the shift (amended by W-481, choice V13), which covers that worst case. Positions within 1e-9 µm of a bright region's box of `4 s_b` are boundary voxels. *Plateau* (derived from `E_n` at its worst case `a = −4w`): `0 ≤ A_n U (1 + T_n) − (image − background) ≤ ½ erfc(2√2) · A_n U (1 + T_n)`, with `½ erfc(2√2)` = 3.167e-5, plus 1e-9 of the maximum for rounding. *Site skipping* (derived from the rule of "Stains": a skipped site's face term is below `−4w` over the box): at voxels where the oracle's face term `h_n` is below `−4w` and sets the argument, the identity holds within `½ erfc(2√2) · A_n U (1 + T_n)` (choice V9; counted and reported). Boundary voxels counted and reported, expected 0. | routine; `synthetic`, `validation`. |
+| GN14 | The band at every boundary | `band_cases` (none); `ctx_stains` (42) | Label boundaries bisected to 1e-9 µm between nearby positions with the point evaluator; at each, the boundary stain of each cell whose boundary it is, at `b` 0.01 and 0.5 µm; `β_k` at both ends of steps of 1e-3 and 1e-6 µm in random directions from random positions, on steps that do not cross the internal face of a binucleate cell; at positions where the internal-face term `g_k` alone lights the band (`g_k < 0.05 µm ≤ abs(d_k)`), whether a boundary of `C = k` lies within audit D's search radius. | `β_k = 0` on every boundary of `C = k` inside `Ω`, the face between the two sites of a binucleate cell included, so the band is at its peak `B_k U(σ)` there; `β_k` is continuous off that internal face ("The boundary source", W-480); `g_k` lights the band only near a boundary of `C = k` (reported: the page states no distance for "near"). No appearance preset uses the boundary source (O2). | *Continuity* (derived: a Lipschitz bound of `β_k`): `abs(Δβ_k) ≤ L_k · ‖Δσ‖ + 1e-9 µm`. `β_k` is built by `max`, `min` and `abs` from face terms, which are exact distances to planes (constant 1), and from the outer terms of the cell's sites, so `L_k` is the largest constant of those: 1 under T1 and T3 and for an empty cell (a distance to a sphere, or none); under T2 `r̄_n / a_min,l` over the lobes `l` of the site's nucleus (`(ρ − 1) · r̄_n` for an ellipsoid of smallest semi-axis `a_min,l`; the grown term has larger semi-axes), and for lobe 1 under N2 that value times `sqrt(1 / r_min² + G² / r_min⁴)`, with `r_min = 1 − harmonic_amplitude · M_Y` and `G = L · harmonic_amplitude · M_Y` the bound of `‖∇_S r‖` by Bernstein's inequality for a spherical polynomial of degree `L` (in a plane, `abs(r′) ≤ L · Σ abs(a_k)`). *Band at the boundary* (derived from the same bound): at each end of a bisected pair, at most `ε` = 1e-9 µm from the boundary, `β_k ≤ L_k ε + 1e-9 µm`, so the band is at least `exp(−½ ((L_k ε + 1e-9 µm) / b)²)` of `B_k U(σ)` (above `1 − 1e-12` at `b` 0.01 µm for every `L_k` up to 12; the largest on the fixtures is 11.7). *Converse*: reported, no tolerance (the count of such positions with no boundary within `4 × 0.05 µm × F`, audit D's search, expected 0). | routine; `synthetic`, `validation`. |
+| GN15 | Bright regions (identity 9) | `ctx_stains`, `context_routine` (42) | For every row of `bright_regions.csv`, `N` at its centre by the evaluator and the oracle; its nucleus ID, stain, size and height. | `N(c_b) = n` exactly for its nucleus `n`; sizes and heights positive; regions only in a `nucleus` stain with texture (identity 9, Tx1). An appearance scene draws no bright region, and its `bright_regions.csv` is empty (GA21); its texture is compared by TR5 and TR7 in GA23. | Exact by the point evaluator (the generator's own function); by the oracle, float rounding of the decision: centres within 1e-9 µm of a boundary reported, expected 0. | routine; `synthetic`, `validation`. |
+| GN16 | The unevenness field | `ctx_stains`, a copy with `centres_per_area` 0 (42) | The field `U` recomputed from `unevenness.csv` with U1's normalized formula at the voxel centres (inside GN13's comparison), and on the common voxels of the whole-voxel pair of `ctx_stains` (two FOVs whose offsets differ by whole voxels, so a common voxel images one sample position at two roundings); the field with no centre. | U1: `U` is the recorded bumps' normalized log-Gaussian sum, the same at a sample position in every FOV that images it; with no centre `U = 1` ("Unevenness across the field"). The statement that `log U` has standard deviation exactly `a` at every point, given the centres, has no check of its own: it holds by the normalization (the weights are divided by `sqrt(Σ w_q²)`), which the recomputation reproduces, and audit A of W-394 measured it (0.67 to 0.73 per preset, 200 realizations). An appearance scene draws no field, and its `unevenness.csv` is empty (GA21). | Between FOVs, the ratio within 1e-12 of 1 (float rounding of an exact identity; the tolerance script observes at most 8.9e-16 on the dense 3D presets' spacing and 1.1e-15 on the culture `slow` preset's 0.388796 µm); with no centre exactly 1; the rest inside GN13. | routine; `synthetic`, `validation`. |
+| GN17 | 8-bit output (identity 10) and the image dtypes | `ctx_uint8`, its no-cell copy (42) | Each 8-bit stain image against `clip(rint(J · k), 0, 255)` of its float64 rendering `J` with the same streams; `k` from `stain_channels.csv` against `g / m_A` of the configuration; the saved and reloaded stain images' dtype and values. | Identity 10; `k` exists and equals `g / m_A` for a FOV or a scene without a nucleus (B1); float32 and uint8 images are written and read back unchanged ("Truth schema"). In an appearance scene the cast is `clip(rint(g · J), 0, 255)` with `g` the bank's median plateau (GA15). | The 8-bit image exact against the expression with the recorded `k` (the page defines the cast by it); `k` within 1e-9 relative of `g / m_A` (float rounding: `m_A = exp(μ)` of the law); the dtypes and values after reloading exact. | routine; `synthetic`, `validation`. |
 | GN18 | The truth translation of the morphology round (identity 8) | `ctx_stains` (both translations), `ctx_plane` (42) | `morphology_truth.csv` against the configuration: `translation_*_vox` against `τ_f ⊘ s`, `pull_displacement_*_vox` against `−τ_f ⊘ s`, each `τ` against its bound; the morphology image against the stain functions at `true_f + τ_f + q ⊙ s` (inside GN13's comparison); with the whole-voxel translation, the morphology `DAPI` against the reference `DAPI` shifted by `τ_f ⊘ s` on the common voxels; `Ω` and `K` from `sample.json` against the same scene without a morphology round; the aligned crop of identity 2 with `T`. | Identity 8; the pull displacement is the negated translation in voxels ("The truth of the translation"); `abs(τ_{f,a}) ≤ T_a · s_a`, `τ_z = 0` at `Z=1` (MT1); `Ω` grows by `T ⊙ s` on each side and `K` is unchanged; `δ_f = nominal_f ⊘ s + j_f + J + T`, and a supplied jitter that makes it whole on every axis gives an aligned crop (entries 3, 4 and 11 of "Accepted statements this addition changes"). | The truth columns within 1e-9 voxels (float rounding of `τ_f ⊘ s`); the shifted image within 1e-10 of the maximum (float rounding of an exact identity, derived as GN13's integer shift; choice V13), boundary voxels reported, expected 0; the rest exact. | routine; `synthetic`, `validation`. |
 | GN19 | Projection truth (identity 11) | `ctx_monolayer`, `context_routine` (2D tissue and culture) (42) | Every nucleus centre's z; on a FOV grid, the sample grid and a grid at a fractional offset in Z, Y and X, the nucleus IDs per column of fixed `(y, x)`; columns within 1e-9 µm of a power face. | Every centre at `z_mid`; no column holds two nucleus IDs; `P(y, x)` is the Z maximum of that grid's labels (PT1, "Monolayer"). | Exact; columns within 1e-9 µm of a face reported, expected 0. | routine; `synthetic`, `validation`. |
 | GN20 | `Z=1` | `ctx_plane` (42) | Generation; the shapes of every FOV image, stain, morphology image and label image; the z of every nucleus centre, lobe offset, cell anchor, molecule, bright region and unevenness centre; `τ_z`; the label kind `import_labels` reads; GN4, GN6, GN13, GN17 and GN18 on this fixture. | Generation succeeds; every array has one plane; every z is exactly 0; `τ_z = 0`; the saved labels are read as `plane` label images ("`Z=1`"). | Exact. | routine; `synthetic`, `validation`. |
 | GN21 | A new random stream leaves the existing draws unchanged | `ctx_off`, `ctx_types` and its two changed copies, `ctx_stains` and a copy with one more stain (42) | The components of every stream the context generator draws from (recorded in `context.json`); with every new part off, the streams drawn; between `ctx_types` and its copies, every molecule's position, compartment and gene; between `ctx_stains` and its copy with one more stain, the other stains' images; the noise descriptor of a reference-round `DAPI` stain. | Every new component starts with `context.`, so no new descriptor equals one of the formed model, the `sample.*` components or `stain.noise.*` (`synthetic/_sample.py::_SAMPLE_COMPONENTS`); with every part off no `context.` stream is drawn (with GN1(b)); changing type 2's abundance changes only the genes of type-2 cells' molecules; changing type 3's molecules per cell changes only the molecules of type-3 cells; adding a stain changes no other stain; a reference-round `DAPI` draws its noise from the sample scene's stain streams ("Random streams", points 1 to 4). | Exact. | routine; `synthetic`, `validation`. |
 | GN22 | Truth schema and persistence | `ctx_stains`, `ctx_types`, `ctx_plane`, `ctx_off` (42) | The directory `save_context_scene` writes: the sample layout against `save_sample_scene` of `scene.sample`; the twelve tables' columns and order; `context.json` keys, version and SHA-256 of every file; the tables reloaded; an empty population (a type with no cell, no N2, no morphology round); the dataset `save_context_dataset` writes, read by `Dataset`, `FOV.load_images` and `FOV.prepare_morphology`. | V1: the sample layout unchanged and twelve new tables with the columns of "Truth schema"; `context_truth_version` `"1"`; hashes equal the files; reloaded tables equal (floats round trip); empty populations give a header and no row; the dataset holds the layout of "Files and layout" and `prepare_morphology` loads the reference stain and registers the morphology round. | Exact (`check_exact`). | routine; `synthetic`, `contract`. |
-| GN23 | The four cases and the molecules in their target ranges | `context_slow`; `context_slow_acquired` for TR4 and TR5 of 2D tissue and culture (42) | With W-393's measures (definitions of W-393 `notes.md` §2, rebuilt in a test helper; the bright-region detection at factor 1.5, 0.1 µm³ or µm², one-voxel smoothing) on the truth labels and the stain of each scene, at the pixel W-393 measured each quantity: the edge width 10–90 % (TR4) and the bright regions (TR5) of 2D tissue and culture on `context_slow_acquired`, at their acquired pixels of 0.094635 and 0.194398 µm (at the presets' twice-coarser pixels a culture pixel is about 0.15 µm², near the median bright region of 0.26 µm², and the culture's edge of 0.85 µm spans about two pixels); every other quantity, and TR4 and TR5 of dense 3D tissue, on `context_slow` itself: share of touching nuclei; nucleus volume (area) fraction; share not described by one ellipsoid; edge width 10–90 %; bright regions per nucleus, size and peak; nucleus median over the image's median; within-nucleus CV; background and noise over the plateau; the 8-bit plateau grey level; reads per cell; nuclear fraction per cell; the expanded cell volume (dense 3D); the composite signal share per cell (2D tissue); the share of clipped plateaus and bright-region peaks. | Inside the target range of each quantity, the p5–p95 of the W-393 row named in "The four cases, their controls and their ranges" and in each preset table (PS1); a quantity measured on fewer than 100 objects of its kind is reported, not compared (choice V12); the clipped shares reported. Per scene the dense 3D `slow` preset holds about 150 nuclei and reaches 100; the 2D tissue (about 76) and culture (about 42) `slow` presets and their variants (about 20 and 12) do not, so their quantities measured on nuclei or cells are reported, and a quantity of another kind (bright regions, molecules) is compared only where the scene holds 100 of its objects (the culture's second scene, seed 43, belongs to the chain check only). | The range, provisional ("Thresholds and where they come from", TR rows); counts exact. | `slow`; `synthetic`, `validation`, `slow`. |
+| GN23 | The four cases and the molecules in their target ranges | `context_slow`; `context_slow_acquired` for TR4 and TR5 of 2D tissue and culture (42) | With W-393's measures (definitions of W-393 `notes.md` §2, rebuilt in a test helper; the bright-region detection at factor 1.5, 0.1 µm³ or µm², one-voxel smoothing) on the truth labels and the stain of each scene, at the pixel W-393 measured each quantity: the edge width 10–90 % (TR4) and the bright regions (TR5) of 2D tissue and culture on `context_slow_acquired`, at their acquired pixels of 0.094635 and 0.194398 µm (at the presets' twice-coarser pixels a culture pixel is about 0.15 µm², near the median bright region of 0.26 µm², and the culture's edge of 0.85 µm spans about two pixels); every other quantity, and TR4 and TR5 of dense 3D tissue, on `context_slow` itself: share of touching nuclei; nucleus volume (area) fraction; share not described by one ellipsoid; edge width 10–90 %; bright regions per nucleus, size and peak; nucleus median over the image's median; within-nucleus CV; background and noise over the plateau; the 8-bit plateau grey level; reads per cell; nuclear fraction per cell; the expanded cell volume (dense 3D); the composite signal share per cell (2D tissue); the share of clipped plateaus and bright-region peaks. | Inside the target range of each quantity, the p5–p95 of the W-393 row named in "The four cases, their controls and their ranges" and in each preset table (PS1); a quantity measured on fewer than 100 objects of its kind is reported, not compared (choice V12); the clipped shares reported. Per scene the dense 3D `slow` preset holds about 150 nuclei and reaches 100; the 2D tissue (about 76) and culture (about 42) `slow` presets and their variants (about 20 and 12) do not, so their quantities measured on nuclei or cells are reported, and a quantity of another kind (bright regions, molecules) is compared only where the scene holds 100 of its objects (the culture's second scene, seed 43, belongs to the chain check only). The appearance presets are compared by GA23 with the target definitions of {doc}`synthetic-real-appearance-validation`. | The range, provisional ("Thresholds and where they come from", TR rows); counts exact. | `slow`; `synthetic`, `validation`, `slow`. |
 | GN24 | Generation cost | `context_routine`, `context_slow`, `context_slow_acquired` (42) | Each preset generated in its own process under `/usr/bin/time -v`: wall time and peak RSS, recorded in the test output. | Within the bound of C26 (one CPU, 16 GiB, 3600 s per step) for the `slow` presets and the two variants; a test that generates a routine preset in the routine tier takes less than 5 s ("Resources"). | The bound; nothing else is asserted. | `slow`; `synthetic`, `validation`, `slow`. |
 | GN25 | The existing tests unchanged | the existing files | The diff of each implementation issue against the files `test/test_synthetic_sample_scene.py`, `test/test_synthetic_sample_golden.py`, `test/report_scene.py`, `test/test_report_chain.py`, the tests {doc}`synthetic-sample-scene` names in "Opt-in, and what stays as it is", and those of {doc}`stitching-assembly-validation` and {doc}`sample-segmentation-validation` that generate a sample preset. | No edit to any of them; each passes in its tier ("Opt-in", "Existing tests that must pass unchanged"). | Exact (an empty diff). | their own tiers and markers. |
 
@@ -258,23 +279,29 @@ environment runs them all; GN24 needs `/usr/bin/time`.
 Where a test differs from its row as written, the case is a finding recorded in its issue's
 worker notes, and the row is not changed:
 
-* **GN3 and GN7, `ctx_crowded` at `floor=0.9`.** The domain holds more than `0.9 · 0.6`, so
-  placement stops and records without raising (W-483, finding 1). GN7 tests the fixture as
-  written. GN3 tests the refusal below a floor on a variant at `density=0.9`, which stops
-  at the same seed.
+* **GN3 and GN7, `ctx_crowded`.** At `density=0.6` and `floor=0.9` the domain holds more
+  than `0.9 · 0.6`, so placement stopped and recorded without raising (W-483, finding 1).
+  W-488 amended the fixture to `density=0.9`. GN3 tests it (`crowded-below` of
+  `cellular_scenes.py`): placement stops at the same seed and raises. The copy at
+  `floor=0.1` is generated at `density=0.6` (`crowded-0.1`) and stops at the same seed and
+  records; GN7 also keeps the copy at `density=0.6` and `floor=0.9`, which reaches its
+  floor. `cellular_scenes.py` is one of the files GA25 pins, so it is not edited.
 * **GN3, "`z_mid` outside the covered region's Z interval".** This cannot be reached,
-  because the interval is centred on `z_mid` (W-483, finding 3), so it has no case.
+  because the interval is centred on `z_mid` (W-483, finding 3). W-488 dropped the clause
+  from GN3; the generator keeps the refusal as a guard, without a test.
 * **GN6, the anchors.** Each anchor lies strictly inside its own power cell in the
-  arithmetic K1 names. An anchor that P1 placed on its partner's face within rounding, by
-  the oracle's own arithmetic, is reported (W-483, finding 2).
+  arithmetic K1 names, as GN6 states since W-488. An anchor that P1 placed on its
+  partner's face within rounding, by the oracle's own arithmetic, is reported (W-483,
+  finding 2).
 * **GN6 on the presets.** These scenes need not hold a voxel inside two nuclei's shapes, so
   that count is reported rather than required to be positive.
 * **GN11's rendering identity on the presets.** It runs under the identity's own conditions
   in {doc}`synthetic-sample-scene`: the formed template's noise and background off and
   float64 accumulation. The preset's readout trend and mixing are kept, through each
   molecule's realized amplitudes.
-* **GN23, TR7 of dense 3D tissue.** This is reported and not asserted (the amendment of
-  2026-10-15 after the TR table).
+* **GN23, TR7 of dense 3D tissue.** This is reported and not asserted on
+  `context-dense3d-slow-v1` (the amendment of 2026-10-15 after the TR table). On
+  `appearance-dense3d-slow-v1` GA23 asserts it.
 
 GN25 pins the SHA-256 of each file its row names, line endings read as LF. The pins are the
 content at 7d6c417, the base revision of the §2.12 implementation issues. For the session
@@ -324,9 +351,11 @@ One chain check per context, each through the real route of its context (D2), ea
 the four steps the issue names, numbered 1 to 4 below, and a step 0 where the route has a
 stage before the segmentation whose result this design records. Each step is its own test,
 so a miss in one step does not hide the others. The thresholds of steps 1 and 2 apply to the
-`slow` preset of each context (for the culture, to its two scenes pooled, "Seeds"); the
-routine preset of each context runs the same chain with steps 3 and 4 asserted and steps 1
-and 2 reported (choice V1). Each chain fixture is built once per test module. Each step writes its per-object tables to the test's output (the
+appearance `slow` preset of each context ({doc}`synthetic-real-appearance`, PR1), whose bank
+is built from real images (for the culture, to its two scenes pooled, "Seeds"). The
+appearance routine preset of each context, on its closed-form bank, runs the same chain
+with steps 3 and 4 asserted and steps 1 and 2 reported (choice V1). Each check adds a step
+5, reported ({doc}`synthetic-real-appearance-validation`, 'Consequences for the chain checks'). Each chain fixture is built once per test module. Each step writes its per-object tables to the test's output (the
 nuclei matched, missed, merged and split, the false positives, and every molecule whose
 assigned cell is not its true cell), so a miss can be reported with its objects.
 
@@ -339,7 +368,10 @@ At the acquired pixels the 2D tissue and culture `slow` scenes held about 20 and
 too few for TH1 to tell a 5 % from a 20 % miss rate; the coarser pixels and the culture's
 second seed are Jiahao's decision of 2026-10-15 for that reason. These are the expected
 nuclei of a scene; step 1's fraction counts the interior ones (below), so its count differs
-from them, and each step 1 reports the count it used.
+from them, and each step 1 reports the count it used. The appearance `slow` presets, on
+which the chain checks run, hold about 738, 337 and 32 objects, about 63 for the culture's
+two scenes pooled, and the routine appearance presets about 24, 45 and 5: estimates at the
+prototype's reached density ({doc}`synthetic-real-appearance`, 'Presets'), not counts.
 
 **Nuclei against truth (step 1)** uses the matching of the §2.9 check L12
 (`l12_agreement` of `test/test_segmentation_validation.py`: one to one at IoU ≥ 0.5, the
@@ -410,6 +442,7 @@ the scene defines them:
 | CD2 | The cell of each molecule | as CD1 | Per molecule with `in_footprint`, its assigned cell (cells by `assign_molecules` with the 0.7776-µm planar expansion) against `true_cell_id`; agreement among assigned molecules, over the molecules with a true cell, and the share left unassigned; on `chain_dense3d_truth`, `cell_id` against `fov_cell_label`. | On the `slow` preset: TH4 holds; the agreement and the unassigned share reported (TH-UN). On the truth labels: EE1 holds exactly. | TH4: agreement among assigned molecules ≥ 0.85 (provisional). | `slow`, `learned`; `integration`, `validation`; the truth-label part `slow` only. |
 | CD3 | Count identities | `chain_dense3d`, `chain_dense3d_routine`, `chain_dense3d_truth` (42) | The export's tables and `sample.h5ad` against identities 1 to 5 of "Count accounting"; on the truth labels, EE2 and EE3. | Every identity holds (AS6, EE3); `n_obs` equals the counted cells. | Exact. | `slow`, `learned` (the method); `slow` (the truth labels); `integration`, `validation`. |
 | CD4 | The report | as CD3 | `Dataset.report` on the export and `read_report`: the known answers of "The report (step 4)". | As listed there. | Exact for the identities; the rest reported. | as CD3. |
+| CD5 | The method's labels against the method's labels of real images | `chain_dense3d` (42) | On `3D_spleen`'s nucleus labels of each FOV: the touching share (TR1), the volume fraction (TR2) and the cell volume of the nuclei expanded by 0.7776 µm (TR11), with W-393's definitions; the same on the truth labels beside them. | Reported against W-393's ranges of TR1, TR2 and TR11, which are measured on the same method's labels of the real images: a like-for-like comparison of what the method sees (TG2). | Reported, with the value, the range and the object count; no threshold (no measurement of the method's labels on an appearance scene exists). | `slow`, `learned`; `integration`, `validation`. |
 
 ### 2D tissue (CT): projection sample, route after fusion, StarDist `2D_versatile_fluo` and the seeded watershed
 
@@ -420,6 +453,7 @@ the scene defines them:
 | CT2 | The cell of each molecule | as CT1 | The export's retained molecules: assigned cell (the seeded watershed's cells, named through their seed nucleus) against `true_cell_id`; agreement among assigned, over those with a true cell, and the unassigned share; on `chain_tissue2d_truth`, SA5. | On the `slow` preset: TH4 holds; the rest reported. On the truth labels: SA5 holds. | TH4 (provisional). | `slow`, `learned`; `integration`, `validation`. |
 | CT3 | Count identities | `chain_tissue2d`, `chain_tissue2d_routine`, `chain_tissue2d_truth` (42) | SA7's identities on the export; `check_export` (R1 to R3, F, L, S, T1 to T5); on the truth labels, SA3. | Every identity and condition holds. | Exact. | as CD3. |
 | CT4 | The report | as CT3 | As CD4, with RT1's rule for the cells per FOV on the route after fusion. | As "The report (step 4)". | Exact for the identities; the rest reported. | as CD3. |
+| CT5 | As CD5 | `chain_tissue2d` (42) | On the export's nucleus labels: TR1 and TR2 (area fraction); the truth beside them. | As CD5, against W-393's 2D tissue ranges. | Reported. | as CD5. |
 
 ### Sparse culture (CU): route per FOV, Cellpose `cpsam_v2` with the morphology round
 
@@ -430,6 +464,7 @@ the scene defines them:
 | CU2 | The cell of each molecule | as CU0 | Per molecule, the cell of Cellpose's cell labels on `Flamingo` and `DAPI`, extended through z, named through the nucleus it contains, against `true_cell_id`; as CD2; on the `slow` preset the molecules of the two scenes pooled before the agreement is formed, and each scene's agreement reported. | On the `slow` preset: TH4 holds on the pooled molecules; the rest reported. On the truth labels: EE1 holds on each scene. | TH4 (provisional; no W-393 measurement on this route, see TH4). | `slow`, `learned`; `integration`, `validation`. |
 | CU3 | Count identities | `chain_culture`, `chain_culture_truth` (42 and 43), `chain_culture_routine` (42) | As CD3, on each scene. | As CD3, on each scene; not pooled. | Exact. | as CD3. |
 | CU4 | The report | as CU3 | As CD4, on each scene's export. | As "The report (step 4)", on each scene; not pooled. | Exact for the identities; the rest reported. | as CD3. |
+| CU5 | As CD5 | `chain_culture` (42 and 43) | On Cellpose's nuclei extended through z, per scene and pooled: TR1 and TR2; the truth beside them. | As CD5, against W-393's culture ranges. | Reported. | as CD5. |
 
 ## Thresholds and where they come from
 
@@ -438,11 +473,12 @@ methods on the *current* sample scene, it is approved or changed by Jiahao at th
 W-396, and only then does an implementation issue assert it. W-393 states that each "would
 be re-measured on the new scene before they are fixed" (W-393 `notes.md` §10): the first run
 of the chain checks is that re-measurement, and a miss there is a finding ("What a failure
-means").
+means"). For the appearance presets each is provisional again and approved at the gate
+W-515; W-393 measured it on neither scene.
 
 | # | Threshold | Applies to | W-393 table and row it comes from | Observed by W-393 |
 | --- | --- | --- | --- | --- |
-| TH1 | Matched fraction at IoU ≥ 0.5 of the truth nuclei not cut by the Y or X border at least 0.9 | CD1, CT1, CU1 (`slow` presets; CU1 on the counts of the culture's two scenes, seeds 42 and 43, pooled; about 150, 76 and 83 nuclei expected before the border rule, "How many nuclei the thresholds count") | W-393 `notes.md` §10, "Nuclei"; `section10_values.txt`, row "interior matched fraction on misses alone, routes per FOV"; `routes.csv` rows `<scene>/spleen` (CD1), `<scene>/cellpose_route` (CU1) and `<scene>/projection` (CT1), columns `n_truth`, `truth_at_xy_border`, `missed_not_at_xy_border` | Routes per FOV: lowest 0.9091 (one interior miss of 11: `edge/spleen`, `edge/cellpose_route`, `plane/cellpose_route`); no row below 0.9. Route after fusion: `missed_not_at_xy_border` 0 or 1 per row (1 on `background/projection`), but `truth_at_xy_border` is empty on the projection rows, so the interior fraction there is **not measured** by W-393. Merges in three rows remove nuclei from the matched set whose interior status the table does not give (`dense/projection`, `combined/cellpose_route`, `combined/projection`). |
+| TH1 | Matched fraction at IoU ≥ 0.5 of the truth nuclei not cut by the Y or X border at least 0.9 | CD1, CT1, CU1 (`slow` presets; CU1 on the counts of the culture's two scenes, seeds 42 and 43, pooled; about 738, 337 and 63 objects expected before the border rule in the appearance presets (estimates; 'How many nuclei the thresholds count')) | W-393 `notes.md` §10, "Nuclei"; `section10_values.txt`, row "interior matched fraction on misses alone, routes per FOV"; `routes.csv` rows `<scene>/spleen` (CD1), `<scene>/cellpose_route` (CU1) and `<scene>/projection` (CT1), columns `n_truth`, `truth_at_xy_border`, `missed_not_at_xy_border` | Routes per FOV: lowest 0.9091 (one interior miss of 11: `edge/spleen`, `edge/cellpose_route`, `plane/cellpose_route`); no row below 0.9. Route after fusion: `missed_not_at_xy_border` 0 or 1 per row (1 on `background/projection`), but `truth_at_xy_border` is empty on the projection rows, so the interior fraction there is **not measured** by W-393. Merges in three rows remove nuclei from the matched set whose interior status the table does not give (`dense/projection`, `combined/cellpose_route`, `combined/projection`). |
 | TH2 | Merged truth nuclei at most 10 % of the truth count | CD1, CT1, CU1 (as TH1) | W-393 `notes.md` §10, "Merges and splits"; `section10_values.txt`, row "merged truth nuclei per row"; `routes.csv` column `merged_truth` | At most 2 per row; largest share 0.0556 (2 of 36, `combined/projection`). |
 | TH3 | Splits 0 | CD1, CT1, CU1 (as TH1) | W-393 `notes.md` §10, "Merges and splits"; `section10_values.txt`, row "splits, all rows"; `routes.csv` column `split` | 0 in every row. |
 | TH4 | Agreement among assigned molecules at least 0.85 | CD2, CT2, CU2 (`slow` presets; CU2 on the molecules of the two culture scenes pooled) | W-393 `notes.md` §10, "Molecules"; `section10_values.txt`, row "agreement among assigned molecules"; `routes.csv` column `agree_among_assigned`, rows `<scene>/spleen` (CD2) and `<scene>/projection` (CT2) | 0.8632 (`uint8/projection`) to 1.0000 (`base/spleen`); spleen rows 0.97 to 1.00, projection rows 0.86 to 1.00. For CU2 there is **no W-393 row**: the culture cell call was not runnable on the current scene (`routes.csv` rows `<scene>/cellpose_route`, column `note`, "cells not runnable"), so 0.85 applies to the culture as W-393's proposal for every route, without a culture measurement. |
@@ -453,7 +489,7 @@ and asserted by none, because W-393 proposes no bound for them or did not measur
 
 | # | Quantity | Why no threshold | W-393 source |
 | --- | --- | --- | --- |
-| TH-FP | False positives per truth nucleus (steps 1) | W-393 withdrew its first bound of 20 %: three rows exceed it, from the 8-bit clip and the wide edge, which the new presets change; "a bound is proposed only once the new scene is measured" | `notes.md` §10, "False positives"; `section10_values.txt`, rows "false positives per truth nucleus" (0 to 29.4 %) and "rows above 20 %" |
+| TH-FP | False positives per truth nucleus (steps 1) | W-393 withdrew its first bound of 20 %: three rows exceed it, from the 8-bit clip and the wide edge, which the new presets change; in the culture appearance presets a source cell can carry the unlabelled DAPI of a second nucleus, a further cause of false positives; "a bound is proposed only once the new scene is measured" | `notes.md` §10, "False positives"; `section10_values.txt`, rows "false positives per truth nucleus" (0 to 29.4 %) and "rows above 20 %" |
 | TH-UN | Share of the molecules with a true cell left unassigned (steps 2) | "bounded only once the scene's territories are defined to match each route's cell rule"; T2 does that for the tissue presets, but W-393 did not measure it on such a scene | `notes.md` §10, "Molecules"; `section10_values.txt`, row "molecules with a true cell left unassigned" (12 % to 80 %) |
 | TH-MECR | The exclusive pair's MECR after segmentation (steps 4) | Not measured by W-393: the current scene has no cell types | `notes.md` §8, row "Cell types with gene abundances" |
 | TH-CPF | Cells per FOV against the truth-label chain (steps 4) | Not measured by W-393 | none |
@@ -462,39 +498,50 @@ and asserted by none, because W-393 proposes no bound for them or did not measur
 
 **Target ranges of the generator checks (TR).** GN23 compares the scene with the target
 ranges of {doc}`synthetic-cellular-scene` ("The four cases, their controls and their
-ranges" and the preset tables). Each is the p5–p95 of a W-393 row of
+ranges" and the preset tables). GA23 compares the appearance presets with the rows as
+{doc}`synthetic-real-appearance-validation` defines them ('Target definitions'): TR1, TR2
+and TR11 reported on the truth and compared like for like in step 5 of the chain checks,
+TR2v, TR8r and TR8v added, TR3 reported beside the source entries. Each is the p5–p95 of a W-393 row of
 `results/real/<context>/{geometry,stain,molecules}.csv`, collected in W-393 `notes.md` §9;
 each is a development target, provisional, approved at the gate W-396 with the presets
 (C23 to C25):
 
 | # | Quantity | Range by context (dense 3D; 2D tissue; culture) | W-393 row |
 | --- | --- | --- | --- |
-| TR1 | Share of touching nuclei, per image | 0.44–0.57; 0.76–0.82; 0.33–0.72 | `geometry.csv` "share of touching nuclei, per image" |
-| TR2 | Nucleus volume (area) fraction, per image | 0.07–0.16; 0.30–0.44; 0.17–0.45 | `geometry.csv` "nucleus volume fraction, per image" |
-| TR3 | Share not described by one ellipsoid (IoU < 0.8), per image | 0.064–0.074; 0.027–0.060; 0.12–0.43 | `geometry.csv` "share of nuclei not described by one ellipsoid (IoU < 0.8), per image" |
+| TR1 | Share of touching nuclei, per image | 0.44–0.57; 0.76–0.82; 0.33–0.72 for the closed-form presets; for the appearance presets reported on the truth labels, not compared: the truth is placed at the visible stain's density (round 10: 0.99 against 0.56 on the held-out LN crop); compared like for like, on the method's labels of the scene against W-393's range on the same method's labels of the real images, in step 5 of the chain checks, reported | `geometry.csv` "share of touching nuclei, per image" |
+| TR2 | Nucleus volume (area) fraction, per image | 0.07–0.16; 0.30–0.44; 0.17–0.45 for the closed-form presets; for the appearance presets TR2v, with the truth label share reported beside it and compared like for like in step 5 of the chain checks | `geometry.csv` "nucleus volume fraction, per image" |
+| TR2v | Visible-stain share, per scene (stain smoothed by one voxel above its Otsu threshold) | 0.47–0.68; 0.29–0.44; DAPI Z maximum 0.12–0.14 and Flamingo Z maximum 0.41–0.53 | W-513 `tables/visible_share_<context>.csv`, the rows of {doc}`synthetic-real-appearance-validation` |
+| TR3 | Share not described by one ellipsoid (IoU < 0.8), per image | 0.064–0.074; 0.027–0.060; 0.12–0.43 for the closed-form presets; for the appearance presets reported, not compared: the share on the placed truth labels beside the share on the entries they come from and their difference, whose bound is not measured; the real range reported with the squash threshold of rule 4, its control (limit L2; round 10: 0.009 against 0.047) | `geometry.csv` "share of nuclei not described by one ellipsoid (IoU < 0.8), per image" |
 | TR4 | Edge width 10–90 % (µm) | 0.20–2.20; 0.31–1.57; 0.33–1.63 | `stain.csv` "edge width 10-90 %" |
 | TR5 | Bright regions per nucleus; size; peak over the nucleus median | 1–5, 0.13–5.04 µm³, 1.88–3.10; 0–8, 0.11–1.16 µm², 1.76–2.60; 0–58, 0.11–7.49 µm², 1.90–9.58 | `stain.csv` "bright regions per nucleus (factor 1.5)", "bright region size (factor 1.5)", "bright region peak over nucleus median (factor 1.5)" |
 | TR6 | Nucleus median over the image's median of nucleus medians | 0.70–1.44; 0.52–1.37; 0.25–4.92 | `stain.csv` "nucleus median over the image's median of nucleus medians" |
 | TR7 | Variation within a nucleus (CV of interior voxels) | 0.25–0.41; 0.20–0.38; 0.11–1.35 | `stain.csv` "variation within a nucleus (CV of interior voxels)" |
-| TR8 | Background over plateau, per image; noise over plateau, per 128-px block | 0.01–0.34, 0–0.063; 0.022–0.031, 0–0.033; 0.002–0.047, 0–0.24 | `stain.csv` "background level over plateau, per image", "noise (sd of background) over plateau, per 128-px block" |
+| TR8 | Background over plateau, per image; noise over plateau, per 128-px block | 0.01–0.34, 0–0.063; 0.022–0.031, 0–0.033; 0.002–0.047, 0–0.24 for the closed-form presets; for the appearance presets the background is reported, and the rows TR8r and TR8v are added; the noise row unchanged | `stain.csv` "background level over plateau, per image", "noise (sd of background) over plateau, per 128-px block" |
+| TR8r | Background at label rims, median over the truth labels (cells in the culture, on the volume), over the plateau | 0.33–0.40; 0.125–0.130; 0 | W-513 `tables/rim_background_<context>.csv`, column `local_bg_over_plateau_median` |
+| TR8v | Median stain outside the visible stain, over the plateau (the culture on the Z maximum) | 0–0.54; 0.022–0.047; DAPI 0.036–0.038 and Flamingo 0.022–0.074, reported | W-513 `tables/visible_share_<context>.csv`, column `not_visible_over_plateau`, the rows of {doc}`synthetic-real-appearance-validation` |
 | TR9 | 8-bit plateau (grey levels) | 35–50; 64–93; 13–83 | W-393 `notes.md` §9 (the tiles' plateaus) |
 | TR10 | Reads per cell; nuclear fraction of reads per cell | 1–19, 0.25–0.75; 85–310, 0.43–0.93; 86–1884, 0–0.56 | `molecules.csv` "reads per cell (kept cells)" (tissue-2D: "reads per cell (cells not touching the crop border)"), "nuclear fraction of reads, per cell with >= 10 reads" |
-| TR11 | Cell volume (expanded nuclei, dense 3D) | 90–185 µm³ | `geometry.csv` "cell volume" |
+| TR11 | Cell volume (expanded nuclei, dense 3D) | 90–185 µm³ for the closed-form presets; for the appearance presets reported on the truth; compared like for like on the method's nuclei expanded by 0.7776 µm in step 5 of CD, reported | `geometry.csv` "cell volume" |
 | TR12 | Composite signal share per cell (2D tissue) | 0.52–0.96 | `molecules.csv` "share of pixels with signal in the composite, per cell" |
 
-**Amendment of 2026-10-15 (W-485; operator decision pending Jiahao's confirmation).** GN23
+**Amendment of 2026-10-15 (W-485; operator decision, confirmed by Jiahao on 2026-10-16; it applies to the closed-form presets only, W-515, AM1).** GN23
 measured TR7 of dense 3D tissue on `context-dense3d-slow-v1` at seed 42 at a median
 within-nucleus CV of 0.168 on 143 nuclei, outside its range 0.25–0.41. Two trials on that
 preset, each changing one bright-region law, gave 0.212 (height median 2.0 instead of 1.35)
 and 0.206 (5 regions per nucleus instead of 3), each with TR5 inside its ranges: the Gaussian
 bright regions of Tx1, within TR5's ranges, do not reach the real within-nucleus variation.
-TR7 of dense 3D tissue is therefore a known limit of the scene: GN23 reports it with its
-measured value, range and object count and does not assert it. A texture control that
-reaches it is a candidate for a later issue. TR7 of 2D tissue and of the culture is reported,
+TR7 of dense 3D tissue is therefore a known limit of the closed-form presets: GN23 reports
+it with its measured value, range and object count and does not assert it. The appearance
+presets of {doc}`synthetic-real-appearance` are the texture control: round 10 of the
+prototype gave 0.317 against the real 0.348 on the held-out crop, and GA23 of
+{doc}`synthetic-real-appearance-validation` asserts TR7 of `appearance-dense3d-slow-v1`
+against 0.25–0.41. TR7 of 2D tissue and of the culture is reported,
 as V12 gives it.
 
 The tissue-2D ranges come from its densest tiles and every real label is method output
-(W-393 `notes.md` §12); the routine presets take some values outside the middle of a range
+(W-393 `notes.md` §12); the density and background ranges of the appearance presets come
+from W-513's per-image measurements of three or four images per context, each range the
+smallest to the largest value; the routine presets take some values outside the middle of a range
 on purpose ("Presets", PS1), and are therefore not compared with TR10.
 
 ## What a failure means
@@ -606,6 +653,10 @@ script `scripts/execution_costs.py` of W-482's run directory
   marker `synthetic`, in its `pytest-slow-synthetic` selection, and the truth-label chains
   (`slow`, not `learned`), which carry `integration`, in `pytest-slow-other`; each runs when
   its paths change and at the last issue of a batch.
+* The routine gate and the CI environment also run GA1 (routine presets) to GA22 and GA25,
+  on closed-form banks. The `slow` selection also runs GA23, GA24, GA26 and GA27, which
+  read the real banks through `STARFINDER_APPEARANCE_BANKS` on the lab machine and skip
+  elsewhere ({doc}`synthetic-real-appearance-validation`, 'Execution conditions').
 * The controller's `learned` selections run the chain checks with a model (`learned` and
   `slow`) in `pytest-learned-slow-other`, when their inputs change and at the last issue of
   a batch. The controller selects a check by the changed paths in the project
@@ -614,7 +665,9 @@ script `scripts/execution_costs.py` of W-482's run directory
 * The CI environment skips every chain check, naming the missing extra.
 
 **Bounds.** The `slow` presets need the resource bound of C26 (RG1: one CPU, 16 GiB and
-3,600 s per step). The nearest dense 3D `slow` scene's generation peaked at 3,498,428 KiB
+3,600 s per step). So do the appearance `slow` presets, their bank builds and their
+chains; their estimated sums are about 1,200 s (CD), 1,955 s (CT) and 1,805 s (CU, two
+scenes) ({doc}`synthetic-real-appearance-validation`, 'Bounds'). The nearest dense 3D `slow` scene's generation peaked at 3,498,428 KiB
 and the `3D_spleen` call alone at 3,263,160 KiB; a chain check holds both in one test
 process, which can exceed the project's 4 GiB default and stays within RG1's 16 GiB. The
 sum of W-393's measured operations for the dense 3D `slow` chain (generation 194.12 s and
@@ -633,7 +686,9 @@ default; I5 measures it.
 ## Coverage of the cellular scene's page
 
 Every identity and guarantee of {doc}`synthetic-cellular-scene`, by section, with the
-check that tests it or the reason it has none. The statement-by-statement list (each line
+check that tests it or the reason it has none. Those of {doc}`synthetic-real-appearance`
+are covered in {doc}`synthetic-real-appearance-validation` ('Coverage of the appearance
+page'). The statement-by-statement list (each line
 of W-480's re-run of W-394's audits C and E) is in the W-395 worker notes; for the page as
 amended by W-481 (W-481's re-run of audit C and the guarantee search of audit E run again on
 the amended page) it is `results/coverage/coverage_checklist.md` of W-482's run directory.
@@ -723,7 +778,9 @@ these checks. W-395 saved them in its run directory; the set the gate reviews is
 decisions of 2026-10-15 and the other four are W-395's unchanged: I1 the scene (shapes, packing,
 territories, cell types, molecules); I2 the stains and the morphology round; I3 the
 presets; I4 the generator checks; I5 the chain checks; I6 the documentation with a short
-example. I2 depends on I1, I3 on I1 and I2, I4 on I1 to I3, I5 on I3 and I4, I6 on I1 to I5.
+example. I1 to I4 are implemented (W-483 to W-486). I5 (W-487) and I6 (W-488) are amended,
+and the appearance scene is implemented by the drafts A1 to A5 of W-514 before them
+({doc}`synthetic-real-appearance-validation`, 'Implementation order'). I2 depends on I1, I3 on I1 and I2, I4 on I1 to I3, I5 on I3 and I4, I6 on I1 to I5.
 The W-395 worker notes give each issue's checks. Nothing here is created in Linear.
 
 ## Exclusions
@@ -735,5 +792,123 @@ The W-395 worker notes give each issue's checks. Nothing here is created in Line
 * **No comparison of segmentation methods and no accuracy claim** ("The claim boundary").
 * **No microsim and no simulation of raw acquisition**: that decision is taken at the gate
   W-396 from the W-392 result, and no check or issue here prepares it.
-* **No real data, no new dependency, no lock change, no marker registration.**
+* **No real data in the repository, the routine tier or the CI environment; no new
+  dependency, no lock change, no marker registration.**
 * **Nothing is accepted by this page**, and no issue is created in Linear.
+
+## Implementation
+
+The generator checks of this page are in the modules that "Implemented checks" names, by
+row. The chain checks run on the appearance presets, as {doc}`synthetic-real-appearance-validation`
+amends them ("Consequences for the chain checks"), with the step 5 it adds.
+
+**Issues.** The cellular scene was implemented by W-483 (geometry and molecules), W-484
+(stains and the morphology round) and W-485 (the six context presets); W-486 completed its
+generator checks. The real appearance was implemented by W-516 (the bank), W-517
+(augmentation, placement, territories and labels), W-518 (composition, output, the
+morphology round and truth), W-519 (the six appearance presets and the three real banks)
+and W-520 (the remaining generator checks, GA23 and the table of implemented checks). W-487
+ran the chain checks on the appearance presets. W-488 applied the lists of accepted
+statements, W-483's four findings and the confirmations of the dated amendments, and added
+these sections and the example `docs/examples/context_scene.py` ({doc}`api/examples`), run
+by `test_synthetic_context_example.py`.
+
+**Modules** (all in `src/python/starfinder/synthetic/`, exported by `starfinder.synthetic`
+and listed on the API page `docs/api/synthetic.rst`):
+
+* `_cellular.py` (W-483): the shape functions of lobed nuclei and harmonics, extents,
+  contact distances and the label functions;
+* `_context.py` (W-483, W-484): `ContextSceneConfig` and its parts (`NucleusShapeConfig`,
+  `PackingConfig`, `TerritoryConfig`, `CellTypeConfig`, `MoleculeConfig`),
+  `generate_context_scene`, `ContextScene`, `save_context_scene` and `save_context_dataset`;
+* `_stains.py` (W-484): `StainChannelConfig`, `BrightRegionConfig`, `UnevennessConfig`,
+  `OutputScaleConfig`, `MorphologyRoundConfig` and the stain functions;
+* `_context_presets.py` (W-485): `CONTEXT_PRESETS`, `CONTEXT_PRESET_VERSION` and
+  `context_scene_preset`;
+* `_appearance_bank.py` (W-516): `BankReference`, `build_appearance_bank`,
+  `closed_form_bank` and `load_appearance_bank`;
+* `_appearance_layout.py` (W-517): `AugmentationConfig`, `LayoutConfig`, placement by PL2
+  with DN1 and DN3, territories, ownership and the point evaluator;
+* `_appearance.py` (W-518): `AppearanceSceneConfig`, `CompositionConfig`,
+  `generate_appearance_scene`, `AppearanceScene`, `save_appearance_scene` and
+  `APPEARANCE_TRUTH_VERSION`;
+* `_appearance_presets.py` (W-519): `APPEARANCE_PRESETS`, `APPEARANCE_PRESET_VERSION` and
+  `appearance_scene_preset`;
+* `_sample.py`: the hooks by which the sample scene's generation runs with the cellular
+  scene's and the appearance scene's cells (W-483, W-484, W-518); a scene without the new
+  settings is the accepted sample scene.
+
+**Tests** (in `src/python/test/`):
+
+* the generator checks GN1 to GN25 of {doc}`synthetic-cellular-scene-validation`: `test_synthetic_cellular_contract.py`,
+  `test_synthetic_cellular_scene.py` (W-483), `test_synthetic_cellular_stains.py`,
+  `test_synthetic_cellular_stains_contract.py` (W-484), `test_synthetic_cellular_presets.py`,
+  `test_synthetic_cellular_presets_contract.py` (W-485), `test_synthetic_cellular_routine.py`
+  and `test_synthetic_cellular_checks.py` (W-486), with the helpers `cellular_oracle.py`,
+  `cellular_scenes.py`, `cellular_measures.py` and `cellular_checks.py`; each row's tests are
+  named in that page's "Implemented checks";
+* the generator checks GA1 to GA27 of {doc}`synthetic-real-appearance-validation`:
+  `test_synthetic_appearance_bank.py`, `test_synthetic_appearance_golden.py` (W-516),
+  `test_synthetic_appearance_scene.py` (W-517), `test_synthetic_appearance_stains.py`,
+  `test_synthetic_appearance_contract.py` (W-518), `test_synthetic_appearance_presets.py`,
+  `test_synthetic_appearance_presets_contract.py` (W-519, GA23 added by W-520),
+  `test_synthetic_appearance_coverage.py` and `test_synthetic_appearance_checks.py` (W-520),
+  with the helpers `cellular_appearance_oracle.py`, `cellular_appearance_scenes.py` and
+  `cellular_appearance_measures.py`; each row's tests are named in that page's "Implemented
+  checks";
+* the chain checks CD, CT and CU, steps 0 to 5, on the appearance presets:
+  `test_integration_cellular_chain.py` (W-487), marked `integration` and `validation`; the
+  chains with a model are `slow` and `learned`, the truth-label chains `slow`;
+* the example's test `test_synthetic_context_example.py` (W-488), `slow`.
+
+**Amendments during the implementation**, each with its date, its issue and its reason;
+each is written where it applies:
+
+* **2026-10-15, W-485** ({doc}`synthetic-cellular-scene-validation`, after the table of target
+  ranges). TR7 of dense 3D tissue is reported, not asserted, on `context-dense3d-slow-v1`:
+  the bright regions of Tx1, within TR5's ranges, do not reach the real within-nucleus
+  variation (0.168 against 0.25–0.41). Operator decision, confirmed by Jiahao on 2026-10-16;
+  it applies to the closed-form presets only (W-515, AM1).
+* **2026-10-17, W-516** ({doc}`synthetic-real-appearance`, after CF1's options table). The
+  closed-form bank's sources are rendered with noise and unevenness off: with the field
+  kept, BR4 refuses two of the three culture sources and no closed-form culture bank can be
+  built. Operator decision, confirmed by Jiahao on 2026-10-18.
+* **2026-10-17, W-516** ({doc}`synthetic-real-appearance-validation`, GA6's row). The stored
+  field outside a mask is compared within `max(1e-6 · r, 1e-9)` of the value over the
+  plateau: an entry whose rim level `r` is 0 still carries the blurred inside excess
+  outside its mask, and float32 storage cannot meet a bound of 0. Operator decision,
+  confirmed by Jiahao on 2026-10-18.
+* **2026-10-17, W-519** ({doc}`synthetic-real-appearance`, "Presets"). `appearance-culture-slow-v1`
+  stops after 500 refused proposals in a row: the culture's cell masks saturate below DN1's
+  target of 0.501, and a stop after 4,000 took 27 min 41 s per generation. At seed 42 it
+  places 65 cells and reaches 0.480. Operator decision, confirmed by Jiahao on 2026-10-18.
+* **2026-10-18, W-520** ({doc}`synthetic-real-appearance-validation`, after "Target
+  definitions"). TR2v of dense 3D (0.385) and TR8r of dense 3D (0.238) and of 2D tissue
+  (0.034) are reported beside their ranges, not asserted: DN1 places with a fixed threshold
+  while TR2v takes the scene's own Otsu threshold, and the real rim level holds unlabelled
+  stain that no entry carries. Operator decision, confirmed by Jiahao on 2026-10-18.
+* **2026-10-18, W-487** ({doc}`synthetic-real-appearance-validation`, "Consequences for the
+  chain checks"). CD1's TH1 on `appearance-dense3d-slow-v1` (0.570 against at least 0.9)
+  and CU1's TH3 on `appearance-culture-slow-v1` (2 splits against 0, the seeds 42 and 43
+  pooled) are reported beside their thresholds, not asserted: the dense 3D scene holds
+  about three to six times the label density of the method's labels on real LN, and the two
+  culture splits come from a mask with a detached piece and a two-lobed mask at the FOV
+  border. Every other threshold stays asserted. Operator decision pending Jiahao's
+  confirmation.
+* **2026-10-18, W-488** ({doc}`synthetic-cellular-scene-validation`). W-483's four findings are
+  applied with the options its notes recommend: the fixture `ctx_crowded` at `density=0.9`,
+  so that it raises as the page says; GN6's anchors strict in the label function's
+  arithmetic, as K1 states; the unreachable monolayer refusal dropped from GN3 and kept in
+  the generator as a guard; and GN9 stating that `ctx_types` holds three sample cells. The
+  rows as written could not be tested as written (W-483 notes, "Findings for Jiahao").
+
+No threshold, tolerance, target range, preset or bank was changed by W-488.
+
+**Accepted statements applied (W-488, 2026-10-18).** The fourteen entries of
+{doc}`synthetic-cellular-scene`'s "Accepted statements this addition changes" are applied to
+{doc}`synthetic-sample-scene`, with the completions of entry 32 of {doc}`synthetic-real-appearance`'s list; entries
+1 to 34 of {doc}`synthetic-real-appearance`'s "Accepted statements this page changes" are
+applied to {doc}`synthetic-cellular-scene`; and entries 1 to 38 of {doc}`synthetic-real-appearance-validation`'s list,
+which take the place of entries 35 to 43 of {doc}`synthetic-real-appearance`, are applied to
+{doc}`synthetic-cellular-scene-validation`. Each is applied with its proposed wording; the lists
+stay on their pages as the record of what changed.

@@ -32,7 +32,10 @@ of that run's notes. Inputs and the microsim result come from W-392
   parameters are **development targets** read from the W-393 measurements, **not a D04
   calibration** (D6). The real labels W-393 measured are method output (StarDist,
   Cellpose, the legacy watershed), read as measurements of shape and spacing, not as
-  annotation or truth (W-393 `notes.md` §12).
+  annotation or truth (W-393 `notes.md` §12). With the real appearance of
+  {doc}`synthetic-real-appearance`, nuclei and culture cells are real method labels with
+  their stain, augmented and placed by a synthetic rule; that scene is not a calibrated
+  tissue model either.
 * It **establishes no segmentation accuracy.** The §2.9 methods run on it as an
   engineering check of the chain, not as a measure of a method's quality; no accuracy is
   claimed, no methods are compared, nothing is trained. A method that fails on the scene
@@ -40,11 +43,13 @@ of that run's notes. Inputs and the microsim result come from W-392
 * It does **not use microsim** or any new dependency (D5). The W-392 spike did not keep
   microsim as a stain renderer (W-392 `spike/results.md`); whether a simulation of raw
   acquisition is opened is decided at the gate W-396 and is not prepared here. Everything
-  is rendered with NumPy and SciPy, which are locked.
+  is rendered with NumPy and SciPy, which are locked; the real appearance of
+  {doc}`synthetic-real-appearance` also uses scikit-image, which is locked.
 * It has **no optical model, no simulation of raw acquisition and no attenuation with
   depth.** None was requested; W-393 found no need for depth attenuation (W-393
   `notes.md` §8, row "Attenuation with depth": not shown needed, not tested).
-* It has no structured tissue background, no ER stain (D2), no illumination differences
+* It has no structured tissue background (the real appearance of
+  {doc}`synthetic-real-appearance` adds one from real patches), no ER stain (D2), no illumination differences
   between FOVs, no stage drift beyond the accepted jitter, and no cross-FOV cell matching.
 
 ## Settled decisions this page follows
@@ -55,7 +60,9 @@ of that run's notes. Inputs and the microsim result come from W-392
   interiors, territory interiors, a band at territory boundaries). A cytoplasm stain and a
   morphology round with a known translation are required for the culture context; a
   membrane stain is optional; ER is not done. The three contexts and their routes are
-  those of the table of D2 (repeated in "Presets").
+  those of the table of D2 (repeated in "Presets"). In the appearance presets of
+  {doc}`synthetic-real-appearance` the stains are channels of the bank's entries, not
+  geometry sources; the culture's cytoplasm stain and morphology round stay.
 * **D3.** Both regimes, dense and sparse. The nuclear fraction of reads is a control
   (Jiahao: it depends on the tissue and the assay design). Cell types with a gene
   abundance per type. More molecules per cell, so that the composite fills the cell body.
@@ -65,6 +72,9 @@ of that run's notes. Inputs and the microsim result come from W-392
   (Jiahao, 2026-10-09) and a smooth multiplicative unevenness; the existing background
   controls; a nucleus as a union of ellipsoids, a spherical-harmonic perturbation as an
   optional second form. An 8-bit output. No depth attenuation unless W-393 shows a need.
+  On 2026-10-16 Jiahao chose appearance sampled from real images for the texture, the
+  background and the shapes ({doc}`synthetic-real-appearance`); the bright regions, the
+  unevenness and the union of ellipsoids remain the closed-form presets' controls.
 * **D6.** Targets measured in the three contexts by W-393, not a D04 calibration.
 * **D7, D8.** Validation and its thresholds belong to W-395 and the gate W-396; this
   batch implements nothing.
@@ -243,7 +253,14 @@ Every new object keeps that property:
 
 The noise is the one thing that is not a point function: it is drawn per FOV from the
 FOV's streams, as today, and is independent between overlapping FOVs
-({doc}`synthetic-sample-scene`, "Rendering each FOV at its true offset").
+({doc}`synthetic-sample-scene`, "Rendering each FOV at its true offset"). In a scene of
+{doc}`synthetic-real-appearance` the labels are the placed masks under one placement
+order, and every stain (the culture's Flamingo included) is the composition of placed
+entries, background patches and out-of-focus light, each a point function of `σ`. The
+morphology round evaluates them at its shifted points, and the 8-bit output scales by `g`
+with no noise before the cast. `P` holds for its 2D tissue and is reported for its culture.
+No noise is drawn there; what is not a point function is the placement test and `κ`, each
+decided once on the sample grid ('Truth' there).
 
 ## Nucleus shape
 
@@ -264,8 +281,10 @@ LN (p5–p95 0.064–0.074), 0.038 in tissue-2D (0.027–0.060) and 0.24 in the 
 | N2. A spherical-harmonic perturbation (optional second form) | Lobe 1 becomes `‖d'‖ ≤ r(d̂')`, with `d'` the point in lobe 1's normalized frame (`d'_z = d_z / a_z`, `d'_u = u / (a_l e)`, `d'_v = v / a_l`), `d̂' = d' / ‖d'‖` and `r(d̂) = 1 + Σ_{l=2..L} Σ_m a_lm Y_lm(d̂)` with real orthonormal harmonics; in one plane or a monolayer, `r(φ) = 1 + Σ_{k=2..L} (a_k cos kφ + b_k sin kφ)` in the YX angle. | Real harmonics by `scipy.special` (locked) per candidate point; amplitudes bounded so that `r > 0`. | Smooth bumps and dents on every nucleus; star-shaped only, so no deep cleft between lobes. A point function, as N1. |
 | N3. A thresholded random field per nucleus | Smooth noise added to `ρ`, thresholded. | Needs a noise field defined in the sample frame (not the per-FOV noise of the observation model). | Irregular outlines, but the shape depends on how the field is defined between voxel centres; no closed-form bound for the site sphere. |
 
-**Recommendation: N1 first; N2 as an optional second form** (W-393 choice 9: the real
-non-ellipsoid share is 4 to 7 % in LN and tissue-2D and 24 % in the culture).
+**Recommendation: N1 first; N2 as an optional second form** for the closed-form presets
+(W-393 choice 9: the real non-ellipsoid share is 4 to 7 % in LN and tissue-2D and 24 % in
+the culture); in the appearance presets of {doc}`synthetic-real-appearance` a nucleus is a
+placed real mask.
 
 ```python
 @dataclass(frozen=True)
@@ -344,14 +363,19 @@ the site `j*` of smallest power distance (ties to the smaller site index); `N(σ
 `j*` is a site of nucleus `n`, `σ ∈ Ω`, `σ` passes the cell's territory test ("Cell
 territories"), and `ρ_n(σ) ≤ 1`; else 0. Besides the territory test, which T2 and T3
 change, only `ρ_n` changes: the minimum over lobes, with
-lobe 1 in the harmonic form `ρ_{n,1} = ‖d'‖ / r(d̂')` under N2 (and 0 at `d' = 0`).
+lobe 1 in the harmonic form `ρ_{n,1} = ‖d'‖ / r(d̂')` under N2 (and 0 at `d' = 0`). In the
+appearance presets of {doc}`synthetic-real-appearance`, `N(σ)` is the first placed object
+that holds `σ` (its signed distance at most 0), else 0; in the culture, the nucleus of the
+first placed cell that holds `σ`, where that nucleus's mask holds it.
 
 **Bounding site.** Nucleus `n`'s site sphere has centre `c_n` and radius
 `R_n = max_l (‖o_l‖ + max semi-axis of lobe l)`, which contains every lobe; for N2,
 `R_n` uses lobe 1's largest extent `max(a_z, a_l e) · (1 + harmonic_amplitude · M_Y)`. Lobe
 1's offset is 0, so `R_n` is today's radius when a nucleus has one lobe and no harmonics.
 Lobe directions are drawn in the YX plane when the scene has one plane or a monolayer
-(C19), and in 3D otherwise.
+(C19), and in 3D otherwise. In the appearance presets of {doc}`synthetic-real-appearance`,
+`site_radius` is the radius of the placed mask's bounding sphere about its centre, and
+the shape columns are null (AT2).
 
 **The extent along a direction.** `e_n(û)` is the length of the run of the ray
 `c_n + s û`, `s ≥ 0`, that stays inside the nucleus shape from its centre: each lobe the
@@ -365,7 +389,11 @@ Every point `c_n + s û` with `0 ≤ s ≤ e_n(û)` lies in the shape. Lobe 1 co
 smallest power distance only, so two nuclei can never share a point, whatever the lobes
 or the overlap of their spheres: the label is one value per point by construction. Where
 two shapes reach across the face between their power cells, each is cut by that flat
-face, and the two nuclei touch on it ("Packing").
+face, and the two nuclei touch on it ("Packing"). In the appearance presets of
+{doc}`synthetic-real-appearance` a point carries the nucleus of the first placed object
+that holds it, so two nuclei never share a point either; masks may overlap by up to 1 %
+of a mask, the earlier owning the overlap, and touching nuclei meet on their real
+outlines, not on a flat face.
 
 ## Packing
 
@@ -427,14 +455,18 @@ contact distance shrunk by `1 − κ`, which is smaller than the bounding sphere
 nucleus volume fraction of LN (0.13, W-393 `real/ln/geometry.csv` "nucleus volume
 fraction, per image") and the area fractions of tissue-2D (0.36) and the culture (0.26)
 are within reach; audit A of W-394 (`results/audit/rules_vs_presets.txt`) evaluates each
-preset.
+preset. In the appearance presets, placement is the rule PL2 of
+{doc}`synthetic-real-appearance`: masks overlap by at most 1 % of their volume, and the
+earlier object owns the overlap.
 
 A binucleate seed places its two nuclei at `c ± (D_12 / 2) û_φ`, with `c` its proposed
 centre, `û_φ = (0, sin φ, cos φ)` from today's `sample.cell.placement` draw of `φ`, and
 `D_12` the distance of P1 between its two nuclei along `û_φ` (with `nextafter` steps until
 the K1 tests between the two hold); both sites are then tested against the accepted
 sites. With `packing` None this is today's rule (`D_12 = R_1 + R_2 + gap`,
-`_cellular_scene`).
+`_cellular_scene`). The appearance presets of {doc}`synthetic-real-appearance` have no
+binucleate and no empty cells: every placed object is one ordinary cell with one nucleus
+('Kinds of cells' there).
 
 ```python
 @dataclass(frozen=True)
@@ -460,6 +492,11 @@ diagram is vertical, so a column of fixed `(y, x)` lies in one power cell, and *
 nuclei or territories overlap in a Z projection** ("Presets", C19). In floating point the
 sums `dz² + dy² + dx²` of two sites round with the same `dz²` term, so the comparison can
 differ along a column only within rounding of a face; identity 11 reports such columns.
+In the appearance presets of {doc}`synthetic-real-appearance` the 2D tissue is placed in
+one plane, each entry a column through the planes (TZ1), so the same holds there. The
+culture cells keep their own Z extents, the bank shifted by one constant so that its
+median nucleus centroid lies on the stack's middle plane (AU1), and are tested for overlap
+in 3D, so a column can hold two culture nuclei.
 
 **Density.** With `density` None, the seed counts of `CellularSceneConfig` apply as
 today. With a value `φ`, the kind of seed `k` (ordinary, binucleate or empty) is drawn
@@ -471,14 +508,16 @@ sum over its lobes of `4/3 π a_z a_l² e` (with one plane or a monolayer, `π a
 each lobe's own semi-axes. The ordinary or binucleate share must be positive, so that the
 loop ends (`ValueError` otherwise). Nucleus `n` (the `n`-th placed nucleus) draws its sizes
 from its own entity `nucleus-<n>`, so the sequence of sizes does not depend on placement
-outcomes.
+outcomes. In the appearance presets of {doc}`synthetic-real-appearance` objects are added
+until the composed stain's visible-stain share reaches its target (DN1, `slow` presets) or
+a fixed count is placed (DN3, routine presets), with F2's record and floor.
 
 **A seed that cannot be placed (C5).**
 
 | Option | Rule | Cost | Consequence |
 | --- | --- | --- | --- |
 | F1. Raise | As today: `ValueError` naming the seed. | None. | W-393 had to catch the error and retry with fewer seeds on five scenes ("refused" in W-393 `tables/sizing.csv` `generator_attempts`). |
-| **F2. Stop and record, with a floor (recommended)** | With `on_crowded="stop"`, placement ends at the first seed with no accepted proposal after `max_proposals`; that seed is not placed; the reached density and the number of placed seeds are recorded in `context.json`; if the reached density is below `floor · φ`, `ValueError` names the seed and both densities. With `density` None, `on_crowded="stop"` stops the same way and the floor applies to the requested count. | One record entry. | Dense presets are reproducible without retries, and a preset that cannot reach its density fails loudly. |
+| **F2. Stop and record, with a floor (recommended)** | With `on_crowded="stop"`, placement ends at the first seed with no accepted proposal after `max_proposals`; that seed is not placed; the reached density and the number of placed seeds are recorded in `context.json`; if the reached density is below `floor · φ`, `ValueError` names the seed and both densities. With `density` None, `on_crowded="stop"` stops the same way and the floor applies to the requested count. In the appearance presets of {doc}`synthetic-real-appearance` no seed is fixed in advance: each proposal draws its own entry and transform. Placement ends at the target (DN1) or the count (DN3), at `max_proposals` proposals in total, or after `max_refusals` refused proposals in a row. The reached value, the placed objects and the proposals are recorded in `appearance.json`, and below `floor` of the target a `ValueError` names both ('When placement stops' there). | One record entry. | Dense presets are reproducible without retries, and a preset that cannot reach its density fails loudly. |
 | F3. Skip the seed and continue | Drop the seed, try the next. | None. | The scene holds fewer seeds than requested without a clear stopping point; later seeds can still fit, which makes the result depend on the order of sizes. |
 
 **Recommendation: F2**, `on_crowded` defaulting to `"raise"` so that a count-mode scene
@@ -491,7 +530,10 @@ distance 21.8 µm, W-393 `real/culture/geometry.csv` "nearest-neighbour distance
 centres") at a low area fraction, and territories that leave empty space. The culture
 labels of W-393 are denser than "sparse" suggests (area fraction 0.17 to 0.47, touching
 share 0.50; W-393 `notes.md` §6), so the culture presets keep `g = 0` and `contact` at the
-measured share: their sparseness comes from the density, not from a gap.
+measured share: their sparseness comes from the density, not from a gap. In the
+appearance presets of {doc}`synthetic-real-appearance` both regimes come from the bank and
+PL2: contact proposals with probability 0.75, at most 1 % overlap, and the density from
+the visible-stain share of the source images (DN1).
 
 ## Cell territories
 
@@ -512,7 +554,8 @@ unassigned on that route (W-393 `notes.md` §4 and choice 2).
 **Recommendation: T2 for dense 3D tissue and 2D tissue, T1 for the culture**, whose
 cells reach far beyond the nucleus (median cell area 896 µm² against nuclei of 259 µm²,
 W-393 `real/culture/geometry.csv` "cell area (2D labels)", "nucleus area (2D labels)")
-(W-393 choice 2, option (a)).
+(W-393 choice 2, option (a)); in the appearance presets, CT1 (the nearest placed nucleus
+within the growth) and the culture cells' own masks ({doc}`synthetic-real-appearance`).
 
 ```python
 @dataclass(frozen=True)
@@ -532,7 +575,11 @@ in floating point and under N2); under T3 there is no outer limit. In each case
 `C(σ) = cell(n)`, also at a point on a power face or a surface, because both labels come
 from one evaluation. The anchor (the first site's centre) lies strictly in its own power
 cell by the K1 tests and has `ρ = 0`, so it lies in its own territory, as
-{doc}`synthetic-sample-scene` ("Sample membership") requires.
+{doc}`synthetic-sample-scene` ("Sample membership") requires. In the appearance presets of
+{doc}`synthetic-real-appearance` it holds by one placement order: on every voxel of a
+nucleus label the cell label is that nucleus's cell, and the distance rule CT1 decides
+only where no nucleus label holds the point ('One ownership rule for nuclei and cells'
+there).
 
 ## Cell types
 
@@ -590,7 +637,9 @@ abundance table, or ambient abundances with marker genes, void the two answers b
 **What else may depend on the type (C8, second part).** The configuration allows a value
 per type for the mean molecules per cell, the nuclear fraction of reads and a scale of
 the nucleus size laws; every other law stays per scene. The presets use one value per
-context for each (the W-393 tables do not resolve types).
+context for each (the W-393 tables do not resolve types). In the appearance presets of
+{doc}`synthetic-real-appearance` the size scale has no effect, since sizes come from the
+entries and the augmentation's scale.
 
 ```python
 @dataclass(frozen=True)
@@ -681,7 +730,10 @@ dtype by rounding and clipping (`synthetic/_sample.py::_stain_signal`, `_observe
 | S2. One configuration class per stain | `NuclearStainConfig`, `CytoplasmStainConfig`, ... | More classes, duplicated controls. | Each stain can differ; the interface of D2 is not one. |
 | S3. A list of today's `StainConfig` | Reuse `StainConfig` with a source field. | A new field on `StainConfig`. | Changes the accepted `StainConfig` and the saved `sample.json` (C1). |
 
-**Recommendation: S1.**
+**Recommendation: S1.** In the appearance presets of {doc}`synthetic-real-appearance`
+each stain is one channel of the bank's entries, with the name, round and file pattern of
+its `StainChannelConfig`; its source and appearance controls are not used ('Composition'
+there).
 
 ```python
 @dataclass(frozen=True)
@@ -757,9 +809,10 @@ detected them as objects (smoothed stain at least 1.5 times the nucleus median, 
 | Tx2. A multiplicative random field inside each nucleus | Smooth noise per nucleus. | A field defined in the sample frame. | Raises the within-nucleus CV, but its bright regions are not countable objects with a truth row, and the CV cannot tell regions from noise (D4). |
 | Tx3. Ellipsoidal plateaus | Brighter sub-ellipsoids with soft edges. | As Tx1, plus edges. | Flat-topped regions; real regions are peaked (peak 2.0 to 3.0, mean 1.7 to 2.0 of the nucleus median). |
 
-**Recommendation: Tx1**, with W-393's bright-region detection (factor 1.5, 0.1 µm³ or
-µm², one-voxel smoothing) as the measure a generator check applies (W-393 choice 8;
-accepting the measure is part of this choice). The region size of a Gaussian of height
+**Recommendation: Tx1** for the closed-form presets, with W-393's bright-region
+detection (factor 1.5, 0.1 µm³ or µm², one-voxel smoothing) as the measure a generator
+check applies (W-393 choice 8; accepting the measure is part of this choice); the
+appearance presets carry the real texture of their entries. The region size of a Gaussian of height
 `h` above 1.5 times the plateau has radius `s · sqrt(2 ln(2h))`, which gives first values
 `s ≈ 0.41 µm` (LN, `h` 1.35), `0.21 µm` (tissue-2D, `h` 1.0) and `0.17 µm` (culture, `h`
 2.0); the generator check measures the scene with W-393's detection and the preset value
@@ -791,7 +844,8 @@ SD from the MAD of the measured ratio (`1.4826 × MAD`: 0.23 LN, 0.20 tissue-2D,
 culture) and the field's `a` from the remaining width of the p5–p95 range
 (`sqrt(max(0, s_range² − s_nuc²))` with `s_range = ln(p95 / p5) / 3.29`: 0 LN, 0.22
 tissue-2D, 0.74 culture). W-393 measured no spatial scale of the unevenness; `L` is one
-FOV width (a development value).
+FOV width (a development value). The appearance presets take the spread between nuclei
+from their entries and the gain (0.9–1.1), with no field.
 
 ```python
 @dataclass(frozen=True)
@@ -810,7 +864,9 @@ plateau per block 0.021, 0.011 and 0.025 (W-393 `real/<context>/stain.csv` "back
 level over plateau, per image", "background over plateau, per 128-px block", "noise (sd
 of background) over plateau, per 128-px block"). The current stain has 0.38 and 0.039
 (W-393 `notes.md` §6, scene `base`): higher than every context, so the presets lower it
-(W-393 `notes.md` §8, "Existing background controls": no new control).
+(W-393 `notes.md` §8, "Existing background controls": no new control). In the appearance
+presets the background is assembled from real patches and no observation stage is added
+(BG1, OB1 of {doc}`synthetic-real-appearance`).
 
 **The territory source** (cytoplasm). The stain of cell `k` is built from the same rule
 as its label `C` ("Cell territories"). Let `j_k(σ)` be the site of cell `k` with the
@@ -854,7 +910,8 @@ centre, beyond every nucleus's cut-off. A point where `d_k > 4w` for every cell 
 no territory signal; under T3 every point of `Ω` lies in a territory, so with T3 only a
 scene without cells has such points in `Ω`. W-393 did not measure a cytoplasm stain (its
 real tables hold nuclear stains only), so `q`, `B_k` and the edge of the cytoplasm stain are
-development values for the gate.
+development values for the gate. The culture appearance presets carry the real Flamingo of
+their cell entries.
 
 **The boundary source** (membrane). A band of width `b` (the `band_width`) centred on
 every boundary of each cell label `C = k`:
@@ -919,7 +976,10 @@ LN, 64 to 93 in tissue-2D and 13 to 83 in the culture (W-393 `notes.md` §9).
 | B2. Render at the 8-bit scale | Set brightness and background in grey levels before the noise. | None. | Poisson noise at a few tens of counts is far stronger than the real noise over the plateau (0.011 to 0.025). |
 | B3. Clip (today) | Cast only. | None. | Saturation, as W-393 found. |
 
-**Recommendation: B1** (W-393 choice 4).
+**Recommendation: B1** (W-393 choice 4). In the appearance presets of
+{doc}`synthetic-real-appearance` the entries are relative to their source plateau, so the
+composed image is multiplied by `g` itself, the median plateau of the bank's source images
+(O8), with no noise stage before the cast.
 
 ```python
 @dataclass(frozen=True)
@@ -1047,6 +1107,11 @@ object lies in the plane z = 0:
 * **Labels.** `plane` label images, as today ({doc}`synthetic-sample-scene`, "Label
   volumes").
 
+In a scene of {doc}`synthetic-real-appearance` with one plane, every object is evaluated at
+z = 0 like any point: a 2D entry is its plane and a 3D entry its section through the plane;
+placement runs in the plane; territories follow CT1 or CU1 in the plane; `τ_z = 0`;
+`plane` label images.
+
 On the current scene, the 2D route ran to the end on a one-plane scene, and StarDist
 `3D_spleen` refused it at its dimensionality check, which is the dense 3D route's
 requirement, not a defect of the scene (W-393 `notes.md` §5). No preset has one plane;
@@ -1061,6 +1126,9 @@ the 2D tissue presets are projection samples (C19).
 | High background | `StainChannelConfig.background` (baseline, regions) and `noise`, relative to the plateau | `real/<context>/stain.csv` "background level over plateau, per image", "background over plateau, per 128-px block", "noise (sd of background) over plateau, per 128-px block" | per image 0.01–0.34; 0.022–0.031; 0.002–0.047. Per block up to 0.78; 0.06; 0.37 (p95). Noise 0–0.063; 0–0.033; 0–0.24 |
 | Nuclei that are not one ellipse | `NucleusShapeConfig.lobed_share` and the lobe laws (N1); N2 optional | `real/<context>/geometry.csv` "share of nuclei not described by one ellipsoid (IoU < 0.8), per image", "convexity (solidity)", "ellipsoid fit IoU" | share 0.064–0.074; 0.027–0.060; 0.12–0.43. Solidity p5 0.88; 0.90; 0.83 |
 
+In the appearance presets the controls are the bank, its selection rules, the density
+(DN1), the fall-off length and the out-of-focus light ({doc}`synthetic-real-appearance`).
+
 The edge width belongs to the touching case as well (a wide edge merges close nuclei in
 the stain): W-393 `real/<context>/stain.csv` "edge width 10-90 %", 1.39 µm (0.20–2.20) in
 LN, 0.72 (0.31–1.57) in tissue-2D, 0.85 (0.33–1.63) in the culture. W-393 measured 0.97 µm
@@ -1073,7 +1141,8 @@ ranges describe dense tissue.
 ## Presets
 
 Six presets in `CONTEXT_PRESETS` (version `context-presets-v1`), separate from
-`SAMPLE_PRESETS`: one routine and one `slow` preset per context. Each table below gives a
+`SAMPLE_PRESETS`: one routine and one `slow` preset per context. The appearance presets
+are separate again, in `APPEARANCE_PRESETS` ({doc}`synthetic-real-appearance`). Each table below gives a
 value per configuration field, with its unit, and the source it was set from: a W-393
 measurement (named "W-393 measured", with its row and, where the measured quantity is
 another one, the conversion), or "not measured by W-393" with the source (a W-393 scene
@@ -1335,7 +1404,9 @@ holds about 76 and 42 nuclei instead of about 20 and 12; their nearest W-393 sce
 | V2. New columns on the sample tables | `cells.csv` gains `type`, `nuclei.csv` gains lobe columns. | Fewer files. | A table's columns would depend on how the scene was made, as {doc}`synthetic-sample-scene` rejected (option V2 there). |
 | V3. `SAMPLE_TRUTH_VERSION` `"2"` for every scene | One schema with the new columns. | One version. | Changes every saved sample scene, including today's presets. |
 
-**Recommendation: V1.**
+**Recommendation: V1.** A scene of {doc}`synthetic-real-appearance` writes this layout
+with the ellipsoid columns null, and adds `appearance.json`, `placements.csv` and
+`background_patches.csv`.
 
 ```
 <directory>/
@@ -1395,6 +1466,12 @@ of a table above or recomputed from the seed and a named stream ("Random streams
 | Morphology round and its translation | `τ_f` | `morphology_truth.csv` |
 | Projection truth | none beyond the nuclei and the grid's planes | recomputed from the nucleus truth (`P` of C19) |
 
+In a scene of {doc}`synthetic-real-appearance` the placed objects' parameters are in
+`placements.csv`, with the bank named by its SHA-256 in `appearance.json`; the background
+patches are in `background_patches.csv`, and `κ` and `g` in `appearance.json`.
+`lobes.csv`, `harmonics.csv`, `stain_objects.csv`, `bright_regions.csv` and
+`unevenness.csv` are empty, and no stain noise is drawn (OB1).
+
 **Identities a test can check** (in addition to identities 1 to 5 of
 {doc}`synthetic-sample-scene`, which hold with the new label functions). A "boundary
 voxel" below is a voxel whose centre lies within 1e-9 µm of a power face, of a lobe or
@@ -1405,6 +1482,11 @@ the plateau, as today's stain does; the box of `4 s_b` of a bright region and th
 peak); as for the aligned crop of
 {doc}`synthetic-sample-scene` (identity 2), a test that recomputes a label with its own
 arithmetic reports the number of boundary voxels where it differs and expects 0.
+Identities 2 (labels from the shape tables), 7 (stains equal their closed forms), 9
+(bright regions) and 10 (`k = g / m_A`) are those of the closed-form scene. A scene of
+{doc}`synthetic-real-appearance` states its own ('Identities a test can check' there).
+Identities 1, 3 to 6 and 8 hold there as written; identity 11 holds for its 2D tissue and
+is reported for its culture.
 
 1. **O1.** "Opt-in" above.
 2. **Labels.** Per-FOV and sample labels equal `N` and `C` (with lobes, harmonics,
@@ -1556,7 +1638,8 @@ by section.
    *Proposed:* "It is **not a calibrated tissue model.** In this scene nuclei are smooth
    ellipsoids, cells are power-diagram territories and molecules are uniform within them;
    the cellular scene of {doc}`synthetic-cellular-scene` adds lobed and touching nuclei,
-   cell types and placement by compartment. Sizes and densities are development targets,
+   cell types and placement by compartment; its real-appearance scene places real nuclei
+   and culture cells instead. Sizes and densities are development targets,
    set there from W-393's measurements of method labels, not fitted to tissue and not a
    D04 calibration."
 3. **"Terms", the halo.**
@@ -1580,13 +1663,15 @@ by section.
    *Proposed:* "The anchor always lies inside its own territory: here because it is inside
    its site sphere ("Cell territories"); in the cellular scene of
    {doc}`synthetic-cellular-scene`, whose site spheres may overlap, because its placement
-   test keeps every centre strictly inside its own power cell."
+   test keeps every centre strictly inside its own power cell; in the real-appearance
+   scene, because a proposal whose anchor lies in a placed mask is refused."
 6. **"Nuclei", first paragraph.**
    *Old:* "Nucleus `n` is an ellipsoid with centre `c_n` (µm), axial semi-axis `a_z`,
    lateral semi-axes `a_l · e` and `a_l`, ..."
    *Proposed:* the same, followed by "In the cellular scene of
    {doc}`synthetic-cellular-scene` a nucleus is a union of ellipsoids, lobe 1 optionally
-   perturbed by spherical harmonics, and its site sphere bounds every lobe."
+   perturbed by spherical harmonics, and its site sphere bounds every lobe; in the
+   real-appearance scene a nucleus is a placed real mask."
 7. **"Nuclei", "Placement (random sequential addition)".**
    *Old:* "Seeds are placed in order: ordinary cells, then binucleate cells, then empty
    cells. Each proposal draws a centre uniformly in `Ω` from the seed's own
@@ -1600,7 +1685,8 @@ by section.
    accepted by a shape-aware contact test that lets site spheres overlap, and with
    `on_crowded="stop"` placement ends at the first seed that cannot be placed, recorded in
    `context.json`, and raises `ValueError` only below a stated share of the target
-   density. Nothing is dropped silently there either."
+   density; the real-appearance scene places objects by PL2 and stops as 'When placement
+   stops' states. Nothing is dropped silently there either."
 8. **"Cell territories and the label-generation rule": "Nucleus label" and "Cell label".**
    *Old:* "`N(σ) = n` where `σ ∈ Ω` and `ρ_n(σ) ≤ 1`, else 0"; "Nuclei never overlap,
    because their site spheres keep a positive gap."; "Then `C(σ) = cell(j*)` when `σ ∈ Ω` and `‖σ − c_{j*}‖ ≤ R_{j*} + reach(cell(j*))`, else
@@ -1613,7 +1699,9 @@ by section.
    because its site spheres may overlap)"; "Nuclei never overlap: a point carries only the
    nucleus of its power-nearest site. Here the site spheres keep a positive gap, so nuclei do not touch; the cellular
    scene of {doc}`synthetic-cellular-scene` lets site spheres overlap and nuclei touch on
-   the faces of their power cells."; the cell label the same, followed by "(the cellular
+   the faces of their power cells; in the real-appearance scene a point carries the
+   nucleus of the first placed object that holds it, and on every nucleus voxel the cell
+   label is that nucleus's cell."; the cell label the same, followed by "(the cellular
    scene adds two other outer limits: a grown nucleus, and none)"; and "A nucleus is
    labelled only where its own site is the power-nearest one and its shape function is at
    most 1, and its shape lies within its territory's outer limit, so **every nucleus lies
@@ -1660,7 +1748,8 @@ by section.
     same files with the same columns, made by the rules of that page (lobes, clipping,
     territories, molecules by compartment); its `context.json` names
     `CONTEXT_TRUTH_VERSION`, which versions those rules, and `sample.json` keeps
-    `sample_truth_version` `"1"`."
+    `sample_truth_version` `"1"`; a real-appearance scene writes them with the ellipsoid
+    columns null, versioned by `APPEARANCE_TRUTH_VERSION` in `appearance.json`."
 14. **"Exclusions".**
     *Old:* "no calibration to real tissue and no empirical profiles; no claim about
     segmentation accuracy, and no learned segmenter run on this scene as a measure of its
@@ -1703,9 +1792,130 @@ device per run.
 * **No calibration:** the presets are development targets; the real labels are method
   output, the tissue-2D crops are the densest tiles of that sample, and one seed per scene
   gives small counts (W-393 `notes.md` §12).
-* **No ER stain** (D2), no structured tissue background, no per-FOV illumination, no
-  cross-FOV cell matching: outside this delivery.
+* **No ER stain** (D2), no per-FOV illumination, no cross-FOV cell matching: outside this
+  delivery. A structured background from real patches is part of
+  {doc}`synthetic-real-appearance`.
 * **No accuracy claim, comparison of methods, training or annotation** (D1, D7; W-93 keeps
   synthetic truth and calibration, W-123 annotation).
-* **No real data** is read by this page or its golden test.
+* **No real data** is read by this page's golden test, the routine tier or the CI
+  environment. The appearance banks of {doc}`synthetic-real-appearance` are built from real
+  images outside the repository, and only `slow` tests on the lab machine read them.
 * **No change to an accepted page:** the changes are listed above, for the gate.
+
+## Implementation
+
+This page's scene is implemented in `starfinder.synthetic` by W-483 to W-485 and checked by
+the generator checks of {doc}`synthetic-cellular-scene-validation` (W-486). The real-appearance
+scene of {doc}`synthetic-real-appearance` (W-516 to W-520) sits beside it and changes none of
+it (E1, PR1 there).
+
+**Issues.** The cellular scene was implemented by W-483 (geometry and molecules), W-484
+(stains and the morphology round) and W-485 (the six context presets); W-486 completed its
+generator checks. The real appearance was implemented by W-516 (the bank), W-517
+(augmentation, placement, territories and labels), W-518 (composition, output, the
+morphology round and truth), W-519 (the six appearance presets and the three real banks)
+and W-520 (the remaining generator checks, GA23 and the table of implemented checks). W-487
+ran the chain checks on the appearance presets. W-488 applied the lists of accepted
+statements, W-483's four findings and the confirmations of the dated amendments, and added
+these sections and the example `docs/examples/context_scene.py` ({doc}`api/examples`), run
+by `test_synthetic_context_example.py`.
+
+**Modules** (all in `src/python/starfinder/synthetic/`, exported by `starfinder.synthetic`
+and listed on the API page `docs/api/synthetic.rst`):
+
+* `_cellular.py` (W-483): the shape functions of lobed nuclei and harmonics, extents,
+  contact distances and the label functions;
+* `_context.py` (W-483, W-484): `ContextSceneConfig` and its parts (`NucleusShapeConfig`,
+  `PackingConfig`, `TerritoryConfig`, `CellTypeConfig`, `MoleculeConfig`),
+  `generate_context_scene`, `ContextScene`, `save_context_scene` and `save_context_dataset`;
+* `_stains.py` (W-484): `StainChannelConfig`, `BrightRegionConfig`, `UnevennessConfig`,
+  `OutputScaleConfig`, `MorphologyRoundConfig` and the stain functions;
+* `_context_presets.py` (W-485): `CONTEXT_PRESETS`, `CONTEXT_PRESET_VERSION` and
+  `context_scene_preset`;
+* `_appearance_bank.py` (W-516): `BankReference`, `build_appearance_bank`,
+  `closed_form_bank` and `load_appearance_bank`;
+* `_appearance_layout.py` (W-517): `AugmentationConfig`, `LayoutConfig`, placement by PL2
+  with DN1 and DN3, territories, ownership and the point evaluator;
+* `_appearance.py` (W-518): `AppearanceSceneConfig`, `CompositionConfig`,
+  `generate_appearance_scene`, `AppearanceScene`, `save_appearance_scene` and
+  `APPEARANCE_TRUTH_VERSION`;
+* `_appearance_presets.py` (W-519): `APPEARANCE_PRESETS`, `APPEARANCE_PRESET_VERSION` and
+  `appearance_scene_preset`;
+* `_sample.py`: the hooks by which the sample scene's generation runs with the cellular
+  scene's and the appearance scene's cells (W-483, W-484, W-518); a scene without the new
+  settings is the accepted sample scene.
+
+**Tests** (in `src/python/test/`):
+
+* the generator checks GN1 to GN25 of {doc}`synthetic-cellular-scene-validation`: `test_synthetic_cellular_contract.py`,
+  `test_synthetic_cellular_scene.py` (W-483), `test_synthetic_cellular_stains.py`,
+  `test_synthetic_cellular_stains_contract.py` (W-484), `test_synthetic_cellular_presets.py`,
+  `test_synthetic_cellular_presets_contract.py` (W-485), `test_synthetic_cellular_routine.py`
+  and `test_synthetic_cellular_checks.py` (W-486), with the helpers `cellular_oracle.py`,
+  `cellular_scenes.py`, `cellular_measures.py` and `cellular_checks.py`; each row's tests are
+  named in that page's "Implemented checks";
+* the generator checks GA1 to GA27 of {doc}`synthetic-real-appearance-validation`:
+  `test_synthetic_appearance_bank.py`, `test_synthetic_appearance_golden.py` (W-516),
+  `test_synthetic_appearance_scene.py` (W-517), `test_synthetic_appearance_stains.py`,
+  `test_synthetic_appearance_contract.py` (W-518), `test_synthetic_appearance_presets.py`,
+  `test_synthetic_appearance_presets_contract.py` (W-519, GA23 added by W-520),
+  `test_synthetic_appearance_coverage.py` and `test_synthetic_appearance_checks.py` (W-520),
+  with the helpers `cellular_appearance_oracle.py`, `cellular_appearance_scenes.py` and
+  `cellular_appearance_measures.py`; each row's tests are named in that page's "Implemented
+  checks";
+* the chain checks CD, CT and CU, steps 0 to 5, on the appearance presets:
+  `test_integration_cellular_chain.py` (W-487), marked `integration` and `validation`; the
+  chains with a model are `slow` and `learned`, the truth-label chains `slow`;
+* the example's test `test_synthetic_context_example.py` (W-488), `slow`.
+
+**Amendments during the implementation**, each with its date, its issue and its reason;
+each is written where it applies:
+
+* **2026-10-15, W-485** ({doc}`synthetic-cellular-scene-validation`, after the table of target
+  ranges). TR7 of dense 3D tissue is reported, not asserted, on `context-dense3d-slow-v1`:
+  the bright regions of Tx1, within TR5's ranges, do not reach the real within-nucleus
+  variation (0.168 against 0.25–0.41). Operator decision, confirmed by Jiahao on 2026-10-16;
+  it applies to the closed-form presets only (W-515, AM1).
+* **2026-10-17, W-516** ({doc}`synthetic-real-appearance`, after CF1's options table). The
+  closed-form bank's sources are rendered with noise and unevenness off: with the field
+  kept, BR4 refuses two of the three culture sources and no closed-form culture bank can be
+  built. Operator decision, confirmed by Jiahao on 2026-10-18.
+* **2026-10-17, W-516** ({doc}`synthetic-real-appearance-validation`, GA6's row). The stored
+  field outside a mask is compared within `max(1e-6 · r, 1e-9)` of the value over the
+  plateau: an entry whose rim level `r` is 0 still carries the blurred inside excess
+  outside its mask, and float32 storage cannot meet a bound of 0. Operator decision,
+  confirmed by Jiahao on 2026-10-18.
+* **2026-10-17, W-519** ({doc}`synthetic-real-appearance`, "Presets"). `appearance-culture-slow-v1`
+  stops after 500 refused proposals in a row: the culture's cell masks saturate below DN1's
+  target of 0.501, and a stop after 4,000 took 27 min 41 s per generation. At seed 42 it
+  places 65 cells and reaches 0.480. Operator decision, confirmed by Jiahao on 2026-10-18.
+* **2026-10-18, W-520** ({doc}`synthetic-real-appearance-validation`, after "Target
+  definitions"). TR2v of dense 3D (0.385) and TR8r of dense 3D (0.238) and of 2D tissue
+  (0.034) are reported beside their ranges, not asserted: DN1 places with a fixed threshold
+  while TR2v takes the scene's own Otsu threshold, and the real rim level holds unlabelled
+  stain that no entry carries. Operator decision, confirmed by Jiahao on 2026-10-18.
+* **2026-10-18, W-487** ({doc}`synthetic-real-appearance-validation`, "Consequences for the
+  chain checks"). CD1's TH1 on `appearance-dense3d-slow-v1` (0.570 against at least 0.9)
+  and CU1's TH3 on `appearance-culture-slow-v1` (2 splits against 0, the seeds 42 and 43
+  pooled) are reported beside their thresholds, not asserted: the dense 3D scene holds
+  about three to six times the label density of the method's labels on real LN, and the two
+  culture splits come from a mask with a detached piece and a two-lobed mask at the FOV
+  border. Every other threshold stays asserted. Operator decision pending Jiahao's
+  confirmation.
+* **2026-10-18, W-488** ({doc}`synthetic-cellular-scene-validation`). W-483's four findings are
+  applied with the options its notes recommend: the fixture `ctx_crowded` at `density=0.9`,
+  so that it raises as the page says; GN6's anchors strict in the label function's
+  arithmetic, as K1 states; the unreachable monolayer refusal dropped from GN3 and kept in
+  the generator as a guard; and GN9 stating that `ctx_types` holds three sample cells. The
+  rows as written could not be tested as written (W-483 notes, "Findings for Jiahao").
+
+No threshold, tolerance, target range, preset or bank was changed by W-488.
+
+**Accepted statements applied (W-488, 2026-10-18).** The fourteen entries of
+{doc}`synthetic-cellular-scene`'s "Accepted statements this addition changes" are applied to
+{doc}`synthetic-sample-scene`, with the completions of entry 32 of {doc}`synthetic-real-appearance`'s list; entries
+1 to 34 of {doc}`synthetic-real-appearance`'s "Accepted statements this page changes" are
+applied to {doc}`synthetic-cellular-scene`; and entries 1 to 38 of {doc}`synthetic-real-appearance-validation`'s list,
+which take the place of entries 35 to 43 of {doc}`synthetic-real-appearance`, are applied to
+{doc}`synthetic-cellular-scene-validation`. Each is applied with its proposed wording; the lists
+stay on their pages as the record of what changed.

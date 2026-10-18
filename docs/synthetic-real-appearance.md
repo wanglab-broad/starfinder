@@ -387,7 +387,7 @@ instead of real images.
 | CF2. A bank of hand-made arrays | Ellipsoids with a constant excess, written in the test. | Least. | The build step is not exercised. |
 | CF3. A small real bank committed as a fixture | As named. | None. | Against W-329: no array derived from real images enters the repository. |
 
-**Amendment of 2026-10-17 (W-516; operator decision pending Jiahao's confirmation).** CF1
+**Amendment of 2026-10-17 (W-516; operator decision, confirmed by Jiahao on 2026-10-18).** CF1
 as written (noise off) conflicts with BR4. With the accepted unevenness field U1 kept, the
 routine culture preset `context-culture-v1` has plateaus of 31, 4 and 53 grey levels at the
 seeds 42, 43 and 44: its field scales a whole routine scene. BR4 refuses a source whose
@@ -840,7 +840,7 @@ that assert them are W-514's.
 
 **Recommendation: PR1**, on the accepted grids.
 
-**Amendment of 2026-10-17 (W-519; operator decision pending Jiahao's confirmation).** The
+**Amendment of 2026-10-17 (W-519; operator decision, confirmed by Jiahao on 2026-10-18).** The
 culture's whole cell masks saturate below DN1's target. Its target, the median over the
 bank's sources of the Flamingo visible share on the middle 16 planes, is 0.501 (0.291,
 0.505 and 0.501 for Position398, 407 and 408). With at most 1 % overlap per mask, placement
@@ -1299,3 +1299,123 @@ The generator checks GN13 (stain identities), GN15 (bright regions), GN16 (field
 GN23 (targets) and the chain checks CD, CT and CU are amended, kept or replaced by W-514.
 Which of them stands for the appearance presets, and how W-487 and W-488 change, is
 W-514's to state (open point).
+
+## Implementation
+
+This page's scene is implemented in `starfinder.synthetic` by W-516 to W-519 and checked by
+the generator checks GA1 to GA27 of {doc}`synthetic-real-appearance-validation` (W-516 to W-520). The
+three real banks `ln-sample1-v1`, `tissue2d-v1` and `culture3d-v1` were built by W-519
+outside the repository ("Execution conditions" of {doc}`synthetic-real-appearance-validation`); the
+presets name each by its name and SHA-256, and only `slow` tests on the lab machine read
+them, through `STARFINDER_APPEARANCE_BANKS`.
+
+**Issues.** The cellular scene was implemented by W-483 (geometry and molecules), W-484
+(stains and the morphology round) and W-485 (the six context presets); W-486 completed its
+generator checks. The real appearance was implemented by W-516 (the bank), W-517
+(augmentation, placement, territories and labels), W-518 (composition, output, the
+morphology round and truth), W-519 (the six appearance presets and the three real banks)
+and W-520 (the remaining generator checks, GA23 and the table of implemented checks). W-487
+ran the chain checks on the appearance presets. W-488 applied the lists of accepted
+statements, W-483's four findings and the confirmations of the dated amendments, and added
+these sections and the example `docs/examples/context_scene.py` ({doc}`api/examples`), run
+by `test_synthetic_context_example.py`.
+
+**Modules** (all in `src/python/starfinder/synthetic/`, exported by `starfinder.synthetic`
+and listed on the API page `docs/api/synthetic.rst`):
+
+* `_cellular.py` (W-483): the shape functions of lobed nuclei and harmonics, extents,
+  contact distances and the label functions;
+* `_context.py` (W-483, W-484): `ContextSceneConfig` and its parts (`NucleusShapeConfig`,
+  `PackingConfig`, `TerritoryConfig`, `CellTypeConfig`, `MoleculeConfig`),
+  `generate_context_scene`, `ContextScene`, `save_context_scene` and `save_context_dataset`;
+* `_stains.py` (W-484): `StainChannelConfig`, `BrightRegionConfig`, `UnevennessConfig`,
+  `OutputScaleConfig`, `MorphologyRoundConfig` and the stain functions;
+* `_context_presets.py` (W-485): `CONTEXT_PRESETS`, `CONTEXT_PRESET_VERSION` and
+  `context_scene_preset`;
+* `_appearance_bank.py` (W-516): `BankReference`, `build_appearance_bank`,
+  `closed_form_bank` and `load_appearance_bank`;
+* `_appearance_layout.py` (W-517): `AugmentationConfig`, `LayoutConfig`, placement by PL2
+  with DN1 and DN3, territories, ownership and the point evaluator;
+* `_appearance.py` (W-518): `AppearanceSceneConfig`, `CompositionConfig`,
+  `generate_appearance_scene`, `AppearanceScene`, `save_appearance_scene` and
+  `APPEARANCE_TRUTH_VERSION`;
+* `_appearance_presets.py` (W-519): `APPEARANCE_PRESETS`, `APPEARANCE_PRESET_VERSION` and
+  `appearance_scene_preset`;
+* `_sample.py`: the hooks by which the sample scene's generation runs with the cellular
+  scene's and the appearance scene's cells (W-483, W-484, W-518); a scene without the new
+  settings is the accepted sample scene.
+
+**Tests** (in `src/python/test/`):
+
+* the generator checks GN1 to GN25 of {doc}`synthetic-cellular-scene-validation`: `test_synthetic_cellular_contract.py`,
+  `test_synthetic_cellular_scene.py` (W-483), `test_synthetic_cellular_stains.py`,
+  `test_synthetic_cellular_stains_contract.py` (W-484), `test_synthetic_cellular_presets.py`,
+  `test_synthetic_cellular_presets_contract.py` (W-485), `test_synthetic_cellular_routine.py`
+  and `test_synthetic_cellular_checks.py` (W-486), with the helpers `cellular_oracle.py`,
+  `cellular_scenes.py`, `cellular_measures.py` and `cellular_checks.py`; each row's tests are
+  named in that page's "Implemented checks";
+* the generator checks GA1 to GA27 of {doc}`synthetic-real-appearance-validation`:
+  `test_synthetic_appearance_bank.py`, `test_synthetic_appearance_golden.py` (W-516),
+  `test_synthetic_appearance_scene.py` (W-517), `test_synthetic_appearance_stains.py`,
+  `test_synthetic_appearance_contract.py` (W-518), `test_synthetic_appearance_presets.py`,
+  `test_synthetic_appearance_presets_contract.py` (W-519, GA23 added by W-520),
+  `test_synthetic_appearance_coverage.py` and `test_synthetic_appearance_checks.py` (W-520),
+  with the helpers `cellular_appearance_oracle.py`, `cellular_appearance_scenes.py` and
+  `cellular_appearance_measures.py`; each row's tests are named in that page's "Implemented
+  checks";
+* the chain checks CD, CT and CU, steps 0 to 5, on the appearance presets:
+  `test_integration_cellular_chain.py` (W-487), marked `integration` and `validation`; the
+  chains with a model are `slow` and `learned`, the truth-label chains `slow`;
+* the example's test `test_synthetic_context_example.py` (W-488), `slow`.
+
+**Amendments during the implementation**, each with its date, its issue and its reason;
+each is written where it applies:
+
+* **2026-10-15, W-485** ({doc}`synthetic-cellular-scene-validation`, after the table of target
+  ranges). TR7 of dense 3D tissue is reported, not asserted, on `context-dense3d-slow-v1`:
+  the bright regions of Tx1, within TR5's ranges, do not reach the real within-nucleus
+  variation (0.168 against 0.25–0.41). Operator decision, confirmed by Jiahao on 2026-10-16;
+  it applies to the closed-form presets only (W-515, AM1).
+* **2026-10-17, W-516** ({doc}`synthetic-real-appearance`, after CF1's options table). The
+  closed-form bank's sources are rendered with noise and unevenness off: with the field
+  kept, BR4 refuses two of the three culture sources and no closed-form culture bank can be
+  built. Operator decision, confirmed by Jiahao on 2026-10-18.
+* **2026-10-17, W-516** ({doc}`synthetic-real-appearance-validation`, GA6's row). The stored
+  field outside a mask is compared within `max(1e-6 · r, 1e-9)` of the value over the
+  plateau: an entry whose rim level `r` is 0 still carries the blurred inside excess
+  outside its mask, and float32 storage cannot meet a bound of 0. Operator decision,
+  confirmed by Jiahao on 2026-10-18.
+* **2026-10-17, W-519** ({doc}`synthetic-real-appearance`, "Presets"). `appearance-culture-slow-v1`
+  stops after 500 refused proposals in a row: the culture's cell masks saturate below DN1's
+  target of 0.501, and a stop after 4,000 took 27 min 41 s per generation. At seed 42 it
+  places 65 cells and reaches 0.480. Operator decision, confirmed by Jiahao on 2026-10-18.
+* **2026-10-18, W-520** ({doc}`synthetic-real-appearance-validation`, after "Target
+  definitions"). TR2v of dense 3D (0.385) and TR8r of dense 3D (0.238) and of 2D tissue
+  (0.034) are reported beside their ranges, not asserted: DN1 places with a fixed threshold
+  while TR2v takes the scene's own Otsu threshold, and the real rim level holds unlabelled
+  stain that no entry carries. Operator decision, confirmed by Jiahao on 2026-10-18.
+* **2026-10-18, W-487** ({doc}`synthetic-real-appearance-validation`, "Consequences for the
+  chain checks"). CD1's TH1 on `appearance-dense3d-slow-v1` (0.570 against at least 0.9)
+  and CU1's TH3 on `appearance-culture-slow-v1` (2 splits against 0, the seeds 42 and 43
+  pooled) are reported beside their thresholds, not asserted: the dense 3D scene holds
+  about three to six times the label density of the method's labels on real LN, and the two
+  culture splits come from a mask with a detached piece and a two-lobed mask at the FOV
+  border. Every other threshold stays asserted. Operator decision pending Jiahao's
+  confirmation.
+* **2026-10-18, W-488** ({doc}`synthetic-cellular-scene-validation`). W-483's four findings are
+  applied with the options its notes recommend: the fixture `ctx_crowded` at `density=0.9`,
+  so that it raises as the page says; GN6's anchors strict in the label function's
+  arithmetic, as K1 states; the unreachable monolayer refusal dropped from GN3 and kept in
+  the generator as a guard; and GN9 stating that `ctx_types` holds three sample cells. The
+  rows as written could not be tested as written (W-483 notes, "Findings for Jiahao").
+
+No threshold, tolerance, target range, preset or bank was changed by W-488.
+
+**Accepted statements applied (W-488, 2026-10-18).** The fourteen entries of
+{doc}`synthetic-cellular-scene`'s "Accepted statements this addition changes" are applied to
+{doc}`synthetic-sample-scene`, with the completions of entry 32 of {doc}`synthetic-real-appearance`'s list; entries
+1 to 34 of {doc}`synthetic-real-appearance`'s "Accepted statements this page changes" are
+applied to {doc}`synthetic-cellular-scene`; and entries 1 to 38 of {doc}`synthetic-real-appearance-validation`'s list,
+which take the place of entries 35 to 43 of {doc}`synthetic-real-appearance`, are applied to
+{doc}`synthetic-cellular-scene-validation`. Each is applied with its proposed wording; the lists
+stay on their pages as the record of what changed.
