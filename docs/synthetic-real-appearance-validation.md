@@ -200,19 +200,39 @@ is **provisional**.
 | --- | --- | --- | --- | --- | --- |
 | TR1 | **Changed: reported on the truth labels; compared like for like in the chain checks** | Share of touching nuclei, per image | Truth labels: none (reported). Method labels in step 5 of the chain checks: the accepted 0.44–0.57; 0.76–0.82; 0.33–0.72 | W-393 `geometry.csv` "share of touching nuclei, per image" (the method's labels of the real image). Round 10 gave 0.99 on its truth against 0.56 on the held-out LN crop's labels (`round10/logs/ln.log.json`, `proto` and `real_crop`, `touching_share`) | reported |
 | TR2 | **Changed: replaced by TR2v; the label share reported beside it** | Nucleus volume (area) fraction of the truth labels, per image | Truth labels: none (reported). Method labels in step 5 of the chain checks: the accepted 0.07–0.16; 0.30–0.44; 0.17–0.45 | W-393 `geometry.csv` "nucleus volume fraction, per image"; the real label shares beside the visible ones: W-513 `tables/visible_share_<context>.csv`, column `label_share` of the rows of TR2v (the culture `DAPI-2D` rows of Position407 and Position408 carry the 2D-label artefact named under TR8v) | reported |
-| TR2v | **New** | Visible-stain share of the scene, per scene | 0.47–0.68; 0.29–0.44; DAPI 0.12–0.14 and Flamingo 0.41–0.53 | W-513 `tables/visible_share_ln.csv`, rows `ln/<FOV>/slab16_z17/DAPI-3D/nuclei-3D` for Position048, 049, 057, 058 (the 16 planes of the preset; 0.583, 0.681, 0.539, 0.472); `tables/visible_share_tissue2d.csv`, rows `tissue2d/<crop>/whole/PI-2D/nuclei-2D` (0.443, 0.361, 0.288); `tables/visible_share_culture.csv`, rows `culture/<FOV>/whole/DAPI-2D/nuclei-2D` (0.118, 0.139, 0.140, 0.134) and `culture/<FOV>/whole/Flamingo-2D/cells-2D` (0.410, 0.455, 0.533, 0.506) for Position397, 398, 407, 408 | asserted where V12 allows (dense 3D, 2D tissue); culture reported |
+| TR2v | **New** | Visible-stain share of the scene, per scene | 0.47–0.68; 0.29–0.44; DAPI 0.12–0.14 and Flamingo 0.41–0.53 | W-513 `tables/visible_share_ln.csv`, rows `ln/<FOV>/slab16_z17/DAPI-3D/nuclei-3D` for Position048, 049, 057, 058 (the 16 planes of the preset; 0.583, 0.681, 0.539, 0.472); `tables/visible_share_tissue2d.csv`, rows `tissue2d/<crop>/whole/PI-2D/nuclei-2D` (0.443, 0.361, 0.288); `tables/visible_share_culture.csv`, rows `culture/<FOV>/whole/DAPI-2D/nuclei-2D` (0.118, 0.139, 0.140, 0.134) and `culture/<FOV>/whole/Flamingo-2D/cells-2D` (0.410, 0.455, 0.533, 0.506) for Position397, 398, 407, 408 | asserted where V12 allows (2D tissue); dense 3D reported under the amendment of 2026-10-18 below; culture reported |
 | TR3 | **Changed: reported, beside the source entries and the real range** | Share not described by one ellipsoid (IoU < 0.8), on the truth labels and on the entries they come from | None asserted. The placed share, the entries' share and their difference are reported; a bound on the difference is **missing**: neither W-393 nor W-513 measured a placed share, and no derivation bounds it (below). Real range, reported: the accepted 0.064–0.074; 0.027–0.060; 0.12–0.43 | W-393 `geometry.csv` "share of nuclei not described by one ellipsoid (IoU < 0.8), per image". The miss against the real range is limit L2: round 10 gave 0.009 against 0.047 on the held-out LN crop (`proto` and `real_crop`, `non_ellipsoid_share`). It is reported with the squash threshold of rule 4, its control | reported |
 | TR4 | **Stays: compared with the real ranges** | Edge width 10–90 % (µm) | 0.20–2.20; 0.31–1.57; 0.33–1.63 | W-393 `stain.csv` "edge width 10-90 %". The edge is made by the fall-off length `λ`, the blur and the out-of-focus light, not by the entry alone, so only the real range describes it. The held-out crop's value is reported beside it (limit L3: round 10 0.82 µm against 1.54 µm in LN, `edge_width_p5_med_p95`) | asserted (dense 3D); 2D tissue and culture on `app_slow_acquired`, reported |
 | TR5 | **Stays: compared with the real ranges** | Bright regions per nucleus; size; peak over the nucleus median | as accepted | W-393 `stain.csv` (the accepted rows). The texture is the entries' own; the prefilter of IN2 at a coarser grid smooths it, so the real ranges, not the entries, are the reference | asserted (dense 3D); 2D tissue and culture on `app_slow_acquired`, reported |
 | TR6 | **Stays** | Nucleus median over the image's median of nucleus medians | as accepted | W-393 `stain.csv` (the accepted row) | asserted where V12 allows |
 | TR7 | **Stays: compared with the real ranges; the source entries reported** | Within-nucleus CV of interior voxels | as accepted (0.25–0.41; 0.20–0.38; 0.11–1.35) | W-393 `stain.csv` "variation within a nucleus (CV of interior voxels)". Round 10 gave 0.317, 0.285 and 0.218 against 0.348, 0.266 and 0.343 on the held-out crops (`within_cv_p5_med_p95`). Reported beside it: the median over placed objects of their CV over their entry's CV | asserted where V12 allows (dense 3D, 2D tissue); culture reported |
 | TR8 | **Changed: the per-image background replaced by TR8r and TR8v; the noise row stays** | Background over plateau (W-393's, more than 2 µm from every label); noise over plateau per 128-px block | Background: none (reported). Noise: 0–0.063; 0–0.033; 0–0.24 | W-393 `stain.csv` (the accepted rows). W-393's background contains the unlabelled nuclei (0.34 in Position048; {doc}`synthetic-real-appearance`, "Composition") | background reported; noise asserted where V12 allows |
-| TR8r | **New** | Background at label rims, median over the truth labels (the truth cells in the culture), over the plateau; dense 3D on the volume, 2D tissue on the Z maximum, the culture on the volume (the exception above) | 0.33–0.40; 0.125–0.130; 0 | W-513 `tables/rim_background_ln.csv` rows `ln/<FOV>/DAPI` (0.400, 0.333, 0.385, 0.360; 3D labels of the whole FOVs), `tables/rim_background_tissue2d.csv` rows `tissue2d/<crop>/PI` (0.125, 0.125, 0.130), `tables/rim_background_culture.csv` rows `culture/<FOV>/DAPI` and `culture/<FOV>/Flamingo` for Position397, 398, 407, 408 (0 in all eight; volume, cell boxes, plateaus on the extended labels), column `local_bg_over_plateau_median` | asserted where V12 allows (dense 3D, 2D tissue); culture reported |
+| TR8r | **New** | Background at label rims, median over the truth labels (the truth cells in the culture), over the plateau; dense 3D on the volume, 2D tissue on the Z maximum, the culture on the volume (the exception above) | 0.33–0.40; 0.125–0.130; 0 | W-513 `tables/rim_background_ln.csv` rows `ln/<FOV>/DAPI` (0.400, 0.333, 0.385, 0.360; 3D labels of the whole FOVs), `tables/rim_background_tissue2d.csv` rows `tissue2d/<crop>/PI` (0.125, 0.125, 0.130), `tables/rim_background_culture.csv` rows `culture/<FOV>/DAPI` and `culture/<FOV>/Flamingo` for Position397, 398, 407, 408 (0 in all eight; volume, cell boxes, plateaus on the extended labels), column `local_bg_over_plateau_median` | reported: dense 3D and 2D tissue under the amendment of 2026-10-18 below; culture reported |
 | TR8v | **New** | Median stain outside the visible stain, over the plateau, per scene; dense 3D on the volume, 2D tissue and the culture on the Z maximum (the same form as TR2v) | 0–0.54; 0.022–0.047; DAPI 0.036–0.038 and Flamingo 0.022–0.074 | W-513 `tables/visible_share_ln.csv` rows `ln/<FOV>/slab16_z17/DAPI-3D/nuclei-3D` (0.486, 0.111, 0.538, 0; over the whole FOV's plateau); `tables/visible_share_tissue2d.csv` rows `tissue2d/<crop>/whole/PI-2D/nuclei-2D` (0.047, 0.038, 0.022); `tables/visible_share_culture.csv` rows `culture/Position397/whole/DAPI-2D/nuclei-2D` and `culture/Position398/whole/DAPI-2D/nuclei-2D` (0.038, 0.036), and rows `culture/<FOV>/whole/Flamingo-2D/cells-2D` for Position397, 398, 407, 408 (0.039, 0.022, 0.074, 0.0625), column `not_visible_over_plateau`. The DAPI rows of Position407 and Position408 (0.308, 0.158) are left out: their plateaus of 13 and 19 come from 2D nucleus labels covering 0.47 and 0.33 of the projection, against a visible DAPI of 0.14 and 0.13 (the same rows, `label_share`, `visible_share`, `plateau`), the artefact {doc}`synthetic-real-appearance` reports (SRC2) | reported: the LN value is 0 where a tile holds empty regions, so the range is wide; a block-wise form is **not measured** by W-513 |
 | TR9 | **Stays** | 8-bit plateau (grey levels), measured on the scene as W-393 measured it (the culture on the Z maximum with the projected nucleus labels) | 35–50; 64–93; 13–83 | W-393 `notes.md` §9. O8 sets `g` at 45, 86 and 46 (W-513 `tables/bank_selection_<context>.csv`, `plateau`). In dense 3D and 2D tissue `g` is the same quantity as the measured plateau. In the culture `g` is the plateau on the volume with the extended labels, whereas TR9 is measured on the projection, so the two differ | asserted where V12 allows |
 | TR10 | **Stays** | Reads per cell; nuclear fraction of reads per cell | as accepted | W-393 `molecules.csv` (the accepted rows); the molecules are the accepted ones | asserted where V12 allows |
 | TR11 | **Changed: reported on the truth; compared like for like in the chain check** | Cell volume (dense 3D) | Truth: none (reported). Method labels in step 5 of CD (the method's nuclei expanded by 0.7776 µm): the accepted 90–185 µm³ | W-393 `geometry.csv` "cell volume" (StarDist labels of the real image, expanded). The truth's territories grow by CT1 among nuclei placed at the visible stain's density, so they are smaller than expansions of sparser labels | reported |
 | TR12 | **Stays** | Composite signal share per cell (2D tissue) | 0.52–0.96 | W-393 `molecules.csv` (the accepted row) | asserted where V12 allows |
+
+**Amendment of 2026-10-18 (W-520; operator decision pending Jiahao's confirmation).** The
+first run of GA23 (W-520, seed 42) measured three rows outside their ranges:
+
+* TR2v of `appearance-dense3d-slow-v1`: 0.385 against 0.47–0.68;
+* TR8r of `appearance-dense3d-slow-v1`: 0.238 against 0.33–0.40;
+* TR8r of `appearance-tissue2d-slow-v1`: 0.034 against 0.125–0.130.
+
+The causes, from W-520's `results/tables/ga23_diagnostics.csv`, are the following. DN1
+places with a fixed threshold, 0.567 of the plateau in dense 3D, and reached 0.542 against
+its target 0.539. TR2v measures the same scene with its own Otsu threshold, which is 0.826
+of the plateau there, so its share is 0.385. In 2D tissue the two rules agree (0.348 and
+0.340). `κ` matches the masks' inner rims to the placed entries' mean local background,
+0.379 of the plateau in dense 3D and 0.120 in 2D tissue, close to the real ranges. TR8r
+instead takes the 20th percentile of the free voxels within 1.5 µm of each label, and the
+scene is darker there. The real rim level includes unlabelled stain beside each label, which
+no entry holds (limits L1 and L4). These three rows are **reported beside their range, not
+asserted**, until a scene control reaches them or Jiahao decides otherwise. TR2v of dense 3D
+stays reported until DN1 and TR2v use one threshold rule. No range, source, tolerance or
+seed changes, and every other row is read as written.
 
 **The choice for TR3, TR4, TR5 and TR7.** Shape and texture now come from bank entries,
 so each of these rows can be read in two ways. It can compare the placed objects with
@@ -406,6 +426,113 @@ check that tests it or the reason it has none.
 | "Known limits" | L1 to L8 | GA23 reports L1 (TR8r, TR8v), L2 (TR3), L3 (TR4); L4 is read by "The claim boundary"; L5 by GA26 (91 cells); L6 by GA8 (labels from `D_e`; the pieces per label reported; the page states no criterion for a speck, so none is asserted); L7 and L8 are accepted limits with nothing to compute |
 | "What stays excluded" | No learned model, no real data in the repository, no bank delivered, no out-of-plane rotation, no real membrane stain | GA22; GA7 (rotation about Z only); none for the rest (scope) |
 | "Accepted statements this page changes" | Entries 1 to 43 | None by a test: the documentation issue applies the wording and its review checks it against the list. For entries 35 to 43 (this design's page) the wording here supersedes W-513's where the two differ ("Accepted statements this page changes", below) |
+
+## Implemented checks
+
+The generator checks are in the modules of `src/python/test/` listed below, each marked
+`synthetic` with the kind marker its row names. The implementation issues W-516 to W-519
+added most of them with the code they check. W-520 adds three modules:
+
+* `test_synthetic_appearance_checks.py`, which holds GA25 and the test that keeps this table
+  true, `test_every_ga_row_names_collected_tests`;
+* `test_synthetic_appearance_coverage.py`, the rows on fixtures they name that no earlier
+  module ran: GA13 and GA17 on `app_routine`, GA20's copy with type 2's abundance row changed,
+  GA21 on the culture copies of `app_plane` and `app_morph` (drawn), GA22 with `app_routine`
+  generated under the audit hook, GA15 on `app_plane` (GA19 names it) and GA2's fifteen names
+  together;
+* GA23 in `test_synthetic_appearance_presets.py`, with its measures in
+  `cellular_appearance_measures.py`.
+
+That test reads the rows GA1 to GA27 of the table "Generator checks" from this page and
+checks four things:
+
+* this table has exactly those rows, in that order;
+* every row names at least one test of its module that pytest collects, and none of them
+  is marked as an expected failure or skipped by a mark;
+* each named test carries `synthetic` and the one kind marker its GA row names;
+* a row whose tier is `routine` names no `slow` test, a row whose tier is `slow` names only
+  `slow` tests, and a row whose tier is `routine and slow` names both.
+
+A test of these modules that is not named here is an additional check of the code it
+tests. The helpers are:
+
+* `cellular_appearance_oracle.py`, the test oracle;
+* `cellular_appearance_scenes.py`, the fixtures;
+* `cellular_appearance_measures.py`, GA23's measures: W-393's through `cellular_measures.py`,
+  and the visible-stain share, the median outside the visible stain and the background at
+  label rims rebuilt from the definitions of W-513 `scripts/measure.py`.
+
+GA23 measures the scenes that GA24 generates and saves, each in its own process, read back
+from their files, so that no `slow` preset is generated twice. TR2v, TR8v and TR8r are
+measured on the stain of the sample grid, rendered by the point evaluator and cast as the
+FOV images are; the other rows on each FOV's stain and truth labels, each object once, as
+GN23 measures them. Each scene's rows are printed as one CSV block
+(`preset, row, quantity, value, low, high, objects, outcome`). A row the page asserts,
+outside its range where V12 compares it, fails the test and is a finding.
+
+Every tolerance is the one of the table "Generator checks", unchanged. Where a row says
+"Exact" for a number that is not an integer and that the test computes itself, its tests
+compare it within an absolute 1e-9 (the project's default float tolerance), or within the
+bound the row itself states. Counts, IDs, labels, strings, hashes and dtypes are compared
+exactly, and so are the 8-bit images of GA15 against the row's expression. No test needs an
+extra beyond `dev`, `local-registration` and `checkpoint`. A real-bank test skips, naming
+`STARFINDER_APPEARANCE_BANKS` or the missing file, where the variable or the bank is
+missing; GA24 needs `/usr/bin/time`.
+
+Where a test differs from its row as written, the case is recorded in its issue's worker
+notes, and the row is not changed:
+
+* **Tiers.** A check on `app_routine` generates its routine preset, which takes 5 s or more
+  on one CPU, so it is `slow`; so are the copies on the dense 3D closed-form bank and the
+  `cf_bank_files` of dense 3D and culture. Rows the page tiers `routine` therefore have a
+  `slow` part: GA3, GA4, GA8 to GA15, GA17, GA18 and GA20 to GA22.
+* **GA1** names the golden tests. GN1 (b), a `validation` test of W-483, stays unchanged and
+  passes in its tier, which GA25 covers.
+* **GA2.** The fields of the accepted configurations are GN2's tests, and the keys `_payload`
+  writes are kept by GA1 (b), whose pinned digests hold each context preset's
+  `context.json`.
+* **GA23.** TR4 and TR5 of 2D tissue and of the culture are measured on `app_slow_acquired`
+  and reported; TR7 of `appearance-dense3d-slow-v1` is asserted against 0.25–0.41, while
+  GN23 keeps reporting TR7 of `context-dense3d-slow-v1` (AM1).
+* **GA23, the amendment of 2026-10-18.** TR2v of dense 3D and TR8r of dense 3D and 2D tissue
+  are reported beside their range, with the outcome "reported: amendment of 2026-10-18
+  (W-520), beside the range", as the amendment after "Target definitions" states. Every
+  other row the page asserts still fails the test when it leaves its range.
+
+GA25 pins the SHA-256 of each file it names, line endings read as LF, at 8bf9a5b, the base
+revision of the appearance implementation batch. The files are those GN25 pins (with the
+session fixture `small_dataset` of `conftest.py` by its source) and the test modules and
+helpers of W-483 to W-486.
+
+| # | Module and tests | Fixtures | Tier | Floats |
+| --- | --- | --- | --- | --- |
+| GA1 | `test_synthetic_sample_golden.py`, `test_saved_preset_outputs_equal_the_pins`; `test_synthetic_appearance_golden.py`, `test_saved_context_preset_outputs_equal_the_base_revision_pins` | `sample_presets`, the six context presets | routine and slow | none compared (SHA-256 of content) |
+| GA2 | `test_synthetic_appearance_contract.py`, `test_new_names_are_exported`; `test_synthetic_appearance_presets_contract.py`, `test_six_presets_with_their_version`, `test_each_preset_takes_the_accepted_preset_of_its_context_and_tier`, `test_slow_presets_name_their_real_bank_by_name_and_sha256`, `test_the_accepted_presets_are_unchanged`, `test_preset_names_are_exported_and_on_the_api_pages`; `test_synthetic_appearance_coverage.py`, `test_ga2_every_new_name_is_exported_and_on_the_api_pages`; `test_synthetic_cellular_contract.py`, `test_gn2_existing_fields_and_presets_as_at_the_base`, `test_gn2_new_names_and_fields`; `test_synthetic_cellular_stains_contract.py`, `test_gn2_stain_names_and_fields` | none (the API pages by `docs/check_reference.py`) | routine | preset floats within 1e-9 |
+| GA3 | `test_synthetic_appearance_bank.py`, `test_load_refuses_a_changed_byte_a_wrong_reference_and_a_missing_file`, `test_bank_reference_entries_and_build_refusals`, `test_br4_refuses_both_copies_of_the_file_bank`; `test_synthetic_appearance_scene.py`, `test_ga3_augmentation_and_layout_refusals`, `test_ga3_a_reached_count_below_floor_raises_naming_both_values`; `test_synthetic_appearance_contract.py`, `test_configuration_refusals`, `test_generation_refusals_and_a_stored_bank` | `cf_bank_files` and its two copies, `app_crowded`, none | routine and slow | none compared (the type and the named values) |
+| GA4 | `test_synthetic_appearance_bank.py`, `test_closed_form_bank_build_is_deterministic_and_recorded`, `test_file_bank_build_is_deterministic_and_recorded` | `cf_banks`, `cf_bank_files` | routine and slow | arrays and digests exact |
+| GA5 | `test_synthetic_appearance_bank.py`, `test_bank_cases_meet_their_known_outcomes`, `test_closed_form_bank_selection_equals_the_oracle` | `bank_cases`, `cf_banks` | routine | rim shares and percentiles by the same arithmetic; labels within 1e-9 of a limit reported |
+| GA6 | `test_synthetic_appearance_bank.py`, `test_closed_form_entries_carry_what_the_page_states`, `test_bank_case_entries_and_patches`, `test_fall_off_cases` | `cf_banks`, `bank_cases`, `fall_off_cases` | routine | `D_e` within 1e-6 µm; the excess within 2⁻²³ relative; outside within `max(1e-6 · r, 1e-9)` (the amendment of 2026-10-17) |
+| GA7 | `test_synthetic_appearance_scene.py`, `test_ga7_transforms_are_in_range_redrawn_and_entries_follow_bs2` | `app_tiny`, `app_streams` (gain), `app_cu_offset` | routine | the culture's Z within 1e-9 µm |
+| GA8 | `test_synthetic_appearance_scene.py`, `test_ga8_labels_equal_the_oracle_on_every_grid`, `test_ga8_ga9_hand_made_placements`, `test_ga8_morphology_grid_is_the_reference_grid_moved_by_whole_voxels`; `test_synthetic_appearance_presets.py`, `test_ga8_routine_labels_equal_the_oracle_on_every_grid` | `app_tiny`, `app_plane`, `app_morph`, `app_cases`, `app_routine` | routine and slow | decisions within 1e-9 µm counted as boundary voxels |
+| GA9 | `test_synthetic_appearance_scene.py`, `test_ga9_ownership_overlap_and_anchors`, `test_ga8_ga9_hand_made_placements`; `test_synthetic_appearance_presets.py`, `test_ga9_routine_ownership_overlap_and_anchors` | `app_cases`, `app_tiny`, `app_plane`, `app_routine` | routine and slow | anchors within 1e-9 µm |
+| GA10 | `test_synthetic_appearance_scene.py`, `test_ga10_each_centre_is_the_one_pl2_gives`, `test_ga10_crowded_placement_stops_and_records`; `test_synthetic_appearance_stains.py`, `test_ga10_dn1_target_threshold_and_stop`, `test_ga10_dn1_short_copy_records_or_raises_at_its_floor`; `test_synthetic_appearance_presets.py`, `test_ga10_routine_placement_and_its_stop` | `app_tiny`, `app_crowded`, `app_dn1`, `app_routine` | routine and slow | centres within 1e-9 µm |
+| GA11 | `test_synthetic_appearance_scene.py`, `test_ga11_territories`, `test_ga8_ga9_hand_made_placements`; `test_synthetic_appearance_presets.py`, `test_ga11_routine_territories` | `app_tiny`, `app_cases`, `app_routine` | routine and slow | ties within 1e-9 µm counted |
+| GA12 | `test_synthetic_appearance_stains.py`, `test_ga12_stains_equal_the_composition`, `test_ga12_background_patches_are_the_redrawn_lattice`, `test_ga12_an_isolated_object_with_the_identity_transform_is_its_entry` | `app_tiny`, `app_plane`, `app_morph`, `app_coarse`, `app_bg1`, `app_cases` | routine and slow | 1e-9 of the image maximum |
+| GA13 | `test_synthetic_appearance_stains.py`, `test_ga13_kappa_and_the_rim_background`; `test_synthetic_appearance_coverage.py`, `test_ga13_kappa_and_the_rim_background_on_the_routine_presets` | `app_tiny`, `app_plane`, `app_bg1`, `app_routine` | routine and slow | 1e-9 relative; the blurred copy within 1e-9 of its maximum |
+| GA14 | `test_synthetic_appearance_bank.py`, `test_brightness_is_relative_to_the_source_plateau`; `test_synthetic_appearance_stains.py`, `test_ga14_g_is_the_median_plateau_and_each_gain_scales_its_object` | `cf_banks`, `app_tiny` | routine and slow | within 2⁻²³ relative; `g` within 1e-9 |
+| GA15 | `test_synthetic_appearance_stains.py`, `test_ga15_8bit_images_are_the_cast_and_no_noise_is_drawn`; `test_synthetic_appearance_coverage.py`, `test_ga15_one_plane_8bit_images_are_the_cast` | `app_tiny_uint8`, `app_plane` with the 8-bit cast | routine and slow | none compared (8-bit images exact) |
+| GA16 | `test_synthetic_appearance_stains.py`, `test_ga16_morphology_round` | `app_morph`, `app_plane` | routine | 1e-9 voxels; 1e-9 of the maximum |
+| GA17 | `test_synthetic_appearance_stains.py`, `test_ga17_types_genes_and_molecules`, `test_ga17_the_count_guard`, `test_ga17_zero_spread_gives_the_median_mean`, `test_ga17_rendering_identity_of_the_reference_round`, `test_ga17_a_type_size_scale_changes_no_placement_and_no_label`; `test_synthetic_appearance_coverage.py`, `test_ga17_types_and_molecules_on_the_routine_presets` | `app_tiny` with `ctx_types`, `app_streams` (size scale), `app_routine` | routine and slow | 4 SE; row sums and `mecr` within 1e-9 |
+| GA18 | `test_synthetic_appearance_scene.py`, `test_ga18_columns_hold_one_nucleus_in_2d_tissue`; `test_synthetic_appearance_presets.py`, `test_ga18_routine_projection_truth` | `app_tiny` (2D tissue, culture), `app_routine` | routine and slow | none compared (IDs exact) |
+| GA19 | `test_synthetic_appearance_scene.py`, `test_ga19_one_plane_labels`; `test_synthetic_appearance_stains.py`, `test_ga19_one_plane_stains`, `test_ga19_saved_labels_import_as_plane_label_images` | `app_plane` | routine | none compared (every z exactly 0) |
+| GA20 | `test_synthetic_appearance_scene.py`, `test_ga20_layout_components_start_with_context_appearance`, `test_ga20_a_changed_gain_range_changes_no_other_draw`, `test_ga20_a_type_size_scale_changes_no_placement_or_label`; `test_synthetic_appearance_stains.py`, `test_ga20_components_of_the_appearance_scene`, `test_ga20_dropping_a_stain_changes_no_other_stain`; `test_synthetic_appearance_coverage.py`, `test_ga20_a_type_abundance_changes_only_that_types_genes` | `app_streams`, `app_tiny` | routine and slow | the redrawn gain within 1e-12 |
+| GA21 | `test_synthetic_appearance_contract.py`, `test_ga21_layout_versions_nulls_tables_and_hashes`, `test_ga21_dataset_registers_the_morphology_round`; `test_synthetic_appearance_coverage.py`, `test_ga21_layout_on_the_culture_plane_and_drawn_morphology` | `app_tiny`, `app_plane`, `app_morph` | routine and slow | floats round trip exactly |
+| GA22 | `test_synthetic_appearance_bank.py`, `test_closed_form_bank_reads_no_file_outside_the_package`; `test_synthetic_appearance_coverage.py`, `test_ga22_a_routine_preset_reads_no_file_outside_the_package` | `cf_banks`, `app_routine` | routine and slow | none compared |
+| GA23 | `test_synthetic_appearance_presets.py`, `test_ga23_slow_preset_in_its_target_ranges`, `test_ga23_acquired_variant_edge_and_bright_regions` | `app_slow`, `app_slow_acquired` | slow | the target ranges |
+| GA24 | `test_synthetic_appearance_presets.py`, `test_ga24_routine_preset_generation_cost`, `test_ga24_slow_preset_generation_within_rg1`, `test_ga24_acquired_pixel_variant_within_rg1`, `test_ga24_bank_build_within_rg1` | `app_routine`, `app_slow`, `app_slow_acquired`, `real_banks` | slow | the bound of RG1 |
+| GA25 | `test_synthetic_appearance_checks.py`, `test_ga25_existing_tests_unchanged` | the existing files | routine | none compared (SHA-256) |
+| GA26 | `test_synthetic_appearance_presets.py`, `test_ga26_real_banks` | `real_banks` | slow | plateaus within 1e-9 |
+| GA27 | `test_synthetic_appearance_presets.py`, `test_ga27_a_rebuild_gives_the_recorded_digest` | `real_banks` | slow | none compared (digests) |
 
 ## Consequences for the chain checks
 
