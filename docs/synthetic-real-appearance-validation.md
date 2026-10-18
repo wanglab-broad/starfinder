@@ -551,6 +551,25 @@ on the appearance Jiahao rejected.
 | CT (2D tissue, route after fusion, StarDist `2D_versatile_fluo` and the seeded watershed) | **Amended** | `chain_tissue2d` on `appearance-tissue2d-slow-v1` (0.18927 µm, StarDist at the scale 0.5; bank `tissue2d-v1`); routine and truth variants as CD | TH1 to TH4 as CD; TH5 every FOV `image_supported` and every per-axis error ≤ 1 µm, unchanged and provisional | CT0's stitch now runs on the real PI texture and background; `P` holds by TZ1. About 337 nuclei (estimate) against about 76. CT5 is added |
 | CU (culture, route per FOV, Cellpose `cpsam_v2` with the morphology round) | **Amended** | `chain_culture` on `appearance-culture-slow-v1` (0.388796 µm; bank `culture3d-v1`) at the seeds 42 and 43, as accepted; routine and truth variants as CD | TH1 to TH4 as CD, on the two scenes pooled | The truth cells and nuclei are Cellpose `cpsam_v2` labels extended through z (CU1 of {doc}`synthetic-real-appearance`), read as the method on its own labels. About 32 cells per scene (estimate), about 63 pooled, against about 83. A culture entry can carry the unlabelled DAPI of a second nucleus, a source of false positives (TH-FP, reported). CU0 stands: MO1 keeps both rounds registered on the shared `DAPI`. CU5 is added |
 
+**Amendment of 2026-10-18 (W-487; operator decision pending Jiahao's confirmation).** The first run of the chain
+checks (W-487, the seeds fixed in advance) missed two rows on the `slow` presets:
+
+* CD1's TH1 on `appearance-dense3d-slow-v1`: StarDist `3D_spleen` matched 499 of 875 interior truth nuclei, 0.570
+  against at least 0.9 (1,381 truth nuclei, 612 labels). TH2 (10 merged of 1,381) and TH3 (no split) hold.
+* CU1's TH3 on `appearance-culture-slow-v1`, the seeds 42 and 43 pooled: 2 splits against 0, both at seed 42. TH1
+  (100 of 106 interior truth nuclei, 0.943) and TH2 (no merge) hold.
+
+The causes are the following. In dense 3D, DN1 places labelled nuclei until the visible-stain share of the real
+images is reached. That stain includes dim nuclei which StarDist did not label in those images (limits L1 and L4).
+The scene therefore holds about three to six times the label density of the method's labels on real LN: its truth
+labels fill 0.47 of the volume, against W-393's 0.07–0.16. The 16-plane stack adds to it: 772 of the 875 interior
+nuclei are cut by a Z end. In the culture, one split comes from a truth mask with a detached piece that Cellpose
+labels separately, which V4 counts as a split (limit L6: the pieces per label are reported, and no criterion for a
+speck is given). The other comes from a two-lobed mask at the FOV border, which Cellpose labels as two. These two
+rows are **reported beside their threshold, not asserted**, with their value and counts. Every other threshold stays
+asserted, CD1's TH2 and TH3 and CU1's TH1 and TH2 included. No threshold, preset, bank, seed or matching rule
+changes. Whether DN1 should use another threshold is the question Jiahao has left open.
+
 **Steps 0 to 4** stay as written, with these readings:
 
 * **The truth on a grid.** On the route per FOV the truth is each FOV's label images. On
