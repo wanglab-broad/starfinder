@@ -24,6 +24,7 @@ from starfinder.barcode import Codebook
 from starfinder.image import ImageMetadata
 from starfinder.io import save_volume
 
+from ._cellular import _labels
 from ._common import ScalarDistribution, _distribution, _draw, _integer, _json, _label, _probabilities
 from ._formed import (_GENERATOR_VERSION, _STREAM_KEY, _STREAM_NAMESPACE, FormedScene,
                       FormedSceneConfig, _plain, generate_formed_scene)
@@ -368,8 +369,12 @@ class SampleScene:
     record: dict
 
 
-def _layout(acquisition):
-    """Nominal grid, scene domain Ω, covered region K and the sample grid."""
+def _layout(acquisition, grow=None):
+    """Nominal grid, scene domain Ω, covered region K and the sample grid.
+
+    ``grow`` (voxels per axis, the cellular scene's morphology bound T) widens Ω by ``T ⊙ s`` on each side and
+    leaves K as it is; None is the sample scene's layout.
+    """
     n = np.array(acquisition.fov_shape_zyx, dtype=np.int64)
     s = np.array(acquisition.spacing_zyx, dtype=np.float64)
     bound = np.array(acquisition.jitter_max_zyx, dtype=np.float64)
@@ -380,7 +385,8 @@ def _layout(acquisition):
     grid = [(k // acquisition.rows, k % acquisition.rows) for k in range(len(ids))]
     nominal = np.array([(0.0, row * step_y, column * step_x) for column, row in grid], dtype=np.float64)
     top = nominal.max(axis=0)
-    omega = (-s / 2 - bound * s, top + (n - .5) * s + bound * s)
+    margin = bound if grow is None else bound + np.asarray(grow, dtype=np.float64)
+    omega = (-s / 2 - margin * s, top + (n - .5) * s + margin * s)
     covered = (-s / 2 + bound * s, top + (n - .5) * s - bound * s)
     origin = omega[0] + s / 2
     shape = np.ceil((omega[1] - omega[0]) / s - 1e-9).astype(np.int64)
@@ -413,7 +419,18 @@ def _rho(points, centre, axial, lateral, elongation, angle):
 
 
 def _label_functions(points, sites, omega):
-    """Cell label C and nucleus label N at (..., 3) sample positions in µm (rule L1)."""
+    """Cell label C and nucleus label N at (..., 3) sample positions in µm (rule L1).
+
+    Sites of the cellular scene (docs/synthetic-cellular-scene.md) carry their nucleus shapes and territory
+    rule and are labelled by that page's rule; sites of the real-appearance scene
+    (docs/synthetic-real-appearance.md) carry their own label function, the placed objects in placement order; every
+    other call is the rule L1 below.
+    """
+    appearance = getattr(sites, "appearance", None)
+    if appearance is not None:
+        return appearance(points)
+    if getattr(sites, "shapes", None) is not None:
+        return _labels(points, sites, omega, _BLOCK)
     shape = points.shape[:-1]
     flat = points.reshape(-1, 3)
     cells = np.zeros(len(flat), dtype=np.uint32)
@@ -742,6 +759,12 @@ def generate_sample_scene(codebook: Codebook, *, config: SampleSceneConfig = Sam
     """
     if not isinstance(config, SampleSceneConfig):
         raise TypeError("config must be SampleSceneConfig")
+    return _generate(codebook, config, on_fov)
+
+
+def _generate(codebook, config, on_fov, cellular=_cellular_scene, molecules=_molecules, grow=None):
+    """The body of generate_sample_scene; the cellular scene passes its own placement and molecule draws and, with a
+    morphology round, its translation bound ``grow`` (voxels), by which the scene domain grows (``_layout``)."""
     if not isinstance(codebook, Codebook):
         raise TypeError("codebook must be Codebook")
     if on_fov is not None and not callable(on_fov):
@@ -750,7 +773,7 @@ def generate_sample_scene(codebook: Codebook, *, config: SampleSceneConfig = Sam
     for value in (template.split, template.scene_key, template.sample_id, template.dataset_version):
         _label(value)
     _integer(template.seed, "seed", 0, 2**64 - 1)
-    layout = _layout(acquisition)
+    layout = _layout(acquisition, grow)
     sample = template.sample_id
     log = {}
     stream = _streams(template.split, template.seed, template.scene_key, log)
@@ -767,8 +790,8 @@ def generate_sample_scene(codebook: Codebook, *, config: SampleSceneConfig = Sam
 
     nuclei = cells = sites = None
     if config.cells is not None:
-        nuclei, cells, sites = _cellular_scene(config.cells, layout, stream)
-    ids, population, sigma, genes, values, abundances = _molecules(config, layout, codebook, cells, sites, stream)
+        nuclei, cells, sites = cellular(config.cells, layout, stream)
+    ids, population, sigma, genes, values, abundances = molecules(config, layout, codebook, cells, sites, stream)
     cell_of, nucleus_of = _label_functions(sigma, sites, layout.omega)
     in_sample = _inside(sigma, layout.covered)
 

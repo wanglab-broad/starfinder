@@ -30,11 +30,16 @@ batch (W-331); this page states the identities a test can check, not the validat
 
 ## What this addition is not
 
-* It does **not establish the accuracy of a learned segmenter.** No segmenter is run on
-  this scene as a measure of its quality, and no segmentation accuracy is claimed from it.
-* It is **not a calibrated tissue model.** Nuclei are smooth ellipsoids, cells are
-  power-diagram territories, molecules are uniform within them; sizes and densities are
-  development choices, not fitted to tissue, and no empirical profile is used.
+* It does **not establish the accuracy of a segmenter.** The §2.9 methods, learned ones
+  included, run on the cellular scene of {doc}`synthetic-cellular-scene` as an engineering
+  check of the chain (D1 of the §2.12 planning decisions), never as a measure of a method's
+  quality, and no segmentation accuracy is claimed from it.
+* It is **not a calibrated tissue model.** In this scene nuclei are smooth ellipsoids,
+  cells are power-diagram territories and molecules are uniform within them; the cellular
+  scene of {doc}`synthetic-cellular-scene` adds lobed and touching nuclei, cell types and
+  placement by compartment; its real-appearance scene places real nuclei and culture cells
+  instead. Sizes and densities are development targets, set there from W-393's
+  measurements of method labels, not fitted to tissue and not a D04 calibration.
 * It does **not use microsim** or any other new rendering dependency (Jiahao,
   2026-10-05). Everything is rendered by the existing analytic model or by closed-form
   functions evaluated at voxel centres, with NumPy and SciPy, which are already locked.
@@ -68,7 +73,8 @@ batch (W-331); this page states the identities a test can check, not the validat
   jitter within the bound. **The sample** is the content of `K`: the **sample molecules**
   `M` are the molecules whose position lies in `K`, and the **sample cells** are the cells
   whose anchor lies in `K` ("The sample scene", "Sample membership").
-* The **halo** is `Ω \ K`, a band of width `2 · J_a · s_a` on each outer side. Its content
+* The **halo** is `Ω \ K`, a band of width `2 · J_a · s_a` on each outer side
+  (`(2 · J_a + T_a) · s_a` with the morphology round of {doc}`synthetic-cellular-scene`). Its content
   is rendered so that FOV edges are not empty where a jitter exposes them, but it is not
   part of the sample, and nothing about it is claimed beyond what is stated for it.
 * A FOV's **nominal origin** is its position from the nominal grid; its **true origin** is
@@ -209,7 +215,10 @@ and every FOV is rendered from it.
 * **Covered region.** Per axis
   `K_a = [−s_a/2 + J_a·s_a, N_a + (n_a − ½)·s_a − J_a·s_a)`,
   that is `Ω` shrunk by `2 · J_a · s_a` on each side (for Z=1, `J_z = 0`, so
-  `K_z = Ω_z = [−s_z/2, s_z/2)`, and every centre and molecule has z = 0). **Every point of `K` lies in at least one footprint, for every jitter within
+  `K_z = Ω_z = [−s_z/2, s_z/2)`, and every centre and molecule has z = 0). With a
+  morphology round of translation bound `T_a` voxels ({doc}`synthetic-cellular-scene`),
+  `Ω` grows by `T_a · s_a` on each side, so that the shifted round images generated
+  content; `K` is unchanged, and is then `Ω` shrunk by `(2 · J_a + T_a) · s_a`. **Every point of `K` lies in at least one footprint, for every jitter within
   the bound.** Proof, per axis: the nominal footprint intervals of grid index `i` are
   `I_i = [i·step_a − s_a/2, i·step_a + (n_a − ½)·s_a)`. Shrink each by `J_a·s_a` on both
   sides to its core. Adjacent cores still overlap, because the overlap rule gives
@@ -223,8 +232,11 @@ and every FOV is rendered from it.
   `K` (`in_sample` true), whatever its population or cell. A cell belongs to the sample
   when its **anchor** lies in `K`. The anchor is the centre of its first site: the
   nucleus centre of an ordinary cell, the first nucleus centre of a binucleate cell, or
-  the virtual centre of an empty cell. The anchor always lies inside its own territory,
-  because it is inside its site sphere ("Cell territories"). A nucleus belongs to the
+  the virtual centre of an empty cell. The anchor always lies inside its own territory:
+  here because it is inside its site sphere ("Cell territories"); in the cellular scene of
+  {doc}`synthetic-cellular-scene`, whose site spheres may overlap, because its placement
+  test keeps every centre strictly inside its own power cell; in the real-appearance
+  scene, because a proposal whose anchor lies in a placed mask is refused. A nucleus belongs to the
   sample when its cell does. Everything else generated in `Ω` is **halo** content
   (`in_sample` false).
   * **A cell that straddles the boundary of `K`** keeps the one membership its anchor
@@ -232,7 +244,8 @@ and every FOV is rendered from it.
     halo molecules where its territory crosses into the halo, and a halo cell can have
     sample molecules in `K`. Those molecules keep that cell as their `true_cell_id`.
 * **Independence from the drawn jitter.** `Ω`, `K` and membership depend on the nominal
-  grid and the jitter bound, not on the drawn jitter. Redrawing the jitter moves no cell
+  grid, the jitter bound and the morphology round's translation bound, not on the drawn
+  jitter or translation. Redrawing the jitter moves no cell
   and no molecule, and changes no membership.
 * **Sample grid.** The sample label volumes are evaluated on the grid of spacing `s` whose
   voxel `q = (0, 0, 0)` has its centre at `origin_sample = lo(Ω) + s/2`, with shape
@@ -451,7 +464,10 @@ amplicon kernel ({doc}`synthetic-specification`, stage 7): with `d = σ − c_n`
 `u = cos θ · d_y + sin θ · d_x`, `v = −sin θ · d_y + cos θ · d_x`, the normalized radius is
 `ρ_n(σ) = sqrt((d_z / a_z)² + (u / (a_l e))² + (v / a_l)²)`, and the nucleus is
 `ρ_n ≤ 1`. Its **site sphere** has radius `R_n = max(a_z, a_l · e)`, which contains it.
-Sizes are drawn before placement, each from its own stream.
+Sizes are drawn before placement, each from its own stream. In the cellular scene of
+{doc}`synthetic-cellular-scene` a nucleus is a union of ellipsoids, lobe 1 optionally
+perturbed by spherical harmonics, and its site sphere bounds every lobe; in the
+real-appearance scene a nucleus is a placed real mask.
 
 **Placement (random sequential addition).** Seeds are placed in order: ordinary cells,
 then binucleate cells, then empty cells. Each proposal draws a centre uniformly in `Ω`
@@ -463,21 +479,37 @@ places its two nuclei at `c ± (d/2)(0, sin φ, cos φ)`, with
 `empty_radius`. A seed with no accepted proposal after `max_proposals` raises
 `ValueError` naming it: nothing is dropped silently. Because acceptance depends on the
 seeds before it, changing one seed's size can move later seeds; streams stay separate,
-outcomes do not.
+outcomes do not. The cellular scene of {doc}`synthetic-cellular-scene` replaces this rule
+when its packing settings are given: the kind of each seed may be drawn, a proposal may be
+placed at its contact distance against an accepted site, it is accepted by a shape-aware
+contact test that lets site spheres overlap, and with `on_crowded="stop"` placement ends at
+the first seed that cannot be placed, recorded in `context.json`, and raises `ValueError`
+only below a stated share of the target density; the real-appearance scene places objects
+by PL2 and stops as 'When placement stops' states. Nothing is dropped silently there
+either.
 
 ### Cell territories and the label-generation rule
 
-**Nucleus label.** `N(σ) = n` where `σ ∈ Ω` and `ρ_n(σ) ≤ 1`, else 0; like `C`, it is 0
-outside `Ω`, where a nucleus near the edge of `Ω` may extend. Nuclei never overlap, because
-their site spheres keep a positive gap.
+**Nucleus label.** `N(σ) = n` where `σ ∈ Ω`, `ρ_n(σ) ≤ 1` and a site of `n` is `j*`, else 0
+(with disjoint site spheres every point with `ρ_n ≤ 1` has `j*` a site of `n`, so this is
+the rule above; the cellular scene of {doc}`synthetic-cellular-scene` needs the condition,
+because its site spheres may overlap); like `C`, it is 0 outside `Ω`, where a nucleus near
+the edge of `Ω` may extend. Nuclei never overlap: a point carries only the nucleus of its
+power-nearest site. Here the site spheres keep a positive gap, so nuclei do not touch; the
+cellular scene of {doc}`synthetic-cellular-scene` lets site spheres overlap and nuclei touch
+on the faces of their power cells; in the real-appearance scene a point carries the nucleus
+of the first placed object that holds it, and on every nucleus voxel the cell label is that
+nucleus's cell.
 
 **Cell label (rule L1 below).** With `pow_j(σ) = ‖σ − c_j‖² − R_j²` over all sites `j`, let
 `j*` be the site of smallest `pow_j(σ)` (ties to the smaller site index). Then
-`C(σ) = cell(j*)` when `σ ∈ Ω` and `‖σ − c_{j*}‖ ≤ R_{j*} + reach(cell(j*))`, else 0. The two
+`C(σ) = cell(j*)` when `σ ∈ Ω` and `‖σ − c_{j*}‖ ≤ R_{j*} + reach(cell(j*))`, else 0 (the
+cellular scene adds two other outer limits: a grown nucleus, and none). The two
 sites of a binucleate cell map to one cell, so its territory is the union of their power
-cells. Because the site spheres are disjoint, each lies inside its own power cell
-(`pow_i ≤ 0` inside sphere `i`, `pow_j > 0` outside sphere `j`), so **every nucleus lies
-inside its own cell** and `N(σ) = n` implies `C(σ) = cell(n)`.
+cells. A nucleus is labelled only where its own site is the power-nearest one and its shape
+function is at most 1, and its shape lies within its territory's outer limit, so **every
+nucleus lies inside its own cell** and `N(σ) = n` implies `C(σ) = cell(n)`; here the site
+spheres are disjoint, so no nucleus is cut by a power face.
 
 Both are point functions of the sample position. They are what "the label at a position"
 means everywhere on this page, and they are evaluated at voxel centres only to fill label
@@ -531,7 +563,9 @@ class StainConfig:
 The stain is one ZYX image per FOV, in the template's dtype, saved as
 `fovs/<fov_id>/stain.ome.tif` with the FOV's reference metadata. It is the
 `reference_stain` input of `stitch` ({doc}`stitching-contract`, "Input image") and the
-nuclear image of the cellular scene.
+nuclear image of the cellular scene. The cellular scene of {doc}`synthetic-cellular-scene`
+renders several stains per FOV, each in its own output dtype; its first nuclear stain of
+the reference round takes this role.
 
 | Option | Pre-noise signal | Cost | Consequence |
 | --- | --- | --- | --- |
@@ -565,7 +599,11 @@ The template's `shape_zyx` must equal `acquisition.fov_shape_zyx`; its populatio
 (`count`, `density`, `coordinates`, `amplicon_ids`, `gene_ids`, non-uniform `placement`)
 must be at their defaults, because the sample scene owns the population (`ValueError`
 otherwise). Its property laws (`brightness`, widths, `elongation`, `angle`) and
-`abundances` are used for every generated molecule.
+`abundances` are used for every generated molecule. In the cellular scene of
+{doc}`synthetic-cellular-scene`, a molecule's gene is drawn from its cell type's abundance
+(an ambient molecule's from the ambient abundance), a cell's count is Poisson with a mean
+drawn per cell, and a cell molecule is placed in its nucleus with a set probability, else
+in the rest of its territory.
 
 **Populations.**
 
@@ -698,6 +736,12 @@ identity 3 applies: there are no label images, no `nuclei.csv` and no cell rows,
        Within the bound that means `j_{f,a} ∈ {−J_a, −J_a + 1, …}` up to `+J_a`.
      * Zero jitter is not aligned unless `J` is whole: on `sample-tiny-v1` it gives
        `δ = (0.4, 1.5, 1.5)` voxels for the first FOV.
+     * With the morphology round of {doc}`synthetic-cellular-scene`, `Ω` grows by `T ⊙ s`
+       on each side, so `origin_sample = −(J + T) ⊙ s` and
+       `δ_f = nominal_f ⊘ s + j_f + J + T`; the condition then holds exactly when
+       `j_{f,a} + J_a + T_a` is a whole number on every axis, and zero jitter is aligned
+       only when `J + T` is whole. For the culture presets (`J_z = 0.8`, `T_z = 0.5`) the
+       supplied jitter `j_z = −0.8` gives `δ_z = 0.5`, not 0; `j_z = −0.3` aligns.
      * Worked example on `sample-tiny-v1` (`J = (0.4, 1.5, 1.5)`): the supplied jitter
        `(−0.4, 0.5, −1.5)` voxels for `FOV_001` gives `δ = (0, 2, 0)` voxels. The FOV's
        5 × 36 × 36 volume then equals `sample_labels[t][0:5, 2:38, 0:36]`.
@@ -889,8 +933,10 @@ are off (required), and the per-round geometry is a translation only.
   4.3·10⁷ point-site evaluations. Saved, it is about 96 MB uncompressed (images 74 MB,
   stain 4.6 MB, labels 17 MB) plus the tables.
 * **Not in either tier.** Larger grids, LN-sized FOVs (50 × 1496 × 1496) and whole-sample
-  scenes are outside this addition; the generator sets no upper bound, as today, and the
-  caller owns memory and time.
+  scenes are outside this addition; the `slow` context presets of
+  {doc}`synthetic-cellular-scene` use 3 × 3 FOVs of 16 × 256 × 256, under their own
+  resource grant; the generator sets no upper bound, as today, and the caller owns memory
+  and time.
 
 ## Truth schema
 
@@ -939,6 +985,11 @@ Units are in the column names' tables above: µm in the sample frame, voxel indi
 the FOV frame, radians for angles; IDs are strings except the uint32 label values
 `cell_id` and `nucleus_id`. CSV floats use round-trip precision; empty cells are nulls.
 `sample.json` names `SAMPLE_TRUTH_VERSION`; any change to a column or rule above bumps it.
+A scene of {doc}`synthetic-cellular-scene` writes the same files with the same columns,
+made by the rules of that page (lobes, clipping, territories, molecules by compartment);
+its `context.json` names `CONTEXT_TRUTH_VERSION`, which versions those rules, and
+`sample.json` keeps `sample_truth_version` `"1"`; a real-appearance scene writes them with
+the ellipsoid columns null, versioned by `APPEARANCE_TRUTH_VERSION` in `appearance.json`.
 
 ## Tests the implementation keeps and adds
 
@@ -976,8 +1027,8 @@ the FOV frame, radians for angles; IDs are strings except the uint32 label value
 ## Exclusions
 
 No implementation and no change to the generator, its presets or its tests; no microsim
-or other new rendering dependency, no calibration to real tissue and no empirical
-profiles; no claim about segmentation accuracy, and no learned segmenter run on this scene
-as a measure of its quality; no change to the §2.9 or §2.10 contracts (the need of the
+or other new rendering dependency, no calibration to real tissue (the development targets
+of {doc}`synthetic-cellular-scene` are not one); no claim about segmentation accuracy, and
+no segmenter run on this scene as a measure of its quality; no change to the §2.9 or §2.10 contracts (the need of the
 no-segmenter path that they still do not meet is listed in the worker notes); no rotation, illumination model, stage
 drift (beyond a supplied jitter table) or cross-FOV cell matching.

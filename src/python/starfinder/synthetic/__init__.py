@@ -20,6 +20,18 @@ from ._calibrated import (CALIBRATED_CONDITIONS as _CALIBRATED_CONDITIONS, calib
 from ._sample import (SAMPLE_PRESET_VERSION, SAMPLE_PRESETS as _SAMPLE_PRESETS, SAMPLE_TRUTH_VERSION,
                       AcquisitionConfig, CellularSceneConfig, SampleScene, SampleSceneConfig, StainConfig,
                       generate_sample_scene, sample_scene_preset, save_sample_scene)
+from ._stains import (BrightRegionConfig, MorphologyRoundConfig, OutputScaleConfig, StainChannelConfig,
+                      UnevennessConfig)
+from ._context import (CONTEXT_PRESET_VERSION, CONTEXT_TRUTH_VERSION, CellTypeConfig, ContextScene, ContextSceneConfig, MoleculeConfig,
+                       NucleusShapeConfig, PackingConfig, TerritoryConfig, generate_context_scene,
+                       save_context_dataset, save_context_scene)
+from ._context_presets import CONTEXT_PRESETS as _CONTEXT_PRESETS, context_scene_preset
+from ._appearance_bank import BankReference, build_appearance_bank, closed_form_bank, load_appearance_bank
+from ._appearance_layout import AugmentationConfig, LayoutConfig
+from ._appearance import (APPEARANCE_TRUTH_VERSION, AppearanceScene, AppearanceSceneConfig, CompositionConfig,
+                          generate_appearance_scene, save_appearance_scene)
+from ._appearance_presets import (APPEARANCE_PRESET_VERSION, APPEARANCE_PRESETS as _APPEARANCE_PRESETS,
+                                  appearance_scene_preset)
 
 #: Named single-factor controls available on demand from development_scene_preset.
 DEVELOPMENT_FACTORS = _DEVELOPMENT_FACTORS
@@ -38,6 +50,10 @@ DEFORMATION_PRESETS = _DEFORMATION_PRESETS
 SCENE_PRESETS = _registry()
 #: Multi-FOV sample scene presets (sample-presets-v1), separate from SCENE_PRESETS.
 SAMPLE_PRESETS = _SAMPLE_PRESETS
+#: Cellular-scene context presets (context-presets-v1), separate from SAMPLE_PRESETS.
+CONTEXT_PRESETS = _CONTEXT_PRESETS
+#: Real-appearance scene presets (appearance-presets-v1), separate from CONTEXT_PRESETS.
+APPEARANCE_PRESETS = _APPEARANCE_PRESETS
 
 __all__ = ['BackgroundConfig', 'CALIBRATED_CONDITIONS', 'calibrated_scene_preset', 'DEVELOPMENT_FACTORS',
            'DEVELOPMENT_FIXTURES', 'DEVELOPMENT_SIZES', 'development_codebook', 'development_preset_factors',
@@ -50,4 +66,12 @@ __all__ = ['BackgroundConfig', 'CALIBRATED_CONDITIONS', 'calibrated_scene_preset
            'generate_registration_pair', 'registration_scene_preset',
            'AcquisitionConfig', 'CellularSceneConfig', 'generate_sample_scene', 'SAMPLE_PRESET_VERSION',
            'SAMPLE_PRESETS', 'SAMPLE_TRUTH_VERSION', 'SampleScene', 'SampleSceneConfig', 'sample_scene_preset',
-           'save_sample_scene', 'StainConfig']
+           'save_sample_scene', 'StainConfig', 'CellTypeConfig', 'CONTEXT_TRUTH_VERSION', 'ContextScene',
+           'ContextSceneConfig', 'generate_context_scene', 'MoleculeConfig', 'NucleusShapeConfig', 'PackingConfig',
+           'save_context_scene', 'TerritoryConfig', 'BrightRegionConfig', 'MorphologyRoundConfig',
+           'OutputScaleConfig', 'save_context_dataset', 'StainChannelConfig', 'UnevennessConfig',
+           'CONTEXT_PRESET_VERSION', 'CONTEXT_PRESETS', 'context_scene_preset', 'BankReference',
+           'build_appearance_bank', 'closed_form_bank', 'load_appearance_bank', 'APPEARANCE_TRUTH_VERSION',
+           'AppearanceScene', 'AppearanceSceneConfig', 'AugmentationConfig', 'CompositionConfig', 'LayoutConfig',
+           'generate_appearance_scene', 'save_appearance_scene', 'APPEARANCE_PRESET_VERSION', 'APPEARANCE_PRESETS',
+           'appearance_scene_preset']

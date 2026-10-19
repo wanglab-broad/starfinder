@@ -17,12 +17,31 @@ and ``starfinder synthetic generate`` writes the MATLAB-compatible layout.
    :toctree: generated
 
    AcquisitionConfig
+   APPEARANCE_PRESET_VERSION
+   APPEARANCE_PRESETS
+   appearance_scene_preset
+   APPEARANCE_TRUTH_VERSION
+   AppearanceScene
+   AppearanceSceneConfig
+   AugmentationConfig
    BackgroundConfig
+   BankReference
    BENCHMARK_PRESETS
    benchmark_scene_preset
+   BrightRegionConfig
+   build_appearance_bank
    CALIBRATED_CONDITIONS
    calibrated_scene_preset
+   CellTypeConfig
    CellularSceneConfig
+   closed_form_bank
+   CompositionConfig
+   CONTEXT_PRESET_VERSION
+   CONTEXT_PRESETS
+   context_scene_preset
+   CONTEXT_TRUTH_VERSION
+   ContextScene
+   ContextSceneConfig
    deformation_geometry
    DEFORMATION_PRESETS
    development_codebook
@@ -35,13 +54,22 @@ and ``starfinder synthetic generate`` writes the MATLAB-compatible layout.
    FormedScene
    FormedSceneConfig
    forward_displacement
+   generate_appearance_scene
    generate_codebook
+   generate_context_scene
    generate_dataset
    generate_formed_scene
    generate_registration_pair
    generate_sample_scene
    GeometryConfig
+   LayoutConfig
+   load_appearance_bank
+   MoleculeConfig
+   MorphologyRoundConfig
    NoiseConfig
+   NucleusShapeConfig
+   OutputScaleConfig
+   PackingConfig
    PRESET_VERSION
    ReadoutEffectsConfig
    registration_scene_preset
@@ -51,13 +79,19 @@ and ``starfinder synthetic generate`` writes the MATLAB-compatible layout.
    SAMPLE_TRUTH_VERSION
    SampleScene
    SampleSceneConfig
+   save_appearance_scene
+   save_context_dataset
+   save_context_scene
    save_formed_scene
    save_sample_scene
    ScalarDistribution
    SCENE_PRESETS
+   StainChannelConfig
    StainConfig
    SyntheticDataset
+   TerritoryConfig
    TextureConfig
+   UnevennessConfig
 
 Formed scenes
 -------------
@@ -581,6 +615,131 @@ peak RSS of about 0.4 GiB). Both use ``development_codebook("balanced")``,
 seed 42 and a translation-only per-round geometry. The cellular scene is a
 development fixture: sizes and densities are not fitted to tissue, and it
 makes no claim about the accuracy of any segmenter.
+
+Cellular scenes
+---------------
+
+``generate_context_scene(codebook, config=ContextSceneConfig(), on_fov=None)``
+adds the richer cellular scene of :doc:`../synthetic-cellular-scene` beside the
+unchanged sample scene. ``ContextSceneConfig`` holds an unchanged
+``SampleSceneConfig`` and the parts, each off at its default: with every part
+off the result's ``sample`` equals ``generate_sample_scene`` of the same
+configuration, field for field. ``NucleusShapeConfig`` makes nuclei unions of
+ellipsoids whose lobe offsets are bounded so that every drawn nucleus is one
+connected shape, with an optional harmonic perturbation of lobe 1;
+``PackingConfig`` places seeds with a shape-aware contact distance, so that
+nuclei touch on the faces of their power cells, by count or up to a target
+density, optionally in a monolayer, and with ``on_crowded="stop"`` records the
+reached density and raises only below its ``floor``; ``TerritoryConfig``
+selects the cell territory (the site sphere plus a reach, a grown nucleus, or
+the whole power cell); ``CellTypeConfig`` gives cell types by region with a
+gene abundance per type and named marker pairs; ``MoleculeConfig`` sets the
+molecules per cell, the nuclear fraction of reads and the ambient genes. Every
+new draw comes from a ``context.`` stream.
+
+``stains`` is a tuple of ``StainChannelConfig``, one per channel, each with a
+geometry source: ``nucleus`` (nucleus interiors with a soft edge across the
+surface and across the faces between touching nuclei, optional bright regions
+``BrightRegionConfig``), ``territory`` (cell territories, dimmer inside the
+nucleus) or ``boundary`` (a band on every boundary of a cell). Each stain has a
+plateau per object, an optional multiplicative ``UnevennessConfig`` field
+continuous across FOVs, the sample stain's background and noise controls, and
+an optional ``OutputScaleConfig`` that scales the noisy image to a plateau grey
+level before the 8-bit cast. The stains take the place of the sample scene's
+stain (``sample.stain`` must be None). Every stain is a function of the sample
+position, evaluated at each FOV's voxel centres without resampling. A stain of
+round ``morphology`` belongs to the ``MorphologyRoundConfig`` round, imaged at
+the voxel centres moved by a known translation per FOV (drawn within a bound,
+or supplied); the scene domain grows by that bound on each side, and the
+covered region does not change.
+
+``ContextScene`` holds the ``SampleScene``, the stain images of the reference
+round and of the morphology round, and the new truth tables;
+``save_context_scene(scene, directory)`` writes the ``save_sample_scene``
+layout unchanged plus ``lobes.csv``, ``harmonics.csv``, ``cell_context.csv``,
+``regions.csv``, ``type_abundances.csv``, ``cell_gene_counts.csv``,
+``marker_pairs.csv``, ``stain_channels.csv``, ``stain_objects.csv``,
+``bright_regions.csv``, ``unevenness.csv``, ``morphology_truth.csv``, the stain
+images per FOV and ``context.json`` (``CONTEXT_TRUTH_VERSION``, the requested
+and effective configuration, the placement outcome, the ``context.`` streams
+drawn and the SHA-256 of every other file). ``save_context_dataset(scene,
+directory)`` writes the scene as a raw dataset (``dataset.json``, the codebook
+and one TIFF per round, FOV and channel, the reference stains in the reference
+round's folder) that ``Dataset``, ``FOV.load_images`` and
+``FOV.prepare_morphology`` read; the morphology round is registered on the
+reference stain that shares its name. The scene is a development fixture, not
+a calibrated tissue model, and makes no claim about the accuracy of any
+segmenter.
+
+``context_scene_preset(name)`` returns ``(Codebook, ContextSceneConfig)`` for a
+``CONTEXT_PRESETS`` name (version ``CONTEXT_PRESET_VERSION``,
+``context-presets-v1``), a registry separate from ``SAMPLE_PRESETS``: one
+routine and one ``slow`` preset per context of
+:doc:`../synthetic-cellular-scene` ("Presets"), with the values of its tables.
+``context-dense3d-v1`` and ``context-dense3d-slow-v1`` are dense 3D tissue on
+the LN grid (2 × 2 FOVs of 16×64×64 and 3 × 3 FOVs of 16×256×256);
+``context-tissue2d-v1`` and ``context-tissue2d-slow-v1`` are a monolayer for
+projection samples (8×64×64 at 0.37854 µm, and 16×256×256 at 0.18927 µm in Y
+and X); ``context-culture-v1`` and ``context-culture-slow-v1`` are the sparse
+culture, a monolayer with the morphology round ``organelle`` holding ``DAPI``
+and the cytoplasm stain ``Flamingo`` (0.777592 µm, and 0.388796 µm). Every
+preset uses ``development_codebook("balanced")``, seed 42, the cell types of
+G1, the amplicon appearance of ``sample-small-v1`` and an 8-bit nuclear stain
+on ``ch04`` of the reference round; no preset uses the ``boundary`` source.
+Each routine preset generates in a few seconds on one CPU; the ``slow``
+presets take one to three minutes and below 2 GiB.
+
+The appearance bank of :doc:`../synthetic-real-appearance` holds nuclei (in
+the culture, cells with their nucleus and both stains) cut from source images
+with their method labels, and background patches.
+``build_appearance_bank(config, path)`` is its build step: it keeps the labels
+that pass the four selection rules, stores per entry the signed distance of its
+mask, its excess over the local background inside the mask and its own capped
+fall-off outside, relative to its source image's plateau, refuses a source
+whose plateau lies outside a factor 1.5 of the bank's median (or of its median
+over the visible stain), and writes ``<bank>.npz`` with
+``<bank>.record.json`` (the inputs with their SHA-256, the counts per rule, the
+plateaus and a digest of the arrays). The build configuration names the real
+source images and stays outside the repository. ``closed_form_bank(preset, n)``
+runs the same build in memory on ``n − 1`` scenes of an accepted context preset
+(the last of ``n`` seeds held out), so that tests read no real data.
+``load_appearance_bank(reference)`` returns the bank a ``BankReference`` names:
+a closed-form bank, or ``<name>.npz`` from the directory that
+``STARFINDER_APPEARANCE_BANKS`` names, refused when its SHA-256 differs from the
+reference's.
+
+``generate_appearance_scene(codebook, config=AppearanceSceneConfig(...))``
+places the entries of that bank on the acquisition layout of an unchanged
+``ContextSceneConfig`` (``AugmentationConfig`` for the rotation, flips, scale
+and gain; ``LayoutConfig`` for the placement, the visible-stain density or a
+fixed count, and the stop) and returns an ``AppearanceScene``. Its cells are
+the placed objects, one nucleus each, with the accepted cell types and
+molecules; each stain is the bank channel of its name, composed as background
+plus out-of-focus light plus the placed signal (``CompositionConfig``: real
+background patches or a closed-form bank's background, no noise, an 8-bit
+stain scaled by the bank's median plateau). ``save_appearance_scene`` writes
+the ``save_context_scene`` layout with the shape columns empty, plus
+``appearance.json`` (version ``APPEARANCE_TRUTH_VERSION``),
+``placements.csv`` and ``background_patches.csv``; ``save_context_dataset``
+of ``scene.context`` writes its dataset. See
+:doc:`../synthetic-real-appearance`.
+
+``appearance_scene_preset(name)`` returns ``(codebook, AppearanceSceneConfig)``
+for the six ``APPEARANCE_PRESETS`` (version ``APPEARANCE_PRESET_VERSION``,
+``appearance-presets-v1``), which sit beside the six context presets and leave
+them unchanged. Each takes the accepted context preset of its context and tier
+(grid, spacing, jitter, overlap, seed 42, cell types, molecules, stains and
+morphology round) with its own name as dataset version and scene key. The
+routine presets ``appearance-dense3d-v1``, ``appearance-tissue2d-v1`` and
+``appearance-culture-v1`` place a fixed count of entries of their context's
+closed-form bank and read no real data. The ``slow`` presets
+``appearance-dense3d-slow-v1``, ``appearance-tissue2d-slow-v1`` and
+``appearance-culture-slow-v1`` place entries of the real banks
+``ln-sample1-v1``, ``tissue2d-v1`` and ``culture3d-v1``, named by name and
+SHA-256 and read from ``STARFINDER_APPEARANCE_BANKS``, until the visible-stain
+share reaches its target or placement stops after a run of refused proposals
+(500 in the culture, whose cells saturate below its target; 4,000 otherwise).
+The banks are built outside the repository.
 
 Scientific limitations
 ----------------------

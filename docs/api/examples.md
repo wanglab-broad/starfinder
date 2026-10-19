@@ -21,3 +21,24 @@ error and TPS no-fallback behavior. It does not install or execute optional demo
 ```{literalinclude} ../examples/api_contracts.py
 :language: python
 ```
+
+## A cellular scene and a real-appearance scene
+
+`context_scene.py` generates the routine 2D tissue presets of the cellular scene
+(`context-tissue2d-v1`, {doc}`../synthetic-cellular-scene`) and of the real-appearance
+scene (`appearance-tissue2d-v1`, {doc}`../synthetic-real-appearance`), saves each, and
+prints the truth answers of the two marker pairs (`marker_pairs.csv`) and the numbers of
+nuclei, cells and molecules. The routine appearance presets place entries of the
+closed-form bank, which is built in memory from scenes of the closed-form generator, so
+the example reads no real data and needs no `STARFINDER_APPEARANCE_BANKS`. It takes
+about 10 s on one CPU, almost all of it the generation of the two presets. From
+`src/python`, with an optional new output directory outside the checkout (without one, a
+temporary directory is used and removed):
+
+```bash
+uv run python ../../docs/examples/context_scene.py /absolute/path/to/context-example
+```
+
+```{literalinclude} ../examples/context_scene.py
+:language: python
+```
