@@ -1900,8 +1900,8 @@ each is written where it applies:
   pooled) are reported beside their thresholds, not asserted: the dense 3D scene holds
   about three to six times the label density of the method's labels on real LN, and the two
   culture splits come from a mask with a detached piece and a two-lobed mask at the FOV
-  border. Every other threshold stays asserted. Operator decision pending Jiahao's
-  confirmation.
+  border. Every other threshold stays asserted. Operator decision, confirmed by Jiahao on
+  2026-10-18.
 * **2026-10-18, W-488** ({doc}`synthetic-cellular-scene-validation`). W-483's four findings are
   applied with the options its notes recommend: the fixture `ctx_crowded` at `density=0.9`,
   so that it raises as the page says; GN6's anchors strict in the label function's
@@ -1914,8 +1914,8 @@ each is written where it applies:
   and saving the two presets takes more than 5 s on one CPU, the bound of a routine test,
   and that time is the package's. Measured on one CPU: the example 9.25 s, its test 8.57 s
   in the `pytest-slow-synthetic` selection and 8.55 s in the CI environment. The test runs
-  in `pytest-slow-synthetic` and in the CI environment. Operator decision pending Jiahao's
-  confirmation.
+  in `pytest-slow-synthetic` and in the CI environment. Operator decision, confirmed by Jiahao on
+  2026-10-18.
 
 No threshold, tolerance, target range, preset or bank was changed by W-488.
 

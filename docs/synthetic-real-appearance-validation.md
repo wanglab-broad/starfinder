@@ -551,7 +551,7 @@ on the appearance Jiahao rejected.
 | CT (2D tissue, route after fusion, StarDist `2D_versatile_fluo` and the seeded watershed) | **Amended** | `chain_tissue2d` on `appearance-tissue2d-slow-v1` (0.18927 µm, StarDist at the scale 0.5; bank `tissue2d-v1`); routine and truth variants as CD | TH1 to TH4 as CD; TH5 every FOV `image_supported` and every per-axis error ≤ 1 µm, unchanged and provisional | CT0's stitch now runs on the real PI texture and background; `P` holds by TZ1. About 337 nuclei (estimate) against about 76. CT5 is added |
 | CU (culture, route per FOV, Cellpose `cpsam_v2` with the morphology round) | **Amended** | `chain_culture` on `appearance-culture-slow-v1` (0.388796 µm; bank `culture3d-v1`) at the seeds 42 and 43, as accepted; routine and truth variants as CD | TH1 to TH4 as CD, on the two scenes pooled | The truth cells and nuclei are Cellpose `cpsam_v2` labels extended through z (CU1 of {doc}`synthetic-real-appearance`), read as the method on its own labels. About 32 cells per scene (estimate), about 63 pooled, against about 83. A culture entry can carry the unlabelled DAPI of a second nucleus, a source of false positives (TH-FP, reported). CU0 stands: MO1 keeps both rounds registered on the shared `DAPI`. CU5 is added |
 
-**Amendment of 2026-10-18 (W-487; operator decision pending Jiahao's confirmation).** The first run of the chain
+**Amendment of 2026-10-18 (W-487; operator decision, confirmed by Jiahao on 2026-10-18).** The first run of the chain
 checks (W-487, the seeds fixed in advance) missed two rows on the `slow` presets:
 
 * CD1's TH1 on `appearance-dense3d-slow-v1`: StarDist `3D_spleen` matched 499 of 875 interior truth nuclei, 0.570
@@ -1118,8 +1118,8 @@ each is written where it applies:
   pooled) are reported beside their thresholds, not asserted: the dense 3D scene holds
   about three to six times the label density of the method's labels on real LN, and the two
   culture splits come from a mask with a detached piece and a two-lobed mask at the FOV
-  border. Every other threshold stays asserted. Operator decision pending Jiahao's
-  confirmation.
+  border. Every other threshold stays asserted. Operator decision, confirmed by Jiahao on
+  2026-10-18.
 * **2026-10-18, W-488** ({doc}`synthetic-cellular-scene-validation`). W-483's four findings are
   applied with the options its notes recommend: the fixture `ctx_crowded` at `density=0.9`,
   so that it raises as the page says; GN6's anchors strict in the label function's
@@ -1132,8 +1132,8 @@ each is written where it applies:
   and saving the two presets takes more than 5 s on one CPU, the bound of a routine test,
   and that time is the package's. Measured on one CPU: the example 9.25 s, its test 8.57 s
   in the `pytest-slow-synthetic` selection and 8.55 s in the CI environment. The test runs
-  in `pytest-slow-synthetic` and in the CI environment. Operator decision pending Jiahao's
-  confirmation.
+  in `pytest-slow-synthetic` and in the CI environment. Operator decision, confirmed by Jiahao on
+  2026-10-18.
 
 No threshold, tolerance, target range, preset or bank was changed by W-488.
 
