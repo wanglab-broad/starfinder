@@ -338,7 +338,7 @@ arrays.
 
 | # | Check | Fixture (seed) | What is computed | Expected result (source) | Tolerance | Tier and markers |
 | --- | --- | --- | --- | --- | --- | --- |
-| GA1 | The accepted presets unchanged (identity 1) | `sample_presets`, the six context presets (42) | (a) GN1 (a) and (b) unchanged; (b) the group digests of everything `save_context_scene` writes for each context preset, as the golden test of the sample presets computes them, against pins taken at the base revision of the implementation batch before its first change. | (a) as GN1; (b) equal to the pins ("Opt-in": the six presets keep their behaviour; E1). | Exact (SHA-256 of content). | (a) as GN1; (b) routine for the three routine presets, `slow` for the three `slow` presets; `synthetic`, `golden`. |
+| GA1 | The accepted presets unchanged (identity 1) | `sample_presets`, the six context presets (42) | (a) GN1 (a) and (b) unchanged; (b) the group digests of everything `save_context_scene` writes for each context preset, as the golden test of the sample presets computes them, against pins taken at the base revision of the implementation batch before its first change. | (a) as GN1; (b) equal to the pins ("Opt-in": the six presets keep their behaviour; E1). | Exact (SHA-256 of content); in (b) the floating-point values of the CSV files and JSON records to 9 significant digits, magnitudes below 1e-12 as 0 (amendment of 2026-10-19). | (a) as GN1; (b) routine for the three routine presets, `slow` for the three `slow` presets; `synthetic`, `golden`. |
 | GA2 | Names, fields and the preset registry | none | The fields of `ContextSceneConfig` and of every accepted configuration, and the keys `_payload` writes, against the base revision; the new names (`generate_appearance_scene`, `AppearanceScene`, `AppearanceSceneConfig`, `BankReference`, `AugmentationConfig`, `LayoutConfig`, `CompositionConfig`, `build_appearance_bank`, `closed_form_bank`, `load_appearance_bank`, `save_appearance_scene`, `appearance_scene_preset`, `APPEARANCE_PRESETS`, `APPEARANCE_PRESET_VERSION`, `APPEARANCE_TRUTH_VERSION`) exported and on API pages; six presets, `appearance-presets-v1`, `"1"`; each preset's grid, spacing, jitter, overlap, seed, cell types and molecules against the accepted preset of its context and tier. | Accepted fields and payload keys unchanged ("Opt-in"); the names of "Opt-in" exported (`docs/check_reference.py`); PR1's six presets with the accepted values of their context and tier ("Presets"). | Exact; preset floats within 1e-9. | routine; `synthetic`, `contract`. |
 | GA3 | Refusals | `cf_bank_files` and its two copies; none | `ValueError` and its message for: a bank file whose SHA-256 differs from the reference; a missing `entry_id`; an augmentation range outside its allowed interval (a scale or gain at or below 0); `floor` outside `(0, 1]`; a source refused by BR4 (both copies); a reached density below `floor` (`app_crowded`). | Each raises `ValueError` naming the field, the file or the source and its two numbers ("The appearance bank", BR4; "When placement stops"). | Exact (the type; the named values in the message). | routine; `synthetic`, `contract`. |
 | GA4 | The bank build is deterministic and recorded | `cf_banks`, `cf_bank_files` (42 to 45) | Each closed-form bank built twice in memory; each file bank built twice into two files; the digest of the arrays; the SHA-256 of each file against its record; the record's inputs (preset and seeds for CF1; path, size and SHA-256 of each source file), rules, counts per rule, plateaus and digest; `load_appearance_bank` with the recorded SHA-256 and with one byte changed. | Two builds give equal arrays and an equal digest. The recorded SHA-256 equals the file's. The record lists every input with its SHA-256 (or the preset and seeds) and the counts of "Selection of entries". Loading with a changed byte raises (ST1, CF1). | Arrays and digests exact; the file bytes are not compared, because a zip archive carries a time (ST1). | routine; `synthetic`, `validation`. |
@@ -506,7 +506,7 @@ helpers of W-483 to W-486.
 
 | # | Module and tests | Fixtures | Tier | Floats |
 | --- | --- | --- | --- | --- |
-| GA1 | `test_synthetic_sample_golden.py`, `test_saved_preset_outputs_equal_the_pins`; `test_synthetic_appearance_golden.py`, `test_saved_context_preset_outputs_equal_the_base_revision_pins` | `sample_presets`, the six context presets | routine and slow | none compared (SHA-256 of content) |
+| GA1 | `test_synthetic_sample_golden.py`, `test_saved_preset_outputs_equal_the_pins`; `test_synthetic_appearance_golden.py`, `test_saved_context_preset_outputs_equal_the_base_revision_pins` | `sample_presets`, the six context presets | routine and slow | none compared (SHA-256 of content); the context presets' floats to 9 significant digits (amendment of 2026-10-19) |
 | GA2 | `test_synthetic_appearance_contract.py`, `test_new_names_are_exported`; `test_synthetic_appearance_presets_contract.py`, `test_six_presets_with_their_version`, `test_each_preset_takes_the_accepted_preset_of_its_context_and_tier`, `test_slow_presets_name_their_real_bank_by_name_and_sha256`, `test_the_accepted_presets_are_unchanged`, `test_preset_names_are_exported_and_on_the_api_pages`; `test_synthetic_appearance_coverage.py`, `test_ga2_every_new_name_is_exported_and_on_the_api_pages`; `test_synthetic_cellular_contract.py`, `test_gn2_existing_fields_and_presets_as_at_the_base`, `test_gn2_new_names_and_fields`; `test_synthetic_cellular_stains_contract.py`, `test_gn2_stain_names_and_fields` | none (the API pages by `docs/check_reference.py`) | routine | preset floats within 1e-9 |
 | GA3 | `test_synthetic_appearance_bank.py`, `test_load_refuses_a_changed_byte_a_wrong_reference_and_a_missing_file`, `test_bank_reference_entries_and_build_refusals`, `test_br4_refuses_both_copies_of_the_file_bank`; `test_synthetic_appearance_scene.py`, `test_ga3_augmentation_and_layout_refusals`, `test_ga3_a_reached_count_below_floor_raises_naming_both_values`; `test_synthetic_appearance_contract.py`, `test_configuration_refusals`, `test_generation_refusals_and_a_stored_bank` | `cf_bank_files` and its two copies, `app_crowded`, none | routine and slow | none compared (the type and the named values) |
 | GA4 | `test_synthetic_appearance_bank.py`, `test_closed_form_bank_build_is_deterministic_and_recorded`, `test_file_bank_build_is_deterministic_and_recorded` | `cf_banks`, `cf_bank_files` | routine and slow | arrays and digests exact |
@@ -568,7 +568,8 @@ labels separately, which V4 counts as a split (limit L6: the pieces per label ar
 speck is given). The other comes from a two-lobed mask at the FOV border, which Cellpose labels as two. These two
 rows are **reported beside their threshold, not asserted**, with their value and counts. Every other threshold stays
 asserted, CD1's TH2 and TH3 and CU1's TH1 and TH2 included. No threshold, preset, bank, seed or matching rule
-changes. Whether DN1 should use another threshold is the question Jiahao has left open.
+changes. Whether DN1 should use another threshold was a question Jiahao closed on 2026-10-18:
+the rows stay known limits ("Implementation").
 
 **Steps 0 to 4** stay as written, with these readings:
 
@@ -1137,6 +1138,15 @@ each is written where it applies:
 
 No threshold, tolerance, target range, preset or bank was changed by W-488.
 
+* **2026-10-19, GA1 (b)** (`test_synthetic_appearance_golden.py`). The digests of the context
+  presets' saved files compare the floating-point values of the CSV files and JSON records to 9
+  significant digits, magnitudes below 1e-12 as 0; integers, strings and pixel arrays stay
+  exact. NumPy's vectorised functions differ in the last bit between CPUs: on a GitHub runner
+  the records of `context-culture-v1` differed from the lab machine's in that bit only, and
+  with NumPy's AVX-512 paths turned off on the lab machine the CSV files differed too. The
+  pins were taken again at `a9e7b59`, whose saved files equal the base revision's exactly on
+  the lab machine, and they hold on both CPU paths. Jiahao's decision, 2026-10-19.
+
 **Accepted statements applied (W-488, 2026-10-18).** The fourteen entries of
 {doc}`synthetic-cellular-scene`'s "Accepted statements this addition changes" are applied to
 {doc}`synthetic-sample-scene`, with the completions of entry 32 of {doc}`synthetic-real-appearance`'s list; entries
@@ -1146,6 +1156,9 @@ which take the place of entries 35 to 43 of {doc}`synthetic-real-appearance`, ar
 {doc}`synthetic-cellular-scene-validation`. Each is applied with its proposed wording; the lists
 stay on their pages as the record of what changed.
 
-**Questions Jiahao has left open**, not answered here: whether DN1 should place with the
-scene's own Otsu threshold, the threshold TR2v measures with; and whether TR8r gets a
-control. No preset, target or check was changed for them.
+**Questions Jiahao closed on 2026-10-18.** Whether DN1 should place with the scene's own Otsu
+threshold, the threshold TR2v measures with, and whether TR8r gets a control: both stay known
+limits, reported beside their ranges, as CD1's TH1 of W-487 is. The scene serves to check the
+pipeline, not to measure segmentation accuracy. Better source labels (the source FOVs
+segmented again with better StarDist settings, and the banks rebuilt) would move these rows
+without a change of the generator. No preset, target or check was changed for them.
