@@ -24,7 +24,7 @@ uv run python ../../docs/examples/recipes.py "$QUICKSTART_OUTPUT" "$RECIPES_OUTP
 If you already completed the quickstart, set `QUICKSTART_OUTPUT` to that directory
 and run only the second command. Both scripts refuse to reuse their output
 directory. The recipes reuse the tiny preset's seed **42**, TIFFs and codebook;
-they process only **FOV_001** (4 rounds of `(8,128,128,4)` uint8). The independent
+they process only **FOV_001** (4 rounds of `(8,128,128,4)` uint16). The independent
 I/O, registration and detection examples use a deterministic `(12,24,24)` uint16
 array with one bright voxel, without randomness. Allow one CPU, 1 GiB RAM and
 50 MiB disk for the combined commands; these are planning bounds, not enforced

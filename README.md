@@ -44,7 +44,7 @@ Following demos are provided:
     - Available datasets:  ```HeLa cell culture dataset```, ```Mouse brain tissue section dataset```
     - Software requirements: [MATLAB 2023b](https://www.mathworks.com/products/matlab.html) or newer
 
-2. [```Downsteam analysis```](https://github.com/wanglab-broad/starfinder/tree/main/example/downsteam)
+2. [```Downstream analysis```](https://github.com/wanglab-broad/starfinder/tree/main/example/downstream)
     - Available datasets:  ```HeLa cell culture dataset```, ```Mouse brain tissue section dataset```
     - Software requirements: ```Python: starfinder```
 
