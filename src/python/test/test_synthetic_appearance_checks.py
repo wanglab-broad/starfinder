@@ -31,7 +31,8 @@ CELLULAR_PINS = {
     "cellular_measures.py": "5041fdb0a39f502f6f3138b29951c61f29c1e96881870e044eceac6f69a4bf15",
     "cellular_oracle.py": "92749ac589ddfe104d7e5fedfbceeffdae39f445242aff3d4a883d35ec5026ae",
     "cellular_scenes.py": "89b41b4b380ceb81fae2bb251ddac6a4c73c9598993254d4ad16260272e12f07",
-    "test_synthetic_cellular_checks.py": "a936683ceec9f1e1a80dbf8a62fb54d472bfe0db097d90fa9a74364104665d09",
+    # Changed on 2026-10-19 with GN25's pin of test_synthetic_sample_golden.py (GN1's amendment).
+    "test_synthetic_cellular_checks.py": "0d6d9a36d1e20977721cd677508e78fde7bfb0cbeb6ca18a87ac3fc1466baafa",
     "test_synthetic_cellular_contract.py": "8d1ebb0a2dae8be379014fc976961560ff04716c7883651551e237b6d64441af",
     "test_synthetic_cellular_presets.py": "9d73cff301b6043dd839379d27f67cbf605c9b85c92cde8717086c32353b70bf",
     "test_synthetic_cellular_presets_contract.py": "3e98639567d3430c46f09b08115b9353602b49839fc12088cd5d3eb5a7fc303f",

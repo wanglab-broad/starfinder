@@ -32,8 +32,9 @@ KINDS = {"contract", "validation", "golden"}
 PINS = {
     "test_synthetic_sample_scene.py":
         "2abe07ab33ba9460e7b90ba0bf4aee17d33a42ba4f8875bc8f40ba54ac00c438",
+    # Changed on 2026-10-19 (GN1's amendment: its floats compared to 6 significant digits).
     "test_synthetic_sample_golden.py":
-        "b490f716c2844fdce89d7fe800c57fd2e040f0407096c71442c0e9e6745c65d1",
+        "7b7540030d4bffda7e14bd275e56bc5cb0bc202de187e741f3aa74dc052d0f16",
     "report_scene.py":
         "6faf88d709944d38f82be7f05c5b0e50c5c5f78b3a74f88581048f21f7e9c683",
     "test_report_chain.py":

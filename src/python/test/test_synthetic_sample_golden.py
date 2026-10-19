@@ -13,9 +13,15 @@ an existing preset fails here. Digests are of content, by group of files:
   TIFF files as written); the array digests they hold stay in.
 
 Repeatability is that of the formed model (docs/synthetic-specification.md, "Random
-streams"): exact for a pinned NumPy build on one CPU.
+streams"): exact for a pinned NumPy build on one CPU. NumPy's vectorised functions differ
+in the last bit between CPUs, so the floating-point values of the CSV files and the JSON
+records are compared to 6 significant digits, with magnitudes below 1e-9 taken as 0
+(amendment of 2026-10-19 to GN1: a GitHub runner's CSV files differed from the lab
+machine's only there). Integers, strings and pixel arrays stay exact.
 """
+import csv
 import hashlib
+import io
 import json
 from pathlib import Path
 
@@ -27,41 +33,49 @@ from starfinder.synthetic import generate_sample_scene, sample_scene_preset, sav
 
 pytestmark = [pytest.mark.synthetic, pytest.mark.golden]
 
-# Generated at 943bb6b in dev-s210-export-20261007T050852Z (NumPy 2.2.6), one CPU, one thread.
+# Generated at 943bb6b in dev-s210-export-20261007T050852Z (NumPy 2.2.6), one CPU, one thread. Taken again on
+# 2026-10-19 at 8606450 with the floats to 6 significant digits (GN1's amendment of 2026-10-19): there every group
+# still equalled the exact pins of 943bb6b on the lab machine, and the new pins are the same with NumPy's AVX-512
+# paths turned off.
 PINNED = {
     "sample-tiny-v1": {
-        "positions.csv": "6d5cda005ccd3324dbd42c21a6ba43ad6fbfc5aaa5f5338f16bb8972ab19785a",
-        "placement_truth.csv": "e11d5a38bcdaa05124884773fd9e853ac93e48359e3a8bc8b6a8b4eb31428f0b",
-        "nuclei.csv": "c0132ff73481805d58d24d59661902080807ddfef86dd53d403255a4a5c95f8e",
-        "cells.csv": "bab3476c3533c0b96131a82054708694789aaf17f01880ba6c726d848053256f",
-        "molecules.csv": "0626d1066b25ee1e27ede459167ef414d7cbcc11194ca2664c1eb5017bba3c77",
-        "cell_fovs.csv": "d2dfd62fec40bfa08bbdac1e493180ec7acc51acf67599fbc1199d8f8da87689",
-        "molecule_fovs.csv": "11a0cd7ee9e1e95f743d38b5facb51258a7741c360039e0cf9edbb9f595ead0e",
+        "positions.csv": "7fb4663d4ba10aded41fe94227712d7279ab9ff8031894404f78e7ed9b228d43",
+        "placement_truth.csv": "98aa6ce8558d9e8a0e9d5e87ce77721b63266617311d30c14bcf77e566897a93",
+        "nuclei.csv": "dbef41063148f34ab7a7bfd708f77ce23db76af6a5653831f1fa76c82575c126",
+        "cells.csv": "e9fbac588824e523ab8c17ee35d566557d8976d6402100b08e335c26fb151e02",
+        "molecules.csv": "82ee4e3b79a37dd17b047de9550a3d57090ed11f2a7bd722df3c17d0732a4e20",
+        "cell_fovs.csv": "cc3a9ae57746ee9ef2d8693ba2d92b40a87b51d96bf3ea935a819ec4eb013a63",
+        "molecule_fovs.csv": "8f027049b77080e514882b3cb0f455b7f03d68d4e0830142c4483dda10d88dc2",
         "sample labels": "592d2eadb0a2bec2fb69594ba0fd505737729cba49f69cfd1a3185e2609e81ad",
         "fov images": "6ce3926cb9e0f810861f56fa621c3484ab63ad6aa7b579d7c97b12e3984d099b",
         "fov stains": "5579572204f3808e9046640b3b94335bc96bdf096e1993c15f6399427533975d",
         "fov labels": "ace7448e66c1d78552b2c6da57ddee52d8361bfd294782435f475e6914b34105",
-        "fov tables": "6c04a446cd4e90e5c6cff66b5d5719e2416632979dd2ce2afe5bed4de136e7cd",
-        "records": "be27331a45bbfad9ed496b29cb7ec1a235e6323dc483ae3b79aba7d4527af524",
+        "fov tables": "729ba3607ceb09597e3470b43d37b7768eceb5f981f239b4462ebedcaf82e7ed",
+        "records": "9c57dda47387a642977f6142dad613ed0b89cb012ef658705c6664c2a1dac90e",
     },
     "sample-small-v1": {
-        "positions.csv": "628e8a6a2afef365f3e6d9aaaf6f9fed54f9853302271230c67e39947d4287bc",
-        "placement_truth.csv": "05a12497456025d499406dcbca38399df59869d61f21ba93b66afe56e755ff38",
-        "nuclei.csv": "a2ba391a510da0c19b6f8ca4ea3d6118800e1d4cde6ed8057b6f8ecc45ba9d1d",
-        "cells.csv": "931dd6045da02d89b18c9ad1af868b6048be117c09758a0aac8f8dda9ff0abe9",
-        "molecules.csv": "29abd3522d334c4ccee05658b3f943287fc685849cfa226f1f4d3b835aa5f631",
-        "cell_fovs.csv": "5233396f9c4aadcd2d905225266ad3f79871bb7ee83deab9c672b56621300cb5",
-        "molecule_fovs.csv": "8b670f3a5953626b675eecf93546b4260187ce86f33a59d1b2844d355e3a2c2f",
+        "positions.csv": "45e5e7c5b334ed6ec6e0a861ac0bba858ccf02b7a5485a88ec5438be9e691e3e",
+        "placement_truth.csv": "b92171961b9c0dea2b25e152eac8ef632b2f51109efbdaf69c4f2787b7cee092",
+        "nuclei.csv": "353ce9aa2d6a608768ce7400eef05da31111e14e57189ee78664b13686062447",
+        "cells.csv": "e0f7c9f9629f4c02f903b100e1e58d89283ac9849bae18ede962a1be6f5ab706",
+        "molecules.csv": "eb901673814b72b2d43d89cab0eff4368f9df282e01c0302b6a82f8518612432",
+        "cell_fovs.csv": "824e442163fbc5550e587f2e911265ef480cfb9c35b4ef15f0c71542c1990d08",
+        "molecule_fovs.csv": "a0e1ba8f3ad822f1a685eda24acada00e0453a3a461f3f2f1d66c37425618f1f",
         "sample labels": "066220555d7977b0d051ab963f4ae06e641b9d8a9446ad824e07e712e98d4fd8",
         "fov images": "ff6fd38c7ca95d13e30791cf36009c804fa0e3ef8e7f541c52efe59fb5265d1d",
         "fov stains": "2043a01700b1ffa80c098b728a7bca4e5fd46cb8686af38c46215bef6f82b54f",
         "fov labels": "525b45f163bf54d79bfc14f58176a04e92f8dd60a61efafdb55879a932a84ea3",
-        "fov tables": "752bb56d48b5c6656a04e26fe2bece149829975a84568ea7a06c730ec30fcc46",
-        "records": "2c55a0b9a6aba93323dc0e6cea46d11744d7e32bb27526dd2e05c13adf67417c",
+        "fov tables": "637c823e6eff98f92944f042f4dbd96ad42122dcd51dce44295d41b4593baf39",
+        "records": "0280c4bf644bb933e4b275806a9f86d6196ba408eec6e5053f166aa6e714354d",
     },
 }
 GROUPS = ("positions.csv", "placement_truth.csv", "nuclei.csv", "cells.csv", "molecules.csv", "cell_fovs.csv",
           "molecule_fovs.csv", "sample labels", "fov images", "fov stains", "fov labels", "fov tables", "records")
+
+
+def _number(value):
+    """A float to 6 significant digits; magnitudes below 1e-9 are 0 (the last bit differs between CPUs)."""
+    return 0.0 if abs(value) < 1e-9 else float(f"{value:.6g}")
 
 
 def _canonical(value):
@@ -69,7 +83,23 @@ def _canonical(value):
         return {k: _canonical(v) for k, v in value.items() if k != "numpy_version"}
     if isinstance(value, list):
         return [_canonical(v) for v in value]
+    if isinstance(value, float):
+        return _number(value)
     return value
+
+
+def _cell(text):
+    if not any(c in text for c in ".eE"):
+        return text
+    try:
+        return repr(_number(float(text)))
+    except ValueError:
+        return text
+
+
+def _csv_payload(path):
+    rows = csv.reader(io.StringIO(path.read_text(encoding="utf-8"), newline=""))
+    return "\n".join("\x1f".join(_cell(cell) for cell in row) for row in rows).encode()
 
 
 def _file_digest(root, name):
@@ -82,6 +112,8 @@ def _file_digest(root, name):
         if name == "sample.json":
             record.pop("files")
         payload = json.dumps(_canonical(record), sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode()
+    elif name.endswith(".csv"):
+        payload = _csv_payload(path)
     else:
         payload = path.read_bytes()
     return hashlib.sha256(payload).hexdigest()
