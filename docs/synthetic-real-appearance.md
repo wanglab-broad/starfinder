@@ -1347,7 +1347,7 @@ and listed on the API page `docs/api/synthetic.rst`):
 
 **Tests** (in `src/python/test/`):
 
-* the generator checks GN1 to GN25 of {doc}`synthetic-cellular-scene-validation`: `test_synthetic_cellular_contract.py`,
+* the generator checks GN1 to GN24 (GN25 retired) of {doc}`synthetic-cellular-scene-validation`: `test_synthetic_cellular_contract.py`,
   `test_synthetic_cellular_scene.py` (W-483), `test_synthetic_cellular_stains.py`,
   `test_synthetic_cellular_stains_contract.py` (W-484), `test_synthetic_cellular_presets.py`,
   `test_synthetic_cellular_presets_contract.py` (W-485), `test_synthetic_cellular_routine.py`
