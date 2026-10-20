@@ -320,6 +320,7 @@ def test_sd1_elements_omissions_and_format(case, zarr_format, tmp_path, monkeypa
     check_export(folder)
 
 
+@pytest.mark.contract
 @pytest.mark.parametrize("call", ["entry", "alone"])
 def test_sd1_a_sample_name_outside_the_rule_is_refused_before_anything_is_written(call, tmp_path):
     f = export_folder(tmp_path)
@@ -949,6 +950,7 @@ def test_sd8_lookup_source_verifies_every_recorded_section_hash(tmp_path):
     assert lookup_source(f.export_dir, cell=cell) == expected["cell"]
 
 
+@pytest.mark.contract
 def test_sd8_lookup_source_with_the_spatialdata_part_off(tmp_path):
     """A folder whose spatialdata (and fusion, labels) parts were off: the lookup works from the assembly section."""
     f = export_folder(tmp_path)

@@ -1362,9 +1362,11 @@ Rules:
 ### What the default tier covers and what it does not
 
 RC1 to RC13, DF1 to DF12, PR1 to PR5, EF1, EF2 (without its `scene_no_run_json` part),
-PG1 to PG7 on the hand-written pages, RR1, RR2, WF1 and DT1 on `report_cells` run in the
-routine tier on hand-written records. RP1 to RP3, CH1 to CH3, RT1, RT2, Z1, A2, CP1 and
-DT1 on `scene_chain` run the synthetic chain and are `slow`. The cases with an export need
+PG1 to PG7 on the hand-written pages, RR1, RR2 and WF1 run in the routine tier on
+hand-written records, except PG7's entry on `report_cells` (5.4 s) and DT1 on
+`report_cells` (6.4 s, two processes), which are `slow` by the 5-s rule (W-530). RP1 to
+RP3, CH1 to CH3, RT1, RT2, Z1, A2, CP1 and DT1 on `scene_chain` run the synthetic chain and
+are `slow`. The cases with an export need
 the `anndata` extra; the chains also need `multiview-stitcher` for the fused image; RP2's
 `demons` step needs `local-registration`. Nothing here measures how well a sample was
 processed, and nothing shows that a marker pattern is biologically right.
@@ -1455,7 +1457,7 @@ present at a stage when no row of `unavailable.csv` names it with a reason other
 | PG4 | `test_report_page.py`, `test_pg4_no_external_resource`, `test_page_with_every_figure`; `test_report_comparison.py`, `test_page_loads_nothing_and_embeds_samples_csv`; `test_report_chain.py`, `test_ch1_ch2_ch3_the_report_at_each_stage`, `test_rt1_segmentation_and_assembly_on_both_routes`, `test_a2_an_export_and_no_run_json`, `test_cp1_the_comparison_page` | default and slow | none compared |
 | PG5 | `test_report_page.py`, `test_pg5_size_budget_and_figure_sizes`, `test_page_with_every_figure`; `test_report_chain.py`, `test_ch1_ch2_ch3_the_report_at_each_stage`, `test_rt1_segmentation_and_assembly_on_both_routes`, `test_rt2_sample_measurements_on_both_routes`, `test_a2_an_export_and_no_run_json`, `test_cp1_the_comparison_page`; `test_report_figure_rules.py`, `test_text_size_and_slots_on_every_page`, `test_no_overlap_on_the_pages`, `test_slots_are_the_page_columns_and_the_table`, `test_a_row_of_two_and_one_figure`, `test_comparison_page_figures`, `test_heatmap_rows`, `test_heatmap_tables_are_not_sampled`, `test_a_hand_written_sample_of_64_fovs`, `test_intensity_panels_do_not_overlap`, `test_time_per_step_with_the_steps_of_a_run_record`, `test_preprocessing_grid_gaps`, `test_registration_example_gaps_and_zoom_mark`, `test_segmentation_examples_gaps`, `test_whole_view_regions`, `test_readout_bar_labels_are_not_clipped`, `test_summary_rows`, `test_summary_text_forms`, `test_report_json_does_not_depend_on_the_page`; `test_report_second_review.py`, `test_header`, `test_time_per_step_aligned_with_a_hand_written_map`, `test_time_per_step_aligned_on_the_page`, `test_time_per_step_without_placement`, `test_no_figure_shown_enlarged_on_every_page`, `test_preprocessing_grid_is_drawn_larger`, `test_comparison_page_not_enlarged`, `test_legends_of_the_hand_written_figures`, `test_legend_of_the_whole_sample_view`, `test_figures_table_equals_the_constants`, `test_second_review_on_the_chain_page` | default and slow | within 4 px (the alignment of Time per step), 1e-3 px (the map the script draws against `map_extent`); the ratios as floats |
 | PG6 | `test_report_page.py`, `test_pg6_no_verdict_and_no_score`, `test_page_with_every_figure`; `test_report_collection.py`, `test_pg6_schema`; `test_report_chain.py`, `test_ch1_ch2_ch3_the_report_at_each_stage`, `test_rt1_segmentation_and_assembly_on_both_routes`, `test_a2_an_export_and_no_run_json`, `test_cp1_the_comparison_page` | default and slow | none compared |
-| PG7 | `test_report_collection.py`, `test_pg7_*`, `test_read_report_checks_the_listed_files`; `test_report_page.py`, `test_pg7_checks_through_dataset_report`, `test_pg7_entry_on_the_dataset` | default | none compared |
+| PG7 | `test_report_collection.py`, `test_pg7_*`, `test_read_report_checks_the_listed_files`; `test_report_page.py`, `test_pg7_checks_through_dataset_report`, `test_pg7_entry_on_the_dataset` | default and slow | none compared |
 | CH1 | `test_report_chain.py`, `test_ch1_ch2_ch3_the_report_at_each_stage` | slow | none compared |
 | CH2 | `test_report_chain.py`, `test_ch1_ch2_ch3_the_report_at_each_stage` | slow | none compared |
 | CH3 | `test_report_chain.py`, `test_ch1_ch2_ch3_the_report_at_each_stage`, `test_ch3_the_reads_assigned_to_cells`; `test_report_measurements.py`, `test_markers_on_the_stack` | slow | exact (the tables); the marker figures' geometry within 1e-9 |
@@ -1467,7 +1469,7 @@ present at a stage when no row of `unavailable.csv` names it with a reason other
 | RR1 | `test_report_run_record_additions.py`, `test_r1_*`, `test_r2_*`, `test_r4_r5_the_rule_writes_run_json_alone_and_its_logs_are_unchanged`, `test_r5_*` | default | none compared |
 | RR2 | `test_report_records_golden.py`, `test_run_record_holds_every_pinned_key_and_value`, `test_checkpoint_folder_holds_every_pinned_file`, `test_the_comparison_accepts_additions_and_finds_removals_and_changes`; `test_report_run_record_additions.py`, `test_an_older_record_and_the_format_version`; `test_report_collection.py`, `test_rc11_older_record` | default | exact |
 | WF1 | `test_report_workflow.py`, `test_wf1_*` | default | none compared |
-| DT1 | `test_report_collection.py`, `test_dt1_two_single_thread_processes`; `test_report_chain.py`, `test_dt1_the_chain_in_two_single_thread_processes` | default and slow | exact (bytes) |
+| DT1 | `test_report_collection.py`, `test_dt1_two_single_thread_processes`; `test_report_chain.py`, `test_dt1_the_chain_in_two_single_thread_processes` | slow | exact (bytes) |
 
 ### Tour notebook (W-460)
 

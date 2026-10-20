@@ -60,20 +60,36 @@ when the default cache is sandboxed. Do not silently alter dependencies or lock.
 If editable metadata requires reinstalling, record
 `uv sync --locked --group docs --extra local-registration` and verify extras.
 
-Run focused checks, then the required gates before committing:
+Run focused checks, then the gates of each change before committing: the quick
+gate Q, `not (slow or learned or extended) and (contract or not validation)`, and
+the reference audit.
 
 ```bash
-uv run pytest test/ -v -m "not slow and not learned"
-uv run --group docs sphinx-build -n -W --keep-going -b html ../../docs /external/new-run/html
+uv run pytest test/ -v -m "not (slow or learned or extended) and (contract or not validation)"  # Q
 uv run python ../../docs/check_reference.py
 ```
 
-Also run the `slow` tests of each subsystem the change touches, and the `learned`
-tests when it touches spot finding. Run the complete suite (`pytest test/ -v`
-and `pytest test/ -v -m extended`) for a change to a shared path (`image`, `io`,
-`dataset`, `conftest.py`, `pyproject.toml`, `uv.lock`), for the canary issue of
-a batch and once at the end of each batch. Every test file carries a subsystem
-marker; mark new tests as [contributing](docs/contributing.md) specifies.
+The other selections, defined in [contributing](docs/contributing.md) ("Test
+selections"), run on these occasions:
+
+* V, `validation and not contract and not (slow or learned or extended)`: at a
+  batch's end and before merge.
+* R = Q ∪ V, the fast tier, `not (slow or learned or extended)`: for a change to
+  a shared path (`image`, `io`, `dataset`, `conftest.py`, `pyproject.toml`,
+  `uv.lock`), at a batch's canary, at a batch's end and before merge.
+* Slow, `slow and not (learned or extended) and <subsystem>`: the subsystems the
+  change touches, and every subsystem at a batch's end.
+* Learned, `learned`: when a dependency of the learned tests changes, and at a
+  batch's end if one changed.
+* Extended, `extended and not learned`: at a batch's end and before merge.
+* Documentation: the reference audit on every change; the strict build
+  (`uv run --group docs sphinx-build -n -W --keep-going -b html ../../docs
+  /external/new-run/html`) at a batch's end, before merge, and on a change to
+  `docs/` or to a public interface.
+
+R, slow, learned and extended together hold every collected test once
+(`scripts/selection_coverage.py`). Every test file carries a subsystem marker;
+mark new tests as [contributing](docs/contributing.md) specifies.
 
 Run affected bounded examples from [contributing](docs/contributing.md). Generated
 API stubs are ignored/disposable; edit authored lists/docstrings. Never weaken

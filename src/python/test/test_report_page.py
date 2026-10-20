@@ -679,8 +679,10 @@ PLACES = [r"checkpoints/[^/]+/run\.json", r"checkpoints/[^/]+/registered/.+", r"
           rf"report/{SAMPLE}/.+", rf"report/\.{SAMPLE}\.[0-9a-f]+\.tmp(/.+)?"]
 
 
+@pytest.mark.contract
 @pytest.mark.skipif(hasattr(os, "geteuid") and os.geteuid() == 0, reason="root ignores read-only permissions")
-@pytest.mark.parametrize("maker", ENTRY_FIXTURES)
+# report_cells takes 5.4 s on one CPU with its imports done beforehand (W-530).
+@pytest.mark.parametrize("maker", ["report_records", pytest.param("report_cells", marks=pytest.mark.slow)])
 def test_pg7_entry_on_the_dataset(tmp_path, no_processing, maker):
     case = entry_case(tmp_path / "root", maker)
     (case.root / "report").mkdir()

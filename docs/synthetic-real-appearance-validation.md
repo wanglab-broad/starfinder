@@ -626,7 +626,7 @@ build configuration, outside the repository (ST1).
 
 | Tier and selection | Checks | Bank |
 | --- | --- | --- |
-| Routine (`not slow and not learned`; `pytest-fast`), and the CI environment | GA1 (routine presets) to GA22 | closed-form banks built in the session, or hand-made arrays; **no real data** |
+| Routine (the fast tier R, `not (slow or learned or extended)`: the quick gate Q and V), and the CI environment | GA1 (routine presets) to GA22 | closed-form banks built in the session, or hand-made arrays; **no real data** |
 | `slow`, `synthetic` (`pytest-slow-synthetic`) | GA1 (the `slow` context presets); the routine fixtures that measure 5 s or more | closed-form banks; no real data |
 | `slow`, `synthetic`, real-bank (`pytest-slow-synthetic` on the lab machine) | GA23, GA24 (the `slow` presets and the builds), GA26, GA27 | the three real banks |
 | `slow` and `learned`, `integration` (the `learned` selection) | CD, CT and CU with a model, on the `slow` presets | the three real banks |

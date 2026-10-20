@@ -254,16 +254,16 @@ When Python behavior changes, run the tests from `src/python`. The explicit `dev
 group is needed with `UV_NO_DEFAULT_GROUPS=true` above.
 
 ```bash
-uv run --group dev pytest test/ -v -m "not slow and not learned"   # routine: about 5 minutes on one CPU
-uv run --group dev pytest test/ -v -m "registration"                # one subsystem, slow tests included
-uv run --group dev pytest test/ -v                                  # default run
-uv run --group dev pytest test/ -v -m extended                      # extended run
+uv run --group dev pytest test/ -v -m "not (slow or learned or extended) and (contract or not validation)"  # Q
+uv run --group dev pytest test/ -v -m "registration"    # one subsystem, slow tests included
+uv run --group dev pytest test/ -v                      # default run
+uv run --group dev pytest test/ -v -m extended          # extended run
 ```
 
-The default run excludes tests marked `extended`. The complete suite (default
-and extended) takes about an hour on one CPU, most of it the learned detectors,
-so select by marker while developing and leave the complete suite to the batch
-gate described in `AGENTS.md`.
+The default run excludes tests marked `extended`; a `-m` on the command line
+replaces that default, so each selection below names `extended` itself. Select
+by marker while developing and leave the other selections to the cadences of
+"Test selections" below.
 
 #### Test markers
 
@@ -273,7 +273,7 @@ Markers are registered in `src/python/pyproject.toml` and checked with
 | Group | Markers | Set on |
 | --- | --- | --- |
 | Subsystem | `core`, `io`, `dataset`, `preprocessing`, `registration`, `spot_finding`, `barcode`, `segmentation`, `stitching`, `report`, `synthetic`, `evaluation`, `benchmark`, `workflow`, `integration` | the file, with `pytestmark` |
-| Cost and requirement | `slow`, `learned` | the test or the parameter |
+| Cost and requirement | `slow`, `learned`, `extended` | the test or the parameter (`extended`: the file or the test) |
 | Kind | `contract`, `golden`, `validation`, `e2e` | the file or the test |
 
 Rules for a new or changed test:
@@ -287,7 +287,9 @@ Rules for a new or changed test:
 3. Kind: `contract` for interface, dtype, error, registry and workflow-key
    behavior; `golden` for comparison with pinned outputs; `validation` for a
    check named in a design table of these pages (the S and V series); `e2e` for
-   the full pipeline. A test without a kind marker is an ordinary unit test.
+   the full pipeline. A test without a kind marker is an ordinary unit test. A
+   `validation` test that is also an ordinary test of a public interface is
+   marked `contract` too, which puts it in the quick gate Q.
 4. `learned` for a test that loads a detector model or needs
    `STARFINDER_WEIGHTS_DIR`.
 5. `slow` by measurement: 5 s or more on one CPU and one thread in the locked
@@ -296,8 +298,60 @@ Rules for a new or changed test:
    cached or module-scoped result which takes that long is `slow` as well,
    because it pays the cost when the first user is deselected. For a
    parametrized test, mark the slow parameters with `pytest.param(...,
-   marks=pytest.mark.slow)` when only some are slow.
+   marks=pytest.mark.slow)` when only some are slow. An existing test changes
+   its cost marker only with a saved measurement that separates the one-time
+   import and setup from the execution.
 6. Reviewers check the markers of new and changed tests.
+
+#### Test selections
+
+The tests run in the selections below, each with its cadence. "A batch" is a
+run of issues with one canary issue first; "before merge" is the gate of a pull
+request.
+
+| Selection | Marker expression | When it runs |
+| --- | --- | --- |
+| Q, the quick gate | `not (slow or learned or extended) and (contract or not validation)` | every change |
+| V, the rest of the fast tier | `validation and not contract and not (slow or learned or extended)` | at a batch's end and before merge |
+| R = Q ∪ V, the fast tier | `not (slow or learned or extended)` | for a change to a shared path (`starfinder/image.py`, `starfinder/io/`, `starfinder/dataset/`, `test/conftest.py`, `pyproject.toml`, `uv.lock`), at a batch's canary, at a batch's end and before merge |
+| Slow, per subsystem | `slow and not (learned or extended) and <subsystem>`, in the groups below | when that subsystem changes, and at a batch's end |
+| Learned | `learned` | when a dependency of the learned tests changes, and at a batch's end if one changed |
+| Extended | `extended and not learned` | at a batch's end and before merge |
+| Documentation | not pytest: the reference audit `docs/check_reference.py`; the strict build `sphinx-build -n -W` | the reference audit on every change; the strict build at a batch's end, before merge, and on a change to `docs/` or to a public interface |
+
+The slow selection runs in five groups, one per subsystem check:
+
+| Group | Marker expression |
+| --- | --- |
+| benchmark | `slow and not (learned or extended) and benchmark` |
+| synthetic | `slow and not (learned or extended) and synthetic and not benchmark` |
+| registration | `slow and not (learned or extended) and registration` |
+| spot_finding | `slow and not (learned or extended) and spot_finding` |
+| other | `slow and not (learned or extended) and not (benchmark or synthetic or registration or spot_finding)` |
+
+Q and V share no test, and together they are R. R, slow (`slow and not (learned
+or extended)`), learned and extended hold each collected test exactly once, so
+a batch's end runs every test. The `learned` tests run in the controller's
+learned checks, split by model and chain; the `extended` tests that are
+`learned` run there too. A test that is both `contract` and `validation` runs in
+Q. To check the coverage, collect the node IDs of each selection (no test runs)
+and compare them:
+
+```bash
+uv run python scripts/selection_coverage.py --output <run-dir>/selections
+```
+
+It writes each selection's node IDs and `coverage.json`, and exits with 1 when
+Q and V overlap or when a collected test is missing from the four selections or
+in two of them. To review the cost markers, run a selection with
+`--durations=0` and pass its log to the drift report, which lists the tests
+without `slow` that took 5 s or more and the `slow` tests under 2 s (leaving out
+those that use a cached, wider-scoped fixture):
+
+```bash
+uv run pytest test/ -v --durations=0 -m "<selection>" > <run-dir>/durations.log
+uv run python scripts/marker_drift.py <run-dir>/durations.log
+```
 
 The `Tests` GitHub Actions workflow installs the locked `dev`,
 `local-registration` and `checkpoint` extras, then runs the default and

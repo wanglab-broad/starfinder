@@ -83,6 +83,7 @@ def temporaries(folder):
 
 # --- EX1: the parts, in order, and the default folder ---------------------------------------------------------
 
+@pytest.mark.contract
 @needs_library
 def test_default_export(folder, monkeypatch):
     calls = []
@@ -125,6 +126,7 @@ def test_two_image_names(folder):
     check_export(folder.export_dir)
 
 
+@pytest.mark.contract
 @needs_library
 def test_parts_called_alone(folder):
     """Each part alone, on the saved files of the parts before it, writes its section and leaves the others."""
@@ -286,6 +288,7 @@ def unchanged(f, call, error, match=None):
     assert listing(f.root) == before
 
 
+@pytest.mark.contract
 def test_checks_before_writing(folder, monkeypatch, tmp_path):
     # 1. Config.
     with pytest.raises(ValueError, match="dimensionality"):

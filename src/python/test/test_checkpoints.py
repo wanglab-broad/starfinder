@@ -96,6 +96,7 @@ def record(fov, directory=None):
     return json.loads((path / 'run.json').read_text())
 
 
+@pytest.mark.contract
 @pytest.mark.parametrize('table_format', ['csv', 'parquet'])
 @pytest.mark.parametrize('mode', ['batch', 'streaming'])
 @pytest.mark.parametrize('z', [1, 4])
@@ -526,6 +527,7 @@ def test_overwrite_run_never_leaves_a_stale_stage_loadable(tmp_path, monkeypatch
     ds.fov('FOV').load_checkpoint('candidates')
 
 
+@pytest.mark.contract
 def test_load_checkpoint_rejects_mismatches_and_existing_results(tmp_path):
     ds = dataset(tmp_path)
     saved = resident(ds).run(full(), checkpoints=CheckpointConfig())

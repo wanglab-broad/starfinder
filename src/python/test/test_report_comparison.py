@@ -422,6 +422,7 @@ def test_argument_checks(tmp_path, samples):
     assert sorted(p.name for p in report.iterdir()) == ["s1"]
 
 
+@pytest.mark.contract
 def test_a_report_root_given_or_absent(tmp_path):
     """``report_root`` is read in place of ``<output_root>/report/``; one that does not exist gives missing rows."""
     case = report_records(tmp_path / "root")

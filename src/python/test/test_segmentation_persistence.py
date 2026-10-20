@@ -83,6 +83,7 @@ def check_reload(fov, name, checkpoints, folder):
     return loaded
 
 
+@pytest.mark.contract
 def test_l13_an_imported_run_writes_its_labels_and_record(golden, tmp_path):
     fov, path, labels = golden
     checkpoints = CheckpointConfig(directory=tmp_path / "checkpoints")
@@ -149,6 +150,7 @@ def test_saved_runs_are_not_overwritten_by_default(seeded, tmp_path):
         "input.ome.tif", "labels.tif", "segmentation.json"]
 
 
+@pytest.mark.contract
 def test_load_segmentation_errors(seeded, tmp_path):
     fov, plan, _ = seeded
     checkpoints = CheckpointConfig(directory=tmp_path / "checkpoints")

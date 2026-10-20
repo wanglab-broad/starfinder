@@ -974,6 +974,7 @@ def test_pg7_folder_rules_and_replacement(records, monkeypatch):
     assert folder == empty and (empty / "report.json").is_file()
 
 
+@pytest.mark.contract
 def test_read_report_checks_the_listed_files(records):
     folder, record = records.collect()
     assert read_report(folder) == record
@@ -1035,6 +1036,7 @@ def test_pg6_schema(tmp_path, maker, variant):
     assert not any(w in words for w in ('"verdict"', '"score"', '"pass"', '"grade"'))
 
 
+@pytest.mark.contract
 def test_closed_lists_equal_the_contract():
     assert list(UNAVAILABLE_REASONS) == CONTRACT_REASONS
     assert len(REPORT_PARTS) == 27 and len(set(REPORT_PARTS)) == 27
@@ -1050,6 +1052,7 @@ def test_closed_lists_equal_the_contract():
 
 # --- Configuration ---------------------------------------------------------------------------------------------
 
+@pytest.mark.contract
 def test_configuration_defaults_and_checks():
     config = ReportConfig()
     assert (config.markers, config.marker_pairs, config.positive_threshold, config.example_fovs,
@@ -1101,6 +1104,7 @@ LEFT_OUT = ("generated_at", "wall_s", "cpu_s", "peak_rss_kib")
 GENERATED = re.compile(r'(<dd id="generated"[^>]*>).*?(</dd>)', re.S)
 
 
+@pytest.mark.slow
 def test_dt1_two_single_thread_processes(tmp_path):
     anndata_or_skip()
     case = report_cells(tmp_path / "root")

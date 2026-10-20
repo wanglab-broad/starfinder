@@ -70,9 +70,11 @@ did not measure, it says so and gives none.
 ## Conventions
 
 * **Tiers and markers** are those of {doc}`contributing` ("Test markers"). The *routine
-  tier* is the selection `not slow and not learned`, which the controller's routine test
-  gate runs on every issue. A check is `slow` when it takes 5 s or more on one CPU and one
-  thread in the locked environment, measured with `--durations=0`; the tier written below
+  tier* is the fast tier R, `not (slow or learned or extended)`: its `contract` and
+  kind-less checks run in the quick gate Q on every change, its other `validation` checks in
+  V at a batch's end and before merge ({doc}`contributing`, "Test markers"). A check
+  is `slow` when it takes 5 s or more on one CPU and one thread in the locked
+  environment, measured with `--durations=0`; the tier written below
   is the expected one, and a routine check measured at 5 s or more is marked `slow` and
   named in its issue's notes. A check that loads a model is `learned`. Every test file sets
   one subsystem marker and a kind marker: the generator checks are `synthetic` (the
@@ -633,15 +635,16 @@ script `scripts/execution_costs.py` of W-482's run directory
 
 **Which gate runs what.**
 
-* The routine test gate (`not slow and not learned`, every issue) runs the routine
-  generator checks: GN1 to GN22 on the tiny fixtures. They need no extra beyond the
+* The routine tier (the fast tier R: the quick gate Q on every change and V at a batch's
+  end and before merge) runs the routine generator checks: GN1 to GN22 on the tiny
+  fixtures. They need no extra beyond the
   base, so the CI environment runs them too.
 * The controller's `slow` selections run the `slow` generator checks (GN1(a) and (b) on
   `sample-small-v1`, the preset parts of GN4 to GN7, GN23, GN24), which carry the subsystem
   marker `synthetic`, in its `pytest-slow-synthetic` selection, and the truth-label chains
   (`slow`, not `learned`), which carry `integration`, in `pytest-slow-other`; each runs when
   its paths change and at the last issue of a batch.
-* The routine gate and the CI environment also run GA1 (routine presets) to GA22,
+* The routine tier and the CI environment also run GA1 (routine presets) to GA22,
   on closed-form banks. The `slow` selection also runs GA23, GA24, GA26 and GA27, which
   read the real banks through `STARFINDER_APPEARANCE_BANKS` on the lab machine and skip
   elsewhere ({doc}`synthetic-real-appearance-validation`, 'Execution conditions').

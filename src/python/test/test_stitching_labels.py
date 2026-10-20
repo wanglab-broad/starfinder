@@ -978,6 +978,7 @@ def test_ex3_h_a_replaced_territory_without_conflicts(tmp_path):
     check_export(folder.export_dir)
 
 
+@pytest.mark.contract
 def test_fuse_labels_without_the_extra(cases, monkeypatch, tmp_path):
     """fuse_labels alone without multiview-stitcher: not_run, extra_missing, the warning names the extra."""
     case = cases("label_pair")

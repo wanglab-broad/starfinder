@@ -582,6 +582,7 @@ def test_sg3_label_files_and_the_section(tmp_path, scene, k, runs):
     assert loaded.cells is loaded.runs["cell"] and loaded.nuclei is loaded.runs["nucleus"]
 
 
+@pytest.mark.contract
 @needs_library
 def test_sg3_load_sample_segmentation_checks_the_label_files(tmp_path):
     folder, grid = fused(tmp_path, "fused_pair", 1)

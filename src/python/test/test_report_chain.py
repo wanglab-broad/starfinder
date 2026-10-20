@@ -47,7 +47,7 @@ from . import test_report_page as page_checks
 from .report_scene import Chain, scene_chain, scene_chain_plane  # noqa: F401 (module-scoped fixtures)
 from .report_sizes import EXAMPLE_TILE, INTENSITY_SIZE, preprocessing_tile, tiles_width
 
-pytestmark = [pytest.mark.report, pytest.mark.validation]
+pytestmark = [pytest.mark.report, pytest.mark.integration, pytest.mark.validation]
 
 TOL = 1e-9
 DESIGN = Path(__file__).resolve().parents[3] / "docs" / "report-algorithms.md"

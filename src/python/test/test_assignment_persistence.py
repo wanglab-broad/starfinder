@@ -218,6 +218,7 @@ def test_a15_a_changed_or_removed_file_raises_naming_the_path(tmp_path, genes, m
     assert str(target) in str(error.value)
 
 
+@pytest.mark.contract
 def test_a15_errors_and_overwrite(tmp_path, genes, masks):
     root = tmp_path / "checkpoints"
     checkpoints = CheckpointConfig(directory=root)
@@ -346,6 +347,7 @@ def test_a15_inputs_the_rule_calls_unsaved_are_written(tmp_path, genes, masks, c
     assert np.array_equal(labels, cells.labels)
 
 
+@pytest.mark.contract
 @pytest.mark.parametrize("table_format", ["csv", "parquet"])
 def test_excluded_cells_are_preserved(tmp_path, genes, masks, table_format):
     if table_format == "parquet":
