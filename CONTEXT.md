@@ -12,7 +12,8 @@ Python images are ZYX or ZYXC; 2D uses singleton Z. Spots are zero-based ZYX,
 with subpixel coordinates and identity `(namespace, spot_id)`. ImageMetadata
 carries spatial interpretation separately from intensities. Unknown calibration
 stays unknown. Python names use snake_case and PascalCase, with **FOV** retained.
-MATLAB API names and shared workflow/CSV contracts are excluded from renaming.
+MATLAB API names, and the files and keys MATLAB code reads or writes, are excluded
+from renaming.
 
 ## Responsibilities and data flow
 

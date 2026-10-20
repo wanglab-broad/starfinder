@@ -4,7 +4,10 @@ Read [CONTEXT.md](CONTEXT.md) for vocabulary and package responsibilities,
 [architecture](docs/architecture.md) and [contracts](docs/api/contracts.md) for
 maintained behavior, and [migration](docs/migration.md) for breaking Python changes.
 Python naming is snake_case/PascalCase with the explicit exception **FOV stays FOV**.
-MATLAB APIs and shared MATLAB-facing keys, filenames and coordinate contracts stay unchanged.
+MATLAB APIs, and the files, keys and coordinate conventions that MATLAB code reads or
+writes, stay unchanged. Otherwise the Python package follows its own design: MATLAB
+compatibility alone is no reason to keep a Python name, key, layout or format
+(W-526, 2026-10-19).
 
 ## Scope and ownership
 
@@ -37,8 +40,10 @@ Change only the authorized slice and maintained callers/tests/docs needed for
 coherence. Verify diagnoses in actual code. Prefer functions and small typed
 configs/results; avoid duplicated algorithms and compatibility shims for replaced
 Python APIs. Keep arrays ZYX/ZYXC, explicit channel ordering and boundary conversions
-as specified in the site contracts. Update notebooks' imports without executing
-historical notebooks or rewriting outputs. Do not qualify process-dependent
+as specified in the site contracts. The example notebooks in `example/introduction/`
+are regenerated after the housekeeping refactor (W-526): executed, simplified,
+outputs kept. Until then, and for other notebooks, update imports only, without
+executing them or rewriting outputs. Do not qualify process-dependent
 synthetic hash seeds without explicit scope. Preserve historical source before extraction.
 
 ## Environment and validation

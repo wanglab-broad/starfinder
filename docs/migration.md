@@ -2,9 +2,12 @@
 
 This is a coordinated breaking Python cleanup: update maintained imports and
 callers together. Replaced interfaces have no compatibility aliases. **FOV stays
-FOV.** MATLAB APIs, shared MATLAB-facing workflow keys, CSV coordinate bases and
-filenames remain unchanged. Historical scripts and outputs retain their original
-provenance; they are not examples of the current API.
+FOV.** MATLAB APIs, and the files, keys and coordinate conventions that MATLAB
+code reads or writes, remain unchanged. Since 2026-10-19 the Python package
+otherwise follows its own design (W-526): a Python name, key, layout or format may
+change even where it once matched the MATLAB pipeline, and each such change is
+listed here. Historical scripts and outputs retain their original provenance; they
+are not examples of the current API.
 
 ## Mechanical names and ownership
 
