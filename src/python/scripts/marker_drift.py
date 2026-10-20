@@ -2,12 +2,14 @@
 """Report marker drift from a pytest ``--durations=0`` log (W-298 item 1, W-530).
 
 Lists the tests that ran without ``slow`` and took 5 s or more (setup, call and teardown
-together), and the ``slow`` tests that took less than 2 s. A ``slow`` test under 2 s that
-requests a fixture wider than the function (module, class, package or session scope) is left
-out of the second list and reported apart: it is ``slow`` because it shares a cached result
-whose cost its first user pays (docs/contributing.md, "Test markers", rule 5). Skipped tests
-are not counted. A one-time import is not separated here: a listed test is a candidate that a
-measurement with the import done beforehand confirms or clears.
+together), and the ``slow`` tests that took less than 2 s. A ``slow`` test under 2 s is left
+out of the second list, and reported apart with the entry's name, only when an entry of
+``EXEMPTIONS`` covers it: the entry names one cached source (a wider-scoped fixture or a cached
+helper that is not a fixture), the tests that share it, and a saved measurement of the cost its
+first user pays, which makes the others ``slow`` (docs/contributing.md, "Test markers", rule 5).
+A wider-scoped fixture alone exempts nothing. Skipped tests are not counted. A one-time import is
+not separated here: a listed test is a candidate that a measurement with the import done
+beforehand confirms or clears.
 
 Run from src/python::
 
@@ -30,6 +32,27 @@ from pathlib import Path
 SLOW_AT = 5.0
 FAST_UNDER = 2.0
 
+# The cached sources that make tests ``slow`` although their own run is short. Each entry covers the tests it names
+# ("<file>::<function>", every parametrization) and gives the measured cost its first user pays.
+EXEMPTIONS = (
+    {"name": "app_routine",
+     "source": "test/cellular_appearance_scenes.py::app_routine (functools.cache, not a fixture)",
+     "tests": ["test/test_synthetic_appearance_presets.py::test_ga8_routine_labels_equal_the_oracle_on_every_grid",
+               "test/test_synthetic_appearance_presets.py::test_ga9_routine_ownership_overlap_and_anchors",
+               "test/test_synthetic_appearance_presets.py::test_ga10_routine_placement_and_its_stop",
+               "test/test_synthetic_appearance_presets.py::test_ga11_routine_territories",
+               "test/test_synthetic_appearance_presets.py::test_ga18_routine_projection_truth",
+               "test/test_synthetic_appearance_coverage.py::"
+               "test_ga13_kappa_and_the_rim_background_on_the_routine_presets",
+               "test/test_synthetic_appearance_coverage.py::test_ga17_types_and_molecules_on_the_routine_presets"],
+     "reason": ("Each routine appearance preset is generated, banked and placed once per process; its first user "
+                "pays 5.61 to 9.82 s and the others 0.02 to 1.78 s, so all are slow by rule 5."),
+     "evidence": ("runs/W-530/20261020T132102Z-6834ae5f/results/measurements/app-routine-users.log (one CPU, "
+                  "--durations=0): '9.82s call "
+                  "test/test_synthetic_appearance_presets.py::test_ga8_routine_labels_equal_the_oracle_on_every_grid"
+                  "[appearance-culture-v1]'")},
+)
+
 DURATION = re.compile(r"^\s*(\d+(?:\.\d+)?)s (setup|call|teardown)\s+(\S.*?)\s*$")
 OUTCOME = re.compile(r"^(\S+::\S.*?) (PASSED|FAILED|ERROR|SKIPPED|XFAIL|XPASS)\b")
 
@@ -49,12 +72,19 @@ def parse_log(text: str) -> tuple[dict[str, dict[str, float]], dict[str, str]]:
     return dict(durations), outcomes
 
 
+def exemption_of(node: str, exemptions=EXEMPTIONS) -> str | None:
+    """The name of the entry that covers ``node`` (any parametrization of a listed test), or None."""
+    test = node.split("[", 1)[0]
+    return next((entry["name"] for entry in exemptions if test in entry["tests"]), None)
+
+
 def drift(durations: dict[str, dict[str, float]], outcomes: dict[str, str], items: dict[str, dict],
-          slow_at: float = SLOW_AT, fast_under: float = FAST_UNDER) -> dict:
-    """The drift report; ``items`` maps a node ID to {"markers": [...], "shared_fixtures": [...]}."""
+          slow_at: float = SLOW_AT, fast_under: float = FAST_UNDER, exemptions=EXEMPTIONS) -> dict:
+    """The drift report; ``items`` maps a node ID to {"markers": [...]}."""
     ran = {n for n in set(durations) | set(outcomes) if outcomes.get(n) != "SKIPPED"}
     report = {"slow_at": slow_at, "fast_under": fast_under, "tests": len(ran),
-              "unmarked_at_or_over": [], "slow_under": [], "slow_under_shared_fixture": [], "not_collected": []}
+              "exemptions": [{k: e[k] for k in ("name", "source", "reason", "evidence")} for e in exemptions],
+              "unmarked_at_or_over": [], "slow_under": [], "slow_under_exempt": [], "not_collected": []}
     for node in sorted(ran):
         if node not in items:
             report["not_collected"].append(node)
@@ -65,12 +95,12 @@ def drift(durations: dict[str, dict[str, float]], outcomes: dict[str, str], item
         if not slow and row["seconds"] >= slow_at:
             report["unmarked_at_or_over"].append(row)
         elif slow and row["seconds"] < fast_under:
-            shared = items[node].get("shared_fixtures", [])
-            if shared:
-                report["slow_under_shared_fixture"].append(dict(row, shared_fixtures=shared))
+            entry = exemption_of(node, exemptions)
+            if entry:
+                report["slow_under_exempt"].append(dict(row, exemption=entry))
             else:
                 report["slow_under"].append(row)
-    for name in ("unmarked_at_or_over", "slow_under", "slow_under_shared_fixture"):
+    for name in ("unmarked_at_or_over", "slow_under", "slow_under_exempt"):
         report[name].sort(key=lambda r: (-r["seconds"], r["nodeid"]))
     return report
 
@@ -82,10 +112,12 @@ def text(report: dict) -> str:
     lines += [f"  {r['seconds']:7.2f} s  {r['nodeid']}  {r['phases']}" for r in report["unmarked_at_or_over"]]
     lines += ["", f"slow, under {report['fast_under']:g} s: {len(report['slow_under'])}"]
     lines += [f"  {r['seconds']:7.2f} s  {r['nodeid']}" for r in report["slow_under"]]
-    lines += ["", f"Left out (slow, under {report['fast_under']:g} s, sharing a wider-scoped fixture): "
-              f"{len(report['slow_under_shared_fixture'])}"]
-    lines += [f"  {r['seconds']:7.2f} s  {r['nodeid']}  {', '.join(r['shared_fixtures'])}"
-              for r in report["slow_under_shared_fixture"]]
+    lines += ["", f"Left out (slow, under {report['fast_under']:g} s, covered by an exemption): "
+              f"{len(report['slow_under_exempt'])}"]
+    lines += [f"  {r['seconds']:7.2f} s  {r['nodeid']}  exemption {r['exemption']}"
+              for r in report["slow_under_exempt"]]
+    lines += ["", f"Exemptions: {len(report['exemptions'])}"]
+    lines += [f"  {e['name']}: {e['source']}; {e['reason']} Evidence: {e['evidence']}" for e in report["exemptions"]]
     if report["not_collected"]:
         lines += ["", f"In the log but not collected now: {len(report['not_collected'])}"]
         lines += [f"  {n}" for n in report["not_collected"]]

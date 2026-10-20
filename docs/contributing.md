@@ -345,8 +345,11 @@ It writes each selection's node IDs and `coverage.json`, and exits with 1 when
 Q and V overlap or when a collected test is missing from the four selections or
 in two of them. To review the cost markers, run a selection with
 `--durations=0` and pass its log to the drift report, which lists the tests
-without `slow` that took 5 s or more and the `slow` tests under 2 s (leaving out
-those that use a cached, wider-scoped fixture):
+without `slow` that took 5 s or more and the `slow` tests under 2 s. It leaves out
+a `slow` test under 2 s only when an entry of `EXEMPTIONS` in
+`scripts/marker_drift.py` covers it. An entry names one cached source (a
+wider-scoped fixture or a cached helper), the tests that share it and a saved
+measurement of what its first user pays:
 
 ```bash
 uv run pytest test/ -v --durations=0 -m "<selection>" > <run-dir>/durations.log
