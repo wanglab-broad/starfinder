@@ -10,8 +10,8 @@ by W-482, Accepted at W-396) for the scenes of that appearance and edits no acce
 It has five parts:
 
 * the **target definitions** of the appearance presets ("Target definitions");
-* the **generator checks**, GA1 to GA27, and what becomes of GN1 to GN25 ("Generator
-  checks");
+* the **generator checks**, GA1 to GA24 and GA26 to GA27, and how the cellular checks also
+  apply to appearance ("Generator checks");
 * the **consequences for the chain checks** CD, CT and CU of the accepted design
   ("Consequences for the chain checks");
 * the **execution conditions**, with where the banks live and the measured cost of each
@@ -296,7 +296,7 @@ The accepted fixtures stay. These are added:
 
 ## Generator checks
 
-**What becomes of GN1 to GN25.** The rows stay as written for the closed-form scene and its
+**How the cellular checks apply.** The rows GN1 to GN24 stay as written for the closed-form scene and its
 six presets, which are unchanged (E1, PR1). For a scene of real appearance each is read as
 below. The rows on labels, packing, territories, types and molecules depend on the layout
 option. Under PL2, which {doc}`synthetic-real-appearance` recommends, nothing is packed
@@ -329,7 +329,6 @@ apply to the fitted sites.
 | GN22 | **Changed**: the AT2 layout | GA21 |
 | GN23 | **Changed**: the target definitions above, on real banks | GA23 |
 | GN24 | **Stays**, extended to the appearance presets and the bank build | GA24 |
-| GN25 | **Stays**, extended to the tests of W-483 to W-486 | GA25 |
 
 Routine tier unless the row says otherwise. "Source" names the section of
 {doc}`synthetic-real-appearance` that gives the expected result. **No routine row reads
@@ -362,7 +361,6 @@ arrays.
 | GA22 | The closed-form bank reads no real data | `cf_banks`, `app_routine` | In a subprocess that builds `cf_banks` and generates `app_routine`, the files opened, recorded by an `open` audit hook (`sys.addaudithook`); the bank records' inputs. | No file outside the test's `tmp_path` and the package is read; the records name a preset and seeds (CF1; "Real data stays outside the repository"). | Exact. | routine; `synthetic`, `contract`. |
 | GA23 | The appearance presets in their target ranges | `app_slow`; `app_slow_acquired` for TR4 and TR5 of 2D tissue and culture (42) | Each row of "Target definitions" on the truth labels and the stain of each scene, at the pixel named; per quantity the measured value, the range, the object count and the outcome, printed as one CSV block (`preset, row, quantity, value, low, high, objects, outcome`) that the implementation issue saves in its run directory, as W-485 saved `gn23_targets.csv`. | Each asserted row inside its range; each reported row reported; a quantity on fewer than 100 objects reported (V12). | The ranges, provisional; counts exact. | `slow`; `synthetic`, `validation`; real-bank. |
 | GA24 | Generation and build cost | `app_routine`, `app_slow`, `app_slow_acquired`, the build of each real bank | Each preset generated, and each bank built, in its own process under `/usr/bin/time -v`: wall time and peak RSS, in the test output. | Within RG1 (one CPU, 16 GiB, 3,600 s per step) for the `slow` presets, their variants and the builds; a routine-tier test that generates a routine appearance preset takes less than 5 s, else it is `slow` ("Presets", "Resources"). | The bound; nothing else is asserted. | `slow`; `synthetic`, `validation`; real-bank for the `slow` presets and the builds. |
-| GA25 | The existing tests unchanged | the existing files | The diff of each implementation issue against the files GN25 pins and the test modules and helpers of W-483 to W-486 (`test_synthetic_cellular_*.py`, `cellular_oracle.py`, `cellular_scenes.py`, `cellular_measures.py`, `cellular_checks.py`), pinned at the base revision of the implementation batch. | No edit to any of them; each passes in its tier (E1). | Exact (SHA-256). | routine; `synthetic`, `validation`. |
 | GA26 | The real banks | `real_banks` | Each bank file's SHA-256 against the preset's; the build record's inputs against W-392's inventory (`inventory/`, the SHA-256 of each file); the held-out images (LN Position048, `crop_y18432_x0`, culture Position397) against the sources; the counts per rule against W-513 `tables/bank_selection_<context>.csv`; BR4's guard on every source; the entry count against the largest preset's placements (BS2). | SHA-256 equal; every input inventoried and equal; no held-out image among the sources; the counts equal W-513's rows (3,033 LN entries; 304 2D tissue; 91 culture); every source inside BR4's guard; the bank size reported against the placements. | Exact. | `slow`; `synthetic`, `validation`; real-bank. |
 | GA27 | Rebuild of a real bank | `real_banks` | The bank rebuilt from its build configuration in a temporary directory; its digest against the stored record's. | Equal digests (ST1, "a rebuild is compared by that digest"). | Exact. | `slow`; `synthetic`, `validation`; real-bank. |
 
@@ -433,8 +431,8 @@ The generator checks are in the modules of `src/python/test/` listed below, each
 `synthetic` with the kind marker its row names. The implementation issues W-516 to W-519
 added most of them with the code they check. W-520 adds three modules:
 
-* `test_synthetic_appearance_checks.py`, which holds GA25 and the test that keeps this table
-  true, `test_every_ga_row_names_collected_tests`;
+* `test_synthetic_appearance_checks.py`, which holds `test_every_ga_row_names_collected_tests`
+  to keep this table true;
 * `test_synthetic_appearance_coverage.py`, the rows on fixtures they name that no earlier
   module ran: GA13 and GA17 on `app_routine`, GA20's copy with type 2's abundance row changed,
   GA21 on the culture copies of `app_plane` and `app_morph` (drawn), GA22 with `app_routine`
@@ -443,7 +441,7 @@ added most of them with the code they check. W-520 adds three modules:
 * GA23 in `test_synthetic_appearance_presets.py`, with its measures in
   `cellular_appearance_measures.py`.
 
-That test reads the rows GA1 to GA27 of the table "Generator checks" from this page and
+That test reads the rows GA1 to GA24 and GA26 to GA27 of the table "Generator checks" from this page and
 checks four things:
 
 * this table has exactly those rows, in that order;
@@ -487,7 +485,7 @@ notes, and the row is not changed:
   `cf_bank_files` of dense 3D and culture. Rows the page tiers `routine` therefore have a
   `slow` part: GA3, GA4, GA8 to GA15, GA17, GA18 and GA20 to GA22.
 * **GA1** names the golden tests. GN1 (b), a `validation` test of W-483, stays unchanged and
-  passes in its tier, which GA25 covers.
+  passes in its tier.
 * **GA2.** The fields of the accepted configurations are GN2's tests, and the keys `_payload`
   writes are kept by GA1 (b), whose pinned digests hold each context preset's
   `context.json`.
@@ -499,10 +497,9 @@ notes, and the row is not changed:
   (W-520), beside the range", as the amendment after "Target definitions" states. Every
   other row the page asserts still fails the test when it leaves its range.
 
-GA25 pins the SHA-256 of each file it names, line endings read as LF, at 8bf9a5b, the base
-revision of the appearance implementation batch. The files are those GN25 pins (with the
-session fixture `small_dataset` of `conftest.py` by its source) and the test modules and
-helpers of W-483 to W-486.
+**Retired check:** GA25 was retired on 2026-10-19 because it froze test, helper and selected
+fixture source text during development, forcing later test changes to edit source pins first.
+Behavioral goldens and shared-fixture checks remain.
 
 | # | Module and tests | Fixtures | Tier | Floats |
 | --- | --- | --- | --- | --- |
@@ -530,7 +527,6 @@ helpers of W-483 to W-486.
 | GA22 | `test_synthetic_appearance_bank.py`, `test_closed_form_bank_reads_no_file_outside_the_package`; `test_synthetic_appearance_coverage.py`, `test_ga22_a_routine_preset_reads_no_file_outside_the_package` | `cf_banks`, `app_routine` | routine and slow | none compared |
 | GA23 | `test_synthetic_appearance_presets.py`, `test_ga23_slow_preset_in_its_target_ranges`, `test_ga23_acquired_variant_edge_and_bright_regions` | `app_slow`, `app_slow_acquired` | slow | the target ranges |
 | GA24 | `test_synthetic_appearance_presets.py`, `test_ga24_routine_preset_generation_cost`, `test_ga24_slow_preset_generation_within_rg1`, `test_ga24_acquired_pixel_variant_within_rg1`, `test_ga24_bank_build_within_rg1` | `app_routine`, `app_slow`, `app_slow_acquired`, `real_banks` | slow | the bound of RG1 |
-| GA25 | `test_synthetic_appearance_checks.py`, `test_ga25_existing_tests_unchanged` | the existing files | routine | none compared (SHA-256) |
 | GA26 | `test_synthetic_appearance_presets.py`, `test_ga26_real_banks` | `real_banks` | slow | plateaus within 1e-9 |
 | GA27 | `test_synthetic_appearance_presets.py`, `test_ga27_a_rebuild_gives_the_recorded_digest` | `real_banks` | slow | none compared (digests) |
 
@@ -630,7 +626,7 @@ build configuration, outside the repository (ST1).
 
 | Tier and selection | Checks | Bank |
 | --- | --- | --- |
-| Routine (`not slow and not learned`; `pytest-fast`), and the CI environment | GA1 (routine presets) to GA22, GA25 | closed-form banks built in the session, or hand-made arrays; **no real data** |
+| Routine (`not slow and not learned`; `pytest-fast`), and the CI environment | GA1 (routine presets) to GA22 | closed-form banks built in the session, or hand-made arrays; **no real data** |
 | `slow`, `synthetic` (`pytest-slow-synthetic`) | GA1 (the `slow` context presets); the routine fixtures that measure 5 s or more | closed-form banks; no real data |
 | `slow`, `synthetic`, real-bank (`pytest-slow-synthetic` on the lab machine) | GA23, GA24 (the `slow` presets and the builds), GA26, GA27 | the three real banks |
 | `slow` and `learned`, `integration` (the `learned` selection) | CD, CT and CU with a model, on the `slow` presets | the three real banks |
@@ -715,7 +711,7 @@ completed (named in each).
    *Old:* "the generator checks are `synthetic` (the package whose behaviour they assert),
    kind `validation`, `contract` for configuration and interface checks, `golden` for
    pinned outputs"
-   *Proposed:* the same, followed by "; the appearance checks GA1 to GA27 carry the same
+   *Proposed:* the same, followed by "; the appearance checks GA1 to GA24 and GA26 to GA27 carry the same
    markers, and those that read a bank built from real images are `slow`".
 5. **"Conventions", "Thresholds".**
    *Old:* "each cites the W-393 table and row it comes from ("Thresholds and where they come
@@ -783,8 +779,8 @@ completed (named in each).
     "Source" names the statement of {doc}`synthetic-cellular-scene` (by section) or of
     another page that gives the expected result."
     *Proposed:* the same, followed by "These rows check the closed-form scene and its six
-    presets. A scene of real appearance is checked by GA1 to GA27 of
-    {doc}`synthetic-real-appearance-validation`, whose table 'What becomes of GN1 to GN25'
+    presets. A scene of real appearance is checked by GA1 to GA24 and GA26 to GA27 of
+    {doc}`synthetic-real-appearance-validation`, whose table 'How the cellular checks apply'
     says which of these rows applies to it."
 13. **Row GN13 (the stain identities), "Expected result".**
     *Old:* "Identity 7: equal at any fractional offset and at `Z=1`, except at boundary
@@ -930,12 +926,12 @@ completed (named in each).
     each range the smallest to the largest value".
 34. **"Execution conditions", "Which gate runs what", the first two items.**
     *Old:* "The routine test gate (`not slow and not learned`, every issue) runs the routine
-    generator checks: GN1 to GN22 on the tiny fixtures, and GN25. They need no extra beyond
+    generator checks: GN1 to GN22 on the tiny fixtures. They need no extra beyond
     the base, so the CI environment runs them too." and "The controller's `slow` selections
     run the `slow` generator checks (GN1(a) and (b) on `sample-small-v1`, the preset parts
     of GN4 to GN7, GN23, GN24) ..."
     *Proposed:* the same, followed by "The routine gate and the CI environment also run GA1
-    (routine presets) to GA22 and GA25, on closed-form banks. The `slow` selection also runs
+    (routine presets) to GA22, on closed-form banks. The `slow` selection also runs
     GA23, GA24, GA26 and GA27, which read the real banks through
     `STARFINDER_APPEARANCE_BANKS` on the lab machine and skip elsewhere
     ({doc}`synthetic-real-appearance-validation`, 'Execution conditions')."
@@ -1066,14 +1062,14 @@ and listed on the API page `docs/api/synthetic.rst`):
 
 **Tests** (in `src/python/test/`):
 
-* the generator checks GN1 to GN25 of {doc}`synthetic-cellular-scene-validation`: `test_synthetic_cellular_contract.py`,
+* the generator checks GN1 to GN24 of {doc}`synthetic-cellular-scene-validation`: `test_synthetic_cellular_contract.py`,
   `test_synthetic_cellular_scene.py` (W-483), `test_synthetic_cellular_stains.py`,
   `test_synthetic_cellular_stains_contract.py` (W-484), `test_synthetic_cellular_presets.py`,
   `test_synthetic_cellular_presets_contract.py` (W-485), `test_synthetic_cellular_routine.py`
   and `test_synthetic_cellular_checks.py` (W-486), with the helpers `cellular_oracle.py`,
   `cellular_scenes.py`, `cellular_measures.py` and `cellular_checks.py`; each row's tests are
   named in that page's "Implemented checks";
-* the generator checks GA1 to GA27 of {doc}`synthetic-real-appearance-validation`:
+* the generator checks GA1 to GA24 and GA26 to GA27 of {doc}`synthetic-real-appearance-validation`:
   `test_synthetic_appearance_bank.py`, `test_synthetic_appearance_golden.py` (W-516),
   `test_synthetic_appearance_scene.py` (W-517), `test_synthetic_appearance_stains.py`,
   `test_synthetic_appearance_contract.py` (W-518), `test_synthetic_appearance_presets.py`,
@@ -1146,8 +1142,7 @@ No threshold, tolerance, target range, preset or bank was changed by W-488.
   presets differed from the lab machine's in that bit only, and with NumPy's AVX-512 paths
   turned off on the lab machine the CSV files of every preset differed too. The pins were
   taken again at `8606450`, whose saved files equal the base revisions' exactly on the lab
-  machine, and they hold on both CPU paths. GN25's pin of `test_synthetic_sample_golden.py`
-  and GA25's pin of `test_synthetic_cellular_checks.py` follow. Jiahao's decision,
+  machine, and they hold on both CPU paths. Jiahao's decision,
   2026-10-19.
 
 **Accepted statements applied (W-488, 2026-10-18).** The fourteen entries of

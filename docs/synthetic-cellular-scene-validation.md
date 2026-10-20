@@ -77,7 +77,7 @@ did not measure, it says so and gives none.
   named in its issue's notes. A check that loads a model is `learned`. Every test file sets
   one subsystem marker and a kind marker: the generator checks are `synthetic` (the
   package whose behaviour they assert), kind `validation`, `contract` for configuration and
-  interface checks, `golden` for pinned outputs; the appearance checks GA1 to GA27 carry
+  interface checks, `golden` for pinned outputs; the appearance checks GA1 to GA24 and GA26 to GA27 carry
   the same markers, and those that read a bank built from real images are `slow`; the
   chain checks assert the behaviour of
   `synthetic`, `segmentation`, `assignment`, `stitching` and `report` together, so their
@@ -196,8 +196,8 @@ evaluator, written from {doc}`synthetic-real-appearance`
 Routine tier unless the row says otherwise (see "Conventions" for the 5-s rule). "Source"
 names the statement of {doc}`synthetic-cellular-scene` (by section) or of another page that
 gives the expected result. These rows check the closed-form scene and its six presets. A
-scene of real appearance is checked by GA1 to GA27 of
-{doc}`synthetic-real-appearance-validation`, whose table 'What becomes of GN1 to GN25' says
+scene of real appearance is checked by GA1 to GA24 and GA26 to GA27 of
+{doc}`synthetic-real-appearance-validation`, whose table 'How the cellular checks apply' says
 which of these rows applies to it.
 
 | # | Check | Fixture (seed) | What is computed | Expected result (source) | Tolerance | Tier and markers |
@@ -226,7 +226,6 @@ which of these rows applies to it.
 | GN22 | Truth schema and persistence | `ctx_stains`, `ctx_types`, `ctx_plane`, `ctx_off` (42) | The directory `save_context_scene` writes: the sample layout against `save_sample_scene` of `scene.sample`; the twelve tables' columns and order; `context.json` keys, version and SHA-256 of every file; the tables reloaded; an empty population (a type with no cell, no N2, no morphology round); the dataset `save_context_dataset` writes, read by `Dataset`, `FOV.load_images` and `FOV.prepare_morphology`. | V1: the sample layout unchanged and twelve new tables with the columns of "Truth schema"; `context_truth_version` `"1"`; hashes equal the files; reloaded tables equal (floats round trip); empty populations give a header and no row; the dataset holds the layout of "Files and layout" and `prepare_morphology` loads the reference stain and registers the morphology round. | Exact (`check_exact`). | routine; `synthetic`, `contract`. |
 | GN23 | The four cases and the molecules in their target ranges | `context_slow`; `context_slow_acquired` for TR4 and TR5 of 2D tissue and culture (42) | With W-393's measures (definitions of W-393 `notes.md` §2, rebuilt in a test helper; the bright-region detection at factor 1.5, 0.1 µm³ or µm², one-voxel smoothing) on the truth labels and the stain of each scene, at the pixel W-393 measured each quantity: the edge width 10–90 % (TR4) and the bright regions (TR5) of 2D tissue and culture on `context_slow_acquired`, at their acquired pixels of 0.094635 and 0.194398 µm (at the presets' twice-coarser pixels a culture pixel is about 0.15 µm², near the median bright region of 0.26 µm², and the culture's edge of 0.85 µm spans about two pixels); every other quantity, and TR4 and TR5 of dense 3D tissue, on `context_slow` itself: share of touching nuclei; nucleus volume (area) fraction; share not described by one ellipsoid; edge width 10–90 %; bright regions per nucleus, size and peak; nucleus median over the image's median; within-nucleus CV; background and noise over the plateau; the 8-bit plateau grey level; reads per cell; nuclear fraction per cell; the expanded cell volume (dense 3D); the composite signal share per cell (2D tissue); the share of clipped plateaus and bright-region peaks. | Inside the target range of each quantity, the p5–p95 of the W-393 row named in "The four cases, their controls and their ranges" and in each preset table (PS1); a quantity measured on fewer than 100 objects of its kind is reported, not compared (choice V12); the clipped shares reported. Per scene the dense 3D `slow` preset holds about 150 nuclei and reaches 100; the 2D tissue (about 76) and culture (about 42) `slow` presets and their variants (about 20 and 12) do not, so their quantities measured on nuclei or cells are reported, and a quantity of another kind (bright regions, molecules) is compared only where the scene holds 100 of its objects (the culture's second scene, seed 43, belongs to the chain check only). The appearance presets are compared by GA23 with the target definitions of {doc}`synthetic-real-appearance-validation`. | The range, provisional ("Thresholds and where they come from", TR rows); counts exact. | `slow`; `synthetic`, `validation`, `slow`. |
 | GN24 | Generation cost | `context_routine`, `context_slow`, `context_slow_acquired` (42) | Each preset generated in its own process under `/usr/bin/time -v`: wall time and peak RSS, recorded in the test output. | Within the bound of C26 (one CPU, 16 GiB, 3600 s per step) for the `slow` presets and the two variants; a test that generates a routine preset in the routine tier takes less than 5 s ("Resources"). | The bound; nothing else is asserted. | `slow`; `synthetic`, `validation`, `slow`. |
-| GN25 | The existing tests unchanged | the existing files | The diff of each implementation issue against the files `test/test_synthetic_sample_scene.py`, `test/test_synthetic_sample_golden.py`, `test/report_scene.py`, `test/test_report_chain.py`, the tests {doc}`synthetic-sample-scene` names in "Opt-in, and what stays as it is", and those of {doc}`stitching-assembly-validation` and {doc}`sample-segmentation-validation` that generate a sample preset. | No edit to any of them; each passes in its tier ("Opt-in", "Existing tests that must pass unchanged"). | Exact (an empty diff). | their own tiers and markers. |
 
 ## Implemented checks
 
@@ -235,10 +234,10 @@ The generator checks are in the modules of `src/python/test/` listed below, each
 added most of them with the code they check. W-486 adds
 `test_synthetic_cellular_routine.py`: GN4 to GN6, GN8 to GN12, GN15 and GN19 on
 `context_routine`, and GN4 on `ctx_stains`. It also adds GN5 on `context_slow` in
-`test_synthetic_cellular_presets.py`, and `test_synthetic_cellular_checks.py`, which holds
-GN25 and the test that keeps this table true, `test_every_gn_row_names_collected_tests`.
+`test_synthetic_cellular_presets.py`, and `test_synthetic_cellular_checks.py`, whose
+`test_every_gn_row_names_collected_tests` keeps this table true.
 
-That test reads the rows GN1 to GN25 of the table "Generator checks" from this page and
+That test reads the rows GN1 to GN24 of the table "Generator checks" from this page and
 checks four things:
 
 * this table has exactly those rows, in that order;
@@ -285,7 +284,7 @@ worker notes, and the row is not changed:
   `cellular_scenes.py`): placement stops at the same seed and raises. The copy at
   `floor=0.1` is generated at `density=0.6` (`crowded-0.1`) and stops at the same seed and
   records; GN7 also keeps the copy at `density=0.6` and `floor=0.9`, which reaches its
-  floor. `cellular_scenes.py` is one of the files GA25 pins, so it is not edited.
+  floor. `cellular_scenes.py` remains unchanged.
 * **GN3, "`z_mid` outside the covered region's Z interval".** This cannot be reached,
   because the interval is centred on `z_mid` (W-483, finding 3). W-488 dropped the clause
   from GN3; the generator keeps the refusal as a guard, without a test.
@@ -303,19 +302,9 @@ worker notes, and the row is not changed:
   `context-dense3d-slow-v1` (the amendment of 2026-10-15 after the TR table). On
   `appearance-dense3d-slow-v1` GA23 asserts it.
 
-GN25 pins the SHA-256 of each file its row names, line endings read as LF. The pins are the
-content at 7d6c417, the base revision of the §2.12 implementation issues. For the session
-fixture `small_dataset` of `conftest.py`, the pin is the source of the fixture and of the
-two constants it reads. The files are:
-
-* the four files the row names;
-* the tests {doc}`synthetic-sample-scene` names, with their helpers and the R6 tables;
-* the tests named by {doc}`stitching-assembly-validation` and
-  {doc}`sample-segmentation-validation` that generate a sample preset, directly or through
-  `sample_segmentation_fixtures.py`.
-
-The `slow` tests carry `synthetic` and run in `pytest-slow-synthetic`; the routine tier
-runs the others.
+**Retired check:** GN25 was retired on 2026-10-19 because it froze test, helper and selected
+fixture source text during development, forcing later test changes to edit source pins first.
+Behavioral goldens and shared-fixture checks remain.
 
 | # | Module and tests | Fixtures | Tier | Floats |
 | --- | --- | --- | --- | --- |
@@ -343,7 +332,6 @@ runs the others.
 | GN22 | `test_synthetic_cellular_contract.py`, `test_gn22_saved_layout_tables_and_record`, `test_gn22_empty_populations`; `test_synthetic_cellular_stains_contract.py`, `test_gn22_saved_stain_tables_and_images`, `test_gn22_dataset_read_and_morphology_registered`, `test_gn22_dataset_refusals` | `ctx_stains`, `ctx_types`, `ctx_plane`, `ctx_off` | routine and slow | floats round trip exactly |
 | GN23 | `test_synthetic_cellular_presets.py`, `test_gn23_slow_preset_in_its_target_ranges`, `test_gn23_acquired_variant_edge_and_bright_regions` | `context_slow`, `context_slow_acquired` | slow | the TR ranges |
 | GN24 | `test_synthetic_cellular_presets.py`, `test_gn24_generation_cost_in_its_own_process` | `context_routine`, `context_slow`, `context_slow_acquired` | slow | the bound of C26 |
-| GN25 | `test_synthetic_cellular_checks.py`, `test_gn25_existing_tests_unchanged` | the existing files | routine | none compared (SHA-256) |
 
 ## Chain checks
 
@@ -646,14 +634,14 @@ script `scripts/execution_costs.py` of W-482's run directory
 **Which gate runs what.**
 
 * The routine test gate (`not slow and not learned`, every issue) runs the routine
-  generator checks: GN1 to GN22 on the tiny fixtures, and GN25. They need no extra beyond the
+  generator checks: GN1 to GN22 on the tiny fixtures. They need no extra beyond the
   base, so the CI environment runs them too.
 * The controller's `slow` selections run the `slow` generator checks (GN1(a) and (b) on
   `sample-small-v1`, the preset parts of GN4 to GN7, GN23, GN24), which carry the subsystem
   marker `synthetic`, in its `pytest-slow-synthetic` selection, and the truth-label chains
   (`slow`, not `learned`), which carry `integration`, in `pytest-slow-other`; each runs when
   its paths change and at the last issue of a batch.
-* The routine gate and the CI environment also run GA1 (routine presets) to GA22 and GA25,
+* The routine gate and the CI environment also run GA1 (routine presets) to GA22,
   on closed-form banks. The `slow` selection also runs GA23, GA24, GA26 and GA27, which
   read the real banks through `STARFINDER_APPEARANCE_BANKS` on the lab machine and skip
   elsewhere ({doc}`synthetic-real-appearance-validation`, 'Execution conditions').
@@ -698,7 +686,6 @@ the amended page) it is `results/coverage/coverage_checklist.md` of W-482's run 
 | "Opt-in" | A scene without the new settings is exactly today's output; `generate_sample_scene` and `save_sample_scene` unchanged; the golden test's pins | GN1 |
 | "Opt-in" | Identity O1 | GN1 (b) |
 | "Opt-in" | The addition is reached only through new names; no field added to `SampleSceneConfig`, `CellularSceneConfig`, `StainConfig` | GN2 |
-| "Opt-in" | The existing tests pass unchanged | GN25 |
 | "Names" | The new names, with their API pages | GN2; the reference audit |
 | "Names" | `stains` given requires `sample.stain` None (`ValueError`) | GN3 |
 | "Every new object is a function of the sample position" | Every new object evaluated at voxel centres at any fractional offset, without resampling | GN4 (labels), GN13 (stains, bright regions, field), GN18 (morphology round), GN19 (projection truth), GN17 (8-bit, per voxel) |
@@ -840,14 +827,14 @@ and listed on the API page `docs/api/synthetic.rst`):
 
 **Tests** (in `src/python/test/`):
 
-* the generator checks GN1 to GN25 of {doc}`synthetic-cellular-scene-validation`: `test_synthetic_cellular_contract.py`,
+* the generator checks GN1 to GN24 of {doc}`synthetic-cellular-scene-validation`: `test_synthetic_cellular_contract.py`,
   `test_synthetic_cellular_scene.py` (W-483), `test_synthetic_cellular_stains.py`,
   `test_synthetic_cellular_stains_contract.py` (W-484), `test_synthetic_cellular_presets.py`,
   `test_synthetic_cellular_presets_contract.py` (W-485), `test_synthetic_cellular_routine.py`
   and `test_synthetic_cellular_checks.py` (W-486), with the helpers `cellular_oracle.py`,
   `cellular_scenes.py`, `cellular_measures.py` and `cellular_checks.py`; each row's tests are
   named in that page's "Implemented checks";
-* the generator checks GA1 to GA27 of {doc}`synthetic-real-appearance-validation`:
+* the generator checks GA1 to GA24 and GA26 to GA27 of {doc}`synthetic-real-appearance-validation`:
   `test_synthetic_appearance_bank.py`, `test_synthetic_appearance_golden.py` (W-516),
   `test_synthetic_appearance_scene.py` (W-517), `test_synthetic_appearance_stains.py`,
   `test_synthetic_appearance_contract.py` (W-518), `test_synthetic_appearance_presets.py`,
@@ -914,8 +901,8 @@ each is written where it applies:
   significant digits, magnitudes below 1e-9 as 0, because NumPy's results differ in the last
   bit between CPUs (a GitHub runner's CSV files differed from the lab machine's only there).
   Integers, strings and pixel arrays stay exact; the pins were taken again at `8606450`, where
-  the saved files equal those of 943bb6b exactly on the lab machine. GN25's pin of the file
-  follows. The same applies to GA1 ({doc}`synthetic-real-appearance-validation`). Jiahao's
+  the saved files equal those of 943bb6b exactly on the lab machine. The same applies to GA1
+  ({doc}`synthetic-real-appearance-validation`). Jiahao's
   decision, 2026-10-19.
 
 No threshold, tolerance, target range, preset or bank was changed by W-488.
