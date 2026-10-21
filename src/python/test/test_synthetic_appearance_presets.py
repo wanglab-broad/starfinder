@@ -1,66 +1,26 @@
-"""Generator checks of the appearance presets and the real banks (docs/synthetic-real-appearance-validation.md).
+"""Generator checks of the routine appearance presets (docs/synthetic-real-appearance-validation.md).
 
 GA8 (labels against the placements), GA9 (ownership and anchors), GA10 (placement and its stop), GA11 (territories) and
 GA18 (projection truth) on ``app_routine``, the three routine appearance presets on their closed-form banks (DN3), as
 generated; recomputed by the test oracle (``cellular_appearance_oracle.py``) with the helpers of the layout's checks
-(``test_synthetic_appearance_scene.py``). GA24 (the cost of each preset and of each bank build, each in its own process
-under /usr/bin/time -v), GA26 (the real banks against their records, W-392's inventory and W-513's counts) and GA27 (a
-rebuild gives the recorded digest) on ``real_banks``, ``app_slow`` and ``app_slow_acquired``. GA23 (W-520): each row of
-"Target definitions" measured on the scenes of ``app_slow`` and ``app_slow_acquired`` that GA24 saved
-(``cellular_appearance_measures.py``), compared where the page asserts it and V12 allows, reported otherwise, and
-printed as one CSV block per scene. The routine checks read no real data. A real-bank check is ``slow``, reads the
-banks through STARFINDER_APPEARANCE_BANKS and skips with a reason naming the variable or the missing file. Reported
-values are printed.
+(``test_synthetic_appearance_scene.py``). GA24's routine part: each routine preset generated in its own process under
+/usr/bin/time -v within the project's 4 GiB. These checks read no real data. The real-bank checks GA23, GA26, GA27
+and GA24's ``slow`` presets, acquired variants and bank builds were moved by W-536 to
+``benchmarks/appearance_evidence.py``, run by the Chapter II evidence project. Reported values are printed.
 """
-import hashlib
-import json
-import math
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 import pytest
 
-from starfinder.synthetic import APPEARANCE_PRESETS, BankReference, load_appearance_bank
+from starfinder.synthetic import APPEARANCE_PRESETS
 
 from . import cellular_appearance_oracle as oracle
-from .cellular_appearance_measures import (AMENDED, AMENDMENT, appearance_targets, context_of, csv_block, findings,
-                                           load_saved_scene)
-from .cellular_appearance_scenes import (ACQUIRED_SPACING, RG1_RSS_KIB, RG1_SECONDS, ROUTINE_PRESETS, ROUTINE_RSS_KIB,
-                                         SLOW_BANKS, SLOW_PRESETS, app_routine, generate_measured, real_bank,
-                                         rebuild_measured)
+from .cellular_appearance_scenes import ROUTINE_PRESETS, ROUTINE_RSS_KIB, app_routine, generate_measured
 from .test_synthetic_appearance_scene import grids, lattice, pieces, redrawn_growth, replay_centre
 
 pytestmark = [pytest.mark.synthetic, pytest.mark.validation]
 
 slow = pytest.mark.slow
-BANKS = tuple(SLOW_BANKS.values())
-# W-392's inventory of the real inputs, with the SHA-256 of each file (GA26).
-W392_INVENTORY = Path("/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-392/20261009T0323Z-inputs/"
-                      "inventory")
-# SRC2's held-out image of each bank, never a source.
-HELD_OUT = {"ln-sample1-v1": "Position048", "tissue2d-v1": "crop_y18432_x0", "culture3d-v1": "Position397"}
-# SEL1's counts per source image, W-513 tables/bank_selection_<context>.csv (docs/synthetic-real-appearance.md,
-# "Selection of entries"): labels, left out by rule 1 (by the Z end alone, in LN where that rule applies), by rule 2,
-# by rule 3, by rule 4, kept; and the plateau.
-W513 = {
-    "ln-sample1-v1": {"Position049": (2475, 1018, 993, 146, 0, 110, 1201, 45.0),
-                      "Position057": (2405, 856, 838, 156, 0, 102, 1291, 39.0),
-                      "Position058": (1207, 565, 558, 66, 0, 35, 541, 50.0)},
-    "tissue2d-v1": {"crop_y20480_x2048": (291, 23, 0, 28, 0, 69, 171, 80.0),
-                    "crop_y20480_x4096": (242, 34, 0, 22, 0, 53, 133, 92.5)},
-    "culture3d-v1": {"Position398": (54, 23, 0, 4, 0, 0, 27, 48.0), "Position407": (56, 17, 0, 4, 0, 0, 35, 46.0),
-                     "Position408": (57, 22, 0, 4, 2, 0, 29, 45.0)},
-}
-COUNTS = ("labels", "left_out_border", "left_out_border_z_alone", "left_out_size_after_border",
-          "left_out_nucleus_after_size", "left_out_squashed_after_rest", "kept")
-ENTRIES = {"ln-sample1-v1": 3033, "tissue2d-v1": 304, "culture3d-v1": 91}
-# O8's g, the median plateau of each bank's source images.
-PLATEAU = {"ln-sample1-v1": 45.0, "tissue2d-v1": 86.25, "culture3d-v1": 46.0}
-# The objects of each slow preset at the prototype's density (W-513 tables/resource_estimates.csv; estimates), against
-# which the bank size is reported (BS2).
-ESTIMATED_OBJECTS = {"ln-sample1-v1": 738, "tissue2d-v1": 337, "culture3d-v1": 32}
-GUARD = 1.5
 
 
 def routine(name):
@@ -239,40 +199,10 @@ def test_ga18_routine_projection_truth(name):
     print(f"GA18 {name}: columns holding two nucleus IDs per grid {counts}")
 
 
-# ------------------------------------------------------------------------------------------------ GA24
-
-
-@pytest.fixture(scope="session")
-def app_slow(tmp_path_factory):
-    """``app_slow`` (and with ``acquired`` ``app_slow_acquired``): a slow preset generated once per session in its own
-    process under /usr/bin/time -v, its scene saved under the session's temporary directory."""
-    measured = {}
-
-    def get(name, acquired=False):
-        if (name, acquired) not in measured:
-            real_bank(SLOW_BANKS[name])
-            directory = tmp_path_factory.mktemp(f"{name}-acquired" if acquired else name)
-            measured[name, acquired] = generate_measured(name, directory, ACQUIRED_SPACING[name] if acquired else None)
-        return measured[name, acquired]
-    return get
-
-
-@pytest.fixture(scope="session")
-def rebuilt(tmp_path_factory):
-    """GA27's rebuild of each real bank, once per session, in its own process under /usr/bin/time -v."""
-    measured = {}
-
-    def get(name):
-        if name not in measured:
-            measured[name] = (real_bank(name), rebuild_measured(real_bank(name), tmp_path_factory.mktemp(name)))
-        return measured[name]
-    return get
-
-
-def within_rg1(result, what):
-    assert result.exit == 0, f"{what}: exit {result.exit}\n{result.output}"
-    assert result.wall_s <= RG1_SECONDS and result.peak_rss_kib <= RG1_RSS_KIB, (
-        f"{what}: {result.wall_s} s and {result.peak_rss_kib} KiB against RG1")
+# ------------------------------------------------------------------------------------------------ GA24 (routine)
+# GA24's slow presets, acquired variants and bank builds, and GA23, GA26 and GA27, read the real banks and allow RG1
+# (3,600 s and 16 GiB per step); W-536 moved them to benchmarks/appearance_evidence.py, which the Chapter II evidence
+# project runs.
 
 
 @slow
@@ -284,193 +214,3 @@ def test_ga24_routine_preset_generation_cost(name, tmp_path):
     assert result.summary["placed"] == APPEARANCE_PRESETS[name]["count"]
     print(f"GA24 {name}: process {result.wall_s:.2f} s (generation {result.summary['generation_s']:.2f} s), peak RSS "
           f"{result.peak_rss_kib} KiB")
-
-
-def report_slow(name, result, label):
-    summary = result.summary
-    density = summary["density"]
-    assert summary["bank"]["sha256"] == APPEARANCE_PRESETS[name]["bank_sha256"]
-    assert density["mode"] == "visible" and density["target"] == APPEARANCE_PRESETS[name]["target"]
-    assert density["stopped_by"] == "target" or density["reached"] >= density["floor"] * density["target"]
-    print(f"GA24 {label}: process {result.wall_s:.2f} s (generation {summary['generation_s']:.2f} s), peak RSS "
-          f"{result.peak_rss_kib} KiB; {summary['placed']} objects in {summary['proposals']} proposals, visible share "
-          f"{density['reached']:.4f} against {density['target']:.4f} ({density['stopped_by']}); bank cycles "
-          f"{summary['bank']['cycles']}")
-
-
-@slow
-@pytest.mark.parametrize("name", SLOW_PRESETS)
-def test_ga24_slow_preset_generation_within_rg1(name, app_slow):
-    result = app_slow(name)
-    within_rg1(result, name)
-    report_slow(name, result, name)
-
-
-@slow
-@pytest.mark.parametrize("name", list(ACQUIRED_SPACING))
-def test_ga24_acquired_pixel_variant_within_rg1(name, app_slow):
-    result = app_slow(name, acquired=True)
-    within_rg1(result, f"{name} at the acquired pixel")
-    assert result.summary["spacing_zyx"] == pytest.approx(list(ACQUIRED_SPACING[name]), abs=1e-12)
-    report_slow(name, result, f"{name} at {ACQUIRED_SPACING[name][1]} µm")
-
-
-@slow
-@pytest.mark.parametrize("name", BANKS)
-def test_ga24_bank_build_within_rg1(name, rebuilt):
-    _, result = rebuilt(name)
-    within_rg1(result, f"build of {name}")
-    print(f"GA24 build {name}: process {result.wall_s:.2f} s (build {result.summary['build_s']:.2f} s), peak RSS "
-          f"{result.peak_rss_kib} KiB, file {result.summary['file']['size']} bytes")
-
-
-# ------------------------------------------------------------------------------------------------ GA26 and GA27
-
-
-def inventory():
-    """W-392's inventory: path -> SHA-256; a skip naming the file where it is missing."""
-    out = {}
-    for context in ("ln", "culture", "tissue2d"):
-        path = W392_INVENTORY / f"{context}.json"
-        if not path.is_file():
-            pytest.skip(f"no file {path}: GA26 compares the build records' inputs with W-392's inventory")
-        out.update({f["path"]: f["sha256"] for f in json.loads(path.read_text(encoding="utf-8"))["files"]})
-    return out
-
-
-def sha256(path):
-    digest = hashlib.sha256()
-    with open(path, "rb") as handle:
-        for block in iter(lambda: handle.read(1 << 22), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
-
-def crops_meet(a, b):
-    if a is None or b is None:
-        return True
-    return a[0] < b[0] + b[2] and b[0] < a[0] + a[2] and a[1] < b[1] + b[3] and b[1] < a[1] + a[3]
-
-
-@slow
-@pytest.mark.parametrize("name", BANKS)
-def test_ga26_real_banks(name):
-    bank = real_bank(name)
-    record = bank.record
-    # The file is the one its preset names, and its arrays give the recorded digest.
-    assert sha256(bank.path) == bank.sha256 == record["file"]["sha256"]
-    loaded = load_appearance_bank(BankReference(name=name, sha256=bank.sha256))
-    assert loaded.digest == record["digest"] and len(loaded) == ENTRIES[name] == record["counts"]["entries"]
-    # Every input is inventoried by W-392 with an equal SHA-256; the configuration is the recorded one.
-    known = inventory()
-    files = [*record["inputs"], *(i for h in record["held_out"] for i in h["inputs"])]
-    assert files and all(f["path"] in known and known[f["path"]] == f["sha256"] for f in files), [
-        f["path"] for f in files if known.get(f["path"]) != f["sha256"]]
-    assert [s["image"] for s in bank.config["sources"]] == [s["image"] for s in record["sources"]]
-    # The held-out image is never a source: not among the images, and no source reads its pixels.
-    assert [h["image"] for h in record["held_out"]] == [HELD_OUT[name]]
-    images = [i["image"] for i in record["images"]]
-    assert HELD_OUT[name] not in images and images == list(W513[name])
-    for held in record["held_out"]:
-        for f in held["inputs"]:
-            for source in record["inputs"]:
-                if source["sha256"] == f["sha256"]:
-                    assert not crops_meet(held.get("crop_yx"), source["crop_yx"]), (held["image"], source["image"])
-    # SEL1's counts per image equal W-513's, and the plateaus; BR4's guard on every source.
-    for image in record["images"]:
-        *counts, plateau = W513[name][image["image"]]
-        assert tuple(image[k] for k in COUNTS) == tuple(counts), image["image"]
-        assert image["plateau"] == pytest.approx(plateau, abs=1e-9)
-        assert 1 / GUARD <= image["plateau_over_median"] <= GUARD
-        assert 1 / GUARD <= image["visible_over_plateau"] <= GUARD
-    assert record["plateau_median"] == pytest.approx(PLATEAU[name], abs=1e-9)
-    assert record["counts"]["kept"] == sum(v[6] for v in W513[name].values()) == ENTRIES[name]
-    estimate = ESTIMATED_OBJECTS[name]
-    print(f"GA26 {name}: {len(loaded)} entries from {images} (held out {HELD_OUT[name]}), {record['counts']['patches']} "
-          f"patches, g {record['plateau_median']}; plateau over the median "
-          f"{[round(i['plateau_over_median'], 4) for i in record['images']]}, visible median over the plateau "
-          f"{[round(i['visible_over_plateau'], 4) for i in record['images']]}; bank size against about {estimate} "
-          f"placements (estimate): {len(loaded) / estimate:.2f} times, reuse without replacement "
-          f"{max(0, estimate - len(loaded)) / estimate:.3f}")
-
-
-@slow
-@pytest.mark.parametrize("name", BANKS)
-def test_ga27_a_rebuild_gives_the_recorded_digest(name, rebuilt):
-    bank, result = rebuilt(name)
-    assert result.exit == 0, result.output
-    assert result.summary["digest"] == bank.record["digest"]
-    assert result.summary["counts"] == bank.record["counts"]
-    print(f"GA27 {name}: rebuilt digest {result.summary['digest']} equals the record's; the rebuilt file's SHA-256 "
-          f"{result.summary['file']['sha256']} (the stored {bank.sha256}; a zip archive's bytes may carry a time)")
-
-
-# ------------------------------------------------------------------------------------------------ GA23 (W-520)
-# Each row of "Target definitions" on the scenes GA24 generated and saved (``app_slow``, ``app_slow_acquired``), read
-# back and measured by ``cellular_appearance_measures.py``. Each scene's rows are printed as one CSV block
-# (``preset, row, quantity, value, low, high, objects, outcome``) between "GA23 CSV BEGIN" and "GA23 CSV END" lines,
-# and each row with its details as one ``GA23 ROW`` JSON line. A row the page asserts and V12 allows, outside its
-# range, is a finding: the test fails naming it ("What a failure means"). Under the amendment of 2026-10-18 (W-520;
-# operator decision pending Jiahao's confirmation, after "Target definitions") TR2v of dense 3D and TR8r of dense 3D and
-# 2D tissue are reported beside their range, not asserted.
-
-# The rows of "Target definitions" each scene reports: TR4 and TR5 of 2D tissue and culture on app_slow_acquired.
-GA23_ROWS = {"dense3d": {"TR1", "TR2", "TR2v", "TR3", "TR4", "TR5", "TR6", "TR7", "TR8", "TR8r", "TR8v", "TR9", "TR10",
-                         "TR11"},
-             "tissue2d": {"TR1", "TR2", "TR2v", "TR3", "TR6", "TR7", "TR8", "TR8r", "TR8v", "TR9", "TR10", "TR12"},
-             "culture": {"TR1", "TR2", "TR2v", "TR3", "TR6", "TR7", "TR8", "TR8r", "TR8v", "TR9", "TR10"}}
-
-
-def measure_targets(name, result, acquired):
-    assert result.exit == 0, result.output
-    context = context_of(name)
-    label = f"{name}@acquired" if acquired else name
-    scene = load_saved_scene(result.directory / "scene", reference_round=context == "tissue2d" and not acquired)
-    assert scene.record["stream_scheme"]["seed"] == 42 and scene.record["bank"]["sha256"] == APPEARANCE_PRESETS[name][
-        "bank_sha256"]
-    bank = load_appearance_bank(BankReference(name=SLOW_BANKS[name], sha256=APPEARANCE_PRESETS[name]["bank_sha256"]))
-    rows = appearance_targets(name, label, scene, bank, acquired=acquired)
-    print(f"GA23 CSV BEGIN {label}\n{csv_block(rows)}\nGA23 CSV END {label}")
-    for row in rows:
-        print("GA23 ROW " + json.dumps(row, sort_keys=True, default=float))
-    return rows
-
-
-def assert_no_findings(rows):
-    found = findings(rows)
-    assert not found, "GA23 findings (rows the page asserts outside their range where V12 compares them): " + "; ".join(
-        f"{r['preset']} {r['row']} {r['quantity']} {r['value']:.4g} not in [{r['low']}, {r['high']}] on {r['objects']} "
-        f"{r['kind']}" for r in found)
-
-
-@slow
-@pytest.mark.parametrize("name", SLOW_PRESETS)
-def test_ga23_slow_preset_in_its_target_ranges(name, app_slow):
-    rows = measure_targets(name, app_slow(name), acquired=False)
-    context = context_of(name)
-    assert {r["row"] for r in rows} == GA23_ROWS[context]
-    if context == "dense3d":
-        # TR7 of appearance-dense3d-slow-v1 is asserted against 0.25–0.41 (AM1; GN23 keeps reporting the closed-form
-        # preset's): V12 allows it, so its outcome is a comparison, not a report.
-        (cv,) = [r for r in rows if r["quantity"] == "within-nucleus CV"]
-        assert (cv["low"], cv["high"]) == (0.25, 0.41) and cv["outcome"] in ("in range", "outside the range"), cv
-    # The amended rows: reported with their value and range, under the amendment of 2026-10-18.
-    amended = [r for r in rows if r["row"] in AMENDED.get(context, set())
-               and not r["quantity"].startswith("label share")]
-    assert len(amended) == len(AMENDED.get(context, set()))
-    assert all(r["outcome"] == f"reported: {AMENDMENT}" and r["low"] is not None and r["value"] is not None
-               for r in amended), amended
-    compared = [r for r in rows if not r["outcome"].startswith("reported")]
-    placed = next(r["objects"] for r in rows if r["row"] == "TR2v")
-    print(f"GA23 {name}: {placed} objects placed; compared {len(compared)} of {len(rows)} quantities "
-          f"({sum(r['outcome'] == 'in range' for r in compared)} in range)")
-    assert_no_findings(rows)
-
-
-@slow
-@pytest.mark.parametrize("name", list(ACQUIRED_SPACING))
-def test_ga23_acquired_variant_edge_and_bright_regions(name, app_slow):
-    rows = measure_targets(name, app_slow(name, acquired=True), acquired=True)
-    assert {r["row"] for r in rows} == {"TR4", "TR5"}
-    assert all(r["outcome"].startswith("reported") for r in rows)
-    print(f"GA23 {name}@acquired: {[(r['quantity'], r['objects']) for r in rows]}")

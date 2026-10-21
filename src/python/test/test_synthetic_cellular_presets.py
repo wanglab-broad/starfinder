@@ -3,12 +3,12 @@
 GN7 on the presets (``context_routine``, ``context_slow``): K1 for every pair of sites recomputed by the test oracle,
 the placement record, and F2's floor reached, with the reached density read back from the saved ``context.json``.
 GN5 on ``context_slow`` (W-486): the lobes and LB1 by ``cellular_checks.check_lobes``, on the module's slow scenes.
-GN23 on ``context_slow`` and ``context_slow_acquired``: W-393's measures (``cellular_measures.py``) against the target
-ranges TR1 to TR12, compared where the scene holds at least 100 objects of the quantity's kind and reported otherwise
-(choice V12); TR7 of dense 3D tissue is reported and not asserted (the page's amendment of 2026-10-15). GN24: each preset and each acquired-pixel variant generated in its own process under
-``/usr/bin/time -v``, within the bound of C26 (RG1: one CPU, 16 GiB and 3,600 s per step).
+GN24 on the routine presets: each generated in its own process under ``/usr/bin/time -v``, within the project's 4 GiB.
+GN23 (W-393's target ranges on ``context_slow`` and ``context_slow_acquired``) and GN24's ``slow`` and acquired-pixel
+cases (RG1: one CPU, 16 GiB and 3,600 s per step) were moved by W-536 to ``benchmarks/cellular_evidence.py``, run by
+the Chapter II evidence project.
 
-Each GN23 and GN24 row is printed as one ``GN23 ROW`` or ``GN24 ROW`` JSON line, so a run with ``-s`` holds the tables.
+Each GN24 row is printed as one ``GN24 ROW`` JSON line, so a run with ``-s`` holds the table.
 """
 from dataclasses import replace
 import json
@@ -24,34 +24,19 @@ import pytest
 from starfinder.synthetic import context_scene_preset, generate_context_scene, save_context_scene
 
 from .cellular_checks import check_lobes
-from .cellular_measures import EDGE_AND_REGIONS, MINIMUM, TARGETS, outcome, scene_targets
 from .cellular_oracle import Oracle
 
 pytestmark = [pytest.mark.synthetic, pytest.mark.validation]
 
 ROUTINE = ["context-dense3d-v1", "context-tissue2d-v1", "context-culture-v1"]
 SLOW = ["context-dense3d-slow-v1", "context-tissue2d-slow-v1", "context-culture-slow-v1"]
-# context_slow_acquired: the 2D tissue and culture slow presets at the pixel W-393 measured TR4 and TR5 on.
-ACQUIRED = {"context-tissue2d-slow-v1": (0.346255, 0.094635, 0.094635),
-            "context-culture-slow-v1": (0.346255, 0.194398, 0.194398)}
-CONTEXT = {"dense3d": ("DAPI", False), "tissue2d": ("PI", True), "culture": ("DAPI", True)}
-# RG1 (C26), granted at W-396: one CPU, 16 GiB and 3,600 s per step; the project's 4 GiB for a routine step.
+# RG1 (C26), granted at W-396: one CPU, 16 GiB and 3,600 s per step (benchmarks/cellular_evidence.py); the project's
+# 4 GiB for a routine step.
 BOUND_S, BOUND_KIB, ROUTINE_KIB = 3600.0, 16 * 1024 * 1024, 4 * 1024 * 1024
 
 
-def context_of(name):
-    return name.split("-")[1]
-
-
-def acquired(name):
-    """A context_slow_acquired variant: the preset with spacing_zyx replaced, every other value as the preset."""
+def generate(name):
     book, config = context_scene_preset(name)
-    acquisition = replace(config.sample.acquisition, spacing_zyx=ACQUIRED[name])
-    return book, replace(config, sample=replace(config.sample, acquisition=acquisition))
-
-
-def generate(name, variant=False):
-    book, config = acquired(name) if variant else context_scene_preset(name)
     return config, generate_context_scene(book, config=config)
 
 
@@ -131,13 +116,6 @@ def slow_scene(request):
     del scene
 
 
-@pytest.fixture(scope="module", params=list(ACQUIRED))
-def acquired_scene(request):
-    config, scene = generate(request.param, variant=True)
-    yield request.param, config, scene
-    del scene
-
-
 @pytest.mark.slow
 def test_gn7_slow_preset_reaches_its_floor(slow_scene, tmp_path):
     name, config, scene = slow_scene
@@ -150,59 +128,6 @@ def test_gn7_slow_preset_reaches_its_floor(slow_scene, tmp_path):
 def test_gn5_lobes_on_the_slow_presets(slow_scene):
     name, config, scene = slow_scene
     check_lobes(name, config, scene)
-
-
-# ---------------------------------------------------------------- GN23: the four cases in their target ranges
-
-# Compared quantities that GN23 reports with their value, range and count and does not assert: TR7 of dense 3D
-# tissue, a known limit of the scene (docs/synthetic-cellular-scene-validation.md, the amendment of 2026-10-15 after
-# the TR table).
-KNOWN_LIMITS = {("dense3d", "within-nucleus CV")}
-
-def check_targets(label, name, scene, quantities):
-    context = context_of(name)
-    stain, projection = CONTEXT[context]
-    rows = scene_targets(scene, context, stain, projection, quantities)
-    findings, adjustable = [], []
-    for row in rows:
-        row = dict(row, scene=label, outcome=outcome(row))
-        known = (context, row["quantity"]) in KNOWN_LIMITS and not row["outcome"].startswith("reported")
-        if known:
-            row["outcome"] += "; reported, not asserted (known limit, amendment of 2026-10-15)"
-        print("GN23 ROW " + json.dumps(row, sort_keys=True))
-        if row["outcome"] == "outside the range" and not known:
-            # The bright-region size may be adjusted by the page's rule within its stated conversion; every other
-            # quantity outside its range is a finding returned to Jiahao.
-            (adjustable if row["quantity"].startswith("bright region size") else findings).append(row)
-    for row in adjustable:
-        print(f"GN23 {label}: the bright-region size {row['value']:.4g} lies outside {row['low']}–{row['high']} on "
-              f"{row['objects']} regions (adjustable within the conversion of 'Presets')")
-    assert not findings, "GN23 findings (TR rows outside their range where V12 compares them): " + "; ".join(
-        f"{r['row']} {r['quantity']} {r['value']:.4g} not in [{r['low']}, {r['high']}] on {r['objects']} {r['kind']}"
-        for r in findings)
-    return rows
-
-
-@pytest.mark.slow
-def test_gn23_slow_preset_in_its_target_ranges(slow_scene):
-    name, _, scene = slow_scene
-    context = context_of(name)
-    quantities = [q for q, (_, _, ranges) in TARGETS.items() if context in ranges
-                  and (context == "dense3d" or q not in EDGE_AND_REGIONS)]
-    rows = check_targets(name, name, scene, quantities)
-    nuclei = len(scene.sample.nuclei)
-    print(f"GN23 {name}: {nuclei} nuclei, {len(scene.sample.cells)} cells, {len(scene.sample.molecules)} molecules; "
-          f"compared {sum(r['objects'] >= MINIMUM and r['value'] is not None for r in rows)} of {len(rows)} "
-          f"quantities")
-
-
-@pytest.mark.slow
-def test_gn23_acquired_variant_edge_and_bright_regions(acquired_scene):
-    name, config, scene = acquired_scene
-    assert tuple(config.sample.acquisition.spacing_zyx) == ACQUIRED[name]
-    label = f"{name}@acquired"
-    rows = check_targets(label, name, scene, list(EDGE_AND_REGIONS))
-    print(f"GN23 {label}: {len(scene.sample.nuclei)} nuclei; {[(r['quantity'], r['objects']) for r in rows]}")
 
 
 # ---------------------------------------------------------------- GN24: generation cost, one process per scene
@@ -243,8 +168,8 @@ def generate_in_own_process(name, spacing):
     return row
 
 
-CASES = ([(name, None, "routine") for name in ROUTINE] + [(name, None, "slow") for name in SLOW]
-         + [(name, ACQUIRED[name], "acquired") for name in ACQUIRED])
+# The routine presets; the slow presets and the acquired-pixel variants are benchmarks/cellular_evidence.py's.
+CASES = [(name, None, "routine") for name in ROUTINE]
 
 
 @pytest.mark.slow

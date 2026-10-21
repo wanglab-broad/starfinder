@@ -226,8 +226,8 @@ which of these rows applies to it.
 | GN20 | `Z=1` | `ctx_plane` (42) | Generation; the shapes of every FOV image, stain, morphology image and label image; the z of every nucleus centre, lobe offset, cell anchor, molecule, bright region and unevenness centre; `τ_z`; the label kind `import_labels` reads; GN4, GN6, GN13, GN17 and GN18 on this fixture. | Generation succeeds; every array has one plane; every z is exactly 0; `τ_z = 0`; the saved labels are read as `plane` label images ("`Z=1`"). | Exact. | routine; `synthetic`, `validation`. |
 | GN21 | A new random stream leaves the existing draws unchanged | `ctx_off`, `ctx_types` and its two changed copies, `ctx_stains` and a copy with one more stain (42) | The components of every stream the context generator draws from (recorded in `context.json`); with every new part off, the streams drawn; between `ctx_types` and its copies, every molecule's position, compartment and gene; between `ctx_stains` and its copy with one more stain, the other stains' images; the noise descriptor of a reference-round `DAPI` stain. | Every new component starts with `context.`, so no new descriptor equals one of the formed model, the `sample.*` components or `stain.noise.*` (`synthetic/_sample.py::_SAMPLE_COMPONENTS`); with every part off no `context.` stream is drawn (with GN1(b)); changing type 2's abundance changes only the genes of type-2 cells' molecules; changing type 3's molecules per cell changes only the molecules of type-3 cells; adding a stain changes no other stain; a reference-round `DAPI` draws its noise from the sample scene's stain streams ("Random streams", points 1 to 4). | Exact. | routine; `synthetic`, `validation`. |
 | GN22 | Truth schema and persistence | `ctx_stains`, `ctx_types`, `ctx_plane`, `ctx_off` (42) | The directory `save_context_scene` writes: the sample layout against `save_sample_scene` of `scene.sample`; the twelve tables' columns and order; `context.json` keys, version and SHA-256 of every file; the tables reloaded; an empty population (a type with no cell, no N2, no morphology round); the dataset `save_context_dataset` writes, read by `Dataset`, `FOV.load_images` and `FOV.prepare_morphology`. | V1: the sample layout unchanged and twelve new tables with the columns of "Truth schema"; `context_truth_version` `"1"`; hashes equal the files; reloaded tables equal (floats round trip); empty populations give a header and no row; the dataset holds the layout of "Files and layout" and `prepare_morphology` loads the reference stain and registers the morphology round. | Exact (`check_exact`). | routine; `synthetic`, `contract`. |
-| GN23 | The four cases and the molecules in their target ranges | `context_slow`; `context_slow_acquired` for TR4 and TR5 of 2D tissue and culture (42) | With W-393's measures (definitions of W-393 `notes.md` §2, rebuilt in a test helper; the bright-region detection at factor 1.5, 0.1 µm³ or µm², one-voxel smoothing) on the truth labels and the stain of each scene, at the pixel W-393 measured each quantity: the edge width 10–90 % (TR4) and the bright regions (TR5) of 2D tissue and culture on `context_slow_acquired`, at their acquired pixels of 0.094635 and 0.194398 µm (at the presets' twice-coarser pixels a culture pixel is about 0.15 µm², near the median bright region of 0.26 µm², and the culture's edge of 0.85 µm spans about two pixels); every other quantity, and TR4 and TR5 of dense 3D tissue, on `context_slow` itself: share of touching nuclei; nucleus volume (area) fraction; share not described by one ellipsoid; edge width 10–90 %; bright regions per nucleus, size and peak; nucleus median over the image's median; within-nucleus CV; background and noise over the plateau; the 8-bit plateau grey level; reads per cell; nuclear fraction per cell; the expanded cell volume (dense 3D); the composite signal share per cell (2D tissue); the share of clipped plateaus and bright-region peaks. | Inside the target range of each quantity, the p5–p95 of the W-393 row named in "The four cases, their controls and their ranges" and in each preset table (PS1); a quantity measured on fewer than 100 objects of its kind is reported, not compared (choice V12); the clipped shares reported. Per scene the dense 3D `slow` preset holds about 150 nuclei and reaches 100; the 2D tissue (about 76) and culture (about 42) `slow` presets and their variants (about 20 and 12) do not, so their quantities measured on nuclei or cells are reported, and a quantity of another kind (bright regions, molecules) is compared only where the scene holds 100 of its objects (the culture's second scene, seed 43, belongs to the chain check only). The appearance presets are compared by GA23 with the target definitions of {doc}`synthetic-real-appearance-validation`. | The range, provisional ("Thresholds and where they come from", TR rows); counts exact. | `slow`; `synthetic`, `validation`, `slow`. |
-| GN24 | Generation cost | `context_routine`, `context_slow`, `context_slow_acquired` (42) | Each preset generated in its own process under `/usr/bin/time -v`: wall time and peak RSS, recorded in the test output. | Within the bound of C26 (one CPU, 16 GiB, 3600 s per step) for the `slow` presets and the two variants; a test that generates a routine preset in the routine tier takes less than 5 s ("Resources"). | The bound; nothing else is asserted. | `slow`; `synthetic`, `validation`, `slow`. |
+| GN23 | The four cases and the molecules in their target ranges | `context_slow`; `context_slow_acquired` for TR4 and TR5 of 2D tissue and culture (42) | With W-393's measures (definitions of W-393 `notes.md` §2, rebuilt in a test helper; the bright-region detection at factor 1.5, 0.1 µm³ or µm², one-voxel smoothing) on the truth labels and the stain of each scene, at the pixel W-393 measured each quantity: the edge width 10–90 % (TR4) and the bright regions (TR5) of 2D tissue and culture on `context_slow_acquired`, at their acquired pixels of 0.094635 and 0.194398 µm (at the presets' twice-coarser pixels a culture pixel is about 0.15 µm², near the median bright region of 0.26 µm², and the culture's edge of 0.85 µm spans about two pixels); every other quantity, and TR4 and TR5 of dense 3D tissue, on `context_slow` itself: share of touching nuclei; nucleus volume (area) fraction; share not described by one ellipsoid; edge width 10–90 %; bright regions per nucleus, size and peak; nucleus median over the image's median; within-nucleus CV; background and noise over the plateau; the 8-bit plateau grey level; reads per cell; nuclear fraction per cell; the expanded cell volume (dense 3D); the composite signal share per cell (2D tissue); the share of clipped plateaus and bright-region peaks. | Inside the target range of each quantity, the p5–p95 of the W-393 row named in "The four cases, their controls and their ranges" and in each preset table (PS1); a quantity measured on fewer than 100 objects of its kind is reported, not compared (choice V12); the clipped shares reported. Per scene the dense 3D `slow` preset holds about 150 nuclei and reaches 100; the 2D tissue (about 76) and culture (about 42) `slow` presets and their variants (about 20 and 12) do not, so their quantities measured on nuclei or cells are reported, and a quantity of another kind (bright regions, molecules) is compared only where the scene holds 100 of its objects (the culture's second scene, seed 43, belongs to the chain check only). The appearance presets are compared by GA23 with the target definitions of {doc}`synthetic-real-appearance-validation`. | The range, provisional ("Thresholds and where they come from", TR rows); counts exact. | `slow`; `synthetic`, `validation`, `slow`; run by the Chapter II evidence project (W-536). |
+| GN24 | Generation cost | `context_routine`, `context_slow`, `context_slow_acquired` (42) | Each preset generated in its own process under `/usr/bin/time -v`: wall time and peak RSS, recorded in the test output. | Within the bound of C26 (one CPU, 16 GiB, 3600 s per step) for the `slow` presets and the two variants; a test that generates a routine preset in the routine tier takes less than 5 s ("Resources"). | The bound; nothing else is asserted. | `slow`; `synthetic`, `validation`, `slow`; the `slow` presets and the two variants run by the Chapter II evidence project (W-536). |
 
 ## Implemented checks
 
@@ -249,12 +249,27 @@ checks four things:
 * a row whose tier is `routine` names no `slow` test, a row whose tier is `slow` names only
   `slow` tests, and a row whose tier is `routine and slow` names both.
 
+A row whose tier is `evidence project` names its script under `benchmarks/` and no test,
+and every script a row names exists.
+
+**Checks run by the evidence project (W-536).** GN23 and the `slow` and acquired-pixel cases
+of GN24 generate the `slow` presets again and allow C26's bound per step, so they are
+evidence workloads rather than software checks. Jiahao accepted moving them to the
+Chapter II evidence project (TM-14 of W-526, 2026-10-19). They run as
+`benchmarks/cellular_evidence.py`, which pytest does not collect, with the same assertions,
+printed rows and bounds as the tests they were at revision `0b9fa8b`. From `src/python`:
+`uv run python ../../benchmarks/cellular_evidence.py --output <run directory>`; `--check`
+selects checks and `--list` lists the cases and seeds. They read no real data. The script
+imports `cellular_measures.py` and the GN24 process runner of
+`test_synthetic_cellular_presets.py` from `src/python/test/`. GN7 and GN5 on the `slow`
+presets and GN24 on the routine presets (within the project's 4 GiB) stay in the suite.
+
 A test of these modules that is not named here is an additional check of the code it
 tests. The helpers are:
 
 * `cellular_oracle.py`, the test oracle;
 * `cellular_scenes.py`, the tiny fixtures;
-* `cellular_measures.py`, W-393's measures for GN23;
+* `cellular_measures.py`, W-393's measures for GN23 (run by `benchmarks/cellular_evidence.py`) and the chain checks;
 * `cellular_checks.py`, the GN5 check that the two preset modules share.
 
 The routine presets are generated once per session in `test_synthetic_cellular_routine.py`,
@@ -332,8 +347,8 @@ Behavioral goldens and shared-fixture checks remain.
 | GN20 | `test_synthetic_cellular_stains.py`, `test_gn20_one_plane` | `ctx_plane` | routine | none compared (every z exactly 0) |
 | GN21 | `test_synthetic_cellular_scene.py`, `test_gn21_new_components_start_with_context`, `test_gn21_a_type_abundance_changes_only_that_types_genes`, `test_gn21_a_type_count_changes_only_that_types_molecules`; `test_synthetic_cellular_stains.py`, `test_gn21_stain_components_and_streams` | `ctx_off`, `ctx_types` and its copies, `ctx_stains` and its copy with one more stain | routine and slow | none compared |
 | GN22 | `test_synthetic_cellular_contract.py`, `test_gn22_saved_layout_tables_and_record`, `test_gn22_empty_populations`; `test_synthetic_cellular_stains_contract.py`, `test_gn22_saved_stain_tables_and_images`, `test_gn22_dataset_read_and_morphology_registered`, `test_gn22_dataset_refusals` | `ctx_stains`, `ctx_types`, `ctx_plane`, `ctx_off` | routine and slow | floats round trip exactly |
-| GN23 | `test_synthetic_cellular_presets.py`, `test_gn23_slow_preset_in_its_target_ranges`, `test_gn23_acquired_variant_edge_and_bright_regions` | `context_slow`, `context_slow_acquired` | slow | the TR ranges |
-| GN24 | `test_synthetic_cellular_presets.py`, `test_gn24_generation_cost_in_its_own_process` | `context_routine`, `context_slow`, `context_slow_acquired` | slow | the bound of C26 |
+| GN23 | `benchmarks/cellular_evidence.py`, checks `GN23-slow` and `GN23-acquired` | `context_slow`, `context_slow_acquired` | evidence project | the TR ranges |
+| GN24 | `test_synthetic_cellular_presets.py`, `test_gn24_generation_cost_in_its_own_process` (the routine presets); the `slow` presets and the two variants in `benchmarks/cellular_evidence.py`, checks `GN24-slow` and `GN24-acquired` | `context_routine`; `context_slow`, `context_slow_acquired` in the script | slow | the project's 4 GiB; the bound of C26 in the script |
 
 ## Chain checks
 
@@ -640,14 +655,18 @@ script `scripts/execution_costs.py` of W-482's run directory
   fixtures. They need no extra beyond the
   base, so the CI environment runs them too.
 * The controller's `slow` selections run the `slow` generator checks (GN1(a) and (b) on
-  `sample-small-v1`, the preset parts of GN4 to GN7, GN23, GN24), which carry the subsystem
-  marker `synthetic`, in its `pytest-slow-synthetic` selection, and the truth-label chains
-  (`slow`, not `learned`), which carry `integration`, in `pytest-slow-other`; each runs when
-  its paths change and at the last issue of a batch.
+  `sample-small-v1`, the preset parts of GN4 to GN7, GN24 on the routine presets), which
+  carry the subsystem marker `synthetic`, in its `pytest-slow-synthetic` selection, and the
+  truth-label chains (`slow`, not `learned`), which carry `integration`, in
+  `pytest-slow-other`; each runs when its paths change and at the last issue of a batch.
 * The routine tier and the CI environment also run GA1 (routine presets) to GA22,
-  on closed-form banks. The `slow` selection also runs GA23, GA24, GA26 and GA27, which
-  read the real banks through `STARFINDER_APPEARANCE_BANKS` on the lab machine and skip
-  elsewhere ({doc}`synthetic-real-appearance-validation`, 'Execution conditions').
+  on closed-form banks. The `slow` selection also runs GA8 to GA18 and GA24 on the routine
+  appearance presets.
+* The Chapter II evidence project runs, outside the test suite since W-536, GN23 and the
+  `slow` and acquired cases of GN24 (`benchmarks/cellular_evidence.py`, "Implemented
+  checks"), and GA23, the `slow` part of GA24, GA26 and GA27, which read the real banks
+  through `STARFINDER_APPEARANCE_BANKS` (`benchmarks/appearance_evidence.py`;
+  {doc}`synthetic-real-appearance-validation`, 'Implemented checks').
 * The controller's `learned` selections run the chain checks with a model (`learned` and
   `slow`) in `pytest-learned-slow-other`, when their inputs change and at the last issue of
   a batch. The controller selects a check by the changed paths in the project
@@ -836,7 +855,8 @@ and listed on the API page `docs/api/synthetic.rst`):
   `test_synthetic_cellular_presets_contract.py` (W-485), `test_synthetic_cellular_routine.py`
   and `test_synthetic_cellular_checks.py` (W-486), with the helpers `cellular_oracle.py`,
   `cellular_scenes.py`, `cellular_measures.py` and `cellular_checks.py`; each row's tests are
-  named in that page's "Implemented checks";
+  named in that page's "Implemented checks"; GN23 and the `slow` and acquired cases of GN24
+  run in the Chapter II evidence project as `benchmarks/cellular_evidence.py` (W-536);
 * the generator checks GA1 to GA24 and GA26 to GA27 of {doc}`synthetic-real-appearance-validation`:
   `test_synthetic_appearance_bank.py`, `test_synthetic_appearance_golden.py` (W-516),
   `test_synthetic_appearance_scene.py` (W-517), `test_synthetic_appearance_stains.py`,
@@ -845,7 +865,8 @@ and listed on the API page `docs/api/synthetic.rst`):
   `test_synthetic_appearance_coverage.py` and `test_synthetic_appearance_checks.py` (W-520),
   with the helpers `cellular_appearance_oracle.py`, `cellular_appearance_scenes.py` and
   `cellular_appearance_measures.py`; each row's tests are named in that page's "Implemented
-  checks";
+  checks"; GA23, GA26, GA27 and the `slow` part of GA24 run in the Chapter II evidence
+  project as `benchmarks/appearance_evidence.py` (W-536);
 * the chain checks CD, CT and CU, steps 0 to 5, on the appearance presets:
   `test_integration_cellular_chain.py` (W-487), marked `integration` and `validation`; the
   chains with a model are `slow` and `learned`, the truth-label chains `slow`;

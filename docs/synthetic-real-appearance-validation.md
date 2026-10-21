@@ -117,7 +117,9 @@ additions are:
   `bank_cases` and `app_cases` fixtures). A check that needs a bank built from real images
   is `slow`. It reads the bank file through `STARFINDER_APPEARANCE_BANKS` (ST1) and skips,
   naming the variable or the file, where either is missing. Such a check is called a
-  **real-bank check** below.
+  **real-bank check** below. The real-bank generator checks GA23, GA24's `slow` part,
+  GA26 and GA27 run in the Chapter II evidence project as
+  `benchmarks/appearance_evidence.py` since W-536 ("Implemented checks").
 * **Test files.** The generator checks go in `test_synthetic_appearance_<topic>.py`. Their
   helpers are `cellular_appearance_oracle.py` (the test oracle) and
   `cellular_appearance_scenes.py` (the fixtures). The `cellular_` prefix puts the helpers
@@ -359,10 +361,10 @@ arrays.
 | GA20 | A new random stream leaves the existing draws unchanged | `app_streams`, the six context presets (42) | The components the appearance generator draws from; the descriptors against those of the formed model, `sample.*`, `stain.noise.*` and `context.*` (`_SAMPLE_COMPONENTS`, `_CONTEXT_COMPONENTS`); the draws of every other proposal when one law changes; the molecules of other types when type 2's row changes; the other stain when one stain is dropped; with GA1, the accepted presets' outputs. | Every new component starts with `context.appearance.` and equals no existing descriptor; no `context.nucleus.*`, `context.cell.kind`, `context.cell.contact`, `context.stain.*` or `context.texture.*` stream is drawn; a changed gain range changes the draws of no other proposal's entity; GN21's statements on types hold; dropping a stain changes no other stain; the accepted presets are unchanged ("Random streams"). | Exact. | routine; `synthetic`, `validation`. |
 | GA21 | Truth schema and persistence | `app_tiny` (each copy), `app_plane`, `app_morph` (42) | The directory `save_appearance_scene` writes: the `save_context_scene` layout; `nuclei.csv` and `cells.csv` columns, the shape columns null, the centre and anchor against `placements.csv`, `site_radius` against the largest distance from the recorded centre `c_k` (the transformed box centre) to a voxel of the placed mask; the empty tables; `appearance.json` keys and `APPEARANCE_TRUTH_VERSION`, the bank's name, SHA-256 and digest, `κ`, `g`, the SHA-256 of every file; `placements.csv` and `background_patches.csv` columns; the tables reloaded; each stain file's name, round and file pattern against its `StainChannelConfig`; the dataset of `save_context_dataset` read by `Dataset`, `FOV.load_images` and `FOV.prepare_morphology`; the labels rebuilt from the saved files and the bank only (GA8 on the reloaded scene). | AT2 as written ("Truth schema"); hashes equal the files; reloaded tables equal; each stain keeps its `StainChannelConfig`'s name, round and file pattern ("Composition"); `context.json` keys as `_payload` writes them. | Exact (`check_exact`). | routine; `synthetic`, `contract`. |
 | GA22 | The closed-form bank reads no real data | `cf_banks`, `app_routine` | In a subprocess that builds `cf_banks` and generates `app_routine`, the files opened, recorded by an `open` audit hook (`sys.addaudithook`); the bank records' inputs. | No file outside the test's `tmp_path` and the package is read; the records name a preset and seeds (CF1; "Real data stays outside the repository"). | Exact. | routine; `synthetic`, `contract`. |
-| GA23 | The appearance presets in their target ranges | `app_slow`; `app_slow_acquired` for TR4 and TR5 of 2D tissue and culture (42) | Each row of "Target definitions" on the truth labels and the stain of each scene, at the pixel named; per quantity the measured value, the range, the object count and the outcome, printed as one CSV block (`preset, row, quantity, value, low, high, objects, outcome`) that the implementation issue saves in its run directory, as W-485 saved `gn23_targets.csv`. | Each asserted row inside its range; each reported row reported; a quantity on fewer than 100 objects reported (V12). | The ranges, provisional; counts exact. | `slow`; `synthetic`, `validation`; real-bank. |
-| GA24 | Generation and build cost | `app_routine`, `app_slow`, `app_slow_acquired`, the build of each real bank | Each preset generated, and each bank built, in its own process under `/usr/bin/time -v`: wall time and peak RSS, in the test output. | Within RG1 (one CPU, 16 GiB, 3,600 s per step) for the `slow` presets, their variants and the builds; a routine-tier test that generates a routine appearance preset takes less than 5 s, else it is `slow` ("Presets", "Resources"). | The bound; nothing else is asserted. | `slow`; `synthetic`, `validation`; real-bank for the `slow` presets and the builds. |
-| GA26 | The real banks | `real_banks` | Each bank file's SHA-256 against the preset's; the build record's inputs against W-392's inventory (`inventory/`, the SHA-256 of each file); the held-out images (LN Position048, `crop_y18432_x0`, culture Position397) against the sources; the counts per rule against W-513 `tables/bank_selection_<context>.csv`; BR4's guard on every source; the entry count against the largest preset's placements (BS2). | SHA-256 equal; every input inventoried and equal; no held-out image among the sources; the counts equal W-513's rows (3,033 LN entries; 304 2D tissue; 91 culture); every source inside BR4's guard; the bank size reported against the placements. | Exact. | `slow`; `synthetic`, `validation`; real-bank. |
-| GA27 | Rebuild of a real bank | `real_banks` | The bank rebuilt from its build configuration in a temporary directory; its digest against the stored record's. | Equal digests (ST1, "a rebuild is compared by that digest"). | Exact. | `slow`; `synthetic`, `validation`; real-bank. |
+| GA23 | The appearance presets in their target ranges | `app_slow`; `app_slow_acquired` for TR4 and TR5 of 2D tissue and culture (42) | Each row of "Target definitions" on the truth labels and the stain of each scene, at the pixel named; per quantity the measured value, the range, the object count and the outcome, printed as one CSV block (`preset, row, quantity, value, low, high, objects, outcome`) that the implementation issue saves in its run directory, as W-485 saved `gn23_targets.csv`. | Each asserted row inside its range; each reported row reported; a quantity on fewer than 100 objects reported (V12). | The ranges, provisional; counts exact. | `slow`; `synthetic`, `validation`; real-bank; run by the Chapter II evidence project (W-536). |
+| GA24 | Generation and build cost | `app_routine`, `app_slow`, `app_slow_acquired`, the build of each real bank | Each preset generated, and each bank built, in its own process under `/usr/bin/time -v`: wall time and peak RSS, in the test output. | Within RG1 (one CPU, 16 GiB, 3,600 s per step) for the `slow` presets, their variants and the builds; a routine-tier test that generates a routine appearance preset takes less than 5 s, else it is `slow` ("Presets", "Resources"). | The bound; nothing else is asserted. | `slow`; `synthetic`, `validation`; real-bank for the `slow` presets and the builds, which the Chapter II evidence project runs (W-536). |
+| GA26 | The real banks | `real_banks` | Each bank file's SHA-256 against the preset's; the build record's inputs against W-392's inventory (`inventory/`, the SHA-256 of each file); the held-out images (LN Position048, `crop_y18432_x0`, culture Position397) against the sources; the counts per rule against W-513 `tables/bank_selection_<context>.csv`; BR4's guard on every source; the entry count against the largest preset's placements (BS2). | SHA-256 equal; every input inventoried and equal; no held-out image among the sources; the counts equal W-513's rows (3,033 LN entries; 304 2D tissue; 91 culture); every source inside BR4's guard; the bank size reported against the placements. | Exact. | `slow`; `synthetic`, `validation`; real-bank; run by the Chapter II evidence project (W-536). |
+| GA27 | Rebuild of a real bank | `real_banks` | The bank rebuilt from its build configuration in a temporary directory; its digest against the stored record's. | Equal digests (ST1, "a rebuild is compared by that digest"). | Exact. | `slow`; `synthetic`, `validation`; real-bank; run by the Chapter II evidence project (W-536). |
 
 **The tolerance of GA12 and GA16 (derived).** Both sides evaluate one formula on the same
 float32 bank arrays, read as float64. They differ only in how a position is rounded. A
@@ -439,7 +441,8 @@ added most of them with the code they check. W-520 adds three modules:
   generated under the audit hook, GA15 on `app_plane` (GA19 names it) and GA2's fifteen names
   together;
 * GA23 in `test_synthetic_appearance_presets.py`, with its measures in
-  `cellular_appearance_measures.py`.
+  `cellular_appearance_measures.py`; W-536 moved it to `benchmarks/appearance_evidence.py`
+  (below).
 
 That test reads the rows GA1 to GA24 and GA26 to GA27 of the table "Generator checks" from this page and
 checks four things:
@@ -451,6 +454,22 @@ checks four things:
 * a row whose tier is `routine` names no `slow` test, a row whose tier is `slow` names only
   `slow` tests, and a row whose tier is `routine and slow` names both.
 
+A row whose tier is `evidence project` names its script under `benchmarks/` and no test,
+and every script a row names exists.
+
+**Checks run by the evidence project (W-536).** GA23, GA26, GA27 and the `slow` part of GA24
+(the `slow` presets, their acquired variants and the bank builds) read the real banks,
+rebuild them from real images and allow RG1 per step, so they are evidence workloads rather
+than software checks. Jiahao accepted moving them to the Chapter II evidence project
+(TM-14 of W-526, 2026-10-19). They run as `benchmarks/appearance_evidence.py`, which pytest
+does not collect, with the same assertions, printed rows and bounds as the tests they were
+at revision `0b9fa8b`. From `src/python`:
+`STARFINDER_APPEARANCE_BANKS=<bank directory> uv run python ../../benchmarks/appearance_evidence.py --output <run directory>`;
+`--check` selects checks and `--list` lists the cases, banks and seeds without reading a
+bank. The script imports the helpers of this page from `src/python/test/`. GA8 to GA18, the
+routine part of GA24 (each routine preset within the project's 4 GiB) and the closed-form
+bank checks stay in the suite.
+
 A test of these modules that is not named here is an additional check of the code it
 tests. The helpers are:
 
@@ -461,7 +480,8 @@ tests. The helpers are:
   label rims rebuilt from the definitions of W-513 `scripts/measure.py`.
 
 GA23 measures the scenes that GA24 generates and saves, each in its own process, read back
-from their files, so that no `slow` preset is generated twice. TR2v, TR8v and TR8r are
+from their files, so that no `slow` preset is generated twice; both run in
+`benchmarks/appearance_evidence.py`. TR2v, TR8v and TR8r are
 measured on the stain of the sample grid, rendered by the point evaluator and cast as the
 FOV images are; the other rows on each FOV's stain and truth labels, each object once, as
 GN23 measures them. Each scene's rows are printed as one CSV block
@@ -473,7 +493,7 @@ Every tolerance is the one of the table "Generator checks", unchanged. Where a r
 compare it within an absolute 1e-9 (the project's default float tolerance), or within the
 bound the row itself states. Counts, IDs, labels, strings, hashes and dtypes are compared
 exactly, and so are the 8-bit images of GA15 against the row's expression. No test needs an
-extra beyond `dev`, `local-registration` and `checkpoint`. A real-bank test skips, naming
+extra beyond `dev`, `local-registration` and `checkpoint`. A real-bank check skips, naming
 `STARFINDER_APPEARANCE_BANKS` or the missing file, where the variable or the bank is
 missing; GA24 needs `/usr/bin/time`.
 
@@ -525,10 +545,10 @@ Behavioral goldens and shared-fixture checks remain.
 | GA20 | `test_synthetic_appearance_scene.py`, `test_ga20_layout_components_start_with_context_appearance`, `test_ga20_a_changed_gain_range_changes_no_other_draw`, `test_ga20_a_type_size_scale_changes_no_placement_or_label`; `test_synthetic_appearance_stains.py`, `test_ga20_components_of_the_appearance_scene`, `test_ga20_dropping_a_stain_changes_no_other_stain`; `test_synthetic_appearance_coverage.py`, `test_ga20_a_type_abundance_changes_only_that_types_genes` | `app_streams`, `app_tiny` | routine and slow | the redrawn gain within 1e-12 |
 | GA21 | `test_synthetic_appearance_contract.py`, `test_ga21_layout_versions_nulls_tables_and_hashes`, `test_ga21_dataset_registers_the_morphology_round`; `test_synthetic_appearance_coverage.py`, `test_ga21_layout_on_the_culture_plane_and_drawn_morphology` | `app_tiny`, `app_plane`, `app_morph` | routine and slow | floats round trip exactly |
 | GA22 | `test_synthetic_appearance_bank.py`, `test_closed_form_bank_reads_no_file_outside_the_package`; `test_synthetic_appearance_coverage.py`, `test_ga22_a_routine_preset_reads_no_file_outside_the_package` | `cf_banks`, `app_routine` | routine and slow | none compared |
-| GA23 | `test_synthetic_appearance_presets.py`, `test_ga23_slow_preset_in_its_target_ranges`, `test_ga23_acquired_variant_edge_and_bright_regions` | `app_slow`, `app_slow_acquired` | slow | the target ranges |
-| GA24 | `test_synthetic_appearance_presets.py`, `test_ga24_routine_preset_generation_cost`, `test_ga24_slow_preset_generation_within_rg1`, `test_ga24_acquired_pixel_variant_within_rg1`, `test_ga24_bank_build_within_rg1` | `app_routine`, `app_slow`, `app_slow_acquired`, `real_banks` | slow | the bound of RG1 |
-| GA26 | `test_synthetic_appearance_presets.py`, `test_ga26_real_banks` | `real_banks` | slow | plateaus within 1e-9 |
-| GA27 | `test_synthetic_appearance_presets.py`, `test_ga27_a_rebuild_gives_the_recorded_digest` | `real_banks` | slow | none compared (digests) |
+| GA23 | `benchmarks/appearance_evidence.py`, checks `GA23-slow` and `GA23-acquired` | `app_slow`, `app_slow_acquired` | evidence project | the target ranges |
+| GA24 | `test_synthetic_appearance_presets.py`, `test_ga24_routine_preset_generation_cost`; the `slow` presets, the acquired variants and the builds in `benchmarks/appearance_evidence.py`, checks `GA24-slow`, `GA24-acquired` and `GA24-build` | `app_routine`; `app_slow`, `app_slow_acquired`, `real_banks` in the script | slow | the project's 4 GiB; the bound of RG1 in the script |
+| GA26 | `benchmarks/appearance_evidence.py`, check `GA26` | `real_banks` | evidence project | plateaus within 1e-9 |
+| GA27 | `benchmarks/appearance_evidence.py`, check `GA27` | `real_banks` | evidence project | none compared (digests) |
 
 ## Consequences for the chain checks
 
@@ -628,7 +648,7 @@ build configuration, outside the repository (ST1).
 | --- | --- | --- |
 | Routine (the fast tier R, `not (slow or learned or extended)`: the quick gate Q and V), and the CI environment | GA1 (routine presets) to GA22 | closed-form banks built in the session, or hand-made arrays; **no real data** |
 | `slow`, `synthetic` (`pytest-slow-synthetic`) | GA1 (the `slow` context presets); the routine fixtures that measure 5 s or more | closed-form banks; no real data |
-| `slow`, `synthetic`, real-bank (`pytest-slow-synthetic` on the lab machine) | GA23, GA24 (the `slow` presets and the builds), GA26, GA27 | the three real banks |
+| The Chapter II evidence project (`benchmarks/appearance_evidence.py`, W-536; not in the test suite) | GA23, GA24 (the `slow` presets, the acquired variants and the builds), GA26, GA27 | the three real banks |
 | `slow` and `learned`, `integration` (the `learned` selection) | CD, CT and CU with a model, on the `slow` presets | the three real banks |
 | `slow` and `learned`, `integration` | the routine chains (`chain_*_routine`) | closed-form banks; no real data |
 | `slow`, `integration` (`pytest-slow-other`) | the truth-label chains `chain_*_truth` on the `slow` presets | the three real banks |
@@ -1021,8 +1041,9 @@ of it.
 The generator checks of this page are in the modules that "Implemented checks" names, by
 row. The chain checks of {doc}`synthetic-cellular-scene-validation`, amended as "Consequences for the
 chain checks" states, are `test_integration_cellular_chain.py` (W-487). The real-bank
-checks GA23, GA24, GA26 and GA27 run in the controller's `slow` selections with
-`STARFINDER_APPEARANCE_BANKS` set, and skip, naming the variable, where it is unset.
+checks GA23, GA24 (its `slow` part), GA26 and GA27 run in the Chapter II evidence project
+as `benchmarks/appearance_evidence.py` since W-536, with `STARFINDER_APPEARANCE_BANKS` set
+("Implemented checks"); the script records a skip, naming the variable, where it is unset.
 
 **Issues.** The cellular scene was implemented by W-483 (geometry and molecules), W-484
 (stains and the morphology round) and W-485 (the six context presets); W-486 completed its
@@ -1068,7 +1089,8 @@ and listed on the API page `docs/api/synthetic.rst`):
   `test_synthetic_cellular_presets_contract.py` (W-485), `test_synthetic_cellular_routine.py`
   and `test_synthetic_cellular_checks.py` (W-486), with the helpers `cellular_oracle.py`,
   `cellular_scenes.py`, `cellular_measures.py` and `cellular_checks.py`; each row's tests are
-  named in that page's "Implemented checks";
+  named in that page's "Implemented checks"; GN23 and the `slow` and acquired cases of GN24
+  run in the Chapter II evidence project as `benchmarks/cellular_evidence.py` (W-536);
 * the generator checks GA1 to GA24 and GA26 to GA27 of {doc}`synthetic-real-appearance-validation`:
   `test_synthetic_appearance_bank.py`, `test_synthetic_appearance_golden.py` (W-516),
   `test_synthetic_appearance_scene.py` (W-517), `test_synthetic_appearance_stains.py`,
@@ -1077,7 +1099,8 @@ and listed on the API page `docs/api/synthetic.rst`):
   `test_synthetic_appearance_coverage.py` and `test_synthetic_appearance_checks.py` (W-520),
   with the helpers `cellular_appearance_oracle.py`, `cellular_appearance_scenes.py` and
   `cellular_appearance_measures.py`; each row's tests are named in that page's "Implemented
-  checks";
+  checks"; GA23, GA26, GA27 and the `slow` part of GA24 run in the Chapter II evidence
+  project as `benchmarks/appearance_evidence.py` (W-536);
 * the chain checks CD, CT and CU, steps 0 to 5, on the appearance presets:
   `test_integration_cellular_chain.py` (W-487), marked `integration` and `validation`; the
   chains with a model are `slow` and `learned`, the truth-label chains `slow`;

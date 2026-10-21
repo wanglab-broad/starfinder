@@ -21,6 +21,14 @@ Maintained source-derived configuration and adapters for the common
 - `image_statistics.py`: intensity, puncta and noise statistics of one real TIFF or synthetic channel
   volume, and the read-only real-data measurement behind the synthetic calibration targets (W-238);
   see [image statistics](../docs/image-statistics.md).
+- `appearance_evidence.py`: the real-bank appearance checks GA23, GA24 (the `slow` presets, the
+  acquired variants and the bank builds), GA26 and GA27 of
+  [the appearance validation page](../docs/synthetic-real-appearance-validation.md), moved out of the
+  test suite for the Chapter II evidence project (W-536). Reads the real banks through
+  `STARFINDER_APPEARANCE_BANKS`; RG1 allows one CPU, 16 GiB and 3,600 s per step.
+- `cellular_evidence.py`: GN23 and the `slow` and acquired-pixel cases of GN24 of
+  [the cellular validation page](../docs/synthetic-cellular-scene-validation.md), moved likewise
+  (W-536). Reads no real data; within C26's bound per step.
 - `revision.py`: the source revision record that `preprocessing_synthetic.py` and `image_statistics.py`
   write into their manifests (W-288): HEAD, dirty state, the untracked paths and the sha256 of
   `git diff HEAD --binary` followed by each untracked path's name and bytes; an untracked directory
