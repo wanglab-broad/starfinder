@@ -11,7 +11,10 @@ CUDA_VISIBLE_DEVICES="", one thread), loading their weights from
 STARFINDER_WEIGHTS_DIR. Metrics come from evaluate_spots, localization_errors
 and classify_detections with W-266's policy (greedy, 3.0 voxels, inclusive)
 unless a check says otherwise. Each test records the values it gates with
-record_property (the worker notes read them from the JUnit XML).
+record_property (the worker notes read them from the JUnit XML). The Spotiflow
+and Piscis S1, S2, S8 and S13 cases that test_spotiflow.py and test_piscis.py
+repeated run only here, with the union of their assertions; those files keep
+the backend-specific weights, loading, cache and S15 checks (W-537).
 
 This is engineering validation only: every method is compared with the
 check's tolerance, never with another method (E02).
@@ -327,6 +330,8 @@ def test_s1_isolated_spot_recall_and_precision(method, name, seed, record_proper
     report(record_property, recall=recall, precision=precision, detections=len(result.spots))
     if name != "iso3d":
         assert (result.spots.z == 0).all()
+    elif family(method) == "piscis":
+        assert (result.spots.z == np.round(result.spots.z)).all()   # stack-mode z is an integer
     if (method, name) == ("starfish_log", "iso_z1"):
         assert S1_LOG_Z1_RECALL[0] <= recall <= S1_LOG_Z1_RECALL[1]
         assert precision >= S1_PRECISION
@@ -551,7 +556,14 @@ def test_s8_tiling_seams(method, case, seed, record_property):
         tiled = detect(image, replace(config, input_size=PISCIS_SEAM_INPUT_SIZE))
         untiled = detect(image, config)
         assert len(truth) == 18
-        assert tiled.diagnostics["geometry"]["keep_boundaries"] == {"y": [30.5, 59.5], "x": [30.5, 59.5]}
+        # The tiling record depends only on the image shape and input_size, not on the model or the seed.
+        mode = "plane" if case == "seam_z1" else "stack"
+        assert tiled.diagnostics["geometry"] == {"mode": mode, "tile_size": [32, 32], "overlap": [3, 3],
+                                                 "keep_boundaries": {"y": [30.5, 59.5], "x": [30.5, 59.5]}}
+        assert untiled.diagnostics["geometry"] == {"mode": mode, "tile_size": [256, 256], "overlap": [0, 0],
+                                                   "keep_boundaries": {"y": [], "x": []}}
+        assert tiled.diagnostics["effective_settings"]["0"]["input_size"] == PISCIS_SEAM_INPUT_SIZE
+        assert untiled.diagnostics["effective_settings"]["0"]["input_size"] == 256
         candidates, shifts = [], []
         for point in truth:
             found, reference = near(tiled.spots, point), near(untiled.spots, point)
@@ -568,7 +580,7 @@ def test_s8_tiling_seams(method, case, seed, record_property):
         tiled = detect(image, replace(config, n_tiles=S8_SF_TILES[case]))
         shift = paired_shift(tiled.spots, untiled.spots)
         report(record_property, detections=[len(tiled.spots), len(untiled.spots)], max_shift=shift)
-        assert tiled.diagnostics["geometry"]["n_tiles"] == S8_SF_TILES[case]
+        assert tiled.diagnostics["geometry"] == {"n_tiles": S8_SF_TILES[case]}
         assert tiled.diagnostics["effective_settings"]["0"]["n_tiles"] == S8_SF_TILES[case]
         assert shift <= S8_SF_SHIFT
 
@@ -762,14 +774,20 @@ def test_s13_tables_are_identical_twice_in_one_process_and_in_a_second(method, n
     other = second_process_digests(process_group(method))[f"{method}/{name}"]
     report(record_property, digests=[table_digest(first.spots), table_digest(second.spots), other],
            rows=len(first.spots))
+    if family(method) == "spotiflow":
+        assert len(first.spots) == 100
+    elif family(method) == "piscis":
+        assert len(first.spots) >= 100
     assert table_digest(first.spots) == table_digest(second.spots) == other
 
 
 # --- S14: dependency and weights errors -------------------------------------------------------------------
 
+# Piscis 20251212 on iso_z1 with the network patched to raise is test_piscis.py's
+# test_s14_a_detection_completes_with_the_network_patched_to_raise (W-537).
 S14_CASES = [("spotiflow", "missing-library"), ("spotiflow", "missing-torch"), ("piscis", "missing-library"),
              ("piscis", "missing-torch"), ("weights", "missing"), ("weights", "hash-mismatch"),
-             ("weights", "unknown-model"), ("spotiflow-general", "no-network"), ("piscis-20251212", "no-network")]
+             ("weights", "unknown-model"), ("spotiflow-general", "no-network")]
 S14_IMAGES = {"spotiflow": (SpotiflowConfig("smfish_3d"), (8, 16, 16)), "piscis": (PiscisConfig("20251212"), (2, 16, 16))}
 PAYLOAD = b"starfinder fixture weights\n"
 

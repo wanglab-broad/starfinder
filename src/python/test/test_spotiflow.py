@@ -1,15 +1,11 @@
-"""Spotiflow with verified weights (W-272; docs/spot-finding-algorithms.md, "Spotiflow", checks S1, S2, S13 to
-S15; docs/spot-finding-contract.md, "Pretrained weights" and "Execution device").
+"""Spotiflow with verified weights (W-272; docs/spot-finding-algorithms.md, "Spotiflow", checks S14 and S15;
+docs/spot-finding-contract.md, "Pretrained weights" and "Execution device").
 
 Extended tier, CPU only, one thread: skipped without the spotiflow extra, and failing with
 MissingWeightsError when the extra is installed but the weights were not fetched into
-STARFINDER_WEIGHTS_DIR. Bounds and their sources:
-* S1 and S2 on the W-266 isolated-spot scenes, seeds 100-102, native defaults (W-266 detectors.csv and
-  localization-per-axis.csv): recall 1.0 and precision >= 0.98 (W-266: recall 1.0, precision 0.98 to 1.0);
-  3D models on iso3d 3D distance <= 0.5 voxels (W-266 max 0.432); 2D models on iso_z1 lateral <= 0.5 px
-  (W-266 max 0.404).
-* S13: identical table digests for two runs in one process and one in a second process, seed 100
-  (W-266: two one-thread runs bit-identical).
+STARFINDER_WEIGHTS_DIR. The S1, S2 and S13 cases and the forced n_tiles case this file repeated, with the same
+models, scenes, seeds and bounds, run only in test_spot_finding_validation.py (S1, S2, S13 and S8), which holds
+all their assertions (W-537). Bounds and their sources:
 * S15: a 3D model raises IncompatibleGeometryError on Z=1 and Z=6 and runs on 7x8x8; a 2D model raises on
   Z>1 and on 1x5x5 (W-266 minimum-shape and dimensionality probes).
 * S14, provisional (a contract rule; W-266 showed only that the models load from explicit local paths):
@@ -36,9 +32,8 @@ from starfinder.spot_finding import KNOWN_WEIGHTS, SpotiflowConfig, WeightsHashM
 from starfinder.spot_finding import _learned
 from starfinder.spot_finding._weights import weights_directory
 
-from .learned_detectors import (THREAD_VARIABLES, detect, evaluate, one_thread_environment, run_python,
-    table_digest)
-from .spot_finding_scenes import SEEDS, isolated_scene
+from .learned_detectors import THREAD_VARIABLES, detect, evaluate, one_thread_environment, run_python
+from .spot_finding_scenes import isolated_scene
 from .test_spot_finding_golden import CHANNELS, fixture_image, fov_with_fixture, golden_dataset
 
 pytestmark = [pytest.mark.extended, pytest.mark.spot_finding, pytest.mark.learned]
@@ -86,55 +81,6 @@ def isolated(model, seed):
 def test_the_cached_weights_pass_starfinder_weights_verify(model, capsys):
     assert main(["weights", "verify", "spotiflow", model]) == 0
     assert capsys.readouterr().out.startswith(f"spotiflow\t{model}\tverified\t{weights_directory()}")
-
-
-# --- S1 and S2 -------------------------------------------------------------------------------------------
-
-@pytest.mark.validation
-@pytest.mark.parametrize("seed", SEEDS)
-@pytest.mark.parametrize("model", MODELS_3D)
-def test_s1_s2_3d_models_on_iso3d(model, seed):
-    _, truth, result = isolated(model, seed)
-    match, errors = evaluate(result.spots, truth)
-    assert match.values["recall"] == 1.0
-    assert match.values["precision"] >= 0.98
-    assert errors.values["dist_max"] <= 0.5
-
-
-@pytest.mark.validation
-@pytest.mark.parametrize("seed", SEEDS)
-@pytest.mark.parametrize("model", MODELS_2D)
-def test_s1_s2_2d_models_on_iso_z1(model, seed):
-    _, truth, result = isolated(model, seed)
-    match, errors = evaluate(result.spots, truth)
-    assert (result.spots.z == 0).all()
-    assert match.values["recall"] == 1.0
-    assert match.values["precision"] >= 0.98
-    assert errors.values["lateral_max"] <= 0.5
-
-
-# --- S13 -------------------------------------------------------------------------------------------------
-
-@pytest.fixture(scope="module")
-def second_process_digests(torch):
-    code = ("import json\n"
-            "from starfinder.spot_finding import SpotiflowConfig\n"
-            "from test.learned_detectors import detect, table_digest\n"
-            "from test.spot_finding_scenes import isolated_scene\n"
-            f"scenes = {SCENE!r}\n"
-            "print(json.dumps({m: table_digest(detect(isolated_scene(s, 100)[0], SpotiflowConfig(m)).spots)"
-            " for m, s in scenes.items()}))\n")
-    return json.loads(run_python(code))
-
-
-@pytest.mark.validation
-@pytest.mark.slow
-@pytest.mark.parametrize("model", MODELS_3D + MODELS_2D)
-def test_s13_tables_are_identical_in_one_process_and_in_a_second(model, second_process_digests):
-    image, _, first = isolated(model, 100)
-    second = detect(image, SpotiflowConfig(model))
-    assert len(first.spots) == 100
-    assert table_digest(first.spots) == table_digest(second.spots) == second_process_digests[model]
 
 
 # --- S15 -------------------------------------------------------------------------------------------------
@@ -297,14 +243,6 @@ def test_records_effective_settings_model_execution_and_columns(model):
     assert spots.probability.between(STORED[model], 1.0).all() and spots.probability.dtype == np.float64
     index = tuple(np.clip(np.rint(spots[a].to_numpy()).astype(int), 0, n - 1) for a, n in zip("zyx", image.shape))
     assert spots.peak_intensity.tolist() == image[index].astype(float).tolist()
-
-
-def test_n_tiles_is_passed_and_recorded():
-    image, _ = isolated_scene("iso_z1", 100)
-    result = detect(image, SpotiflowConfig("general", n_tiles=(2, 2)))
-    assert result.diagnostics["geometry"] == {"n_tiles": (2, 2)}
-    assert result.diagnostics["effective_settings"]["0"]["n_tiles"] == (2, 2)
-    assert len(result.spots) == len(isolated("general", 100)[2].spots)
 
 
 @pytest.mark.slow
