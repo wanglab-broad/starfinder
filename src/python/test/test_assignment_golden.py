@@ -20,7 +20,9 @@ its Z maximum as the 2D case, a molecule table of 19 rows written as a one-based
     expansion by 6.
 
 ``legacy_assignment`` follows the script at 6b384cd line by line, with the cited lines;
-since the script became an adapter call (W-317) it is the frozen legacy reference. The tile
+since the script became an adapter call (W-317) it is the frozen legacy reference. The pins
+were computed with it; the tests that ran only it are gone (W-535), and the package tests
+below and in test_assignment.py check the package against the pins. The tile
 configuration, the global coordinates, the overlap filter (lines 39-42, 78-80, 141-165),
 the plots and the H5AD and CSV writing are §2.10 or output plumbing and are not pinned;
 see docs/assignment-baseline.md.
@@ -43,6 +45,8 @@ from skimage.segmentation import expand_labels
 from starfinder.assignment import AssignmentConfig, assign_molecules, molecule_table_from_csv
 from starfinder.image import ImageMetadata
 from starfinder.segmentation import ExpandLabelsConfig, ReferenceGrid, SegmentationResult
+
+from .coordination_helpers import digest
 
 pytestmark = [pytest.mark.workflow, pytest.mark.golden]
 pytestmark += [pytest.mark.segmentation]  # the §2.9 package calls (docs/assignment-contract.md)
@@ -93,14 +97,6 @@ def write_genes(path):
     """documents/genes.csv: headerless gene,barcode."""
     path.write_text("".join(f"{gene},{barcode}\n" for gene, barcode in GENES))
     return path
-
-
-def digest(array):
-    """SHA-256 over dtype, shape and C-order bytes."""
-    array = np.ascontiguousarray(array)
-    h = hashlib.sha256(f"{array.dtype.str}|{array.shape}|".encode())
-    h.update(array.tobytes())
-    return h.hexdigest()
 
 
 def frame_digest(frame):
@@ -266,116 +262,10 @@ def labels():
     return label_fixture()
 
 
-@pytest.fixture
-def inputs(tmp_path):
-    return write_reads(tmp_path / "goodSpots.csv"), write_genes(tmp_path / "genes.csv")
-
-
-def _case(labels, dimensions):
-    return labels if dimensions == "3d" else labels.max(axis=0)
-
-
 def test_fixture(labels):
     assert labels.shape == SHAPE_ZYX and labels.dtype == np.uint16
     assert sorted(np.unique(labels).tolist()) == [0, 3, 7, 12, 20, 25]
     assert digest(labels) == LABELS_DIGEST
-
-
-@pytest.mark.parametrize("expand", [False, True])
-@pytest.mark.parametrize("dimensions", ["3d", "2d"])
-def test_assignment(labels, inputs, dimensions, expand):
-    reads, counts, meta = legacy_assignment(_case(labels, dimensions), *inputs, expand=expand)
-    assert reads["seg_label"].tolist() == SEG_LABELS[(dimensions, expand)]
-    assert counts.dtype == np.float64 and counts.shape == (5, len(GENES))
-    assert meta["seg_label"].tolist() == [3, 7, 12, 20, 25]  # regionprops order, by label value
-    observed = (digest(reads["seg_label"].to_numpy()), digest(counts), frame_digest(meta))
-    assert observed == PINS[(dimensions, expand)]
-
-
-@pytest.mark.parametrize("expand", [False, True])
-@pytest.mark.parametrize("dimensions", ["3d", "2d"])
-def test_counts_follow_the_labels(labels, inputs, dimensions, expand):
-    """Every counted molecule has its cell's label; label 0 and the gene Z are never counted."""
-    reads, counts, meta = legacy_assignment(_case(labels, dimensions), *inputs, expand=expand)
-    genes = [gene for gene, _ in GENES]
-    expected = np.zeros_like(counts)
-    for label, gene in zip(reads["seg_label"], reads["gene"]):
-        if label and gene in genes:
-            expected[meta["seg_label"].tolist().index(label), genes.index(gene)] += 1
-    assert np.array_equal(counts, expected)
-    in_cells = int((reads["seg_label"] > 0).sum())
-    uncounted_gene = int(((reads["seg_label"] > 0) & (reads["gene"] == "Z")).sum())
-    assert counts.sum() == in_cells - uncounted_gene
-
-
-@pytest.mark.parametrize("dimensions", ["3d", "2d"])
-def test_a_fov_without_cells(labels, inputs, dimensions):
-    empty = np.zeros_like(_case(labels, dimensions))
-    reads, counts, meta = legacy_assignment(empty, *inputs, expand=True)
-    assert counts.shape == (0, len(GENES)) and len(meta) == 0
-    assert not reads["seg_label"].any()
-    assert frame_digest(meta) == EMPTY_META_DIGESTS[dimensions]
-
-
-def test_cells_without_any_molecule_are_dropped(labels, tmp_path):
-    """Legacy: when no molecule lands in a cell, the FOV gives no cell at all (line 111)."""
-    background = tuple(m for m in MOLECULES[10:12])
-    reads_csv = write_reads(tmp_path / "goodSpots.csv", background)
-    reads, counts, meta = legacy_assignment(labels, reads_csv, write_genes(tmp_path / "genes.csv"),
-                                            expand=False)
-    assert not reads["seg_label"].any()
-    assert counts.shape == (0, len(GENES)) and len(meta) == 0
-
-
-def test_coordinate_zero_reads_the_far_edge(labels, tmp_path):
-    """Legacy: one-based x = 0 becomes index -1 and reads the label at x = 63 (no bounds check)."""
-    probe = np.zeros(SHAPE_ZYX, np.uint16)
-    probe[5, 10, 63] = 9
-    reads_csv = tmp_path / "goodSpots.csv"
-    reads_csv.write_text("x,y,z,gene\n0,11,6,A\n")
-    genes_csv = write_genes(tmp_path / "genes.csv")
-    reads, _, _ = legacy_assignment(probe, reads_csv, genes_csv, expand=False)
-    assert reads["seg_label"].tolist() == [9]
-
-
-def test_a_coordinate_beyond_the_grid_raises(labels, tmp_path):
-    reads_csv = tmp_path / "goodSpots.csv"
-    reads_csv.write_text(f"x,y,z,gene\n{SHAPE_ZYX[2] + 1},11,6,A\n")
-    with pytest.raises(IndexError):
-        legacy_assignment(labels, reads_csv, write_genes(tmp_path / "genes.csv"), expand=False)
-
-
-def test_float_coordinates_raise(labels, tmp_path):
-    """Legacy: export_spots writes float coordinates (8.0); indexing with them raises (line 87)."""
-    reads_csv = tmp_path / "goodSpots.csv"
-    reads_csv.write_text("x,y,z,gene\n17.0,17.0,7.0,A\n")
-    with pytest.raises(IndexError, match="integer"):
-        legacy_assignment(labels, reads_csv, write_genes(tmp_path / "genes.csv"), expand=False)
-
-
-def test_two_expansions_are_not_one(labels):
-    """Legacy: segmentation and assignment each expand per plane; 4 then 2 is not 6."""
-    twice, once = labels.copy(), labels.copy()
-    for z in range(SHAPE_ZYX[0]):
-        twice[z] = expand_labels(expand_labels(labels[z], distance=4), distance=2)
-        once[z] = expand_labels(labels[z], distance=6)
-    assert {"twice": digest(twice), "once": digest(once)} == TWO_EXPANSIONS
-    assert (twice > 0).sum() < (once > 0).sum()
-
-
-@pytest.mark.parametrize("change", ["distance", "coordinate"])
-def test_changing_a_pinned_input_changes_a_digest(labels, tmp_path, change):
-    genes_csv = write_genes(tmp_path / "genes.csv")
-    if change == "distance":
-        reads, counts, _ = legacy_assignment(labels, write_reads(tmp_path / "reads.csv"), genes_csv,
-                                             expand=True, distance=DISTANCE - 2)
-    else:
-        moved = (((2, 16, 16), "A"),) + MOLECULES[1:]  # out of cell 3, in the background
-        reads_csv = write_reads(tmp_path / "reads.csv", moved)
-        reads, counts, _ = legacy_assignment(labels, reads_csv, genes_csv, expand=True)
-    pinned = PINS[("3d", True)]
-    assert digest(reads["seg_label"].to_numpy()) != pinned[0]
-    assert digest(counts) != pinned[1]
 
 
 # --- The package calls of §2.9 (docs/assignment-contract.md, "Tests the implementation changes") ----

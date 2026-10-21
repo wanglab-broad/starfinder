@@ -20,11 +20,12 @@ environment has their imports, but pandas 3.0.0 removed ``pd.value_counts``, whi
 function (``pd.Series(values).value_counts()``) and changes nothing else.
 
 (c): ``create_tile_config.py`` imports ``plotly.express`` (line 7), which is not in the
-lock. The arithmetic is therefore pinned through ``legacy_tile_config``, which follows the
-script at 8e7d256 line by line, with the cited lines (``SCRIPT_LINES``, checked against
-the file). The unchanged script is also run once with a stand-in ``plotly.express``
-module, which only replaces the plot written after the CSV, to show that its CSV equals
-the helper's.
+lock. The arithmetic is therefore held by ``legacy_tile_config``, which follows the
+script at 8e7d256 line by line, with the cited lines (``SCRIPT_LINES``). The unchanged
+script is run once with a stand-in ``plotly.express`` module, which only replaces the
+plot written after the CSV, to show that its CSV equals the helper's. The tests that ran
+only the helper are gone (W-535); ``TILE_CONFIG`` and ``SUMS`` are asserted on the package
+in test_stitching_bigstitcher.py and test_stitching_workflow.py.
 
 The values were produced in the locked project environment (Python 3.12.12, pandas 3.0.0,
 NumPy 2.2.6, SciPy 1.17.0, tifffile 2026.1.28) and are identical over repeated
@@ -340,30 +341,6 @@ def test_bigstitcher_macro(tmp_path):
     assert hashlib.sha256(text.encode()).hexdigest() == MACRO_SHA256
 
 
-def test_tile_config_arithmetic(tmp_path):
-    xml, grid = tmp_path / "dataset.xml", tmp_path / "grid.csv"
-    xml.write_text(dataset_xml())
-    grid.write_text(GRID_CSV)
-    frame, sums = legacy_tile_config(xml, grid, TILE_COL, TILE_ROW)
-    assert {s: tuple(float(v) for v in row) for s, row in zip(sums.index, sums.itertuples(index=False))} == SUMS
-    columns = ["x", "y", "z", "start_x", "start_y", "end_x", "end_y",
-               "start_x_norm", "start_y_norm", "end_x_norm", "end_y_norm"]
-    assert [tuple(int(v) for v in row) for row in frame[columns].itertuples(index=False)] == TILE_CONFIG
-    assert list(frame["fov_index"]) == list(range(9))
-    assert list(frame[["col", "row", "id"]].itertuples(index=False, name=None)) == GRID_A
-
-
-def test_integer_cast_truncates_towards_zero(tmp_path):
-    """The cast keeps int(sum): −0.4 → 0 and −0.6 → 0, not floor's −1 (setups 5 and 1)."""
-    xml, grid = tmp_path / "dataset.xml", tmp_path / "grid.csv"
-    xml.write_text(dataset_xml())
-    grid.write_text(GRID_CSV)
-    _, sums = legacy_tile_config(xml, grid, TILE_COL, TILE_ROW)
-    cast = sums.astype(int)
-    assert (cast.loc[5, "x"], cast.loc[1, "y"], cast.loc[2, "z"]) == (0, 0, 0)
-    assert (np.floor(sums.loc[5, "x"]), np.floor(sums.loc[1, "y"]), np.floor(sums.loc[2, "z"])) == (-1, -1, -1)
-
-
 def test_script_writes_the_helper_csv(tmp_path, monkeypatch):
     """The unchanged script, with a stand-in plotly.express for its plot, writes the helper's CSV."""
     xml, grid = tmp_path / "dataset.xml", tmp_path / "grid.csv"
@@ -390,13 +367,6 @@ def test_script_writes_the_helper_csv(tmp_path, monkeypatch):
     assert csv.read_text() == frame.to_csv()
 
 
-def test_cited_lines_match_the_scripts():
-    for name, lines in (("create_tile_config.py", SCRIPT_LINES), ("stitching_preparation.py", PREPARATION_LINES)):
-        text = (SCRIPTS / name).read_text().splitlines()
-        for number, line in lines.items():
-            assert text[number - 1].strip() == line, (name, number)
-
-
 def test_changing_one_stage_position_changes_the_grid(tmp_path, monkeypatch):
     """Position 5 moved one step up, into the empty centre cell."""
     moved = dict(POSITIONS)
@@ -406,18 +376,3 @@ def test_changing_one_stage_position_changes_the_grid(tmp_path, monkeypatch):
     ids = list(grid["id"])
     assert ids != [pid for _, _, pid in GRID_A]
     assert (ids[4], ids[5]) == (5, 0)
-
-
-def test_changing_one_translation_changes_the_tile_config(tmp_path):
-    """Setup 5's Stitching Transform x from −0.4 to 1.6: its cast x goes from 0 to 1, the minimum stays."""
-    changed = dict(STITCHING)
-    changed[5] = (1.6, 2.45, -1.3)
-    xml, grid = tmp_path / "dataset.xml", tmp_path / "grid.csv"
-    xml.write_text(dataset_xml(changed))
-    grid.write_text(GRID_CSV)
-    frame, _ = legacy_tile_config(xml, grid, TILE_COL, TILE_ROW)
-    columns = ["x", "y", "z", "start_x", "start_y", "end_x", "end_y",
-               "start_x_norm", "start_y_norm", "end_x_norm", "end_y_norm"]
-    rows = [tuple(int(v) for v in row) for row in frame[columns].itertuples(index=False)]
-    assert rows != TILE_CONFIG
-    assert rows[5][0] == TILE_CONFIG[5][0] + 1

@@ -32,9 +32,10 @@ from starfinder.segmentation import (SEGMENTATION_METHODS, CompositeConfig, Flam
     segment)
 from starfinder.synthetic import development_scene_preset, generate_formed_scene
 
+from .coordination_helpers import digest
 from .segmentation_fixtures import (BOXES_METADATA, BOXES_SHAPE, CELL_BOXES, NUCLEUS_BOXES, boxes, paint,
     seeded_stain)
-from .test_segmentation_golden import SHAPE_ZYX, digest, fixture
+from .test_segmentation_golden import SHAPE_ZYX, fixture
 
 pytestmark = [pytest.mark.segmentation, pytest.mark.contract]
 

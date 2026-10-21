@@ -29,9 +29,10 @@ from starfinder.image import ImageMetadata, IncompatibleGeometryError
 from starfinder.segmentation import (ExpandLabelsConfig, ReferenceGrid, SegmentationResult, ZExtensionConfig,
                                      expand_labels, extend_labels_through_z)
 
+from .coordination_helpers import digest
 from .segmentation_fixtures import BOXES_METADATA, BOXES_SHAPE, CELL_BOXES, NUCLEUS_BOXES, boxes, paint
 from .test_assignment_golden import MOLECULES as GOLDEN_MOLECULES
-from .test_assignment_golden import SEG_LABELS, digest, label_fixture
+from .test_assignment_golden import SEG_LABELS, label_fixture
 
 pytestmark = [pytest.mark.segmentation, pytest.mark.validation]
 

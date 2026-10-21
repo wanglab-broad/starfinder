@@ -16,13 +16,13 @@ image digest, which changes with the reviewed one final resampling described in
 docs/registration-contract.md. The fixture, the runs, and the input,
 translation-only and demons-field digests stay.
 """
-import hashlib
-
 import numpy as np
 import pytest
 
 from starfinder.dataset import Dataset, RoundState
 from starfinder.image import ImageMetadata
+
+from .coordination_helpers import digest
 
 pytestmark = [pytest.mark.registration, pytest.mark.golden]
 
@@ -85,14 +85,6 @@ def fixture_rounds():
     moved = centers + np.asarray(SHIFT_ZYX) + bump[:, None] * np.asarray(BUMP_ZYX)
     return {"round1": _render(rng, centers, channels, amplitudes, (1.0, 1.0, 1.0, 1.0)),
             "round2": _render(rng, moved, channels, amplitudes, (0.8, 1.2, 1.0, 1.5))}
-
-
-def digest(array):
-    """SHA-256 over dtype, shape and C-order bytes."""
-    array = np.ascontiguousarray(array)
-    h = hashlib.sha256(f"{array.dtype.str}|{array.shape}|".encode())
-    h.update(array.tobytes())
-    return h.hexdigest()
 
 
 def run(tmp_path, methods, **options):

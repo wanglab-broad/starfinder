@@ -47,7 +47,8 @@ from starfinder.spot_finding import _learned, _model_artifacts
 from starfinder.spot_finding._starfish_log import starfish_view
 
 from . import spot_finding_fixtures as fixtures
-from .learned_detectors import THREAD_VARIABLES, W266_MATCH, evaluate, run_python, seam_scene, table_digest
+from .coordination_helpers import table_digest
+from .learned_detectors import THREAD_VARIABLES, W266_MATCH, evaluate, run_python, seam_scene
 from .spot_finding_scenes import FORMED16_SHAPE, SEEDS, formed16, isolated_scene
 from .test_spot_finding_diagnostics import assert_typed_empty
 from .test_spot_finding_golden import PINNED_FIND_SPOTS, golden_dataset
@@ -759,7 +760,7 @@ def second_process_digests(group):
     cases = [(m, n) for m, n in S13_CASES if process_group(m) == group]
     code = ("import json\n"
             "from test.test_spot_finding_validation import METHODS, detect, scene\n"
-            "from test.learned_detectors import table_digest\n"
+            "from test.coordination_helpers import table_digest\n"
             f"cases = {cases!r}\n"
             "print(json.dumps({f'{m}/{n}': table_digest(detect(scene(n, 100)[0], METHODS[m]).spots)"
             " for m, n in cases}))\n")

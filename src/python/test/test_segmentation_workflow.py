@@ -22,7 +22,8 @@ from starfinder.segmentation import (SEGMENTATION_METHODS, CellposeConfig, Compo
                                      InputChannel, LabelImportConfig, SeededWatershedConfig, SegmentationPlan,
                                      SegmentationRun, StarDistConfig)
 
-from .test_segmentation_golden import DISTANCE, LABELS_3D, digest, fixture, stand_in_model
+from .coordination_helpers import digest
+from .test_segmentation_golden import DISTANCE, LABELS_3D, fixture, stand_in_model
 
 pytestmark = [pytest.mark.segmentation, pytest.mark.workflow, pytest.mark.contract]
 

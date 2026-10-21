@@ -36,8 +36,9 @@ from starfinder.image import ImageMetadata
 from starfinder.segmentation import KNOWN_MODELS, ExpandLabelsConfig, expand_labels, rescale_input
 from starfinder.spot_finding._weights import weights_directory
 
+from .coordination_helpers import digest
 from .learned_detectors import one_thread_environment
-from .test_segmentation_golden import SHAPE_ZYX, SHRUNK_IMAGE_DIGEST, digest, fixture, stand_in_model
+from .test_segmentation_golden import SHAPE_ZYX, SHRUNK_IMAGE_DIGEST, fixture, stand_in_model
 
 pytestmark = [pytest.mark.segmentation, pytest.mark.validation]
 

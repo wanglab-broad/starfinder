@@ -21,7 +21,8 @@ from starfinder.preprocessing import (HistogramMatchingConfig, MinMaxNormalizati
 from starfinder.registration import DemonsConfig, RegistrationSignalConfig, TranslationConfig, WarpConfig, apply_transform
 from starfinder.spot_finding import LocalMaximaConfig
 
-from .test_preprocessing_golden import PINNED_SEQUENCE, digest, fixture_rounds
+from .coordination_helpers import digest
+from .test_preprocessing_golden import PINNED_SEQUENCE, fixture_rounds
 
 pytestmark = pytest.mark.integration
 

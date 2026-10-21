@@ -15,15 +15,16 @@ merged amplicon and Flamingo images):
     fixed 0.5 shrink in Y and X;
 (d) the script's per-slice label expansion and its final ``uint16`` cast.
 
-(b) to (d) run ``legacy_stardist_steps``, which follows ``stardist_segmentation.py`` at
-6b384cd line by line, with the cited lines; since the scripts became adapter calls (W-317)
-it is the frozen legacy reference, as ``legacy_overlay_combination`` is for the composite's
-3D-only combination. The model call is replaced by a stand-in
-(``stand_in_model``: Otsu threshold and connected components), so nothing here pins
-model inference; the W-306 parity outputs pin it (docs/segmentation-baseline.md).
-Four tests document legacy behavior that §2.9 changes: the gate raises on an image with
-no foreground, the composite needs 3D inputs, the rescale round trip changes an odd
-grid, and the ``uint16`` cast wraps labels above 65,535.
+(b) to (d) were computed by ``legacy_stardist_steps``, which follows
+``stardist_segmentation.py`` at 6b384cd line by line, with the cited lines; since the
+scripts became adapter calls (W-317) it is the frozen legacy reference, as
+``legacy_overlay_combination`` is for the composite's 3D-only combination. The model call
+is replaced by a stand-in (``stand_in_model``: Otsu threshold and connected components),
+so nothing here pins model inference; the W-306 parity outputs pin it
+(docs/segmentation-baseline.md). The tests that ran only the frozen reference are gone
+(W-535); the frozen reference and its pins stay, and ``test_expand_labels_function`` and
+the tests that import them check the package against the pins. One test documents legacy
+behavior that §2.9 changes: the composite needs 3D inputs.
 
 The digests were produced with the locked project environment (NumPy 2.2.6,
 scikit-image 0.26.0, SciPy 1.17.0, tifffile 2026.1.28) and are bit-identical over
@@ -32,7 +33,6 @@ replace the body of ``legacy_stardist_steps``, ``composite`` and
 ``flamingo_enhancement`` with calls to the package functions; every pinned digest
 stays, except where docs/segmentation-contract.md names an edit.
 """
-import hashlib
 from types import SimpleNamespace
 
 import numpy as np
@@ -48,6 +48,8 @@ from starfinder.dataset.workflow import _run_enhance_dapi_with_flamingo, _run_nu
 from starfinder.preprocessing import ProjectionConfig, project_image
 from starfinder.segmentation import composite_nuclei_amplicon, enhance_with_flamingo
 from starfinder.segmentation import ExpandLabelsConfig, expand_labels as package_expand_labels
+
+from .coordination_helpers import digest
 
 pytestmark = [pytest.mark.workflow, pytest.mark.segmentation, pytest.mark.golden]
 
@@ -93,14 +95,6 @@ def fixture():
     amplicon[points[0][:4], points[1][:4], points[2][:4]] = 255
     return {"dapi": dapi, "amplicon": _uint8(amplicon), "flamingo": flamingo,
             "small_only": small_only}
-
-
-def digest(array):
-    """SHA-256 over dtype, shape and C-order bytes."""
-    array = np.ascontiguousarray(array)
-    h = hashlib.sha256(f"{array.dtype.str}|{array.shape}|".encode())
-    h.update(array.tobytes())
-    return h.hexdigest()
 
 
 def run_adapter(adapter, tmp_path, inputs, config):
@@ -329,63 +323,6 @@ def test_constant_and_zero_inputs(tmp_path, images):
     assert {name: digest(result) for name, result in results.items()} == CONSTANT_DIGESTS
 
 
-@pytest.mark.parametrize("name", ["dapi", "dapi_2d", "small_only"])
-def test_foreground_gate(images, name):
-    image = images["dapi"].max(axis=0) if name == "dapi_2d" else images[name]
-    threshold, areas = foreground_gate(image)
-    decision = (float(threshold), len(areas), int(areas.max()), bool(areas.max() > 100))
-    assert decision == GATE[name]
-    assert digest(areas) == GATE_AREAS_DIGESTS[name]
-
-
-def test_closed_gate_writes_an_empty_uint16_image(images):
-    labels = legacy_stardist_steps(images["small_only"], rescale_labels=True, expand=True)
-    assert labels.dtype == np.uint16 and labels.shape == SHAPE_ZYX and not labels.any()
-
-
-def test_gate_raises_on_an_image_without_foreground():
-    """Legacy: areas.max() of no components raises before the zero-label fallback (line 23)."""
-    with pytest.raises(ValueError, match="zero-size array"):
-        legacy_stardist_steps(np.zeros(SHAPE_ZYX, np.uint8), rescale_labels=False, expand=False)
-
-
-def test_rescale_round_trip(images):
-    shrunk = rescale(images["dapi"], [1, .5, .5])
-    assert shrunk.dtype == np.float64 and shrunk.shape == (16, 32, 32)
-    assert digest(shrunk) == SHRUNK_IMAGE_DIGEST
-    labels = stand_in_model(shrunk)
-    assert digest(labels) == SHRUNK_LABELS_DIGEST
-    restored = rescale(labels, [1, 2, 2], order=0, preserve_range=True)
-    assert restored.shape == SHAPE_ZYX
-    assert (restored.dtype.str, digest(restored)) == RESTORED_LABELS
-    # Nearest neighbour: every restored voxel holds the label of its 2×2 parent.
-    assert np.array_equal(restored, labels.repeat(2, axis=1).repeat(2, axis=2))
-
-
-def test_rescale_round_trip_changes_an_odd_grid(images):
-    """Legacy: 61×63 comes back as round(round(n × 0.5) × 2) = 60×64 (NumPy rounds half to even)."""
-    image = images["dapi"].max(axis=0)[:ODD_YX[0], :ODD_YX[1]]
-    assert rescale(image, [.5, .5]).shape == (30, 32)
-    assert legacy_stardist_steps(image, rescale_labels=True, expand=False).shape == (60, 64)
-
-
-@pytest.mark.parametrize("rescale_labels", [False, True])
-@pytest.mark.parametrize("expand", [False, True])
-def test_label_steps_3d(images, rescale_labels, expand):
-    labels = legacy_stardist_steps(images["dapi"], rescale_labels=rescale_labels, expand=expand)
-    assert labels.dtype == np.uint16 and labels.shape == SHAPE_ZYX
-    assert digest(labels) == LABELS_3D[(rescale_labels, expand)]
-
-
-@pytest.mark.parametrize("rescale_labels", [False, True])
-@pytest.mark.parametrize("expand", [False, True])
-def test_label_steps_2d(images, rescale_labels, expand):
-    image = images["dapi"].max(axis=0)
-    labels = legacy_stardist_steps(image, rescale_labels=rescale_labels, expand=expand)
-    assert labels.dtype == np.uint16 and labels.shape == SHAPE_ZYX[1:]
-    assert digest(labels) == LABELS_2D[(rescale_labels, expand)]
-
-
 def test_expand_labels_function(images):
     """expand_labels(planar, pixel, 4) on the stand-in labels, cast to uint16, gives the expanded pins."""
     config = ExpandLabelsConfig(DISTANCE, "pixel", "planar")
@@ -394,25 +331,6 @@ def test_expand_labels_function(images):
     plane = stand_in_model(images["dapi"].max(axis=0))
     expanded, _ = package_expand_labels(plane[None], None, config=config)
     assert digest(expanded.reshape(plane.shape).astype("uint16")) == LABELS_2D[(False, True)]
-
-
-def test_expansion_is_per_slice(images):
-    """3D expansion grows labels in Y and X only: empty planes stay empty, no label moves plane."""
-    labels = stand_in_model(images["dapi"])
-    expanded = legacy_stardist_steps(images["dapi"], rescale_labels=False, expand=True)
-    expanded = expanded.astype(np.int32)
-    empty = ~labels.any(axis=(1, 2))
-    assert empty.any() and not expanded[empty].any()
-    for z in range(SHAPE_ZYX[0]):
-        assert set(np.unique(expanded[z])) == set(np.unique(labels[z]))
-    assert np.array_equal(expanded[labels > 0], labels[labels > 0])
-    assert (expanded > 0).sum() > (labels > 0).sum()
-
-
-def test_uint16_cast_wraps():
-    """Legacy: the final astype('uint16') (line 63) maps label 65,536 to 0 and 65,537 to 1."""
-    labels = np.array([[1, 65535, 65536, 65537]], dtype=np.int32)
-    assert labels.astype("uint16").tolist() == [[1, 65535, 0, 1]]
 
 
 @pytest.mark.parametrize("change", ["distance", "min_area", "factor", "maximum_projection"])

@@ -37,6 +37,8 @@ from starfinder.dataset.workflow import from_workflow_config
 from starfinder.image import ImageMetadata
 from starfinder.spot_finding import find_spots
 
+from .coordination_helpers import digest, table_digest
+
 pytestmark = [pytest.mark.spot_finding, pytest.mark.golden]
 
 SHAPE_ZYX = (12, 48, 48)
@@ -139,21 +141,6 @@ def fixture_volume():
 def fixture_image(dims):
     volume = fixture_volume()
     return volume if dims == "3d" else volume[Z1_PLANE:Z1_PLANE + 1].copy()
-
-
-def digest(array):
-    """SHA-256 over dtype, shape and C-order bytes."""
-    array = np.ascontiguousarray(array)
-    h = hashlib.sha256(f"{array.dtype.str}|{array.shape}|".encode())
-    h.update(array.tobytes())
-    return h.hexdigest()
-
-
-def table_digest(spots):
-    """SHA-256 over the column names and dtypes and the CSV text (floats in %.17g)."""
-    header = json.dumps([[str(c), str(t)] for c, t in spots.dtypes.items()])
-    text = spots.to_csv(index=False, float_format="%.17g", na_rep="<NA>")
-    return hashlib.sha256((header + "\n" + text).encode()).hexdigest()
 
 
 def threshold_digest(diagnostics):

@@ -148,13 +148,32 @@ class TestE2EBarcodeDecoding:
     """Validate barcode decoding against ground truth gene labels."""
 
     def test_color_sequence_accuracy(self, e2e_result, small_dataset):
-        """Color sequences extracted at GT spot locations match GT."""
+        """Color sequences at matched spots: the counts add up, the accuracy is a fraction, some reads match.
+
+        No accuracy threshold: no software bound for it has been established.
+        """
         fov, ds, gt = e2e_result
         truth = formed_truth(small_dataset)
         detected = spot_table(fov)
         matches = evaluate_spots(detected[["z", "y", "x"]].to_numpy(),
             truth[["z", "y", "x"]].to_numpy(), **matching_config())
         result = evaluate_decoding(detected, truth, matches=matches)
+        counts, accuracy = result.counts, result.values["color_sequence_accuracy"]
+
+        pairs = matches.details["matched_pairs"]
+        assert counts["matched"] == len(pairs) > 0
+        unmatched_truth = len(set(range(len(truth))) - {i for i, _, _ in pairs})
+        unmatched_detected = len(set(range(len(detected))) - {j for _, j, _ in pairs})
+        assert counts["matched"] + unmatched_truth == len(truth)
+        assert counts["matched"] + unmatched_detected == len(detected)
+        eligible = [(truth.color_sequence.iloc[i], detected.observed_color_sequence.iloc[j])
+                    for i, j, _ in pairs if pd.notna(truth.color_sequence.iloc[i])]
+        mismatched = sum(1 for target, observed in eligible if pd.isna(observed) or str(target) != str(observed))
+        assert counts["eligible_color_sequence"] == len(eligible) > 0
+        assert counts["correct_color_sequence"] + mismatched == counts["eligible_color_sequence"]
+        assert 0.0 <= accuracy <= 1.0
+        assert accuracy == pytest.approx(counts["correct_color_sequence"] / counts["eligible_color_sequence"],
+                                         abs=1e-9)
 
         print(
             f"\n  Color sequence accuracy: {result.values['color_sequence_accuracy']:.3f} "

@@ -58,6 +58,7 @@ from starfinder.spot_finding import LocalMaximaConfig, SpotFindingResult, find_s
 from . import readout_fixtures as fx
 from . import readout_scenes as scenes
 from . import test_readout_golden as golden
+from .coordination_helpers import digest, table_digest
 
 pytestmark = [pytest.mark.barcode]
 
@@ -343,7 +344,7 @@ def write_r6_reference(directory=R6_REFERENCE):
     for condition in scenes.CAL_CONDITIONS:
         _, _, tables = cal_tables(condition)
         for name, pin in zip(R6_DECODERS, PINNED_CAL_141C093[condition][3:]):
-            if golden.table_digest(tables[name]) != pin:
+            if table_digest(tables[name]) != pin:
                 raise RuntimeError(f"{condition} {name}: this host does not reproduce the 141c093 digest")
             tables[name][float_columns(tables[name])].to_csv(
                 directory / f"{condition}_{name}.csv", index=False, float_format="%.17g", na_rep="nan")
@@ -353,15 +354,15 @@ def write_r6_reference(directory=R6_REFERENCE):
 @pytest.mark.parametrize("decoder", list(DECODERS))
 def test_r6_golden_tables_without_the_new_columns_equal_the_pins(tmp_path, decoder):
     intensities = golden.extract()
-    assert (golden.digest(intensities.values), golden.digest(intensities.valid)) == golden.PINNED_EXTRACTION[(1, 2, 2)]
+    assert (digest(intensities.values), digest(intensities.valid)) == golden.PINNED_EXTRACTION[(1, 2, 2)]
     decoded = decode_barcodes(intensities, golden.golden_codebook(tmp_path), config=DECODERS[decoder])
-    assert golden.table_digest(golden.without_entry(decoded.table)) == golden.PINNED_DECODING[decoder]
+    assert table_digest(golden.without_entry(decoded.table)) == golden.PINNED_DECODING[decoder]
     for name in golden.FILTERS:
         options = golden.filter_options(decoder, name)
         result = filter_reads(decoded, config=golden.readout_config("filtering", decoder=decoder, **options))
-        assert golden.table_digest(golden.without_entry(result.table)) == golden.PINNED_FILTERING[(decoder, name)][1]
+        assert table_digest(golden.without_entry(result.table)) == golden.PINNED_FILTERING[(decoder, name)][1]
     scored = score_reads(decoded, intensities, reference=golden.golden_codebook(tmp_path))
-    assert golden.table_digest(golden.without_entry(golden.without_score(scored.table))) == (
+    assert table_digest(golden.without_entry(golden.without_score(scored.table))) == (
         golden.PINNED_DECODING[decoder])
 
 
@@ -370,8 +371,8 @@ def test_r6_golden_tables_without_the_new_columns_equal_the_pins(tmp_path, decod
 def test_r6_cal_seed_103_without_the_new_columns_equals_141c093(condition):
     spots, intensities, tables = cal_tables(condition)
     pinned = PINNED_CAL_141C093[condition]
-    assert (golden.table_digest(spots.spots), golden.digest(intensities.values),
-            golden.digest(intensities.valid)) == pinned[:3]
+    assert (table_digest(spots.spots), digest(intensities.values),
+            digest(intensities.valid)) == pinned[:3]
     for name, pin in zip(R6_DECODERS, pinned[3:]):
         table, reference = tables[name], r6_reference(condition, name)
         columns = float_columns(table)
@@ -380,7 +381,7 @@ def test_r6_cal_seed_103_without_the_new_columns_equals_141c093(condition):
         # ones, the table has the 141c093 digest.
         with_reference = table.copy()
         with_reference[columns] = reference.to_numpy()
-        assert golden.table_digest(with_reference) == pin, name
+        assert table_digest(with_reference) == pin, name
         np.testing.assert_allclose(table[columns].to_numpy(), reference.to_numpy(), rtol=R6_FLOAT_TOLERANCE,
                                    atol=R6_FLOAT_TOLERANCE, equal_nan=True, err_msg=name)
 
@@ -504,7 +505,7 @@ def sha256(text):
 
 
 def intensity_digests(prefix, result):
-    return {f"{prefix}/{name}": golden.digest(getattr(result, name))
+    return {f"{prefix}/{name}": digest(getattr(result, name))
             for name in ("values", "valid", "box_voxels", "background", "noise", "background_voxels",
                          "image_background", "image_noise")}
 
@@ -528,16 +529,16 @@ def determinism_digests():
                     checkpoints=golden.readout_config("checkpoints", directory=directory / "checkpoints"))
             prefix = f"golden/{decoder}"
             out.update(intensity_digests(prefix, fov.intensity_result))
-            out[f"{prefix}/candidates"] = golden.table_digest(candidates_frame(fov.spot_result, fov.intensity_result))
+            out[f"{prefix}/candidates"] = table_digest(candidates_frame(fov.spot_result, fov.intensity_result))
             for name in ("decoding_result", "scoring_result", "filtering_result"):
-                out[f"{prefix}/{name}"] = golden.table_digest(getattr(fov, name).table)
+                out[f"{prefix}/{name}"] = table_digest(getattr(fov, name).table)
             for name in ("candidates.csv", "pre_qc.csv"):
                 out[f"{prefix}/{name}"] = golden.file_digest(directory / "checkpoints" / "FOV_001" / name)
     for condition in scenes.CAL_CONDITIONS:
         book, _ = scenes.scene(condition, 103)
         spots, intensities, _, _ = scenes.pipeline(condition, 103)
         prefix = f"cal/{condition}/103"
-        out[f"{prefix}/spots"] = golden.table_digest(spots.spots)
+        out[f"{prefix}/spots"] = table_digest(spots.spots)
         out.update(intensity_digests(prefix, intensities))
         for decoder, config in DECODERS.items():
             decoded = decode_barcodes(intensities, book, config=config)
@@ -546,7 +547,7 @@ def determinism_digests():
             filtered = filter_reads(deduplicated, codebook=book)
             for name, result in (("decoding", decoded), ("scoring", scored), ("deduplication", deduplicated),
                                  ("filtering", filtered)):
-                out[f"{prefix}/{decoder}/{name}"] = golden.table_digest(result.table)
+                out[f"{prefix}/{decoder}/{name}"] = table_digest(result.table)
     return out
 
 

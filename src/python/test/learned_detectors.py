@@ -7,8 +7,6 @@ spots); positions come from W-266's random stream for the whole layout, so
 the kept spots sit where W-266 put them. The scenes are rendered in session
 with the isolated-spot appearance; nothing is written to disk.
 """
-import hashlib
-import json
 import os
 import subprocess
 import sys
@@ -43,13 +41,6 @@ def evaluate(spots, truth):
     detected = spots[["z", "y", "x"]].to_numpy()
     match = evaluate_spots(detected, truth, reference_metadata=META, observed_metadata=META, **W266_MATCH)
     return match, localization_errors(match, detected, truth)
-
-
-def table_digest(spots):
-    """SHA-256 over the column names and dtypes and the CSV text (floats in %.17g), as the golden test digests."""
-    header = json.dumps([[str(c), str(t)] for c, t in spots.dtypes.items()])
-    text = spots.to_csv(index=False, float_format="%.17g", na_rep="<NA>")
-    return hashlib.sha256((header + "\n" + text).encode()).hexdigest()
 
 
 def one_thread_environment(**extra):

@@ -41,6 +41,8 @@ from starfinder.image import ImageMetadata
 from starfinder.io import ImageLoadResult
 from starfinder.spot_finding import SpotFindingResult
 
+from .coordination_helpers import digest, table_digest
+
 pytestmark = [pytest.mark.barcode, pytest.mark.golden]
 
 SHAPE_ZYX = (12, 48, 48)
@@ -210,21 +212,6 @@ def write_codebook(directory):
 def golden_codebook(directory):
     return load_codebook(write_codebook(directory), round_labels=ROUNDS, channel_labels=CHANNELS,
                          encoding=readout_config("encoding"))
-
-
-def digest(array):
-    """SHA-256 over dtype, shape and C-order bytes."""
-    array = np.ascontiguousarray(array)
-    h = hashlib.sha256(f"{array.dtype.str}|{array.shape}|".encode())
-    h.update(array.tobytes())
-    return h.hexdigest()
-
-
-def table_digest(table):
-    """SHA-256 over the column names and dtypes and the CSV text (floats in %.17g)."""
-    header = json.dumps([[str(c), str(t)] for c, t in table.dtypes.items()])
-    text = table.to_csv(index=False, float_format="%.17g", na_rep="<NA>")
-    return hashlib.sha256((header + "\n" + text).encode()).hexdigest()
 
 
 def file_digest(path):

@@ -18,8 +18,9 @@ from starfinder.io import load_volume, load_volume_zyxc, save_volume
 from starfinder.segmentation import (InputChannel, LabelImportConfig, SeededWatershedConfig, SegmentationPlan,
                                      SegmentationRun)
 
+from .coordination_helpers import digest
 from .segmentation_fixtures import BOXES_METADATA, NUCLEUS_BOXES, boxes, seeded_stain
-from .test_segmentation_golden import digest, fixture, stand_in_model
+from .test_segmentation_golden import fixture, stand_in_model
 
 pytestmark = [pytest.mark.segmentation, pytest.mark.validation]
 

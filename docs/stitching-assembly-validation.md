@@ -782,7 +782,7 @@ records on the share and are run by the real-example issue (W-376), not by a tes
 | SD7 | `test_stitching_spatialdata.py`, `test_sd6_sd7_golden_3d_both`, `test_sd6_sd7_label_quad`, `test_sd7_fuse_band` | default; `fuse_band` `slow` |
 | SD8 | `test_stitching_spatialdata.py`, `test_sd8_*`, `test_check_export_finds_a_store_that_differs_from_its_section` | default |
 | WF1 | `test_stitching_workflow.py`, `test_wf1_*` | default |
-| WF2 | `test_stitching_workflow.py`, `test_wf2_*`; `test_assignment_workflow.py`, `test_a18_the_legacy_outputs_equal_the_frozen_helper`; `test_workflow_stitching_golden.py`, `test_stage_file_grid`, `test_tile_config_arithmetic`, `test_script_writes_the_helper_csv`; `test_workflow_assembly_golden.py`, `test_the_adapter_writes_the_legacy_values`, `test_the_empty_branch` | default |
+| WF2 | `test_stitching_workflow.py`, `test_wf2_*`; `test_assignment_workflow.py`, `test_a18_the_legacy_outputs_equal_the_frozen_helper`; `test_workflow_stitching_golden.py`, `test_stage_file_grid`, `test_script_writes_the_helper_csv`; `test_workflow_assembly_golden.py`, `test_the_adapter_writes_the_legacy_values`, `test_the_empty_branch` | default |
 | WF3 | `test_stitching_workflow.py`, `test_wf3_*` | default |
 | RX1 | Run by the real-example issue (W-376), not by a test | real examples |
 | RX2 | Run by the real-example issue (W-376), not by a test | real examples |

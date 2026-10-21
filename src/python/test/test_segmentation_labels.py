@@ -25,9 +25,9 @@ from starfinder.segmentation import (LabelImportConfig, ReferenceGrid, Segmentat
     extend_labels_through_z, import_labels, labels_to_grid, reference_grid_from_file, to_label_dtype)
 from starfinder.synthetic import development_scene_preset, generate_formed_scene
 
+from .coordination_helpers import digest
 from .test_assignment_golden import label_fixture as assign_golden_labels
-from .test_segmentation_golden import (RESTORED_LABELS, SHAPE_ZYX, SHRUNK_LABELS_DIGEST, digest, fixture,
-    stand_in_model)
+from .test_segmentation_golden import RESTORED_LABELS, SHAPE_ZYX, SHRUNK_LABELS_DIGEST, fixture, stand_in_model
 
 pytestmark = [pytest.mark.segmentation, pytest.mark.validation]
 

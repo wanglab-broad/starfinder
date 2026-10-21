@@ -10,8 +10,6 @@ scikit-image output must be reviewed, not re-pinned silently.
 The per-channel statistics (zero fraction, median, MAD and the local-maxima
 ``noise`` threshold) are the values reported on the preprocessing baseline page.
 """
-import hashlib
-
 import numpy as np
 import pytest
 
@@ -29,6 +27,8 @@ from starfinder.preprocessing import (
     project_image,
     reconstruct_background,
 )
+
+from .coordination_helpers import digest
 
 pytestmark = [pytest.mark.preprocessing, pytest.mark.golden]
 
@@ -60,14 +60,6 @@ def fixture_rounds():
     rng = np.random.RandomState(SEED)
     return {"round1": _round_volume(rng, (1.0, 1.0, 1.0, 1.0)),
             "round2": _round_volume(rng, (0.7, 1.3, 1.0, 1.6))}
-
-
-def digest(array):
-    """SHA-256 over dtype, shape and C-order bytes."""
-    array = np.ascontiguousarray(array)
-    h = hashlib.sha256(f"{array.dtype.str}|{array.shape}|".encode())
-    h.update(array.tobytes())
-    return h.hexdigest()
 
 
 def channel_stats(volume):

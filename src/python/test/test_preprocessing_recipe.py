@@ -20,7 +20,8 @@ from starfinder.preprocessing import (PREPROCESSING_METHODS, Background3DConfig,
     PercentileNormalizationConfig, PreprocessingRecipe, PreprocessingStep, ReconstructionConfig, ScalarBackgroundConfig, StepContext, StepResult, PreprocessingSpec, TophatConfig, run_step, step_config_type,
     step_spec)
 
-from .test_preprocessing_golden import PINNED_SEQUENCE, digest, fixture_rounds
+from .coordination_helpers import digest
+from .test_preprocessing_golden import PINNED_SEQUENCE, fixture_rounds
 
 pytestmark = [pytest.mark.preprocessing, pytest.mark.contract]
 
