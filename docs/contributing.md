@@ -356,13 +356,25 @@ uv run pytest test/ -v --durations=0 -m "<selection>" > <run-dir>/durations.log
 uv run python scripts/marker_drift.py <run-dir>/durations.log
 ```
 
-The `Tests` GitHub Actions workflow installs the locked `dev`,
-`local-registration` and `checkpoint` extras, then runs the default and
-extended runs on pushes and pull requests to `dev` and `main`. It installs
-neither the `spotiflow` and `piscis` extras with their weights nor the
-`registration-elastix` extra, so the `learned` tests and the elastix
-registration tests are skipped there. MATLAB is never executed; the launcher
-tests mock `subprocess`.
+The `Tests` GitHub Actions workflow runs on pushes and pull requests to `dev`
+and `main` in two jobs:
+
+| Job | Marker expression |
+| --- | --- |
+| `fast` | `not (slow or learned or extended)`, the fast tier R |
+| `slow-extended` | `(slow or extended) and not learned` |
+
+Together they run every test that is not `learned`. Each job installs the
+locked `dev`, `local-registration` and `checkpoint` extras, sets the numerical
+thread variables to one thread, lists which optional backends are installed,
+and runs its pytest step under `/usr/bin/time -v` for the peak RSS, with `-rs`
+for the reason of each skipped test. Each pytest step has a limit of 30
+minutes. A measured overrun is split by file or node ID into further steps that
+together hold the same tests; neither job is split before an overrun is
+measured. The workflow installs neither the `spotiflow` and `piscis` extras
+with their weights nor the `registration-elastix` extra, so the `learned` tests
+and the elastix registration tests do not run there. MATLAB is never executed;
+the launcher tests mock `subprocess`.
 The full Python suite is separate from bounded documentation CI. Local build
 success does not establish a successful Actions run, deployment, optional-backend
 execution or external link availability.

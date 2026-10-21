@@ -13,10 +13,15 @@ concurrency:
   group: tests-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+# Two jobs with the selections of docs/contributing.md, "Test selections":
+# `fast` runs the fast tier R and `slow-extended` runs the slow and extended
+# tests that are not learned. Each pytest step is limited to 30 minutes; a
+# measured overrun is split by file or node ID.
 jobs:
-  pytest:
+  fast:
+    name: Fast tier R
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 45
     defaults:
       run:
         shell: bash
@@ -42,12 +47,69 @@ jobs:
           cache-dependency-glob: src/python/uv.lock
       - name: Install locked dependencies with the dev, local-registration and checkpoint extras
         run: uv sync --locked --extra dev --extra local-registration --extra checkpoint
+      - name: Install GNU time for the RSS measurement
+        run: command -v /usr/bin/time >/dev/null || { sudo apt-get update && sudo apt-get install -y time; }
+      - name: Inventory the optional backends
+        env:
+          UV_NO_SYNC: 'true'
+        run: >-
+          uv run python -c "import importlib.util as u;
+          [print(f'{m}: {\"installed\" if u.find_spec(m) else \"absent\"}') for m in
+          ('SimpleITK', 'pyarrow', 'itk', 'spotiflow', 'piscis', 'torch', 'stardist',
+          'tensorflow', 'cellpose', 'multiview_stitcher', 'spatialdata', 'anndata',
+          'bioio_ome_tiff', 'napari')]"
       # MATLAB is never executed: the launcher tests mock subprocess.
-      - name: Default suite
+      # `-rs` lists each skipped test with its reason, the inventory of what did not run.
+      - name: Fast tier R
+        timeout-minutes: 30
         env:
           UV_NO_SYNC: 'true'
-        run: uv run pytest test/ -v
-      - name: Extended suite
+        run: /usr/bin/time -v uv run pytest test/ -v -rs -m "not (slow or learned or extended)"
+
+  slow-extended:
+    name: Slow and extended, not learned
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+        working-directory: src/python
+    env:
+      UV_PYTHON: '3.12'
+      UV_LOCKED: 'true'
+      PYTHONDONTWRITEBYTECODE: '1'
+      OMP_NUM_THREADS: '1'
+      OPENBLAS_NUM_THREADS: '1'
+      MKL_NUM_THREADS: '1'
+      NUMEXPR_NUM_THREADS: '1'
+      ITK_GLOBAL_DEFAULT_NUMBER_OF_THREADS: '1'
+      MPLBACKEND: Agg
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+        with:
+          version: '0.9.28'
+          enable-cache: true
+          cache-dependency-glob: src/python/uv.lock
+      - name: Install locked dependencies with the dev, local-registration and checkpoint extras
+        run: uv sync --locked --extra dev --extra local-registration --extra checkpoint
+      - name: Install GNU time for the RSS measurement
+        run: command -v /usr/bin/time >/dev/null || { sudo apt-get update && sudo apt-get install -y time; }
+      - name: Inventory the optional backends
         env:
           UV_NO_SYNC: 'true'
-        run: uv run pytest test/ -v -m extended
+        run: >-
+          uv run python -c "import importlib.util as u;
+          [print(f'{m}: {\"installed\" if u.find_spec(m) else \"absent\"}') for m in
+          ('SimpleITK', 'pyarrow', 'itk', 'spotiflow', 'piscis', 'torch', 'stardist',
+          'tensorflow', 'cellpose', 'multiview_stitcher', 'spatialdata', 'anndata',
+          'bioio_ome_tiff', 'napari')]"
+      # MATLAB is never executed: the launcher tests mock subprocess.
+      # `-rs` lists each skipped test with its reason, the inventory of what did not run.
+      - name: Slow and extended, not learned
+        timeout-minutes: 30
+        env:
+          UV_NO_SYNC: 'true'
+        run: /usr/bin/time -v uv run pytest test/ -v -rs -m "(slow or extended) and not learned"
