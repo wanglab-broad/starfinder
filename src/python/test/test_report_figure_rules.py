@@ -39,7 +39,8 @@ import pytest
 from starfinder.report import _figures, _page
 from starfinder.report._measurements import GroupFigureData
 
-from .report_fixtures import CELL_VARIANTS, RECORD_VARIANTS, report_cells, report_records
+from . import report_fixtures
+from .report_fixtures import CASES, IDS, collect_drawn, report_cells, report_records
 from .report_sizes import (BOX_SIZE, COMPARISON, DISTRIBUTION_HALF, DISTRIBUTION_THIRD, EXAMPLE_TILE, FULL, HALF,
                            INTENSITY_SIZE, MARK_PX, MAX_ROWS, MIN_TEXT_PX, ROW_PX, THIRD, TILE_GAP_PX,
                            preprocessing_tile, tile_gap, tiles_width, time_height_at_least)
@@ -47,13 +48,12 @@ from .test_report_collection import anndata_or_skip
 from .test_report_page import SHIM
 
 pytestmark = [pytest.mark.report, pytest.mark.validation]
+# The shared fixtures of report_fixtures.py: the pages drawn once for the session, and KEEP_CANVAS on.
+drawn, keep = report_fixtures.drawn, report_fixtures.keep
 
 DESIGN = Path(__file__).resolve().parents[3] / "docs" / "report-algorithms.md"
 YELLOW = (0xff, 0xd2, 0x1f)
 WHITE = (255, 255, 255)
-CASES = [("report_records", None)] + [("report_records", v) for v in RECORD_VARIANTS] + [
-    ("report_cells", None)] + [("report_cells", v) for v in CELL_VARIANTS]
-IDS = [f"{m}-{v}" for m, v in CASES]
 # The step names of a workflow run record (the per-FOV steps, then the sample steps, of LN sample1's runs).
 FOV_STEPS = ("load_images", "rotate_round", "preprocess:min_max_normalization", "find_spots", "extract_round",
              "register", "write_checkpoint:candidates", "decode_barcodes", "score_reads",
@@ -82,52 +82,6 @@ def page_figures(figures):
                 if not isinstance(tile, Unavailable):
                     named.append((f"marker:{k}:{role}:{view}", tile))
     return [(name, figure) for name, figure in named if figure is not None]
-
-
-class Drawn:
-    """A collected case: its folder, record, page text and figures (with canvases)."""
-
-    def __init__(self, case, folder, record, figures):
-        self.case, self.folder, self.record, self.figures = case, Path(folder), record, figures
-        self.text = (self.folder / "report.html").read_text(encoding="utf-8")
-
-
-def collect_drawn(maker, variant, root, **patches):
-    """A case collected with the figures kept as drawn; ``patches`` set attributes of ``_figures`` meanwhile."""
-    if maker == "report_cells":
-        anndata_or_skip()
-    found = {}
-    original = _page.build_page
-
-    def build(*args, **kwargs):
-        text, figures = original(*args, **kwargs)
-        found["figures"] = figures
-        return text, figures
-    with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(_figures, "KEEP_CANVAS", True)
-        for name, value in patches.items():
-            patch.setattr(_figures, name, value)
-        patch.setattr(_page, "build_page", build)
-        case = (report_cells if maker == "report_cells" else report_records)(root, variant)
-        folder, record = case.collect()
-    return Drawn(case, folder, record, found["figures"])
-
-
-@pytest.fixture(scope="module")
-def drawn(tmp_path_factory):
-    made = {}
-
-    def get(maker, variant):
-        if (maker, variant) not in made:
-            root = tmp_path_factory.mktemp(f"{maker}-{variant}") / "root"
-            made[(maker, variant)] = collect_drawn(maker, variant, root)
-        return made[(maker, variant)]
-    return get
-
-
-@pytest.fixture
-def keep(monkeypatch):
-    monkeypatch.setattr(_figures, "KEEP_CANVAS", True)
 
 
 # --- Checks of one figure ------------------------------------------------------------------------------------------

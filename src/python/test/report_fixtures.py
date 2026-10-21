@@ -31,9 +31,10 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from starfinder.image import ImageMetadata
-from starfinder.report import MarkerGroup, ReportConfig
+from starfinder.report import MarkerGroup, ReportConfig, _figures, _page
 from starfinder.report._collect import collect_report
 
 DATASET, SAMPLE, SAMPLE_ID = "report", "s1", "s1"
@@ -630,4 +631,66 @@ def report_cells(root, variant=None) -> ReportCase:
         write_assignment_folder(case, fov)
     write_export(case, variant)
     return case
+
+
+# --- The pages drawn with their canvases (test_report_figure_rules.py and test_report_second_review.py) -----------
+
+#: Every case of the page: each fixture alone, then with each of its variants.
+CASES = [("report_records", None)] + [("report_records", v) for v in RECORD_VARIANTS] + [
+    ("report_cells", None)] + [("report_cells", v) for v in CELL_VARIANTS]
+IDS = [f"{m}-{v}" for m, v in CASES]
+
+
+class Drawn:
+    """A collected case: its folder, record, page text and figures (with canvases)."""
+
+    def __init__(self, case, folder, record, figures):
+        self.case, self.folder, self.record, self.figures = case, Path(folder), record, figures
+        self.text = (self.folder / "report.html").read_text(encoding="utf-8")
+
+
+def collect_drawn(maker, variant, root, **patches):
+    """A case collected with the figures kept as drawn; ``patches`` set attributes of ``_figures`` meanwhile."""
+    if maker == "report_cells":
+        from .test_report_collection import anndata_or_skip
+        anndata_or_skip()
+    found = {}
+    original = _page.build_page
+
+    def build(*args, **kwargs):
+        text, figures = original(*args, **kwargs)
+        found["figures"] = figures
+        return text, figures
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(_figures, "KEEP_CANVAS", True)
+        for name, value in patches.items():
+            patch.setattr(_figures, name, value)
+        patch.setattr(_page, "build_page", build)
+        case = (report_cells if maker == "report_cells" else report_records)(root, variant)
+        folder, record = case.collect()
+    return Drawn(case, folder, record, found["figures"])
+
+
+_DRAWN = pytest.StashKey[dict]()
+
+
+@pytest.fixture(scope="session")
+def drawn(request, tmp_path_factory):
+    """``drawn(maker, variant)``: the case collected once for the session by ``collect_drawn``. The modules that
+    import this fixture share the cases (kept in the session's stash): their tests only read the folder and the
+    figures; a test that changes either collects its own."""
+    made = request.config.stash.setdefault(_DRAWN, {})
+
+    def get(maker, variant):
+        if (maker, variant) not in made:
+            root = tmp_path_factory.mktemp(f"{maker}-{variant}") / "root"
+            made[(maker, variant)] = collect_drawn(maker, variant, root)
+        return made[(maker, variant)]
+    yield get
+    made.clear()
+
+
+@pytest.fixture
+def keep(monkeypatch):
+    monkeypatch.setattr(_figures, "KEEP_CANVAS", True)
 

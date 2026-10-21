@@ -37,8 +37,7 @@ from starfinder.io._checkpoint import _read_table
 from starfinder.report import MarkerGroup, ReportConfig, ReportRecord, read_report
 from starfinder.report import _page as page_module
 
-from .report_fixtures import (CELL_VARIANTS, DATASET, FOVS, RECORD_VARIANTS, SAMPLE, SAMPLE_ID, report_cells,
-                              report_records)
+from .report_fixtures import CASES, DATASET, FOVS, IDS, SAMPLE, SAMPLE_ID, report_cells, report_records
 from .report_sizes import (DISTRIBUTION_HALF, DISTRIBUTION_THIRD, EXAMPLE_TILE, HEATMAP_WIDTH, INTENSITY_SIZE,
                            MAX_ROWS, READS_Z_WIDTH, ROW_PX, THIRD, TIME_WIDTH, grid_slot, preprocessing_tile,
                            time_height_at_least, tiles_width)
@@ -93,9 +92,6 @@ KEY_NUMBERS = ["fovs_succeeded", "spots_median_per_fov", "matched_fraction", "co
 KIB, MIB = 1024, 1024 * 1024
 TOL = 1e-9
 
-CASES = [("report_records", None)] + [("report_records", v) for v in RECORD_VARIANTS] + [
-    ("report_cells", None)] + [("report_cells", v) for v in CELL_VARIANTS]
-IDS = [f"{m}-{v}" for m, v in CASES]
 
 
 class Page:

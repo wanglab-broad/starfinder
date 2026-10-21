@@ -30,35 +30,21 @@ import pytest
 from starfinder.report import _figures, _page
 from starfinder.report._measurements import GroupFigureData
 
+from . import report_fixtures
+from .report_fixtures import CASES, IDS, collect_drawn
 from .report_sizes import FULL, HALF, MIN_TEXT_PX, SHOWN_AT_MOST, THIRD, preprocessing_tile, tiles_width
-from .test_report_figure_rules import (CASES, DESIGN, FOV_STEPS, IDS, SAMPLE_STEPS, check_slot, check_text_size,
-                                       collect_drawn, css_rules, hand_previews, hand_replay, intersect, overlaps,
-                                       page_figures, shown)
+from .test_report_figure_rules import (DESIGN, FOV_STEPS, SAMPLE_STEPS, check_slot, check_text_size, css_rules,
+                                       hand_previews, hand_replay, intersect, overlaps, page_figures, shown)
 from .test_report_page import SHIM
 
 pytestmark = [pytest.mark.report, pytest.mark.validation]
+# The shared fixtures of report_fixtures.py: the pages drawn once for the session, and KEEP_CANVAS on.
+drawn, keep = report_fixtures.drawn, report_fixtures.keep
 
 #: Px as shown per step name of "Time per step", and the tolerance of the alignment, px as shown.
 STEP_ROW_PX, ALIGN_PX = 26, 4
 #: The inset of a figure's texts from its tiles' left edge, px as shown (titles, ranges and legend).
 INSET_PX = 4
-
-
-@pytest.fixture(scope="module")
-def drawn(tmp_path_factory):
-    made = {}
-
-    def get(maker, variant):
-        if (maker, variant) not in made:
-            root = tmp_path_factory.mktemp(f"{maker}-{variant}") / "root"
-            made[(maker, variant)] = collect_drawn(maker, variant, root)
-        return made[(maker, variant)]
-    return get
-
-
-@pytest.fixture
-def keep(monkeypatch):
-    monkeypatch.setattr(_figures, "KEEP_CANVAS", True)
 
 
 # --- The header -----------------------------------------------------------------------------------------------------

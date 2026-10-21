@@ -218,6 +218,28 @@ def build_case(name, tmp_path, zarr_format, monkeypatch):
     return f.export_dir
 
 
+#: The configurations (case, Zarr format) that SD1 to SD4 each build alike, exported once for the module by ``exports``.
+SHARED = (("usual", 3), ("fov_not_placed", 3))
+
+
+@pytest.fixture(scope="module")
+def exports(tmp_path_factory):
+    """``exports(name, zarr_format)``: the export folder of ``build_case``, built once for the module per complete
+    configuration (the case and the Zarr format, one of ``SHARED``). SD1 to SD4 only read it; a test that changes an
+    export builds its own."""
+    import dask
+    made = {}
+
+    def get(name, zarr_format):
+        assert (name, zarr_format) in SHARED
+        if (name, zarr_format) not in made:
+            with dask.config.set(scheduler="synchronous"), pytest.MonkeyPatch.context() as patch:
+                made[(name, zarr_format)] = build_case(name, tmp_path_factory.mktemp(f"sd-{name}-{zarr_format}"),
+                                                       zarr_format, patch)
+        return made[(name, zarr_format)]
+    return get
+
+
 IMAGE = "reference_stain_projection"
 W = ("written", None)
 E = ("omitted", "empty")
@@ -274,8 +296,9 @@ SD1_CASES = [pytest.param(case, zarr_format, marks=[pytest.mark.slow] if (case, 
 
 @needs_library
 @pytest.mark.parametrize("case, zarr_format", SD1_CASES)
-def test_sd1_elements_omissions_and_format(case, zarr_format, tmp_path, monkeypatch):
-    folder = build_case(case, tmp_path, zarr_format, monkeypatch)
+def test_sd1_elements_omissions_and_format(case, zarr_format, exports, tmp_path, monkeypatch):
+    folder = exports(case, zarr_format) if (case, zarr_format) in SHARED else \
+        build_case(case, tmp_path, zarr_format, monkeypatch)
     record = record_of(folder)
     section = record["spatialdata"]
     assert statuses(record) == CASES[case]
@@ -343,8 +366,8 @@ def test_sd1_a_sample_name_outside_the_rule_is_refused_before_anything_is_writte
 
 @needs_library
 @pytest.mark.parametrize("case", ["usual", "fov_not_placed"])
-def test_sd2_points(case, tmp_path, monkeypatch):
-    folder = build_case(case, tmp_path, 3, monkeypatch)
+def test_sd2_points(case, exports):
+    folder = exports(case, 3)
     section = record_of(folder)["spatialdata"]
     source = load_assembly(folder).molecules
     placed = np.isfinite(source[["sample_z", "sample_y", "sample_x"]].to_numpy(np.float64)).all(axis=1)
@@ -378,9 +401,9 @@ def test_sd2_points(case, tmp_path, monkeypatch):
 
 @needs_library
 @pytest.mark.parametrize("case", ["usual", "fov_not_placed"])
-def test_sd3_tables_preserve_their_source(case, tmp_path, monkeypatch):
+def test_sd3_tables_preserve_their_source(case, exports):
     import anndata
-    folder = build_case(case, tmp_path, 3, monkeypatch)
+    folder = exports(case, 3)
     section = record_of(folder)["spatialdata"]
     entries = {e["name"]: e for e in section["elements"]}
     assembly = load_assembly(folder)
@@ -440,9 +463,9 @@ ATTRS = {"region": "cell_centroids", "region_key": "region", "instance_key": "in
 
 @needs_library
 @pytest.mark.parametrize("case", ["usual", "fov_not_placed"])
-def test_sd4_export_metadata(case, tmp_path, monkeypatch):
+def test_sd4_export_metadata(case, exports):
     import anndata
-    folder = build_case(case, tmp_path, 3, monkeypatch)
+    folder = exports(case, 3)
     entries = {e["name"]: e for e in record_of(folder)["spatialdata"]["elements"]}
     assembly = load_assembly(folder)
     store = read_store(folder)

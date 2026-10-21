@@ -29,9 +29,9 @@ from starfinder.report import (PROBLEM_RULES, REPORT_PARTS, REPORT_TABLES, UNAVA
                                ReportConfig, ReportLimits, RuleLimit, read_report)
 from starfinder.report._schema import PENDING_VALUES, RULE_UNITS, SUMMARY_KEYS
 
-from .report_fixtures import (CELLS_RETAINED, CHANNELS, COUNTS, ENDED, FOVS, MOVING, NCC_AFTER, NOMINAL, ORIGINS,
-                              RECORD_VARIANTS, SAMPLE, STARTED, TRANSLATIONS, raw_path, report_cells, report_records,
-                              write_inputs)
+from .report_fixtures import (CASES, CELLS_RETAINED, CHANNELS, COUNTS, ENDED, FOVS, MOVING, NCC_AFTER, NOMINAL,
+                              ORIGINS, SAMPLE, STARTED, TRANSLATIONS, raw_path, report_cells,
+                              report_records, write_inputs)
 
 pytestmark = [pytest.mark.report, pytest.mark.validation]
 
@@ -554,10 +554,6 @@ def _not_applicable(table, column, row, case, context):
     return False
 
 
-CASES = [("report_records", None)] + [("report_records", v) for v in RECORD_VARIANTS] + [
-    ("report_cells", None), ("report_cells", "nocal"), ("report_cells", "mismatch"), ("report_cells", "no_markers")]
-
-
 def check_null_values(case, record, tables):
     """RC12 on one collection: every null cell, null summary key and null rule key is n/a by its rule or named by
     exactly one row of unavailable.csv."""
@@ -882,28 +878,8 @@ CHECKS = [
      dict(config=ReportConfig(example_fovs=("F1", "F2", "F9")))),
     (7, FileExistsError, r"notes\.txt is not a file of the report", _check7, {}),
 ]
-
-
-@pytest.mark.parametrize("number", [c[0] for c in CHECKS])
-def test_pg7_entry_checks_in_order(tmp_path, number):
-    anndata_or_skip()
-    case = report_cells(tmp_path / "root")
-    case.collect()
-    arguments = {}
-    # This check's violation and every later one's (the earliest argument change kept), so that each check raises
-    # before the later ones and the error is the first check's.
-    for later, _, _, edit, changes in CHECKS[number - 1:]:
-        if number <= 2 and later in (3, 4):
-            continue
-        if edit is not None:
-            edit(case)
-        arguments = changes | arguments
-    _, error, message, _, _ = CHECKS[number - 1]
-    earlier = snapshot(case.folder)
-    with pytest.raises(error, match=message):
-        case.collect(**arguments)
-    assert snapshot(case.folder) == earlier
-    assert [p.name for p in case.folder.parent.iterdir()] == [SAMPLE]
+# The checks run in order through Dataset.report, the public entry, for both fixtures:
+# test_pg7_checks_through_dataset_report of test_report_page.py (W-533 removed their repeat through collect_report).
 
 
 @pytest.mark.parametrize("arguments,error", [(dict(fov_ids=[]), ValueError), (dict(fov_ids=["F1", "F1"]), ValueError),
