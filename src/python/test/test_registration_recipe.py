@@ -424,6 +424,7 @@ def test_registered_checkpoint_reapplies_identically(tmp_path, kind, z1):
     assert reapplied.dtype == fov.images["round2"].dtype
     np.testing.assert_array_equal(reapplied, fov.images["round2"])
     np.testing.assert_array_equal(reloaded.images["round2"], fov.images["round2"])
+    np.testing.assert_array_equal(reloaded.images["round1"], before["round1"])
     assert reloaded.registration_record["semantics"] == "recipe"
     assert [r.diagnostics for r in reloaded.registration_results["round2"]] == [
         r.diagnostics for r in fov.registration_results["round2"]]

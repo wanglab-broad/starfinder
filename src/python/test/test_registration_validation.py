@@ -24,8 +24,6 @@ from starfinder.dataset import (CheckpointConfig, Dataset, PipelineConfig, Regis
 from starfinder.evaluation.registration import (_valid_overlap, evaluate_displacement_field, evaluate_translation,
                                                 registration_qc)
 from starfinder.image import ImageMetadata, IncompatibleGeometryError
-from starfinder.io import read_checkpoint
-from starfinder.io._checkpoint import write_registered_round
 from starfinder.registration import (REGISTRATION_METHODS, AffineConfig, AffineTransform, BSplineConfig,
                                      BSplineTransform, CpdConfig, DemonsConfig, DenseDisplacementTransform,
                                      InvalidRegistrationConfigError, RegistrationEstimationError,
@@ -39,7 +37,6 @@ from starfinder.synthetic import (DEVELOPMENT_SIZES, GeometryConfig, forward_dis
 
 from .test_registration_golden import fixture_rounds
 from .test_registration_methods import gaussian_geometry, landmark_fixture, polynomial_geometry, preset, rigid_geometry
-from .test_registration_recipe import write_version_1
 
 HAS_ELASTIX = importlib.util.find_spec("itk") is not None and importlib.util.find_spec("SimpleITK") is not None
 requires_elastix = pytest.mark.skipif(not HAS_ELASTIX,
@@ -398,12 +395,11 @@ def test_v6_translation_affine_dense_chain_equals_sequential_evaluation():
 
 
 # ============================================================================ V7: persistence round trip
+# The single translation, affine, B-spline and dense (demons) round trips at both Z, and the version-1 reader,
+# are test_registration_recipe.py's test_registered_checkpoint_reapplies_identically and
+# test_version_1_registered_checkpoints_still_load_as_sequential (W-534).
 TRANSFORM_KINDS = {
-    "translation": ((TranslationConfig(),), ["translation"]),
     "rigid": ((RigidConfig(),), ["affine"]),
-    "affine": ((AffineConfig(),), ["affine"]),
-    "bspline": ((BSplineConfig(),), ["bspline"]),
-    "dense": ((DemonsConfig(iterations=(20, 10)),), ["dense"]),
     "chain-translation-affine-bspline": ((TranslationConfig(), AffineConfig(), BSplineConfig()),
                                          ["translation", "affine", "bspline"]),
     "chain-translation-rigid-dense": ((TranslationConfig(), RigidConfig(), DemonsConfig(iterations=(20, 10))),
@@ -443,22 +439,6 @@ def test_v7_version_2_registered_checkpoint_round_trip(tmp_path, kind, z1):
     assert np.array_equal(apply_transform(before["round2"], chain, config=warp), fov.images["round2"])
     assert np.array_equal(reloaded.images["round2"], fov.images["round2"])
     assert np.array_equal(reloaded.images["round1"], before["round1"])
-
-
-def test_v7_version_1_checkpoint_loads_as_sequential(tmp_path):
-    """A version-1 registered checkpoint (the start revision's writer) loads as sequential, unconverted."""
-    fov = golden_fov(tmp_path, False)
-    reference, moving = (fov.images[name].sum(axis=-1, dtype=np.float64) for name in ("round1", "round2"))
-    result = estimate_transform(reference, moving, config=TranslationConfig(), reference_metadata=fov.metadata["round1"],
-                                moving_metadata=fov.metadata["round2"])
-    directory = fov.paths.checkpoint_dir
-    for name, image in fov.images.items():
-        write_registered_round(directory, name, image, fov.metadata[name])
-    write_version_1(directory, dict(fov._checkpoint_header(), image_rounds=["round1", "round2"], snapshots=[],
-                                    registration_attempts={}, preprocessing=None), {"round2": [result]})
-    loaded = read_checkpoint(directory, "registered")
-    assert loaded["registration_record"]["semantics"] == "sequential" and loaded["registration_chains"] == {}
-    assert loaded["registration_results"]["round2"] == [result]
 
 
 # ============================================================================ V8: Z=1 and small-Z rules

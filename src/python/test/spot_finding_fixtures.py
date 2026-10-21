@@ -10,12 +10,18 @@ rendering exactly. The multi-channel fixtures (``channels``, ``coincident``) and
 ``borders`` are rendered here with NumPy (``render``) because their checks need
 control over which channels share a noise realization. Every fixture is
 generated in session from one seed (100, 101 or 102) and is at most 32x64x64
-voxels and four channels; nothing is written to disk.
+voxels and four channels; nothing is written to disk. The candidates-checkpoint
+helpers at the end (check S11) write to the directory they are given.
 """
+import json
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 
 from starfinder.barcode import Codebook
+from starfinder.io import read_checkpoint
+from starfinder.io._checkpoint import write_candidates
 from starfinder.synthetic import (BackgroundConfig, FormedSceneConfig, NoiseConfig, ScalarDistribution,
     generate_formed_scene)
 
@@ -202,3 +208,23 @@ def min_separation(points):
     points = np.asarray(points, dtype=float)
     distances = np.linalg.norm(points[:, None] - points[None], axis=-1)
     return float(distances[~np.eye(len(points), dtype=bool)].min())
+
+
+# --- Candidates checkpoint (check S11; moved from test_spot_finding_rounds, W-534) ---------------------------
+
+# The candidates checkpoint the golden test's helper wrote at 7a178da (data/spot_finding_candidates_7a178da).
+VERSION_2_CHECKPOINT = Path(__file__).parent / "data" / "spot_finding_candidates_7a178da"
+PLAN_KEYS = ("detection_rounds", "detection_plan", "execution", "weights")
+
+
+def candidates_round_trip(result, directory, table_format):
+    """(header, reloaded spot_result) of ``result`` written as a candidates checkpoint in ``directory``."""
+    write_candidates(directory, {}, result, None, table_format)
+    header = json.loads((directory / "candidates.json").read_text())
+    return header, read_checkpoint(directory, "candidates")["spot_result"]
+
+
+def assert_reloaded(result, reloaded):
+    pd.testing.assert_frame_equal(reloaded.spots, result.spots, check_exact=True)
+    assert reloaded.config == result.config
+    assert reloaded.plan == result.plan

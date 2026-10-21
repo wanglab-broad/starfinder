@@ -32,7 +32,7 @@ import pandas as pd
 import pytest
 from scipy.spatial import cKDTree
 
-from starfinder.dataset import CheckpointConfig
+from starfinder.dataset import CheckpointConfig, PipelineConfig
 from starfinder.evaluation.spot_finding import evaluate_spots
 from starfinder.image import ImageMetadata, IncompatibleGeometryError
 from starfinder.io._checkpoint import _jsonable, _tuples, candidates_frame
@@ -40,7 +40,7 @@ from starfinder.preprocessing import normalize_intensity
 from starfinder.spot_finding import (KNOWN_WEIGHTS, SPOT_FINDING_METHODS, ChannelOverride, LocalMaximaConfig,
     MissingWeightsError, PiscisConfig, SpotFindingBackendUnavailableError, SpotFindingPlan, SpotFindingWarning,
     SpotiflowConfig, StarfishLogConfig, WeightsFile, WeightsHashMismatchError, find_spots, resolve_weights)
-from starfinder.spot_finding import _learned
+from starfinder.spot_finding import _learned, _model_artifacts
 from starfinder.spot_finding._starfish_log import starfish_view
 
 from . import spot_finding_fixtures as fixtures
@@ -49,8 +49,9 @@ from .spot_finding_scenes import FORMED16_SHAPE, SEEDS, formed16, isolated_scene
 from .test_spot_finding_diagnostics import assert_typed_empty
 from .test_spot_finding_golden import PINNED_FIND_SPOTS, golden_dataset
 from .test_spot_finding_local_maxima import RADIUS, RECIPE1, s16
-from .test_spot_finding_rounds import (CHANNELS as ROUND_CHANNELS, DATA as VERSION_2_CHECKPOINT, PLAN_KEYS, ROUNDS,
-    SHAPE_ZYX as MULTIROUND_SHAPE, _round_trip, assert_reloaded, multiround, multiround_fov)
+from .spot_finding_fixtures import PLAN_KEYS, VERSION_2_CHECKPOINT, assert_reloaded, candidates_round_trip
+from .test_spot_finding_rounds import (CHANNELS as ROUND_CHANNELS, ROUNDS, SHAPE_ZYX as MULTIROUND_SHAPE, multiround,
+    multiround_fov)
 from .test_starfish_log import FIXTURES as PARITY, RECORD as PARITY_RECORD, TABLES as PARITY_TABLES
 from .test_starfish_log import parity_image, starfish_table
 
@@ -630,23 +631,61 @@ def test_s10_multi_round_identities(method, seed, record_property):
 
 # --- S11: checkpoint round trip ---------------------------------------------------------------------------
 
-S11_CASES = ([("multiround", m, s, f) for m in LM + LOG_ + SF3 + PI for s in SEEDS for f in ("csv", "parquet")]
-             + [("iso3d", m, s, f) for m in LOG_ + SF3 + PI for s in SEEDS for f in ("csv", "parquet")])
+# The serialization does not depend on the seed: one seed per method, source and format (W-534).
+S11_CASES = ([("multiround", m, SEEDS[0], f) for m in LM + LOG_ + SF3 + PI for f in ("csv", "parquet")]
+             + [("iso3d", m, SEEDS[0], f) for m in LOG_ + SF3 + PI for f in ("csv", "parquet")])
+# The multi-round sets of LM and LoG run a plan with a ch01 override through FOV.run and FOV.load_checkpoint.
+S11_OVERRIDES = {"local_maxima": LocalMaximaConfig(threshold_value=6.0),
+                 "starfish_log": StarfishLogConfig(min_sigma=1, max_sigma=10, num_sigma=30, threshold=0.02)}
+
+
+def _plain(config):
+    return {k: v for k, v in _jsonable(config).items() if k != "method"}
+
+
+def checkpoint_through_fov_run(method, seed, table_format, root):
+    """(result, header, reloaded result) of FOV.run with the S11 override plan and a candidates checkpoint;
+    asserts the plan, execution and round-dtype header keys and the reloaded round diagnostics."""
+    override = S11_OVERRIDES[method]
+    plan = SpotFindingPlan(METHODS[method], (ChannelOverride("ch01", override),), ROUNDS)
+    fov = multiround_fov(root, multiround(seed)[0])
+    fov.run(PipelineConfig(spot_finding=plan),
+            checkpoints=CheckpointConfig(stages=("candidates",), directory=root / "ck", table_format=table_format))
+    header = json.loads((root / "ck" / "FOV_001" / "candidates.json").read_text())
+    assert header["detection_plan"] == [{"channel": "ch01", "config": {**json.loads(json.dumps(
+        _plain(override))), "method": method}}]
+    assert header["execution"]["device"] == "cpu"
+    assert header["dtypes"]["round"] == "string"
+    reloaded = multiround_fov(root, {}).load_checkpoint(
+        "candidates", checkpoints=CheckpointConfig(directory=root / "ck")).spot_result
+    assert reloaded.diagnostics["rounds"] == fov.spot_result.diagnostics["rounds"]
+    return fov.spot_result, header, reloaded
 
 
 @pytest.mark.parametrize("method, source, seed, table_format", params(*[(m, src, s, f) for src, m, s, f in S11_CASES],
            slow=lambda row: piscis(row) or (learned(row) and row[1] == "multiround")))
 def test_s11_candidates_checkpoint_round_trip(method, source, seed, table_format, tmp_path):
-    if source == "multiround":
-        result = multiround_run(method, seed)[1].spot_result
+    if source == "multiround" and method in S11_OVERRIDES:
+        result, header, reloaded = checkpoint_through_fov_run(method, seed, table_format, tmp_path)
     else:
-        result = isolated(method, "iso3d", seed)[2]
+        if source == "multiround":
+            result = multiround_run(method, seed)[1].spot_result
+        else:
+            result = isolated(method, "iso3d", seed)[2]
+        header, reloaded = candidates_round_trip(result, tmp_path, table_format)
     assert len(result.spots)
-    header, reloaded = _round_trip(result, tmp_path, table_format)
     assert header["format_version"] == 2 and all(key in header for key in PLAN_KEYS)
     assert header["detection_rounds"] == (list(ROUNDS) if source == "multiround" else None)
+    if source == "iso3d":
+        assert header["detection_plan"] == []
+    if source == "iso3d" and method == "starfish_log":
+        assert "radius" in result.spots
     if family(method) in LEARNED:
-        assert header["weights"] == json.loads(json.dumps(result.diagnostics["model"]["artifacts"]))
+        model = result.diagnostics["model"]
+        assert header["weights"] == json.loads(json.dumps(model["artifacts"]))
+        if source == "iso3d":
+            assert header["weights"] == json.loads(json.dumps(_model_artifacts(model)))
+            assert header["weights"] and header["execution"]["framework"]["name"] == "torch"
     else:
         assert header["weights"] == []
     assert_reloaded(result, reloaded)
@@ -664,6 +703,7 @@ def test_s11_a_version_2_checkpoint_from_before_the_plan_keys_loads_unchanged(tm
     assert result.plan == SpotFindingPlan(result.config) and result.plan.rounds is None
     assert result.config == LocalMaximaConfig(threshold_mode="global", threshold_value=0.01,
                                               channel_labels=("ch00", "ch01", "ch02", "ch03"))
+    assert "round" not in result.spots and fov.intensity_result is None
 
 
 # --- S12: Starfish parity ---------------------------------------------------------------------------------

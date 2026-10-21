@@ -1,4 +1,4 @@
-"""Detection in several rounds and the candidates checkpoint (§2.7 checks S10 and S11; W-273).
+"""Detection in several rounds (§2.7 check S10; W-273).
 
 The ``multiround`` fixture of docs/spot-finding-algorithms.md is hand-built here (no §2.12
 generator): 3 rounds × 16×64×64 × 2 uint16 channels on one grid, 15 spots per round and
@@ -6,11 +6,11 @@ channel, 5 of them at the same positions in every round. Spots have integer cent
 lattice of sites 7 voxels apart (Z layers 4 and 11), the iso3d appearance (brightness 1500,
 sigma Z 1.5 and YX 1.3, baseline 100, Poisson plus read noise 3) and come from one seed
 (100, 101 or 102). Every bound is provisional: option A of the contract is a new interface
-and a new checkpoint content without a W-266 reference.
+and a new checkpoint content without a W-266 reference. The candidates-checkpoint round trips
+(check S11) are test_spot_finding_validation.py's S11 tests (W-534).
 """
 from dataclasses import replace
 import json
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -20,13 +20,9 @@ from starfinder.barcode import NeighborhoodSumConfig, WtaDecoderConfig
 from starfinder.dataset import CheckpointConfig, Dataset, ExecutionConfig, PipelineConfig, RoundState
 from starfinder.dataset.workflow import from_workflow_config
 from starfinder.image import ImageMetadata, IncompatibleGeometryError
-from starfinder.io import read_checkpoint
-from starfinder.io._checkpoint import candidates_frame, write_candidates
-from starfinder.spot_finding import (ChannelOverride, LocalMaximaConfig, PiscisConfig, SpotFindingPlan,
-    SpotFindingResult, SpotiflowConfig, StarfishLogConfig, find_spots)
-
-from .spot_finding_scenes import SEEDS, isolated_scene
-from .test_spot_finding_golden import PINNED_FIND_SPOTS, golden_dataset, table_digest
+from starfinder.io._checkpoint import candidates_frame
+from starfinder.spot_finding import (ChannelOverride, LocalMaximaConfig, SpotFindingPlan, SpotFindingResult,
+    StarfishLogConfig, find_spots)
 
 pytestmark = pytest.mark.spot_finding
 
@@ -39,8 +35,6 @@ N_SHARED, N_PER_ROUND = 5, 15
 # The starfish ISS tutorial values W-266 used for LoG; an example, not a default.
 METHODS = {"local_maxima": LocalMaximaConfig(),
            "starfish_log": StarfishLogConfig(min_sigma=1, max_sigma=10, num_sigma=30, threshold=0.01)}
-DATA = Path(__file__).parent / "data" / "spot_finding_candidates_7a178da"
-PLAN_KEYS = ("detection_rounds", "detection_plan", "execution", "weights")
 
 
 def _render(rng, centres):
@@ -78,9 +72,10 @@ def multiround_fov(root, images, metadata=None):
     return fov
 
 
-@pytest.fixture(scope="module", params=SEEDS)
-def scene(request):
-    return multiround(request.param)
+@pytest.fixture(scope="module")
+def scene():
+    """Seed 100: these tests assert structure; test_s10_multi_round_identities runs seeds 100 to 102 (W-534)."""
+    return multiround(100)
 
 
 def replace_labels(config):
@@ -281,100 +276,13 @@ def test_the_workflow_rounds_key_builds_a_plan():
     assert detection.rounds == ("round2",) and detection.channel_overrides[0].channel == "ch01"
 
 
-# --- S11: candidates checkpoint -------------------------------------------------------------------------
-
-def _round_trip(result, directory, table_format):
-    write_candidates(directory, {}, result, None, table_format)
-    header = json.loads((directory / "candidates.json").read_text())
-    return header, read_checkpoint(directory, "candidates")["spot_result"]
-
-
-def assert_reloaded(result, reloaded):
-    pd.testing.assert_frame_equal(reloaded.spots, result.spots, check_exact=True)
-    assert reloaded.config == result.config
-    assert reloaded.plan == result.plan
-
-
-@pytest.mark.parametrize("table_format", ["csv", "parquet"])
-@pytest.mark.parametrize("method", METHODS)
-def test_multi_round_sets_round_trip_through_the_candidates_checkpoint(tmp_path, scene, method, table_format):
-    images, _ = scene
-    config = METHODS[method]
-    override = {"local_maxima": LocalMaximaConfig(threshold_value=6.0),
-                "starfish_log": StarfishLogConfig(min_sigma=1, max_sigma=10, num_sigma=30, threshold=0.02)}[method]
-    plan = SpotFindingPlan(config, (ChannelOverride("ch01", override),), ROUNDS)
-    fov = multiround_fov(tmp_path, images)
-    fov.run(PipelineConfig(spot_finding=plan),
-            checkpoints=CheckpointConfig(stages=("candidates",), directory=tmp_path / "ck", table_format=table_format))
-    header = json.loads((tmp_path / "ck" / "FOV_001" / "candidates.json").read_text())
-    assert header["format_version"] == 2
-    assert header["detection_rounds"] == list(ROUNDS)
-    assert header["detection_plan"] == [{"channel": "ch01", "config": {**json.loads(json.dumps(
-        _plain(override))), "method": method}}]
-    assert header["execution"]["device"] == "cpu" and header["weights"] == []
-    assert header["dtypes"]["round"] == "string"
-    reloaded = multiround_fov(tmp_path, {}).load_checkpoint(
-        "candidates", checkpoints=CheckpointConfig(directory=tmp_path / "ck"))
-    assert_reloaded(fov.spot_result, reloaded.spot_result)
-    assert reloaded.spot_result.diagnostics["rounds"] == fov.spot_result.diagnostics["rounds"]
-
-
-def _plain(config):
-    from starfinder.io._checkpoint import _jsonable
-    return {k: v for k, v in _jsonable(config).items() if k != "method"}
-
-
-@pytest.mark.parametrize("table_format", ["csv", "parquet"])
-def test_iso3d_log_tables_round_trip(tmp_path, table_format):
-    image, _ = isolated_scene("iso3d", 100)
-    result = find_spots(image, config=METHODS["starfish_log"], metadata=ImageMetadata("iso3d"),
-                        spot_namespace="iso3d/100")
-    assert len(result.spots) and "radius" in result.spots
-    header, reloaded = _round_trip(result, tmp_path, table_format)
-    assert header["format_version"] == 2 and all(key in header for key in PLAN_KEYS)
-    assert header["detection_rounds"] is None and header["detection_plan"] == []
-    assert_reloaded(result, reloaded)
-
-
-def test_a_checkpoint_from_the_start_revision_loads_unchanged(tmp_path):
-    header = json.loads((DATA / "FOV_001" / "candidates.json").read_text())
-    assert header["format_version"] == 2 and not any(key in header for key in PLAN_KEYS)
-    fov = golden_dataset(tmp_path).fov("FOV_001").load_checkpoint(
-        "candidates", checkpoints=CheckpointConfig(directory=DATA.parent / DATA.name))
-    result = fov.spot_result
-    assert table_digest(result.spots) == PINNED_FIND_SPOTS[("global", True, "z1")][1]
-    assert result.plan == SpotFindingPlan(result.config) and result.plan.rounds is None
-    assert result.config == LocalMaximaConfig(threshold_mode="global", threshold_value=0.01,
-                                              channel_labels=("ch00", "ch01", "ch02", "ch03"))
-    assert "round" not in result.spots and fov.intensity_result is None
-
-
 @pytest.fixture
 def one_thread(monkeypatch):
-    """One numerical thread and no GPU for the learned detectors (the checks also set these before start)."""
+    """One numerical thread and no GPU for the learned detectors (the checks also set these before start);
+    test_spot_finding_diagnostics uses it."""
     from .learned_detectors import THREAD_VARIABLES
     torch = pytest.importorskip("torch")
     monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "")
     for name in THREAD_VARIABLES:
         monkeypatch.setenv(name, "1")
     torch.set_num_threads(1)
-
-
-@pytest.mark.extended
-@pytest.mark.learned
-@pytest.mark.parametrize("config", [SpotiflowConfig("synth_3d"), SpotiflowConfig("smfish_3d"),
-                                    pytest.param(PiscisConfig("20230905"), marks=pytest.mark.slow),
-                                    pytest.param(PiscisConfig("20251212"), marks=pytest.mark.slow)],
-                         ids=lambda c: f"{c.method}-{c.model}")
-def test_iso3d_learned_tables_round_trip(tmp_path, one_thread, config):
-    pytest.importorskip(config.method)
-    from starfinder.spot_finding import _model_artifacts
-    image, _ = isolated_scene("iso3d", 100)
-    result = find_spots(image, config=config, metadata=ImageMetadata("iso3d"), spot_namespace="iso3d/100")
-    assert len(result.spots)
-    for table_format in ("csv", "parquet"):
-        header, reloaded = _round_trip(result, tmp_path / table_format, table_format)
-        assert header["format_version"] == 2 and all(key in header for key in PLAN_KEYS)
-        assert header["weights"] == json.loads(json.dumps(_model_artifacts(result.diagnostics["model"])))
-        assert header["weights"] and header["execution"]["framework"]["name"] == "torch"
-        assert_reloaded(result, reloaded)
