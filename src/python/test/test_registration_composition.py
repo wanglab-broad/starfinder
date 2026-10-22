@@ -9,7 +9,8 @@ import numpy as np
 import pytest
 from scipy.ndimage import map_coordinates
 
-from starfinder.dataset import Dataset, PipelineConfig, RegistrationRecipe, RegistrationStep, RoundState
+from starfinder.dataset import Dataset, PipelineConfig, RoundState
+from starfinder.registration import RegistrationRecipe, RegistrationStep
 from starfinder.image import ImageMetadata, IncompatibleGeometryError
 from starfinder.registration import (AffineConfig, AffineTransform, BSplineTransform, DemonsConfig,
     DenseDisplacementTransform, TransformChain, TranslationConfig, TranslationTransform,

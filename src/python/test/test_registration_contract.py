@@ -1,4 +1,4 @@
-from starfinder.dataset import RegistrationRecipe, RegistrationStep
+from starfinder.registration import RegistrationRecipe, RegistrationStep
 """Bounded shared registration contracts; no scientific benchmark execution."""
 
 import importlib.util

@@ -11,8 +11,8 @@ import pytest
 
 from starfinder.barcode import (Codebook, CodebookAwareDecoderConfig, NeighborhoodSumConfig,
     ReadFilterConfig, WtaDecoderConfig)
-from starfinder.dataset import (CheckpointConfig, Dataset, ExecutionConfig, PipelineConfig,
-    RegistrationRecipe, RegistrationStep, RoundState)
+from starfinder.dataset import CheckpointConfig, Dataset, ExecutionConfig, PipelineConfig, RoundState
+from starfinder.registration import RegistrationRecipe, RegistrationStep
 from starfinder.image import ImageMetadata
 from starfinder.dataset import read_checkpoint
 from starfinder.io import ImageLoadConfig, load_volume_zyxc, save_volume

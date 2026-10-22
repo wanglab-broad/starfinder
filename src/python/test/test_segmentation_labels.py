@@ -16,8 +16,8 @@ import pytest
 import tifffile
 from skimage.transform import rescale
 
-from starfinder.dataset import (CheckpointConfig, Dataset, ExecutionConfig, PipelineConfig, RegistrationRecipe,
-    RegistrationStep, RoundState)
+from starfinder.dataset import (CheckpointConfig, Dataset, ExecutionConfig, PipelineConfig, RoundState)
+from starfinder.registration import RegistrationRecipe, RegistrationStep
 from starfinder.image import ImageMetadata, IncompatibleGeometryError
 from starfinder.io import ImageLoadConfig, save_volume
 from starfinder.registration import TranslationConfig

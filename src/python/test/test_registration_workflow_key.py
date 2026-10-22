@@ -7,7 +7,8 @@ import jsonschema
 import pytest
 import yaml
 
-from starfinder.dataset import RecoveryConfig, RegistrationRecipe, RegistrationStep, from_workflow_config
+from starfinder.dataset import from_workflow_config
+from starfinder.registration import RecoveryConfig, RegistrationRecipe, RegistrationStep
 from starfinder.registration import (REGISTRATION_METHODS, AffineConfig, BSplineConfig, DemonsConfig,
     InsufficientLandmarksError, RegistrationEstimationError, RegistrationQcConfig, RegistrationSignalConfig,
     RegistrationSpec, RigidConfig, TranslationConfig, WarpConfig)

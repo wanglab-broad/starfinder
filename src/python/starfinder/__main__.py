@@ -99,10 +99,11 @@ def _weights(args):
     (KNOWN_MODELS, §2.9) share the cache and the commands.
     """
     from starfinder.segmentation import KNOWN_MODELS, MissingModelError, ModelHashMismatchError, resolve_model
-    from starfinder.segmentation._models import RECORD_NAME as MODEL_RECORD, _fetch_model
+    from starfinder._weights import RECORD_NAME, model_folder, weights_directory
+    from starfinder.segmentation._models import _fetch_model
     from starfinder.spot_finding import KNOWN_WEIGHTS, MissingWeightsError, WeightsHashMismatchError
     from starfinder.spot_finding import fetch_weights, resolve_weights
-    from starfinder.spot_finding._weights import RECORD_NAME, listed_files, model_folder, weights_directory
+    from starfinder.spot_finding._weights import listed_files
     if args.command == 'fetch':
         if (args.method, args.model) in KNOWN_MODELS:
             print(_fetch_model(args.method, args.model, directory=args.dir))
@@ -121,7 +122,7 @@ def _weights(args):
         for (method, model), entry in KNOWN_MODELS.items():
             folder = root / method / model
             present = all((folder / item.path).is_file() for item in entry.files)
-            state = ('fetched' if (folder / MODEL_RECORD).is_file() else 'present' if present
+            state = ('fetched' if (folder / RECORD_NAME).is_file() else 'present' if present
                      else 'incomplete' if folder.exists() else 'not fetched')
             print(f'{method}\t{model}\t{entry.dimensionality}\t{entry.bytes} bytes\tsha256 {entry.sha256}\t'
                   f'{entry.url}\t{state}')

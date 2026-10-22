@@ -9,7 +9,8 @@ import pytest
 
 from starfinder._registry import Dependency
 from starfinder.benchmark._adapters import _config as benchmark_config
-from starfinder.dataset import RecoveryConfig, RegistrationStep, from_workflow_config
+from starfinder.dataset import from_workflow_config
+from starfinder.registration import RecoveryConfig, RegistrationStep
 from starfinder.image import ImageMetadata, IncompatibleGeometryError
 from starfinder._checkpoint import _registration_results, write_registered_header
 from starfinder.registration import (

@@ -30,7 +30,7 @@ from starfinder.dataset import CheckpointConfig, PipelineConfig
 from starfinder.image import IncompatibleGeometryError
 from starfinder.spot_finding import KNOWN_WEIGHTS, SpotiflowConfig, WeightsHashMismatchError
 from starfinder.spot_finding import _learned
-from starfinder.spot_finding._weights import weights_directory
+from starfinder._weights import weights_directory
 
 from .learned_detectors import THREAD_VARIABLES, detect, evaluate, one_thread_environment, run_python
 from .spot_finding_scenes import isolated_scene

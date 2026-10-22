@@ -243,7 +243,8 @@ def generate_raw_registered_stack_cache(
     if dataset not in RAW_REAL_DATASETS:
         raise FileNotFoundError(f"No raw-E2E stack cache recipe for {dataset}/{fov_id}")
 
-    from starfinder.dataset import Dataset, RegistrationRecipe, RegistrationStep
+    from starfinder.dataset import Dataset
+    from starfinder.registration import RegistrationRecipe, RegistrationStep
     from starfinder.registration import RegistrationSignalConfig, TranslationConfig
     from starfinder.preprocessing import MinMaxNormalizationConfig
     from starfinder.dataset.types import RoundState

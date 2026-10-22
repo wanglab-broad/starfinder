@@ -34,7 +34,7 @@ import pytest
 
 from starfinder.image import ImageMetadata
 from starfinder.segmentation import KNOWN_MODELS, ExpandLabelsConfig, expand_labels, rescale_input
-from starfinder.spot_finding._weights import weights_directory
+from starfinder._weights import weights_directory
 
 from .coordination_helpers import digest
 from .learned_detectors import one_thread_environment

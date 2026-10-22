@@ -24,6 +24,7 @@ from ._errors import (
 from ._chain import TransformChain
 from ._methods import REGISTRATION_METHODS as _REGISTRATION_METHODS
 from ._methods import RegistrationSpec
+from ._recipe import ExternalReference, RecoveryConfig, RegistrationRecipe, RegistrationStep
 from ._types import (
     AffineTransform,
     BSplineTransform,
@@ -51,6 +52,10 @@ __all__ = [
     "WarpConfig",
     "RegistrationQcConfig",
     "RegistrationSignalConfig",
+    "RegistrationRecipe",
+    "RegistrationStep",
+    "RecoveryConfig",
+    "ExternalReference",
     "REGISTRATION_METHODS",
     "RegistrationSpec",
     "TranslationTransform",

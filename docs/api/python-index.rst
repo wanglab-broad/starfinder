@@ -116,7 +116,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.sample_output.ExportIncompleteWarning`
 * :py:obj:`starfinder.sample_output.ExportRecord`
 * :py:obj:`starfinder.segmentation.extend_labels_through_z`
-* :py:obj:`starfinder.dataset.ExternalReference`
+* :py:obj:`starfinder.registration.ExternalReference`
 * :py:obj:`starfinder.barcode.extract_intensities`
 * :py:obj:`starfinder.spot_finding.fetch_weights`
 * :py:obj:`starfinder.barcode.filter_reads`
@@ -259,7 +259,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.barcode.ReadScoringResult`
 * :py:obj:`starfinder.preprocessing.reconstruct_background`
 * :py:obj:`starfinder.preprocessing.ReconstructionConfig`
-* :py:obj:`starfinder.dataset.RecoveryConfig`
+* :py:obj:`starfinder.registration.RecoveryConfig`
 * :py:obj:`starfinder.segmentation.reference_grid_from_file`
 * :py:obj:`starfinder.segmentation.ReferenceGrid`
 * :py:obj:`starfinder.registration.REGISTRATION_METHODS`
@@ -269,12 +269,12 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.registration.RegistrationDiagnostics`
 * :py:obj:`starfinder.registration.RegistrationEstimationError`
 * :py:obj:`starfinder.registration.RegistrationQcConfig`
-* :py:obj:`starfinder.dataset.RegistrationRecipe`
+* :py:obj:`starfinder.registration.RegistrationRecipe`
 * :py:obj:`starfinder.registration.RegistrationRejectedError`
 * :py:obj:`starfinder.registration.RegistrationResult`
 * :py:obj:`starfinder.registration.RegistrationSignalConfig`
 * :py:obj:`starfinder.registration.RegistrationSpec`
-* :py:obj:`starfinder.dataset.RegistrationStep`
+* :py:obj:`starfinder.registration.RegistrationStep`
 * :py:obj:`starfinder.benchmark.report_benchmark`
 * :py:obj:`starfinder.report.REPORT_PARTS`
 * :py:obj:`starfinder.report.REPORT_TABLES`

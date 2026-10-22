@@ -22,10 +22,11 @@ import pytest
 from skimage.measure import label
 
 from starfinder.barcode import Codebook, NeighborhoodSumConfig, ReadFilterConfig, WtaDecoderConfig
-from starfinder.dataset import (ChannelInfo, CheckpointConfig, Dataset, ExecutionConfig, ExternalReference,
-                                MorphologyConfig, PipelineConfig, RegistrationRecipe, RegistrationStep, RoundState)
+from starfinder.dataset import (ChannelInfo, CheckpointConfig, Dataset, ExecutionConfig, MorphologyConfig,
+                                PipelineConfig, RoundState)
+from starfinder.registration import ExternalReference, RegistrationRecipe, RegistrationStep
 from starfinder.dataset._prepared import SAME_ACQUISITION
-from starfinder.dataset.fov import _rotated
+from starfinder.preprocessing._rotation import _rotated
 from starfinder.image import ImageMetadata
 from starfinder.io import ImageLoadConfig, save_volume
 from starfinder._checkpoint import FORMAT_VERSION, STAGES

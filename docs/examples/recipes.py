@@ -10,7 +10,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from starfinder.dataset import RegistrationRecipe, RegistrationStep, FOV, RoundState, Dataset
+from starfinder.dataset import FOV, RoundState, Dataset
+from starfinder.registration import RegistrationRecipe, RegistrationStep
 from starfinder.io import load_round, load_volume, save_volume
 from starfinder.registration import TranslationConfig, estimate_transform, apply_transform, TranslationConfig
 from starfinder.spot_finding import find_spots, LocalMaximaConfig

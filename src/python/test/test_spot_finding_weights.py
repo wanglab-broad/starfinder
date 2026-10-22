@@ -17,7 +17,8 @@ import pytest
 from starfinder.__main__ import main
 from starfinder.spot_finding import (KNOWN_WEIGHTS, KnownWeights, MissingWeightsError, WeightsFile,
     WeightsHashMismatchError, fetch_weights, resolve_weights)
-from starfinder.spot_finding._weights import RECORD_NAME, listed_files, weights_artifacts, weights_directory
+from starfinder._weights import RECORD_NAME, weights_directory
+from starfinder.spot_finding._weights import listed_files, weights_artifacts
 
 pytestmark = pytest.mark.spot_finding
 
@@ -134,13 +135,13 @@ def listed_fixture(tmp_path, monkeypatch):
 @pytest.fixture
 def downloads(monkeypatch):
     """The URLs fetch downloads, in order."""
-    from starfinder.spot_finding import _fetch
-    urls, download = [], _fetch._download
+    from starfinder import _weights_fetch
+    urls, download = [], _weights_fetch._download
 
     def counted(url, target, *args, **kwargs):
         urls.append(url)
         return download(url, target, *args, **kwargs)
-    monkeypatch.setattr(_fetch, "_download", counted)
+    monkeypatch.setattr(_weights_fetch, "_download", counted)
     return urls
 
 

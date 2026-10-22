@@ -480,7 +480,8 @@ def prepare_real_raw_inputs(
                 cached_raw_input_info(output_dir, dataset, fov_id),
             )
 
-    from starfinder.dataset import Dataset, RegistrationRecipe, RegistrationStep
+    from starfinder.dataset import Dataset
+    from starfinder.registration import RegistrationRecipe, RegistrationStep
     from starfinder.registration import RegistrationSignalConfig, TranslationConfig
     from starfinder.preprocessing import MinMaxNormalizationConfig
     from starfinder.dataset.types import RoundState

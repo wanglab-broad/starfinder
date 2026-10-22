@@ -131,7 +131,7 @@ The golden test pins the enhancement on its fixture.
   (`reshape=True`, cubic spline). For multiples of 90° this equals `np.rot90` with the
   same sign convention as `FOV.run`'s rotation (checked on a 3×8×10 array). For other
   angles the grid grows (30° turns 8×10 into 12×13), while `FOV.run`'s rotation
-  (`_rotated`, `src/python/starfinder/dataset/fov.py:56-75`) keeps the shape with
+  (`_rotated`, `src/python/starfinder/preprocessing/_rotation.py:9-28`) keeps the shape with
   bilinear interpolation, so `images/DAPI` and `images/ref_merged` are then on
   different grids.
 * With top-level `maximum_projection`, the Z maximum; written by `skimage.io.imsave`

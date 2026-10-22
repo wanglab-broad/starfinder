@@ -11,7 +11,8 @@ import pytest
 import yaml
 
 from starfinder.dataset import (Dataset, FOV, RoundState, PipelineConfig, ExecutionConfig,
-    RegistrationRecipe, RegistrationStep, RecoveryConfig, SubtileConfig, from_workflow_config)
+    SubtileConfig, from_workflow_config)
+from starfinder.registration import RecoveryConfig, RegistrationRecipe, RegistrationStep
 from starfinder.image import ImageMetadata, IncompatibleGeometryError
 from starfinder.barcode import export_spots
 from starfinder.io import ImageLoadConfig, save_volume

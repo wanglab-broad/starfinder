@@ -6,9 +6,9 @@ functions. `PipelineConfig` describes the scientific sequence; `ExecutionConfig`
 controls when images are loaded and released. Unknown config arguments raise.
 
 ```python
-from starfinder.dataset import PipelineConfig, ExecutionConfig, RegistrationRecipe, RegistrationStep
+from starfinder.dataset import PipelineConfig, ExecutionConfig
 from starfinder.io import ImageLoadConfig
-from starfinder.registration import TranslationConfig
+from starfinder.registration import RegistrationRecipe, RegistrationStep, TranslationConfig
 from starfinder.spot_finding import LocalMaximaConfig
 from starfinder.barcode import NeighborhoodSumConfig, WtaDecoderConfig, ReadFilterConfig
 
@@ -28,7 +28,7 @@ Load the dataset codebook before decoding. None disables a stage. The sequence i
 load, rotation, the steps of the preprocessing recipe (`preprocessing`, a
 {py:class}`~starfinder.preprocessing.PreprocessingRecipe`) in their declared
 order, the registration recipe (`registration`, a
-{py:class}`~starfinder.dataset.RegistrationRecipe`), the preprocessing recipe's
+{py:class}`~starfinder.registration.RegistrationRecipe`), the preprocessing recipe's
 `post_registration` steps, detection,
 extraction, decoding and filtering. `post_registration` accepts only
 reconstruction, which legacy subtile workflows place after registration. The
@@ -192,7 +192,7 @@ later.load_registered_round("morph", checkpoints=CheckpointConfig(directory="che
 
 ## Registration recipe
 
-A {py:class}`~starfinder.dataset.RegistrationRecipe` is zero or more global steps
+A {py:class}`~starfinder.registration.RegistrationRecipe` is zero or more global steps
 (`translation`, `rigid`, `affine`) followed by at most one local step (`demons`,
 `bspline`, `tps`, `cpd`), as specified in {doc}`registration-contract`. For
 each moving sequencing round, `FOV.register` (which `run` calls):
@@ -220,7 +220,7 @@ summary, the `WarpConfig` applied per round and the semantics (`recipe`; a
 loaded version-1 checkpoint is `sequential`). A round is registered once.
 
 ```python
-from starfinder.dataset import RegistrationRecipe, RegistrationStep
+from starfinder.registration import RegistrationRecipe, RegistrationStep
 from starfinder.registration import DemonsConfig, RegistrationSignalConfig, TranslationConfig
 
 recipe = RegistrationRecipe(
@@ -244,7 +244,7 @@ each moving round, by index, pattern or name (`Dataset.channel_index`, see
 round with its own channels lists them in `Dataset.other_channel_order`, and
 `Dataset.channel_labels(round)` returns either. `reference=None` uses `recipe.reference_round` (default: the dataset
 reference round); any loaded round may be named. An
-{py:class}`~starfinder.dataset.ExternalReference` supplies a ZYX reference
+{py:class}`~starfinder.registration.ExternalReference` supplies a ZYX reference
 signal directly; it must have the moving rounds' grid.
 
 Unknown or repeated channel names, channel indices outside a round and grid mismatches raise
@@ -260,7 +260,7 @@ is also saved under `other_rounds/<round>/` (see "Sequencing rounds and other
 rounds" above). `FOV.prepare_morphology` calls it for each other round.
 
 ```python
-from starfinder.dataset import ExternalReference
+from starfinder.registration import ExternalReference
 
 stain = RegistrationSignalConfig("channel", reference_channel="ch04", moving_channel="ch00")
 recipe = RegistrationRecipe((RegistrationStep(TranslationConfig()),), signal=stain)
@@ -339,7 +339,7 @@ reinterpreted as a single-segment predicate.
 Recovery is disabled by default. For an explicitly recoverable landmark failure:
 
 ```python
-from starfinder.dataset import RecoveryConfig
+from starfinder.registration import RecoveryConfig
 from starfinder.registration import DemonsConfig, TpsConfig, InsufficientLandmarksError
 step = RegistrationStep(
     TpsConfig(),

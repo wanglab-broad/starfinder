@@ -33,8 +33,16 @@ one moving round into one pull map, ``T1(T2(...Tn(p)))``; its ``pull_field()`` i
 composite float64 displacement, and ``apply_transform`` resamples an image once through
 it. :py:class:`~starfinder.registration.RegistrationSignalConfig` builds the float64 ZYX
 registration signal of a round (channel maximum by default, sum, or one channel). Both
-belong to the registration recipe of :py:class:`~starfinder.dataset.RegistrationRecipe`;
+belong to the registration recipe of :py:class:`~starfinder.registration.RegistrationRecipe`;
 see :doc:`../coordination`.
+
+The recipe types are part of this package: a
+:py:class:`~starfinder.registration.RegistrationRecipe` holds ordered
+:py:class:`~starfinder.registration.RegistrationStep` entries, each with an optional
+:py:class:`~starfinder.registration.RecoveryConfig`, and an
+:py:class:`~starfinder.registration.ExternalReference` is a reference signal that is not a
+round of the dataset. ``FOV.register``, ``FOV.register_rounds`` and
+``PipelineConfig.registration`` take them; see :doc:`../registration-contract`.
 
 .. currentmodule:: starfinder.registration
 
@@ -50,17 +58,21 @@ see :doc:`../coordination`.
    DemonsConfig
    DenseDisplacementTransform
    estimate_transform
+   ExternalReference
    InsufficientLandmarksError
    InvalidRegistrationConfigError
+   RecoveryConfig
    REGISTRATION_METHODS
    RegistrationBackendUnavailableError
    RegistrationDiagnostics
    RegistrationEstimationError
    RegistrationQcConfig
+   RegistrationRecipe
    RegistrationRejectedError
    RegistrationResult
    RegistrationSignalConfig
    RegistrationSpec
+   RegistrationStep
    RigidConfig
    TpsConfig
    TransformChain

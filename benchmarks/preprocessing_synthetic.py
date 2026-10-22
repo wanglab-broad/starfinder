@@ -41,7 +41,8 @@ import numpy as np
 import pandas as pd
 
 from starfinder.barcode import Codebook, NeighborhoodSumConfig, ReadFilterConfig, WtaDecoderConfig
-from starfinder.dataset import Dataset, PipelineConfig, RegistrationRecipe, RegistrationStep, RoundState
+from starfinder.dataset import Dataset, PipelineConfig, RoundState
+from starfinder.registration import RegistrationRecipe, RegistrationStep
 from starfinder.evaluation.matching import match_points
 from starfinder.preprocessing import (Background3DConfig, HistogramMatchingConfig, MinMaxNormalizationConfig,
     PercentileNormalizationConfig, PreprocessingRecipe, PreprocessingStep, ReconstructionConfig, ScalarBackgroundConfig,

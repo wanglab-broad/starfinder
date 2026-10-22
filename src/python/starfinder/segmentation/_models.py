@@ -20,11 +20,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from starfinder._records import file_sha256
-from starfinder.spot_finding._weights import weights_directory
+from starfinder._weights import RECORD_NAME, model_folder, weights_directory
 
 from ._errors import MissingModelError, ModelHashMismatchError
 
-RECORD_NAME = "starfinder-weights.json"
 #: The files a user-trained model folder must hold, by method; a Cellpose model is one file.
 REQUIRED_FILES = {"stardist": ("config.json", "thresholds.json", "weights_best.h5")}
 
@@ -163,7 +162,7 @@ def resolve_model(method: str, *, model: str | None = None, model_path=None,
         raise ValueError(f"{method} needs exactly one of model and model_path")
     if model is not None:
         entry = known_model(method, model)
-        folder = weights_directory(directory) / method / model
+        folder = model_folder(method, model, directory)
         artifacts = []
         for item in entry.files:
             path = folder / item.path
@@ -244,7 +243,7 @@ def _fetch_model(method: str, model: str, *, directory=None) -> Path:
     differs raises ModelHashMismatchError. This is the only segmentation code
     that uses the network.
     """
-    from starfinder.spot_finding._fetch import _download, _extract
+    from starfinder._weights_fetch import _download, _extract
 
     entry = known_model(method, model)
     root = weights_directory(directory)

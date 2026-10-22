@@ -960,10 +960,9 @@ def decoded_fov(tmp_path_factory):
     from starfinder.dataset import (
         Dataset,
         PipelineConfig,
-        RegistrationRecipe,
-        RegistrationStep,
         RoundState,
     )
+    from starfinder.registration import RegistrationRecipe, RegistrationStep
     from starfinder.io import ImageLoadConfig, save_volume
     from starfinder.registration import TranslationConfig
     from starfinder.spot_finding import LocalMaximaConfig

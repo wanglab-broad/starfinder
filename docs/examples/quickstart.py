@@ -14,7 +14,8 @@ from starfinder.registration import TranslationConfig
 import numpy as np
 import pandas as pd
 
-from starfinder.dataset import RegistrationRecipe, RegistrationStep, RoundState, Dataset
+from starfinder.dataset import RoundState, Dataset
+from starfinder.registration import RegistrationRecipe, RegistrationStep
 
 
 def main(output: Path) -> None:

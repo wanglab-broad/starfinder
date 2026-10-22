@@ -12,8 +12,8 @@ import numpy as np
 import pytest
 
 from starfinder._registry import _version
-from starfinder.dataset import (CheckpointConfig, Dataset, PipelineConfig, RecoveryConfig, RegistrationRecipe,
-    RegistrationStep, RoundState, from_workflow_config)
+from starfinder.dataset import (CheckpointConfig, Dataset, PipelineConfig, RoundState, from_workflow_config)
+from starfinder.registration import RecoveryConfig, RegistrationRecipe, RegistrationStep
 from starfinder.image import ImageMetadata
 from starfinder.dataset import read_checkpoint
 from starfinder._records import atomic_file as _atomic, write_json

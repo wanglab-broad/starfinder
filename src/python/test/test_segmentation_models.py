@@ -280,13 +280,13 @@ def archive(tmp_path, monkeypatch):
             handle.writestr(name, content)
     entry = fixture_entry(path.as_uri(), path.read_bytes())
     monkeypatch.setitem(KNOWN_MODELS, ("stardist", "fixture_model"), entry)
-    from starfinder.spot_finding import _fetch
-    urls, download = [], _fetch._download
+    from starfinder import _weights_fetch
+    urls, download = [], _weights_fetch._download
 
     def counted(url, target, *args):
         urls.append(url)
         return download(url, target, *args)
-    monkeypatch.setattr(_fetch, "_download", counted)
+    monkeypatch.setattr(_weights_fetch, "_download", counted)
     return entry, urls
 
 

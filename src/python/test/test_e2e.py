@@ -1,5 +1,5 @@
-from starfinder.dataset import PipelineConfig, ExecutionConfig, RegistrationRecipe, RegistrationStep
-from starfinder.registration import TranslationConfig
+from starfinder.dataset import PipelineConfig, ExecutionConfig
+from starfinder.registration import RegistrationRecipe, RegistrationStep, TranslationConfig
 from starfinder.io import ImageLoadConfig
 from starfinder.preprocessing import MinMaxNormalizationConfig, PreprocessingRecipe, PreprocessingStep
 from starfinder.spot_finding import LocalMaximaConfig

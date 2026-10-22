@@ -17,7 +17,8 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from starfinder.dataset import Dataset, RegistrationRecipe, RegistrationStep, RoundState
+from starfinder.dataset import Dataset, RoundState
+from starfinder.registration import RegistrationRecipe, RegistrationStep
 
 from starfinder.evaluation.registration import _valid_overlap, evaluate_displacement_field, registration_qc
 from starfinder.image import ImageMetadata, IncompatibleGeometryError

@@ -19,8 +19,8 @@ import numpy as np
 import pytest
 
 from starfinder.benchmark import BenchmarkCase, evaluate_benchmark, run_benchmark
-from starfinder.dataset import (CheckpointConfig, Dataset, PipelineConfig, RegistrationRecipe, RegistrationStep,
-                                RoundState)
+from starfinder.dataset import (CheckpointConfig, Dataset, PipelineConfig, RoundState)
+from starfinder.registration import RegistrationRecipe, RegistrationStep
 from starfinder.evaluation.registration import (_valid_overlap, evaluate_displacement_field, evaluate_translation,
                                                 registration_qc)
 from starfinder.image import ImageMetadata, IncompatibleGeometryError

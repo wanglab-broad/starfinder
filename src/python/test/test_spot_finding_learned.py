@@ -25,7 +25,8 @@ from starfinder.spot_finding import (KNOWN_WEIGHTS, SPOT_FINDING_METHODS, Channe
     PiscisConfig, SpotFindingBackendUnavailableError, SpotFindingPlan, SpotFindingSpec, SpotiflowConfig, WeightsFile,
     WeightsHashMismatchError, find_spots, resolve_weights)
 from starfinder.spot_finding import _learned, _methods
-from starfinder.spot_finding._weights import weights_artifacts, weights_directory
+from starfinder._weights import weights_directory
+from starfinder.spot_finding._weights import weights_artifacts
 
 from .learned_detectors import one_thread_environment, run_python
 from .test_spot_finding_golden import CHANNELS, fov_with_fixture, golden_dataset

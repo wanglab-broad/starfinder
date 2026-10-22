@@ -605,7 +605,7 @@ What the examples of Preprocessing and Registration show, rebuilt from the run r
    round is loaded with `config.pipeline.load` through `io/tiff.py`: `load_round`, which
    applies the configuration's `conversion` when it has one (`io/tiff.py` line 300), and
    rotated by `config.pipeline.rotation_degrees` with the code of `FOV._rotate_round`
-   (`_rotated`).
+   (`_rotated`, `preprocessing/_rotation.py`).
 3. **The `steps` phase.** The entries of `preprocessing.rounds[<round>]` whose `stage` is
    `steps`, in `index` order. `FOV._preprocess` records each entry with `stage` set to its
    phase (`steps` or `post_registration`) and `step` set to the step's name (`dataset/fov.py`

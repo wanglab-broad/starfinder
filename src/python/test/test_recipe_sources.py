@@ -11,8 +11,8 @@ import numpy as np
 import pytest
 
 from starfinder.barcode import NeighborhoodSumConfig, extract_intensities
-from starfinder.dataset import (CheckpointConfig, Dataset, ExecutionConfig, PipelineConfig, RegistrationRecipe,
-    RegistrationStep, RoundState)
+from starfinder.dataset import (CheckpointConfig, Dataset, ExecutionConfig, PipelineConfig, RoundState)
+from starfinder.registration import RegistrationRecipe, RegistrationStep
 from starfinder.image import ImageMetadata
 from starfinder.io import ImageLoadResult
 from starfinder.preprocessing import (HistogramMatchingConfig, MinMaxNormalizationConfig, PercentileNormalizationConfig,

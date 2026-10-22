@@ -7,14 +7,13 @@ imports. Weights are loaded from explicit paths in the cache, never from the
 libraries' own caches.
 """
 from dataclasses import dataclass
-import os
 from pathlib import Path
 
 from starfinder._records import file_sha256
+from starfinder._weights import model_folder, weights_directory
 
 from ._errors import MissingWeightsError, WeightsHashMismatchError
 
-RECORD_NAME = "starfinder-weights.json"
 _SPOTIFLOW_RELEASE = "https://github.com/weigertlab/spotiflow-models/releases/download/0.6.0"
 _PISCIS_REVISION = "9bdefc72cb519053c63fd2d7bff9d12db7bb394e"
 _PISCIS_FILES = f"https://huggingface.co/wniu/Piscis/resolve/{_PISCIS_REVISION}/models"
@@ -137,30 +136,6 @@ def known_weights(method: str, model: str) -> KnownWeights:
     return entry
 
 
-def weights_directory(directory=None) -> Path:
-    """Root of the weights cache, as an absolute path.
-
-    directory when given; otherwise STARFINDER_WEIGHTS_DIR when set, else
-    $XDG_CACHE_HOME/starfinder/weights (default ~/.cache/starfinder/weights).
-    A relative or ~ root is expanded and resolved here, so no library ever
-    receives a relative path (Piscis would prefix one with its own model
-    cache). A model lives in <root>/<method>/<model>/.
-    """
-    if directory is not None:
-        root = Path(directory)
-    elif os.environ.get("STARFINDER_WEIGHTS_DIR"):
-        root = Path(os.environ["STARFINDER_WEIGHTS_DIR"])
-    else:
-        root = Path(os.environ.get("XDG_CACHE_HOME") or str(Path.home() / ".cache")) / "starfinder" / "weights"
-    return root.expanduser().resolve()
-
-
-def model_folder(method: str, model: str, directory=None) -> Path:
-    """The folder of one model in the cache (it may not exist)."""
-    entry = known_weights(method, model)
-    return weights_directory(directory) / entry.method / entry.model
-
-
 def fetch_command(method, model, directory=None):
     return f"starfinder weights fetch {method} {model}" + (f" --dir {directory}" if directory is not None else "")
 
@@ -194,7 +169,7 @@ def resolve_weights(method: str, model: str, *, directory=None, extracted: tuple
     both hashes) when a hash differs.
     """
     entry = known_weights(method, model)
-    folder = model_folder(method, model, directory)
+    folder = model_folder(entry.method, entry.model, directory)
     for item in _listed(entry, extracted):
         path = folder / item.path
         if not path.is_file():

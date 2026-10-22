@@ -585,7 +585,7 @@ W-392's `inventory/models.json`, which the implementation checks before its firs
 | Chain check | Model and its path | How the test finds it | Environment and device |
 | --- | --- | --- | --- |
 | CD | StarDist `3D_spleen`: `/home/unix/jiahao/.cache/starfinder/user-models/stardist/3D_spleen` (`config.json`, `thresholds.json`, `weights_best.h5`) | `STARFINDER_STARDIST_3D_SPLEEN`, as `test/test_segmentation_validation.py` | The locked environment of the batch (`dev-s210-export-20261007T050852Z`, extras `stardist`, `anndata`, `multiview-stitcher`), CPU, one thread (`CUDA_VISIBLE_DEVICES=""`) |
-| CT | StarDist `2D_versatile_fluo`: `/home/unix/jiahao/.cache/starfinder/weights/stardist/2D_versatile_fluo` | `STARFINDER_WEIGHTS_DIR=/home/unix/jiahao/.cache/starfinder/weights` (`spot_finding/_weights.py::weights_directory`) | As CD; CPU, because the export applies one device to every run of its `segmentation` block and `seeded_watershed` runs on the CPU only (open point of {doc}`synthetic-cellular-scene`, W-393 `notes.md` §4) |
+| CT | StarDist `2D_versatile_fluo`: `/home/unix/jiahao/.cache/starfinder/weights/stardist/2D_versatile_fluo` | `STARFINDER_WEIGHTS_DIR=/home/unix/jiahao/.cache/starfinder/weights` (`_weights.py::weights_directory`) | As CD; CPU, because the export applies one device to every run of its `segmentation` block and `seeded_watershed` runs on the CPU only (open point of {doc}`synthetic-cellular-scene`, W-393 `notes.md` §4) |
 | CU | Cellpose `cpsam_v2`: `/home/unix/jiahao/.cache/starfinder/weights/cellpose/cpsam_v2/cpsam_v2` | `STARFINDER_WEIGHTS_DIR`, as CT; `HF_HUB_OFFLINE=1` | As CD, extra `cellpose`; CPU |
 
 The GPU is not used by any gate. W-393 also measured each model call on the GPU (the

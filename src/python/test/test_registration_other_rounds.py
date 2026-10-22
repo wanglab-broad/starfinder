@@ -19,7 +19,8 @@ import pandas as pd
 import pytest
 import tifffile
 
-from starfinder.dataset import Dataset, ExternalReference, RegistrationRecipe, RegistrationStep, RoundState
+from starfinder.dataset import Dataset, RoundState
+from starfinder.registration import ExternalReference, RegistrationRecipe, RegistrationStep
 from starfinder.evaluation.registration import _valid_overlap, evaluate_displacement_field
 from starfinder.image import ImageMetadata, IncompatibleGeometryError
 from starfinder.io import save_volume

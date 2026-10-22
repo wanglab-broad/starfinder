@@ -19,16 +19,16 @@ from starfinder.spot_finding._methods import SpotFindingConfig
 from starfinder.io import ImageLoadConfig
 from starfinder.preprocessing import (MinMaxNormalizationConfig, HistogramMatchingConfig, ReconstructionConfig, TophatConfig, ProjectionConfig,
     StepContext, read_supplied_statistics, run_step, step_spec)
+from starfinder.preprocessing._rotation import _rotated
 from starfinder.dataset._logging import _log_step
 from starfinder import _checkpoint
 from starfinder._layout import _FovPaths
 from starfinder._records import file_sha256
 from starfinder._registry import _version
-from starfinder.dataset.config import (CheckpointConfig, PipelineConfig, ExecutionConfig, ExternalReference,
-    MorphologyConfig, RegistrationRecipe, RegistrationStep, _check_rotation)
+from starfinder.dataset.config import CheckpointConfig, PipelineConfig, ExecutionConfig, MorphologyConfig, _check_rotation
 from starfinder.dataset.types import REFERENCE_STAIN
-from starfinder.registration import (RegistrationRejectedError, RegistrationResult, RegistrationSignalConfig,
-    TransformChain, TranslationConfig, TranslationTransform, WarpConfig)
+from starfinder.registration import (ExternalReference, RegistrationRecipe, RegistrationRejectedError, RegistrationResult,
+    RegistrationSignalConfig, RegistrationStep, TransformChain, TranslationConfig, TranslationTransform, WarpConfig)
 from starfinder.barcode import (DECODING_METHODS, Codebook, IntensityExtractionResult, NeighborhoodSumConfig,
     WtaDecoderConfig, ReadFilterConfig, BarcodeDecodingResult, ReadFilteringResult, ReadScoreConfig,
     ReadScoringResult, DeduplicationConfig, ReadDeduplicationResult)
@@ -56,28 +56,6 @@ def _recipe_record(recipe):
                 step_signals=[None if step.signal is None else asdict(step.signal) for step in recipe.steps],
                 warp=None if recipe.warp is None else asdict(recipe.warp), reference_round=recipe.reference_round,
                 qc=asdict(recipe.qc))
-
-
-def _rotated(volume, source, angle):
-    """(image, metadata, diagnostics) of a ZYX(C) volume rotated by angle degrees in YX.
-
-    Exact 90-degree multiples use np.rot90 and a contiguous copy; other angles
-    scipy.ndimage.rotate with bilinear interpolation, keeping the shape and dtype.
-    """
-    vol = _validate_image(volume)
-    metadata = source.rotated(vol.shape[:3], angle, frame_id=f"{source.frame_id}/rotate:{angle}")
-    k_90 = round(angle / 90)
-    if abs(angle - k_90 * 90) < 1e-6:
-        # np.rot90 and imrotate share sign convention: k=1 is CCW, k=-1 is CW
-        image = np.ascontiguousarray(np.rot90(vol, k=k_90, axes=(1, 2)))
-    else:
-        from scipy.ndimage import rotate as ndimage_rotate
-        image = ndimage_rotate(vol, angle, axes=(1, 2), reshape=False, order=1).astype(vol.dtype)
-    return image, metadata, {
-        "source_metadata": asdict(source), "source_shape_zyx": vol.shape[:3],
-        "output_shape_zyx": image.shape[:3], "angle_degrees": angle,
-        "mapping": "source = R @ (output - output_center) + source_center",
-    }
 
 
 def _default_warp(chain):

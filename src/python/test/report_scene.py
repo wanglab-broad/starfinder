@@ -111,7 +111,7 @@ def pipeline_config(channels, *, registration=None, preprocessing=None):
     from starfinder.barcode import (DeduplicationConfig, NeighborhoodSumConfig, ReadFilterConfig, ReadScoreConfig,
                                     WtaDecoderConfig)
     from starfinder.dataset import PipelineConfig
-    from starfinder.dataset.config import RegistrationRecipe, RegistrationStep
+    from starfinder.registration import RegistrationRecipe, RegistrationStep
     from starfinder.io import ImageLoadConfig
     from starfinder.preprocessing import MinMaxNormalizationConfig, PreprocessingRecipe, PreprocessingStep, TophatConfig
     from starfinder.registration import RegistrationSignalConfig, TranslationConfig

@@ -26,6 +26,7 @@ are not examples of the current API.
 | `io.read_checkpoint` | `dataset.read_checkpoint` (no alias) |
 | `io.export_spots` | `barcode.export_spots` (no alias) |
 | `sample_output.SampleSegmentation` | `segmentation.SampleSegmentation` (no alias) |
+| `dataset.RegistrationRecipe`, `RegistrationStep`, `RecoveryConfig`, `ExternalReference` | `registration.RegistrationRecipe`, `RegistrationStep`, `RecoveryConfig`, `ExternalReference` (no alias) |
 
 These relocations do not make the old positional arguments or return values valid.
 Use typed operation configs and structured results. See the [full export
@@ -266,7 +267,7 @@ supported; regenerate them.
 ### Registration recipe
 
 `PipelineConfig.registration` is a
-{py:class}`~starfinder.dataset.RegistrationRecipe` or `None` (no registration),
+{py:class}`~starfinder.registration.RegistrationRecipe` or `None` (no registration),
 not a tuple of steps, as specified in the
 [registration contract](registration-contract.md). `FOV.register` takes a
 recipe too. There are no aliases.
@@ -351,7 +352,7 @@ allow.
 ### Other rounds
 
 `FOV.register_rounds(recipe, *, rounds, reference=None)` and
-{py:class}`~starfinder.dataset.ExternalReference` are new: other rounds, such
+{py:class}`~starfinder.registration.ExternalReference` are new: other rounds, such
 as morphology rounds, register to a reference round or an external reference
 image through a shared stain, and the transform is applied to every channel of
 the round. A channel label in `RegistrationSignalConfig(mode="channel")` is

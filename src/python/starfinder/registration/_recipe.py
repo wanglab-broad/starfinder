@@ -1,0 +1,138 @@
+"""The registration recipe: ordered steps with optional recovery, and an external reference signal."""
+from dataclasses import dataclass
+
+import numpy as np
+
+from starfinder._registry import spec_for
+from starfinder.image import ImageMetadata, _validate_image
+
+from ._config import RegistrationQcConfig, RegistrationSignalConfig, TranslationConfig, WarpConfig
+from ._errors import InsufficientLandmarksError, RegistrationEstimationError, RegistrationRejectedError
+from ._methods import REGISTRATION_METHODS, RegistrationConfig
+
+# Error categories a RecoveryConfig may allow.
+_RECOVERABLE = (RegistrationEstimationError, InsufficientLandmarksError, RegistrationRejectedError)
+
+
+@dataclass(frozen=True)
+class RecoveryConfig:
+    """Opt-in ordered alternatives, only for explicitly allowed estimation errors.
+
+    Validation, geometry, application and dependency errors never recover.
+    RegistrationRejectedError (a configured QC criterion failed) is an
+    estimation error, so allowing RegistrationEstimationError allows it too.
+    """
+    allowed_errors: tuple[type[RegistrationEstimationError], ...]
+    alternatives: tuple[RegistrationConfig, ...]
+
+    def __post_init__(self):
+        if not self.allowed_errors or any(e not in _RECOVERABLE for e in self.allowed_errors):
+            raise ValueError('recovery allows only explicit estimation error categories')
+        if not self.alternatives:
+            raise ValueError('recovery requires ordered alternatives')
+        for config in self.alternatives:
+            spec_for(REGISTRATION_METHODS, config, 'registration method', TypeError, 'invalid recovery configuration')
+            config.__post_init__()
+
+
+@dataclass(frozen=True)
+class RegistrationStep:
+    """One position of a recipe: a registered method config, optional recovery and signal.
+
+    signal None uses the recipe's signal. Recovery alternatives must have the
+    step kind of config, so recovery never changes an allowed sequence.
+    """
+    config: RegistrationConfig
+    recovery: RecoveryConfig | None = None
+    signal: RegistrationSignalConfig | None = None
+
+    def __post_init__(self):
+        spec = spec_for(REGISTRATION_METHODS, self.config, 'registration method', TypeError, 'unsupported registration config')
+        self.config.__post_init__()
+        if self.recovery is not None:
+            if not isinstance(self.recovery, RecoveryConfig):
+                raise TypeError('recovery requires RecoveryConfig')
+            self.recovery.__post_init__()
+            for config in self.recovery.alternatives:
+                if REGISTRATION_METHODS[type(config)].step_kind != spec.step_kind:
+                    raise ValueError(f'recovery alternative {config.method!r} is not a {spec.step_kind} method '
+                                     f'like {spec.name!r}')
+        if self.signal is not None:
+            if not isinstance(self.signal, RegistrationSignalConfig):
+                raise TypeError('signal requires RegistrationSignalConfig')
+            self.signal.__post_init__()
+
+
+@dataclass(frozen=True)
+class RegistrationRecipe:
+    """Ordered registration steps that compose into one pull transform per moving round.
+
+    steps is zero or more global steps (translation, rigid, affine) followed
+    by at most one local step (demons, bspline, tps, cpd), at least one step;
+    the step kind is the step_kind of the method's REGISTRATION_METHODS
+    entry. Step k is estimated on the moving signal resampled in float64
+    through steps 1 to k-1; after the last step every image of the moving
+    round is resampled once through the composed TransformChain. signal
+    builds the registration signals (default: the channel maximum). warp is
+    the final resampling; None derives WarpConfig(backend="translation") for a
+    chain of translations and WarpConfig(backend="scipy") otherwise.
+    reference_round None uses the dataset reference round; when set it must
+    equal it. qc holds the routine QC rejection criteria (none by default).
+    """
+    steps: tuple[RegistrationStep, ...]
+    signal: RegistrationSignalConfig = RegistrationSignalConfig()
+    warp: WarpConfig | None = None
+    reference_round: str | None = None
+    qc: RegistrationQcConfig = RegistrationQcConfig()
+
+    def __post_init__(self):
+        if not isinstance(self.steps, (tuple, list)) or not self.steps:
+            raise ValueError('a registration recipe requires at least one step')
+        steps = tuple(self.steps)
+        for step in steps:
+            if not isinstance(step, RegistrationStep):
+                raise TypeError('registration requires RegistrationStep entries')
+            step.__post_init__()
+        object.__setattr__(self, 'steps', steps)
+        kinds = [REGISTRATION_METHODS[type(step.config)].step_kind for step in steps]
+        if 'local' in kinds[:-1]:
+            names = tuple(step.config.method for step in steps)
+            raise ValueError(f'registration steps {names} are not global steps followed by at most one local step')
+        for name, kind in (('signal', RegistrationSignalConfig), ('qc', RegistrationQcConfig)):
+            if not isinstance(getattr(self, name), kind):
+                raise TypeError(f'{name} requires {kind.__name__}')
+            getattr(self, name).__post_init__()
+        if self.warp is not None:
+            if not isinstance(self.warp, WarpConfig):
+                raise TypeError('warp requires WarpConfig')
+            self.warp.__post_init__()
+            configs = [c for step in steps for c in (step.config, *(step.recovery.alternatives if step.recovery else ()))]
+            translations = [type(c) is TranslationConfig for c in configs]
+            if self.warp.backend == 'translation' and not all(translations):
+                raise ValueError('warp backend "translation" applies only to recipes of translation steps')
+            if self.warp.backend != 'translation' and all(translations):
+                raise ValueError('a recipe of translation steps requires warp backend "translation"')
+        if self.reference_round is not None and (not isinstance(self.reference_round, str) or not self.reference_round):
+            raise ValueError('reference_round must be a round name or None')
+
+
+@dataclass(frozen=True, eq=False)
+class ExternalReference:
+    """A reference signal that is not a round of the dataset, for FOV.register_rounds.
+
+    image is a finite ZYX array on the grid of the rounds it registers: the
+    same shape, and metadata with the same spacing, origin, direction and
+    unit. It is the reference signal of every step as given, whatever the
+    recipe's signal mode. label names it in the attempt records (for example
+    ``"round1:ch04"``), next to the SHA-256 of the image's C-order bytes.
+    """
+    image: np.ndarray
+    metadata: ImageMetadata
+    label: str
+
+    def __post_init__(self):
+        _validate_image(self.image, ndim=(3,))
+        if not isinstance(self.metadata, ImageMetadata):
+            raise TypeError('metadata requires ImageMetadata')
+        if not isinstance(self.label, str) or not self.label:
+            raise ValueError('label must be a nonempty string')

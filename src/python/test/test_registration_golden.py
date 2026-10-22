@@ -44,8 +44,9 @@ def registration_config(methods, *, signal="merged", demons_iterations=None):
     the defaults of each config; demons_iterations=None keeps the DemonsConfig
     default, so a changed default changes the pinned digests.
     """
-    from starfinder.dataset import PipelineConfig, RegistrationRecipe, RegistrationStep
-    from starfinder.registration import DemonsConfig, RegistrationSignalConfig, TranslationConfig
+    from starfinder.dataset import PipelineConfig
+    from starfinder.registration import (DemonsConfig, RegistrationRecipe, RegistrationSignalConfig, RegistrationStep,
+                                         TranslationConfig)
 
     configs = {"translation": lambda: TranslationConfig(),
                "demons": lambda: (DemonsConfig() if demons_iterations is None

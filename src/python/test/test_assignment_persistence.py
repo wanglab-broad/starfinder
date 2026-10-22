@@ -381,7 +381,8 @@ def test_excluded_cells_are_preserved(tmp_path, genes, masks, table_format):
 @pytest.mark.dataset
 def test_fov_run_and_segmentation_files_are_untouched_by_assign(tmp_path):
     from starfinder.barcode import NeighborhoodSumConfig, WtaDecoderConfig
-    from starfinder.dataset import PipelineConfig, RegistrationRecipe, RegistrationStep
+    from starfinder.dataset import PipelineConfig
+    from starfinder.registration import RegistrationRecipe, RegistrationStep
     from starfinder.io import ImageLoadConfig
     from starfinder.registration import TranslationConfig
     from starfinder.synthetic import generate_formed_scene

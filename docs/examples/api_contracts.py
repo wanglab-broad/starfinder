@@ -16,7 +16,8 @@ from starfinder.barcode import (
     decode_barcodes, extract_intensities, filter_reads,
 )
 from starfinder.synthetic import formed_scene_preset, generate_formed_scene
-from starfinder.dataset import RoundState, Dataset, RegistrationRecipe, RegistrationStep
+from starfinder.dataset import RoundState, Dataset
+from starfinder.registration import RegistrationRecipe, RegistrationStep
 from starfinder.io import ImageLoadResult, load_volume, save_volume
 from starfinder.preprocessing import normalize_intensity
 from starfinder.registration import estimate_transform, apply_transform, TranslationConfig, TpsConfig, DemonsConfig, WarpConfig, DenseDisplacementTransform, InsufficientLandmarksError, RegistrationSignalConfig

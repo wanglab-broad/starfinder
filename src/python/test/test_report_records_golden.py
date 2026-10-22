@@ -36,8 +36,8 @@ import pytest
 
 from starfinder.barcode import (Codebook, DeduplicationConfig, NeighborhoodSumConfig, ReadFilterConfig,
                                 ReadScoreConfig, WtaDecoderConfig)
-from starfinder.dataset import (CheckpointConfig, Dataset, ExecutionConfig, PipelineConfig, RegistrationRecipe,
-                                RegistrationStep, RoundState)
+from starfinder.dataset import (CheckpointConfig, Dataset, ExecutionConfig, PipelineConfig, RoundState)
+from starfinder.registration import RegistrationRecipe, RegistrationStep
 from starfinder.image import ImageMetadata
 from starfinder.io import ImageLoadConfig, save_volume
 from starfinder.preprocessing import (MinMaxNormalizationConfig, PreprocessingRecipe, PreprocessingStep,

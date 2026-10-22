@@ -39,7 +39,7 @@ from starfinder.image import ImageMetadata, IncompatibleGeometryError
 from starfinder.segmentation import (KNOWN_MODELS, SEGMENTATION_METHODS, CellposeConfig, ExpandLabelsConfig,
     MissingModelError, ModelHashMismatchError, ReferenceGrid, SegmentationInput, StarDistConfig, expand_labels,
     resolve_model, segment)
-from starfinder.spot_finding._weights import weights_directory
+from starfinder._weights import weights_directory
 
 from .learned_detectors import one_thread_environment
 from .segmentation_fixtures import BOXES_METADATA, boxes

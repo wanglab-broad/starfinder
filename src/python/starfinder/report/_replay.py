@@ -4,9 +4,9 @@ the examples", ``intensity.csv``).
 The report rebuilds the images of the main example from its run record (D1): the raw input
 of the reference round and of the first moving round, checked against the SHA-256 the run
 recorded (step 1), loaded with ``config.pipeline.load`` through ``io.load_round`` and
-rotated with ``FOV.run``'s ``_rotated`` (step 2); the recorded ``steps`` entries rerun with
-``preprocessing.run_step``, their fitted values compared with the recorded ones (step 3);
-on a moving round the saved transforms restored with ``_checkpoint.py``:
+rotated with ``FOV.run``'s ``_rotated`` (``preprocessing/_rotation.py``; step 2); the recorded
+``steps`` entries rerun with ``preprocessing.run_step``, their fitted values compared with the
+recorded ones (step 3); on a moving round the saved transforms restored with ``_checkpoint.py``:
 ``_restore_result``, composed and resampled once with the round's ``application_config``
 (step 4; no registration is estimated); then the ``post_registration`` entries (step 5).
 The image a round ends with is the image the stage ``registered`` saves (step 6), which
@@ -333,7 +333,7 @@ class _Replayer:
 
     def load(self, name, entries, load, rotation):
         """Step 2: the round loaded with the run's load configuration from the recorded files, and rotated."""
-        from starfinder.dataset.fov import _rotated
+        from starfinder.preprocessing._rotation import _rotated
         from starfinder.io import load_round
         directory = _round_directory(entries, load)
         loaded = load_round(directory, config=replace(load, subdir=""))

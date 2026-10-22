@@ -212,7 +212,7 @@ def test_rp2_field_not_saved(tmp_path):
     with ``field_not_saved`` (RE1, PR1); the round's ``input`` and ``steps`` rows of ``intensity.csv`` are
     written, and the reference round's rows of every phase."""
     pytest.importorskip("SimpleITK", reason="the demons step needs the local-registration extra")
-    from starfinder.dataset.config import RegistrationRecipe, RegistrationStep
+    from starfinder.registration import RegistrationRecipe, RegistrationStep
     from starfinder.preprocessing import (MinMaxNormalizationConfig, PreprocessingRecipe, PreprocessingStep,
                                           ReconstructionConfig, TophatConfig)
     from starfinder.registration import DemonsConfig, RegistrationSignalConfig, TranslationConfig

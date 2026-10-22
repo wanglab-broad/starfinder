@@ -1,5 +1,4 @@
-from starfinder.dataset import RegistrationRecipe, RegistrationStep
-from starfinder.registration import TranslationConfig
+from starfinder.registration import RegistrationRecipe, RegistrationStep, TranslationConfig
 from .coordination_helpers import spot_table, detected_shifts
 """Tests for FOV pipeline on small synthetic dataset."""
 

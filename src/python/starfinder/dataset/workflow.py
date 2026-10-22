@@ -4,7 +4,7 @@ from dataclasses import MISSING, asdict, dataclass, field, fields, replace
 from pathlib import Path
 from types import SimpleNamespace
 
-from .config import ExternalReference, PipelineConfig, ExecutionConfig, RegistrationRecipe, RegistrationStep, RecoveryConfig
+from .config import PipelineConfig, ExecutionConfig
 from ._declared import reference_settings
 from .dataset import Dataset
 from .types import ChannelInfo, RoundState, SubtileConfig
@@ -13,9 +13,9 @@ from starfinder.io import ImageLoadConfig
 from starfinder.preprocessing import (MinMaxNormalizationConfig, HistogramMatchingConfig,
     ReconstructionConfig, TophatConfig, ProjectionConfig, PreprocessingRecipe, PreprocessingStep, step_config_type)
 from starfinder._registry import config_type_for
-from starfinder.registration import (REGISTRATION_METHODS, CpdConfig, DemonsConfig, InsufficientLandmarksError,
-    RegistrationEstimationError, RegistrationQcConfig, RegistrationRejectedError, RegistrationSignalConfig,
-    TranslationConfig, WarpConfig)
+from starfinder.registration import (REGISTRATION_METHODS, CpdConfig, DemonsConfig, ExternalReference,
+    InsufficientLandmarksError, RecoveryConfig, RegistrationEstimationError, RegistrationQcConfig, RegistrationRecipe,
+    RegistrationRejectedError, RegistrationSignalConfig, RegistrationStep, TranslationConfig, WarpConfig)
 from starfinder.barcode import (DECODING_METHODS, ENCODINGS, BarcodeLayout, EncodingConfig, LocalBackgroundConfig,
     NeighborhoodSumConfig, OneBaseEncodingConfig, ReadFilterConfig, ReadScoreConfig, Segment, WtaDecoderConfig,
     DeduplicationConfig)
@@ -1017,7 +1017,7 @@ def _segmentation(config) -> _LegacySegmentation:
     """
     from starfinder.preprocessing import ProjectionConfig
     from starfinder.segmentation import KNOWN_MODELS, ExpandLabelsConfig, StarDistConfig
-    from starfinder.spot_finding._weights import weights_directory
+    from starfinder._weights import weights_directory
     if 'segmentation' in config:
         _python_only(config, ['segmentation'])
         raise ValueError('the segmentation block is run by FOV.segment (the §2.13 rule); the stardist_segmentation '

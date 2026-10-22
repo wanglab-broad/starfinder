@@ -20,7 +20,8 @@ from skimage.measure import label
 
 from starfinder._execution import THREAD_VARIABLES
 from starfinder._registry import Dependency, config_type_for, names
-from starfinder.dataset import (Dataset, PipelineConfig, RegistrationRecipe, RegistrationStep, RoundState)
+from starfinder.dataset import (Dataset, PipelineConfig, RoundState)
+from starfinder.registration import RegistrationRecipe, RegistrationStep
 from starfinder.image import ImageMetadata, IncompatibleGeometryError
 from starfinder.io import ImageLoadConfig, save_volume
 from starfinder.preprocessing import ProjectionConfig

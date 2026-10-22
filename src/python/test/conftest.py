@@ -1,6 +1,5 @@
 from starfinder.preprocessing import MinMaxNormalizationConfig
-from starfinder.dataset import RegistrationRecipe, RegistrationStep
-from starfinder.registration import TranslationConfig
+from starfinder.registration import RegistrationRecipe, RegistrationStep, TranslationConfig
 """Pytest fixtures for STARfinder tests."""
 
 from starfinder.spot_finding import LocalMaximaConfig

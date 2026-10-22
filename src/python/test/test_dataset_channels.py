@@ -15,8 +15,9 @@ import yaml
 from skimage.measure import label
 
 from starfinder.barcode import Codebook
-from starfinder.dataset import (ChannelInfo, CheckpointConfig, Dataset, PipelineConfig, RegistrationRecipe,
-                                RegistrationStep, RoundState, from_workflow_config)
+from starfinder.dataset import (ChannelInfo, CheckpointConfig, Dataset, PipelineConfig, RoundState,
+                                from_workflow_config)
+from starfinder.registration import RegistrationRecipe, RegistrationStep
 from starfinder.dataset.workflow import _nuclei_registration
 from starfinder.io import ImageLoadConfig, save_volume
 from starfinder.registration import RegistrationSignalConfig, TranslationConfig
