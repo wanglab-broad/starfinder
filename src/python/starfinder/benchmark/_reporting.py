@@ -13,16 +13,6 @@ def _print_quality_report(report: EvaluationResult) -> None:
         print(f"{name}: {rendered} {report.units[name]} {reason}".rstrip())
 
 
-def _e2e_summary(shifts, spots, decoding):
-    """Select supplied canonical results for a benchmark summary."""
-    return {"shift_max_error": shifts.values["max_error"],
-            "shift_passed": shifts.values["passed"],
-            "spot_recall": spots.values["recall"],
-            "spot_precision": spots.values["precision"],
-            "spot_mean_distance": spots.values["mean_distance"],
-            **decoding.values}
-
-
 def generate_inspection_image(
     ref: np.ndarray,
     mov: np.ndarray,
@@ -93,61 +83,3 @@ def generate_inspection_image(
     plt.tight_layout()
     fig.savefig(output_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
-
-
-def generate_overview_grid(output_dir: Path) -> None:
-    """Generate an overview grid of all inspection images.
-
-    Parameters
-    ----------
-    output_dir : Path
-        Output directory containing synthetic/ subdirectory.
-    """
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-
-    from glob import glob
-
-    synthetic_dir = Path(output_dir) / "synthetic"
-    inspection_files = sorted(glob(str(synthetic_dir / "*" / "inspection_*.png")))
-
-    if not inspection_files:
-        print("No inspection images found")
-        return
-
-    # Load images
-    images = []
-    labels = []
-    for f in inspection_files:
-        img = plt.imread(f)
-        images.append(img)
-        # Extract preset and type from path
-        parts = Path(f).parts
-        preset = parts[-2]
-        name = Path(f).stem.replace("inspection_", "")
-        labels.append(f"{preset}\n{name}")
-
-    # Create grid
-    n_images = len(images)
-    n_cols = min(4, n_images)
-    n_rows = (n_images + n_cols - 1) // n_cols
-
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3 * n_rows))
-    axes = np.atleast_2d(axes)
-
-    for idx, (img, label) in enumerate(zip(images, labels)):
-        row, col = idx // n_cols, idx % n_cols
-        axes[row, col].imshow(img)
-        axes[row, col].set_title(label, fontsize=8)
-        axes[row, col].axis("off")
-
-    # Hide unused axes
-    for idx in range(n_images, n_rows * n_cols):
-        row, col = idx // n_cols, idx % n_cols
-        axes[row, col].axis("off")
-
-    plt.tight_layout()
-    fig.savefig(output_dir / "overview.png", dpi=100, bbox_inches="tight")
-    plt.close(fig)
-    print(f"Saved overview: {output_dir / 'overview.png'}")

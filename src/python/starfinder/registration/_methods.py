@@ -4,8 +4,6 @@ from collections.abc import Callable
 from dataclasses import KW_ONLY, dataclass
 
 from starfinder._registry import Dependency, check_shared
-from starfinder.image import IncompatibleGeometryError
-
 from ._config import AffineConfig, BSplineConfig, CpdConfig, DemonsConfig, RigidConfig, TpsConfig, TranslationConfig
 from ._cpd import estimate_cpd
 from ._demons import estimate_demons
@@ -88,17 +86,3 @@ REGISTRATION_METHODS: dict[type, RegistrationSpec] = {
 # Annotation alias for a registered config; a test keeps its members equal to the registry keys.
 RegistrationConfig = (TranslationConfig | RigidConfig | AffineConfig | BSplineConfig | DemonsConfig | TpsConfig
                       | CpdConfig)
-
-
-def _check_shape(spec, shape):
-    """Reject a ZYX shape the method does not accept, before it runs."""
-    if shape[0] == 1 and 2 not in spec.dimensions:
-        raise IncompatibleGeometryError(f"{spec.name} requires 3D input; Z=1 is not supported")
-    if shape[0] > 1 and 3 not in spec.dimensions:
-        raise IncompatibleGeometryError(f"{spec.name} supports only Z=1 input")
-    minimum = spec.min_shape_zyx if shape[0] > 1 else (1, *spec.min_shape_zyx[1:])
-    if any(n < m for n, m in zip(shape, minimum)):
-        raise IncompatibleGeometryError(
-            f"{spec.name} requires 3D input with every axis at least {minimum}, not {tuple(shape)}"
-            if shape[0] > 1 else
-            f"{spec.name} requires Y and X of at least {minimum[1:]}, not {tuple(shape[1:])}")

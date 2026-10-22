@@ -11,6 +11,8 @@ import re
 from dataclasses import dataclass
 from importlib import metadata
 
+from starfinder.image import IncompatibleGeometryError
+
 _NAME = re.compile(r"[a-z][a-z0-9]*(_[a-z0-9]+)*")
 
 
@@ -59,6 +61,20 @@ def spec_for(registry, config, what: str, error: type[Exception] = TypeError, me
         raise error(message or f"no {what} is registered for {type(config).__qualname__} "
                                "(lookup uses the exact config type)")
     return spec
+
+
+def check_shape(spec, shape):
+    """Reject a ZYX shape the method does not accept, before it runs."""
+    if shape[0] == 1 and 2 not in spec.dimensions:
+        raise IncompatibleGeometryError(f"{spec.name} requires 3D input; Z=1 is not supported")
+    if shape[0] > 1 and 3 not in spec.dimensions:
+        raise IncompatibleGeometryError(f"{spec.name} supports only Z=1 input")
+    minimum = spec.min_shape_zyx if shape[0] > 1 else (1, *spec.min_shape_zyx[1:])
+    if any(n < m for n, m in zip(shape, minimum)):
+        raise IncompatibleGeometryError(
+            f"{spec.name} requires 3D input with every axis at least {minimum}, not {tuple(shape)}"
+            if shape[0] > 1 else
+            f"{spec.name} requires Y and X of at least {minimum[1:]}, not {tuple(shape[1:])}")
 
 
 def config_type_for(registry, name: str, what: str, error: type[Exception] = ValueError,

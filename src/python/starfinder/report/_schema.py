@@ -106,9 +106,6 @@ RECORD_KEYS = ("format_version", "stage", "sample", "dataset_id", "sample_id", "
 SUMMARY_KEYS = ("fovs_expected", "fovs_with_run_record", "fovs_succeeded", "spots_median_per_fov", "matched_fraction",
                 "counted_cells", "reads_per_cell_median", "genes_per_cell_median", "cells_median_per_fov",
                 "reads_in_cells", "h5ad_whole_count_sum", "reads_in_cells_equal")
-#: The keys of each rule's entry of ``report.json`` ``rules``: the limit applied, the unit, whether it was
-#: evaluated and the number of FOVs it marks.
-RULE_KEYS = ("limit", "unit", "evaluated", "fovs_marked")
 #: The unit of each rule on values (docs/report-algorithms.md, "The rules of the first delivery"); the
 #: categorical rules have none.
 RULE_UNITS = {"shift_residual": "voxels", "alignment_score": "dimensionless", "correct_form_fraction": "fraction",
@@ -126,12 +123,6 @@ SAMPLES_DTYPES = {"sample": "string", "report": "string", "report_sha256": "stri
 #: The values the staged delivery of the report (W-452 to W-456) left to a later issue: none, since the report is
 #: complete. Every null cell is not applicable by its column's rule or named by one row of ``unavailable.csv``.
 PENDING_VALUES = ()
-
-
-#: The kinds of a file of ``report.json`` ``inputs``.
-INPUT_KINDS = ("run_record", "transforms", "field", "raw_image", "supplied_statistics", "codebook",
-               "segmentation_record", "assignment_record", "label_image", "reference_image", "placement",
-               "placement_table", "export_record", "export_table", "anndata", "fused_image")
 
 
 def row_key(table: str, row) -> str:

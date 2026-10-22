@@ -53,8 +53,6 @@ MOLECULE_ONLY_DTYPES = {"spot_namespace": "string", "spot_id": "string", "z": "f
 # docs/sample-segmentation-contract.md); null for a molecule without a cell_id.
 CELL_KEY = ["cell_namespace", "cell_id"]
 CELL_KEY_DTYPES = {"cell_namespace": "string"}
-SAMPLE_COORDINATES = [f"sample_{name}_{a}" for name in ("centroid", "expanded_centroid", "ownership_centroid")
-                      for a in AXES]
 CELL_DTYPES = {"fov_id": "string", "cell_namespace": "string", "cell_id": "UInt32", "obs_name": "string",
                **{c: d for c, d in CELL_DTYPES_29.items() if c != "cell_id"},
                **{f"sample_centroid_{a}": "float64" for a in AXES},

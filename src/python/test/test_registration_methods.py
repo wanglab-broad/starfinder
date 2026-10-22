@@ -40,7 +40,6 @@ from starfinder.registration import (
     estimate_transform,
 )
 from starfinder.registration import _elastix
-from starfinder.registration._methods import _check_shape
 from starfinder.synthetic import (BENCHMARK_PRESETS, DEVELOPMENT_SIZES, GeometryConfig, forward_displacement,
                                   generate_formed_scene, registration_scene_preset)
 

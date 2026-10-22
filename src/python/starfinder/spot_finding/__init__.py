@@ -11,14 +11,14 @@ import numpy as np
 import pandas as pd
 
 from starfinder._execution import check_device, execution_record
-from starfinder._registry import spec_for
+from starfinder._registry import check_shape, spec_for
 from starfinder.image import ImageMetadata, _validate_image
 
 from ._config import (LocalMaximaConfig, NoiseLandmarkConfig, PercentileCentroidConfig, PiscisConfig, SpotiflowConfig,
     StarfishLogConfig)
 from ._errors import MissingWeightsError, SpotFindingBackendUnavailableError, SpotFindingWarning, WeightsHashMismatchError
 from ._methods import SPOT_FINDING_METHODS as _SPOT_FINDING_METHODS
-from ._methods import (MethodContext, SpotFindingConfig, SpotFindingSpec, check_columns, check_shape, constant_details,
+from ._methods import (MethodContext, SpotFindingConfig, SpotFindingSpec, check_columns, constant_details,
     empty_table, per_channel, require_method, skips_constant)
 from ._plan import ChannelOverride, SpotFindingPlan
 from ._plot import plot_detections

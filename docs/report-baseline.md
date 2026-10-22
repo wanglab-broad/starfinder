@@ -111,11 +111,13 @@ Not on `dev`. It writes a standalone HTML summary of a saved run:
 
 ### The printing helpers of `src/python/starfinder/benchmark/_reporting.py` on `dev`
 
-`_print_quality_report` prints the values of an `EvaluationResult` with their units and
-reasons, writes "undefined" for a missing value and adds no threshold; `_e2e_summary`
-selects benchmark values; `generate_inspection_image` writes a green–magenta composite of a
-reference and a moving volume; `generate_overview_grid` tiles those images. They serve the
-benchmark on synthetic inputs with a ground truth.
+W-546 removed `_e2e_summary` and `generate_overview_grid` because neither has an in-tree
+caller; their definitions are preserved at the audited source revision
+[`c30ed2e`](https://github.com/wanglab-broad/starfinder/blob/c30ed2e/src/python/starfinder/benchmark/_reporting.py).
+`_print_quality_report` remains as a test helper used by `test_evaluation.py`; it prints the
+values of an `EvaluationResult` with their units and reasons, writes "undefined" for a missing
+value and adds no threshold. `generate_inspection_image` remains in use by the `synthetic`
+command and writes a green–magenta composite of a reference and a moving volume.
 
 ### What to bring over
 
@@ -124,8 +126,9 @@ benchmark on synthetic inputs with a ground truth.
 | The notebook's shift heatmap and per-sample box plots | **Keep the views, leave the notebook.** The registration heatmap (all FOVs and rounds) and the comparison page's three box plots (D2) take their place, read from the Python records. | The notebook reads files nothing writes, MATLAB quantities and a hard-coded path, and stops at cell 10. |
 | `embed_figure` and `render_table` | **Keep the rules, rewrite the code**: figures embedded as base64 images, every text escaped, no external resource. | D3 asks for one offline page filled with the standard library; the functions are small, and their module needs `starfinder.provenance`, which `dev` lacks. |
 | `write_run_summary` | **Leave.** | Its record is not `run.json`. Its two rules, an existing destination is never overwritten and a missing metric stays unavailable, are kept by {doc}`report-contract` ("The output folder", "Unavailable parts"). |
-| `_print_quality_report`'s "undefined" with a reason | **Keep the rule.** | The report's unavailable rule is the same idea with a closed list of reasons. |
-| `generate_inspection_image` (green–magenta) | **Keep the colour convention**: reference green, moving magenta, as the scope asks. | Its input is a benchmark volume pair; the report's example is replayed from the raw input ({doc}`report-contract`, "The replay"). |
+| `_e2e_summary`, `generate_overview_grid` | **Delete in W-546.** | Neither has an in-tree caller; the historical definitions are linked at [`c30ed2e`](https://github.com/wanglab-broad/starfinder/blob/c30ed2e/src/python/starfinder/benchmark/_reporting.py). |
+| `_print_quality_report`'s "undefined" with a reason | **Keep the test helper.** | The report's unavailable rule is the same idea with a closed list of reasons. |
+| `generate_inspection_image` (green–magenta) | **Keep the helper.** | The `synthetic` command uses it; its input is a benchmark volume pair, and the report's example is replayed from the raw input ({doc}`report-contract`, "The replay"). |
 
 ## The source inventory
 

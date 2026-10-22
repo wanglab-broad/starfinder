@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from starfinder._registry import require, spec_for
+from starfinder._registry import check_shape, require, spec_for
 from starfinder.image import ImageMetadata, IncompatibleGeometryError, _validate_image
 
 from ._config import WarpConfig
@@ -13,7 +13,7 @@ from ._errors import (
     UnsupportedTransformOperationError,
 )
 from ._chain import TransformChain, resample
-from ._methods import REGISTRATION_METHODS, RegistrationConfig, _check_shape
+from ._methods import REGISTRATION_METHODS, RegistrationConfig
 from ._resampling import _cast_warp_output, _output_dtype, apply_tps_deformation
 from ._types import (
     AffineTransform,
@@ -58,7 +58,7 @@ def estimate_transform(
         reference_metadata=reference_metadata,
         moving_metadata=moving_metadata,
     )
-    _check_shape(spec, reference_image.shape)
+    check_shape(spec, reference_image.shape)
     require(spec, "registration method", RegistrationBackendUnavailableError)
     try:
         transform, backend, application, *details = spec.run(reference_image, moving_image, config, geometry)

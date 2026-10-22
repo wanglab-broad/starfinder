@@ -1638,8 +1638,6 @@ _BIGSTITCHER = 'bigstitcher'
 _ASSEMBLY_CALL_KEYS = ('assignment', 'table_format')
 # ExportConfig fields the export block does not name: the assembly block gives them, or they are its parts.
 _EXPORT_PARTS = ('assembly', 'table_format', 'fusion', 'labels', 'spatialdata')
-# The files of the BigStitcher folder <bigstitcher_save_dir>/<sample>/ (the tiles are in its tiles/).
-BIGSTITCHER_MACRO, BIGSTITCHER_VIEW_MAP, BIGSTITCHER_XML = 'BigStitcher_macro.ijm', 'view_map.csv', 'dataset.xml'
 
 
 @dataclass(frozen=True)
