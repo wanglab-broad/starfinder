@@ -172,7 +172,7 @@ def _input_dtype(section, output):
 def _check_tiff(folder, name, output, section, condition="F1"):
     from starfinder.io.tiff import METADATA_NAMESPACE
 
-    from ._tiff import ANNOTATION_NAMESPACE, read_ome_layout
+    from starfinder.io._ome import ANNOTATION_NAMESPACE, read_ome_layout
     layout = read_ome_layout(folder / output["path"])
     one_plane = output["shape_zyx"][0] == 1
     axes = "YX" if one_plane else "ZYX"
@@ -603,9 +603,10 @@ def _check_segmentation(folder, record):
 
 def _formula_grid(assembly_section, k, two_d):
     """The label grid's (S, O, N) per axis Z, Y, X from the FOVs the assembly section records (L5)."""
-    from ._grid import INCLUDED
+    from starfinder.stitching._placement import OWNING
+
     from ._labels import label_grid
-    fovs = [e for e in assembly_section["fovs"] if e["placement_status"] in INCLUDED and e.get("grid")]
+    fovs = [e for e in assembly_section["fovs"] if e["placement_status"] in OWNING and e.get("grid")]
     origins = [e["origin_zyx"] for e in fovs]
     shapes = [e["grid"]["shape_zyx"] for e in fovs]
     spacing = fovs[0]["grid"]["metadata"]["spacing_zyx"]
@@ -630,7 +631,9 @@ def _check_labels(folder, record):
 
     from starfinder.assembly import load_assembly
 
-    from ._labels import LABEL_FILE, _read_territory, retained_by_fov, retained_image
+    from starfinder.segmentation._operations import retained_image
+
+    from ._labels import LABEL_FILE, _read_territory, retained_by_fov
     section = record.get("labels")
     status = part_status(record, "fuse_labels")
     if status != "written" or not isinstance(section, dict):
@@ -713,17 +716,18 @@ def _check_sample_labels(folder, record, section, output):
     """L2 to L5 by the rule ``segmentation`` (docs/sample-segmentation-contract.md, "The label images"): L3 reads
     the sample's territories, L5 checks the grid of the label scale's spacing and the territories' origin."""
     from starfinder.assembly import load_assembly
+    from starfinder.segmentation._operations import retained_image
 
-    from ._labels import (LABEL_FILE, read_sample_territory, retained_ids, retained_image, sample_label_grid,
+    from ._labels import (LABEL_FILE, read_sample_territory, retained_ids, sample_label_grid,
                           sample_territory_source)
     assembly = load_assembly(folder)
     territory_grid = assembly.record["assignment"]["grid"]
     shape = territory_grid["shape_zyx"]
     spacing, origin = territory_grid["metadata"]["spacing_zyx"], territory_grid["metadata"]["origin_zyx"]
     # L5: spacing k·s (s the FOVs' acquired spacing), the territories' origin, the size of the formula; Z the slab.
-    from ._grid import INCLUDED
+    from starfinder.stitching._placement import OWNING
     acquired = {tuple(float(v) for v in e["grid"]["metadata"]["spacing_zyx"][1:]) for e in record["assembly"]["fovs"]
-                if e["placement_status"] in INCLUDED and e.get("grid")}
+                if e["placement_status"] in OWNING and e.get("grid")}
     if len(acquired) != 1:
         _fail("L5", f"the included FOVs of the assembly section have the Y and X spacings {sorted(acquired)}")
     s_y, s_x = next(iter(acquired))

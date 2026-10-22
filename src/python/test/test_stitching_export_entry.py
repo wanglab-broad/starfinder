@@ -24,7 +24,7 @@ from pandas.testing import assert_frame_equal
 import starfinder.assembly
 import starfinder.assignment._persist as assignment_persist
 import starfinder.dataset._export as export_module
-import starfinder.sample_output._tiff as tiff_module
+import starfinder.io._ome as tiff_module
 from starfinder.assembly import assemble, load_assembly, save_assembly
 from starfinder.dataset._export import assembly_inputs, fusion_inputs
 from starfinder.image import ImageMetadata, IncompatibleGeometryError
@@ -38,7 +38,7 @@ from starfinder.sample_output import (
     fuse,
 )
 from starfinder.sample_output._record import section_sha256
-from starfinder.sample_output._tiff import read_ome_layout
+from starfinder.io._ome import read_ome_layout
 from starfinder.stitching import PlacementReviewRequiredError, load_placement, save_placement
 
 from .assembly_fixtures import SAMPLE, golden_origins, golden_placement

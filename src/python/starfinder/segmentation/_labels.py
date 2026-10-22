@@ -1,4 +1,4 @@
-"""The label image contract: hashes, the uint32 dtype rule, the reference grid and the result."""
+"""The label image contract: hashes, the uint32 dtype rule, the reference grid, the result and the sample result."""
 from __future__ import annotations
 
 import hashlib
@@ -267,3 +267,36 @@ class SegmentationResult:
     def max_label(self) -> int:
         """Largest value (0 for an empty image)."""
         return int(self.labels.max())
+
+
+@dataclass(frozen=True)
+class SampleSegmentation:
+    """The sample segmentation of the route after fusion: its grid, one label image per run, and its section.
+
+    ``grid`` is the segmentation grid (the fused projection's, frame
+    ``sample:<sample>``), None when no run was made; ``runs`` maps each run
+    name, in run order, to its
+    :class:`~starfinder.segmentation.SegmentationResult` (geometry ``plane``,
+    label namespace ``[dataset_id, sample_id, null, null, <run>]``);
+    ``record`` is the ``segmentation`` section of ``export.json``.
+    """
+
+    grid: ReferenceGrid | None
+    runs: Mapping[str, SegmentationResult]
+    record: Mapping[str, Any]
+
+    @property
+    def status(self) -> str:
+        """The status of the part ``segment``, ``written``, ``reused``, ``empty``, ``not_run`` or ``failed``."""
+        return self.record.get("status")
+
+    @property
+    def cells(self) -> SegmentationResult | None:
+        """The run whose labels are the cells."""
+        return self.runs.get(self.record.get("cells"))
+
+    @property
+    def nuclei(self) -> SegmentationResult | None:
+        """The nucleus run, or None."""
+        name = self.record.get("nuclei")
+        return None if name is None else self.runs.get(name)

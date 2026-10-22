@@ -16,13 +16,13 @@ import warnings
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 
 from starfinder.image import ImageMetadata
-from starfinder.segmentation import (LabelImportConfig, ReferenceGrid, SegmentationBackendUnavailableError,
-                                     SegmentationInput, SegmentationResult, import_labels, resolve_model, segment)
+from starfinder.segmentation import (LabelImportConfig, ReferenceGrid, SampleSegmentation,
+                                     SegmentationBackendUnavailableError, SegmentationInput, SegmentationResult,
+                                     import_labels, resolve_model, segment)
 
 from ._config import ROUTES, ExportConfig, SampleSegmentationConfig, _segmentation_spec
 from ._record import (ExportIncompleteWarning, Timer, as_json, listed_files, part_status, read_export, remove_listed,
@@ -189,39 +189,6 @@ def check_route(config: ExportConfig, assignment, *, reuse=None, models=True) ->
 
 
 # --- The sample segmentation ----------------------------------------------------------------------------------
-
-@dataclass(frozen=True)
-class SampleSegmentation:
-    """The sample segmentation of the route after fusion: its grid, one label image per run, and its section.
-
-    ``grid`` is the segmentation grid (the fused projection's, frame
-    ``sample:<sample>``), None when no run was made; ``runs`` maps each run
-    name, in run order, to its
-    :class:`~starfinder.segmentation.SegmentationResult` (geometry ``plane``,
-    label namespace ``[dataset_id, sample_id, null, null, <run>]``);
-    ``record`` is the ``segmentation`` section of ``export.json``.
-    """
-
-    grid: ReferenceGrid | None
-    runs: Mapping[str, SegmentationResult]
-    record: Mapping[str, Any]
-
-    @property
-    def status(self) -> str:
-        """The status of the part ``segment``, ``written``, ``reused``, ``empty``, ``not_run`` or ``failed``."""
-        return self.record.get("status")
-
-    @property
-    def cells(self) -> SegmentationResult | None:
-        """The run whose labels are the cells."""
-        return self.runs.get(self.record.get("cells"))
-
-    @property
-    def nuclei(self) -> SegmentationResult | None:
-        """The nucleus run, or None."""
-        name = self.record.get("nuclei")
-        return None if name is None else self.runs.get(name)
-
 
 def label_file(run: str) -> str:
     """The file name of a run's label image, ``segmentation_<run>.ome.tif``."""
@@ -413,7 +380,7 @@ def segment_fused(output_dir, *, config: SampleSegmentationConfig, sample: str,
     """
     from starfinder._records import file_sha256
 
-    from . import _tiff
+    from starfinder.io import _ome
     from starfinder._records import software
     timer = Timer()
     plan = _check(output_dir, config, sample, identity)
@@ -477,7 +444,7 @@ def segment_fused(output_dir, *, config: SampleSegmentationConfig, sample: str,
                           "label_namespace": result.label_namespace, "factor_yx": k,
                           "placement_fovs_sha256": plan.placement["fovs_sha256"],
                           "placement_links_sha256": plan.placement["links_sha256"]}
-            layout = _tiff.write_ome_tiff(path, result.labels[0], metadata=grid.metadata, annotation=annotation)
+            layout = _ome.write_ome_tiff(path, result.labels[0], metadata=grid.metadata, annotation=annotation)
             digest = file_sha256(path)
             metadata = grid.metadata
             outputs.append({"path": name, "format": "ome_tiff", "image": annotation["image"], "run": run.name,

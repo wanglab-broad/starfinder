@@ -15,7 +15,8 @@ import json
 import pytest
 
 from starfinder.dataset import _export
-from starfinder.sample_output import ExportConfig, FusionConfig, _tiff, check_export
+from starfinder.io import _ome
+from starfinder.sample_output import ExportConfig, FusionConfig, check_export
 from starfinder.sample_output._record import PARTS, read_export
 
 from .test_stitching_declared_grids import SAMPLE, scene_dataset
@@ -108,7 +109,7 @@ def test_an_interruption_inside_the_fusion_records_it_failed_as_before(scene, tm
     record is not complete either."""
     folder = tmp_path / "export"
     with monkeypatch.context() as patch:
-        patch.setattr(_tiff, "write_ome_tiff", interrupt)
+        patch.setattr(_ome, "write_ome_tiff", interrupt)
         with pytest.raises(KeyboardInterrupt):
             export(scene, folder)
     record = read_export(folder)

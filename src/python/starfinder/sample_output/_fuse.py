@@ -32,13 +32,13 @@ import numpy as np
 
 from starfinder._records import atomic_path, publish, software
 from starfinder.image import IncompatibleGeometryError
+from starfinder.io import _ome
 from starfinder.segmentation import ReferenceGrid
 from starfinder.stitching import PlacementResult
-from starfinder.stitching._placement import grid_problems, same_frame_grid
+from starfinder.stitching._placement import OWNING, grid_problems, same_frame_grid
 
-from . import _tiff
 from ._config import FusionConfig
-from ._grid import AXES, INCLUDED, FusedGrid, _names, fused_grid, included_fovs
+from ._grid import AXES, FusedGrid, _names, fused_grid, included_fovs
 from ._record import (
     ExportIncompleteWarning,
     Timer,
@@ -331,8 +331,8 @@ def _fov_entries(placement, plan, config):
     entries = []
     for row in placement.fovs.itertuples(index=False):
         origin = [float(getattr(row, f"origin_{a}")) for a in AXES]
-        entry = {"fov_id": row.fov_id, "placement_status": row.status, "included": row.status in INCLUDED,
-                 "reason": None if row.status in INCLUDED else row.status,
+        entry = {"fov_id": row.fov_id, "placement_status": row.status, "included": row.status in OWNING,
+                 "reason": None if row.status in OWNING else row.status,
                  "origin_zyx": [v if math.isfinite(v) else None for v in origin], "grid": None, "images": {}}
         item = plan.by_fov.get(row.fov_id)
         if item is not None:
@@ -481,7 +481,7 @@ class _Reader:
     # The plan.
 
     def plan(self, array) -> None:
-        """Count, for each source task, the bands of ``array`` the writer computes (``_tiff.bands``) that need it."""
+        """Count, for each source task, the bands of ``array`` the writer computes (``_ome.bands``) that need it."""
         from dask.core import get_dependencies
         from dask.utils import ensure_dict
         graph = ensure_dict(array.__dask_graph__())
@@ -523,7 +523,7 @@ class _Reader:
             return [i for i in range(len(edges[axis]) - 1) if edges[axis][i] < hi and edges[axis][i + 1] > lo]
 
         counts = {}
-        for z, y0, y1 in _tiff.bands(array.shape):
+        for z, y0, y1 in _ome.bands(array.shape):
             axes = ([blocks(0, z, z + 1)] if array.ndim == 3 else []) + [blocks(array.ndim - 2, y0, y1),
                                                                           range(array.numblocks[-1])]
             needed = set()
@@ -677,7 +677,7 @@ def _write_tiff(path, fused, grid, dimensionality, config, name, placement, read
                   "projection": config.projection if dimensionality == "projection" else None,
                   "factor_yx": grid.factor_yx, "placement_fovs_sha256": table_sha256(placement.fovs),
                   "placement_links_sha256": table_sha256(placement.links)}
-    layout = _tiff.write_ome_tiff(path, data, metadata=metadata, annotation=annotation, levels=levels)
+    layout = _ome.write_ome_tiff(path, data, metadata=metadata, annotation=annotation, levels=levels)
     return {"levels": level_entries, "tile_yx": layout["tile_yx"], "compression": layout["compression"],
             "axes": layout["axes"], "annotation": annotation}
 

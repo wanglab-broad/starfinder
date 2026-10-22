@@ -319,7 +319,6 @@ starfinder.sample_output
 * :py:obj:`starfinder.sample_output.lookup_source`
 * :py:obj:`starfinder.sample_output.RouteComparison`
 * :py:obj:`starfinder.sample_output.ROUTES`
-* :py:obj:`starfinder.sample_output.SampleSegmentation`
 * :py:obj:`starfinder.sample_output.SampleSegmentationConfig`
 * :py:obj:`starfinder.sample_output.SampleSegmentationRun`
 * :py:obj:`starfinder.sample_output.segment_fused`
@@ -351,6 +350,7 @@ starfinder.segmentation
 * :py:obj:`starfinder.segmentation.ReferenceGrid`
 * :py:obj:`starfinder.segmentation.rescale_input`
 * :py:obj:`starfinder.segmentation.resolve_model`
+* :py:obj:`starfinder.segmentation.SampleSegmentation`
 * :py:obj:`starfinder.segmentation.SeededWatershedConfig`
 * :py:obj:`starfinder.segmentation.segment`
 * :py:obj:`starfinder.segmentation.SEGMENTATION_METHODS`

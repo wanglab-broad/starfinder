@@ -111,7 +111,7 @@ lengths given for the acquired grid and converted to the segmentation grid by th
 and writes one ``segmentation_<run>.ome.tif`` per run (uint32) and the ``segmentation``
 section of ``export.json``, whose inputs are the fused files' SHA-256 and the grid;
 :py:func:`~starfinder.sample_output.load_sample_segmentation` reads them back as a
-:py:class:`~starfinder.sample_output.SampleSegmentation`, each label file checked against its
+:py:class:`~starfinder.segmentation.SampleSegmentation`, each label file checked against its
 SHA-256. On the route after fusion ``fuse_labels`` passes the sample's territories as its one
 view (rule ``segmentation``), ``lookup_source`` returns for a cell its row in the sample cell
 table, ``label_file`` and ``label_value`` and no assignment folder, the circles of the
@@ -150,7 +150,6 @@ its tables only into a folder ``output`` outside both. See
    lookup_source
    RouteComparison
    ROUTES
-   SampleSegmentation
    SampleSegmentationConfig
    SampleSegmentationRun
    segment_fused

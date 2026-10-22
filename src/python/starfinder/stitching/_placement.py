@@ -26,6 +26,8 @@ FORMAT_VERSION = 1
 STAGE = "stitching"
 STATUSES = ("image_supported", "metadata_only", "placeholder", "missing", "failed")
 PLACED = ("image_supported", "metadata_only", "placeholder")
+#: Placement statuses whose FOVs own points in the assembly and are fused: a finite origin and a source image.
+OWNING = ("image_supported", "metadata_only")
 FLAGS = ("fallback", "supplied", "correction_above_bound", "residual_above_tolerance", "nan_quality_link",
          "optimizer_removed_link")
 LINK_REASONS = ("", "quality_below_threshold", "nan_quality", "optimizer_removed", "pruned")

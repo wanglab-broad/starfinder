@@ -24,7 +24,7 @@ import tifffile
 
 from starfinder.image import ImageMetadata
 from starfinder.io import load_volume
-from starfinder.sample_output._tiff import PLACEHOLDER_UUID, read_ome_layout, write_ome_tiff
+from starfinder.io._ome import PLACEHOLDER_UUID, read_ome_layout, write_ome_tiff
 
 pytestmark = [pytest.mark.stitching, pytest.mark.contract]
 EXTRAS = "the multiview-stitcher and anndata extras (starfinder[multiview-stitcher,anndata]) are not installed"

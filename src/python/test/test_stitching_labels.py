@@ -30,7 +30,7 @@ from starfinder.io import save_volume
 from starfinder.sample_output import ExportConfig, ExportIncompleteWarning, LabelConfig, check_export, fuse_labels
 from starfinder.sample_output._labels import check_label_ids
 from starfinder.sample_output._record import section_sha256
-from starfinder.sample_output._tiff import read_ome_layout
+from starfinder.io._ome import read_ome_layout
 from starfinder.stitching import load_placement
 
 from . import label_fixtures as lf

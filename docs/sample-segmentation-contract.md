@@ -166,7 +166,7 @@ All new names are additions; no existing public name, module or format version c
 | Settings of the route | `SampleSegmentationConfig(runs, cells, nuclei=None, assignment=AssignmentConfig(), device="cpu")` | frozen dataclass | `starfinder.sample_output` |
 | One run | `SampleSegmentationRun(name, target, inputs, method, seeds=None)` | frozen dataclass | `starfinder.sample_output` |
 | The segment part | `segment_fused(output_dir, *, config, sample, identity=None)` returning `SampleSegmentation` | function | `starfinder.sample_output` |
-| Its result | `SampleSegmentation(grid, runs, record)` | frozen dataclass | `starfinder.sample_output` |
+| Its result | `SampleSegmentation(grid, runs, record)` | frozen dataclass | `starfinder.segmentation` |
 | Its loader | `load_sample_segmentation(output_dir)` | function | `starfinder.sample_output` |
 | The assembly of this route | the keyword `segmentation: SampleSegmentation | None = None` of `assemble` | keyword | `starfinder.assembly` |
 | The consistency check | `compare_routes(per_fov, after_fusion, *, threshold=0.5, output=None)` returning `RouteComparison` | function, frozen dataclass | `starfinder.sample_output` |

@@ -22,7 +22,8 @@ import numpy as np
 import pytest
 import tifffile
 
-from starfinder.sample_output import FusionConfig, FusionInput, _fuse, _tiff, fuse
+from starfinder.io import _ome
+from starfinder.sample_output import FusionConfig, FusionInput, _fuse, fuse
 
 from . import reading_fixtures as rf
 
@@ -81,10 +82,10 @@ def run_fusions(tmp_path, monkeypatch, form, shape):
     paths = rf.write_tiles(tmp_path / "tiles", form, shape)
     held = held_counter(monkeypatch)
     started = []
-    real_write = _tiff.write_ome_tiff
+    real_write = _ome.write_ome_tiff
     results = {}
     with rf.DecodeCounter(paths) as counter:
-        monkeypatch.setattr(_tiff, "write_ome_tiff", lambda *a, **k: started.append(len(counter.log)) or
+        monkeypatch.setattr(_ome, "write_ome_tiff", lambda *a, **k: started.append(len(counter.log)) or
                             real_write(*a, **k))
         for dimensionality, scale in FUSIONS:
             counter.reset()

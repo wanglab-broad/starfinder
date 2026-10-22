@@ -25,6 +25,7 @@ are not examples of the current API.
 | Separate benchmark drivers and `starfinder-generate` | `starfinder synthetic generate`, `starfinder benchmark run/evaluate/report` |
 | `io.read_checkpoint` | `dataset.read_checkpoint` (no alias) |
 | `io.export_spots` | `barcode.export_spots` (no alias) |
+| `sample_output.SampleSegmentation` | `segmentation.SampleSegmentation` (no alias) |
 
 These relocations do not make the old positional arguments or return values valid.
 Use typed operation configs and structured results. See the [full export

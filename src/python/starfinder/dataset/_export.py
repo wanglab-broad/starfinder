@@ -21,7 +21,6 @@ from pathlib import Path
 
 from starfinder.sample_output._config import ExportConfig, image_name
 from starfinder.sample_output._fuse import FusionInput, check_assembly, check_fusion, fuse
-from starfinder.sample_output._grid import INCLUDED
 from starfinder.sample_output._labels import check_label_count, check_label_ids, fuse_labels
 from starfinder.sample_output._record import (
     PARTS,
@@ -37,6 +36,7 @@ from starfinder.sample_output._record import (
 )
 from starfinder.sample_output._segment import check_route, resolve_route, segment_off_section
 from starfinder.stitching import PlacementResult
+from starfinder.stitching._placement import OWNING
 
 REFERENCE_STAIN_FILE = Path("other_rounds") / "reference_stain" / "image.ome.tif"
 MOLECULE_CSV = "signal/{fov_id}_goodSpots.csv"
@@ -113,7 +113,7 @@ def fusion_inputs(dataset, placement, config) -> list[FusionInput]:
     """One FusionInput per included FOV: its reference grid and the path of each selected source image."""
     inputs = []
     for fov, status in zip(placement.fovs["fov_id"], placement.fovs["status"]):
-        if status not in INCLUDED:
+        if status not in OWNING:
             continue
         images = {image_name(entry): source_path(dataset, fov, entry) for entry in config.fusion.images}
         inputs.append(FusionInput(fov, _reference_grid(dataset, fov), images))
@@ -285,7 +285,7 @@ def with_route(result, route, route_source, **extra):
 
 def _input_grids(dataset, placement):
     return {fov: _reference_grid(dataset, fov) for fov, status in zip(placement.fovs["fov_id"],
-                                                                     placement.fovs["status"]) if status in INCLUDED}
+                                                                     placement.fovs["status"]) if status in OWNING}
 
 
 def _reuse(dataset, placement, config, output_dir, held):
@@ -341,7 +341,8 @@ def _reuse(dataset, placement, config, output_dir, held):
 def _export_after_fusion(dataset, sample, placement, assignment, config, output_dir, route_source) -> ExportRecord:
     """``Dataset.export`` on the route after fusion with an assignment: checks 4 to 7, then the parts in order."""
     from starfinder.assembly import assemble, save_assembly
-    from starfinder.sample_output._segment import SampleSegmentation, segment_fused
+    from starfinder.sample_output._segment import segment_fused
+    from starfinder.segmentation import SampleSegmentation
     # 7. The route, with the reuse conditions when segment is off. On this route it comes before checks 4 and 5, so
     # that a configuration without the route's settings is refused naming them (RD1), not for its inputs.
     held = {}

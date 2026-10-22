@@ -19,7 +19,8 @@ import numpy as np
 import pytest
 import tifffile
 
-from starfinder.sample_output import FusionConfig, FusionInput, _fuse, _tiff, fuse
+from starfinder.io import _ome
+from starfinder.sample_output import FusionConfig, FusionInput, _fuse, fuse
 
 from . import reading_fixtures as rf
 
@@ -125,10 +126,10 @@ def test_a_file_in_strips_is_read_once_and_fuses_as_its_twin(tmp_path, monkeypat
                 inside.discard(key)
     monkeypatch.setattr(_fuse._Reader, "_get", counted)
     started = []
-    real_write = _tiff.write_ome_tiff
+    real_write = _ome.write_ome_tiff
     images = {}
     with rf.DecodeCounter(strips) as counter:
-        monkeypatch.setattr(_tiff, "write_ome_tiff", lambda *a, **k: started.append(len(counter.log)) or
+        monkeypatch.setattr(_ome, "write_ome_tiff", lambda *a, **k: started.append(len(counter.log)) or
                             real_write(*a, **k))
         record = fuse(placed, inputs(strips, grid), config=CONFIG, output_dir=tmp_path / "out_strips")
         assert record.status == "written"

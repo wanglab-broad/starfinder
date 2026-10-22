@@ -16,6 +16,8 @@ from collections import Counter
 
 import numpy as np
 
+from starfinder.segmentation._operations import retained_image
+
 #: The margin of the voxel-centre extent, in voxels.
 EPS = 1e-9
 
@@ -96,7 +98,6 @@ def measure(fovs, load, grid):
     of cells of two FOVs that show one grid voxel, ``f`` before ``g`` in
     ``fovs``.
     """
-    from starfinder.sample_output._labels import retained_image
     sizes, shared = {}, Counter()
     for k, f in enumerate(fovs):
         ids_f = f["cells"]

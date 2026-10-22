@@ -16,7 +16,7 @@ import pytest
 import tifffile
 
 from starfinder.sample_output import FusionConfig, check_export, fuse, fused_grid
-from starfinder.sample_output._tiff import read_ome_layout
+from starfinder.io._ome import read_ome_layout
 
 from .fusion_fixtures import OVERLAP_VALUES, fuse_band, overlap_pair, position_grid
 

@@ -11,18 +11,17 @@ from dataclasses import dataclass
 from starfinder.image import ImageMetadata
 from starfinder.segmentation import ReferenceGrid
 from starfinder.stitching import PlacementResult
+from starfinder.stitching._placement import OWNING
 
 from ._config import FusionConfig
 
-#: Placement statuses whose FOVs are fused: a finite origin and a source image.
-INCLUDED = ("image_supported", "metadata_only")
 IDENTITY = ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))
 AXES = ("z", "y", "x")
 
 
 def included_fovs(placement: PlacementResult) -> list[str]:
     """The included FOVs of a placement, in placement table order."""
-    return [fov for fov, status in zip(placement.fovs["fov_id"], placement.fovs["status"]) if status in INCLUDED]
+    return [fov for fov, status in zip(placement.fovs["fov_id"], placement.fovs["status"]) if status in OWNING]
 
 
 def _names(values):

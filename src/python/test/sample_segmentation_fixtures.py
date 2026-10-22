@@ -352,7 +352,7 @@ def truth_labels(scene, grid, target="cell") -> np.ndarray:
 
 def truth_import(folder, grid, target="cell", *, path=None, labels=None) -> Path:
     """The truth labels on the grid written as a uint32 OME-TIFF with the grid's metadata, for an import run."""
-    from starfinder.sample_output._tiff import write_ome_tiff
+    from starfinder.io._ome import write_ome_tiff
     path = Path(path or folder.root / "truth" / f"{target}.ome.tif")
     path.parent.mkdir(parents=True, exist_ok=True)
     labels = truth_labels(folder.scene, grid, target) if labels is None else labels

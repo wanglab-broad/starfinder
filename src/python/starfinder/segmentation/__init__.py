@@ -14,14 +14,18 @@ cell territories and keeps both masks. :func:`segment` runs one method of
 ``SEGMENTATION_METHODS`` (``stardist``, ``cellpose``, ``seeded_watershed``) on a
 :class:`SegmentationInput` behind the stage checks; :func:`resolve_model` verifies a
 model of ``KNOWN_MODELS`` or a user-trained model by path without downloading;
-``FOV.segment`` runs a :class:`SegmentationPlan` of named runs on one FOV. See
-docs/segmentation-contract.md and docs/segmentation-algorithms.md.
+``FOV.segment`` runs a :class:`SegmentationPlan` of named runs on one FOV.
+:class:`SampleSegmentation` is what ``starfinder.sample_output.segment_fused``
+returns on the route after fusion: the segmentation grid, one
+:class:`SegmentationResult` per run and the ``segmentation`` section
+(docs/sample-segmentation-contract.md). See docs/segmentation-contract.md and
+docs/segmentation-algorithms.md.
 """
 from ._errors import MissingModelError, ModelHashMismatchError, SegmentationBackendUnavailableError
 from ._import import LabelImportConfig, import_labels
 from ._inputs import (CompositeConfig, FlamingoEnhancementConfig, composite_nuclei_amplicon, enhance_with_flamingo,
                       normalize_percentiles, rescale_input)
-from ._labels import ReferenceGrid, SegmentationResult, reference_grid_from_file, to_label_dtype
+from ._labels import ReferenceGrid, SampleSegmentation, SegmentationResult, reference_grid_from_file, to_label_dtype
 from ._learned import CellposeConfig, StarDistConfig
 from ._methods import SEGMENTATION_METHODS as _SEGMENTATION_METHODS
 from ._methods import MethodContext, SeededWatershedConfig, SegmentationSpec
@@ -40,7 +44,7 @@ SEGMENTATION_METHODS = _SEGMENTATION_METHODS
 #: user-trained models to model_path.
 KNOWN_MODELS = _KNOWN_MODELS
 
-__all__ = ["ReferenceGrid", "reference_grid_from_file", "SegmentationResult", "to_label_dtype",
+__all__ = ["ReferenceGrid", "reference_grid_from_file", "SegmentationResult", "SampleSegmentation", "to_label_dtype",
            "LabelImportConfig", "import_labels", "labels_to_grid", "ExpandLabelsConfig", "expand_labels",
            "ZExtensionConfig", "extend_labels_through_z",
            "CompositeConfig", "composite_nuclei_amplicon", "FlamingoEnhancementConfig", "enhance_with_flamingo",

@@ -22,7 +22,7 @@ with one level; :func:`lookup_source` traces a molecule or cell back to its FOV'
 assignment. :func:`check_export` checks a folder against its record. :func:`segment_fused`
 segments the fused projection of a sample on the route after fusion (:data:`ROUTES`,
 :class:`SampleSegmentationConfig`, :class:`SampleSegmentationRun`) and writes one label
-image per run and the ``segmentation`` section (:class:`SampleSegmentation`,
+image per run and the ``segmentation`` section (:class:`~starfinder.segmentation.SampleSegmentation`,
 :func:`load_sample_segmentation`); :func:`compare_routes` reports how the cells and
 molecules of an export folder of each route correspond (:class:`RouteComparison`) and
 decides nothing; see docs/sample-segmentation-contract.md.
@@ -38,7 +38,7 @@ from ._fuse import FusionInput, FusionRecord, fuse
 from ._grid import FusedGrid, fused_grid
 from ._labels import LabelRecord, fuse_labels
 from ._record import ExportIncompleteWarning, ExportRecord
-from ._segment import SampleSegmentation, load_sample_segmentation, segment_fused
+from ._segment import load_sample_segmentation, segment_fused
 from ._spatialdata import export_spatialdata, lookup_source
 
 #: The values of ``ExportConfig.route``: ``per_fov`` (segmentation per FOV followed by assembly) and
@@ -48,5 +48,5 @@ ROUTES = _ROUTES
 __all__ = ["ExportConfig", "FusionConfig", "LabelConfig", "SpatialDataExportConfig", "fuse", "fused_grid",
            "FusionInput", "FusedGrid", "FusionRecord", "fuse_labels", "LabelRecord", "ExportRecord",
            "ExportIncompleteWarning", "export_spatialdata", "lookup_source", "check_export", "ROUTES",
-           "SampleSegmentationConfig", "SampleSegmentationRun", "segment_fused", "SampleSegmentation",
+           "SampleSegmentationConfig", "SampleSegmentationRun", "segment_fused",
            "load_sample_segmentation", "compare_routes", "RouteComparison"]

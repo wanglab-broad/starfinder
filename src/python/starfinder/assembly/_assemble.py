@@ -24,13 +24,13 @@ from starfinder.assignment._assign import COMPARTMENTS, assignment_table_sha256
 from starfinder.image import ImageMetadata, IncompatibleGeometryError
 from starfinder.segmentation import ReferenceGrid
 from starfinder.stitching import PlacementResult
-from starfinder.stitching._placement import PLACED, grid_problems, same_frame_grid, table_sha256
+from starfinder.stitching._placement import OWNING, PLACED, grid_problems, same_frame_grid, table_sha256
 from starfinder.stitching._positions import _names
 from starfinder.stitching._review import require_approval
 
 from ._config import (ASSEMBLY_STATUSES, CELL_ASSEMBLY_FLAGS, CELL_ASSEMBLY_REASONS, DUPLICATE_REASONS,
                       MOLECULE_ASSEMBLY_FLAGS, MOLECULE_ASSEMBLY_REASONS, AssemblyConfig, AssemblyInput)
-from ._ownership import OWNING, OwnershipMap, ownership_map, recorded_grid
+from ._ownership import OwnershipMap, ownership_map, recorded_grid
 
 FORMAT_VERSION = 1
 STAGE = "assembly"
@@ -705,8 +705,6 @@ def _duplicate_rule(placement, by_fov, state, order, threshold):
     and the shared voxels of every pair of retained cells of two FOVs that
     share one (``_duplicates.measure``).
     """
-    from starfinder.sample_output._grid import INCLUDED
-
     from . import _duplicates
     fovs = [f for f in order if state[f]["placed"] and any(state[f]["retained"].values())]
     if len(fovs) < 2:
@@ -727,7 +725,7 @@ def _duplicate_rule(placement, by_fov, state, order, threshold):
     rows = placement.fovs.set_index("fov_id")
     origin = {f: tuple(float(rows.loc[f, f"origin_{a}"]) for a in AXES) for f in rows.index}
     # The label export's grid at scale 1: the smallest origin of the included FOVs per axis, their spacing.
-    included = [f for f, status in zip(placement.fovs["fov_id"], placement.fovs["status"]) if status in INCLUDED]
+    included = [f for f, status in zip(placement.fovs["fov_id"], placement.fovs["status"]) if status in OWNING]
     grid = {"origin": tuple(min(origin[f][a] for f in included) for a in range(3)),
             "spacing": next(iter(spacings)), "two_d": next(iter(kinds)) == "plane"}
     items = [{"fov_id": f, "origin": origin[f], "shape": by_fov[f].grid.shape_zyx,

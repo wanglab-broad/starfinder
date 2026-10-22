@@ -415,7 +415,7 @@ def _step_truth_grid(a):
     evaluator at the fused projection's pixel centres, moved into the truth frame by the mean origin difference of the
     placement used, at the Z of every plane of the sample grid, the Z maximum of the IDs (PT1); written as uint32
     OME-TIFFs with the grid's metadata, for ``truth_runs``."""
-    from starfinder.sample_output._tiff import write_ome_tiff
+    from starfinder.io._ome import write_ome_tiff
     from starfinder.synthetic import appearance_scene_preset, load_appearance_bank
     from starfinder.synthetic._appearance import _point_evaluator
     from .cellular_appearance_measures import load_saved_scene

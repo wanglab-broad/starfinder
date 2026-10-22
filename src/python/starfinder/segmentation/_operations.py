@@ -1,4 +1,5 @@
-"""Label functions that are not methods (D4): expand_labels, labels_to_grid and the culture extension through z."""
+"""Label functions that are not methods (D4): expand_labels, labels_to_grid, the culture extension through z and
+retained_image."""
 from __future__ import annotations
 
 import math
@@ -330,3 +331,16 @@ def extend_labels_through_z(labels_2d, stain, metadata: ImageMetadata, *,
                          "dilation_radius_yx": list(radii)},
               "geometry": "extended", "outcome": "ok" if output.any() else "empty"}
     return output, record
+
+
+def retained_image(territory, cell_ids, ids) -> np.ndarray:
+    """A territory mapped voxel by voxel: a retained cell's ``cell_id`` to its ``instance_id``, everything else to 0."""
+    territory = np.asarray(territory)
+    out = np.zeros(territory.shape, np.uint32)
+    if len(cell_ids) == 0:
+        return out
+    values = territory.astype(np.int64)
+    index = np.clip(np.searchsorted(cell_ids, values), 0, len(cell_ids) - 1)
+    hit = (cell_ids[index] == values) & (values > 0)
+    out[hit] = ids[index[hit]]
+    return out

@@ -27,10 +27,11 @@ from typing import Any
 import numpy as np
 
 from starfinder.image import ImageMetadata, IncompatibleGeometryError
+from starfinder.io import _ome
+from starfinder.segmentation._operations import retained_image
 from starfinder.stitching import PlacementResult
 from starfinder.stitching._placement import grid_problems
 
-from . import _tiff
 from ._config import FusionConfig, LabelConfig
 from ._grid import AXES, IDENTITY, _names, fused_grid, included_fovs
 from ._record import (
@@ -126,19 +127,6 @@ def retained_by_fov(cells) -> dict[str, tuple[np.ndarray, np.ndarray]]:
         rows = fovs == fov
         order = np.argsort(cell_ids[rows], kind="stable")
         out[fov] = (cell_ids[rows][order], ids[rows][order])
-    return out
-
-
-def retained_image(territory, cell_ids, ids) -> np.ndarray:
-    """A territory mapped voxel by voxel: a retained cell's ``cell_id`` to its ``instance_id``, everything else to 0."""
-    territory = np.asarray(territory)
-    out = np.zeros(territory.shape, np.uint32)
-    if len(cell_ids) == 0:
-        return out
-    values = territory.astype(np.int64)
-    index = np.clip(np.searchsorted(cell_ids, values), 0, len(cell_ids) - 1)
-    hit = (cell_ids[index] == values) & (values > 0)
-    out[hit] = ids[index[hit]]
     return out
 
 
@@ -545,7 +533,7 @@ def _fuse_and_write(placement, assembly, config, ids, retained, fovs, output_dir
                   "placement_fovs_sha256": table_sha256(placement.fovs),
                   "placement_links_sha256": table_sha256(placement.links)}
     path = output_dir / LABEL_FILE
-    layout = _tiff.write_ome_tiff(path, data, metadata=metadata, annotation=annotation)
+    layout = _ome.write_ome_tiff(path, data, metadata=metadata, annotation=annotation)
     written = _tiff_values(path)
     ids_input = sorted({int(v) for image in images.values() for v in np.unique(image) if v > 0})
     ids_output = sorted(int(v) for v in written if v > 0)
@@ -641,7 +629,7 @@ def _fuse_sample_and_write(placement, assembly, config, output_dir, relative, sh
                   "placement_fovs_sha256": table_sha256(placement.fovs),
                   "placement_links_sha256": table_sha256(placement.links)}
     out = output_dir / LABEL_FILE
-    layout = _tiff.write_ome_tiff(out, data, metadata=metadata, annotation=annotation)
+    layout = _ome.write_ome_tiff(out, data, metadata=metadata, annotation=annotation)
     written = _tiff_values(out)
     ids_input = sorted(int(v) for v in np.unique(image) if v > 0)
     ids_output = sorted(int(v) for v in written if v > 0)

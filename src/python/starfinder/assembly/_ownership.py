@@ -19,11 +19,10 @@ import pandas as pd
 from starfinder.image import ImageMetadata
 from starfinder.segmentation import ReferenceGrid
 from starfinder.stitching import PlacementResult
-from starfinder.stitching._placement import PLACED
+from starfinder.stitching._placement import OWNING, PLACED
 
 from ._config import AssemblyConfig
 
-OWNING = ("image_supported", "metadata_only")
 GEOMETRY_COLUMNS = ("fov_id", "placement_status", "footprint_y0", "footprint_y1", "footprint_x0", "footprint_x1",
                     "centre_y", "centre_x", "owns_points", "candidate", "box_y0", "box_y1", "box_x0", "box_x1",
                     "box_y1_closed", "box_x1_closed")

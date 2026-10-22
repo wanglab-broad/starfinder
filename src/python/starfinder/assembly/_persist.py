@@ -97,7 +97,7 @@ def save_assembly(result: AssemblyResult, folder, *, table_format: str = "csv") 
     territories = territories_of(result)
     if territories is not None:
         # The route after fusion with an expansion: the territories assign sampled, on the segmentation grid.
-        from starfinder.sample_output._tiff import write_ome_tiff
+        from starfinder.io._ome import write_ome_tiff
         labels, metadata = territories
         folder.mkdir(parents=True, exist_ok=True)
         write_ome_tiff(folder / TERRITORIES_FILE, labels[0], metadata=metadata,
@@ -175,7 +175,7 @@ def load_assembly(folder) -> AssemblyResult:
 
         from starfinder.image import ImageMetadata
         from starfinder.io.tiff import METADATA_NAMESPACE
-        from starfinder.sample_output._tiff import read_ome_layout
+        from starfinder.io._ome import read_ome_layout
         path = folder / files["territories"]["path"]
         labels = np.ascontiguousarray(tifffile.imread(path), dtype=np.uint32)
         stored = read_ome_layout(path)["annotations"][METADATA_NAMESPACE]

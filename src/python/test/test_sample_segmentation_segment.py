@@ -22,14 +22,14 @@ from starfinder.assembly import load_assembly
 from starfinder.dataset import workflow
 from starfinder.image import IncompatibleGeometryError
 from starfinder.io.tiff import METADATA_NAMESPACE
-from starfinder.sample_output import (ROUTES, ExportConfig, SampleSegmentation, SampleSegmentationConfig,
-                                      SampleSegmentationRun, check_export, load_sample_segmentation, segment_fused)
+from starfinder.sample_output import (ROUTES, ExportConfig, SampleSegmentationConfig, SampleSegmentationRun,
+                                      check_export, load_sample_segmentation, segment_fused)
 from starfinder.sample_output._check import TOLERANCE_TIFF_UM, _check_tiff
 from starfinder.sample_output._segment import LENGTH_FIELDS, check_route, scale_lengths
-from starfinder.sample_output._tiff import read_ome_layout
+from starfinder.io._ome import read_ome_layout
 from starfinder.segmentation import (SEGMENTATION_METHODS, CellposeConfig, LabelImportConfig, MissingModelError,
-                                     ModelHashMismatchError, SeededWatershedConfig, SegmentationResult,
-                                     StarDistConfig)
+                                     ModelHashMismatchError, SampleSegmentation, SeededWatershedConfig,
+                                     SegmentationResult, StarDistConfig)
 from starfinder._records import file_sha256
 
 from .assembly_fixtures import SAMPLE as GOLDEN_SAMPLE

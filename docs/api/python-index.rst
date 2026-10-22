@@ -301,7 +301,7 @@ Python functions and classes A–Z
 * :py:obj:`starfinder.synthetic.SAMPLE_TRUTH_VERSION`
 * :py:obj:`starfinder.synthetic.SampleScene`
 * :py:obj:`starfinder.synthetic.SampleSceneConfig`
-* :py:obj:`starfinder.sample_output.SampleSegmentation`
+* :py:obj:`starfinder.segmentation.SampleSegmentation`
 * :py:obj:`starfinder.sample_output.SampleSegmentationConfig`
 * :py:obj:`starfinder.sample_output.SampleSegmentationRun`
 * :py:obj:`starfinder.synthetic.save_appearance_scene`

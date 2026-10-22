@@ -19,7 +19,7 @@ import tifffile
 from starfinder.io import load_volume
 from starfinder.preprocessing.projection import ProjectionConfig, project_image
 from starfinder.sample_output import FusionConfig, check_export, fuse
-from starfinder.sample_output._tiff import ANNOTATION_NAMESPACE, read_ome_layout
+from starfinder.io._ome import ANNOTATION_NAMESPACE, read_ome_layout
 
 from .fusion_fixtures import checker_pair, make_case, plane_pair, quad, zstack
 

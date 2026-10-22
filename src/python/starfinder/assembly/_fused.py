@@ -18,7 +18,7 @@ import numpy as np
 import pandas as pd
 
 from starfinder.assignment import AssignmentConfig, MoleculeTable, assign_molecules
-from starfinder.segmentation import ExpandLabelsConfig
+from starfinder.segmentation import ExpandLabelsConfig, SampleSegmentation
 from starfinder.stitching._placement import table_sha256
 
 from ._assemble import (
@@ -84,7 +84,6 @@ def _identity(namespace):
 
 def _check(placement, inputs, segmentation):
     """The checks of the route's assembly, after ``assemble``'s own checks of the placement and inputs."""
-    from starfinder.sample_output import SampleSegmentation
     if not isinstance(segmentation, SampleSegmentation):
         raise TypeError("segmentation must be a SampleSegmentation (segment_fused or load_sample_segmentation)")
     if segmentation.status not in ("written", "reused") or segmentation.grid is None or segmentation.cells is None:
