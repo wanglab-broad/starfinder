@@ -7,89 +7,23 @@ directory and moved into place with ``os.replace``.
 """
 from __future__ import annotations
 
-from contextlib import contextmanager
-from dataclasses import fields, is_dataclass
 import json
-import os
 from pathlib import Path
-import uuid
 
 import numpy as np
 import pandas as pd
+
+from starfinder._records import TABLE_FORMATS, _read_table, _write_table, atomic_file, tuples, write_json
 
 FORMAT_VERSION = 2
 # Header versions the reader accepts: version 1 has the pre-recipe registered layout.
 READ_VERSIONS = (1, 2)
 STAGES = ("registered", "candidates", "pre_qc")
-TABLE_FORMATS = ("csv", "parquet")
-NA_TOKEN = "<NA>"
-ESCAPE = "\\"
-_CONTROL = "[\x00-\x1f\x7f]"
-# In-memory dtype -> dtype used to parse CSV text; the header restores the former.
-_CSV_DTYPES = {"string": "string", "str": "string", "float64": "float64",
-               "int64": "Int64", "Int64": "Int64", "bool": "boolean", "boolean": "boolean",
-               "UInt32": "UInt32"}
 
 
 def _check_stage(stage):
     if stage not in STAGES:
         raise ValueError(f"unknown checkpoint stage {stage!r}; expected one of {STAGES}")
-
-
-def _require_parquet():
-    try:
-        import pyarrow  # noqa: F401
-    except ImportError as error:
-        raise ImportError("Parquet checkpoints require pyarrow; install the 'checkpoint' extra "
-                          "or use table_format='csv'") from error
-
-
-@contextmanager
-def _atomic(path):
-    """Yield a temporary sibling path; replace ``path`` with it only on success."""
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(f".{path.stem}.{uuid.uuid4().hex}.tmp{path.suffix}")
-    try:
-        yield tmp
-        os.replace(tmp, path)
-    finally:
-        if tmp.exists():
-            tmp.unlink()
-
-
-def _jsonable(value):
-    """Plain JSON values; tuples become lists, types qualified names, NaN/inf null."""
-    if is_dataclass(value) and not isinstance(value, type):
-        return {f.name: _jsonable(getattr(value, f.name)) for f in fields(value)}
-    if isinstance(value, dict):
-        return {str(k): _jsonable(v) for k, v in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_jsonable(v) for v in value]
-    if isinstance(value, np.generic):
-        value = value.item()
-    if isinstance(value, float) and not np.isfinite(value):
-        return None
-    if isinstance(value, Path):
-        return str(value)
-    if isinstance(value, type):
-        return f"{value.__module__}.{value.__qualname__}"
-    return value
-
-
-def write_json(data, path):
-    """Atomically write indented, strict JSON (non-finite floats become null)."""
-    with _atomic(path) as tmp:
-        tmp.write_text(json.dumps(_jsonable(data), indent=2, allow_nan=False) + "\n")
-
-
-def _tuples(value):
-    """Invert JSON list conversion for results whose sequences are tuples."""
-    if isinstance(value, list):
-        return tuple(_tuples(v) for v in value)
-    if isinstance(value, dict):
-        return {k: _tuples(v) for k, v in value.items()}
-    return value
 
 
 def _json_diagnostics(diagnostics):
@@ -107,85 +41,12 @@ def _config(data, classes):
     data = dict(data)
     method = data.pop("method", None)
     cls = classes[method] if isinstance(classes, dict) else classes
-    return cls(**{k: _tuples(v) for k, v in data.items()})
+    return cls(**{k: tuples(v) for k, v in data.items()})
 
 
 def _metadata(data):
     from starfinder.image import ImageMetadata
     return ImageMetadata(**data)
-
-
-# --- Tables ---------------------------------------------------------------------
-
-def _dtype_map(frame):
-    dtypes = {}
-    for column, dtype in frame.dtypes.items():
-        name = str(dtype)
-        if name not in _CSV_DTYPES:
-            raise ValueError(f"checkpoint column {column!r} has unsupported dtype {name}")
-        dtypes[str(column)] = name
-    return dtypes
-
-
-def _escape_strings(column):
-    """CSV text for a string column: missing values stay NA (written as NA_TOKEN).
-
-    Literal values equal to NA_TOKEN or starting with ESCAPE gain one leading
-    ESCAPE, so printable text, including "", "NA" or "<NA>", reads back exactly.
-    """
-    literal = column.eq(NA_TOKEN).fillna(False) | column.str.startswith(ESCAPE).fillna(False)
-    return column.mask(literal, ESCAPE + column)
-
-
-def _unescape_strings(column):
-    missing = column.eq(NA_TOKEN)
-    column = column.mask(column.str.startswith(ESCAPE), column.str.slice(len(ESCAPE)))
-    return column.mask(missing, pd.NA)
-
-
-def _write_table(frame, directory, name, table_format):
-    """Write a table with its dtype map; return (file name, dtype map)."""
-    dtypes = _dtype_map(frame)
-    path = Path(directory) / f"{name}.{table_format}"
-    if table_format == "parquet":
-        _require_parquet()
-        with _atomic(path) as tmp:
-            frame.to_parquet(tmp, index=False, engine="pyarrow")
-    elif table_format == "csv":
-        text = frame.copy()
-        for column, dtype in dtypes.items():
-            if dtype in ("string", "str"):
-                strings = frame[column].astype("string")
-                # CSV holds printable text only; never write a changed value.
-                if strings.str.contains(_CONTROL, regex=True, na=False).any():
-                    raise ValueError(f"CSV checkpoint column {column!r} contains a control character "
-                                     "(U+0000-U+001F or U+007F); use table_format='parquet' for such data")
-                text[column] = _escape_strings(strings)
-        with _atomic(path) as tmp:
-            text.to_csv(tmp, index=False, float_format="%.17g", na_rep=NA_TOKEN)
-    else:
-        raise ValueError(f"table_format must be one of {TABLE_FORMATS}")
-    return path.name, dtypes
-
-
-def _read_table(path, dtypes):
-    """Read a table and restore the recorded dtype of every column, in order."""
-    path = Path(path)
-    if path.suffix == ".parquet":
-        _require_parquet()
-        frame = pd.read_parquet(path, engine="pyarrow")
-    else:
-        # String columns are read verbatim (no NA parsing), then unescaped.
-        strings = [c for c, d in dtypes.items() if d in ("string", "str")]
-        frame = pd.read_csv(path, dtype={c: _CSV_DTYPES[d] for c, d in dtypes.items()},
-                            keep_default_na=False, float_precision="round_trip",
-                            na_values={c: [NA_TOKEN] for c in dtypes if c not in strings})
-        for column in strings:
-            if column in frame:
-                frame[column] = _unescape_strings(frame[column])
-    if list(frame.columns) != list(dtypes):
-        raise ValueError(f"{path.name}: columns differ from the checkpoint header")
-    return frame.astype(dtypes).reset_index(drop=True)
 
 
 def _signal_columns(round_labels, channel_labels):
@@ -366,7 +227,7 @@ def write_registered_round(directory, round_name, image, metadata, snapshot=None
         if label is not None and (not label or Path(label).name != label or label in (".", "..")):
             raise ValueError(f"label {label!r} is not a plain file name")
     path = registered_image_path(directory, round_name, snapshot)
-    with _atomic(path) as tmp:
+    with atomic_file(path) as tmp:
         save_volume(image, tmp, metadata=metadata)
     return path
 
@@ -424,7 +285,7 @@ def write_registered_header(directory, header, registration_results, registratio
                 arrays[f"result_{i}"] = r.transform.coefficients
         field_name = f"{name}_field.npz"
         if arrays:
-            with _atomic(directory / field_name) as tmp:
+            with atomic_file(directory / field_name) as tmp:
                 with open(tmp, "wb") as handle:
                     np.savez(handle, **arrays)
             files.append(field_name)
@@ -481,7 +342,7 @@ def _restore_result(entry, index, fields, format_version, application, methods):
     elif kind == "affine" and format_version != 1:
         transform = AffineTransform(**data)
     elif kind == "bspline" and format_version != 1:
-        transform = BSplineTransform(**{k: _tuples(v) for k, v in data.pop("bspline").items()},
+        transform = BSplineTransform(**{k: tuples(v) for k, v in data.pop("bspline").items()},
                                      coefficients=arrays[f"result_{index}"], **data)
     elif kind == "dense":
         transform = DenseDisplacementTransform(displacement_zyx=arrays[f"result_{index}"], **data)
@@ -590,9 +451,9 @@ def _extraction_config(header):
     """The NeighborhoodSumConfig of a candidates header; no background_config (before §2.8) is background=None."""
     from starfinder.barcode import LocalBackgroundConfig, NeighborhoodSumConfig
     background = header.get("background_config")
-    fields_ = {k: _tuples(v) for k, v in header["signals"]["extraction_config"].items() if k != "method"}
+    fields_ = {k: tuples(v) for k, v in header["signals"]["extraction_config"].items() if k != "method"}
     return NeighborhoodSumConfig(**fields_, background=None if background is None else LocalBackgroundConfig(
-        **{k: _tuples(v) for k, v in background.items()}))
+        **{k: tuples(v) for k, v in background.items()}))
 
 
 def _detection_plan(header, config, detectors):
@@ -621,7 +482,7 @@ def _read_candidates(directory, header):
     detectors = _detectors()
     config = _config(header["detection_config"], detectors)
     spot_result = SpotFindingResult(spots, _metadata(header["metadata"]), namespace, config,
-        _tuples(header["detection_diagnostics"]), _detection_plan(header, config, detectors))
+        tuples(header["detection_diagnostics"]), _detection_plan(header, config, detectors))
     if signals is None:
         return {"spot_result": spot_result, "intensity_result": None}
     rounds, channels = tuple(signals["round_labels"]), tuple(signals["channel_labels"])
@@ -633,7 +494,7 @@ def _read_candidates(directory, header):
                         image_noise=_from_round_channel(header["image_noise"], rounds, channels))
     intensity = IntensityExtractionResult(values, tuple(spots.spot_id), namespace,
         channels, rounds, _metadata(signals["metadata"]),
-        _extraction_config(header), valid, _tuples(signals["diagnostics"]), **measured)
+        _extraction_config(header), valid, tuples(signals["diagnostics"]), **measured)
     return {"spot_result": spot_result, "intensity_result": intensity}
 
 
@@ -694,7 +555,7 @@ def _read_pre_qc(directory, header):
                                     _config(header["scoring_config"], ReadScoreConfig), counts, readout_mode(header))
         table = table.drop(columns=list(SCORE_COLUMNS))
     return {"decoding_result": BarcodeDecodingResult(table, header["spot_namespace"], *labels, config,
-        _tuples(header["decoding_diagnostics"]), readout_mode(header)), "scoring_result": scoring,
+        tuples(header["decoding_diagnostics"]), readout_mode(header)), "scoring_result": scoring,
         "deduplication_result": deduplication}
 
 
@@ -770,6 +631,6 @@ def read_checkpoint(path: Path | str, stage: str) -> dict:
     results, chains, record = _registration_results(directory, header)
     return {"images": images, "snapshots": snapshots, "metadata": metadata,
             "registration_results": results, "registration_chains": chains, "registration_record": record,
-            "registration_attempts": {name: [_tuples(a) for a in attempts]
+            "registration_attempts": {name: [tuples(a) for a in attempts]
                                       for name, attempts in header["registration_attempts"].items()},
             "preprocessing_record": header.get("preprocessing") or {}}

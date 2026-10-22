@@ -16,6 +16,7 @@ from numbers import Real
 import numpy as np
 import pandas as pd
 
+from starfinder._records import json_record
 from starfinder.image import ImageMetadata, IncompatibleGeometryError
 from starfinder.segmentation._labels import ReferenceGrid, _grid_record
 
@@ -44,11 +45,6 @@ MICROMETRE = ("µm", "um", "micrometer")
 SUPPLIED_IMPLEMENTATION = "starfinder.stitching.placement_from_table"
 
 
-def _json(record):
-    from starfinder.segmentation._persist import json_record
-    return json_record(record)
-
-
 def frame_record(sample):
     """The record's ``frame``: the sample frame, identity direction, µm."""
     return {"frame_id": f"sample:{sample}", "unit": "µm", "direction": "identity"}
@@ -71,7 +67,7 @@ def table_csv(frame) -> bytes:
     reads back exactly; the SHA-256 of these bytes is the table's SHA-256 in
     ``placement.json`` and in an approval.
     """
-    from starfinder.io._checkpoint import _CONTROL, NA_TOKEN, _dtype_map, _escape_strings
+    from starfinder._records import _CONTROL, NA_TOKEN, _dtype_map, _escape_strings
     text = frame.copy()
     for column, dtype in _dtype_map(frame).items():
         if dtype in ("string", "str"):
@@ -161,7 +157,7 @@ class PlacementResult:
         reasons = sorted(set(links["reason"]) - set(LINK_REASONS))
         if reasons:
             raise ValueError(f"link reason must be one of {list(LINK_REASONS)}; got {_names(reasons)}")
-        object.__setattr__(self, "record", _json(dict(self.record)))
+        object.__setattr__(self, "record", json_record(dict(self.record)))
 
 
 def frame_metadata(metadata: ImageMetadata) -> ImageMetadata:

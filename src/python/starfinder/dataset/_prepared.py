@@ -54,18 +54,18 @@ def write_image(directory, *, identity, name, image, metadata, channels, rotatio
     registration_record["rounds"] entry. A registered round also passes its
     RegistrationResult list, its application WarpConfig and its attempts.
     """
-    from starfinder.io._checkpoint import _atomic, _transform_json, write_json
+    from starfinder._records import atomic_file, write_json
+    from starfinder.io._checkpoint import _transform_json
     from starfinder.io.tiff import save_volume
     from starfinder.registration import BSplineTransform, DenseDisplacementTransform
-    from starfinder.segmentation._import import _software
-    from starfinder.segmentation._persist import file_sha256
+    from starfinder._records import file_sha256, software
     directory = Path(directory)
     for file_name in FILES:
         (directory / file_name).unlink(missing_ok=True)
     directory.mkdir(parents=True, exist_ok=True)
     image = np.asarray(image)
     path = directory / IMAGE_FILE
-    with _atomic(path) as tmp:
+    with atomic_file(path) as tmp:
         save_volume(image, tmp, metadata=metadata)
     registration = dict(entry, **dict.fromkeys(CHAIN_KEYS))
     field = None
@@ -77,7 +77,7 @@ def write_image(directory, *, identity, name, image, metadata, channels, rotatio
                                          if isinstance(result.transform, DenseDisplacementTransform)
                                          else result.transform.coefficients)
         if arrays:
-            with _atomic(directory / FIELD_FILE) as tmp:
+            with atomic_file(directory / FIELD_FILE) as tmp:
                 with open(tmp, "wb") as handle:
                     np.savez(handle, **arrays)
             field = {"path": FIELD_FILE, "file_sha256": file_sha256(directory / FIELD_FILE)}
@@ -88,7 +88,7 @@ def write_image(directory, *, identity, name, image, metadata, channels, rotatio
                   image={"path": IMAGE_FILE, "shape": list(image.shape), "dtype": str(image.dtype),
                          "metadata": asdict(metadata), "sha256": image_sha256(image),
                          "file_sha256": file_sha256(path)},
-                  software=_software())
+                  software=software())
     write_json(record, directory / RECORD_FILE)
     return json.loads((directory / RECORD_FILE).read_text())
 
@@ -109,7 +109,7 @@ def read_image(directory, name, identity, channel_labels) -> dict:
     from starfinder.io._checkpoint import _config, _field_loader, _registration_methods, _restore_result
     from starfinder.io.tiff import load_volume_zyxc
     from starfinder.registration import WarpConfig
-    from starfinder.segmentation._persist import check_file
+    from starfinder._records import check_file
     directory = Path(directory)
     path = directory / RECORD_FILE
     if not path.is_file():

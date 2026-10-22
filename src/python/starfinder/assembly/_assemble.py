@@ -6,7 +6,6 @@ docs/assembly-algorithms.md.
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 from collections import Counter
@@ -18,9 +17,9 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from starfinder._records import json_sha256, software
 from starfinder.assignment import AssignmentResult
-from starfinder.assignment._assign import COMPARTMENTS
-from starfinder.assignment._assign import table_sha256 as assignment_table_sha256
+from starfinder.assignment._assign import COMPARTMENTS, assignment_table_sha256
 from starfinder.image import ImageMetadata, IncompatibleGeometryError
 from starfinder.segmentation import ReferenceGrid
 from starfinder.stitching import PlacementResult
@@ -740,15 +739,6 @@ def _duplicate_rule(placement, by_fov, state, order, threshold):
     return _duplicates.decide(sizes, shared, threshold, position), sizes, shared
 
 
-def _sha256_json(value):
-    return hashlib.sha256(json.dumps(value, sort_keys=True, default=str).encode()).hexdigest()
-
-
-def _software():
-    from starfinder.segmentation._import import _software as software
-    return software()
-
-
 def assemble(placement: PlacementResult, inputs: Sequence[AssemblyInput], *,
              config: AssemblyConfig = AssemblyConfig(), segmentation=None) -> AssemblyResult:
     """Assemble a sample from its placement and its per-FOV §2.9 results, or on the route after fusion.
@@ -1138,7 +1128,7 @@ def _fov_record(fov_row, entry, fov, config, mode):
     item["molecules_sha256"] = record["inputs"]["molecules"]["sha256"]
     item["nuclei"] = result.nuclei if isinstance(result, _Saved) else result.nucleus_labels is not None
     if fov.folder is not None:
-        from starfinder.segmentation._persist import file_sha256
+        from starfinder._records import file_sha256
         files = record["files"]
         item["assignment"] = {"name": fov.name, "folder": str(fov.folder), "source": "folder",
                               "record_sha256": file_sha256(fov.folder / "assignment.json"),
@@ -1149,14 +1139,14 @@ def _fov_record(fov_row, entry, fov, config, mode):
                                    "sha256": entry_file["sha256"]}
     else:
         item["assignment"] = {"name": record.get("name"), "folder": None, "source": "memory",
-                              "record_sha256": _sha256_json(record),
+                              "record_sha256": json_sha256(record),
                               "tables": {t: assignment_table_sha256(getattr(result, t))
                                          for t in ("molecules", "cells", "counts")}}
     return item
 
 
 def _record(placement, config, mode, genes, ownership: OwnershipMap, by_fov, fovs, cells, molecules, computed):
-    from starfinder.segmentation._persist import json_record
+    from starfinder._records import json_record
     review = placement.record.get("review") or {}
     hashes = table_sha256(placement.fovs), table_sha256(placement.links)
     approvals = [a for a in review.get("approvals", []) if (a.get("fovs_sha256"), a.get("links_sha256")) == hashes]
@@ -1180,5 +1170,5 @@ def _record(placement, config, mode, genes, ownership: OwnershipMap, by_fov, fov
                  for row in fovs.itertuples(index=False)],
         "counts": _counts_record(cells, molecules, fovs, set(computed), config.duplicate_threshold is not None),
         "files": {},
-        "software": _software(),
+        "software": software(),
     })

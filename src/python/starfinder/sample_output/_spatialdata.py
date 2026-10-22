@@ -26,16 +26,16 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from starfinder._records import atomic_path, publish
+
 from ._config import SpatialDataExportConfig
 from ._record import (
     ExportIncompleteWarning,
     Timer,
     as_json,
-    atomic_path,
     directory_files,
     listed_files,
     part_status,
-    publish,
     read_export,
     remove_listed,
     section_sha256,
@@ -284,7 +284,7 @@ def _image_names(fusion, requested):
 
 def _rasters(folder, record, requested_images):
     """The image and labels elements: (written outputs with their files, omitted entries)."""
-    from starfinder.segmentation._persist import check_file
+    from starfinder._records import check_file
     written, omitted = [], []
     fusion, status = record.get("fusion"), part_status(record, "fuse")
     if status == "failed" or part_status(record, "fuse_labels") == "failed":
@@ -322,7 +322,7 @@ def _expression(folder, assembly, ids):
     """``sample.h5ad`` read whole, with the added obs columns ``region`` and ``instance_id``."""
     import anndata
 
-    from starfinder.segmentation._persist import check_file
+    from starfinder._records import check_file
     entry = (assembly.record.get("files") or {}).get("anndata")
     if not entry:
         raise ValueError("the assembly record lists no sample.h5ad; save the assembly with save_assembly first")
@@ -496,7 +496,7 @@ def _round_trip(path, entries) -> None:
     import zarr
     from anndata.io import read_elem
 
-    from starfinder.segmentation._persist import file_sha256
+    from starfinder._records import file_sha256
     for entry in entries:
         if entry["status"] != "written":
             continue
@@ -667,8 +667,8 @@ def _export(assembly, record, config, output_dir, timer, *, requested_images):
               "config": {"zarr_format": config.zarr_format}}
 
     def finish(status, *, warn=None, **extra):
-        from ._fuse import _software
-        section = as_json({"status": status, **extra, **common, "software": _software(), **timer.record(),
+        from starfinder._records import software
+        section = as_json({"status": status, **extra, **common, "software": software(), **timer.record(),
                            "viewer_qualification": "deferred"})
         section.setdefault("outputs", [])
         update_section(output_dir, sample, "export_spatialdata", section)

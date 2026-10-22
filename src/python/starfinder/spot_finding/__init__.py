@@ -201,7 +201,7 @@ def _model_artifacts(record):
 
 def _detect(image, config, metadata, spot_namespace, device="cpu", round_name=None):
     """find_spots; round_name (from FOV.find_spots) is named in the warnings."""
-    from starfinder.io._checkpoint import _jsonable, _tuples
+    from starfinder._records import jsonable, tuples
     image = _validate_image(image)
     base = config.config if isinstance(config, SpotFindingPlan) else config
     spec = spec_for(SPOT_FINDING_METHODS, base, _WHAT, TypeError, "unsupported detection config")
@@ -299,7 +299,7 @@ def _detect(image, config, metadata, spot_namespace, device="cpu", round_name=No
                 warnings.warn(messages[-1], SpotFindingWarning, stacklevel=3)
     if models:
         diagnostics['model'] = _model_record(models, keys)
-    diagnostics['effective_settings'] = {keys[c]: _tuples(_jsonable(effective.get(c, configs[c])))
+    diagnostics['effective_settings'] = {keys[c]: tuples(jsonable(effective.get(c, configs[c])))
                                          for c in range(n_channels)}
     diagnostics['warnings'] = tuple(messages)
     diagnostics['software'] = _software(spec)

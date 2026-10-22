@@ -21,6 +21,7 @@ from xml.etree import ElementTree
 import numpy as np
 import pandas as pd
 
+from starfinder._records import file_sha256
 from starfinder._registry import provenance
 from starfinder.image import IncompatibleGeometryError
 from starfinder.segmentation._labels import ReferenceGrid
@@ -546,14 +547,6 @@ def _to_um(world_xyz, calibration_xyz, spacing_zyx):
     return np.array([voxel[2] * spacing_zyx[0], voxel[1] * spacing_zyx[1], voxel[0] * spacing_zyx[2]])
 
 
-def _file_sha256(path):
-    digest = hashlib.sha256()
-    with open(path, "rb") as handle:
-        for block in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
-
 def import_bigstitcher(dataset_xml, *, table: TilePositionTable, view_map: pd.DataFrame,
                        grids: Mapping[str, ReferenceGrid], config: BigStitcherConfig,
                        review: ReviewPolicy = ReviewPolicy(), fallback: str | None = None,
@@ -783,7 +776,7 @@ def import_bigstitcher(dataset_xml, *, table: TilePositionTable, view_map: pd.Da
                              "legacy_id": legacy_id})
     method = provenance(StitchingSpec("bigstitcher", import_bigstitcher), config, STAGE)
     method.update({"macro_sha256": None if macro is None else hashlib.sha256(macro.encode("utf-8")).hexdigest(),
-                   "dataset_xml_sha256": _file_sha256(path), "dataset_xml_path": str(path.resolve()),
+                   "dataset_xml_sha256": file_sha256(path), "dataset_xml_path": str(path.resolve()),
                    "fiji_version": None, "bigstitcher_version": None, "views": view_records,
                    "pairwise": [{"view_a": va, "view_b": vb, "translation_xyz": [float(v) for v in t],
                                  "correlation": float(r), "hash": h, "overlap_boundingbox": bb}

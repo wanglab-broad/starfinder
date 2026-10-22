@@ -18,10 +18,9 @@ from pathlib import Path
 import numpy as np
 import tifffile
 
+from starfinder._records import atomic_path, publish
 from starfinder.image import ImageMetadata
 from starfinder.io.tiff import METADATA_NAMESPACE, _ome_digest, _ome_uuid, _stamp_uuid
-
-from ._record import atomic_path, publish
 
 TILE = 512
 COMPRESSION = "zlib"

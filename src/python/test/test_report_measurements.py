@@ -22,7 +22,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from starfinder.io._checkpoint import _read_table
+from starfinder._records import _read_table
 from starfinder.report import MarkerGroup, ReportConfig
 from starfinder.report._collect import report_measurements
 from starfinder.report._figures import (EXAMPLE_TILE, SMALL_PLOT, grid_edges, histogram_bins,
@@ -179,9 +179,9 @@ def test_reads_in_cells_without_the_inputs(tmp_path):
 def drop_cell_namespace(case):
     """The export of ``case`` as one saved before the molecule table had ``cell_namespace``: the table written again
     without the column by the checkpoint writer, and its entry in export.json given the new SHA-256 and dtypes."""
-    from starfinder.io._checkpoint import _write_table
+    from starfinder._records import _write_table
     from starfinder.sample_output._record import update_section
-    from starfinder.segmentation._persist import file_sha256
+    from starfinder._records import file_sha256
     folder = case.root / "export" / case.sample
     section = json.loads((folder / "export.json").read_text())["assembly"]
     molecules = export_table(case.root, case.sample, "molecules").drop(columns="cell_namespace")

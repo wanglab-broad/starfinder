@@ -18,6 +18,7 @@ from types import SimpleNamespace
 import numpy as np
 import pandas as pd
 
+from starfinder._records import file_sha256
 from starfinder.barcode import Codebook
 from starfinder.io import save_volume
 
@@ -26,7 +27,7 @@ from ._common import ScalarDistribution, _draw, _integer, _json, _label, _probab
 from ._formed import _STREAM_KEY, _STREAM_NAMESPACE, _plain
 from ._observation import _noise, _observe, _prepare_background, evaluate_background_translated
 from ._sample import (_BLOCK, SampleScene, SampleSceneConfig, _cast, _checked_distribution, _config_payload, _generate,
-                      _inside, _label_functions, _layout, _real, _sha256, _streams, save_sample_scene)
+                      _inside, _label_functions, _layout, _real, _streams, save_sample_scene)
 from ._stains import (_ROUNDS, MorphologyRoundConfig, StainChannelConfig, _bright_regions, _bumps, _median, _model,
                       _plateaus, _Points)
 
@@ -1506,7 +1507,7 @@ def save_context_scene(scene: ContextScene, directory: Path | str) -> Path:
             save_volume(image[..., None], directory / "fovs" / fov / "stains" / f"{name}.ome.tif", metadata=metadata)
         if fov in scene.morphology:
             save_volume(scene.morphology[fov], directory / "fovs" / fov / "morphology.ome.tif", metadata=metadata)
-    files = {path.relative_to(directory).as_posix(): _sha256(path)
+    files = {path.relative_to(directory).as_posix(): file_sha256(path)
              for path in sorted(directory.rglob("*")) if path.is_file()}
     record = dict(scene.record, files=files)
     (directory / "context.json").write_text(
@@ -1580,7 +1581,7 @@ def save_context_dataset(scene: ContextScene, directory: Path | str) -> Path:
     pd.DataFrame(codebook["rows"])[columns].to_csv(directory / "codebook.csv", index=False)
     spacing = record["sample_grid"]["spacing_zyx"]
     channel = lambda s: dict(channel=s["channel"], name=s["name"])  # noqa: E731
-    files = {path.relative_to(directory).as_posix(): _sha256(path)
+    files = {path.relative_to(directory).as_posix(): file_sha256(path)
              for path in sorted(directory.rglob("*")) if path.is_file()}
     dataset = dict(
         format="starfinder.synthetic.save_context_dataset", context_truth_version=CONTEXT_TRUTH_VERSION,

@@ -28,14 +28,14 @@ ANNDATA_FILE = "sample.h5ad"
 
 def _write_table(frame, directory, name, table_format):
     """Write one sample table atomically through the checkpoint table writer; return (file name, dtypes)."""
-    from starfinder.io._checkpoint import _write_table as write
+    from starfinder._records import _write_table as write
     return write(frame, directory, name, table_format)
 
 
 def _write_anndata(result, path):
     """Write sample.h5ad atomically."""
-    from starfinder.io._checkpoint import _atomic
-    with _atomic(path) as tmp:
+    from starfinder._records import atomic_file
+    with atomic_file(path) as tmp:
         sample_anndata(result, tmp)
 
 
@@ -79,8 +79,7 @@ def save_assembly(result: AssemblyResult, folder, *, table_format: str = "csv") 
     ModuleNotFoundError
         anndata is not installed (the ``anndata`` extra).
     """
-    from starfinder.io._checkpoint import TABLE_FORMATS, write_json
-    from starfinder.segmentation._persist import file_sha256, json_record
+    from starfinder._records import TABLE_FORMATS, file_sha256, json_record, write_json
     if not isinstance(result, AssemblyResult):
         raise TypeError("result must be an AssemblyResult")
     if table_format not in TABLE_FORMATS:
@@ -147,8 +146,7 @@ def load_assembly(folder) -> AssemblyResult:
         missing or whose SHA-256 differs from the record (naming the path and
         both hashes).
     """
-    from starfinder.io._checkpoint import _read_table
-    from starfinder.segmentation._persist import check_file
+    from starfinder._records import _read_table, check_file
     folder = Path(folder)
     export = folder / EXPORT_FILE
     if not export.is_file():

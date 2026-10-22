@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import resource
 import shutil
 import time
@@ -73,7 +72,7 @@ def verify_section_hashes(record: Mapping, where="export.json") -> None:
 
 def as_json(value):
     """The value as it reads back from export.json."""
-    from starfinder.segmentation._persist import json_record
+    from starfinder._records import json_record
     return json_record(value)
 
 
@@ -120,7 +119,7 @@ def is_complete(record: Mapping) -> bool:
 
 def write_export(folder, record: dict, *, sample: str | None = None) -> dict:
     """Write ``export.json`` atomically with its top-level fields recomputed; return the record written."""
-    from starfinder.io._checkpoint import write_json
+    from starfinder._records import write_json
     record = dict(record)
     sample = sample or record.get("sample")
     record.update({"format_version": FORMAT_VERSION, "stage": STAGE, "sample": sample,
@@ -208,7 +207,7 @@ def remove_listed(folder, paths) -> None:
 
 def directory_files(path) -> dict[str, str]:
     """Every file under a folder, relative POSIX path → SHA-256, sorted."""
-    from starfinder.segmentation._persist import file_sha256
+    from starfinder._records import file_sha256
     path = Path(path)
     return {p.relative_to(path).as_posix(): file_sha256(p) for p in sorted(path.rglob("*")) if p.is_file()}
 
@@ -222,21 +221,6 @@ class Timer:
     def record(self) -> dict:
         return {"wall_s": time.perf_counter() - self.wall, "cpu_s": time.process_time() - self.cpu,
                 "peak_rss_kib": int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)}
-
-
-def atomic_path(path) -> Path:
-    """A temporary sibling name for a file or folder that is renamed into place when complete."""
-    import uuid
-    path = Path(path)
-    return path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
-
-
-def publish(tmp, path) -> None:
-    """Rename a completed temporary file or folder into place, replacing an earlier one."""
-    path = Path(path)
-    if path.is_dir():
-        shutil.rmtree(path)
-    os.replace(tmp, path)
 
 
 @dataclass(frozen=True)

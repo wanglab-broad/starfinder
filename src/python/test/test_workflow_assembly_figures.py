@@ -108,7 +108,7 @@ def stable(value):
 
 
 def snapshot(folder):
-    from starfinder.segmentation._persist import file_sha256
+    from starfinder._records import file_sha256
     files = sorted(p.relative_to(folder).as_posix() for p in folder.rglob("*") if p.is_file())
     record = stable(json.loads((folder / "export.json").read_text()))
     return files, record, {f: file_sha256(folder / f) for f in files if f.startswith("tables/")}

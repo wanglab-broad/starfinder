@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 import tifffile
 
+from starfinder._records import file_sha256, software
 from starfinder.image import IncompatibleGeometryError
 
 from ._labels import (FORMAT_VERSION, GEOMETRIES, ReferenceGrid, SegmentationResult, _check_geometry,
@@ -38,11 +39,6 @@ class LabelImportConfig:
             raise ValueError(f"geometry must be None, volume, plane or extended; got {self.geometry!r}")
         if not isinstance(self.relabel, bool):
             raise TypeError("relabel must be a bool")
-
-
-def _software():
-    from starfinder.dataset._run_record import _code, _environment
-    return {"code": _code(), "environment": _environment()}
 
 
 def import_labels(path: Path | str, *, grid: ReferenceGrid, target: str, geometry: str | None = None,
@@ -120,18 +116,13 @@ def import_labels(path: Path | str, *, grid: ReferenceGrid, target: str, geometr
         "format_version": FORMAT_VERSION, "stage": "segmentation", **_namespace_ids(label_namespace),
         "target": config.target, "geometry": geometry, "label_namespace": label_namespace,
         "grid": _grid_record(grid), "input": None, "seeds": None, "methods": [],
-        "import": {"path": str(path), "file_sha256": _file_sha256(path), "sha256": array_sha256(source),
+        "import": {"path": str(path), "file_sha256": file_sha256(path), "sha256": array_sha256(source),
                    "source_dtype": str(source.dtype), "source_shape": list(file_shape),
                    "metadata_source": metadata_source, "relabel": config.relabel, "relabel_map": relabel_map,
                    "target": config.target, "geometry": geometry},
         "operations": [], "outcome": "ok" if max_label else "empty",
         "labels": {"dtype": str(labels.dtype), "sha256": array_sha256(labels), "n_labels": n_labels,
                    "max_label": max_label},
-        "software": _software(),
+        "software": software(),
     }
     return SegmentationResult(labels, grid, config.target, geometry, label_namespace, record)
-
-
-def _file_sha256(path, chunk=1 << 20):
-    from starfinder.dataset._run_record import _sha256
-    return _sha256(path, chunk)

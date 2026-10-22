@@ -33,7 +33,7 @@ from starfinder.sample_output import (
 )
 from starfinder.sample_output._export import assembly_inputs
 from starfinder.segmentation import CellposeConfig, ExpandLabelsConfig, LabelImportConfig, ReferenceGrid
-from starfinder.segmentation._persist import file_sha256
+from starfinder._records import file_sha256
 from starfinder.stitching import PlacementResult, approve_placement, save_placement
 
 from .fusion_fixtures import listing

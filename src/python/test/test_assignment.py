@@ -809,7 +809,7 @@ import sys
 sys.path.insert(0, {test_root!r})
 from test.test_assignment import assign_boxes, golden_inputs, GOLDEN_GRID
 from starfinder.assignment import AssignmentConfig, assign_molecules
-from starfinder.assignment._assign import table_sha256
+from starfinder.assignment._assign import assignment_table_sha256 as table_sha256
 from starfinder.segmentation import ExpandLabelsConfig
 results = {{"boxes": assign_boxes()}}
 for dimensions in ("3d", "2d"):

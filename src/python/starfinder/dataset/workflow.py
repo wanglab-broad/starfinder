@@ -1107,9 +1107,9 @@ def _run_stardist_segmentation(snakemake):
     """
     import tifffile
     from starfinder.io import load_volume
-    from starfinder.io._checkpoint import _jsonable
+    from starfinder._records import jsonable
     from starfinder.segmentation import SegmentationInput, reference_grid_from_file, segment
-    from starfinder.segmentation._import import _file_sha256
+    from starfinder._records import file_sha256
     from starfinder.segmentation._plan import _expand
     config, fov_id = snakemake.config, snakemake.wildcards.fovID
     legacy = _segmentation(config)
@@ -1135,11 +1135,11 @@ def _run_stardist_segmentation(snakemake):
     tifffile.imwrite(output, result.labels[0] if plane else result.labels, compression='zlib',
                      photometric='minisblack')
     record = dict(result.record, run=_LEGACY_SEGMENTATION_RUN,
-                  input=dict(result.record['input'], path=str(path), file_sha256=_file_sha256(path),
+                  input=dict(result.record['input'], path=str(path), file_sha256=file_sha256(path),
                              projection=None if legacy.projection is None else asdict(legacy.projection)),
                   workflow=dict(legacy.record, metadata_source='declared' if declared else 'stored',
-                                output=str(output), output_sha256=_file_sha256(output)))
-    output.with_suffix('.json').write_text(json.dumps(_jsonable(record), indent=2, default=str))
+                                output=str(output), output_sha256=file_sha256(output)))
+    output.with_suffix('.json').write_text(json.dumps(jsonable(record), indent=2, default=str))
 
 
 def _input_channel(values):
@@ -1480,7 +1480,7 @@ def _write_raw_h5ad(result, path, *, sample, fov_id, tile):
     import numpy as np
     import pandas as pd
     from starfinder.assignment import write_h5ad
-    from starfinder.io._checkpoint import _jsonable
+    from starfinder._records import jsonable
     _, rows = result.matrix()
     # Object strings throughout: anndata 0.12 writes no pandas Arrow string arrays, which pandas 3 infers.
     with pd.option_context('future.infer_string', False):
@@ -1491,7 +1491,7 @@ def _write_raw_h5ad(result, path, *, sample, fov_id, tile):
         obs.index = pd.Index([str(i) for i in range(len(obs))], dtype=object)
         write_h5ad(path, obs, rows[['cell_id']][keep].reset_index(drop=True), result.counts, result.genes,
                    layers=result.nucleus_labels is not None,
-                   uns={'assignment': json.dumps(_jsonable(result.record), default=str)})
+                   uns={'assignment': json.dumps(jsonable(result.record), default=str)})
     return obs.seg_label.to_numpy()
 
 

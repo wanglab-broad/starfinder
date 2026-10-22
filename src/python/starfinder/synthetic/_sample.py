@@ -20,6 +20,7 @@ import numpy as np
 import pandas as pd
 from scipy.special import erfc
 
+from starfinder._records import file_sha256
 from starfinder.barcode import Codebook
 from starfinder.image import ImageMetadata
 from starfinder.io import save_volume
@@ -1037,14 +1038,6 @@ def _assemble(config, codebook, layout, sample, jitter, true, ids, population, s
                        molecules, cell_fovs, molecule_fovs, sample_grid, sample_labels, fov_labels, record)
 
 
-def _sha256(path, chunk=1 << 20):
-    digest = hashlib.sha256()
-    with open(path, "rb") as handle:
-        for block in iter(lambda: handle.read(chunk), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
-
 def save_sample_scene(scene: SampleScene, directory: Path | str) -> Path:
     """Write a sample scene to a new or empty directory and return its path.
 
@@ -1096,7 +1089,7 @@ def save_sample_scene(scene: SampleScene, directory: Path | str) -> Path:
         rows = scene.molecule_fovs[scene.molecule_fovs.fov_id == fov].sort_values("csv_row")
         pd.DataFrame(dict(x=rows.x.to_numpy() + 1, y=rows.y.to_numpy() + 1, z=rows.z.to_numpy() + 1,
                           gene=[genes[i] for i in rows.amplicon_id])).to_csv(root / "molecules.csv", index=False)
-    files = {path.relative_to(directory).as_posix(): _sha256(path)
+    files = {path.relative_to(directory).as_posix(): file_sha256(path)
              for path in sorted(directory.rglob("*")) if path.is_file()}
     record = dict(scene.record, files=files)
     (directory / "sample.json").write_text(

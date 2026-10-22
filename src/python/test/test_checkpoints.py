@@ -15,7 +15,8 @@ from starfinder.dataset import (CheckpointConfig, Dataset, ExecutionConfig, Pipe
     RegistrationRecipe, RegistrationStep, RoundState)
 from starfinder.image import ImageMetadata
 from starfinder.io import ImageLoadConfig, load_volume_zyxc, read_checkpoint, save_volume
-from starfinder.io._checkpoint import _read_table, _write_table, candidates_frame, parse_candidates
+from starfinder._records import _read_table, _write_table
+from starfinder.io._checkpoint import candidates_frame, parse_candidates
 from starfinder.registration import DemonsConfig, TranslationConfig
 from starfinder.spot_finding import LocalMaximaConfig
 
@@ -374,17 +375,17 @@ def test_keyboard_interrupt_is_recorded_as_interrupted(tmp_path, monkeypatch):
 
 
 def test_failed_final_write_never_replaces_original_error(tmp_path, monkeypatch, caplog):
-    import starfinder.dataset._run_record as run_record
+    import starfinder._records as records
     import starfinder.registration as registration
     injected = ValueError('original')
     monkeypatch.setattr(registration, 'estimate_transform', lambda *a, **k: (_ for _ in ()).throw(injected))
-    original_write = run_record.write_json
+    original_write = records.write_json
 
     def write(data, path):
         if data['status'] != 'running':
             raise OSError('disk full')
         original_write(data, path)
-    monkeypatch.setattr(run_record, 'write_json', write)
+    monkeypatch.setattr(records, 'write_json', write)
     fov = resident(dataset(tmp_path))
     with pytest.raises(ValueError) as raised:
         fov.run(full(), checkpoints=CheckpointConfig())
@@ -394,8 +395,8 @@ def test_failed_final_write_never_replaces_original_error(tmp_path, monkeypatch,
 
 
 def test_failed_success_write_is_recorded_as_failed(tmp_path, monkeypatch):
-    import starfinder.dataset._run_record as run_record
-    original_write = run_record.write_json
+    import starfinder._records as records
+    original_write = records.write_json
     failed = []
 
     def write(data, path):
@@ -403,7 +404,7 @@ def test_failed_success_write_is_recorded_as_failed(tmp_path, monkeypatch):
             failed.append(path)
             raise OSError('disk full')
         original_write(data, path)
-    monkeypatch.setattr(run_record, 'write_json', write)
+    monkeypatch.setattr(records, 'write_json', write)
     fov = resident(dataset(tmp_path))
     with pytest.raises(OSError, match='disk full'):
         fov.run(full(), checkpoints=CheckpointConfig(hash_inputs=False))
@@ -414,8 +415,8 @@ def test_failed_success_write_is_recorded_as_failed(tmp_path, monkeypatch):
 
 def test_json_files_are_strict_and_code_ignores_enclosing_repositories(tmp_path, monkeypatch):
     import subprocess
-    import starfinder.dataset._run_record as run_record
-    from starfinder.io._checkpoint import write_json
+    import starfinder._records as records
+    from starfinder._records import write_json
     write_json(dict(a=float('nan'), b=[np.float64('inf'), -np.inf], c=1.5), tmp_path / 'x.json')
     text = (tmp_path / 'x.json').read_text()
     assert json.loads(text, parse_constant=lambda c: pytest.fail(c)) == dict(a=None, b=[None, None], c=1.5)
@@ -424,13 +425,33 @@ def test_json_files_are_strict_and_code_ignores_enclosing_repositories(tmp_path,
         if 'rev-parse' in args and '--show-toplevel' in args:
             return subprocess.CompletedProcess(args, 0, stdout=str(tmp_path) + '\n')
         raise AssertionError('commit must not be read from another repository')
-    monkeypatch.setattr(run_record.subprocess, 'run', enclosing)
-    run_record._code.cache_clear()
+    monkeypatch.setattr(records.subprocess, 'run', enclosing)
+    records.code.cache_clear()
     try:
-        code = run_record._code()
+        code = records.code()
     finally:
-        run_record._code.cache_clear()
+        records.code.cache_clear()
     assert code['git_commit'] is None and code['git_dirty'] is None
+
+
+@pytest.mark.contract
+def test_code_records_the_commit_and_state_of_this_checkout():
+    import subprocess
+    from pathlib import Path
+    import starfinder._records as records
+    root = Path(records.__file__).resolve().parent
+
+    def git(*args):
+        return subprocess.run(['git', '-C', str(root), *args], capture_output=True, text=True, timeout=30)
+    if shutil.which('git') is None or git('rev-parse', '--show-toplevel').returncode != 0:
+        pytest.skip('the package is not inside a git checkout')
+    records.code.cache_clear()
+    try:
+        code = records.code()
+    finally:
+        records.code.cache_clear()
+    assert code['git_commit'] == git('rev-parse', 'HEAD').stdout.strip()
+    assert code['git_dirty'] == bool(git('status', '--porcelain', '--untracked-files=no').stdout.strip())
 
 
 def test_run_record_fields_inputs_and_hashes(tmp_path):

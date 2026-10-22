@@ -23,7 +23,7 @@ import pytest
 import tifffile
 
 from starfinder.io import read_checkpoint
-from starfinder.io._checkpoint import _read_table
+from starfinder._records import _read_table
 from starfinder.report import ReportConfig
 from starfinder.report._collect import report_examples
 from starfinder.report._figures import (EXAMPLE_TILE, intensity_figure, preprocessing_figure,

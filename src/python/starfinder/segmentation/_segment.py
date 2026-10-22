@@ -10,11 +10,12 @@ from dataclasses import asdict, dataclass
 import numpy as np
 
 from starfinder._execution import THREAD_VARIABLES
+from starfinder._records import software
 from starfinder._registry import provenance, require, spec_for
 from starfinder.image import IncompatibleGeometryError, _validate_image
 
 from ._errors import MissingModelError, SegmentationBackendUnavailableError
-from ._import import LabelImportConfig, _software
+from ._import import LabelImportConfig
 from ._labels import (FORMAT_VERSION, ReferenceGrid, SegmentationResult, _check_namespace, _check_target,
     _grid_record, _json, _namespace_ids, array_sha256, same_grid, to_label_dtype)
 from ._methods import DEVICES, ROLES, SEGMENTATION_METHODS, MethodContext
@@ -298,7 +299,7 @@ def segment(segmentation_input: SegmentationInput, *, config, target: str, seeds
         "methods": [entry], "operations": [], "outcome": "ok" if max_label else "empty",
         "labels": {"dtype": str(labels.dtype), "sha256": array_sha256(labels), "n_labels": n_labels,
                    "max_label": max_label},
-        "software": _software(),
+        "software": software(),
     }
     diagnostics = {"details": _json({k: v for k, v in details.items() if k not in ("effective", "framework")}),
                    "wall_seconds": seconds}

@@ -116,7 +116,7 @@ def provenance(spec, config, stage: str) -> dict:
     each declared distribution to its installed version (None if absent);
     artifacts is reserved and empty.
     """
-    from starfinder.io._checkpoint import _jsonable
+    from starfinder._records import jsonable
     return {"stage": stage, "method": spec.name, "config_type": _public_path(type(config)),
-            "implementation": f"{spec.run.__module__}.{spec.run.__qualname__}", "config": _jsonable(config),
+            "implementation": f"{spec.run.__module__}.{spec.run.__qualname__}", "config": jsonable(config),
             "requires": {d.distribution: _version(d.distribution) for d in spec.requires}, "artifacts": []}

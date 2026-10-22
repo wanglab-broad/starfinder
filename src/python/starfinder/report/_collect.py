@@ -142,7 +142,7 @@ class _Inputs:
 
     def verify(self, path, kind, recorded=None):
         """As :meth:`read`, the file hashed in blocks without holding its bytes: None, or :class:`Unavailable`."""
-        from starfinder.segmentation._persist import file_sha256
+        from starfinder._records import file_sha256
         path = Path(path)
         name = self.relative(path)
         if not path.is_file():
@@ -174,10 +174,10 @@ class _Inputs:
         """A JSON record checked against the SHA-256 of its canonical content that another record holds.
 
         ``assignment.json`` ``inputs.cells.record_sha256`` hashes the segmentation record the assignment read
-        (``assignment/_assign.py``: ``_sha256_json``), not the file's bytes. Returns the record, None when it
+        (``_records.py``: ``json_sha256``), not the file's bytes. Returns the record, None when it
         does not parse, or :class:`Unavailable` (``input_missing``, ``input_changed``).
         """
-        from starfinder.assignment._assign import _sha256_json
+        from starfinder._records import json_sha256
         path = Path(path)
         name = self.relative(path)
         if not path.is_file():
@@ -185,7 +185,7 @@ class _Inputs:
         record = self.json(path, kind, strict=False)
         if recorded is not None:
             self.entries[name]["verified"] = True
-            digest = _sha256_json(record) if record is not None else None
+            digest = json_sha256(record) if record is not None else None
             if digest != recorded:
                 return Unavailable("input_changed", f"{name} holds a record of SHA-256 {digest}, the assignment's "
                                                     f"record {recorded}")
@@ -193,7 +193,7 @@ class _Inputs:
 
     def table(self, path, kind, recorded, dtypes):
         """A recorded table read with its dtypes, or :class:`Unavailable`."""
-        from starfinder.io._checkpoint import _read_table
+        from starfinder._records import _read_table
         data = self.read(path, kind, recorded)
         if isinstance(data, Unavailable):
             return data
@@ -1111,8 +1111,7 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
     FileExistsError
         The report folder holds a file that is not the report's own.
     """
-    from starfinder.dataset._run_record import _code, _environment
-    from starfinder.io._checkpoint import _jsonable, _write_table, write_json
+    from starfinder._records import _write_table, jsonable, software, write_json
     from starfinder.sample_output._record import Timer
     from ._page import budget_bytes, build_page, identity_facts
     timer = Timer()
@@ -1144,7 +1143,7 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
     resolved_assignment, resolved_segmentation = collection.resolved_runs()
     frames = {name: _frame(name, tables[name]) for name in COLLECTED_TABLES}
     generated_at = _now()
-    config_json = _jsonable(config)
+    config_json = jsonable(config)
     page, _ = build_page(collection, tables, frames, [_plain(row) for row in unavailable], _plain(summary), identity,
                          generated_at, config_json, folder)
     page_bytes = page.encode("utf-8")
@@ -1167,7 +1166,7 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
             "format_version": FORMAT_VERSION, "stage": STAGE, "sample": sample, "dataset_id": dataset_id,
             "sample_id": sample_id, "fov_ids": fov_ids, "route": collection.route,
             "assignment": resolved_assignment, "segmentation": resolved_segmentation, "generated_at": generated_at,
-            "software": {"code": _code(), "environment": _environment()}, "config": config_json,
+            "software": software(), "config": config_json,
             "stages": {"run_records": [f for f in fov_ids if records[f] is not None],
                        "placement": placement is not None, "export": export is not None,
                        "parts": dict((export or {}).get("parts") or {})},

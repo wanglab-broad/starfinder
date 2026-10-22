@@ -13,7 +13,7 @@ import pytest
 
 from starfinder.dataset import PipelineConfig
 from starfinder.image import ImageMetadata
-from starfinder.io._checkpoint import _jsonable, _tuples
+from starfinder._records import jsonable as _jsonable, tuples as _tuples
 from starfinder.spot_finding import (ChannelOverride, LocalMaximaConfig, NoiseLandmarkConfig, PercentileCentroidConfig,
     SpotFindingPlan, SpotFindingWarning, find_spots)
 

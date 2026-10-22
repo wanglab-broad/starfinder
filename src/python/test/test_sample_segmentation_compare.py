@@ -451,8 +451,7 @@ def test_cr3_a_threshold_outside_0_1_is_refused(tmp_path):
 def reverse_cells(folder):
     """Rewrite the cell and count tables of an export folder with their rows reversed, and their SHA-256 in the
     record."""
-    from starfinder.io._checkpoint import _write_table, write_json
-    from starfinder.segmentation._persist import file_sha256
+    from starfinder._records import _write_table, file_sha256, write_json
     result = load_assembly(folder)
     record = json.loads((folder / "export.json").read_text())
     files = record["assembly"]["files"]

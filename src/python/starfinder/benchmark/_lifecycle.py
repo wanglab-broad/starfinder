@@ -12,8 +12,10 @@ import time
 import tracemalloc
 import uuid
 
+from starfinder._records import file_sha256
+
 from ._records import BenchmarkCase, BenchmarkTrialResult, _json
-from ._storage import (_write, _read, _identity, _digest, _inside, _reference, _verified,
+from ._storage import (_write, _read, _identity, _inside, _reference, _verified,
                        _array, _save_array, _save_transform, SCHEMA_VERSION)
 from ._adapters import _validate, _process, _evaluate
 
@@ -218,8 +220,8 @@ def evaluate_benchmark(run_dir):
     directory.mkdir(parents=True, exist_ok=False)
     results = []
     for trial in trials:
-        trial.provenance['evaluation_source'] = {'run_manifest_sha256': _digest(root / 'manifest.json'),
-            'trial_sha256': _digest(root / trial.case_id / trial.trial_id / 'trial.json')}
+        trial.provenance['evaluation_source'] = {'run_manifest_sha256': file_sha256(root / 'manifest.json'),
+            'trial_sha256': file_sha256(root / trial.case_id / trial.trial_id / 'trial.json')}
         if trial.status['processing'] not in ('success', 'fallback_success'):
             trial.status['evaluation'] = 'skipped'
             trial.errors['evaluation'] = {'type': 'ProcessingFailed', 'message': 'processing did not succeed'}
@@ -241,7 +243,7 @@ def evaluate_benchmark(run_dir):
         results.append(trial.to_dict())
     _write(directory / 'results.json', results)
     _write(directory / 'manifest.json', {'schema_version': SCHEMA_VERSION, 'run_id': manifest['run_id'],
-        'run_manifest_sha256': _digest(root / 'manifest.json'),
+        'run_manifest_sha256': file_sha256(root / 'manifest.json'),
         'results': _reference(directory, directory / 'results.json')})
     return directory
 
@@ -273,6 +275,6 @@ def report_benchmark(evaluation_dir):
                 for key, value in metric['values'].items():
                     writer.writerow(prefix + [group + '.' + key, value, metric['units'][key], metric['status'], metric['reasons'].get(key, '')])
     _write(directory / 'manifest.json', {'schema_version': SCHEMA_VERSION, 'run_id': manifest['run_id'],
-        'evaluation_manifest_sha256': _digest(evaluation / 'manifest.json'),
+        'evaluation_manifest_sha256': file_sha256(evaluation / 'manifest.json'),
         'outputs': [_reference(directory, directory / name) for name in ('trials.json', 'summary.csv')]})
     return directory

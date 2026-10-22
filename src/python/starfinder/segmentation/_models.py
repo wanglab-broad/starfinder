@@ -19,7 +19,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from starfinder.spot_finding._weights import sha256_file, weights_directory
+from starfinder._records import file_sha256
+from starfinder.spot_finding._weights import weights_directory
 
 from ._errors import MissingModelError, ModelHashMismatchError
 
@@ -169,7 +170,7 @@ def resolve_model(method: str, *, model: str | None = None, model_path=None,
             if not path.is_file():
                 raise MissingModelError(f"{method} model {model!r}: file {path} is missing; segmentation never "
                                         f"downloads a model; fetch it with '{fetch_command(method, model, directory)}'")
-            digest = sha256_file(path)
+            digest = file_sha256(path)
             if digest != item.sha256:
                 raise ModelHashMismatchError(f"{method} model {model!r}: {path} has SHA-256 {digest}, expected "
                                              f"{item.sha256}")
@@ -198,7 +199,7 @@ def resolve_model(method: str, *, model: str | None = None, model_path=None,
         raise MissingModelError(f"segmentation method {method!r}: model {path} has no {missing}")
     artifacts = []
     for file in files:
-        digest = sha256_file(file)
+        digest = file_sha256(file)
         if file.name in expected and expected[file.name] != digest:
             raise ModelHashMismatchError(f"{file}: SHA-256 {digest} differs from the expected {expected[file.name]}")
         artifacts.append({"name": f"{method}/{path.name}/{file.name}" if path.is_dir() else f"{method}/{path.name}",
@@ -225,7 +226,7 @@ def _verify_folder(entry, folder):
         if not path.is_file():
             missing.append(item)
             continue
-        digest = sha256_file(path)
+        digest = file_sha256(path)
         if digest != item.sha256:
             raise ModelHashMismatchError(
                 f"{entry.method} model {entry.model!r}: {path} has SHA-256 {digest}, expected {item.sha256}; "
@@ -267,7 +268,7 @@ def _fetch_model(method: str, model: str, *, directory=None) -> Path:
             os.replace(download, extracted / entry.files[0].path)
         for item in entry.files:
             path = extracted / item.path
-            if not path.is_file() or sha256_file(path) != item.sha256:
+            if not path.is_file() or file_sha256(path) != item.sha256:
                 raise ModelHashMismatchError(f"{entry.url}: {item.path} is missing from the download or differs "
                                              f"from the expected SHA-256 {item.sha256}")
         folder.mkdir(parents=True, exist_ok=True)

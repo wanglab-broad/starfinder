@@ -33,7 +33,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from starfinder.io._checkpoint import _read_table
+from starfinder._records import _read_table
 from starfinder.report import MarkerGroup, ReportConfig, ReportRecord, read_report
 from starfinder.report import _page as page_module
 

@@ -216,7 +216,7 @@ def molecule_table_from_csv(path: Path | str, *, spot_namespace: str, genes) -> 
         A column of x, y, z, gene is missing, a coordinate is not numeric, and
         every check of :class:`MoleculeTable`.
     """
-    from starfinder.dataset._run_record import _sha256
+    from starfinder._records import file_sha256
 
     path = Path(path)
     if not path.is_file():
@@ -234,6 +234,6 @@ def molecule_table_from_csv(path: Path | str, *, spot_namespace: str, genes) -> 
         coordinates[axis] = values.to_numpy(np.float64) - 1
     table = _frame(spot_namespace, [f"csv:{i}" for i in range(len(frame))], coordinates["z"], coordinates["y"],
                    coordinates["x"], frame["gene"].astype(object).where(frame["gene"].notna(), None))
-    source = {"spot_namespace": spot_namespace, "csv": str(path), "sha256": _sha256(path),
+    source = {"spot_namespace": spot_namespace, "csv": str(path), "sha256": file_sha256(path),
               "coordinates": "one-based"}
     return MoleculeTable(table, _genes(genes), "final", source)

@@ -29,7 +29,8 @@ from starfinder.barcode import BarcodeLayout, Codebook, ReadFilterConfig, Segmen
 from starfinder.dataset import (CheckpointConfig, Dataset, ExecutionConfig, PipelineConfig, RegistrationRecipe,
                                 RegistrationStep, RoundState, from_workflow_config)
 from starfinder.dataset.fov import FOV
-from starfinder.io._checkpoint import _jsonable, _transform_json
+from starfinder._records import jsonable as _jsonable
+from starfinder.io._checkpoint import _transform_json
 from starfinder.registration import (AffineConfig, DemonsConfig, RegistrationQcConfig, RegistrationRejectedError,
                                      TranslationConfig)
 

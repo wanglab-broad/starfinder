@@ -2,68 +2,20 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from functools import lru_cache
-import hashlib
 import logging
 from pathlib import Path
-import platform
-import subprocess
 import traceback
 
-from starfinder.io._checkpoint import write_json
+from starfinder import _records
+from starfinder._records import file_sha256, software
 
 logger = logging.getLogger("starfinder")
 
 FORMAT_VERSION = 1
-_PACKAGES = ("starfinder", "numpy", "pandas", "scipy", "scikit-image", "tifffile", "pyarrow", "SimpleITK")
 
 
 def _now():
     return datetime.now(timezone.utc).isoformat()
-
-
-@lru_cache(maxsize=1)
-def _code():
-    from importlib.metadata import PackageNotFoundError, version
-    try:
-        package_version = version("starfinder")
-    except PackageNotFoundError:
-        package_version = None
-    root = Path(__file__).resolve().parents[1]
-    try:
-        top = subprocess.run(["git", "-C", str(root), "rev-parse", "--show-toplevel"], capture_output=True,
-                             text=True, timeout=10, check=True).stdout.strip()
-        # An installed package can sit inside another project's repository; only
-        # a starfinder checkout (src/python/starfinder at its root) is recorded.
-        if not (Path(top) / "src" / "python" / "starfinder").resolve() == root:
-            raise subprocess.SubprocessError("package is not inside a starfinder checkout")
-        commit = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"], capture_output=True,
-                                text=True, timeout=10, check=True).stdout.strip()
-        dirty = bool(subprocess.run(["git", "-C", str(root), "status", "--porcelain", "--untracked-files=no"],
-                                    capture_output=True, text=True, timeout=30, check=True).stdout.strip())
-    except (OSError, subprocess.SubprocessError):
-        commit = dirty = None
-    return {"version": package_version, "git_commit": commit or None, "git_dirty": dirty}
-
-
-@lru_cache(maxsize=1)
-def _environment():
-    from importlib.metadata import PackageNotFoundError, version
-    packages = {}
-    for name in _PACKAGES:
-        try:
-            packages[name] = version(name)
-        except PackageNotFoundError:
-            packages[name] = None
-    return {"python": platform.python_version(), "platform": platform.platform(), "packages": packages}
-
-
-def _sha256(path, chunk=1 << 20):
-    digest = hashlib.sha256()
-    with open(path, "rb") as handle:
-        while block := handle.read(chunk):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def _codebook_record(dataset):
@@ -88,7 +40,7 @@ def _workflow_config_record(dataset):
     if path is None:
         return None
     # A configuration whose config_path names no readable file keeps its path with a null hash.
-    return {"path": str(path), "sha256": _sha256(path) if Path(path).is_file() else None}
+    return {"path": str(path), "sha256": file_sha256(path) if Path(path).is_file() else None}
 
 
 def _transforms(fov, written):
@@ -130,7 +82,7 @@ class _RunRecord:
             "format_version": FORMAT_VERSION, "dataset_id": dataset.dataset_id,
             "sample_id": dataset.sample_id, "fov_id": fov.fov_id, "subtile_id": fov.subtile_id,
             "status": "running", "started_at": _now(), "ended_at": None, "error": None,
-            "code": _code(), "environment": _environment(),
+            **software(),
             # The dataset's readout mode (docs/readout-contract.md) is recorded with the configs.
             "config": {"pipeline": config, "execution": execution, "checkpoints": checkpoints,
                        "readout_mode": dataset.readout_mode, "encoding": encoding},
@@ -151,7 +103,7 @@ class _RunRecord:
         """Record loaded source files, hashing them unless hash_inputs is False."""
         for path in paths:
             self.data["inputs"].append({"path": str(path),
-                "sha256": _sha256(path) if self.checkpoints.hash_inputs else None})
+                "sha256": file_sha256(path) if self.checkpoints.hash_inputs else None})
 
     def add_checkpoint(self, stage, files):
         self.data["checkpoints"].setdefault(stage, []).extend(files)
@@ -201,7 +153,8 @@ class _RunRecord:
         self.data.update(preprocessing=fov.preprocessing_record or None,
                          registration=fov.registration_attempts,
                          transforms=_transforms(fov, self.data["checkpoints"].get("registered", [])), counts=counts)
-        write_json(self.data, self.path)
+        # Through the module, so that a test can make the write fail.
+        _records.write_json(self.data, self.path)
 
     def finish(self, status, error=None, round_name=None):
         """Record the final status; a failed write never masks ``error``."""

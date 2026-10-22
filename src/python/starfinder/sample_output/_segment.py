@@ -260,7 +260,7 @@ class _Plan:
 
 def _check(output_dir, config, sample, identity) -> _Plan:
     """Every check before anything is written; the plan of the runs."""
-    from starfinder.segmentation._persist import file_sha256
+    from starfinder._records import file_sha256
     if not isinstance(config, SampleSegmentationConfig):
         raise TypeError("config must be a SampleSegmentationConfig")
     config.__post_init__()
@@ -411,10 +411,10 @@ def segment_fused(output_dir, *, config: SampleSegmentationConfig, sample: str,
     MissingModelError, ModelHashMismatchError
         Before anything is written: a model missing or with another SHA-256.
     """
-    from starfinder.segmentation._persist import file_sha256
+    from starfinder._records import file_sha256
 
     from . import _tiff
-    from ._fuse import _software
+    from starfinder._records import software
     timer = Timer()
     plan = _check(output_dir, config, sample, identity)
     output_dir = Path(output_dir)
@@ -429,7 +429,7 @@ def segment_fused(output_dir, *, config: SampleSegmentationConfig, sample: str,
                        "placement": plan.placement},
                    "runs": list(runs), "cells": config.cells, "nuclei": config.nuclei, "device": config.device,
                    "assignment": asdict(config.assignment),
-                   "outputs": list(outputs), "software": _software(), **timer.record()}
+                   "outputs": list(outputs), "software": software(), **timer.record()}
         section = as_json(section)
         update_section(output_dir, sample, "segment", section)
         if warn:
@@ -515,7 +515,7 @@ def load_sample_segmentation(output_dir) -> SampleSegmentation:
     """
     import tifffile
 
-    from starfinder.segmentation._persist import file_sha256
+    from starfinder._records import file_sha256
     output_dir = Path(output_dir)
     record = read_export(output_dir)
     section = record.get("segmentation")

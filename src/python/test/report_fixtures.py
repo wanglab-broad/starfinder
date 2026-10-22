@@ -112,7 +112,7 @@ def metadata(frame="fov") -> ImageMetadata:
 
 
 def jsonable(value):
-    from starfinder.io._checkpoint import _jsonable
+    from starfinder._records import jsonable as _jsonable
     return json.loads(json.dumps(_jsonable(value)))
 
 
@@ -492,9 +492,9 @@ def write_export(case: ReportCase, variant=None) -> None:
     from starfinder.assembly._assemble import CELL_DTYPES, COUNT_DTYPES, FOV_DTYPES, molecule_dtypes
     from starfinder.assembly import AssemblyConfig, CELL_ASSEMBLY_REASONS, MOLECULE_ASSEMBLY_REASONS
     from starfinder.assignment import write_h5ad
-    from starfinder.io._checkpoint import _write_table
+    from starfinder._records import _write_table
     from starfinder.sample_output._record import update_section
-    from starfinder.segmentation._persist import file_sha256
+    from starfinder._records import file_sha256
     from starfinder.stitching._placement import frame_record
     folder = case.root / "export" / case.sample
     (folder / "tables").mkdir(parents=True, exist_ok=True)
@@ -587,7 +587,7 @@ def write_assignment_folder(case: ReportCase, fov) -> Path:
     record and its record SHA-256 (``assignment/_assign.py``: ``_label_input``) and whose ``files`` the SHA-256
     of ``cells.csv``.
     """
-    from starfinder.assignment._assign import _sha256_json
+    from starfinder._records import json_sha256 as _sha256_json
     run = case.checkpoint(fov) / "segmentation" / "cell"
     run.mkdir(parents=True, exist_ok=True)
     segmentation = {"format_version": 1, "stage": "segmentation", "run": "cell", "target": "cell",
@@ -611,7 +611,7 @@ def write_assignment_folder(case: ReportCase, fov) -> Path:
 
 def assignment_entry(case: ReportCase, fov) -> dict:
     """``assembly.fovs[*].assignment`` of a folder source, as ``assembly/_assemble.py``: ``_fov_record`` writes it."""
-    from starfinder.segmentation._persist import file_sha256
+    from starfinder._records import file_sha256
     folder = case.checkpoint(fov) / "assignment" / "default"
     record = json.loads((folder / "assignment.json").read_text())
     return {"name": "default", "folder": str(folder), "source": "folder",

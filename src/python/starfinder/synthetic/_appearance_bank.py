@@ -28,7 +28,9 @@ from scipy import ndimage as ndi
 import skimage
 from skimage.filters import threshold_otsu
 
-from ._sample import _cast, _sha256, _streams
+from starfinder._records import file_sha256
+
+from ._sample import _cast, _streams
 
 #: Version of the bank file layout and its build rules; any change to an array, a rule or the record bumps it.
 APPEARANCE_BANK_VERSION = "1"
@@ -630,7 +632,7 @@ def _regions_meet(a, b):
 
 def _file_record(path, role, image):
     return dict(image=image, role=role, path=str(Path(path).resolve()), size=Path(path).stat().st_size,
-                sha256=_sha256(path))
+                sha256=file_sha256(path))
 
 
 def _label_array(labels, what):
@@ -746,7 +748,7 @@ def build_appearance_bank(config: Mapping | str | Path, path: str | Path) -> dic
     with open(path, "xb") as handle:
         np.savez_compressed(handle, **arrays, record=np.asarray(json.dumps(record, sort_keys=True)))
     record = dict(record, generator="starfinder.synthetic.build_appearance_bank",
-                  file=dict(path=str(path.resolve()), size=path.stat().st_size, sha256=_sha256(path)))
+                  file=dict(path=str(path.resolve()), size=path.stat().st_size, sha256=file_sha256(path)))
     with open(record_path, "x", encoding="utf-8") as handle:
         handle.write(json.dumps(record, indent=2, sort_keys=True, allow_nan=False) + "\n")
     return record
@@ -914,7 +916,7 @@ def load_appearance_bank(reference: BankReference) -> AppearanceBank:
     path = Path(directory) / f"{reference.name}.npz"
     if not path.is_file():
         raise FileNotFoundError(f"bank {reference.name}: no file {path}")
-    sha256 = _sha256(path)
+    sha256 = file_sha256(path)
     if sha256 != reference.sha256:
         raise ValueError(f"bank {reference.name}: the SHA-256 of {path} is {sha256}, not the reference's "
                          f"{reference.sha256}")

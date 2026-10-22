@@ -30,7 +30,7 @@ from starfinder.sample_output._tiff import read_ome_layout
 from starfinder.segmentation import (SEGMENTATION_METHODS, CellposeConfig, LabelImportConfig, MissingModelError,
                                      ModelHashMismatchError, SeededWatershedConfig, SegmentationResult,
                                      StarDistConfig)
-from starfinder.segmentation._persist import file_sha256
+from starfinder._records import file_sha256
 
 from .assembly_fixtures import SAMPLE as GOLDEN_SAMPLE
 from .fusion_fixtures import export_folder, listing

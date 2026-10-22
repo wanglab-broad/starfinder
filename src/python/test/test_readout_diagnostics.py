@@ -16,7 +16,7 @@ import starfinder.barcode as barcode
 from starfinder.barcode import (DeduplicationConfig, ReadFilterConfig, ReadScoreConfig, decode_barcodes,
                                 explain_read, filter_reads, inspect_read, plot_read, score_reads, summarize_reads)
 from starfinder.barcode import diagnostics as diagnostics_module
-from starfinder.io._checkpoint import _jsonable
+from starfinder._records import jsonable as _jsonable
 
 from . import readout_fixtures as fx
 from .test_readout_deduplication import crosstalk_pipeline

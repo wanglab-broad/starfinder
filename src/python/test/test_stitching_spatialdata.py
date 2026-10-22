@@ -49,7 +49,7 @@ from starfinder.sample_output import (
     lookup_source,
 )
 from starfinder.sample_output._record import section_sha256
-from starfinder.segmentation._persist import file_sha256
+from starfinder._records import file_sha256
 from starfinder.stitching import (
     approve_placement,
     placement_from_table,

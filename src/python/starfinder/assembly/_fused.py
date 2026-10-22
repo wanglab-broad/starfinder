@@ -243,7 +243,7 @@ def assemble_after_fusion(placement, inputs, config, segmentation, base: Assembl
     fovs["n_molecules_retained"] = [int(kept.get(f, 0)) for f in fovs["fov_id"]]
     fovs = fovs.astype(base.fovs.dtypes.to_dict())
 
-    from starfinder.segmentation._persist import json_record
+    from starfinder._records import json_record
     record = dict(base.record)
     record.update({
         "mode": "cells", "route": ROUTE, "route_source": None,

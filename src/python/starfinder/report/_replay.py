@@ -224,8 +224,8 @@ def _composite(image):
 
 
 def _jsonable_fitted(fitted):
-    from starfinder.io._checkpoint import _jsonable
-    return json.loads(json.dumps(_jsonable(dict(fitted)), allow_nan=False))
+    from starfinder._records import jsonable
+    return json.loads(json.dumps(jsonable(dict(fitted)), allow_nan=False))
 
 
 def reference_round(record):
@@ -245,14 +245,14 @@ def reference_round(record):
 def _load_config(data):
     from starfinder.image import ImageMetadata
     from starfinder.io import ImageLoadConfig
-    from starfinder.io._checkpoint import _tuples
+    from starfinder._records import tuples
     from starfinder.io.conversion import ImageConversionConfig
     data = dict(data)
     if data.get("conversion") is not None:
-        data["conversion"] = ImageConversionConfig(**_tuples(data["conversion"]))
+        data["conversion"] = ImageConversionConfig(**tuples(data["conversion"]))
     if data.get("metadata") is not None:
-        data["metadata"] = ImageMetadata(**_tuples(data["metadata"]))
-    return ImageLoadConfig(**{k: _tuples(v) for k, v in data.items() if k not in ("conversion", "metadata")},
+        data["metadata"] = ImageMetadata(**tuples(data["metadata"]))
+    return ImageLoadConfig(**{k: tuples(v) for k, v in data.items() if k not in ("conversion", "metadata")},
                            conversion=data.get("conversion"), metadata=data.get("metadata"))
 
 

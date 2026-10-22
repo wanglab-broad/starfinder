@@ -15,7 +15,8 @@ from dataclasses import replace
 from pathlib import Path
 
 from starfinder.segmentation._labels import array_sha256
-from starfinder.segmentation._persist import check_file, file_sha256, json_record, read_labels, write_labels
+from starfinder._records import check_file, file_sha256, json_record
+from starfinder.segmentation._persist import read_labels, write_labels
 
 from ._assign import FORMAT_VERSION, AssignmentResult
 
@@ -32,7 +33,7 @@ def assignment_directory(fov_directory, name) -> Path:
 
 
 def _files(directory):
-    from starfinder.io._checkpoint import TABLE_FORMATS
+    from starfinder._records import TABLE_FORMATS
     directory = Path(directory)
     return ([directory / RECORD_FILE] + [directory / f"{t}.{f}" for t in TABLES for f in TABLE_FORMATS]
             + [directory / n for n in (TERRITORIES_FILE, CELL_LABELS_FILE, NUCLEUS_LABELS_FILE)])
@@ -60,7 +61,7 @@ def write_assignment(directory, result: AssignmentResult, *, metadata, cells_sav
     ``same_run`` says the nuclei are the cell run itself (one file serves both).
     The returned record is the JSON form written to ``assignment.json``.
     """
-    from starfinder.io._checkpoint import _write_table, write_json
+    from starfinder._records import _write_table, write_json
     directory = Path(directory)
     for path in _files(directory):
         path.unlink(missing_ok=True)
@@ -119,7 +120,7 @@ def _labels(directory, entry, expected, what):
 
 def read_assignment(directory, name) -> AssignmentResult:
     """Read an assignment folder and its linked label files, checking every recorded SHA-256."""
-    from starfinder.io._checkpoint import _read_table
+    from starfinder._records import _read_table
     directory = Path(directory)
     path = directory / RECORD_FILE
     if not path.is_file():

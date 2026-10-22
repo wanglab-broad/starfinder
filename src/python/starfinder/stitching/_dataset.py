@@ -42,7 +42,7 @@ def read_inputs(output_root, fov_ids, input_name, *, reference) -> dict[str, Sti
     from starfinder.dataset._declared import reference_grid, reference_volume
     from starfinder.dataset._paths import _FovPaths
     from starfinder.io import load_volume, load_volume_zyxc
-    from starfinder.segmentation._persist import file_sha256
+    from starfinder._records import file_sha256
     _check_input(input_name)
     output_root = Path(output_root)
     loaded = {}

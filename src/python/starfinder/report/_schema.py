@@ -182,7 +182,7 @@ def read_report(folder) -> dict:
         ``files`` list that is missing or whose SHA-256 or size differs from
         the record (naming the file).
     """
-    from starfinder.segmentation._persist import file_sha256
+    from starfinder._records import file_sha256
     folder = Path(folder)
     path = folder / REPORT_FILE
     if not path.is_file():

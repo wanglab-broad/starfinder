@@ -32,6 +32,7 @@ import pandas as pd
 from scipy import ndimage as ndi
 from skimage.filters import threshold_otsu
 
+from starfinder._records import file_sha256
 from starfinder.barcode import Codebook
 
 from ._appearance_bank import (BANK_DIRECTORY_VARIABLE, BankReference, _struct,
@@ -45,7 +46,7 @@ from ._context import (_CONTEXT_COMPONENTS, CONTEXT_PRESET_VERSION, CONTEXT_TRUT
                        save_context_scene)
 from ._formed import _STREAM_KEY, _STREAM_NAMESPACE, _plain
 from ._observation import evaluate_background
-from ._sample import _cast, _generate, _layout, _real, _sha256, _streams
+from ._sample import _cast, _generate, _layout, _real, _streams
 
 #: Version of the appearance truth files (appearance.json, placements.csv, background_patches.csv); any change to a
 #: column, a key or a rule bumps it.
@@ -1054,7 +1055,7 @@ def save_appearance_scene(scene: AppearanceScene, directory: Path | str) -> Path
     directory = save_context_scene(scene.context, directory)
     scene.placements.to_csv(directory / "placements.csv", index=False)
     scene.background_patches.to_csv(directory / "background_patches.csv", index=False)
-    files = {path.relative_to(directory).as_posix(): _sha256(path)
+    files = {path.relative_to(directory).as_posix(): file_sha256(path)
              for path in sorted(directory.rglob("*")) if path.is_file()}
     record = dict(scene.record, files=files)
     (directory / "appearance.json").write_text(

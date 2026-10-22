@@ -50,10 +50,10 @@ def _get(mapping, *keys):
 # --- Readers ------------------------------------------------------------------------------------------------------
 
 def read_columns(path, dtypes, columns) -> pd.DataFrame:
-    """The named columns of a checkpoint table (``io/_checkpoint.py``: ``_read_table``'s conventions: strings read
+    """The named columns of a checkpoint table (``_records.py``: ``_read_table``'s conventions: strings read
     verbatim and unescaped, ``<NA>`` a missing value, floats round-trip), with their recorded dtypes, in file
     order; a column the table does not record is left out."""
-    from starfinder.io._checkpoint import _CSV_DTYPES, NA_TOKEN, _unescape_strings
+    from starfinder._records import _CSV_DTYPES, NA_TOKEN, _unescape_strings
     path = Path(path)
     wanted = [c for c in dtypes if c in columns]
     if path.suffix == ".parquet":

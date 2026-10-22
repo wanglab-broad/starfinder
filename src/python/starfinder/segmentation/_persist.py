@@ -16,6 +16,7 @@ from pathlib import Path
 
 import numpy as np
 
+from starfinder._records import check_file, file_sha256, json_record
 from starfinder.image import ImageMetadata
 
 from ._labels import FORMAT_VERSION, LABEL_DTYPE, ReferenceGrid, SegmentationResult, array_sha256
@@ -35,28 +36,6 @@ def run_directory(fov_directory, name) -> Path:
     return Path(fov_directory) / "segmentation" / name
 
 
-def file_sha256(path) -> str:
-    """SHA-256 of a file's bytes."""
-    from starfinder.dataset._run_record import _sha256
-    return _sha256(path)
-
-
-def json_record(record):
-    """The record as it reads back from its JSON file (tuples become lists, non-finite floats null)."""
-    from starfinder.io._checkpoint import _jsonable
-    return json.loads(json.dumps(_jsonable(record), allow_nan=False))
-
-
-def check_file(path, recorded, what="file") -> None:
-    """A recorded file must exist and have the recorded SHA-256; ValueError names the path and both hashes."""
-    path = Path(path)
-    if not path.is_file():
-        raise ValueError(f"{what} {path} is missing (recorded SHA-256 {recorded})")
-    actual = file_sha256(path)
-    if actual != recorded:
-        raise ValueError(f"{what} {path} has SHA-256 {actual}, the record {recorded}")
-
-
 def read_labels(path) -> tuple[np.ndarray, ImageMetadata | None]:
     """A saved ``uint32`` ZYX label file in native byte order, and its stored metadata (None without)."""
     from starfinder.io import load_volume
@@ -71,9 +50,9 @@ def read_labels(path) -> tuple[np.ndarray, ImageMetadata | None]:
 
 def write_labels(path, labels, metadata) -> str:
     """Write a ``uint32`` ZYX label image (zlib, with its metadata) atomically; return the file's SHA-256."""
-    from starfinder.io._checkpoint import _atomic
+    from starfinder._records import atomic_file
     from starfinder.io.tiff import save_volume
-    with _atomic(path) as tmp:
+    with atomic_file(path) as tmp:
         save_volume(np.ascontiguousarray(labels, dtype=LABEL_DTYPE), tmp, compress=True, metadata=metadata)
     return file_sha256(path)
 
@@ -99,7 +78,7 @@ def write_run(directory, result: SegmentationResult, segmentation_input=None) ->
     import, which has no segmentation input). The returned record is the JSON
     form written to ``segmentation.json``, so a reload compares equal.
     """
-    from starfinder.io._checkpoint import write_json
+    from starfinder._records import write_json
     from starfinder.io.tiff import save_volume
     directory = Path(directory)
     clear_run(directory)
@@ -110,9 +89,9 @@ def write_run(directory, result: SegmentationResult, segmentation_input=None) ->
     record["labels"] = {"path": LABELS_FILE, "dtype": labels["dtype"], "sha256": labels["sha256"],
                         "file_sha256": labels_sha, "n_labels": labels["n_labels"], "max_label": labels["max_label"]}
     if segmentation_input is not None:
-        from starfinder.io._checkpoint import _atomic
+        from starfinder._records import atomic_file
         path = directory / INPUT_FILE
-        with _atomic(path) as tmp:
+        with atomic_file(path) as tmp:
             save_volume(np.asarray(segmentation_input.image), tmp, compress=True,
                         metadata=segmentation_input.grid.metadata)
         record["input"] = dict(record["input"], path=INPUT_FILE, file_sha256=file_sha256(path))

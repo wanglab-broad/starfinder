@@ -71,7 +71,7 @@ def _check_samples(samples) -> list[str]:
 
 def _read_sample(folder: Path):
     """A present sample's ``report.json`` (checked against every file it lists), its SHA-256 and its ``fovs.csv``."""
-    from starfinder.io._checkpoint import _read_table
+    from starfinder._records import _read_table
     path = folder / REPORT_FILE
     data = path.read_bytes()
     try:
@@ -172,7 +172,7 @@ def compare_samples(report_root, samples: Sequence[str], *, dataset_id: str | No
         ``report.json`` is not a version 1 report record, or one of whose listed files is missing or differs from its
         recorded SHA-256 (naming the file). Nothing is written then.
     """
-    from starfinder.io._checkpoint import _atomic, _write_table
+    from starfinder._records import _write_table, atomic_file
     from ._figures import sample_box_figure
     from ._page import fill, image, table_rows, template_text
     samples = _check_samples(samples)
@@ -214,7 +214,7 @@ def compare_samples(report_root, samples: Sequence[str], *, dataset_id: str | No
     page = fill(template_text(INDEX_TEMPLATE), values, INDEX_SLOTS).encode("utf-8")
 
     # Written last, in this order, so that samples.csv (the workflow's declared output) implies index.html.
-    with _atomic(root / INDEX_FILE) as tmp:
+    with atomic_file(root / INDEX_FILE) as tmp:
         tmp.write_bytes(page)
     file_name, dtypes = _write_table(frame, root, Path(SAMPLES_FILE).stem, "csv")
     table = (root / file_name).read_bytes()

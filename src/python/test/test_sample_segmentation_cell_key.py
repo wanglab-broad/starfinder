@@ -18,7 +18,7 @@ import pytest
 from pandas.testing import assert_frame_equal
 
 from starfinder.assembly import AssemblyConfig, AssemblyResult, assemble, load_assembly, save_assembly
-from starfinder.assignment._assign import table_sha256
+from starfinder.assignment._assign import assignment_table_sha256 as table_sha256
 
 from .assembly_fixtures import (GOLDEN_IDS, TILE_ZYX, approved, golden_molecule_tables, golden_pieces,
                                 golden_placement, golden_results, inputs_of, own_placement, own_results,
@@ -286,8 +286,7 @@ def test_so3_save_and_load_keep_the_column(case, table_format, tmp_path):
 
 def _as_saved_before_the_column(folder):
     """Rewrite a saved folder's molecule table without cell_namespace, its record as save_assembly wrote it then."""
-    from starfinder.io._checkpoint import _read_table, _write_table, write_json
-    from starfinder.segmentation._persist import file_sha256
+    from starfinder._records import _read_table, _write_table, file_sha256, write_json
     sections = json.loads((folder / "export.json").read_text())
     entry = sections["assembly"]["files"]["molecules"]
     frame = _read_table(folder / entry["path"], entry["dtypes"]).drop(columns=KEY)

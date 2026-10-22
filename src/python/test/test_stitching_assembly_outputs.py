@@ -136,7 +136,7 @@ def frozen_write_raw_h5ad(result, path, *, sample, fov_id, tile):
     """starfinder/dataset/workflow.py's _write_raw_h5ad before write_h5ad (the frozen reference)."""
     import anndata
 
-    from starfinder.io._checkpoint import _jsonable
+    from starfinder._records import jsonable as _jsonable
     matrix, rows = result.matrix()
     layers = {}
     if result.nucleus_labels is not None:
@@ -358,7 +358,7 @@ def test_as12_an_interrupted_save_leaves_complete_or_absent_files(tmp_path, monk
         save_assembly(result, folder)
     files = sorted(p.relative_to(folder).as_posix() for p in folder.rglob("*") if p.is_file())
     assert files == ["tables/fovs.csv"]
-    from starfinder.io._checkpoint import _dtype_map, _read_table
+    from starfinder._records import _dtype_map, _read_table
     assert_frame_equal(_read_table(folder / "tables/fovs.csv", _dtype_map(result.fovs)), result.fovs,
                        check_exact=True)
 

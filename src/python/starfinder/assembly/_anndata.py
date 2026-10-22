@@ -112,8 +112,8 @@ def sample_anndata(result: AssemblyResult, path, *, annotation: Mapping | pd.Ser
     expanded = int(rows["ownership_centroid"].eq("expanded").sum())
     spatial = {"columns": list(SPATIAL_COLUMNS), "centroid": result.record.get("config", {}).get("centroid"),
                "rows": {"expanded": expanded, "original": n - expanded}}
-    from starfinder.io._checkpoint import _jsonable
-    uns = {"assembly": json.dumps(_jsonable(result.record), default=str), "spatial_unit": "µm",
+    from starfinder._records import jsonable
+    uns = {"assembly": json.dumps(jsonable(result.record), default=str), "spatial_unit": "µm",
            "frame_id": (result.record.get("frame") or {}).get("frame_id", f"sample:{result.sample}"),
            "spatial_centroid": json.dumps(spatial)}
     obsm = {"spatial": rows[list(SPATIAL_COLUMNS)].to_numpy(np.float64).reshape(n, 2)}

@@ -10,8 +10,7 @@ from pathlib import Path
 
 import numpy as np
 
-# The written form of a missing wavelength (records and summaries).
-UNAVAILABLE = "unavailable"
+from starfinder._records import UNAVAILABLE
 
 # The image name of the reference round's stain files (Dataset.reference_stains); no round may take it.
 REFERENCE_STAIN = "reference_stain"

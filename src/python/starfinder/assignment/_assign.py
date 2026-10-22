@@ -10,6 +10,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from starfinder._records import json_sha256, software
 from starfinder.image import IncompatibleGeometryError
 from starfinder.segmentation import ReferenceGrid, SegmentationResult, expand_labels
 from starfinder.segmentation._labels import GEOMETRIES, _grid_record, _json, array_sha256, same_grid
@@ -78,16 +79,12 @@ def sample_labels(labels, positions_zyx, *, geometry: str) -> tuple[np.ndarray, 
     return values, voxels, inside
 
 
-def _sha256_json(value) -> str:
-    return hashlib.sha256(json.dumps(value, sort_keys=True, default=str).encode()).hexdigest()
-
-
 def _record_json(record):
-    from starfinder.io._checkpoint import _jsonable
-    return json.loads(json.dumps(_jsonable(record), default=str))
+    from starfinder._records import jsonable
+    return json.loads(json.dumps(jsonable(record), default=str))
 
 
-def table_sha256(frame: pd.DataFrame) -> str:
+def assignment_table_sha256(frame: pd.DataFrame) -> str:
     """SHA-256 of a table's column names, dtypes and CSV text (floats with 17 significant digits)."""
     header = json.dumps([[str(c), str(t)] for c, t in frame.dtypes.items()])
     text = frame.to_csv(index=False, float_format="%.17g")
@@ -357,7 +354,7 @@ def _label_input(result):
     record = _record_json(result.record)
     return {"run": record.get("run"), "target": result.target, "geometry": result.geometry,
             "label_namespace": result.label_namespace, "labels_sha256": array_sha256(result.labels),
-            "record_sha256": _sha256_json(record), "operations": record.get("operations", []),
+            "record_sha256": json_sha256(record), "operations": record.get("operations", []),
             "saved_under_run": False, "file": {"path": None, "sha256": None}, "record": record}
 
 
@@ -579,7 +576,7 @@ def assign_molecules(molecules: MoleculeTable, cells: SegmentationResult, *, gri
             "nuclei": None if nuclei is None else _label_input(nuclei),
             "correspondence": None if nuclei is None else {
                 "source": "overlap" if correspondence is None else "supplied",
-                "sha256": None if correspondence is None else table_sha256(
+                "sha256": None if correspondence is None else assignment_table_sha256(
                     pd.DataFrame({"nucleus_id": sorted(pairs), "cell_id": [pairs[n] for n in sorted(pairs)]}))},
         },
         "config": {"expansion": None if config.expansion is None else _json(asdict(config.expansion)),
@@ -600,13 +597,8 @@ def assign_molecules(molecules: MoleculeTable, cells: SegmentationResult, *, gri
                    "assigned_by_compartment": by_compartment},
         "outcome": "ok" if len(cell_ids) else "empty",
         "files": {},
-        "software": _software(),
+        "software": software(),
     }
     return AssignmentResult(molecule_table, cell_table, counts, nucleus_table, cell_labels, territories,
                             None if nuclei is None else nuclei.labels, molecules.genes, cells.label_namespace,
                             record)
-
-
-def _software():
-    from starfinder.segmentation._import import _software as software
-    return software()

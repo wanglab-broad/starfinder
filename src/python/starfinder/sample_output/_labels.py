@@ -171,7 +171,7 @@ def _territory_source(entry):
     the path, when the folder's ``assignment.json`` is missing.
     """
     from starfinder.assignment._persist import RECORD_FILE, _path
-    from starfinder.segmentation._persist import file_sha256
+    from starfinder._records import file_sha256
     territories = entry.get("territories") or {}
     if territories.get("path"):
         return Path(territories["path"]), territories["sha256"], "assembly_record"
@@ -196,7 +196,7 @@ def _territory_source(entry):
 def _read_territory(path, sha256):
     """The territory labels of a file, its SHA-256 checked first (ValueError naming the path and both hashes)."""
     from starfinder.assignment import _persist as assignment_persist
-    from starfinder.segmentation._persist import check_file
+    from starfinder._records import check_file
     check_file(path, sha256, "territory file")
     labels, _ = assignment_persist.read_labels(path)
     return labels
@@ -251,7 +251,7 @@ def after_fusion(assembly) -> bool:
 def _section(status, placement, assembly, config, timer, **extra):
     from starfinder.stitching._placement import table_sha256
 
-    from ._fuse import _software
+    from starfinder._records import software
     flags = assembly.record.get("flags") or {}
     segmentation = after_fusion(assembly)
     section = {"status": status, **extra,
@@ -261,7 +261,7 @@ def _section(status, placement, assembly, config, timer, **extra):
                              "links_sha256": table_sha256(placement.links)},
                "conflicts_computed": bool(flags.get("conflicts", False)) and not segmentation,
                "labels_scale_yx": config.scale_yx,
-               "factor_yx": config.factor_yx, "software": _software(), **timer.record(),
+               "factor_yx": config.factor_yx, "software": software(), **timer.record(),
                "viewer_qualification": "deferred"}
     if segmentation:
         # The label files the assembly read (each run's, and territories.ome.tif when assign expanded): T5.
@@ -465,7 +465,7 @@ def _fuse_and_write(placement, assembly, config, ids, retained, fovs, output_dir
     from multiview_stitcher import fusion
     from multiview_stitcher import spatial_image_utils as si_utils
 
-    from starfinder.segmentation._persist import file_sha256
+    from starfinder._records import file_sha256
     from starfinder.stitching._placement import table_sha256
     grids = _grids(placement, assembly, ids)
     grid = fused_grid(placement, grids, config=FusionConfig())
@@ -575,7 +575,7 @@ def read_sample_territory(path, sha256) -> np.ndarray:
     """The sample's territories of the route after fusion (ZYX, one plane), the file's SHA-256 checked first."""
     import tifffile
 
-    from starfinder.segmentation._persist import check_file
+    from starfinder._records import check_file
     check_file(path, sha256, "territory file")
     labels = tifffile.imread(path)
     return np.ascontiguousarray(labels[np.newaxis] if labels.ndim == 2 else labels)
@@ -596,7 +596,7 @@ def _fuse_sample_and_write(placement, assembly, config, output_dir, relative, sh
     from multiview_stitcher import fusion
     from multiview_stitcher import spatial_image_utils as si_utils
 
-    from starfinder.segmentation._persist import file_sha256
+    from starfinder._records import file_sha256
     from starfinder.stitching._placement import table_sha256
 
     from ._fuse import _library_grid

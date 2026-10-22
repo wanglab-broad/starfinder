@@ -414,7 +414,7 @@ def _report(per_fov, after, sizes, shared, threshold):
 
 
 def _write(output: Path, report: RouteComparison) -> None:
-    from starfinder.io._checkpoint import _write_table, write_json
+    from starfinder._records import _write_table, write_json
     output.mkdir(parents=True, exist_ok=True)
     for name in ("pairs", "counts", "molecules"):
         _write_table(getattr(report, name), output, name, "csv")
@@ -469,9 +469,9 @@ def compare_routes(per_fov, after_fusion, *, threshold: float = 0.5, output=None
         SHA-256 differs from its record.
     """
     from starfinder.assembly import load_assembly
-    from starfinder.segmentation._persist import file_sha256
+    from starfinder._records import file_sha256
 
-    from ._fuse import _software
+    from starfinder._records import software
     from ._labels import read_sample_territory, sample_territory_source
     threshold = _threshold(threshold)
     folders = {"per_fov": Path(per_fov).resolve(), "after_fusion": Path(after_fusion).resolve()}
@@ -513,7 +513,7 @@ def compare_routes(per_fov, after_fusion, *, threshold: float = 0.5, output=None
                                  "export_sha256": file_sha256(folder / EXPORT_FILE),
                                  "files": {k: v["sha256"] for k, v in (results[name].record.get("files") or {}).items()}}
                           for name, folder in folders.items()},
-              "territories": files, "software": _software()}
+              "territories": files, "software": software()}
     report = RouteComparison(summary, pairs, counts, molecules, record)
     if output is not None:
         _write(output, report)

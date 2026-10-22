@@ -9,8 +9,10 @@ import tempfile
 import urllib.request
 import zipfile
 
+from starfinder._records import file_sha256
+
 from ._errors import WeightsHashMismatchError
-from ._weights import RECORD_NAME, _listed, listed_files, resolve_weights, sha256_file
+from ._weights import RECORD_NAME, _listed, listed_files, resolve_weights
 
 
 def _download(url, target, chunk=1 << 22):
@@ -49,7 +51,7 @@ def _extract(archive, destination):
 
 
 def _record(entry, folder):
-    files = {p.relative_to(folder).as_posix(): sha256_file(p)
+    files = {p.relative_to(folder).as_posix(): file_sha256(p)
              for p in sorted(folder.rglob("*")) if p.is_file() and p.name != RECORD_NAME}
     return {"method": entry.method, "model": entry.model, "url": entry.url, "revision": entry.revision,
             "sha256": entry.sha256, "bytes": entry.bytes, "md5": entry.md5,
@@ -81,7 +83,7 @@ def _stage(entry, staging):
         path = extracted / item.path
         if not path.is_file():
             raise WeightsHashMismatchError(f"{entry.url}: the download has no {item.path}")
-        actual = sha256_file(path)
+        actual = file_sha256(path)
         if actual != item.sha256:
             raise WeightsHashMismatchError(f"{entry.url}: {item.path} has SHA-256 {actual}, expected {item.sha256}")
     return extracted
@@ -107,7 +109,7 @@ def fetch(entry, root):
             if not path.is_file():
                 missing.append(item)
                 continue
-            actual = sha256_file(path)
+            actual = file_sha256(path)
             if actual != item.sha256:
                 raise WeightsHashMismatchError(
                     f"{entry.method} model {entry.model!r}: {path} has SHA-256 {actual}, expected {item.sha256}; "

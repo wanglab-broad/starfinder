@@ -38,7 +38,8 @@ from scipy.spatial import cKDTree
 from starfinder.dataset import CheckpointConfig, PipelineConfig
 from starfinder.evaluation.spot_finding import evaluate_spots
 from starfinder.image import ImageMetadata, IncompatibleGeometryError
-from starfinder.io._checkpoint import _jsonable, _tuples, candidates_frame
+from starfinder._records import jsonable as _jsonable, tuples as _tuples
+from starfinder.io._checkpoint import candidates_frame
 from starfinder.preprocessing import normalize_intensity
 from starfinder.spot_finding import (KNOWN_WEIGHTS, SPOT_FINDING_METHODS, ChannelOverride, LocalMaximaConfig,
     MissingWeightsError, PiscisConfig, SpotFindingBackendUnavailableError, SpotFindingPlan, SpotFindingWarning,

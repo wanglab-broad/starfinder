@@ -18,6 +18,8 @@ from xml.etree import ElementTree
 import numpy as np
 import pandas as pd
 
+from starfinder._records import file_sha256, json_record
+
 COLUMNS = ("fov_id", "position_id", "nominal_z", "nominal_y", "nominal_x", "source", "grid_column", "grid_row")
 DTYPES = {"fov_id": "str", "position_id": "Int64", "nominal_z": "float64", "nominal_y": "float64",
           "nominal_x": "float64", "source": "str", "grid_column": "Int64", "grid_row": "Int64"}
@@ -29,16 +31,6 @@ ORDERS = ("column_major_down_right", "column_major_down_right_serpentine", "row_
 UNITS = {"µm": None, "um": None, "nm": ("divide", 1000.0), "mm": ("multiply", 1000.0)}
 _AXES = ("+x", "-x", "+y", "-y")
 _TABLE_SOURCE = re.compile(r"leica:.+|grid|table:.+")
-
-
-def _json(record):
-    from starfinder.segmentation._persist import json_record
-    return json_record(record)
-
-
-def _file_sha256(path):
-    from starfinder.segmentation._persist import file_sha256
-    return file_sha256(path)
 
 
 def _names(values, limit=10):
@@ -105,7 +97,7 @@ class TilePositionTable:
         if unknown:
             raise ValueError(f"row source must be one of {list(SOURCES)}; got {_names(unknown)}")
         object.__setattr__(self, "positions", frame.astype(DTYPES).reset_index(drop=True))
-        object.__setattr__(self, "record", _json(dict(self.record)))
+        object.__setattr__(self, "record", json_record(dict(self.record)))
 
     @property
     def fov_ids(self) -> list[str]:
@@ -434,7 +426,7 @@ def positions_from_leica(path, *, stage_axes: StageAxisMapping, fov_ids: Mapping
     pids = [p[0] for p in points]
     ids = [fov_ids[pid] for pid in pids]
     record = {"converter": "positions_from_leica", "source": f"leica:{path.resolve()}", "path": str(path.resolve()),
-              "sha256": _file_sha256(path),
+              "sha256": file_sha256(path),
               "stage_axes": {"x": stage_axes.x, "y": stage_axes.y, "source": stage_axes.source},
               "fov_ids": {str(pid): fov for pid, fov in zip(pids, ids)},
               "stage_positions": [{"position_id": pid, "stage_x_m": x_m, "stage_y_m": y_m, "attributes": attributes}
@@ -548,5 +540,5 @@ def positions_from_table(path_or_frame, *, unit: str = "µm") -> TilePositionTab
     source = "table:frame" if path is None else f"table:{path.resolve()}"
     record = {"converter": "positions_from_table", "source": source, "unit": unit,
               "path": None if path is None else str(path.resolve()),
-              "sha256": None if path is None else _file_sha256(path)}
+              "sha256": None if path is None else file_sha256(path)}
     return TilePositionTable(_frame(ids, nominal, "supplied"), source, record)

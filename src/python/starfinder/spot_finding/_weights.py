@@ -7,9 +7,10 @@ imports. Weights are loaded from explicit paths in the cache, never from the
 libraries' own caches.
 """
 from dataclasses import dataclass
-import hashlib
 import os
 from pathlib import Path
+
+from starfinder._records import file_sha256
 
 from ._errors import MissingWeightsError, WeightsHashMismatchError
 
@@ -160,14 +161,6 @@ def model_folder(method: str, model: str, directory=None) -> Path:
     return weights_directory(directory) / entry.method / entry.model
 
 
-def sha256_file(path, chunk=1 << 22) -> str:
-    digest = hashlib.sha256()
-    with open(path, "rb") as handle:
-        while block := handle.read(chunk):
-            digest.update(block)
-    return digest.hexdigest()
-
-
 def fetch_command(method, model, directory=None):
     return f"starfinder weights fetch {method} {model}" + (f" --dir {directory}" if directory is not None else "")
 
@@ -208,7 +201,7 @@ def resolve_weights(method: str, model: str, *, directory=None, extracted: tuple
             raise MissingWeightsError(
                 f"{method} model {model!r}: weights file {path} is missing; fetch it with "
                 f"'{fetch_command(method, model, directory)}'")
-        actual = sha256_file(path)
+        actual = file_sha256(path)
         if actual != item.sha256:
             raise WeightsHashMismatchError(
                 f"{method} model {model!r}: {path} has SHA-256 {actual}, expected {item.sha256}")

@@ -96,7 +96,7 @@ def _r1(folder):
 
 
 def _r2(folder, record):
-    from starfinder.segmentation._persist import file_sha256
+    from starfinder._records import file_sha256
     for part in PARTS:
         if part_status(record, part) in NO_FILES and listed_files(record, part):
             _fail("R2", f"part {part} has status {part_status(record, part)!r} but lists files "
@@ -410,7 +410,7 @@ def _t1(folder, record, section):
     projection of each input image with the recorded SHA-256 and grid."""
     import tifffile
 
-    from starfinder.segmentation._persist import file_sha256
+    from starfinder._records import file_sha256
     grid = section["inputs"]["grid"]
     outputs = {o.get("path"): o for o in section.get("outputs") or []}
     for run in section.get("runs") or []:

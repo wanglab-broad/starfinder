@@ -67,7 +67,7 @@ def save_placement(result: PlacementResult, directory) -> Path:
         directory is a file, or a folder holding files that are not placement
         files.
     """
-    from starfinder.io._checkpoint import _dtype_map, _jsonable
+    from starfinder._records import _dtype_map, jsonable
     if not isinstance(result, PlacementResult):
         raise TypeError("result must be a PlacementResult")
     directory = Path(directory)
@@ -93,7 +93,7 @@ def save_placement(result: PlacementResult, directory) -> Path:
             tables[name] = {"path": file_name, "sha256": hashlib.sha256(data).hexdigest(),
                             "dtypes": _dtype_map(frame)}
         record = dict(result.record, tables=tables)
-        text = json.dumps(_jsonable(record), indent=2, allow_nan=False) + "\n"
+        text = json.dumps(jsonable(record), indent=2, allow_nan=False) + "\n"
         _write_file(tmp / RECORD_FILE, text.encode("utf-8"))
         if directory.exists():
             os.replace(directory, old)
@@ -125,8 +125,7 @@ def load_placement(directory) -> PlacementResult:
         A record of another version or stage, or a table that is missing or
         whose SHA-256 differs from the record (naming the file and both hashes).
     """
-    from starfinder.io._checkpoint import _read_table
-    from starfinder.segmentation._persist import check_file
+    from starfinder._records import _read_table, check_file
     directory = Path(directory)
     path = directory / RECORD_FILE
     if not path.is_file():

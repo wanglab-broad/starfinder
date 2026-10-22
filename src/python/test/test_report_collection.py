@@ -24,7 +24,7 @@ import sys
 import pandas as pd
 import pytest
 
-from starfinder.io._checkpoint import _read_table
+from starfinder._records import _read_table
 from starfinder.report import (PROBLEM_RULES, REPORT_PARTS, REPORT_TABLES, UNAVAILABLE_REASONS, MarkerGroup,
                                ReportConfig, ReportLimits, RuleLimit, read_report)
 from starfinder.report._schema import PENDING_VALUES, RULE_UNITS, SUMMARY_KEYS
@@ -930,8 +930,8 @@ def test_pg7_folder_rules_and_replacement(records, monkeypatch):
     assert read_report(folder) == second
     # An error after the checks leaves the earlier report as it was, and no staging folder.
     earlier = snapshot(folder)
-    import starfinder.io._checkpoint as checkpoint
-    monkeypatch.setattr(checkpoint, "_write_table", lambda *a, **k: (_ for _ in ()).throw(OSError("disk full")))
+    import starfinder._records as _records
+    monkeypatch.setattr(_records, "_write_table", lambda *a, **k: (_ for _ in ()).throw(OSError("disk full")))
     with pytest.raises(OSError, match="disk full"):
         records.collect()
     monkeypatch.undo()

@@ -285,7 +285,7 @@ def export_folder(tmp_path, *, dimensions="3d", placement_result=None, conflicts
 
 def listing(folder):
     """Every file under a folder with its SHA-256, relative POSIX path → digest."""
-    from starfinder.segmentation._persist import file_sha256
+    from starfinder._records import file_sha256
     return {p.relative_to(folder).as_posix(): file_sha256(p) for p in sorted(folder.rglob("*")) if p.is_file()}
 
 

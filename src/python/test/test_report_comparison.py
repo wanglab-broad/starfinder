@@ -28,7 +28,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from starfinder.io._checkpoint import _read_table
+from starfinder._records import _read_table
 from starfinder.report import ComparisonRecord, read_report
 
 from .report_fixtures import CELLS_RETAINED, COUNTS, DATASET, FOVS, SAMPLE_ID, report_cells, report_records

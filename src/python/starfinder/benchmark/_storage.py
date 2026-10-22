@@ -4,15 +4,9 @@ import json
 from pathlib import Path
 import numpy as np
 
+from starfinder._records import file_sha256
+
 SCHEMA_VERSION = 1
-
-
-def _digest(path):
-    h = hashlib.sha256()
-    with Path(path).open('rb') as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b''):
-            h.update(block)
-    return h.hexdigest()
 
 
 def _identity(value):
@@ -38,14 +32,14 @@ def _inside(root, name):
 
 
 def _reference(root, path):
-    return {'path': str(Path(path).relative_to(root)), 'sha256': _digest(path)}
+    return {'path': str(Path(path).relative_to(root)), 'sha256': file_sha256(path)}
 
 
 def _verified(root, ref):
     path = _inside(root, ref['path'])
     if not path.is_file():
         raise FileNotFoundError(f'required artifact missing: {path}')
-    if _digest(path) != ref['sha256']:
+    if file_sha256(path) != ref['sha256']:
         raise ValueError(f'artifact checksum mismatch: {path}')
     return path
 

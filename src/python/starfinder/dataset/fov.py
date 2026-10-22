@@ -21,6 +21,7 @@ from starfinder.preprocessing import (MinMaxNormalizationConfig, HistogramMatchi
     StepContext, read_supplied_statistics, run_step, step_spec)
 from starfinder.dataset._logging import _log_step
 from starfinder.dataset._paths import _FovPaths
+from starfinder._records import file_sha256
 from starfinder._registry import _version
 from starfinder.dataset.config import (CheckpointConfig, PipelineConfig, ExecutionConfig, ExternalReference,
     MorphologyConfig, RegistrationRecipe, RegistrationStep, _check_rotation)
@@ -102,8 +103,8 @@ def _qc_record(qc):
 
     Sequences are tuples and undefined floats None; projections are not kept.
     """
-    from starfinder.io._checkpoint import _jsonable, _tuples
-    return _tuples(_jsonable(dict(status=qc.status, values=qc.values, units=qc.units, counts=qc.counts,
+    from starfinder._records import jsonable, tuples
+    return tuples(jsonable(dict(status=qc.status, values=qc.values, units=qc.units, counts=qc.counts,
                                   reasons=qc.reasons, config=qc.config,
                                   details={k: v for k, v in qc.details.items() if k != 'projections'})))
 
@@ -1305,7 +1306,7 @@ class FOV:
                 supplied = read_supplied_statistics(path, recipe, channel_labels=self.dataset.channel_order,
                                                     rounds=pipeline_rounds)
                 self.preprocessing_record['supplied_statistics'] = {
-                    'path': str(path), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
+                    'path': str(path), 'sha256': file_sha256(path)}
             image_stages = any((config.load, config.rotation_degrees is not None, steps, post,
                 config.registration, config.spot_finding, config.extraction))
             stages = checkpoints.stages if checkpoints is not None else ()
@@ -1471,7 +1472,7 @@ class FOV:
     def _save_prepared(self, root, name):
         """Write the saved form of the prepared image name under root/other_rounds/name/."""
         from starfinder.dataset._prepared import image_directory, write_image
-        from starfinder.io._checkpoint import _jsonable
+        from starfinder._records import jsonable
         entry = self.registration_record['rounds'][name]
         registered = name in self.registration_chains
         write_image(image_directory(root, name),
@@ -1479,7 +1480,7 @@ class FOV:
                                   fov_id=self.fov_id, subtile_id=self.subtile_id),
                     name=name, image=self.images[name], metadata=self.metadata[name],
                     channels=[c.record() for c in self.dataset._resident_channels(name)],
-                    rotation=_jsonable(self.load_diagnostics.get(name, {}).get('rotation')),
+                    rotation=jsonable(self.load_diagnostics.get(name, {}).get('rotation')),
                     entry={k: v for k, v in entry.items() if k != 'saved'},
                     chain_results=self.registration_results[name] if registered else None,
                     application=self.registration_record['application'][name] if registered else None,
@@ -1631,7 +1632,7 @@ class FOV:
             than the reference grid's.
         """
         from starfinder.dataset._prepared import IMAGE_FILE, image_directory, read_image
-        from starfinder.io._checkpoint import _tuples
+        from starfinder._records import tuples
         from starfinder.registration import TransformChain
         if name in self.registration_record.get('rounds', {}) or name in self.registration_chains:
             raise ValueError(f'{name!r} is already prepared in this FOV')
@@ -1648,7 +1649,7 @@ class FOV:
                              f'{ref!r} ({self.metadata[ref]!r})')
         record = saved['record']
         self.images[name], self.metadata[name] = saved['image'], saved['metadata']
-        self.load_diagnostics[name] = {} if record['rotation'] is None else {'rotation': _tuples(record['rotation'])}
+        self.load_diagnostics[name] = {} if record['rotation'] is None else {'rotation': tuples(record['rotation'])}
         self.registration_record = dict(self.registration_record)
         if saved['results'] is not None:
             registration = record['registration']
@@ -1656,7 +1657,7 @@ class FOV:
             self.registration_record.setdefault('application', {})[name] = saved['application']
             self.registration_results[name] = saved['results']
             self.registration_chains[name] = TransformChain(tuple(r.transform for r in saved['results']))
-            self.registration_attempts[name] = [_tuples(a) for a in registration['attempts']]
+            self.registration_attempts[name] = [tuples(a) for a in registration['attempts']]
         self.registration_record.setdefault('rounds', {})[name] = dict(
             saved['entry'], saved={'path': (directory / IMAGE_FILE).relative_to(root).as_posix(),
                                    'sha256': record['image']['file_sha256']})
@@ -1675,7 +1676,8 @@ class FOV:
 
     def _start_run_record(self, checkpoints, config, execution):
         from starfinder.dataset._run_record import _RunRecord
-        from starfinder.io._checkpoint import _require_parquet, clear_stages
+        from starfinder._records import _require_parquet
+        from starfinder.io._checkpoint import clear_stages
         checkpoints.__post_init__()
         directory = self._checkpoint_dir(checkpoints)
         if directory.exists() and not checkpoints.overwrite:
@@ -1788,7 +1790,8 @@ class FOV:
         ImportError
             Parquet was requested without pyarrow.
         """
-        from starfinder.io._checkpoint import _check_stage, _require_parquet, header_path
+        from starfinder._records import _require_parquet
+        from starfinder.io._checkpoint import _check_stage, header_path
         _check_stage(stage)
         checkpoints.__post_init__()
         directory = self._checkpoint_dir(checkpoints)
@@ -1840,7 +1843,8 @@ class FOV:
         FileNotFoundError
             The stage was not written.
         """
-        from starfinder.io._checkpoint import _check_stage, _jsonable, read_checkpoint, read_header
+        from starfinder._records import jsonable
+        from starfinder.io._checkpoint import _check_stage, read_checkpoint, read_header
         from starfinder.io._checkpoint import readout_mode as io_readout_mode
         _check_stage(stage)
         later = ['spot_result', 'intensity_result', 'decoding_result', 'scoring_result', 'deduplication_result',
@@ -1853,7 +1857,7 @@ class FOV:
             raise ValueError(f'load_checkpoint({stage!r}) requires an FOV without {", ".join(occupied)}')
         directory = self._checkpoint_dir(checkpoints)
         header = read_header(directory, stage)
-        expected = _jsonable(self._checkpoint_header())
+        expected = jsonable(self._checkpoint_header())
         for key, label in (('fov_id', 'FOV id'), ('subtile_id', 'subtile id'),
                            ('rounds', 'round labels'), ('channel_labels', 'channel order')):
             if header.get(key) != expected[key]:
@@ -1863,7 +1867,7 @@ class FOV:
                              f'dataset ({self.dataset.readout_mode!r})')
         if header.get('encoding') is not None and self.codebook is not None:
             from starfinder.barcode.codebook import _encoding_record
-            current = _jsonable(_encoding_record(self.codebook.encoding))
+            current = jsonable(_encoding_record(self.codebook.encoding))
             if header['encoding'] != current:
                 raise ValueError(f"{stage} checkpoint encoding {header['encoding']} differs from the dataset "
                                  f"codebook's encoding ({current}); load the codebook with the recorded encoding")
@@ -2116,11 +2120,11 @@ class FOV:
             (naming the path and both hashes), a record of another version, run
             or FOV, or stored metadata other than the recorded grid's.
         """
-        from starfinder.io._checkpoint import _jsonable
+        from starfinder._records import jsonable
         from starfinder.segmentation._persist import read_run, run_directory
         directory = run_directory(self._checkpoint_dir(checkpoints), name)
         result = read_run(directory, name)
-        expected = _jsonable(self._checkpoint_header())
+        expected = jsonable(self._checkpoint_header())
         for key in ('dataset_id', 'sample_id', 'fov_id', 'subtile_id'):
             if result.record.get(key) != expected[key]:
                 raise ValueError(f'segmentation run {name!r} has {key} {result.record.get(key)!r}, this FOV '
@@ -2214,7 +2218,7 @@ class FOV:
         check_name(name, 'assignment')
         if checkpoints is not None:
             from starfinder.assignment._persist import assignment_directory, check_writable
-            from starfinder.io._checkpoint import _require_parquet
+            from starfinder._records import _require_parquet
             checkpoints.__post_init__()
             check_writable(assignment_directory(self._checkpoint_dir(checkpoints), name), checkpoints.overwrite)
             if checkpoints.table_format == 'parquet':
@@ -2290,9 +2294,9 @@ class FOV:
             A Parquet table is read without pyarrow.
         """
         from starfinder.assignment._persist import assignment_directory, read_assignment
-        from starfinder.io._checkpoint import _jsonable
+        from starfinder._records import jsonable
         result = read_assignment(assignment_directory(self._checkpoint_dir(checkpoints), name), name)
-        expected = _jsonable(self._checkpoint_header())
+        expected = jsonable(self._checkpoint_header())
         for key in ('dataset_id', 'sample_id', 'fov_id', 'subtile_id'):
             if result.record.get(key) != expected[key]:
                 raise ValueError(f'assignment {name!r} has {key} {result.record.get(key)!r}, this FOV '
@@ -2391,14 +2395,14 @@ class FOV:
         results (None before decoding).
         """
         from starfinder.barcode import summarize_reads
-        from starfinder.io._checkpoint import _jsonable
+        from starfinder._records import jsonable
         path = self.paths.score_log(suffix)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(dict(
             detected=len(self.spot_result.spots) if self.spot_result is not None else None,
             counts=self.filtering_result.counts if self.filtering_result is not None else None,
             fractions=self.filtering_result.fractions if self.filtering_result is not None else None,
-            summary=_jsonable(summarize_reads(self.results)) if self.decoding_result is not None else None,
+            summary=jsonable(summarize_reads(self.results)) if self.decoding_result is not None else None,
             registration_attempts=self.registration_attempts), indent=2))
         return path
 

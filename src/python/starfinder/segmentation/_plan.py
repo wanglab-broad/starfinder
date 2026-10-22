@@ -11,8 +11,8 @@ from dataclasses import asdict, dataclass, replace
 
 import numpy as np
 
+from starfinder._records import UNAVAILABLE, file_sha256
 from starfinder._registry import check_name, spec_for
-from starfinder.dataset.types import UNAVAILABLE
 from starfinder.image import IncompatibleGeometryError
 
 from ._import import LabelImportConfig, import_labels
@@ -199,8 +199,8 @@ class SegmentationPlan:
 
 def _record_sha256(record):
     """SHA-256 of a FOV record as sorted JSON, so the segmentation record refers to it by hash."""
-    from starfinder.io._checkpoint import _jsonable
-    text = json.dumps(_jsonable(record), sort_keys=True, default=str)
+    from starfinder._records import jsonable
+    text = json.dumps(jsonable(record), sort_keys=True, default=str)
     return hashlib.sha256(text.encode()).hexdigest()
 
 
@@ -301,7 +301,7 @@ def _channel(fov, item):
         # The reference merged image (the channel, or the composite's amplicon) was read from the saved
         # reference image of FOV.load_reference_image: its path below the output root and its file SHA-256.
         source["reference_image"] = {"path": path.relative_to(fov.dataset.output_root).as_posix(),
-                                     "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+                                     "sha256": file_sha256(path)}
     return np.ascontiguousarray(image), source
 
 

@@ -286,7 +286,7 @@ def run_and_reload(root, dataset, pipeline, execution=None):
     # The pre_qc table without entry_id (and without the score columns), the pre_qc table without
     # the score columns and the candidates table without the background columns, written by the
     # same writer.
-    from starfinder.io._checkpoint import _read_table, _write_table
+    from starfinder._records import _read_table, _write_table
     for name, table in (("without_entry", without_entry(without_score(reads))), ("without_score", without_score(reads))):
         (root / name).mkdir()
         _write_table(table, root / name, "pre_qc", "csv")

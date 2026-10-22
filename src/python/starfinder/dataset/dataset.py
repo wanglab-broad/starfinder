@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-import hashlib
 from numbers import Integral
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pandas as pd
 
+from starfinder._records import file_sha256
 from starfinder.barcode import (BarcodeLayout, Codebook, DirectPanel, EncodingConfig, OneBaseEncodingConfig,
     load_codebook, load_direct_panel)
 from starfinder.barcode.codebook import _encoding_summary
@@ -447,7 +447,7 @@ class Dataset:
     def _keep_reference_file(self, kind, loaded, path):
         """Keep the path and SHA-256 of the file a codebook or panel was loaded from (a new dict: replace shares it)."""
         path = Path(path).absolute()
-        sha256 = hashlib.sha256(path.read_bytes()).hexdigest()
+        sha256 = file_sha256(path)
         self._reference_files = {**self._reference_files, kind: (loaded, str(path), sha256)}
 
     def stitch(self, sample: str, fov_ids, *, table, config, input: str = "reference_merged", review=None,

@@ -30,6 +30,7 @@ from typing import Any
 
 import numpy as np
 
+from starfinder._records import atomic_path, publish, software
 from starfinder.image import IncompatibleGeometryError
 from starfinder.segmentation import ReferenceGrid
 from starfinder.stitching import PlacementResult
@@ -42,10 +43,8 @@ from ._record import (
     ExportIncompleteWarning,
     Timer,
     as_json,
-    atomic_path,
     directory_files,
     listed_files,
-    publish,
     read_export,
     remove_listed,
     section_sha256,
@@ -328,7 +327,7 @@ def _placement_entry(placement):
 
 def _fov_entries(placement, plan, config):
     from starfinder.segmentation._labels import array_sha256
-    from starfinder.segmentation._persist import file_sha256
+    from starfinder._records import file_sha256
     entries = []
     for row in placement.fovs.itertuples(index=False):
         origin = [float(getattr(row, f"origin_{a}")) for a in AXES]
@@ -372,17 +371,12 @@ def _grid_entry(grid):
             "fov_ids": list(grid.fov_ids)}
 
 
-def _software():
-    from starfinder.segmentation._import import _software as software
-    return software()
-
-
 def _section(status, placement, plan, config, assembly, outputs, timer, *, version=None, **extra):
     section = {"status": status, **extra,
                "assembly_sha256": None if assembly is None else section_sha256(as_json(assembly.record)),
                "placement": _placement_entry(placement), "fovs": _fov_entries(placement, plan, config),
                "library": _library_entry(config, plan.grid, version), "config": asdict(config),
-               "grid": _grid_entry(plan.grid), "outputs": list(outputs), "software": _software(),
+               "grid": _grid_entry(plan.grid), "outputs": list(outputs), "software": software(),
                **timer.record(), "viewer_qualification": "deferred"}
     return as_json(section)
 
@@ -846,7 +840,7 @@ def fuse(placement: PlacementResult, inputs: Sequence[FusionInput], *, assembly=
                              "library_grid": _library_grid(fused), **arguments}
                     entry.update(_write_tiff(output_dir / file_name, fused, plan.grid, dimensionality, config, name,
                                              placement, reader))
-                    from starfinder.segmentation._persist import file_sha256
+                    from starfinder._records import file_sha256
                     entry["sha256"] = file_sha256(output_dir / file_name)
                     outputs.append(entry)
                     if config.ome_zarr:

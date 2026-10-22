@@ -994,7 +994,7 @@ Strict JSON (non-finite numbers as `null`), written last.
 | `route` | `per_fov`, `after_fusion`, or null without an export; `per_fov` for an export whose assembly records no route ("The two routes", choice 20). |
 | `assignment`, `segmentation` | The entry's arguments, with the runs they resolved to. |
 | `generated_at` | UTC time the report was written. |
-| `software` | `code` and `environment`, as `run.json` records them (`dataset/_run_record.py`: `_code`, `_environment`). |
+| `software` | `code` and `environment`, as `run.json` records them (`_records.py`: `code`, `environment`). |
 | `config` | The `ReportConfig`, as JSON. |
 | `stages` | What existed: the FOVs with a run record, `placement` (boolean), `export` (boolean) and the export's `parts`. |
 | `inputs` | Every file read: `path` (relative to the output root, absolute outside it), `kind` (`run_record`, `transforms`, `field`, `raw_image`, `supplied_statistics`, `codebook`, `segmentation_record`, `assignment_record`, `label_image`, `reference_image`, `placement`, `placement_table`, `export_record`, `export_table`, `anndata`, `fused_image`), `sha256`, `bytes`, and `verified` (whether a record's SHA-256 was compared). |
