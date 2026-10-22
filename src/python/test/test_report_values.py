@@ -94,7 +94,7 @@ def test_rc8_fov_with_no_spot(tmp_path):
 # --- DF2: the shift of the global steps -------------------------------------------------------------------------
 
 def result_entry(transform, index, field_name=None):
-    from starfinder.io._checkpoint import _transform_json
+    from starfinder._checkpoint import _transform_json
     from starfinder.registration import TranslationConfig, WarpConfig
     from starfinder.registration._types import RegistrationDiagnostics, RegistrationResult
     diagnostics = RegistrationDiagnostics("translation", "scipy_fft", TranslationConfig())

@@ -22,7 +22,7 @@ import pandas as pd
 import pytest
 import tifffile
 
-from starfinder.io import read_checkpoint
+from starfinder.dataset import read_checkpoint
 from starfinder._records import _read_table
 from starfinder.report import ReportConfig
 from starfinder.report._collect import report_examples

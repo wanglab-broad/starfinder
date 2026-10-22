@@ -20,8 +20,8 @@ import numpy as np
 import pandas as pd
 
 from starfinder.barcode import Codebook
-from starfinder.io import read_checkpoint
-from starfinder.io._checkpoint import write_candidates
+from starfinder.dataset import read_checkpoint
+from starfinder._checkpoint import write_candidates
 from starfinder.synthetic import (BackgroundConfig, FormedSceneConfig, NoiseConfig, ScalarDistribution,
     generate_formed_scene)
 

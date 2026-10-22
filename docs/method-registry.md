@@ -332,7 +332,7 @@ Paths are relative to `src/python/starfinder/` unless they start with
 | `dataset/workflow.py:40` | legacy default methods (`demons` local, `translation` global) | Stay in the adapter as legacy defaults. |
 | `dataset/workflow.py:91` | warp backend by method name | Until move 3, derived from the estimator's returned `WarpConfig` backend through a per-`transform_kind` table; move 3 replaces it with the recipe's single `warp`. |
 | `dataset/workflow.py:204` (`registration_keys`) | the four config types whose fields are accepted | The init fields of every `REGISTRATION_METHODS` key, plus the adapter's legacy names. |
-| `io/_checkpoint.py:343-346` (`_registration_results`) | `dict(translation=..., demons=..., tps=..., cpd=...)` | The name-to-type map from `REGISTRATION_METHODS` (`config_type_for()`); saved `method` values equal spec names by the discriminator rule. |
+| `_checkpoint.py:343-346` (`_registration_results`) | `dict(translation=..., demons=..., tps=..., cpd=...)` | The name-to-type map from `REGISTRATION_METHODS` (`config_type_for()`); saved `method` values equal spec names by the discriminator rule. |
 | `benchmark/_adapters.py:5-19` (`_CONFIGS`, `_config`) | name-to-type map for benchmark cases | `config_type_for(REGISTRATION_METHODS, ...)`, keeping `ValueError('unsupported registration method: ...')`. |
 | `registration/_config.py:31`, `:48`, `:74`, `:99` | the `method` discriminator defaults | Stay (checkpoints and `run.json` store them); a test asserts each equals its spec name. |
 | `workflow/schemas/config.schema.yaml:576-579` | `local_registration.method` enum `demons`, `tps`, `cpd` | Widened to the accepted names (the registered names plus the legacy demons aliases) and kept equal to them by a new default-tier test (W-240 choice 4, accepted); the change is in `workflow/`, so it belongs to move 3. |
@@ -345,7 +345,7 @@ Paths are relative to `src/python/starfinder/` unless they start with
 | `spot_finding/__init__.py:126` (`SpotFindingResult.__post_init__`) | accepted config types | `type(config) in SPOT_FINDING_METHODS`. |
 | `spot_finding/__init__.py:163-177` (`find_spots`) | the config union and the accepted types | `spec_for(SPOT_FINDING_METHODS, config, ...)` keeping `TypeError("unsupported detection config")`; the annotation uses one alias. |
 | `spot_finding/__init__.py:187-228` | the `isinstance` dispatch | `spec.run` per method; the shared table and diagnostics assembly stay in `find_spots`. |
-| `io/_checkpoint.py:378-381` (`_detectors`) | name-to-type map for saved detection configs | The name-to-type map from `SPOT_FINDING_METHODS`. |
+| `_checkpoint.py:378-381` (`_detectors`) | name-to-type map for saved detection configs | The name-to-type map from `SPOT_FINDING_METHODS`. |
 | `dataset/config.py:120`, `dataset/config.py:126` | `PipelineConfig.spot_finding` accepts only `LocalMaximaConfig` | Types whose spec has `pipeline=True`. |
 | `dataset/fov.py:477-486` (`FOV.find_spots`) | only `LocalMaximaConfig` | The same `pipeline` capability, keeping the current message for other types. |
 | `dataset/workflow.py:232` | the YAML block always builds `LocalMaximaConfig` | The optional `method` key through `config_type_for(SPOT_FINDING_METHODS, ...)`, default `local_maxima`. |
@@ -355,7 +355,7 @@ Paths are relative to `src/python/starfinder/` unless they start with
 
 `barcode/decoding.py:169` and `:207` (accepted types and dispatch),
 `dataset/config.py:121` and `:127` (`PipelineConfig.decoding`) and
-`io/_checkpoint.py:439` (`dict(wta=..., codebook_aware=...)`) hard-coded the two
+`_checkpoint.py:439` (`dict(wta=..., codebook_aware=...)`) hard-coded the two
 decoders. The first version of this page placed this registry in §2.9 and named
 it `DECODERS`; §2.8 adds it as `DECODING_METHODS`, following the `*_METHODS`
 pattern of decision 2 ({doc}`readout-contract`, "Encoding registry"; W-292).
@@ -364,7 +364,7 @@ pattern of decision 2 ({doc}`readout-contract`, "Encoding registry"; W-292).
 | --- | --- | --- |
 | `barcode/decoding.py` (`decode_barcodes`) | accepted types and the `isinstance` dispatch | `spec_for(DECODING_METHODS, config, ...)`, keeping `TypeError("unsupported decoder config")`; `spec.run` per decoder. A codebook whose encoding kind (`EncodingSpec.symbols`) is not in `spec.encodings` raises `TypeError`. |
 | `dataset/config.py` (`PipelineConfig.decoding`) | the two config types | The `DECODING_METHODS` keys. |
-| `io/_checkpoint.py` (`_read_pre_qc`) | `dict(wta=..., codebook_aware=...)` | The name-to-type map of `DECODING_METHODS`. |
+| `_checkpoint.py` (`_read_pre_qc`) | `dict(wta=..., codebook_aware=...)` | The name-to-type map of `DECODING_METHODS`. |
 | `dataset/workflow.py` | always `WtaDecoderConfig(diagnostics=True)` | The Python-only `decoding` key names a `DECODING_METHODS` method (default `wta`); the schema list is kept equal to the registry by a test. |
 
 `DecodingSpec` declares `modes` (readout modes), `encodings` (encoding symbol
@@ -565,7 +565,7 @@ The §2.6 specification ({doc}`registration-contract`) also:
   defines the recipe's reference round, signal, allowed step sequences,
   transform composition and single final resampling;
 * derives the five registration places named in its scope (`registration/_api.py`,
-  `dataset/config.py`, `io/_checkpoint.py`, `benchmark/_adapters.py` and
+  `dataset/config.py`, `_checkpoint.py`, `benchmark/_adapters.py` and
   `dataset/workflow.py`) and the schema enum from `REGISTRATION_METHODS`;
 * defines the `transform_kind` values of the new methods and the composition
   rules between kinds;

@@ -25,6 +25,8 @@ reads of one amplicon as duplicates of one representative, which
 :py:func:`~starfinder.barcode.summarize_reads` and
 :py:func:`~starfinder.barcode.explain_read` are the read inspection, population
 summary and decision inspection diagnostics. See :doc:`../readout-contract`.
+:py:func:`~starfinder.barcode.export_spots` writes the joined spots as a one-based
+MATLAB-compatible CSV.
 
 .. currentmodule:: starfinder.barcode
 
@@ -49,6 +51,7 @@ summary and decision inspection diagnostics. See :doc:`../readout-contract`.
    ENCODINGS
    EncodingSpec
    explain_read
+   export_spots
    extract_intensities
    filter_reads
    inspect_read

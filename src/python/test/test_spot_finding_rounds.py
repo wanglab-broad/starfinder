@@ -20,7 +20,7 @@ from starfinder.barcode import NeighborhoodSumConfig, WtaDecoderConfig
 from starfinder.dataset import CheckpointConfig, Dataset, ExecutionConfig, PipelineConfig, RoundState
 from starfinder.dataset.workflow import from_workflow_config
 from starfinder.image import ImageMetadata, IncompatibleGeometryError
-from starfinder.io._checkpoint import candidates_frame
+from starfinder._checkpoint import candidates_frame
 from starfinder.spot_finding import (ChannelOverride, LocalMaximaConfig, SpotFindingPlan, SpotFindingResult,
     StarfishLogConfig, find_spots)
 

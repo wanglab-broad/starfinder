@@ -6,7 +6,7 @@ of the reference round and of the first moving round, checked against the SHA-25
 recorded (step 1), loaded with ``config.pipeline.load`` through ``io.load_round`` and
 rotated with ``FOV.run``'s ``_rotated`` (step 2); the recorded ``steps`` entries rerun with
 ``preprocessing.run_step``, their fitted values compared with the recorded ones (step 3);
-on a moving round the saved transforms restored with ``io/_checkpoint.py``:
+on a moving round the saved transforms restored with ``_checkpoint.py``:
 ``_restore_result``, composed and resampled once with the round's ``application_config``
 (step 4; no registration is estimated); then the ``post_registration`` entries (step 5).
 The image a round ends with is the image the stage ``registered`` saves (step 6), which
@@ -348,7 +348,7 @@ class _Replayer:
     def run_entry(self, entry, image, metadata, name, reference_round):
         """One recorded entry rebuilt from its ``step`` and ``config`` and rerun as ``FOV._preprocess`` runs it;
         returns the output, whether the fitted values equal the recorded ones, or the reason it cannot run."""
-        from starfinder.io._checkpoint import _config
+        from starfinder._checkpoint import _config
         from starfinder.preprocessing import StepContext, run_step, step_config_type, step_spec
         config = _config(entry["config"], step_config_type(entry["step"]))
         spec = step_spec(config)
@@ -370,7 +370,7 @@ class _Replayer:
 
     def transforms(self, name):
         """Step 4: the round's chain and ``WarpConfig`` from its saved transforms, or the reason it has none."""
-        from starfinder.io._checkpoint import _config, _field_loader, _registration_methods, _restore_result
+        from starfinder._checkpoint import _config, _field_loader, _registration_methods, _restore_result
         from starfinder.registration import TransformChain, WarpConfig
         entries = _get(self.record, "registration", name) or []
         last = entries[-1] if entries else {}

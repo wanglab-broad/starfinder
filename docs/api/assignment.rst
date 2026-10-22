@@ -12,7 +12,7 @@ population, the source record and a SHA-256 that does not depend on row order. I
 repeated or null keys, rows of another FOV, non-finite coordinates and genes outside the
 gene list (``ValueError`` naming them). :py:func:`~starfinder.assignment.molecule_table`
 joins a :py:class:`~starfinder.spot_finding.SpotFindingResult` with a read result by
-``(spot_namespace, spot_id)``, as :py:func:`~starfinder.io.export_spots` does (``final``:
+``(spot_namespace, spot_id)``, as :py:func:`~starfinder.barcode.export_spots` does (``final``:
 the accepted reads; ``called``: the reads called ``assigned``);
 :py:func:`~starfinder.assignment.molecule_table_from_csv` reads a legacy one-based
 ``x, y, z, gene`` CSV with integer or float coordinates.

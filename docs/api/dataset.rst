@@ -38,6 +38,9 @@ records, without running a stage, and ``Dataset.compare_samples(samples)`` write
 dataset's comparison page (``report/index.html`` and ``report/samples.csv``) from the finished
 sample reports only; see :doc:`report`.
 
+``read_checkpoint(path, stage)`` reads one stage of a per-FOV checkpoint directory into the
+typed results; see :doc:`../checkpoints` for the layout.
+
 .. currentmodule:: starfinder.dataset
 
 .. autosummary::
@@ -53,6 +56,7 @@ sample reports only; see :doc:`report`.
    from_workflow_config
    MorphologyConfig
    PipelineConfig
+   read_checkpoint
    RecoveryConfig
    RegistrationRecipe
    RegistrationStep

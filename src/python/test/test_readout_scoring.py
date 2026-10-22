@@ -26,8 +26,8 @@ from starfinder.barcode.scoring import SCORE_COLUMNS
 from starfinder.dataset import CheckpointConfig, PipelineConfig
 from starfinder.dataset.workflow import from_workflow_config
 from starfinder.evaluation.barcode import ranking_quality
-from starfinder.io import read_checkpoint
-from starfinder.io._checkpoint import candidates_frame
+from starfinder.dataset import read_checkpoint
+from starfinder._checkpoint import candidates_frame
 
 from . import readout_fixtures as fx
 from . import readout_scenes as scenes

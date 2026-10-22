@@ -51,8 +51,9 @@ from starfinder.barcode.scoring import SCORE_COLUMNS
 from starfinder.dataset import CheckpointConfig, PipelineConfig
 from starfinder.evaluation.barcode import evaluate_decoding, ranking_quality
 from starfinder.evaluation.matching import match_points
-from starfinder.io import ImageLoadResult, read_checkpoint
-from starfinder.io._checkpoint import candidates_frame
+from starfinder.dataset import read_checkpoint
+from starfinder.io import ImageLoadResult
+from starfinder._checkpoint import candidates_frame
 from starfinder.spot_finding import LocalMaximaConfig, SpotFindingResult, find_spots
 
 from . import readout_fixtures as fx

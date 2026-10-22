@@ -31,7 +31,7 @@ from starfinder.dataset import CheckpointConfig, Dataset, PipelineConfig, RoundS
 from starfinder.dataset.workflow import from_workflow_config
 from starfinder.image import ImageMetadata
 from starfinder.io import ImageLoadResult, save_volume
-from starfinder.io._checkpoint import candidates_frame, read_checkpoint, read_header, readout_mode
+from starfinder._checkpoint import candidates_frame, read_checkpoint, read_header, readout_mode
 from starfinder.spot_finding import LocalMaximaConfig, SpotFindingPlan
 
 from .test_readout_examples import CHANNELS, DIRECT_MAPPING, DIRECT_SPOTS, direct_images, rounds

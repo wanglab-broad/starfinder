@@ -30,6 +30,7 @@ from .decoding import (
 from .scoring import ReadScoreConfig, ReadScoringResult, score_reads
 from .deduplication import DeduplicationConfig, ReadDeduplicationResult, deduplicate_reads
 from .filtering import ReadFilterConfig, ReadFilteringResult, filter_reads
+from .spots import export_spots
 from .diagnostics import explain_read, inspect_read, plot_read, summarize_reads
 
 #: The barcode encoding registry, mapping each exact frozen encoding config type to its
@@ -74,6 +75,7 @@ __all__ = [
     "deduplicate_reads",
     "encode_bases",
     "explain_read",
+    "export_spots",
     "extract_intensities",
     "filter_reads",
     "inspect_read",

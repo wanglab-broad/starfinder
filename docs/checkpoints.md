@@ -432,7 +432,7 @@ When no image operation is configured and no images are resident, `run` skips
 the round loop. Resuming is always an explicit call; there is no scheduler.
 {py:meth}`~starfinder.dataset.FOV.save_checkpoint` writes one stage from the
 current results outside `run`. It uses `CheckpointConfig.directory`,
-`table_format` and `overwrite`. {py:func}`~starfinder.io.read_checkpoint` reads a
+`table_format` and `overwrite`. {py:func}`~starfinder.dataset.read_checkpoint` reads a
 stage directly and returns a dict keyed by the FOV attributes it restores.
 
 ## run.json

@@ -133,12 +133,12 @@ def chain_shift(entries, application_config=None):
     """The shift of a round ("Shift", S1) from its transform entries (the ``_transform_json`` form).
 
     The global steps (``translation``, ``affine``) are a prefix of the chain; they are rebuilt with
-    ``io/_checkpoint.py``: ``_restore_result`` and composed as ``registration/_chain.py`` composes them,
+    ``_checkpoint.py``: ``_restore_result`` and composed as ``registration/_chain.py`` composes them,
     ``Φ_g(p) = T₁(T₂(…T_k(p)…))``. A chain of translations gives the sum of the displacements exactly; a
     chain with an affine step gives ``Φ_g(c) − c`` at the centre ``c`` of the reference grid. Returns a
     ``(z, y, x)`` tuple of floats, or :data:`NA` for a chain without a global step.
     """
-    from starfinder.io._checkpoint import _registration_methods, _restore_result
+    from starfinder._checkpoint import _registration_methods, _restore_result
     from starfinder.registration import TransformChain, WarpConfig
     from starfinder.registration._chain import _affine
     from starfinder.registration._types import TranslationTransform
@@ -154,7 +154,7 @@ def chain_shift(entries, application_config=None):
     def no_field(name):  # a global step reads no field file
         raise ValueError(f"a global step names the field {name!r}")
 
-    from starfinder.io._checkpoint import _config
+    from starfinder._checkpoint import _config
     application = _config(application_config, WarpConfig) if application_config else WarpConfig()
     methods = _registration_methods()
     transforms = [_restore_result(entry, i, no_field, 2, application, methods).transform

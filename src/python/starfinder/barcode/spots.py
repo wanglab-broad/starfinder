@@ -1,15 +1,14 @@
 """Identity-based spot persistence; the sole MATLAB coordinate boundary."""
 from __future__ import annotations
 from pathlib import Path
-import starfinder
 import pandas as pd
 
 from starfinder.spot_finding import SpotFindingResult
-
+from .decoding import BarcodeDecodingResult
+from .filtering import ReadFilteringResult
 
 
 def _join_spots(detection, reads=None, *, accepted_only=False):
-    from starfinder.barcode import BarcodeDecodingResult, ReadFilteringResult
     if not isinstance(detection, SpotFindingResult):
         raise TypeError('detection must be SpotFindingResult')
     detection.__post_init__()
@@ -43,7 +42,7 @@ def _join_spots(detection, reads=None, *, accepted_only=False):
     return joined
 
 
-def export_spots(detection: SpotFindingResult, reads: starfinder.barcode.BarcodeDecodingResult | starfinder.barcode.ReadFilteringResult | None,
+def export_spots(detection: SpotFindingResult, reads: BarcodeDecodingResult | ReadFilteringResult | None,
                  path: Path | str, *, accepted_only: bool = False,
                  columns: list[str] | None = None) -> Path:
     """Join complete results by namespace/ID, then optionally select accepted reads.

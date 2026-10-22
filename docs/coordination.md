@@ -359,7 +359,7 @@ alternatives; `RegistrationRejectedError` is an estimation error. Invalid
 parameters, incompatible geometry, unavailable dependencies and application
 errors propagate. A recovered result is labeled with its actual method.
 
-`io.export_spots(detection, reads, path, accepted_only=True)` joins complete
+`barcode.export_spots(detection, reads, path, accepted_only=True)` joins complete
 filtering results to detections one-to-one on `(spot_namespace, spot_id)`, then
 selects accepted rows. Decoding results also work with `accepted_only=False`.
 Duplicate, missing or foreign keys fail; row order never defines identity.

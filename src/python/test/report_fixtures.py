@@ -6,7 +6,7 @@ Each FOV's ``checkpoints/<fov>/run.json`` is written as JSON in the form
 ``dataset/_run_record.py`` writes it, with R1 to R4: status ``succeeded``, the steps of
 loading, preprocessing (``min_max_normalization`` then ``white_tophat``), registration (one
 translation step) and detection to filtering with stated seconds, deduplication and a filter
-with ``end_bases``. The transform entries are made by ``io/_checkpoint.py``:
+with ``end_bases``. The transform entries are made by ``_checkpoint.py``:
 ``_transform_json`` from the package's own result types. The placement is saved with
 ``save_placement``: every FOV ``image_supported`` at the origins of the page (F2 corrected by
 +0.25 µm in X), review ``not_needed``. The run records name raw inputs whose bytes are
@@ -150,7 +150,7 @@ def registration_result(displacement):
 
 
 def transform_entry(displacement):
-    from starfinder.io._checkpoint import _transform_json
+    from starfinder._checkpoint import _transform_json
     return jsonable(_transform_json(registration_result(displacement), 0, None))
 
 
@@ -325,7 +325,7 @@ def placement_result(fov_ids, *, statuses=None, flags=None, supplied=False):
 
 def write_transforms_file(root, fov, *, source=None):
     """``checkpoints/<fov>/registered/transforms.json`` (format version 2) through write_registered_header."""
-    from starfinder.io._checkpoint import write_registered_header
+    from starfinder._checkpoint import write_registered_header
     source = source or fov
     results = {name: [registration_result(TRANSLATIONS[name][source])] for name in MOVING}
     record = {"semantics": "recipe", "recipe": None,

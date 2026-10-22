@@ -1,7 +1,7 @@
 """The records §2.11 adds to run.json and the workflow's run record (W-451, check RR1 of docs/report-algorithms.md).
 
 docs/report-contract.md, "Records added to run.json": R1 ``transforms`` (the entries of
-``registered/transforms.json``, ``io/_checkpoint.py``: ``_transform_json``, with the field
+``registered/transforms.json``, ``_checkpoint.py``: ``_transform_json``, with the field
 file named only when the stage ``registered`` wrote it), R2 ``codebook`` (the file
 ``Dataset.load_codebook`` or ``load_direct_panel`` read), R3
 ``counts.filtering.endpoint_valid`` (the filter's correct-form count), R4
@@ -30,7 +30,7 @@ from starfinder.dataset import (CheckpointConfig, Dataset, ExecutionConfig, Pipe
                                 RegistrationStep, RoundState, from_workflow_config)
 from starfinder.dataset.fov import FOV
 from starfinder._records import jsonable as _jsonable
-from starfinder.io._checkpoint import _transform_json
+from starfinder._checkpoint import _transform_json
 from starfinder.registration import (AffineConfig, DemonsConfig, RegistrationQcConfig, RegistrationRejectedError,
                                      TranslationConfig)
 

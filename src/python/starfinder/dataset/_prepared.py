@@ -55,7 +55,7 @@ def write_image(directory, *, identity, name, image, metadata, channels, rotatio
     RegistrationResult list, its application WarpConfig and its attempts.
     """
     from starfinder._records import atomic_file, write_json
-    from starfinder.io._checkpoint import _transform_json
+    from starfinder._checkpoint import _transform_json
     from starfinder.io.tiff import save_volume
     from starfinder.registration import BSplineTransform, DenseDisplacementTransform
     from starfinder._records import file_sha256, software
@@ -106,7 +106,7 @@ def read_image(directory, name, identity, channel_labels) -> dict:
     channel_labels.
     """
     from starfinder.image import ImageMetadata
-    from starfinder.io._checkpoint import _config, _field_loader, _registration_methods, _restore_result
+    from starfinder._checkpoint import _config, _field_loader, _registration_methods, _restore_result
     from starfinder.io.tiff import load_volume_zyxc
     from starfinder.registration import WarpConfig
     from starfinder._records import check_file

@@ -37,7 +37,7 @@ from starfinder.dataset import CheckpointConfig, Dataset, PipelineConfig, RoundS
 from starfinder.dataset.workflow import from_workflow_config
 from starfinder.image import ImageMetadata
 from starfinder.io import ImageLoadResult
-from starfinder.io._checkpoint import FORMAT_VERSION
+from starfinder._checkpoint import FORMAT_VERSION
 
 from . import readout_fixtures as fx
 from .test_readout_direct import direct_dataset, direct_fov

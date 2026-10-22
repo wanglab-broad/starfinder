@@ -155,7 +155,7 @@ def _genes(genes):
 def molecule_table(detection, reads, *, genes, population: str = "final") -> MoleculeTable:
     """The molecules of a detection and a read result, joined by ``(spot_namespace, spot_id)``.
 
-    The join and its checks are those of :func:`starfinder.io.export_spots`.
+    The join and its checks are those of :func:`starfinder.barcode.export_spots`.
     ``population="final"`` takes the accepted reads of a
     :class:`~starfinder.barcode.ReadFilteringResult` (the goodSpots population);
     ``"called"`` takes the reads whose ``call_status`` is ``assigned`` from a
@@ -183,7 +183,7 @@ def molecule_table(detection, reads, *, genes, population: str = "final") -> Mol
         namespace), and every check of :class:`MoleculeTable`.
     """
     from starfinder.barcode import ReadFilteringResult
-    from starfinder.io.spots import _join_spots
+    from starfinder.barcode.spots import _join_spots
 
     if population not in POPULATIONS:
         raise ValueError(f"population must be final or called; got {population!r}")

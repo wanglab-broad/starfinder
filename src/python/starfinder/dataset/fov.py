@@ -21,6 +21,7 @@ from starfinder.preprocessing import (MinMaxNormalizationConfig, HistogramMatchi
     StepContext, read_supplied_statistics, run_step, step_spec)
 from starfinder.dataset._logging import _log_step
 from starfinder.dataset._paths import _FovPaths
+from starfinder import _checkpoint
 from starfinder._records import file_sha256
 from starfinder._registry import _version
 from starfinder.dataset.config import (CheckpointConfig, PipelineConfig, ExecutionConfig, ExternalReference,
@@ -1677,7 +1678,6 @@ class FOV:
     def _start_run_record(self, checkpoints, config, execution):
         from starfinder.dataset._run_record import _RunRecord
         from starfinder._records import _require_parquet
-        from starfinder.io._checkpoint import clear_stages
         checkpoints.__post_init__()
         directory = self._checkpoint_dir(checkpoints)
         if directory.exists() and not checkpoints.overwrite:
@@ -1686,7 +1686,7 @@ class FOV:
             _require_parquet()
         if directory.exists():
             # Stages this run does not rewrite must not survive from an earlier run.
-            clear_stages(directory)
+            _checkpoint.clear_stages(directory)
         directory.mkdir(parents=True, exist_ok=True)
         record = _RunRecord(self, directory, checkpoints, config, execution)
         record.write()
@@ -1699,19 +1699,19 @@ class FOV:
 
     def _write_registered_round(self, directory, round_name):
         """Write a round's image and its downstream snapshots; return their relative paths."""
-        from starfinder.io import _checkpoint as io
         missing = [s for s in self._checkpoint_snapshots() if s not in self.snapshots.get(round_name, {})]
         if missing:
             raise ValueError(f'registered checkpoint requires snapshots {missing} of round {round_name!r}')
-        paths = [io.write_registered_round(directory, round_name, self.images[round_name], self.metadata[round_name])]
-        paths += [io.write_registered_round(directory, round_name, self.snapshots[round_name][s],
-                                            self.metadata[round_name], snapshot=s) for s in self._checkpoint_snapshots()]
+        paths = [_checkpoint.write_registered_round(directory, round_name, self.images[round_name],
+                                                    self.metadata[round_name])]
+        paths += [_checkpoint.write_registered_round(directory, round_name, self.snapshots[round_name][s],
+                                                     self.metadata[round_name], snapshot=s)
+                  for s in self._checkpoint_snapshots()]
         return [path.relative_to(directory).as_posix() for path in paths]
 
     @_log_step
     def _write_checkpoint(self, stage, directory, table_format, *, round_name=None, image_rounds=None):
         """Write one stage (or one registered round) and record its files."""
-        from starfinder.io import _checkpoint as io
         directory = Path(directory)
         header = self._checkpoint_header()
         if stage == 'registered' and round_name is not None:
@@ -1736,13 +1736,15 @@ class FOV:
                           preprocessing=self.preprocessing_record or None,
                           channels={r: [c.record() for c in self.dataset.channel_info(r)] for r in image_rounds})
             files += [f'registered/{name}' for name in
-                      io.write_registered_header(directory, header, {k: v for k, v in self.registration_results.items()
-                                                                     if k in kept}, record)]
+                      _checkpoint.write_registered_header(directory, header,
+                                                          {k: v for k, v in self.registration_results.items()
+                                                           if k in kept}, record)]
         elif stage == 'candidates':
             if self.spot_result is None:
                 raise ValueError('candidates checkpoint requires spot_result')
             header.update(readout_mode=self.dataset.readout_mode)
-            files = io.write_candidates(directory, header, self.spot_result, self.intensity_result, table_format)
+            files = _checkpoint.write_candidates(directory, header, self.spot_result, self.intensity_result,
+                                                 table_format)
         elif stage == 'pre_qc':
             if self.decoding_result is None:
                 raise ValueError('pre_qc checkpoint requires decoding_result')
@@ -1751,11 +1753,11 @@ class FOV:
             # The encoding that decoded the reads is recorded beside the layout (null in direct mode).
             header.update(layout=self.codebook.layout if recorded else None,
                           encoding=_encoding_record(self.codebook.encoding) if recorded else None)
-            files = io.write_pre_qc(directory, header, self.decoding_result, table_format,
-                                    scoring_result=self.scoring_result,
-                                    deduplication_result=self.deduplication_result)
+            files = _checkpoint.write_pre_qc(directory, header, self.decoding_result, table_format,
+                                             scoring_result=self.scoring_result,
+                                             deduplication_result=self.deduplication_result)
         else:
-            io._check_stage(stage)
+            _checkpoint._check_stage(stage)
         if self._run_record is not None:
             self._run_record.add_checkpoint(stage, files)
         return files
@@ -1791,11 +1793,10 @@ class FOV:
             Parquet was requested without pyarrow.
         """
         from starfinder._records import _require_parquet
-        from starfinder.io._checkpoint import _check_stage, header_path
-        _check_stage(stage)
+        _checkpoint._check_stage(stage)
         checkpoints.__post_init__()
         directory = self._checkpoint_dir(checkpoints)
-        if header_path(directory, stage).exists() and not checkpoints.overwrite:
+        if _checkpoint.header_path(directory, stage).exists() and not checkpoints.overwrite:
             raise FileExistsError(f'{stage} checkpoint exists in {directory}; pass overwrite=True')
         if checkpoints.table_format == 'parquet':
             _require_parquet()
@@ -1844,9 +1845,7 @@ class FOV:
             The stage was not written.
         """
         from starfinder._records import jsonable
-        from starfinder.io._checkpoint import _check_stage, read_checkpoint, read_header
-        from starfinder.io._checkpoint import readout_mode as io_readout_mode
-        _check_stage(stage)
+        _checkpoint._check_stage(stage)
         later = ['spot_result', 'intensity_result', 'decoding_result', 'scoring_result', 'deduplication_result',
                  'filtering_result']
         later = {'registered': ['images', 'snapshots', 'registration_results', 'registration_attempts',
@@ -1856,14 +1855,14 @@ class FOV:
         if occupied:
             raise ValueError(f'load_checkpoint({stage!r}) requires an FOV without {", ".join(occupied)}')
         directory = self._checkpoint_dir(checkpoints)
-        header = read_header(directory, stage)
+        header = _checkpoint.read_header(directory, stage)
         expected = jsonable(self._checkpoint_header())
         for key, label in (('fov_id', 'FOV id'), ('subtile_id', 'subtile id'),
                            ('rounds', 'round labels'), ('channel_labels', 'channel order')):
             if header.get(key) != expected[key]:
                 raise ValueError(f'{stage} checkpoint {label} {header.get(key)!r} differs from this FOV ({expected[key]!r})')
-        if stage != 'registered' and io_readout_mode(header) != self.dataset.readout_mode:
-            raise ValueError(f'{stage} checkpoint readout mode {io_readout_mode(header)!r} differs from the '
+        if stage != 'registered' and _checkpoint.readout_mode(header) != self.dataset.readout_mode:
+            raise ValueError(f'{stage} checkpoint readout mode {_checkpoint.readout_mode(header)!r} differs from the '
                              f'dataset ({self.dataset.readout_mode!r})')
         if header.get('encoding') is not None and self.codebook is not None:
             from starfinder.barcode.codebook import _encoding_record
@@ -1871,7 +1870,7 @@ class FOV:
             if header['encoding'] != current:
                 raise ValueError(f"{stage} checkpoint encoding {header['encoding']} differs from the dataset "
                                  f"codebook's encoding ({current}); load the codebook with the recorded encoding")
-        for name, value in read_checkpoint(directory, stage).items():
+        for name, value in _checkpoint.read_checkpoint(directory, stage).items():
             setattr(self, name, value)
         return self
 
@@ -2356,7 +2355,7 @@ class FOV:
 
     def save_spots(self, slot='goodSpots', columns=None, *, path=None):
         """Export identities and coordinates once; shared slot filenames retained."""
-        from starfinder.io import export_spots
+        from starfinder.barcode import export_spots
         if slot not in ('goodSpots', 'allSpots'):
             raise ValueError('slot must be goodSpots or allSpots')
         reads = self.filtering_result if slot == 'goodSpots' else self.decoding_result

@@ -15,9 +15,9 @@ from starfinder._registry import _version
 from starfinder.dataset import (CheckpointConfig, Dataset, PipelineConfig, RecoveryConfig, RegistrationRecipe,
     RegistrationStep, RoundState, from_workflow_config)
 from starfinder.image import ImageMetadata
-from starfinder.io import read_checkpoint
+from starfinder.dataset import read_checkpoint
 from starfinder._records import atomic_file as _atomic, write_json
-from starfinder.io._checkpoint import write_registered_round
+from starfinder._checkpoint import write_registered_round
 from starfinder.registration import (AffineConfig, BSplineConfig, DemonsConfig, InsufficientLandmarksError,
     RegistrationEstimationError, RegistrationQcConfig, RegistrationRejectedError, RegistrationSignalConfig,
     RigidConfig, TpsConfig, TranslationConfig, TranslationTransform, WarpConfig, apply_transform,

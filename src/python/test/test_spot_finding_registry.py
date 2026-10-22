@@ -14,7 +14,7 @@ from starfinder.dataset import CheckpointConfig, ExecutionConfig, PipelineConfig
 from starfinder.dataset.workflow import from_workflow_config
 from starfinder.image import ImageMetadata, IncompatibleGeometryError
 from starfinder._records import jsonable as _jsonable
-from starfinder.io._checkpoint import _detectors
+from starfinder._checkpoint import _detectors
 from starfinder.spot_finding import (SPOT_FINDING_METHODS, LocalMaximaConfig, NoiseLandmarkConfig,
     PercentileCentroidConfig, PiscisConfig, SpotFindingBackendUnavailableError, SpotFindingPlan, SpotFindingResult,
     SpotFindingSpec, SpotiflowConfig, StarfishLogConfig, find_spots)

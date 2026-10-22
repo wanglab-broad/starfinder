@@ -10,7 +10,7 @@ import pandas as pd
 
 from starfinder._registry import provenance, require, spec_for
 from starfinder.image import IncompatibleGeometryError
-from starfinder.io._checkpoint import _json_diagnostics
+from starfinder._checkpoint import _json_diagnostics
 from starfinder.segmentation._labels import ReferenceGrid
 
 from ._errors import StitchingBackendUnavailableError

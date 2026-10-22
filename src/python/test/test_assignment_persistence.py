@@ -23,7 +23,7 @@ from starfinder.assignment import AssignmentConfig
 from starfinder.barcode import Codebook, ReadFilterConfig, ReadFilteringResult
 from starfinder.dataset import CheckpointConfig, Dataset, RoundState
 from starfinder.io import save_volume
-from starfinder.io._checkpoint import FORMAT_VERSION, STAGES
+from starfinder._checkpoint import FORMAT_VERSION, STAGES
 from starfinder.segmentation import (ExpandLabelsConfig, InputChannel, LabelImportConfig, SeededWatershedConfig,
                                      SegmentationPlan, SegmentationRun, import_labels)
 from starfinder.segmentation._persist import read_labels

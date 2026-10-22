@@ -23,11 +23,15 @@ are not examples of the current API.
 | `benchmark.synthetic` | `synthetic` |
 | `registration.metrics`, benchmark truth comparisons | Pure domain functions in `evaluation` |
 | Separate benchmark drivers and `starfinder-generate` | `starfinder synthetic generate`, `starfinder benchmark run/evaluate/report` |
+| `io.read_checkpoint` | `dataset.read_checkpoint` (no alias) |
+| `io.export_spots` | `barcode.export_spots` (no alias) |
 
 These relocations do not make the old positional arguments or return values valid.
 Use typed operation configs and structured results. See the [full export
 inventory](api/inventory.rst) and [coordination member map](coordination.md).
 Registration internals, benchmark helpers and barcode lookup constants are private.
+`io` holds image file I/O only: the checkpoint serializers are private to the package
+and `read_checkpoint` is public in `dataset`, beside `FOV.load_checkpoint`.
 
 ## Before and after Python calls
 

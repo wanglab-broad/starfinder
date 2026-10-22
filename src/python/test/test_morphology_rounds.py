@@ -28,7 +28,7 @@ from starfinder.dataset._prepared import SAME_ACQUISITION
 from starfinder.dataset.fov import _rotated
 from starfinder.image import ImageMetadata
 from starfinder.io import ImageLoadConfig, save_volume
-from starfinder.io._checkpoint import FORMAT_VERSION, STAGES
+from starfinder._checkpoint import FORMAT_VERSION, STAGES
 from starfinder.registration import (RegistrationSignalConfig, TranslationConfig, WarpConfig, apply_transform)
 from starfinder.segmentation import (SEGMENTATION_METHODS, FlamingoEnhancementConfig, InputChannel, SegmentationPlan,
                                      SegmentationRun, SegmentationSpec, enhance_with_flamingo)

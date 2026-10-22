@@ -52,7 +52,7 @@ def workflow(tmp_path, *, expand=False, seg_expand=False, backend="python", **ex
 def write_reads(path, molecules, *, floats=False):
     rows = [(x + 1, y + 1, z + 1, gene) for (z, y, x), gene in molecules]
     frame = pd.DataFrame(rows, columns=["x", "y", "z", "gene"])
-    if floats:  # as starfinder.io.export_spots writes them
+    if floats:  # as starfinder.barcode.export_spots writes them
         frame[["x", "y", "z"]] = frame[["x", "y", "z"]].astype(np.float64)
     frame.to_csv(path, index=False)
     return path

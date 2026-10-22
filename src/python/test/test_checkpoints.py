@@ -14,9 +14,10 @@ from starfinder.barcode import (Codebook, CodebookAwareDecoderConfig, Neighborho
 from starfinder.dataset import (CheckpointConfig, Dataset, ExecutionConfig, PipelineConfig,
     RegistrationRecipe, RegistrationStep, RoundState)
 from starfinder.image import ImageMetadata
-from starfinder.io import ImageLoadConfig, load_volume_zyxc, read_checkpoint, save_volume
+from starfinder.dataset import read_checkpoint
+from starfinder.io import ImageLoadConfig, load_volume_zyxc, save_volume
 from starfinder._records import _read_table, _write_table
-from starfinder.io._checkpoint import candidates_frame, parse_candidates
+from starfinder._checkpoint import candidates_frame, parse_candidates
 from starfinder.registration import DemonsConfig, TranslationConfig
 from starfinder.spot_finding import LocalMaximaConfig
 
@@ -607,7 +608,7 @@ def test_load_volume_zyxc_preserves_shape_dtype_and_geometry(tmp_path, shape, dt
 @pytest.mark.extended
 def test_checkpoint_timing_on_small_synthetic_dataset(small_dataset, tmp_path, capsys):
     """Wall time of a 16x256x256, 4-round run with all checkpoints and of table build/parse."""
-    from starfinder.io._checkpoint import read_header
+    from starfinder._checkpoint import read_header
     from starfinder.preprocessing import MinMaxNormalizationConfig, PreprocessingRecipe, PreprocessingStep
     for round_dir in (small_dataset / 'FOV_001').iterdir():
         if round_dir.is_dir():

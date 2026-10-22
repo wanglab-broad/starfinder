@@ -13,7 +13,8 @@ import yaml
 from starfinder.dataset import (Dataset, FOV, RoundState, PipelineConfig, ExecutionConfig,
     RegistrationRecipe, RegistrationStep, RecoveryConfig, SubtileConfig, from_workflow_config)
 from starfinder.image import ImageMetadata, IncompatibleGeometryError
-from starfinder.io import ImageLoadConfig, save_volume, export_spots
+from starfinder.barcode import export_spots
+from starfinder.io import ImageLoadConfig, save_volume
 from starfinder.preprocessing import (MinMaxNormalizationConfig, HistogramMatchingConfig,
     ReconstructionConfig, TophatConfig, PreprocessingRecipe, PreprocessingStep)
 from starfinder.registration import (TranslationConfig, TpsConfig, DemonsConfig, CpdConfig,

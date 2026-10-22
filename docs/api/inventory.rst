@@ -103,6 +103,7 @@ starfinder.barcode
 * :py:obj:`starfinder.barcode.ENCODINGS`
 * :py:obj:`starfinder.barcode.EncodingSpec`
 * :py:obj:`starfinder.barcode.explain_read`
+* :py:obj:`starfinder.barcode.export_spots`
 * :py:obj:`starfinder.barcode.extract_intensities`
 * :py:obj:`starfinder.barcode.filter_reads`
 * :py:obj:`starfinder.barcode.inspect_read`
@@ -146,6 +147,7 @@ starfinder.dataset
 * :py:obj:`starfinder.dataset.from_workflow_config`
 * :py:obj:`starfinder.dataset.MorphologyConfig`
 * :py:obj:`starfinder.dataset.PipelineConfig`
+* :py:obj:`starfinder.dataset.read_checkpoint`
 * :py:obj:`starfinder.dataset.RecoveryConfig`
 * :py:obj:`starfinder.dataset.RegistrationRecipe`
 * :py:obj:`starfinder.dataset.RegistrationStep`
@@ -200,14 +202,12 @@ starfinder.io
 ~~~~~~~~~~~~~
 
 * :py:obj:`starfinder.io.convert_image`
-* :py:obj:`starfinder.io.export_spots`
 * :py:obj:`starfinder.io.ImageConversionConfig`
 * :py:obj:`starfinder.io.ImageLoadConfig`
 * :py:obj:`starfinder.io.ImageLoadResult`
 * :py:obj:`starfinder.io.load_round`
 * :py:obj:`starfinder.io.load_volume`
 * :py:obj:`starfinder.io.load_volume_zyxc`
-* :py:obj:`starfinder.io.read_checkpoint`
 * :py:obj:`starfinder.io.save_volume`
 
 starfinder.preprocessing

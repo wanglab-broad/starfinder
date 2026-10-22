@@ -1040,7 +1040,7 @@ def test_fov_assign_runs_the_entry_on_the_fov_results(decoded_fov, tmp_path):
 
 @pytest.mark.dataset
 def test_molecule_table_agrees_with_export_spots(decoded_fov, tmp_path):
-    from starfinder.io import export_spots
+    from starfinder.barcode import export_spots
     fov, _ = decoded_fov
     path = export_spots(fov.spot_result, fov.filtering_result, tmp_path / "goodSpots.csv", accepted_only=True)
     from_csv = molecule_table_from_csv(path, spot_namespace=fov.spot_result.spot_namespace, genes=fov.codebook.genes)

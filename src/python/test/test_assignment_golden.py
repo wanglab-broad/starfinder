@@ -13,7 +13,7 @@ its Z maximum as the 2D case, a molecule table of 19 rows written as a one-based
     every cell, both of which give a count matrix with no row;
 (c) legacy behaviors that §2.9 changes: a molecule at the one-based coordinate 0 reads
     the label at the far edge (negative index), one beyond the grid raises
-    ``IndexError``, float coordinates (as ``starfinder.io.export_spots`` writes them)
+    ``IndexError``, float coordinates (as ``starfinder.barcode.export_spots`` writes them)
     raise ``IndexError``, a gene absent from ``genes.csv`` keeps its label but is not
     counted, a FOV whose molecules all miss the cells loses every cell, and a planar
     expansion by 4 followed by one by 2 (segmentation, then assignment) is not one

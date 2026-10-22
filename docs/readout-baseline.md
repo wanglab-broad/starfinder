@@ -73,7 +73,7 @@ per-round margin table and a candidate table (`decoding.py:285-372`); they are n
 saved in checkpoints. Exact calls are identical in both decoders; they differ in
 scores and in rescue. Both treat each codebook row as one gene. The decoders are
 hard-coded in `decoding.py:169`, `:207`, `dataset/config.py:226` and
-`io/_checkpoint.py:537` ({doc}`method-registry`, "Decoding").
+`_checkpoint.py:537` ({doc}`method-registry`, "Decoding").
 
 ## Read filtering
 
@@ -158,7 +158,7 @@ counts (`dataset/_run_record.py:119-129`).
 
 | Stage | Content at `141c093` |
 | --- | --- |
-| `candidates` | `candidates.<csv|parquet>`: identity, spot columns, then `sig_<round>_<channel>` and `valid_<round>` (`io/_checkpoint.py:196-220`); `candidates.json` with the detection plan, the extraction config, labels and metadata (`:458-484`). Reloading rebuilds the `SpotFindingResult` and `IntensityExtractionResult` (`:496-518`). |
+| `candidates` | `candidates.<csv|parquet>`: identity, spot columns, then `sig_<round>_<channel>` and `valid_<round>` (`_checkpoint.py:196-220`); `candidates.json` with the detection plan, the extraction config, labels and metadata (`:458-484`). Reloading rebuilds the `SpotFindingResult` and `IntensityExtractionResult` (`:496-518`). |
 | `pre_qc` | `pre_qc.<csv|parquet>`: the decoding table unchanged; `pre_qc.json` with the decoder config, labels and the JSON-representable diagnostics (`:523-531`). It holds the decoding table only: no extracted values, no background, no score and no filtering. Reloading rebuilds a `BarcodeDecodingResult` without its array diagnostics (`:534-540`). |
 | Version | `FORMAT_VERSION = 2`; readers accept 1 and 2 (`:20-22`). |
 | Rerun | From `candidates`: decode and filter without images; from `pre_qc`: filter only ({doc}`checkpoints`, "Reload and continue"). There is no filtering checkpoint. |

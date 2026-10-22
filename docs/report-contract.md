@@ -383,8 +383,8 @@ Every place is fixed under the output root (D1); nothing is searched for.
 | Input | Place | Written by, at `dc5fc3c` | Needed for |
 | --- | --- | --- | --- |
 | Run record | `checkpoints/<fov>/run.json` | `dataset/_run_record.py`: `_RunRecord.write`, `_RunRecord.finish` (`FOV.run` with a `CheckpointConfig`) | Every part up to the readout; the identity, version and times |
-| Saved transforms | `checkpoints/<fov>/registered/transforms.json`, `<round>_field.npz` | `io/_checkpoint.py`: `write_registered_header` (stage `registered`) | The shifts of a run record without `transforms`; the dense and B-spline fields of the replay |
-| Reads before the filter | `checkpoints/<fov>/pre_qc.json` | `io/_checkpoint.py`: `write_pre_qc` (stage `pre_qc`) | Only the codebook layout's segment ends, for R3 of an older run record |
+| Saved transforms | `checkpoints/<fov>/registered/transforms.json`, `<round>_field.npz` | `_checkpoint.py`: `write_registered_header` (stage `registered`) | The shifts of a run record without `transforms`; the dense and B-spline fields of the replay |
+| Reads before the filter | `checkpoints/<fov>/pre_qc.json` | `_checkpoint.py`: `write_pre_qc` (stage `pre_qc`) | Only the codebook layout's segment ends, for R3 of an older run record |
 | Raw input | the files `run.json` `inputs[*].path` names | the acquisition | The replay of the main example |
 | Supplied statistics | `run.json` `preprocessing.supplied_statistics.path` | the user | The replay of a recipe with `fit="supplied"` |
 | Codebook | `run.json` `codebook.path` (R2) | the user | The gene list of the marker check |
@@ -626,7 +626,7 @@ What the examples of Preprocessing and Registration show, rebuilt from the run r
    applies the round's transforms to the image the `steps` phase left, and to each of the
    round's snapshots, as `FOV._register_round` resamples them once (line 813); it estimates
    nothing, so it needs neither the registration signals nor the reference image that the
-   estimation reads (lines 1337–1339, 549–566). Each result of the round is rebuilt with `io/_checkpoint.py`:
+   estimation reads (lines 1337–1339, 549–566). Each result of the round is rebuilt with `_checkpoint.py`:
    `_restore_result`, which reads an entry of the form `_transform_json` writes (`step`,
    `transform`, `diagnostics`) and, for a dense or B-spline result, one array of a field
    file. The entries come from `run.json` `transforms.<round>.results` (R1), or, for a run
@@ -657,7 +657,7 @@ What the examples of Preprocessing and Registration show, rebuilt from the run r
    on the round as its `steps` phase left it, so the replay applies no transform to it.
 6. **The registered images** (`registered/<round>.ome.tif`) are not read. `FOV.run` writes
    a round's image after its `post_registration` phase (lines 1353–1355, through
-   `FOV._write_registered_round` and `io/_checkpoint.py`: `write_registered_round`), with
+   `FOV._write_registered_round` and `_checkpoint.py`: `write_registered_round`), with
    `io/tiff.py`: `save_volume` called without `conversion`, so the saved image keeps the
    dtype and the values of the round at that point (`io/tiff.py` lines 350–352). The image
    the replay ends with after step 5 is therefore the image the checkpoint saves; the
@@ -1040,7 +1040,7 @@ each step's transform (`registration.<round>[i].qc.details.transform`, written b
 a translation's `displacement_zyx`, an affine's 3 × 3 `matrix`, `offset` and `det`, a dense
 or B-spline step's displacement statistics ({doc}`report-baseline`, G2). The full
 transforms are written only by the stage `registered` (`registered/transforms.json`,
-`io/_checkpoint.py`: `write_registered_header`).
+`_checkpoint.py`: `write_registered_header`).
 
 ```json
 "transforms": {
@@ -1062,7 +1062,7 @@ transforms are written only by the stage `registered` (`registered/transforms.js
 ```
 
 Each entry of `results` is the entry `registered/transforms.json` holds for the same result:
-`io/_checkpoint.py`: `_transform_json(result, i, field_name)`, which writes `step` (the
+`_checkpoint.py`: `_transform_json(result, i, field_name)`, which writes `step` (the
 result's index `i` in the round's results; the one place that index is called `result` is
 `run.json` `preprocessing.transforms`, written by `FOV._record_transforms`), `transform`
 and `diagnostics`, and no `result` key. The only difference is the field file's name:

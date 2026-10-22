@@ -387,7 +387,7 @@ interface:
 
 The registered checkpoint keeps its files (`registered/transforms.json` and
 `registered/<round>_field.npz`) and gains transform kinds. Its
-`FORMAT_VERSION` (`io/_checkpoint.py`, shared by the three checkpoint headers)
+`FORMAT_VERSION` (`_checkpoint.py`, shared by the three checkpoint headers)
 changes from 1 to 2:
 
 | Kind | `transforms.json` entry (in `transform`) | Arrays in `<round>_field.npz` |

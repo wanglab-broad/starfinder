@@ -49,7 +49,7 @@ def _transforms(fov, written):
     written lists the files the stage registered wrote; a dense field or B-spline
     coefficients are named only when that stage wrote the round's field file.
     """
-    from starfinder.io._checkpoint import _transform_json
+    from starfinder._checkpoint import _transform_json
     rounds = set(fov._pipeline_rounds())
     applications = fov.registration_record.get("application", {})
     transforms = {}

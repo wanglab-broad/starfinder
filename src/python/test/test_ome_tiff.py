@@ -14,7 +14,8 @@ import tifffile
 
 from starfinder.dataset import CheckpointConfig
 from starfinder.image import ImageMetadata
-from starfinder.io import ImageLoadConfig, load_volume, load_volume_zyxc, read_checkpoint, save_volume
+from starfinder.dataset import read_checkpoint
+from starfinder.io import ImageLoadConfig, load_volume, load_volume_zyxc, save_volume
 from starfinder.io.tiff import METADATA_NAMESPACE
 
 from .test_checkpoints import ROUNDS, dataset, full, resident
