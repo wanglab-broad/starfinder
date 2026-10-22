@@ -214,7 +214,7 @@ def test_declared_grid_export_equals_the_stored_one(scene_folders, scene_exports
 def test_a_file_with_stored_metadata_is_read_as_before(scene_folders, tmp_path):
     """The file wins: with voxel sizes configured, a file that stores metadata gives the grid
     reference_grid_from_file gives (shape, metadata, source and hash)."""
-    from starfinder.sample_output._export import _reference_grid
+    from starfinder.dataset._export import _reference_grid
     stored = scene_folders["stored"]
     other = replace(stored, voxel_size_xy=7.0, voxel_size_z=9.0)
     for fov in scene_folders["scene"].positions.fov_id:

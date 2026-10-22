@@ -21,8 +21,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from starfinder._layout import EXPORT_FILE
+
 from ._record import (
-    EXPORT_FILE,
     FORMAT_VERSION,
     NO_FILES,
     PARTS,

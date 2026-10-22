@@ -322,7 +322,7 @@ def z_size(export, placement, reference_images=None):
 
 def reference_image_z_size(inputs, root, fov_ids, pattern=None):
     """The Z size from a reference image: the file ``pattern`` names for a FOV (the ``Dataset``'s
-    ``reference_image``, resolved by ``dataset._declared.reference_image_path``; None is its default
+    ``reference_image``, resolved by ``_layout.reference_image_path``; None is its default
     ``images/ref_merged/{fov_id}.tif``), of the first FOV in list order whose file exists and whose TIFF header gives
     a ZYX or YX image (``io.tiff._volume_header`` with ``floating=True``: an integer or a floating-point file, no pixel
     decoded). Each file opened is hashed in blocks and listed in ``report.json`` ``inputs`` (kind
@@ -334,7 +334,7 @@ def reference_image_z_size(inputs, root, fov_ids, pattern=None):
     """
     import tifffile
 
-    from starfinder.dataset._declared import REFERENCE_IMAGE, reference_image_path
+    from starfinder._layout import REFERENCE_IMAGE, reference_image_path
     from starfinder.io.tiff import _volume_header
     failed = None
     for fov in fov_ids:

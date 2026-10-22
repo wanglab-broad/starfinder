@@ -26,7 +26,7 @@ import pandas as pd
 import pytest
 import tifffile
 
-import starfinder.sample_output._export as export_module
+import starfinder.dataset._export as export_module
 from starfinder.assembly import (
     AssemblyConfig,
     AssemblyInput,

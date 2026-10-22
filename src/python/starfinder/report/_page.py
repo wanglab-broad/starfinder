@@ -30,6 +30,8 @@ from importlib import resources
 import numpy as np
 import pandas as pd
 
+from starfinder import _layout
+
 from ._schema import READOUT_LEVELS
 from ._values import (Unavailable, acquisition, configuration_check, is_value, reference_image_z_size, run_time,
                       software, time_per_step, z_size)
@@ -720,13 +722,13 @@ class _Page:
         def place(path, shown):
             exists = path.exists()
             return f"<code>{_e(shown)}</code>" + ("" if exists else ' <span class="muted">not written</span>')
-        checkpoints = any((root / "checkpoints" / f).is_dir() for f in c.fov_ids)
+        checkpoints = any(_layout.checkpoint_dir(root, f).is_dir() for f in c.fov_ids)
         report = self.folder
         output = [("Output root", f"<code>{_e(root)}</code>"),
                   ("Checkpoints", "<code>checkpoints/&lt;fov_id&gt;/</code>" +
                    ("" if checkpoints else ' <span class="muted">not written</span>')),
-                  ("Placement", place(root / "stitching" / c.sample, f"stitching/{c.sample}/")),
-                  ("Sample export", place(root / "export" / c.sample, f"export/{c.sample}/")),
+                  ("Placement", place(_layout.stitching_dir(root, c.sample), f"{_layout.STITCHING}/{c.sample}/")),
+                  ("Sample export", place(_layout.export_dir(root, c.sample), f"{_layout.EXPORT}/{c.sample}/")),
                   ("Report", f"<code>{_e(self._shown(report / 'report.html'))}</code>"),
                   ("Report tables", f"<code>{_e(self._shown(report / 'tables'))}/</code>")]
         return {"files_input": self._table([("Images", entry("entry=images", images)),
@@ -768,7 +770,7 @@ def identity_facts(collection) -> tuple[dict, list]:
                 rows.append(("summary.identity", unread or Unavailable(
                     "not_recorded", "no record holds a grid (export.json fusion.fovs or assembly.fovs, "
                                     "placement.json inputs) and no FOV has a reference image "
-                                    f"({pattern or 'images/ref_merged/{fov_id}.tif'})"), "entry=z_size"))
+                                    f"({pattern or _layout.REFERENCE_IMAGE})"), "entry=z_size"))
         elif isinstance(value, Unavailable):
             rows.append(("summary.identity", value, f"entry={name}"))
     return facts, rows

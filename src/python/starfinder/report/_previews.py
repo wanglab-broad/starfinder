@@ -27,6 +27,8 @@ from pathlib import Path
 
 import numpy as np
 
+from starfinder import _layout
+
 from ._values import Unavailable, first
 
 #: The slab of a 3D preview's background, µm (choice A6, SL1).
@@ -129,7 +131,7 @@ class _Previews:
                 return c.lane_missing[fov]
             return Unavailable("input_missing", f"checkpoints/{fov}/assignment/{c.assignment}/assignment.json")
         record, _ = c.assignments[fov]
-        folder = c.root / "checkpoints" / fov / "assignment" / c.assignment
+        folder = _layout.checkpoint_dir(c.root, fov) / "assignment" / c.assignment
         labels = {}
         for key in ("cells", "nuclei"):
             entry = _get(record, "inputs", key, "file")
@@ -144,7 +146,7 @@ class _Previews:
             if isinstance(image, Unavailable):
                 return image
             labels[key] = _zyx(image)
-        path = c.root / "images" / "ref_merged" / f"{fov}.tif"
+        path = _layout._FovPaths(c.root, fov).ref_merged_tif
         background = _read_image(c.inputs, path, "reference_image")
         if isinstance(background, Unavailable):
             return background

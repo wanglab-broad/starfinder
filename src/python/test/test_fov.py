@@ -232,3 +232,12 @@ class TestFOVPaths:
         assert "subtile" in str(p.subtile_dir)
         assert p.signal_csv("goodSpots").name == "FOV_001_goodSpots.csv"
         assert p.shift_log().name == "FOV_001.txt"
+
+    def test_paths_keep_the_attributes_of_the_base_revision(self, tmp_path):
+        """FOV.paths keeps its class name and every public attribute it had before the path object moved to
+        starfinder._layout (W-548; the list recorded at 81fead1), signal_png included."""
+        fov = Dataset(tmp_path / "in", tmp_path / "out", "d", "s", "o").fov("FOV_001")
+        assert type(fov.paths).__name__ == "_FovPaths"
+        assert sorted(name for name in dir(fov.paths) if not name.startswith("_")) == [
+            "checkpoint_dir", "fov_id", "gr_log", "nr_log", "output_root", "ref_merged_tif", "rsf_log", "score_log",
+            "shift_log", "signal_csv", "signal_png", "subtile_dir"]

@@ -14,7 +14,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-EXPORT_FILE = "export.json"
+from starfinder._layout import EXPORT_FILE
+
 FORMAT_VERSION = 1
 STAGE = "export"
 #: The parts in the order Dataset.export calls them, with the section each writes. ``segment`` is the part of the

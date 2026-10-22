@@ -17,6 +17,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from starfinder._layout import ASSIGNMENT_RECORD
 from starfinder._records import json_sha256, software
 from starfinder.assignment import AssignmentResult
 from starfinder.assignment._assign import COMPARTMENTS, assignment_table_sha256
@@ -1129,7 +1130,7 @@ def _fov_record(fov_row, entry, fov, config, mode):
         from starfinder._records import file_sha256
         files = record["files"]
         item["assignment"] = {"name": fov.name, "folder": str(fov.folder), "source": "folder",
-                              "record_sha256": file_sha256(fov.folder / "assignment.json"),
+                              "record_sha256": file_sha256(fov.folder / ASSIGNMENT_RECORD),
                               "tables": {t: files[t]["sha256"] for t in ("molecules", "cells", "counts") if t in files}}
         if config.conflicts:
             entry_file = files["territories"] if "territories" in files else record["inputs"]["cells"]["file"]

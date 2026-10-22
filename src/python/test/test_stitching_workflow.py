@@ -34,6 +34,7 @@ import starfinder.dataset.workflow as workflow
 from starfinder.assembly import AssemblyConfig
 from starfinder.assignment._persist import read_assignment
 from starfinder.dataset import Dataset
+from starfinder.dataset._stitching import POSITION_KEYS
 from starfinder.image import ImageMetadata
 from starfinder.io import save_volume
 from starfinder.sample_output import (ExportConfig, ExportIncompleteWarning, FusionConfig, LabelConfig,
@@ -42,7 +43,6 @@ from starfinder.segmentation import ReferenceGrid, reference_grid_from_file
 from starfinder.segmentation._labels import same_grid
 from starfinder.stitching import (STITCHING_METHODS, BigStitcherConfig, MultiviewStitcherConfig, ReviewPolicy,
                                   StageAxisMapping, import_bigstitcher, load_placement)
-from starfinder.stitching._dataset import POSITION_KEYS
 
 from .assembly_fixtures import SAMPLE
 from .fusion_fixtures import export_folder, golden_codebook
@@ -365,7 +365,7 @@ def test_wf3_placement_rules_declare_the_position_file(tmp_path, case):
 @pytest.mark.parametrize("case", ["stage_file_default", "stage_file_path", "table"])
 def test_wf3_the_declared_position_file_is_the_file_dataset_stitch_reads(tmp_path, monkeypatch, case):
     """table_from_positions (what Dataset.stitch and the BigStitcher rules call) opens the declared file."""
-    import starfinder.stitching._dataset as positions_module
+    import starfinder.dataset._stitching as positions_module
     positions, _ = POSITION_CASES[case]
     opened = []
 

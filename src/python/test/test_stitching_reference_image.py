@@ -32,12 +32,12 @@ import tifffile
 from pandas.testing import assert_frame_equal
 
 import starfinder.dataset.workflow as workflow
+from starfinder._layout import REFERENCE_IMAGE, reference_image_path
 from starfinder.assembly import load_assembly
 from starfinder.dataset import Dataset
-from starfinder.dataset._declared import REFERENCE_IMAGE, reference_image_path
+from starfinder.dataset._export import _reference_grid, source_path
 from starfinder.io import save_volume
 from starfinder.sample_output import ExportConfig, FusionConfig, check_export
-from starfinder.sample_output._export import _reference_grid, source_path
 from starfinder.stitching import MultiviewStitcherConfig, load_placement, positions_from_table
 
 from .stitching_fixtures import LN_SPACING, grid

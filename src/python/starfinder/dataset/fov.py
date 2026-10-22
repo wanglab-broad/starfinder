@@ -20,8 +20,8 @@ from starfinder.io import ImageLoadConfig
 from starfinder.preprocessing import (MinMaxNormalizationConfig, HistogramMatchingConfig, ReconstructionConfig, TophatConfig, ProjectionConfig,
     StepContext, read_supplied_statistics, run_step, step_spec)
 from starfinder.dataset._logging import _log_step
-from starfinder.dataset._paths import _FovPaths
 from starfinder import _checkpoint
+from starfinder._layout import _FovPaths
 from starfinder._records import file_sha256
 from starfinder._registry import _version
 from starfinder.dataset.config import (CheckpointConfig, PipelineConfig, ExecutionConfig, ExternalReference,

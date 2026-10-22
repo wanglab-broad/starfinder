@@ -7,6 +7,7 @@ from pathlib import Path
 import traceback
 
 from starfinder import _records
+from starfinder._layout import RUN_RECORD
 from starfinder._records import file_sha256, software
 
 logger = logging.getLogger("starfinder")
@@ -97,7 +98,7 @@ class _RunRecord:
 
     @property
     def path(self):
-        return self.directory / "run.json"
+        return self.directory / RUN_RECORD
 
     def add_inputs(self, paths):
         """Record loaded source files, hashing them unless hash_inputs is False."""

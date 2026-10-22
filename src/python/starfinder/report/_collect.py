@@ -35,6 +35,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from starfinder import _layout
+
 from ._config import ReportConfig, marker_genes
 from ._measurements import _Measurements
 from ._previews import _Previews
@@ -46,7 +48,6 @@ from ._values import (NA, ROLES, Unavailable, _Marker, alignment_score, chain_sh
                       density, first, fraction, is_value, median, over_fovs, owned_pixels, residuals,
                       run_seconds)
 
-RUN_RECORD = "run.json"
 PAGE_FILE = "report.html"
 _UNPLACED = ("missing", "failed")
 _WRITTEN = ("written", "reused")
@@ -220,7 +221,7 @@ def _check_arguments(sample, fov_ids, config):
 def _check_run_records(inputs, root, fov_ids, dataset_id, sample_id):
     records = {}
     for fov in fov_ids:
-        path = root / "checkpoints" / fov / RUN_RECORD
+        path = _layout.run_record(root, fov)
         if not path.is_file():
             records[fov] = None
             continue
@@ -237,7 +238,7 @@ def _check_run_records(inputs, root, fov_ids, dataset_id, sample_id):
 
 def _check_export(inputs, export_dir, sample, fov_ids, assignment):
     from starfinder.sample_output._record import verify_section_hashes
-    path = export_dir / "export.json"
+    path = export_dir / _layout.EXPORT_FILE
     if not path.is_file():
         return None
     record = inputs.json(path, "export_record")
@@ -298,11 +299,11 @@ def _check_markers(inputs, config, records, export, export_dir):
                 source = (codebook["path"], set(_codebook_genes(data, codebook.get("kind"))))
             break
     if source is None and isinstance(_get(export, "assembly", "genes"), list):
-        source = (str(export_dir / "export.json"), set(export["assembly"]["genes"]))
+        source = (str(export_dir / _layout.EXPORT_FILE), set(export["assembly"]["genes"]))
     if source is None:
         raise ValueError("the configuration names marker genes, but there is no gene list to check them against: "
                          "no run record names a readable codebook (run.json codebook) and there is no "
-                         f"{export_dir / 'export.json'} assembly.genes")
+                         f"{export_dir / _layout.EXPORT_FILE} assembly.genes")
     for gene in genes:
         if gene not in source[1]:
             raise ValueError(f"marker gene {gene!r} is not in the gene list of {source[0]}")
@@ -348,8 +349,8 @@ class _Collection:
         self.inputs, self.root, self.sample, self.fov_ids = inputs, root, sample, fov_ids
         self.records, self.export, self.placement = records, export, placement
         self.assignment, self.segmentation, self.config = assignment, segmentation, config
-        self.export_dir = root / "export" / sample
-        self.stitching_dir = root / "stitching" / sample
+        self.export_dir = _layout.export_dir(root, sample)
+        self.stitching_dir = _layout.stitching_dir(root, sample)
         self._transform_files = {}
         self.assembly = (export or {}).get("assembly") if isinstance((export or {}).get("assembly"), dict) else None
         self.route = None if export is None else ((self.assembly or {}).get("route") or "per_fov")
@@ -417,7 +418,7 @@ class _Collection:
             if saved.get("source") == "folder" and saved.get("name") == self.assignment and saved.get("record_sha256"):
                 recorded[entry.get("fov_id")] = saved["record_sha256"]
         for fov in self.fov_ids:
-            path = self.root / "checkpoints" / fov / "assignment" / self.assignment / "assignment.json"
+            path = _layout.checkpoint_dir(self.root, fov) / "assignment" / self.assignment / _layout.ASSIGNMENT_RECORD
             if not path.is_file() and fov not in recorded:
                 continue
             data = self.inputs.read(path, "assignment_record", recorded.get(fov))
@@ -431,7 +432,7 @@ class _Collection:
             run = cells.get("run")
             seg = None
             if run is not None:
-                path = self.root / "checkpoints" / fov / "segmentation" / run / "segmentation.json"
+                path = _layout.checkpoint_dir(self.root, fov) / "segmentation" / run / "segmentation.json"
                 # The run's record exists when the run was saved under it (its labels linked from there); an
                 # import or a run kept in memory has none, and the assignment's own copy of the record is read.
                 if path.is_file() or cells.get("saved_under_run"):
@@ -445,7 +446,7 @@ class _Collection:
     # fovs.csv ----------------------------------------------------------------------------------------------
 
     def _record_path(self, fov):
-        return f"checkpoints/{fov}/{RUN_RECORD}"
+        return f"{_layout.CHECKPOINTS}/{fov}/{_layout.RUN_RECORD}"
 
     def count(self, fov, level):
         """A read level of a FOV's run record, or the reason it has none."""
@@ -659,7 +660,7 @@ class _Collection:
 
     def _transforms_file(self, fov):
         if fov not in self._transform_files:
-            path = self.root / "checkpoints" / fov / "registered" / "transforms.json"
+            path = _layout.checkpoint_dir(self.root, fov) / _layout.REGISTERED / _layout.TRANSFORMS_FILE
             record = self.inputs.json(path, "transforms", strict=False) if path.is_file() else None
             self._transform_files[fov] = record if isinstance(record, dict) else None
         return self._transform_files[fov]
@@ -998,7 +999,8 @@ class _Collection:
 
     def resolved_runs(self):
         assignment = {"name": self.assignment,
-                      "folders": {fov: f"checkpoints/{fov}/assignment/{self.assignment}" for fov in self.assignments}}
+                      "folders": {fov: f"{_layout.CHECKPOINTS}/{fov}/assignment/{self.assignment}"
+                                  for fov in self.assignments}}
         if self.route == "after_fusion":
             section = (self.export or {}).get("segmentation") or {}
             runs = {"cells": self.segmentation or section.get("cells"),
@@ -1233,18 +1235,18 @@ def _prepare(output_root, sample, fov_ids, *, dataset_id, sample_id, assignment,
     if segmentation is not None and (not isinstance(segmentation, str) or not segmentation):
         raise ValueError(f"segmentation must be a run name or None; got {segmentation!r}")
     inputs = _Inputs(root)
-    export_dir, stitching_dir = root / "export" / sample, root / "stitching" / sample
-    if not any((root / "checkpoints" / f / RUN_RECORD).is_file() for f in fov_ids) and \
-            not (export_dir / "export.json").is_file():
+    export_dir, stitching_dir = _layout.export_dir(root, sample), _layout.stitching_dir(root, sample)
+    if not any(_layout.run_record(root, f).is_file() for f in fov_ids) and \
+            not (export_dir / _layout.EXPORT_FILE).is_file():
         raise FileNotFoundError(f"nothing to report for sample {sample!r}: no FOV of the list has a run record "
-                                f"({root / 'checkpoints'}/<fov>/{RUN_RECORD}) and there is no "
-                                f"{export_dir / 'export.json'}")
+                                f"({root / _layout.CHECKPOINTS}/<fov>/{_layout.RUN_RECORD}) and there is no "
+                                f"{export_dir / _layout.EXPORT_FILE}")
     records = _check_run_records(inputs, root, fov_ids, dataset_id, sample_id)
     export = _check_export(inputs, export_dir, sample, fov_ids, assignment)
     placement = _check_placement(inputs, stitching_dir, fov_ids)
     _check_markers(inputs, config, records, export, export_dir)
     _check_examples(config, fov_ids)
-    folder = Path(output_dir) if output_dir is not None else root / "report" / sample
+    folder = Path(output_dir) if output_dir is not None else _layout.report_dir(root, sample)
     if check_folder:
         own_files(folder)
     collection = _Collection(inputs, root, sample, fov_ids, records, export, placement, assignment, segmentation,

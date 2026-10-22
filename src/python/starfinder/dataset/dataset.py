@@ -9,12 +9,12 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 
+from starfinder._layout import REFERENCE_IMAGE
 from starfinder._records import file_sha256
 from starfinder.barcode import (BarcodeLayout, Codebook, DirectPanel, EncodingConfig, OneBaseEncodingConfig,
     load_codebook, load_direct_panel)
 from starfinder.barcode.codebook import _encoding_summary
 from starfinder.barcode.decoding import READOUT_MODES
-from starfinder.dataset._declared import REFERENCE_IMAGE
 from starfinder.dataset.types import (
     REFERENCE_STAIN,
     ChannelInfo,
@@ -127,7 +127,8 @@ class Dataset:
             raise ValueError(f"readout_mode must be one of {READOUT_MODES}; got {self.readout_mode!r}")
         if self.direct_panel is not None and not isinstance(self.direct_panel, DirectPanel):
             raise TypeError("direct_panel must be a DirectPanel or None")
-        from starfinder.dataset._declared import check_reference_image, check_voxel_size
+        from starfinder._layout import check_reference_image
+        from starfinder.dataset._declared import check_voxel_size
         self.voxel_size_xy = check_voxel_size("voxel_size_xy", self.voxel_size_xy)
         self.voxel_size_z = check_voxel_size("voxel_size_z", self.voxel_size_z)
         self.reference_image = check_reference_image(self.reference_image)
@@ -518,7 +519,7 @@ class Dataset:
             errors of ``stitch``.
         """
         from starfinder.stitching import ReviewPolicy, TilePositionTable, save_placement, stitch
-        from starfinder.stitching._dataset import read_inputs, table_from_positions
+        from starfinder.dataset._stitching import read_inputs, table_from_positions
 
         ids = list(fov_ids)
         if not ids or len(set(ids)) != len(ids):
@@ -626,7 +627,7 @@ class Dataset:
             another SHA-256, with the folder unchanged.
         """
         from starfinder.sample_output import ExportConfig
-        from starfinder.sample_output._export import export_sample
+        from starfinder.dataset._export import export_sample
         return export_sample(self, sample, placement=placement, assignment=assignment,
                              config=ExportConfig() if config is None else config, output_dir=output_dir)
 
@@ -727,6 +728,7 @@ class Dataset:
             one of the files it lists differs from its record (naming the
             file); nothing is written then.
         """
+        from starfinder import _layout
         from starfinder.report._compare import compare_samples
-        root = Path(self.output_root) / "report" if report_root is None else report_root
+        root = _layout.report_root(self.output_root) if report_root is None else report_root
         return compare_samples(root, samples, dataset_id=self.dataset_id)

@@ -319,7 +319,7 @@ def test_the_route_per_fov_is_untouched(tmp_path, case):
     route_per_fov, and nothing else of the record names the route."""
     from starfinder.assembly import assemble
     from starfinder.sample_output import FusionConfig
-    from starfinder.sample_output._export import assembly_inputs
+    from starfinder.dataset._export import assembly_inputs
     changes = dict(PER_FOV_CASES[case])
     dimensionality = changes.pop("dimensionality", "projection")
     folder = export_folder(tmp_path)

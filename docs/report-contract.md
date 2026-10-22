@@ -152,7 +152,7 @@ detection, biological interpretation.
   reasons"); it is **unavailable** for the sample or for one FOV, with one reason of the
   closed list.
 * The **route** is the export's `assembly.route` (`per_fov` or `after_fusion`), written by
-  `sample_output/_export.py`: `export_sample`.
+  `dataset/_export.py`: `export_sample`.
 * The **example FOVs** are the three FOVs whose images the page shows; the **main example**
   is the first.
 * The **replay** reruns a FOV's recorded preprocessing on its raw input and applies its saved
@@ -391,7 +391,7 @@ Every place is fixed under the output root (D1); nothing is searched for.
 | Per-FOV segmentation and assignment | `checkpoints/<fov>/segmentation/<run>/`, `checkpoints/<fov>/assignment/<assignment>/` | `segmentation/_persist.py`: `write_run`; `assignment/_persist.py`: `write_assignment` | The per-FOV lane on the route per FOV; the segmentation examples on that route |
 | Reference image | `images/ref_merged/<fov>.tif`, or the `reference_image` pattern | `dataset/fov.py`: `FOV.save_reference_image` | The background of the segmentation examples on the route per FOV; the Z size when no export exists |
 | Placement | `stitching/<sample>/placement.json`, `fovs.csv` | `stitching/_persist.py`: `save_placement` | The FOV maps, the correction from the stage position, the placement status, the owned area |
-| Export record | `export/<sample>/export.json` | `sample_output/_record.py`: `write_export`, `update_section` (through `sample_output/_export.py`: `export_sample`) | The route, the parts, the population accounting, the fused image and label files, the export's software |
+| Export record | `export/<sample>/export.json` | `sample_output/_record.py`: `write_export`, `update_section` (through `dataset/_export.py`: `export_sample`) | The route, the parts, the population accounting, the fused image and label files, the export's software |
 | Sample tables | `export/<sample>/tables/fovs.csv`, `cells.csv`, `molecules.csv`, `sample.h5ad` | `assembly/_persist.py`: `save_assembly`; `assembly/_anndata.py`: `sample_anndata` | Cells per FOV, reads in cells, per-cell distributions, MECR, marker patterns, reads along Z |
 | Fused image | the `fusion.outputs` of `export.json` (`<image>_projection.ome.tif`, `<image>_stack.ome.tif`) | `sample_output/_fuse.py`: `fuse` | The marker patterns' image; the XZ zoom (a stack) |
 | Sample label image | `export/<sample>/segmentation_<run>.ome.tif` | `sample_output/_segment.py`: `segment_fused` | The segmentation examples on the route after fusion |
@@ -538,7 +538,7 @@ inputs are in "Where each record is looked for".
 ## The two routes
 
 The route is read from `export.json` `assembly.route` (written by
-`sample_output/_export.py`: `export_sample`); an assembly saved before the route existed
+`dataset/_export.py`: `export_sample`); an assembly saved before the route existed
 records none and is read as `per_fov`, as `sample_output/_compare.py`: `_route_of` reads it
 (the W-398 exports record none); without an export it is null, and the per-FOV
 assignment folders, when they exist, are read as the route per FOV for the examples and the

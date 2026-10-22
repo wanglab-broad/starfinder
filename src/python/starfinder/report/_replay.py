@@ -32,6 +32,8 @@ from pathlib import Path
 
 import numpy as np
 
+from starfinder import _layout
+
 from ._values import Unavailable, first
 
 #: The phases of a recorded entry, in the order ``FOV.run`` runs them; ``input`` is the loaded and rotated round.
@@ -183,13 +185,13 @@ def replay_fov(output_root, fov_id, rounds=None, *, keep_final=False) -> Replay:
     """The replay of one FOV of an output root, outside a report: ``rounds`` None replays every round of its
     ``preprocessing.rounds`` (the reference round first). The files it reads are checked as the report checks
     them."""
-    from ._collect import RUN_RECORD, _Inputs
+    from ._collect import _Inputs
     root = Path(output_root)
     inputs = _Inputs(root)
-    record = inputs.json(root / "checkpoints" / fov_id / RUN_RECORD, "run_record")
+    record = inputs.json(_layout.run_record(root, fov_id), "run_record")
     if isinstance(record, Unavailable):
         raise FileNotFoundError(f"no run record of {fov_id} under {root}")
-    path = root / "checkpoints" / fov_id / "registered" / "transforms.json"
+    path = _layout.checkpoint_dir(root, fov_id) / _layout.REGISTERED / _layout.TRANSFORMS_FILE
 
     def saved():
         data = inputs.json(path, "transforms", strict=False) if path.is_file() else None
@@ -383,7 +385,7 @@ class _Replayer:
         source, results, application = found
         if application is None:
             return Unavailable("not_recorded", f"{source} holds no application_config of {name}")
-        directory = self.root / "checkpoints" / self.fov_id / "registered"
+        directory = _layout.checkpoint_dir(self.root, self.fov_id) / _layout.REGISTERED
         for entry in results:
             kind = _get(entry, "transform", "kind")
             if kind in ("dense", "bspline"):

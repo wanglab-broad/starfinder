@@ -1,9 +1,101 @@
-"""Path helpers for FOV output locations."""
+"""The layout of a dataset's output root: the folders and record files the package reads and writes.
+
+Private and unexported; it imports nothing from ``starfinder``. Every helper
+returns a path without touching the filesystem. The MATLAB-era folders
+(``images``, ``signal``, ``log``, ``output``, ``expr``, ``documents``) keep
+their names, and the ``.smk`` rules spell the same paths on their own.
+"""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+
+#: The folders under the output root.
+CHECKPOINTS = "checkpoints"
+STITCHING = "stitching"
+EXPORT = "export"
+REPORT = "report"
+#: The record files: a FOV's run record in its checkpoint folder, a sample's export record in its export folder.
+RUN_RECORD = "run.json"
+EXPORT_FILE = "export.json"
+#: Inside a FOV's checkpoint folder: the registration folder and its header, and an assignment's record.
+REGISTERED = "registered"
+TRANSFORMS_FILE = "transforms.json"
+ASSIGNMENT_RECORD = "assignment.json"
+#: The setting naming a FOV's reference image (workflow YAML key and ``Dataset`` field) and its default: a file
+#: pattern with ``{fov_id}``, absolute or relative to the output root.
+REFERENCE_IMAGE_KEY = "reference_image"
+REFERENCE_IMAGE = "images/ref_merged/{fov_id}.tif"
+
+
+def check_reference_image(value) -> str:
+    """The ``reference_image`` pattern; ValueError naming the setting for anything but a string with ``{fov_id}``."""
+    if not isinstance(value, str) or "{fov_id}" not in value:
+        raise ValueError(f"{REFERENCE_IMAGE_KEY} must be a file pattern with {{fov_id}}, absolute or relative to the "
+                         f"output root (default {REFERENCE_IMAGE!r}); got {value!r}")
+    return value
+
+
+def reference_image_path(output_root, fov_id, pattern=REFERENCE_IMAGE) -> Path:
+    """The file of a FOV's reference image: ``pattern`` with ``{fov_id}`` replaced, relative to ``output_root``."""
+    path = Path(check_reference_image(pattern).replace("{fov_id}", fov_id))
+    return path if path.is_absolute() else Path(output_root) / path
+
+
+def checkpoint_dir(output_root, fov_id) -> Path:
+    """``checkpoints/<fov_id>``, the default checkpoint folder of a FOV."""
+    return Path(output_root) / CHECKPOINTS / fov_id
+
+
+def run_record(output_root, fov_id) -> Path:
+    """``checkpoints/<fov_id>/run.json``, the run record of a FOV."""
+    return checkpoint_dir(output_root, fov_id) / RUN_RECORD
+
+
+def stitching_dir(output_root, sample) -> Path:
+    """``stitching/<sample>``, the placement folder of a sample."""
+    return Path(output_root) / STITCHING / sample
+
+
+def export_dir(output_root, sample) -> Path:
+    """``export/<sample>``, the export folder of a sample."""
+    return Path(output_root) / EXPORT / sample
+
+
+def report_root(output_root) -> Path:
+    """``report``, the report root of a dataset (the sample reports and the comparison page)."""
+    return Path(output_root) / REPORT
+
+
+def report_dir(output_root, sample) -> Path:
+    """``report/<sample>``, the report folder of a sample."""
+    return report_root(output_root) / sample
+
+
+def image_file(output_root, fov_id, *folders) -> Path:
+    """``images/<folders...>/<fov_id>.tif``, a FOV's image under the MATLAB-era images folder."""
+    return Path(output_root, "images", *folders, f"{fov_id}.tif")
+
+
+def expr_dir(output_root, fov_id) -> Path:
+    """``expr/<fov_id>``, the folder of the workflow's per-FOV assignment outputs."""
+    return Path(output_root) / "expr" / fov_id
+
+
+def tile_config(output_root, sample) -> Path:
+    """``output/tile_config_<sample>.csv``, the MATLAB-era tile configuration of a sample."""
+    return Path(output_root) / "output" / f"tile_config_{sample}.csv"
+
+
+def stage_file(output_root, sample) -> Path:
+    """``documents/maf/<sample>.maf``, the default stage file of a sample."""
+    return Path(output_root) / "documents" / "maf" / f"{sample}.maf"
+
+
+def sample_annotation(output_root) -> Path:
+    """``documents/sample-annotation.csv``, the FOV list of each sample."""
+    return Path(output_root) / "documents" / "sample-annotation.csv"
 
 
 @dataclass(frozen=True)
@@ -53,7 +145,7 @@ class _FovPaths:
         pathlib.Path
             Path under output_root; no filesystem mutation.
         """
-        return self.output_root / "checkpoints" / self.fov_id
+        return self.output_root / CHECKPOINTS / self.fov_id
 
     def rsf_log(self) -> Path:
         """Return log/<fov_id>_rsf.txt without creating it.

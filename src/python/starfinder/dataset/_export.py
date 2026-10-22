@@ -19,13 +19,11 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
-from starfinder.stitching import PlacementResult
-
-from ._config import ExportConfig, image_name
-from ._fuse import FusionInput, check_assembly, check_fusion, fuse
-from ._grid import INCLUDED
-from ._labels import check_label_count, check_label_ids, fuse_labels
-from ._record import (
+from starfinder.sample_output._config import ExportConfig, image_name
+from starfinder.sample_output._fuse import FusionInput, check_assembly, check_fusion, fuse
+from starfinder.sample_output._grid import INCLUDED
+from starfinder.sample_output._labels import check_label_count, check_label_ids, fuse_labels
+from starfinder.sample_output._record import (
     PARTS,
     SECTIONS,
     ExportRecord,
@@ -37,14 +35,15 @@ from ._record import (
     update_section,
     write_export,
 )
-from ._segment import check_route, resolve_route, segment_off_section
+from starfinder.sample_output._segment import check_route, resolve_route, segment_off_section
+from starfinder.stitching import PlacementResult
 
 REFERENCE_STAIN_FILE = Path("other_rounds") / "reference_stain" / "image.ome.tif"
 MOLECULE_CSV = "signal/{fov_id}_goodSpots.csv"
 
 
 def _paths(dataset, fov):
-    from starfinder.dataset._paths import _FovPaths
+    from starfinder._layout import _FovPaths
     return _FovPaths(Path(dataset.output_root), fov)
 
 
@@ -54,7 +53,7 @@ def source_path(dataset, fov, entry) -> Path:
     if entry == "reference_stain":
         return paths.checkpoint_dir / REFERENCE_STAIN_FILE
     if entry == "reference_merged":
-        from starfinder.dataset._declared import reference_image_path
+        from starfinder._layout import reference_image_path
         return reference_image_path(dataset.output_root, fov, dataset.reference_image)
     pattern = entry.split("=", 1)[1][len("file:"):].replace("{fov_id}", fov)
     path = Path(pattern)
@@ -161,7 +160,7 @@ def export_sample(dataset, sample: str, *, placement, assignment: str | None = "
     if not isinstance(sample, str) or not sample:
         raise ValueError("sample must be a nonempty string")
     if config.export_spatialdata:
-        from ._spatialdata import check_name
+        from starfinder.sample_output._spatialdata import check_name
         check_name(sample, "sample name")
     if assignment is not None and (not isinstance(assignment, str) or not assignment):
         raise ValueError(f"assignment must be a saved assignment name or None; got {assignment!r}")
@@ -254,8 +253,8 @@ def export_sample(dataset, sample: str, *, placement, assignment: str | None = "
 
 def _spatialdata_part(result, config, output_dir):
     """Part 4. An error inside it records the part ``failed`` with the exception's type and message, then raises."""
-    from ._record import Timer
-    from ._spatialdata import _check, _export
+    from starfinder.sample_output._record import Timer
+    from starfinder.sample_output._spatialdata import _check, _export
     timer = Timer()
     requested = [f"{name}_{d}" for name in config.fusion.image_names for d in config.fusion.dimensionalities]
     try:
@@ -291,10 +290,9 @@ def _input_grids(dataset, placement):
 
 def _reuse(dataset, placement, config, output_dir, held):
     """The reuse conditions of ``segment: false`` (and ``assemble: false``), before anything is written."""
+    from starfinder.sample_output._grid import fused_grid
+    from starfinder.sample_output._segment import load_sample_segmentation
     from starfinder.stitching._placement import table_sha256
-
-    from ._grid import fused_grid
-    from ._segment import load_sample_segmentation
     where = f"export.segment: false reuses the saved sample segmentation of {output_dir}"
     try:
         saved = load_sample_segmentation(output_dir)
@@ -343,8 +341,7 @@ def _reuse(dataset, placement, config, output_dir, held):
 def _export_after_fusion(dataset, sample, placement, assignment, config, output_dir, route_source) -> ExportRecord:
     """``Dataset.export`` on the route after fusion with an assignment: checks 4 to 7, then the parts in order."""
     from starfinder.assembly import assemble, save_assembly
-
-    from ._segment import SampleSegmentation, segment_fused
+    from starfinder.sample_output._segment import SampleSegmentation, segment_fused
     # 7. The route, with the reuse conditions when segment is off. On this route it comes before checks 4 and 5, so
     # that a configuration without the route's settings is refused naming them (RD1), not for its inputs.
     held = {}

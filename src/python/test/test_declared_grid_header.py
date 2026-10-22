@@ -371,7 +371,7 @@ def test_each_export_caller_reads_the_grid_without_pixels(tmp_path, monkeypatch)
     base's grids."""
     from starfinder.dataset.workflow import _assembly_block, _export_dataset
     from starfinder.sample_output import ExportConfig, FusionConfig
-    from starfinder.sample_output._export import _input_grids, assembly_inputs, fusion_inputs
+    from starfinder.dataset._export import _input_grids, assembly_inputs, fusion_inputs
     from starfinder.stitching import load_placement
     out, config, images = golden_sample(tmp_path)
     dataset = _export_dataset(config, _assembly_block(config))
@@ -457,7 +457,7 @@ def test_a_float_reference_image_is_still_read_whole(monkeypatch, tmp_path):
     finite only its pixels show (load_volume refuses NaN), so assembly_inputs and fusion_inputs read it whole, as
     on the base revision, and get the base's grids."""
     from starfinder.sample_output import ExportConfig, FusionConfig
-    from starfinder.sample_output._export import assembly_inputs, fusion_inputs
+    from starfinder.dataset._export import assembly_inputs, fusion_inputs
     from starfinder.stitching import load_placement
     from starfinder.synthetic import generate_sample_scene, sample_scene_preset, save_sample_scene
 
@@ -494,10 +494,10 @@ def test_read_inputs_reads_the_reference_image_whole_only_for_its_pixels(tmp_pat
     read each reference image whole for every input; now only reference_merged, whose image it is, reads it whole,
     and reference_stain, a file: input and a missing file: input read only its grid (no page of it decoded). Every
     StitchingInput (image, grid, source, file hash) equals the base's."""
+    from starfinder._layout import _FovPaths
     from starfinder.dataset._declared import reference_settings
-    from starfinder.dataset._paths import _FovPaths
+    from starfinder.dataset._stitching import REFERENCE_STAIN_FILE, read_inputs
     from starfinder.dataset.workflow import _assembly_block, _export_dataset
-    from starfinder.stitching._dataset import REFERENCE_STAIN_FILE, read_inputs
     out, config, images = golden_sample(tmp_path)
     reference = reference_settings(_export_dataset(config, _assembly_block(config)))
     for fov in images:

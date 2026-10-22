@@ -31,7 +31,7 @@ from starfinder.sample_output import (
     fused_grid,
     segment_fused,
 )
-from starfinder.sample_output._export import assembly_inputs
+from starfinder.dataset._export import assembly_inputs
 from starfinder.segmentation import CellposeConfig, ExpandLabelsConfig, LabelImportConfig, ReferenceGrid
 from starfinder._records import file_sha256
 from starfinder.stitching import PlacementResult, approve_placement, save_placement

@@ -8,6 +8,7 @@ from .config import ExternalReference, PipelineConfig, ExecutionConfig, Registra
 from ._declared import reference_settings
 from .dataset import Dataset
 from .types import ChannelInfo, RoundState, SubtileConfig
+from starfinder import _layout
 from starfinder.io import ImageLoadConfig
 from starfinder.preprocessing import (MinMaxNormalizationConfig, HistogramMatchingConfig,
     ReconstructionConfig, TophatConfig, ProjectionConfig, PreprocessingRecipe, PreprocessingStep, step_config_type)
@@ -895,7 +896,7 @@ def _run_nuclei_registration(snakemake):
     for name in names:
         # Channels that share a name write the same file, the last one winning, as in MATLAB.
         for c, folder in enumerate(folders[name]):
-            path = dataset.output_root / 'images' / name / folder / f'{fov.fov_id}.tif'
+            path = _layout.image_file(dataset.output_root, fov.fov_id, name, folder)
             volume, metadata = fov.images[name][..., c], fov.metadata[name]
             if projection is None:
                 save_volume(volume, path, metadata=metadata)
@@ -1596,7 +1597,7 @@ def _run_reads_assignment(snakemake):
     block = _assembly_block(config) if 'assembly' in config else None
     sample, number = _fov_sample(snakemake.input[0], config, fov_id)
     output_root = Path(config['root_output_path']) / config['dataset_id'] / config['output_id']
-    tile = None if block is not None else _tile_record(output_root / 'output' / f'tile_config_{sample}.csv', number)
+    tile = None if block is not None else _tile_record(_layout.tile_config(output_root, sample), number)
     genes = _assignment_genes(snakemake.input[4], config)
     if block is None:
         grid, cells = _legacy_cells(Path(snakemake.input[2]), config, fov_id, target)
@@ -1610,9 +1611,8 @@ def _run_reads_assignment(snakemake):
     if block is not None and block.assignment is not None:
         from starfinder.assignment import summarize_assignment
         from starfinder.assignment._persist import assignment_directory, write_assignment
-        from ._paths import _FovPaths
         result = replace(result, record=dict(result.record, counts=summarize_assignment(result)))
-        result = write_assignment(assignment_directory(_FovPaths(output_root, fov_id).checkpoint_dir, name), result,
+        result = write_assignment(assignment_directory(_layout._FovPaths(output_root, fov_id).checkpoint_dir, name), result,
                                   metadata=cells.grid.metadata)
     h5ad, csv_path = Path(snakemake.output[0]), Path(snakemake.output[1])
     written = _write_raw_h5ad(result, h5ad, sample=sample, fov_id=fov_id, tile=tile)
@@ -1680,7 +1680,7 @@ def _stitching_block(config) -> _StitchingBlock:
     and refused with another method. Raises ValueError naming the key.
     """
     from starfinder.stitching import STITCHING_METHODS, BigStitcherConfig, ReviewPolicy
-    from starfinder.stitching._dataset import POSITION_KEYS, _check_input
+    from ._stitching import POSITION_KEYS, _check_input
     _python_only(config, ['stitching'])
     values = config['stitching']
     if not isinstance(values, dict):
@@ -1762,7 +1762,7 @@ def _stitching_position_inputs(config, output_root, sample):
     positions = (config.get('stitching') or {}).get('positions') or {}
     source = positions.get('source')
     if source == 'stage_file':
-        return [str(positions.get('stage_file') or Path(output_root) / 'documents' / 'maf' / f'{sample}.maf')]
+        return [str(positions.get('stage_file') or _layout.stage_file(output_root, sample))]
     if source == 'table' and positions.get('table'):
         return [str(positions['table'])]
     return []
@@ -1775,9 +1775,8 @@ def _reference_image_inputs(config, output_root, fov_ids):
     reads_assignment with an assembly block) declare the file the adapters
     read; a FOV ID '{fovID}' gives the rule's wildcard pattern.
     """
-    from ._declared import reference_image_path
     pattern = reference_settings(config)['reference_image']
-    return [str(reference_image_path(output_root, fov, pattern)) for fov in fov_ids]
+    return [str(_layout.reference_image_path(output_root, fov, pattern)) for fov in fov_ids]
 
 
 def _workflow_fov_name(config):
@@ -1801,7 +1800,7 @@ def _sample_table(block, dataset, sample, fov_ids, grids, config):
     a listed FOV that is not one of the sample, raises ValueError naming both
     lists, as Dataset.stitch does for a table that does not match its FOVs.
     """
-    from starfinder.stitching._dataset import table_from_positions
+    from ._stitching import table_from_positions
     table = table_from_positions(block.positions, fov_ids, grids, sample=sample, output_root=dataset.output_root,
                                  fov_pattern=dataset.fov_pattern, fov_name=_workflow_fov_name(config))
     if set(table.fov_ids) != set(fov_ids):
@@ -1890,7 +1889,7 @@ def _run_bigstitcher_macro(snakemake):
     folder.
     """
     from starfinder.stitching import bigstitcher_macro
-    from starfinder.stitching._dataset import read_inputs
+    from ._stitching import read_inputs
     config, sample = snakemake.config, snakemake.wildcards.sample
     block = _stitching_block(config)
     folder = _bigstitcher_folder(block, sample)
@@ -2135,12 +2134,12 @@ def _export_sample_files(config, output_root, fov_ids, sample='{sample}'):
     block = _assembly_block(config)
     export = _export_config(config)[0] if block.assignment is not None else None
     root = Path(output_root)
-    inputs = [str(root / 'stitching' / sample / 'placement.json')]
+    inputs = [str(_layout.stitching_dir(root, sample) / 'placement.json')]
     if block.assignment is None:
-        inputs += [str(root / 'signal' / f'{fov}_goodSpots.csv') for fov in fov_ids]
+        inputs += [str(_layout._FovPaths(root, fov).signal_csv('goodSpots')) for fov in fov_ids]
     elif _after_fusion(export, block):
-        from starfinder.sample_output._export import source_path
-        inputs += [str(root / 'signal' / f'{fov}_goodSpots.csv') for fov in fov_ids]
+        from ._export import source_path
+        inputs += [str(_layout._FovPaths(root, fov).signal_csv('goodSpots')) for fov in fov_ids]
         inputs += _reference_image_inputs(config, root, fov_ids)
         # The files Dataset.export's fuse part reads, by the same expression (source_path).
         files = SimpleNamespace(output_root=root, reference_image=reference_settings(config)['reference_image'])
@@ -2148,11 +2147,11 @@ def _export_sample_files(config, output_root, fov_ids, sample='{sample}'):
             if entry != 'reference_stain':
                 inputs += [p for p in (str(source_path(files, fov, entry)) for fov in fov_ids) if p not in inputs]
     else:
-        inputs += [str(root / 'expr' / fov / 'raw.h5ad') for fov in fov_ids]
-        inputs += [str(root / 'expr' / fov / 'reads_assignment.csv') for fov in fov_ids]
-        inputs += [str(root / 'checkpoints' / fov / 'assignment' / block.assignment / 'assignment.json')
+        inputs += [str(_layout.expr_dir(root, fov) / 'raw.h5ad') for fov in fov_ids]
+        inputs += [str(_layout.expr_dir(root, fov) / 'reads_assignment.csv') for fov in fov_ids]
+        inputs += [str(_layout.checkpoint_dir(root, fov) / 'assignment' / block.assignment / _layout.ASSIGNMENT_RECORD)
                    for fov in fov_ids]
-    return inputs, str(root / 'export' / sample / 'export.json')
+    return inputs, str(_layout.export_dir(root, sample) / _layout.EXPORT_FILE)
 
 
 def _run_export(snakemake):
@@ -2204,17 +2203,16 @@ def _write_ownership_figures(output_root, name, placement_dir, export_dir, input
     from starfinder.assembly import fov_ownership, load_assembly
     from starfinder.assignment._persist import RECORD_FILE, assignment_directory, read_assignment
     from starfinder.stitching import load_placement
-    from ._paths import _FovPaths
     declared = {os.path.abspath(p) for p in inputs}
     assembly, placement = load_assembly(export_dir), load_placement(placement_dir)
     fovs = assembly.fovs
     for fov_id in fovs['fov_id'][fovs['kind'].eq('assignment').fillna(False).to_numpy(dtype=bool)]:
-        folder = assignment_directory(_FovPaths(output_root, fov_id).checkpoint_dir, name)
+        folder = assignment_directory(_layout._FovPaths(output_root, fov_id).checkpoint_dir, name)
         if os.path.abspath(folder / RECORD_FILE) not in declared:
             continue
         result = read_assignment(folder, name)
-        image = output_root / 'images' / 'DAPI' / f'{fov_id}.tif'
-        _write_assignment_figures(result, image if image.is_file() else None, output_root / 'expr' / fov_id,
+        image = _layout.image_file(output_root, fov_id, 'DAPI')
+        _write_assignment_figures(result, image if image.is_file() else None, _layout.expr_dir(output_root, fov_id),
                                   ownership=fov_ownership(assembly, fov_id, placement=placement))
 
 
@@ -2273,18 +2271,18 @@ def _report_sample_files(config, output_root, fov_ids, sample='{sample}'):
     """
     root = Path(output_root)
     if 'assembly' in config:
-        inputs = [str(root / 'export' / sample / 'export.json')]
+        inputs = [str(_layout.export_dir(root, sample) / _layout.EXPORT_FILE)]
     elif 'stitching' in config:
-        inputs = [str(root / 'stitching' / sample / 'placement.json')]
+        inputs = [str(_layout.stitching_dir(root, sample) / 'placement.json')]
     else:
-        inputs = [str(root / 'log' / 'sf_scores' / f'{fov}.txt') for fov in fov_ids]
-    return inputs, str(root / 'report' / sample / 'report.json')
+        inputs = [str(_layout._FovPaths(root, fov).score_log()) for fov in fov_ids]
+    return inputs, str(_layout.report_dir(root, sample) / 'report.json')
 
 
 def _report_dataset_files(output_root, samples):
     """(inputs, output) of the report_dataset rule: every sample's report/<sample>/report.json, and
     report/samples.csv (beside it Dataset.compare_samples writes report/index.html)."""
-    root = Path(output_root) / 'report'
+    root = _layout.report_root(output_root)
     return [str(root / sample / 'report.json') for sample in samples], str(root / 'samples.csv')
 
 
@@ -2299,7 +2297,7 @@ def _run_report_sample(snakemake):
     config, sample = snakemake.config, snakemake.wildcards.sample
     report = _report_block(config)
     dataset = _workflow_dataset(config)
-    fov_ids = _sample_fovs(_output_root(config) / 'documents' / 'sample-annotation.csv', config, sample)
+    fov_ids = _sample_fovs(_layout.sample_annotation(_output_root(config)), config, sample)
     dataset.report(sample, fov_ids, assignment=_report_assignment(config), config=report,
                    output_dir=Path(snakemake.output[0]).parent)
 

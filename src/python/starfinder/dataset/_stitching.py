@@ -9,10 +9,9 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from starfinder.image import IncompatibleGeometryError
-
-from ._positions import (GridSnap, StageAxisMapping, TilePositionTable, _names, _stage_points, positions_from_grid,
-                         positions_from_leica, positions_from_table)
-from ._stitch import StitchingInput
+from starfinder.stitching._positions import (GridSnap, StageAxisMapping, TilePositionTable, _names, _stage_points,
+                                             positions_from_grid, positions_from_leica, positions_from_table)
+from starfinder.stitching._stitch import StitchingInput
 
 INPUTS = ("reference_merged", "reference_stain")
 POSITION_KEYS = ("source", "stage_axes", "snap_to_grid", "regular_grid", "tile_shape_yx", "spacing_yx", "table",
@@ -39,8 +38,8 @@ def read_inputs(output_root, fov_ids, input_name, *, reference) -> dict[str, Sti
     grid is read (:func:`~starfinder.dataset._declared.reference_grid`: the
     header of a file that stores none).
     """
+    from starfinder._layout import _FovPaths
     from starfinder.dataset._declared import reference_grid, reference_volume
-    from starfinder.dataset._paths import _FovPaths
     from starfinder.io import load_volume, load_volume_zyxc
     from starfinder._records import file_sha256
     _check_input(input_name)

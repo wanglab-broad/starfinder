@@ -24,7 +24,7 @@ import tifffile
 
 import starfinder.assembly
 import starfinder.assignment._persist as assignment_persist
-import starfinder.sample_output._export as export_module
+import starfinder.dataset._export as export_module
 from starfinder.assembly import AssemblyConfig, AssemblyResult, assemble, load_assembly, save_assembly
 from starfinder.io import save_volume
 from starfinder.sample_output import ExportConfig, ExportIncompleteWarning, LabelConfig, check_export, fuse_labels

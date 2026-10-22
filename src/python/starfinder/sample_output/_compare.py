@@ -23,7 +23,9 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from ._record import EXPORT_FILE, read_export
+from starfinder._layout import EXPORT_FILE
+
+from ._record import read_export
 
 #: The six molecule categories, in the order they are decided (retention, then the cell, then the match).
 CATEGORIES = ("same_cell", "different_cells", "cell_on_one_route", "no_cell_on_both", "retained_on_one_route",

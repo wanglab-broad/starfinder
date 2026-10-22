@@ -14,26 +14,10 @@ from collections.abc import Mapping
 from numbers import Real
 from pathlib import Path
 
+from starfinder._layout import REFERENCE_IMAGE, REFERENCE_IMAGE_KEY, reference_image_path
+
 #: The configuration keys of the declared calibration (workflow YAML; ``Dataset`` fields of the same names).
 VOXEL_KEYS = ("voxel_size_xy", "voxel_size_z")
-#: The setting naming a FOV's reference image (workflow YAML key and ``Dataset`` field) and its default: a file
-#: pattern with ``{fov_id}``, absolute or relative to the output root.
-REFERENCE_IMAGE_KEY = "reference_image"
-REFERENCE_IMAGE = "images/ref_merged/{fov_id}.tif"
-
-
-def check_reference_image(value) -> str:
-    """The ``reference_image`` pattern; ValueError naming the setting for anything but a string with ``{fov_id}``."""
-    if not isinstance(value, str) or "{fov_id}" not in value:
-        raise ValueError(f"{REFERENCE_IMAGE_KEY} must be a file pattern with {{fov_id}}, absolute or relative to the "
-                         f"output root (default {REFERENCE_IMAGE!r}); got {value!r}")
-    return value
-
-
-def reference_image_path(output_root, fov_id, pattern=REFERENCE_IMAGE) -> Path:
-    """The file of a FOV's reference image: ``pattern`` with ``{fov_id}`` replaced, relative to ``output_root``."""
-    path = Path(check_reference_image(pattern).replace("{fov_id}", fov_id))
-    return path if path.is_absolute() else Path(output_root) / path
 
 
 def reference_settings(source) -> dict:

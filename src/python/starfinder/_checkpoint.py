@@ -13,6 +13,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from starfinder._layout import REGISTERED, TRANSFORMS_FILE
 from starfinder._records import TABLE_FORMATS, _read_table, _write_table, atomic_file, tuples, write_json
 
 FORMAT_VERSION = 2
@@ -156,7 +157,7 @@ def header_path(directory, stage):
     """Path of a stage's JSON header inside a per-FOV checkpoint directory."""
     _check_stage(stage)
     directory = Path(directory)
-    return directory / "registered" / "transforms.json" if stage == "registered" else directory / f"{stage}.json"
+    return directory / REGISTERED / TRANSFORMS_FILE if stage == "registered" else directory / f"{stage}.json"
 
 
 def clear_stages(directory):
@@ -169,7 +170,7 @@ def clear_stages(directory):
     interrupted clear never leaves a loadable stale stage.
     """
     directory = Path(directory)
-    registered = directory / "registered"
+    registered = directory / REGISTERED
     paths = [header_path(directory, stage) for stage in STAGES]
     paths += [directory / f"{stage}.{fmt}" for stage in STAGES[1:] for fmt in TABLE_FORMATS]
     snapshots = []
@@ -207,14 +208,14 @@ def registered_image_path(directory, round_name, snapshot=None):
 
     A snapshot of the round is stored as registered/<snapshot>/<round>.ome.tif.
     """
-    directory = Path(directory) / "registered"
+    directory = Path(directory) / REGISTERED
     return (directory if snapshot is None else directory / snapshot) / f"{round_name}.ome.tif"
 
 
 def _registered_image(directory, round_name):
     """The current image of a saved round, falling back to the earlier <round>.tif name."""
     path = registered_image_path(directory, round_name)
-    earlier = Path(directory) / "registered" / f"{round_name}.tif"
+    earlier = Path(directory) / REGISTERED / f"{round_name}.tif"
     return earlier if not path.is_file() and earlier.is_file() else path
 
 
@@ -274,7 +275,7 @@ def write_registered_header(directory, header, registration_results, registratio
     record = registration_record or {}
     semantics = record.get("semantics", "recipe")
     applications = record.get("application", {})
-    directory = Path(directory) / "registered"
+    directory = Path(directory) / REGISTERED
     transforms, files = {}, []
     for name, results in registration_results.items():
         arrays = {}
@@ -296,8 +297,8 @@ def write_registered_header(directory, header, registration_results, registratio
                   applications={} if semantics == "sequential" else
                   {name: {"application_config": applications.get(name, results[-1].application_config)}
                    for name, results in registration_results.items() if results})
-    write_json(header, directory / "transforms.json")
-    return files + ["transforms.json"]
+    write_json(header, directory / TRANSFORMS_FILE)
+    return files + [TRANSFORMS_FILE]
 
 
 def _registration_methods():
@@ -371,7 +372,7 @@ def _registration_results(directory, header):
     semantics = "sequential" if header["format_version"] == 1 else header.get("registration_semantics", "recipe")
     applications = {name: _config(entry["application_config"], WarpConfig)
                     for name, entry in header.get("applications", {}).items()}
-    fields = _field_loader(Path(directory) / "registered")
+    fields = _field_loader(Path(directory) / REGISTERED)
     results, chains = {}, {}
     for name, entries in header["transforms"].items():
         restored = []

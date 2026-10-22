@@ -15,11 +15,12 @@ from pathlib import Path
 
 import numpy as np
 
+from starfinder._layout import EXPORT_FILE
+
 from ._anndata import sample_anndata
 from ._assemble import AssemblyResult, fill_cell_namespace
 from ._fused import TERRITORIES_FILE, territories_of, with_territories
 
-EXPORT_FILE = "export.json"
 SECTION = "assembly"
 TABLES = ("fovs", "cells", "molecules", "counts")
 TABLE_DIR = "tables"
