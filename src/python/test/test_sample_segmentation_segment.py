@@ -17,15 +17,15 @@ import pandas as pd
 import pytest
 import tifffile
 
-import starfinder.sample_output._segment as segment_module
+import starfinder.export._segment as segment_module
 from starfinder.assembly import load_assembly
 from starfinder.dataset import workflow
 from starfinder.image import IncompatibleGeometryError
 from starfinder.io.tiff import METADATA_NAMESPACE
-from starfinder.sample_output import (ROUTES, ExportConfig, SampleSegmentationConfig, SampleSegmentationRun,
+from starfinder.export import (ROUTES, ExportConfig, SampleSegmentationConfig, SampleSegmentationRun,
                                       check_export, load_sample_segmentation, segment_fused)
-from starfinder.sample_output._check import TOLERANCE_TIFF_UM, _check_tiff
-from starfinder.sample_output._segment import LENGTH_FIELDS, check_route, scale_lengths
+from starfinder.export._check import TOLERANCE_TIFF_UM, _check_tiff
+from starfinder.export._segment import LENGTH_FIELDS, check_route, scale_lengths
 from starfinder.io._ome import read_ome_layout
 from starfinder.segmentation import (SEGMENTATION_METHODS, CellposeConfig, LabelImportConfig, MissingModelError,
                                      ModelHashMismatchError, SampleSegmentation, SeededWatershedConfig,
@@ -281,7 +281,7 @@ def test_rs4_a_valid_configuration_passes_check_7(tmp_path):
     # Dataset.export passes check 7 with it and runs the route after fusion: fuse, then the part segment (here a
     # stand-in for segment, so that no model is loaded), whose nucleus import is written on the fused grid.
     from starfinder.image import ImageMetadata
-    from starfinder.sample_output import fused_grid
+    from starfinder.export import fused_grid
     from starfinder.segmentation import ReferenceGrid
     direction = ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))
     spacing, origin, shape = fused_grid(folder.placement, folder.grids,
@@ -318,7 +318,7 @@ def test_the_route_per_fov_is_untouched(tmp_path, case):
     """On the existing export fixture: the tables are those assemble gives, the part segment is off with the reason
     route_per_fov, and nothing else of the record names the route."""
     from starfinder.assembly import assemble
-    from starfinder.sample_output import FusionConfig
+    from starfinder.export import FusionConfig
     from starfinder.dataset._export import assembly_inputs
     changes = dict(PER_FOV_CASES[case])
     dimensionality = changes.pop("dimensionality", "projection")
@@ -620,7 +620,7 @@ def test_sg3_segment_fused_again_replaces_the_files_of_its_earlier_section(tmp_p
 def test_sg3_segment_fused_without_a_fusion_records_not_run(tmp_path):
     folder = write_scene(tmp_path, SCENES["fused_pair"]())
     nuclei = tmp_path / "nuclei.tif"
-    from starfinder.sample_output import ExportIncompleteWarning
+    from starfinder.export import ExportIncompleteWarning
     with pytest.warns(ExportIncompleteWarning, match="part_not_run"):
         result = segment_fused(folder.export_dir, config=seeded_runs(nuclei), sample=SAMPLE, identity=IDENTITY)
     assert result.status == "not_run" and result.record["reason"] == "part_not_run" and result.runs == {}

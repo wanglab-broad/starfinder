@@ -18,7 +18,7 @@ import tifffile
 
 from starfinder.io import load_volume
 from starfinder.preprocessing.projection import ProjectionConfig, project_image
-from starfinder.sample_output import FusionConfig, check_export, fuse
+from starfinder.export import FusionConfig, check_export, fuse
 from starfinder.io._ome import ANNOTATION_NAMESPACE, read_ome_layout
 
 from .fusion_fixtures import checker_pair, make_case, plane_pair, quad, zstack
@@ -364,8 +364,8 @@ def test_check_export_counts_chunk_reads(tmp_path, version, zarr_format):
     """
     import zarr
 
-    from starfinder.sample_output._fuse import _codec
-    from starfinder.sample_output._record import directory_files, section_sha256
+    from starfinder.export._fuse import _codec
+    from starfinder.export._record import directory_files, section_sha256
     z, y, x = np.meshgrid(np.arange(20), np.arange(8), np.arange(8), indexing="ij")
     arrays = {f"T{f}": (1 + 64 * z + 8 * y + x + 100 * f).astype(np.uint16) for f in range(2)}
     case = make_case("tall", {"T0": (0.0, 0.0, 0.0), "T1": (0.0, 0.0, 6.25)}, arrays)

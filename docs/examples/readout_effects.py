@@ -5,7 +5,7 @@ import json
 import numpy as np
 import pandas as pd
 
-from starfinder.barcode import Codebook, NeighborhoodSumConfig, extract_intensities
+from starfinder.readout import Codebook, NeighborhoodSumConfig, extract_intensities
 from starfinder.io import ImageLoadResult
 from starfinder.spot_finding import SpotFindingResult, LocalMaximaConfig
 from starfinder.synthetic import (

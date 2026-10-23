@@ -23,7 +23,7 @@ import pandas as pd
 from scipy.stats import spearmanr
 
 from _decoding_inputs import saved_decoding, saved_extraction, saved_codebook, report_table
-from starfinder.evaluation.barcode import evaluate_decoding
+from starfinder.evaluation.readout import evaluate_decoding
 from starfinder.evaluation.spot_finding import evaluate_spots
 from starfinder.image import ImageMetadata
 

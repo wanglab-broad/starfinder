@@ -14,7 +14,7 @@ from starfinder.dataset import (Dataset, FOV, RoundState, PipelineConfig, Execut
     SubtileConfig, from_workflow_config)
 from starfinder.registration import RecoveryConfig, RegistrationRecipe, RegistrationStep
 from starfinder.image import ImageMetadata, IncompatibleGeometryError
-from starfinder.barcode import export_spots
+from starfinder.readout import export_spots
 from starfinder.io import ImageLoadConfig, save_volume
 from starfinder.preprocessing import (MinMaxNormalizationConfig, HistogramMatchingConfig,
     ReconstructionConfig, TophatConfig, PreprocessingRecipe, PreprocessingStep)
@@ -22,7 +22,7 @@ from starfinder.registration import (TranslationConfig, TpsConfig, DemonsConfig,
     InsufficientLandmarksError, RegistrationBackendUnavailableError, InvalidRegistrationConfigError,
     RegistrationSignalConfig)
 from starfinder.spot_finding import LocalMaximaConfig
-from starfinder.barcode import (Codebook, NeighborhoodSumConfig, WtaDecoderConfig,
+from starfinder.readout import (Codebook, NeighborhoodSumConfig, WtaDecoderConfig,
     ReadFilterConfig, filter_reads)
 
 pytestmark = [pytest.mark.integration, pytest.mark.contract]

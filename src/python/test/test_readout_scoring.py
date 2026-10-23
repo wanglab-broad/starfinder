@@ -20,12 +20,12 @@ import pandas as pd
 import pytest
 import yaml
 
-from starfinder.barcode import (DirectAssignmentConfig, NeighborhoodSumConfig, ReadFilterConfig, ReadScoreConfig,
+from starfinder.readout import (DirectAssignmentConfig, NeighborhoodSumConfig, ReadFilterConfig, ReadScoreConfig,
                                 ReadScoringResult, WtaDecoderConfig, decode_barcodes, filter_reads, score_reads)
-from starfinder.barcode.scoring import SCORE_COLUMNS
+from starfinder.readout.scoring import SCORE_COLUMNS
 from starfinder.dataset import CheckpointConfig, PipelineConfig
 from starfinder.dataset.workflow import from_workflow_config
-from starfinder.evaluation.barcode import ranking_quality
+from starfinder.evaluation.readout import ranking_quality
 from starfinder.dataset import read_checkpoint
 from starfinder._checkpoint import candidates_frame
 
@@ -36,7 +36,7 @@ from .test_readout_direct import pipeline as direct_pipeline
 from .test_readout_golden import (ROUNDS, SEED, candidates, extract, fixture_rounds, golden_codebook,
                                   golden_dataset, readout_config, METADATA)
 
-pytestmark = [pytest.mark.barcode]
+pytestmark = [pytest.mark.readout]
 
 ROOT = Path(__file__).resolve().parents[3]
 

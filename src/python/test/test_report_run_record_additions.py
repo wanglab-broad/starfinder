@@ -25,7 +25,7 @@ import pandas as pd
 import pytest
 import yaml
 
-from starfinder.barcode import BarcodeLayout, Codebook, ReadFilterConfig, Segment
+from starfinder.readout import BarcodeLayout, Codebook, ReadFilterConfig, Segment
 from starfinder.dataset import (CheckpointConfig, Dataset, ExecutionConfig, PipelineConfig, RoundState,
                                 from_workflow_config)
 from starfinder.registration import RegistrationRecipe, RegistrationStep

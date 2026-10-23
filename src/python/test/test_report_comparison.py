@@ -313,7 +313,7 @@ def test_reads_the_reports_only(root, monkeypatch):
 
     import starfinder.report._collect as collect
     import starfinder.report._measurements as measurements
-    import starfinder.sample_output._record as export_record
+    import starfinder.export._record as export_record
     import starfinder.stitching as stitching
     import starfinder.stitching._persist as persist
 

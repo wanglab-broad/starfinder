@@ -23,10 +23,10 @@ import pandas as pd
 import pytest
 import yaml
 
-from starfinder.barcode import (DECODING_METHODS, Codebook, CodebookAwareDecoderConfig, DirectAssignmentConfig,
+from starfinder.readout import (DECODING_METHODS, Codebook, CodebookAwareDecoderConfig, DirectAssignmentConfig,
                                 DirectPanel, NeighborhoodSumConfig, ReadFilterConfig, WtaDecoderConfig, assign_direct,
                                 decode_barcodes, extract_intensities, load_direct_panel)
-from starfinder.barcode.decoding import BarcodeDecodingResult
+from starfinder.readout.decoding import BarcodeDecodingResult
 from starfinder.dataset import CheckpointConfig, Dataset, PipelineConfig, RoundState
 from starfinder.dataset.workflow import from_workflow_config
 from starfinder.image import ImageMetadata
@@ -36,7 +36,7 @@ from starfinder.spot_finding import LocalMaximaConfig, SpotFindingPlan
 
 from .test_readout_examples import CHANNELS, DIRECT_MAPPING, DIRECT_SPOTS, direct_images, rounds
 
-pytestmark = pytest.mark.barcode
+pytestmark = pytest.mark.readout
 
 ROOT = Path(__file__).resolve().parents[3]
 SCHEMA = yaml.safe_load((ROOT / "workflow/schemas/config.schema.yaml").read_text())

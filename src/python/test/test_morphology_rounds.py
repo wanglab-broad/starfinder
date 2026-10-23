@@ -21,7 +21,7 @@ import pandas as pd
 import pytest
 from skimage.measure import label
 
-from starfinder.barcode import Codebook, NeighborhoodSumConfig, ReadFilterConfig, WtaDecoderConfig
+from starfinder.readout import Codebook, NeighborhoodSumConfig, ReadFilterConfig, WtaDecoderConfig
 from starfinder.dataset import (ChannelInfo, CheckpointConfig, Dataset, ExecutionConfig, MorphologyConfig,
                                 PipelineConfig, RoundState)
 from starfinder.registration import ExternalReference, RegistrationRecipe, RegistrationStep

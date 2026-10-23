@@ -10,7 +10,7 @@ import json
 import numpy as np
 import pytest
 
-from starfinder.barcode import NeighborhoodSumConfig, extract_intensities
+from starfinder.readout import NeighborhoodSumConfig, extract_intensities
 from starfinder.dataset import (CheckpointConfig, Dataset, ExecutionConfig, PipelineConfig, RoundState)
 from starfinder.registration import RegistrationRecipe, RegistrationStep
 from starfinder.image import ImageMetadata

@@ -31,7 +31,7 @@ dependencies each output needs. It builds on three contracts and redefines none 
 
 Where this page names a column, a function or a rule of those pages, it uses it unchanged.
 The current exporter work and today's fused files are recorded in
-{doc}`sample-output-baseline`. It is implemented in `starfinder.sample_output`, nothing is
+{doc}`sample-output-baseline`. It is implemented in `starfinder.export`, nothing is
 renamed and no dependency changes. The validation design and the implementation issues are in
 {doc}`stitching-assembly-validation`.
 
@@ -213,7 +213,7 @@ for the implementation issue to verify; the sections that rely on one name it.
 
 | Option | Names | Effect on the golden values | Effect on existing files and outputs |
 | --- | --- | --- | --- |
-| **N1. One `starfinder.sample_output` module (recommended)** | Coordination `Dataset.export`; config `ExportConfig`; fusion `fuse`, `fused_grid`, `FusionInput`, `FusionConfig`, `FusedGrid`, `FusionRecord`; labels `fuse_labels`, `LabelConfig`, `LabelRecord`; export `export_spatialdata`, `SpatialDataExportConfig`; record `ExportRecord`, `ExportIncompleteWarning`; check `check_export`; lookup `lookup_source`. `assemble`, `save_assembly`, `load_assembly` and `sample_anndata` stay in `starfinder.assembly`. | None: the golden tests pin the legacy scripts and are untouched. | New files only, plus one method on `Dataset`; the exports go into `__all__` and the autosummary list of `docs/api/sample_output.rst`, which `docs/check_reference.py` requires. The legacy `images/fused/{sample}/` folder is not written. |
+| **N1. One `starfinder.export` module (recommended)** | Coordination `Dataset.export`; config `ExportConfig`; fusion `fuse`, `fused_grid`, `FusionInput`, `FusionConfig`, `FusedGrid`, `FusionRecord`; labels `fuse_labels`, `LabelConfig`, `LabelRecord`; export `export_spatialdata`, `SpatialDataExportConfig`; record `ExportRecord`, `ExportIncompleteWarning`; check `check_export`; lookup `lookup_source`. `assemble`, `save_assembly`, `load_assembly` and `sample_anndata` stay in `starfinder.assembly`. | None: the golden tests pin the legacy scripts and are untouched. | New files only, plus one method on `Dataset`; the exports go into `__all__` and the autosummary list of `docs/api/export.rst`, which `docs/check_reference.py` requires. The legacy `images/fused/{sample}/` folder is not written. |
 | N2. Two modules, `starfinder.fusion` and `starfinder.sample_export` | The same functions split by output; `sample_export` is the reference-branch name | None. | The same files; the parts of one entry are spread over two modules, and `sample_export` reuses a name whose reference-branch API (`export_sample` with affine source mappings) this page does not adopt. |
 | N3. Inside `starfinder.assembly` | `starfinder.assembly.fuse`, `export_spatialdata` | None. | The same files; the assembly module grows image I/O and the optional multiview-stitcher, zarr and spatialdata imports. |
 
@@ -1813,7 +1813,7 @@ On Python 3.11 or later, the supported versions once the dependency plan of
 The default output therefore needs the `anndata` and `multiview-stitcher` extras (and
 `checkpoint` for Parquet tables). Without `multiview-stitcher` the tables and
 `sample.h5ad` are still written and the record says the fuse part did not run. A missing
-extra is named in the record and the warning; importing `starfinder.sample_output`
+extra is named in the record and the warning; importing `starfinder.export`
 imports neither multiview-stitcher, zarr nor spatialdata. `spatialdata-io` in the
 `spatialdata` extra is not used. No dependency or lock change is made by this page.
 
@@ -1863,7 +1863,7 @@ extra and are skipped without it, naming the extra.
 
 ## `docs/migration.md` entries
 
-The implementation adds the `starfinder.sample_output` module and its names,
+The implementation adds the `starfinder.export` module and its names,
 `Dataset.export`, the `export` YAML block and the `export_sample` rule, and the folder
 `<OUTPUT>/export/<sample>/` for configurations with `stitching` and `assembly` blocks.
 Legacy configurations and `images/fused/{sample}/` are unchanged.

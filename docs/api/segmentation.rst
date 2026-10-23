@@ -164,10 +164,10 @@ computed run, ``segmentation.json``), and ``FOV.load_segmentation(name)`` reads 
 checking the recorded SHA-256 values (see :doc:`../checkpoints`).
 
 A :py:class:`~starfinder.segmentation.SampleSegmentation` is the sample segmentation of the
-route after fusion, as ``starfinder.sample_output.segment_fused`` and
+route after fusion, as ``starfinder.export.segment_fused`` and
 ``load_sample_segmentation`` return it: the segmentation grid, one
 :py:class:`~starfinder.segmentation.SegmentationResult` per run and the ``segmentation``
-section of ``export.json`` (see :doc:`sample_output` and
+section of ``export.json`` (see :doc:`export` and
 :doc:`../sample-segmentation-contract`).
 
 .. currentmodule:: starfinder.segmentation

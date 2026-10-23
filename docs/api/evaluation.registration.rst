@@ -108,7 +108,7 @@ scientific truth/calibration or define an E01 protocol. MATLAB is excluded.
 
    EvaluationResult
 
-.. currentmodule:: starfinder.evaluation.barcode
+.. currentmodule:: starfinder.evaluation.readout
 
 .. autosummary::
    :toctree: generated

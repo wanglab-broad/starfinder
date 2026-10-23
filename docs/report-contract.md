@@ -75,7 +75,7 @@ Statements not in this table follow the settled decisions or the accepted pages.
 | 17 | The existing test that pins the exact key set of `run.json` | TC1: change it to "at least these keys" with the additions listed; it is the one existing test the additions change | "Tests the implementation keeps and adds" |
 | 18 | The reason of a value to which several reasons apply | P1: one reason, the first that applies in the order of the closed list | "The reasons" |
 | 19 | The form of the record of unavailable values | U1: one row per unavailable value, key (`part`, `table`, `column`, `row_key`) | "Where a reason is shown and recorded" |
-| 20 | The route of an export whose assembly records none (W-447) | RT1: read as `per_fov`, as `sample_output/_compare.py`: `_route_of` does | "The two routes" |
+| 20 | The route of an export whose assembly records none (W-447) | RT1: read as `per_fov`, as `export/_compare.py`: `_route_of` does | "The two routes" |
 | 21 | The Preprocessing outputs after a moving round's `post_registration` entries when its transforms cannot be rebuilt (W-447) | PR1: unavailable with the reason; the input and the `steps` outputs are shown | "The replay" |
 
 Choices 14 and 15 are numbers: this page proposes them and states their source; they stay
@@ -203,7 +203,7 @@ A sample-level reader, not a runner: it calls no processing stage, reads only sa
 | `sample` | The sample, as `Dataset.stitch` and `Dataset.export` name it: the folders `stitching/<sample>/`, `export/<sample>/` and `report/<sample>/`. |
 | `fov_ids` | The FOV list: nonempty, unique, in the order the report shows them. The workflow passes the sample's FOVs from the sample annotation (`dataset/workflow.py`: `_sample_fovs`), as `stitch_sample` does. |
 | `assignment` | The §2.9 assignment name of the route per FOV, read at `checkpoints/<fov>/assignment/<assignment>/` (written by `assignment/_persist.py`: `write_assignment`); the default of `Dataset.export`. `None`: a sample without cells. |
-| `segmentation` | The segmentation run whose outlines the examples show. On the route per FOV, the name of a run under `checkpoints/<fov>/segmentation/<run>/` (written by `segmentation/_persist.py`: `write_run`); `None` is the cell run the assignment read (`assignment.json` `inputs.cells`), with the nucleus run when `inputs.nuclei` names one. On the route after fusion, a run of the export's `segmentation` section (written by `sample_output/_segment.py`: `segment_fused`); `None` is its `cells` run, with its `nuclei` run. |
+| `segmentation` | The segmentation run whose outlines the examples show. On the route per FOV, the name of a run under `checkpoints/<fov>/segmentation/<run>/` (written by `segmentation/_persist.py`: `write_run`); `None` is the cell run the assignment read (`assignment.json` `inputs.cells`), with the nucleus run when `inputs.nuclei` names one. On the route after fusion, a run of the export's `segmentation` section (written by `export/_segment.py`: `segment_fused`); `None` is its `cells` run, with its `nuclei` run. |
 | `config` | A `ReportConfig`; `None` is `ReportConfig()`. |
 | `output_dir` | `None` (the default) is `<output_root>/report/<sample>/`, the place the comparison entry reads. Another folder is allowed (for a test or a copy). |
 
@@ -221,7 +221,7 @@ In this order; each raises with the output folder unchanged:
    folder (`ValueError` naming the file, the key and both values). Both are written by
    `dataset/_run_record.py`: `_RunRecord.__init__`.
 4. **The export.** When `export.json` exists: it passes
-   `sample_output/_record.py`: `verify_section_hashes`, its `sample` equals `sample`, the
+   `export/_record.py`: `verify_section_hashes`, its `sample` equals `sample`, the
    FOVs of its `assembly.fovs` equal the FOV list as a set, and on the route per FOV its
    assignment name equals `assignment` (`ValueError` naming both). When
    `stitching/<sample>/placement.json` exists, its FOVs (`inputs`, written by
@@ -391,10 +391,10 @@ Every place is fixed under the output root (D1); nothing is searched for.
 | Per-FOV segmentation and assignment | `checkpoints/<fov>/segmentation/<run>/`, `checkpoints/<fov>/assignment/<assignment>/` | `segmentation/_persist.py`: `write_run`; `assignment/_persist.py`: `write_assignment` | The per-FOV lane on the route per FOV; the segmentation examples on that route |
 | Reference image | `images/ref_merged/<fov>.tif`, or the `reference_image` pattern | `dataset/fov.py`: `FOV.save_reference_image` | The background of the segmentation examples on the route per FOV; the Z size when no export exists |
 | Placement | `stitching/<sample>/placement.json`, `fovs.csv` | `stitching/_persist.py`: `save_placement` | The FOV maps, the correction from the stage position, the placement status, the owned area |
-| Export record | `export/<sample>/export.json` | `sample_output/_record.py`: `write_export`, `update_section` (through `dataset/_export.py`: `export_sample`) | The route, the parts, the population accounting, the fused image and label files, the export's software |
+| Export record | `export/<sample>/export.json` | `export/_record.py`: `write_export`, `update_section` (through `dataset/_export.py`: `export_sample`) | The route, the parts, the population accounting, the fused image and label files, the export's software |
 | Sample tables | `export/<sample>/tables/fovs.csv`, `cells.csv`, `molecules.csv`, `sample.h5ad` | `assembly/_persist.py`: `save_assembly`; `assembly/_anndata.py`: `sample_anndata` | Cells per FOV, reads in cells, per-cell distributions, MECR, marker patterns, reads along Z |
-| Fused image | the `fusion.outputs` of `export.json` (`<image>_projection.ome.tif`, `<image>_stack.ome.tif`) | `sample_output/_fuse.py`: `fuse` | The marker patterns' image; the XZ zoom (a stack) |
-| Sample label image | `export/<sample>/segmentation_<run>.ome.tif` | `sample_output/_segment.py`: `segment_fused` | The segmentation examples on the route after fusion |
+| Fused image | the `fusion.outputs` of `export.json` (`<image>_projection.ome.tif`, `<image>_stack.ome.tif`) | `export/_fuse.py`: `fuse` | The marker patterns' image; the XZ zoom (a stack) |
+| Sample label image | `export/<sample>/segmentation_<run>.ome.tif` | `export/_segment.py`: `segment_fused` | The segmentation examples on the route after fusion |
 
 Each file the report reads is checked against the SHA-256 a record holds for it, where one
 does (`run.json` `inputs`; `codebook.sha256`; `assignment.json` `files` and `inputs.cells.file`;
@@ -539,7 +539,7 @@ inputs are in "Where each record is looked for".
 
 The route is read from `export.json` `assembly.route` (written by
 `dataset/_export.py`: `export_sample`); an assembly saved before the route existed
-records none and is read as `per_fov`, as `sample_output/_compare.py`: `_route_of` reads it
+records none and is read as `per_fov`, as `export/_compare.py`: `_route_of` reads it
 (the W-398 exports record none); without an export it is null, and the per-FOV
 assignment folders, when they exist, are read as the route per FOV for the examples and the
 per-FOV lane. The comparison of the two routes (`compare_routes`) is not read (A3).
@@ -1125,7 +1125,7 @@ attribute that `_RunRecord.__init__` reads.
 
 Today `counts.filtering` holds `total`, `accepted`, `rejected` (`ReadFilteringResult.counts`,
 copied by `_RunRecord.write`); the count is the filter's
-`diagnostics["endpoint_valid_count"]` (`barcode/filtering.py`: `filter_reads`), not saved.
+`diagnostics["endpoint_valid_count"]` (`readout/filtering.py`: `filter_reads`), not saved.
 
 | Field | Type | Unit | Content |
 | --- | --- | --- | --- |

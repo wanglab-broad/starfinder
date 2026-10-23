@@ -9,7 +9,7 @@ from itertools import product
 import numpy as np
 import pandas as pd
 
-from starfinder.barcode import Codebook
+from starfinder.readout import Codebook
 
 from ._common import ScalarDistribution
 from ._formed import FormedSceneConfig, ReadoutEffectsConfig

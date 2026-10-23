@@ -1,6 +1,6 @@
 """Small development recipes; reuse quickstart inputs and write new outputs."""
 
-from starfinder.barcode import NeighborhoodSumConfig, ReadFilterConfig
+from starfinder.readout import NeighborhoodSumConfig, ReadFilterConfig
 from starfinder.io import ImageLoadConfig
 
 import argparse

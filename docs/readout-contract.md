@@ -21,6 +21,9 @@ engineering validation design are in {doc}`readout-algorithms`. Nothing here is
 implemented, and nothing here renames anything: the existing names
 (`starfinder.barcode`, `BarcodeDecodingResult`, `PipelineConfig.decoding`) stay.
 
+Later note: W-556 renamed the module `starfinder.barcode` to `starfinder.readout`
+(W-526, NM-12); the decision text above is kept as written.
+
 The measured evidence comes from W-278, run directory
 `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-278/20261002T011718Z-0cfc7de7`
 (handoff `worker-notes.md`; tables `estimators.csv`, `scores.csv`, `direct.csv`,
@@ -107,14 +110,17 @@ existing read table (its identity columns are the same), and N2 costs a format
 version and alias tests for a rename alone. "Barcode" in a direct-mode result is
 the price of N1.
 
+Later note: W-556 renamed the module `starfinder.barcode` of N1 to `starfinder.readout`
+(W-526, NM-12), with its member names unchanged; N1 is kept as decided.
+
 New names under N1:
 
 | Concept | Name | Kind |
 | --- | --- | --- |
 | Readout mode | `Dataset.readout_mode`, `"multiplexed"` (default) or `"direct"`; YAML top-level `readout_mode` | Dataset field |
-| Encoding registry | `ENCODINGS: dict[type, EncodingSpec]` in `starfinder.barcode`; entries `two_base` (`EncodingConfig`, which gains `method="two_base"`) and `one_base` (`OneBaseEncodingConfig`) | registry |
+| Encoding registry | `ENCODINGS: dict[type, EncodingSpec]` in `starfinder.readout`; entries `two_base` (`EncodingConfig`, which gains `method="two_base"`) and `one_base` (`OneBaseEncodingConfig`) | registry |
 | Encoding table (W-304) | `EncodingConfig.pair_to_color`; `EncodingSpec.table`; `Codebook.encoding_table()`, `Dataset.encoding_table()`, `FOV.encoding_table()`; YAML `load_codebook.encoding.pair_to_color` | config field, spec field, methods |
-| Decoding registry | `DECODING_METHODS: dict[type, DecodingSpec]` in `starfinder.barcode`; entries `wta`, `codebook_aware`, `direct` | registry (the "Decoding" row of {doc}`method-registry` names it `DECODERS`; this page uses the `*_METHODS` pattern of decision 2 there) |
+| Decoding registry | `DECODING_METHODS: dict[type, DecodingSpec]` in `starfinder.readout`; entries `wta`, `codebook_aware`, `direct` | registry (the "Decoding" row of {doc}`method-registry` names it `DECODERS`; this page uses the `*_METHODS` pattern of decision 2 there) |
 | Segment layout | `BarcodeLayout`, `Segment`; `Codebook.layout` | frozen dataclasses |
 | Codebook entries | `Codebook.table` column `entry_id`; `n_entries`, `seq_to_entry`, `entry_to_seq` | codebook |
 | Direct mapping | `DirectPanel`, `load_direct_panel`; `Dataset.direct_panel`, `Dataset.load_direct_panel` | dataset |
@@ -596,8 +602,8 @@ The implementation adds these entries:
 * `test/test_readout_examples.py`: the reference functions of the expected `one_base`
   and direct-readout behavior are replaced by calls to `ENCODINGS` and
   `assign_direct`; every asserted value stays.
-* `test/test_barcode.py`: one named edit. The case `"A,CACGC\nA,CATGC\n"` of
-  `test_invalid_csv_has_row_context` (`test_barcode.py:59-74`) requires two different
+* `test/test_readout.py`: one named edit. The case `"A,CACGC\nA,CATGC\n"` of
+  `test_invalid_csv_has_row_context` (`test_readout.py:59-74`) requires two different
   barcodes for one gene to raise, which D5 reverses. The task-group-2 issue removes
   that case and adds a test that the same rows load as two entries of gene `A`. The
   other cases of that test still raise (the identical-row case as a repeated

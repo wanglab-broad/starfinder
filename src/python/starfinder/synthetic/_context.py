@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 
 from starfinder._records import file_sha256
-from starfinder.barcode import Codebook
+from starfinder.readout import Codebook
 from starfinder.io import save_volume
 
 from ._cellular import _contact, _extent, _harmonic_bound, _harmonic_terms, _labels, _lobe_one_extent, _shapes

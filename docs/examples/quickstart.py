@@ -3,7 +3,7 @@
 Run from src/python with a new external output directory; see getting-started.md.
 """
 
-from starfinder.barcode import NeighborhoodSumConfig, ReadFilterConfig
+from starfinder.readout import NeighborhoodSumConfig, ReadFilterConfig
 from starfinder.spot_finding import LocalMaximaConfig
 import argparse
 import json

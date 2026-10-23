@@ -15,13 +15,13 @@ import pandas as pd
 import pytest
 
 from starfinder._registry import config_type_for, names
-from starfinder.barcode import (DECODING_METHODS, ENCODINGS, Codebook, CodebookAwareDecoderConfig, DecodingSpec,
+from starfinder.readout import (DECODING_METHODS, ENCODINGS, Codebook, CodebookAwareDecoderConfig, DecodingSpec,
                                 EncodingConfig, EncodingSpec, OneBaseEncodingConfig, WtaDecoderConfig,
                                 decode_barcodes)
 
-from .barcode_cases import CHANNELS, intensity, tensor
+from .readout_cases import CHANNELS, intensity, tensor
 
-pytestmark = pytest.mark.barcode
+pytestmark = pytest.mark.readout
 
 ROOT = Path(__file__).resolve().parents[3]
 ONE_BASE_COLORS = {"A": "1", "C": "2", "G": "3", "T": "4"}

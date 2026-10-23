@@ -14,7 +14,7 @@ import pandas as pd
 import pytest
 
 import starfinder.synthetic as synthetic
-from starfinder.barcode import load_codebook
+from starfinder.readout import load_codebook
 from starfinder.dataset import ChannelInfo, Dataset, MorphologyConfig, RoundState
 from starfinder.registration import RegistrationRecipe, RegistrationStep
 from starfinder.io import load_volume, load_volume_zyxc

@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from starfinder.barcode import (ENCODINGS, Codebook, EncodingConfig, OneBaseEncodingConfig, WtaDecoderConfig,
+from starfinder.readout import (ENCODINGS, Codebook, EncodingConfig, OneBaseEncodingConfig, WtaDecoderConfig,
                                 assign_direct, decode_barcodes, decode_color_sequence, encode_bases,
                                 extract_intensities, load_codebook, load_direct_panel)
 from starfinder.dataset import Dataset, RoundState
@@ -20,9 +20,9 @@ from starfinder.image import ImageMetadata
 from starfinder.io import ImageLoadResult
 from starfinder.spot_finding import LocalMaximaConfig, SpotFindingPlan
 
-from .barcode_cases import intensity, tensor
+from .readout_cases import intensity, tensor
 
-pytestmark = pytest.mark.barcode
+pytestmark = pytest.mark.readout
 
 CHANNELS = ("ch00", "ch01", "ch02", "ch03")
 

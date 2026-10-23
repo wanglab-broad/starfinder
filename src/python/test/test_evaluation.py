@@ -9,7 +9,7 @@ import pytest
 from starfinder.image import ImageMetadata, IncompatibleGeometryError
 from starfinder.evaluation.matching import match_points
 from starfinder.evaluation.spot_finding import evaluate_spots
-from starfinder.evaluation.barcode import evaluate_decoding
+from starfinder.evaluation.readout import evaluate_decoding
 from starfinder.evaluation.registration import (
     evaluate_translation, normalized_cross_correlation, structural_similarity,
     evaluate_mask_overlap, evaluate_registration,
@@ -109,7 +109,7 @@ def test_decoding_known_missing_and_zero_denominator():
 
 def test_decoding_result_evaluates_against_synthetic_spot_truth_without_renaming():
     """Decoded reads and spot_truth share gene_id/color_sequence and the spot keys."""
-    from starfinder.barcode import (Codebook, NeighborhoodSumConfig, WtaDecoderConfig,
+    from starfinder.readout import (Codebook, NeighborhoodSumConfig, WtaDecoderConfig,
                                     decode_barcodes, extract_intensities)
     from starfinder.io import ImageLoadResult
     from starfinder.spot_finding import LocalMaximaConfig, SpotFindingResult

@@ -8,7 +8,7 @@ from dataclasses import replace
 
 import pandas as pd
 
-from starfinder.barcode import Codebook
+from starfinder.readout import Codebook
 from starfinder.synthetic import (BackgroundConfig, FormedSceneConfig, NoiseConfig, ScalarDistribution,
     formed_scene_preset, generate_formed_scene)
 from starfinder.synthetic._presets import _appearance

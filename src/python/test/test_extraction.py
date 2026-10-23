@@ -4,7 +4,7 @@ from dataclasses import replace
 import numpy as np
 import pandas as pd
 import pytest
-from starfinder.barcode import (
+from starfinder.readout import (
     extract_intensities,
     NeighborhoodSumConfig,
     decode_barcodes,
@@ -13,9 +13,9 @@ from starfinder.barcode import (
 from starfinder.io import ImageLoadResult
 from starfinder.spot_finding import SpotFindingResult, LocalMaximaConfig
 from starfinder.image import ImageMetadata
-from .barcode_cases import CHANNELS, META, codebook
+from .readout_cases import CHANNELS, META, codebook
 
-pytestmark = [pytest.mark.barcode, pytest.mark.contract]
+pytestmark = [pytest.mark.readout, pytest.mark.contract]
 
 
 def spots(points, ids=None):

@@ -16,14 +16,14 @@ import pytest
 import yaml
 
 from starfinder._registry import names
-from starfinder.barcode import (DECODING_METHODS, ENCODINGS, BarcodeLayout, Codebook, CodebookAwareDecoderConfig,
+from starfinder.readout import (DECODING_METHODS, ENCODINGS, BarcodeLayout, Codebook, CodebookAwareDecoderConfig,
                                 EncodingConfig, OneBaseEncodingConfig, ReadFilterConfig, Segment, WtaDecoderConfig,
                                 decode_barcodes, filter_reads, load_codebook)
 from starfinder.dataset.workflow import from_workflow_config
 
-from .barcode_cases import intensity, tensor
+from .readout_cases import intensity, tensor
 
-pytestmark = pytest.mark.barcode
+pytestmark = pytest.mark.readout
 
 ROOT = Path(__file__).resolve().parents[3]
 SCHEMA = yaml.safe_load((ROOT / "workflow/schemas/config.schema.yaml").read_text())

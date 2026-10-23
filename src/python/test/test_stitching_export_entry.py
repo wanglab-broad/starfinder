@@ -29,7 +29,7 @@ from starfinder.assembly import assemble, load_assembly, save_assembly
 from starfinder.dataset._export import assembly_inputs, fusion_inputs
 from starfinder.image import ImageMetadata, IncompatibleGeometryError
 from starfinder.io import save_volume
-from starfinder.sample_output import (
+from starfinder.export import (
     ExportConfig,
     ExportIncompleteWarning,
     FusionConfig,
@@ -37,7 +37,7 @@ from starfinder.sample_output import (
     check_export,
     fuse,
 )
-from starfinder.sample_output._record import section_sha256
+from starfinder.export._record import section_sha256
 from starfinder.io._ome import read_ome_layout
 from starfinder.stitching import PlacementReviewRequiredError, load_placement, save_placement
 

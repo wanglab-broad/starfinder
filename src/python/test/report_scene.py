@@ -108,7 +108,7 @@ def scene_config(plane=False):
 
 def pipeline_config(channels, *, registration=None, preprocessing=None):
     """W-384's synthetic recipe with deduplication; ``registration`` and ``preprocessing`` replace its recipes."""
-    from starfinder.barcode import (DeduplicationConfig, NeighborhoodSumConfig, ReadFilterConfig, ReadScoreConfig,
+    from starfinder.readout import (DeduplicationConfig, NeighborhoodSumConfig, ReadFilterConfig, ReadScoreConfig,
                                     WtaDecoderConfig)
     from starfinder.dataset import PipelineConfig
     from starfinder.registration import RegistrationRecipe, RegistrationStep
@@ -200,7 +200,7 @@ def build_chain(base, *, plane=False, stages=STAGES, registration=None, preproce
 
 
 def _export_per_fov(chain, dataset, plane):
-    from starfinder.sample_output import ExportConfig, FusionConfig
+    from starfinder.export import ExportConfig, FusionConfig
     fusion = FusionConfig(dimensionality="projection" if plane else "both")
     dataset.export(chain.sample, placement=chain.root / "stitching" / chain.sample,
                    output_dir=chain.root / "export" / chain.sample, config=ExportConfig(route="per_fov", fusion=fusion))
@@ -214,7 +214,7 @@ def export_after_fusion(chain, destination) -> Chain:
     from starfinder.assignment import AssignmentConfig
     from starfinder.dataset import Dataset, RoundState
     from starfinder.io import save_volume
-    from starfinder.sample_output import (ExportConfig, FusionConfig, SampleSegmentationConfig, SampleSegmentationRun,
+    from starfinder.export import (ExportConfig, FusionConfig, SampleSegmentationConfig, SampleSegmentationRun,
                                           fused_grid)
     from starfinder.segmentation import LabelImportConfig, ReferenceGrid, SeededWatershedConfig
     from starfinder.stitching import load_placement

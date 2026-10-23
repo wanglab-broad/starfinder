@@ -364,7 +364,7 @@ default-tier checks seconds. Each run records wall time and maximum RSS with
 ### Implemented checks (W-296)
 
 The checks are in the modules of `src/python/test/` listed below, each marked
-`validation` (subsystem `barcode`). The task groups added most of them with the code
+`validation` (subsystem `readout`). The task groups added most of them with the code
 they check; `test_readout_validation.py` adds R3, R5, R8 and R19, R6 on `cal`, and the
 `two_seg` parts of R2 and R16. Every check on a hand-built fixture with noise runs with
 seeds 100, 101 and 102:

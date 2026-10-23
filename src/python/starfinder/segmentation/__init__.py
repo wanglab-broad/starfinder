@@ -15,7 +15,7 @@ cell territories and keeps both masks. :func:`segment` runs one method of
 :class:`SegmentationInput` behind the stage checks; :func:`resolve_model` verifies a
 model of ``KNOWN_MODELS`` or a user-trained model by path without downloading;
 ``FOV.segment`` runs a :class:`SegmentationPlan` of named runs on one FOV.
-:class:`SampleSegmentation` is what ``starfinder.sample_output.segment_fused``
+:class:`SampleSegmentation` is what ``starfinder.export.segment_fused``
 returns on the route after fusion: the segmentation grid, one
 :class:`SegmentationResult` per run and the ``segmentation`` section
 (docs/sample-segmentation-contract.md). See docs/segmentation-contract.md and

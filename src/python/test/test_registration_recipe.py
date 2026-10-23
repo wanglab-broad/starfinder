@@ -506,7 +506,7 @@ def test_version_1_registered_checkpoints_still_load_as_sequential(tmp_path):
 
 
 def test_version_1_candidates_and_pre_qc_headers_still_load(tmp_path):
-    from starfinder.barcode import Codebook, NeighborhoodSumConfig, ReadFilterConfig, WtaDecoderConfig
+    from starfinder.readout import Codebook, NeighborhoodSumConfig, ReadFilterConfig, WtaDecoderConfig
     from starfinder.spot_finding import LocalMaximaConfig
     import pandas as pd
     fov = golden_fov(tmp_path)

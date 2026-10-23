@@ -45,7 +45,7 @@ from starfinder.assignment._persist import assignment_directory, write_assignmen
 from starfinder.dataset import Dataset
 from starfinder.image import ImageMetadata, IncompatibleGeometryError
 from starfinder.io import load_volume, save_volume
-from starfinder.sample_output import ExportConfig, FusionConfig, FusionInput, LabelConfig, check_export, fuse
+from starfinder.export import ExportConfig, FusionConfig, FusionInput, LabelConfig, check_export, fuse
 from starfinder.segmentation import ReferenceGrid, reference_grid_from_file
 from starfinder.stitching import approve_placement, placement_from_table, positions_from_table, save_placement
 
@@ -295,7 +295,7 @@ def merged(fov):
 def run_combination(root, metadata):
     """placement_from_table, assemble, fuse and fuse_labels on own_cases with every grid given this metadata."""
     from starfinder.assembly import save_assembly
-    from starfinder.sample_output import fuse_labels
+    from starfinder.export import fuse_labels
     grid = own_grid(metadata)
     grids = {fov: grid for fov in OWN_IDS}
     placed = approve_placement(placement_from_table(own_table(), grids, sample="s1"), reviewer="test", note="own")
@@ -401,7 +401,7 @@ REFUSED = {"nm": (own_metadata("nm", "identity"), "a unit other than µm: FOV1 (
 @pytest.mark.parametrize("case", list(REFUSED))
 def test_another_unit_no_unit_or_another_direction_is_refused_as_before(tmp_path, case):
     """The four entries refuse these grids with the messages of the base revision."""
-    from starfinder.sample_output._labels import _grids as label_grids
+    from starfinder.export._labels import _grids as label_grids
     metadata, listed = REFUSED[case]
     grid = own_grid(metadata)
     grids = {fov: grid for fov in OWN_IDS}
@@ -479,7 +479,7 @@ def test_paged_tiles_fuse_as_their_zyx_twins(tmp_path, monkeypatch):
     """IYX and QYX pages read as ZYX: the header check and the lazy reader agree, every file is read by its pages,
     neither through tifffile's Zarr store (W-432) nor whole, and the fused images equal the ZYX file's pixel for
     pixel."""
-    from starfinder.sample_output._fuse import _source_shape
+    from starfinder.export._fuse import _source_shape
     placed, grid = tile_placement()
     config = FusionConfig(images=("reference_merged",), dimensionality="both", scale_yx=0.5)
     reads = []
@@ -512,7 +512,7 @@ def test_the_lazy_reader_gives_the_header_shape(tmp_path):
     """The lazy reader of a paged file is a dask array of the header's shape and of the file's pixels."""
     import dask.array as da
 
-    from starfinder.sample_output._fuse import _lazy, _Source, _source_shape
+    from starfinder.export._fuse import _lazy, _Source, _source_shape
     from contextlib import ExitStack
     for form in ("IYX", "QYX"):
         path = tile_files(tmp_path, form)["FOV1"]
@@ -534,7 +534,7 @@ CHANNELS = {"CZYX": (np.zeros((2, 3, 36, 36), np.uint16), {"metadata": {"axes": 
 
 @pytest.mark.parametrize("case", list(CHANNELS))
 def test_a_channel_axis_or_more_than_three_axes_is_refused_as_before(tmp_path, case):
-    from starfinder.sample_output._fuse import _source_shape
+    from starfinder.export._fuse import _source_shape
     array, kwargs = CHANNELS[case]
     path = tmp_path / "tile.tif"
     tifffile.imwrite(path, array, **kwargs)
@@ -579,7 +579,7 @@ FALLBACK_KINDS = {"pages, no metadata (IYX)": "generic", "uniform pages, no meta
 def test_only_metadata_free_pages_are_read_as_zyx(tmp_path, case):
     """Every file the base revision read or refused is read or refused the same, except the two metadata-free page
     series of the decision; a refusal keeps the base message."""
-    from starfinder.sample_output._fuse import _source_shape
+    from starfinder.export._fuse import _source_shape
     shape, kwargs, base, expected = AXIS_CASES[case]
     assert expected == base or case in (*FALLBACK_KINDS, "shaped pages without axes (QYX)")
     path = tmp_path / "tile.tif"

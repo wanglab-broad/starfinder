@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from starfinder.barcode import Codebook
+from starfinder.readout import Codebook
 from starfinder.image import ImageMetadata
 from starfinder.synthetic import (BackgroundConfig, FormedSceneConfig, GeometryConfig,
                                   NoiseConfig, ReadoutEffectsConfig, ScalarDistribution,

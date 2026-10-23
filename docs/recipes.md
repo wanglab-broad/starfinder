@@ -257,8 +257,8 @@ Workflow settings: `seq_channel_order`, `n_rounds`, `ref_round`, plus the
 [configuration](workflow-configuration.md#rule-resources-and-parameters).
 The YAML wrapper is not identical to this direct API: its filtering field is
 `end_base`, while the typed `ReadFilterConfig` field is `end_bases`. For base/color conversions
-alone, see {py:func}`~starfinder.barcode.encode_bases` and
-{py:func}`~starfinder.barcode.decode_color_sequence`.
+alone, see {py:func}`~starfinder.readout.encode_bases` and
+{py:func}`~starfinder.readout.decode_color_sequence`.
 
 ## Inspect molecule outputs
 

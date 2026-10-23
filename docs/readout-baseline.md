@@ -13,17 +13,17 @@ start with `src/matlab/`, `workflow/` or `docs/`, and line numbers are at
 
 ## Extraction
 
-`extract_intensities(rounds, spots, *, config)` in `starfinder.barcode`
-({doc}`api/barcode`) sums a box around each candidate in every round.
+`extract_intensities(rounds, spots, *, config)` in `starfinder.readout`
+({doc}`api/readout`) sums a box around each candidate in every round.
 
 | Field | Behavior at `141c093` |
 | --- | --- |
-| Inputs | An ordered mapping of round label to `ImageLoadResult` (ZYXC), whose insertion order defines the round axis, and a `SpotFindingResult`. Every round must have the same shape, the spot result's metadata and the same channel labels, else `ValueError` (`barcode/extraction.py:105-138`). Coordinates must lie in `[0, size − 1]` on every axis before rounding (`:141-142`). |
+| Inputs | An ordered mapping of round label to `ImageLoadResult` (ZYXC), whose insertion order defines the round axis, and a `SpotFindingResult`. Every round must have the same shape, the spot result's metadata and the same channel labels, else `ValueError` (`readout/extraction.py:105-138`). Coordinates must lie in `[0, size − 1]` on every axis before rounding (`:141-142`). |
 | Sampling | Nearest voxel: the box centre is `floor(coord + 0.5)` (`:143`). `NeighborhoodSumConfig.sampling` accepts only `"nearest"` (`:36-37`). |
 | Box and units | `neighborhood_radius_zyx` (default `(1, 2, 2)`) are half-widths in voxel counts, never physical spacing: the box is 3×5×5 voxels by default (`:22`). The value is the float64 sum of the image's grey levels over the box, per channel (`:146-152`); it is not divided by the voxel count, and nothing is subtracted. |
 | Boundary | `boundary="zero"` only (`:36-37`). Near a face the box is clipped to the image (`:148-149`), which equals zero padding: a clipped box sums fewer voxels, and nothing records how many. |
 | Result | `IntensityExtractionResult`: `values` (N×C×R float64, finite), `spot_ids` and `spot_namespace` from the spot table, `channel_labels`, `round_labels`, `metadata`, `config`, `valid` and `diagnostics` (`source_shape_zyx`, `calculation_dtype`, `sampling`) (`:40-96`, `:153-167`). |
-| The `valid` mask | Boolean N×R, documented as "false marks an unavailable measurement, not zero signal" (`:44`). `extract_intensities` always sets it to all true (`:161`), including for a clipped box at a face and for a round that is zero at the candidate. Nothing in the package sets it to false. It can only be false in a result a caller builds directly or in a `candidates` checkpoint whose `valid_<round>` column was edited. Decoding turns any false round into `unmatched` with reason `invalid_measurement` (`barcode/decoding.py:195`, `:267-276`). |
+| The `valid` mask | Boolean N×R, documented as "false marks an unavailable measurement, not zero signal" (`:44`). `extract_intensities` always sets it to all true (`:161`), including for a clipped box at a face and for a round that is zero at the candidate. Nothing in the package sets it to false. It can only be false in a result a caller builds directly or in a `candidates` checkpoint whose `valid_<round>` column was edited. Decoding turns any false round into `unmatched` with reason `invalid_measurement` (`readout/decoding.py:195`, `:267-276`). |
 | `FOV` extraction | `FOV.extract_intensities(config, rounds)` and `FOV.run` extract one round at a time (`_extract_round`, `dataset/fov.py:887-900`) from the round's image or the recipe's `extraction_source` snapshot, then concatenate the rounds (`_assemble_intensities`, `:902-915`). Every sequencing round is extracted at every candidate. |
 | Cost | W-278 measured the per-spot loop on `medium` (32×512×512, 587 candidates, 4 rounds, 4 channels): median 0.0586 s, 25 µs per spot and round, 685,180 KiB peak RSS for the process (W-278 `extraction-cost.csv`). |
 | MATLAB counterpart | `STARMapDataset.ReadsExtraction` (`src/matlab/STARMapDataset.m:762-811`) calls `ExtractFromLocation` (`src/matlab/ExtractFromLocation.m:1-48`) per round on the channels whose name contains `seq`. It clips the box to the image (`GetExtents`, `:51-67`), L2-normalizes the channel sums, and stores only the round's WTA color (`M` for a tie, `N` for NaN) and its score `-log(max)`. The color strings of the rounds are concatenated into `color_seq` (`STARMapDataset.m:796-805`); the sums themselves are not kept. Its `voxel_size` is `(row, column, Z)`, Python's is `(z, y, x)` ({doc}`conventions`). |
@@ -32,8 +32,8 @@ start with `src/matlab/`, `workflow/` or `docs/`, and line numbers are at
 
 | Field | Behavior at `141c093` |
 | --- | --- |
-| Encoding | Two-base color space only (`barcode/_encoding.py:10-30`): each pair of adjacent bases maps to one of four colors (`AA, CC, GG, TT` → 1; `AC, CA, GT, TG` → 2; `AG, CT, GA, TC` → 3; `AT, CG, GC, TA` → 4), so `n` bases give `n − 1` colors. `decode_color_sequence(colors, start_base)` inverts it from a known first base (`:70-119`). There is no other encoding. |
-| `EncodingConfig.reverse_bases` | Default `True`: the barcode is reversed before encoding (`barcode/codebook.py:31`, `:48`), as MATLAB `do_reverse` (`src/matlab/LoadCodebook.m:16-18`). |
+| Encoding | Two-base color space only (`readout/_encoding.py:10-30`): each pair of adjacent bases maps to one of four colors (`AA, CC, GG, TT` → 1; `AC, CA, GT, TG` → 2; `AG, CT, GA, TC` → 3; `AT, CG, GC, TA` → 4), so `n` bases give `n − 1` colors. `decode_color_sequence(colors, start_base)` inverts it from a known first base (`:70-119`). There is no other encoding. |
+| `EncodingConfig.reverse_bases` | Default `True`: the barcode is reversed before encoding (`readout/codebook.py:31`, `:48`), as MATLAB `do_reverse` (`src/matlab/LoadCodebook.m:16-18`). |
 | `EncodingConfig.split_index` | `None` or a positive integer `i` (`codebook.py:32-42`). After encoding, the color at **zero-based** position `i` is removed and the colors after it are moved before the colors before it: `seq[i+1:] + seq[:i]` (`:49-53`). Both parts must be nonempty. This is the only representation of two segments: there is no segment count, no segment length in bases and no per-segment end bases. |
 | `Codebook` | A table with `gene_id` and `color_sequence` (and an optional `base_sequence`, checked against the encoding), `round_labels`, `channel_labels` (exactly four) and `color_to_channel` (a bijection of colors `1`–`4` onto the channel indices) (`codebook.py:57-127`). Each `color_sequence` must have one color per round. A repeated `gene_id` is an error (`:100-101`), and so is a repeated color sequence (`:108-109`). A row is therefore a gene: `n_genes` counts rows, `gene_to_seq` maps each gene to one sequence, and `seq_to_gene` maps each sequence to its gene (`:135-153`). |
 | `load_codebook` | Reads a headerless `gene,barcode` CSV (the MATLAB `genes.csv`), a `gene,barcode` header, or a canonical `gene_id,color_sequence[,base_sequence]` header; barcodes are encoded with the given `EncodingConfig` (`codebook.py:156-218`). Errors name the source row. `Dataset.load_codebook(path, split_index=None, reverse_bases=True)` builds the `EncodingConfig` and uses the sequencing rounds and `channel_order` as labels (`dataset/dataset.py:139-165`). |
@@ -42,7 +42,7 @@ start with `src/matlab/`, `workflow/` or `docs/`, and line numbers are at
 ## Decoders
 
 `decode_barcodes(intensity_result, codebook, *, config)` takes `WtaDecoderConfig`
-or `CodebookAwareDecoderConfig` (`barcode/decoding.py:152-380`). Both:
+or `CodebookAwareDecoderConfig` (`readout/decoding.py:152-380`). Both:
 
 * require the intensity and codebook channel and round labels to match exactly
   (`:175-179`);
@@ -77,7 +77,7 @@ hard-coded in `decoding.py:169`, `:207`, `dataset/config.py:226` and
 
 ## Read filtering
 
-`filter_reads(decoding_result, *, config)` (`barcode/filtering.py:109-168`)
+`filter_reads(decoding_result, *, config)` (`readout/filtering.py:109-168`)
 annotates every row and keeps it; `ReadFilteringResult.accepted` is a view.
 
 | Field | Behavior at `141c093` |
@@ -190,7 +190,7 @@ mapping per round and channel, and no extraction limited to a candidate's own ro
 ## Evaluation
 
 `starfinder.evaluation.evaluate_decoding(decoded, truth, *, matches)`
-(`evaluation/barcode.py:8-51`) gives gene and color-sequence accuracy over
+(`evaluation/readout.py:8-51`) gives gene and color-sequence accuracy over
 `match_points` pairs. There is no ranking measure for a score (AUROC, error at
 fixed retention) and no duplicate measure; W-278 computed both in its own scripts.
 

@@ -170,7 +170,7 @@ def _codebook(preset):
 def _raw_dataset(raw, root):
     """A Dataset of the raw dataset ``save_context_dataset`` wrote, from the fields ``dataset.json`` records, with its
     output under ``root`` (as the appearance contract tests build it)."""
-    from starfinder.barcode import load_codebook
+    from starfinder.readout import load_codebook
     from starfinder.dataset import ChannelInfo, Dataset, RoundState
     record = _read_json(Path(raw) / "dataset.json")
     rounds = record["rounds"]
@@ -401,7 +401,7 @@ def _fusion_images(context, stain):
 
 
 def _fused_projection(root, sample, fovs, context, stain):
-    from starfinder.sample_output import FusionConfig, fused_grid
+    from starfinder.export import FusionConfig, fused_grid
     from starfinder.stitching import load_placement
     placement = load_placement(Path(root) / "stitching" / sample)
     fusion = FusionConfig(images=_fusion_images(context, stain), dimensionality="projection", projection="max",
@@ -471,7 +471,7 @@ def _step_assign_export(a):
     from starfinder.assignment import AssignmentConfig, assign_molecules, molecule_table_from_csv
     from starfinder.assignment._persist import assignment_directory, write_assignment
     from starfinder.dataset import Dataset
-    from starfinder.sample_output import ExportConfig, FusionConfig, SampleSegmentationConfig, SampleSegmentationRun
+    from starfinder.export import ExportConfig, FusionConfig, SampleSegmentationConfig, SampleSegmentationRun
     from starfinder.segmentation import ExpandLabelsConfig, SeededWatershedConfig, StarDistConfig, import_labels
     from .sample_segmentation_fixtures import truth_runs
     base, variant, context = Path(a["base"]), a["variant"], a["context"]
@@ -1164,7 +1164,7 @@ def check_per_fov_identities(chain):
     construction), ``check_accounting`` recomputing them from the per-FOV §2.9 results, ``check_export``, and
     ``n_obs`` of sample.h5ad equal to the counted cells."""
     from starfinder.assembly import load_assembly
-    from starfinder.sample_output import check_export
+    from starfinder.export import check_export
     from starfinder.stitching import load_placement
     from .assembly_fixtures import check_accounting
     from .test_report_measurements import matrix
@@ -1195,7 +1195,7 @@ def check_export_after_fusion(folder):
     ``TypeError`` for a molecule that no FOV owns (excluded ``outside_grid``, a valid export), which these chains hold
     (W-487 worker notes, a finding for a later issue; the package is not changed here)."""
     from starfinder.assembly import load_assembly
-    from starfinder.sample_output import _check as checks
+    from starfinder.export import _check as checks
     from .test_sample_segmentation_route import t3_failures
     folder = Path(folder)
     record = checks._r1(folder)

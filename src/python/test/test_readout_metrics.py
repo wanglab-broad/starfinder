@@ -8,7 +8,7 @@ import math
 import numpy as np
 import pytest
 
-from starfinder.evaluation.barcode import evaluate_deduplication, ranking_quality
+from starfinder.evaluation.readout import evaluate_deduplication, ranking_quality
 
 pytestmark = [pytest.mark.evaluation, pytest.mark.contract]
 

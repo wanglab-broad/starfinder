@@ -18,7 +18,7 @@ SMALL_DATASET_GENERATOR = {"generator_version": "6", "preset_version": "benchmar
 
 # Every test carries at least one of these (registered in pyproject.toml), so `pytest -m` can select
 # the tests of a subsystem.
-SUBSYSTEM_MARKERS = frozenset({"core", "io", "dataset", "preprocessing", "registration", "spot_finding", "barcode",
+SUBSYSTEM_MARKERS = frozenset({"core", "io", "dataset", "preprocessing", "registration", "spot_finding", "readout",
                                "segmentation", "stitching", "report", "synthetic", "evaluation", "benchmark",
                                "workflow", "integration"})
 

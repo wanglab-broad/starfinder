@@ -13,13 +13,13 @@ from dataclasses import replace
 import pandas as pd
 import pytest
 
-from starfinder.barcode import (Codebook, CodebookAwareDecoderConfig, NeighborhoodSumConfig, WtaDecoderConfig,
+from starfinder.readout import (Codebook, CodebookAwareDecoderConfig, NeighborhoodSumConfig, WtaDecoderConfig,
                                 decode_barcodes, extract_intensities, load_codebook, summarize_reads)
 from starfinder.io import ImageLoadResult
 from starfinder.spot_finding import LocalMaximaConfig, find_spots
 from starfinder.synthetic import calibrated_scene_preset, generate_formed_scene
 
-pytestmark = pytest.mark.barcode
+pytestmark = pytest.mark.readout
 
 SEED = 103
 # entry -> gene: six genes of 2 to 3 entries each.

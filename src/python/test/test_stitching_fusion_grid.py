@@ -5,7 +5,7 @@ Fixtures: ``quad`` (seed 2102), ``zstack`` (equal Z, different Z, the one-plane 
 ``plane_pair``, ``checker_pair``, ``fuse_band``, ``quad``'s first FOV alone and
 ``status_cases``' placement with every FOV excluded (``fuse`` called alone: status
 ``empty``, F8). The expected ``n0`` is the formula evaluated here. ``import
-starfinder.sample_output`` is checked in a subprocess.
+starfinder.export`` is checked in a subprocess.
 """
 import json
 import math
@@ -17,7 +17,7 @@ import numpy as np
 import pytest
 
 from starfinder.assembly import AssemblyConfig
-from starfinder.sample_output import (
+from starfinder.export import (
     ExportConfig,
     ExportIncompleteWarning,
     FusionConfig,
@@ -28,7 +28,7 @@ from starfinder.sample_output import (
     fuse,
     fused_grid,
 )
-from starfinder.sample_output._fuse import sum_bound
+from starfinder.export._fuse import sum_bound
 
 from .assembly_fixtures import approved, golden_placement
 from .fusion_fixtures import checker_pair, fuse_band, grid_of, make_case, plane_pair, quad, zstack
@@ -230,7 +230,7 @@ def test_missing_extra_records_not_run(tmp_path, monkeypatch):
 
 
 def test_import_loads_no_optional_library():
-    code = ("import sys, starfinder.sample_output; "
+    code = ("import sys, starfinder.export; "
             "print([m for m in ('multiview_stitcher', 'zarr', 'spatialdata') if m in sys.modules])")
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True,
                          env={"PYTHONPATH": str(SRC), "PATH": "/usr/bin:/bin"})

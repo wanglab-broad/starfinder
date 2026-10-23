@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from starfinder.barcode import NeighborhoodSumConfig, WtaDecoderConfig
+from starfinder.readout import NeighborhoodSumConfig, WtaDecoderConfig
 from starfinder.dataset import CheckpointConfig, Dataset, ExecutionConfig, PipelineConfig, RoundState
 from starfinder.dataset.workflow import from_workflow_config
 from starfinder.image import ImageMetadata, IncompatibleGeometryError

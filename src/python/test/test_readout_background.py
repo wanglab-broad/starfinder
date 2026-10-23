@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from starfinder.barcode import (Codebook, LocalBackgroundConfig, NeighborhoodSumConfig, WtaDecoderConfig,
+from starfinder.readout import (Codebook, LocalBackgroundConfig, NeighborhoodSumConfig, WtaDecoderConfig,
                                 decode_barcodes, extract_intensities, score_reads)
 from starfinder.image import ImageMetadata
 from starfinder.io import ImageLoadResult
@@ -18,7 +18,7 @@ from starfinder.spot_finding import LocalMaximaConfig, SpotFindingResult
 
 from . import readout_scenes as scenes
 
-pytestmark = [pytest.mark.barcode]
+pytestmark = [pytest.mark.readout]
 
 SHAPE = (12, 48, 48)
 CHANNELS = ("ch00", "ch01", "ch02", "ch03")

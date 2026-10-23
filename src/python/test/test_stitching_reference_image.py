@@ -38,7 +38,7 @@ from starfinder.assembly import load_assembly
 from starfinder.dataset import Dataset
 from starfinder.dataset._export import _reference_grid, source_path
 from starfinder.io import save_volume
-from starfinder.sample_output import ExportConfig, FusionConfig, check_export
+from starfinder.export import ExportConfig, FusionConfig, check_export
 from starfinder.stitching import MultiviewStitcherConfig, load_placement, positions_from_table
 
 from .stitching_fixtures import LN_SPACING, grid

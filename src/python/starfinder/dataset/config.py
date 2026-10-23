@@ -11,7 +11,7 @@ from starfinder.registration import RegistrationRecipe
 from starfinder._execution import check_device
 from starfinder.spot_finding import SPOT_FINDING_METHODS, SpotFindingPlan
 from starfinder.spot_finding._methods import SpotFindingConfig
-from starfinder.barcode import (DECODING_METHODS, NeighborhoodSumConfig, WtaDecoderConfig,
+from starfinder.readout import (DECODING_METHODS, NeighborhoodSumConfig, WtaDecoderConfig,
     CodebookAwareDecoderConfig, DirectAssignmentConfig, ReadFilterConfig, ReadScoreConfig, DeduplicationConfig)
 
 

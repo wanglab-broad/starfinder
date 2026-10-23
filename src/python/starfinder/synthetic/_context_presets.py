@@ -7,7 +7,7 @@ W-481 for the two ``slow`` presets whose pixel is twice the acquired one), recor
 """
 from __future__ import annotations
 
-from starfinder.barcode import Codebook
+from starfinder.readout import Codebook
 
 from ._common import ScalarDistribution
 from ._context import (CONTEXT_PRESET_VERSION, CellTypeConfig, ContextSceneConfig, MoleculeConfig, NucleusShapeConfig,

@@ -20,7 +20,7 @@ import pytest
 from pandas.testing import assert_frame_equal
 
 from starfinder.assignment import AssignmentConfig
-from starfinder.barcode import Codebook, ReadFilterConfig, ReadFilteringResult
+from starfinder.readout import Codebook, ReadFilterConfig, ReadFilteringResult
 from starfinder.dataset import CheckpointConfig, Dataset, RoundState
 from starfinder.io import save_volume
 from starfinder._checkpoint import FORMAT_VERSION, STAGES
@@ -380,7 +380,7 @@ def test_excluded_cells_are_preserved(tmp_path, genes, masks, table_format):
 
 @pytest.mark.dataset
 def test_fov_run_and_segmentation_files_are_untouched_by_assign(tmp_path):
-    from starfinder.barcode import NeighborhoodSumConfig, WtaDecoderConfig
+    from starfinder.readout import NeighborhoodSumConfig, WtaDecoderConfig
     from starfinder.dataset import PipelineConfig
     from starfinder.registration import RegistrationRecipe, RegistrationStep
     from starfinder.io import ImageLoadConfig

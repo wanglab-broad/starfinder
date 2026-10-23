@@ -14,19 +14,23 @@ are not examples of the current API.
 | Before | Current owner/interface |
 | --- | --- |
 | `dataset.STARMapDataset`, `LayerState`, `layers` | `dataset.Dataset`, `RoundState`, `rounds` |
-| `dataset.Codebook` | `barcode.Codebook` |
+| `dataset.Codebook` | `readout.Codebook` |
 | `io.load_multipage_tiff`, `load_image_stacks`, `save_stack` | `io.load_volume`, `load_round`, `save_volume` |
 | `min_max_normalize`, `histogram_match`, `morphological_reconstruction`, `tophat_filter` | `preprocessing.normalize_intensity`, `match_histogram`, `reconstruct_background`, `filter_tophat` |
 | `utils.make_projection` | `preprocessing.project_image` |
 | `spotfinding.find_spots_3d` | `spot_finding.find_spots` |
-| `decode_color_seq` | `barcode.decode_color_sequence` |
+| `decode_color_seq` | `readout.decode_color_sequence` |
 | `benchmark.synthetic` | `synthetic` |
 | `registration.metrics`, benchmark truth comparisons | Pure domain functions in `evaluation` |
 | Separate benchmark drivers and `starfinder-generate` | `starfinder synthetic generate`, `starfinder benchmark run/evaluate/report` |
 | `io.read_checkpoint` | `dataset.read_checkpoint` (no alias) |
-| `io.export_spots` | `barcode.export_spots` (no alias) |
+| `io.export_spots` | `readout.export_spots` (no alias) |
 | `sample_output.SampleSegmentation` | `segmentation.SampleSegmentation` (no alias) |
 | `dataset.RegistrationRecipe`, `RegistrationStep`, `RecoveryConfig`, `ExternalReference` | `registration.RegistrationRecipe`, `RegistrationStep`, `RecoveryConfig`, `ExternalReference` (no alias) |
+| `starfinder.barcode` (the module, its submodules and the root export `starfinder.barcode`) | `starfinder.readout` (no alias) |
+| `starfinder.sample_output` (the module and its submodules) | `starfinder.export` (no alias) |
+| `starfinder.evaluation.barcode` | `starfinder.evaluation.readout` (no alias) |
+| pytest marker `barcode` (`-m barcode`) | pytest marker `readout` (`-m readout`) |
 
 These relocations do not make the old positional arguments or return values valid.
 Use typed operation configs and structured results. See the [API
@@ -34,6 +38,12 @@ reference](api/python.rst) and [coordination member map](coordination.md).
 Registration internals, benchmark helpers and barcode lookup constants are private.
 `io` holds image file I/O only: the checkpoint serializers are private to the package
 and `read_checkpoint` is public in `dataset`, beside `FOV.load_checkpoint`.
+
+The module renames of W-556 change the module paths only: every member keeps its name,
+and the root exports (`decode_barcodes`, `extract_intensities`, `filter_reads`,
+`load_codebook`) keep theirs. The OME annotation namespace `"starfinder.sample_output"`
+that the package's OME-TIFF files carry stays as it is: it is a format identifier, which
+`check_export` reads back.
 
 ## Before and after Python calls
 
@@ -102,7 +112,7 @@ good_reads = filter_reads(calls, ...)
 After (given labeled rounds, a SpotFindingResult and a validated Codebook):
 
 ```python
-from starfinder.barcode import (NeighborhoodSumConfig, WtaDecoderConfig,
+from starfinder.readout import (NeighborhoodSumConfig, WtaDecoderConfig,
     ReadFilterConfig, extract_intensities, decode_barcodes, filter_reads)
 
 intensities = extract_intensities(rounds, spots,
@@ -603,13 +613,13 @@ keys `detection_config`, `detection_rounds`, `detection_plan` and
 "Readout modes" and "Direct readout"). `Dataset.readout_mode` is `"multiplexed"`
 (the default: every earlier result, identity and digest is unchanged) or
 `"direct"`, where a round and channel identify a gene.
-{py:class}`~starfinder.barcode.DirectPanel` holds the gene of each (round, channel),
-{py:func}`~starfinder.barcode.load_direct_panel` reads it from a
+{py:class}`~starfinder.readout.DirectPanel` holds the gene of each (round, channel),
+{py:func}`~starfinder.readout.load_direct_panel` reads it from a
 `round,channel,gene_id` CSV, and `Dataset.load_direct_panel` stores it as
 `Dataset.direct_panel`; a repeated gene or (round, channel) raises `ValueError`
-naming it. {py:class}`~starfinder.barcode.DirectAssignmentConfig` (`direct` in
+naming it. {py:class}`~starfinder.readout.DirectAssignmentConfig` (`direct` in
 `DECODING_METHODS`, no parameters) and
-{py:func}`~starfinder.barcode.assign_direct` assign each candidate the gene of its
+{py:func}`~starfinder.readout.assign_direct` assign each candidate the gene of its
 own round and channel: one read per candidate with `round`, `channel`, `entry_id`
 `"<round>/<channel>"`, `call_type` `direct`, and the diagnostic columns
 `own_channel_rank` and `own_channel_fraction`; a (round, channel) without a gene is
@@ -650,13 +660,13 @@ gain `readout_mode`; a checkpoint without it loads as `multiplexed`, and
 
 §2.8 registers the barcode encodings and the decoders on the shared registry
 mechanism ({doc}`method-registry`, {doc}`readout-contract`, "Encoding registry").
-`starfinder.barcode.ENCODINGS` maps each encoding config type to its
-`EncodingSpec`: `two_base` is {py:class}`~starfinder.barcode.EncodingConfig`, which
+`starfinder.readout.ENCODINGS` maps each encoding config type to its
+`EncodingSpec`: `two_base` is {py:class}`~starfinder.readout.EncodingConfig`, which
 gains the discriminator `method="two_base"` (its positional constructor is
 unchanged), and `one_base` is the new
-{py:class}`~starfinder.barcode.OneBaseEncodingConfig`, whose `base_to_color` maps A,
+{py:class}`~starfinder.readout.OneBaseEncodingConfig`, whose `base_to_color` maps A,
 C, G and T one-to-one onto the colors 1–4 and has no default.
-`starfinder.barcode.DECODING_METHODS` maps `WtaDecoderConfig` (`wta`) and
+`starfinder.readout.DECODING_METHODS` maps `WtaDecoderConfig` (`wta`) and
 `CodebookAwareDecoderConfig` (`codebook_aware`) to their `DecodingSpec`, with the
 readout modes, encoding kinds, rescue and score columns each declares. Lookups use
 the exact config type, so `decode_barcodes` rejects a subclass of a decoder config
@@ -668,7 +678,7 @@ config; `Dataset.load_codebook` gains keyword-only `encoding` and `layout`.
 ### Encoding table
 
 W-304 makes the `two_base` pair-to-color table visible, configurable and recorded
-({doc}`readout-contract`, "Encoding registry"). {py:class}`~starfinder.barcode.EncodingConfig`
+({doc}`readout-contract`, "Encoding registry"). {py:class}`~starfinder.readout.EncodingConfig`
 gains `pair_to_color`, the 16 ordered base pairs mapped to the colors `"1"` to `"4"`,
 whose default is the active table of `src/matlab/EncodeBases.m`; `EncodingConfig()`
 and every default result are unchanged, the positional constructor is unchanged,
@@ -678,7 +688,7 @@ or in which the four pairs of one first base do not have four different colors
 raises `ValueError`. Every encode and decode path follows the codebook's table,
 including the `end_bases` shortcut of `filter_reads` when the codebook is given.
 `EncodingSpec` gains the required keyword field `table`;
-{py:meth}`~starfinder.barcode.Codebook.encoding_table`,
+{py:meth}`~starfinder.readout.Codebook.encoding_table`,
 {py:meth}`~starfinder.dataset.Dataset.encoding_table` and
 {py:meth}`~starfinder.dataset.FOV.encoding_table` show the table with the channel of
 each color. `repr(codebook)` ends with the encoding method and segment layout, and
@@ -693,8 +703,8 @@ checkpoint without the key loads as before.
 
 ### Segment layout
 
-{py:class}`~starfinder.barcode.BarcodeLayout` and
-{py:class}`~starfinder.barcode.Segment` describe how a barcode is cut into
+{py:class}`~starfinder.readout.BarcodeLayout` and
+{py:class}`~starfinder.readout.Segment` describe how a barcode is cut into
 separately read segments: lengths in bases, acquisition order and allowed
 (first, last) end bases per segment, several pairs allowed. `Codebook.layout` holds
 the effective layout: one segment by default, or the two segments that a legacy
@@ -738,7 +748,7 @@ as two entries of that gene, and the decoding table (and so `pre_qc`) gains
 
 Extraction now measures a local background and noise next to the sums, on by
 default ({doc}`readout-contract`, "Extraction"; {doc}`readout-algorithms`,
-"Background and noise"). {py:class}`~starfinder.barcode.LocalBackgroundConfig`
+"Background and noise"). {py:class}`~starfinder.readout.LocalBackgroundConfig`
 (`inner_radius_zyx=(1, 3, 3)`, `outer_radius_zyx=(1, 6, 6)`, `min_voxels=16`,
 provisional) is the new field `NeighborhoodSumConfig.background`; `background=None`
 turns it off, and the inner box must contain the extraction box, so a radius
@@ -761,9 +771,9 @@ ring grows along the axes where `voxel_size` exceeds its inner box
 
 ### Shared read-QC score
 
-{py:func}`~starfinder.barcode.score_reads` (`reference` is the codebook, or the
+{py:func}`~starfinder.readout.score_reads` (`reference` is the codebook, or the
 direct panel in readout mode `direct`) returns a
-{py:class}`~starfinder.barcode.ReadScoringResult`: the read table with the columns
+{py:class}`~starfinder.readout.ReadScoringResult`: the read table with the columns
 `qc_score`, `qc_ambiguity_max`, `qc_signal_to_background`, `qc_rounds` and
 `qc_reason` appended ({doc}`readout-contract`, "Shared read-QC score"). `qc_score`
 (W-278 design D1) is the probability NLL of the assigned entry recomputed on
@@ -772,7 +782,7 @@ calibrated probability; it sets no cutoff and never changes `gene_id`, `entry_id
 `call_status` or `call_type`. Reads without an assignment have NaN with
 `no_assignment`, and reads with a round without background NaN with
 `background_unavailable`; scoring intensities that have no background raises
-`ValueError` naming extraction. {py:class}`~starfinder.barcode.ReadScoreConfig`
+`ValueError` naming extraction. {py:class}`~starfinder.readout.ReadScoreConfig`
 (`method="bgcorr_probability"`, no parameter) is `PipelineConfig.scoring`, `None` by
 default in the Python API; `FOV.run` scores after decoding or assignment and before
 filtering, `FOV.score_reads` scores the stored reads, `FOV.scoring_result` holds the
@@ -787,7 +797,7 @@ spot CSV columns are unchanged.
 
 ### Optional deduplication
 
-{py:func}`~starfinder.barcode.deduplicate_reads` (`DeduplicationConfig`,
+{py:func}`~starfinder.readout.deduplicate_reads` (`DeduplicationConfig`,
 `ReadDeduplicationResult`; {doc}`readout-contract`, "Optional deduplication") groups
 the reads of one amplicon that was detected in two channels. Candidates of one
 detection round in different detection channels are linked when they lie within
@@ -834,7 +844,7 @@ background was stored, and raises `ValueError` naming extraction when it was not
 
 ### Readout evaluation metrics
 
-`starfinder.evaluation.barcode` adds `ranking_quality(score, correct, *,
+`starfinder.evaluation.readout` adds `ranking_quality(score, correct, *,
 orientation, retention=(0.5, 0.8, 0.9, 1.0))`: the AUROC of a score with its
 Hanley–McNeil standard error and the error at fixed retention, and
 `evaluate_deduplication(groups, source, *, pairs)`: missed duplicates, false
@@ -844,17 +854,17 @@ cutoff.
 
 ### Read diagnostics
 
-`starfinder.barcode` adds the three diagnostics of {doc}`readout-contract`
+`starfinder.readout` adds the three diagnostics of {doc}`readout-contract`
 ("Diagnostics"), which read retained results only.
-{py:func}`~starfinder.barcode.inspect_read` returns one read's sums, background,
+{py:func}`~starfinder.readout.inspect_read` returns one read's sums, background,
 background-subtracted sums, channel probabilities, noise, observed and assigned
 colors and per-segment bases, one row per round and channel, and
-{py:func}`~starfinder.barcode.plot_read` draws it.
-{py:func}`~starfinder.barcode.summarize_reads` returns the population summary (counts
+{py:func}`~starfinder.readout.plot_read` draws it.
+{py:func}`~starfinder.readout.summarize_reads` returns the population summary (counts
 by status, reason and call type, per gene and per entry, `qc_score` quantiles per call
 type, deduplication and filtering counts, per round and channel medians, valid and
 background-unavailable counts, cross-channel pairs).
-{py:func}`~starfinder.barcode.explain_read` returns a read's ordered decisions with
+{py:func}`~starfinder.readout.explain_read` returns a read's ordered decisions with
 their values and limits. They accept a read result or `FOV.results`. `FOV.run` never
 calls `inspect_read`, `plot_read` or `explain_read`; when it scores or deduplicates,
 `run.json` records the summary under `counts["summary"]`, and
@@ -1337,7 +1347,7 @@ saved. The specification is {doc}`stitching-contract` ("Method registry") and
 
 ### Sample outputs: the export entry and the fused image
 
-New names in a new module, `starfinder.sample_output`, one new method, `Dataset.export`,
+New names in a new module, `starfinder.export`, one new method, `Dataset.export`,
 and one new folder, `<OUTPUT>/export/<sample>/`; nothing existing changes.
 `Dataset.stitch` and `stitching/<sample>/` stay as they are, the legacy rules and
 `images/fused/{sample}/` (BigStitcher's inputs and `dataset.xml`) are untouched, and no
@@ -1357,7 +1367,7 @@ with the workflow issue. The label export (`fuse_labels`) and the SpatialData ex
 
 `fuse` and `Dataset.export`'s fuse part need the optional extra
 `starfinder[multiview-stitcher]`; the assemble part needs `starfinder[anndata]`.
-Importing `starfinder.sample_output` imports neither multiview-stitcher, zarr nor
+Importing `starfinder.export` imports neither multiview-stitcher, zarr nor
 spatialdata. With `assemble` on, `assemble` now keeps at most two territory images in
 memory: a saved assignment's territories are read again from its folder, with their
 SHA-256 checked, when the flags need them; its results are unchanged. The specification
@@ -1365,7 +1375,7 @@ is {doc}`sample-output-contract`.
 
 ### Sample outputs: the assembled label export
 
-One new function, `starfinder.sample_output.fuse_labels`, with `LabelRecord`, and one new
+One new function, `starfinder.export.fuse_labels`, with `LabelRecord`, and one new
 file, `export/<sample>/cell_labels.ome.tif`; nothing existing changes, and the part is
 off by default (`ExportConfig(fuse_labels=True)` turns it on).
 
@@ -1387,7 +1397,7 @@ files were changed after assembly now raises `ValueError` naming the file.
 
 ### Sample outputs: the SpatialData export
 
-Two new functions, `starfinder.sample_output.export_spatialdata` and `lookup_source`, and
+Two new functions, `starfinder.export.export_spatialdata` and `lookup_source`, and
 one new store, `export/<sample>/sample.zarr/`; nothing existing changes, and the part is
 off by default (`ExportConfig(export_spatialdata=True)` turns it on). The reference
 branch's `sample_export` API is not adopted, and no code is brought over from it.
@@ -1449,7 +1459,7 @@ before. No table, record, count or `export/<sample>/` file changes.
 ### A deterministic UUID in the package's OME-TIFF files
 
 `save_volume` (a ZYXC OME-TIFF, and a ZYX volume on a `*.ome.*` name, which tifffile
-writes as OME-TIFF) and the OME-TIFF writer of `starfinder.sample_output` (the fused
+writes as OME-TIFF) and the OME-TIFF writer of `starfinder.export` (the fused
 images and `cell_labels.ome.tif`) now write a name-based (version 5) `urn:uuid:` in the
 OME-XML header, derived from the pixel data and the metadata written, instead of
 tifffile's time-based UUID. The same array and metadata therefore give the same bytes in
@@ -1474,7 +1484,7 @@ import as before. No signature changes.
 A second route to a sample's cells beside the route per FOV: the fused Z maximum of a
 projection sample is segmented once and the sample's molecules are assigned to those
 cells ({doc}`sample-segmentation-contract`; for users, {doc}`workflow-downstream`, "Two
-routes to a sample's cells"). New names in `starfinder.sample_output`, one keyword of
+routes to a sample's cells"). New names in `starfinder.export`, one keyword of
 `assemble`, three fields of `ExportConfig`, three keys of the workflow `export` block and
 one column of the sample molecule table; no existing name, module or format version
 changes. The route per FOV keeps its rules, the duplicate rule of W-400 included.

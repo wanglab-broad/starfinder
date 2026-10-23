@@ -11,7 +11,7 @@ import sys
 import numpy as np
 import pandas as pd
 
-from starfinder.barcode import (
+from starfinder.readout import (
     Codebook, NeighborhoodSumConfig, CodebookAwareDecoderConfig,
     decode_barcodes, extract_intensities, filter_reads,
 )

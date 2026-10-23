@@ -33,7 +33,7 @@ from unittest import mock
 import numpy as np
 import pandas as pd
 
-from starfinder.barcode import BarcodeLayout, Segment, decode_color_sequence, load_codebook
+from starfinder.readout import BarcodeLayout, Segment, decode_color_sequence, load_codebook
 from starfinder.dataset import Dataset, RoundState
 from starfinder.image import ImageMetadata
 from starfinder.spot_finding import LocalMaximaConfig, SpotFindingResult

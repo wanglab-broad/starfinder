@@ -34,7 +34,7 @@ from skimage.measure import label
 
 from starfinder.assignment import AssignmentConfig, assign_molecules, molecule_table
 from starfinder.assignment import _assign
-from starfinder.barcode import ReadFilterConfig
+from starfinder.readout import ReadFilterConfig
 from starfinder.dataset import CheckpointConfig, MorphologyConfig, PipelineConfig
 from starfinder.dataset.workflow import _nuclei_checkpoints, _nuclei_registration
 from starfinder.image import ImageMetadata, IncompatibleGeometryError

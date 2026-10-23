@@ -1,8 +1,8 @@
 """STARfinder: Spatial transcriptomics data processing pipeline."""
 
 from starfinder.image import ImageMetadata
-from starfinder import barcode, preprocessing, registration, spot_finding
-from starfinder.barcode import decode_barcodes, extract_intensities, filter_reads, load_codebook
+from starfinder import readout, preprocessing, registration, spot_finding
+from starfinder.readout import decode_barcodes, extract_intensities, filter_reads, load_codebook
 from starfinder.dataset import FOV, Dataset
 from starfinder.io import load_round, load_volume, save_volume
 from starfinder.preprocessing import (
@@ -33,8 +33,8 @@ __all__ = [
     # Spot finding
     "spot_finding",
     "find_spots",
-    # Barcode processing
-    "barcode",
+    # Readout
+    "readout",
     "extract_intensities",
     "decode_barcodes",
     "load_codebook",

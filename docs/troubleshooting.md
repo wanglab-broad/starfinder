@@ -53,7 +53,7 @@ barcode orientation (`EncodingConfig.reverse_bases`), sequence lengths and optio
 filtering. `M` is a tied maximum and `N` a NaN maximum; they are not valid
 four-color gene calls. A codebook parser `KeyError` can indicate an unexpected
 header or unsupported nucleotide pair. Use the actual two-column `gene,barcode`
-format described by {py:func}`~starfinder.barcode.load_codebook`.
+format described by {py:func}`~starfinder.readout.load_codebook`.
 
 `save_spots` writes header-only CSVs for successful zero detections or all-rejected
 results. Missing processing results still raise. Export joins coordinates by

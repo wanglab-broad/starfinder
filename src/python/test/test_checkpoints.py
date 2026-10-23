@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from starfinder.barcode import (Codebook, CodebookAwareDecoderConfig, NeighborhoodSumConfig,
+from starfinder.readout import (Codebook, CodebookAwareDecoderConfig, NeighborhoodSumConfig,
     ReadFilterConfig, WtaDecoderConfig)
 from starfinder.dataset import CheckpointConfig, Dataset, ExecutionConfig, PipelineConfig, RoundState
 from starfinder.registration import RegistrationRecipe, RegistrationStep
@@ -358,11 +358,11 @@ def test_injected_registration_failure_is_recorded_and_propagates(tmp_path, monk
 
 
 def test_keyboard_interrupt_is_recorded_as_interrupted(tmp_path, monkeypatch):
-    import starfinder.barcode as barcode
+    import starfinder.readout as readout
 
     def interrupt(*args, **kwargs):
         raise KeyboardInterrupt
-    monkeypatch.setattr(barcode, 'decode_barcodes', interrupt)
+    monkeypatch.setattr(readout, 'decode_barcodes', interrupt)
     fov = resident(dataset(tmp_path))
     with pytest.raises(KeyboardInterrupt):
         fov.run(full(), checkpoints=CheckpointConfig())
@@ -527,7 +527,7 @@ def test_disabled_checkpoints_write_nothing_and_existing_directory_is_protected(
 
 
 def test_overwrite_run_never_leaves_a_stale_stage_loadable(tmp_path, monkeypatch):
-    import starfinder.barcode as barcode
+    import starfinder.readout as readout
     ds = dataset(tmp_path)
     resident(ds).run(full(), checkpoints=CheckpointConfig(hash_inputs=False))
     directory = tmp_path / 'out' / 'checkpoints' / 'FOV'
@@ -536,7 +536,7 @@ def test_overwrite_run_never_leaves_a_stale_stage_loadable(tmp_path, monkeypatch
 
     def fail(*args, **kwargs):
         raise injected
-    monkeypatch.setattr(barcode, 'decode_barcodes', fail)
+    monkeypatch.setattr(readout, 'decode_barcodes', fail)
     with pytest.raises(RuntimeError):
         resident(ds).run(full(), checkpoints=CheckpointConfig(hash_inputs=False, overwrite=True))
     data = record(ds.fov('FOV'))

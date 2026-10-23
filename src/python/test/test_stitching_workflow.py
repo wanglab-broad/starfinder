@@ -38,7 +38,7 @@ from starfinder.dataset import Dataset
 from starfinder.dataset._stitching import POSITION_KEYS
 from starfinder.image import ImageMetadata
 from starfinder.io import save_volume
-from starfinder.sample_output import (ExportConfig, ExportIncompleteWarning, FusionConfig, LabelConfig,
+from starfinder.export import (ExportConfig, ExportIncompleteWarning, FusionConfig, LabelConfig,
                                       SpatialDataExportConfig)
 from starfinder.segmentation import ReferenceGrid, reference_grid_from_file
 from starfinder.segmentation._labels import same_grid

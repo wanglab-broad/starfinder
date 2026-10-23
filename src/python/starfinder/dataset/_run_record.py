@@ -75,7 +75,7 @@ class _RunRecord:
         self.failure = None
         self._methods = None
         dataset = fov.dataset
-        from starfinder.barcode.codebook import _encoding_record
+        from starfinder.readout.codebook import _encoding_record
         # The codebook's encoding (null without a codebook or in readout mode direct).
         encoding = (_encoding_record(dataset.codebook.encoding)
                     if dataset.codebook is not None and dataset.readout_mode == "multiplexed" else None)
@@ -149,7 +149,7 @@ class _RunRecord:
         if fov.scoring_result is not None or fov.deduplication_result is not None:
             # The §2.8 population summary (docs/readout-contract.md, "Diagnostics") of the scored or
             # deduplicated reads; runs without those stages keep the earlier counts only.
-            from starfinder.barcode import summarize_reads
+            from starfinder.readout import summarize_reads
             counts["summary"] = summarize_reads(fov.results)
         self.data.update(preprocessing=fov.preprocessing_record or None,
                          registration=fov.registration_attempts,

@@ -10,7 +10,7 @@ from itertools import product
 import numpy as np
 import pandas as pd
 
-from starfinder.barcode import Codebook, EncodingConfig
+from starfinder.readout import Codebook, EncodingConfig
 
 from ._common import ScalarDistribution, _json
 from ._formed import FormedSceneConfig, ReadoutEffectsConfig

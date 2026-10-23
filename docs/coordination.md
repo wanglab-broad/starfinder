@@ -10,7 +10,7 @@ from starfinder.dataset import PipelineConfig, ExecutionConfig
 from starfinder.io import ImageLoadConfig
 from starfinder.registration import RegistrationRecipe, RegistrationStep, TranslationConfig
 from starfinder.spot_finding import LocalMaximaConfig
-from starfinder.barcode import NeighborhoodSumConfig, WtaDecoderConfig, ReadFilterConfig
+from starfinder.readout import NeighborhoodSumConfig, WtaDecoderConfig, ReadFilterConfig
 
 config = PipelineConfig(
     load=ImageLoadConfig(channel_labels=dataset.channel_order),
@@ -359,7 +359,7 @@ alternatives; `RegistrationRejectedError` is an estimation error. Invalid
 parameters, incompatible geometry, unavailable dependencies and application
 errors propagate. A recovered result is labeled with its actual method.
 
-`barcode.export_spots(detection, reads, path, accepted_only=True)` joins complete
+`readout.export_spots(detection, reads, path, accepted_only=True)` joins complete
 filtering results to detections one-to-one on `(spot_namespace, spot_id)`, then
 selects accepted rows. Decoding results also work with `accepted_only=False`.
 Duplicate, missing or foreign keys fail; row order never defines identity.

@@ -14,10 +14,10 @@ from starfinder._registry import config_type_for
 from starfinder.registration import (REGISTRATION_METHODS, CpdConfig, DemonsConfig,
     InsufficientLandmarksError, RecoveryConfig, RegistrationEstimationError, RegistrationQcConfig, RegistrationRecipe,
     RegistrationRejectedError, RegistrationSignalConfig, RegistrationStep, WarpConfig)
-from starfinder.barcode import (DECODING_METHODS, ENCODINGS, BarcodeLayout, EncodingConfig, LocalBackgroundConfig,
+from starfinder.readout import (DECODING_METHODS, ENCODINGS, BarcodeLayout, EncodingConfig, LocalBackgroundConfig,
     NeighborhoodSumConfig, OneBaseEncodingConfig, ReadFilterConfig, ReadScoreConfig, Segment, WtaDecoderConfig,
     DeduplicationConfig)
-from starfinder.barcode.decoding import READOUT_MODES, _mode_mismatch
+from starfinder.readout.decoding import READOUT_MODES, _mode_mismatch
 from starfinder.spot_finding import SPOT_FINDING_METHODS, ChannelOverride, LocalMaximaConfig, SpotFindingPlan
 
 _RULES = ('rsf_single_fov', 'gr_single_fov_subtile', 'lrsf_single_fov_subtile',
@@ -1289,7 +1289,7 @@ def _assembly_block(config) -> _AssemblyBlock:
     """
     from starfinder._registry import check_name
     from starfinder.assembly import AssemblyConfig
-    from starfinder.sample_output._config import TABLE_FORMATS
+    from starfinder.export._config import TABLE_FORMATS
     _python_only(config, ['assembly'])
     if 'stitching' not in config:
         raise ValueError("the assembly block reads the stitching block's placement; add a stitching block")
@@ -1312,7 +1312,7 @@ def _assembly_block(config) -> _AssemblyBlock:
 def _export_keys():
     """export block key → (ExportConfig part or None, field): the fields of ExportConfig (its flags), FusionConfig,
     LabelConfig as labels_<field> and SpatialDataExportConfig as spatialdata_<field>."""
-    from starfinder.sample_output import ExportConfig, FusionConfig, LabelConfig, SpatialDataExportConfig
+    from starfinder.export import ExportConfig, FusionConfig, LabelConfig, SpatialDataExportConfig
     keys = {f.name: (None, f.name) for f in fields(ExportConfig) if f.init and f.name not in _EXPORT_PARTS}
     keys.update({f.name: ('fusion', f.name) for f in fields(FusionConfig) if f.init})
     keys.update({f'labels_{f.name}': ('labels', f.name) for f in fields(LabelConfig) if f.init})
@@ -1326,7 +1326,7 @@ def _sample_segmentation_block(values, config):
     seeds and method, whose config fields are the run's other keys (import: the LabelImportConfig fields); the
     assignment settings are those of the top-level assignment block."""
     from starfinder.assignment import AssignmentConfig
-    from starfinder.sample_output import SampleSegmentationConfig, SampleSegmentationRun
+    from starfinder.export import SampleSegmentationConfig, SampleSegmentationRun
     if not isinstance(values, dict):
         raise TypeError('export.segmentation must be a mapping')
     _known(values, ('device', 'cells', 'nuclei', 'runs'), 'export.segmentation')
@@ -1364,7 +1364,7 @@ def _export_config(config):
     assembly and table_format of the ExportConfig come from the assembly block,
     which the export block needs.
     """
-    from starfinder.sample_output import ExportConfig, FusionConfig, LabelConfig, SpatialDataExportConfig
+    from starfinder.export import ExportConfig, FusionConfig, LabelConfig, SpatialDataExportConfig
     _python_only(config, ['export'] if 'export' in config else [])
     if 'assembly' not in config:
         raise ValueError('the export block configures the export_sample rule, which runs with an assembly block only; '
@@ -1395,7 +1395,7 @@ def _after_fusion(export, block):
     """Whether export_sample runs the route after fusion: the route resolved by Dataset.export's rule (set, or by
     default after_fusion for dimensionality projection) with an assignment name; without one the export is
     molecules_only on either route (docs/sample-segmentation-contract.md, "The route setting")."""
-    from starfinder.sample_output._segment import resolve_route
+    from starfinder.export._segment import resolve_route
     return block.assignment is not None and resolve_route(export)[0] == 'after_fusion'
 
 
@@ -1409,7 +1409,7 @@ def _check_export_route(config):
     before anything is written: they need the export folder and the model
     files, and a model is not hashed at every parse.
     """
-    from starfinder.sample_output._segment import check_route
+    from starfinder.export._segment import check_route
     export, block = _export_config(config)
     check_route(export, block.assignment, models=False)
 

@@ -2,10 +2,10 @@
 
 import pytest
 
-from starfinder.barcode import encode_bases
-from starfinder.barcode import EncodingConfig
+from starfinder.readout import encode_bases
+from starfinder.readout import EncodingConfig
 
-pytestmark = pytest.mark.barcode
+pytestmark = pytest.mark.readout
 
 
 class TestTwoBaseEncoding:

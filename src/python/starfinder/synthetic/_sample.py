@@ -21,7 +21,7 @@ import pandas as pd
 from scipy.special import erfc
 
 from starfinder._records import file_sha256
-from starfinder.barcode import Codebook
+from starfinder.readout import Codebook
 from starfinder.image import ImageMetadata
 from starfinder.io import save_volume
 

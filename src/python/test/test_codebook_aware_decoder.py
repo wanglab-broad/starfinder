@@ -4,7 +4,7 @@ from dataclasses import replace
 import numpy as np
 import pandas as pd
 import pytest
-from starfinder.barcode import (
+from starfinder.readout import (
     decode_barcodes,
     WtaDecoderConfig,
     CodebookAwareDecoderConfig,
@@ -12,9 +12,9 @@ from starfinder.barcode import (
     filter_reads,
     ReadFilterConfig,
 )
-from .barcode_cases import codebook, intensity, tensor
+from .readout_cases import codebook, intensity, tensor
 
-pytestmark = pytest.mark.barcode
+pytestmark = pytest.mark.readout
 
 
 def decode(values, mapping, **options):
@@ -256,7 +256,7 @@ def test_rescue_geomean_penalty_and_separation_boundaries():
 
 
 def test_result_validation_rejects_nonfinite_and_duplicate_ids():
-    from .barcode_cases import intensity
+    from .readout_cases import intensity
 
     values = tensor(["1", "2"])
     with pytest.raises(ValueError, match="unique"):

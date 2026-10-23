@@ -33,11 +33,11 @@ import numpy as np
 import pandas as pd
 import tifffile
 
-from starfinder.barcode import Codebook
+from starfinder.readout import Codebook
 from starfinder.dataset import Dataset
 from starfinder.image import ImageMetadata
 from starfinder.io import save_volume
-from starfinder.sample_output import (ExportConfig, FusionConfig, FusionInput, SampleSegmentationConfig,
+from starfinder.export import (ExportConfig, FusionConfig, FusionInput, SampleSegmentationConfig,
                                       SampleSegmentationRun, fuse)
 from starfinder.segmentation import (CellposeConfig, LabelImportConfig, ReferenceGrid, SeededWatershedConfig,
                                      StarDistConfig)

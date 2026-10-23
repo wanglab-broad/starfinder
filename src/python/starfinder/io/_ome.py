@@ -6,8 +6,9 @@ computes no voxel. BigTIFF, one series of axes ``YX`` or ``ZYX`` (each Z plane o
 from a lazy array, SubIFD levels given by the caller, ``PhysicalSize*`` and ``Plane``
 positions in µm, and two ``CommentAnnotation``: the ``ImageMetadata`` of the output level
 (namespace ``starfinder.image.ImageMetadata``, which ``load_volume`` restores) and the
-``starfinder.sample_output`` annotation. The OME-XML UUID is a name-based UUID of the
-tiles and the metadata written, so the same content gives the same bytes.
+sample export annotation (namespace ``ANNOTATION_NAMESPACE``). The OME-XML UUID is a
+name-based UUID of the tiles and the metadata written, so the same content gives the same
+bytes.
 """
 from __future__ import annotations
 
@@ -24,6 +25,8 @@ from starfinder.io.tiff import METADATA_NAMESPACE, _ome_digest, _ome_uuid, _stam
 
 TILE = 512
 COMPRESSION = "zlib"
+# A format identifier that OME files carry and check_export reads back: it keeps the old
+# module name after W-556 renamed starfinder.sample_output to starfinder.export.
 ANNOTATION_NAMESPACE = "starfinder.sample_output"
 # Written first and replaced in place by the content UUID once every tile is written.
 PLACEHOLDER_UUID = "urn:uuid:00000000-0000-0000-0000-000000000000"

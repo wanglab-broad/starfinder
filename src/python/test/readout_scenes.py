@@ -18,8 +18,8 @@ import warnings
 import numpy as np
 import pandas as pd
 
-from starfinder.barcode import CodebookAwareDecoderConfig, NeighborhoodSumConfig, WtaDecoderConfig, decode_barcodes
-from starfinder.barcode import extract_intensities, score_reads
+from starfinder.readout import CodebookAwareDecoderConfig, NeighborhoodSumConfig, WtaDecoderConfig, decode_barcodes
+from starfinder.readout import extract_intensities, score_reads
 from starfinder.evaluation.matching import match_points
 from starfinder.io import ImageLoadResult
 from starfinder.spot_finding import LocalMaximaConfig, SpotFindingResult, find_spots

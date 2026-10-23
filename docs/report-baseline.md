@@ -79,10 +79,10 @@ the comparison page (D2).
 | | `log/sf_scores/<fov>.txt` | `dataset/fov.py`: `FOV.save_diagnostics` | the same | `detected`; the filter `counts` and `fractions` (with `endpoint_valid`); the read summary of `summarize_reads`; the registration attempts. |
 | | `signal/<fov>_goodSpots.csv`, `images/ref_merged/<fov>.tif` | `dataset/fov.py`: `FOV.save_spots`, `FOV.save_reference_image` | the same | The accepted reads; the reference image whose grid stitching reads. |
 | Placement | `stitching/<sample>/placement.json`, `fovs.csv`, `links.csv` | `stitching/_persist.py`: `save_placement`, through `Dataset.stitch(output_dir=…)` | rule `stitch_sample` | The method; the positions source with its SHA-256; per FOV the status, origin, nominal position and correction ({doc}`stitching-contract`). |
-| Export | `export/<sample>/export.json` | `sample_output/_record.py`: `write_export` and `update_section`, through `dataset/_export.py`: `export_sample` (`Dataset.export`) | rule `export_sample` | The parts and their status; the `assembly` section (route, ownership rule, population counts); the `fusion` section (grid, outputs, `wall_s`); `segmentation`; `labels`; `spatialdata` ({doc}`sample-output-contract`, {doc}`sample-segmentation-contract`). |
+| Export | `export/<sample>/export.json` | `export/_record.py`: `write_export` and `update_section`, through `dataset/_export.py`: `export_sample` (`Dataset.export`) | rule `export_sample` | The parts and their status; the `assembly` section (route, ownership rule, population counts); the `fusion` section (grid, outputs, `wall_s`); `segmentation`; `labels`; `spatialdata` ({doc}`sample-output-contract`, {doc}`sample-segmentation-contract`). |
 | | `export/<sample>/tables/fovs.csv`, `cells.csv`, `molecules.csv`, `counts.csv`, `sample.h5ad` | `assembly/_persist.py`: `save_assembly` (the AnnData by `assembly/_anndata.py`: `sample_anndata`) | the assemble part written or reused | Per FOV the placement status, footprint, cells and molecules with their retained counts; per cell and molecule the assembly status; the counted cells' counts ({doc}`assembly-contract`, "Sample tables"). |
-| | `export/<sample>/<image>_projection.ome.tif`, `<image>_stack.ome.tif` | `sample_output/_fuse.py`: `fuse` | the fuse part | The fused image the marker patterns are drawn on. |
-| | `export/<sample>/segmentation_<run>.ome.tif` | `sample_output/_segment.py`: `segment_fused` | route after fusion, part `segment` | The sample's label image. |
+| | `export/<sample>/<image>_projection.ome.tif`, `<image>_stack.ome.tif` | `export/_fuse.py`: `fuse` | the fuse part | The fused image the marker patterns are drawn on. |
+| | `export/<sample>/segmentation_<run>.ome.tif` | `export/_segment.py`: `segment_fused` | route after fusion, part `segment` | The sample's label image. |
 
 Figures the stages already draw: the assignment figures `expr/<fov>/assignment.png` and
 `assignment_single_layer.png` (`dataset/workflow.py`: `_write_assignment_figures`), drawn by
@@ -92,7 +92,7 @@ processing.
 
 Diagnostics that exist but that `FOV.run` does not save: the read filter's
 `diagnostics["endpoint_valid_count"]` and `endpoint_valid_segment_counts`
-(`barcode/filtering.py`: `filter_reads`), which reach only `log/sf_scores/<fov>.txt`, as a
+(`readout/filtering.py`: `filter_reads`), which reach only `log/sf_scores/<fov>.txt`, as a
 fraction, through `FOV.save_diagnostics`; and the segmentation result's `wall_seconds`.
 
 ### `src/python/starfinder/reporting.py` on the reference branch (blob `c2e527b`, 161 lines)

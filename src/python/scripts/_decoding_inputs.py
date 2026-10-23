@@ -8,7 +8,7 @@ Scientific reevaluation of historical artifacts remains a separate task.
 import csv
 import numpy as np
 import pandas as pd
-from starfinder.barcode import (
+from starfinder.readout import (
     Codebook,
     EncodingConfig,
     IntensityExtractionResult,

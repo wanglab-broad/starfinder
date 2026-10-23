@@ -227,7 +227,7 @@ def _candidate_sequences(
     wta_seq : str
         Observed sequence in one-based color labels or unknown_chars.
     one_error_index : dict[str, list[str]]
-        Index from :func:`starfinder.barcode._build_one_error_index`.
+        Index from :func:`starfinder.readout._build_one_error_index`.
     seq_to_gene : dict[str, str]
         Valid sequence-to-gene mapping.
     unknown_chars : str
@@ -393,7 +393,7 @@ def _decode_codebook_aware(
     ----------
     intensity_tensor : np.ndarray
         Raw numeric intensities ``(N, C, R)``; normalized by
-        :func:`starfinder.barcode._channel_probabilities`.
+        :func:`starfinder.readout._channel_probabilities`.
     seq_to_gene : dict[str, str]
         Color sequence (length R, labels 1..C) to gene mapping.
     spot_ids : array-like or None

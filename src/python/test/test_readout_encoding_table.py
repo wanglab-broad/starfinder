@@ -28,11 +28,11 @@ import pandas as pd
 import pytest
 import yaml
 
-from starfinder.barcode import (ENCODINGS, BarcodeLayout, Codebook, EncodingConfig, EncodingSpec,
+from starfinder.readout import (ENCODINGS, BarcodeLayout, Codebook, EncodingConfig, EncodingSpec,
                                 NeighborhoodSumConfig, OneBaseEncodingConfig, ReadFilterConfig, Segment,
                                 WtaDecoderConfig, decode_barcodes, decode_color_sequence, encode_bases,
                                 explain_read, extract_intensities, filter_reads, inspect_read, load_codebook)
-from starfinder.barcode import _encoding, filtering
+from starfinder.readout import _encoding, filtering
 from starfinder.dataset import CheckpointConfig, Dataset, PipelineConfig, RoundState
 from starfinder.dataset.workflow import from_workflow_config
 from starfinder.image import ImageMetadata
@@ -45,7 +45,7 @@ from .test_readout_direct import pipeline as direct_pipeline
 from .test_readout_golden import (CHANNELS, METADATA, ROUNDS, candidates, golden_dataset, readout_config,
                                   write_codebook)
 
-pytestmark = pytest.mark.barcode
+pytestmark = pytest.mark.readout
 
 ROOT = Path(__file__).resolve().parents[3]
 SCHEMA = yaml.safe_load((ROOT / "workflow/schemas/config.schema.yaml").read_text())

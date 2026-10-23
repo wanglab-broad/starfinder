@@ -379,7 +379,7 @@ realized amplitude, visibility and a reason when not visible), per-FOV
 ``provenance`` and ``historical_truth``. ``spot_truth`` rows are keyed by
 ``spot_namespace`` (the FOV) and ``spot_id`` (the amplicon ID), and its
 ``gene_id`` and ``color_sequence`` columns are the names decoding results and
-:py:func:`starfinder.evaluation.barcode.evaluate_decoding` use, so the tables
+:py:func:`starfinder.evaluation.readout.evaluate_decoding` use, so the tables
 join and evaluate without renaming. ``historical_truth`` is the ``ground_truth.json``
 payload in the historical v2 keys (``image_shape``, ``n_rounds``, ``fovs`` with
 ``shifts`` and ``spots`` holding ``id``, ``gene``, ``barcode``, ``color_seq``,

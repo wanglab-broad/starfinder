@@ -794,8 +794,8 @@ def assemble(placement: PlacementResult, inputs: Sequence[AssemblyInput], *,
         threshold.
     segmentation : SampleSegmentation, optional
         The sample segmentation of the route after fusion
-        (:func:`~starfinder.sample_output.segment_fused` or
-        :func:`~starfinder.sample_output.load_sample_segmentation`), status
+        (:func:`~starfinder.export.segment_fused` or
+        :func:`~starfinder.export.load_sample_segmentation`), status
         ``written`` or ``reused``. Its record's ``assignment`` holds the
         assignment settings the tables are made with (``AssignmentConfig()``
         when it holds none); with a reused segmentation ``Dataset.export``

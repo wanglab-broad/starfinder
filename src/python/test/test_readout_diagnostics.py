@@ -12,10 +12,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-import starfinder.barcode as barcode
-from starfinder.barcode import (DeduplicationConfig, ReadFilterConfig, ReadScoreConfig, decode_barcodes,
+import starfinder.readout as readout
+from starfinder.readout import (DeduplicationConfig, ReadFilterConfig, ReadScoreConfig, decode_barcodes,
                                 explain_read, filter_reads, inspect_read, plot_read, score_reads, summarize_reads)
-from starfinder.barcode import diagnostics as diagnostics_module
+from starfinder.readout import diagnostics as diagnostics_module
 from starfinder._records import jsonable as _jsonable
 
 from . import readout_fixtures as fx
@@ -26,7 +26,7 @@ from .test_readout_golden import (CHANNELS, PINNED_STATUS, ROUNDS, SPOTS, TIED_R
                                   golden_codebook, readout_config)
 from .test_readout_scoring import golden_run
 
-pytestmark = [pytest.mark.barcode]
+pytestmark = [pytest.mark.readout]
 
 
 def golden_reads(tmp_path, decoder, **options):
@@ -128,7 +128,7 @@ def test_explain_read_follows_the_read_through_every_stage(tmp_path):
     assert not copy.loc["representative", "passed"] and copy.loc["representative", "detail"] == "duplicate of 0"
     assert not copy.loc["duplicate", "passed"] and copy.loc["accepted", "detail"] == "duplicate"
     two_seg = fx.two_seg_fov(tmp_path / "two_seg").run(crosstalk_pipeline(
-        deduplication=None, decoder=barcode.WtaDecoderConfig()))
+        deduplication=None, decoder=readout.WtaDecoderConfig()))
     wrong = explain_read(two_seg.results, str(len(two_seg.spot_result.spots) - 1), reference=two_seg.codebook)
     ends = wrong[wrong.stage == "end_bases"].set_index("item")
     assert ends.loc["segment A", "passed"] and not ends.loc["segment B", "passed"]
@@ -179,7 +179,7 @@ def test_fov_run_records_the_summary_and_never_calls_the_on_demand_diagnostics(t
         raise AssertionError("FOV.run must not call this diagnostic")
 
     for name in ("inspect_read", "plot_read", "explain_read"):
-        monkeypatch.setattr(barcode, name, forbidden)
+        monkeypatch.setattr(readout, name, forbidden)
         monkeypatch.setattr(diagnostics_module, name, forbidden)
     fov = fx.crosstalk_fov(tmp_path)
     from starfinder.dataset import CheckpointConfig

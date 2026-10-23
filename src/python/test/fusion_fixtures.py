@@ -17,11 +17,11 @@ import numpy as np
 import pandas as pd
 
 from starfinder.assignment._persist import assignment_directory, write_assignment
-from starfinder.barcode import Codebook
+from starfinder.readout import Codebook
 from starfinder.dataset import Dataset
 from starfinder.image import ImageMetadata
 from starfinder.io import save_volume
-from starfinder.sample_output import FusionInput
+from starfinder.export import FusionInput
 from starfinder.segmentation import ReferenceGrid
 from starfinder.stitching import approve_placement, save_placement
 

@@ -561,7 +561,7 @@ def scene_no_run_json(scene_chain, tmp_path_factory):  # noqa: F811
     alone (``molecules_only``; the reference images ``images/ref_merged`` fused, since the stains live under the
     checkpoint folder)."""
     from starfinder.dataset import Dataset, RoundState
-    from starfinder.sample_output import ExportConfig, FusionConfig
+    from starfinder.export import ExportConfig, FusionConfig
     base = tmp_path_factory.mktemp("scene_no_run_json")
     cells = scene_chain.copy(base / "cells")
     for fov in cells.fov_ids:

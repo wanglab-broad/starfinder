@@ -165,7 +165,7 @@ class _Previews:
         """The cell and nucleus label files and the fused background of the export, or the reason it lacks one."""
         if hasattr(self, "_sources"):
             return self._sources
-        from starfinder.sample_output._record import part_status
+        from starfinder.export._record import part_status
         c = self.c
         export, export_dir = c.export, c.export_dir
         missing = first(*(Unavailable("part_not_written", f"{part}: {part_status(export, part)}")

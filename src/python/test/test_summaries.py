@@ -5,7 +5,7 @@ import re
 import numpy as np
 import pytest
 
-from starfinder.barcode import NeighborhoodSumConfig, ReadFilterConfig, WtaDecoderConfig, filter_reads
+from starfinder.readout import NeighborhoodSumConfig, ReadFilterConfig, WtaDecoderConfig, filter_reads
 from starfinder.dataset import CheckpointConfig, Dataset, PipelineConfig, RoundState
 from starfinder.registration import RegistrationRecipe, RegistrationStep
 from starfinder.evaluation import EvaluationResult

@@ -22,7 +22,7 @@ import pandas as pd
 import pytest
 
 from starfinder.assembly import load_assembly
-from starfinder.sample_output import RouteComparison, compare_routes
+from starfinder.export import RouteComparison, compare_routes
 from starfinder.stitching import approve_placement, placement_from_table, positions_from_table, save_placement
 
 from .sample_segmentation_fixtures import (

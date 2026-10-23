@@ -41,15 +41,15 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from starfinder.barcode import (Codebook, CodebookAwareDecoderConfig, DeduplicationConfig, DirectAssignmentConfig,
+from starfinder.readout import (Codebook, CodebookAwareDecoderConfig, DeduplicationConfig, DirectAssignmentConfig,
                                 DirectPanel, NeighborhoodSumConfig, OneBaseEncodingConfig, ReadFilterConfig,
                                 ReadScoreConfig, WtaDecoderConfig, assign_direct, decode_barcodes,
                                 deduplicate_reads, extract_intensities, filter_reads, load_codebook, score_reads)
-from starfinder.barcode._codebook_aware import _channel_probabilities
-from starfinder.barcode.deduplication import DEDUPLICATION_COLUMNS
-from starfinder.barcode.scoring import SCORE_COLUMNS
+from starfinder.readout._codebook_aware import _channel_probabilities
+from starfinder.readout.deduplication import DEDUPLICATION_COLUMNS
+from starfinder.readout.scoring import SCORE_COLUMNS
 from starfinder.dataset import CheckpointConfig, PipelineConfig
-from starfinder.evaluation.barcode import evaluate_decoding, ranking_quality
+from starfinder.evaluation.readout import evaluate_decoding, ranking_quality
 from starfinder.evaluation.matching import match_points
 from starfinder.dataset import read_checkpoint
 from starfinder.io import ImageLoadResult
@@ -61,7 +61,7 @@ from . import readout_scenes as scenes
 from . import test_readout_golden as golden
 from .coordination_helpers import digest, table_digest
 
-pytestmark = [pytest.mark.barcode]
+pytestmark = [pytest.mark.readout]
 
 SRC = Path(__file__).resolve().parents[1]
 HAND_SEEDS = (100, 101, 102)

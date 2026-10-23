@@ -34,7 +34,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from starfinder.barcode import decode_barcodes, extract_intensities, filter_reads, load_codebook
+from starfinder.readout import decode_barcodes, extract_intensities, filter_reads, load_codebook
 from starfinder.dataset import Dataset, RoundState
 from starfinder.dataset.workflow import from_workflow_config
 from starfinder.image import ImageMetadata
@@ -43,7 +43,7 @@ from starfinder.spot_finding import SpotFindingResult
 
 from .coordination_helpers import digest, table_digest
 
-pytestmark = [pytest.mark.barcode, pytest.mark.golden]
+pytestmark = [pytest.mark.readout, pytest.mark.golden]
 
 SHAPE_ZYX = (12, 48, 48)
 CHANNELS = ("ch00", "ch01", "ch02", "ch03")
@@ -103,7 +103,7 @@ def readout_config(kind, *, radius=(1, 2, 2), decoder="wta", score_bound=None, e
     always select WtaDecoderConfig(diagnostics=True), so "yaml" requires decoder "wta".
     """
     from starfinder._registry import config_type_for
-    from starfinder.barcode import DECODING_METHODS, ENCODINGS, NeighborhoodSumConfig, ReadFilterConfig, ReadScoreConfig
+    from starfinder.readout import DECODING_METHODS, ENCODINGS, NeighborhoodSumConfig, ReadFilterConfig, ReadScoreConfig
     from starfinder.dataset import CheckpointConfig, PipelineConfig
     from starfinder.spot_finding import LocalMaximaConfig
 
@@ -202,7 +202,7 @@ def candidates():
 
 def write_codebook(directory):
     """genes.csv-style gene,barcode file of the 5-base barcodes of CODEWORDS (start base C)."""
-    from starfinder.barcode import decode_color_sequence
+    from starfinder.readout import decode_color_sequence
     path = directory / "codebook.csv"
     rows = [f"{gene},{decode_color_sequence(colors, 'C')[::-1]}" for colors, gene in CODEWORDS.items()]
     path.write_text("\n".join(rows) + "\n")

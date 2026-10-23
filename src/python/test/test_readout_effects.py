@@ -157,7 +157,7 @@ print(h.hexdigest())
 
 
 def test_acquisition_order_mapping_and_single_round_loss_default():
-    from starfinder.barcode import Codebook
+    from starfinder.readout import Codebook
     book, config = formed_scene_preset()
     matrix = np.repeat(np.eye(4)[None], 3, axis=0)
     matrix[0, 2, 1] = .5

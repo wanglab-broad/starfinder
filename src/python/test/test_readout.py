@@ -4,7 +4,7 @@ import importlib
 import numpy as np
 import pandas as pd
 import pytest
-from starfinder.barcode import (
+from starfinder.readout import (
     Codebook,
     EncodingConfig,
     load_codebook,
@@ -15,10 +15,10 @@ from starfinder.barcode import (
     filter_reads,
 )
 from starfinder.synthetic._presets import _TEST_CODEBOOK
-from starfinder.barcode import EncodingConfig
-from .barcode_cases import CHANNELS, intensity, tensor
+from starfinder.readout import EncodingConfig
+from .readout_cases import CHANNELS, intensity, tensor
 
-pytestmark = pytest.mark.barcode
+pytestmark = pytest.mark.readout
 
 ROUNDS = tuple(f"r{i}" for i in range(4))
 
@@ -112,7 +112,7 @@ def test_split_range_and_mapping_errors(tmp_path, small_dataset):
 
 
 def test_no_old_public_interfaces():
-    import starfinder.barcode as barcode
+    import starfinder.readout as readout
     import starfinder.dataset as dataset
 
     for name in (
@@ -128,9 +128,9 @@ def test_no_old_public_interfaces():
         "channel_probabilities",
         "wta_color_sequences",
     ):
-        assert not hasattr(barcode, name)
+        assert not hasattr(readout, name)
     assert not hasattr(dataset, "Codebook")
-    for module in ("starfinder.barcode.encoding", "starfinder.barcode.codebook_aware"):
+    for module in ("starfinder.readout.encoding", "starfinder.readout.codebook_aware"):
         with pytest.raises(ModuleNotFoundError):
             importlib.import_module(module)
 

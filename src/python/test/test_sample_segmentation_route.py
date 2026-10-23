@@ -23,7 +23,7 @@ import tifffile
 
 from starfinder.assembly import AssemblyConfig, AssemblyResult, assemble, load_assembly, ownership_map
 from starfinder.assignment import AssignmentConfig
-from starfinder.sample_output import (
+from starfinder.export import (
     ExportIncompleteWarning,
     SampleSegmentationConfig,
     SampleSegmentationRun,
@@ -368,7 +368,7 @@ def test_sg4_reuse(tmp_path, fuse_on):
 def test_sg4_reuse_with_changed_assignment_settings(tmp_path):
     """A reused segmentation takes the current export's assignment settings: the segmentation section's assignment
     holds them, and the tables are made with them (here an expansion of 1 µm, which the first export did not have)."""
-    from starfinder.sample_output import load_sample_segmentation
+    from starfinder.export import load_sample_segmentation
     folder, segmentation, first = first_export(tmp_path)
     assert first["segmentation"]["assignment"]["expansion"] is None
     labels = {run["path"]: run["sha256"] for run in first["segmentation"]["runs"]}
@@ -536,7 +536,7 @@ def test_sg5_no_included_fov(tmp_path):
 @needs_anndata
 @needs_library
 def test_sg5_a_method_that_raises(tmp_path, monkeypatch):
-    import starfinder.sample_output._segment as segment_module
+    import starfinder.export._segment as segment_module
     folder = write_folder(tmp_path, "fused_pair")
     grid = export_grid(folder)
     nuclei = truth_import(folder, grid, "nucleus", labels=scene_truth_labels(folder, grid, "nucleus"))

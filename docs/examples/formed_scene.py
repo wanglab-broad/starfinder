@@ -5,7 +5,7 @@ import json
 import numpy as np
 import pandas as pd
 
-from starfinder.barcode import NeighborhoodSumConfig, WtaDecoderConfig, extract_intensities, decode_barcodes
+from starfinder.readout import NeighborhoodSumConfig, WtaDecoderConfig, extract_intensities, decode_barcodes
 from starfinder.io import ImageLoadResult
 from starfinder.spot_finding import SpotFindingResult, LocalMaximaConfig
 from starfinder.synthetic import ScalarDistribution, formed_scene_preset, generate_formed_scene

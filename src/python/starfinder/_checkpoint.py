@@ -450,7 +450,7 @@ def _extraction_fields(config):
 
 def _extraction_config(header):
     """The NeighborhoodSumConfig of a candidates header; no background_config (before §2.8) is background=None."""
-    from starfinder.barcode import LocalBackgroundConfig, NeighborhoodSumConfig
+    from starfinder.readout import LocalBackgroundConfig, NeighborhoodSumConfig
     background = header.get("background_config")
     fields_ = {k: tuples(v) for k, v in header["signals"]["extraction_config"].items() if k != "method"}
     return NeighborhoodSumConfig(**fields_, background=None if background is None else LocalBackgroundConfig(
@@ -467,7 +467,7 @@ def _detection_plan(header, config, detectors):
 
 
 def _read_candidates(directory, header):
-    from starfinder.barcode import IntensityExtractionResult, NeighborhoodSumConfig
+    from starfinder.readout import IntensityExtractionResult, NeighborhoodSumConfig
     from starfinder.spot_finding import SpotFindingResult
     frame = _read_table(Path(directory) / header["table"], header["dtypes"])
     namespace = header["spot_namespace"]
@@ -532,10 +532,10 @@ def write_pre_qc(directory, header, decoding_result, table_format, *, scoring_re
 
 
 def _read_pre_qc(directory, header):
-    from starfinder.barcode import (DECODING_METHODS, BarcodeDecodingResult, DeduplicationConfig,
+    from starfinder.readout import (DECODING_METHODS, BarcodeDecodingResult, DeduplicationConfig,
                                     ReadDeduplicationResult, ReadScoreConfig, ReadScoringResult)
-    from starfinder.barcode.deduplication import DEDUPLICATION_COLUMNS, deduplication_counts
-    from starfinder.barcode.scoring import SCORE_COLUMNS
+    from starfinder.readout.deduplication import DEDUPLICATION_COLUMNS, deduplication_counts
+    from starfinder.readout.scoring import SCORE_COLUMNS
     table = _read_table(Path(directory) / header["table"], header["dtypes"])
     config = _config(header["decoding_config"], {spec.name: t for t, spec in DECODING_METHODS.items()})
     labels = tuple(header["channel_labels_decoded"]), tuple(header["round_labels"])

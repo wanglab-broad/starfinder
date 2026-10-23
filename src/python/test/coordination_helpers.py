@@ -8,7 +8,7 @@ import json
 
 import numpy as np
 
-from starfinder.barcode.spots import _join_spots
+from starfinder.readout.spots import _join_spots
 
 
 def spot_table(fov, accepted=False):

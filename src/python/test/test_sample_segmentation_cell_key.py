@@ -339,7 +339,7 @@ def test_so3_the_fill_rule():
                                   "status_placeholder_with_input", "status_failed", "empty_no_cell_row",
                                   "empty_molecules_only"])
 def test_so3_cell_links_by_the_cell_key(case):
-    from starfinder.sample_output._spatialdata import cell_links
+    from starfinder.export._spatialdata import cell_links
     result, _ = build(case)
     links = cell_links(result)
     if case == "empty_molecules_only":
@@ -350,7 +350,7 @@ def test_so3_cell_links_by_the_cell_key(case):
 
 
 def test_so3_cell_links_refuses_a_key_the_cell_table_does_not_hold():
-    from starfinder.sample_output._spatialdata import cell_links
+    from starfinder.export._spatialdata import cell_links
     result, _ = build("big_ids")
     molecules = result.molecules.copy()
     row = int(np.flatnonzero(molecules.cell_id.notna().to_numpy())[0])
@@ -421,7 +421,7 @@ def test_so3_readers_that_do_not_read_the_key_give_the_same_results(case, tmp_pa
     """sample_anndata, export_counts and fov_ownership on the table with the column and on the table before it."""
     anndata = pytest.importorskip("anndata", reason="the anndata extra (starfinder[anndata]) is not installed")
     from starfinder.assembly import fov_ownership, sample_anndata
-    from starfinder.sample_output._spatialdata import export_counts
+    from starfinder.export._spatialdata import export_counts
     result, _ = build(case)
     before = without_key(result)
     assert export_counts(result) == export_counts(before)
@@ -458,8 +458,8 @@ def test_so3_the_export_readers_on_a_folder_with_the_column(assignment, tmp_path
     import spatialdata
 
     from starfinder.assignment._persist import read_assignment
-    from starfinder.sample_output import ExportConfig, SpatialDataExportConfig, check_export, lookup_source
-    from starfinder.sample_output._spatialdata import cell_links
+    from starfinder.export import ExportConfig, SpatialDataExportConfig, check_export, lookup_source
+    from starfinder.export._spatialdata import cell_links
 
     from .assembly_fixtures import SAMPLE
     from .fusion_fixtures import export_folder

@@ -28,7 +28,7 @@ import tifffile
 
 from starfinder.assembly import AssemblyConfig, load_assembly, ownership_map
 from starfinder.assembly._anndata import sample_anndata
-from starfinder.sample_output import LabelConfig, check_export, lookup_source, segment_fused
+from starfinder.export import LabelConfig, check_export, lookup_source, segment_fused
 from starfinder.stitching import load_placement
 
 from .fusion_fixtures import listing
@@ -441,7 +441,7 @@ def test_so4_l6_the_id_bound(tmp_path, monkeypatch):
     their recorded SHA-256, and no table, ``sample.h5ad``, territories, ``cell_labels.ome.tif`` or store exists; the
     record names the part ``fuse_labels`` with the error, ``complete`` is false. The error is the one L6 raises on
     the route per FOV (``check_label_ids`` of the sample cell table)."""
-    import starfinder.sample_output._labels as labels_module
+    import starfinder.export._labels as labels_module
     folder = write_folder(tmp_path, "fused_pair")
     segmentation = truth_config(folder, export_grid(folder))
     export(folder, route_config(segmentation=segmentation))

@@ -26,7 +26,7 @@ import tifffile
 from starfinder.assembly import assemble, load_assembly
 from starfinder.image import ImageMetadata
 from starfinder.io import save_volume
-from starfinder.sample_output import check_export
+from starfinder.export import check_export
 from starfinder.dataset._export import assembly_inputs
 from starfinder.segmentation import ReferenceGrid
 from starfinder.stitching import save_placement

@@ -512,7 +512,7 @@ class _Measurements:
         projection entry and its stack entry (either None), each file checked against its SHA-256; or the reason
         the part has none."""
         def make():
-            from starfinder.sample_output._record import part_status
+            from starfinder.export._record import part_status
             c = self.c
             if c.e_state is not None:
                 return c.e_state

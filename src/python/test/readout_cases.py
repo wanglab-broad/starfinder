@@ -2,7 +2,7 @@
 
 import numpy as np
 import pandas as pd
-from starfinder.barcode import Codebook, IntensityExtractionResult, NeighborhoodSumConfig
+from starfinder.readout import Codebook, IntensityExtractionResult, NeighborhoodSumConfig
 from starfinder.image import ImageMetadata
 
 CHANNELS = ("red", "green", "blue", "yellow")

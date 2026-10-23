@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from starfinder.barcode import Codebook
+from starfinder.readout import Codebook
 
 from ._appearance import _APPEARANCE_PRESET_VERSION, AppearanceSceneConfig
 from ._appearance_bank import BankReference

@@ -237,7 +237,7 @@ def _check_run_records(inputs, root, fov_ids, dataset_id, sample_id):
 
 
 def _check_export(inputs, export_dir, sample, fov_ids, assignment):
-    from starfinder.sample_output._record import verify_section_hashes
+    from starfinder.export._record import verify_section_hashes
     path = export_dir / _layout.EXPORT_FILE
     if not path.is_file():
         return None
@@ -380,7 +380,7 @@ class _Collection:
         if self.export is None:
             self.e_state = Unavailable("no_export", f"{self.inputs.relative(self.export_dir)}/export.json")
             return
-        from starfinder.sample_output._record import part_status
+        from starfinder.export._record import part_status
         status = part_status(self.export, "assemble")
         if status not in _WRITTEN or self.assembly is None:
             self.e_state = Unavailable("part_not_written", f"assemble: {status}")
@@ -1114,7 +1114,7 @@ def collect_report(output_root, sample: str, fov_ids: Sequence[str], *, dataset_
         The report folder holds a file that is not the report's own.
     """
     from starfinder._records import _write_table, jsonable, software, write_json
-    from starfinder.sample_output._record import Timer
+    from starfinder.export._record import Timer
     from ._page import budget_bytes, build_page, identity_facts
     timer = Timer()
     folder, collection = _prepare(output_root, sample, fov_ids, dataset_id=dataset_id, sample_id=sample_id,

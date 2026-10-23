@@ -3,7 +3,7 @@ from starfinder.registration import RegistrationRecipe, RegistrationStep, Transl
 from starfinder.io import ImageLoadConfig
 from starfinder.preprocessing import MinMaxNormalizationConfig, PreprocessingRecipe, PreprocessingStep
 from starfinder.spot_finding import LocalMaximaConfig
-from starfinder.barcode import NeighborhoodSumConfig, WtaDecoderConfig, ReadFilterConfig
+from starfinder.readout import NeighborhoodSumConfig, WtaDecoderConfig, ReadFilterConfig
 from .coordination_helpers import spot_table, detected_shifts
 """End-to-end pipeline validation against synthetic ground truth.
 
@@ -20,7 +20,7 @@ import pytest
 
 from starfinder.evaluation.registration import evaluate_translation
 from starfinder.evaluation.spot_finding import evaluate_spots
-from starfinder.evaluation.barcode import evaluate_decoding
+from starfinder.evaluation.readout import evaluate_decoding
 from starfinder.image import ImageMetadata
 import numpy as np
 

@@ -27,9 +27,9 @@ import starfinder.assignment._persist as assignment_persist
 import starfinder.dataset._export as export_module
 from starfinder.assembly import AssemblyConfig, AssemblyResult, assemble, load_assembly, save_assembly
 from starfinder.io import save_volume
-from starfinder.sample_output import ExportConfig, ExportIncompleteWarning, LabelConfig, check_export, fuse_labels
-from starfinder.sample_output._labels import check_label_ids
-from starfinder.sample_output._record import section_sha256
+from starfinder.export import ExportConfig, ExportIncompleteWarning, LabelConfig, check_export, fuse_labels
+from starfinder.export._labels import check_label_ids
+from starfinder.export._record import section_sha256
 from starfinder.io._ome import read_ome_layout
 from starfinder.stitching import load_placement
 

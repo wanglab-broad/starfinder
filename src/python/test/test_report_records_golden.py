@@ -34,7 +34,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from starfinder.barcode import (Codebook, DeduplicationConfig, NeighborhoodSumConfig, ReadFilterConfig,
+from starfinder.readout import (Codebook, DeduplicationConfig, NeighborhoodSumConfig, ReadFilterConfig,
                                 ReadScoreConfig, WtaDecoderConfig)
 from starfinder.dataset import (CheckpointConfig, Dataset, ExecutionConfig, PipelineConfig, RoundState)
 from starfinder.registration import RegistrationRecipe, RegistrationStep

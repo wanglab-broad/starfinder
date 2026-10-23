@@ -353,7 +353,7 @@ Paths are relative to `src/python/starfinder/` unless they start with
 
 ### Decoding
 
-`barcode/decoding.py:169` and `:207` (accepted types and dispatch),
+`readout/decoding.py:169` and `:207` (accepted types and dispatch),
 `dataset/config.py:121` and `:127` (`PipelineConfig.decoding`) and
 `_checkpoint.py:439` (`dict(wta=..., codebook_aware=...)`) hard-coded the two
 decoders. The first version of this page placed this registry in §2.9 and named
@@ -362,7 +362,7 @@ pattern of decision 2 ({doc}`readout-contract`, "Encoding registry"; W-292).
 
 | Place | What was hard-coded | How it is derived |
 | --- | --- | --- |
-| `barcode/decoding.py` (`decode_barcodes`) | accepted types and the `isinstance` dispatch | `spec_for(DECODING_METHODS, config, ...)`, keeping `TypeError("unsupported decoder config")`; `spec.run` per decoder. A codebook whose encoding kind (`EncodingSpec.symbols`) is not in `spec.encodings` raises `TypeError`. |
+| `readout/decoding.py` (`decode_barcodes`) | accepted types and the `isinstance` dispatch | `spec_for(DECODING_METHODS, config, ...)`, keeping `TypeError("unsupported decoder config")`; `spec.run` per decoder. A codebook whose encoding kind (`EncodingSpec.symbols`) is not in `spec.encodings` raises `TypeError`. |
 | `dataset/config.py` (`PipelineConfig.decoding`) | the two config types | The `DECODING_METHODS` keys. |
 | `_checkpoint.py` (`_read_pre_qc`) | `dict(wta=..., codebook_aware=...)` | The name-to-type map of `DECODING_METHODS`. |
 | `dataset/workflow.py` | always `WtaDecoderConfig(diagnostics=True)` | The Python-only `decoding` key names a `DECODING_METHODS` method (default `wta`); the schema list is kept equal to the registry by a test. |

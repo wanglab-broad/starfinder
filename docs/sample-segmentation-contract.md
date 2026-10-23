@@ -162,18 +162,18 @@ All new names are additions; no existing public name, module or format version c
 
 | Concept | Name | Kind | Module |
 | --- | --- | --- | --- |
-| Route values | `ROUTES = ("per_fov", "after_fusion")` | tuple | `starfinder.sample_output` |
-| Settings of the route | `SampleSegmentationConfig(runs, cells, nuclei=None, assignment=AssignmentConfig(), device="cpu")` | frozen dataclass | `starfinder.sample_output` |
-| One run | `SampleSegmentationRun(name, target, inputs, method, seeds=None)` | frozen dataclass | `starfinder.sample_output` |
-| The segment part | `segment_fused(output_dir, *, config, sample, identity=None)` returning `SampleSegmentation` | function | `starfinder.sample_output` |
+| Route values | `ROUTES = ("per_fov", "after_fusion")` | tuple | `starfinder.export` |
+| Settings of the route | `SampleSegmentationConfig(runs, cells, nuclei=None, assignment=AssignmentConfig(), device="cpu")` | frozen dataclass | `starfinder.export` |
+| One run | `SampleSegmentationRun(name, target, inputs, method, seeds=None)` | frozen dataclass | `starfinder.export` |
+| The segment part | `segment_fused(output_dir, *, config, sample, identity=None)` returning `SampleSegmentation` | function | `starfinder.export` |
 | Its result | `SampleSegmentation(grid, runs, record)` | frozen dataclass | `starfinder.segmentation` |
-| Its loader | `load_sample_segmentation(output_dir)` | function | `starfinder.sample_output` |
+| Its loader | `load_sample_segmentation(output_dir)` | function | `starfinder.export` |
 | The assembly of this route | the keyword `segmentation: SampleSegmentation | None = None` of `assemble` | keyword | `starfinder.assembly` |
-| The consistency check | `compare_routes(per_fov, after_fusion, *, threshold=0.5, output=None)` returning `RouteComparison` | function, frozen dataclass | `starfinder.sample_output` |
-| Export settings | `ExportConfig.route`, `ExportConfig.segment`, `ExportConfig.segmentation` | fields | `starfinder.sample_output` |
+| The consistency check | `compare_routes(per_fov, after_fusion, *, threshold=0.5, output=None)` returning `RouteComparison` | function, frozen dataclass | `starfinder.export` |
+| Export settings | `ExportConfig.route`, `ExportConfig.segment`, `ExportConfig.segmentation` | fields | `starfinder.export` |
 | Record | the `segmentation` section of `export.json`; the key `route` in the `assembly` section | JSON | — |
 
-The new exports go into `__all__` and the autosummary list of `docs/api/sample_output.rst`
+The new exports go into `__all__` and the autosummary list of `docs/api/export.rst`
 when they are implemented, which `docs/check_reference.py` requires.
 
 ## The entry
@@ -512,7 +512,7 @@ readers use: `obs_name` is `<sample>_<fov_id>_<cell_id>`; identity 1 counts the 
 per `fov_id` against `fovs.n_cells` (read from the source,
 `src/python/starfinder/assembly/_assemble.py:166`); the counts table and `sample.h5ad`
 carry it; `lookup_source(cell=…)` finds the record's FOV entry by it (read from the
-source, `src/python/starfinder/sample_output/_spatialdata.py:755–757`); and
+source, `src/python/starfinder/export/_spatialdata.py:755–757`); and
 `equivalent_radii` takes the cell's grid spacing by it (call C10).
 
 | Option | `fov_id` on this route | What it changes in the package | What it changes in the outputs | Readers of the present outputs |
@@ -636,7 +636,7 @@ Each reader the package has of these outputs, and what it does on the route afte
 | `sample_anndata` | `layers` from the FOV entries (call C20) | From the `segmentation` record on this route. |
 | `cell_links` (SpatialData) | `(fov_id, cell_id)` | `(cell_namespace, cell_id)` (CK1). |
 | `equivalent_radii` (SpatialData shapes) | `size_voxels` with the cell's FOV spacing | With the segmentation grid's spacing: with a FOV's spacing a cell counted at 1/2 would get half its radius (call C10: 2.82 µm against 5.64 µm). |
-| `lookup_source(cell=…)` | The FOV's assignment folder and the row's position among the cells of its FOV (read from the source, `src/python/starfinder/sample_output/_spatialdata.py:755–762`); `lookup_source(spot=…)` of a `molecules_only` export returns the FOV, no assignment folder and the row (call C11c) | `assignment_folder` null, `row` the cell's position in the sample cell table, and two added keys, `label_file` (the cell run's file) and `label_value` (`cell_id`). `lookup_source(spot=…)` is the same as for a `molecules_only` sample. |
+| `lookup_source(cell=…)` | The FOV's assignment folder and the row's position among the cells of its FOV (read from the source, `src/python/starfinder/export/_spatialdata.py:755–762`); `lookup_source(spot=…)` of a `molecules_only` export returns the FOV, no assignment folder and the row (call C11c) | `assignment_folder` null, `row` the cell's position in the sample cell table, and two added keys, `label_file` (the cell run's file) and `label_value` (`cell_id`). `lookup_source(spot=…)` is the same as for a `molecules_only` sample. |
 | `check_export` | R1 to R3, F, L, S | R1 with the part `segment`, L3 and L5 by the rule `segmentation`, S2 with the new column, and the conditions T1 to T5 of "The record". |
 | `fov_ownership`, the assignment figures of `export_sample` (W-330) | Redrawn for each FOV whose `fovs.kind` is `assignment` and whose saved assignment is an input (read from the source, `src/python/starfinder/_snakemake.py:794`) | Not drawn: every FOV's `kind` is `molecules` on this route. |
 
@@ -664,7 +664,7 @@ by default). On this route `fuse_labels` passes the sample's territories (the ce
 labels, or the expanded territories) with `cell_id` mapped to `instance_id` as its one
 view to the same library call (interpolation order 0, `_first_positive`,
 `output_spacing`; the call `fuse_labels` makes today is read from the source,
-`src/python/starfinder/sample_output/_labels.py:429`), so no second placement is written.
+`src/python/starfinder/export/_labels.py:429`), so no second placement is written.
 Call C25 passed the sample cell labels of the synthetic input as one view to that call at
 twice the spacing: it returned every second pixel of the input, uint32, with no value
 outside the input's. The grid therefore has the label scale's spacing and the
@@ -816,7 +816,7 @@ folders; then it writes the tables below as CSV and the summary as JSON there.
 
 | Option | Where | What it changes | Consequence |
 | --- | --- | --- | --- |
-| **CC1. A package function (recommended)** | `compare_routes` in `starfinder.sample_output`, called by hand on a block or a sample; no workflow rule. | One function and its result type. | Repeatable on any two folders; tested on fixtures. |
+| **CC1. A package function (recommended)** | `compare_routes` in `starfinder.export`, called by hand on a block or a sample; no workflow rule. | One function and its result type. | Repeatable on any two folders; tested on fixtures. |
 | CC2. A validation script only | Scripts in a run directory, as W-399's. | Nothing in the package. | Not repeatable by a user; not tested. |
 | CC3. Both routes inside one export | `Dataset.export` runs both routes. | A second order of processing in every export. | Doubles the cost of every export; Jiahao does not want two orders of processing where one can do. |
 

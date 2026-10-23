@@ -11,10 +11,10 @@ import pandas as pd
 
 from starfinder._layout import REFERENCE_IMAGE
 from starfinder._records import file_sha256
-from starfinder.barcode import (BarcodeLayout, Codebook, DirectPanel, EncodingConfig, OneBaseEncodingConfig,
+from starfinder.readout import (BarcodeLayout, Codebook, DirectPanel, EncodingConfig, OneBaseEncodingConfig,
     load_codebook, load_direct_panel)
-from starfinder.barcode.codebook import _encoding_summary
-from starfinder.barcode.decoding import READOUT_MODES
+from starfinder.readout.codebook import _encoding_summary
+from starfinder.readout.decoding import READOUT_MODES
 from starfinder.dataset.types import (
     REFERENCE_STAIN,
     ChannelInfo,
@@ -330,7 +330,7 @@ class Dataset:
         Returns
         -------
         pandas.DataFrame
-            :meth:`starfinder.barcode.Codebook.encoding_table`: columns bases,
+            :meth:`starfinder.readout.Codebook.encoding_table`: columns bases,
             color and channel (the channel label of the color).
 
         Raises
@@ -414,7 +414,7 @@ class Dataset:
             Stores the canonical barcode Codebook, and keeps the file's
             absolute path and SHA-256 for ``run.json`` ``codebook``. Sequencing
             round labels and channel_order must be configured explicitly.
-            Errors propagate from :func:`starfinder.barcode.load_codebook`.
+            Errors propagate from :func:`starfinder.readout.load_codebook`.
         """
         if encoding is None:
             encoding = EncodingConfig(reverse_bases=reverse_bases, split_index=split_index)
@@ -439,7 +439,7 @@ class Dataset:
         None
             Stores the DirectPanel, and keeps the file's absolute path and
             SHA-256 for ``run.json`` ``codebook``. Errors propagate from
-            :func:`starfinder.barcode.load_direct_panel`.
+            :func:`starfinder.readout.load_direct_panel`.
         """
         self.direct_panel = load_direct_panel(path, round_labels=tuple(self.rounds.sequencing_rounds),
                                               channel_labels=tuple(self.channel_order))
@@ -563,29 +563,29 @@ class Dataset:
         declare), saved with
         :func:`~starfinder.assembly.save_assembly` (with ``assemble`` off the
         saved assembly is ``reused``, or the part is ``off`` when there is none);
-        :func:`~starfinder.sample_output.fuse` on one
-        :class:`~starfinder.sample_output.FusionInput` per included FOV
+        :func:`~starfinder.export.fuse` on one
+        :class:`~starfinder.export.FusionInput` per included FOV
         (``reference_stain``:
         ``checkpoints/{fovID}/other_rounds/reference_stain/image.ome.tif``;
         ``reference_merged``: the reference image ``reference_image`` names;
         ``<name>=file:<pattern>`` relative to the output root); and, with
         ``fuse_labels`` on (off by default),
-        :func:`~starfinder.sample_output.fuse_labels` on the placement and the
+        :func:`~starfinder.export.fuse_labels` on the placement and the
         assembly, which writes ``cell_labels.ome.tif``; and, with
         ``export_spatialdata`` on (off by default),
-        :func:`~starfinder.sample_output.export_spatialdata` on the saved
+        :func:`~starfinder.export.export_spatialdata` on the saved
         assembly and the ``fusion`` and ``labels`` sections, which writes
         ``sample.zarr/`` (with it on, a sample name outside spatialdata's
         element naming rule is refused among the config checks). A part that
         cannot run is recorded ``not_run`` with
-        :class:`~starfinder.sample_output.ExportIncompleteWarning`; any other
+        :class:`~starfinder.export.ExportIncompleteWarning`; any other
         error inside the SpatialData part records it ``failed`` and is raised
         again. The part ``segment`` of the route after fusion is recorded
         ``off`` on the route per FOV (reason ``route_per_fov``, or ``no_cells``
         with ``assignment=None``). On the route after fusion with an
         assignment (docs/sample-segmentation-contract.md) the parts run in the
         order ``fuse``; ``segment``
-        (:func:`~starfinder.sample_output.segment_fused` on the fused
+        (:func:`~starfinder.export.segment_fused` on the fused
         projection, with the dataset's ``(dataset_id, sample_id)``; with
         ``segment`` off the saved sample segmentation is ``reused`` under the
         reuse rule, checked before anything is written); ``assemble`` on each
@@ -626,7 +626,7 @@ class Dataset:
             Check 7: a model of ``config.segmentation`` is missing or has
             another SHA-256, with the folder unchanged.
         """
-        from starfinder.sample_output import ExportConfig
+        from starfinder.export import ExportConfig
         from starfinder.dataset._export import export_sample
         return export_sample(self, sample, placement=placement, assignment=assignment,
                              config=ExportConfig() if config is None else config, output_dir=output_dir)

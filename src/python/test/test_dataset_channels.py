@@ -14,7 +14,7 @@ import pytest
 import yaml
 from skimage.measure import label
 
-from starfinder.barcode import Codebook
+from starfinder.readout import Codebook
 from starfinder.dataset import (ChannelInfo, CheckpointConfig, Dataset, PipelineConfig, RoundState,
                                 from_workflow_config)
 from starfinder.registration import RegistrationRecipe, RegistrationStep

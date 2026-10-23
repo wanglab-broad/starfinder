@@ -370,7 +370,7 @@ def test_each_export_caller_reads_the_grid_without_pixels(tmp_path, monkeypatch)
     each reference image whole once on the base revision, for its grid alone; now none does, and each gets the
     base's grids."""
     from starfinder.dataset.workflow import _assembly_block, _export_dataset
-    from starfinder.sample_output import ExportConfig, FusionConfig
+    from starfinder.export import ExportConfig, FusionConfig
     from starfinder.dataset._export import _input_grids, assembly_inputs, fusion_inputs
     from starfinder.stitching import load_placement
     out, config, images = golden_sample(tmp_path)
@@ -456,7 +456,7 @@ def test_a_float_reference_image_is_still_read_whole(monkeypatch, tmp_path):
     """W-390's sample scene, whose stains are float32 and written as pages without metadata: whether a float file is
     finite only its pixels show (load_volume refuses NaN), so assembly_inputs and fusion_inputs read it whole, as
     on the base revision, and get the base's grids."""
-    from starfinder.sample_output import ExportConfig, FusionConfig
+    from starfinder.export import ExportConfig, FusionConfig
     from starfinder.dataset._export import assembly_inputs, fusion_inputs
     from starfinder.stitching import load_placement
     from starfinder.synthetic import generate_sample_scene, sample_scene_preset, save_sample_scene

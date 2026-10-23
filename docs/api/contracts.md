@@ -322,7 +322,7 @@ active table of `EncodeBases.m`; the four pairs of one first base need four
 different colors), and every encode and decode path follows the codebook's table
 while `encode_bases` and `decode_color_sequence` keep the default.
 `EncodingSpec.table(config)` returns either encoding's table;
-{py:meth}`~starfinder.barcode.Codebook.encoding_table`,
+{py:meth}`~starfinder.readout.Codebook.encoding_table`,
 {py:meth}`~starfinder.dataset.Dataset.encoding_table` and
 {py:meth}`~starfinder.dataset.FOV.encoding_table` show it with the columns `bases`,
 `color` and `channel` (the latter two raise `ValueError` without a codebook or in
@@ -426,7 +426,7 @@ Before: combined extraction returned channel calls and scores; codebook loading
 returned two dictionaries, and filtering dropped rejected rows. After:
 
 ```python
-from starfinder.barcode import (
+from starfinder.readout import (
     extract_intensities, decode_barcodes, filter_reads,
     NeighborhoodSumConfig, WtaDecoderConfig, ReadFilterConfig,
 )

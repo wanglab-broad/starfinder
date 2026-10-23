@@ -13,7 +13,7 @@ import warnings
 import numpy as np
 import pandas as pd
 
-from starfinder.barcode import Codebook
+from starfinder.readout import Codebook
 from starfinder.image import ImageMetadata
 from ._common import (ScalarDistribution, _array, _distribution, _draw, _integer,
                       _json, _label, _placement, _position, _probabilities)

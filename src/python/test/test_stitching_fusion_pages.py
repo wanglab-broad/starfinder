@@ -20,7 +20,7 @@ import pytest
 import tifffile
 
 from starfinder.io import _ome
-from starfinder.sample_output import FusionConfig, FusionInput, _fuse, fuse
+from starfinder.export import FusionConfig, FusionInput, _fuse, fuse
 
 from . import reading_fixtures as rf
 

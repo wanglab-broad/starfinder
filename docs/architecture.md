@@ -7,13 +7,14 @@ streaming select image residency, not different scientific pipelines.
 | Namespace | Responsibility | Boundary |
 | --- | --- | --- |
 | `assignment` | Molecules to cells, nucleus–cell correspondence, compartments and counts on one FOV's grid | Does not segment, stitch or run inside `FOV.run` |
-| `barcode` | Codebook validation, extraction, decoding, filtering | Does not load images or select benchmarks |
 | `benchmark` | Cases, timing, manifests, saved-output evaluation/reporting | Does not implement algorithms or select hidden scientific defaults |
 | `dataset` | Dataset/FOV inputs, rounds, typed pipeline and execution policy | Calls public processing functions |
 | `evaluation` | Pure metrics and explicit matching policies | Does not detect, register, rerun or write reports |
+| `export` | Sample export: fusion, labels, SpatialData, the export check and the route comparison | Does not place FOVs or assemble molecule tables |
 | `image` | ImageMetadata, spatial validation/conversion | Does not own intensities or acquisition state |
 | `io` | Image/table persistence and explicit conversion | Does not process experiments |
 | `preprocessing` | Typed finite-array operations | Does not own FOV state |
+| `readout` | Codebook validation, extraction, decoding, filtering | Does not load images or select benchmarks |
 | `registration` | Estimate/apply transforms and diagnostics | Does not evaluate truth or time experiments |
 | `segmentation` | Label images on a reference grid, mask import and label functions | Does not assign molecules or run inside `FOV.run` |
 | `spot_finding` | Detection and stable SpotFindingResult identities | Does not perform registration evaluation |

@@ -92,7 +92,7 @@ import hashlib, json, sys
 from pathlib import Path
 sys.path.insert(0, sys.argv[1])
 import dask
-from starfinder.sample_output import ExportConfig
+from starfinder.export import ExportConfig
 from test.assembly_fixtures import SAMPLE
 from test.fusion_fixtures import export_folder
 folder = export_folder(Path(sys.argv[2]))

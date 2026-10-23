@@ -1768,11 +1768,11 @@ one, and is not listed.
 These are W-393 choice 7; they are not scene changes and not statements of
 {doc}`synthetic-sample-scene`. The route after fusion has no composite operation: a run
 reads the fused projections it names and stacks them as its input channels
-(`sample_output/_segment.py::segment_fused`), and `seeded_watershed` takes one channel, so
+(`export/_segment.py::segment_fused`), and `seeded_watershed` takes one channel, so
 W-393 made the nuclei–amplicon composite per FOV and fused it, where tissue-2D's legacy
 route made it from the fused images. `SampleSegmentationConfig.device` applies to every
 run of the block and is refused when a run's method does not run on it
-(`sample_output/_config.py::SampleSegmentationConfig.__post_init__`), and
+(`export/_config.py::SampleSegmentationConfig.__post_init__`), and
 `seeded_watershed` runs on the CPU only (its entry in
 `segmentation/_methods.py::SEGMENTATION_METHODS`), so StarDist cannot run on the GPU
 beside it (W-393 `notes.md` §4). Proposed: a composite made from the fused images, and a

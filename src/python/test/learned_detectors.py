@@ -15,7 +15,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from starfinder.barcode import Codebook
+from starfinder.readout import Codebook
 from starfinder.evaluation.spot_finding import evaluate_spots, localization_errors
 from starfinder.image import ImageMetadata
 from starfinder.spot_finding import find_spots

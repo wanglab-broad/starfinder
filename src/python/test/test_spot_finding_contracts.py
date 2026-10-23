@@ -132,7 +132,7 @@ def test_fov_namespace_and_downstream_identity(tmp_path):
     fov.extract_intensities()
     pd.testing.assert_series_equal(ids, spot_table(fov).spot_id)
     assert spot_table(fov).spot_namespace.tolist() == [namespace]
-    from starfinder.barcode import Codebook
+    from starfinder.readout import Codebook
     dataset.codebook = Codebook(pd.DataFrame({'gene_id':['gene'],'color_sequence':['1']}),
                                ('round1',), ('a','b','c','d'))
     fov.decode_barcodes().filter_reads()

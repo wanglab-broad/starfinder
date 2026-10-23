@@ -40,7 +40,7 @@ import warnings
 import numpy as np
 import pandas as pd
 
-from starfinder.barcode import Codebook, NeighborhoodSumConfig, ReadFilterConfig, WtaDecoderConfig
+from starfinder.readout import Codebook, NeighborhoodSumConfig, ReadFilterConfig, WtaDecoderConfig
 from starfinder.dataset import Dataset, PipelineConfig, RoundState
 from starfinder.registration import RegistrationRecipe, RegistrationStep
 from starfinder.evaluation.matching import match_points

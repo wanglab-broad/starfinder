@@ -180,7 +180,7 @@ def drop_cell_namespace(case):
     """The export of ``case`` as one saved before the molecule table had ``cell_namespace``: the table written again
     without the column by the checkpoint writer, and its entry in export.json given the new SHA-256 and dtypes."""
     from starfinder._records import _write_table
-    from starfinder.sample_output._record import update_section
+    from starfinder.export._record import update_section
     from starfinder._records import file_sha256
     folder = case.root / "export" / case.sample
     section = json.loads((folder / "export.json").read_text())["assembly"]

@@ -33,7 +33,7 @@ from scipy import ndimage as ndi
 from skimage.filters import threshold_otsu
 
 from starfinder._records import file_sha256
-from starfinder.barcode import Codebook
+from starfinder.readout import Codebook
 
 from ._appearance_bank import (BANK_DIRECTORY_VARIABLE, BankReference, _struct,
                                load_appearance_bank)

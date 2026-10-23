@@ -23,7 +23,7 @@ from starfinder import _snakemake  # noqa: E402
 from starfinder.assembly import fov_ownership, load_assembly  # noqa: E402
 from starfinder.assignment._persist import read_assignment  # noqa: E402
 from starfinder.io import save_volume  # noqa: E402
-from starfinder.sample_output import check_export  # noqa: E402
+from starfinder.export import check_export  # noqa: E402
 from starfinder.stitching import load_placement, save_placement  # noqa: E402
 
 from .assembly_fixtures import GOLDEN_IDS, golden_placement, unit_grid  # noqa: E402

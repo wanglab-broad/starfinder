@@ -35,7 +35,7 @@ from starfinder.assembly import (
     save_assembly,
 )
 from starfinder.assignment._persist import read_assignment, write_assignment
-from starfinder.sample_output import (
+from starfinder.export import (
     ExportConfig,
     ExportIncompleteWarning,
     FusionConfig,
@@ -48,7 +48,7 @@ from starfinder.sample_output import (
     fuse_labels,
     lookup_source,
 )
-from starfinder.sample_output._record import section_sha256
+from starfinder.export._record import section_sha256
 from starfinder._records import file_sha256
 from starfinder.stitching import (
     approve_placement,

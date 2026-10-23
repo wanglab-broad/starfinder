@@ -17,7 +17,7 @@ from renaming.
 
 ## Responsibilities and data flow
 
-`io` → `preprocessing` → `registration` → `spot_finding` → `barcode`
+`io` → `preprocessing` → `registration` → `spot_finding` → `readout`
 is the processing flow. `image` owns metadata; `dataset` owns coordination.
 `synthetic` produces processed images/truth; `evaluation` computes pure metrics;
 `benchmark` runs explicit cases, measures resources and writes reports.

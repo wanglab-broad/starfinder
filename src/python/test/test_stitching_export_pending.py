@@ -16,8 +16,8 @@ import pytest
 
 from starfinder.dataset import _export
 from starfinder.io import _ome
-from starfinder.sample_output import ExportConfig, FusionConfig, check_export
-from starfinder.sample_output._record import PARTS, read_export
+from starfinder.export import ExportConfig, FusionConfig, check_export
+from starfinder.export._record import PARTS, read_export
 
 from .test_stitching_declared_grids import SAMPLE, scene_dataset
 
@@ -70,7 +70,7 @@ def interrupt(*args, **kwargs):
 def listing(folder):
     """Every file of the folder with its SHA-256, export.json aside (it holds the times; compared without them)."""
     from starfinder._layout import EXPORT_FILE
-    from starfinder.sample_output._record import directory_files
+    from starfinder.export._record import directory_files
     return {name: digest for name, digest in directory_files(folder).items() if name != EXPORT_FILE}
 
 

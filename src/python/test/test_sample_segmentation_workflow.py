@@ -33,7 +33,7 @@ import yaml
 import starfinder.dataset.workflow as workflow
 from starfinder import _snakemake
 from starfinder._registry import names
-from starfinder.sample_output import (
+from starfinder.export import (
     ROUTES,
     ExportConfig,
     FusionConfig,

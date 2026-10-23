@@ -21,16 +21,16 @@ Modules (alphabetical)
 
    assembly
    assignment
-   barcode
    benchmark
    dataset
    evaluation.registration
+   export
    image
    io
    preprocessing
+   readout
    registration
    report
-   sample_output
    segmentation
    spot_finding
    stitching

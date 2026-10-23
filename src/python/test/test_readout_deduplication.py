@@ -19,26 +19,26 @@ import pandas as pd
 import pytest
 import yaml
 
-from starfinder.barcode import (BarcodeDecodingResult, CodebookAwareDecoderConfig, DeduplicationConfig,
+from starfinder.readout import (BarcodeDecodingResult, CodebookAwareDecoderConfig, DeduplicationConfig,
                                 NeighborhoodSumConfig, ReadDeduplicationResult, ReadFilterConfig, ReadScoreConfig,
                                 WtaDecoderConfig, decode_barcodes, deduplicate_reads, filter_reads, score_reads)
-from starfinder.barcode.deduplication import DEDUPLICATION_COLUMNS
-from starfinder.barcode.filtering import score_columns
+from starfinder.readout.deduplication import DEDUPLICATION_COLUMNS
+from starfinder.readout.filtering import score_columns
 from starfinder.dataset import CheckpointConfig, PipelineConfig
 from starfinder.dataset.workflow import from_workflow_config
-from starfinder.evaluation.barcode import evaluate_deduplication
+from starfinder.evaluation.readout import evaluate_deduplication
 from starfinder.spot_finding import LocalMaximaConfig, SpotFindingResult
 
 from . import readout_fixtures as fx
 from . import readout_scenes as scenes
-from .barcode_cases import META, codebook, intensity, tensor
+from .readout_cases import META, codebook, intensity, tensor
 from .test_readout_direct import HAND_SEEDS, direct_dataset, direct_fov
 from .test_readout_direct import pipeline as direct_pipeline
 from .test_readout_golden import (METADATA, PINNED_FILTERING_SCORED, PINNED_PRE_QC_SCORED, ROUNDS, SEED, candidates,
                                   golden_codebook, golden_dataset, readout_config, table_digest)
 from .test_readout_scoring import ROOT, golden_run, workflow
 
-pytestmark = [pytest.mark.barcode]
+pytestmark = [pytest.mark.readout]
 
 MERGED, CONFLICTING = "same_sequence_within_distance", "conflicting_calls"
 READS = ("decoding_result", "scoring_result", "deduplication_result", "filtering_result")
@@ -365,7 +365,7 @@ def test_r18_golden_score_bounds_and_the_default_filter(tmp_path, seed, decoder)
 
 @pytest.mark.validation
 def test_r18_every_declared_score_column_is_a_valid_bound():
-    from starfinder.barcode import DECODING_METHODS
+    from starfinder.readout import DECODING_METHODS
     declared = {c for spec in DECODING_METHODS.values() for c in spec.score_columns}
     assert set(score_columns()) == declared | {"qc_score", "qc_ambiguity_max", "qc_signal_to_background",
                                                "qc_rounds"}

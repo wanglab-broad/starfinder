@@ -29,10 +29,10 @@ from starfinder.dataset.config import CheckpointConfig, PipelineConfig, Executio
 from starfinder.dataset.types import REFERENCE_STAIN
 from starfinder.registration import (ExternalReference, RegistrationRecipe, RegistrationRejectedError, RegistrationResult,
     RegistrationSignalConfig, RegistrationStep, TransformChain, TranslationConfig, TranslationTransform, WarpConfig)
-from starfinder.barcode import (DECODING_METHODS, Codebook, IntensityExtractionResult, NeighborhoodSumConfig,
+from starfinder.readout import (DECODING_METHODS, Codebook, IntensityExtractionResult, NeighborhoodSumConfig,
     WtaDecoderConfig, ReadFilterConfig, BarcodeDecodingResult, ReadFilteringResult, ReadScoreConfig,
     ReadScoringResult, DeduplicationConfig, ReadDeduplicationResult)
-from starfinder.barcode.decoding import _mode_mismatch
+from starfinder.readout.decoding import _mode_mismatch
 
 # Raised in readout mode multiplexed when a candidate set with a round column would be decoded as barcodes.
 MULTI_ROUND_DECODING = ("decoding candidates from several detection rounds needs a readout mode (§2.8): "
@@ -957,7 +957,7 @@ class FOV:
     @_log_step
     def _extract_round(self, round_name, config=NeighborhoodSumConfig(), source=None):
         """Extract one round from its image or, when source is set, from that snapshot."""
-        from starfinder.barcode import extract_intensities
+        from starfinder.readout import extract_intensities
         from starfinder.io import ImageLoadResult
         if source is not None and source not in self.snapshots.get(round_name, {}):
             raise ValueError(f'extraction source {source!r} is not a snapshot of round {round_name!r}')
@@ -996,7 +996,7 @@ class FOV:
         """Extract labeled intensities; decoding is a separate reusable stage.
 
         In readout mode direct each candidate is read in its own round only
-        (see :func:`starfinder.barcode.extract_intensities`).
+        (see :func:`starfinder.readout.extract_intensities`).
         """
         if not isinstance(config, NeighborhoodSumConfig):
             raise TypeError("config must be NeighborhoodSumConfig")
@@ -1047,7 +1047,7 @@ class FOV:
         column; reads come from assign_direct with dataset.direct_panel. A
         decoder that does not support the dataset's mode raises TypeError.
         """
-        from starfinder.barcode import assign_direct, decode_barcodes
+        from starfinder.readout import assign_direct, decode_barcodes
         self._check_readout(config, self.spot_result is not None and 'round' in self.spot_result.spots)
         self._check_reference()
         # A score and a deduplication belong to the reads they were computed on.
@@ -1065,11 +1065,11 @@ class FOV:
 
         The reference is the dataset codebook (multiplexed) or direct panel
         (direct). Identities are never changed (see
-        :func:`starfinder.barcode.score_reads`). Intensities without background
+        :func:`starfinder.readout.score_reads`). Intensities without background
         measurements raise ValueError naming extraction, the stage to rerun.
         """
-        from starfinder.barcode import score_reads
-        from starfinder.barcode.scoring import NO_BACKGROUND
+        from starfinder.readout import score_reads
+        from starfinder.readout.scoring import NO_BACKGROUND
         if self.decoding_result is None:
             raise ValueError('scoring requires decoding')
         if self.intensity_result is None or self.intensity_result.background is None:
@@ -1088,12 +1088,12 @@ class FOV:
         The reads are the scored reads when scoring ran, otherwise the decoded
         reads; the candidates without a ``round`` column were detected in the
         reference round. Nothing is removed or changed: the deduplication columns
-        are added (see :func:`starfinder.barcode.deduplicate_reads`), and
+        are added (see :func:`starfinder.readout.deduplicate_reads`), and
         filter_reads rejects the duplicates by default. Readout mode direct
         raises ValueError.
         """
-        from starfinder.barcode import deduplicate_reads
-        from starfinder.barcode.deduplication import DIRECT_MODE
+        from starfinder.readout import deduplicate_reads
+        from starfinder.readout.deduplication import DIRECT_MODE
         if self.dataset.readout_mode == 'direct':
             raise ValueError(DIRECT_MODE)
         if self.decoding_result is None:
@@ -1116,7 +1116,7 @@ class FOV:
         supplies the segment ends of its layout; it is not used for reads of
         readout mode direct.
         """
-        from starfinder.barcode import filter_reads
+        from starfinder.readout import filter_reads
         reads = next(r for r in (self.deduplication_result, self.scoring_result, self.decoding_result)
                      if r is not None)
         codebook = self.codebook if getattr(reads, 'readout_mode', None) != 'direct' else None
@@ -1228,14 +1228,14 @@ class FOV:
         # nothing to score and is skipped, as when the workflow's downstream stages are disabled.
         scoring = config.scoring if (config.decoding or self.decoding_result is not None) else None
         if scoring:
-            from starfinder.barcode.scoring import NO_BACKGROUND
+            from starfinder.readout.scoring import NO_BACKGROUND
             # Scoring reads the background of this run's extraction, or of the resident intensities.
             background = (config.extraction.background is not None if config.extraction else
                           self.intensity_result is not None and self.intensity_result.background is not None)
             if not background:
                 raise ValueError(NO_BACKGROUND)
         if config.deduplication:
-            from starfinder.barcode.deduplication import DIRECT_MODE
+            from starfinder.readout.deduplication import DIRECT_MODE
             if self.dataset.readout_mode == 'direct':
                 raise ValueError(DIRECT_MODE)
             if not (config.decoding or self.decoding_result is not None):
@@ -1726,7 +1726,7 @@ class FOV:
         elif stage == 'pre_qc':
             if self.decoding_result is None:
                 raise ValueError('pre_qc checkpoint requires decoding_result')
-            from starfinder.barcode.codebook import _encoding_record
+            from starfinder.readout.codebook import _encoding_record
             recorded = self.decoding_result.readout_mode == 'multiplexed' and self.codebook is not None
             # The encoding that decoded the reads is recorded beside the layout (null in direct mode).
             header.update(layout=self.codebook.layout if recorded else None,
@@ -1843,7 +1843,7 @@ class FOV:
             raise ValueError(f'{stage} checkpoint readout mode {_checkpoint.readout_mode(header)!r} differs from the '
                              f'dataset ({self.dataset.readout_mode!r})')
         if header.get('encoding') is not None and self.codebook is not None:
-            from starfinder.barcode.codebook import _encoding_record
+            from starfinder.readout.codebook import _encoding_record
             current = jsonable(_encoding_record(self.codebook.encoding))
             if header['encoding'] != current:
                 raise ValueError(f"{stage} checkpoint encoding {header['encoding']} differs from the dataset "
@@ -2333,7 +2333,7 @@ class FOV:
 
     def save_spots(self, slot='goodSpots', columns=None, *, path=None):
         """Export identities and coordinates once; shared slot filenames retained."""
-        from starfinder.barcode import export_spots
+        from starfinder.readout import export_spots
         if slot not in ('goodSpots', 'allSpots'):
             raise ValueError('slot must be goodSpots or allSpots')
         reads = self.filtering_result if slot == 'goodSpots' else self.decoding_result
@@ -2368,10 +2368,10 @@ class FOV:
     def save_diagnostics(self, suffix=''):
         """Write counts, undefined fractions, the population summary and explicit registration attempts.
 
-        summary is :func:`starfinder.barcode.summarize_reads` of the stored
+        summary is :func:`starfinder.readout.summarize_reads` of the stored
         results (None before decoding).
         """
-        from starfinder.barcode import summarize_reads
+        from starfinder.readout import summarize_reads
         from starfinder._records import jsonable
         path = self.paths.score_log(suffix)
         path.parent.mkdir(parents=True, exist_ok=True)

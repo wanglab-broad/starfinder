@@ -16,7 +16,7 @@ fixed here; the files are written only on request (the page's fixture writes no 
 export folder that records their SHA-256 as the assembly does: ``export/s1/tables/fovs.csv``,
 ``cells.csv``, ``molecules.csv``, ``counts.csv`` through the checkpoint table writer and
 ``sample.h5ad`` through ``assignment.write_h5ad``, with ``export.json`` written through
-``sample_output/_record.py`` so that ``verify_section_hashes`` passes; route ``per_fov``.
+``export/_record.py`` so that ``verify_section_hashes`` passes; route ``per_fov``.
 
 Every variant of the page's table is a ``variant`` name. Nothing is read from a run
 directory, no image is written and no random number is used.
@@ -493,7 +493,7 @@ def write_export(case: ReportCase, variant=None) -> None:
     from starfinder.assembly import AssemblyConfig, CELL_ASSEMBLY_REASONS, MOLECULE_ASSEMBLY_REASONS
     from starfinder.assignment import write_h5ad
     from starfinder._records import _write_table
-    from starfinder.sample_output._record import update_section
+    from starfinder.export._record import update_section
     from starfinder._records import file_sha256
     from starfinder.stitching._placement import frame_record
     folder = case.root / "export" / case.sample
