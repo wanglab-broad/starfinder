@@ -119,7 +119,7 @@ def load_direct_panel(path: str | Path, *, round_labels: tuple[str, ...],
 
 
 @dataclass(frozen=True)
-class DirectAssignmentConfig:
+class DirectDecoderConfig:
     """Direct readout: the gene of each candidate's own round and channel.
 
     No parameters besides the panel. No codeword competition, rescue, required
@@ -134,7 +134,7 @@ class DirectAssignmentConfig:
 
 
 def _run_direct(intensity_result, spots, panel, config):
-    """The direct read table of assign_direct (docs/readout-algorithms.md, "Direct assignment").
+    """The direct read table of decode_direct (docs/readout-algorithms.md, "Direct assignment").
 
     Status precedence: unmapped_channel, then invalid_measurement, then
     zero_signal_round. Negative sums count as 0, as in the decoders' clipping.

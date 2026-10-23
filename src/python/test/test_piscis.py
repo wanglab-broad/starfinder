@@ -1,7 +1,7 @@
 """Piscis with verified weights (W-272; docs/spot-finding-algorithms.md, "Piscis", checks S14 and S15;
 docs/spot-finding-contract.md, "Pretrained weights", "Z=1, dimensionality, scale and tiling").
 
-Extended tier, CPU only, one thread: skipped without the piscis extra, and failing with MissingWeightsError
+Extended tier, CPU only, one thread: skipped without the piscis extra, and failing with MissingModelError
 when the extra is installed but the weights were not fetched into STARFINDER_WEIGHTS_DIR. Both models run
 every check; the contract does not choose between them. The S1, S2, S8 and S13 cases this file repeated, with
 the same models, scenes, seeds and bounds, run only in test_spot_finding_validation.py, which holds all their
@@ -26,7 +26,7 @@ import pytest
 
 from starfinder.__main__ import main
 from starfinder.dataset import CheckpointConfig, PipelineConfig
-from starfinder.spot_finding import KNOWN_WEIGHTS, PiscisConfig, WeightsHashMismatchError
+from starfinder.spot_finding import KNOWN_MODELS, PiscisConfig, ModelHashMismatchError
 from starfinder.spot_finding import _learned
 from starfinder._weights import weights_directory
 
@@ -116,10 +116,10 @@ def test_s15_plane_mode_runs_on_1x8x8_and_stack_mode_on_2x8x8(model):
 
 @pytest.mark.validation
 def test_s14_a_changed_hash_raises_before_the_piscis_constructor(no_loaded_models, constructor_calls, monkeypatch):
-    entry = KNOWN_WEIGHTS[("piscis", "20251212")]
-    monkeypatch.setitem(KNOWN_WEIGHTS, ("piscis", "20251212"),
+    entry = KNOWN_MODELS[("piscis", "20251212")]
+    monkeypatch.setitem(KNOWN_MODELS, ("piscis", "20251212"),
                         replace(entry, files=(replace(entry.files[0], sha256="0" * 64),)))
-    with pytest.raises(WeightsHashMismatchError, match="20251212.pt has SHA-256 [0-9a-f]{64}, expected 0{64}"):
+    with pytest.raises(ModelHashMismatchError, match="20251212.pt has SHA-256 [0-9a-f]{64}, expected 0{64}"):
         detect(spot((2, 16, 16)), PiscisConfig("20251212"))
     assert constructor_calls == []
 
@@ -205,7 +205,7 @@ def test_s14_no_library_cache_is_read_or_written_with_an_empty_home(tmp_path):
 @pytest.mark.parametrize("scene", SCENE_PARAMS)
 def test_records_effective_settings_model_execution_and_columns(scene, model):
     image, _, result = isolated(scene, model, 100)
-    entry = KNOWN_WEIGHTS[("piscis", model)]
+    entry = KNOWN_MODELS[("piscis", model)]
     diagnostics = result.diagnostics
     (effective,) = diagnostics["effective_settings"].values()
     assert (effective["threshold"], effective["min_distance"], effective["input_size"], effective["scale"],
@@ -240,4 +240,4 @@ def test_the_pipeline_records_the_loaded_file_in_run_json(tmp_path):
     (entry,) = [step for step in data["steps"] if step["name"] == "find_spots"][0]["methods"]
     assert entry["method"] == "piscis" and entry["requires"] == {"piscis": "1.1.0", "torch": "2.7.1+cpu"}
     assert entry["artifacts"] == direct.diagnostics["model"]["artifacts"]
-    assert entry["artifacts"][0]["sha256"] == KNOWN_WEIGHTS[("piscis", "20251212")].sha256
+    assert entry["artifacts"][0]["sha256"] == KNOWN_MODELS[("piscis", "20251212")].sha256

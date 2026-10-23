@@ -32,7 +32,7 @@ start with `src/matlab/`, `workflow/` or `docs/`, and line numbers are at
 
 | Field | Behavior at `141c093` |
 | --- | --- |
-| Encoding | Two-base color space only (`readout/_encoding.py:10-30`): each pair of adjacent bases maps to one of four colors (`AA, CC, GG, TT` → 1; `AC, CA, GT, TG` → 2; `AG, CT, GA, TC` → 3; `AT, CG, GC, TA` → 4), so `n` bases give `n − 1` colors. `decode_color_sequence(colors, start_base)` inverts it from a known first base (`:70-119`). There is no other encoding. |
+| Encoding | Two-base color space only (`readout/_encoding.py:10-30`): each pair of adjacent bases maps to one of four colors (`AA, CC, GG, TT` → 1; `AC, CA, GT, TG` → 2; `AG, CT, GA, TC` → 3; `AT, CG, GC, TA` → 4), so `n` bases give `n − 1` colors. `colors_to_bases(colors, start_base)` inverts it from a known first base (`:70-119`). There is no other encoding. |
 | `EncodingConfig.reverse_bases` | Default `True`: the barcode is reversed before encoding (`readout/codebook.py:31`, `:48`), as MATLAB `do_reverse` (`src/matlab/LoadCodebook.m:16-18`). |
 | `EncodingConfig.split_index` | `None` or a positive integer `i` (`codebook.py:32-42`). After encoding, the color at **zero-based** position `i` is removed and the colors after it are moved before the colors before it: `seq[i+1:] + seq[:i]` (`:49-53`). Both parts must be nonempty. This is the only representation of two segments: there is no segment count, no segment length in bases and no per-segment end bases. |
 | `Codebook` | A table with `gene_id` and `color_sequence` (and an optional `base_sequence`, checked against the encoding), `round_labels`, `channel_labels` (exactly four) and `color_to_channel` (a bijection of colors `1`–`4` onto the channel indices) (`codebook.py:57-127`). Each `color_sequence` must have one color per round. A repeated `gene_id` is an error (`:100-101`), and so is a repeated color sequence (`:108-109`). A row is therefore a gene: `n_genes` counts rows, `gene_to_seq` maps each gene to one sequence, and `seq_to_gene` maps each sequence to its gene (`:135-153`). |
@@ -41,7 +41,7 @@ start with `src/matlab/`, `workflow/` or `docs/`, and line numbers are at
 
 ## Decoders
 
-`decode_barcodes(intensity_result, codebook, *, config)` takes `WtaDecoderConfig`
+`decode_reads(intensity_result, codebook, *, config)` takes `WtaDecoderConfig`
 or `CodebookAwareDecoderConfig` (`readout/decoding.py:152-380`). Both:
 
 * require the intensity and codebook channel and round labels to match exactly
@@ -57,7 +57,7 @@ or `CodebookAwareDecoderConfig` (`readout/decoding.py:152-380`). Both:
 * return one row per candidate with `spot_id`, `spot_namespace`,
   `observed_color_sequence`, `decoded_color_sequence`, `gene_id`, `call_status`
   (`assigned`, `unmatched`, `ambiguous`, `no_signal`), `failure_reason`,
-  `call_type` and the decoder's named scores (`BarcodeDecodingResult`, `:96-149`).
+  `call_type` and the decoder's named scores (`ReadDecodingResult`, `:96-149`).
 
 | | `WtaDecoderConfig` | `CodebookAwareDecoderConfig` |
 | --- | --- | --- |
@@ -159,7 +159,7 @@ counts (`dataset/_run_record.py:119-129`).
 | Stage | Content at `141c093` |
 | --- | --- |
 | `candidates` | `candidates.<csv|parquet>`: identity, spot columns, then `sig_<round>_<channel>` and `valid_<round>` (`_checkpoint.py:196-220`); `candidates.json` with the detection plan, the extraction config, labels and metadata (`:458-484`). Reloading rebuilds the `SpotFindingResult` and `IntensityExtractionResult` (`:496-518`). |
-| `pre_qc` | `pre_qc.<csv|parquet>`: the decoding table unchanged; `pre_qc.json` with the decoder config, labels and the JSON-representable diagnostics (`:523-531`). It holds the decoding table only: no extracted values, no background, no score and no filtering. Reloading rebuilds a `BarcodeDecodingResult` without its array diagnostics (`:534-540`). |
+| `pre_qc` | `pre_qc.<csv|parquet>`: the decoding table unchanged; `pre_qc.json` with the decoder config, labels and the JSON-representable diagnostics (`:523-531`). It holds the decoding table only: no extracted values, no background, no score and no filtering. Reloading rebuilds a `ReadDecodingResult` without its array diagnostics (`:534-540`). |
 | Version | `FORMAT_VERSION = 2`; readers accept 1 and 2 (`:20-22`). |
 | Rerun | From `candidates`: decode and filter without images; from `pre_qc`: filter only ({doc}`checkpoints`, "Reload and continue"). There is no filtering checkpoint. |
 
@@ -183,7 +183,7 @@ namespace for all listed rounds, and never merges coincident candidates. Extract
 reads every sequencing round at every candidate (`dataset/fov.py:1131-1135`).
 Decoding such a set raises
 `ValueError("decoding candidates from several detection rounds needs a readout mode (§2.8)")`
-in `FOV.run` (`:1018-1020`) and in `FOV.decode_barcodes` for any spot table with a
+in `FOV.run` (`:1018-1020`) and in `FOV.decode_reads` for any spot table with a
 `round` column (`:940-941`, message `:33`). There is no direct readout: no gene
 mapping per round and channel, and no extraction limited to a candidate's own round.
 

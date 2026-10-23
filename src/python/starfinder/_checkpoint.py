@@ -532,7 +532,7 @@ def write_pre_qc(directory, header, decoding_result, table_format, *, scoring_re
 
 
 def _read_pre_qc(directory, header):
-    from starfinder.readout import (DECODING_METHODS, BarcodeDecodingResult, DeduplicationConfig,
+    from starfinder.readout import (DECODING_METHODS, ReadDecodingResult, DeduplicationConfig,
                                     ReadDeduplicationResult, ReadScoreConfig, ReadScoringResult)
     from starfinder.readout.deduplication import DEDUPLICATION_COLUMNS, deduplication_counts
     from starfinder.readout.scoring import SCORE_COLUMNS
@@ -555,7 +555,7 @@ def _read_pre_qc(directory, header):
         scoring = ReadScoringResult(table, header["spot_namespace"], *labels,
                                     _config(header["scoring_config"], ReadScoreConfig), counts, readout_mode(header))
         table = table.drop(columns=list(SCORE_COLUMNS))
-    return {"decoding_result": BarcodeDecodingResult(table, header["spot_namespace"], *labels, config,
+    return {"decoding_result": ReadDecodingResult(table, header["spot_namespace"], *labels, config,
         tuples(header["decoding_diagnostics"]), readout_mode(header)), "scoring_result": scoring,
         "deduplication_result": deduplication}
 
@@ -594,7 +594,7 @@ def read_checkpoint(path: Path | str, stage: str) -> dict:
         measurements and box_voxels come from the background columns, and
         are None (with ``background=None`` in its config) for a checkpoint
         written without them. ``pre_qc``: ``decoding_result``
-        (BarcodeDecodingResult without array or table diagnostics; its
+        (ReadDecodingResult without array or table diagnostics; its
         readout_mode is the header's, ``multiplexed`` when absent) and
         ``scoring_result`` (ReadScoringResult of the scored table, or None
         when the checkpoint has no ``scoring_config``) and

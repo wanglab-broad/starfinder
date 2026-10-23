@@ -41,9 +41,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from starfinder.readout import (Codebook, CodebookAwareDecoderConfig, DeduplicationConfig, DirectAssignmentConfig,
+from starfinder.readout import (Codebook, CodebookAwareDecoderConfig, DeduplicationConfig, DirectDecoderConfig,
                                 DirectPanel, NeighborhoodSumConfig, OneBaseEncodingConfig, ReadFilterConfig,
-                                ReadScoreConfig, WtaDecoderConfig, assign_direct, decode_barcodes,
+                                ReadScoreConfig, WtaDecoderConfig, decode_direct, decode_reads,
                                 deduplicate_reads, extract_intensities, filter_reads, load_codebook, score_reads)
 from starfinder.readout._codebook_aware import _channel_probabilities
 from starfinder.readout.deduplication import DEDUPLICATION_COLUMNS
@@ -100,7 +100,7 @@ def test_r2_two_seg_calls_equal_one_segment_and_segment_ends(tmp_path, seed, dec
     # The same colors in a one-segment codebook (no layout ends) give the same calls.
     one = Codebook(fov.codebook.table[["gene_id", "color_sequence"]], fx.ROUNDS, fx.CHANNELS)
     assert len(one.layout.segments) == 1 and not one.layout.segments[0].ends
-    plain = decode_barcodes(fov.intensity_result, one, config=DECODERS[decoder]).table
+    plain = decode_reads(fov.intensity_result, one, config=DECODERS[decoder]).table
     pd.testing.assert_frame_equal(without(fov.decoding_result.table, ["entry_id"]), without(plain, ["entry_id"]),
                                   check_exact=True)
     reads = fov.filtering_result.table
@@ -140,7 +140,7 @@ def test_r3_one_base_decoding_equals_the_two_base_run(tmp_path, seed, decoder):
     assert book.table.color_sequence.tolist() == list(golden.CODEWORDS)
     assert book.table.entry_id.tolist() == ["ACGT", "CATG", "GTAC", "TGCA", "CCCC", "GAGA", "TCTC", "AGAG"]
     intensities = extract_golden(golden_rounds(seed))
-    table = decode_barcodes(intensities, book, config=DECODERS[decoder]).table
+    table = decode_reads(intensities, book, config=DECODERS[decoder]).table
     # Truth: the golden spot positions with their planted genes, for the clean reads.
     spots = golden.candidates().spots
     clean = spots.spot_id.isin(CLEAN_SPOTS).to_numpy()
@@ -154,7 +154,7 @@ def test_r3_one_base_decoding_equals_the_two_base_run(tmp_path, seed, decoder):
     assert evaluation.values["gene_id_accuracy"] == 1.0
     assert table.call_status[clean].eq("assigned").all()
     # Statuses (and every other column but entry_id) equal the golden two-base run of the same colors.
-    two_base = decode_barcodes(intensities, golden.golden_codebook(tmp_path), config=DECODERS[decoder]).table
+    two_base = decode_reads(intensities, golden.golden_codebook(tmp_path), config=DECODERS[decoder]).table
     pd.testing.assert_frame_equal(without(table, ["entry_id"]), without(two_base, ["entry_id"]), check_exact=True)
     statuses = dict(zip(table.spot_id, zip(table.call_status, table.failure_reason)))
     assert statuses == golden.PINNED_STATUS[decoder]
@@ -214,13 +214,13 @@ def test_r5_required_rounds_and_acquisition_local_failures(tmp_path, seed, decod
 
     config = DECODERS[decoder]
     clean = extract_golden(golden_rounds(seed))
-    reference = decode_barcodes(clean, book, config=config).table
+    reference = decode_reads(clean, book, config=config).table
     perturbed = extract_golden(dropout_rounds(seed))
     valid = perturbed.valid.copy()
     masked = np.isin(ids, MASKED_SPOTS)
     valid[masked, MASKED_ROUND] = False
     perturbed = replace(perturbed, valid=valid)
-    table = decode_barcodes(perturbed, book, config=config).table
+    table = decode_reads(perturbed, book, config=config).table
     covered = np.isin(ids, DROPOUT_COVERED)
     # (i) exactly the 3 covered candidates are no_signal / zero_signal_round.
     zero_round = table.failure_reason.eq("zero_signal_round").to_numpy()
@@ -236,7 +236,7 @@ def test_r5_required_rounds_and_acquisition_local_failures(tmp_path, seed, decod
     other = ~(covered | masked)
     pd.testing.assert_frame_equal(table[other], reference[other], check_exact=True)
     # The score is NaN with no_assignment for every perturbed read.
-    scored = score_reads(decode_barcodes(perturbed, book, config=config), perturbed, reference=book).table
+    scored = score_reads(decode_reads(perturbed, book, config=config), perturbed, reference=book).table
     assert scored.loc[covered | masked, "qc_score"].isna().all()
     assert scored.qc_reason[covered | masked].eq("no_assignment").all()
 
@@ -250,11 +250,11 @@ def test_r5_required_rounds_and_acquisition_local_failures(tmp_path, seed, decod
     with_band = SpotFindingResult(extra, spots.metadata, spots.spot_namespace, spots.config, spots.diagnostics)
     banded = extract_golden(dropout_rounds(seed), with_band)
     banded = replace(banded, valid=np.vstack([valid, banded.valid[-1:]]))
-    band_table = decode_barcodes(banded, book, config=config).table
+    band_table = decode_reads(banded, book, config=config).table
     assert tuple(band_table.iloc[10][["call_status", "failure_reason", "call_type"]]) == (
         "no_signal", "zero_signal_round", "no_call")
     pd.testing.assert_frame_equal(band_table.iloc[:10], table, check_exact=True)
-    band_scored = score_reads(decode_barcodes(banded, book, config=config), banded, reference=book).table
+    band_scored = score_reads(decode_reads(banded, book, config=config), banded, reference=book).table
     assert np.isnan(band_scored.qc_score.iloc[10]) and band_scored.qc_reason.iloc[10] == "no_assignment"
 
 
@@ -356,7 +356,7 @@ def write_r6_reference(directory=R6_REFERENCE):
 def test_r6_golden_tables_without_the_new_columns_equal_the_pins(tmp_path, decoder):
     intensities = golden.extract()
     assert (digest(intensities.values), digest(intensities.valid)) == golden.PINNED_EXTRACTION[(1, 2, 2)]
-    decoded = decode_barcodes(intensities, golden.golden_codebook(tmp_path), config=DECODERS[decoder])
+    decoded = decode_reads(intensities, golden.golden_codebook(tmp_path), config=DECODERS[decoder])
     assert table_digest(golden.without_entry(decoded.table)) == golden.PINNED_DECODING[decoder]
     for name in golden.FILTERS:
         options = golden.filter_options(decoder, name)
@@ -410,7 +410,7 @@ def direct_calls(condition, seed):
         image = {label: scenes.loaded(the_scene.rounds[label], the_scene.metadata, book.channel_labels)}
         intensities = extract_intensities(image, spots, config=scenes.EXTRACTION, readout_mode="direct")
         panel = direct_panel(book, label)
-        decoded = assign_direct(intensities, spots, panel, config=DirectAssignmentConfig())
+        decoded = decode_direct(intensities, spots, panel, config=DirectDecoderConfig())
         table = score_reads(decoded, intensities, reference=panel).table
         # The decoder's probability NLL of the same call: the codebook-aware decoder's channel
         # probabilities (sums clipped at 0, + 1e-6) at the assigned channel, floored at 1e-12.
@@ -542,7 +542,7 @@ def determinism_digests():
         out[f"{prefix}/spots"] = table_digest(spots.spots)
         out.update(intensity_digests(prefix, intensities))
         for decoder, config in DECODERS.items():
-            decoded = decode_barcodes(intensities, book, config=config)
+            decoded = decode_reads(intensities, book, config=config)
             scored = score_reads(decoded, intensities, reference=book)
             deduplicated = deduplicate_reads(scored, spots, intensities, config=DeduplicationConfig())
             filtered = filter_reads(deduplicated, codebook=book)

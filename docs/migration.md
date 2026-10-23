@@ -19,7 +19,7 @@ are not examples of the current API.
 | `min_max_normalize`, `histogram_match`, `morphological_reconstruction`, `tophat_filter` | `preprocessing.normalize_intensity`, `match_histogram`, `reconstruct_background`, `filter_tophat` |
 | `utils.make_projection` | `preprocessing.project_image` |
 | `spotfinding.find_spots_3d` | `spot_finding.find_spots` |
-| `decode_color_seq` | `readout.decode_color_sequence` |
+| `decode_color_seq` | `readout.colors_to_bases` |
 | `benchmark.synthetic` | `synthetic` |
 | `registration.metrics`, benchmark truth comparisons | Pure domain functions in `evaluation` |
 | Separate benchmark drivers and `starfinder-generate` | `starfinder synthetic generate`, `starfinder benchmark run/evaluate/report` |
@@ -31,6 +31,20 @@ are not examples of the current API.
 | `starfinder.sample_output` (the module and its submodules) | `starfinder.export` (no alias) |
 | `starfinder.evaluation.barcode` | `starfinder.evaluation.readout` (no alias) |
 | pytest marker `barcode` (`-m barcode`) | pytest marker `readout` (`-m readout`) |
+| `readout.decode_barcodes` and the root export `starfinder.decode_barcodes` | `readout.decode_reads`, root `starfinder.decode_reads` (no alias) |
+| `FOV.decode_barcodes` | `FOV.decode_reads` (no alias) |
+| `readout.encode_bases` | `readout.bases_to_colors` (no alias) |
+| `readout.decode_color_sequence` | `readout.colors_to_bases` (no alias) |
+| `readout.BarcodeDecodingResult` | `readout.ReadDecodingResult` (no alias) |
+| `readout.assign_direct` | `readout.decode_direct` (no alias) |
+| `readout.DirectAssignmentConfig` | `readout.DirectDecoderConfig` (no alias) |
+| `spot_finding.resolve_weights` | `spot_finding.resolve_model` (no alias) |
+| `spot_finding.fetch_weights` | `spot_finding.fetch_model` (no alias) |
+| `spot_finding.KNOWN_WEIGHTS` | `spot_finding.KNOWN_MODELS` (no alias) |
+| `spot_finding.KnownWeights` | `spot_finding.KnownModel` (no alias) |
+| `spot_finding.WeightsFile` | `spot_finding.ModelFile` (no alias) |
+| `spot_finding.MissingWeightsError` | `spot_finding.MissingModelError` (no alias) |
+| `spot_finding.WeightsHashMismatchError` | `spot_finding.ModelHashMismatchError` (no alias) |
 
 These relocations do not make the old positional arguments or return values valid.
 Use typed operation configs and structured results. See the [API
@@ -44,6 +58,33 @@ and the root exports (`decode_barcodes`, `extract_intensities`, `filter_reads`,
 `load_codebook`) keep theirs. The OME annotation namespace `"starfinder.sample_output"`
 that the package's OME-TIFF files carry stays as it is: it is a format identifier, which
 `check_export` reads back.
+
+The member renames of W-557 (W-526, NC-01, NC-02, NM-16, NM-17 and NM-18) change these
+recorded strings with the names:
+
+* the `run.json` step name `decode_barcodes` is `decode_reads`, the name of the FOV method
+  that `FOV.run` calls to decode. The report reads either name: one mapping of the report,
+  `RECORDED_STEP_NAMES` (`report/_values.py`), maps the old step name to the new one, so a
+  report of a run written before the rename still shows its decoding method and card;
+  `steps.csv` keeps the recorded name. No other reader maps an old name.
+* the `reads` value of a molecule table's `source` (`type(reads).__name__`, kept in the
+  assignment records) is `ReadDecodingResult` for unfiltered reads;
+* the repr `BarcodeDecodingResult: n reads — …` is `ReadDecodingResult: n reads — …`, and
+  the `TypeError` and `ValueError` messages that named a renamed function or class (in
+  `decode_reads`, `deduplicate_reads`, the read diagnostics, `filter_reads`,
+  `score_reads` and the spot-finding model check, "a model of KNOWN_MODELS") name the new
+  one;
+* an error record's `type` (`type(error).__name__`) is `MissingModelError` or
+  `ModelHashMismatchError` for a spot-finding model, the names segmentation records too;
+* the description of the workflow schema's spot-finding `model` says `KNOWN_MODELS`.
+
+`spot_finding` and `segmentation` now both define `resolve_model`, `KNOWN_MODELS`,
+`KnownModel`, `ModelFile`, `MissingModelError` and `ModelHashMismatchError`. They stay
+separate types with separate tables (their schemas and resolver signatures differ), so
+import them through their module where both are used. The CLI group `weights`,
+`STARFINDER_WEIGHTS_DIR`, `starfinder-weights.json`, the method IDs of
+`DECODING_METHODS` and `ENCODINGS`, `PipelineConfig.decoding`, the checkpoint header keys
+and `readout_mode` keep their names.
 
 ## Before and after Python calls
 
@@ -113,11 +154,11 @@ After (given labeled rounds, a SpotFindingResult and a validated Codebook):
 
 ```python
 from starfinder.readout import (NeighborhoodSumConfig, WtaDecoderConfig,
-    ReadFilterConfig, extract_intensities, decode_barcodes, filter_reads)
+    ReadFilterConfig, extract_intensities, decode_reads, filter_reads)
 
 intensities = extract_intensities(rounds, spots,
     config=NeighborhoodSumConfig(neighborhood_radius_zyx=(1, 2, 2)))
-decoded = decode_barcodes(intensities, codebook, config=WtaDecoderConfig())
+decoded = decode_reads(intensities, codebook, config=WtaDecoderConfig())
 filtered = filter_reads(decoded, config=ReadFilterConfig())
 accepted = filtered.accepted
 ```
@@ -269,7 +310,7 @@ spot CSVs still use `gene` and `color_seq`.
 | `SyntheticDataset.spot_truth` columns `gene`, `color_seq` | `gene_id`, `color_sequence` |
 | `evaluate_decoding` columns `gene`, `color_seq` | truth `gene_id`, `color_sequence`; decoded `gene_id` and `sequence_column` (default `observed_color_sequence`) |
 | `evaluate_decoding` values `gene_accuracy`, `color_seq_accuracy`; counts `*_gene`, `*_color_seq` | `gene_id_accuracy`, `color_sequence_accuracy`; `*_gene_id`, `*_color_sequence` |
-| `decode_color_sequence(color_seq=...)` | `decode_color_sequence(color_sequence=...)` |
+| `decode_color_sequence(color_seq=...)` | `colors_to_bases(color_sequence=...)` |
 
 `formed.csv` files written before this change carry `codeword` and are not
 supported; regenerate them.
@@ -464,7 +505,7 @@ holds the plan (`None` on construction means `SpotFindingPlan(config)`). Direct
 `find_spots` detects one image and raises `ValueError` for a plan with `rounds`.
 **Intentional change:** decoding a candidate set of several rounds raises
 `ValueError("decoding candidates from several detection rounds needs a readout mode
-(§2.8)")`, from `FOV.run` before any processing and from `FOV.decode_barcodes` for a
+(§2.8)")`, from `FOV.run` before any processing and from `FOV.decode_reads` for a
 spot table with a `round` column. Extraction reads every candidate in every sequencing
 round, as before; in `FOV.run` it then runs after the last detected round, which needs
 batch mode or `retain_images=True`. Since W-293 this holds in readout mode
@@ -511,14 +552,14 @@ return an `EvaluationResult`.
 
 ### Pretrained weights
 
-`KNOWN_WEIGHTS` lists the pretrained weights Starfinder can fetch and verify
+`spot_finding.KNOWN_MODELS` lists the pretrained weights Starfinder can fetch and verify
 (two Spotiflow 3D, two Spotiflow 2D and two Piscis models, with full SHA-256
 values) and sets no default. `starfinder weights fetch <method> <model>`
-(`fetch_weights`) downloads, verifies and installs a model under
+(`fetch_model`) downloads, verifies and installs a model under
 `STARFINDER_WEIGHTS_DIR` (else `$XDG_CACHE_HOME/starfinder/weights`);
 `starfinder weights list` and `starfinder weights verify` show and re-hash the
-local copies. `resolve_weights` raises `MissingWeightsError` or
-`WeightsHashMismatchError`. Detection never downloads.
+local copies. `resolve_model` raises `MissingModelError` or
+`ModelHashMismatchError`. Detection never downloads.
 
 ### Starfish LoG
 
@@ -546,10 +587,10 @@ requires the four settings.
 extras `spotiflow` and `piscis` (`pip install starfinder[spotiflow]`; CPU torch
 2.7.1; not available on Python 3.14 and later). Without the extra a run raises
 `SpotFindingBackendUnavailableError` naming the module and the extra. Every config
-names its weights (`model`, a row of `KNOWN_WEIGHTS`; there is no default), and an
+names its weights (`model`, a row of `KNOWN_MODELS`; there is no default), and an
 unknown model or one of the other method raises `ValueError` listing the known
 names. Detection loads only the copy fetched with `starfinder weights fetch`: each
-call re-hashes every file `KNOWN_WEIGHTS` lists for the model before the model is
+call re-hashes every file `KNOWN_MODELS` lists for the model before the model is
 built, passes the libraries absolute paths only (a relative
 `STARFINDER_WEIGHTS_DIR` is resolved), never downloads and never reads
 `~/.spotiflow`, `~/.piscis/models` or the Hugging Face cache; a loaded model is
@@ -566,8 +607,8 @@ and `n_tiles`; Piscis's tile size), `diagnostics["model"]` and the `run.json`
 provenance `artifacts` record the path, SHA-256, source and revision of every
 verified file, and `diagnostics["geometry"]` records Spotiflow's `n_tiles` or Piscis's
 tile size and keep-boundaries, near which Piscis can repeat a spot (not merged).
-`KNOWN_WEIGHTS` entries gain `extracted`, every file of a Spotiflow archive with
-its SHA-256; `resolve_weights(..., extracted=...)` also checks the named files, and
+`KNOWN_MODELS` entries gain `extracted`, every file of a Spotiflow archive with
+its SHA-256; `resolve_model(..., extracted=...)` also checks the named files, and
 detection and `starfinder weights verify` re-hash all of them. The weights root is
 always an absolute path (`~` expanded, relative paths resolved).
 
@@ -617,14 +658,14 @@ keys `detection_config`, `detection_rounds`, `detection_plan` and
 {py:func}`~starfinder.readout.load_direct_panel` reads it from a
 `round,channel,gene_id` CSV, and `Dataset.load_direct_panel` stores it as
 `Dataset.direct_panel`; a repeated gene or (round, channel) raises `ValueError`
-naming it. {py:class}`~starfinder.readout.DirectAssignmentConfig` (`direct` in
+naming it. {py:class}`~starfinder.readout.DirectDecoderConfig` (`direct` in
 `DECODING_METHODS`, no parameters) and
-{py:func}`~starfinder.readout.assign_direct` assign each candidate the gene of its
+{py:func}`~starfinder.readout.decode_direct` assign each candidate the gene of its
 own round and channel: one read per candidate with `round`, `channel`, `entry_id`
 `"<round>/<channel>"`, `call_type` `direct`, and the diagnostic columns
 `own_channel_rank` and `own_channel_fraction`; a (round, channel) without a gene is
 `unmatched` with `unmapped_channel`, and a zero own round `no_signal`. Nothing is
-merged or reassigned. `BarcodeDecodingResult` gains `readout_mode`.
+merged or reassigned. `ReadDecodingResult` gains `readout_mode`.
 
 In `direct` mode, `extract_intensities(..., readout_mode="direct")` (which
 `FOV.run` and `FOV.extract_intensities` pass from the dataset) reads each candidate
@@ -632,16 +673,16 @@ in its own round only; the other rounds are `0.0` with `valid=False`.
 `IntensityExtractionResult` gains `box_voxels` (N×R int64, the voxels each box
 summed, 0 for a round that was not read; since W-294 a candidates checkpoint
 stores it with the background measurements, and a checkpoint without them reloads
-it as `None`). `FOV.run` and `FOV.decode_barcodes`
-assign with `DirectAssignmentConfig` and `Dataset.direct_panel`.
+it as `None`). `FOV.run` and `FOV.decode_reads`
+assign with `DirectDecoderConfig` and `Dataset.direct_panel`.
 
 Decoding a multi-round candidate set (a `round` column) needs
 `readout_mode="direct"`: in `multiplexed` mode it still raises `ValueError`, whose
 message keeps "needs a readout mode (§2.8)" and adds "set readout_mode='direct'".
 A decoder that does not support the dataset's mode (`wta` or `codebook_aware` in
 `direct` mode, `direct` in `multiplexed` mode) raises `TypeError` naming the mode
-and the decoder, in `FOV.run`, `FOV.decode_barcodes`, `decode_barcodes` and
-`assign_direct`; `direct` mode without a `round` column, or without a loaded panel,
+and the decoder, in `FOV.run`, `FOV.decode_reads`, `decode_reads` and
+`decode_direct`; `direct` mode without a `round` column, or without a loaded panel,
 raises `ValueError`.
 
 The YAML top-level key `readout_mode` (Python only; the schema accepts `direct`
@@ -669,7 +710,7 @@ C, G and T one-to-one onto the colors 1–4 and has no default.
 `starfinder.readout.DECODING_METHODS` maps `WtaDecoderConfig` (`wta`) and
 `CodebookAwareDecoderConfig` (`codebook_aware`) to their `DecodingSpec`, with the
 readout modes, encoding kinds, rescue and score columns each declares. Lookups use
-the exact config type, so `decode_barcodes` rejects a subclass of a decoder config
+the exact config type, so `decode_reads` rejects a subclass of a decoder config
 with `TypeError("unsupported decoder config")`, and it raises `TypeError` when the
 codebook's encoding kind is not one the decoder declares. The decoders' numerical
 behavior is unchanged. `Codebook(encoding=...)` accepts any registered encoding
@@ -682,7 +723,7 @@ W-304 makes the `two_base` pair-to-color table visible, configurable and recorde
 gains `pair_to_color`, the 16 ordered base pairs mapped to the colors `"1"` to `"4"`,
 whose default is the active table of `src/matlab/EncodeBases.m`; `EncodingConfig()`
 and every default result are unchanged, the positional constructor is unchanged,
-and the module functions `encode_bases` and `decode_color_sequence` keep the default
+and the module functions `bases_to_colors` and `colors_to_bases` keep the default
 table. A table whose keys are not the 16 pairs, whose values are not `"1"` to `"4"`,
 or in which the four pairs of one first base do not have four different colors
 raises `ValueError`. Every encode and decode path follows the codebook's table,

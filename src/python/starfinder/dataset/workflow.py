@@ -556,7 +556,7 @@ def from_workflow_config(config: dict, rule: str = 'rsf_single_fov') -> Workflow
     reads_extraction.background is false (or a mapping of LocalBackgroundConfig
     fields). The Python-only top-level readout_mode
     (multiplexed, the default, or direct) becomes Dataset.readout_mode; in
-    direct mode decoding is the direct method (DirectAssignmentConfig), the
+    direct mode decoding is the direct method (DirectDecoderConfig), the
     rule's codebook input is the panel CSV (round,channel,gene_id), the
     candidates need spot_finding.rounds, and the barcode keys
     load_codebook.split_index and encoding and reads_filtration.end_base,

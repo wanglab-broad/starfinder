@@ -559,6 +559,30 @@ def test_data_block_cannot_end_its_script(tmp_path):
     assert json.loads(text)["fovs"] == [{"x": "</script><!--a"}, {"x": None}]
 
 
+@pytest.mark.contract
+@pytest.mark.parametrize("recorded", ["decode_reads", "decode_barcodes"])
+def test_decoding_method_and_card_for_either_recorded_step_name(tmp_path, recorded):
+    # W-557 (NM-16): a run recorded before the rename names its decoding step after FOV.decode_barcodes; the
+    # report reads it as decode_reads (RECORDED_STEP_NAMES), and steps.csv keeps the recorded name.
+    from starfinder.report._values import RECORDED_STEP_NAMES
+    assert RECORDED_STEP_NAMES == {"decode_barcodes": "decode_reads"}
+    case = report_records(tmp_path / "root")
+    for fov in case.fov_ids:
+        record = case.run_record(fov)
+        for step in record["steps"]:
+            if step["name"] == "decode_reads":
+                step["name"] = recorded
+        case.write_run_record(fov, record)
+    folder, record = case.collect()
+    page = Page(case, folder, record)
+    rows = page.tables["steps"]
+    decoding = rows[rows["name"] == recorded]
+    assert len(decoding) == len(case.fov_ids) and set(decoding["method"]) == {"wta (multiplexed)"}
+    cards = re.findall(r'<div class="st( off)?"[^>]*><b><span class="n">\d+</span>Decoding</b><i>([^<]*)</i>',
+                       page.text)
+    assert cards == [("", "wta (multiplexed)")]
+
+
 # --- PG7 through Dataset.report ----------------------------------------------------------------------------------
 
 def dataset_of(case):

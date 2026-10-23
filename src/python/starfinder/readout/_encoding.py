@@ -31,7 +31,7 @@ _COLOR_TO_BASE_PAIRS = {
 _COLOR_TO_CHANNEL = {"1": 0, "2": 1, "3": 2, "4": 3}
 
 
-def encode_bases(sequence: str) -> str:
+def bases_to_colors(sequence: str) -> str:
     """Encode a DNA sequence to a color-space sequence.
 
     Pure encoding with no reversal. Applies a sliding 2-base window
@@ -49,7 +49,7 @@ def encode_bases(sequence: str) -> str:
 
     Examples
     --------
-    >>> encode_bases("CGCAC")
+    >>> bases_to_colors("CGCAC")
     '4422'
 
     Raises
@@ -68,7 +68,7 @@ def encode_bases(sequence: str) -> str:
     return "".join(colors)
 
 
-def decode_color_sequence(color_sequence: str, start_base: str) -> str:
+def colors_to_bases(color_sequence: str, start_base: str) -> str:
     """Decode a color sequence back to a DNA barcode.
 
     Uses chain tracking: given the start base, each color digit constrains
@@ -89,7 +89,7 @@ def decode_color_sequence(color_sequence: str, start_base: str) -> str:
 
     Examples
     --------
-    >>> decode_color_sequence("4422", "C")
+    >>> colors_to_bases("4422", "C")
     'CGCAC'
 
     Raises
@@ -121,12 +121,12 @@ def decode_color_sequence(color_sequence: str, start_base: str) -> str:
 
 
 def encode_pairs(sequence: str, pair_to_color: dict[str, str]) -> str:
-    """encode_bases with an explicit validated pair table (EncodingConfig.pair_to_color)."""
+    """bases_to_colors with an explicit validated pair table (EncodingConfig.pair_to_color)."""
     return "".join(pair_to_color[sequence[i : i + 2]] for i in range(len(sequence) - 1))
 
 
 def decode_pairs(color_sequence: str, start_base: str, pair_to_color: dict[str, str]) -> str:
-    """decode_color_sequence with an explicit validated pair table.
+    """colors_to_bases with an explicit validated pair table.
 
     The table gives each first base four different colors, so every step has
     exactly one next base.

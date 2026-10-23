@@ -1,7 +1,7 @@
 """The known-weights table, the weights cache, fetch, verification, their errors and the CLI group
 (W-270, docs/spot-finding-contract.md, "Pretrained weights").
 
-No test uses the network: fixture entries inserted into KNOWN_WEIGHTS download a few-byte file
+No test uses the network: fixture entries inserted into KNOWN_MODELS download a few-byte file
 from a temporary directory through a file:// URL, and socket connections are blocked.
 """
 import hashlib
@@ -15,8 +15,8 @@ from pathlib import Path
 import pytest
 
 from starfinder.__main__ import main
-from starfinder.spot_finding import (KNOWN_WEIGHTS, KnownWeights, MissingWeightsError, WeightsFile,
-    WeightsHashMismatchError, fetch_weights, resolve_weights)
+from starfinder.spot_finding import (KNOWN_MODELS, KnownModel, MissingModelError, ModelFile,
+    ModelHashMismatchError, fetch_model, resolve_model)
 from starfinder._weights import RECORD_NAME, weights_directory
 from starfinder.spot_finding._weights import listed_files, weights_artifacts
 
@@ -77,10 +77,10 @@ def piscis_fixture(tmp_path, monkeypatch):
     source = tmp_path / "source" / "fixture.pt"
     source.parent.mkdir()
     source.write_bytes(PAYLOAD)
-    entry = replace(KNOWN_WEIGHTS[("piscis", "20251212")], model="fixture", url=source.as_uri(),
+    entry = replace(KNOWN_MODELS[("piscis", "20251212")], model="fixture", url=source.as_uri(),
                     revision="fixture", sha256=sha256(PAYLOAD), bytes=len(PAYLOAD),
-                    files=(WeightsFile("fixture.pt", sha256(PAYLOAD), len(PAYLOAD)),))
-    monkeypatch.setitem(KNOWN_WEIGHTS, ("piscis", "fixture"), entry)
+                    files=(ModelFile("fixture.pt", sha256(PAYLOAD), len(PAYLOAD)),))
+    monkeypatch.setitem(KNOWN_MODELS, ("piscis", "fixture"), entry)
     return entry
 
 
@@ -94,12 +94,12 @@ def archive_fixture(tmp_path, monkeypatch):
         handle.writestr("fixture_3d/config.yaml", b"is_3d: true\n")
         handle.writestr("__MACOSX/fixture_3d/._best.pt", b"x")
     data = archive.read_bytes()
-    entry = replace(KNOWN_WEIGHTS[("spotiflow", "smfish_3d")], model="fixture_3d", url=archive.as_uri(),
+    entry = replace(KNOWN_MODELS[("spotiflow", "smfish_3d")], model="fixture_3d", url=archive.as_uri(),
                     revision="fixture", sha256=sha256(data), bytes=len(data), md5=hashlib.md5(data).hexdigest(),
-                    files=(WeightsFile("best.pt", sha256(PAYLOAD), len(PAYLOAD)),),
-                    extracted=(WeightsFile("best.pt", sha256(PAYLOAD), len(PAYLOAD)),
-                               WeightsFile("config.yaml", sha256(b"is_3d: true\n"), len(b"is_3d: true\n"))))
-    monkeypatch.setitem(KNOWN_WEIGHTS, ("spotiflow", "fixture_3d"), entry)
+                    files=(ModelFile("best.pt", sha256(PAYLOAD), len(PAYLOAD)),),
+                    extracted=(ModelFile("best.pt", sha256(PAYLOAD), len(PAYLOAD)),
+                               ModelFile("config.yaml", sha256(b"is_3d: true\n"), len(b"is_3d: true\n"))))
+    monkeypatch.setitem(KNOWN_MODELS, ("spotiflow", "fixture_3d"), entry)
     return entry
 
 
@@ -116,10 +116,10 @@ def write_zip(path, files):
 
 
 def listed_entry(url, data):
-    return replace(KNOWN_WEIGHTS[("spotiflow", "smfish_3d")], model="fixture_listed", url=url, revision="fixture",
+    return replace(KNOWN_MODELS[("spotiflow", "smfish_3d")], model="fixture_listed", url=url, revision="fixture",
                    sha256=sha256(data), bytes=len(data), md5=hashlib.md5(data).hexdigest(),
-                   files=(WeightsFile("best.pt", sha256(PAYLOAD), len(PAYLOAD)),),
-                   extracted=tuple(WeightsFile(n, sha256(d), len(d)) for n, d in sorted(LISTED.items())))
+                   files=(ModelFile("best.pt", sha256(PAYLOAD), len(PAYLOAD)),),
+                   extracted=tuple(ModelFile(n, sha256(d), len(d)) for n, d in sorted(LISTED.items())))
 
 
 @pytest.fixture
@@ -128,7 +128,7 @@ def listed_fixture(tmp_path, monkeypatch):
     archive = tmp_path / "source" / "fixture_listed.zip"
     archive.parent.mkdir(exist_ok=True)
     entry = listed_entry(archive.as_uri(), write_zip(archive, LISTED))
-    monkeypatch.setitem(KNOWN_WEIGHTS, ("spotiflow", "fixture_listed"), entry)
+    monkeypatch.setitem(KNOWN_MODELS, ("spotiflow", "fixture_listed"), entry)
     return entry
 
 
@@ -151,8 +151,8 @@ def snapshot(folder):
 
 
 def fetched_listed(downloads):
-    """fetch_weights of the listed fixture with old modification times, so any rewrite shows."""
-    folder = fetch_weights("spotiflow", "fixture_listed")
+    """fetch_model of the listed fixture with old modification times, so any rewrite shows."""
+    folder = fetch_model("spotiflow", "fixture_listed")
     for path in folder.iterdir():
         os.utime(path, ns=(10**18, 10**18))
     downloads.clear()
@@ -163,26 +163,26 @@ def fetched_listed(downloads):
 
 def test_known_weights_holds_the_six_w266_rows():
     table = {key: (e.sha256, e.bytes, e.md5, e.files[0].path, e.files[0].sha256, e.files[0].bytes)
-             for key, e in KNOWN_WEIGHTS.items()}
+             for key, e in KNOWN_MODELS.items()}
     assert table == W266
-    for (method, model), entry in KNOWN_WEIGHTS.items():
-        assert isinstance(entry, KnownWeights) and (entry.method, entry.model) == (method, model)
+    for (method, model), entry in KNOWN_MODELS.items():
+        assert isinstance(entry, KnownModel) and (entry.method, entry.model) == (method, model)
         assert len(entry.sha256) == 64 and len(entry.files) == 1 and entry.archive == (method == "spotiflow")
-    assert KNOWN_WEIGHTS[("spotiflow", "smfish_3d")].url == (
+    assert KNOWN_MODELS[("spotiflow", "smfish_3d")].url == (
         "https://github.com/weigertlab/spotiflow-models/releases/download/0.6.0/smfish_3d.zip")
-    assert KNOWN_WEIGHTS[("piscis", "20230905")].url == (
+    assert KNOWN_MODELS[("piscis", "20230905")].url == (
         "https://huggingface.co/wniu/Piscis/resolve/9bdefc72cb519053c63fd2d7bff9d12db7bb394e/models/20230905.pt")
-    assert {k: e.native_threshold for k, e in KNOWN_WEIGHTS.items() if k[0] == "piscis"} == {
+    assert {k: e.native_threshold for k, e in KNOWN_MODELS.items() if k[0] == "piscis"} == {
         ("piscis", "20230905"): 0.5, ("piscis", "20251212"): 0.5}
-    assert [round(KNOWN_WEIGHTS[("spotiflow", m)].native_threshold, 3) for m in
+    assert [round(KNOWN_MODELS[("spotiflow", m)].native_threshold, 3) for m in
             ("synth_3d", "smfish_3d", "general", "hybiss")] == [0.3, 0.4, 0.5, 0.532]
 
 
 def test_an_unknown_model_lists_the_known_models(cache):
     with pytest.raises(ValueError, match=r"known models: \['20230905', '20251212'\]"):
-        resolve_weights("piscis", "latest")
+        resolve_model("piscis", "latest")
     with pytest.raises(ValueError, match="known methods"):
-        resolve_weights("starfish", "x")
+        resolve_model("starfish", "x")
 
 
 # --- Cache location -------------------------------------------------------------------------------------
@@ -201,8 +201,8 @@ def test_the_cache_directory(monkeypatch, tmp_path):
 # --- Resolution and its errors --------------------------------------------------------------------------
 
 def test_an_empty_cache_raises_missing_weights_naming_path_and_command(cache):
-    with pytest.raises(MissingWeightsError) as raised:
-        resolve_weights("spotiflow", "smfish_3d")
+    with pytest.raises(MissingModelError) as raised:
+        resolve_model("spotiflow", "smfish_3d")
     message = str(raised.value)
     assert isinstance(raised.value, FileNotFoundError)
     assert str(cache / "spotiflow" / "smfish_3d" / "best.pt") in message
@@ -210,7 +210,7 @@ def test_an_empty_cache_raises_missing_weights_naming_path_and_command(cache):
 
 
 def test_fetch_writes_the_verified_copy_and_its_record(cache, piscis_fixture):
-    folder = fetch_weights("piscis", "fixture")
+    folder = fetch_model("piscis", "fixture")
     assert folder == cache / "piscis" / "fixture"
     assert (folder / "fixture.pt").read_bytes() == PAYLOAD
     record = json.loads((folder / RECORD_NAME).read_text())
@@ -218,43 +218,43 @@ def test_fetch_writes_the_verified_copy_and_its_record(cache, piscis_fixture):
         "piscis", "fixture", piscis_fixture.url, sha256(PAYLOAD), len(PAYLOAD))
     assert record["files"] == {"fixture.pt": sha256(PAYLOAD)}
     assert sorted(p.name for p in folder.parent.iterdir()) == ["fixture"]  # no temporary files remain
-    assert resolve_weights("piscis", "fixture") == folder
+    assert resolve_model("piscis", "fixture") == folder
     assert weights_artifacts("piscis", "fixture", folder) == [{
         "name": "piscis/fixture", "path": str((folder / "fixture.pt").resolve()), "sha256": sha256(PAYLOAD),
         "source": piscis_fixture.url, "revision": "fixture"}]
 
 
 def test_a_changed_byte_raises_the_hash_mismatch_with_both_hashes(cache, piscis_fixture):
-    folder = fetch_weights("piscis", "fixture")
+    folder = fetch_model("piscis", "fixture")
     changed = bytearray(PAYLOAD)
     changed[0] ^= 1
     (folder / "fixture.pt").write_bytes(bytes(changed))
-    with pytest.raises(WeightsHashMismatchError) as raised:
-        resolve_weights("piscis", "fixture")
+    with pytest.raises(ModelHashMismatchError) as raised:
+        resolve_model("piscis", "fixture")
     assert isinstance(raised.value, ValueError)
     assert sha256(bytes(changed)) in str(raised.value) and sha256(PAYLOAD) in str(raised.value)
     assert str(folder / "fixture.pt") in str(raised.value)
     # A changed copy is never overwritten by a new fetch.
-    with pytest.raises(WeightsHashMismatchError):
-        fetch_weights("piscis", "fixture")
+    with pytest.raises(ModelHashMismatchError):
+        fetch_model("piscis", "fixture")
     assert (folder / "fixture.pt").read_bytes() == bytes(changed)
 
 
 def test_a_verified_copy_is_not_downloaded_again(cache, piscis_fixture):
-    folder = fetch_weights("piscis", "fixture")
+    folder = fetch_model("piscis", "fixture")
     Path(piscis_fixture.url.removeprefix("file://")).unlink()
-    assert fetch_weights("piscis", "fixture") == folder
+    assert fetch_model("piscis", "fixture") == folder
 
 
 def test_a_wrong_download_installs_nothing(cache, piscis_fixture, monkeypatch):
-    monkeypatch.setitem(KNOWN_WEIGHTS, ("piscis", "fixture"), replace(piscis_fixture, sha256="0" * 64))
-    with pytest.raises(WeightsHashMismatchError, match="0" * 64):
-        fetch_weights("piscis", "fixture")
+    monkeypatch.setitem(KNOWN_MODELS, ("piscis", "fixture"), replace(piscis_fixture, sha256="0" * 64))
+    with pytest.raises(ModelHashMismatchError, match="0" * 64):
+        fetch_model("piscis", "fixture")
     assert list((cache / "piscis").iterdir()) == []
 
 
 def test_an_archive_is_checked_and_extracted(cache, archive_fixture, monkeypatch):
-    folder = fetch_weights("spotiflow", "fixture_3d")
+    folder = fetch_model("spotiflow", "fixture_3d")
     assert folder == cache / "spotiflow" / "fixture_3d"
     assert sorted(p.name for p in folder.iterdir()) == ["best.pt", "config.yaml", RECORD_NAME]
     record = json.loads((folder / RECORD_NAME).read_text())
@@ -262,24 +262,24 @@ def test_an_archive_is_checked_and_extracted(cache, archive_fixture, monkeypatch
     assert record["files"] == {"best.pt": sha256(PAYLOAD), "config.yaml": sha256(b"is_3d: true\n")}
     assert not (cache / "spotiflow" / "__MACOSX").exists()
     other = cache.parent / "other"
-    monkeypatch.setitem(KNOWN_WEIGHTS, ("spotiflow", "fixture_3d"), replace(archive_fixture, md5="f" * 32))
-    with pytest.raises(WeightsHashMismatchError, match="MD5"):
-        fetch_weights("spotiflow", "fixture_3d", directory=other)
+    monkeypatch.setitem(KNOWN_MODELS, ("spotiflow", "fixture_3d"), replace(archive_fixture, md5="f" * 32))
+    with pytest.raises(ModelHashMismatchError, match="MD5"):
+        fetch_model("spotiflow", "fixture_3d", directory=other)
     assert list((other / "spotiflow").iterdir()) == []
 
 
 def test_the_directory_argument_overrides_the_environment(cache, piscis_fixture, tmp_path):
-    folder = fetch_weights("piscis", "fixture", directory=tmp_path / "explicit")
+    folder = fetch_model("piscis", "fixture", directory=tmp_path / "explicit")
     assert folder == tmp_path / "explicit" / "piscis" / "fixture"
     assert not cache.exists()
-    with pytest.raises(MissingWeightsError, match="--dir"):
-        resolve_weights("piscis", "fixture", directory=tmp_path / "elsewhere")
+    with pytest.raises(MissingModelError, match="--dir"):
+        resolve_model("piscis", "fixture", directory=tmp_path / "elsewhere")
 
 
 # --- Fetch checks every listed file (W-286) -------------------------------------------------------------
 
 def full_check(directory=None):
-    return resolve_weights("spotiflow", "fixture_listed", directory=directory,
+    return resolve_model("spotiflow", "fixture_listed", directory=directory,
                            extracted=listed_files("spotiflow", "fixture_listed"))
 
 
@@ -289,10 +289,10 @@ def test_fetch_restores_only_a_missing_listed_file(cache, listed_fixture, downlo
     record = json.loads((folder / RECORD_NAME).read_text())
     (folder / name).unlink()
     kept = {n: v for n, v in snapshot(folder).items() if n != RECORD_NAME}
-    with pytest.raises(MissingWeightsError, match="'starfinder weights fetch spotiflow fixture_listed'"):
+    with pytest.raises(MissingModelError, match="'starfinder weights fetch spotiflow fixture_listed'"):
         full_check()
-    # The remedy MissingWeightsError names: fetch again into the same root.
-    assert fetch_weights("spotiflow", "fixture_listed") == folder
+    # The remedy MissingModelError names: fetch again into the same root.
+    assert fetch_model("spotiflow", "fixture_listed") == folder
     assert downloads == [listed_fixture.url]
     after = snapshot(folder)
     assert after[name][0] == LISTED[name]
@@ -311,8 +311,8 @@ def test_fetch_refuses_a_changed_listed_file(cache, listed_fixture, downloads, m
     for name in missing:
         (folder / name).unlink()
     before = snapshot(folder)
-    with pytest.raises(WeightsHashMismatchError) as raised:
-        fetch_weights("spotiflow", "fixture_listed")
+    with pytest.raises(ModelHashMismatchError) as raised:
+        fetch_model("spotiflow", "fixture_listed")
     assert str(folder / "config.yaml") in str(raised.value)
     assert sha256(b"is_3d: false\n") in str(raised.value) and sha256(LISTED["config.yaml"]) in str(raised.value)
     assert downloads == [] and snapshot(folder) == before
@@ -321,7 +321,7 @@ def test_fetch_refuses_a_changed_listed_file(cache, listed_fixture, downloads, m
 def test_fetch_keeps_a_complete_verified_folder(cache, listed_fixture, downloads):
     folder = fetched_listed(downloads)
     before = snapshot(folder)
-    assert fetch_weights("spotiflow", "fixture_listed") == folder
+    assert fetch_model("spotiflow", "fixture_listed") == folder
     assert downloads == [] and snapshot(folder) == before
 
 
@@ -332,7 +332,7 @@ def test_fetch_refuses_a_folder_without_its_record(cache, listed_fixture, downlo
         (folder / name).unlink()
     before = snapshot(folder)
     with pytest.raises(FileExistsError, match=RECORD_NAME):
-        fetch_weights("spotiflow", "fixture_listed")
+        fetch_model("spotiflow", "fixture_listed")
     assert downloads == [] and snapshot(folder) == before
 
 
@@ -343,9 +343,9 @@ def test_a_fresh_fetch_checks_every_listed_file(cache, tmp_path, monkeypatch, do
     archive = tmp_path / "broken.zip"
     files = {n: d for n, d in LISTED.items() if n != name} if change == "lacks" else {**LISTED, name: b"other\n"}
     entry = listed_entry(archive.as_uri(), write_zip(archive, files))
-    monkeypatch.setitem(KNOWN_WEIGHTS, ("spotiflow", "fixture_listed"), entry)
-    with pytest.raises(WeightsHashMismatchError, match=name) as raised:
-        fetch_weights("spotiflow", "fixture_listed")
+    monkeypatch.setitem(KNOWN_MODELS, ("spotiflow", "fixture_listed"), entry)
+    with pytest.raises(ModelHashMismatchError, match=name) as raised:
+        fetch_model("spotiflow", "fixture_listed")
     assert ("has no" if change == "lacks" else sha256(b"other\n")) in str(raised.value)
     assert downloads == [entry.url]
     assert list((cache / "spotiflow").iterdir()) == []

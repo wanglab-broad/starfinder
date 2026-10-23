@@ -18,7 +18,7 @@ import warnings
 import numpy as np
 import pandas as pd
 
-from starfinder.readout import CodebookAwareDecoderConfig, NeighborhoodSumConfig, WtaDecoderConfig, decode_barcodes
+from starfinder.readout import CodebookAwareDecoderConfig, NeighborhoodSumConfig, WtaDecoderConfig, decode_reads
 from starfinder.readout import extract_intensities, score_reads
 from starfinder.evaluation.matching import match_points
 from starfinder.io import ImageLoadResult
@@ -119,7 +119,7 @@ def pipeline(condition, seed):
         truth_gene[j] = genes[i]
     tables = {}
     for name, config in DECODERS.items():
-        decoded = decode_barcodes(intensities, book, config=config)
+        decoded = decode_reads(intensities, book, config=config)
         tables[name] = score_reads(decoded, intensities, reference=book).table
     return spots, intensities, tables, truth_gene
 

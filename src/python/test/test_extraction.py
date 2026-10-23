@@ -7,7 +7,7 @@ import pytest
 from starfinder.readout import (
     extract_intensities,
     NeighborhoodSumConfig,
-    decode_barcodes,
+    decode_reads,
     WtaDecoderConfig,
 )
 from starfinder.io import ImageLoadResult
@@ -62,7 +62,7 @@ def test_half_voxel_rounds_up_and_no_coordinate_truncation():
     )
     np.testing.assert_array_equal(result.values[0, :, 0], [0, 0, 200, 0])
     assert found.spots.x[0] == 1.5
-    decoded = decode_barcodes(result, codebook({"3": "gene"}), config=WtaDecoderConfig())
+    decoded = decode_reads(result, codebook({"3": "gene"}), config=WtaDecoderConfig())
     assert decoded.table.gene_id[0] == "gene"
 
 

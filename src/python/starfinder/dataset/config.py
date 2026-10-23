@@ -12,7 +12,7 @@ from starfinder._execution import check_device
 from starfinder.spot_finding import SPOT_FINDING_METHODS, SpotFindingPlan
 from starfinder.spot_finding._methods import SpotFindingConfig
 from starfinder.readout import (DECODING_METHODS, NeighborhoodSumConfig, WtaDecoderConfig,
-    CodebookAwareDecoderConfig, DirectAssignmentConfig, ReadFilterConfig, ReadScoreConfig, DeduplicationConfig)
+    CodebookAwareDecoderConfig, DirectDecoderConfig, ReadFilterConfig, ReadScoreConfig, DeduplicationConfig)
 
 
 @dataclass(frozen=True)
@@ -124,7 +124,7 @@ class PipelineConfig:
     config of a SPOT_FINDING_METHODS method with pipeline=True, or a
     SpotFindingPlan of one. decoding is a DECODING_METHODS config of the
     dataset's readout mode: wta or codebook_aware (multiplexed), or
-    DirectAssignmentConfig (direct). scoring (ReadScoreConfig, opt-in) adds
+    DirectDecoderConfig (direct). scoring (ReadScoreConfig, opt-in) adds
     the shared read-QC score to the reads after decoding; it needs the local
     background of the extraction. deduplication (DeduplicationConfig, off by
     default) marks cross-channel reads of one amplicon as duplicates of one
@@ -139,7 +139,7 @@ class PipelineConfig:
     registration: RegistrationRecipe | None = None
     spot_finding: SpotFindingConfig | SpotFindingPlan | None = None
     extraction: NeighborhoodSumConfig | None = None
-    decoding: WtaDecoderConfig | CodebookAwareDecoderConfig | DirectAssignmentConfig | None = None
+    decoding: WtaDecoderConfig | CodebookAwareDecoderConfig | DirectDecoderConfig | None = None
     filtering: ReadFilterConfig | None = None
     scoring: ReadScoreConfig | None = None
     deduplication: DeduplicationConfig | None = None

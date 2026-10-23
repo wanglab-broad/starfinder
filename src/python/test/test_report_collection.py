@@ -251,7 +251,7 @@ def expected_steps(*, deduplication=True, registration=True, placement=True):
             if registration:
                 steps.append(("register", name, "translation", 0.5))
             steps.append(("extract_round", name, None, 0.125))
-        steps += [("decode_barcodes", None, "wta (multiplexed)", 0.25), ("score_reads", None, None, 0.125)]
+        steps += [("decode_reads", None, "wta (multiplexed)", 0.25), ("score_reads", None, None, 0.125)]
         if deduplication:
             steps.append(("deduplicate_reads", None, None, 0.125))
         steps.append(("filter_reads", None, "filter", 0.125))

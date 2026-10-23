@@ -1,6 +1,6 @@
 """Validated codebooks and independent intensity extraction, decoding, scoring, deduplication and filtering."""
 
-from ._encoding import encode_bases, decode_color_sequence
+from ._encoding import bases_to_colors, colors_to_bases
 from ._layout import BarcodeLayout, Segment
 from .codebook import ENCODINGS as _ENCODINGS
 from .codebook import (
@@ -16,16 +16,16 @@ from .extraction import (
     IntensityExtractionResult,
     extract_intensities,
 )
-from ._direct import DirectAssignmentConfig, DirectPanel, load_direct_panel
+from ._direct import DirectDecoderConfig, DirectPanel, load_direct_panel
 from .decoding import DECODING_METHODS as _DECODING_METHODS
 from .decoding import (
     WtaDecoderConfig,
     CodebookAwareDecoderConfig,
-    BarcodeDecodingResult,
+    ReadDecodingResult,
     DecodingSpec,
     InvalidIntensityError,
-    assign_direct,
-    decode_barcodes,
+    decode_direct,
+    decode_reads,
 )
 from .scoring import ReadScoreConfig, ReadScoringResult, score_reads
 from .deduplication import DeduplicationConfig, ReadDeduplicationResult, deduplicate_reads
@@ -34,25 +34,24 @@ from .spots import export_spots
 from .diagnostics import explain_read, inspect_read, plot_read, summarize_reads
 
 #: The barcode encoding registry, mapping each exact frozen encoding config type to its
-#: EncodingSpec (two_base, one_base). Codebook, load_codebook, decode_barcodes and the
+#: EncodingSpec (two_base, one_base). Codebook, load_codebook, decode_reads and the
 #: workflow adapter derive their encoding sets from it.
 ENCODINGS = _ENCODINGS
 
 #: The decoder registry, mapping each exact frozen decoder config type to its DecodingSpec
 #: (wta, codebook_aware for readout mode multiplexed; direct for readout mode direct).
-#: decode_barcodes, assign_direct, PipelineConfig.decoding, FOV.run, the workflow adapter and
+#: decode_reads, decode_direct, PipelineConfig.decoding, FOV.run, the workflow adapter and
 #: the checkpoint reader derive their decoder sets and mode checks from it.
 DECODING_METHODS = _DECODING_METHODS
 
 __all__ = [
-    "BarcodeDecodingResult",
     "BarcodeLayout",
     "Codebook",
     "CodebookAwareDecoderConfig",
     "DECODING_METHODS",
     "DecodingSpec",
     "DeduplicationConfig",
-    "DirectAssignmentConfig",
+    "DirectDecoderConfig",
     "DirectPanel",
     "ENCODINGS",
     "EncodingConfig",
@@ -62,6 +61,7 @@ __all__ = [
     "LocalBackgroundConfig",
     "NeighborhoodSumConfig",
     "OneBaseEncodingConfig",
+    "ReadDecodingResult",
     "ReadDeduplicationResult",
     "ReadFilterConfig",
     "ReadFilteringResult",
@@ -69,11 +69,11 @@ __all__ = [
     "ReadScoringResult",
     "Segment",
     "WtaDecoderConfig",
-    "assign_direct",
-    "decode_barcodes",
-    "decode_color_sequence",
+    "bases_to_colors",
+    "colors_to_bases",
+    "decode_direct",
+    "decode_reads",
     "deduplicate_reads",
-    "encode_bases",
     "explain_read",
     "export_spots",
     "extract_intensities",

@@ -1020,7 +1020,7 @@ $defs:
         minimum: 0
         maximum: 1
       model:
-        description: "Python only; spotiflow and piscis (required): a model of KNOWN_WEIGHTS, fetched with 'starfinder weights fetch'"
+        description: "Python only; spotiflow and piscis (required): a model of KNOWN_MODELS, fetched with 'starfinder weights fetch'"
         type: string
       prob_thresh:
         description: "Python only; spotiflow: heatmap probability in [0, 1]; null: the value stored with the weights"

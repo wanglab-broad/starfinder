@@ -16,7 +16,7 @@ from ._codebook_aware import _build_one_error_index, _candidate_sequences, _chan
 from ._direct import DirectPanel
 from ._layout import colors_have_ends, read_orientation, segment_bases, segment_colors
 from .codebook import Codebook, encoding_spec
-from .decoding import DECODING_METHODS, BarcodeDecodingResult
+from .decoding import DECODING_METHODS, ReadDecodingResult
 from .deduplication import (DEDUPLICATION_COLUMNS, DeduplicationConfig, ReadDeduplicationResult,
                             cross_channel_pairs, deduplication_counts)
 from .extraction import IntensityExtractionResult
@@ -27,7 +27,7 @@ STATUSES = ("assigned", "ambiguous", "no_signal", "unmatched")
 QUANTILES = (0.05, 0.25, 0.5, 0.75, 0.95)
 # Read stages from the most downstream; a read result or FOV.results gives them.
 _STAGES = (("filtering", ReadFilteringResult), ("deduplication", ReadDeduplicationResult),
-           ("scoring", ReadScoringResult), ("decoding", BarcodeDecodingResult))
+           ("scoring", ReadScoringResult), ("decoding", ReadDecodingResult))
 
 
 def _stages(reads):
@@ -47,7 +47,7 @@ def _stages(reads):
     for stage, kind in _STAGES:
         if isinstance(reads, kind):
             return {stage: reads}
-    raise TypeError("reads must be a BarcodeDecodingResult, ReadScoringResult, ReadDeduplicationResult, "
+    raise TypeError("reads must be a ReadDecodingResult, ReadScoringResult, ReadDeduplicationResult, "
                     "ReadFilteringResult or a mapping of stage names to them (FOV.results)")
 
 

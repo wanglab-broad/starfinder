@@ -13,7 +13,7 @@ import pandas as pd
 
 from starfinder.readout import (
     Codebook, NeighborhoodSumConfig, CodebookAwareDecoderConfig,
-    decode_barcodes, extract_intensities, filter_reads,
+    decode_reads, extract_intensities, filter_reads,
 )
 from starfinder.synthetic import formed_scene_preset, generate_formed_scene
 from starfinder.dataset import RoundState, Dataset
@@ -66,7 +66,7 @@ def main(output: Path) -> None:
     assert extracted.values.shape == (1, 4, 1) and extracted.values.dtype == np.float64
     book = Codebook(pd.DataFrame({'gene_id':['GeneA'], 'color_sequence':['1']}),
                     ('round1',), channels)
-    decoded = decode_barcodes(extracted, book, config=CodebookAwareDecoderConfig(diagnostics=True))
+    decoded = decode_reads(extracted, book, config=CodebookAwareDecoderConfig(diagnostics=True))
     np.testing.assert_allclose(decoded.diagnostics['probabilities'].sum(axis=1), 1)
     assert decoded.table.loc[0, 'gene_id'] == 'GeneA'
     assert decoded.table.loc[0, 'call_type'] == 'exact'

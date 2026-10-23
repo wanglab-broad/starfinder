@@ -11,7 +11,7 @@ import pandas as pd
 import pytest
 
 from starfinder.readout import (Codebook, LocalBackgroundConfig, NeighborhoodSumConfig, WtaDecoderConfig,
-                                decode_barcodes, extract_intensities, score_reads)
+                                decode_reads, extract_intensities, score_reads)
 from starfinder.image import ImageMetadata
 from starfinder.io import ImageLoadResult
 from starfinder.spot_finding import LocalMaximaConfig, SpotFindingResult
@@ -113,7 +113,7 @@ def test_r9_below_min_voxels_is_nan_and_the_score_background_unavailable():
     others = np.arange(len(CANDIDATES)) != corner
     assert (result.background[others] == CONSTANT).all()
     assert np.isfinite(result.values).all() and result.valid.all()
-    reads = decode_barcodes(result, codebook(), config=WtaDecoderConfig())
+    reads = decode_reads(result, codebook(), config=WtaDecoderConfig())
     assert reads.table.call_status.iloc[corner] == "assigned"
     scored = score_reads(reads, result, reference=codebook()).table
     assert scored.qc_reason.iloc[corner] == "background_unavailable"
@@ -122,7 +122,7 @@ def test_r9_below_min_voxels_is_nan_and_the_score_background_unavailable():
     exact = extract(bg_const(), CANDIDATES,
                     NeighborhoodSumConfig(background=LocalBackgroundConfig(min_voxels=RING_VOXELS["corner"])))
     assert (exact.background[corner] == CONSTANT).all()
-    scored = score_reads(decode_barcodes(exact, codebook(), config=WtaDecoderConfig()), exact,
+    scored = score_reads(decode_reads(exact, codebook(), config=WtaDecoderConfig()), exact,
                          reference=codebook()).table
     assert scored.qc_reason.iloc[corner] == "" and np.isfinite(scored.qc_score.iloc[corner])
 

@@ -1,6 +1,6 @@
 """The shared pretrained-weights cache: its root, a model's folder in it and the record file name.
 
-Spot finding (KNOWN_WEIGHTS) and segmentation (KNOWN_MODELS) keep their models
+Spot finding (spot_finding.KNOWN_MODELS) and segmentation (segmentation.KNOWN_MODELS) keep their models
 in this one cache as ``<root>/<method>/<model>/``, each folder next to a
 ``starfinder-weights.json`` record once fetched. Each stage keeps its own
 artifact table, errors and record content; the file SHA-256 is

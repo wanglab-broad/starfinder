@@ -21,9 +21,9 @@ import pytest
 from starfinder.__main__ import main
 from starfinder.dataset import CheckpointConfig, PipelineConfig
 from starfinder.image import ImageMetadata
-from starfinder.spot_finding import (KNOWN_WEIGHTS, SPOT_FINDING_METHODS, ChannelOverride, MissingWeightsError,
-    PiscisConfig, SpotFindingBackendUnavailableError, SpotFindingPlan, SpotFindingSpec, SpotiflowConfig, WeightsFile,
-    WeightsHashMismatchError, find_spots, resolve_weights)
+from starfinder.spot_finding import (KNOWN_MODELS, SPOT_FINDING_METHODS, ChannelOverride, MissingModelError,
+    PiscisConfig, SpotFindingBackendUnavailableError, SpotFindingPlan, SpotFindingSpec, SpotiflowConfig, ModelFile,
+    ModelHashMismatchError, find_spots, resolve_model)
 from starfinder.spot_finding import _learned, _methods
 from starfinder._weights import weights_directory
 from starfinder.spot_finding._weights import weights_artifacts
@@ -136,9 +136,9 @@ def test_with_the_extras_found_missing_weights_raise_before_any_model_is_built(c
                                                                                 empty_cache):
     extra, config, image = EXTRAS[config_type]
     stand_ins(monkeypatch, extra, "torch")   # the stand-ins have no model class: building one would fail
-    with pytest.raises(MissingWeightsError) as raised:
+    with pytest.raises(MissingModelError) as raised:
         detect(image, config)
-    entry = KNOWN_WEIGHTS[(extra, config.model)]
+    entry = KNOWN_MODELS[(extra, config.model)]
     assert str(empty_cache / extra / config.model / entry.files[0].path) in str(raised.value)
     assert f"'starfinder weights fetch {extra} {config.model}'" in str(raised.value)
 
@@ -202,7 +202,7 @@ def test_invalid_settings_raise_at_construction(config, change):
 # --- The extracted files of the Spotiflow archives -------------------------------------------------------
 
 def test_the_table_holds_every_extracted_file_of_the_spotiflow_archives():
-    for (method, model), entry in KNOWN_WEIGHTS.items():
+    for (method, model), entry in KNOWN_MODELS.items():
         if method == "piscis":
             assert entry.extracted == ()
             continue
@@ -222,27 +222,27 @@ def folder_fixture(empty_cache, monkeypatch):
     files = {}
     for name, data in contents.items():
         (folder / name).write_bytes(data)
-        files[name] = WeightsFile(name, hashlib.sha256(data).hexdigest(), len(data))
-    entry = replace(KNOWN_WEIGHTS[("spotiflow", "smfish_3d")], model="fixture", revision="fixture",
+        files[name] = ModelFile(name, hashlib.sha256(data).hexdigest(), len(data))
+    entry = replace(KNOWN_MODELS[("spotiflow", "smfish_3d")], model="fixture", revision="fixture",
                     files=(files["best.pt"],), extracted=tuple(files[n] for n in sorted(files)))
-    monkeypatch.setitem(KNOWN_WEIGHTS, ("spotiflow", "fixture"), entry)
+    monkeypatch.setitem(KNOWN_MODELS, ("spotiflow", "fixture"), entry)
     return folder
 
 
 def test_resolve_weights_checks_the_named_extracted_files(folder_fixture):
     reads = ("config.yaml", "thresholds.yaml")
-    assert resolve_weights("spotiflow", "fixture", extracted=reads) == folder_fixture
+    assert resolve_model("spotiflow", "fixture", extracted=reads) == folder_fixture
     assert [a["path"] for a in weights_artifacts("spotiflow", "fixture", folder_fixture, reads)] == [
         str((folder_fixture / name).resolve()) for name in ("best.pt", "config.yaml", "thresholds.yaml")]
     (folder_fixture / "config.yaml").write_bytes(b"is_3d: false\n")
-    assert resolve_weights("spotiflow", "fixture") == folder_fixture   # not named: not checked
-    with pytest.raises(WeightsHashMismatchError, match=hashlib.sha256(b"is_3d: false\n").hexdigest()):
-        resolve_weights("spotiflow", "fixture", extracted=reads)
+    assert resolve_model("spotiflow", "fixture") == folder_fixture   # not named: not checked
+    with pytest.raises(ModelHashMismatchError, match=hashlib.sha256(b"is_3d: false\n").hexdigest()):
+        resolve_model("spotiflow", "fixture", extracted=reads)
     (folder_fixture / "thresholds.yaml").unlink()
-    with pytest.raises(MissingWeightsError, match="thresholds.yaml"):
-        resolve_weights("spotiflow", "fixture", extracted=("thresholds.yaml",))
+    with pytest.raises(MissingModelError, match="thresholds.yaml"):
+        resolve_model("spotiflow", "fixture", extracted=("thresholds.yaml",))
     with pytest.raises(ValueError, match="extracts no"):
-        resolve_weights("spotiflow", "fixture", extracted=("model.yaml",))
+        resolve_model("spotiflow", "fixture", extracted=("model.yaml",))
 
 
 @pytest.mark.parametrize("changed", ["best.pt", "config.yaml", "last.pt", "thresholds.yaml"])
@@ -250,10 +250,10 @@ def test_a_detection_verifies_every_listed_file_before_any_model(changed, folder
     stand_ins(monkeypatch, "spotiflow", "torch")   # the stand-ins have no model class: building one would fail
     monkeypatch.setattr(_learned, "_MODELS", {})
     (folder_fixture / changed).write_bytes(b"changed\n")
-    with pytest.raises(WeightsHashMismatchError, match=f"{changed} has SHA-256"):
+    with pytest.raises(ModelHashMismatchError, match=f"{changed} has SHA-256"):
         detect(np.ones((8, 16, 16), np.uint16), SpotiflowConfig("fixture"))
     (folder_fixture / changed).unlink()
-    with pytest.raises(MissingWeightsError, match=changed):
+    with pytest.raises(MissingModelError, match=changed):
         detect(np.ones((8, 16, 16), np.uint16), SpotiflowConfig("fixture"))
 
 

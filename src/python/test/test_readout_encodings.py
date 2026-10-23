@@ -17,7 +17,7 @@ import pytest
 from starfinder._registry import config_type_for, names
 from starfinder.readout import (DECODING_METHODS, ENCODINGS, Codebook, CodebookAwareDecoderConfig, DecodingSpec,
                                 EncodingConfig, EncodingSpec, OneBaseEncodingConfig, WtaDecoderConfig,
-                                decode_barcodes)
+                                decode_reads)
 
 from .readout_cases import CHANNELS, intensity, tensor
 
@@ -110,7 +110,7 @@ def test_decoding_registry_names_and_capabilities():
 def test_declared_score_columns_are_the_numeric_columns_the_decoder_writes(config):
     book = Codebook(pd.DataFrame({"gene_id": ["A", "B"], "color_sequence": ["1234", "4321"]}),
                     tuple(f"r{i}" for i in range(4)), CHANNELS)
-    table = decode_barcodes(intensity(tensor(["1234", "4321"])), book, config=config).table
+    table = decode_reads(intensity(tensor(["1234", "4321"])), book, config=config).table
     numeric = [c for c in table.columns if pd.api.types.is_float_dtype(table[c])]
     assert sorted(numeric) == sorted(DECODING_METHODS[type(config)].score_columns)
 
@@ -123,7 +123,7 @@ def test_one_base_codebook_decodes_with_both_decoders():
     book = Codebook(path_rows, rounds, CHANNELS, encoding=OneBaseEncodingConfig(ONE_BASE_COLORS))
     assert book.layout.segments[0].bases == 4
     for config in (WtaDecoderConfig(), CodebookAwareDecoderConfig()):
-        table = decode_barcodes(intensity(tensor(["3142", "2241"])), book, config=config).table
+        table = decode_reads(intensity(tensor(["3142", "2241"])), book, config=config).table
         assert table.gene_id.tolist() == ["Mbp", "Gfap"] and table.entry_id.tolist() == ["3142", "2241"]
     with pytest.raises(ValueError, match="disagrees"):
         Codebook(path_rows.assign(base_sequence=["GATC", "CCTT"]), rounds, CHANNELS,
@@ -150,7 +150,7 @@ def test_decoding_a_codebook_of_an_undeclared_encoding_kind_raises_type_error(mo
                     tuple(f"r{i}" for i in range(4)), CHANNELS, encoding=BinaryFixtureConfig())
     for config in (WtaDecoderConfig(), CodebookAwareDecoderConfig()):
         with pytest.raises(TypeError, match="does not decode 'binary' encodings"):
-            decode_barcodes(intensity(tensor(["1234"])), book, config=config)
+            decode_reads(intensity(tensor(["1234"])), book, config=config)
 
 
 @pytest.mark.contract
@@ -163,7 +163,7 @@ def test_unregistered_configs_raise_type_error():
         pass
 
     with pytest.raises(TypeError, match="unsupported decoder config"):
-        decode_barcodes(intensity(tensor(["1234"])), book, config=Subclass())
+        decode_reads(intensity(tensor(["1234"])), book, config=Subclass())
     with pytest.raises(TypeError, match="ENCODINGS"):
         Codebook(book.table, book.round_labels, CHANNELS, encoding=BinaryFixtureConfig())
 

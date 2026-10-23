@@ -30,7 +30,7 @@ import yaml
 
 from starfinder.readout import (ENCODINGS, BarcodeLayout, Codebook, EncodingConfig, EncodingSpec,
                                 NeighborhoodSumConfig, OneBaseEncodingConfig, ReadFilterConfig, Segment,
-                                WtaDecoderConfig, decode_barcodes, decode_color_sequence, encode_bases,
+                                WtaDecoderConfig, decode_reads, colors_to_bases, bases_to_colors,
                                 explain_read, extract_intensities, filter_reads, inspect_read, load_codebook)
 from starfinder.readout import _encoding, filtering
 from starfinder.dataset import CheckpointConfig, Dataset, PipelineConfig, RoundState
@@ -94,16 +94,16 @@ def test_the_default_table_is_the_active_matlab_table_and_the_module_functions_a
     assert EncodingConfig() == EncodingConfig(pair_to_color=DEFAULT)
     assert EncodingConfig().pair_to_color == DEFAULT and list(EncodingConfig().pair_to_color) == PAIRS
     assert EncodingConfig(False, 2) == EncodingConfig(reverse_bases=False, split_index=2, pair_to_color=DEFAULT)
-    assert str(inspect.signature(encode_bases)) == "(sequence: str) -> str"
-    assert str(inspect.signature(decode_color_sequence)) == "(color_sequence: str, start_base: str) -> str"
-    assert encode_bases("CGCAC") == "4422" and decode_color_sequence("4422", "C") == "CGCAC"
+    assert str(inspect.signature(bases_to_colors)) == "(sequence: str) -> str"
+    assert str(inspect.signature(colors_to_bases)) == "(color_sequence: str, start_base: str) -> str"
+    assert bases_to_colors("CGCAC") == "4422" and colors_to_bases("4422", "C") == "CGCAC"
     two = ENCODINGS[EncodingConfig]
     for barcode in random_barcodes(100):
-        colors = encode_bases(barcode)
+        colors = bases_to_colors(barcode)
         assert colors == "".join(DEFAULT[barcode[i:i + 2]] for i in range(len(barcode) - 1))
-        assert decode_color_sequence(colors, barcode[0]) == barcode
+        assert colors_to_bases(colors, barcode[0]) == barcode
         assert two.encode(barcode, EncodingConfig(reverse_bases=False)) == colors
-        assert EncodingConfig().encode(barcode) == encode_bases(barcode[::-1])
+        assert EncodingConfig().encode(barcode) == bases_to_colors(barcode[::-1])
     assert hash(EncodingConfig()) == hash(EncodingConfig(pair_to_color=DEFAULT))
 
 
@@ -212,7 +212,7 @@ def golden_run(root, seed, table, decoder, ends, csv):
 
 class _Cleared:
     """Within the block the default pair table is empty in place, in every module that imported it, so
-    any default-table use (encode_bases, decode_color_sequence, a default EncodingConfig or the legacy
+    any default-table use (bases_to_colors, colors_to_bases, a default EncodingConfig or the legacy
     end-base fallback of filter_reads) raises."""
 
     def __enter__(self):
@@ -229,14 +229,14 @@ class _Cleared:
 def test_the_guard_catches_every_default_table_use():
     with _Cleared():
         with pytest.raises(KeyError):
-            encode_bases("AC")
+            bases_to_colors("AC")
         with pytest.raises(KeyError):
-            decode_color_sequence("1", "A")
+            colors_to_bases("1", "A")
         with pytest.raises(ValueError, match="pair_to_color"):
             EncodingConfig()
         with pytest.raises(KeyError):
             _encoding.decode_pairs("12", "C", filtering._BASE_PAIR_TO_COLOR)
-    assert encode_bases("AC") == "2" and EncodingConfig().pair_to_color == DEFAULT
+    assert bases_to_colors("AC") == "2" and EncodingConfig().pair_to_color == DEFAULT
 
 
 @pytest.mark.validation
@@ -316,7 +316,7 @@ def scene_reads(book, seed):
     loaded = {label: ImageLoadResult(image, ImageMetadata("scene/FOV_001"), fx.CHANNELS, (), {})
               for label, image in rounds.items()}
     intensities = extract_intensities(loaded, spots, config=NeighborhoodSumConfig())
-    decoded = decode_barcodes(intensities, book, config=WtaDecoderConfig())
+    decoded = decode_reads(intensities, book, config=WtaDecoderConfig())
     filtered = filter_reads(decoded, config=ReadFilterConfig(end_bases="CC", exclude_invalid_endpoints=True),
                             codebook=book)
     return decoded, filtered, genes

@@ -33,7 +33,7 @@ from unittest import mock
 import numpy as np
 import pandas as pd
 
-from starfinder.readout import BarcodeLayout, Segment, decode_color_sequence, load_codebook
+from starfinder.readout import BarcodeLayout, Segment, colors_to_bases, load_codebook
 from starfinder.dataset import Dataset, RoundState
 from starfinder.image import ImageMetadata
 from starfinder.spot_finding import LocalMaximaConfig, SpotFindingResult
@@ -159,7 +159,7 @@ def candidates(truth, name):
 def write_codebook(directory, codewords, name="codebook.csv"):
     """gene,barcode CSV of 5-base two_base barcodes (start base C, reversed) for 4-color sequences."""
     path = directory / name
-    path.write_text("\n".join(f"{gene},{decode_color_sequence(colors, 'C')[::-1]}"
+    path.write_text("\n".join(f"{gene},{colors_to_bases(colors, 'C')[::-1]}"
                               for colors, gene in codewords.items()) + "\n")
     return path
 

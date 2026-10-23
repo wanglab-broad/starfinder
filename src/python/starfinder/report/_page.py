@@ -34,7 +34,7 @@ from starfinder import _layout
 
 from ._schema import READOUT_LEVELS
 from ._values import (Unavailable, acquisition, configuration_check, is_value, reference_image_z_size, run_time,
-                      software, time_per_step, z_size)
+                      software, step_name, time_per_step, z_size)
 
 TEMPLATE = "report.html"
 #: The slots of the template, in document order; each is filled exactly once.
@@ -413,7 +413,7 @@ class _Page:
         names = {}
         for row in steps:
             if row["scope"] == "fov":
-                names.setdefault(row["fov_id"], []).append(row["name"])
+                names.setdefault(row["fov_id"], []).append(step_name(row["name"]))
         lead_fov = lead.get("fov_id") if lead else None
         lead_names = names.get(lead_fov, [])
         differ = sum(1 for r in records if names.get(r.get("fov_id"), []) != lead_names)
@@ -422,7 +422,8 @@ class _Page:
 
         def method(name):
             for row in steps:
-                if row["scope"] == "fov" and row["fov_id"] == lead_fov and row["name"] == name and row["method"]:
+                if (row["scope"] == "fov" and row["fov_id"] == lead_fov and step_name(row["name"]) == name
+                        and row["method"]):
                     return row["method"]
             return None
 
@@ -439,7 +440,7 @@ class _Page:
                              else card("Preprocessing", off="not run"))
             for title, key, step, default in (("Registration", "registration", "register", None),
                                               ("Spot finding", "spot_finding", "find_spots", None),
-                                              ("Decoding", "decoding", "decode_barcodes", None),
+                                              ("Decoding", "decoding", "decode_reads", None),
                                               ("Read QC filter", "filtering", "filter_reads", None)):
                 if pipeline.get(key) is None:
                     fov_cards.append(card(title, off="not run"))

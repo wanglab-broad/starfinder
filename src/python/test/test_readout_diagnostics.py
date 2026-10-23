@@ -13,7 +13,7 @@ import pandas as pd
 import pytest
 
 import starfinder.readout as readout
-from starfinder.readout import (DeduplicationConfig, ReadFilterConfig, ReadScoreConfig, decode_barcodes,
+from starfinder.readout import (DeduplicationConfig, ReadFilterConfig, ReadScoreConfig, decode_reads,
                                 explain_read, filter_reads, inspect_read, plot_read, score_reads, summarize_reads)
 from starfinder.readout import diagnostics as diagnostics_module
 from starfinder._records import jsonable as _jsonable
@@ -32,7 +32,7 @@ pytestmark = [pytest.mark.readout]
 def golden_reads(tmp_path, decoder, **options):
     book = golden_codebook(tmp_path)
     intensities = extract()
-    decoded = decode_barcodes(intensities, book, config=readout_config("decoding", decoder=decoder, **options))
+    decoded = decode_reads(intensities, book, config=readout_config("decoding", decoder=decoder, **options))
     return book, intensities, decoded
 
 
@@ -153,7 +153,7 @@ def test_inspect_read_shows_the_tied_round_of_spot_4(tmp_path):
     np.testing.assert_allclose(table.subtracted, table["sum"] - table.background_sum, rtol=0, atol=0)
     np.testing.assert_allclose(table.groupby("round").probability.sum(), 1.0, rtol=0, atol=1e-12)
     # The codebook-aware call of spot 4 assigns GeneE (2222); the colors and bases of its entry.
-    rescued = decode_barcodes(intensities, book, config=readout_config("decoding", decoder="codebook_aware"))
+    rescued = decode_reads(intensities, book, config=readout_config("decoding", decoder="codebook_aware"))
     table = inspect_read(intensities, rescued, TIED_SPOT, reference=book)
     assert table.assigned_color[table.assigned].tolist() == list("2222")
     assert table.assigned.sum() == len(ROUNDS) and table.segment.unique().tolist() == ["A"]

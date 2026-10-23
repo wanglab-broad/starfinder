@@ -137,7 +137,7 @@ def test_result_classes_have_one_line_summaries(tmp_path):
         (ds.codebook, "Codebook: 2 genes × 2 rounds, channels a, b, c, d; encoding two_base, one segment of 2 colors"),
         (fov.spot_result, "SpotFindingResult: 4 spots × [spot_id, z, y, x, ...]"),
         (fov.intensity_result, "IntensityExtractionResult: 4 spots × 4 channels × 2 rounds"),
-        (fov.decoding_result, "BarcodeDecodingResult: 4 reads — assigned 1, ambiguous 2, unmatched 1"),
+        (fov.decoding_result, "ReadDecodingResult: 4 reads — assigned 1, ambiguous 2, unmatched 1"),
         (fov.filtering_result, "ReadFilteringResult: 1 accepted / 4 (25.0%), rejected 3 — call_status 3"),
         (fov.registration_results['round2'][0],
          "RegistrationResult: translation (scipy_fft), displacement_zyx (0, 0, 0)"),
@@ -153,7 +153,7 @@ def test_result_classes_have_one_line_summaries(tmp_path):
                         r'(call_status|score:wta_l2_nll) \d+, (call_status|score:wta_l2_nll) \d+', text)
     assert 'precision' not in text.lower() and 'accuracy' not in text.lower()
     empty = replace(fov.decoding_result, table=fov.decoding_result.table.iloc[:0])
-    assert repr(empty) == "BarcodeDecodingResult: 0 reads"
+    assert repr(empty) == "ReadDecodingResult: 0 reads"
     assert repr(filter_reads(empty)) == "ReadFilteringResult: 0 accepted / 0 (undefined), rejected 0"
 
     dense = resident(ds).run(PipelineConfig(registration=RegistrationRecipe((RegistrationStep(DemonsConfig(iterations=(1,))),))))

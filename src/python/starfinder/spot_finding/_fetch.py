@@ -9,8 +9,8 @@ import tempfile
 from starfinder._records import file_sha256
 from starfinder._weights import RECORD_NAME
 
-from ._errors import WeightsHashMismatchError
-from ._weights import _listed, listed_files, resolve_weights
+from ._errors import ModelHashMismatchError
+from ._weights import _listed, listed_files, resolve_model
 
 
 def _record(entry, folder):
@@ -22,7 +22,7 @@ def _record(entry, folder):
 
 
 def _checked(entry):
-    """The files of entry that detection and verify check: every file KNOWN_WEIGHTS lists for the model."""
+    """The files of entry that detection and verify check: every file KNOWN_MODELS lists for the model."""
     return _listed(entry, listed_files(entry.method, entry.model))
 
 
@@ -32,11 +32,11 @@ def _stage(entry, staging):
     download = staging / "download"
     size, sha256, md5 = _download(entry.url, download)
     if size != entry.bytes or sha256 != entry.sha256:
-        raise WeightsHashMismatchError(
+        raise ModelHashMismatchError(
             f"{entry.url}: downloaded {size} bytes with SHA-256 {sha256}, expected {entry.bytes} bytes with "
             f"SHA-256 {entry.sha256}")
     if entry.md5 is not None and md5 != entry.md5:
-        raise WeightsHashMismatchError(f"{entry.url}: MD5 {md5}, expected the library's {entry.md5}")
+        raise ModelHashMismatchError(f"{entry.url}: MD5 {md5}, expected the library's {entry.md5}")
     if entry.archive:
         extracted = _extract(download, staging / "extracted")
     else:
@@ -46,18 +46,18 @@ def _stage(entry, staging):
     for item in _checked(entry):
         path = extracted / item.path
         if not path.is_file():
-            raise WeightsHashMismatchError(f"{entry.url}: the download has no {item.path}")
+            raise ModelHashMismatchError(f"{entry.url}: the download has no {item.path}")
         actual = file_sha256(path)
         if actual != item.sha256:
-            raise WeightsHashMismatchError(f"{entry.url}: {item.path} has SHA-256 {actual}, expected {item.sha256}")
+            raise ModelHashMismatchError(f"{entry.url}: {item.path} has SHA-256 {actual}, expected {item.sha256}")
     return extracted
 
 
 def fetch(entry, root):
-    """Install entry under root/<method>/<model>/ after verifying the download; see fetch_weights.
+    """Install entry under root/<method>/<model>/ after verifying the download; see fetch_model.
 
     An existing folder is checked file by file against every listed file. A
-    present file that differs raises WeightsHashMismatchError and a folder
+    present file that differs raises ModelHashMismatchError and a folder
     without a record raises FileExistsError; neither is changed. When every
     present file verifies, the missing listed files, if any, are restored from
     one verified download and the record is rewritten. A present file is never
@@ -75,7 +75,7 @@ def fetch(entry, root):
                 continue
             actual = file_sha256(path)
             if actual != item.sha256:
-                raise WeightsHashMismatchError(
+                raise ModelHashMismatchError(
                     f"{entry.method} model {entry.model!r}: {path} has SHA-256 {actual}, expected {item.sha256}; "
                     f"fetch never overwrites a present file, so remove {folder} and fetch again")
         if not (folder / RECORD_NAME).is_file():
@@ -100,5 +100,5 @@ def fetch(entry, root):
             os.replace(extracted, folder)
     finally:
         shutil.rmtree(staging, ignore_errors=True)
-    return resolve_weights(entry.method, entry.model, directory=root,
+    return resolve_model(entry.method, entry.model, directory=root,
                            extracted=listed_files(entry.method, entry.model))

@@ -2,7 +2,7 @@
 docs/spot-finding-contract.md, "Pretrained weights" and "Execution device").
 
 Extended tier, CPU only, one thread: skipped without the spotiflow extra, and failing with
-MissingWeightsError when the extra is installed but the weights were not fetched into
+MissingModelError when the extra is installed but the weights were not fetched into
 STARFINDER_WEIGHTS_DIR. The S1, S2 and S13 cases and the forced n_tiles case this file repeated, with the same
 models, scenes, seeds and bounds, run only in test_spot_finding_validation.py (S1, S2, S13 and S8), which holds
 all their assertions (W-537). Bounds and their sources:
@@ -28,7 +28,7 @@ import pytest
 from starfinder.__main__ import main
 from starfinder.dataset import CheckpointConfig, PipelineConfig
 from starfinder.image import IncompatibleGeometryError
-from starfinder.spot_finding import KNOWN_WEIGHTS, SpotiflowConfig, WeightsHashMismatchError
+from starfinder.spot_finding import KNOWN_MODELS, SpotiflowConfig, ModelHashMismatchError
 from starfinder.spot_finding import _learned
 from starfinder._weights import weights_directory
 
@@ -42,7 +42,7 @@ MODELS_3D, MODELS_2D = ("synth_3d", "smfish_3d"), ("general", "hybiss")
 SCENE = {**{m: "iso3d" for m in MODELS_3D}, **{m: "iso_z1" for m in MODELS_2D}}
 # The prob_thresh stored with each model (thresholds.yaml prob_thresh_best; W-266 known-weights.csv).
 STORED = {"synth_3d": 0.3, "smfish_3d": 0.4, "general": 0.49999999999999994, "hybiss": 0.5319999999999999}
-# Every file KNOWN_WEIGHTS lists for a Spotiflow model, in the order of the artifacts: each is verified on
+# Every file KNOWN_MODELS lists for a Spotiflow model, in the order of the artifacts: each is verified on
 # every detection (Spotiflow.from_folder itself reads best.pt, config.yaml and thresholds.yaml).
 LISTED = ("best.pt", "config.yaml", "last.pt", "thresholds.yaml", "train_config.yaml")
 
@@ -124,11 +124,11 @@ def test_s14_a_changed_hash_raises_before_spotiflow_from_folder(changed, no_load
     from spotiflow.model import Spotiflow
     calls = []
     monkeypatch.setattr(Spotiflow, "from_folder", classmethod(lambda cls, *a, **k: calls.append(a)))
-    entry = KNOWN_WEIGHTS[("spotiflow", "smfish_3d")]
+    entry = KNOWN_MODELS[("spotiflow", "smfish_3d")]
     wrong = lambda files: tuple(replace(f, sha256="0" * 64) if f.path == changed else f for f in files)
-    monkeypatch.setitem(KNOWN_WEIGHTS, ("spotiflow", "smfish_3d"),
+    monkeypatch.setitem(KNOWN_MODELS, ("spotiflow", "smfish_3d"),
                         replace(entry, files=wrong(entry.files), extracted=wrong(entry.extracted)))
-    with pytest.raises(WeightsHashMismatchError, match=f"{changed} has SHA-256 [0-9a-f]{{64}}, expected 0{{64}}"):
+    with pytest.raises(ModelHashMismatchError, match=f"{changed} has SHA-256 [0-9a-f]{{64}}, expected 0{{64}}"):
         detect(spot((8, 16, 16)), SpotiflowConfig("smfish_3d"))
     assert calls == []
 
@@ -217,7 +217,7 @@ def test_s14_no_library_cache_is_read_or_written_with_an_empty_home(tmp_path):
 @pytest.mark.parametrize("model", MODELS_3D + MODELS_2D)
 def test_records_effective_settings_model_execution_and_columns(model):
     image, _, result = isolated(model, 100)
-    entry = KNOWN_WEIGHTS[("spotiflow", model)]
+    entry = KNOWN_MODELS[("spotiflow", model)]
     diagnostics = result.diagnostics
     (effective,) = diagnostics["effective_settings"].values()
     assert effective["prob_thresh"] == STORED[model] == entry.native_threshold

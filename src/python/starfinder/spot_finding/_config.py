@@ -36,7 +36,7 @@ def _positive(value):
 def _model(method, model):
     """The known-weights entry of a named model; ValueError lists the method's known models."""
     if not isinstance(model, str) or not model:
-        raise ValueError(f"model must name a {method} model of KNOWN_WEIGHTS")
+        raise ValueError(f"model must name a {method} model of KNOWN_MODELS")
     return known_weights(method, model)
 
 
@@ -137,7 +137,7 @@ class StarfishLogConfig:
 class SpotiflowConfig:
     """Spotiflow 0.6.5 with named pretrained weights, one channel at a time (extra ``spotiflow``).
 
-    model names a spotiflow row of KNOWN_WEIGHTS (there is no default): a 3D
+    model names a spotiflow row of KNOWN_MODELS (there is no default): a 3D
     model (synth_3d, smfish_3d) detects Z>1 images in 3D and a 2D model
     (general, hybiss) detects Z=1 images as a YX plane (z=0); any other
     pairing raises IncompatibleGeometryError. prob_thresh is the probability
@@ -180,7 +180,7 @@ class SpotiflowConfig:
 class PiscisConfig:
     """Piscis 1.1.0 (the Piscis class) with named pretrained weights, one channel at a time (extra ``piscis``).
 
-    model names a piscis row of KNOWN_WEIGHTS (there is no default, and
+    model names a piscis row of KNOWN_MODELS (there is no default, and
     Starfinder does not choose between them). A Z=1 image is detected in
     plane mode (z=0) and a Z>1 image in stack mode, where z is an integer and
     vertically aligned spots merge across planes. threshold is the max-pooled

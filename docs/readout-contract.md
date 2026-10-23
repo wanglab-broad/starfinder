@@ -24,6 +24,10 @@ implemented, and nothing here renames anything: the existing names
 Later note: W-556 renamed the module `starfinder.barcode` to `starfinder.readout`
 (W-526, NM-12); the decision text above is kept as written.
 
+Later note: W-557 renamed `BarcodeDecodingResult` to `ReadDecodingResult` and
+`decode_barcodes` to `decode_reads` (W-526, NC-01 and NM-16); the decision text above
+and option N1 below are kept as written.
+
 The measured evidence comes from W-278, run directory
 `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/runs/W-278/20261002T011718Z-0cfc7de7`
 (handoff `worker-notes.md`; tables `estimators.csv`, `scores.csv`, `direct.csv`,
@@ -124,7 +128,7 @@ New names under N1:
 | Segment layout | `BarcodeLayout`, `Segment`; `Codebook.layout` | frozen dataclasses |
 | Codebook entries | `Codebook.table` column `entry_id`; `n_entries`, `seq_to_entry`, `entry_to_seq` | codebook |
 | Direct mapping | `DirectPanel`, `load_direct_panel`; `Dataset.direct_panel`, `Dataset.load_direct_panel` | dataset |
-| Direct assignment | `DirectAssignmentConfig`, `assign_direct` | config, function |
+| Direct assignment | `DirectDecoderConfig`, `decode_direct` | config, function |
 | Background | `LocalBackgroundConfig`; `NeighborhoodSumConfig.background`; result fields `background`, `noise`, `background_voxels`, `box_voxels`, `image_background`, `image_noise` | config, result fields |
 | Score | `ReadScoreConfig`, `score_reads`, `ReadScoringResult`; `PipelineConfig.scoring` | config, function, result |
 | Deduplication | `DeduplicationConfig`, `deduplicate_reads`, `ReadDeduplicationResult`; `PipelineConfig.deduplication` | config, function, result |
@@ -154,7 +158,7 @@ already holds, so it is a dataset setting. `FOV.run` reads it from `fov.dataset`
 
 A decoder declares the modes it supports in `DecodingSpec.modes`: `wta` and
 `codebook_aware` support `multiplexed`, `direct` supports `direct`. `FOV.run` and
-`decode_barcodes` raise `TypeError` naming the mode and the decoder when they do not
+`decode_reads` raise `TypeError` naming the mode and the decoder when they do not
 match, and `ValueError` when the mode's reference (codebook or panel) is not loaded.
 In `multiplexed` mode a candidate table with a `round` column still raises
 `ValueError`; its message keeps the words "needs a readout mode (§2.8)" and adds
@@ -181,7 +185,7 @@ discriminator equal to its spec name. `EncodingSpec` adds:
 
 | Name | Config (parameters, defaults) | `encode` | `decode` | `colors_for(n)` | `needs_first_base` | `junction_colors` |
 | --- | --- | --- | --- | --- | --- | --- |
-| `two_base` | `EncodingConfig(reverse_bases=True, pair_to_color=<default table>)`; the legacy `split_index` stays as a field, translated into a two-segment layout and mutually exclusive with `Codebook.layout` | `pair_to_color` of each adjacent pair of `bases[::-1] if reverse_bases else bases` (with the default table, `encode_bases`) | from `first_base`, each color gives the one next base through `pair_to_color` (with the default table, `decode_color_sequence(colors, first_base)`), reversed back when `reverse_bases` | `n − 1` | yes | 1 |
+| `two_base` | `EncodingConfig(reverse_bases=True, pair_to_color=<default table>)`; the legacy `split_index` stays as a field, translated into a two-segment layout and mutually exclusive with `Codebook.layout` | `pair_to_color` of each adjacent pair of `bases[::-1] if reverse_bases else bases` (with the default table, `bases_to_colors`) | from `first_base`, each color gives the one next base through `pair_to_color` (with the default table, `colors_to_bases(colors, first_base)`), reversed back when `reverse_bases` | `n − 1` | yes | 1 |
 | `one_base` | `OneBaseEncodingConfig(base_to_color, reverse_bases=False)`: `base_to_color` maps `A`, `C`, `G`, `T` to distinct colors `1`–`4` and has no default | `"".join(base_to_color[b] for b in bases)`, reversed first when `reverse_bases` | the inverse mapping | `n` | no | 0 |
 
 **The `two_base` table (W-304).** `EncodingConfig.pair_to_color` maps each of the
@@ -199,7 +203,7 @@ example the second table kept as comments in `EncodeBases.m`) or pair the bases
 differently. Every encode and decode path uses the codebook's table: the codebook's
 color sequences, the per-segment end-base checks and the `end_bases` shortcut of
 `filter_reads` (given the codebook), `inspect_read` and `explain_read`; the module
-functions `encode_bases` and `decode_color_sequence` keep the default table and
+functions `bases_to_colors` and `colors_to_bases` keep the default table and
 their signatures. `EncodingSpec.table(config)` returns the table of either encoding;
 `Codebook.encoding_table()` shows it as a table with the columns `bases`, `color`
 and `channel` (the channel label of the color through `color_to_channel`): 16 rows
@@ -217,7 +221,7 @@ decodes), `rescue` (whether it can change an observed color) and `score_columns`
 `codebook_aware` declare `encodings={"color"}`: they decode one color per round
 from the four-color alphabet and use nothing else from the encoding, so they
 support `two_base` and `one_base` unchanged. `direct` declares no encoding.
-`decode_barcodes` raises `TypeError` when the codebook's encoding kind is not
+`decode_reads` raises `TypeError` when the codebook's encoding kind is not
 among the decoder's.
 
 **Adding a different code type.** A binary on/off code (one bit per channel per
@@ -556,7 +560,7 @@ registries by a default-tier test, as for the other stages ({doc}`method-registr
 The implementation adds these entries:
 
 1. **Readout mode.** `Dataset.readout_mode`, `DirectPanel`, `load_direct_panel`,
-   `DirectAssignmentConfig`, `assign_direct`; the YAML key `readout_mode`; decoding a
+   `DirectDecoderConfig`, `decode_direct`; the YAML key `readout_mode`; decoding a
    multi-round candidate set needs `readout_mode="direct"`.
 2. **Encodings and decoders.** `ENCODINGS` with `two_base` (`EncodingConfig`, now
    with `method`) and `one_base` (`OneBaseEncodingConfig`); `DECODING_METHODS`;
@@ -601,7 +605,7 @@ The implementation adds these entries:
   its digests (b) and (d) are re-pinned with a comment naming the decision.
 * `test/test_readout_examples.py`: the reference functions of the expected `one_base`
   and direct-readout behavior are replaced by calls to `ENCODINGS` and
-  `assign_direct`; every asserted value stays.
+  `decode_direct`; every asserted value stays.
 * `test/test_readout.py`: one named edit. The case `"A,CACGC\nA,CATGC\n"` of
   `test_invalid_csv_has_row_context` (`test_readout.py:59-74`) requires two different
   barcodes for one gene to raise, which D5 reverses. The task-group-2 issue removes

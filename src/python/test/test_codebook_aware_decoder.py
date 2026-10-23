@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from starfinder.readout import (
-    decode_barcodes,
+    decode_reads,
     WtaDecoderConfig,
     CodebookAwareDecoderConfig,
     InvalidIntensityError,
@@ -18,7 +18,7 @@ pytestmark = pytest.mark.readout
 
 
 def decode(values, mapping, **options):
-    return decode_barcodes(
+    return decode_reads(
         intensity(values), codebook(mapping), config=CodebookAwareDecoderConfig(**options)
     )
 
@@ -27,8 +27,8 @@ def test_known_wta_and_probability_score_semantics():
     values = np.array([[[3.0], [4.0], [0.0], [0.0]]])
     ext = intensity(values)
     book = codebook({"2": "gene"})
-    wta = decode_barcodes(ext, book, config=WtaDecoderConfig(diagnostics=True))
-    aware = decode_barcodes(ext, book, config=CodebookAwareDecoderConfig(diagnostics=True))
+    wta = decode_reads(ext, book, config=WtaDecoderConfig(diagnostics=True))
+    aware = decode_reads(ext, book, config=CodebookAwareDecoderConfig(diagnostics=True))
     assert wta.table.wta_l2_nll[0] == pytest.approx(-np.log(4 / (5 + 1e-6)))
     assert aware.table.probability_nll[0] == pytest.approx(-np.log((4 + 1e-6) / (7 + 4e-6)))
     assert wta.table.gene_id[0] == aware.table.gene_id[0] == "gene"
@@ -123,7 +123,7 @@ def test_zero_signal_is_not_rescued_but_nonzero_tie_can_be():
     assert rescued.table.call_type[0] == "rescued_unknown"
     ambiguous = decode(values, {"4422": "A", "4322": "B"}, min_geomean_probability=0.1)
     assert ambiguous.table.call_status[0] == "ambiguous"
-    wta = decode_barcodes(intensity(values), codebook({"4422": "A"}), config=WtaDecoderConfig())
+    wta = decode_reads(intensity(values), codebook({"4422": "A"}), config=WtaDecoderConfig())
     assert wta.table.call_status[0] == "ambiguous"
 
 
@@ -132,8 +132,8 @@ def test_negatives_separate_from_zero_and_ties(config):
     values = np.array([[[3.0], [-2.0], [0.0], [-1.0]]])
     original = values.copy()
     with pytest.raises(InvalidIntensityError):
-        decode_barcodes(intensity(values), codebook({"1": "A"}), config=config)
-    result = decode_barcodes(
+        decode_reads(intensity(values), codebook({"1": "A"}), config=config)
+    result = decode_reads(
         intensity(values),
         codebook({"1": "A"}),
         config=replace(config, negative_policy="clip_negative"),
@@ -150,18 +150,18 @@ def test_labels_mapping_invalid_masks_and_empty_schema():
     ext = intensity(tensor(["1234"]))
     book = codebook({"1234": "A"})
     with pytest.raises(ValueError, match="labels"):
-        decode_barcodes(
+        decode_reads(
             ext, replace(book, round_labels=book.round_labels[::-1]), config=WtaDecoderConfig()
         )
     mapping = {"1": 1, "2": 0, "3": 2, "4": 3}
     remapped = replace(book, color_to_channel=mapping)
     vals = ext.values[:, [1, 0, 2, 3], :]
-    mapped = decode_barcodes(
+    mapped = decode_reads(
         replace(ext, values=vals), remapped, config=CodebookAwareDecoderConfig(diagnostics=True)
     )
     assert mapped.table.gene_id[0] == "A"
     assert mapped.diagnostics["probabilities"][0, :, 0].argmax() == 1
-    invalid = decode_barcodes(
+    invalid = decode_reads(
         replace(ext, valid=np.zeros((1, 4), bool)), book, config=WtaDecoderConfig()
     )
     assert invalid.table.failure_reason[0] == "invalid_measurement"
@@ -169,7 +169,7 @@ def test_labels_mapping_invalid_masks_and_empty_schema():
         WtaDecoderConfig(diagnostics=True),
         CodebookAwareDecoderConfig(diagnostics=True),
     ):
-        empty = decode_barcodes(intensity(np.empty((0, 4, 4))), book, config=config)
+        empty = decode_reads(intensity(np.empty((0, 4, 4))), book, config=config)
         assert empty.table.empty and isinstance(empty.table.spot_id.dtype, pd.StringDtype)
         filtered = filter_reads(empty)
         assert filtered.counts == {"total": 0, "accepted": 0, "rejected": 0}
@@ -200,8 +200,8 @@ def test_filter_rerun_scores_endpoints_and_all_rejected():
 def test_wta_exact_tie_vs_probability_tolerance_is_explicit():
     values = np.array([[[1.0], [1.0 + 1e-13], [0.0], [0.0]]])
     book = codebook({"1": "A", "2": "B"})
-    wta = decode_barcodes(intensity(values), book, config=WtaDecoderConfig())
-    aware = decode_barcodes(
+    wta = decode_reads(intensity(values), book, config=WtaDecoderConfig())
+    aware = decode_reads(
         intensity(values), book, config=CodebookAwareDecoderConfig(min_score_delta=0)
     )
     assert wta.table.call_status[0] == "assigned" and wta.table.gene_id[0] == "B"

@@ -362,14 +362,14 @@ def test_keyboard_interrupt_is_recorded_as_interrupted(tmp_path, monkeypatch):
 
     def interrupt(*args, **kwargs):
         raise KeyboardInterrupt
-    monkeypatch.setattr(readout, 'decode_barcodes', interrupt)
+    monkeypatch.setattr(readout, 'decode_reads', interrupt)
     fov = resident(dataset(tmp_path))
     with pytest.raises(KeyboardInterrupt):
         fov.run(full(), checkpoints=CheckpointConfig())
     data = record(fov)
     assert data['status'] == 'interrupted'
     assert (data['error']['step'], data['error']['round'], data['error']['type']) == (
-        'decode_barcodes', None, 'KeyboardInterrupt')
+        'decode_reads', None, 'KeyboardInterrupt')
     # Earlier stages remain usable after the interruption.
     assert data['checkpoints']['candidates'] == ['candidates.csv', 'candidates.json']
     assert 'pre_qc' not in data['checkpoints']
@@ -491,6 +491,14 @@ def test_run_record_fields_inputs_and_hashes(tmp_path):
     assert {entry['sha256'] for entry in record(fov)['inputs']} == {None}
 
 
+def test_run_record_names_the_decoding_step_after_fov_decode_reads(tmp_path):
+    # W-557 (NC-01): the step name is the decorated FOV method's name.
+    fov = resident(dataset(tmp_path)).run(full(), checkpoints=CheckpointConfig())
+    names = [s['name'] for s in record(fov)['steps']]
+    assert names.count('decode_reads') == 1
+    assert names.index('write_checkpoint:candidates') < names.index('decode_reads') < names.index('filter_reads')
+
+
 def test_run_record_keeps_the_spot_finding_config_under_its_field_name(tmp_path):
     fov = resident(dataset(tmp_path)).run(PipelineConfig(**DETECT), checkpoints=CheckpointConfig(stages=()))
     data = record(fov)
@@ -536,7 +544,7 @@ def test_overwrite_run_never_leaves_a_stale_stage_loadable(tmp_path, monkeypatch
 
     def fail(*args, **kwargs):
         raise injected
-    monkeypatch.setattr(readout, 'decode_barcodes', fail)
+    monkeypatch.setattr(readout, 'decode_reads', fail)
     with pytest.raises(RuntimeError):
         resident(ds).run(full(), checkpoints=CheckpointConfig(hash_inputs=False, overwrite=True))
     data = record(ds.fov('FOV'))

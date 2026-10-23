@@ -1,7 +1,7 @@
 """Pretrained weights: the known-weights table, the local cache and hash-checked resolution.
 
 Starfinder fetches weights only on an explicit command (``starfinder weights
-fetch`` or fetch_weights) and never through a detection: this module does not
+fetch`` or fetch_model) and never through a detection: this module does not
 use the network, and the fetch code lives in a module that detection never
 imports. Weights are loaded from explicit paths in the cache, never from the
 libraries' own caches.
@@ -12,7 +12,7 @@ from pathlib import Path
 from starfinder._records import file_sha256
 from starfinder._weights import model_folder, weights_directory
 
-from ._errors import MissingWeightsError, WeightsHashMismatchError
+from ._errors import MissingModelError, ModelHashMismatchError
 
 _SPOTIFLOW_RELEASE = "https://github.com/weigertlab/spotiflow-models/releases/download/0.6.0"
 _PISCIS_REVISION = "9bdefc72cb519053c63fd2d7bff9d12db7bb394e"
@@ -23,7 +23,7 @@ _OPERATOR = ("operator-retrieved on 2026-10-01 (W-266 recovery note R-20261001T0
 
 
 @dataclass(frozen=True)
-class WeightsFile:
+class ModelFile:
     """A file of a model folder that the library loads: path relative to the folder, SHA-256 and size."""
     path: str
     sha256: str
@@ -31,7 +31,7 @@ class WeightsFile:
 
 
 @dataclass(frozen=True)
-class KnownWeights:
+class KnownModel:
     """One row of the known-weights table (W-266 known-weights.csv).
 
     url is the file Starfinder downloads, with its SHA-256 and size; md5 is
@@ -43,7 +43,7 @@ class KnownWeights:
     input). native_threshold is the threshold stored with the weights or the
     library default. extracted is every file a Spotiflow archive extracts to,
     with its SHA-256 and size, recorded from the verified archives (empty for
-    Piscis, whose download is the loaded file); resolve_weights checks the ones
+    Piscis, whose download is the loaded file); resolve_model checks the ones
     a caller names.
     """
     method: str
@@ -55,33 +55,33 @@ class KnownWeights:
     bytes: int
     md5: str | None
     archive: bool
-    files: tuple[WeightsFile, ...]
+    files: tuple[ModelFile, ...]
     min_shape_zyx: tuple[int, int, int]
     training_pixel_size: str
     training_pixel_size_provenance: str
     native_threshold: float
-    extracted: tuple[WeightsFile, ...] = ()
+    extracted: tuple[ModelFile, ...] = ()
 
 
 def _spotiflow(model, dimensionality, sha256, size, md5, best, best_bytes, minimum, pixels, threshold, extracted):
-    best = WeightsFile("best.pt", best, best_bytes)
-    extracted = tuple(sorted((best, *(WeightsFile(*item) for item in extracted)), key=lambda f: f.path))
-    return KnownWeights(
+    best = ModelFile("best.pt", best, best_bytes)
+    extracted = tuple(sorted((best, *(ModelFile(*item) for item in extracted)), key=lambda f: f.path))
+    return KnownModel(
         "spotiflow", model, dimensionality, f"{_SPOTIFLOW_RELEASE}/{model}.zip", "spotiflow-models release 0.6.0",
         sha256, size, md5, True, (best,), minimum, pixels, f"{_SPOTIFLOW_PIXELS}; {_OPERATOR}", threshold, extracted)
 
 
 def _piscis(model, sha256, size):
-    return KnownWeights(
+    return KnownModel(
         "piscis", model, "2D network; stack mode links planes", f"{_PISCIS_FILES}/{model}.pt",
-        f"wniu/Piscis {_PISCIS_REVISION}", sha256, size, None, False, (WeightsFile(f"{model}.pt", sha256, size),),
+        f"wniu/Piscis {_PISCIS_REVISION}", sha256, size, None, False, (ModelFile(f"{model}.pt", sha256, size),),
         (2, 1, 1), "not published by the authors", _OPERATOR, 0.5)
 
 
-# The known-weights table: (method, model) -> KnownWeights. It sets no default model. The extracted files of
+# The known-weights table: (method, model) -> KnownModel. It sets no default model. The extracted files of
 # the Spotiflow archives besides best.pt were hashed from the archives that matched the table's SHA-256 and the
 # library's MD5 (W-272; the operator's fetched copies and the W-266 spike copies agree).
-KNOWN_WEIGHTS: dict[tuple[str, str], KnownWeights] = {
+KNOWN_MODELS: dict[tuple[str, str], KnownModel] = {
     (entry.method, entry.model): entry for entry in (
         _spotiflow("synth_3d", "3D", "2468125c8c1a8bb6f6364f439d50ff08e24a15e6fa4c0c2cf43b26667393038b", 263107693,
                    "a031f1284590886fbae37dc583c0270d",
@@ -125,14 +125,14 @@ KNOWN_WEIGHTS: dict[tuple[str, str], KnownWeights] = {
 }
 
 
-def known_weights(method: str, model: str) -> KnownWeights:
+def known_weights(method: str, model: str) -> KnownModel:
     """The table entry of (method, model); ValueError lists the known models of the method."""
-    entry = KNOWN_WEIGHTS.get((method, model))
+    entry = KNOWN_MODELS.get((method, model))
     if entry is None:
-        known = sorted(m for k, m in KNOWN_WEIGHTS if k == method)
+        known = sorted(m for k, m in KNOWN_MODELS if k == method)
         raise ValueError(f"unknown {method} model {model!r}; known models: {known}" if known else
                          f"no known weights for method {method!r}; known methods: "
-                         f"{sorted({k for k, _ in KNOWN_WEIGHTS})}")
+                         f"{sorted({k for k, _ in KNOWN_MODELS})}")
     return entry
 
 
@@ -151,11 +151,11 @@ def _listed(entry, extracted):
 
 
 def listed_files(method: str, model: str) -> tuple[str, ...]:
-    """Every file KNOWN_WEIGHTS lists for a model: its files and every extracted file, as extracted= names."""
+    """Every file KNOWN_MODELS lists for a model: its files and every extracted file, as extracted= names."""
     return tuple(item.path for item in known_weights(method, model).extracted)
 
 
-def resolve_weights(method: str, model: str, *, directory=None, extracted: tuple[str, ...] = ()) -> Path:
+def resolve_model(method: str, model: str, *, directory=None, extracted: tuple[str, ...] = ()) -> Path:
     """Verified local folder of a known model, without using the network or the library.
 
     Checks that the folder and every file the table lists exist, and
@@ -163,9 +163,9 @@ def resolve_weights(method: str, model: str, *, directory=None, extracted: tuple
     entry's extracted list (paths in the folder) to check the same way;
     detection and ``starfinder weights verify`` name all of them
     (listed_files). Raises
-    ValueError for an unknown model or extracted file, MissingWeightsError
+    ValueError for an unknown model or extracted file, MissingModelError
     (naming the method, model, expected path and fetch command) when
-    something is missing, and WeightsHashMismatchError (naming the file and
+    something is missing, and ModelHashMismatchError (naming the file and
     both hashes) when a hash differs.
     """
     entry = known_weights(method, model)
@@ -173,24 +173,24 @@ def resolve_weights(method: str, model: str, *, directory=None, extracted: tuple
     for item in _listed(entry, extracted):
         path = folder / item.path
         if not path.is_file():
-            raise MissingWeightsError(
+            raise MissingModelError(
                 f"{method} model {model!r}: weights file {path} is missing; fetch it with "
                 f"'{fetch_command(method, model, directory)}'")
         actual = file_sha256(path)
         if actual != item.sha256:
-            raise WeightsHashMismatchError(
+            raise ModelHashMismatchError(
                 f"{method} model {model!r}: {path} has SHA-256 {actual}, expected {item.sha256}")
     return folder
 
 
 def weights_artifacts(method: str, model: str, folder, extracted: tuple[str, ...] = ()) -> list[dict]:
-    """The provenance artifacts entries of a resolved model: one per verified file (see resolve_weights)."""
+    """The provenance artifacts entries of a resolved model: one per verified file (see resolve_model)."""
     entry = known_weights(method, model)
     return [{"name": f"{method}/{model}", "path": str((Path(folder) / item.path).resolve()), "sha256": item.sha256,
              "source": entry.url, "revision": entry.revision} for item in _listed(entry, extracted)]
 
 
-def fetch_weights(method: str, model: str, *, directory=None) -> Path:
+def fetch_model(method: str, model: str, *, directory=None) -> Path:
     """Download, verify and install one known model into the cache; return its folder.
 
     The source file is downloaded to a temporary name in the target

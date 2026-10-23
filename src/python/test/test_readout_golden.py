@@ -34,7 +34,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from starfinder.readout import decode_barcodes, extract_intensities, filter_reads, load_codebook
+from starfinder.readout import decode_reads, extract_intensities, filter_reads, load_codebook
 from starfinder.dataset import Dataset, RoundState
 from starfinder.dataset.workflow import from_workflow_config
 from starfinder.image import ImageMetadata
@@ -202,9 +202,9 @@ def candidates():
 
 def write_codebook(directory):
     """genes.csv-style gene,barcode file of the 5-base barcodes of CODEWORDS (start base C)."""
-    from starfinder.readout import decode_color_sequence
+    from starfinder.readout import colors_to_bases
     path = directory / "codebook.csv"
-    rows = [f"{gene},{decode_color_sequence(colors, 'C')[::-1]}" for colors, gene in CODEWORDS.items()]
+    rows = [f"{gene},{colors_to_bases(colors, 'C')[::-1]}" for colors, gene in CODEWORDS.items()]
     path.write_text("\n".join(rows) + "\n")
     return path
 
@@ -244,7 +244,7 @@ def extract(radius=(1, 2, 2)):
 
 
 def decode(directory, decoder, **options):
-    return decode_barcodes(extract(), golden_codebook(directory),
+    return decode_reads(extract(), golden_codebook(directory),
                            config=readout_config("decoding", decoder=decoder, **options))
 
 
@@ -539,4 +539,4 @@ def test_candidates_with_a_round_column_raise_on_decoding(tmp_path):
     fov.spot_result = SpotFindingResult(spots, METADATA, NAMESPACE, readout_config("detection"), {})
     fov.intensity_result = extract()
     with pytest.raises(ValueError, match="needs a readout mode"):
-        fov.decode_barcodes(config=readout_config("decoding"))
+        fov.decode_reads(config=readout_config("decoding"))

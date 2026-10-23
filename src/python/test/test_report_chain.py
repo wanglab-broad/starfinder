@@ -73,7 +73,7 @@ REPLAY_PARTS = ("preprocessing.example", "preprocessing.intensity", "registratio
 # A reason that a configuration or a record explains at every stage; any other reason makes its part unavailable.
 STANDING_REASONS = ("not_configured", "not_recorded")
 # The run-record steps that have a method in steps.csv (docs/report-contract.md, "steps.csv", method).
-STEPS_WITH_A_METHOD = ("preprocess:", "register", "find_spots", "decode_barcodes", "filter_reads")
+STEPS_WITH_A_METHOD = ("preprocess:", "register", "find_spots", "decode_reads", "filter_reads")
 DT1_SCRIPT = """
 import json
 import sys

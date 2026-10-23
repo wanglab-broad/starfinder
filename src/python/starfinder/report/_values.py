@@ -35,6 +35,17 @@ class _Marker:
 #: A null value that does not exist in its case; no row names it.
 NA = _Marker("NA")
 
+#: run.json step names written before a rename, mapped to the current name the report reads them as: a run
+#: recorded before W-557 names its decoding step after the FOV method of the time. Only the report's readers
+#: use this; steps.csv keeps the recorded name.
+RECORDED_STEP_NAMES = {"decode_barcodes": "decode_reads"}
+
+
+def step_name(name):
+    """The current name of a recorded run.json step name (``RECORDED_STEP_NAMES``); other names are unchanged."""
+    return RECORDED_STEP_NAMES.get(name, name)
+
+
 #: The seed of the draw of the main example ("The example FOVs"); part of the algorithm.
 EXAMPLE_SEED = 0
 #: The factor of the robust spread: s = 1.4826 × MAD.

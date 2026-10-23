@@ -14,7 +14,7 @@ from starfinder.readout import (
     IntensityExtractionResult,
     NeighborhoodSumConfig,
     CodebookAwareDecoderConfig,
-    decode_barcodes,
+    decode_reads,
     load_codebook,
     extract_intensities,
 )
@@ -64,7 +64,7 @@ def saved_decoding(
         CHANNELS,
     )
     options.setdefault("diagnostics", True)
-    return decode_barcodes(extracted, book, config=CodebookAwareDecoderConfig(**options))
+    return decode_reads(extracted, book, config=CodebookAwareDecoderConfig(**options))
 
 
 def tensor_diagnostics(values):

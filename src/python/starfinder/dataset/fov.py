@@ -30,7 +30,7 @@ from starfinder.dataset.types import REFERENCE_STAIN
 from starfinder.registration import (ExternalReference, RegistrationRecipe, RegistrationRejectedError, RegistrationResult,
     RegistrationSignalConfig, RegistrationStep, TransformChain, TranslationConfig, TranslationTransform, WarpConfig)
 from starfinder.readout import (DECODING_METHODS, Codebook, IntensityExtractionResult, NeighborhoodSumConfig,
-    WtaDecoderConfig, ReadFilterConfig, BarcodeDecodingResult, ReadFilteringResult, ReadScoreConfig,
+    WtaDecoderConfig, ReadFilterConfig, ReadDecodingResult, ReadFilteringResult, ReadScoreConfig,
     ReadScoringResult, DeduplicationConfig, ReadDeduplicationResult)
 from starfinder.readout.decoding import _mode_mismatch
 
@@ -143,7 +143,7 @@ class FOV:
     subtile_id: int | None = None
 
     intensity_result: IntensityExtractionResult | None = None
-    decoding_result: BarcodeDecodingResult | None = None
+    decoding_result: ReadDecodingResult | None = None
     filtering_result: ReadFilteringResult | None = None
     scoring_result: ReadScoringResult | None = None
     deduplication_result: ReadDeduplicationResult | None = None
@@ -1037,26 +1037,26 @@ class FOV:
             raise ValueError("Codebook not loaded. Call dataset.load_codebook() first.")
 
     @_log_step
-    def decode_barcodes(self, *, config=WtaDecoderConfig(diagnostics=True)):
+    def decode_reads(self, *, config=WtaDecoderConfig(diagnostics=True)):
         """Decode (multiplexed) or assign (direct) the stored intensities; retain every spot identity.
 
         In readout mode multiplexed a spot table with a ``round`` column
         (detection in several rounds) raises ValueError naming the readout
         mode (§2.8). In readout mode direct, config must be a
-        DirectAssignmentConfig and the candidates must have a ``round``
-        column; reads come from assign_direct with dataset.direct_panel. A
+        DirectDecoderConfig and the candidates must have a ``round``
+        column; reads come from decode_direct with dataset.direct_panel. A
         decoder that does not support the dataset's mode raises TypeError.
         """
-        from starfinder.readout import assign_direct, decode_barcodes
+        from starfinder.readout import decode_direct, decode_reads
         self._check_readout(config, self.spot_result is not None and 'round' in self.spot_result.spots)
         self._check_reference()
         # A score and a deduplication belong to the reads they were computed on.
         self.scoring_result = self.deduplication_result = None
         if self.dataset.readout_mode == 'direct':
-            self.decoding_result = assign_direct(self.intensity_result, self.spot_result,
+            self.decoding_result = decode_direct(self.intensity_result, self.spot_result,
                                                  self.dataset.direct_panel, config=config)
         else:
-            self.decoding_result = decode_barcodes(self.intensity_result, self.codebook, config=config)
+            self.decoding_result = decode_reads(self.intensity_result, self.codebook, config=config)
         return self
 
     @_log_step
@@ -1158,7 +1158,7 @@ class FOV:
         ``multiplexed`` mode decoding such a candidate set raises ValueError
         naming the readout mode; in ``direct`` mode each candidate is
         extracted in its own round only, its other rounds are valid=False,
-        and decoding is DirectAssignmentConfig, which needs such a candidate
+        and decoding is DirectDecoderConfig, which needs such a candidate
         set and dataset.direct_panel. A decoder that does not support the
         mode raises TypeError naming the mode and the decoder. Extraction reads
         the extraction_source snapshot (default: the detection image; without
@@ -1370,7 +1370,7 @@ class FOV:
                 self._write_checkpoint(stage='candidates', directory=record.directory,
                                        table_format=checkpoints.table_format)
             if config.decoding:
-                self.decode_barcodes(config=config.decoding)
+                self.decode_reads(config=config.decoding)
             if scoring:
                 self.score_reads(config=scoring)
             if config.deduplication:

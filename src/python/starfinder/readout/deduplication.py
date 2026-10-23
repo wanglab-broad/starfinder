@@ -14,7 +14,7 @@ import pandas as pd
 from scipy.spatial import cKDTree
 
 from starfinder.spot_finding import SpotFindingResult
-from .decoding import READOUT_MODES, BarcodeDecodingResult
+from .decoding import READOUT_MODES, ReadDecodingResult
 from .extraction import IntensityExtractionResult
 from .scoring import ReadScoringResult
 
@@ -128,7 +128,7 @@ def _components(n, links):
 
 
 def deduplicate_reads(
-    result: BarcodeDecodingResult | ReadScoringResult,
+    result: ReadDecodingResult | ReadScoringResult,
     spots: SpotFindingResult,
     intensity_result: IntensityExtractionResult,
     *,
@@ -166,8 +166,8 @@ def deduplicate_reads(
         Readout mode direct, candidates without a channel column, mismatched
         identities, or a detection round the intensities do not hold.
     """
-    if not isinstance(result, (BarcodeDecodingResult, ReadScoringResult)):
-        raise TypeError("deduplication needs decoded reads: a BarcodeDecodingResult or ReadScoringResult")
+    if not isinstance(result, (ReadDecodingResult, ReadScoringResult)):
+        raise TypeError("deduplication needs decoded reads: a ReadDecodingResult or ReadScoringResult")
     if not isinstance(spots, SpotFindingResult) or not isinstance(intensity_result, IntensityExtractionResult):
         raise TypeError("expected SpotFindingResult and IntensityExtractionResult")
     if not isinstance(config, DeduplicationConfig):

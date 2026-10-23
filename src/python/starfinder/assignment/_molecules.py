@@ -159,14 +159,14 @@ def molecule_table(detection, reads, *, genes, population: str = "final") -> Mol
     ``population="final"`` takes the accepted reads of a
     :class:`~starfinder.readout.ReadFilteringResult` (the goodSpots population);
     ``"called"`` takes the reads whose ``call_status`` is ``assigned`` from a
-    :class:`~starfinder.readout.BarcodeDecodingResult` or a filtering result,
+    :class:`~starfinder.readout.ReadDecodingResult` or a filtering result,
     before filtering. Positions are the detection's zero-based ``z, y, x``.
 
     Parameters
     ----------
     detection : SpotFindingResult
         The spots and their positions.
-    reads : BarcodeDecodingResult or ReadFilteringResult
+    reads : ReadDecodingResult or ReadFilteringResult
         The reads of those spots.
     genes : sequence of str
         The ordered gene list (``Codebook.genes``).

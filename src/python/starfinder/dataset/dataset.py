@@ -622,7 +622,7 @@ class Dataset:
             anything is written"), in their order, with the folder unchanged;
             a reference image without stored metadata while ``voxel_size_xy``
             or ``voxel_size_z`` is None raises ``ValueError`` naming them.
-        MissingModelError, ModelHashMismatchError
+        starfinder.segmentation.MissingModelError, starfinder.segmentation.ModelHashMismatchError
             Check 7: a model of ``config.segmentation`` is missing or has
             another SHA-256, with the folder unchanged.
         """

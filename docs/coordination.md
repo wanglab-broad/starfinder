@@ -292,7 +292,7 @@ FOV 'FOV_001' of Dataset 'test' (sample 'small')
 
 Stages that have not run are omitted, and rounds whose images are not
 resident are listed as not loaded. `Codebook`, `SpotFindingResult`,
-`IntensityExtractionResult`, `BarcodeDecodingResult`, `ReadFilteringResult`,
+`IntensityExtractionResult`, `ReadDecodingResult`, `ReadFilteringResult`,
 `RegistrationResult` and `EvaluationResult` each have a one-line summary with
 the same counts. The filtering summary shows the accepted fraction and rejection
 reasons only; precision and accuracy need truth and come from `evaluation`.

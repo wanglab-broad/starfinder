@@ -19,9 +19,9 @@ import pandas as pd
 import pytest
 import yaml
 
-from starfinder.readout import (BarcodeDecodingResult, CodebookAwareDecoderConfig, DeduplicationConfig,
+from starfinder.readout import (ReadDecodingResult, CodebookAwareDecoderConfig, DeduplicationConfig,
                                 NeighborhoodSumConfig, ReadDeduplicationResult, ReadFilterConfig, ReadScoreConfig,
-                                WtaDecoderConfig, decode_barcodes, deduplicate_reads, filter_reads, score_reads)
+                                WtaDecoderConfig, decode_reads, deduplicate_reads, filter_reads, score_reads)
 from starfinder.readout.deduplication import DEDUPLICATION_COLUMNS
 from starfinder.readout.filtering import score_columns
 from starfinder.dataset import CheckpointConfig, PipelineConfig
@@ -155,7 +155,7 @@ def test_r14_false_merges_on_calibrated_scenes():
             totals["measured_rule_links"] += int(((distinct.distance <= 1 + 1e-9)
                                                   & (observed[distinct.i] == observed[distinct.j])).sum())
             for name, config in scenes.DECODERS.items():
-                result = deduplicate_reads(decode_barcodes(intensities, book, config=config), spots, intensities,
+                result = deduplicate_reads(decode_reads(intensities, book, config=config), spots, intensities,
                                            config=DeduplicationConfig(1.0))
                 ids = result.table.spot_id.astype(str).to_numpy()
                 if name == "wta":
@@ -194,7 +194,7 @@ def test_r15_without_a_deduplication_config_every_table_equals_a_run_without_the
     # The tables equal a run without the stage: the decoder, score and filter functions called
     # directly on the same intensities, and at the pinned seed the pins of the golden run.
     stages = readout_config("pipeline", decoder=decoder)
-    decoded = decode_barcodes(fov.intensity_result, dataset.codebook, config=stages.decoding)
+    decoded = decode_reads(fov.intensity_result, dataset.codebook, config=stages.decoding)
     scored = score_reads(decoded, fov.intensity_result, reference=dataset.codebook)
     pd.testing.assert_frame_equal(fov.scoring_result.table, scored.table, check_exact=True)
     if seed == SEED:
@@ -444,7 +444,7 @@ def manual(sequences, points, channels, *, own=None, rounds=None):
     spots = SpotFindingResult(frame, META, "test/sample/fov", LocalMaximaConfig(),
                               {"channel_labels": ["red", "green", "blue", "yellow"]})
     book = codebook({"1234": "G1", "2143": "G2", "4321": "G3"}, rounds=labels)
-    return decode_barcodes(data, book, config=WtaDecoderConfig()), spots, data
+    return decode_reads(data, book, config=WtaDecoderConfig()), spots, data
 
 
 @pytest.mark.contract
@@ -487,7 +487,7 @@ def test_links_are_inclusive_cross_channel_and_exclude_m_and_n():
     # A sequence with M (a tie) or N is never compatible, even when both reads have it.
     table = reads.table.copy()
     table["observed_color_sequence"] = pd.array(["1M34", "1M34", "N234", "N234"], dtype="string")
-    tied = BarcodeDecodingResult(table, reads.spot_namespace, reads.channel_labels, reads.round_labels,
+    tied = ReadDecodingResult(table, reads.spot_namespace, reads.channel_labels, reads.round_labels,
                                  reads.config, reads.diagnostics)
     result = deduplicate_reads(tied, spots, data, config=DeduplicationConfig(5.0))
     assert result.counts["groups"] == 0 and result.diagnostics["cross_channel_pairs"] == 2
@@ -516,7 +516,7 @@ def test_groups_are_connected_components_with_one_representative():
     table = reads.table.copy()
     table.loc[0, ["call_status", "failure_reason", "call_type"]] = ["unmatched", "invalid_measurement", "no_call"]
     table.loc[0, ["gene_id", "entry_id", "decoded_color_sequence"]] = pd.NA
-    mixed = BarcodeDecodingResult(table, reads.spot_namespace, reads.channel_labels, reads.round_labels,
+    mixed = ReadDecodingResult(table, reads.spot_namespace, reads.channel_labels, reads.round_labels,
                                   reads.config, reads.diagnostics)
     result = deduplicate_reads(mixed, spots, data)
     assert result.table.is_representative.tolist() == [False, True] and result.table.duplicate_of[0] == "1"
@@ -547,7 +547,7 @@ def test_run_checks_the_deduplication_stage_before_processing(tmp_path):
     assert fov.deduplication_result is None
     fov.deduplicate_reads()
     assert fov.deduplication_result is not None
-    fov.decode_barcodes(config=CodebookAwareDecoderConfig())
+    fov.decode_reads(config=CodebookAwareDecoderConfig())
     assert fov.deduplication_result is None and fov.scoring_result is None
     # Without scoring, deduplication reads the decoded reads.
     fov.deduplicate_reads(config=DeduplicationConfig(0.0))

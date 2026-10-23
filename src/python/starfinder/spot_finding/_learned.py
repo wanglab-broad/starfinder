@@ -2,14 +2,14 @@
 
 The run order is the contract's: find_spots has already imported the
 library through require(); each method then verifies every listed weights
-file with resolve_weights (verified_folder) and only then constructs the
+file with resolve_model (verified_folder) and only then constructs the
 model from the verified files, through an absolute path.
 Nothing here uses the network or the libraries' own caches.
 """
 import numpy as np
 import pandas as pd
 
-from ._weights import known_weights, listed_files, resolve_weights, weights_artifacts
+from ._weights import known_weights, listed_files, resolve_model, weights_artifacts
 
 # Loaded models of this process, keyed by (method, model, SHA-256 of the loaded weights file), so the
 # channels and rounds of a run load a model once. Verification still runs on every call, before the lookup.
@@ -17,9 +17,9 @@ _MODELS: dict[tuple[str, str, str], object] = {}
 
 
 def verified_folder(method, model):
-    """The model's cache folder after resolve_weights has recomputed the SHA-256 of every file KNOWN_WEIGHTS
+    """The model's cache folder after resolve_model has recomputed the SHA-256 of every file KNOWN_MODELS
     lists for it (its files and all extracted files); the same for every method, with nothing skipped."""
-    return resolve_weights(method, model, extracted=listed_files(method, model))
+    return resolve_model(method, model, extracted=listed_files(method, model))
 
 
 def absolute(path, library):

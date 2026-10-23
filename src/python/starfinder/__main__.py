@@ -95,31 +95,30 @@ def main(argv=None):
 def _weights(args):
     """starfinder weights fetch|list|verify; verify exits 1 when a local copy is missing or changed.
 
-    The known detector weights (KNOWN_WEIGHTS, §2.7) and the known segmentation models
-    (KNOWN_MODELS, §2.9) share the cache and the commands.
+    The known detector models (spot_finding.KNOWN_MODELS, §2.7) and the known segmentation
+    models (segmentation.KNOWN_MODELS, §2.9) share the cache and the commands. Both stages
+    name their members alike, so each is used through its module.
     """
-    from starfinder.segmentation import KNOWN_MODELS, MissingModelError, ModelHashMismatchError, resolve_model
+    from starfinder import segmentation, spot_finding
     from starfinder._weights import RECORD_NAME, model_folder, weights_directory
     from starfinder.segmentation._models import _fetch_model
-    from starfinder.spot_finding import KNOWN_WEIGHTS, MissingWeightsError, WeightsHashMismatchError
-    from starfinder.spot_finding import fetch_weights, resolve_weights
     from starfinder.spot_finding._weights import listed_files
     if args.command == 'fetch':
-        if (args.method, args.model) in KNOWN_MODELS:
+        if (args.method, args.model) in segmentation.KNOWN_MODELS:
             print(_fetch_model(args.method, args.model, directory=args.dir))
         else:
-            print(fetch_weights(args.method, args.model, directory=args.dir))
+            print(spot_finding.fetch_model(args.method, args.model, directory=args.dir))
         return 0
     root = weights_directory(args.dir)
     if args.command == 'list':
         print(f'weights directory: {root}')
-        for (method, model), entry in KNOWN_WEIGHTS.items():
+        for (method, model), entry in spot_finding.KNOWN_MODELS.items():
             folder = model_folder(method, model, args.dir)
             state = ('fetched' if (folder / RECORD_NAME).is_file() else 'incomplete' if folder.exists()
                      else 'not fetched')
             print(f'{method}\t{model}\t{entry.dimensionality}\t{entry.bytes} bytes\tsha256 {entry.sha256}\t'
                   f'{entry.revision}\t{state}')
-        for (method, model), entry in KNOWN_MODELS.items():
+        for (method, model), entry in segmentation.KNOWN_MODELS.items():
             folder = root / method / model
             present = all((folder / item.path).is_file() for item in entry.files)
             state = ('fetched' if (folder / RECORD_NAME).is_file() else 'present' if present
@@ -132,21 +131,23 @@ def _weights(args):
     if args.method is not None:
         keys = [(args.method, args.model)]
     else:
-        keys = ([key for key in KNOWN_WEIGHTS if model_folder(*key, args.dir).exists()]
-                + [key for key in KNOWN_MODELS if (root / key[0] / key[1]).exists()])
+        keys = ([key for key in spot_finding.KNOWN_MODELS if model_folder(*key, args.dir).exists()]
+                + [key for key in segmentation.KNOWN_MODELS if (root / key[0] / key[1]).exists()])
     if not keys:
         print(f'no local weights in {root}')
     failed = False
     for method, model in keys:
         try:
-            if (method, model) in KNOWN_MODELS:
-                resolve_model(method, model=model, directory=args.dir)
+            if (method, model) in segmentation.KNOWN_MODELS:
+                segmentation.resolve_model(method, model=model, directory=args.dir)
                 folder = root / method / model
             else:
-                # Every file KNOWN_WEIGHTS lists for the model is re-hashed, as every detection does.
-                folder = resolve_weights(method, model, directory=args.dir, extracted=listed_files(method, model))
+                # Every file spot_finding.KNOWN_MODELS lists for the model is re-hashed, as every detection does.
+                folder = spot_finding.resolve_model(method, model, directory=args.dir,
+                                                    extracted=listed_files(method, model))
             print(f'{method}\t{model}\tverified\t{folder}')
-        except (MissingWeightsError, WeightsHashMismatchError, MissingModelError, ModelHashMismatchError) as error:
+        except (spot_finding.MissingModelError, spot_finding.ModelHashMismatchError,
+                segmentation.MissingModelError, segmentation.ModelHashMismatchError) as error:
             failed = True
             print(f'{method}\t{model}\tfailed\t{error}')
     return int(failed)

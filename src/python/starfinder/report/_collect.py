@@ -46,7 +46,7 @@ from ._schema import (FORMAT_VERSION, POPULATIONS, PROBLEM_RULES, READOUT_LEVELS
                       REPORT_TABLES, RULE_UNITS, STAGE, SUMMARY_KEYS, TABLE_DIR, TABLE_DTYPES, ReportRecord, row_key)
 from ._values import (NA, ROLES, Unavailable, _Marker, alignment_score, chain_shift, choose_examples,
                       density, first, fraction, is_value, median, over_fovs, owned_pixels, residuals,
-                      run_seconds)
+                      run_seconds, step_name)
 
 PAGE_FILE = "report.html"
 _UNPLACED = ("missing", "failed")
@@ -767,7 +767,7 @@ class _Collection:
 
     @staticmethod
     def _step_method(record, step, registration_methods):
-        name = step.get("name") or ""
+        name = step_name(step.get("name") or "")
         if name.startswith("preprocess:"):
             return name.split(":", 1)[1]
         if name == "register":
@@ -775,7 +775,7 @@ class _Collection:
         if name == "find_spots":
             methods = list(dict.fromkeys(m.get("method") for m in step.get("methods") or [] if m.get("method")))
             return ";".join(methods) if methods else NA
-        if name == "decode_barcodes":
+        if name == "decode_reads":
             method = _get(record, "config", "pipeline", "decoding", "method")
             mode = _get(record, "config", "readout_mode")
             return NA if method is None else (f"{method} ({mode})" if mode else method)

@@ -4,7 +4,7 @@ from pathlib import Path
 import pandas as pd
 
 from starfinder.spot_finding import SpotFindingResult
-from .decoding import BarcodeDecodingResult
+from .decoding import ReadDecodingResult
 from .filtering import ReadFilteringResult
 
 
@@ -21,7 +21,7 @@ def _join_spots(detection, reads=None, *, accepted_only=False):
         if accepted_only:
             raise ValueError('accepted_only requires filtering results')
         return coordinates
-    if not isinstance(reads, (BarcodeDecodingResult, ReadFilteringResult)):
+    if not isinstance(reads, (ReadDecodingResult, ReadFilteringResult)):
         raise TypeError('reads must be decoding or filtering results')
     table = reads.table
     if not table.columns.is_unique or any(k not in table for k in keys) or table[keys].isna().any().any() or table.duplicated(keys).any():
@@ -42,7 +42,7 @@ def _join_spots(detection, reads=None, *, accepted_only=False):
     return joined
 
 
-def export_spots(detection: SpotFindingResult, reads: BarcodeDecodingResult | ReadFilteringResult | None,
+def export_spots(detection: SpotFindingResult, reads: ReadDecodingResult | ReadFilteringResult | None,
                  path: Path | str, *, accepted_only: bool = False,
                  columns: list[str] | None = None) -> Path:
     """Join complete results by namespace/ID, then optionally select accepted reads.

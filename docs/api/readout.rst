@@ -11,7 +11,7 @@ See :doc:`contracts` for labels, identities, score meanings and numerical policy
 ``direct``) to its :py:class:`~starfinder.readout.DecodingSpec`; lookups use
 the exact config type. In readout mode ``direct``, a
 :py:class:`~starfinder.readout.DirectPanel` gives the gene of each (round, channel) and
-:py:func:`~starfinder.readout.assign_direct` assigns each candidate from its own round.
+:py:func:`~starfinder.readout.decode_direct` assigns each candidate from its own round.
 A codebook row is an entry (``entry_id``) of a gene, and
 :py:class:`~starfinder.readout.BarcodeLayout` describes its segments. Extraction
 measures a local background and noise next to the sums
@@ -33,20 +33,19 @@ MATLAB-compatible CSV.
 .. autosummary::
    :toctree: generated/
 
-   assign_direct
-   BarcodeDecodingResult
    BarcodeLayout
+   bases_to_colors
    Codebook
    CodebookAwareDecoderConfig
-   decode_barcodes
-   decode_color_sequence
+   colors_to_bases
+   decode_direct
+   decode_reads
    DECODING_METHODS
    DecodingSpec
    deduplicate_reads
    DeduplicationConfig
-   DirectAssignmentConfig
+   DirectDecoderConfig
    DirectPanel
-   encode_bases
    EncodingConfig
    ENCODINGS
    EncodingSpec
@@ -63,6 +62,7 @@ MATLAB-compatible CSV.
    NeighborhoodSumConfig
    OneBaseEncodingConfig
    plot_read
+   ReadDecodingResult
    ReadDeduplicationResult
    ReadFilterConfig
    ReadFilteringResult

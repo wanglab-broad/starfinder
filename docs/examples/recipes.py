@@ -75,7 +75,7 @@ def decode_fov(quickstart: Path, output: Path) -> FOV:
     fov.register(RegistrationRecipe((RegistrationStep(TranslationConfig()),)))
     fov.find_spots(config=LocalMaximaConfig(threshold_mode="noise", threshold_value=5.0))
     fov.extract_intensities(config=NeighborhoodSumConfig((1, 2, 2)))
-    fov.decode_barcodes().filter_reads()
+    fov.decode_reads().filter_reads()
     assert 0 < len(fov.filtering_result.accepted) <= len(fov.spot_result.spots)
     assert set(fov.filtering_result.accepted["gene_id"]) <= set(dataset.codebook.genes)
     print(f"FOV_001: {len(fov.spot_result.spots)} detected, {len(fov.filtering_result.accepted)} retained")

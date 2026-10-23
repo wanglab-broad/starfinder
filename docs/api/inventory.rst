@@ -19,7 +19,7 @@ Root exports refer to the same objects as their owning namespaces; modules and
 * ``starfinder.__version__`` (module or version metadata)
 * ``starfinder.apply_transform`` → :py:obj:`starfinder.registration.apply_transform`
 * ``starfinder.Dataset`` → :py:obj:`starfinder.dataset.Dataset`
-* ``starfinder.decode_barcodes`` → :py:obj:`starfinder.readout.decode_barcodes`
+* ``starfinder.decode_reads`` → :py:obj:`starfinder.readout.decode_reads`
 * ``starfinder.estimate_transform`` → :py:obj:`starfinder.registration.estimate_transform`
 * ``starfinder.extract_intensities`` → :py:obj:`starfinder.readout.extract_intensities`
 * ``starfinder.filter_reads`` → :py:obj:`starfinder.readout.filter_reads`

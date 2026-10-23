@@ -279,7 +279,7 @@ Rows and key, as {doc}`report-contract` states them: one row per step; key (`sco
 | Column | Definition | Unit | Empty or undefined input |
 | --- | --- | --- | --- |
 | `scope`, `fov_id`, `index`, `name`, `round`, `status` | As {doc}`report-contract` lists them: per FOV, `R_f.steps[i]` in record order (`index = i`), then, on the route per FOV, one row `segment` (method of the cell run: `segmentation.json` `methods`, or `imported` for an import, baseline G13) and one row `assign`; then the sample rows `stitch` (`placement.json` `method.method`) and one per export part in the order of `export.json` `parts`. | — | as the contract states |
-| `method` | `preprocess:<step>` → `<step>`; `register` → `registration.csv` `methods` of the round; `find_spots` → the distinct `method` values of `R_f.steps[i].methods` (the step's provenance entries, one per method that ran, written by `_RunRecord.add_methods`), `;`-joined in record order; `decode_barcodes` → `R_f.config.pipeline.decoding.method` with `R_f.config.readout_mode`; `filter_reads` → `filter`; `segment`, `assign`, `stitch` and the export parts as above; every other step n/a. | — | n/a for a step without a method |
+| `method` | `preprocess:<step>` → `<step>`; `register` → `registration.csv` `methods` of the round; `find_spots` → the distinct `method` values of `R_f.steps[i].methods` (the step's provenance entries, one per method that ran, written by `_RunRecord.add_methods`), `;`-joined in record order; `decode_reads` → `R_f.config.pipeline.decoding.method` with `R_f.config.readout_mode`; `filter_reads` → `filter`; `segment`, `assign`, `stitch` and the export parts as above; every other step n/a. | — | n/a for a step without a method |
 | `seconds` | `R_f.steps[i].seconds`; an export part's `wall_s` (`fusion`, `labels`, `spatialdata`, `segmentation` sections). | s | `not_recorded` for stitching, assembly and the per-FOV segmentation and assignment; n/a for a part `off` or `not_run` |
 
 ### `readout_totals.csv`
@@ -891,7 +891,7 @@ the residual map uses arrows and colour as below.
    records' configuration, `placement.json` and `export.json`). Two lanes, "Per FOV" and "Per sample", cards numbered in run order, four per row. Per-FOV cards and the steps they
    stand for: Preprocessing (`preprocess:*`; method: the recipe's steps joined by " → ");
    Registration (`register`; the succeeded methods); Spot finding (`find_spots`); Decoding
-   (`decode_barcodes`; decoder and readout mode); Read QC filter (`filter_reads`);
+   (`decode_reads`; decoder and readout mode); Read QC filter (`filter_reads`);
    Deduplication; and on the route per FOV Segmentation and Assignment. Per-sample cards:
    Stitching (`placement.json` `method.method`), Segmentation (route after fusion),
    Assembly (the ownership rule of `export.json` `assembly.config`), Export (the export's

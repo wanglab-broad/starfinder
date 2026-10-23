@@ -237,7 +237,7 @@ it does not append dataset/sample IDs. Configure rounds with
 {py:meth}`~starfinder.dataset.FOV.register`,
 {py:meth}`~starfinder.dataset.FOV.find_spots`,
 {py:meth}`~starfinder.dataset.FOV.extract_intensities`,
-{py:meth}`~starfinder.dataset.FOV.decode_barcodes` and
+{py:meth}`~starfinder.dataset.FOV.decode_reads` and
 {py:meth}`~starfinder.dataset.FOV.filter_reads` in order.
 
 ```{literalinclude} examples/recipes.py
@@ -257,8 +257,8 @@ Workflow settings: `seq_channel_order`, `n_rounds`, `ref_round`, plus the
 [configuration](workflow-configuration.md#rule-resources-and-parameters).
 The YAML wrapper is not identical to this direct API: its filtering field is
 `end_base`, while the typed `ReadFilterConfig` field is `end_bases`. For base/color conversions
-alone, see {py:func}`~starfinder.readout.encode_bases` and
-{py:func}`~starfinder.readout.decode_color_sequence`.
+alone, see {py:func}`~starfinder.readout.bases_to_colors` and
+{py:func}`~starfinder.readout.colors_to_bases`.
 
 ## Inspect molecule outputs
 

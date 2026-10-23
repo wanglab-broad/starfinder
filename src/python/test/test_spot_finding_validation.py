@@ -41,9 +41,9 @@ from starfinder.image import ImageMetadata, IncompatibleGeometryError
 from starfinder._records import jsonable as _jsonable, tuples as _tuples
 from starfinder._checkpoint import candidates_frame
 from starfinder.preprocessing import normalize_intensity
-from starfinder.spot_finding import (KNOWN_WEIGHTS, SPOT_FINDING_METHODS, ChannelOverride, LocalMaximaConfig,
-    MissingWeightsError, PiscisConfig, SpotFindingBackendUnavailableError, SpotFindingPlan, SpotFindingWarning,
-    SpotiflowConfig, StarfishLogConfig, WeightsFile, WeightsHashMismatchError, find_spots, resolve_weights)
+from starfinder.spot_finding import (KNOWN_MODELS, SPOT_FINDING_METHODS, ChannelOverride, LocalMaximaConfig,
+    MissingModelError, PiscisConfig, SpotFindingBackendUnavailableError, SpotFindingPlan, SpotFindingWarning,
+    SpotiflowConfig, StarfishLogConfig, ModelFile, ModelHashMismatchError, find_spots, resolve_model)
 from starfinder.spot_finding import _learned, _model_artifacts
 from starfinder.spot_finding._starfish_log import starfish_view
 
@@ -640,7 +640,7 @@ def test_s10_multi_round_identities(method, seed, record_property):
     reference = spots[spots["round"] == ROUNDS[0]].drop(columns="round").reset_index(drop=True)
     pd.testing.assert_frame_equal(reference, default.spots, check_exact=True)
     with pytest.raises(ValueError, match="§2.8"):
-        fov.decode_barcodes()
+        fov.decode_reads()
 
 
 # --- S11: checkpoint round trip ---------------------------------------------------------------------------
@@ -811,31 +811,31 @@ def test_s14_dependency_and_weights_errors(method, case, tmp_path, monkeypatch):
         assert str(raised.value) == (f"spot-finding method '{method}' requires {module}; install the '{method}' "
                                      f"extra (starfinder[{method}])")
     elif case == "missing":
-        for (name, model), entry in KNOWN_WEIGHTS.items():
-            with pytest.raises(MissingWeightsError) as raised:
-                resolve_weights(name, model)
+        for (name, model), entry in KNOWN_MODELS.items():
+            with pytest.raises(MissingModelError) as raised:
+                resolve_model(name, model)
             message = str(raised.value)
             assert str(tmp_path / "weights" / name / model / entry.files[0].path) in message
             assert f"'starfinder weights fetch {name} {model}'" in message
     elif case == "hash-mismatch":
         digest = hashlib.sha256(PAYLOAD).hexdigest()
-        entry = replace(KNOWN_WEIGHTS[("piscis", "20251212")], model="fixture", url="file:///unused",
+        entry = replace(KNOWN_MODELS[("piscis", "20251212")], model="fixture", url="file:///unused",
                         revision="fixture", sha256=digest, bytes=len(PAYLOAD),
-                        files=(WeightsFile("fixture.pt", digest, len(PAYLOAD)),))
-        monkeypatch.setitem(KNOWN_WEIGHTS, ("piscis", "fixture"), entry)
+                        files=(ModelFile("fixture.pt", digest, len(PAYLOAD)),))
+        monkeypatch.setitem(KNOWN_MODELS, ("piscis", "fixture"), entry)
         path = tmp_path / "weights" / "piscis" / "fixture" / "fixture.pt"
         path.parent.mkdir(parents=True)
         path.write_bytes(PAYLOAD)
-        assert resolve_weights("piscis", "fixture") == path.parent
+        assert resolve_model("piscis", "fixture") == path.parent
         changed = bytes([PAYLOAD[0] ^ 1]) + PAYLOAD[1:]
         path.write_bytes(changed)
         actual = hashlib.sha256(changed).hexdigest()
-        with pytest.raises(WeightsHashMismatchError) as raised:
-            resolve_weights("piscis", "fixture")
+        with pytest.raises(ModelHashMismatchError) as raised:
+            resolve_model("piscis", "fixture")
         assert f"{path} has SHA-256 {actual}, expected {digest}" in str(raised.value)
     elif case == "unknown-model":
         with pytest.raises(ValueError, match=r"known models: \['20230905', '20251212'\]"):
-            resolve_weights("piscis", "latest")
+            resolve_model("piscis", "latest")
         with pytest.raises(ValueError, match=r"known models: \['general', 'hybiss', 'smfish_3d', 'synth_3d'\]"):
             SpotiflowConfig("latest")
     else:

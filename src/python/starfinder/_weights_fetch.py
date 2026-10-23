@@ -1,7 +1,7 @@
 """Download and extraction of a weights file; imported only inside the functions that fetch.
 
 Kept apart from ``starfinder._weights`` so that ``urllib`` and ``zipfile`` load
-only when a model is fetched (``starfinder weights fetch``, fetch_weights).
+only when a model is fetched (``starfinder weights fetch``, fetch_model).
 """
 import hashlib
 from pathlib import Path, PurePosixPath

@@ -110,7 +110,7 @@ def test_decoding_known_missing_and_zero_denominator():
 def test_decoding_result_evaluates_against_synthetic_spot_truth_without_renaming():
     """Decoded reads and spot_truth share gene_id/color_sequence and the spot keys."""
     from starfinder.readout import (Codebook, NeighborhoodSumConfig, WtaDecoderConfig,
-                                    decode_barcodes, extract_intensities)
+                                    decode_reads, extract_intensities)
     from starfinder.io import ImageLoadResult
     from starfinder.spot_finding import LocalMaximaConfig, SpotFindingResult
     from starfinder.synthetic import FormedSceneConfig, generate_dataset
@@ -130,7 +130,7 @@ def test_decoding_result_evaluates_against_synthetic_spot_truth_without_renaming
                               META, "FOV_001", LocalMaximaConfig(), {})
     rounds = {label: ImageLoadResult(image, META, book.channel_labels, ())
               for label, image in data.rounds["FOV_001"].items()}
-    decoded = decode_barcodes(extract_intensities(rounds, spots, config=NeighborhoodSumConfig((0, 0, 0))),
+    decoded = decode_reads(extract_intensities(rounds, spots, config=NeighborhoodSumConfig((0, 0, 0))),
                               book, config=WtaDecoderConfig())
     joined = decoded.table.merge(truth, on=["spot_namespace", "spot_id", "gene_id"], validate="one_to_one")
     assert len(joined) == 3

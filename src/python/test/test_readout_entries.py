@@ -14,7 +14,7 @@ import pandas as pd
 import pytest
 
 from starfinder.readout import (Codebook, CodebookAwareDecoderConfig, NeighborhoodSumConfig, WtaDecoderConfig,
-                                decode_barcodes, extract_intensities, load_codebook, summarize_reads)
+                                decode_reads, extract_intensities, load_codebook, summarize_reads)
 from starfinder.io import ImageLoadResult
 from starfinder.spot_finding import LocalMaximaConfig, find_spots
 from starfinder.synthetic import calibrated_scene_preset, generate_formed_scene
@@ -60,8 +60,8 @@ def test_r4_entries_sharing_a_gene_decode_as_with_unique_genes(cal_103, config):
     assert (shared.n_entries, shared.n_genes, unique.n_genes) == (16, 6, 16)
     with pytest.raises(ValueError, match="one entry per gene"):
         shared.gene_to_seq
-    by_entry = decode_barcodes(intensities, unique, config=config).table
-    shared_reads = decode_barcodes(intensities, shared, config=config)
+    by_entry = decode_reads(intensities, unique, config=config).table
+    shared_reads = decode_reads(intensities, shared, config=config)
     by_gene = shared_reads.table
     assert by_entry.call_status.eq("assigned").sum() > 0
     # Per-entry rows: status, entry, sequences and scores equal; the gene is the entry's gene.
@@ -79,7 +79,7 @@ def test_r4_entries_sharing_a_gene_decode_as_with_unique_genes(cal_103, config):
     for gene in set(GENE_OF.values()):
         assert per_gene.get(gene, 0) == sum(per_entry.get(e, 0) for e, g in GENE_OF.items() if g == gene)
     # The run with unique genes reports the same per-entry counts.
-    assert summarize_reads(decode_barcodes(intensities, unique, config=config))["entries"] == per_entry
+    assert summarize_reads(decode_reads(intensities, unique, config=config))["entries"] == per_entry
 
 
 @pytest.mark.validation

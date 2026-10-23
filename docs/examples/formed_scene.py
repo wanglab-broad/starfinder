@@ -5,7 +5,7 @@ import json
 import numpy as np
 import pandas as pd
 
-from starfinder.readout import NeighborhoodSumConfig, WtaDecoderConfig, extract_intensities, decode_barcodes
+from starfinder.readout import NeighborhoodSumConfig, WtaDecoderConfig, extract_intensities, decode_reads
 from starfinder.io import ImageLoadResult
 from starfinder.spot_finding import SpotFindingResult, LocalMaximaConfig
 from starfinder.synthetic import ScalarDistribution, formed_scene_preset, generate_formed_scene
@@ -35,7 +35,7 @@ def check_scene(depth):
                          [[0, 8, 0], [8, 0, 0], [0, 0, 0], [0, 0, 8]]], dtype=np.float64)
     np.testing.assert_array_equal(extraction.values, expected)
     assert extraction.spot_ids == ('candidate-B', 'candidate-A')
-    decoded = decode_barcodes(extraction, codebook, config=WtaDecoderConfig())
+    decoded = decode_reads(extraction, codebook, config=WtaDecoderConfig())
     by_id = decoded.table.set_index('spot_id')
     assert by_id.loc['candidate-B', 'gene_id'] == 'gene-B'
     assert by_id.loc['candidate-A', 'gene_id'] == 'gene-A'

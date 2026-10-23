@@ -120,7 +120,7 @@ The entry and result names, with the options considered:
 
 **Recommendation: S1.** The stage is called segmentation in the chapter, the registry
 pattern names registries after stages (`SPOT_FINDING_METHODS`, `DECODING_METHODS`), and
-`segment` reads as the verb next to `find_spots` and `decode_barcodes`.
+`segment` reads as the verb next to `find_spots` and `decode_reads`.
 
 New names under S1:
 
@@ -786,7 +786,7 @@ model.
 
 Models live in the §2.7 weights cache (`STARFINDER_WEIGHTS_DIR`, default
 `~/.cache/starfinder/weights`) as `<root>/<method>/<model>/`, verified by
-`resolve_model` the way `resolve_weights` verifies detector weights
+`segmentation.resolve_model` the way `spot_finding.resolve_model` verifies detector weights
 ({doc}`learned-detectors`). Fetching is an explicit command
 (`starfinder weights fetch stardist 2D_versatile_fluo`), extended from §2.7; for
 `cpsam_v2` the published hash could not be checked without network access (W-306

@@ -250,7 +250,7 @@ returns its declared columns with their dtypes. A plan's `rounds` is detected by
 combined table (the reference round first, so its identities are unchanged) and the
 per-round diagnostics under `diagnostics["rounds"]`; such a set is never decoded as
 barcodes: in readout mode `multiplexed` decoding it raises, and readout mode `direct`
-assigns it with `assign_direct` (below).
+assigns it with `decode_direct` (below).
 
 {class}`starfinder.spot_finding.NoiseLandmarkConfig` retains registration's
 per-channel MAD peaks followed by its original radius deduplication: for each
@@ -316,11 +316,11 @@ context. Colors `'1'`–`'4'` are symbols: `color_to_channel` maps them to four
 distinct zero-based channels. Encodings are registered in `ENCODINGS`:
 `EncodingConfig(reverse_bases=True)` (`two_base`) preserves STARmap/synthetic
 reversal, `OneBaseEncodingConfig` (`one_base`) maps each base through
-`base_to_color`; `encode_bases` alone does not reverse. The `two_base` table is
+`base_to_color`; `bases_to_colors` alone does not reverse. The `two_base` table is
 `EncodingConfig.pair_to_color` (the 16 ordered base pairs to colors 1–4, default the
 active table of `EncodeBases.m`; the four pairs of one first base need four
 different colors), and every encode and decode path follows the codebook's table
-while `encode_bases` and `decode_color_sequence` keep the default.
+while `bases_to_colors` and `colors_to_bases` keep the default.
 `EncodingSpec.table(config)` returns either encoding's table;
 {py:meth}`~starfinder.readout.Codebook.encoding_table`,
 {py:meth}`~starfinder.dataset.Dataset.encoding_table` and
@@ -332,11 +332,11 @@ that encoded character and swaps the remaining segments; `Codebook.layout`
 explicitly. Lookup constants and numerical helpers are private; the old combined
 extraction and decoder interfaces have been removed.
 
-`decode_barcodes(extracted, codebook, config=...)` requires exact label order and
+`decode_reads(extracted, codebook, config=...)` requires exact label order and
 a config registered in `DECODING_METHODS` whose declared encoding kinds include
 the codebook's and whose modes include `multiplexed` (else `TypeError`).
 Direct readout (`Dataset.readout_mode="direct"`) is
-`assign_direct(extracted, spots, panel)`: each candidate is read from its own
+`decode_direct(extracted, spots, panel)`: each candidate is read from its own
 round (`extract_intensities(..., readout_mode="direct")` leaves the other rounds
 at 0.0 with `valid=False`) and assigned the `DirectPanel` gene of its own
 (round, channel), with no competition, rescue or reassignment
@@ -427,12 +427,12 @@ returned two dictionaries, and filtering dropped rejected rows. After:
 
 ```python
 from starfinder.readout import (
-    extract_intensities, decode_barcodes, filter_reads,
+    extract_intensities, decode_reads, filter_reads,
     NeighborhoodSumConfig, WtaDecoderConfig, ReadFilterConfig,
 )
 extracted = extract_intensities(rounds, spots,
     config=NeighborhoodSumConfig((1, 2, 2)))
-decoded = decode_barcodes(extracted, codebook, config=WtaDecoderConfig())
+decoded = decode_reads(extracted, codebook, config=WtaDecoderConfig())
 filtered = filter_reads(decoded,
     config=ReadFilterConfig(score_bounds={"wta_l2_nll": (None, 1.0)}))
 accepted = filtered.accepted

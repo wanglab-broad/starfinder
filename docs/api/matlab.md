@@ -100,7 +100,7 @@ is implied by this reference.
 | Local registration | {mat:func}`RegisterImagesLocal` | {py:func}`starfinder.registration.estimate_transform` |
 | Spot finding | {mat:func}`SpotFindingMax3D` | {py:func}`starfinder.spot_finding.find_spots` |
 | Extraction | {mat:func}`ExtractFromLocation` | {py:func}`starfinder.readout.extract_intensities` |
-| Codebook / decoding | {mat:func}`LoadCodebook`, {mat:func}`EncodeBases`, {mat:func}`DecodeCS` | {py:func}`starfinder.readout.load_codebook`, {py:func}`starfinder.readout.encode_bases`, {py:func}`starfinder.readout.decode_color_sequence` |
+| Codebook / decoding | {mat:func}`LoadCodebook`, {mat:func}`EncodeBases`, {mat:func}`DecodeCS` | {py:func}`starfinder.readout.load_codebook`, {py:func}`starfinder.readout.bases_to_colors`, {py:func}`starfinder.readout.colors_to_bases` |
 | Filtration | {mat:func}`FilterReads`, {mat:func}`FilterReadsMultiSegment` | {py:func}`starfinder.readout.filter_reads` |
 | Preview | {mat:func}`MakeProjections`, {mat:func}`MakeMontage`, {mat:func}`PlotCentroids` | [FOV output and preview methods](generated/starfinder.dataset.FOV.rst); no direct exported montage helper |
 

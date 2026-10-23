@@ -9,13 +9,13 @@ from dataclasses import replace
 from starfinder.image import IncompatibleGeometryError
 
 from ._learned import absolute, cached_model, channels_of, frame, is_constant, model_record, table, verified_folder
-from ._weights import KNOWN_WEIGHTS, known_weights
+from ._weights import KNOWN_MODELS, known_weights
 
 COLUMNS = ('z', 'y', 'x', 'channel', 'peak_intensity', 'probability')
 
 
 def _models(dimensionality):
-    return ", ".join(m for (method, m), e in KNOWN_WEIGHTS.items() if method == "spotiflow"
+    return ", ".join(m for (method, m), e in KNOWN_MODELS.items() if method == "spotiflow"
                      and e.dimensionality == dimensionality)
 
 

@@ -268,7 +268,7 @@ used 4.7 GB of host RSS, above the 4 GiB target; and the GPU is shared.
 
 ### Known-weights table
 
-`KNOWN_WEIGHTS` in `starfinder.spot_finding` maps `(method, model)` to a frozen
+`KNOWN_MODELS` in `starfinder.spot_finding` maps `(method, model)` to a frozen
 entry. It lists the weights Starfinder knows how to fetch and verify. It sets no
 default. The six entries are W-266's `known-weights.csv`, whose SHA-256 values
 were recomputed from the staged files and match the published hashes:
@@ -294,7 +294,7 @@ a worker). The Piscis library defaults to `20251212` and the E02 proposal named
 ### Fetching, cache and verification
 
 * **Explicit fetch.** `starfinder weights fetch <method> <model> [--dir DIR]`
-  (and `fetch_weights(method, model, *, directory=None)`) downloads the source file
+  (and `fetch_model(method, model, *, directory=None)`) downloads the source file
   to a temporary name in the target directory and checks its SHA-256 and, for
   Spotiflow archives, the library-registered MD5, and it checks every file the table
   lists for the model, as `verify` and detection do. Only then does it extract (Spotiflow)
@@ -303,7 +303,7 @@ a worker). The Piscis library defaults to `20251212` and the E02 proposal named
   check, and a present file is never overwritten: a folder whose listed files all verify
   is returned without a download; when listed files are missing and every present one
   verifies, only the missing files are restored from one verified download and the
-  record is rewritten; a changed present file raises `WeightsHashMismatchError` and a
+  record is rewritten; a changed present file raises `ModelHashMismatchError` and a
   folder without the record raises `FileExistsError`, and neither downloads or changes
   anything.
   `starfinder weights list` prints the table and the local state;
@@ -338,20 +338,20 @@ a worker). The Piscis library defaults to `20251212` and the E02 proposal named
 | Situation | Error |
 | --- | --- |
 | The extra is not installed | `SpotFindingBackendUnavailableError` (an `ImportError`) naming the module and the extra |
-| The weights folder or a listed file is missing | `MissingWeightsError` (a `FileNotFoundError`) naming the method, model, expected path and the fetch command |
-| A file's SHA-256 differs from the table | `WeightsHashMismatchError` (a `ValueError`) naming the file and both hashes |
+| The weights folder or a listed file is missing | `MissingModelError` (a `FileNotFoundError`) naming the method, model, expected path and the fetch command |
+| A file's SHA-256 differs from the table | `ModelHashMismatchError` (a `ValueError`) naming the file and both hashes |
 | The model name is unknown, or belongs to the other method | `ValueError` at config construction, listing the known names |
 
 The order at run time keeps the registry mechanism of {doc}`method-registry`
 unchanged: (1) `require(spec, ...)` imports each declared dependency, as
 `_registry.require` does today, and raises `SpotFindingBackendUnavailableError`
-when one is missing; (2) `resolve_weights(method, model)` resolves the cache
+when one is missing; (2) `resolve_model(method, model)` resolves the cache
 folder and recomputes every listed SHA-256, without using the library; (3) the
 model is constructed from the verified files (`Spotiflow.from_folder`, the
 absolute-path `Piscis`). A missing extra is therefore reported before missing or
-changed weights. `resolve_weights` performs step 2 on its own, so its errors can
+changed weights. `resolve_model` performs step 2 on its own, so its errors can
 be tested without the extras. Tests skip when an extra is not installed (`pytest.importorskip`) and fail
-with `MissingWeightsError` when the extra is installed but the weights are not
+with `MissingModelError` when the extra is installed but the weights are not
 fetched (D3).
 
 ### Provenance
@@ -447,7 +447,7 @@ cost of a format version and a second result container.
   `multiplexed` mode, with a plan that names `rounds`, `FOV.run` raises
   `ValueError("decoding candidates from several detection rounds needs a readout
   mode (§2.8): set readout_mode='direct' on the dataset for direct readout")` when
-  decoding is enabled, and `FOV.decode_barcodes` raises the same error for a spot
+  decoding is enabled, and `FOV.decode_reads` raises the same error for a spot
   table with a `round` column, so a multi-round set is never decoded as barcodes.
   In `direct` mode a spot table without a `round` column raises `ValueError`.
 * **Amended by §2.8 (extraction).** In `multiplexed` mode extraction accepts a
@@ -579,8 +579,8 @@ The implementation adds these entries:
    accepted; `SpotFindingBackendUnavailableError`.
 2. **New methods and extras.** `starfish_log` (`StarfishLogConfig`, no extra,
    starfish `BlobDetector` parity), `spotiflow` and `piscis` (`SpotiflowConfig`,
-   `PiscisConfig`; extras `spotiflow` and `piscis`); `KNOWN_WEIGHTS`, `starfinder
-   weights fetch`, `MissingWeightsError`, `WeightsHashMismatchError`; `FOV.run`
+   `PiscisConfig`; extras `spotiflow` and `piscis`); `KNOWN_MODELS`, `starfinder
+   weights fetch`, `MissingModelError`, `ModelHashMismatchError`; `FOV.run`
    never downloads weights.
 3. **Workflow keys.** The `spot_finding` block's `method` key and config fields,
    `channel_overrides`, `rounds` and the rule-level `device`. The legacy keys are

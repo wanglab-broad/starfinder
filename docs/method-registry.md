@@ -362,15 +362,15 @@ pattern of decision 2 ({doc}`readout-contract`, "Encoding registry"; W-292).
 
 | Place | What was hard-coded | How it is derived |
 | --- | --- | --- |
-| `readout/decoding.py` (`decode_barcodes`) | accepted types and the `isinstance` dispatch | `spec_for(DECODING_METHODS, config, ...)`, keeping `TypeError("unsupported decoder config")`; `spec.run` per decoder. A codebook whose encoding kind (`EncodingSpec.symbols`) is not in `spec.encodings` raises `TypeError`. |
+| `readout/decoding.py` (`decode_reads`) | accepted types and the `isinstance` dispatch | `spec_for(DECODING_METHODS, config, ...)`, keeping `TypeError("unsupported decoder config")`; `spec.run` per decoder. A codebook whose encoding kind (`EncodingSpec.symbols`) is not in `spec.encodings` raises `TypeError`. |
 | `dataset/config.py` (`PipelineConfig.decoding`) | the two config types | The `DECODING_METHODS` keys. |
 | `_checkpoint.py` (`_read_pre_qc`) | `dict(wta=..., codebook_aware=...)` | The name-to-type map of `DECODING_METHODS`. |
 | `dataset/workflow.py` | always `WtaDecoderConfig(diagnostics=True)` | The Python-only `decoding` key names a `DECODING_METHODS` method (default `wta`); the schema list is kept equal to the registry by a test. |
 
 `DecodingSpec` declares `modes` (readout modes), `encodings` (encoding symbol
 kinds), `rescue` and `score_columns`. W-293 registers `direct`
-(`DirectAssignmentConfig`, mode `direct`, no encoding), which `assign_direct` runs;
-`FOV.run`, `FOV.decode_barcodes`, `decode_barcodes`, `assign_direct` and the
+(`DirectDecoderConfig`, mode `direct`, no encoding), which `decode_direct` runs;
+`FOV.run`, `FOV.decode_reads`, `decode_reads`, `decode_direct` and the
 workflow adapter check the dataset's readout mode against `modes`. The barcode encodings are registered the same
 way in `ENCODINGS` (`EncodingSpec`), whose stage-specific fields are listed in
 {doc}`readout-contract`; since W-304 they include `table(config)`, the encoding's

@@ -222,7 +222,7 @@ def pinned_record(stages):
         *([_step("write_checkpoint:registered", "round2")] if registered else []),
         _step("extract_round", "round2"),
         *([_step("write_checkpoint:registered")] if registered else []),
-        _step("write_checkpoint:candidates"), _step("decode_barcodes"), _step("score_reads"),
+        _step("write_checkpoint:candidates"), _step("decode_reads"), _step("score_reads"),
         _step("deduplicate_reads"), _step("write_checkpoint:pre_qc"), _step("filter_reads"),
     ]
     estimation_qc = {

@@ -7,7 +7,7 @@ import pandas as pd
 from ._encoding import _BASE_PAIR_TO_COLOR, decode_pairs
 from ._layout import colors_have_ends, segment_colors
 from .codebook import Codebook, EncodingConfig, encoding_spec
-from .decoding import DECODING_METHODS, BarcodeDecodingResult
+from .decoding import DECODING_METHODS, ReadDecodingResult
 from .deduplication import ReadDeduplicationResult
 from .scoring import SCORE_COLUMNS, ReadScoringResult
 
@@ -122,7 +122,7 @@ class ReadFilteringResult:
 
 
 def filter_reads(
-    decoding_result: BarcodeDecodingResult | ReadScoringResult | ReadDeduplicationResult,
+    decoding_result: ReadDecodingResult | ReadScoringResult | ReadDeduplicationResult,
     *,
     config: ReadFilterConfig = ReadFilterConfig(),
     codebook: Codebook | None = None,
@@ -141,9 +141,9 @@ def filter_reads(
     their rejection reasons: call_status, score:<column> for each bound,
     duplicate (exclude_duplicates on deduplicated reads) and endpoint.
     """
-    if not isinstance(decoding_result, (BarcodeDecodingResult, ReadScoringResult,
+    if not isinstance(decoding_result, (ReadDecodingResult, ReadScoringResult,
                                         ReadDeduplicationResult)) or not isinstance(config, ReadFilterConfig):
-        raise TypeError("expected BarcodeDecodingResult, ReadScoringResult or ReadDeduplicationResult and "
+        raise TypeError("expected ReadDecodingResult, ReadScoringResult or ReadDeduplicationResult and "
                         "ReadFilterConfig")
     if codebook is not None and not isinstance(codebook, Codebook):
         raise TypeError("codebook must be Codebook or None")

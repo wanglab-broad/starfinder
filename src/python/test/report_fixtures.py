@@ -228,7 +228,7 @@ def _steps(*, deduplication=True, registration=True, fail_at=None):
             steps[-1]["status"] = "failed"
             return steps
         steps.append(step("extract_round", name))
-    steps += [step("decode_barcodes", seconds=0.25), step("score_reads", seconds=0.125)]
+    steps += [step("decode_reads", seconds=0.25), step("score_reads", seconds=0.125)]
     if deduplication:
         steps.append(step("deduplicate_reads", seconds=0.125))
     steps.append(step("filter_reads", seconds=0.125))

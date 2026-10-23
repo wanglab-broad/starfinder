@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 
 from .codebook import Codebook
-from .decoding import READOUT_MODES, BarcodeDecodingResult
+from .decoding import READOUT_MODES, ReadDecodingResult
 from .extraction import IntensityExtractionResult
 from ._direct import DirectPanel
 
@@ -104,7 +104,7 @@ def _components(values, background, box_voxels, assigned):
 
 
 def score_reads(
-    decoding_result: BarcodeDecodingResult,
+    decoding_result: ReadDecodingResult,
     intensity_result: IntensityExtractionResult,
     *,
     reference: Codebook | DirectPanel,
@@ -139,9 +139,9 @@ def score_reads(
         The intensities have no background measurements (rerun extraction), or
         identities or labels differ between the reads, intensities and reference.
     """
-    if not isinstance(decoding_result, BarcodeDecodingResult) or not isinstance(
+    if not isinstance(decoding_result, ReadDecodingResult) or not isinstance(
             intensity_result, IntensityExtractionResult):
-        raise TypeError("expected BarcodeDecodingResult and IntensityExtractionResult")
+        raise TypeError("expected ReadDecodingResult and IntensityExtractionResult")
     if not isinstance(config, ReadScoreConfig):
         raise TypeError("config must be ReadScoreConfig")
     mode = decoding_result.readout_mode

@@ -20,8 +20,8 @@ import pandas as pd
 import pytest
 import yaml
 
-from starfinder.readout import (DirectAssignmentConfig, NeighborhoodSumConfig, ReadFilterConfig, ReadScoreConfig,
-                                ReadScoringResult, WtaDecoderConfig, decode_barcodes, filter_reads, score_reads)
+from starfinder.readout import (DirectDecoderConfig, NeighborhoodSumConfig, ReadFilterConfig, ReadScoreConfig,
+                                ReadScoringResult, WtaDecoderConfig, decode_reads, filter_reads, score_reads)
 from starfinder.readout.scoring import SCORE_COLUMNS
 from starfinder.dataset import CheckpointConfig, PipelineConfig
 from starfinder.dataset.workflow import from_workflow_config
@@ -68,7 +68,7 @@ def test_r11_golden_score_equals_the_w278_formula(tmp_path, seed, decoder):
     book = golden_codebook(tmp_path)
     with fx.golden_seed(seed):
         intensities, rounds = extract(), fixture_rounds()
-    decoded = decode_barcodes(intensities, book, config=readout_config("decoding", decoder=decoder))
+    decoded = decode_reads(intensities, book, config=readout_config("decoding", decoder=decoder))
     scored = score_reads(decoded, intensities, reference=book)
     table = scored.table
     reference = scenes.w278_components(intensities.values, intensities.box_voxels, intensities.background,
@@ -105,7 +105,7 @@ def test_r11_calibrated_seed_103_score_equals_the_w278_formula():
             np.testing.assert_array_equal(intensities.noise[:, :, j], mad)
             np.testing.assert_array_equal(intensities.background_voxels[:, j], voxels)
         for name, table in tables.items():
-            decoded = decode_barcodes(intensities, book, config=scenes.DECODERS[name])
+            decoded = decode_reads(intensities, book, config=scenes.DECODERS[name])
             assert_formula(table, scenes.w278_components(intensities.values, intensities.box_voxels,
                                                          intensities.background,
                                                          scenes.assigned_channels(table, book, 4)))
@@ -137,7 +137,7 @@ def test_r11_direct_reads_score_their_own_round(tmp_path, seed):
 def test_score_reads_checks_its_inputs(tmp_path):
     book = golden_codebook(tmp_path)
     intensities = extract()
-    decoded = decode_barcodes(intensities, book, config=WtaDecoderConfig())
+    decoded = decode_reads(intensities, book, config=WtaDecoderConfig())
     with pytest.raises(TypeError, match="Codebook"):
         score_reads(decoded, intensities, reference=None)
     with pytest.raises(ValueError, match="extraction"):
@@ -414,7 +414,7 @@ def test_run_checks_the_scoring_stage_before_processing(tmp_path):
     assert list(fov.results) == ["spot_finding", "extraction", "decoding", "scoring"]
     assert isinstance(fov.results["scoring"], ReadScoringResult)
     # Decoding again drops the score of the earlier reads.
-    fov.decode_barcodes(config=WtaDecoderConfig())
+    fov.decode_reads(config=WtaDecoderConfig())
     assert fov.scoring_result is None
 
 
@@ -471,4 +471,4 @@ def test_direct_assignment_config_scores_in_direct_mode_through_the_adapter_defa
     adapted = from_workflow_config({**workflow(spot_finding={"run": True, "rounds": ["round1"]},
                                                reads_extraction={"run": True}, reads_filtration={"run": True}),
                                     "readout_mode": "direct", "backend": "python"})
-    assert adapted.pipeline.decoding == DirectAssignmentConfig() and adapted.pipeline.scoring == ReadScoreConfig()
+    assert adapted.pipeline.decoding == DirectDecoderConfig() and adapted.pipeline.scoring == ReadScoreConfig()

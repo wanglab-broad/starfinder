@@ -54,15 +54,15 @@ Z=1 plane; Piscis runs plane mode for Z=1 and stack mode (integer ``z``) otherwi
 ``diagnostics["geometry"]`` the tiling (Spotiflow ``n_tiles``; Piscis tile size and
 keep-boundaries).
 
-:py:data:`~starfinder.spot_finding.KNOWN_WEIGHTS` lists the pretrained weights Starfinder
+:py:data:`~starfinder.spot_finding.KNOWN_MODELS` lists the pretrained weights Starfinder
 can fetch and verify, with their SHA-256 values; it sets no default model.
-:py:func:`~starfinder.spot_finding.fetch_weights` (``starfinder weights fetch <method>
+:py:func:`~starfinder.spot_finding.fetch_model` (``starfinder weights fetch <method>
 <model>``) is the only code that downloads; ``starfinder weights list`` and ``starfinder
 weights verify`` show and re-hash the local copies. The cache is ``STARFINDER_WEIGHTS_DIR``,
 else ``$XDG_CACHE_HOME/starfinder/weights`` (``~/.cache/starfinder/weights``).
-:py:func:`~starfinder.spot_finding.resolve_weights` returns a verified model folder or
-raises :py:class:`~starfinder.spot_finding.MissingWeightsError` or
-:py:class:`~starfinder.spot_finding.WeightsHashMismatchError`.
+:py:func:`~starfinder.spot_finding.resolve_model` returns a verified model folder or
+raises :py:class:`~starfinder.spot_finding.MissingModelError` or
+:py:class:`~starfinder.spot_finding.ModelHashMismatchError`.
 
 .. currentmodule:: starfinder.spot_finding
 
@@ -70,17 +70,19 @@ raises :py:class:`~starfinder.spot_finding.MissingWeightsError` or
    :toctree: generated
 
    ChannelOverride
-   fetch_weights
+   fetch_model
    find_spots
-   KNOWN_WEIGHTS
-   KnownWeights
+   KNOWN_MODELS
+   KnownModel
    LocalMaximaConfig
-   MissingWeightsError
+   MissingModelError
+   ModelFile
+   ModelHashMismatchError
    NoiseLandmarkConfig
    PercentileCentroidConfig
    PiscisConfig
    plot_detections
-   resolve_weights
+   resolve_model
    SPOT_FINDING_METHODS
    SpotFindingBackendUnavailableError
    SpotFindingPlan
@@ -89,5 +91,3 @@ raises :py:class:`~starfinder.spot_finding.MissingWeightsError` or
    SpotFindingWarning
    SpotiflowConfig
    StarfishLogConfig
-   WeightsFile
-   WeightsHashMismatchError

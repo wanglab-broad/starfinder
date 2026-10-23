@@ -135,7 +135,7 @@ def test_fov_namespace_and_downstream_identity(tmp_path):
     from starfinder.readout import Codebook
     dataset.codebook = Codebook(pd.DataFrame({'gene_id':['gene'],'color_sequence':['1']}),
                                ('round1',), ('a','b','c','d'))
-    fov.decode_barcodes().filter_reads()
+    fov.decode_reads().filter_reads()
     accepted = fov.filtering_result.accepted
     pd.testing.assert_series_equal(ids, accepted.spot_id)
     assert accepted.spot_namespace.tolist() == [namespace]

@@ -102,7 +102,7 @@ class TestFOVPipeline:
             fov.load_images()
             .normalize_intensity()
             .register(RegistrationRecipe((RegistrationStep(TranslationConfig()),))).find_spots(config=LocalMaximaConfig())
-            .extract_intensities().decode_barcodes()
+            .extract_intensities().decode_reads()
         )
 
         assert "observed_color_sequence" in spot_table(fov).columns
@@ -118,7 +118,7 @@ class TestFOVPipeline:
             fov.load_images()
             .normalize_intensity()
             .register(RegistrationRecipe((RegistrationStep(TranslationConfig()),))).find_spots(config=LocalMaximaConfig())
-            .extract_intensities().decode_barcodes()
+            .extract_intensities().decode_reads()
         )
         small_pipeline_dataset.load_codebook(small_dataset / "codebook.csv")
         fov.filter_reads()
@@ -132,7 +132,7 @@ class TestFOVPipeline:
             fov.load_images()
             .normalize_intensity()
             .register(RegistrationRecipe((RegistrationStep(TranslationConfig()),))).find_spots(config=LocalMaximaConfig())
-            .extract_intensities().decode_barcodes()
+            .extract_intensities().decode_reads()
         )
         small_pipeline_dataset.load_codebook(small_dataset / "codebook.csv")
         fov.filter_reads()

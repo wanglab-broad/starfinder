@@ -2,7 +2,7 @@
 
 import pytest
 
-from starfinder.readout import encode_bases
+from starfinder.readout import bases_to_colors
 from starfinder.readout import EncodingConfig
 
 pytestmark = pytest.mark.readout
@@ -17,33 +17,33 @@ class TestTwoBaseEncoding:
         for b1 in bases:
             for b2 in bases:
                 pair = b1 + b2
-                assert encode_bases(pair) in "1234", f"Missing pair: {pair}"
+                assert bases_to_colors(pair) in "1234", f"Missing pair: {pair}"
 
     def test_encoding_symmetry(self):
         """Verify encoding follows expected color groups."""
         # Color 1: same bases
-        assert encode_bases("AA") == "1"
-        assert encode_bases("CC") == "1"
-        assert encode_bases("GG") == "1"
-        assert encode_bases("TT") == "1"
+        assert bases_to_colors("AA") == "1"
+        assert bases_to_colors("CC") == "1"
+        assert bases_to_colors("GG") == "1"
+        assert bases_to_colors("TT") == "1"
 
         # Color 2: A<->C, G<->T
-        assert encode_bases("AC") == "2"
-        assert encode_bases("CA") == "2"
-        assert encode_bases("GT") == "2"
-        assert encode_bases("TG") == "2"
+        assert bases_to_colors("AC") == "2"
+        assert bases_to_colors("CA") == "2"
+        assert bases_to_colors("GT") == "2"
+        assert bases_to_colors("TG") == "2"
 
         # Color 3: A<->G, C<->T
-        assert encode_bases("AG") == "3"
-        assert encode_bases("GA") == "3"
-        assert encode_bases("CT") == "3"
-        assert encode_bases("TC") == "3"
+        assert bases_to_colors("AG") == "3"
+        assert bases_to_colors("GA") == "3"
+        assert bases_to_colors("CT") == "3"
+        assert bases_to_colors("TC") == "3"
 
         # Color 4: A<->T, C<->G
-        assert encode_bases("AT") == "4"
-        assert encode_bases("TA") == "4"
-        assert encode_bases("CG") == "4"
-        assert encode_bases("GC") == "4"
+        assert bases_to_colors("AT") == "4"
+        assert bases_to_colors("TA") == "4"
+        assert bases_to_colors("CG") == "4"
+        assert bases_to_colors("GC") == "4"
 
     @pytest.mark.parametrize(
         "barcode,expected_color_seq",

@@ -18,7 +18,7 @@ import yaml
 from starfinder._registry import names
 from starfinder.readout import (DECODING_METHODS, ENCODINGS, BarcodeLayout, Codebook, CodebookAwareDecoderConfig,
                                 EncodingConfig, OneBaseEncodingConfig, ReadFilterConfig, Segment, WtaDecoderConfig,
-                                decode_barcodes, filter_reads, load_codebook)
+                                decode_reads, filter_reads, load_codebook)
 from starfinder.dataset.workflow import from_workflow_config
 
 from .readout_cases import intensity, tensor
@@ -223,7 +223,7 @@ def test_filter_reads_checks_each_segment(tmp_path):
     # An entry's colors; an entry's segment A with segment B "43", which decodes from T to TAG;
     # and an M in segment A, whose segment B is an entry's.
     reads = [entries[0], entries[1][:2] + "43", "M" + entries[0][1:]]
-    decoded = decode_barcodes(intensity(tensor([r.replace("M", "1") for r in reads]), channels=CHANNELS,
+    decoded = decode_reads(intensity(tensor([r.replace("M", "1") for r in reads]), channels=CHANNELS,
                                         rounds=rounds(4)), book, config=WtaDecoderConfig())
     table = decoded.table.copy()
     table["observed_color_sequence"] = pd.array(reads, dtype="string")

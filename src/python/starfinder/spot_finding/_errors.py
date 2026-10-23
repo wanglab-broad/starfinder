@@ -9,9 +9,9 @@ class SpotFindingWarning(UserWarning):
     """A detection ran but something about its input deserves attention (for example a noise MAD of 0)."""
 
 
-class MissingWeightsError(FileNotFoundError):
+class MissingModelError(FileNotFoundError):
     """The weights folder of a known model, or a file it lists, is missing; fetch it explicitly."""
 
 
-class WeightsHashMismatchError(ValueError):
+class ModelHashMismatchError(ValueError):
     """A weights file's SHA-256 differs from the known-weights table."""

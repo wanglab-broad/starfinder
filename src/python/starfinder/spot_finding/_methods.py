@@ -56,7 +56,7 @@ class SpotFindingSpec:
     trailing ``?`` marks an optional column. column_fields maps each
     optional column to the Boolean config field that adds it, so the columns
     a config produces follow from the spec. weights is True when the config
-    names pretrained weights from KNOWN_WEIGHTS. requires lists optional
+    names pretrained weights from KNOWN_MODELS. requires lists optional
     dependencies, imported when the method runs; min_shape_zyx is the
     smallest accepted size of each axis (a Z=1 input is checked against its
     last two entries).

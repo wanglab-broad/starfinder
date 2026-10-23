@@ -56,7 +56,7 @@ YELLOW = (0xff, 0xd2, 0x1f)
 WHITE = (255, 255, 255)
 # The step names of a workflow run record (the per-FOV steps, then the sample steps, of LN sample1's runs).
 FOV_STEPS = ("load_images", "rotate_round", "preprocess:min_max_normalization", "find_spots", "extract_round",
-             "register", "write_checkpoint:candidates", "decode_barcodes", "score_reads",
+             "register", "write_checkpoint:candidates", "decode_reads", "score_reads",
              "write_checkpoint:pre_qc", "filter_reads", "segment", "assign")
 SAMPLE_STEPS = ("stitch", "assemble", "fuse", "segment", "fuse_labels", "export_spatialdata")
 

@@ -227,14 +227,14 @@ measurements; otherwise a reloaded result has `box_voxels=None`.
 
 ### pre_qc
 
-`pre_qc.<format>` is `BarcodeDecodingResult.table`, unchanged. Since §2.8 (W-292)
+`pre_qc.<format>` is `ReadDecodingResult.table`, unchanged. Since §2.8 (W-292)
 the table holds the string column `entry_id`, the codebook entry of the decoded
 color sequence, after `gene_id`; `FORMAT_VERSION` stays 2, an older reader keeps
 it as an ordinary column, and a `pre_qc` written without it still loads.
 `pre_qc.json` holds the decoder configuration, labels and diagnostics; the reader
 rebuilds the configuration through `DECODING_METHODS` from its `method` (a `direct`
 configuration holds only its `method`). Since W-293 it also records `readout_mode`,
-which becomes `BarcodeDecodingResult.readout_mode` on reloading; a header without it
+which becomes `ReadDecodingResult.readout_mode` on reloading; a header without it
 loads as `multiplexed`. A `direct` table adds `round`, `channel`,
 `own_channel_rank` and `own_channel_fraction`, and its color sequences are missing
 values. Array

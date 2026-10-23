@@ -375,7 +375,7 @@ def segment_fused(output_dir, *, config: SampleSegmentationConfig, sample: str,
     IncompatibleGeometryError
         Before anything is written: an import file of another shape than the
         segmentation grid.
-    MissingModelError, ModelHashMismatchError
+    starfinder.segmentation.MissingModelError, starfinder.segmentation.ModelHashMismatchError
         Before anything is written: a model missing or with another SHA-256.
     """
     from starfinder._records import file_sha256

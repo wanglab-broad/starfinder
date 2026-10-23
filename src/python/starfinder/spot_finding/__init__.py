@@ -16,30 +16,30 @@ from starfinder.image import ImageMetadata, _validate_image
 
 from ._config import (LocalMaximaConfig, NoiseLandmarkConfig, PercentileCentroidConfig, PiscisConfig, SpotiflowConfig,
     StarfishLogConfig)
-from ._errors import MissingWeightsError, SpotFindingBackendUnavailableError, SpotFindingWarning, WeightsHashMismatchError
+from ._errors import MissingModelError, ModelHashMismatchError, SpotFindingBackendUnavailableError, SpotFindingWarning
 from ._methods import SPOT_FINDING_METHODS as _SPOT_FINDING_METHODS
 from ._methods import (MethodContext, SpotFindingConfig, SpotFindingSpec, check_columns, constant_details,
     empty_table, per_channel, require_method, skips_constant)
 from ._plan import ChannelOverride, SpotFindingPlan
 from ._plot import plot_detections
-from ._weights import KNOWN_WEIGHTS as _KNOWN_WEIGHTS
-from ._weights import KnownWeights, WeightsFile, fetch_weights, resolve_weights
+from ._weights import KNOWN_MODELS as _KNOWN_MODELS
+from ._weights import KnownModel, ModelFile, fetch_model, resolve_model
 
 #: The spot-finding method registry, mapping each exact frozen config type to its
 #: SpotFindingSpec. find_spots, SpotFindingResult, SpotFindingPlan, PipelineConfig.spot_finding,
 #: FOV.find_spots, the workflow adapter and the checkpoint reader derive their method sets from it.
 SPOT_FINDING_METHODS = _SPOT_FINDING_METHODS
 
-#: The known-weights table, mapping (method, model) to its KnownWeights entry. It lists the
-#: pretrained weights Starfinder can fetch and verify, and sets no default model.
-KNOWN_WEIGHTS = _KNOWN_WEIGHTS
+#: The known-models table, mapping (method, model) to its KnownModel entry. It lists the
+#: pretrained detector models Starfinder can fetch and verify, and sets no default model.
+KNOWN_MODELS = _KNOWN_MODELS
 
 __all__ = ["LocalMaximaConfig", "NoiseLandmarkConfig", "PercentileCentroidConfig", "StarfishLogConfig",
            "SpotiflowConfig", "PiscisConfig",
            "SpotFindingResult", "find_spots", "plot_detections", "SPOT_FINDING_METHODS", "SpotFindingSpec",
            "SpotFindingPlan", "ChannelOverride", "SpotFindingBackendUnavailableError", "SpotFindingWarning",
-           "KNOWN_WEIGHTS", "KnownWeights", "WeightsFile", "resolve_weights", "fetch_weights",
-           "MissingWeightsError", "WeightsHashMismatchError"]
+           "KNOWN_MODELS", "KnownModel", "ModelFile", "resolve_model", "fetch_model",
+           "MissingModelError", "ModelHashMismatchError"]
 
 _WHAT = "spot-finding method"
 # Native score and size columns, summarised per channel in diagnostics['native'].

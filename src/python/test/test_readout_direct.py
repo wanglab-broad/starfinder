@@ -23,10 +23,10 @@ import pandas as pd
 import pytest
 import yaml
 
-from starfinder.readout import (DECODING_METHODS, Codebook, CodebookAwareDecoderConfig, DirectAssignmentConfig,
-                                DirectPanel, NeighborhoodSumConfig, ReadFilterConfig, WtaDecoderConfig, assign_direct,
-                                decode_barcodes, extract_intensities, load_direct_panel)
-from starfinder.readout.decoding import BarcodeDecodingResult
+from starfinder.readout import (DECODING_METHODS, Codebook, CodebookAwareDecoderConfig, DirectDecoderConfig,
+                                DirectPanel, NeighborhoodSumConfig, ReadFilterConfig, WtaDecoderConfig, decode_direct,
+                                decode_reads, extract_intensities, load_direct_panel)
+from starfinder.readout.decoding import ReadDecodingResult
 from starfinder.dataset import CheckpointConfig, Dataset, PipelineConfig, RoundState
 from starfinder.dataset.workflow import from_workflow_config
 from starfinder.image import ImageMetadata
@@ -81,7 +81,7 @@ def direct_fov(dataset, seed=100):
 
 def pipeline(**changes):
     return replace(PipelineConfig(spot_finding=PLAN, extraction=NeighborhoodSumConfig(),
-                                  decoding=DirectAssignmentConfig(), filtering=ReadFilterConfig()), **changes)
+                                  decoding=DirectDecoderConfig(), filtering=ReadFilterConfig()), **changes)
 
 
 def loaded(fov):
@@ -138,7 +138,7 @@ def test_r7_unmapped_channel_and_zero_own_round(tmp_path, seed):
     fov = direct_fov(direct_dataset(tmp_path / "zero"), seed)
     fov.find_spots(config=PLAN)
     fov.images["round2"][:] = 0
-    fov.extract_intensities().decode_barcodes(config=DirectAssignmentConfig())
+    fov.extract_intensities().decode_reads(config=DirectDecoderConfig())
     table = fov.decoding_result.table
     assert table.call_status.tolist() == ["assigned", "assigned", "no_signal", "no_signal"]
     assert table.failure_reason.tolist() == ["", "", "zero_signal_round", "zero_signal_round"]
@@ -167,13 +167,13 @@ def test_r7_invalid_own_round_is_invalid_measurement(tmp_path, seed):
     fov = direct_fov(direct_dataset(tmp_path), seed).run(pipeline(filtering=None))
     valid = fov.intensity_result.valid.copy()
     valid[1, 0] = False
-    reads = assign_direct(replace(fov.intensity_result, valid=valid), fov.spot_result, fov.dataset.direct_panel)
+    reads = decode_direct(replace(fov.intensity_result, valid=valid), fov.spot_result, fov.dataset.direct_panel)
     assert reads.table.call_status.tolist() == ["assigned", "unmatched", "assigned", "assigned"]
     assert reads.table.failure_reason[1] == "invalid_measurement" and pd.isna(reads.table.gene_id[1])
     # The brightest channel never changes the identity: a brighter other channel only lowers the rank.
     values = fov.intensity_result.values.copy()
     values[0, 1, 0] = 10 * values[0, 0, 0]
-    reads = assign_direct(replace(fov.intensity_result, values=values), fov.spot_result, fov.dataset.direct_panel)
+    reads = decode_direct(replace(fov.intensity_result, values=values), fov.spot_result, fov.dataset.direct_panel)
     assert reads.table.gene_id[0] == "Gfap" and reads.table.own_channel_rank[0] == 2.0
     assert reads.table.own_channel_fraction[0] < 0.1
 
@@ -196,7 +196,7 @@ def test_panel_labels_and_header(tmp_path):
 
 @pytest.mark.contract
 def test_direct_declares_its_mode_and_score_columns(tmp_path):
-    spec = DECODING_METHODS[DirectAssignmentConfig]
+    spec = DECODING_METHODS[DirectDecoderConfig]
     assert (spec.name, spec.modes, spec.encodings, spec.rescue) == ("direct", frozenset({"direct"}), frozenset(), False)
     table = direct_fov(direct_dataset(tmp_path)).run(pipeline()).decoding_result.table
     numeric = [c for c in table.columns if pd.api.types.is_float_dtype(table[c])]
@@ -214,7 +214,7 @@ def test_multiplexed_mode_with_a_round_column_names_the_direct_mode(tmp_path):
     assert fov.spot_result is None
     fov.find_spots(config=PLAN)
     with pytest.raises(ValueError) as raised:
-        fov.decode_barcodes()
+        fov.decode_reads()
     assert "readout mode (§2.8)" in str(raised.value) and "readout_mode='direct'" in str(raised.value)
 
 
@@ -231,7 +231,7 @@ def test_direct_mode_without_a_round_column_raises(tmp_path):
         fov.extract_intensities()
     multiplexed = extract_intensities(loaded(fov), fov.spot_result)
     with pytest.raises(ValueError, match="round and channel columns"):
-        assign_direct(multiplexed, fov.spot_result, fov.dataset.direct_panel)
+        decode_direct(multiplexed, fov.spot_result, fov.dataset.direct_panel)
 
 
 @pytest.mark.contract
@@ -244,11 +244,11 @@ def test_barcode_decoders_raise_in_direct_mode(tmp_path, decoder):
     assert fov.spot_result is None
     fov.run(pipeline(decoding=None, filtering=None))
     with pytest.raises(TypeError, match=f"readout mode 'direct' does not support decoder '{name}'"):
-        fov.decode_barcodes(config=decoder)
+        fov.decode_reads(config=decoder)
     with pytest.raises(TypeError, match=f"readout mode 'direct' does not support decoder '{name}'"):
-        assign_direct(fov.intensity_result, fov.spot_result, fov.dataset.direct_panel, config=decoder)
+        decode_direct(fov.intensity_result, fov.spot_result, fov.dataset.direct_panel, config=decoder)
     with pytest.raises(TypeError, match="a DirectPanel is the reference of readout mode 'direct'"):
-        decode_barcodes(fov.intensity_result, fov.dataset.direct_panel, config=decoder)
+        decode_reads(fov.intensity_result, fov.dataset.direct_panel, config=decoder)
 
 
 @pytest.mark.contract
@@ -259,10 +259,10 @@ def test_direct_assignment_raises_in_multiplexed_mode(tmp_path):
         fov.run(pipeline(spot_finding=DETECTION))
     fov.run(pipeline(spot_finding=DETECTION, decoding=None, filtering=None))
     with pytest.raises(TypeError, match="readout mode 'multiplexed' does not support decoder 'direct'"):
-        fov.decode_barcodes(config=DirectAssignmentConfig())
+        fov.decode_reads(config=DirectDecoderConfig())
     book = Codebook(pd.DataFrame({"gene_id": ["A"], "color_sequence": ["12"]}), ROUNDS, CHANNELS)
     with pytest.raises(TypeError, match="readout mode 'multiplexed' does not support decoder 'direct'"):
-        decode_barcodes(fov.intensity_result, book, config=DirectAssignmentConfig())
+        decode_reads(fov.intensity_result, book, config=DirectDecoderConfig())
 
 
 @pytest.mark.contract
@@ -276,7 +276,7 @@ def test_direct_mode_needs_its_panel_and_a_known_mode(tmp_path):
         "spot_id", "spot_namespace", "observed_color_sequence", "decoded_color_sequence", "gene_id",
         "call_status", "failure_reason")})
     with pytest.raises(ValueError, match="readout mode 'direct' does not support decoder 'wta'"):
-        BarcodeDecodingResult(table, "ns", CHANNELS, ROUNDS, WtaDecoderConfig(), {}, readout_mode="direct")
+        ReadDecodingResult(table, "ns", CHANNELS, ROUNDS, WtaDecoderConfig(), {}, readout_mode="direct")
     assert "readout mode:      direct" in repr(direct_dataset(tmp_path)).splitlines()[4]
 
 
@@ -299,11 +299,11 @@ def test_r16_direct_checkpoints_round_trip_exactly(tmp_path, seed, table_format)
                                   candidates_frame(fov.spot_result, fov.intensity_result), check_exact=True)
     reloaded.load_checkpoint("pre_qc", checkpoints=checkpoints)
     pd.testing.assert_frame_equal(reloaded.decoding_result.table, fov.decoding_result.table, check_exact=True)
-    assert reloaded.decoding_result.config == DirectAssignmentConfig()
+    assert reloaded.decoding_result.config == DirectDecoderConfig()
     assert reloaded.decoding_result.readout_mode == "direct"
     # Rerun without images: assign again from the reloaded candidates.
     rerun = dataset.fov("FOV_001").load_checkpoint("candidates", checkpoints=checkpoints)
-    rerun.run(PipelineConfig(decoding=DirectAssignmentConfig(), filtering=ReadFilterConfig()))
+    rerun.run(PipelineConfig(decoding=DirectDecoderConfig(), filtering=ReadFilterConfig()))
     pd.testing.assert_frame_equal(rerun.decoding_result.table, fov.decoding_result.table, check_exact=True)
     # A dataset of the other mode does not load them.
     other = direct_dataset(tmp_path / "other", mode="multiplexed", panel=None)
@@ -366,7 +366,7 @@ def test_yaml_direct_route_writes_the_four_genes(tmp_path):
     snakemake = SimpleNamespace(config=config, input=["unused", str(panel)], wildcards=SimpleNamespace(fovID="FOV"))
     runpy.run_path(str(ROOT / "workflow" / "scripts" / "rsf_single_fov.py"), init_globals={"snakemake": snakemake})
     adapted = from_workflow_config(config)
-    assert adapted.dataset.readout_mode == "direct" and adapted.pipeline.decoding == DirectAssignmentConfig()
+    assert adapted.dataset.readout_mode == "direct" and adapted.pipeline.decoding == DirectDecoderConfig()
     good = pd.read_csv(adapted.dataset.fov("FOV").paths.signal_csv("goodSpots"))
     assert list(good.columns) == ["x", "y", "z", "gene"]
     assert good.gene.tolist() == GENES
@@ -391,7 +391,7 @@ def test_yaml_readout_mode_keys(tmp_path):
         from_workflow_config(dict(config, rules={"rsf_single_fov": {"parameters": dict(
             parameters, decoding={"method": "wta"})}}))
     assert from_workflow_config(dict(config, rules={"rsf_single_fov": {"parameters": dict(
-        parameters, decoding={"method": "direct"})}})).pipeline.decoding == DirectAssignmentConfig()
+        parameters, decoding={"method": "direct"})}})).pipeline.decoding == DirectDecoderConfig()
     with pytest.raises(ValueError, match=r"remove \['reads_filtration.end_base'\]"):
         from_workflow_config(dict(config, rules={"rsf_single_fov": {"parameters": dict(
             parameters, reads_filtration={"run": True, "end_base": "CC"})}}))

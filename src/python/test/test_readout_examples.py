@@ -6,14 +6,14 @@ that §2.8 adds: the parts the current code could check (codebook validation and
 explicit color sequences, multi-round detection with its ``round`` and ``channel``
 columns, single-round extraction) are checked against it; the expected behavior that was
 written here as small reference functions is now checked against the real functions
-(ENCODINGS for one_base, load_direct_panel and assign_direct for direct readout).
+(ENCODINGS for one_base, load_direct_panel and decode_direct for direct readout).
 """
 import numpy as np
 import pandas as pd
 import pytest
 
 from starfinder.readout import (ENCODINGS, Codebook, EncodingConfig, OneBaseEncodingConfig, WtaDecoderConfig,
-                                assign_direct, decode_barcodes, decode_color_sequence, encode_bases,
+                                decode_direct, decode_reads, colors_to_bases, bases_to_colors,
                                 extract_intensities, load_codebook, load_direct_panel)
 from starfinder.dataset import Dataset, RoundState
 from starfinder.image import ImageMetadata
@@ -34,7 +34,7 @@ def rounds(n):
 def assign(codebook, sequence):
     """WTA call of one read whose brightest channel in each round is the given color."""
     reads = intensity(tensor([sequence]), channels=CHANNELS, rounds=codebook.round_labels)
-    return decode_barcodes(reads, codebook, config=WtaDecoderConfig()).table.iloc[0]
+    return decode_reads(reads, codebook, config=WtaDecoderConfig()).table.iloc[0]
 
 
 # --- Example 1: two_base, one segment ------------------------------------------------
@@ -43,7 +43,7 @@ def test_two_base_one_segment(tmp_path):
     barcode = "CTGACC"
     # Barcode to colors: reverse, then one color per adjacent base pair.
     assert barcode[::-1] == "CCAGTC"
-    assert [encode_bases(barcode[::-1][i:i + 2]) for i in range(5)] == ["1", "2", "3", "2", "3"]
+    assert [bases_to_colors(barcode[::-1][i:i + 2]) for i in range(5)] == ["1", "2", "3", "2", "3"]
     assert EncodingConfig(reverse_bases=True).encode(barcode) == "12323"
     path = tmp_path / "genes.csv"
     path.write_text(f"Slc17a7,{barcode}\n")
@@ -52,10 +52,10 @@ def test_two_base_one_segment(tmp_path):
     # Observed colors back to the barcode: the first base of the read orientation (C) is known.
     read = assign(book, "12323")
     assert (read.observed_color_sequence, read.gene_id, read.call_status) == ("12323", "Slc17a7", "assigned")
-    assert decode_color_sequence("12323", "C") == "CCAGTC"
-    assert decode_color_sequence("12323", "C")[::-1] == barcode
+    assert colors_to_bases("12323", "C") == "CCAGTC"
+    assert colors_to_bases("12323", "C")[::-1] == barcode
     # The current end-base check reads the decoded (reversed) bases: first C, last C.
-    decoded = decode_color_sequence("12323", "C")
+    decoded = colors_to_bases("12323", "C")
     assert decoded[0] + decoded[-1] == "CC"
 
 
@@ -67,7 +67,7 @@ def test_two_base_two_segments(tmp_path):
     assert len(barcode) == 11
     reversed_bases = barcode[::-1]
     assert reversed_bases == "TACGTCATGAC"
-    colors = encode_bases(reversed_bases)
+    colors = bases_to_colors(reversed_bases)
     assert colors == "4242324232"  # c1..c10
     # c5 is the pair (T, C) across the junction: b7 of segment B and b6 of segment A.
     assert reversed_bases[4:6] == segment_b[0] + segment_a[-1] and colors[4] == "3"
@@ -85,9 +85,9 @@ def test_two_base_two_segments(tmp_path):
     # Observed colors back to the barcode: cut 5 | 4, decode each segment from its own
     # first base in the read orientation, reverse each, and join A then B.
     first, second = "242324242"[:5], "242324242"[5:]
-    assert decode_color_sequence(first, "C") == "CATGAC" == segment_a[::-1]
-    assert decode_color_sequence(second, "T") == "TACGT" == segment_b[::-1]
-    assert decode_color_sequence(first, "C")[::-1] + decode_color_sequence(second, "T")[::-1] == barcode
+    assert colors_to_bases(first, "C") == "CATGAC" == segment_a[::-1]
+    assert colors_to_bases(second, "T") == "TACGT" == segment_b[::-1]
+    assert colors_to_bases(first, "C")[::-1] + colors_to_bases(second, "T")[::-1] == barcode
     # Each segment's end bases in the read orientation: A is C...C, B is T...T.
     assert [s[0] + s[-1] for s in ("CATGAC", "TACGT")] == ["CC", "TT"]
 
@@ -97,7 +97,7 @@ def layout_encode(bases, lengths, order, reverse_bases):
     segments' colors joined in acquisition order (docs/readout-contract.md)."""
     starts = np.cumsum((0,) + tuple(lengths))
     segments = [bases[a:b] for a, b in zip(starts[:-1], starts[1:])]
-    colors = [encode_bases(s[::-1] if reverse_bases else s) for s in segments]
+    colors = [bases_to_colors(s[::-1] if reverse_bases else s) for s in segments]
     return "".join(colors[k] for k in order)
 
 
@@ -181,10 +181,10 @@ def test_direct_readout_two_rounds(tmp_path):
     spots = fov.spot_result.spots
     assert list(zip(spots["round"], spots.channel, spots.y, spots.x)) == [
         (name, channel, float(cy), float(cx)) for name, channel, _, cy, cx in DIRECT_SPOTS]
-    # assign_direct: identity from the candidate's own round and channel, one read each.
+    # decode_direct: identity from the candidate's own round and channel, one read each.
     loaded = {name: ImageLoadResult(fov.images[name], fov.metadata[name], CHANNELS, (), {}) for name in rounds(2)}
     own_rounds = extract_intensities(loaded, fov.spot_result, readout_mode="direct")
-    calls = assign_direct(own_rounds, fov.spot_result, panel).table
+    calls = decode_direct(own_rounds, fov.spot_result, panel).table
     assert list(calls.gene_id) == ["Gfap", "Gad1", "Sst", "Aqp4"]
     assert list(calls.spot_id) == list(spots.spot_id)
     # Checked against current code: extracting only each candidate's own round gives its

@@ -59,7 +59,7 @@ def main(output: Path) -> None:
         fov.register(RegistrationRecipe((RegistrationStep(TranslationConfig()),)))
         fov.find_spots(config=LocalMaximaConfig(threshold_mode="noise", threshold_value=5.0, min_distance_voxels=1))
         fov.extract_intensities(config=NeighborhoodSumConfig((1, 2, 2)))
-        fov.decode_barcodes().filter_reads()
+        fov.decode_reads().filter_reads()
 
         # These are completion checks, not a benchmark of detection accuracy.
         assert 0 < len(fov.filtering_result.accepted) <= len(fov.spot_result.spots)

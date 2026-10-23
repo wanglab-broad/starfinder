@@ -8,9 +8,9 @@ from starfinder.readout import (
     Codebook,
     EncodingConfig,
     load_codebook,
-    encode_bases,
-    decode_color_sequence,
-    decode_barcodes,
+    bases_to_colors,
+    colors_to_bases,
+    decode_reads,
     WtaDecoderConfig,
     filter_reads,
 )
@@ -24,15 +24,15 @@ ROUNDS = tuple(f"r{i}" for i in range(4))
 
 
 def test_encoding_roundtrips_and_synthetic_reversal():
-    assert encode_bases("CGCAC") == "4422"
-    assert decode_color_sequence("4422", "C") == "CGCAC"
+    assert bases_to_colors("CGCAC") == "4422"
+    assert colors_to_bases("4422", "C") == "CGCAC"
     for gene, bases in _TEST_CODEBOOK:
         seq = EncodingConfig().encode(bases)
-        assert seq == EncodingConfig(reverse_bases=True).encode(bases) == encode_bases(bases[::-1])
-        assert decode_color_sequence(seq, bases[-1]) == bases[::-1]
+        assert seq == EncodingConfig(reverse_bases=True).encode(bases) == bases_to_colors(bases[::-1])
+        assert colors_to_bases(seq, bases[-1]) == bases[::-1]
     assert EncodingConfig(False).encode("CACGC") == "2244"
     bases = "ACGTAC"
-    raw = encode_bases(bases)
+    raw = bases_to_colors(bases)
     assert EncodingConfig(False, 2).encode(bases) == raw[3:] + raw[:2]
 
 
@@ -42,7 +42,7 @@ def test_load_canonical_order_and_ground_truth_calls(small_dataset):
     assert cb.gene_to_seq["GeneA"] == "4422"
     assert cb.seq_to_gene["4422"] == "GeneA"
     assert cb.genes == [g for g, _ in _TEST_CODEBOOK]
-    result = decode_barcodes(
+    result = decode_reads(
         intensity(tensor(cb.table.color_sequence.tolist()), rounds=ROUNDS),
         cb,
         config=WtaDecoderConfig(),

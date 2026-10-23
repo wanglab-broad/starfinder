@@ -10,7 +10,7 @@ from starfinder._registry import Dependency, check_name, spec_for
 from starfinder.spot_finding import SpotFindingResult
 from .codebook import Codebook, encoding_spec
 from .extraction import IntensityExtractionResult
-from ._direct import DirectAssignmentConfig, DirectPanel, _run_direct
+from ._direct import DirectDecoderConfig, DirectPanel, _run_direct
 from ._codebook_aware import (
     _decode_codebook_aware,
     _channel_probabilities,
@@ -98,14 +98,14 @@ class CodebookAwareDecoderConfig:
 
 
 @dataclass(frozen=True)
-class BarcodeDecodingResult:
+class ReadDecodingResult:
     """One row per identity, labeled axes, effective config and optional diagnostics.
 
     table carries observed/decoded_color_sequence, nullable gene_id, call_status,
     failure_reason, and method-specific named scores. Diagnostics expose
     probabilities (N,C,R), per_round and candidates tables only when requested.
     readout_mode is the mode that produced the reads: ``multiplexed`` (a decoder
-    over the color sequence) or ``direct`` (assign_direct; the table adds round and
+    over the color sequence) or ``direct`` (decode_direct; the table adds round and
     channel, and its color sequences are missing).
     The repr is a one-line read count by call_status without table rows.
     """
@@ -114,7 +114,7 @@ class BarcodeDecodingResult:
     spot_namespace: str
     channel_labels: tuple[str, ...]
     round_labels: tuple[str, ...]
-    config: WtaDecoderConfig | CodebookAwareDecoderConfig | DirectAssignmentConfig
+    config: WtaDecoderConfig | CodebookAwareDecoderConfig | DirectDecoderConfig
     diagnostics: dict
     readout_mode: str = "multiplexed"
 
@@ -159,7 +159,7 @@ class BarcodeDecodingResult:
         return f"{len(self.table)} reads" + (" — " + ", ".join(statuses) if statuses else "")
 
     def __repr__(self):
-        return f"BarcodeDecodingResult: {self._summary()}"
+        return f"ReadDecodingResult: {self._summary()}"
 
 
 def _run_codebook_aware(values, codebook, config, spot_ids, diagnostics):
@@ -234,10 +234,10 @@ class DecodingSpec:
     """Registered decoder: stable name, private implementation and declared capabilities.
 
     run is called by the entry point of the decoder's mode, never by callers. For
-    a multiplexed decoder, decode_barcodes calls run(values, codebook, config,
+    a multiplexed decoder, decode_reads calls run(values, codebook, config,
     spot_ids, diagnostics) with the clipped (N, 4, R) sums in color order 1-4,
     after the checks below, and gets the table before the shared required-round
-    rules. For direct, assign_direct calls run(intensity_result, spots, panel,
+    rules. For direct, decode_direct calls run(intensity_result, spots, panel,
     config) and gets (table, diagnostics). modes are the readout modes the decoder
     supports; encodings the encoding symbol kinds (EncodingSpec.symbols) it
     decodes; rescue whether it can change an observed color; score_columns the
@@ -291,18 +291,18 @@ DECODING_METHODS: dict[type, DecodingSpec] = {
         encodings=frozenset({"color"}), rescue=True,
         score_columns=("probability_nll", "score_delta", "geomean_probability", "min_round_margin",
                        "corrected_round_margin", "mean_total_intensity", "hamming_to_wta")),
-    DirectAssignmentConfig: DecodingSpec(
+    DirectDecoderConfig: DecodingSpec(
         "direct", _run_direct, modes=frozenset({"direct"}), encodings=frozenset(), rescue=False,
         score_columns=("own_channel_rank", "own_channel_fraction")),
 }
 
 
-def decode_barcodes(
+def decode_reads(
     intensity_result: IntensityExtractionResult,
     codebook: Codebook,
     *,
     config: WtaDecoderConfig | CodebookAwareDecoderConfig,
-) -> BarcodeDecodingResult:
+) -> ReadDecodingResult:
     """Decode without changing extraction; reject invalid labels/values explicitly.
 
     The decoder is looked up in DECODING_METHODS by exact config type; a codebook
@@ -313,20 +313,20 @@ def decode_barcodes(
     rescue may resolve an observed tie; equally scored candidates never assign a
     gene. The table reports the decoded entry_id beside its gene_id.
 
-    decode_barcodes reads readout mode ``multiplexed``: a DirectPanel or a decoder
+    decode_reads reads readout mode ``multiplexed``: a DirectPanel or a decoder
     that does not support that mode (``direct``) raises TypeError naming the mode
-    and the decoder; direct readout is assign_direct.
+    and the decoder; direct readout is decode_direct.
     """
     if isinstance(codebook, DirectPanel):
-        raise TypeError("decode_barcodes decodes readout mode 'multiplexed' with a Codebook; a DirectPanel is "
-                        "the reference of readout mode 'direct': use assign_direct")
+        raise TypeError("decode_reads decodes readout mode 'multiplexed' with a Codebook; a DirectPanel is "
+                        "the reference of readout mode 'direct': use decode_direct")
     if not isinstance(intensity_result, IntensityExtractionResult) or not isinstance(
         codebook, Codebook
     ):
         raise TypeError("expected IntensityExtractionResult and Codebook")
     spec = spec_for(DECODING_METHODS, config, "decoding method", TypeError, "unsupported decoder config")
     if "multiplexed" not in spec.modes:
-        raise TypeError(_mode_mismatch("multiplexed", spec) + "; direct readout is assign_direct")
+        raise TypeError(_mode_mismatch("multiplexed", spec) + "; direct readout is decode_direct")
     intensity_result.__post_init__()
     codebook.__post_init__()
     config.__post_init__()
@@ -481,7 +481,7 @@ def decode_barcodes(
         diagnostics["candidate_order"] = (
             "probability_nll then color_sequence; tied candidates are ambiguous"
         )
-    return BarcodeDecodingResult(
+    return ReadDecodingResult(
         table,
         result.spot_namespace,
         result.channel_labels,
@@ -491,13 +491,13 @@ def decode_barcodes(
     )
 
 
-def assign_direct(
+def decode_direct(
     intensity_result: IntensityExtractionResult,
     spots: SpotFindingResult,
     panel: DirectPanel,
     *,
-    config: DirectAssignmentConfig = DirectAssignmentConfig(),
-) -> BarcodeDecodingResult:
+    config: DirectDecoderConfig = DirectDecoderConfig(),
+) -> ReadDecodingResult:
     """Direct readout: each candidate's gene from its own round and channel.
 
     spots is the SpotFindingResult the intensities were extracted from, with its
@@ -533,5 +533,5 @@ def assign_direct(
     panel.__post_init__()
     config.__post_init__()
     table, diagnostics = spec.run(intensity_result, spots, panel, config)
-    return BarcodeDecodingResult(table, intensity_result.spot_namespace, intensity_result.channel_labels,
+    return ReadDecodingResult(table, intensity_result.spot_namespace, intensity_result.channel_labels,
                                  intensity_result.round_labels, config, diagnostics, readout_mode="direct")

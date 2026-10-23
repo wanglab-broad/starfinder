@@ -202,7 +202,7 @@ def test_decoding_a_multi_round_set_raises_naming_the_readout_mode(tmp_path):
     assert fov.spot_result is None
     fov.find_spots(config=SpotFindingPlan(LocalMaximaConfig(), rounds=ROUNDS))
     with pytest.raises(ValueError, match=r"readout mode \(§2\.8\)"):
-        fov.decode_barcodes()
+        fov.decode_reads()
     with pytest.raises(ValueError, match="§2.8"):
         fov.run(PipelineConfig(extraction=NeighborhoodSumConfig(), decoding=WtaDecoderConfig()))
 
