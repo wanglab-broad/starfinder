@@ -237,15 +237,15 @@ def test_molecule_tables_are_the_goodspots_rows(folder):
     """assignment=None: the assembled molecules are exactly the rows of each FOV's goodSpots CSV.
 
     The CSV ``signal/<fov_id>_goodSpots.csv`` is read here with pandas, not with
-    ``molecule_table_from_csv`` or anything built on it. The rule is that of
-    docs/assignment-contract.md ("The assign entry", "Inputs", ``molecule_table_from_csv``): a
+    ``import_legacy_molecules_csv`` or anything built on it. The rule is that of
+    docs/assignment-contract.md ("The assign entry", "Inputs", ``import_legacy_molecules_csv``): a
     legacy one-based ``x, y, z, gene`` CSV, 1 subtracted from each coordinate, row ``i`` (zero-based)
     with the identity ``spot_id = "csv:<i>"``; the namespace is the FOV's
     ``[dataset_id, sample_id, fov_id, null]``. Assignments made by the §2.9 workflow route from the
-    same files (``molecule_table_from_csv``, then ``assign_molecules``, saved as ``from_csv``)
+    same files (``import_legacy_molecules_csv``, then ``assign_molecules``, saved as ``from_csv``)
     give a sample with the same molecule keys.
     """
-    from starfinder.assignment import assign_molecules, molecule_table_from_csv
+    from starfinder.assignment import assign_molecules, import_legacy_molecules_csv
     from starfinder.assignment._persist import write_assignment
 
     from .assembly_fixtures import GOLDEN_GENES, GOLDEN_IDS, label_run, unit_grid, with_record
@@ -267,7 +267,7 @@ def test_molecule_tables_are_the_goodspots_rows(folder):
     grid = unit_grid(TILE_ZYX)
     for fov in GOLDEN_IDS:
         namespace = json.dumps(["data", "sample", fov, None], separators=(",", ":"))
-        table = molecule_table_from_csv(folder.root / "signal" / f"{fov}_goodSpots.csv", spot_namespace=namespace,
+        table = import_legacy_molecules_csv(folder.root / "signal" / f"{fov}_goodSpots.csv", spot_namespace=namespace,
                                         genes=GOLDEN_GENES)
         result = assign_molecules(table, label_run(folder.results[fov].cell_labels, fov, grid), grid=grid)
         write_assignment(folder.assignment_dir(fov, "from_csv"), with_record(result, name="from_csv"),

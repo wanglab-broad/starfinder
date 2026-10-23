@@ -14,9 +14,9 @@ from scipy import ndimage
 from starfinder.dataset import Dataset, PipelineConfig, RoundState
 from starfinder.image import ImageMetadata
 from starfinder.preprocessing import (PREPROCESSING_METHODS, Background3DConfig, PercentileNormalizationConfig, PreprocessingRecipe,
-    PreprocessingStep, ScalarBackgroundConfig, StepContext, merge_histograms, read_supplied_statistics, run_step,
+    PreprocessingStep, ScalarBackgroundConfig, StepContext, merge_histograms, load_supplied_statistics, run_step,
     scalar_background_histograms, subtract_background_3d, subtract_scalar_background, summarize_histograms,
-    summary_stage, supplied_section, supplied_statistics, write_supplied_statistics)
+    summary_recipe, fit_supplied_section, supplied_statistics, save_supplied_statistics)
 
 from .test_preprocessing_golden import fixture_rounds
 
@@ -206,7 +206,7 @@ def test_supplied_shortcut_on_merged_counts_equals_the_subtracted_volumes(dtype,
                                  supplied_statistics=path)
     # Pass 1: histograms of the raw volumes give the scalar background section.
     raw = merge_histograms([summarize_histograms(r, channel_labels=CHANNELS, fov_id=f) for f, r in fovs.items()])
-    section = supplied_section(scalar, raw)
+    section = fit_supplied_section(scalar, raw)
     for r, name in enumerate(ROUNDS):
         for c in range(2):
             concatenated = np.concatenate([rounds[name][..., c].ravel() for rounds in fovs.values()])
@@ -215,14 +215,14 @@ def test_supplied_shortcut_on_merged_counts_equals_the_subtracted_volumes(dtype,
     derived = scalar_background_histograms(raw, scalar, supplied=section)
     direct = merge_histograms([summarize_histograms(
         {name: subtract_scalar_background(v, config=scalar, fitted=section["fitted"][name]) for name, v in r.items()},
-        channel_labels=CHANNELS, fov_id=f, summarized_after=summary_stage(recipe, "percentile_normalization")[1])
+        channel_labels=CHANNELS, fov_id=f, summarized_after=summary_recipe(recipe, "percentile_normalization")[1])
         for f, r in fovs.items()])
     np.testing.assert_array_equal(derived.counts, direct.counts)
     assert derived.summarized_after == direct.summarized_after
     assert (derived.fovs_used, derived.fovs_excluded) == (raw.fovs_used, raw.fovs_excluded)
     # Two passes suffice: the file with both sections drives the application pass.
-    normalization = supplied_section(recipe.steps[1].config, derived)
-    write_supplied_statistics(supplied_statistics(raw, {"scalar_background": section,
+    normalization = fit_supplied_section(recipe.steps[1].config, derived)
+    save_supplied_statistics(supplied_statistics(raw, {"scalar_background": section,
                                                         "percentile_normalization": normalization}), path)
     fov = resident(dataset(tmp_path), "FOV_002", fovs["FOV_002"]).run(PipelineConfig(preprocessing=recipe))
     top = np.iinfo(dtype).max
@@ -241,7 +241,7 @@ def test_shortcut_faults_raise():
     rounds = random_fovs(np.uint8, seed=3)["FOV_001"]
     raw = summarize_histograms(rounds, channel_labels=CHANNELS, fov_id="FOV_001")
     scalar = ScalarBackgroundConfig(fit="supplied")
-    section = supplied_section(scalar, raw)
+    section = fit_supplied_section(scalar, raw)
     for bad in (None, {"fitted": {"round1": section["fitted"]["round1"]}, "params": section["params"]},
                 {**section, "params": {"percentile": 20.0}},
                 {**section, "summarized_after": [{"step": "white_tophat", "config": {"radius_yx": 3}}]},
@@ -261,17 +261,17 @@ def test_shortcut_faults_raise():
 def test_scalar_supplied_section_is_validated_against_the_recipe(tmp_path):
     rounds = random_fovs(np.uint8, seed=4)["FOV_001"]
     raw = summarize_histograms(rounds, channel_labels=CHANNELS, fov_id="FOV_001")
-    section = supplied_section(ScalarBackgroundConfig(percentile=5, fit="supplied"), raw)
+    section = fit_supplied_section(ScalarBackgroundConfig(percentile=5, fit="supplied"), raw)
     assert section["params"] == {"percentile": 5.0} and section["summarized_after"] == []
     path = tmp_path / "s.json"
-    write_supplied_statistics(supplied_statistics(raw, {"scalar_background": section}), path)
+    save_supplied_statistics(supplied_statistics(raw, {"scalar_background": section}), path)
     recipe = lambda p: PreprocessingRecipe((PreprocessingStep(ScalarBackgroundConfig(percentile=p, fit="supplied")),),
                                            supplied_statistics=path)
-    assert read_supplied_statistics(path, recipe(5), rounds=ROUNDS)["steps"]["scalar_background"] == section
+    assert load_supplied_statistics(path, recipe(5), rounds=ROUNDS)["steps"]["scalar_background"] == section
     with pytest.raises(ValueError, match="percentile"):
-        read_supplied_statistics(path, recipe(10))
+        load_supplied_statistics(path, recipe(10))
     with pytest.raises(ValueError, match="rounds"):
-        read_supplied_statistics(path, recipe(5), rounds=ROUNDS + ("round3",))
+        load_supplied_statistics(path, recipe(5), rounds=ROUNDS + ("round3",))
     good = supplied_statistics(raw, {"scalar_background": section})
     for change in (lambda s: s["params"].update(percentile=100), lambda s: s["params"].update(extra=1),
                    lambda s: s["fitted"]["round1"].update(background=[1]),
@@ -279,9 +279,9 @@ def test_scalar_supplied_section_is_validated_against_the_recipe(tmp_path):
         candidate = json.loads(json.dumps(good))
         change(candidate["steps"]["scalar_background"])
         with pytest.raises(ValueError):
-            write_supplied_statistics(candidate, tmp_path / "bad.json")
+            save_supplied_statistics(candidate, tmp_path / "bad.json")
     with pytest.raises(ValueError, match="reference_round"):
-        supplied_section(ScalarBackgroundConfig(fit="supplied"), raw, reference_round="round1")
+        fit_supplied_section(ScalarBackgroundConfig(fit="supplied"), raw, reference_round="round1")
 
 
 # --- 3D background -----------------------------------------------------------------

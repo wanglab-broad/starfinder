@@ -28,7 +28,7 @@ null with no row. :py:data:`~starfinder.report.REPORT_TABLES` are the tables of 
 :py:class:`~starfinder.report.MarkerGroup`, :py:class:`~starfinder.report.ReportLimits` and
 :py:class:`~starfinder.report.RuleLimit`, is what the user supplies: the marker groups and
 pairs, the positive threshold, the example FOVs, the provisional limits of the problematic-FOV
-rules and the size of the whole-sample figures. :py:func:`~starfinder.report.read_report`
+rules and the size of the whole-sample figures. :py:func:`~starfinder.report.load_report`
 reads a report's ``report.json`` back, checking every file it lists against its SHA-256.
 
 ``Dataset.report(sample, fov_ids, *, assignment="default", segmentation=None, config=None,
@@ -68,7 +68,7 @@ relative link to each present sample's ``report.html``, and three box plots by s
 FOV, fraction matched to the codebook, cells per FOV) drawn from each present sample's
 ``tables/fovs.csv``; a sample with no value in a column is an empty slot labelled with the reason
 ("missing", "no run record", "no cells"). Each report is read with
-:py:func:`~starfinder.report.read_report`, so a ``report.json`` or a file it lists that differs
+:py:func:`~starfinder.report.load_report`, so a ``report.json`` or a file it lists that differs
 from its record raises ``ValueError`` naming the file before anything is written. The entry reads
 no run record, placement or export, recomputes nothing a sample report holds and writes nothing
 under a sample's folder; the page is built from ``starfinder/report/templates/index.html`` with
@@ -80,9 +80,9 @@ the CSS of the sample page and, like it, loads nothing.
    :toctree: generated
 
    ComparisonRecord
+   load_report
    MarkerGroup
    PROBLEM_RULES
-   read_report
    REPORT_PARTS
    REPORT_TABLES
    ReportConfig

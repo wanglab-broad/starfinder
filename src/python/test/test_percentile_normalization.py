@@ -17,9 +17,9 @@ from starfinder.dataset import Dataset, PipelineConfig, RoundState
 from starfinder.image import ImageMetadata
 from starfinder.preprocessing import (PREPROCESSING_METHODS, HistogramMatchingConfig, HistogramSummary, MinMaxNormalizationConfig,
     PercentileNormalizationConfig, PreprocessingRecipe, PreprocessingStep, StepContext, TophatConfig, filter_tophat,
-    histogram_percentile, match_histogram, merge_histograms, normalize_percentile, read_histograms,
-    read_supplied_statistics, run_step, summarize_histograms, summary_stage, supplied_section, supplied_statistics,
-    write_histograms, write_supplied_statistics)
+    histogram_percentile, match_histogram, merge_histograms, normalize_percentile, load_histograms,
+    load_supplied_statistics, run_step, summarize_histograms, summary_recipe, fit_supplied_section, supplied_statistics,
+    save_histograms, save_supplied_statistics)
 from starfinder.preprocessing.normalization import _match_counts
 
 pytestmark = pytest.mark.preprocessing
@@ -210,7 +210,7 @@ def test_merged_percentiles_equal_numpy_inverted_cdf_on_concatenated_volumes(dty
                 value = histogram_percentile(merged.counts[r, c], p)
                 assert value == np.percentile(concatenated, p, method="inverted_cdf"), (name, c, p)
     # The supplied section uses the same estimator.
-    section = supplied_section(PercentileNormalizationConfig(p_low=1, p_high=99.9), merged)
+    section = fit_supplied_section(PercentileNormalizationConfig(p_low=1, p_high=99.9), merged)
     for name in ROUNDS:
         concatenated = [np.concatenate([rounds[name][..., c].ravel() for rounds in fovs.values()]) for c in range(2)]
         assert section["fitted"][name] == {
@@ -242,7 +242,7 @@ def test_summary_merge_exclusion_and_npz_round_trip(tmp_path):
     assert merged.fovs_used == ("FOV_001", "FOV_002") and merged.fovs_excluded == ("FOV_003",)
     np.testing.assert_array_equal(merged.counts, summaries[0].counts + summaries[1].counts)
     assert merged.summarized_after == after
-    loaded = read_histograms(write_histograms(merged, tmp_path / "merged.npz"))
+    loaded = load_histograms(save_histograms(merged, tmp_path / "merged.npz"))
     np.testing.assert_array_equal(loaded.counts, merged.counts)
     for field in ("dtype", "round_names", "channel_labels", "summarized_after", "fovs_used", "fovs_excluded"):
         assert getattr(loaded, field) == getattr(merged, field)
@@ -269,7 +269,7 @@ def test_supplied_histogram_reference_equals_matching_the_concatenated_reference
     fovs = random_fovs(dtype, seed=3, channels=2)
     merged = merge_histograms(summaries_of(fovs))
     config = HistogramMatchingConfig(reference_channel=1, fit="supplied")
-    section = supplied_section(config, merged, reference_round="round1")
+    section = fit_supplied_section(config, merged, reference_round="round1")
     reference = np.concatenate([rounds["round1"][..., 1] for rounds in fovs.values()], axis=0)
     source = random_fovs(dtype, seed=4)["FOV_002"]["round2"]
     context = StepContext("round2", "round1", ImageMetadata("frame"), supplied=section)
@@ -299,15 +299,15 @@ def test_supplied_histogram_reference_through_fov_run_matches_legacy_recipe_1(tm
     fov_recipe = PreprocessingRecipe((minmax, PreprocessingStep(HistogramMatchingConfig())))
     path = tmp_path / "supplied.json"
     recipe = PreprocessingRecipe((minmax, PreprocessingStep(HistogramMatchingConfig(fit="supplied"))), supplied_statistics=path)
-    prefix, after = summary_stage(recipe, "histogram_matching")
+    prefix, after = summary_recipe(recipe, "histogram_matching")
     assert prefix.steps == (minmax,) and prefix.supplied_statistics is None
     assert after == ({"step": "min_max_normalization", "config": json.loads(json.dumps(asdict(minmax.config)))},)
     ds = dataset(tmp_path)
     fov = resident(ds, "FOV_001", fovs["FOV_001"]).run(PipelineConfig(preprocessing=prefix))
     merged = merge_histograms([summarize_histograms(fov.images, channel_labels=CHANNELS, fov_id="FOV_001",
                                                     summarized_after=after)])
-    section = supplied_section(recipe.steps[1].config, merged, reference_round="round1")
-    write_supplied_statistics(supplied_statistics(merged, {"histogram_matching": section}), path)
+    section = fit_supplied_section(recipe.steps[1].config, merged, reference_round="round1")
+    save_supplied_statistics(supplied_statistics(merged, {"histogram_matching": section}), path)
     supplied = resident(ds, "FOV_001", fovs["FOV_001"]).run(PipelineConfig(preprocessing=recipe))
     legacy = resident(ds, "FOV_001", fovs["FOV_001"]).run(PipelineConfig(preprocessing=fov_recipe))
     for name in ROUNDS:
@@ -327,8 +327,8 @@ def test_fov_fitted_ranges_written_as_supplied_values_give_identical_output(tmp_
     path = tmp_path / "supplied.json"
     recipe = PreprocessingRecipe((tophat, PreprocessingStep(PercentileNormalizationConfig(fit="supplied"))),
                                  supplied_statistics=path)
-    after = summary_stage(recipe, "percentile_normalization")[1]
-    write_supplied_statistics(document({"percentile_normalization": percentile_section(fitted, after)}, "uint16"), path)
+    after = summary_recipe(recipe, "percentile_normalization")[1]
+    save_supplied_statistics(document({"percentile_normalization": percentile_section(fitted, after)}, "uint16"), path)
     supplied_run = resident(ds, "FOV_001", fovs["FOV_001"]).run(PipelineConfig(preprocessing=recipe))
     for name in ROUNDS:
         assert supplied_run.images[name].dtype == np.uint16
@@ -346,7 +346,7 @@ def test_supplied_range_is_fitted_after_the_preceding_step(tmp_path):
     path = tmp_path / "supplied.json"
     recipe = PreprocessingRecipe((PreprocessingStep(TophatConfig()), PreprocessingStep(PercentileNormalizationConfig(fit="supplied"))),
                                  supplied_statistics=path)
-    prefix, after = summary_stage(recipe, "percentile_normalization")
+    prefix, after = summary_recipe(recipe, "percentile_normalization")
     ds = dataset(tmp_path)
     summaries = []
     for fov_id, rounds in fovs.items():
@@ -354,7 +354,7 @@ def test_supplied_range_is_fitted_after_the_preceding_step(tmp_path):
         summaries.append(summarize_histograms(fov.images, channel_labels=CHANNELS, fov_id=fov_id,
                                               summarized_after=after))
     merged = merge_histograms(summaries)
-    section = supplied_section(recipe.steps[1].config, merged)
+    section = fit_supplied_section(recipe.steps[1].config, merged)
     for name in ROUNDS:
         for c in range(2):
             raw = np.concatenate([rounds[name][..., c].ravel() for rounds in fovs.values()])
@@ -362,7 +362,7 @@ def test_supplied_range_is_fitted_after_the_preceding_step(tmp_path):
             fitted = (section["fitted"][name]["low"][c], section["fitted"][name]["high"][c])
             assert fitted == tuple(np.percentile(tophat, p, method="inverted_cdf") for p in (1, 99.9))
             assert fitted != tuple(np.percentile(raw, p, method="inverted_cdf") for p in (1, 99.9))
-    write_supplied_statistics(supplied_statistics(merged, {"percentile_normalization": section}), path)
+    save_supplied_statistics(supplied_statistics(merged, {"percentile_normalization": section}), path)
     fov = resident(ds, "FOV_002", fovs["FOV_002"]).run(PipelineConfig(preprocessing=recipe))
     low, high = section["fitted"]["round2"]["low"][1], section["fitted"]["round2"]["high"][1]
     np.testing.assert_array_equal(fov.images["round2"][..., 1],
@@ -376,7 +376,7 @@ def _supplied_setup(tmp_path):
     tophat = PreprocessingStep(TophatConfig())
     recipe = PreprocessingRecipe((tophat, PreprocessingStep(PercentileNormalizationConfig(fit="supplied"))),
                                  supplied_statistics=path)
-    after = summary_stage(recipe, "percentile_normalization")[1]
+    after = summary_recipe(recipe, "percentile_normalization")[1]
     fitted = {name: {"low": [0, 1], "high": [200, 150]} for name in ROUNDS}
     return path, recipe, document({"percentile_normalization": percentile_section(fitted, after)})
 
@@ -414,10 +414,10 @@ def test_supplied_file_faults_raise(tmp_path, fault):
     with pytest.raises(ValueError):
         fov.run(PipelineConfig(preprocessing=recipe))
     with pytest.raises(ValueError):
-        read_supplied_statistics(path, recipe, dtype="uint8", channel_labels=CHANNELS, rounds=ROUNDS)
+        load_supplied_statistics(path, recipe, dtype="uint8", channel_labels=CHANNELS, rounds=ROUNDS)
     if fault == "dtype":
         # The file's dtype is compared with the step's input when the step runs.
-        read_supplied_statistics(path, recipe, channel_labels=CHANNELS, rounds=ROUNDS)
+        load_supplied_statistics(path, recipe, channel_labels=CHANNELS, rounds=ROUNDS)
     else:
         # Every other fault is found when the file is read, before any step runs.
         np.testing.assert_array_equal(fov.images["round1"], fovs["FOV_001"]["round1"])
@@ -425,18 +425,18 @@ def test_supplied_file_faults_raise(tmp_path, fault):
 
 def test_valid_supplied_file_is_read_and_written(tmp_path):
     path, recipe, good = _supplied_setup(tmp_path)
-    write_supplied_statistics(good, path)
-    assert read_supplied_statistics(path, recipe, dtype=np.uint8, channel_labels=CHANNELS, rounds=ROUNDS) == good
+    save_supplied_statistics(good, path)
+    assert load_supplied_statistics(path, recipe, dtype=np.uint8, channel_labels=CHANNELS, rounds=ROUNDS) == good
     with pytest.raises(ValueError, match="rounds"):
-        read_supplied_statistics(path, recipe, rounds=ROUNDS + ("round3",))
+        load_supplied_statistics(path, recipe, rounds=ROUNDS + ("round3",))
     path.write_text("{not json")
     with pytest.raises(ValueError, match="JSON"):
-        read_supplied_statistics(path)
+        load_supplied_statistics(path)
 
 
 def test_step_input_dtype_must_match_the_supplied_file(tmp_path):
     path, recipe, good = _supplied_setup(tmp_path)
-    write_supplied_statistics(good, path)
+    save_supplied_statistics(good, path)
     fovs = random_fovs(np.uint16, seed=9)
     with pytest.raises(ValueError, match="supplied statistics are for uint8"):
         resident(dataset(tmp_path), "FOV_001", fovs["FOV_001"]).run(PipelineConfig(preprocessing=recipe))
@@ -446,11 +446,11 @@ def test_histogram_section_faults_raise(tmp_path):
     fovs = random_fovs(np.uint8, seed=10)
     merged = merge_histograms(summaries_of(fovs))
     config = HistogramMatchingConfig(fit="supplied")
-    section = supplied_section(config, merged, reference_round="round1")
+    section = fit_supplied_section(config, merged, reference_round="round1")
     recipe = PreprocessingRecipe((PreprocessingStep(config),), supplied_statistics=tmp_path / "s.json")
     good = supplied_statistics(merged, {"histogram_matching": section})
-    write_supplied_statistics(good, tmp_path / "s.json")
-    assert read_supplied_statistics(tmp_path / "s.json", recipe)["steps"]["histogram_matching"] == section
+    save_supplied_statistics(good, tmp_path / "s.json")
+    assert load_supplied_statistics(tmp_path / "s.json", recipe)["steps"]["histogram_matching"] == section
     for change in (lambda s: s["params"].update(reference_channel=2), lambda s: s["params"].update(reference_round="round2"),
                    lambda s: s["fitted"]["round1"]["counts"].pop(), lambda s: s["fitted"]["round1"]["values"].reverse(),
                    lambda s: (s["fitted"]["round1"]["values"].append(256), s["fitted"]["round1"]["counts"].append(1)),
@@ -458,14 +458,14 @@ def test_histogram_section_faults_raise(tmp_path):
         candidate = json.loads(json.dumps(good))
         change(candidate["steps"]["histogram_matching"])
         with pytest.raises(ValueError):
-            write_supplied_statistics(candidate, tmp_path / "bad.json")
+            save_supplied_statistics(candidate, tmp_path / "bad.json")
     other = PreprocessingRecipe((PreprocessingStep(HistogramMatchingConfig(reference_channel=1, fit="supplied")),),
                                 supplied_statistics=tmp_path / "s.json")
     with pytest.raises(ValueError, match="reference_channel"):
-        read_supplied_statistics(tmp_path / "s.json", other)
+        load_supplied_statistics(tmp_path / "s.json", other)
     for bad in (dict(reference_round="round9"), dict(reference_round=None)):
         with pytest.raises(ValueError, match="reference_round"):
-            supplied_section(config, merged, **bad)
+            fit_supplied_section(config, merged, **bad)
     with pytest.raises(ValueError, match="no values for round"):
         run_step(fovs["FOV_001"]["round2"], config, StepContext("round2", "round2", ImageMetadata("f"), supplied=section))
 
@@ -480,7 +480,7 @@ def test_recipe_rejects_repeated_supplied_step_names_and_a_missing_file():
     recipe = PreprocessingRecipe((PreprocessingStep(PercentileNormalizationConfig()), supplied), supplied_statistics="s.json")
     assert recipe.supplied_statistics == Path("s.json")
     with pytest.raises(ValueError, match="no step"):
-        summary_stage(PreprocessingRecipe((PreprocessingStep(TophatConfig()),)), "percentile_normalization")
+        summary_recipe(PreprocessingRecipe((PreprocessingStep(TophatConfig()),)), "percentile_normalization")
 
 
 # --- Two-pass example -----------------------------------------------------------------

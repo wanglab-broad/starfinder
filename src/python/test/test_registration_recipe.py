@@ -15,7 +15,7 @@ from starfinder._registry import _version
 from starfinder.dataset import (CheckpointConfig, Dataset, PipelineConfig, RoundState, from_workflow_config)
 from starfinder.registration import RecoveryConfig, RegistrationRecipe, RegistrationStep
 from starfinder.image import ImageMetadata
-from starfinder.dataset import read_checkpoint
+from starfinder.dataset import load_checkpoint
 from starfinder._records import atomic_file as _atomic, write_json
 from starfinder._checkpoint import write_registered_round
 from starfinder.registration import (AffineConfig, BSplineConfig, DemonsConfig, InsufficientLandmarksError,
@@ -480,7 +480,7 @@ def test_version_1_registered_checkpoints_still_load_as_sequential(tmp_path):
     header = dict(fov._checkpoint_header(), image_rounds=["round1", "round2"], snapshots=[],
                   registration_attempts=attempts, preprocessing=None)
     write_version_1(directory, header, results)
-    loaded = read_checkpoint(directory, "registered")
+    loaded = load_checkpoint(directory, "registered")
     restored = loaded["registration_results"]["round2"]
     assert restored[0] == translation
     (saved, _) = json.loads((directory / "registered" / "transforms.json").read_text())["transforms"]["round2"]
@@ -519,12 +519,12 @@ def test_version_1_candidates_and_pre_qc_headers_still_load(tmp_path):
     directory = fov.paths.checkpoint_dir
     for stage in ("candidates", "pre_qc"):
         path = directory / f"{stage}.json"
-        current = read_checkpoint(directory, stage)
+        current = load_checkpoint(directory, stage)
         header = json.loads(path.read_text())
         assert header["format_version"] == 2
         path.write_text(json.dumps(dict(header, format_version=1)))
-        again = read_checkpoint(directory, stage)
+        again = load_checkpoint(directory, stage)
         assert set(again) == set(current)
         path.write_text(json.dumps(dict(header, format_version=3)))
         with pytest.raises(ValueError, match="is not a version 1 or 2"):
-            read_checkpoint(directory, stage)
+            load_checkpoint(directory, stage)

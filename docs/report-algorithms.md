@@ -1265,7 +1265,7 @@ Rules:
 * **Expected values** are written in the fixture by hand, or computed in the test by the
   formula this page states from the fixture's own numbers (for example `count / spots` in
   float64), or come from a package function that is not part of the report and that the row
-  names (`ownership_map`, `read_checkpoint`). Never from the report's own output.
+  names (`ownership_map`, `dataset.load_checkpoint`). Never from the report's own output.
 * **Seeds.** The synthetic scenes use the preset seed 42 of {doc}`synthetic-sample-scene`;
   the example draw uses its own seed 0, which is part of the algorithm ("The example FOVs").
   No other random number is used. The hand-written fixtures use none.
@@ -1336,7 +1336,7 @@ Rules:
 | PR5 | Spots close to zero | `hand_tables` spots (1000, 1200, 40, 1000); (0, 0, 0) (none) | Rows | The third FOV (40 < 0.05 × 1000 = 50); with every count 0 the limit is 0 and nothing is marked. Exact. |
 | EF1 | Automatic example choice | `report_records`; `report_cells`; a 10-FOV table with `passed_filter` 100, 200, …, 1000 (none) | `report.json` `examples`; `fovs.csv` `example` | Before a segmentation: `example_1` F1 (median 645, distances 5, 155, 145, 5, the tie of F1 and F4 broken by list order, `q = 1`), `example_2` F3 (`fewest_reads`, 500), `example_3` F2 (`most_reads`, 800); with cells: `example_2` F2 (`fewest_cells`, 0), `example_3` F4 (`most_cells`, 14); for the 10-FOV table `N` holds the FOVs of 500 and 600 (`q = 2`) and `example_1` is `N[default_rng(0).integers(2)]`, recorded with `seed` 0. Exact. |
 | EF2 | Coinciding, named and unavailable examples | `report_records` `one`; a two-FOV copy; `example_fovs` given; `scene_no_run_json` (none; 42 for the scene) | Roles and rows | One FOV: three roles on F1; two FOVs: the third role on the FOV its rule gives over both; named: the roles in the given order with `chosen_by` `configuration`; no read count: the choice unavailable with `no_run_record`, the example parts each named by a row. Exact. |
-| RP1 | The replay against the saved registered image | `scene_chain_registered`, FOV `FOV_001` (42) | Largest absolute difference per round between the replayed image and `read_checkpoint(…, "registered")` | 0 in every round (bit-identical, every voxel compared, as W-384 `replay.csv`): the two rounds the report replays, and for the test all four; the replayed fitted values equal the recorded ones. Exact. |
+| RP1 | The replay against the saved registered image | `scene_chain_registered`, FOV `FOV_001` (42) | Largest absolute difference per round between the replayed image and `dataset.load_checkpoint(…, "registered")` | 0 in every round (bit-identical, every voxel compared, as W-384 `replay.csv`): the two rounds the report replays, and for the test all four; the replayed fitted values equal the recorded ones. Exact. |
 | RP2 | Replay failures | `scene_chain_registered` copies: one recorded `fitted` maximum raised by 1 in `run.json`; one input byte changed; one input removed; a recipe with a `demons` step and a `post_registration` entry run without the stage `registered` (42) | `report.json` `replay`; rows | `replay_differs`; `input_changed`; `input_missing`; `field_not_saved` for the Registration example and, for the moving round, the two rows of the `post_registration` outputs with `field_not_saved`, the round's `input` and `steps` rows of `intensity.csv` written. Exact. |
 | RP3 | The two sources of the transforms | `scene_chain_registered` and its copy with R1 removed (42) | Replayed images | The replayed images equal bit for bit, nothing left out; `transform_source` is `run.json` for the first and `transforms.json` for the copy (a field the comparison of images does not read). Exact. |
 | PG1 | Embedded data equal the saved tables | every page the RC, CH, RT, Z1 and A2 checks write | The data block parsed with `json`, read back with the dtypes `report.json` lists | Each embedded table equals its CSV cell by cell, every column and row compared, null for a missing value; `cells` and `intensity` are not embedded. Exact. |
@@ -1474,7 +1474,7 @@ present at a stage when no row of `unavailable.csv` names it with a reason other
 ### Tour notebook (W-460)
 
 The executed `example/introduction/starfinder_report_tour.ipynb` shows the report through the
-public entries (`Dataset.report`, `Dataset.compare_samples`, `read_report`) on `sample-tiny-v1`
+public entries (`Dataset.report`, `Dataset.compare_samples`, `load_report`) on `sample-tiny-v1`
 and `scene_plane`, as the §2.6 to §2.10 tours show theirs: the records of `run.json`, a report
 after the per-FOV processing and after the export, `report.json` and the tables, the unavailable
 values with their reasons, the problematic FOVs under the default and a stricter limit, both

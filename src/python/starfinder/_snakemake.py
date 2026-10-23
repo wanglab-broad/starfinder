@@ -470,7 +470,7 @@ def _run_reads_assignment(snakemake):
     Inputs (as the rule declares them): the sample annotation, the DAPI image
     (diagnostic plot only), images/stardist_segmentation/{fovID}.tif (imported
     with the inferred target on the declared grid, _legacy_cells), the
-    goodSpots CSV (molecule_table_from_csv; integer and float coordinates),
+    goodSpots CSV (import_legacy_molecules_csv; integer and float coordinates),
     documents/genes.csv (checked against the codebook, _assignment_genes) and
     the tile configuration, read for the sample of the FOV and applied outside
     the package: global coordinates and the overlap filter, as the script does
@@ -487,7 +487,7 @@ def _run_reads_assignment(snakemake):
     assignment folder checkpoints/{fovID}/assignment/<assembly.assignment>/
     (its record named so), which the export_sample rule assembles.
     """
-    from starfinder.assignment import assign_molecules, molecule_table_from_csv
+    from starfinder.assignment import assign_molecules, import_legacy_molecules_csv
     config, fov_id = snakemake.config, snakemake.wildcards.fovID
     assignment, target, translation = _reads_assignment(config)
     block = _assembly_block(config) if 'assembly' in config else None
@@ -499,7 +499,7 @@ def _run_reads_assignment(snakemake):
         grid, cells = _legacy_cells(Path(snakemake.input[2]), config, fov_id, target)
     else:
         grid, cells = _assembly_cells(Path(snakemake.input[2]), output_root, config, fov_id, target)
-    molecules = molecule_table_from_csv(snakemake.input[3], spot_namespace=_label_namespace(config, fov_id),
+    molecules = import_legacy_molecules_csv(snakemake.input[3], spot_namespace=_label_namespace(config, fov_id),
                                         genes=genes)
     result = assign_molecules(molecules, cells, grid=grid, config=assignment)
     name = 'reads_assignment' if block is None or block.assignment is None else block.assignment

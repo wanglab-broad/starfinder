@@ -15,8 +15,8 @@ import numpy as np
 from starfinder.dataset import Dataset, PipelineConfig, RoundState
 from starfinder.image import ImageMetadata
 from starfinder.preprocessing import (PercentileNormalizationConfig, PreprocessingRecipe, PreprocessingStep, TophatConfig,
-    merge_histograms, read_supplied_statistics, summarize_histograms, summary_stage, supplied_section,
-    supplied_statistics, write_histograms, write_supplied_statistics)
+    merge_histograms, load_supplied_statistics, summarize_histograms, summary_recipe, fit_supplied_section,
+    supplied_statistics, save_histograms, save_supplied_statistics)
 
 ROUNDS = ("round1", "round2")
 CHANNELS = ("ch00", "ch01")
@@ -58,20 +58,20 @@ def main(output):
                                  supplied_statistics=supplied)
 
     # Pass 1: summarize at the normalization step's input, after the top-hat.
-    prefix, after = summary_stage(recipe, "percentile_normalization")
+    prefix, after = summary_recipe(recipe, "percentile_normalization")
     summaries = []
     for fov_id, rounds in raw.items():
         fov = load(dataset, fov_id, rounds).run(PipelineConfig(preprocessing=prefix))
         summary = summarize_histograms({name: fov.images[name] for name in ROUNDS}, channel_labels=CHANNELS,
                                        fov_id=fov_id, summarized_after=after)
-        write_histograms(summary, output / f"{fov_id}_histograms.npz")
+        save_histograms(summary, output / f"{fov_id}_histograms.npz")
         summaries.append(summary)
     merged = merge_histograms(summaries)
-    section = supplied_section(recipe.steps[1].config, merged)
-    write_supplied_statistics(supplied_statistics(merged, {"percentile_normalization": section}), supplied)
+    section = fit_supplied_section(recipe.steps[1].config, merged)
+    save_supplied_statistics(supplied_statistics(merged, {"percentile_normalization": section}), supplied)
 
     # Pass 2: apply the full recipe with the supplied sample-level range.
-    statistics = read_supplied_statistics(supplied, recipe, channel_labels=CHANNELS, rounds=ROUNDS)
+    statistics = load_supplied_statistics(supplied, recipe, channel_labels=CHANNELS, rounds=ROUNDS)
     results = {}
     for fov_id, rounds in raw.items():
         fov = load(dataset, fov_id, rounds).run(PipelineConfig(preprocessing=recipe))

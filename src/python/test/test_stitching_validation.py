@@ -12,7 +12,7 @@ agrees with the ``slow`` marks. This module adds:
   (``multiview_stitcher`` on the reference-round images, maximum over channels,
   ``binning_zyx=(1, 1, 1)``, the link filter off), approved with ``approve_placement`` when its
   review is ``required``; the path that needs no segmenter (``import_labels(…, relabel=False)``,
-  ``molecule_table_from_csv``, ``assign_molecules`` without expansion) and ``assemble`` on it;
+  ``import_legacy_molecules_csv``, ``assign_molecules`` without expansion) and ``assemble`` on it;
   MV3's bound, EE2 (the oracle of ``test_stitching_assembly_scene.py`` with the stitched
   origins in place of the true ones) and EE3 on that assembly; and the observations whose
   status differs from the assembly on the truth placement in gauge G1 (``true_correction_*``
@@ -31,7 +31,7 @@ import pandas as pd
 import pytest
 
 from starfinder.assembly import AssemblyInput, assemble
-from starfinder.assignment import assign_molecules, molecule_table_from_csv
+from starfinder.assignment import assign_molecules, import_legacy_molecules_csv
 from starfinder.segmentation import ReferenceGrid, import_labels
 from starfinder.stitching import (STITCHING_METHODS, MultiviewStitcherConfig, StitchingInput, approve_placement,
                                   positions_from_table, stitch)
@@ -214,7 +214,7 @@ def chain(tmp_path_factory):
             namespace = json.dumps([dataset, sample, fov, None, "truth"])
             labels[target] = import_labels(root / "fovs" / fov / "labels" / file, grid=grids[fov], target=target,
                                            relabel=False, label_namespace=namespace)
-        mols = molecule_table_from_csv(root / "fovs" / fov / "molecules.csv",
+        mols = import_legacy_molecules_csv(root / "fovs" / fov / "molecules.csv",
                                        spot_namespace=json.dumps([dataset, sample, fov, None]), genes=book.genes)
         results[fov] = assign_molecules(mols, labels["cell"], grid=grids[fov], nuclei=labels["nucleus"])
     assembly_inputs = [AssemblyInput(f, grids[f], assignment=results[f]) for f in table.fov_ids]

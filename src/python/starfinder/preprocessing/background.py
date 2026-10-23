@@ -146,7 +146,7 @@ def scalar_background_histograms(summary: HistogramSummary, config: ScalarBackgr
     merging). With fit="supplied", b is read per round from supplied, the
     scalar_background section of the supplied-statistics file, and the
     summary may be merged. The result records the step after the summary's
-    summarized_after, as summary_stage records it for the next fitted step.
+    summarized_after, as summary_recipe records it for the next fitted step.
 
     Raises
     ------

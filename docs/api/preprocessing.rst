@@ -43,11 +43,11 @@ Steps with ``fit="supplied"`` (percentile normalization, scalar background and t
 histogram-matching reference) read their values from the recipe's ``supplied_statistics`` file, schema
 ``starfinder.preprocessing.supplied/1``, as specified in
 :doc:`../preprocessing-algorithms`. A summary pass runs the steps before the fitted
-step (:py:func:`~starfinder.preprocessing.summary_stage`), records the integer
+step (:py:func:`~starfinder.preprocessing.summary_recipe`), records the integer
 histograms of each FOV at that step's input
 (:py:func:`~starfinder.preprocessing.summarize_histograms`), sums them
 (:py:func:`~starfinder.preprocessing.merge_histograms`) and fits the step's section
-(:py:func:`~starfinder.preprocessing.supplied_section`). The application pass runs the
+(:py:func:`~starfinder.preprocessing.fit_supplied_section`). The application pass runs the
 full recipe; ``FOV.run`` validates the file against the recipe, the dataset
 ``channel_order`` and the rounds before any step runs. The manual two-pass example
 below summarizes three FOVs after a white top-hat, merges them, writes the file and
@@ -70,14 +70,18 @@ API
    :toctree: generated
 
    Background3DConfig
+   correct_background
    filter_tophat
+   fit_supplied_section
    histogram_percentile
    HistogramMatchingConfig
    HistogramSummary
+   load_histograms
+   load_supplied_statistics
    match_histogram
    merge_histograms
    MinMaxNormalizationConfig
-   normalize_intensity
+   normalize_min_max
    normalize_percentile
    PercentileNormalizationConfig
    PREPROCESSING_METHODS
@@ -86,11 +90,10 @@ API
    PreprocessingStep
    project_image
    ProjectionConfig
-   read_histograms
-   read_supplied_statistics
-   reconstruct_background
    ReconstructionConfig
    run_step
+   save_histograms
+   save_supplied_statistics
    scalar_background_histograms
    ScalarBackgroundConfig
    step_config_type
@@ -100,9 +103,6 @@ API
    subtract_background_3d
    subtract_scalar_background
    summarize_histograms
-   summary_stage
-   supplied_section
+   summary_recipe
    supplied_statistics
    TophatConfig
-   write_histograms
-   write_supplied_statistics

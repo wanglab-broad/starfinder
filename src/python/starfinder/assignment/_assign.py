@@ -25,7 +25,7 @@ COMPARTMENTS = ("whole", "nucleus", "cytoplasm")
 _MOLECULE_STATES = ("nucleus", "cytoplasm", "withheld", "no_nucleus", "unavailable")
 
 
-def sample_labels(labels, positions_zyx, *, geometry: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def labels_at_positions(labels, positions_zyx, *, geometry: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Read a label image at molecule positions with the rule ``i = floor(c + 0.5)`` per axis.
 
     Voxel ``i`` covers ``[i − 0.5, i + 0.5)``, so a position at −0.5 samples voxel 0
@@ -427,7 +427,7 @@ def assign_molecules(molecules: MoleculeTable, cells: SegmentationResult, *, gri
     # Sampling: the territory, the original territory and the nucleus at one voxel.
     table = molecules.table
     positions = table[["z", "y", "x"]].to_numpy(np.float64)
-    values, voxels, inside = sample_labels(sampled, positions, geometry=geometry)
+    values, voxels, inside = labels_at_positions(sampled, positions, geometry=geometry)
     # Plane labels on a grid of several planes: z is checked against that grid. A one-plane grid samples y and x
     # only, so z never puts a molecule outside it (voxel_z is the plane, 0).
     if geometry == "plane" and grid.shape_zyx[0] > 1:
@@ -436,9 +436,9 @@ def assign_molecules(molecules: MoleculeTable, cells: SegmentationResult, *, gri
         inside = inside & z_inside
         voxels[~z_inside, 0] = -1
     values = np.where(inside, values, 0).astype(np.int64)
-    original = (sample_labels(cell_labels, positions, geometry=geometry)[0].astype(np.int64)
+    original = (labels_at_positions(cell_labels, positions, geometry=geometry)[0].astype(np.int64)
                 if territories is not None else None)
-    nucleus_values = (sample_labels(nuclei.labels, positions, geometry=nuclei.geometry)[0].astype(np.int64)
+    nucleus_values = (labels_at_positions(nuclei.labels, positions, geometry=nuclei.geometry)[0].astype(np.int64)
                       if nuclei is not None else None)
 
     # Cells: sizes and centroids of both territories, correspondence and the exclusion.

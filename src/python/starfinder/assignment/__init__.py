@@ -18,14 +18,14 @@ region and the cells and molecules the sample assembly excluded. See
 docs/assignment-contract.md and docs/assignment-algorithms.md.
 """
 from ._anndata import write_h5ad
-from ._assign import AssignmentResult, assign_molecules, sample_labels
+from ._assign import AssignmentResult, assign_molecules, labels_at_positions
 from ._config import (ASSIGNMENT_STATUSES, CELL_CORRESPONDENCE, CELL_STATUSES, COMPARTMENT_STATES, NUCLEUS_STATUSES,
                       AssignmentConfig, CorrespondenceConfig)
 from ._correspondence import match_nuclei
 from ._diagnostics import FOVOwnership, plot_assignment, summarize_assignment
-from ._molecules import MoleculeTable, molecule_table, molecule_table_from_csv
+from ._molecules import MoleculeTable, molecule_table, import_legacy_molecules_csv
 
 __all__ = ["assign_molecules", "AssignmentResult", "AssignmentConfig", "CorrespondenceConfig",
-           "MoleculeTable", "molecule_table", "molecule_table_from_csv", "sample_labels", "match_nuclei",
+           "MoleculeTable", "molecule_table", "import_legacy_molecules_csv", "labels_at_positions", "match_nuclei",
            "ASSIGNMENT_STATUSES", "CELL_STATUSES", "CELL_CORRESPONDENCE", "NUCLEUS_STATUSES",
            "COMPARTMENT_STATES", "summarize_assignment", "plot_assignment", "FOVOwnership", "write_h5ad"]

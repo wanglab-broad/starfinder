@@ -151,7 +151,7 @@ class ComparisonRecord:
     record: dict
 
 
-def read_report(folder) -> dict:
+def load_report(folder) -> dict:
     """The record ``report.json`` of a report folder, checked against the files it lists.
 
     Parameters

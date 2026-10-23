@@ -534,7 +534,7 @@ def per_fov_routes(folder, *, assignment=None, name="default"):
     assignment folder ``checkpoints/<fov>/assignment/<name>/``. Returns the AssignmentResults by FOV."""
     import json as json_module
 
-    from starfinder.assignment import AssignmentConfig, assign_molecules, molecule_table_from_csv
+    from starfinder.assignment import AssignmentConfig, assign_molecules, import_legacy_molecules_csv
     from starfinder.assignment._persist import assignment_directory, write_assignment
     from starfinder.segmentation import import_labels
     assignment = AssignmentConfig() if assignment is None else assignment
@@ -551,7 +551,7 @@ def per_fov_routes(folder, *, assignment=None, name="default"):
                              metadata={"axes": "ZYX"})
             namespace = json_module.dumps([DS, SAMPLE, fov, None, target], separators=(",", ":"))
             labels[target] = import_labels(path, grid=grid, target=target, relabel=False, label_namespace=namespace)
-        molecules = molecule_table_from_csv(root / "signal" / f"{fov}_goodSpots.csv",
+        molecules = import_legacy_molecules_csv(root / "signal" / f"{fov}_goodSpots.csv",
                                             spot_namespace=json_module.dumps([DS, SAMPLE, fov, None],
                                                                              separators=(",", ":")), genes=genes)
         result = assign_molecules(molecules, labels["cell"], grid=grid, nuclei=labels["nucleus"], config=assignment)

@@ -5,7 +5,7 @@ Fixtures: ``scene_tiny`` (``sample-tiny-v1``, seed 42, J1 jitter in Z, Y and X),
 ``scene_tiny_flat`` (the same configuration with ``jitter_max_zyx`` ``(0.0, 1.5, 1.5)``) and
 ``scene_tiny_flat_inward`` (every FOV moved by the bound towards the grid centre in Y and X,
 Z 0). Per FOV the truth labels enter through ``import_labels(…, relabel=False)`` and the
-molecules through ``molecule_table_from_csv``; ``assign_molecules`` runs without expansion;
+molecules through ``import_legacy_molecules_csv``; ``assign_molecules`` runs without expansion;
 the placement is ``placement_from_table`` on ``positions.csv`` with ``origins`` from
 ``true_origin_z/y/x`` of ``placement_truth.csv``, approved. The oracle of EE2 is computed here
 from the truth tables and the FOV truth label images by the rules of
@@ -20,7 +20,7 @@ import pandas as pd
 import pytest
 
 from starfinder.assembly import AssemblyInput, assemble
-from starfinder.assignment import assign_molecules, molecule_table_from_csv
+from starfinder.assignment import assign_molecules, import_legacy_molecules_csv
 from starfinder.segmentation import ReferenceGrid, import_labels
 from starfinder.stitching import approve_placement, placement_from_table, positions_from_table
 
@@ -73,7 +73,7 @@ def scene(request, tmp_path_factory):
             namespace = json.dumps([dataset, sample, fov, None, "truth"])
             labels[target] = import_labels(root / "fovs" / fov / "labels" / file, grid=grids[fov], target=target,
                                            relabel=False, label_namespace=namespace)
-        mols = molecule_table_from_csv(root / "fovs" / fov / "molecules.csv",
+        mols = import_legacy_molecules_csv(root / "fovs" / fov / "molecules.csv",
                                        spot_namespace=json.dumps([dataset, sample, fov, None]), genes=book.genes)
         results[fov] = assign_molecules(mols, labels["cell"], grid=grids[fov], nuclei=labels["nucleus"])
     result = assemble(placement, [AssemblyInput(f, grids[f], assignment=results[f]) for f in table.fov_ids])

@@ -131,8 +131,8 @@ has its `step` index, its transform and its diagnostics:
 | `dense` | `field`, the file name | `result_<i>`: the displacement field, float32 or float64 |
 
 `<i>` is the result's index in the round's list. JSON floats round-trip exactly,
-so the reloaded transforms equal the saved ones. `read_checkpoint` and
-`load_checkpoint("registered")` rebuild a
+so the reloaded transforms equal the saved ones. `dataset.load_checkpoint` and
+`FOV.load_checkpoint("registered")` rebuild a
 {py:class}`~starfinder.registration.TransformChain` per round
 (`registration_chains`) and the round's `WarpConfig`
 (`registration_record["application"]`, also each result's
@@ -432,7 +432,7 @@ When no image operation is configured and no images are resident, `run` skips
 the round loop. Resuming is always an explicit call; there is no scheduler.
 {py:meth}`~starfinder.dataset.FOV.save_checkpoint` writes one stage from the
 current results outside `run`. It uses `CheckpointConfig.directory`,
-`table_format` and `overwrite`. {py:func}`~starfinder.dataset.read_checkpoint` reads a
+`table_format` and `overwrite`. {py:func}`~starfinder.dataset.load_checkpoint` reads a
 stage directly and returns a dict keyed by the FOV attributes it restores.
 
 ## run.json

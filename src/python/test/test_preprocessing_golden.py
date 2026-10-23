@@ -23,9 +23,9 @@ from starfinder.preprocessing import (
     TophatConfig,
     filter_tophat,
     match_histogram,
-    normalize_intensity,
+    normalize_min_max,
     project_image,
-    reconstruct_background,
+    correct_background,
 )
 
 from .coordination_helpers import digest
@@ -81,16 +81,16 @@ def channel_stats(volume):
 def operation_outputs(rounds):
     """Each existing operation applied to the moving round (round2)."""
     raw = rounds["round2"]
-    minmax = normalize_intensity(raw, config=MINMAX)
-    reference = normalize_intensity(rounds["round1"], config=MINMAX)[..., 0].copy()
+    minmax = normalize_min_max(raw, config=MINMAX)
+    reference = normalize_min_max(rounds["round1"], config=MINMAX)[..., 0].copy()
     matched = match_histogram(minmax, reference, config=HistogramMatchingConfig())
     return {
         "raw": raw,
         "minmax": minmax,
         "histogram_after_minmax": matched,
-        "reconstruction_after_histogram": reconstruct_background(matched, config=ReconstructionConfig()),
+        "reconstruction_after_histogram": correct_background(matched, config=ReconstructionConfig()),
         "tophat_after_minmax": filter_tophat(minmax, config=TophatConfig()),
-        "reconstruction_raw_uint16": reconstruct_background(raw, config=ReconstructionConfig()),
+        "reconstruction_raw_uint16": correct_background(raw, config=ReconstructionConfig()),
         "tophat_raw_uint16": filter_tophat(raw, config=TophatConfig()),
         "projection_max_raw": project_image(raw, config=ProjectionConfig("max")),
         "projection_sum_raw": project_image(raw, config=ProjectionConfig("sum")),

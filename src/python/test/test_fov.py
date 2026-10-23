@@ -62,14 +62,14 @@ class TestFOVPipeline:
 
     def test_enhance_contrast(self, small_pipeline_dataset):
         fov = small_pipeline_dataset.fov("FOV_001")
-        fov.load_images().normalize_intensity()
+        fov.load_images().normalize_min_max()
 
         for r in fov.images:
             assert fov.images[r].dtype == np.uint8
 
     def test_global_registration(self, small_pipeline_dataset):
         fov = small_pipeline_dataset.fov("FOV_001")
-        fov.load_images().normalize_intensity().register(RegistrationRecipe((RegistrationStep(TranslationConfig()),)))
+        fov.load_images().normalize_min_max().register(RegistrationRecipe((RegistrationStep(TranslationConfig()),)))
 
         # Reference round should not be in global_shifts
         assert "round1" not in detected_shifts(fov)
@@ -88,7 +88,7 @@ class TestFOVPipeline:
 
     def test_spot_finding(self, small_pipeline_dataset):
         fov = small_pipeline_dataset.fov("FOV_001")
-        fov.load_images().normalize_intensity().register(RegistrationRecipe((RegistrationStep(TranslationConfig()),)))
+        fov.load_images().normalize_min_max().register(RegistrationRecipe((RegistrationStep(TranslationConfig()),)))
         fov.find_spots(config=LocalMaximaConfig())
 
         assert spot_table(fov) is not None
@@ -100,7 +100,7 @@ class TestFOVPipeline:
         fov = small_pipeline_dataset.fov("FOV_001")
         (
             fov.load_images()
-            .normalize_intensity()
+            .normalize_min_max()
             .register(RegistrationRecipe((RegistrationStep(TranslationConfig()),))).find_spots(config=LocalMaximaConfig())
             .extract_intensities().decode_reads()
         )
@@ -116,7 +116,7 @@ class TestFOVPipeline:
         fov = small_pipeline_dataset.fov("FOV_001")
         (
             fov.load_images()
-            .normalize_intensity()
+            .normalize_min_max()
             .register(RegistrationRecipe((RegistrationStep(TranslationConfig()),))).find_spots(config=LocalMaximaConfig())
             .extract_intensities().decode_reads()
         )
@@ -130,7 +130,7 @@ class TestFOVPipeline:
         fov = small_pipeline_dataset.fov("FOV_001")
         (
             fov.load_images()
-            .normalize_intensity()
+            .normalize_min_max()
             .register(RegistrationRecipe((RegistrationStep(TranslationConfig()),))).find_spots(config=LocalMaximaConfig())
             .extract_intensities().decode_reads()
         )
@@ -162,7 +162,7 @@ class TestFOVPipeline:
     def test_fluent_chaining(self, small_pipeline_dataset):
         """Verify methods return self for chaining."""
         fov = small_pipeline_dataset.fov("FOV_001")
-        result = fov.load_images().normalize_intensity()
+        result = fov.load_images().normalize_min_max()
         assert result is fov
 
 

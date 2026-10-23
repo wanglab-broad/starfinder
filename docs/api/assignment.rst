@@ -14,7 +14,7 @@ gene list (``ValueError`` naming them). :py:func:`~starfinder.assignment.molecul
 joins a :py:class:`~starfinder.spot_finding.SpotFindingResult` with a read result by
 ``(spot_namespace, spot_id)``, as :py:func:`~starfinder.readout.export_spots` does (``final``:
 the accepted reads; ``called``: the reads called ``assigned``);
-:py:func:`~starfinder.assignment.molecule_table_from_csv` reads a legacy one-based
+:py:func:`~starfinder.assignment.import_legacy_molecules_csv` reads a legacy one-based
 ``x, y, z, gene`` CSV with integer or float coordinates.
 
 :py:func:`~starfinder.assignment.assign_molecules` takes the molecules, a cell
@@ -29,7 +29,7 @@ segmentation, and the expansion unit against the calibration. It never reads or 
 a file.
 
 Sampling reads each label image at ``floor(c + 0.5)`` per axis
-(:py:func:`~starfinder.assignment.sample_labels`); a ``plane`` is read at ``y, x``. Every
+(:py:func:`~starfinder.assignment.labels_at_positions`); a ``plane`` is read at ``y, x``. Every
 molecule gets one status of ``ASSIGNMENT_STATUSES``: ``assigned``, ``unassigned``
 (outside every territory), ``excluded_cell`` (in an excluded cell) or ``outside_grid``;
 nothing is dropped. :py:class:`~starfinder.assignment.AssignmentConfig` sets the one
@@ -108,12 +108,12 @@ the ``anndata`` extra.
    COMPARTMENT_STATES
    CorrespondenceConfig
    FOVOwnership
+   import_legacy_molecules_csv
+   labels_at_positions
    match_nuclei
    molecule_table
-   molecule_table_from_csv
    MoleculeTable
    NUCLEUS_STATUSES
    plot_assignment
-   sample_labels
    summarize_assignment
    write_h5ad

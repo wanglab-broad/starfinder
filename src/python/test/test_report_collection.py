@@ -26,7 +26,7 @@ import pytest
 
 from starfinder._records import _read_table
 from starfinder.report import (PROBLEM_RULES, REPORT_PARTS, REPORT_TABLES, UNAVAILABLE_REASONS, MarkerGroup,
-                               ReportConfig, ReportLimits, RuleLimit, read_report)
+                               ReportConfig, ReportLimits, RuleLimit, load_report)
 from starfinder.report._schema import PENDING_VALUES, RULE_UNITS, SUMMARY_KEYS
 
 from .report_fixtures import (CASES, CELLS_RETAINED, CHANNELS, COUNTS, ENDED, FOVS, MOVING, NCC_AFTER, NOMINAL,
@@ -927,7 +927,7 @@ def test_pg7_folder_rules_and_replacement(records, monkeypatch):
     _, second, tables = collect(records)
     assert tables["fovs"].set_index("fov_id").loc["F1", "spots"] == 1001
     assert sorted(snapshot(folder)) == sorted(["report.html", "report.json"] + [f"tables/{t}.csv" for t in COLLECTED])
-    assert read_report(folder) == second
+    assert load_report(folder) == second
     # An error after the checks leaves the earlier report as it was, and no staging folder.
     earlier = snapshot(folder)
     import starfinder._records as _records
@@ -953,15 +953,15 @@ def test_pg7_folder_rules_and_replacement(records, monkeypatch):
 @pytest.mark.contract
 def test_read_report_checks_the_listed_files(records):
     folder, record = records.collect()
-    assert read_report(folder) == record
+    assert load_report(folder) == record
     change_byte(folder / "tables" / "fovs.csv")
     with pytest.raises(ValueError, match=r"fovs\.csv has SHA-256"):
-        read_report(folder)
+        load_report(folder)
     (folder / "tables" / "fovs.csv").unlink()
     with pytest.raises(ValueError, match="is missing"):
-        read_report(folder)
+        load_report(folder)
     with pytest.raises(FileNotFoundError):
-        read_report(folder / "tables")
+        load_report(folder / "tables")
 
 
 # --- PG6: the schema, with no verdict and no score -------------------------------------------------------------

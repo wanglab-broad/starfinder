@@ -476,7 +476,7 @@ The `candidates` stage keeps its files, table layout, dtype map and
   entries);
 * `_detectors()` is replaced by the name-to-type map from `SPOT_FINDING_METHODS`
   (`config_type_for`), and the override configs are rebuilt the same way;
-* reload: `read_checkpoint(..., "candidates")` returns a `SpotFindingResult` whose
+* reload: `dataset.load_checkpoint(..., "candidates")` returns a `SpotFindingResult` whose
   table equals the written one exactly (CSV and Parquet), whose config and plan
   equal the original, and whose diagnostics keep the JSON-representable entries.
   A version-2 checkpoint written at `42f652d` loads as before, with

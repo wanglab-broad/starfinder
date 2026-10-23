@@ -23,8 +23,9 @@ from skimage.segmentation import expand_labels as skimage_expand_labels
 import starfinder.assignment._assign as assign_module
 from starfinder.assignment import (ASSIGNMENT_STATUSES, CELL_CORRESPONDENCE, CELL_STATUSES, COMPARTMENT_STATES,
                                    NUCLEUS_STATUSES, AssignmentConfig, AssignmentResult, CorrespondenceConfig,
-                                   MoleculeTable, assign_molecules, match_nuclei, molecule_table,
-                                   molecule_table_from_csv, plot_assignment, sample_labels, summarize_assignment)
+                                   MoleculeTable, assign_molecules, import_legacy_molecules_csv,
+                                   labels_at_positions, match_nuclei, molecule_table, plot_assignment,
+                                   summarize_assignment)
 from starfinder.image import ImageMetadata, IncompatibleGeometryError
 from starfinder.segmentation import (ExpandLabelsConfig, ReferenceGrid, SegmentationResult, ZExtensionConfig,
                                      expand_labels, extend_labels_through_z)
@@ -315,18 +316,18 @@ def test_a1_sampling_at_the_bounds():
     last = table.iloc[-1]
     assert (last.assignment_status, last.voxel_z, last.voxel_y, last.voxel_x) == ("unassigned", 2, 3, 3)
     assert pd.isna(last.cell_id)
-    values, voxels, inside = sample_labels(labels, np.array([[2.5, -0.5, 7.5]]), geometry="volume")
+    values, voxels, inside = labels_at_positions(labels, np.array([[2.5, -0.5, 7.5]]), geometry="volume")
     assert voxels.tolist() == [[3, 0, -1]] and not inside[0] and values[0] == 0
 
 
 def test_sample_labels_on_a_plane_ignores_z():
     plane = np.arange(16, dtype=np.uint32).reshape(1, 4, 4)
-    values, voxels, inside = sample_labels(plane, np.array([[5.0, 1.0, 2.0], [-9.0, 3.4, 0.6]]), geometry="plane")
+    values, voxels, inside = labels_at_positions(plane, np.array([[5.0, 1.0, 2.0], [-9.0, 3.4, 0.6]]), geometry="plane")
     assert values.tolist() == [6, 13] and voxels.tolist() == [[0, 1, 2], [0, 3, 1]] and inside.all()
     with pytest.raises(ValueError, match="finite"):
-        sample_labels(plane, np.array([[np.nan, 0, 0]]), geometry="plane")
+        labels_at_positions(plane, np.array([[np.nan, 0, 0]]), geometry="plane")
     with pytest.raises(ValueError, match="disagrees"):
-        sample_labels(plane, np.zeros((1, 3)), geometry="volume")
+        labels_at_positions(plane, np.zeros((1, 3)), geometry="volume")
 
 
 # --- A2 (boxes), A5-A11: statuses, correspondence, compartments, exclusion ---------------------------
@@ -599,7 +600,7 @@ def test_a13_cell_metadata():
 def test_a14_grid_and_identity_checks_raise_before_sampling(monkeypatch):
     def never(*args, **kwargs):
         raise AssertionError("sampled before the checks")
-    monkeypatch.setattr(assign_module, "sample_labels", never)
+    monkeypatch.setattr(assign_module, "labels_at_positions", never)
     mols, cells, nuclei, grid = boxes_inputs()
     shifted = ReferenceGrid(BOXES_SHAPE, replace(BOXES_METADATA, frame_id="boxes/shifted"), "fov:round1")
     other_shape = ReferenceGrid((8, 32, 30), BOXES_METADATA, "fov:round1")
@@ -880,22 +881,22 @@ def test_molecule_table_validation():
 def test_molecule_table_from_csv(tmp_path):
     path = tmp_path / "goodSpots.csv"
     path.write_text("x,y,z,gene\n1,2,3,A\n17.0,17.5,7.0,B\n")
-    table = molecule_table_from_csv(path, spot_namespace=SPOT_NAMESPACE, genes=GENES)
+    table = import_legacy_molecules_csv(path, spot_namespace=SPOT_NAMESPACE, genes=GENES)
     frame = table.table
     assert frame.spot_id.tolist() == ["csv:0", "csv:1"]
     assert frame[["z", "y", "x"]].to_numpy().tolist() == [[2.0, 1.0, 0.0], [6.0, 16.5, 16.0]]
     assert table.population == "final" and table.source["csv"] == str(path) and len(table.source["sha256"]) == 64
     path.write_text("x,y,z,gene\n1,2,3,Z\n")
     with pytest.raises(ValueError, match="\\['Z'\\]"):
-        molecule_table_from_csv(path, spot_namespace=SPOT_NAMESPACE, genes=GENES)
+        import_legacy_molecules_csv(path, spot_namespace=SPOT_NAMESPACE, genes=GENES)
     path.write_text("x,y,z,gene\n1,2,nan,A\n")
     with pytest.raises(ValueError, match="row 0"):
-        molecule_table_from_csv(path, spot_namespace=SPOT_NAMESPACE, genes=GENES)
+        import_legacy_molecules_csv(path, spot_namespace=SPOT_NAMESPACE, genes=GENES)
     path.write_text("x,y,gene\n1,2,A\n")
     with pytest.raises(ValueError, match="\\['z'\\]"):
-        molecule_table_from_csv(path, spot_namespace=SPOT_NAMESPACE, genes=GENES)
+        import_legacy_molecules_csv(path, spot_namespace=SPOT_NAMESPACE, genes=GENES)
     with pytest.raises(FileNotFoundError):
-        molecule_table_from_csv(tmp_path / "missing.csv", spot_namespace=SPOT_NAMESPACE, genes=GENES)
+        import_legacy_molecules_csv(tmp_path / "missing.csv", spot_namespace=SPOT_NAMESPACE, genes=GENES)
 
 
 def test_match_nuclei_on_arrays_equals_the_entry():
@@ -1042,7 +1043,7 @@ def test_molecule_table_agrees_with_export_spots(decoded_fov, tmp_path):
     from starfinder.readout import export_spots
     fov, _ = decoded_fov
     path = export_spots(fov.spot_result, fov.filtering_result, tmp_path / "goodSpots.csv", accepted_only=True)
-    from_csv = molecule_table_from_csv(path, spot_namespace=fov.spot_result.spot_namespace, genes=fov.codebook.genes)
+    from_csv = import_legacy_molecules_csv(path, spot_namespace=fov.spot_result.spot_namespace, genes=fov.codebook.genes)
     joined = molecule_table(fov.spot_result, fov.filtering_result, genes=fov.codebook.genes)
     assert len(joined.table) == len(from_csv.table) > 0
     for column in ("z", "y", "x"):

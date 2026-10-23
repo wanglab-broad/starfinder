@@ -171,7 +171,7 @@ All names are additions; no existing public name, module or format version chang
 | The comparison entry | `Dataset.compare_samples(samples, *, report_root=None)` returning `ComparisonRecord` | method | `starfinder.dataset` (implemented in `starfinder.report`) |
 | Configuration | `ReportConfig`, `MarkerGroup`, `RuleLimit`, `ReportLimits` | frozen dataclasses | `starfinder.report` |
 | Results | `ReportRecord(path, record)`, `ComparisonRecord(path, record)` | frozen dataclasses | `starfinder.report` |
-| Reader | `read_report(folder)` returning the checked `report.json` | function | `starfinder.report` |
+| Reader | `load_report(folder)` returning the checked `report.json` | function | `starfinder.report` |
 | Closed lists | `UNAVAILABLE_REASONS`, `REPORT_PARTS`, `REPORT_TABLES`, `PROBLEM_RULES` | tuples | `starfinder.report` |
 | Template | `report.html` and `index.html` templates | package data | `starfinder/report/templates/` |
 | Records | `report.json` (`stage` `report`, `format_version` 1); in `run.json` the keys `transforms`, `codebook`, `workflow_config` and `counts.filtering.endpoint_valid` | JSON | — |
@@ -1090,7 +1090,7 @@ that does not exist.
 Written by `_RunRecord.write` from `FOV.registration_results` and
 `FOV.registration_record["application"]`, so the record is rewritten after each registered
 round, as the attempts are. JSON floats round-trip exactly, so the replay rebuilds the
-same chain as `read_checkpoint(…, "registered")` does (W-384: bit-identical).
+same chain as `dataset.load_checkpoint(…, "registered")` does (W-384: bit-identical).
 
 | Option | Form | Note |
 | --- | --- | --- |

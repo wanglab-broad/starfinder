@@ -15,7 +15,7 @@ import pytest
 
 from starfinder.evaluation.spot_finding import classify_detections, evaluate_spots
 from starfinder.image import ImageMetadata
-from starfinder.preprocessing import MinMaxNormalizationConfig, normalize_intensity
+from starfinder.preprocessing import MinMaxNormalizationConfig, normalize_min_max
 from starfinder.spot_finding import LocalMaximaConfig, find_spots
 
 from .spot_finding_scenes import FORMED16_SHAPE, SEEDS, formed16
@@ -161,7 +161,7 @@ def s16(image, metadata, truth, eligible, config):
 @pytest.mark.parametrize("seed", SEEDS)
 def test_s16_the_merge_removes_same_channel_duplicates_without_losing_a_match(seed):
     image, metadata, truth, eligible = formed16(seed)
-    image = normalize_intensity(image, config=RECIPE1)
+    image = normalize_min_max(image, config=RECIPE1)
     _, legacy, _ = s16(image, metadata, truth, eligible, LocalMaximaConfig())
     _, merged, _ = s16(image, metadata, truth, eligible, LocalMaximaConfig(merge_radius_zyx=RADIUS))
     assert merged["duplicate_same_group"] == 0
@@ -175,7 +175,7 @@ def test_s16_the_merge_removes_same_channel_duplicates_without_losing_a_match(se
 def test_s16_no_eligible_amplicon_near_a_face_is_missed_without_border_exclusion(seed, variant):
     image, metadata, truth, eligible = formed16(seed)
     if variant == "uint8":
-        image = normalize_intensity(image, config=RECIPE1)
+        image = normalize_min_max(image, config=RECIPE1)
     shape = np.asarray(FORMED16_SHAPE)
     near_face = np.flatnonzero(eligible & (np.minimum(truth, shape - 1 - truth).min(axis=1) <= 1))
     _, _, matched = s16(image, metadata, truth, eligible, LocalMaximaConfig(exclude_border=False))

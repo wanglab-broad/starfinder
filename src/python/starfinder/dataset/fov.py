@@ -18,7 +18,7 @@ from starfinder.spot_finding import LocalMaximaConfig, SpotFindingPlan, SpotFind
 from starfinder.spot_finding._methods import SpotFindingConfig
 from starfinder.io import ImageLoadConfig
 from starfinder.preprocessing import (MinMaxNormalizationConfig, HistogramMatchingConfig, ReconstructionConfig, TophatConfig, ProjectionConfig,
-    StepContext, read_supplied_statistics, run_step, step_spec)
+    StepContext, load_supplied_statistics, run_step, step_spec)
 from starfinder.preprocessing._rotation import _rotated
 from starfinder.dataset._logging import _log_step
 from starfinder import _checkpoint
@@ -420,10 +420,10 @@ class FOV:
         return self
 
     @_log_step
-    def normalize_intensity(self, *, config=MinMaxNormalizationConfig('uint8', (0, 255)), rounds=None):
-        """Normalize selected rounds with an explicit output policy."""
-        from starfinder.preprocessing import normalize_intensity
-        self._apply_to_rounds(lambda image: normalize_intensity(image, config=config), rounds)
+    def normalize_min_max(self, *, config=MinMaxNormalizationConfig('uint8', (0, 255)), rounds=None):
+        """Min-max normalize selected rounds with an explicit output policy (normalize_min_max)."""
+        from starfinder.preprocessing import normalize_min_max
+        self._apply_to_rounds(lambda image: normalize_min_max(image, config=config), rounds)
         return self
 
     @_log_step
@@ -439,10 +439,10 @@ class FOV:
         return self
 
     @_log_step
-    def reconstruct_background(self, *, config=ReconstructionConfig(), rounds=None):
-        """Apply public reconstruction to selected rounds."""
-        from starfinder.preprocessing import reconstruct_background
-        self._apply_to_rounds(lambda image: reconstruct_background(image, config=config), rounds)
+    def correct_background(self, *, config=ReconstructionConfig(), rounds=None):
+        """Correct the background of selected rounds by morphological reconstruction (correct_background)."""
+        from starfinder.preprocessing import correct_background
+        self._apply_to_rounds(lambda image: correct_background(image, config=config), rounds)
         return self
 
     @_log_step
@@ -1282,7 +1282,7 @@ class FOV:
                 if not self.dataset.channel_order:
                     raise ValueError('fit="supplied" steps require the dataset channel_order')
                 path = recipe.supplied_statistics
-                supplied = read_supplied_statistics(path, recipe, channel_labels=self.dataset.channel_order,
+                supplied = load_supplied_statistics(path, recipe, channel_labels=self.dataset.channel_order,
                                                     rounds=pipeline_rounds)
                 self.preprocessing_record['supplied_statistics'] = {
                     'path': str(path), 'sha256': file_sha256(path)}
@@ -1848,7 +1848,7 @@ class FOV:
             if header['encoding'] != current:
                 raise ValueError(f"{stage} checkpoint encoding {header['encoding']} differs from the dataset "
                                  f"codebook's encoding ({current}); load the codebook with the recorded encoding")
-        for name, value in _checkpoint.read_checkpoint(directory, stage).items():
+        for name, value in _checkpoint.load_checkpoint(directory, stage).items():
             setattr(self, name, value)
         return self
 

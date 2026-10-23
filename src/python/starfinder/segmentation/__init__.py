@@ -5,8 +5,8 @@ a ``uint32`` ZYX label image (a plane is 1×Y×X) on a :class:`ReferenceGrid`, w
 its target (``nucleus`` or ``cell``), geometry (``volume``, ``plane`` or
 ``extended``), identity namespace and run record. Masks made elsewhere enter through
 :func:`import_labels` (not a method). :func:`composite_nuclei_amplicon`,
-:func:`enhance_with_flamingo`, :func:`normalize_percentiles` and
-:func:`rescale_input` are plain input functions, :func:`labels_to_grid` and
+:func:`enhance_with_flamingo`, :func:`normalize_percentile_unclipped` and
+:func:`rescale_input` are plain input functions, :func:`resample_labels` and
 :func:`extend_labels_through_z` plain label functions; each returns its result and a
 record mapping and leaves its inputs unchanged. :func:`expand_labels` is the one
 label expansion; the assignment entry (``starfinder.assignment``) applies it to the
@@ -24,14 +24,14 @@ docs/segmentation-algorithms.md.
 from ._errors import MissingModelError, ModelHashMismatchError, SegmentationBackendUnavailableError
 from ._import import LabelImportConfig, import_labels
 from ._inputs import (CompositeConfig, FlamingoEnhancementConfig, composite_nuclei_amplicon, enhance_with_flamingo,
-                      normalize_percentiles, rescale_input)
+                      normalize_percentile_unclipped, rescale_input)
 from ._labels import ReferenceGrid, SampleSegmentation, SegmentationResult, reference_grid_from_file, to_label_dtype
 from ._learned import CellposeConfig, StarDistConfig
 from ._methods import SEGMENTATION_METHODS as _SEGMENTATION_METHODS
 from ._methods import MethodContext, SeededWatershedConfig, SegmentationSpec
 from ._models import KNOWN_MODELS as _KNOWN_MODELS
 from ._models import KnownModel, ModelFile, resolve_model
-from ._operations import ExpandLabelsConfig, ZExtensionConfig, expand_labels, extend_labels_through_z, labels_to_grid
+from ._operations import ExpandLabelsConfig, ZExtensionConfig, expand_labels, extend_labels_through_z, resample_labels
 from ._plan import InputChannel, SegmentationPlan, SegmentationRun
 from ._segment import SegmentationInput, segment
 
@@ -45,10 +45,10 @@ SEGMENTATION_METHODS = _SEGMENTATION_METHODS
 KNOWN_MODELS = _KNOWN_MODELS
 
 __all__ = ["ReferenceGrid", "reference_grid_from_file", "SegmentationResult", "SampleSegmentation", "to_label_dtype",
-           "LabelImportConfig", "import_labels", "labels_to_grid", "ExpandLabelsConfig", "expand_labels",
+           "LabelImportConfig", "import_labels", "resample_labels", "ExpandLabelsConfig", "expand_labels",
            "ZExtensionConfig", "extend_labels_through_z",
            "CompositeConfig", "composite_nuclei_amplicon", "FlamingoEnhancementConfig", "enhance_with_flamingo",
-           "normalize_percentiles", "rescale_input",
+           "normalize_percentile_unclipped", "rescale_input",
            "segment", "SegmentationInput", "SEGMENTATION_METHODS", "SegmentationSpec", "MethodContext",
            "SeededWatershedConfig", "StarDistConfig", "CellposeConfig", "SegmentationPlan", "SegmentationRun",
            "InputChannel", "KNOWN_MODELS", "KnownModel", "ModelFile", "resolve_model",

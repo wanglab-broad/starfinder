@@ -602,7 +602,7 @@ the ``save_formed_scene`` layout with ``stain.ome.tif``, ``labels/nuclei.tif``,
 ``labels/cells.tif`` and a legacy one-based ``molecules.csv`` (``x, y, z,
 gene``). The FOV labels carry the FOV's reference metadata, so
 ``segmentation.import_labels(..., relabel=False)`` and
-``assignment.molecule_table_from_csv`` read them without a segmenter. A
+``assignment.import_legacy_molecules_csv`` read them without a segmenter. A
 nonempty directory raises ``FileExistsError``.
 
 ``sample_scene_preset(name)`` returns ``(Codebook, SampleSceneConfig)`` for a

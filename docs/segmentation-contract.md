@@ -132,8 +132,8 @@ New names under S1:
 | Registry | `SEGMENTATION_METHODS: dict[type, SegmentationSpec]` | registry |
 | Methods | `StarDistConfig` (`stardist`), `CellposeConfig` (`cellpose`), `SeededWatershedConfig` (`seeded_watershed`) | configs |
 | Import | `import_labels`, `LabelImportConfig` | function, config |
-| Input functions | `composite_nuclei_amplicon` (`CompositeConfig`), `enhance_with_flamingo` (`FlamingoEnhancementConfig`), `normalize_percentiles`, `rescale_input` | functions, configs |
-| Label functions | `expand_labels` (`ExpandLabelsConfig`), `extend_labels_through_z` (`ZExtensionConfig`), `labels_to_grid` | functions, configs |
+| Input functions | `composite_nuclei_amplicon` (`CompositeConfig`), `enhance_with_flamingo` (`FlamingoEnhancementConfig`), `normalize_percentile_unclipped`, `rescale_input` | functions, configs |
+| Label functions | `expand_labels` (`ExpandLabelsConfig`), `extend_labels_through_z` (`ZExtensionConfig`), `resample_labels` | functions, configs |
 | Models | `KNOWN_MODELS`, `resolve_model`, `ModelFile`, `KnownModel` | table, function, dataclasses |
 | Errors | `SegmentationBackendUnavailableError`, `MissingModelError`, `ModelHashMismatchError` | exceptions |
 | Coordination | `FOV.segment(plan, *, device="cpu", checkpoints=None)`, `FOV.segmentation_results`, `FOV.load_segmentation(name)`, `FOV.reference_grid()`; `SegmentationPlan`, `SegmentationRun`, `InputChannel` | methods, attribute, dataclasses |
@@ -245,7 +245,7 @@ process or in separate ones:
   ({doc}`assignment-contract`, "The grid rule"), so its labels and assignment tables equal
   those of the same calls in one process. `fov.assign(…)` there takes the molecules of
   process 1 from its `candidates` and `pre_qc` checkpoints, with the filter re-applied by
-  `FOV.run`; `assign_molecules` with `molecule_table_from_csv` of the exported table is the
+  `FOV.run`; `assign_molecules` with `import_legacy_molecules_csv` of the exported table is the
   other route. An input that reads a channel of the reference round other than its merged
   image still needs that round resident, and `FOV.segment` says so. A reference image saved
   with a projection (YX) gives a Z=1 grid, on which a run's inputs must also have Z=1, and
@@ -722,16 +722,16 @@ sha256}`), which the run record keeps.
 | --- | --- | --- | --- |
 | `composite_nuclei_amplicon` | `(nuclear, amplicon, *, config=CompositeConfig()) -> np.ndarray` | `nuclear_quantile` 0.005 and `amplicon_quantile` 0.001 (fractions; the stretch uses q and 1 − q of the whole volume); two ZYX arrays of equal shape, else `IncompatibleGeometryError` (arrays carry no metadata, so `FOV.segment` checks that both come from images with the reference metadata); output uint8 ZYX | the config, the four quantile values reached, both input hashes |
 | `enhance_with_flamingo` | `(nuclear, flamingo, *, config=FlamingoEnhancementConfig()) -> np.ndarray` | `flamingo_quantile` 0.005, `nuclear_quantile` 0.001 (fractions), `median_radius_px` 1 (pixels, a disk in each plane); two ZYX arrays of equal shape, checked as for the composite; output uint8 ZYX | the config, the quantile values, both input hashes |
-| `normalize_percentiles` | `(image, *, p_low=1.0, p_high=99.8, axes=None) -> np.ndarray` | percents of the intensity distribution over `axes` (default all spatial axes); output float32, unclipped | `p_low`, `p_high` and the two values reached |
+| `normalize_percentile_unclipped` | `(image, *, p_low=1.0, p_high=99.8, axes=None) -> np.ndarray` | percents of the intensity distribution over `axes` (default all spatial axes); output float32, unclipped | `p_low`, `p_high` and the two values reached |
 | `rescale_input` | `(image, metadata, *, scale_zyx) -> tuple[np.ndarray, ImageMetadata]` | per-axis factors > 0 (dimensionless); linear interpolation with anti-aliasing; the metadata's spacing, when it has one, is divided by the factors, and its `frame_id` is extended | factors, input and output shapes |
-| `labels_to_grid` | `(labels, *, target_shape) -> np.ndarray` | nearest neighbour by pixel centres, source index ⌊(i + 0.5) × n_source / n_target⌋ per axis, onto exactly `target_shape`; the caller attaches the target grid | both shapes |
+| `resample_labels` | `(labels, *, target_shape) -> np.ndarray` | nearest neighbour by pixel centres, source index ⌊(i + 0.5) × n_source / n_target⌋ per axis, onto exactly `target_shape`; the caller attaches the target grid | both shapes |
 | `expand_labels` | `(labels, metadata, *, config=ExpandLabelsConfig(distance, unit, mode)) -> np.ndarray` | `distance` in `pixel` or `um` (`um` needs `metadata.spacing_zyx`, else `ValueError`); `mode` `planar` (each Z plane, the current behavior) or `volumetric` (3D Euclidean distance with the ZYX spacing); no default distance | the config and the number of voxels added |
 | `extend_labels_through_z` | `(labels_2d, stain, metadata, *, config=ZExtensionConfig()) -> np.ndarray` | `labels_2d` of shape (1, Y, X) and a ZYX `stain` with the same Y, X (else `IncompatibleGeometryError`); `median_um`, `threshold` (`"otsu"` or a number on the [0, 1] scale of the stain's dtype range, as `img_as_float` and MATLAB's `graythresh` give it; a voxel is foreground when its filtered value is strictly greater, as MATLAB's `imbinarize` and `im2bw`; W-309 amendment), `min_area_um2`, `dilation_um`, `fill_holes` (twice for cells), converted with `metadata.spacing_zyx` (required); legacy values in pixels are translated by the workflow adapter with the configured spacing | the config, the threshold reached and the hash of the plane labels; `FOV.segment` adds the source run's name and sets the geometry to `extended` |
 
 Rules:
 
-* `rescale_input` and `labels_to_grid` serve a direct caller who detects nuclei on a
-  shrunk input with a method that has no scale parameter of its own. `labels_to_grid`
+* `rescale_input` and `resample_labels` serve a direct caller who detects nuclei on a
+  shrunk input with a method that has no scale parameter of its own. `resample_labels`
   maps onto exactly the target shape, so the odd-size grid change of the current round
   trip cannot happen. `FOV.segment` has no option that shrinks an input, and `segment`
   rejects seeds whose grid differs from the input's, so a cell run never computes
@@ -760,10 +760,10 @@ operation, so none is registered in `PREPROCESSING_METHODS`:
   float, while `percentile_normalization` uses inverted-CDF percentiles and keeps the
   dtype. Reusing it would change the pinned golden digests.
 * StarDist needs csbdeep's float32, unclipped normalization at 1 and 99.8 to keep the
-  W-306 parity; `percentile_normalization` keeps the input dtype, so `normalize_percentiles`
-  is separate.
+  W-306 parity; `percentile_normalization` keeps the input dtype, so
+  `normalize_percentile_unclipped` is separate.
 * `rescale_input` changes the grid, which no preprocessing step may do.
-* `expand_labels`, `labels_to_grid` and `extend_labels_through_z` operate on labels.
+* `expand_labels`, `resample_labels` and `extend_labels_through_z` operate on labels.
 
 What is reused is an application policy, not a method: a run's optional `projection` is
 a `ProjectionConfig` applied with `starfinder.preprocessing.project_image`, as
@@ -1153,7 +1153,7 @@ MATLAB-backend run, and the §2.9 changes apply to them there as well:
   `composite_nuclei_amplicon` and `enhance_with_flamingo` and assert
   `COMPOSITE_DIGESTS` and `FLAMINGO_DIGEST`; that `expand_labels(mode="planar",
   unit="pixel", distance=4)` on the stand-in labels, cast to `uint16`, gives
-  `LABELS_3D[(False, True)]` and `LABELS_2D[(False, True)]`; and that `labels_to_grid` on
+  `LABELS_3D[(False, True)]` and `LABELS_2D[(False, True)]`; and that `resample_labels` on
   the even 16×32×32 → 16×64×64 case gives the values of `RESTORED_LABELS`. When the script
   bodies become adapter calls, `run_script` is replaced by those package calls and
   `test_the_helper_follows_the_script` is removed, because the cited lines leave the

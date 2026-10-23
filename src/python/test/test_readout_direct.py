@@ -31,7 +31,7 @@ from starfinder.dataset import CheckpointConfig, Dataset, PipelineConfig, RoundS
 from starfinder.dataset.workflow import from_workflow_config
 from starfinder.image import ImageMetadata
 from starfinder.io import ImageLoadResult, save_volume
-from starfinder._checkpoint import candidates_frame, read_checkpoint, read_header, readout_mode
+from starfinder._checkpoint import candidates_frame, load_checkpoint, read_header, readout_mode
 from starfinder.spot_finding import LocalMaximaConfig, SpotFindingPlan
 
 from .test_readout_examples import CHANNELS, DIRECT_MAPPING, DIRECT_SPOTS, direct_images, rounds
@@ -328,7 +328,7 @@ def test_r16_a_checkpoint_without_the_key_loads_as_multiplexed(tmp_path, seed):
         assert header.pop("readout_mode") == "multiplexed"
         path.write_text(json.dumps(header))
         assert readout_mode(read_header(directory, stage)) == "multiplexed"
-    assert read_checkpoint(directory, "pre_qc")["decoding_result"].readout_mode == "multiplexed"
+    assert load_checkpoint(directory, "pre_qc")["decoding_result"].readout_mode == "multiplexed"
     reloaded = dataset.fov("FOV_001").load_checkpoint("candidates", checkpoints=checkpoints)
     reloaded.load_checkpoint("pre_qc", checkpoints=checkpoints)
     pd.testing.assert_frame_equal(reloaded.decoding_result.table, fov.decoding_result.table, check_exact=True)

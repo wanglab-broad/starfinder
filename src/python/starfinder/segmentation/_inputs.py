@@ -202,15 +202,22 @@ def _percent(value, name):
     return float(value)
 
 
-def normalize_percentiles(image, *, p_low: float = 1.0, p_high: float = 99.8,
-                          axes=None) -> tuple[np.ndarray, dict]:
+def normalize_percentile_unclipped(image, *, p_low: float = 1.0, p_high: float = 99.8,
+                                   axes=None) -> tuple[np.ndarray, dict]:
     """Percentile normalization to float32, unclipped: csbdeep's ``normalize``.
 
     ``(x − p_low) / (p_high − p_low + 1e-20)`` in float32, with the two percentiles
     computed by ``np.percentile`` (linear) over ``axes`` and cast to float32, as
     csbdeep 0.8.2 computes it for the ``stardist`` method. A constant image maps to
-    zeros. Unlike ``percentile_normalization`` (a preprocessing method), the dtype
-    becomes float32 and nothing is clipped.
+    zeros.
+
+    It differs from :func:`starfinder.preprocessing.normalize_percentile` (the
+    ``percentile_normalization`` preprocessing method) in four ways: the output is
+    float32, not the input dtype scaled to its full range; values outside the
+    percentile range are not clipped, so they fall below 0 or above 1; the
+    percentiles are linear (``np.percentile``'s default), not inverted-CDF; and they
+    are taken over ``axes`` of this image only, never supplied from a statistics
+    file. It returns a record beside the image.
 
     Parameters
     ----------
@@ -260,7 +267,8 @@ def normalize_percentiles(image, *, p_low: float = 1.0, p_high: float = 99.8,
         values = np.squeeze(values, axis=axes)
         return values.item() if values.ndim == 0 else values.tolist()
 
-    record = {"function": "normalize_percentiles", "config": {"p_low": p_low, "p_high": p_high, "axes": list(axes)},
+    record = {"function": "normalize_percentile_unclipped",
+              "config": {"p_low": p_low, "p_high": p_high, "axes": list(axes)},
               "inputs": [array_sha256(image)], "output": array_sha256(output),
               "percentiles": {"low": reached(low), "high": reached(high)}}
     return output, record
@@ -270,7 +278,7 @@ def rescale_input(image, metadata: ImageMetadata, *, scale_zyx) -> tuple[np.ndar
     """Resample a ZYX image by per-axis factors, with the matching metadata.
 
     For a direct caller that detects nuclei on a shrunk input with a method that
-    has no scale of its own; :func:`labels_to_grid` maps the labels back onto the
+    has no scale of its own; :func:`resample_labels` maps the labels back onto the
     exact input grid. ``skimage.transform.rescale`` with linear interpolation,
     anti-aliasing on the shrinking axes (its default) and its default range
     conversion, so the output is float64 and an integer image is on the [0, 1]

@@ -9,7 +9,7 @@ import tifffile
 
 from starfinder.image import ImageMetadata
 from starfinder.io import ImageConversionConfig, ImageLoadConfig, convert_image, load_round, load_volume, save_volume
-from starfinder.preprocessing import (HistogramMatchingConfig, MinMaxNormalizationConfig, ProjectionConfig, ReconstructionConfig, TophatConfig, filter_tophat, match_histogram, normalize_intensity, project_image, reconstruct_background)
+from starfinder.preprocessing import (HistogramMatchingConfig, MinMaxNormalizationConfig, ProjectionConfig, ReconstructionConfig, TophatConfig, filter_tophat, match_histogram, normalize_min_max, project_image, correct_background)
 
 pytestmark = [pytest.mark.core, pytest.mark.contract]
 
@@ -128,11 +128,11 @@ def test_conversion_range_scope_rounding_constants():
 def test_processing_source_dtype_and_constants(dtype):
     image = np.full((2, 7, 7, 2), 10, dtype=dtype)
     original = image.copy()
-    for operation in (filter_tophat, reconstruct_background):
+    for operation in (filter_tophat, correct_background):
         result = operation(image)
         assert result.dtype == dtype
         assert not result.any()
-    normalized = normalize_intensity(image, config=MinMaxNormalizationConfig("float32", (-1, 1)))
+    normalized = normalize_min_max(image, config=MinMaxNormalizationConfig("float32", (-1, 1)))
     np.testing.assert_array_equal(normalized, -np.ones(image.shape))
     matched = match_histogram(image, image[..., 0])
     assert matched.dtype == dtype
@@ -148,7 +148,7 @@ def test_constant_lower_endpoint_precedes_snr_gate(dtype, lower, scope):
     if scope == "per_channel":
         image[..., 1] = 100
     before = image.copy()
-    result = normalize_intensity(image, config=MinMaxNormalizationConfig(
+    result = normalize_min_max(image, config=MinMaxNormalizationConfig(
         output_dtype=np.dtype(dtype).name, output_range=(lower, 255),
         scope=scope, snr_threshold=5.0,
     ))
@@ -161,7 +161,7 @@ def test_uint16_overflow_and_no_forced_uint8():
     image = np.full((1, 9, 9), 40000, dtype=np.uint16)
     image[0, 4, 4] = 60000
     top = filter_tophat(image, config=TophatConfig(radius_yx=2))
-    reconstructed = reconstruct_background(image, config=ReconstructionConfig(radius_yx=2))
+    reconstructed = correct_background(image, config=ReconstructionConfig(radius_yx=2))
     assert top.dtype == reconstructed.dtype == np.uint16
     assert top[0, 4, 4] == 20000
     assert reconstructed[0, 4, 4] == 40000
@@ -184,8 +184,8 @@ def test_projection_signed_float_and_overflow():
 
 @pytest.mark.parametrize("image", [np.zeros((2, 2)), np.zeros((0, 2, 2)), np.full((1, 2, 2), np.nan), np.full((1, 2, 2), np.inf), np.ones((1, 2, 2), complex)])
 def test_processing_invalid_images(image):
-    operations = [filter_tophat, reconstruct_background, project_image,
-        lambda x: normalize_intensity(x, config=MinMaxNormalizationConfig("uint8", (0, 255))),
+    operations = [filter_tophat, correct_background, project_image,
+        lambda x: normalize_min_max(x, config=MinMaxNormalizationConfig("uint8", (0, 255))),
         lambda x: match_histogram(x, np.zeros((1, 2, 2)))]
     for op in operations:
         with pytest.raises(ValueError):

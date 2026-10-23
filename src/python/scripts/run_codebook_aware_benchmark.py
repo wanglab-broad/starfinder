@@ -334,7 +334,7 @@ def load_and_register_synthetic_images(
     n_rounds: int,
 ) -> dict[str, np.ndarray]:
     from starfinder.io import load_round
-    from starfinder.preprocessing import normalize_intensity
+    from starfinder.preprocessing import normalize_min_max
 
     images: dict[str, np.ndarray] = {}
     channel_order = ["ch00", "ch01", "ch02", "ch03"]
@@ -349,7 +349,7 @@ def load_and_register_synthetic_images(
                 scope="global", rounding="truncate",
             ))
         _meta = loaded_round.diagnostics
-        images[round_name] = normalize_intensity(image, config=MinMaxNormalizationConfig('uint8', (0, 255), snr_threshold=5.0))
+        images[round_name] = normalize_min_max(image, config=MinMaxNormalizationConfig('uint8', (0, 255), snr_threshold=5.0))
 
     ref_merged = np.sum(images["round1"], axis=-1, dtype=np.uint16)
     for round_idx in range(2, n_rounds + 1):
@@ -515,7 +515,7 @@ def prepare_real_raw_inputs(
     step_info["input_rss_after_rotate_mb"] = round(rss, 1)
     elapsed, rss = timed_prep_step(
         "enhance",
-        lambda: fov.normalize_intensity(config=MinMaxNormalizationConfig("uint8", (0, 255), snr_threshold=float(config["snr_threshold"]))),
+        lambda: fov.normalize_min_max(config=MinMaxNormalizationConfig("uint8", (0, 255), snr_threshold=float(config["snr_threshold"]))),
     )
     step_info["input_time_enhance_s"] = round(elapsed, 3)
     step_info["input_rss_after_enhance_mb"] = round(rss, 1)

@@ -2,7 +2,7 @@
 docs/report-algorithms.md, "The comparison page").
 
 :func:`compare_samples` reads finished sample reports only: each sample's
-``<report_root>/<sample>/report.json``, checked with :func:`._schema.read_report` against
+``<report_root>/<sample>/report.json``, checked with :func:`._schema.load_report` against
 every file it lists, and its ``tables/fovs.csv``. It reads no run record, placement or
 export and recomputes nothing a sample report holds: each column of ``samples.csv`` copies a
 key of the sample's ``report.json``, and the three box plots draw the columns ``spots``,
@@ -26,7 +26,7 @@ from urllib.parse import quote
 
 import pandas as pd
 
-from ._schema import REPORT_FILE, SAMPLES_DTYPES, TABLE_DIR, ComparisonRecord, read_report
+from ._schema import REPORT_FILE, SAMPLES_DTYPES, TABLE_DIR, ComparisonRecord, load_report
 
 INDEX_FILE = "index.html"
 SAMPLES_FILE = "samples.csv"
@@ -75,7 +75,7 @@ def _read_sample(folder: Path):
     path = folder / REPORT_FILE
     data = path.read_bytes()
     try:
-        record = read_report(folder)
+        record = load_report(folder)
     except (json.JSONDecodeError, UnicodeDecodeError) as error:
         raise ValueError(f"{path} is not a report record: {error}") from error
     if record.get("summary") is None or any(key not in record["summary"] for key in SUMMARY_COLUMNS) or \

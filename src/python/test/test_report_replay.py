@@ -6,7 +6,7 @@ bins of ``intensity.csv``), the figures of the Preprocessing and Registration ex
 of the intensity distributions, and RT1's tile part (the segmentation previews on both
 routes). DF11 runs on hand-written step outputs; the other checks run the synthetic chains
 of ``report_scene.py`` (seed 42) and are ``slow``. Expected values are computed here from the
-fixtures' own arrays and files, or come from ``read_checkpoint`` (the reference of RP1),
+fixtures' own arrays and files, or come from ``load_checkpoint`` (the reference of RP1),
 never from the report's own output.
 """
 from __future__ import annotations
@@ -22,7 +22,7 @@ import pandas as pd
 import pytest
 import tifffile
 
-from starfinder.dataset import read_checkpoint
+from starfinder.dataset import load_checkpoint
 from starfinder._records import _read_table
 from starfinder.report import ReportConfig
 from starfinder.report._collect import report_examples
@@ -136,7 +136,7 @@ def test_rp1_replay_equals_the_saved_registered_image(scene_chain_registered):  
     replay = replay_fov(chain.root, MAIN, keep_final=True)
     seconds = time.perf_counter() - start
     print(f"\nRP1: the replay of {MAIN}, four rounds, took {seconds:.3f} s")
-    saved = read_checkpoint(chain.root / "checkpoints" / MAIN, "registered")
+    saved = load_checkpoint(chain.root / "checkpoints" / MAIN, "registered")
     assert replay.missing is None and replay.round_missing == {}
     assert list(replay.rounds) == chain.rounds
     for name in chain.rounds:
@@ -302,7 +302,7 @@ def test_figures_of_the_examples(scene_chain_registered):  # noqa: F811
     # block). The input from the raw files, the last state from the saved registered image (the round has no
     # post_registration entry), the others from the replayed states.
     raw = {c: tifffile.imread(chain.input_root / "round1" / MAIN / f"{c}.ome.tif") for c in channels}
-    saved = read_checkpoint(chain.root / "checkpoints" / MAIN, "registered")["images"]
+    saved = load_checkpoint(chain.root / "checkpoints" / MAIN, "registered")["images"]
     states = replay.rounds["round1"].states
     for tile in figure.tiles:
         c = channels.index(tile["channel"])

@@ -21,7 +21,7 @@ It builds on these pages and redefines none of them:
 * {doc}`assembly-contract`: footprints, ownership, retention, statuses and the count
   identities;
 * {doc}`segmentation-contract` ("External-mask import", "Label image") and
-  {doc}`assignment-contract` (`MoleculeTable`, `molecule_table_from_csv`, "Coordinate
+  {doc}`assignment-contract` (`MoleculeTable`, `import_legacy_molecules_csv`, "Coordinate
   sampling").
 
 It is implemented in `starfinder.synthetic`, no existing generator behavior changes and
@@ -805,7 +805,7 @@ assembly can be compared with sample-level truth without running a segmenter:
    rule of "Per-FOV truth" ("Sampled labels and nullable truth IDs").
 2. **Molecules.** `fovs/<f>/molecules.csv` is the legacy one-based `x, y, z, gene` CSV of
    the reference-round positions of the molecules that FOV renders (`p + 1`, round-trip
-   float precision), in `molecule_fovs` order. `molecule_table_from_csv(path,
+   float precision), in `molecule_fovs` order. `import_legacy_molecules_csv(path,
    spot_namespace=["<dataset>", "<sample>", "<f>", null], genes=codebook.genes)` reads it
    unchanged; its `spot_id` `csv:<row>` maps to `amplicon_id` through `csv_row`. The
    synthetic package writes the CSV and never imports `starfinder.assignment`.
@@ -1006,7 +1006,7 @@ the ellipsoid columns null, versioned by `APPEARANCE_TRUTH_VERSION` in `appearan
   column on the jitter and per-FOV draws of every existing FOV, and does not compare their
   images); a successful single-plane scene (below); the save and reload round trip with
   SHA-256 checks;
-  `import_labels` and `molecule_table_from_csv` accepting the saved files of one FOV;
+  `import_labels` and `import_legacy_molecules_csv` accepting the saved files of one FOV;
   cross-process repeatability of `sample-tiny-v1`; and one `slow` test that generates
   `sample-small-v1` under `/usr/bin/time -v` and records its time and peak RSS, as
   `test_medium_cli_both_modes_time_and_peak_rss` does for the benchmark presets.

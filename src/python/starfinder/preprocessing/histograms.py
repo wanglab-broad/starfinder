@@ -83,7 +83,7 @@ def summarize_histograms(images: Mapping[str, np.ndarray], *, channel_labels: Se
 
     images maps round names, in order, to finite ZYXC (or single-channel ZYX)
     uint8 or uint16 volumes of one dtype, taken at the fitted step's input:
-    after the preceding recipe steps (see summary_stage). Each histogram is
+    after the preceding recipe steps (see summary_recipe). Each histogram is
     numpy.bincount(values, minlength=dtype_max + 1), with all bins. Inputs are
     not modified.
 
@@ -196,13 +196,13 @@ def histogram_percentile(counts: np.ndarray, p: float) -> int:
     return int(np.searchsorted(cumulative, _rank(total, p) + 1, side="left"))
 
 
-def write_histograms(summary: HistogramSummary, path: Path | str) -> Path:
+def save_histograms(summary: HistogramSummary, path: Path | str) -> Path:
     """Save a summary as .npz: counts (rounds, channels, bins), labels, FOVs and preceding steps.
 
-    The file is written in one full-file write and read back by read_histograms.
+    The file is written in one full-file write and read back by load_histograms.
     """
     if not isinstance(summary, HistogramSummary):
-        raise TypeError("write_histograms requires a HistogramSummary")
+        raise TypeError("save_histograms requires a HistogramSummary")
     buffer = io.BytesIO()
     np.savez_compressed(buffer, counts=summary.counts, dtype=np.str_(summary.dtype),
                         round_names=np.asarray(summary.round_names, dtype=str),
@@ -215,8 +215,8 @@ def write_histograms(summary: HistogramSummary, path: Path | str) -> Path:
     return path
 
 
-def read_histograms(path: Path | str) -> HistogramSummary:
-    """Load a summary written by write_histograms, revalidating it."""
+def load_histograms(path: Path | str) -> HistogramSummary:
+    """Load a summary written by save_histograms, revalidating it."""
     with np.load(Path(path), allow_pickle=False) as data:
         return HistogramSummary(data["counts"], str(data["dtype"]), tuple(data["round_names"].tolist()),
                                 tuple(data["channel_labels"].tolist()), tuple(json.loads(str(data["summarized_after"]))),

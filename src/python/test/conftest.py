@@ -97,7 +97,7 @@ def e2e_result(small_dataset: Path, small_ground_truth: dict, tmp_path_factory):
     fov = ds.fov("FOV_001")
     (
         fov.load_images()
-        .normalize_intensity(config=MinMaxNormalizationConfig('uint8', (0, 255), snr_threshold=5.0))
+        .normalize_min_max(config=MinMaxNormalizationConfig('uint8', (0, 255), snr_threshold=5.0))
         .register(RegistrationRecipe((RegistrationStep(TranslationConfig()),))).find_spots(config=LocalMaximaConfig())
         .extract_intensities()
         .decode_reads().filter_reads()

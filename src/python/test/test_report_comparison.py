@@ -29,7 +29,7 @@ import pandas as pd
 import pytest
 
 from starfinder._records import _read_table
-from starfinder.report import ComparisonRecord, read_report
+from starfinder.report import ComparisonRecord, load_report
 
 from .report_fixtures import CELLS_RETAINED, COUNTS, DATASET, FOVS, SAMPLE_ID, report_cells, report_records
 from .test_report_collection import anndata_or_skip, snapshot
@@ -155,7 +155,7 @@ def test_samples_csv_of_a_report_without_cells(root):
     result = dataset_at(root).compare_samples(["s4"])
     frame, _, _ = written(result)
     row = frame.to_dict("records")[0]
-    record = read_report(root / "report" / "s4")
+    record = load_report(root / "report" / "s4")
     assert row["report"] == "present"
     for column, _, path in SAMPLES_COLUMNS:
         if path is not None:
@@ -206,7 +206,7 @@ def test_box_plots(root):
     assert list(data) == ["samples", "fovs"]
     assert list(data["fovs"]) == ["s1", "s4"]
     for sample in ("s1", "s4"):
-        record = read_report(root / "report" / sample)
+        record = load_report(root / "report" / sample)
         entry = next(e for e in record["files"] if e["path"] == "tables/fovs.csv")
         fovs = _read_table(root / "report" / sample / "tables" / "fovs.csv", entry["dtypes"])
         rows = data["fovs"][sample]

@@ -305,17 +305,17 @@ Paths are relative to `src/python/starfinder/` unless they start with
 | `preprocessing/steps.py:124-132` (`STEPS`) | the method set | This is the registry, renamed `PREPROCESSING_METHODS` in move 1; it stays the source of truth. |
 | `preprocessing/steps.py:139-166` (`step_spec`, `step_config_type`) | lookups over `STEPS` | Already derived; they call `spec_for()` and `config_type_for()` with unchanged messages. |
 | `preprocessing/steps.py:55-74` (`StepSpec`) | the name pattern | `check_name()` in `PreprocessingSpec`; the pattern is unchanged. |
-| `preprocessing/supplied.py:90-114` (`supplied_section`) | exact-type branches for `PercentileNormalizationConfig`, `ScalarBackgroundConfig` and `HistogramMatchingConfig` that fit each section, the rule that only histogram matching takes `reference_round`, and the fallback error | `step_spec(config).supplied`: its `fit` hook builds the section; `reference_round` is accepted only when `per_round` is `False`; `supplied is None` raises the current `has no supplied statistics` error. |
+| `preprocessing/supplied.py:90-114` (`fit_supplied_section`) | exact-type branches for `PercentileNormalizationConfig`, `ScalarBackgroundConfig` and `HistogramMatchingConfig` that fit each section, the rule that only histogram matching takes `reference_round`, and the fallback error | `step_spec(config).supplied`: its `fit` hook builds the section; `reference_round` is accepted only when `per_round` is `False`; `supplied is None` raises the current `has no supplied statistics` error. |
 | `preprocessing/supplied.py:163-164` (`_SECTION_VALIDATORS`), used at line 195 | the steps whose file sections can be validated | The `validate` hook of `PREPROCESSING_METHODS[step_config_type(name)].supplied`; a name whose spec has `supplied=None` keeps the current error. |
-| `preprocessing/supplied.py:280-294` (`read_supplied_statistics`) | exact-type branches that compare section params with the recipe's config (`p_low`/`p_high`, `percentile`, `reference_channel`) and skip the per-round check for histogram matching | The `check_params` hook of the step's `supplied`, and its `per_round` flag for the round check. |
+| `preprocessing/supplied.py:280-294` (`load_supplied_statistics`) | exact-type branches that compare section params with the recipe's config (`p_low`/`p_high`, `percentile`, `reference_channel`) and skip the per-round check for histogram matching | The `check_params` hook of the step's `supplied`, and its `per_round` flag for the round check. |
 | `preprocessing/background.py:136`, `:167` (`scalar_background_histograms`) | a single-type check and the literal name `scalar_background` | Stays single-method (a public helper of one step); the literal becomes `step_spec(config).name`. |
 | `preprocessing/steps.py:279-282` (`PreprocessingRecipe.__post_init__`) | only `ReconstructionConfig` may run after registration | The steps whose spec has `post_registration=True`; the message is built from their config names, so with reconstruction alone it stays `post_registration may contain only ReconstructionConfig steps`. |
-| `benchmarks/preprocessing_synthetic.py:505` | passes `reference_round` to `supplied_section()` only for `HistogramMatchingConfig` | `per_round` of `step_spec(entry.config).supplied`. |
+| `benchmarks/preprocessing_synthetic.py:505` | passes `reference_round` to `fit_supplied_section()` only for `HistogramMatchingConfig` | `per_round` of `step_spec(entry.config).supplied`. |
 | `preprocessing/steps.py:135-136` (`_supplied`), `dataset/fov.py:358`, `dataset/fov.py:634` | none; they read the config's `fit` field | Stay: a config field, not a method list. |
 | `dataset/workflow.py:120-143` (`_explicit_recipe`) | none; it uses `step_config_type` | Already derived. |
 | `dataset/workflow.py:96-113` (`_legacy_recipe`) | the four legacy keys and their fixed configs | Stays explicit: it is the frozen legacy translation of recipe 1, not a method list. |
 | `workflow/schemas/config.schema.yaml:381-505` | one definition per step and the `oneOf` list | Stays static; `test_preprocessing_workflow_key.py` keeps it equal to `PREPROCESSING_METHODS`. |
-| `dataset/fov.py:299-330` (`normalize_intensity`, `match_histogram`, `reconstruct_background`, `filter_tophat`) | one fixed config per convenience method | Stays: public per-method wrappers, not a list. |
+| `dataset/fov.py:299-330` (`normalize_min_max`, `match_histogram`, `correct_background`, `filter_tophat`) | one fixed config per convenience method | Stays: public per-method wrappers, not a list. |
 
 ### Registration
 
@@ -463,7 +463,7 @@ Apply the preprocessing renames listed above. `step_spec`, `step_config_type`
 and the `PreprocessingSpec` name check call the helper; `PreprocessingSpec`
 gains keyword-only `requires`, `min_shape_zyx`, `post_registration` and
 `supplied`; the recipe's post-registration check reads `post_registration`. The
-type branches of `supplied_section()` and `read_supplied_statistics()` and the
+type branches of `fit_supplied_section()` and `load_supplied_statistics()` and the
 `_SECTION_VALIDATORS` table are replaced by the `SuppliedSpec` hooks of the
 three methods that have one; the public functions keep their signatures and
 messages.

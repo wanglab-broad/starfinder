@@ -403,7 +403,7 @@ Each round's list keeps one entry per step result, in step order, with
 `application_config`. The header records the recipe (step method names,
 signal, warp, QC config).
 
-* **Reload.** `read_checkpoint(..., "registered")` rebuilds the transforms,
+* **Reload.** `dataset.load_checkpoint(..., "registered")` rebuilds the transforms,
   a `TransformChain` per round and the application policy. JSON floats
   round-trip exactly and the arrays are stored as float64, so the reloaded
   chain's `pull_field()` is bit-identical to the one computed in the

@@ -318,7 +318,7 @@ list(fov.results)  # stages that have run, in pipeline order
 | `layers.seq`, `layers.other`, `layers.ref` | `rounds.sequencing_rounds`, `rounds.other_rounds`, `rounds.reference_round` |
 | `all_layers`, `to_register` | `all_rounds`, `moving_rounds` |
 | `STARMapDataset.from_config(config)` | `from_workflow_config(config, rule).dataset` |
-| `load_raw_images`, `enhance_contrast`, `hist_equalize`, `morph_recon`, `tophat` | `load_images`, `normalize_intensity`, `match_histogram`, `reconstruct_background`, `filter_tophat` |
+| `load_raw_images`, `enhance_contrast`, `hist_equalize`, `morph_recon`, `tophat` | `load_images`, `normalize_min_max`, `match_histogram`, `correct_background`, `filter_tophat` |
 | `global_registration()`, `local_registration(method=...)` | `register(RegistrationRecipe((RegistrationStep(TranslationConfig()),)))`, `register(RegistrationRecipe((RegistrationStep(TpsConfig()),), signal=RegistrationSignalConfig("channel", 0)))` |
 | `run_streaming(...)`, `run_streaming_gr(...)` | `run(config, execution=ExecutionConfig("streaming"))` |
 | `all_spots`, `good_spots` | `spot_result`, `intensity_result`, `decoding_result`, `filtering_result.accepted` |

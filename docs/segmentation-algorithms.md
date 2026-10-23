@@ -65,8 +65,8 @@ used on this page.
 | `seeded_watershed` | method | Cell territories grown from nuclei on a stain (amplicon, cytoplasm or composite), with each cell carrying its nucleus's label |
 | `composite_nuclei_amplicon` | input function | One image in which both nuclei and amplicon-filled cytoplasm are bright, the legacy `overlay` input |
 | `enhance_with_flamingo` | input function | DAPI with the Flamingo (cytoplasm) stain subtracted, which separates touching nuclei |
-| `normalize_percentiles` | input function | The float intensity range StarDist models expect |
-| `rescale_input`, `labels_to_grid` | input and label functions | Nucleus detection on a shrunk grid by a method without its own scale, with the labels returned to the exact full-resolution grid |
+| `normalize_percentile_unclipped` | input function | The float intensity range StarDist models expect |
+| `rescale_input`, `resample_labels` | input and label functions | Nucleus detection on a shrunk grid by a method without its own scale, with the labels returned to the exact full-resolution grid |
 | `expand_labels` | label function | Territories around nuclei when no cell stain exists, applied once |
 | `extend_labels_through_z` | label function | A 3D territory for single-layer culture from 2D labels and a stain |
 | `import_labels` | import | Masks made elsewhere (CellProfiler, earlier workflow runs) in the same contract |
@@ -76,7 +76,7 @@ used on this page.
 ### `stardist`
 
 **Algorithm.** Load the model folder (`StarDist2D` or `StarDist3D` by the model's
-`n_dim`); normalize the input channel with `normalize_percentiles` (csbdeep's
+`n_dim`); normalize the input channel with `normalize_percentile_unclipped` (csbdeep's
 `normalize`, float32, unclipped); call `predict_instances(image, scale=…,
 n_tiles=…, prob_thresh=…, nms_thresh=…)`. StarDist resamples the input by `scale`
 (`ndi.zoom`, order 1), predicts object probabilities and ray distances, runs non-maximum
@@ -318,7 +318,7 @@ ZYX on one grid; a plane is Z=1 (today a YX input raises).
 the volume, about 2.7 GB for 50×1496×1496; the per-plane median adds one plane. Measured
 on the golden fixture (CPU, one thread): about 20 ms per call.
 
-### `normalize_percentiles`
+### `normalize_percentile_unclipped`
 
 **Algorithm.** `(x − p_low) / (p_high − p_low + 1e-20)` in float32 with the two
 percentiles (NumPy, linear) over `axes`, unclipped: csbdeep's `normalize`, which the
@@ -336,11 +336,11 @@ results after normalization (W-306 `iso_unnormalized` and `iso_x10*` rows, secti
 **Resources.** One float32 copy: 427 MiB for 50×1496×1496, a code-derived estimate from
 the model configuration (W-306 `fov-memory-estimate.json`).
 
-### `rescale_input` and `labels_to_grid`
+### `rescale_input` and `resample_labels`
 
 **Algorithm.** `rescale_input` resamples the image by per-axis factors (linear, with
 anti-aliasing when shrinking) and returns metadata whose spacing is divided by the
-factors (when it has a spacing) and whose `frame_id` records the rescale. `labels_to_grid`
+factors (when it has a spacing) and whose `frame_id` records the rescale. `resample_labels`
 maps a label image back by nearest neighbour by pixel centres (source index ⌊(i + 0.5) ×
 n_source / n_target⌋ per axis) onto exactly the target shape, so an odd size keeps its grid
 (the current round trip turns 61×67 into 60×68: W-306 P3; and 61×63 into 60×64: golden

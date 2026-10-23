@@ -34,7 +34,7 @@ def _supplied_index(recipe, name):
     raise ValueError(f'the recipe has no step {name!r} with fit="supplied"')
 
 
-def summary_stage(recipe: PreprocessingRecipe, step: str) -> tuple[PreprocessingRecipe, tuple[dict, ...]]:
+def summary_recipe(recipe: PreprocessingRecipe, step: str) -> tuple[PreprocessingRecipe, tuple[dict, ...]]:
     """Recipe to run for the summary pass of a supplied step, and its summarized_after record.
 
     Statistics for the step named step (with fit="supplied") are summarized
@@ -51,7 +51,7 @@ def summary_stage(recipe: PreprocessingRecipe, step: str) -> tuple[Preprocessing
         The recipe has no step of that name with fit="supplied".
     """
     if not isinstance(recipe, PreprocessingRecipe):
-        raise TypeError("summary_stage requires a PreprocessingRecipe")
+        raise TypeError("summary_recipe requires a PreprocessingRecipe")
     index = _supplied_index(recipe, step)
     prefix = recipe.steps[:index]
     path = recipe.supplied_statistics if any(_supplied(entry.config) for entry in prefix) else None
@@ -59,7 +59,7 @@ def summary_stage(recipe: PreprocessingRecipe, step: str) -> tuple[Preprocessing
                     supplied_statistics=path), tuple(_preceding(recipe, index)))
 
 
-def supplied_section(config, merged: HistogramSummary, *, reference_round: str | None = None) -> dict:
+def fit_supplied_section(config, merged: HistogramSummary, *, reference_round: str | None = None) -> dict:
     """Fit one step's supplied section from merged histograms, with the step's SuppliedSpec.fit hook.
 
     PercentileNormalizationConfig: params {"p_low", "p_high"} and, per
@@ -78,7 +78,7 @@ def supplied_section(config, merged: HistogramSummary, *, reference_round: str |
         another step.
     """
     if not isinstance(merged, HistogramSummary):
-        raise TypeError("supplied_section requires a merged HistogramSummary")
+        raise TypeError("fit_supplied_section requires a merged HistogramSummary")
     config.__post_init__()
     after = list(merged.summarized_after)
     spec = step_spec(config)
@@ -134,7 +134,7 @@ def supplied_statistics(merged: HistogramSummary, sections: Mapping[str, Mapping
     """Supplied-statistics document: the envelope from merged and sections keyed by step name.
 
     The envelope takes dtype, channel labels and the FOVs used and excluded
-    from merged. Sections come from supplied_section; for a later summary
+    from merged. Sections come from fit_supplied_section; for a later summary
     pass, add its section to the document's "steps" and write it again.
 
     Raises
@@ -149,7 +149,7 @@ def supplied_statistics(merged: HistogramSummary, sections: Mapping[str, Mapping
                       "steps": dict(sections)})
 
 
-def write_supplied_statistics(statistics: Mapping[str, Any], path: Path | str) -> Path:
+def save_supplied_statistics(statistics: Mapping[str, Any], path: Path | str) -> Path:
     """Validate a supplied-statistics document and write it as JSON in one full-file write."""
     document = _validate(dict(statistics))
     path = Path(path)
@@ -157,7 +157,7 @@ def write_supplied_statistics(statistics: Mapping[str, Any], path: Path | str) -
     return path
 
 
-def read_supplied_statistics(path: Path | str, recipe: PreprocessingRecipe | None = None, *, dtype: str | None = None,
+def load_supplied_statistics(path: Path | str, recipe: PreprocessingRecipe | None = None, *, dtype: str | None = None,
                              channel_labels: Sequence[str] | None = None,
                              rounds: Sequence[str] | None = None) -> dict[str, Any]:
     """Read and validate a supplied-statistics file.

@@ -67,8 +67,13 @@ def filter_tophat(volume: np.ndarray, *, config: TophatConfig = TophatConfig()) 
     return _morph(volume, config.radius_yx, False)
 
 
-def reconstruct_background(volume: np.ndarray, *, config: ReconstructionConfig = ReconstructionConfig()) -> np.ndarray:
-    """Subtract reconstructed background then add white and subtract black tophat.
+def correct_background(volume: np.ndarray, *, config: ReconstructionConfig = ReconstructionConfig()) -> np.ndarray:
+    """Correct the background by morphological reconstruction; return the corrected image.
+
+    Per XY slice and channel: subtract the background reconstructed by dilation
+    from the slice eroded with a disk of ``config.radius_yx``, then add the white
+    top-hat and subtract the black top-hat of the result. The step's registry ID
+    stays ``reconstruction``.
 
     Float64 slice intermediates avoid uint16 signed overflow. Output retains
     source dtype, explicitly saturating to its representable range (float

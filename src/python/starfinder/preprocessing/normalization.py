@@ -37,8 +37,15 @@ class MinMaxNormalizationConfig:
             raise ValueError("snr_threshold must be finite and nonnegative")
 
 
-def normalize_intensity(volume: np.ndarray, *, config: MinMaxNormalizationConfig) -> np.ndarray:
-    """Normalize finite nonempty ZYX/ZYXC data without input mutation.
+def normalize_min_max(volume: np.ndarray, *, config: MinMaxNormalizationConfig) -> np.ndarray:
+    """Min-max normalize finite nonempty ZYX/ZYXC data without input mutation.
+
+    Maps each group's data range (per channel, or the whole volume for global
+    scope) linearly onto ``config.output_range`` in ``config.output_dtype``. The
+    SNR gate is kept: a nonconstant group whose max/mean is below
+    ``config.snr_threshold`` keeps its raw values clipped to the output range
+    (see MinMaxNormalizationConfig). The step's registry ID stays
+    ``min_max_normalization``.
 
     Allocates the output and float64 work per channel (or whole volume for
     global scope). No spatial boundary operation. Constants map to the declared

@@ -1,4 +1,4 @@
-"""Label functions that are not methods (D4): expand_labels, labels_to_grid, the culture extension through z and
+"""Label functions that are not methods (D4): expand_labels, resample_labels, the culture extension through z and
 retained_image."""
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ def _target_shape(target_shape):
     return tuple(int(n) for n in shape)
 
 
-def labels_to_grid(labels, *, target_shape) -> tuple[np.ndarray, dict]:
+def resample_labels(labels, *, target_shape) -> tuple[np.ndarray, dict]:
     """Map a label image onto exactly ``target_shape`` by nearest neighbour at pixel centres.
 
     Per axis the source index of output index i is ⌊(i + 0.5) × n_source / n_target⌋,
@@ -56,7 +56,7 @@ def labels_to_grid(labels, *, target_shape) -> tuple[np.ndarray, dict]:
     index = [((2 * np.arange(n_target) + 1) * n_source) // (2 * n_target)
              for n_source, n_target in zip(source.shape, target)]
     output = np.ascontiguousarray(source[np.ix_(*index)])
-    record = {"function": "labels_to_grid", "config": {"target_shape": list(target)},
+    record = {"function": "resample_labels", "config": {"target_shape": list(target)},
               "inputs": [array_sha256(array)], "output": array_sha256(output),
               "source_shape": list(array.shape), "target_shape": list(target)}
     return output, record

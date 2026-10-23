@@ -36,7 +36,7 @@ The chains (fixtures of the two pages, built once per module and only when a sel
 Every chain: the molecules at their truth positions (each FOV's legacy CSV, V2 a); ``Dataset.stitch`` with
 ``MultiviewStitcherConfig()`` on the reference stain, its placement used when every FOV is ``image_supported`` (2D
 tissue: when TH5 holds) and the truth placement otherwise (SC1); ``Dataset.export``; ``Dataset.report`` and
-``read_report``. The truth-label chain uses the placement its method chain uses.
+``load_report``. The truth-label chain uses the placement its method chain uses.
 
 Each stage that generates, stitches, segments, assigns and exports, or reports runs in its own process under
 ``/usr/bin/time -v`` (one CPU thread, no GPU, ``HF_HUB_OFFLINE``), so that each step's wall time and peak RSS are
@@ -462,13 +462,13 @@ def _copy_shared(base, summary, variant):
 
 
 def _step_assign_export(a):
-    """The assignment and the export of one chain. Route per FOV: per FOV the molecules (``molecule_table_from_csv``
+    """The assignment and the export of one chain. Route per FOV: per FOV the molecules (``import_legacy_molecules_csv``
     of the truth-position CSV), the labels (the method's, or the FOV's truth labels, imported ``relabel=False``),
     ``assign_molecules`` (dense 3D method: the 0.7776-µm planar expansion; otherwise the default) saved as the §2.9
     folder ``default``, then ``Dataset.export`` (``route: per_fov``, ``dimensionality: stack``). Route after fusion:
     ``Dataset.export`` (``dimensionality: projection``, Z maximum, ``scale_yx`` 1) with the method's segmentation
     block or the truth runs."""
-    from starfinder.assignment import AssignmentConfig, assign_molecules, molecule_table_from_csv
+    from starfinder.assignment import AssignmentConfig, assign_molecules, import_legacy_molecules_csv
     from starfinder.assignment._persist import assignment_directory, write_assignment
     from starfinder.dataset import Dataset
     from starfinder.export import ExportConfig, FusionConfig, SampleSegmentationConfig, SampleSegmentationRun
@@ -485,7 +485,7 @@ def _step_assign_export(a):
     if CONTEXTS[context]["route"] == "per_fov":
         for fov in fovs:
             grid = _grid(root, fov)
-            molecules = molecule_table_from_csv(root / "signal" / f"{fov}_goodSpots.csv",
+            molecules = import_legacy_molecules_csv(root / "signal" / f"{fov}_goodSpots.csv",
                                                 spot_namespace=_ns(ds, sample, fov, None), genes=tuple(book.genes))
             if variant == "truth":
                 labels = {target: import_labels(base / "scene" / "fovs" / fov / "labels" / file, grid=grid,
@@ -1350,14 +1350,14 @@ def mixing_cells(chain, pair):
 
 
 def check_report(chain):
-    """Step 4 on one chain: read_report equal to the files, RC12 and PG1; reads_in_cells equal to Σ X and to the
+    """Step 4 on one chain: load_report equal to the files, RC12 and PG1; reads_in_cells equal to Σ X and to the
     molecules of the counted cells (identity 4); mecr.csv equal to DF8 recomputed from X; the cells per FOV by RT1's
     rule. Returns the page and the quantities reported."""
-    from starfinder.report import read_report
+    from starfinder.report import load_report
     from . import test_report_page as page_checks
     from .test_report_chain import ChainCase, check_null_values
     from .test_report_measurements import expected_reads_in_cells, matrix
-    record = read_report(chain.report_dir)
+    record = load_report(chain.report_dir)
     page = page_checks.Page(ChainCase(chain, _report_config(chain)), chain.report_dir, record)
     for name, entry in ((e["path"], e) for e in record["files"]):
         assert hashlib.sha256((chain.report_dir / name).read_bytes()).hexdigest() == entry["sha256"], name

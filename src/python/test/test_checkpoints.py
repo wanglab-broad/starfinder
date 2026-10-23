@@ -14,7 +14,7 @@ from starfinder.readout import (Codebook, CodebookAwareDecoderConfig, Neighborho
 from starfinder.dataset import CheckpointConfig, Dataset, ExecutionConfig, PipelineConfig, RoundState
 from starfinder.registration import RegistrationRecipe, RegistrationStep
 from starfinder.image import ImageMetadata
-from starfinder.dataset import read_checkpoint
+from starfinder.dataset import load_checkpoint
 from starfinder.io import ImageLoadConfig, load_volume_zyxc, save_volume
 from starfinder._records import _read_table, _write_table
 from starfinder._checkpoint import candidates_frame, parse_candidates
@@ -157,7 +157,7 @@ def test_dense_transforms_and_codebook_aware_tables_round_trip(tmp_path):
         'round1.ome.tif', 'round2.ome.tif', 'round2_field.npz', 'transforms.json']
     with np.load(directory / 'registered' / 'round2_field.npz') as fields:
         assert fields.files == ['result_1']
-    loaded = read_checkpoint(directory, 'registered')
+    loaded = load_checkpoint(directory, 'registered')
     restored = loaded['registration_results']['round2']
     original = saved.registration_results['round2']
     np.testing.assert_array_equal(restored[1].transform.displacement_zyx, original[1].transform.displacement_zyx)
@@ -226,8 +226,8 @@ def test_csv_and_parquet_reload_identically(tmp_path):
     csv = resident(ds).run(full(), checkpoints=CheckpointConfig(directory=tmp_path / 'csv'))
     resident(ds).run(full(), checkpoints=CheckpointConfig(directory=tmp_path / 'parquet', table_format='parquet'))
     for stage in ('candidates', 'pre_qc'):
-        a = read_checkpoint(tmp_path / 'csv' / 'FOV', stage)
-        b = read_checkpoint(tmp_path / 'parquet' / 'FOV', stage)
+        a = load_checkpoint(tmp_path / 'csv' / 'FOV', stage)
+        b = load_checkpoint(tmp_path / 'parquet' / 'FOV', stage)
         assert a.keys() == b.keys()
         if stage == 'candidates':
             assert_spots_equal(a['spot_result'], b['spot_result'])
@@ -293,7 +293,7 @@ def test_nul_gene_id_fails_csv_and_round_trips_through_parquet(tmp_path):
     saved = resident(ds).run(full(), checkpoints=CheckpointConfig(directory=tmp_path / 'parquet',
                                                                     table_format='parquet'))
     assert saved.decoding_result.table.gene_id.iloc[0] == 'a\x00b'
-    loaded = read_checkpoint(tmp_path / 'parquet' / 'FOV', 'pre_qc')['decoding_result']
+    loaded = load_checkpoint(tmp_path / 'parquet' / 'FOV', 'pre_qc')['decoding_result']
     assert_decoding_equal(loaded, saved.decoding_result)
     assert loaded.table.gene_id.iloc[0] == 'a\x00b'
 
@@ -306,7 +306,7 @@ def test_literal_na_gene_id_round_trips_in_csv_and_parquet(tmp_path):
     resident(ds).run(full(), checkpoints=CheckpointConfig(directory=tmp_path / 'parquet', table_format='parquet'))
     genes = saved.decoding_result.table.gene_id
     assert genes.iloc[0] == '<NA>' and genes.isna().sum() == 3
-    loaded = {f: read_checkpoint(tmp_path / f / 'FOV', 'pre_qc')['decoding_result'] for f in ('csv', 'parquet')}
+    loaded = {f: load_checkpoint(tmp_path / f / 'FOV', 'pre_qc')['decoding_result'] for f in ('csv', 'parquet')}
     assert_decoding_equal(loaded['csv'], saved.decoding_result)
     assert_decoding_equal(loaded['csv'], loaded['parquet'])
     for table_format in ('csv', 'parquet'):

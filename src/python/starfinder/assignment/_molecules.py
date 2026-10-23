@@ -64,7 +64,7 @@ class MoleculeTable:
     shares. ``sha256``, set at construction, is the SHA-256 of the six columns in
     canonical form: rows sorted by ``(spot_namespace, spot_id)``, then each column's
     name, dtype and values, so it does not depend on row order. Build it with
-    :func:`molecule_table` or :func:`molecule_table_from_csv`.
+    :func:`molecule_table` or :func:`import_legacy_molecules_csv`.
 
     Raises
     ------
@@ -200,7 +200,7 @@ def molecule_table(detection, reads, *, genes, population: str = "final") -> Mol
     return MoleculeTable(table, _genes(genes), population, source)
 
 
-def molecule_table_from_csv(path: Path | str, *, spot_namespace: str, genes) -> MoleculeTable:
+def import_legacy_molecules_csv(path: Path | str, *, spot_namespace: str, genes) -> MoleculeTable:
     """The molecules of a legacy one-based ``x, y, z, gene`` CSV (MATLAB or ``export_spots``).
 
     Integer and float coordinates are both read; 1 is subtracted from each, and

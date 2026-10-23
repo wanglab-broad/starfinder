@@ -63,7 +63,7 @@ It calls `workflow/scripts/rsf_single_fov.py` or `.m` respectively.
 | --- | --- | --- | --- |
 | load | `from_workflow_config`, `load_codebook`, `FOV.load_images` | `STARMapDataset`, `LoadRawImages` | Round/FOV channel stacks → in-memory images; Python loads the codebook before processing |
 | rotate | `FOV.rotate` if angle is nonzero | `LoadRawImages(..., 'rotate_angle', ...)` | Rotated image arrays; no standalone stage file |
-| enhance | Optional `normalize_intensity`, `match_histogram`, `reconstruct_background` | `EnhanceContrast`, `HistEqualize`, `MorphRecon` | Preprocessed arrays |
+| enhance | Optional `normalize_min_max`, `match_histogram`, `correct_background` | `EnhanceContrast`, `HistEqualize`, `MorphRecon` | Preprocessed arrays |
 | registration | `register(RegistrationRecipe(...))`: global then local step, composed and resampled once | `GlobalRegistration`, `LocalRegistration` | Aligned arrays and reference image |
 | spot_finding | `find_spots` | `SpotFinding` | Candidate coordinates |
 | extraction | `extract_intensities` / `decode_reads` | `ReadsExtraction` | Per-round intensities/color calls |

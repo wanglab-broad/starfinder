@@ -7,8 +7,8 @@ from starfinder.dataset import FOV, Dataset
 from starfinder.io import load_round, load_volume, save_volume
 from starfinder.preprocessing import (
     match_histogram,
-    normalize_intensity,
-    reconstruct_background,
+    normalize_min_max,
+    correct_background,
     filter_tophat,
 )
 from starfinder.registration import estimate_transform, apply_transform
@@ -41,9 +41,9 @@ __all__ = [
     "filter_reads",
     # Preprocessing
     "preprocessing",
-    "normalize_intensity",
+    "normalize_min_max",
     "match_histogram",
-    "reconstruct_background",
+    "correct_background",
     "filter_tophat",
     # Utilities
     "project_image",

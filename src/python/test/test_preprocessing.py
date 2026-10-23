@@ -9,8 +9,8 @@ import pytest
 
 from starfinder.preprocessing import (
     match_histogram,
-    normalize_intensity,
-    reconstruct_background,
+    normalize_min_max,
+    correct_background,
     filter_tophat,
 )
 
@@ -18,12 +18,12 @@ pytestmark = pytest.mark.preprocessing
 
 
 class TestMinMaxNormalize:
-    """Tests for normalize_intensity."""
+    """Tests for normalize_min_max."""
 
     def test_rescales_to_uint8(self):
         """Output spans [0, 255] for non-constant input."""
         vol = np.random.RandomState(42).randint(50, 200, (5, 16, 16), dtype=np.uint8)
-        result = normalize_intensity(vol, config=MinMaxNormalizationConfig('uint8', (0, 255)))
+        result = normalize_min_max(vol, config=MinMaxNormalizationConfig('uint8', (0, 255)))
         assert result.dtype == np.uint8
         assert result.shape == vol.shape
         assert result.min() == 0
@@ -34,7 +34,7 @@ class TestMinMaxNormalize:
         vol = np.zeros((3, 8, 8, 2), dtype=np.uint8)
         vol[:, :, :, 0] = 100  # constant → zeros
         vol[:, :, :, 1] = np.arange(192, dtype=np.uint8).reshape(3, 8, 8)
-        result = normalize_intensity(vol, config=MinMaxNormalizationConfig('uint8', (0, 255)))
+        result = normalize_min_max(vol, config=MinMaxNormalizationConfig('uint8', (0, 255)))
         assert result.shape == vol.shape
         assert result.dtype == vol.dtype
         # Channel 0: constant → all zeros
@@ -45,7 +45,7 @@ class TestMinMaxNormalize:
     def test_constant_channel_zeros(self):
         """Constant-valued channel maps to all zeros."""
         vol = np.full((3, 8, 8), 42, dtype=np.uint8)
-        result = normalize_intensity(vol, config=MinMaxNormalizationConfig('uint8', (0, 255)))
+        result = normalize_min_max(vol, config=MinMaxNormalizationConfig('uint8', (0, 255)))
         assert np.all(result == 0)
 
 
@@ -62,7 +62,7 @@ class TestSNRGating:
         vol[:, :, :, 1] = 5
         vol[1, 16, 16, 1] = 200
 
-        result = normalize_intensity(vol, config=MinMaxNormalizationConfig('uint8', (0, 255), snr_threshold=5.0))
+        result = normalize_min_max(vol, config=MinMaxNormalizationConfig('uint8', (0, 255), snr_threshold=5.0))
 
         # Nonconstant low-SNR values are retained exactly.
         np.testing.assert_array_equal(result[:, :, :, 0], vol[:, :, :, 0])
@@ -76,7 +76,7 @@ class TestSNRGating:
         vol[:, :, :, 1] = 5
         vol[1, 16, 16, 1] = 200
 
-        result = normalize_intensity(vol, config=MinMaxNormalizationConfig('uint8', (0, 255), snr_threshold=None))
+        result = normalize_min_max(vol, config=MinMaxNormalizationConfig('uint8', (0, 255), snr_threshold=None))
 
         # Both channels should be rescaled to [0, 255]
         # Channel 0: constant → all zeros (lo == hi case)
@@ -109,22 +109,22 @@ class TestHistogramMatch:
 
 
 class TestMorphologicalReconstruction:
-    """Tests for reconstruct_background."""
+    """Tests for correct_background."""
 
     def test_shape_preserved(self):
         """Output shape matches input for 3D and 4D."""
         vol3d = np.random.RandomState(0).randint(0, 256, (3, 32, 32), dtype=np.uint8)
-        assert reconstruct_background(vol3d, config=ReconstructionConfig(radius_yx=3)).shape == vol3d.shape
+        assert correct_background(vol3d, config=ReconstructionConfig(radius_yx=3)).shape == vol3d.shape
 
         vol4d = np.random.RandomState(1).randint(0, 256, (3, 32, 32, 2), dtype=np.uint8)
-        assert reconstruct_background(vol4d, config=ReconstructionConfig(radius_yx=3)).shape == vol4d.shape
+        assert correct_background(vol4d, config=ReconstructionConfig(radius_yx=3)).shape == vol4d.shape
 
     def test_background_removed(self):
         """Smooth background is reduced; small features preserved."""
         # Create image with uniform background + bright spot
         img = np.full((1, 64, 64), 100, dtype=np.uint8)
         img[0, 32, 32] = 255
-        result = reconstruct_background(img, config=ReconstructionConfig(radius_yx=5))
+        result = correct_background(img, config=ReconstructionConfig(radius_yx=5))
         assert result.dtype == img.dtype
         assert result.shape == img.shape
         # Background should be suppressed (lower than original 100)

@@ -48,7 +48,7 @@ composite and the Flamingo-assisted DAPI enhancement of the workflow scripts, bi
 bit, on two ZYX arrays of one shape (a plane is 1×Y×X; other shapes raise
 :py:class:`~starfinder.image.IncompatibleGeometryError`), with a ``uint8`` output; the
 script's maximum projection is a run's projection, not part of the function.
-:py:func:`~starfinder.segmentation.normalize_percentiles` is csbdeep's percentile
+:py:func:`~starfinder.segmentation.normalize_percentile_unclipped` is csbdeep's percentile
 normalization (float32, unclipped; a constant image gives zeros), and
 :py:func:`~starfinder.segmentation.rescale_input` resamples an image by per-axis factors
 and returns metadata whose spacing is divided by the factors and whose ``frame_id``
@@ -61,7 +61,7 @@ by a distance (:py:class:`~starfinder.segmentation.ExpandLabelsConfig`: ``distan
 or ``volumetric``), never overwriting or renumbering a label; ``um`` needs the metadata's
 spacing. It is the one label expansion: the assignment entry applies it to the cell
 territories and keeps both masks (:doc:`assignment`).
-:py:func:`~starfinder.segmentation.labels_to_grid` (nearest neighbour at pixel centres
+:py:func:`~starfinder.segmentation.resample_labels` (nearest neighbour at pixel centres
 onto exactly the target shape) and
 :py:func:`~starfinder.segmentation.extend_labels_through_z` (plane labels kept where a
 stain is foreground, with the sizes of
@@ -188,14 +188,14 @@ section of ``export.json`` (see :doc:`export` and
    KNOWN_MODELS
    KnownModel
    LabelImportConfig
-   labels_to_grid
    MethodContext
    MissingModelError
    ModelFile
    ModelHashMismatchError
-   normalize_percentiles
+   normalize_percentile_unclipped
    reference_grid_from_file
    ReferenceGrid
+   resample_labels
    rescale_input
    resolve_model
    SampleSegmentation

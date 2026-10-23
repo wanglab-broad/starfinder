@@ -80,7 +80,7 @@ def assembly_inputs(dataset, placement, assignment) -> list:
 
     The folder is ``checkpoints/<fov_id>/assignment/<assignment>/``; with
     ``assignment=None`` the FOV's ``signal/<fov_id>_goodSpots.csv`` is read
-    with ``molecule_table_from_csv``. The grid is that of the FOV's reference
+    with ``import_legacy_molecules_csv``. The grid is that of the FOV's reference
     image, the file the dataset's ``reference_image`` names (default
     ``images/ref_merged/<fov_id>.tif``): its stored metadata, or the grid the
     dataset's ``voxel_size_xy`` and ``voxel_size_z`` declare for a file that
@@ -88,7 +88,7 @@ def assembly_inputs(dataset, placement, assignment) -> list:
     ``assemble`` then refuses an owning FOV without one.
     """
     from starfinder.assembly import AssemblyInput
-    from starfinder.assignment import molecule_table_from_csv
+    from starfinder.assignment import import_legacy_molecules_csv
     from starfinder.assignment._persist import RECORD_FILE, assignment_directory
     inputs = []
     genes = _genes(dataset) if assignment is None else None
@@ -105,7 +105,7 @@ def assembly_inputs(dataset, placement, assignment) -> list:
             continue
         namespace = json.dumps([dataset.dataset_id, dataset.sample_id, fov, None], separators=(",", ":"))
         inputs.append(AssemblyInput(fov, _reference_grid(dataset, fov),
-                                    molecules=molecule_table_from_csv(path, spot_namespace=namespace, genes=genes)))
+                                    molecules=import_legacy_molecules_csv(path, spot_namespace=namespace, genes=genes)))
     return inputs
 
 

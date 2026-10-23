@@ -384,12 +384,12 @@ def test_three_processes_segment_and_assign_as_one_process(raw, threshold, tmp_p
 @pytest.fixture
 def no_sampling(monkeypatch):
     calls = []
-    original = _assign.sample_labels
+    original = _assign.labels_at_positions
 
     def counting(*args, **kwargs):
         calls.append(1)
         return original(*args, **kwargs)
-    monkeypatch.setattr(_assign, "sample_labels", counting)
+    monkeypatch.setattr(_assign, "labels_at_positions", counting)
     return calls
 
 

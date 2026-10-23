@@ -40,7 +40,7 @@ from starfinder.evaluation.spot_finding import evaluate_spots
 from starfinder.image import ImageMetadata, IncompatibleGeometryError
 from starfinder._records import jsonable as _jsonable, tuples as _tuples
 from starfinder._checkpoint import candidates_frame
-from starfinder.preprocessing import normalize_intensity
+from starfinder.preprocessing import normalize_min_max
 from starfinder.spot_finding import (KNOWN_MODELS, SPOT_FINDING_METHODS, ChannelOverride, LocalMaximaConfig,
     MissingModelError, PiscisConfig, SpotFindingBackendUnavailableError, SpotFindingPlan, SpotFindingWarning,
     SpotiflowConfig, StarfishLogConfig, ModelFile, ModelHashMismatchError, find_spots, resolve_model)
@@ -898,7 +898,7 @@ def test_s15_dimensionality_rules(method, shape, record_property):
 def test_s16_the_w218_option_and_exclude_border_on_formed16(part, variant, seed, record_property):
     image, metadata, truth, eligible = formed16(seed)
     if variant == "uint8":
-        image = normalize_intensity(image, config=RECIPE1)
+        image = normalize_min_max(image, config=RECIPE1)
     if part == "merge":
         _, legacy, _ = s16(image, metadata, truth, eligible, LocalMaximaConfig())
         result, merged, _ = s16(image, metadata, truth, eligible, LocalMaximaConfig(merge_radius_zyx=RADIUS))

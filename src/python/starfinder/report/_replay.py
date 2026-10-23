@@ -322,13 +322,13 @@ class _Replayer:
     def supplied_statistics(self):
         """The supplied-statistics document of a step with ``fit="supplied"``, checked against its SHA-256."""
         if self.supplied is None:
-            from starfinder.preprocessing import read_supplied_statistics
+            from starfinder.preprocessing import load_supplied_statistics
             entry = _get(self.record, "preprocessing", "supplied_statistics") or {}
             if not entry.get("path"):
                 self.supplied = Unavailable("not_recorded", "preprocessing.supplied_statistics holds no path")
             else:
                 data = self.inputs.read(entry["path"], "supplied_statistics", entry.get("sha256"))
-                self.supplied = data if isinstance(data, Unavailable) else read_supplied_statistics(entry["path"])
+                self.supplied = data if isinstance(data, Unavailable) else load_supplied_statistics(entry["path"])
         return self.supplied
 
     def load(self, name, entries, load, rotation):

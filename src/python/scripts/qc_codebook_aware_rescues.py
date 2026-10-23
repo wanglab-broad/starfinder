@@ -275,7 +275,7 @@ def generate_raw_registered_stack_cache(
     print(f"Generating registered stack cache for {dataset} {fov_id}")
     fov.load_images()
     fov.rotate(angle=float(config["rotate_angle"]))
-    fov.normalize_intensity(config=MinMaxNormalizationConfig("uint8", (0, 255), snr_threshold=float(config["snr_threshold"])))
+    fov.normalize_min_max(config=MinMaxNormalizationConfig("uint8", (0, 255), snr_threshold=float(config["snr_threshold"])))
     fov.register(RegistrationRecipe((RegistrationStep(TranslationConfig()),), signal=RegistrationSignalConfig('sum')))
 
     save_registered_stack_cache(

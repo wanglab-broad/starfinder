@@ -16,14 +16,14 @@ are not examples of the current API.
 | `dataset.STARMapDataset`, `LayerState`, `layers` | `dataset.Dataset`, `RoundState`, `rounds` |
 | `dataset.Codebook` | `readout.Codebook` |
 | `io.load_multipage_tiff`, `load_image_stacks`, `save_stack` | `io.load_volume`, `load_round`, `save_volume` |
-| `min_max_normalize`, `histogram_match`, `morphological_reconstruction`, `tophat_filter` | `preprocessing.normalize_intensity`, `match_histogram`, `reconstruct_background`, `filter_tophat` |
+| `min_max_normalize`, `histogram_match`, `morphological_reconstruction`, `tophat_filter` | `preprocessing.normalize_min_max`, `match_histogram`, `correct_background`, `filter_tophat` |
 | `utils.make_projection` | `preprocessing.project_image` |
 | `spotfinding.find_spots_3d` | `spot_finding.find_spots` |
 | `decode_color_seq` | `readout.colors_to_bases` |
 | `benchmark.synthetic` | `synthetic` |
 | `registration.metrics`, benchmark truth comparisons | Pure domain functions in `evaluation` |
 | Separate benchmark drivers and `starfinder-generate` | `starfinder synthetic generate`, `starfinder benchmark run/evaluate/report` |
-| `io.read_checkpoint` | `dataset.read_checkpoint` (no alias) |
+| `io.read_checkpoint` | `dataset.load_checkpoint` (no alias) |
 | `io.export_spots` | `readout.export_spots` (no alias) |
 | `sample_output.SampleSegmentation` | `segmentation.SampleSegmentation` (no alias) |
 | `dataset.RegistrationRecipe`, `RegistrationStep`, `RecoveryConfig`, `ExternalReference` | `registration.RegistrationRecipe`, `RegistrationStep`, `RecoveryConfig`, `ExternalReference` (no alias) |
@@ -45,13 +45,27 @@ are not examples of the current API.
 | `spot_finding.WeightsFile` | `spot_finding.ModelFile` (no alias) |
 | `spot_finding.MissingWeightsError` | `spot_finding.MissingModelError` (no alias) |
 | `spot_finding.WeightsHashMismatchError` | `spot_finding.ModelHashMismatchError` (no alias) |
+| `preprocessing.normalize_intensity`, the root export `starfinder.normalize_intensity` and `FOV.normalize_intensity` | `preprocessing.normalize_min_max`, root `starfinder.normalize_min_max` and `FOV.normalize_min_max` (no alias) |
+| `preprocessing.reconstruct_background`, the root export `starfinder.reconstruct_background` and `FOV.reconstruct_background` | `preprocessing.correct_background`, root `starfinder.correct_background` and `FOV.correct_background` (no alias) |
+| `preprocessing.summary_stage` | `preprocessing.summary_recipe` (no alias) |
+| `preprocessing.supplied_section` | `preprocessing.fit_supplied_section` (no alias) |
+| `dataset.read_checkpoint` | `dataset.load_checkpoint` (no alias; the method `FOV.load_checkpoint` keeps its name) |
+| `report.read_report` | `report.load_report` (no alias) |
+| `preprocessing.read_histograms` | `preprocessing.load_histograms` (no alias) |
+| `preprocessing.write_histograms` | `preprocessing.save_histograms` (no alias) |
+| `preprocessing.read_supplied_statistics` | `preprocessing.load_supplied_statistics` (no alias) |
+| `preprocessing.write_supplied_statistics` | `preprocessing.save_supplied_statistics` (no alias) |
+| `segmentation.labels_to_grid` | `segmentation.resample_labels` (no alias) |
+| `segmentation.normalize_percentiles` (the function) | `segmentation.normalize_percentile_unclipped` (no alias) |
+| `assignment.molecule_table_from_csv` | `assignment.import_legacy_molecules_csv` (no alias) |
+| `assignment.sample_labels` (the function) | `assignment.labels_at_positions` (no alias) |
 
 These relocations do not make the old positional arguments or return values valid.
 Use typed operation configs and structured results. See the [API
 reference](api/python.rst) and [coordination member map](coordination.md).
 Registration internals, benchmark helpers and barcode lookup constants are private.
 `io` holds image file I/O only: the checkpoint serializers are private to the package
-and `read_checkpoint` is public in `dataset`, beside `FOV.load_checkpoint`.
+and `dataset.load_checkpoint` is public, beside the method `FOV.load_checkpoint`.
 
 The module renames of W-556 change the module paths only: every member keeps its name,
 and the root exports (`decode_barcodes`, `extract_intensities`, `filter_reads`,
@@ -86,6 +100,31 @@ import them through their module where both are used. The CLI group `weights`,
 `DECODING_METHODS` and `ENCODINGS`, `PipelineConfig.decoding`, the checkpoint header keys
 and `readout_mode` keep their names.
 
+The member renames of W-558 (W-526, NM-02, NM-03, NM-06, NM-07, NM-10, NM-19, NM-20,
+NM-26, NC-07, SM-03 and SM-23) make the package's own files read and written with one
+verb pair, `load_`/`save_`. They change these recorded strings with the names:
+
+* the `"function"` of the record that `segmentation.resample_labels` returns is
+  `resample_labels`, and that of `segmentation.normalize_percentile_unclipped` is
+  `normalize_percentile_unclipped`. Neither record is written to a file by the package;
+* the `TypeError` messages "summary_recipe requires a PreprocessingRecipe",
+  "fit_supplied_section requires a merged HistogramSummary" and "save_histograms
+  requires a HistogramSummary" name the new functions.
+
+No `run.json` step name changes: `FOV.run` preprocesses through its recipe (step names
+`preprocess:<stage>`), not through `FOV.normalize_min_max` or `FOV.correct_background`.
+These keep their names: the registry IDs `min_max_normalization` and `reconstruction`;
+the config fields `StarDistConfig.normalize_percentiles` and
+`CellposeConfig.normalize_percentiles`, their validation messages and their run-record
+keys; the field `SampleScene.sample_labels`; the method `FOV.load_checkpoint`, which
+restores state onto a FOV (`dataset.load_checkpoint` returns a dict);
+`preprocessing.normalize_percentile`, `supplied_statistics` and `assignment.write_h5ad`;
+the schema `starfinder.preprocessing.supplied/1` and its `summarized_after` field; and
+the recorded `"coordinates": "one-based"` of the legacy CSV reader.
+`segmentation.normalize_percentile_unclipped` differs from
+`preprocessing.normalize_percentile`: it returns float32, does not clip, takes linear
+percentiles over the given axes and returns a record.
+
 ## Before and after Python calls
 
 The **before** snippets below are historical text, not runnable imports.
@@ -103,10 +142,10 @@ After:
 
 ```python
 from starfinder.io import load_volume
-from starfinder.preprocessing import normalize_intensity, MinMaxNormalizationConfig
+from starfinder.preprocessing import normalize_min_max, MinMaxNormalizationConfig
 
 loaded = load_volume(path)
-image = normalize_intensity(loaded.image, config=MinMaxNormalizationConfig(
+image = normalize_min_max(loaded.image, config=MinMaxNormalizationConfig(
     output_dtype="uint8", output_range=(0, 255)))
 metadata = loaded.metadata
 ```
@@ -537,7 +576,7 @@ draws one channel's detections on one slice or crop and returns the matplotlib a
 rounds), `detection_plan` (the channel overrides as `{channel, config}` entries),
 `execution` and `weights` (the provenance `artifacts` entries of the loaded weights),
 and the table may carry the spot columns `round` (string), `radius` and `probability`
-(float64). `FORMAT_VERSION` stays 2. `read_checkpoint(..., "candidates")` rebuilds the
+(float64). `FORMAT_VERSION` stays 2. `dataset.load_checkpoint(..., "candidates")` rebuilds the
 plan, so the reloaded `spot_result.plan` equals the original; a checkpoint written
 before these keys loads unchanged, with no overrides and `rounds` `None`. See
 {doc}`checkpoints`.
@@ -931,7 +970,7 @@ Masks made elsewhere, such as CellProfiler outputs, the legacy
 {py:class}`~starfinder.segmentation.LabelImportConfig` for a plan run) instead of a
 plain `imread`. Big-endian files are read with native values, float and boolean masks
 are rejected, and the shape and any stored metadata are checked against the grid.
-{py:func}`~starfinder.segmentation.labels_to_grid` replaces the legacy round trip
+{py:func}`~starfinder.segmentation.resample_labels` replaces the legacy round trip
 `rescale(labels, [1, 2, 2], order=0)`, which turned a 61×63 grid into 60×64, by an
 exact map onto the target shape.
 {py:func}`~starfinder.segmentation.extend_labels_through_z` with
@@ -961,12 +1000,12 @@ image. The inputs come from the reference frame: a morphology round's DAPI after
 `FOV.save_reference_image` writes. The workflow scripts call these functions (see
 "Segmentation and assignment workflow rules" below).
 
-{py:func}`~starfinder.segmentation.normalize_percentiles` is csbdeep's `normalize` as
+{py:func}`~starfinder.segmentation.normalize_percentile_unclipped` is csbdeep's `normalize` as
 `stardist_segmentation.py` calls it (percentiles 1 and 99.8, float32, unclipped), with
 its values recorded. {py:func}`~starfinder.segmentation.rescale_input` performs the
 script's `rescale(image, [1, .5, .5])` shrink for any factors and also returns
 metadata whose spacing is divided by the factors and whose `frame_id` records the
-rescale; {py:func}`~starfinder.segmentation.labels_to_grid` maps labels detected on the
+rescale; {py:func}`~starfinder.segmentation.resample_labels` maps labels detected on the
 shrunk image back onto the exact input grid. None of these is registered in
 `PREPROCESSING_METHODS`.
 
@@ -1001,7 +1040,7 @@ Assignment is the third call per FOV, after `FOV.run` and `FOV.segment` (decisio
 {py:func}`~starfinder.assignment.assign_molecules`, which places the molecules of a
 {py:class}`~starfinder.assignment.MoleculeTable` (from
 {py:func}`~starfinder.assignment.molecule_table` or a legacy goodSpots CSV through
-{py:func}`~starfinder.assignment.molecule_table_from_csv`) in the territories of a cell
+{py:func}`~starfinder.assignment.import_legacy_molecules_csv`) in the territories of a cell
 {py:class}`~starfinder.segmentation.SegmentationResult` and returns an
 {py:class}`~starfinder.assignment.AssignmentResult` with the molecule, cell, count and
 nucleus tables. `FOV.assign(config, cells=…, nuclei=…)` runs it on the FOV's results and
@@ -1569,7 +1608,7 @@ run.json"):
 
 * **New: the processing report.** `Dataset.report(sample, fov_ids, …)` writes
   `<output_root>/report/<sample>/` (`report.html`, `report.json`, `tables/`) and returns a
-  `ReportRecord` ({doc}`report-contract`, "The sample entry"); `starfinder.report.read_report`
+  `ReportRecord` ({doc}`report-contract`, "The sample entry"); `starfinder.report.load_report`
   reads a report back. The entry reads the saved records only and calls no processing stage.
   Nothing existing changes.
 * **New: the comparison page.** `Dataset.compare_samples(samples, *, report_root=None)` writes

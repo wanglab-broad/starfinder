@@ -40,7 +40,7 @@ import tifffile
 from pandas.testing import assert_frame_equal
 
 from starfinder.assembly import AssemblyInput, assemble, load_assembly
-from starfinder.assignment import assign_molecules, molecule_table_from_csv
+from starfinder.assignment import assign_molecules, import_legacy_molecules_csv
 from starfinder.assignment._persist import assignment_directory, write_assignment
 from starfinder.dataset import Dataset
 from starfinder.image import ImageMetadata, IncompatibleGeometryError
@@ -112,7 +112,7 @@ def scene_dataset(root, scene, book, saved, *, stored, voxel_sizes=None):
         grid = grids[fov] = ReferenceGrid(stain.shape, metadata, "declared")
         cells = label_run(scene.fov_labels[fov]["cell"], fov, grid)
         nuclei = label_run(scene.fov_labels[fov]["nucleus"], fov, grid, target="nucleus", run="nucleus")
-        mols = molecule_table_from_csv(saved / "fovs" / fov / "molecules.csv", spot_namespace=spot_namespace(fov),
+        mols = import_legacy_molecules_csv(saved / "fovs" / fov / "molecules.csv", spot_namespace=spot_namespace(fov),
                                        genes=book.genes)
         result = assign_molecules(mols, cells, grid=grid, nuclei=nuclei)
         write_assignment(assignment_directory(out / "checkpoints" / fov, "default"),

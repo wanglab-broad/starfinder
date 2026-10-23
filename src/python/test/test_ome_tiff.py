@@ -14,7 +14,7 @@ import tifffile
 
 from starfinder.dataset import CheckpointConfig
 from starfinder.image import ImageMetadata
-from starfinder.dataset import read_checkpoint
+from starfinder.dataset import load_checkpoint
 from starfinder.io import ImageLoadConfig, load_volume, load_volume_zyxc, save_volume
 from starfinder.io.tiff import METADATA_NAMESPACE
 
@@ -159,7 +159,7 @@ def test_checkpoint_saved_under_the_earlier_tif_name_reloads(tmp_path):
     for name in ROUNDS:
         np.testing.assert_array_equal(fov.images[name], saved.images[name], strict=True)
         assert fov.metadata[name] == saved.metadata[name]
-    assert read_checkpoint(saved.paths.checkpoint_dir, 'registered')['registration_results'] == saved.registration_results
+    assert load_checkpoint(saved.paths.checkpoint_dir, 'registered')['registration_results'] == saved.registration_results
     # overwrite clears the earlier files as well as the current ones
     resident(ds).run(full(), checkpoints=CheckpointConfig(overwrite=True))
     assert sorted(p.name for p in registered.glob('*.tif')) == ['round1.ome.tif', 'round2.ome.tif']

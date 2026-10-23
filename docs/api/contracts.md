@@ -134,7 +134,7 @@ error. Constant data maps to the lower output endpoint. This is intensity
 conversion, not physical-unit conversion. Float64 work is allocated per active
 channel/group, plus output. Inputs are never mutated.
 
-{func}`starfinder.preprocessing.normalize_intensity` requires
+{func}`starfinder.preprocessing.normalize_min_max` requires
 `MinMaxNormalizationConfig(output_dtype="uint8", output_range=(0, 255))` to
 reproduce the historical output choice. Its default scope is per-channel and
 integer rounding truncates; float64 calculation can differ at quantization
@@ -147,7 +147,7 @@ intentionally corrects the historical constant-with-enabled-gate behavior.
 {func}`starfinder.preprocessing.match_histogram` matches each channel to one
 ZYX reference with an exact CDF. `HistogramMatchingConfig` preserves input dtype
 by default and rejects unrepresentable results; the unused `nbins` is removed.
-{func}`starfinder.preprocessing.reconstruct_background` and
+{func}`starfinder.preprocessing.correct_background` and
 {func}`starfinder.preprocessing.filter_tophat` use a disk of `radius_yx` pixels,
 independently per XY slice/channel, with reflect boundaries. Float64 slice work
 avoids signed uint16 overflow; results retain source dtype and saturate to its
@@ -199,10 +199,10 @@ Old array-returning I/O and positional preprocessing arguments are removed:
 
 ```python
 from starfinder.io import ImageLoadConfig, load_round
-from starfinder.preprocessing import MinMaxNormalizationConfig, normalize_intensity
+from starfinder.preprocessing import MinMaxNormalizationConfig, normalize_min_max
 
 loaded = load_round("round1", config=ImageLoadConfig(channel_labels=("ch00", "ch01")))
-image = normalize_intensity(loaded.image, config=MinMaxNormalizationConfig(
+image = normalize_min_max(loaded.image, config=MinMaxNormalizationConfig(
     output_dtype="uint8", output_range=(0, 255), snr_threshold=5.0))
 ```
 

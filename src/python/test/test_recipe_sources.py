@@ -17,7 +17,7 @@ from starfinder.image import ImageMetadata
 from starfinder.io import ImageLoadResult
 from starfinder.preprocessing import (HistogramMatchingConfig, MinMaxNormalizationConfig, PercentileNormalizationConfig,
     PreprocessingRecipe, PreprocessingStep, ReconstructionConfig, ScalarBackgroundConfig, TophatConfig, normalize_percentile,
-    subtract_scalar_background, summary_stage)
+    subtract_scalar_background, summary_recipe)
 from starfinder.registration import DemonsConfig, RegistrationSignalConfig, TranslationConfig, WarpConfig, apply_transform
 from starfinder.spot_finding import LocalMaximaConfig
 
@@ -91,7 +91,7 @@ def test_snapshot_names_and_sources_are_validated():
 def test_summary_stage_drops_the_sources():
     recipe = replace(RECIPE_2, steps=(RECIPE_2.steps[0], PreprocessingStep(PercentileNormalizationConfig(fit="supplied"))),
                      registration_source="bg_corrected", supplied_statistics="s.json")
-    prefix, _ = summary_stage(recipe, "percentile_normalization")
+    prefix, _ = summary_recipe(recipe, "percentile_normalization")
     assert prefix.steps == recipe.steps[:1]
     assert prefix.extraction_source is None and prefix.registration_source is None
 

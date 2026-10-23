@@ -26,7 +26,7 @@ from starfinder.readout.scoring import SCORE_COLUMNS
 from starfinder.dataset import CheckpointConfig, PipelineConfig
 from starfinder.dataset.workflow import from_workflow_config
 from starfinder.evaluation.readout import ranking_quality
-from starfinder.dataset import read_checkpoint
+from starfinder.dataset import load_checkpoint
 from starfinder._checkpoint import candidates_frame
 
 from . import readout_fixtures as fx
@@ -285,7 +285,7 @@ def assert_reads_equal(a, b):
 def test_r16_background_and_score_columns_round_trip_exactly(tmp_path, seed, table_format):
     dataset, fov, checkpoints = golden_run(tmp_path, table_format, seed=seed)
     directory = tmp_path / "checkpoints" / "FOV_001"
-    loaded = read_checkpoint(directory, "candidates")
+    loaded = load_checkpoint(directory, "candidates")
     a, b = loaded["intensity_result"], fov.intensity_result
     for name in ("values", "valid", "box_voxels", "background", "noise", "background_voxels", "image_background",
                  "image_noise"):
@@ -377,7 +377,7 @@ def test_r16_a_141c093_checkpoint_loads_without_background_or_score_and_scoring_
     intensity = loaded.intensity_result
     assert intensity.config == no_background and intensity.background is None and intensity.box_voxels is None
     np.testing.assert_array_equal(intensity.values, fov.intensity_result.values)
-    pre_qc = read_checkpoint(directory, "pre_qc")
+    pre_qc = load_checkpoint(directory, "pre_qc")
     assert pre_qc["scoring_result"] is None
     pd.testing.assert_frame_equal(pre_qc["decoding_result"].table, fov.decoding_result.table)
     with pytest.raises(ValueError, match="rerun extraction"):

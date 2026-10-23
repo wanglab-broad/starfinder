@@ -562,7 +562,7 @@ def _read_pre_qc(directory, header):
 
 # --- Public reader ---------------------------------------------------------------
 
-def read_checkpoint(path: Path | str, stage: str) -> dict:
+def load_checkpoint(path: Path | str, stage: str) -> dict:
     """Read one stage of a per-FOV checkpoint directory into existing typed results.
 
     Parameters

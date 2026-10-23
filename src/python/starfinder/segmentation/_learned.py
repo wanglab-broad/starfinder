@@ -21,7 +21,7 @@ from typing import Any
 
 import numpy as np
 
-from ._inputs import normalize_percentiles
+from ._inputs import normalize_percentile_unclipped
 from ._models import KNOWN_MODELS
 
 BLOCK_FIELDS = ("block_size", "min_overlap", "context")
@@ -336,7 +336,7 @@ def _stardist(image, config: StarDistConfig, context) -> tuple[np.ndarray, dict[
     """Normalize, then ``predict_instances`` or block-wise ``predict_instances_big`` (docs/segmentation-algorithms.md).
 
     The one channel is normalized by csbdeep's percentiles over the whole image
-    (normalize_percentiles, float32, unclipped); a Z=1 input to a 2D model is
+    (normalize_percentile_unclipped, float32); a Z=1 input to a 2D model is
     squeezed to YX (the wrapper restores the axis). The model folder is loaded
     with ``StarDist2D`` or ``StarDist3D(None, name=…, basedir=…)``, which reads
     the folder and downloads nothing. A scale of 1 on every axis is passed as
@@ -357,7 +357,7 @@ def _stardist(image, config: StarDistConfig, context) -> tuple[np.ndarray, dict[
     shape = image.shape[:3] if n_dim == 3 else image.shape[1:3]
     blocks = None if config.block_size is None else _stardist_blocks(config, n_dim, grid, shape)
     p_low, p_high = config.normalize_percentiles
-    normalized, norm_record = normalize_percentiles(image[..., 0], p_low=p_low, p_high=p_high)
+    normalized, norm_record = normalize_percentile_unclipped(image[..., 0], p_low=p_low, p_high=p_high)
     x, axes = (normalized, "ZYX") if n_dim == 3 else (normalized[0], "YX")
 
     import tensorflow as tf

@@ -42,7 +42,7 @@ import pytest
 from skimage.measure import regionprops
 from skimage.segmentation import expand_labels
 
-from starfinder.assignment import AssignmentConfig, assign_molecules, molecule_table_from_csv
+from starfinder.assignment import AssignmentConfig, assign_molecules, import_legacy_molecules_csv
 from starfinder.image import ImageMetadata
 from starfinder.segmentation import ExpandLabelsConfig, ReferenceGrid, SegmentationResult
 
@@ -290,7 +290,7 @@ def package_cells(labels, dimensions):
 
 def package_assignment(labels, tmp_path, dimensions, expand, molecules=None):
     reads_csv = write_reads(tmp_path / "goodSpots.csv", molecules or tuple(MOLECULES[i] for i in KEEP))
-    table = molecule_table_from_csv(reads_csv, spot_namespace=json.dumps(FOV_IDENTITY, separators=(",", ":")),
+    table = import_legacy_molecules_csv(reads_csv, spot_namespace=json.dumps(FOV_IDENTITY, separators=(",", ":")),
                                     genes=tuple(gene for gene, _ in GENES))
     config = AssignmentConfig(expansion=ExpandLabelsConfig(DISTANCE, "pixel", "planar") if expand else None)
     return assign_molecules(table, package_cells(labels, dimensions), grid=PACKAGE_GRID, config=config)
@@ -365,7 +365,7 @@ def test_the_package_marks_molecules_off_the_grid(labels, tmp_path):
     """New behavior: one-based 0 and one beyond the grid are outside_grid, neither wrapped nor raising."""
     reads_csv = tmp_path / "reads.csv"
     reads_csv.write_text(f"x,y,z,gene\n0,11,6,A\n{SHAPE_ZYX[2] + 1},11,6,A\n17.0,17.0,7.0,B\n")
-    table = molecule_table_from_csv(reads_csv, spot_namespace=json.dumps(FOV_IDENTITY, separators=(",", ":")),
+    table = import_legacy_molecules_csv(reads_csv, spot_namespace=json.dumps(FOV_IDENTITY, separators=(",", ":")),
                                     genes=tuple(gene for gene, _ in GENES))
     result = assign_molecules(table, package_cells(labels, "3d"), grid=PACKAGE_GRID)
     molecules = result.molecules

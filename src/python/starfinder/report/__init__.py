@@ -10,7 +10,7 @@ value whose input is missing is unavailable with one reason of the closed list
 :class:`ReportConfig` (with :class:`MarkerGroup`, :class:`ReportLimits` and
 :class:`RuleLimit`) is what the user supplies; :data:`REPORT_PARTS`,
 :data:`REPORT_TABLES` and :data:`PROBLEM_RULES` are the parts of the page, the tables
-of the folder and the rules of the problematic FOVs; :func:`read_report` reads a
+of the folder and the rules of the problematic FOVs; :func:`load_report` reads a
 report's record back, checking every file it lists. ``Dataset.report`` writes a sample's
 report (the page ``report.html``, ``report.json`` and ``tables/``) and returns a
 :class:`ReportRecord`; ``Dataset.compare_samples`` writes the dataset's comparison page
@@ -22,7 +22,7 @@ from ._schema import PROBLEM_RULES as _PROBLEM_RULES
 from ._schema import REPORT_PARTS as _REPORT_PARTS
 from ._schema import REPORT_TABLES as _REPORT_TABLES
 from ._schema import UNAVAILABLE_REASONS as _UNAVAILABLE_REASONS
-from ._schema import ComparisonRecord, ReportRecord, read_report
+from ._schema import ComparisonRecord, ReportRecord, load_report
 
 #: The reasons a value or a part of the report can be unavailable, in the order that decides which one a value
 #: gets when several apply (P1): the first of them in this order.
@@ -35,5 +35,5 @@ REPORT_TABLES = _REPORT_TABLES
 #: The rules of the problematic FOVs, in the order of their rows in ``problematic_fovs.csv``.
 PROBLEM_RULES = _PROBLEM_RULES
 
-__all__ = ["ComparisonRecord", "MarkerGroup", "PROBLEM_RULES", "read_report", "REPORT_PARTS", "REPORT_TABLES",
+__all__ = ["ComparisonRecord", "load_report", "MarkerGroup", "PROBLEM_RULES", "REPORT_PARTS", "REPORT_TABLES",
            "ReportConfig", "ReportLimits", "ReportRecord", "RuleLimit", "UNAVAILABLE_REASONS"]

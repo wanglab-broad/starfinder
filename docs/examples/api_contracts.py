@@ -19,7 +19,7 @@ from starfinder.synthetic import formed_scene_preset, generate_formed_scene
 from starfinder.dataset import RoundState, Dataset
 from starfinder.registration import RegistrationRecipe, RegistrationStep
 from starfinder.io import ImageLoadResult, load_volume, save_volume
-from starfinder.preprocessing import normalize_intensity
+from starfinder.preprocessing import normalize_min_max
 from starfinder.registration import estimate_transform, apply_transform, TranslationConfig, TpsConfig, DemonsConfig, WarpConfig, DenseDisplacementTransform, InsufficientLandmarksError, RegistrationSignalConfig
 from starfinder.spot_finding import find_spots, LocalMaximaConfig
 from starfinder.image import ImageMetadata
@@ -42,7 +42,7 @@ def main(output: Path) -> None:
     field[...] = displacement
     np.testing.assert_array_equal(apply_transform(moving, DenseDisplacementTransform(field, fixed.shape, moving.shape, ImageMetadata("reference"), ImageMetadata("moving")), config=WarpConfig(backend="scipy")), fixed)
 
-    normalized = normalize_intensity(fixed, config=MinMaxNormalizationConfig('uint8', (0, 255)))
+    normalized = normalize_min_max(fixed, config=MinMaxNormalizationConfig('uint8', (0, 255)))
     assert normalized.dtype == np.uint8 and normalized.max() == 255
     projection = project_image(fixed, config=ProjectionConfig(method='max'))
     assert projection.shape == (1, 24, 24) and projection.dtype == np.uint16

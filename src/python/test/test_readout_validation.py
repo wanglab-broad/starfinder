@@ -51,7 +51,7 @@ from starfinder.readout.scoring import SCORE_COLUMNS
 from starfinder.dataset import CheckpointConfig, PipelineConfig
 from starfinder.evaluation.readout import evaluate_decoding, ranking_quality
 from starfinder.evaluation.matching import match_points
-from starfinder.dataset import read_checkpoint
+from starfinder.dataset import load_checkpoint
 from starfinder.io import ImageLoadResult
 from starfinder._checkpoint import candidates_frame
 from starfinder.spot_finding import LocalMaximaConfig, SpotFindingResult, find_spots
@@ -476,7 +476,7 @@ def test_r16_two_seg_checkpoints_round_trip_exactly(tmp_path, seed, table_format
         extraction=NeighborhoodSumConfig(), decoding=CodebookAwareDecoderConfig(), scoring=ReadScoreConfig(),
         deduplication=DeduplicationConfig(), filtering=ReadFilterConfig()), checkpoints=checkpoints)
     directory = tmp_path / "checkpoints" / "FOV_001"
-    loaded_candidates = read_checkpoint(directory, "candidates")
+    loaded_candidates = load_checkpoint(directory, "candidates")
     a, b = loaded_candidates["intensity_result"], fov.intensity_result
     for name in ("values", "valid", "box_voxels", "background", "noise", "background_voxels", "image_background",
                  "image_noise"):

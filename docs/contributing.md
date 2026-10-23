@@ -81,7 +81,7 @@ For a project-path preview, build into a `starfinder` subdirectory of your
 external preview root, serve that parent directory, and open
 <http://127.0.0.1:8000/starfinder/>. This checks the same relative asset and source
 paths used by Pages.
-Check the five navigation sections (Get started, Workflow, Benchmark, API, Wiki / Convention), search for `normalize_intensity`, open its
+Check the five navigation sections (Get started, Workflow, Benchmark, API, Wiki / Convention), search for `normalize_min_max`, open its
 generated API page, and follow the `[source]` link beside its signature. The
 separate page-source link shows the documentation markup.
 
@@ -200,7 +200,7 @@ After a reviewed change is committed and pushed to the selected branch:
    [Python API page](api/python.rst), its function anchor and `[source]` backlink;
    open [MATLAB dataset methods](api/matlab/dataset.rst) and
    [workflow configuration](workflows.md). Follow links between guides and APIs.
-4. Search for `normalize_intensity` in the site's search UI and open a matching
+4. Search for `normalize_min_max` in the site's search UI and open a matching
    API result. In browser developer tools, check for JavaScript errors and failed
    requests to CSS, fonts, scripts and `searchindex.js`. Check nested pages as
    well as the home page: assets must resolve beneath `/starfinder/`, not at the

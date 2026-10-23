@@ -34,7 +34,7 @@ import pandas as pd
 import pytest
 
 from starfinder._records import _read_table
-from starfinder.report import MarkerGroup, ReportConfig, ReportRecord, read_report
+from starfinder.report import MarkerGroup, ReportConfig, ReportRecord, load_report
 from starfinder.report import _page as page_module
 
 from .report_fixtures import CASES, DATASET, FOVS, IDS, SAMPLE, SAMPLE_ID, report_cells, report_records
@@ -511,7 +511,7 @@ def test_pg5_size_budget_and_figure_sizes(pages, maker, variant):
         ["distribution:spots", "distribution:correct_form_fraction", "distribution:matched_fraction"])
     if maker == "report_cells":
         assert {"per_cell:reads", "per_cell:genes", "reads_along_z"} <= set(names)
-    assert read_report(page.folder) == page.record
+    assert load_report(page.folder) == page.record
 
 
 # --- PG6: no verdict and no score -------------------------------------------------------------------------------
@@ -723,7 +723,7 @@ def test_pg7_entry_on_the_dataset(tmp_path, no_processing, maker):
         undo()
     # The default folder, the record and its files.
     assert isinstance(result, ReportRecord) and result.path == case.root / "report" / SAMPLE
-    assert result.record == read_report(result.path)
+    assert result.record == load_report(result.path)
     assert (result.record["dataset_id"], result.record["sample_id"]) == (DATASET, SAMPLE_ID)
     assert sorted(p.name for p in result.path.iterdir()) == ["report.html", "report.json", "tables"]
     assert sorted(p.name for p in (result.path / "tables").iterdir()) == sorted(
@@ -777,7 +777,7 @@ def test_pg7_entry_on_the_dataset(tmp_path, no_processing, maker):
         assert record["summary"]["fovs_succeeded"] == len(case.fov_ids)
     # A second report through the entry replaces the first; an output_dir elsewhere is allowed.
     again = report_through(case)
-    assert again.path == result.path and read_report(again.path) == again.record
+    assert again.path == result.path and load_report(again.path) == again.record
     other = report_through(case, output_dir=tmp_path / "copy")
     assert other.path == tmp_path / "copy" and (other.path / "report.html").is_file()
 

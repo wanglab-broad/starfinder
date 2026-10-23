@@ -2,7 +2,7 @@
 
 Row L7 of the engineering validation design in docs/assignment-algorithms.md: the
 DAPI–amplicon composite and the Flamingo enhancement against W-307's pinned digests
-(``test_segmentation_golden.py``), ``normalize_percentiles`` against its formula computed
+(``test_segmentation_golden.py``), ``normalize_percentile_unclipped`` against its formula computed
 here, and ``rescale_input``'s shape and metadata; then input preservation (D4), the shape
 rules and records of docs/segmentation-contract.md ("Input preparation and label
 functions"), and the reuse of the §2.6 registration outputs: a morphology round
@@ -22,7 +22,7 @@ from starfinder.image import ImageMetadata, IncompatibleGeometryError
 from starfinder.io import load_volume
 from starfinder.preprocessing import PREPROCESSING_METHODS, ProjectionConfig, project_image
 from starfinder.segmentation import (CompositeConfig, FlamingoEnhancementConfig, composite_nuclei_amplicon,
-    enhance_with_flamingo, normalize_percentiles, rescale_input)
+    enhance_with_flamingo, normalize_percentile_unclipped, rescale_input)
 
 from .test_registration_other_rounds import SEQUENCING, SHIFT, TRANSLATION, grid, texture
 from .test_segmentation_golden import (COMPOSITE_DIGESTS, CONSTANT_DIGESTS, FLAMINGO_DIGEST, SHAPE_ZYX,
@@ -86,7 +86,7 @@ def test_l7_normalization_follows_the_formula(images):
     dapi = images["dapi"]
     low, high = np.percentile(dapi, 1.0), np.percentile(dapi, 99.8)  # NumPy, linear
     expected = (dapi.astype(np.float64) - low) / (high - low + 1e-20)
-    output, record = normalize_percentiles(dapi)
+    output, record = normalize_percentile_unclipped(dapi)
     assert output.dtype == np.float32 and output.shape == dapi.shape
     np.testing.assert_allclose(output, expected, rtol=1e-6, atol=1e-6)
     assert output.min() < 0 and output.max() > 1  # unclipped
@@ -95,7 +95,7 @@ def test_l7_normalization_follows_the_formula(images):
 
 
 def test_l7_normalization_of_a_constant_image_gives_zeros():
-    output, record = normalize_percentiles(np.full(SHAPE_ZYX, 50, np.uint8))
+    output, record = normalize_percentile_unclipped(np.full(SHAPE_ZYX, 50, np.uint8))
     assert output.dtype == np.float32 and output.shape == SHAPE_ZYX and not output.any()
     assert record["percentiles"] == {"low": 50.0, "high": 50.0}
 
@@ -103,13 +103,13 @@ def test_l7_normalization_of_a_constant_image_gives_zeros():
 def test_normalization_is_per_channel_by_default(images):
     """A ZYXC image: the default axes (0, 1, 2) normalize each channel over its own volume."""
     stack = np.stack([images["dapi"], images["flamingo"]], axis=-1)
-    output, record = normalize_percentiles(stack, p_low=2.0, p_high=98.0)
+    output, record = normalize_percentile_unclipped(stack, p_low=2.0, p_high=98.0)
     assert output.shape == stack.shape
     for c, name in enumerate(("dapi", "flamingo")):
         low, high = np.percentile(images[name], 2.0), np.percentile(images[name], 98.0)
         np.testing.assert_allclose(output[..., c], (images[name] - low) / (high - low + 1e-20), rtol=1e-6, atol=1e-6)
         assert (record["percentiles"]["low"][c], record["percentiles"]["high"][c]) == (low, high)
-    whole, _ = normalize_percentiles(stack, axes=(0, 1, 2, 3))
+    whole, _ = normalize_percentile_unclipped(stack, axes=(0, 1, 2, 3))
     low, high = np.percentile(stack, 1.0), np.percentile(stack, 99.8)
     np.testing.assert_allclose(whole, (stack - low) / (high - low + 1e-20), rtol=1e-6, atol=1e-6)
 
@@ -118,7 +118,7 @@ def test_normalization_is_per_channel_by_default(images):
                                      dict(axes=(0, 0)), dict(axes=(3,)), dict(axes=())])
 def test_normalization_rejects_invalid_settings(images, options):
     with pytest.raises(ValueError):
-        normalize_percentiles(images["dapi"], **options)
+        normalize_percentile_unclipped(images["dapi"], **options)
 
 
 # --- L7: rescaling --------------------------------------------------------------------------------
@@ -174,9 +174,9 @@ def _calls(images):
                         "zero_stain": (images["dapi"], zero)}.items():
         cases += [(f"composite_{label}", pair, composite_nuclei_amplicon),
                   (f"flamingo_{label}", pair, enhance_with_flamingo)]
-    cases += [("normalize_dapi", (images["dapi"],), normalize_percentiles),
-              ("normalize_float32", (float32,), normalize_percentiles),
-              ("normalize_constant", (c50,), normalize_percentiles),
+    cases += [("normalize_dapi", (images["dapi"],), normalize_percentile_unclipped),
+              ("normalize_float32", (float32,), normalize_percentile_unclipped),
+              ("normalize_constant", (c50,), normalize_percentile_unclipped),
               ("rescale_spacing", (ramp(),), lambda image: rescale_input(image, UM, scale_zyx=(1, 0.5, 0.5))),
               ("rescale_no_spacing", (ramp(),),
                lambda image: rescale_input(image, ImageMetadata("FOV/round1"), scale_zyx=(1, 0.5, 0.5)))]
@@ -246,9 +246,9 @@ def test_enhancement_record(images):
 
 
 def test_normalization_record(images):
-    output, record = normalize_percentiles(images["dapi"])
+    output, record = normalize_percentile_unclipped(images["dapi"])
     assert set(record) == RECORD_KEYS | {"percentiles"}
-    assert record["function"] == "normalize_percentiles"
+    assert record["function"] == "normalize_percentile_unclipped"
     assert record["inputs"] == [digest(images["dapi"])] and record["output"] == digest(output)
     assert json.loads(json.dumps(record)) == record
 
@@ -274,7 +274,7 @@ def test_no_input_function_is_a_preprocessing_method():
     """D4: the input functions are not preprocessing steps (docs/segmentation-contract.md)."""
     assert not {CompositeConfig, FlamingoEnhancementConfig} & set(PREPROCESSING_METHODS)
     names = {getattr(spec, "name", None) for spec in PREPROCESSING_METHODS.values()}
-    assert not names & {"composite_nuclei_amplicon", "enhance_with_flamingo", "normalize_percentiles",
+    assert not names & {"composite_nuclei_amplicon", "enhance_with_flamingo", "normalize_percentile_unclipped",
                         "rescale_input"}
 
 

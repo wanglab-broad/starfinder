@@ -272,7 +272,7 @@ review of 2026-10-06 asked for it:
 
 The path of {doc}`synthetic-sample-scene` ("The path that needs no segmenter"): per FOV,
 the truth labels enter through `import_labels(…, relabel=False)` and the molecules
-through `molecule_table_from_csv`; `assign_molecules` runs without expansion; then
+through `import_legacy_molecules_csv`; `assign_molecules` runs without expansion; then
 `assemble`. The placement is the truth in EE2 to EE5: `placement_from_table` on the
 nominal grid of `positions.csv` with `origins` from `true_origin_z/y/x` of
 `placement_truth.csv`, approved with `approve_placement`, so every FOV is `metadata_only`

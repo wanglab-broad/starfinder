@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 
 from starfinder.readout import Codebook
-from starfinder.dataset import read_checkpoint
+from starfinder.dataset import load_checkpoint
 from starfinder._checkpoint import write_candidates
 from starfinder.synthetic import (BackgroundConfig, FormedSceneConfig, NoiseConfig, ScalarDistribution,
     generate_formed_scene)
@@ -221,7 +221,7 @@ def candidates_round_trip(result, directory, table_format):
     """(header, reloaded spot_result) of ``result`` written as a candidates checkpoint in ``directory``."""
     write_candidates(directory, {}, result, None, table_format)
     header = json.loads((directory / "candidates.json").read_text())
-    return header, read_checkpoint(directory, "candidates")["spot_result"]
+    return header, load_checkpoint(directory, "candidates")["spot_result"]
 
 
 def assert_reloaded(result, reloaded):

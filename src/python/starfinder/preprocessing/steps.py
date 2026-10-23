@@ -19,7 +19,7 @@ from starfinder.image import ImageMetadata, _validate_image
 from starfinder.preprocessing.background import (Background3DConfig, ScalarBackgroundConfig, _background_3d,
     _check_scalar_params, _fit_scalar, _scalar_background, _validate_scalar)
 from starfinder.preprocessing.histograms import HistogramSummary
-from starfinder.preprocessing.morphology import ReconstructionConfig, TophatConfig, filter_tophat, reconstruct_background
+from starfinder.preprocessing.morphology import ReconstructionConfig, TophatConfig, filter_tophat, correct_background
 from starfinder.preprocessing.normalization import (HistogramMatchingConfig, MinMaxNormalizationConfig,
     PercentileNormalizationConfig, _check_histogram_params, _check_percentile_params, _fit_histogram,
     _fit_percentile, _match_counts, _normalize, _percentile_normalize, _validate_histogram, _validate_percentile,
@@ -145,7 +145,7 @@ def _volumetric(volume, config, context):
 
 
 def _reconstruction(volume, config, context):
-    return StepResult(reconstruct_background(volume, config=config), {}, {})
+    return StepResult(correct_background(volume, config=config), {}, {})
 
 
 def _tophat(volume, config, context):

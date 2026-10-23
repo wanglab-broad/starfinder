@@ -908,7 +908,7 @@ def test_saved_layout_and_hashes(tiny, saved):
 
 
 def test_no_segmenter_path_reads_the_saved_files(tiny, saved):
-    from starfinder.assignment import molecule_table_from_csv
+    from starfinder.assignment import import_legacy_molecules_csv
     from starfinder.io import load_volume
     from starfinder.segmentation import ReferenceGrid, import_labels
     book, config, scene = tiny
@@ -926,7 +926,7 @@ def test_no_segmenter_path_reads_the_saved_files(tiny, saved):
     assert stain.metadata == metadata
     np.testing.assert_array_equal(stain.image, scene.stains[fov])
     spot_namespace = json.dumps(["sample-tiny-v1", "sample", fov, None], separators=(",", ":"))
-    table = molecule_table_from_csv(saved / "fovs" / fov / "molecules.csv", spot_namespace=spot_namespace,
+    table = import_legacy_molecules_csv(saved / "fovs" / fov / "molecules.csv", spot_namespace=spot_namespace,
                                     genes=book.genes)
     rows = scene.molecule_fovs[scene.molecule_fovs.fov_id == fov].set_index("csv_row")
     assert len(table.table) == len(rows) > 0

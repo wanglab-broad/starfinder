@@ -28,7 +28,7 @@ import yaml
 import starfinder.dataset.workflow as workflow
 from starfinder import _snakemake
 from starfinder.dataset import Dataset
-from starfinder.report import MarkerGroup, ReportConfig, ReportLimits, RuleLimit, read_report
+from starfinder.report import MarkerGroup, ReportConfig, ReportLimits, RuleLimit, load_report
 
 pytestmark = [pytest.mark.workflow, pytest.mark.contract]
 
@@ -334,7 +334,7 @@ def test_wf1_the_rules_write_the_report_and_the_comparison_page(tmp_path):
     assert inputs == [str(output_root / "stitching" / REPORT_SAMPLE / "placement.json")] and Path(inputs[0]).is_file()
     run_script("report_sample.py", SimpleNamespace(config=config, input=inputs, output=[output],
                                                    wildcards=Wildcards(sample=REPORT_SAMPLE)))
-    record = read_report(Path(output).parent)
+    record = load_report(Path(output).parent)
     assert Path(output).is_file() and (Path(output).parent / "report.html").is_file()
     assert record["sample"] == REPORT_SAMPLE and record["fov_ids"] == list(FOVS)
     inputs, output = _snakemake._report_dataset_files(output_root, [REPORT_SAMPLE])

@@ -18,6 +18,7 @@ Root exports refer to the same objects as their owning namespaces; modules and
 
 * ``starfinder.__version__`` (module or version metadata)
 * ``starfinder.apply_transform`` → :py:obj:`starfinder.registration.apply_transform`
+* ``starfinder.correct_background`` → :py:obj:`starfinder.preprocessing.correct_background`
 * ``starfinder.Dataset`` → :py:obj:`starfinder.dataset.Dataset`
 * ``starfinder.decode_reads`` → :py:obj:`starfinder.readout.decode_reads`
 * ``starfinder.estimate_transform`` → :py:obj:`starfinder.registration.estimate_transform`
@@ -31,11 +32,10 @@ Root exports refer to the same objects as their owning namespaces; modules and
 * ``starfinder.load_round`` → :py:obj:`starfinder.io.load_round`
 * ``starfinder.load_volume`` → :py:obj:`starfinder.io.load_volume`
 * ``starfinder.match_histogram`` → :py:obj:`starfinder.preprocessing.match_histogram`
-* ``starfinder.normalize_intensity`` → :py:obj:`starfinder.preprocessing.normalize_intensity`
+* ``starfinder.normalize_min_max`` → :py:obj:`starfinder.preprocessing.normalize_min_max`
 * ``starfinder.preprocessing`` (module or version metadata)
 * ``starfinder.project_image`` → :py:obj:`starfinder.preprocessing.project_image`
 * ``starfinder.readout`` (module or version metadata)
-* ``starfinder.reconstruct_background`` → :py:obj:`starfinder.preprocessing.reconstruct_background`
 * ``starfinder.registration`` (module or version metadata)
 * ``starfinder.save_volume`` → :py:obj:`starfinder.io.save_volume`
 * ``starfinder.spot_finding`` (module or version metadata)

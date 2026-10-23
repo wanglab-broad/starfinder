@@ -22,7 +22,7 @@ from starfinder.image import ImageMetadata, IncompatibleGeometryError
 from starfinder.io import ImageLoadConfig, save_volume
 from starfinder.registration import TranslationConfig
 from starfinder.segmentation import (LabelImportConfig, ReferenceGrid, SegmentationResult, ZExtensionConfig,
-    extend_labels_through_z, import_labels, labels_to_grid, reference_grid_from_file, to_label_dtype)
+    extend_labels_through_z, import_labels, resample_labels, reference_grid_from_file, to_label_dtype)
 from starfinder.synthetic import development_scene_preset, generate_formed_scene
 
 from .coordination_helpers import digest
@@ -486,23 +486,23 @@ def test_l5_hole_filling_area_filter_and_dilation_follow_the_physical_sizes():
     assert record["pixels"] == {"median_window_yx": [1, 1], "min_area": 3, "dilation_radius_yx": [2.0, 2.0]}
 
 
-# --- L6: labels_to_grid ---------------------------------------------------------------------------
+# --- L6: resample_labels ---------------------------------------------------------------------------
 
 def test_l6_the_shrunk_stand_in_labels_return_to_the_restored_values():
     dapi = fixture()["dapi"]
     shrunk = stand_in_model(rescale(dapi, [1, .5, .5]))
     assert shrunk.shape == (16, 32, 32) and digest(shrunk) == SHRUNK_LABELS_DIGEST
-    restored, record = labels_to_grid(shrunk, target_shape=SHAPE_ZYX)
+    restored, record = resample_labels(shrunk, target_shape=SHAPE_ZYX)
     assert restored.dtype == np.uint32 and restored.shape == SHAPE_ZYX and restored.flags.c_contiguous
     assert (restored.astype(np.int32).dtype.str, digest(restored.astype(np.int32))) == RESTORED_LABELS
-    assert record == {"function": "labels_to_grid", "config": {"target_shape": [16, 64, 64]},
+    assert record == {"function": "resample_labels", "config": {"target_shape": [16, 64, 64]},
                       "inputs": [digest(shrunk)], "output": digest(restored),
                       "source_shape": [16, 32, 32], "target_shape": [16, 64, 64]}
 
 
 def test_l6_an_odd_grid_is_reached_exactly():
     source = np.arange(1, 30 * 32 + 1, dtype=np.int32).reshape(1, 30, 32)
-    output, record = labels_to_grid(source, target_shape=(1, 61, 63))
+    output, record = resample_labels(source, target_shape=(1, 61, 63))
     assert output.shape == (1, 61, 63)
 
     def index(i, n_source, n_target):
@@ -522,7 +522,7 @@ def test_l6_an_odd_grid_is_reached_exactly():
 ])
 def test_l6_rejections(labels, target_shape, error):
     with pytest.raises(error):
-        labels_to_grid(labels, target_shape=target_shape)
+        resample_labels(labels, target_shape=target_shape)
 
 
 # --- FOV.reference_grid ---------------------------------------------------------------------------

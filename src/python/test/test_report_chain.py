@@ -37,7 +37,7 @@ import pandas as pd
 import pytest
 import tifffile
 
-from starfinder.report import REPORT_PARTS, MarkerGroup, ReportConfig, read_report
+from starfinder.report import REPORT_PARTS, MarkerGroup, ReportConfig, load_report
 
 from .conftest import SUBSYSTEM_MARKERS
 from . import test_report_collection as collection_checks
@@ -120,7 +120,7 @@ def report(chain: Chain, config, aside: Path, **changes):
     a :class:`test_report_page.Page`, so that a later report of the same folder leaves it as it was."""
     result = dataset_of(chain).report(chain.sample, chain.fov_ids, config=config, **changes)
     assert result.path == chain.root / "report" / chain.sample
-    assert result.record == read_report(result.path)
+    assert result.record == load_report(result.path)
     shutil.copytree(result.path, aside)
     return page_checks.Page(ChainCase(chain, config), aside, result.record)
 
@@ -247,7 +247,7 @@ def check_page(page, chain: Chain, tmp_path):
     names = page_checks.check_figures(page, figure_sizes(page, chain))
     assert len(names) == len(set(names)) and "time" in names
     assert ("heatmap" in names) == (not page.tables["registration"].empty)
-    assert read_report(page.folder) == page.record
+    assert load_report(page.folder) == page.record
     page_checks.test_pg6_no_verdict_and_no_score(as_case, "chain", None)
     # RC12: every null cell, summary key and rule key is n/a by its rule or named by exactly one row.
     check_null_values(page)

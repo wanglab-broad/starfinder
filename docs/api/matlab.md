@@ -94,7 +94,7 @@ is implied by this reference.
 | --- | --- | --- |
 | Orchestration | {mat:class}`STARMapDataset` | {py:class}`starfinder.dataset.Dataset`, {py:class}`starfinder.dataset.FOV` |
 | Load / output | {mat:func}`LoadImageStacks`, {mat:func}`LoadMultipageTiff`, {mat:func}`SaveSingleStack` | {py:func}`starfinder.io.load_round`, {py:func}`starfinder.io.load_volume`, {py:func}`starfinder.io.save_volume` |
-| Enhance | {mat:func}`MinMaxNorm`, {mat:func}`MorphologicalReconstruction` | {py:func}`starfinder.preprocessing.normalize_intensity`, {py:func}`starfinder.preprocessing.reconstruct_background` |
+| Enhance | {mat:func}`MinMaxNorm`, {mat:func}`MorphologicalReconstruction` | {py:func}`starfinder.preprocessing.normalize_min_max`, {py:func}`starfinder.preprocessing.correct_background` |
 | Histogram / background | {mat:meth}`STARMapDataset.HistEqualize`, {mat:meth}`STARMapDataset.Tophat` | {py:func}`starfinder.preprocessing.match_histogram`, {py:func}`starfinder.preprocessing.filter_tophat` |
 | Global registration | {mat:func}`DFTRegister3D`, {mat:func}`DFTApply3D` | {py:func}`starfinder.registration.estimate_transform`, {py:func}`starfinder.registration.apply_transform` |
 | Local registration | {mat:func}`RegisterImagesLocal` | {py:func}`starfinder.registration.estimate_transform` |

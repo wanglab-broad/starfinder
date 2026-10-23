@@ -46,8 +46,8 @@ from starfinder.registration import RegistrationRecipe, RegistrationStep
 from starfinder.evaluation.matching import match_points
 from starfinder.preprocessing import (Background3DConfig, HistogramMatchingConfig, MinMaxNormalizationConfig,
     PercentileNormalizationConfig, PreprocessingRecipe, PreprocessingStep, ReconstructionConfig, ScalarBackgroundConfig,
-    TophatConfig, merge_histograms, step_spec, summarize_histograms, summary_stage, supplied_section,
-    supplied_statistics, write_supplied_statistics)
+    TophatConfig, merge_histograms, step_spec, summarize_histograms, summary_recipe, fit_supplied_section,
+    supplied_statistics, save_supplied_statistics)
 from starfinder.preprocessing._diagnostics import channel_diagnostics
 from starfinder.registration import RegistrationSignalConfig, TranslationConfig
 from starfinder.spot_finding import LocalMaximaConfig
@@ -495,7 +495,7 @@ def fit_supplied(recipe, scenes, book, workdir):
         if getattr(entry.config, "fit", None) != "supplied":
             continue
         name = step_spec(entry.config).name
-        stage, after = summary_stage(recipe, name)
+        stage, after = summary_recipe(recipe, name)
         summaries = []
         for fov_id, (scene, *_rest) in scenes.items():
             fov = preprocess(make_fov(scene, book, fov_id, workdir), stage if stage.steps else None, False)
@@ -504,8 +504,8 @@ def fit_supplied(recipe, scenes, book, workdir):
                                                   summarized_after=after))
         merged = merge_histograms(summaries)
         kwargs = {} if step_spec(entry.config).supplied.per_round else {"reference_round": ref}
-        sections[name] = supplied_section(entry.config, merged, **kwargs)
-        write_supplied_statistics(supplied_statistics(merged, sections), path)
+        sections[name] = fit_supplied_section(entry.config, merged, **kwargs)
+        save_supplied_statistics(supplied_statistics(merged, sections), path)
     return sections
 
 

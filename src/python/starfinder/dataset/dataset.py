@@ -603,7 +603,7 @@ class Dataset:
         assignment : str or None
             The §2.9 assignment name read per FOV, or None for a sample without
             segmentation: each FOV's ``signal/{fovID}_goodSpots.csv`` is read with
-            :func:`~starfinder.assignment.molecule_table_from_csv` and the
+            :func:`~starfinder.assignment.import_legacy_molecules_csv` and the
             dataset's gene list.
         config : ExportConfig or None
             None is ``ExportConfig()``.
