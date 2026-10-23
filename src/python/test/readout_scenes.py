@@ -23,7 +23,7 @@ from starfinder.readout import extract_intensities, score_reads
 from starfinder.evaluation.matching import match_points
 from starfinder.io import ImageLoadResult
 from starfinder.spot_finding import LocalMaximaConfig, SpotFindingResult, find_spots
-from starfinder.synthetic import NoiseConfig, ScalarDistribution, calibrated_scene_preset, generate_formed_scene
+from starfinder.synthetic import NoiseConfig, ScalarDistribution, calibrated_scene_preset, generate_amplicon_scene
 
 HELDOUT_SEEDS = (103, 104, 105)
 DENSE_COUNT = 160
@@ -40,7 +40,7 @@ MAD_SCALE = 1.4826
 
 
 def calibrated_config(condition, seed):
-    """(codebook, FormedSceneConfig) of one W-278 condition (w278_lib.calibrated_config)."""
+    """(codebook, AmpliconSceneConfig) of one W-278 condition (w278_lib.calibrated_config)."""
     named = {"noise": "clean", "mixing": "clean", "weakening": "clean", "dense": "clean"}.get(condition, condition)
     book, cfg = calibrated_scene_preset(named, seed=seed)
     if condition == "noise":
@@ -57,7 +57,7 @@ def calibrated_config(condition, seed):
 def _generate(book, cfg):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        return generate_formed_scene(book, config=cfg)
+        return generate_amplicon_scene(book, config=cfg)
 
 
 @lru_cache(maxsize=None)

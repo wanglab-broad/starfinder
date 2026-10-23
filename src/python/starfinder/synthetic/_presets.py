@@ -13,7 +13,7 @@ import pandas as pd
 from starfinder.readout import Codebook, EncodingConfig
 
 from ._common import ScalarDistribution, _json
-from ._formed import FormedSceneConfig, ReadoutEffectsConfig
+from ._formed import AmpliconSceneConfig, ReadoutEffectsConfig
 from ._geometry import GeometryConfig
 from ._observation import BackgroundConfig, NoiseConfig
 
@@ -104,7 +104,7 @@ def _codebook(entries, rounds=None):
 
 
 def _appearance(shape, rounds, dtype):
-    """Formed-scene fields shared by every benchmark preset (see PRESET_VERSION)."""
+    """Amplicon-scene fields shared by every benchmark preset (see PRESET_VERSION)."""
     if dtype not in _INTENSITY_SCALE:
         raise ValueError("dtype must be uint8, uint16, float32 or float64")
     a, scale = _APPEARANCE, _INTENSITY_SCALE[dtype]
@@ -141,13 +141,13 @@ def _preset(name):
     return BENCHMARK_PRESETS[name]
 
 
-def benchmark_scene_preset(name: str, *, dtype: str = "uint16") -> tuple[Codebook, FormedSceneConfig]:
+def benchmark_scene_preset(name: str, *, dtype: str = "uint16") -> tuple[Codebook, AmpliconSceneConfig]:
     """Return (codebook, config) for one FOV of an e2e benchmark preset.
 
     Rounds follow the codebook (four), round1 is the reference and every other
     round receives a uniform translation within the preset's e2e half-range.
     Appearance follows PRESET_VERSION; uint8 scales every intensity by 1/16.
-    Pass the config to generate_dataset with the FOV IDs to generate.
+    Pass the config to generate_amplicon_dataset with the FOV IDs to generate.
     """
     spec = _preset(name)
     codebook = _codebook(_TEST_CODEBOOK) if spec["genes"] == 12 else generate_codebook(spec["genes"])
@@ -156,7 +156,7 @@ def benchmark_scene_preset(name: str, *, dtype: str = "uint16") -> tuple[Codeboo
     shape = spec["shape_zyx"]
     geometry = GeometryConfig(translation_enabled=True, reference_round=codebook.round_labels[0],
                               translation_max_zyx=(z if shape[0] > 1 else 0, yx, yx))
-    config = FormedSceneConfig(
+    config = AmpliconSceneConfig(
         dataset_version=f"{PRESET_VERSION}-{name}", sample_id="synthetic", scene_key=f"{PRESET_VERSION}/{name}",
         seed=spec["seed"], split="development", shape_zyx=shape, count=spec["count"],
         max_count=max(1024, spec["count"]), geometry=geometry, **_appearance(shape, rounds, dtype))
@@ -202,7 +202,7 @@ def deformation_geometry(name: str, shape_zyx, *, reference_round: str | None = 
 
 
 def registration_scene_preset(name: str, deformation: str = "shift", *,
-                              dtype: str = "uint16") -> tuple[Codebook, FormedSceneConfig]:
+                              dtype: str = "uint16") -> tuple[Codebook, AmpliconSceneConfig]:
     """Return (codebook, config) for a reference/moving registration pair.
 
     The codebook has rounds (reference, <deformation>) and one gene whose
@@ -218,7 +218,7 @@ def registration_scene_preset(name: str, deformation: str = "shift", *,
     shift = (z if shape[0] > 1 else 0, yx, yx) if deformation == "shift" else None
     geometry = deformation_geometry(deformation, shape, reference_round="reference",
                                     translation_max_zyx=shift)
-    config = FormedSceneConfig(
+    config = AmpliconSceneConfig(
         dataset_version=f"{PRESET_VERSION}-{name}-registration", sample_id="synthetic", FOV_id=name,
         scene_key=_json([PRESET_VERSION, name, "registration"]), seed=spec["seed"],
         shape_zyx=shape, count=spec["count"], max_count=max(1024, spec["count"]), geometry=geometry,

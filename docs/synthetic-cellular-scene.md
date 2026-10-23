@@ -1,4 +1,4 @@
-# Synthetic cellular scene: nucleus shapes, packing, cell types, stains, the morphology round and three context presets
+# Synthetic cellular scene: nucleus shapes, packing, cell types, stains, the morphology round and the cellular presets of three contexts
 
 Status: Accepted (W-396, 2026-10-15, at 5701cc2)
 
@@ -142,19 +142,19 @@ is one (W-393 `notes.md` §11).
 
 A scene without the new settings is exactly today's output. The addition is reached
 only through new names; `generate_sample_scene`, `save_sample_scene`,
-`sample_scene_preset`, `SampleSceneConfig`, `CellularSceneConfig`, `StainConfig` and
+`sample_scene_preset`, `SampleSceneConfig`, `CellsConfig`, `StainConfig` and
 `SAMPLE_PRESETS` keep their behaviour, fields and values.
 
 **Why a new configuration.** `SampleSceneConfig`'s `asdict` form is the
 `requested_config` of every saved `sample.json` (`synthetic/_sample.py::_config_payload`,
-called by `_assemble`), so a new field on it, on `CellularSceneConfig` or on
+called by `_assemble`), so a new field on it, on `CellsConfig` or on
 `StainConfig`, even one defaulting to None, would add a key to `sample.json` of both
 existing presets.
 
 | Option | Rule | Cost | Consequence |
 | --- | --- | --- | --- |
-| **E1. A new entry and configuration (recommended)** | `generate_context_scene(codebook, *, config=ContextSceneConfig(...), on_fov=None)`; `ContextSceneConfig` holds an unchanged `SampleSceneConfig` and the new parts. The sample-scene internals are shared as private functions. | One more entry; the internals of `synthetic/_sample.py` are split into shared private functions, which the golden test guards. | `generate_sample_scene` and its saved files stay unchanged by construction; the golden test pins their content. The new truth lives in new files with their own version (C22). |
-| E2. New optional fields, omitted from the payload when None | `CellularSceneConfig` and `StainConfig` gain fields defaulting to None; `_config_payload` drops None-valued new keys. | A special case in the payload; `requested_config` no longer equals `asdict`. | Today's files stay unchanged only by that special case, and every reader of `requested_config` must know it. |
+| **E1. A new entry and configuration (recommended)** | `generate_cellular_scene(codebook, *, config=CellularSceneConfig(...), on_fov=None)`; `CellularSceneConfig` holds an unchanged `SampleSceneConfig` and the new parts. The sample-scene internals are shared as private functions. | One more entry; the internals of `synthetic/_sample.py` are split into shared private functions, which the golden test guards. | `generate_sample_scene` and its saved files stay unchanged by construction; the golden test pins their content. The new truth lives in new files with their own version (C22). |
+| E2. New optional fields, omitted from the payload when None | `CellsConfig` and `StainConfig` gain fields defaulting to None; `_config_payload` drops None-valued new keys. | A special case in the payload; `requested_config` no longer equals `asdict`. | Today's files stay unchanged only by that special case, and every reader of `requested_config` must know it. |
 | E3. New fields and a new truth version | Add the fields; `SAMPLE_TRUTH_VERSION` becomes `"2"`. | Simplest code. | Both existing presets' `sample.json` change: a scene without the new settings is no longer today's output, against the issue. |
 
 **Recommendation: E1.**
@@ -167,8 +167,8 @@ existing presets.
    sample tables, the sample labels, the FOV images, stains, labels and tables, and the
    JSON records without `numpy_version` and without the file map). One temporary edit of
    the stain kernel made both presets fail it (worker notes of W-394).
-2. **Identity O1.** `generate_context_scene(book, config=ContextSceneConfig(sample=c))`,
-   with every new part at its default (None or empty), returns a `ContextScene` whose
+2. **Identity O1.** `generate_cellular_scene(book, config=CellularSceneConfig(sample=c))`,
+   with every new part at its default (None or empty), returns a `CellularScene` whose
    `sample` equals `generate_sample_scene(book, config=c)` field for field (arrays equal,
    tables equal with `check_exact`, `record` equal), and saved, its `sample.json` and
    every file of the sample layout equal those of `save_sample_scene`.
@@ -185,16 +185,16 @@ requires:
 
 | Concept | Name | Kind |
 | --- | --- | --- |
-| Entry | `generate_context_scene(codebook, *, config=ContextSceneConfig(), on_fov=None)` | function |
-| Result | `ContextScene` | dataclass |
-| Configuration | `ContextSceneConfig`, `NucleusShapeConfig`, `PackingConfig`, `TerritoryConfig`, `CellTypeConfig`, `MoleculeConfig`, `StainChannelConfig`, `BrightRegionConfig`, `UnevennessConfig`, `OutputScaleConfig`, `MorphologyRoundConfig` | frozen dataclasses |
-| Persistence | `save_context_scene(scene, directory)`, `save_context_dataset(scene, directory)` | functions |
-| Presets | `context_scene_preset(name)`, `CONTEXT_PRESETS`, `CONTEXT_PRESET_VERSION` (`context-presets-v1`) | function, dict, str |
-| Version | `CONTEXT_TRUTH_VERSION` (`"1"`) | str |
+| Entry | `generate_cellular_scene(codebook, *, config=CellularSceneConfig(), on_fov=None)` | function |
+| Result | `CellularScene` | dataclass |
+| Configuration | `CellularSceneConfig`, `NucleusShapeConfig`, `PackingConfig`, `TerritoryConfig`, `CellTypeConfig`, `MoleculeConfig`, `StainChannelConfig`, `BrightRegionConfig`, `UnevennessConfig`, `OutputScaleConfig`, `MorphologyRoundConfig` | frozen dataclasses |
+| Persistence | `save_cellular_scene(scene, directory)`, `save_cellular_dataset(scene, directory)` | functions |
+| Presets | `cellular_scene_preset(name)`, `CELLULAR_PRESETS`, `CELLULAR_PRESET_VERSION` (`context-presets-v1`) | function, dict, str |
+| Version | `CELLULAR_TRUTH_VERSION` (`"1"`) | str |
 
 ```python
 @dataclass(frozen=True)
-class ContextSceneConfig:
+class CellularSceneConfig:
     sample: SampleSceneConfig = SampleSceneConfig()   # template, acquisition, seeds and size laws, molecules
     nuclei: NucleusShapeConfig | None = None          # lobes and harmonics ("Nucleus shape")
     packing: PackingConfig | None = None              # density, contact, overlap ("Packing")
@@ -205,7 +205,7 @@ class ContextSceneConfig:
     morphology: MorphologyRoundConfig | None = None   # the additional round ("The morphology round")
 
 @dataclass
-class ContextScene:
+class CellularScene:
     sample: SampleScene                               # the sample-scene result, its tables and labels
     stains: dict[str, dict[str, np.ndarray]]          # fov_id -> stain name -> ZYX image (reference round)
     morphology: dict[str, np.ndarray]                 # fov_id -> ZYXC image of the morphology round
@@ -400,7 +400,7 @@ outlines, not on a flat face.
 Today seeds are placed by random sequential addition in `Ω`, each proposal accepted
 when its site sphere keeps a positive `gap` to every accepted sphere, and a seed with no
 accepted proposal after `max_proposals` raises `ValueError`
-(`synthetic/_sample.py::_cellular_scene`, `_clear`; `CellularSceneConfig.__post_init__`
+(`synthetic/_sample.py::_cellular_scene`, `_clear`; `CellsConfig.__post_init__`
 requires `gap > 0`). The site spheres are therefore disjoint, so no two nuclei touch: W-393
 measured a touching share of 0 on every scene, also at gap 0.05 µm, against 0.52 in LN,
 0.79 in tissue-2D and 0.50 in the culture (W-393 `notes.md` §3 and §6,
@@ -476,7 +476,7 @@ class PackingConfig:
     kind_shares: tuple[float, float, float] | None = None   # ordinary, binucleate, empty; None: from the counts
     contact: float = 0.0             # probability that a proposal is placed against an accepted site, 0 ≤ contact ≤ 1
     overlap: float = 0.0             # κ, 0 ≤ κ < 0.5
-    gap: float = 0.0                 # g ≥ 0 (µm); today's CellularSceneConfig.gap is used when packing is None
+    gap: float = 0.0                 # g ≥ 0 (µm); today's CellsConfig.gap is used when packing is None
     monolayer: bool = False          # every centre in the stack's mid-plane z_mid = (n_z − 1) / 2 · s_z
     on_crowded: str = "raise"        # "raise" or "stop" (C5)
     floor: float = 0.9               # with "stop": the reached share of the density below which it still raises, 0 < floor ≤ 1
@@ -498,10 +498,10 @@ culture cells keep their own Z extents, the bank shifted by one constant so that
 median nucleus centroid lies on the stack's middle plane (AU1), and are tested for overlap
 in 3D, so a column can hold two culture nuclei.
 
-**Density.** With `density` None, the seed counts of `CellularSceneConfig` apply as
+**Density.** With `density` None, the seed counts of `CellsConfig` apply as
 today. With a value `φ`, the kind of seed `k` (ordinary, binucleate or empty) is drawn
 from `context.cell.kind` (entity `cell-<k>`) with the probabilities `kind_shares` (or
-proportional to the counts of `CellularSceneConfig`), and seeds are added until the summed
+proportional to the counts of `CellsConfig`), and seeds are added until the summed
 nominal size of the placed nuclei reaches `φ · ‖Ω‖`. `‖Ω‖` is the volume of `Ω`, or the
 area of its Y-X box with one plane or a monolayer; the nominal size of a nucleus is the
 sum over its lobes of `4/3 π a_z a_l² e` (with one plane or a monolayer, `π a_l² e`), with
@@ -1061,7 +1061,7 @@ class MorphologyRoundConfig:
     translation_zyx: Mapping[str, tuple[float, float, float]] | None = None
 ```
 
-**Files and layout.** `save_context_dataset(scene, directory)` writes a dataset that
+**Files and layout.** `save_cellular_dataset(scene, directory)` writes a dataset that
 `Dataset` and `FOV.load_images`, `FOV.run` and `FOV.prepare_morphology` read:
 
 ```
@@ -1081,7 +1081,7 @@ existing case, a nuclear stain file of the reference round with no morphology ro
 the same layout without the morphology folder; `prepare_morphology` then loads it as
 `reference_stain` with no transform. The no-segmenter path of
 {doc}`synthetic-sample-scene` (labels and molecule CSV per FOV) stays in the
-`save_context_scene` layout.
+`save_cellular_scene` layout.
 
 **The truth of the translation.** `morphology_truth.csv`, one row per FOV: `fov_id`,
 `round`, `translation_z/y/x_um` (`τ_f`), `translation_z/y/x_vox` (`τ_f ⊘ s`, as drawn or
@@ -1140,7 +1140,7 @@ ranges describe dense tissue.
 
 ## Presets
 
-Six presets in `CONTEXT_PRESETS` (version `context-presets-v1`), separate from
+Six cellular presets in `CELLULAR_PRESETS` (version `context-presets-v1`), separate from
 `SAMPLE_PRESETS`: one routine and one `slow` preset per context. The appearance presets
 are separate again, in `APPEARANCE_PRESETS` ({doc}`synthetic-real-appearance`). Each table below gives a
 value per configuration field, with its unit, and the source it was set from: a W-393
@@ -1162,13 +1162,13 @@ ranges hold for the mean.
 
 | Parameter | Field (unit) | Value | Set from |
 | --- | --- | --- | --- |
-| Codebook | `context_scene_preset` | `development_codebook("balanced")`, 16 genes, four rounds, four channels | Not measured by W-393; the codebook of `sample-small-v1` (`synthetic/_sample.py::sample_scene_preset`) |
-| Seed, split, scene key | `FormedSceneConfig.seed`, `split`, `scene_key` | 42, `development`, the preset's name | Not measured by W-393; the convention of the sample presets |
+| Codebook | `cellular_scene_preset` | `development_codebook("balanced")`, 16 genes, four rounds, four channels | Not measured by W-393; the codebook of `sample-small-v1` (`synthetic/_sample.py::sample_scene_preset`) |
+| Seed, split, scene key | `AmpliconSceneConfig.seed`, `split`, `scene_key` | 42, `development`, the preset's name | Not measured by W-393; the convention of the sample presets |
 | Per-round geometry | `GeometryConfig.translation_max_zyx` (voxels) | translation only, (1, 2, 2), about `round1` | Not measured by W-393; `sample-small-v1` and the W-393 sizing scenes' `config.json` |
 | Amplicon appearance | the template's property laws, readout, background and noise; `dtype` | those of `sample-small-v1` (`_appearance` of `benchmark-presets-v1`), float32 | Not measured by W-393 (it measured stains and labels, not amplicon images); the W-393 sizing scenes |
 | Stochastic readout effects | `ReadoutEffectsConfig` | off | Required by `SampleSceneConfig` |
 | Seed kinds | `PackingConfig.kind_shares` | ordinary 0.9, binucleate 0.05, empty 0.05 | Not measured by W-393; assumption, so that the `slow` presets hold cells with two nuclei and without a nucleus |
-| Empty site | `CellularSceneConfig.empty_radius` (µm) | 2.5 | Not measured by W-393; the default |
+| Empty site | `CellsConfig.empty_radius` (µm) | 2.5 | Not measured by W-393; the default |
 | Crowding | `max_proposals`; `PackingConfig.on_crowded`, `floor` | 10,000; `stop`, 0.9 | Not measured by W-393; the default and C5 |
 | Lobe laws | `NucleusShapeConfig.extra_lobes`, `lobe_scale`, `lobe_offset` | 1 or 2; uniform 0.5–0.8; uniform 0.5–0.9 of lobe 1's `a_l`, bounded by LB1 | Not measured by W-393; assumption. With LB1's bound every drawn nucleus is one connected shape before clipping ("Nucleus shape"; audit F of W-480 at 10,000 draws per preset and at the ends of the laws); a clipped label can have more than one piece, counted under its one ID. The generator check measures the resulting non-ellipsoid share |
 | Harmonics | `NucleusShapeConfig.harmonics` | 0 (N2 off) | C2 |
@@ -1179,7 +1179,7 @@ ranges hold for the mean.
 | Noise model | `StainChannelConfig.noise` | Poisson (α 1) and read noise `σ = sqrt((r_n · 1000)² − b · 1000)` | W-393 measured `r_n`, "noise (sd of background) over plateau, per 128-px block", and `b`, "background level over plateau, per image": the background's own Poisson variance is removed from the measured noise |
 | Bright-region spreads | `BrightRegionConfig.size`, `height` log SDs | `ln(p95 / p5) / (3 · 3.29)` of the region volume (`/ (2 · 3.29)` of an area); `ln((peak95 − 1) / (peak5 − 1)) / 3.29` | W-393 measured "bright region size (factor 1.5)" and "bright region peak over nucleus median (factor 1.5)" |
 | Unevenness centres, length | `UnevennessConfig.centres_per_area`, `length` | 4, one FOV width | Not measured by W-393 (no spatial scale was measured); assumption |
-| Growth, reach spread | `TerritoryConfig.growth`, `CellularSceneConfig.reach` log SD | 0.15 (culture reach 0.3) | Not measured by W-393; the reach law SD of `sample-small-v1` |
+| Growth, reach spread | `TerritoryConfig.growth`, `CellsConfig.reach` log SD | 0.15 (culture reach 0.3) | Not measured by W-393; the reach law SD of `sample-small-v1` |
 
 **Truth of the 2D tissue projection (C19).** On the route after fusion the fused Z
 maximum is segmented in one call; the nuclei of a 3D scene can overlap in that
@@ -1242,7 +1242,7 @@ cells by expansion of the nuclei by 0.7776 µm, planar (W-382's setting, W-393 `
 | Grid, FOV shape | `AcquisitionConfig.columns`, `rows`, `fov_shape_zyx` (voxels) | 2 × 2, 16 × 64 × 64 | 3 × 3, 16 × 256 × 256 | Not measured by W-393; its sizing scenes `ln_routine`, `ln_slow` (`results/scenes/<name>/config.json`) |
 | Spacing | `spacing_zyx` (µm) | 0.346255, 0.194398, 0.194398 | same | Not measured by W-393; the LN calibration of those configurations |
 | Overlap, jitter bound | `overlap`; `jitter_max_zyx` (voxels) | 0.25; 0.8, 3.0, 3.0 | 0.25; 0.8, 4.5, 4.5 | Not measured by W-393; those configurations |
-| Axial semi-axis | `CellularSceneConfig.nucleus_axial_radius` (µm, lognormal median, log SD) | 2.1, 0.14 | same | W-393 measured `real/ln/geometry.csv` "semi-axis a3" 2.09 (1.66–2.61); log SD `ln(p95 / p5) / 3.29` |
+| Axial semi-axis | `CellsConfig.nucleus_axial_radius` (µm, lognormal median, log SD) | 2.1, 0.14 | same | W-393 measured `real/ln/geometry.csv` "semi-axis a3" 2.09 (1.66–2.61); log SD `ln(p95 / p5) / 3.29` |
 | Lateral semi-axis | `nucleus_lateral_radius` (µm, median, log SD) | 2.7, 0.10 | same | W-393 measured "semi-axis a2" 2.73 (2.35–3.22) |
 | Elongation | `nucleus_elongation` (folded lognormal μ, τ) | 0.089, 0.151 | same | W-393 measured "elongation a1/a2" 1.21 (p95 1.47): median `exp(μ + 0.674 τ)`, p95 `exp(μ + 1.96 τ)` |
 | Lobed share | `NucleusShapeConfig.lobed_share` | 0.07 | same | W-393 measured "share of nuclei not described by one ellipsoid (IoU < 0.8), per image" 0.068 (0.064–0.074) |
@@ -1322,7 +1322,7 @@ and an area density.
 | --- | --- | --- | --- | --- |
 | Grid, FOV shape | `columns`, `rows`, `fov_shape_zyx` (voxels) | 2 × 2, 16 × 64 × 64 | 3 × 3, 16 × 256 × 256 | Not measured by W-393; its sizing scenes `cu_routine`, `cu_slow` (`cu_slow` at the acquired pixel, half the `slow` preset's) |
 | Spacing | `spacing_zyx` (µm) | 0.346255, 0.777592, 0.777592 | 0.346255, 0.388796, 0.388796 | Not measured by W-393; the culture grid binned 4 × 4 (routine: a 64-pixel FOV at 0.194 µm is smaller than one nucleus), W-393 `notes.md` §7, and binned 2 × 2, twice the acquired pixel of 0.194398 µm (`slow`; Jiahao's decision of 2026-10-15 before the gate W-396, so that a `slow` scene holds about 42 nuclei instead of about 12 at the acquired pixel) |
-| Seed | `FormedSceneConfig.seed` | 42 | 42 | Not measured by W-393; the convention of the sample presets. The `slow` preset's own seed stays 42; the validation design runs the culture chain check at the two seeds 42 and 43 (Jiahao's decision of 2026-10-15; about 83 nuclei over the two scenes by W-481's re-run of audit A) |
+| Seed | `AmpliconSceneConfig.seed` | 42 | 42 | Not measured by W-393; the convention of the sample presets. The `slow` preset's own seed stays 42; the validation design runs the culture chain check at the two seeds 42 and 43 (Jiahao's decision of 2026-10-15; about 83 nuclei over the two scenes by W-481's re-run of audit A) |
 | Overlap, jitter bound | `overlap`; `jitter_max_zyx` (voxels) | 0.25; 0.8, 3.0, 3.0 | 0.25; 0.8, 4.5, 4.5 | Not measured by W-393; those configurations |
 | Axial semi-axis | `nucleus_axial_radius` (µm, median, log SD) | 2.1, 0.14 | same | W-393 measured "nucleus volume (extended 3D labels)" 1,081 µm³ and "nucleus area (2D labels)" 259 µm²: a height of 4.2 µm, half of it the semi-axis; the log SD is LN's (assumption) |
 | Lateral semi-axis | `nucleus_lateral_radius` (µm, median, log SD) | 7.5, 0.30 | same | W-393 measured `real/culture/geometry.csv` "semi-axis a2" 7.48 (1.05–16.5); the log SD is an assumption, narrower than that range because its low end is debris (W-393 `notes.md` §9) |
@@ -1331,7 +1331,7 @@ and an area density.
 | Density | `density` (area fraction; monolayer) | 0.26 | same | W-393 measured "nucleus volume fraction, per image", an area fraction for these 2D labels, 0.26 (0.17–0.45) |
 | Contact; monolayer | `contact`; `monolayer` | 0.4; true | same | W-393 measured "share of touching nuclei, per image" 0.48 (0.33–0.72); `contact` set by audit A on the label image of the Z projection (mean 0.55 routine; 0.60 `slow` at its pixel of 0.388796 µm in W-481's re-run, within the range, so `contact` is not retuned) |
 | Expected nuclei | outcome | about 8 | about 42 | audit A (`‖Ω‖` 10,219 µm²); for the `slow` preset its re-run by W-481 (`‖Ω‖` 66,046 µm²); both grown by the morphology bound |
-| Territory | `CellularSceneConfig.reach` (µm median, log SD); `TerritoryConfig.rule` | 5.3, 0.3; `reach` | same | W-393 measured "cell area (2D labels)" 896 µm² (202–2291): equivalent radius 16.9 µm, less "semi-axis a1" 11.6 µm |
+| Territory | `CellsConfig.reach` (µm median, log SD); `TerritoryConfig.rule` | 5.3, 0.3; `reach` | same | W-393 measured "cell area (2D labels)" 896 µm² (202–2291): equivalent radius 16.9 µm, less "semi-axis a1" 11.6 µm |
 | Molecules per cell | `per_cell_median`, `per_cell_spread` | 120, 0.40 | 982, 0.40 | W-393 measured `real/culture/molecules.csv` "reads per cell" 982 (86–1884); the routine preset stays near the p5 for the routine tier; the spread fitted to the p95 (model 506–1901 at median 982); the lower tail is not reproduced |
 | Nuclear fraction | `nuclear_fraction` | 0.26 | same | W-393 measured "nuclear fraction of reads" 0.26 (0–0.56) |
 | Expected molecules | outcome | about 1,200 | about 44,500 | audit A; for the `slow` preset its re-run by W-481 |
@@ -1400,7 +1400,7 @@ holds about 76 and 42 nuclei instead of about 20 and 12; their nearest W-393 sce
 
 | Option | Where the new truth goes | Cost | Effect on existing outputs |
 | --- | --- | --- | --- |
-| **V1. New files beside the unchanged sample layout, with their own version (recommended)** | `save_context_scene` writes the `save_sample_scene` layout unchanged, plus the files below and `context.json` with `context_truth_version` `"1"`. | Consumers join by `nucleus_id`, `cell_id`, `amplicon_id`, `fov_id` and the stain name; twelve new tables and the stain images. | None: no existing table gains a column; `sample.json` keeps `sample_truth_version` `"1"`. |
+| **V1. New files beside the unchanged sample layout, with their own version (recommended)** | `save_cellular_scene` writes the `save_sample_scene` layout unchanged, plus the files below and `context.json` with `context_truth_version` `"1"`. | Consumers join by `nucleus_id`, `cell_id`, `amplicon_id`, `fov_id` and the stain name; twelve new tables and the stain images. | None: no existing table gains a column; `sample.json` keeps `sample_truth_version` `"1"`. |
 | V2. New columns on the sample tables | `cells.csv` gains `type`, `nuclei.csv` gains lobe columns. | Fewer files. | A table's columns would depend on how the scene was made, as {doc}`synthetic-sample-scene` rejected (option V2 there). |
 | V3. `SAMPLE_TRUTH_VERSION` `"2"` for every scene | One schema with the new columns. | One version. | Changes every saved sample scene, including today's presets. |
 
@@ -1412,7 +1412,7 @@ with the ellipsoid columns null, and adds `appearance.json`, `placements.csv` an
 <directory>/
   <the save_sample_scene layout, unchanged>     # sample.json, the seven tables, labels, fovs/<fov_id>/...
   context.json                 # context_truth_version "1", context_preset_version, the requested and effective
-                               #   ContextSceneConfig, the reached density and placed seeds (F2), the stream
+                               #   CellularSceneConfig, the reached density and placed seeds (F2), the stream
                                #   scheme and descriptors, the SHA-256 of every file of the directory
   lobes.csv                    # nucleus_id, lobe, offset_z/y/x (µm), axial_radius, lateral_radius (µm),
                                #   elongation, angle (rad); lobe 1 repeats nuclei.csv's ellipsoid with offset 0
@@ -1437,7 +1437,7 @@ with the ellipsoid columns null, and adds `appearance.json`, `placements.csv` an
   fovs/<fov_id>/morphology.ome.tif             # the morphology round (ZYXC, its stains in configuration order)
 ```
 
-The raw dataset of `save_context_dataset` is a separate directory ("The morphology
+The raw dataset of `save_cellular_dataset` is a separate directory ("The morphology
 round"). `molecules.csv` keeps its columns; its `compartment` column already records the
 nucleus or cytoplasm placement, and its `gene_id` the type's draw. An empty population
 gives a table with its header and no rows (a type with no cell, a cell with no molecule,
@@ -1592,7 +1592,7 @@ prefixed `context.`:
    `context.`, which no existing component does, so a new descriptor differs from every
    existing one in its component field. The per-FOV stain noise keeps its component names
    and differs by `channel_label` (a stain name other than the sample scene's `DAPI`, or the
-   same name in another round, which sets `round_label`); a context scene whose nuclear
+   same name in another round, which sets `round_label`); a cellular scene whose nuclear
    stain is named `DAPI` in the reference round draws its noise from the same streams as the
    sample scene's stain.
 3. **With a new part off, its draws are not made.** A part at its default (None) consumes
@@ -1601,7 +1601,7 @@ prefixed `context.`:
    `packing` given, the uniform proposals of P1 still come from `sample.cell.placement`
    in today's order of draws, and every new draw (kind, contact, direction) comes from a
    `context.` stream.
-4. **Within a context scene**, each new draw has its own entity, so changing a law changes
+4. **Within a cellular scene**, each new draw has its own entity, so changing a law changes
    no draw of any stream; what the draws produce can change. Changing a type's gene
    abundance changes only the genes of that type's molecules. Changing a type's molecules
    per cell or nuclear fraction changes the number of that type's molecules and which
@@ -1747,7 +1747,7 @@ by section.
     *Proposed:* the same, followed by "A scene of {doc}`synthetic-cellular-scene` writes the
     same files with the same columns, made by the rules of that page (lobes, clipping,
     territories, molecules by compartment); its `context.json` names
-    `CONTEXT_TRUTH_VERSION`, which versions those rules, and `sample.json` keeps
+    `CELLULAR_TRUTH_VERSION`, which versions those rules, and `sample.json` keeps
     `sample_truth_version` `"1"`; a real-appearance scene writes them with the ellipsoid
     columns null, versioned by `APPEARANCE_TRUTH_VERSION` in `appearance.json`."
 14. **"Exclusions".**
@@ -1817,7 +1817,7 @@ morphology round and truth), W-519 (the six appearance presets and the three rea
 and W-520 (the remaining generator checks, GA23 and the table of implemented checks). W-487
 ran the chain checks on the appearance presets. W-488 applied the lists of accepted
 statements, W-483's four findings and the confirmations of the dated amendments, and added
-these sections and the example `docs/examples/context_scene.py` ({doc}`api/examples`), run
+these sections and the example `docs/examples/cellular_scene.py` ({doc}`api/examples`), run
 by `test_synthetic_context_example.py`.
 
 **Modules** (all in `src/python/starfinder/synthetic/`, exported by `starfinder.synthetic`
@@ -1825,15 +1825,15 @@ and listed on the API page `docs/api/synthetic.rst`):
 
 * `_cellular.py` (W-483): the shape functions of lobed nuclei and harmonics, extents,
   contact distances and the label functions;
-* `_context.py` (W-483, W-484): `ContextSceneConfig` and its parts (`NucleusShapeConfig`,
+* `_context.py` (W-483, W-484): `CellularSceneConfig` and its parts (`NucleusShapeConfig`,
   `PackingConfig`, `TerritoryConfig`, `CellTypeConfig`, `MoleculeConfig`),
-  `generate_context_scene`, `ContextScene`, `save_context_scene` and `save_context_dataset`;
+  `generate_cellular_scene`, `CellularScene`, `save_cellular_scene` and `save_cellular_dataset`;
 * `_stains.py` (W-484): `StainChannelConfig`, `BrightRegionConfig`, `UnevennessConfig`,
   `OutputScaleConfig`, `MorphologyRoundConfig` and the stain functions;
-* `_context_presets.py` (W-485): `CONTEXT_PRESETS`, `CONTEXT_PRESET_VERSION` and
-  `context_scene_preset`;
+* `_context_presets.py` (W-485): `CELLULAR_PRESETS`, `CELLULAR_PRESET_VERSION` and
+  `cellular_scene_preset`;
 * `_appearance_bank.py` (W-516): `BankReference`, `build_appearance_bank`,
-  `closed_form_bank` and `load_appearance_bank`;
+  `generate_closed_form_bank` and `load_appearance_bank`;
 * `_appearance_layout.py` (W-517): `AugmentationConfig`, `LayoutConfig`, placement by PL2
   with DN1 and DN3, territories, ownership and the point evaluator;
 * `_appearance.py` (W-518): `AppearanceSceneConfig`, `CompositionConfig`,
@@ -1908,7 +1908,7 @@ each is written where it applies:
   arithmetic, as K1 states; the unreachable monolayer refusal dropped from GN3 and kept in
   the generator as a guard; and GN9 stating that `ctx_types` holds three sample cells. The
   rows as written could not be tested as written (W-483 notes, "Findings for Jiahao").
-* **2026-10-18, W-488** (`docs/examples/context_scene.py`, {doc}`api/examples`). The example
+* **2026-10-18, W-488** (`docs/examples/cellular_scene.py`, {doc}`api/examples`). The example
   keeps the two presets the issue names, `context-tissue2d-v1` and `appearance-tissue2d-v1`,
   and its test `test_synthetic_context_example.py` is `slow` instead of routine: generating
   and saving the two presets takes more than 5 s on one CPU, the bound of a routine test,

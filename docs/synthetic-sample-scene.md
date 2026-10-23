@@ -95,9 +95,9 @@ The addition is **opt-in**: it is reached only through new names ("Names"). Noth
 exists today calls it, and a caller who does not call it gets exactly today's behavior.
 The implementation must keep, by construction:
 
-* **No existing signature or config changes.** `generate_formed_scene`, `generate_dataset`,
-  `generate_registration_pair`, `save_formed_scene`, `formed_scene_preset` and every preset
-  function keep their parameters. `FormedSceneConfig`, `ReadoutEffectsConfig`,
+* **No existing signature or config changes.** `generate_amplicon_scene`, `generate_amplicon_dataset`,
+  `generate_registration_pair`, `save_amplicon_scene`, `amplicon_scene_preset` and every preset
+  function keep their parameters. `AmpliconSceneConfig`, `ReadoutEffectsConfig`,
   `BackgroundConfig`, `TextureConfig`, `NoiseConfig`, `GeometryConfig` and
   `ScalarDistribution` gain no field: their `asdict` form is the `requested_config` of
   every provenance record, so a new field would change every saved `provenance.json`.
@@ -105,7 +105,7 @@ The implementation must keep, by construction:
   `DEFORMATION_PRESETS`, `DEVELOPMENT_FIXTURES`, `DEVELOPMENT_SIZES` and
   `CALIBRATED_CONDITIONS` keep their keys and values; the sample presets live in a
   separate registry, because `test_one_registry_holds_every_tier` calls
-  `formed_scene_preset` on every `SCENE_PRESETS` name.
+  `amplicon_scene_preset` on every `SCENE_PRESETS` name.
 * **No version changes.** `_GENERATOR_VERSION` stays `"6"`, `PRESET_VERSION` stays
   `benchmark-presets-v1`, `HISTORICAL_TRUTH_VERSION` stays `"2.0"` and the stream
   namespace stays `starfinder.synthetic/1`. Every FOV scene of a sample scene is produced
@@ -154,7 +154,7 @@ CPU (the repeatability limit of {doc}`synthetic-specification`, "Random streams"
   `benchmark_scene_preset` and `registration_scene_preset`;
 * the files written by `starfinder synthetic generate` in both modes (`--mode e2e` and
   `--mode registration`), including `ground_truth.json` and `generation.json`;
-* the files of `save_formed_scene` for the fixtures above.
+* the files of `save_amplicon_scene` for the fixtures above.
 
 The implementation shows this by running the files above unchanged; the cross-process
 tests (`test_actual_cross_process_repeats_and_no_files`,
@@ -171,7 +171,7 @@ All new, in `starfinder.synthetic`, with `__all__` and the autosummary list of
 | --- | --- | --- |
 | Entry | `generate_sample_scene(codebook, *, config=SampleSceneConfig(), on_fov=None)` | function |
 | Result | `SampleScene` | dataclass |
-| Config | `SampleSceneConfig`, `AcquisitionConfig`, `CellularSceneConfig`, `StainConfig` | frozen dataclasses |
+| Config | `SampleSceneConfig`, `AcquisitionConfig`, `CellsConfig`, `StainConfig` | frozen dataclasses |
 | Persistence | `save_sample_scene(scene, directory)` | function |
 | Presets | `sample_scene_preset(name)`, `SAMPLE_PRESETS`, `SAMPLE_PRESET_VERSION` (`sample-presets-v1`) | function, dict, str |
 | Version | `SAMPLE_TRUTH_VERSION` (`"1"`) | str |
@@ -180,7 +180,7 @@ All new, in `starfinder.synthetic`, with `__all__` and the autosummary list of
 @dataclass
 class SampleScene:
     sample: str                                   # the sample frame is sample:<sample>
-    fovs: dict[str, FormedScene]                  # one formed scene per FOV, in table order
+    fovs: dict[str, AmpliconScene]                  # one amplicon scene per FOV, in table order
     stains: dict[str, np.ndarray]                 # ZYX stain image per FOV (empty without a stain)
     fov_metadata: dict[str, ImageMetadata]        # each FOV's reference grid metadata (FOV frame)
     placement: pd.DataFrame                       # placement truth ("Placement truth")
@@ -197,7 +197,7 @@ class SampleScene:
 ```
 
 With `on_fov(fov_id, scene, stain, labels)`, each FOV is handed over as soon as it is
-complete and not retained, as `generate_dataset`'s `on_round` does for rounds; `fovs`,
+complete and not retained, as `generate_amplicon_dataset`'s `on_round` does for rounds; `fovs`,
 `stains` and `fov_labels` are then empty and the tables are complete.
 
 ## The sample scene
@@ -336,7 +336,7 @@ design needs a trend; it can be written as a supplied table today.
 
 ### Rendering each FOV at its true offset
 
-Each FOV is rendered by the unchanged formed generator, as one `FormedScene` on its own
+Each FOV is rendered by the unchanged formed generator, as one `AmpliconScene` on its own
 grid, with **no interpolation of a rendered image**: every voxel value is the analytic
 model evaluated at that voxel's centre.
 
@@ -359,7 +359,7 @@ model evaluated at that voxel's centre.
   frame: in an acquisition, round-to-round registration is per FOV. The FOV's true origin
   applies to the reference frame, so every round of the FOV is placed by it.
 * **Noise.** Every residual of every FOV is drawn from that FOV's streams (scene key
-  `[scene_key, fov_id]`, as `generate_dataset` gives), so **the noise is independent per
+  `[scene_key, fov_id]`, as `generate_amplicon_dataset` gives), so **the noise is independent per
   FOV**: two FOVs that image the same molecule in an overlap see independent noise.
 * **Stochastic readout effects** (`loss`, `dropout`, `weakening`) are per-ID draws of each
   FOV's scene; drawn per FOV, the same molecule could be lost in one FOV and kept in its
@@ -441,7 +441,7 @@ float64 accumulation:
 
 ```python
 @dataclass(frozen=True)
-class CellularSceneConfig:
+class CellsConfig:
     nuclei: int = 7                       # ordinary cells, one nucleus each
     binucleate: int = 1                   # cells with two nuclei
     empty: int = 0                        # cells without a nucleus
@@ -583,11 +583,11 @@ not measurement QC.
 ```python
 @dataclass(frozen=True)
 class SampleSceneConfig:
-    fov: FormedSceneConfig = FormedSceneConfig(     # template: dtype, laws, readout, background, noise,
+    fov: AmpliconSceneConfig = AmpliconSceneConfig(     # template: dtype, laws, readout, background, noise,
         dataset_version="sample-scene-v1", sample_id="sample",   # geometry, seed, split, scene_key, sample_id
         scene_key="sample-scene-v1", shape_zyx=(5, 36, 36), dtype="float32", accumulation="float64")
     acquisition: AcquisitionConfig = AcquisitionConfig()
-    cells: CellularSceneConfig | None = CellularSceneConfig()   # None: no cellular scene
+    cells: CellsConfig | None = CellsConfig()   # None: no cellular scene
     stain: StainConfig | None = StainConfig()                   # None: no stain image
     molecules_per_cell: float = 8.0      # Poisson mean per cell
     ambient_density: float = 0.002       # molecules per µm³ of Ω
@@ -858,7 +858,7 @@ with the template's `split` and `seed`.
   | `sample.stain.brightness` | `nucleus-<n>` | one value |
   | `sample.stain.background.*` | as above | the stain's sample-frame texture |
 
-* **Per-FOV draws** use the scene key `[scene_key, fov_id]` of `generate_dataset`: the
+* **Per-FOV draws** use the scene key `[scene_key, fov_id]` of `generate_amplicon_dataset`: the
   existing `geometry.*` and `noise.*` components for the amplicon rounds, and
   `stain.noise.dependent`, `stain.noise.independent` and `stain.noise.correlated` with the
   stain's channel label for the stain.
@@ -941,7 +941,7 @@ are off (required), and the per-round geometry is a translation only.
 
 | Option | Where the truth goes | Cost | Effect on existing outputs |
 | --- | --- | --- | --- |
-| **V1. New sample-level files with their own version (recommended)** | Per FOV the unchanged `save_formed_scene` layout; beside it the sample tables and label images below, described by `sample.json` with `sample_truth_version` `"1"`. No existing table gains a column. | Consumers join the sample tables with the FOV tables by `fov_id` and `amplicon_id`; seven new files. | None: every existing file keeps its columns and bytes. |
+| **V1. New sample-level files with their own version (recommended)** | Per FOV the unchanged `save_amplicon_scene` layout; beside it the sample tables and label images below, described by `sample.json` with `sample_truth_version` `"1"`. No existing table gains a column. | Consumers join the sample tables with the FOV tables by `fov_id` and `amplicon_id`; seven new files. | None: every existing file keeps its columns and bytes. |
 | V2. New columns on the per-FOV tables | `formed` gains `sample_z/y/x`, `true_cell_id`, `compartment`; `round_truth` gains `in_footprint` | Fewer files. | The columns would exist only for sample scenes, so the schema of `formed.csv` would depend on how it was made; or they exist always and every existing `formed.csv` changes. |
 | V3. `ground_truth.json` version 3 | Extend the historical MATLAB-compatible record with the sample keys | One file for MATLAB readers. | `HISTORICAL_TRUTH_VERSION` would move from `"2.0"`, which changes the files `starfinder synthetic generate` writes and `test_benchmark_synthetic.py` checks. |
 
@@ -949,7 +949,7 @@ are off (required), and the per-round geometry is a translation only.
 schema per table, and versions the addition independently of generator version 6.
 
 **Layout** written by `save_sample_scene(scene, directory)` into a new or empty directory
-(nothing is overwritten, as `save_formed_scene`):
+(nothing is overwritten, as `save_amplicon_scene`):
 
 ```
 <directory>/
@@ -973,7 +973,7 @@ schema per table, and versions the addition independently of generator version 6
   molecule_fovs.csv             # "Per-FOV truth": amplicon_id, fov_id, in_sample, z, y, x, in_footprint,
                                 #   fov_cell_label, fov_nucleus_label, label_agrees, csv_row
   labels/sample_nuclei.tif, labels/sample_cells.tif
-  fovs/<fov_id>/                # save_formed_scene layout: images/<round>.ome.tif, formed.csv,
+  fovs/<fov_id>/                # save_amplicon_scene layout: images/<round>.ome.tif, formed.csv,
                                 #   round_truth.csv, signals.csv, provenance.json
   fovs/<fov_id>/stain.ome.tif
   fovs/<fov_id>/labels/nuclei.tif, fovs/<fov_id>/labels/cells.tif
@@ -986,7 +986,7 @@ the FOV frame, radians for angles; IDs are strings except the uint32 label value
 `sample.json` names `SAMPLE_TRUTH_VERSION`; any change to a column or rule above bumps it.
 A scene of {doc}`synthetic-cellular-scene` writes the same files with the same columns,
 made by the rules of that page (lobes, clipping, territories, molecules by compartment);
-its `context.json` names `CONTEXT_TRUTH_VERSION`, which versions those rules, and
+its `context.json` names `CELLULAR_TRUTH_VERSION`, which versions those rules, and
 `sample.json` keeps `sample_truth_version` `"1"`; a real-appearance scene writes them with
 the ellipsoid columns null, versioned by `APPEARANCE_TRUTH_VERSION` in `appearance.json`.
 

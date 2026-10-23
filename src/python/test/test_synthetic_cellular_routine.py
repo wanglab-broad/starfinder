@@ -21,7 +21,7 @@ import pytest
 from scipy import ndimage
 
 from starfinder.report._measurements import mecr
-from starfinder.synthetic import BackgroundConfig, NoiseConfig, context_scene_preset, generate_context_scene
+from starfinder.synthetic import BackgroundConfig, NoiseConfig, cellular_scene_preset, generate_cellular_scene
 from starfinder.synthetic._context import _context_labels
 
 from .cellular_checks import check_lobes, check_projection
@@ -40,9 +40,9 @@ STAIN_LABELS = [f"stains-{rule}-whole" for rule in RULES] + ["stains-pair"]
 
 @cache
 def preset(name):
-    """(codebook, config, ContextScene) of a routine preset as generated, once per session."""
-    book, config = context_scene_preset(name)
-    return book, config, generate_context_scene(book, config=config)
+    """(codebook, config, CellularScene) of a routine preset as generated, once per session."""
+    book, config = cellular_scene_preset(name)
+    return book, config, generate_cellular_scene(book, config=config)
 
 
 def placing_cell(amplicon_id):
@@ -286,7 +286,7 @@ def test_gn11_molecules_per_cell_and_the_count_guard_on_the_routine_presets(name
     assert context.molecule_mean.nunique() == len(context)  # one lognormal draw per cell (M2, spread > 0)
     guard = replace(config, sample=replace(config.sample, max_count=len(molecules) - 1))
     with pytest.raises(ValueError, match="max_count"):
-        generate_context_scene(book, config=guard)
+        generate_cellular_scene(book, config=guard)
 
 
 def quiet(config):
@@ -304,7 +304,7 @@ def test_gn11_rendering_identity_on_the_routine_presets(name):
     FOV's p, cut at a squared radius of 16) with each molecule's realized amplitudes per channel, which carry the
     preset's readout trend and mixing, within the oracle tolerance of the sample scene's test."""
     book, config, _ = preset(name)
-    generated = generate_context_scene(book, config=quiet(config))
+    generated = generate_cellular_scene(book, config=quiet(config))
     reference = config.sample.fov.geometry.reference_round
     r = book.round_labels.index(reference)
     shape = np.array(config.sample.acquisition.fov_shape_zyx)

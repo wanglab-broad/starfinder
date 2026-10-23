@@ -7,10 +7,10 @@ from dataclasses import replace
 from functools import cache
 import math
 
-from starfinder.synthetic import (BrightRegionConfig, CellTypeConfig, ContextSceneConfig, MoleculeConfig,
+from starfinder.synthetic import (BrightRegionConfig, CellTypeConfig, CellularSceneConfig, MoleculeConfig,
                                   MorphologyRoundConfig, NoiseConfig, NucleusShapeConfig, OutputScaleConfig,
                                   PackingConfig, ScalarDistribution, StainChannelConfig, TerritoryConfig,
-                                  UnevennessConfig, generate_context_scene, sample_scene_preset)
+                                  UnevennessConfig, generate_cellular_scene, sample_scene_preset)
 
 from .cellular_oracle import harmonic_bound
 
@@ -83,51 +83,51 @@ def plane(config):
 
 
 def config_of(name):
-    """The ContextSceneConfig of a fixture name."""
+    """The CellularSceneConfig of a fixture name."""
     book, config = tiny()
     shapes = {f"shapes-{rule}": dict(nuclei=SHAPES, packing=PACKING, territories=TerritoryConfig(rule))
               for rule in RULES}
     shapes.update({f"harmonic-{rule}": dict(nuclei=harmonic(False), packing=PACKING, territories=TerritoryConfig(rule))
                    for rule in RULES})
     if name in shapes:
-        return ContextSceneConfig(sample=config, **shapes[name])
+        return CellularSceneConfig(sample=config, **shapes[name])
     if name in ("monolayer", "monolayer-harmonic"):
-        return ContextSceneConfig(sample=config, nuclei=harmonic(True) if name.endswith("harmonic") else SHAPES,
-                                  packing=replace(PACKING, monolayer=True), territories=TerritoryConfig("grown"))
+        return CellularSceneConfig(sample=config, nuclei=harmonic(True) if name.endswith("harmonic") else SHAPES,
+                                   packing=replace(PACKING, monolayer=True), territories=TerritoryConfig("grown"))
     if name == "plane":
         # ctx_plane: ctx_shapes on the single-plane configuration, N2 in its Fourier form, T2.
-        return ContextSceneConfig(sample=plane(config), nuclei=harmonic(True), packing=PACKING,
-                                  territories=TerritoryConfig("grown"))
+        return CellularSceneConfig(sample=plane(config), nuclei=harmonic(True), packing=PACKING,
+                                   territories=TerritoryConfig("grown"))
     if name == "types":
-        return ContextSceneConfig(sample=config, types=TYPES, molecules=MOLECULES)
+        return CellularSceneConfig(sample=config, types=TYPES, molecules=MOLECULES)
     if name == "types-abundance":
         rows = list(TYPES.abundances)
         # Type 2's row: its markers lighter, the shared genes heavier.
         rows[1] = tuple(0.05 if w == 0.15 else 0.1125 if w == 0.0875 else w for w in rows[1])
-        return ContextSceneConfig(sample=config, types=replace(TYPES, abundances=tuple(rows)), molecules=MOLECULES)
+        return CellularSceneConfig(sample=config, types=replace(TYPES, abundances=tuple(rows)), molecules=MOLECULES)
     if name == "types-support":
         # The review's case: type 2's weight of balanced-09 moves to balanced-10, a change of the row's support.
         rows = list(TYPES.abundances)
         row = list(rows[1])
         row[9], row[8] = row[9] + row[8], 0.0
         rows[1] = tuple(row)
-        return ContextSceneConfig(sample=config, types=replace(TYPES, abundances=tuple(rows)), molecules=MOLECULES)
+        return CellularSceneConfig(sample=config, types=replace(TYPES, abundances=tuple(rows)), molecules=MOLECULES)
     if name == "types-count":
-        return ContextSceneConfig(sample=config, types=replace(TYPES, molecules_per_cell=(200.0, 200.0, 50.0, 200.0)),
-                                  molecules=MOLECULES)
+        return CellularSceneConfig(sample=config, types=replace(TYPES, molecules_per_cell=(200.0, 200.0, 50.0, 200.0)),
+                                   molecules=MOLECULES)
     if name == "spread-zero":
         molecules = MoleculeConfig(per_cell_median=20, per_cell_spread=0.0, nuclear_fraction=0.5)
-        return ContextSceneConfig(sample=config, types=TYPES, molecules=molecules)
+        return CellularSceneConfig(sample=config, types=TYPES, molecules=molecules)
     if name.startswith("crowded-"):
         # ctx_crowded: density 0.6, more than the domain holds, with the floors 0.9 and 0.1; "crowded-below" is the
         # variant whose target is beyond reach by more than its floor (see the worker notes, finding 1).
         density, floor = (0.9, 0.9) if name == "crowded-below" else (0.6, float(name[len("crowded-"):]))
-        return ContextSceneConfig(sample=config, packing=PackingConfig(density=density, on_crowded="stop",
-                                                                       floor=floor))
+        return CellularSceneConfig(sample=config, packing=PackingConfig(density=density, on_crowded="stop",
+                                                                        floor=floor))
     if name == "density":
         # Density mode that reaches its target, lobed nuclei and contact proposals.
-        return ContextSceneConfig(sample=config, nuclei=replace(SHAPES, lobed_share=0.5),
-                                  packing=PackingConfig(density=0.15, contact=0.5, overlap=0.1, on_crowded="stop"))
+        return CellularSceneConfig(sample=config, nuclei=replace(SHAPES, lobed_share=0.5),
+                                   packing=PackingConfig(density=0.15, contact=0.5, overlap=0.1, on_crowded="stop"))
     if name.startswith("territory-"):
         # The review's case: one spherical nucleus of radius 0.5 µm, reach 0.1 µm, a mean of 100 molecules, no ambient
         # molecule; "territory-<rule>[-molecules]" with T3 or T2 (δ = 2 µm), and optionally MoleculeConfig(100).
@@ -141,7 +141,7 @@ def config_of(name):
         territory = (TerritoryConfig("power") if rule == "power"
                      else TerritoryConfig("grown", growth=ScalarDistribution("constant", (2.0,))))
         molecules = MoleculeConfig(per_cell_median=100) if name.endswith("-molecules") else None
-        return ContextSceneConfig(sample=sample, territories=territory, molecules=molecules)
+        return CellularSceneConfig(sample=sample, territories=territory, molecules=molecules)
     if name.startswith(("stains-", "uint8", "plane-")) or name == "mr1":
         return stain_config(name)
     raise KeyError(name)
@@ -173,16 +173,16 @@ def stain_config(name):
         parts = dict(nuclei=harmonic(True), packing=PACKING, territories=TerritoryConfig("grown"),
                      morphology=morphology(mode, flat=True))
         if name == "plane-uint8":
-            return ContextSceneConfig(sample=replace(sample, stain=None), stains=uint8(), **parts)
+            return CellularSceneConfig(sample=replace(sample, stain=None), stains=uint8(), **parts)
         if name == "plane-uint8-float":
-            return ContextSceneConfig(sample=float64(sample), stains=stains(noise=NOISE), **parts)
-        return ContextSceneConfig(sample=float64(sample), stains=stains(), **parts)
+            return CellularSceneConfig(sample=float64(sample), stains=stains(noise=NOISE), **parts)
+        return CellularSceneConfig(sample=float64(sample), stains=stains(), **parts)
     if name.startswith("stains-") and name.split("-")[1] in RULES:
         _, rule, mode = name.split("-")
-        return ContextSceneConfig(sample=float64(config), territories=TerritoryConfig(rule), stains=stains(),
-                                  morphology=morphology(mode), **shapes)
-    base = ContextSceneConfig(sample=float64(config), territories=TerritoryConfig("reach"), stains=stains(),
-                              morphology=morphology("whole"), **shapes)
+        return CellularSceneConfig(sample=float64(config), territories=TerritoryConfig(rule), stains=stains(),
+                                   morphology=morphology(mode), **shapes)
+    base = CellularSceneConfig(sample=float64(config), territories=TerritoryConfig("reach"), stains=stains(),
+                               morphology=morphology("whole"), **shapes)
     empty = replace(config.cells, nuclei=0, binucleate=0, empty=0)
     if name == "stains-pair":
         acquisition = replace(config.acquisition, jitter="supplied", jitter_zyx=PAIR)
@@ -217,7 +217,7 @@ def uint8():
 
 @cache
 def scene(name):
-    """(codebook, config, ContextScene) of a fixture name, generated once per session."""
+    """(codebook, config, CellularScene) of a fixture name, generated once per session."""
     book, _ = tiny()
     config = config_of(name)
-    return book, config, generate_context_scene(book, config=config)
+    return book, config, generate_cellular_scene(book, config=config)

@@ -2,7 +2,7 @@
 
 The real-appearance scene is opt-in (E1 of docs/synthetic-real-appearance.md): a scene without its settings is exactly
 the accepted cellular scene, and the six ``context-*-v1`` presets keep their outputs. This file pins what
-``save_context_scene`` writes for each of them, as generated at the base revision of the implementation batch
+``save_cellular_scene`` writes for each of them, as generated at the base revision of the implementation batch
 (8bf9a5b, before W-516's first change), so that a change of any generated value of an accepted preset fails here.
 Digests are of content, by group of files, as the golden test of the sample presets computes them
 (``test_synthetic_sample_golden.py``):
@@ -32,7 +32,7 @@ import numpy as np
 import pytest
 import tifffile
 
-from starfinder.synthetic import context_scene_preset, generate_context_scene, save_context_scene
+from starfinder.synthetic import cellular_scene_preset, generate_cellular_scene, save_cellular_scene
 
 pytestmark = [pytest.mark.synthetic, pytest.mark.golden]
 
@@ -40,6 +40,8 @@ pytestmark = [pytest.mark.synthetic, pytest.mark.golden]
 # W-516 run's scripts/take_context_pins.py, each preset in its own process. Taken again on 2026-10-19 at 8606450 with
 # the floats to 6 significant digits (GA1's amendment of 2026-10-19): there every group still equalled the exact pins
 # of 8bf9a5b on the lab machine, and the new pins are the same with NumPy's AVX-512 paths turned off.
+# The "records" pins were taken again on 2026-10-23 for W-559 (the renamed "type" and "generator" labels), after a
+# saved comparison showed the base revision's records (89ff80f) equal to the new ones once the rename table is applied.
 PINNED = {
     "context-dense3d-v1": {
         "bright_regions.csv": "c4a281ab0fefd3a3562936a99b5280395e362b124361c772adcf100703527cb6",
@@ -60,7 +62,7 @@ PINNED = {
         "nuclei.csv": "92d353f6c431a15f64537a81f64cc7b0dd34306a88d5ff25105feaa72a052609",
         "placement_truth.csv": "7ed8ace5da46936f26fc8ae421b8294a182bcab99762dfef95d2a0f7490c31b9",
         "positions.csv": "72a704e59318e53e647115a1ba316d7f4fcac369a6203f43fc0c2bd773d82cc7",
-        "records": "0594580dbc6efee3e89bce135f434a7213e2c99ed8f7396a2d0249ab5e73ffa3",
+        "records": "8f8392a23622d86b688be68c240f6b29b924396b9e019bb64740fa78d83b1d55",
         "regions.csv": "4504bdb5210ed7bb2d0d5a1cf89373e527ee198cb54f9edd2a0e84782612c763",
         "sample labels": "f60df984b2ae3a31a10956808ff956145a59c70120162af3071dbd286398818b",
         "stain_channels.csv": "57eac57b213298e95a531be2b17336e17a65b956df0df92f0d0ec4750a7dee1a",
@@ -87,7 +89,7 @@ PINNED = {
         "nuclei.csv": "63623bcd307d2f5499e3ca7252c1c37f81be9676ec39930f74b164ce69d294b9",
         "placement_truth.csv": "bb220e3e3b15f976264484c85a47960d2deb9138c8e7fe69a0e72fb11ef7c095",
         "positions.csv": "80dda74c0f64dee0bb8569a450bb315c2e83c4bc3ccaefe0d256c3a906566d08",
-        "records": "f82a2ebae6ddb38fc473bc736242085c1797f6c7ddd045cfb937876e42ebd25e",
+        "records": "76cbd55e17b96a731d1feacebb9ce31b458907a539ea4fe14b1742b4fdbfc346",
         "regions.csv": "2a19a47e877be2d29e0f748020b0d29912a936f672121b6310da51dc9068a578",
         "sample labels": "8b6f148d04fc376e3138f978354bc30f105033a8dbfb03f73684d6fba891fdbc",
         "stain_channels.csv": "b0edcde7497c38f742f17ddacfe4cf6aa498452517046f55ac2cc94f86850e5e",
@@ -115,7 +117,7 @@ PINNED = {
         "nuclei.csv": "9e7a467df3148a9e0fb68afb64aa1442e57415ae46f661798952c0aaec41b80e",
         "placement_truth.csv": "cce45aa67014d4f077b0c58e2b5bb06ad6ccf0fac383fe9952da5f72cd5bde5b",
         "positions.csv": "d290b28cf97125b29dd7218ecea2c6547ec3cd3e0076b55d56f9043a8f455783",
-        "records": "7a6545d330c1a468dcbade8aba719c50f020e896a4d68c21b36b771d65d47d76",
+        "records": "4b97cdb1d4e12267f731281a5a252f8cb825a038dca0c1672c141ad73804a77a",
         "regions.csv": "ff008a75f16d6b341ffff7ba735e6b1fb60f6bac824b0516bed31cae429c08be",
         "sample labels": "85706dc7674c16229ce883be5c9c6c12bde31da9e91209aebd3d38e1621ae342",
         "stain_channels.csv": "5d81a7f67b7f61643dfb0adc5c0b2211e7b139baf5241c84dfa692212891d520",
@@ -142,7 +144,7 @@ PINNED = {
         "nuclei.csv": "720cca3f5f4946b23fbc3836c608f8ed555974f2a639cefa5bf910fb8683305b",
         "placement_truth.csv": "a758f0928e62dd6e44eb423c1965125ff6cddca3ee23f33351518a37640cbbf7",
         "positions.csv": "e0f4955564543093588102d5f22eb595394626ec0fec17a7f42d59bda07e8d94",
-        "records": "f59f730a247ae9d34796c7248056c83a968e79c52b3c571746bec5fbf388ba7b",
+        "records": "1d1b8711a390638e5b0d0e7313e7ad2e532202b03177de54a8556d0d9a498efc",
         "regions.csv": "bd1bfe254b56636ae99e74c1c2a46b727546314d3aea6da41ec3b0a021997724",
         "sample labels": "40352599da99ddb45e29a60114073291c65cde2602f565ed1e08392ff86e98de",
         "stain_channels.csv": "57eac57b213298e95a531be2b17336e17a65b956df0df92f0d0ec4750a7dee1a",
@@ -169,7 +171,7 @@ PINNED = {
         "nuclei.csv": "df6328720eefd49cf1edd602889d04cba71ac59721c02108cf394fee501d4bb5",
         "placement_truth.csv": "936d825c46cca5cf26f106612571a5281812747093c28f5d33a69455f3241352",
         "positions.csv": "6bc860148994d4b98a2a13c7fd12e12bc78b390967674f8fe781f14173d61f8b",
-        "records": "e98c95e71bb4d77fc5fd115b7feba834b74b642df8d4c20a45aa72db2b8125e9",
+        "records": "f6371008a6511eb9e7362e32096d13241fdc7f41a652af9a31cbd3893581ea0b",
         "regions.csv": "55a9a9e3a8a107e7c2feef4457e78372893b9540c1b8748083be0b5dff89c8d8",
         "sample labels": "2e65a2c2cce5e7bb76ecc9f1dafa4af142b8d2e704adf8497c0bec3466b6a869",
         "stain_channels.csv": "b0edcde7497c38f742f17ddacfe4cf6aa498452517046f55ac2cc94f86850e5e",
@@ -197,7 +199,7 @@ PINNED = {
         "nuclei.csv": "2cfc83ee8b24bfebdebe26c83010afa876c3383f4c50ef358fb85cf6ce3452c3",
         "placement_truth.csv": "3e21910427d2407c866f4ed904c3980feecfd523041155313586eeaedf22dba5",
         "positions.csv": "5ab28104ba00c32ef20afb6b714858bcae5e73bd49810e8b76174dc9ae17f33c",
-        "records": "db4784980c36103223fcdb4371ffcb53ed4044167dde918c1b9cf027f5cc2416",
+        "records": "9275d807281e5c85a53ec3c6b181824f229d0a68484c712d788f72a994d2d5cf",
         "regions.csv": "3537e2d504f6d0d82ead90f56340eea7650c44faf93fb9989a20e92028abbef5",
         "sample labels": "c7315110f0e9d058cd23b7ebf86d3f69ca49025dfd764f10cc8f0f7f8c5b9c36",
         "stain_channels.csv": "5d81a7f67b7f61643dfb0adc5c0b2211e7b139baf5241c84dfa692212891d520",
@@ -290,8 +292,8 @@ def saved_digests(root: Path) -> dict[str, str]:
     pytest.param("context-culture-slow-v1", marks=pytest.mark.slow),
 ])
 def test_saved_context_preset_outputs_equal_the_base_revision_pins(tmp_path, name):
-    book, config = context_scene_preset(name)
-    root = save_context_scene(generate_context_scene(book, config=config), tmp_path / name)
+    book, config = cellular_scene_preset(name)
+    root = save_cellular_scene(generate_cellular_scene(book, config=config), tmp_path / name)
     digests = saved_digests(root)
     assert sorted(digests) == sorted(PINNED[name])
     changed = {group: digests[group] for group in PINNED[name] if digests[group] != PINNED[name][group]}

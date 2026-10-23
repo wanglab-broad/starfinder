@@ -32,7 +32,7 @@ from starfinder.registration import (REGISTRATION_METHODS, AffineConfig, AffineT
                                      estimate_transform)
 from starfinder.registration._chain import transform_kind
 from starfinder.registration._elastix import _index_matrix
-from starfinder.synthetic import (DEVELOPMENT_SIZES, GeometryConfig, forward_displacement, generate_formed_scene,
+from starfinder.synthetic import (DEVELOPMENT_SIZES, GeometryConfig, forward_displacement, generate_amplicon_scene,
                                   registration_scene_preset)
 
 from .test_registration_golden import fixture_rounds
@@ -80,7 +80,7 @@ def pair(shape, seed, *, deformation="shift", geometry=None):
     with preset(shape) as name:
         codebook, config = registration_scene_preset(name, deformation)
     config = replace(config, seed=seed, **({} if geometry is None else dict(geometry=geometry)))
-    formed = generate_formed_scene(codebook, config=config)
+    formed = generate_amplicon_scene(codebook, config=config)
     record = next(t for t in formed.provenance["transforms"].values() if t["round_label"] == deformation)
     return formed.rounds["reference"], formed.rounds[deformation], forward_displacement(record, shape)
 

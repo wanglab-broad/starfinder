@@ -27,7 +27,7 @@ implementation.
 
 * **Existing behaviour.** Statements cite the file and function at the batch's starting
   revision `eb333bc` as `<file>::<function>`, with files under `src/python/starfinder/`
-  (for example `synthetic/_context.py::generate_context_scene`).
+  (for example `synthetic/_context.py::generate_cellular_scene`).
 * **The prototype.** "The prototype" is the operator's record
   `runs/W-485/20261016T1714Z-operator-prototype/` under the artifact root
   `/home/unix/jiahao/wanglab/jiahao/test/starfinder_benchmark/`:
@@ -96,7 +96,7 @@ and the prototype's choice named among the options. This list is the index.
 
 | # | Choice | Recommendation | Prototype (round 10) | Section |
 | --- | --- | --- | --- | --- |
-| RA1 | How the real appearance is reached | E1, a new entry and configuration around an unchanged `ContextSceneConfig` | not applicable (a script) | "Opt-in" |
+| RA1 | How the real appearance is reached | E1, a new entry and configuration around an unchanged `CellularSceneConfig` | not applicable (a script) | "Opt-in" |
 | RA2 | What an entry is | EN1, a nucleus (dense 3D, 2D tissue) or a cell with its nucleus and both stains (culture) | EN1 | "The appearance bank" |
 | RA3 | Bank sources and held-out images | SRC2, the prototype's sources with the culture FOVs Position407 and Position408 added | SRC1 | "The appearance bank" |
 | RA4 | Selection of entries | SEL1, the prototype's four rules with no cap | SEL1 with a cap per FOV | "The appearance bank" |
@@ -166,20 +166,20 @@ and the prototype's choice named among the options. This list is the index.
 ## Opt-in
 
 A scene without the new settings is exactly the accepted cellular scene. The six
-`context-*-v1` presets, `generate_context_scene`, `save_context_scene`,
-`save_context_dataset`, `ContextSceneConfig` and `CONTEXT_PRESETS` keep their behaviour,
+`context-*-v1` presets, `generate_cellular_scene`, `save_cellular_scene`,
+`save_cellular_dataset`, `CellularSceneConfig` and `CELLULAR_PRESETS` keep their behaviour,
 fields and values.
 
-`ContextSceneConfig`'s payload is the `requested_config` of every saved `context.json`
-(`synthetic/_context.py::_payload`, called by `generate_context_scene`). `_payload` writes
+`CellularSceneConfig`'s payload is the `requested_config` of every saved `context.json`
+(`synthetic/_context.py::_payload`, called by `generate_cellular_scene`). `_payload` writes
 `sample`, `nuclei`, `packing`, `territories`, `types`, `molecules`, `stains` and
-`morphology` by name, so a new field on `ContextSceneConfig` changes `context.json` only if
+`morphology` by name, so a new field on `CellularSceneConfig` changes `context.json` only if
 `_payload` is changed to write it. Options E2 and E3 each need such a change.
 
 | Option | Rule | Cost | Consequence |
 | --- | --- | --- | --- |
-| **E1. A new entry and configuration (recommended)** | `generate_appearance_scene(codebook, *, config=AppearanceSceneConfig(...), on_fov=None)`; `AppearanceSceneConfig` holds an unchanged `ContextSceneConfig` and the new parts. | One more entry; shared private functions, as W-483 shared those of the sample scene. | The accepted presets' outputs stay unchanged by construction; the new truth lives in new files ("Truth"). |
-| E2. A new optional field `appearance` on `ContextSceneConfig`, left out of the payload when None | As named. | A special case in `_payload`. | With `_payload` changed to write the field only when it is set, the accepted presets' `context.json` stays as it is, but `requested_config` holds the field for some configurations and not for others; every reader must know the case. |
+| **E1. A new entry and configuration (recommended)** | `generate_appearance_scene(codebook, *, config=AppearanceSceneConfig(...), on_fov=None)`; `AppearanceSceneConfig` holds an unchanged `CellularSceneConfig` and the new parts. | One more entry; shared private functions, as W-483 shared those of the sample scene. | The accepted presets' outputs stay unchanged by construction; the new truth lives in new files ("Truth"). |
+| E2. A new optional field `appearance` on `CellularSceneConfig`, left out of the payload when None | As named. | A special case in `_payload`. | With `_payload` changed to write the field only when it is set, the accepted presets' `context.json` stays as it is, but `requested_config` holds the field for some configurations and not for others; every reader must know the case. |
 | E3. A new field and a new context truth version | As named. | Least code. | With `_payload` changed to write the field for every configuration, every accepted preset's `context.json` gains a key and a new version, against the exclusions of this batch. |
 
 **Recommendation: E1.**
@@ -189,15 +189,15 @@ fields and values.
 | Entry | `generate_appearance_scene(codebook, *, config=AppearanceSceneConfig(...), on_fov=None)` | function |
 | Result | `AppearanceScene` | dataclass |
 | Configuration | `AppearanceSceneConfig`, `BankReference`, `AugmentationConfig`, `LayoutConfig`, `CompositionConfig` | frozen dataclasses |
-| Bank | `build_appearance_bank(config, path)`, `closed_form_bank(preset, n)`, `load_appearance_bank(reference)` | functions |
-| Persistence | `save_appearance_scene(scene, directory)`; the dataset by `save_context_dataset` of `scene.context` | function |
+| Bank | `build_appearance_bank(config, path)`, `generate_closed_form_bank(preset, n)`, `load_appearance_bank(reference)` | functions |
+| Persistence | `save_appearance_scene(scene, directory)`; the dataset by `save_cellular_dataset` of `scene.context` | function |
 | Presets | `appearance_scene_preset(name)`, `APPEARANCE_PRESETS`, `APPEARANCE_PRESET_VERSION` (`appearance-presets-v1`) | function, dict, str |
 | Version | `APPEARANCE_TRUTH_VERSION` (`"1"`) | str |
 
 ```python
 @dataclass(frozen=True)
 class AppearanceSceneConfig:
-    context: ContextSceneConfig            # unchanged: acquisition, seeds, cell types, molecules, morphology round;
+    context: CellularSceneConfig            # unchanged: acquisition, seeds, cell types, molecules, morphology round;
                                            #   its nuclei, packing and stains parts are not used (below)
     bank: BankReference                    # a stored bank by name and SHA-256, or a closed-form bank ("The bank
                                            #   without real data")
@@ -207,7 +207,7 @@ class AppearanceSceneConfig:
 
 @dataclass
 class AppearanceScene:
-    context: ContextScene                  # the context scene's tables and layout; its stains are the composed ones
+    context: CellularScene                  # the cellular scene's tables and layout; its stains are the composed ones
     placements: pd.DataFrame               # "Truth"
     record: dict                           # versions, bank SHA-256, configuration, reached density, streams
 ```
@@ -216,7 +216,7 @@ class AppearanceScene:
 (`synthetic/_sample.py::_layout`, `generate_sample_scene`) stay. So do the cell types and
 molecules, placed by rejection with the label functions of this page
 (`synthetic/_context.py::_Context.molecules`), the morphology round's translation and
-dataset layout (`synthetic/_context.py::_stain_part`, `save_context_dataset`), the cast
+dataset layout (`synthetic/_context.py::_stain_part`, `save_cellular_dataset`), the cast
 (`synthetic/_sample.py::_cast`) and the stream scheme (`synthetic/_sample.py::_streams`).
 Under PL2 the packing (`synthetic/_context.py::_Context._place`), the nucleus shapes
 (`synthetic/_cellular.py::_shapes`), the closed-form stains
@@ -383,7 +383,7 @@ instead of real images.
 
 | Option | Rule | Cost | Consequence |
 | --- | --- | --- | --- |
-| **CF1. Entries rendered by the accepted closed-form generator (recommended)** | `closed_form_bank(preset, n)` generates an accepted `context-*-v1` preset (`synthetic/_context.py::generate_context_scene`) with noise off, and runs the build step on its stain and truth labels as if they were a source image, in memory, with no file. Its record names the preset and seed instead of the SHA-256 of inputs. | One small accepted scene per bank; the build code is exercised on it. | The routine tier, the CI environment and the golden tests read no real data, and every code path of the bank, placement, composition and truth is tested on it. Its appearance is the closed form's, so it checks the machinery, not the realism. |
+| **CF1. Entries rendered by the accepted closed-form generator (recommended)** | `generate_closed_form_bank(preset, n)` generates an accepted `context-*-v1` preset (`synthetic/_context.py::generate_cellular_scene`) with noise off, and runs the build step on its stain and truth labels as if they were a source image, in memory, with no file. Its record names the preset and seed instead of the SHA-256 of inputs. | One small accepted scene per bank; the build code is exercised on it. | The routine tier, the CI environment and the golden tests read no real data, and every code path of the bank, placement, composition and truth is tested on it. Its appearance is the closed form's, so it checks the machinery, not the realism. |
 | CF2. A bank of hand-made arrays | Ellipsoids with a constant excess, written in the test. | Least. | The build step is not exercised. |
 | CF3. A small real bank committed as a fixture | As named. | None. | Against W-329: no array derived from real images enters the repository. |
 
@@ -716,14 +716,14 @@ once on the sample grid. Both are recorded.
 | Option | Where the new truth goes | Cost | Consequence |
 | --- | --- | --- | --- |
 | AT1. New files; the accepted shape columns filled with the moment ellipsoid of each placed mask | `nuclei.csv` keeps its columns with fitted values. | A fit per object. | Columns that read as the shape but are not: recomputing the labels from them gives other labels (identity 2 of {doc}`synthetic-cellular-scene` would fail). |
-| **AT2. New files beside the context layout; the ellipsoid columns null (recommended)** | `save_appearance_scene` writes the `save_context_scene` layout with `nuclei.csv` and `cells.csv` keeping their columns, centre and anchor from the placement, the shape columns (`axial_radius`, `lateral_radius`, `elongation`, `angle`) null and `site_radius` the radius of the placed mask's bounding sphere; `lobes.csv`, `harmonics.csv`, `stain_objects.csv`, `bright_regions.csv` and `unevenness.csv` empty (the gains are in `placements.csv`); plus the files below. | Readers of the shape columns must accept nulls. | The labels are rebuilt from `placements.csv` and the bank only, and nothing pretends to be an ellipsoid. |
+| **AT2. New files beside the context layout; the ellipsoid columns null (recommended)** | `save_appearance_scene` writes the `save_cellular_scene` layout with `nuclei.csv` and `cells.csv` keeping their columns, centre and anchor from the placement, the shape columns (`axial_radius`, `lateral_radius`, `elongation`, `angle`) null and `site_radius` the radius of the placed mask's bounding sphere; `lobes.csv`, `harmonics.csv`, `stain_objects.csv`, `bright_regions.csv` and `unevenness.csv` empty (the gains are in `placements.csv`); plus the files below. | Readers of the shape columns must accept nulls. | The labels are rebuilt from `placements.csv` and the bank only, and nothing pretends to be an ellipsoid. |
 | AT3. A new sample truth version | `SAMPLE_TRUTH_VERSION` `"2"` for these scenes. | One version. | Two meanings of `sample.json` in one layout. |
 
 **Recommendation: AT2**, with `APPEARANCE_TRUTH_VERSION` `"1"`:
 
 ```
 <directory>/
-  <the save_context_scene layout>     # nuclei.csv and cells.csv as above; context.json unchanged in meaning
+  <the save_cellular_scene layout>     # nuclei.csv and cells.csv as above; context.json unchanged in meaning
   appearance.json                     # appearance_truth_version "1", appearance_preset_version, the requested and
                                       #   effective AppearanceSceneConfig, the bank's name, SHA-256, build digest and
                                       #   build record path, the reached density and placed objects, the
@@ -786,7 +786,7 @@ source cell, so the two channels are registered with each other.
 | MO2. The reference DAPI from the closed form | As named. | None. | Two different DAPI images of one sample position: the registration has no truth. |
 
 **Recommendation: MO1.** The translation, its truth table `morphology_truth.csv` and the
-dataset layout of `save_context_dataset` are unchanged.
+dataset layout of `save_cellular_dataset` are unchanged.
 
 ## Target ranges
 
@@ -1157,12 +1157,12 @@ beside.
     the bank, its selection rules, the density (DN1), the fall-off length and the
     out-of-focus light ({doc}`synthetic-real-appearance`)."
 28. **"Presets", first sentence.**
-    *Old:* "Six presets in `CONTEXT_PRESETS` (version `context-presets-v1`), separate from
+    *Old:* "Six presets in `CELLULAR_PRESETS` (version `context-presets-v1`), separate from
     `SAMPLE_PRESETS`: one routine and one `slow` preset per context."
     *Proposed:* the same, followed by "The appearance presets are separate again, in
     `APPEARANCE_PRESETS` ({doc}`synthetic-real-appearance`)."
 29. **"Truth schema", the recommendation V1.**
-    *Old:* "`save_context_scene` writes the `save_sample_scene` layout unchanged, plus the
+    *Old:* "`save_cellular_scene` writes the `save_sample_scene` layout unchanged, plus the
     files below and `context.json` with `context_truth_version` `"1"`."
     *Proposed:* the same, followed by "A scene of {doc}`synthetic-real-appearance` writes
     this layout with the ellipsoid columns null, and adds `appearance.json`,
@@ -1317,7 +1317,7 @@ morphology round and truth), W-519 (the six appearance presets and the three rea
 and W-520 (the remaining generator checks, GA23 and the table of implemented checks). W-487
 ran the chain checks on the appearance presets. W-488 applied the lists of accepted
 statements, W-483's four findings and the confirmations of the dated amendments, and added
-these sections and the example `docs/examples/context_scene.py` ({doc}`api/examples`), run
+these sections and the example `docs/examples/cellular_scene.py` ({doc}`api/examples`), run
 by `test_synthetic_context_example.py`.
 
 **Modules** (all in `src/python/starfinder/synthetic/`, exported by `starfinder.synthetic`
@@ -1325,15 +1325,15 @@ and listed on the API page `docs/api/synthetic.rst`):
 
 * `_cellular.py` (W-483): the shape functions of lobed nuclei and harmonics, extents,
   contact distances and the label functions;
-* `_context.py` (W-483, W-484): `ContextSceneConfig` and its parts (`NucleusShapeConfig`,
+* `_context.py` (W-483, W-484): `CellularSceneConfig` and its parts (`NucleusShapeConfig`,
   `PackingConfig`, `TerritoryConfig`, `CellTypeConfig`, `MoleculeConfig`),
-  `generate_context_scene`, `ContextScene`, `save_context_scene` and `save_context_dataset`;
+  `generate_cellular_scene`, `CellularScene`, `save_cellular_scene` and `save_cellular_dataset`;
 * `_stains.py` (W-484): `StainChannelConfig`, `BrightRegionConfig`, `UnevennessConfig`,
   `OutputScaleConfig`, `MorphologyRoundConfig` and the stain functions;
-* `_context_presets.py` (W-485): `CONTEXT_PRESETS`, `CONTEXT_PRESET_VERSION` and
-  `context_scene_preset`;
+* `_context_presets.py` (W-485): `CELLULAR_PRESETS`, `CELLULAR_PRESET_VERSION` and
+  `cellular_scene_preset`;
 * `_appearance_bank.py` (W-516): `BankReference`, `build_appearance_bank`,
-  `closed_form_bank` and `load_appearance_bank`;
+  `generate_closed_form_bank` and `load_appearance_bank`;
 * `_appearance_layout.py` (W-517): `AugmentationConfig`, `LayoutConfig`, placement by PL2
   with DN1 and DN3, territories, ownership and the point evaluator;
 * `_appearance.py` (W-518): `AppearanceSceneConfig`, `CompositionConfig`,
@@ -1408,7 +1408,7 @@ each is written where it applies:
   arithmetic, as K1 states; the unreachable monolayer refusal dropped from GN3 and kept in
   the generator as a guard; and GN9 stating that `ctx_types` holds three sample cells. The
   rows as written could not be tested as written (W-483 notes, "Findings for Jiahao").
-* **2026-10-18, W-488** (`docs/examples/context_scene.py`, {doc}`api/examples`). The example
+* **2026-10-18, W-488** (`docs/examples/cellular_scene.py`, {doc}`api/examples`). The example
   keeps the two presets the issue names, `context-tissue2d-v1` and `appearance-tissue2d-v1`,
   and its test `test_synthetic_context_example.py` is `slow` instead of routine: generating
   and saving the two presets takes more than 5 s on one CPU, the bound of a routine test,

@@ -42,7 +42,7 @@ from starfinder.registration import (
 )
 from starfinder.registration import _elastix
 from starfinder.synthetic import (BENCHMARK_PRESETS, DEVELOPMENT_SIZES, GeometryConfig, forward_displacement,
-                                  generate_formed_scene, registration_scene_preset)
+                                  generate_amplicon_scene, registration_scene_preset)
 
 pytestmark = [
     pytest.mark.registration,
@@ -92,7 +92,7 @@ def scene(shape, seed, *, deformation="shift", geometry=None):
     with preset(shape) as name:
         codebook, config = registration_scene_preset(name, deformation)
     config = replace(config, seed=seed, **({} if geometry is None else dict(geometry=geometry)))
-    formed = generate_formed_scene(codebook, config=config)
+    formed = generate_amplicon_scene(codebook, config=config)
     record = next(t for t in formed.provenance["transforms"].values() if t["round_label"] == deformation)
     return (formed.rounds["reference"][..., 0].astype(np.float64), formed.rounds[deformation][..., 0].astype(np.float64),
             forward_displacement(record, shape))

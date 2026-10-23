@@ -11,7 +11,7 @@ import pandas as pd
 import pytest
 
 from starfinder.synthetic import (BackgroundConfig, GeometryConfig, NoiseConfig,
-    ReadoutEffectsConfig, ScalarDistribution, formed_scene_preset, generate_formed_scene)
+    ReadoutEffectsConfig, ScalarDistribution, amplicon_scene_preset, generate_amplicon_scene)
 from starfinder.synthetic._geometry import _forward, _inverse
 
 pytestmark = pytest.mark.synthetic
@@ -30,8 +30,8 @@ def noise_streams(scene):
 
 
 def make(depth=3, **kwargs):
-    cb, cfg = formed_scene_preset()
-    return generate_formed_scene(cb, config=replace(cfg, shape_zyx=(depth, 7, 9),
+    cb, cfg = amplicon_scene_preset()
+    return generate_amplicon_scene(cb, config=replace(cfg, shape_zyx=(depth, 7, 9),
         dtype='float64', **kwargs))
 
 
@@ -161,8 +161,8 @@ def test_random_singleton_and_cross_process_repeat():
 import hashlib,json
 from dataclasses import replace
 from starfinder.synthetic import *
-cb,cfg=formed_scene_preset('formed-z1-v1')
-s=generate_formed_scene(cb,config=replace(cfg,shape_zyx=(1,7,9),geometry=GeometryConfig(
+cb,cfg=amplicon_scene_preset('formed-z1-v1')
+s=generate_amplicon_scene(cb,config=replace(cfg,shape_zyx=(1,7,9),geometry=GeometryConfig(
  translation_enabled=True,translation_max_zyx=(0,.2,.3),local_enabled=True,
  centers_zyx=((0,2,3),),strength=.03)))
 p=s.provenance

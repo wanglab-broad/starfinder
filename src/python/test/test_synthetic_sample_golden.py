@@ -37,6 +37,8 @@ pytestmark = [pytest.mark.synthetic, pytest.mark.golden]
 # 2026-10-19 at 8606450 with the floats to 6 significant digits (GN1's amendment of 2026-10-19): there every group
 # still equalled the exact pins of 943bb6b on the lab machine, and the new pins are the same with NumPy's AVX-512
 # paths turned off.
+# The "records" pins were taken again on 2026-10-23 for W-559 (the renamed "type" and "generator" labels), after a
+# saved comparison showed the base revision's records (89ff80f) equal to the new ones once the rename table is applied.
 PINNED = {
     "sample-tiny-v1": {
         "positions.csv": "7fb4663d4ba10aded41fe94227712d7279ab9ff8031894404f78e7ed9b228d43",
@@ -51,7 +53,7 @@ PINNED = {
         "fov stains": "5579572204f3808e9046640b3b94335bc96bdf096e1993c15f6399427533975d",
         "fov labels": "ace7448e66c1d78552b2c6da57ddee52d8361bfd294782435f475e6914b34105",
         "fov tables": "729ba3607ceb09597e3470b43d37b7768eceb5f981f239b4462ebedcaf82e7ed",
-        "records": "9c57dda47387a642977f6142dad613ed0b89cb012ef658705c6664c2a1dac90e",
+        "records": "44b17fbce0d90c9e8a42d92c649efd5e0619f685b250116eee1144d7b74c7ed8",
     },
     "sample-small-v1": {
         "positions.csv": "45e5e7c5b334ed6ec6e0a861ac0bba858ccf02b7a5485a88ec5438be9e691e3e",
@@ -66,7 +68,7 @@ PINNED = {
         "fov stains": "2043a01700b1ffa80c098b728a7bca4e5fd46cb8686af38c46215bef6f82b54f",
         "fov labels": "525b45f163bf54d79bfc14f58176a04e92f8dd60a61efafdb55879a932a84ea3",
         "fov tables": "637c823e6eff98f92944f042f4dbd96ad42122dcd51dce44295d41b4593baf39",
-        "records": "0280c4bf644bb933e4b275806a9f86d6196ba408eec6e5053f166aa6e714354d",
+        "records": "c960db3ca3ca4ff6f53caf2a4ecb002c438ccca426afaaef44e4b64e57ccb4b9",
     },
 }
 GROUPS = ("positions.csv", "placement_truth.csv", "nuclei.csv", "cells.csv", "molecules.csv", "cell_fovs.csv",

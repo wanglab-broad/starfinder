@@ -18,8 +18,8 @@ import pytest
 import starfinder.synthetic as synthetic
 from starfinder.synthetic import (BENCHMARK_PRESETS, BackgroundConfig, DEFORMATION_PRESETS,
                                   GeometryConfig, NoiseConfig, SCENE_PRESETS, benchmark_scene_preset,
-                                  deformation_geometry, formed_scene_preset, forward_displacement,
-                                  generate_codebook, generate_dataset, generate_formed_scene,
+                                  deformation_geometry, amplicon_scene_preset, forward_displacement,
+                                  generate_codebook, generate_amplicon_dataset, generate_amplicon_scene,
                                   generate_registration_pair)
 from starfinder.synthetic import _geometry, _observation
 from starfinder.synthetic._formed import _prepare
@@ -72,10 +72,10 @@ def test_one_registry_holds_every_tier():
     assert {n for n, t in tiers.items() if t == 'fixture'} == {'formed-small-v1', 'formed-z1-v1'}
     assert {n for n, t in tiers.items() if t == 'development_fixture'} == set(synthetic.DEVELOPMENT_FIXTURES)
     for name in SCENE_PRESETS:
-        book, config = formed_scene_preset(name)
+        book, config = amplicon_scene_preset(name)
         assert tuple(config.shape_zyx) == tuple(SCENE_PRESETS[name]['shape_zyx'])
     with pytest.raises(ValueError, match='unknown'):
-        formed_scene_preset('xlarge')
+        amplicon_scene_preset('xlarge')
 
 
 @pytest.mark.parametrize('name,shape,count,seed,z,yx', [
@@ -116,8 +116,8 @@ def test_large_presets_validate_by_configuration_and_memory_estimate(name):
 
 def test_dataset_fovs_own_stream_namespaces_and_appending_ids_changes_nothing():
     book, config = bounded()
-    one = generate_dataset(book, config, fov_ids=('FOV_001',))
-    two = generate_dataset(book, config, fov_ids=('FOV_001', 'FOV_002'))
+    one = generate_amplicon_dataset(book, config, fov_ids=('FOV_001',))
+    two = generate_amplicon_dataset(book, config, fov_ids=('FOV_001', 'FOV_002'))
     for label, image in one.rounds['FOV_001'].items():
         np.testing.assert_array_equal(image, two.rounds['FOV_001'][label])
     assert one.provenance['FOV_001']['image_sha256'] == two.provenance['FOV_001']['image_sha256']
@@ -129,28 +129,28 @@ def test_dataset_fovs_own_stream_namespaces_and_appending_ids_changes_nothing():
         key = two.provenance[fov]['requested_config']['scene_key']
         assert json.loads(key) == [config.scene_key, fov]
     with pytest.raises(ValueError, match='unique'):
-        generate_dataset(book, config, fov_ids=('FOV_001', 'FOV_001'))
+        generate_amplicon_dataset(book, config, fov_ids=('FOV_001', 'FOV_001'))
 
 
 def test_toggling_one_control_changes_no_other_draw():
     book, config = bounded()
-    base = generate_dataset(book, config).rounds['FOV_001']
+    base = generate_amplicon_dataset(book, config).rounds['FOV_001']
     # Disabling mixing changes amplitudes only: placements, noise draws and the
     # identity-held reference geometry are untouched.
-    unmixed = generate_dataset(book, replace(config, readout=replace(config.readout, mixing_enabled=False)))
-    pd.testing.assert_frame_equal(generate_dataset(book, config).formed, unmixed.formed)
+    unmixed = generate_amplicon_dataset(book, replace(config, readout=replace(config.readout, mixing_enabled=False)))
+    pd.testing.assert_frame_equal(generate_amplicon_dataset(book, config).formed, unmixed.formed)
     # Noise-free variants isolate the shared noise draws: toggling noise model or
     # strengths leaves every standardized draw of the other component fixed.
     clean = replace(config, noise=NoiseConfig(), dtype='float64')
     read = replace(clean, noise=NoiseConfig(independent_enabled=True, sigma=3.))
     read_double = replace(clean, noise=NoiseConfig(independent_enabled=True, sigma=6.))
-    images = [generate_dataset(book, c).rounds['FOV_001'] for c in (clean, read, read_double)]
+    images = [generate_amplicon_dataset(book, c).rounds['FOV_001'] for c in (clean, read, read_double)]
     for label in images[0]:
         np.testing.assert_allclose(images[2][label] - images[0][label],
                                    2 * (images[1][label] - images[0][label]), rtol=0, atol=1e-9)
     # A new geometry translation range redraws only the geometry stream.
     moved = replace(config, geometry=replace(config.geometry, translation_max_zyx=(1, 9, 9)))
-    other = generate_dataset(book, moved).rounds['FOV_001']
+    other = generate_amplicon_dataset(book, moved).rounds['FOV_001']
     np.testing.assert_array_equal(other['round1'], base['round1'])
     assert not np.array_equal(other['round2'], base['round2'])
 
@@ -161,9 +161,9 @@ def test_cross_process_byte_repeatability():
 import sys
 sys.path.insert(0, sys.argv[1])
 from test.test_synthetic_contracts import bounded, digest
-from starfinder.synthetic import generate_dataset, generate_registration_pair
+from starfinder.synthetic import generate_amplicon_dataset, generate_registration_pair
 book, config = bounded()
-print(digest(generate_dataset(book, config, fov_ids=('FOV_001', 'FOV_002'))), hash('probe'))
+print(digest(generate_amplicon_dataset(book, config, fov_ids=('FOV_001', 'FOV_002'))), hash('probe'))
 '''
     outputs = [subprocess.check_output([sys.executable, '-c', code, str(ROOT)], text=True, timeout=300,
                                        env=dict(os.environ, PYTHONHASHSEED=value)).split()
@@ -175,8 +175,8 @@ print(digest(generate_dataset(book, config, fov_ids=('FOV_001', 'FOV_002'))), ha
 @pytest.mark.parametrize('dtype', ['uint8', 'uint16'])
 def test_integer_outputs_are_rounded_clipped_float32_accumulation(dtype):
     book, config = bounded(preset_dtype=dtype)
-    floating = generate_dataset(book, replace(config, dtype='float32')).rounds['FOV_001']
-    quantized = generate_dataset(book, config).rounds['FOV_001']
+    floating = generate_amplicon_dataset(book, replace(config, dtype='float32')).rounds['FOV_001']
+    quantized = generate_amplicon_dataset(book, config).rounds['FOV_001']
     limit = np.iinfo(dtype).max
     for label, image in quantized.items():
         assert image.dtype == np.dtype(dtype) and image.shape == (4, 48, 48, 4)
@@ -188,33 +188,33 @@ def test_uint8_preset_scales_intensities_and_stays_mostly_unclipped():
     book, config = benchmark_scene_preset('tiny', dtype='uint8')
     assert config.dtype == 'uint8'
     assert config.brightness.parameters[0] == pytest.approx(np.log(1500 / 16))
-    scene = generate_formed_scene(book, config=replace(config, shape_zyx=(4, 48, 48), count=6))
+    scene = generate_amplicon_scene(book, config=replace(config, shape_zyx=(4, 48, 48), count=6))
     total = sum(sum(c.values()) for c in scene.provenance['clipping_counts'].values())
     assert total <= .01 * 4 * 4 * 48 * 48 * 4
 
 
 def test_accumulation_default_and_float64_option():
     book, config = bounded(dtype='float32', noise=NoiseConfig())
-    single = generate_formed_scene(book, config=config)
-    double = generate_formed_scene(book, config=replace(config, accumulation='float64'))
+    single = generate_amplicon_scene(book, config=config)
+    double = generate_amplicon_scene(book, config=replace(config, accumulation='float64'))
     assert single.provenance['effective_config']['accumulation'] == 'float32'
     assert double.provenance['effective_config']['accumulation'] == 'float64'
     for label, image in single.rounds.items():
         np.testing.assert_allclose(image, double.rounds[label], rtol=1e-5, atol=1e-3)
-    assert generate_formed_scene(book, config=replace(config, dtype='float64')).provenance[
+    assert generate_amplicon_scene(book, config=replace(config, dtype='float64')).provenance[
         'effective_config']['accumulation'] == 'float64'
     with pytest.raises(ValueError, match='accumulation'):
-        generate_formed_scene(book, config=replace(config, accumulation='float16'))
+        generate_amplicon_scene(book, config=replace(config, accumulation='float16'))
 
 
 def test_poisson_noise_replays_the_dependent_stream_and_read_noise():
-    book, base = formed_scene_preset()
+    book, base = amplicon_scene_preset()
     baseline = np.array([[100., 50., 20., 0.]] * 3)
     config = replace(base, count=0, shape_zyx=(4, 32, 32), dtype='float64',
                      background=BackgroundConfig(baseline_enabled=True, baseline=baseline),
                      noise=NoiseConfig(dependent_enabled=True, alpha=2., model='poisson',
                                        independent_enabled=True, sigma=.5))
-    scene = generate_formed_scene(book, config=config)
+    scene = generate_amplicon_scene(book, config=config)
     assert scene.provenance['effective_config']['noise']['model'] == 'poisson'
     for r, label in enumerate(scene.round_labels):
         for c, channel in enumerate(scene.channel_labels):
@@ -229,15 +229,15 @@ def test_poisson_noise_replays_the_dependent_stream_and_read_noise():
     assert abs(values.mean() - 100) < 5 * np.sqrt(200.25 / n)
     assert abs(values.var() - 200.25) < 5 * 200.25 * np.sqrt(2 / n)
     with pytest.raises(ValueError, match='gaussian or poisson'):
-        generate_formed_scene(book, config=replace(config, noise=NoiseConfig(model='uniform')))
+        generate_amplicon_scene(book, config=replace(config, noise=NoiseConfig(model='uniform')))
 
 
 def test_clipping_warning_threshold_and_counts():
-    book, base = formed_scene_preset()
+    book, base = amplicon_scene_preset()
     over = replace(base, count=0, shape_zyx=(1, 10, 10), dtype='uint8',
                    background=BackgroundConfig(baseline_enabled=True, baseline=[[300, 0, 0, 0]] * 3))
     with pytest.warns(RuntimeWarning, match=r'100 of 400 voxel values \(25.0%\)'):
-        scene = generate_formed_scene(book, config=over)
+        scene = generate_amplicon_scene(book, config=over)
     assert scene.provenance['clipping_counts']['round1'] == dict(below=0, above=100)
     # Exactly 1% clipped (4 of 400) stays silent; the count is still recorded.
     one = replace(over, count=None, coordinates=((0, 5, 5),), amplicon_ids=('a',), gene_ids={'a': 'gene-A'},
@@ -245,7 +245,7 @@ def test_clipping_warning_threshold_and_counts():
     import warnings
     with warnings.catch_warnings():
         warnings.simplefilter('error')
-        quiet = generate_formed_scene(book, config=one)
+        quiet = generate_amplicon_scene(book, config=one)
     assert sum(c['above'] for c in quiet.provenance['clipping_counts'].values()) >= 1
 
 
@@ -253,10 +253,10 @@ def test_chunked_noise_and_blockwise_inverse_match_whole_grid(monkeypatch):
     book, config = bounded(dtype='float64')
     config = replace(config, geometry=deformation_geometry('gaussian_large', config.shape_zyx,
                                                            reference_round='round1'))
-    whole = generate_formed_scene(book, config=config)
+    whole = generate_amplicon_scene(book, config=config)
     monkeypatch.setattr(_observation, '_NOISE_CHUNK', 1000)
     monkeypatch.setattr(_geometry, '_BLOCK_VOXELS', 3000)
-    blocked = generate_formed_scene(book, config=config)
+    blocked = generate_amplicon_scene(book, config=config)
     transforms = list(blocked.provenance['transforms'].values())
     assert max(t['inverse']['blocks'] for t in transforms if t['inverse'].get('blocks')) > 1
     for label, image in whole.rounds.items():
@@ -268,13 +268,13 @@ def test_chunked_noise_and_blockwise_inverse_match_whole_grid(monkeypatch):
 def test_affine_and_polynomial_forward_maps_are_literal():
     affine = ((0, 0, 0), (.01, .02, 0), (0, -.01, .03))
     polynomial = ((0,) * 6, (.5, 0, 0, 0, 0, 1.), (0, 0, -.5, 0, .25, 0))
-    book, base = formed_scene_preset()
+    book, base = amplicon_scene_preset()
     geometry = GeometryConfig(affine_enabled=True, affine_zyx=(affine,) * 3,
                               polynomial_enabled=True, polynomial_zyx=(polynomial,) * 3,
                               reference_round='round10')
     config = replace(base, shape_zyx=(5, 21, 41), coordinates=((1, 3, 30),), amplicon_ids=('p',),
                      gene_ids={'p': 'gene-A'}, dtype='float64', geometry=geometry)
-    scene = generate_formed_scene(book, config=config)
+    scene = generate_amplicon_scene(book, config=config)
     q = np.array([1., 3., 30.])
     center, h = np.array([2., 10., 20.]), 20.
     u = (q - center) / h
@@ -291,14 +291,14 @@ def test_affine_and_polynomial_forward_maps_are_literal():
 
 
 def test_random_affine_polynomial_and_magnitude_bounds():
-    book, base = formed_scene_preset()
+    book, base = amplicon_scene_preset()
     shape = (6, 40, 60)
     extent = (np.array(shape) - 1) / 2
     geometry = GeometryConfig(affine_enabled=True, affine_max_zyx=(.1, 1., 2.),
                               polynomial_enabled=True, polynomial_max_zyx=(.1, 1., 2.),
                               local_enabled=True, centers_zyx=((2, 20, 30),), scales=(10,),
                               local_magnitude=1.5, reference_round='round10')
-    scene = generate_formed_scene(book, config=replace(base, shape_zyx=shape, count=0, geometry=geometry))
+    scene = generate_amplicon_scene(book, config=replace(base, shape_zyx=shape, count=0, geometry=geometry))
     rounds = scene.provenance['effective_config']['geometry']['rounds']
     for label, record in rounds.items():
         if label == 'round10':
@@ -313,15 +313,15 @@ def test_random_affine_polynomial_and_magnitude_bounds():
         assert (displacement <= np.array([.1, 1., 2.]) * 2 + 1.5 + 1e-6).all()
         assert record['lipschitz_bound'] <= .5
     with pytest.raises(ValueError, match='select supplied vectors, strength or local_magnitude'):
-        generate_formed_scene(book, config=replace(base, geometry=GeometryConfig(
+        generate_amplicon_scene(book, config=replace(base, geometry=GeometryConfig(
             local_enabled=True, centers_zyx=((1, 2, 2),), strength=.1, local_magnitude=.1)))
     with pytest.raises(ValueError, match='reference_round'):
-        generate_formed_scene(book, config=replace(base, geometry=GeometryConfig(reference_round='nope')))
+        generate_amplicon_scene(book, config=replace(base, geometry=GeometryConfig(reference_round='nope')))
     with pytest.raises(ValueError, match='Z=1'):
-        generate_formed_scene(book, config=replace(base, shape_zyx=(1, 8, 8), geometry=GeometryConfig(
+        generate_amplicon_scene(book, config=replace(base, shape_zyx=(1, 8, 8), geometry=GeometryConfig(
             affine_enabled=True, affine_zyx=(((.1, 0, 0), (0, 0, 0), (0, 0, 0)),) * 3)))
     with pytest.raises(ValueError, match='invertibility'):
-        generate_formed_scene(book, config=replace(base, geometry=GeometryConfig(
+        generate_amplicon_scene(book, config=replace(base, geometry=GeometryConfig(
             affine_enabled=True, affine_zyx=((((.6, 0, 0), (0, 0, 0), (0, 0, 0)),) * 3))))
 
 
@@ -395,7 +395,7 @@ def test_registration_pairs_share_one_scene_and_record_forward_maps():
 
 def test_historical_truth_is_derived_from_round_truth():
     book, config = bounded()
-    result = generate_dataset(book, config, fov_ids=('FOV_001', 'FOV_002'), preset='tiny')
+    result = generate_amplicon_dataset(book, config, fov_ids=('FOV_001', 'FOV_002'), preset='tiny')
     truth = result.historical_truth
     assert truth['version'] == '2.0' and truth['n_rounds'] == 4 and truth['n_channels'] == 4
     assert truth['image_shape'] == [4, 48, 48] and truth['n_genes'] == 12
@@ -420,8 +420,8 @@ def test_dataset_reference_round_never_moves_and_other_draws_are_unchanged():
     # Without a reference round in the geometry, the first round is the
     # reference and is held at identity; every other round keeps its draws.
     unset = replace(config, geometry=replace(config.geometry, reference_round=None))
-    implicit = generate_dataset(book, unset, fov_ids=('FOV_001',))
-    explicit = generate_dataset(book, config, fov_ids=('FOV_001',))
+    implicit = generate_amplicon_dataset(book, unset, fov_ids=('FOV_001',))
+    explicit = generate_amplicon_dataset(book, config, fov_ids=('FOV_001',))
     assert implicit.historical_truth['reference_round'] == 'round1'
     assert implicit.historical_truth['fovs']['FOV_001']['shifts']['round1'] == [0.0, 0.0, 0.0]
     truth = implicit.round_truth.set_index(['amplicon_id', 'round_label'])
@@ -466,6 +466,6 @@ def test_per_point_inverse_matches_whole_block_iteration(name):
     assert point_diag['stopping'] == 'per_point' and point_diag['max_residual'] <= 2e-10
     assert point_diag['iterations'] == block_diag['iterations']
     np.testing.assert_allclose(_geometry._forward(point, mapping), grid, rtol=0, atol=2e-10)
-    scene = generate_formed_scene(cb, config=config)
+    scene = generate_amplicon_scene(cb, config=config)
     moving = next(t for t in scene.provenance['transforms'].values() if t['round_label'] == name)
     assert moving['inverse']['stopping'] == 'per_point'

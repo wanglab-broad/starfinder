@@ -1,6 +1,6 @@
 """The six context presets against the page's tables (docs/synthetic-cellular-scene-validation.md, GN2, preset part).
 
-Every value of ``context_scene_preset`` is compared with the PS1 tables of docs/synthetic-cellular-scene.md
+Every value of ``cellular_scene_preset`` is compared with the PS1 tables of docs/synthetic-cellular-scene.md
 ("Presets": the common parameters and the table of each context, with the ``slow`` pixels of the decision of
 2026-10-15), written here from the page, not from the module; no preset uses the ``boundary`` source (O2).
 Floats are compared within the project's absolute 1e-9 (the page states no other bound for a configuration value).
@@ -12,9 +12,9 @@ import numpy as np
 import pytest
 
 import starfinder.synthetic as synthetic
-from starfinder.synthetic import (CONTEXT_PRESET_VERSION, CONTEXT_PRESETS, SAMPLE_PRESETS, BackgroundConfig,
-                                  CellTypeConfig, ContextSceneConfig, NoiseConfig, OutputScaleConfig,
-                                  ScalarDistribution, context_scene_preset, development_codebook, sample_scene_preset)
+from starfinder.synthetic import (CELLULAR_PRESET_VERSION, CELLULAR_PRESETS, SAMPLE_PRESETS, BackgroundConfig,
+                                  CellTypeConfig, CellularSceneConfig, NoiseConfig, OutputScaleConfig,
+                                  ScalarDistribution, cellular_scene_preset, development_codebook, sample_scene_preset)
 from starfinder.synthetic._presets import _appearance
 from starfinder.synthetic._sample import _layout
 
@@ -66,24 +66,24 @@ def lognormal(dist, median, sd):
 
 
 def test_registry_names_and_version():
-    assert CONTEXT_PRESET_VERSION == "context-presets-v1"
-    assert list(CONTEXT_PRESETS) == NAMES
-    assert {"CONTEXT_PRESETS", "CONTEXT_PRESET_VERSION", "context_scene_preset"} <= set(synthetic.__all__)
-    for name, entry in CONTEXT_PRESETS.items():
+    assert CELLULAR_PRESET_VERSION == "context-presets-v1"
+    assert list(CELLULAR_PRESETS) == NAMES
+    assert {"CELLULAR_PRESETS", "CELLULAR_PRESET_VERSION", "cellular_scene_preset"} <= set(synthetic.__all__)
+    for name, entry in CELLULAR_PRESETS.items():
         assert entry["version"] == "context-presets-v1" and entry["seed"] == 42 and entry["scene_key"] == name
         assert entry["tier"] == ("slow" if "-slow-" in name else "routine")
     # SAMPLE_PRESETS keeps its two keys, and the sample presets are unchanged by the new registry.
     assert list(SAMPLE_PRESETS) == ["sample-tiny-v1", "sample-small-v1"]
     with pytest.raises(ValueError, match="unknown context preset"):
-        context_scene_preset("context-dense3d-v2")
+        cellular_scene_preset("context-dense3d-v2")
 
 
 @pytest.mark.parametrize("name", NAMES)
 def test_gn2_every_value_equals_the_page_table(name):
     p = PRESET[name]
     c = CONTEXT[p["context"]]
-    book, config = context_scene_preset(name)
-    assert isinstance(config, ContextSceneConfig)
+    book, config = cellular_scene_preset(name)
+    assert isinstance(config, CellularSceneConfig)
     # The common parameters.
     reference = development_codebook("balanced")
     assert book.genes == reference.genes and book.round_labels == reference.round_labels and book.n_genes == 16

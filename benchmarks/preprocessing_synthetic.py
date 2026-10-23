@@ -6,7 +6,7 @@ docs/preprocessing-algorithms.md (*Evaluation design for task groups 5 and 6*)
 and writes tables, curves and a manifest to an output directory outside Git.
 
 Scenes are development_scene_preset conditions with only existing
-FormedSceneConfig fields changed (shape, count, seed, dtype, per-FOV gain and a
+AmpliconSceneConfig fields changed (shape, count, seed, dtype, per-FOV gain and a
 uniform intensity scale); the generator is not changed. Every arm is processed
 by FOV.run (recipe, snapshots, registration), then detected with local maxima
 in noise mode over the threshold grid, extracted, decoded and filtered with
@@ -52,7 +52,7 @@ from starfinder.preprocessing._diagnostics import channel_diagnostics
 from starfinder.registration import RegistrationSignalConfig, TranslationConfig
 from starfinder.spot_finding import LocalMaximaConfig
 from starfinder.synthetic import (CALIBRATED_CONDITIONS, BackgroundConfig, NoiseConfig, ScalarDistribution,
-    TextureConfig, calibrated_scene_preset, development_scene_preset, generate_formed_scene)
+    TextureConfig, calibrated_scene_preset, development_scene_preset, generate_amplicon_scene)
 
 SCHEMA = "starfinder.benchmark.preprocessing_synthetic/1"
 THRESHOLDS = (2.0, 3.0, 4.0, 5.0, 6.0, 8.0, 10.0, 12.0, 15.0)
@@ -78,7 +78,7 @@ SNAPSHOT = "bg_corrected"
 #: Snapshot of recipe 1's normalized image, the input of its reconstruction step.
 NORMALIZED = "normalized"
 
-#: Each condition names, per group of FormedSceneConfig fields, the development
+#: Each condition names, per group of AmpliconSceneConfig fields, the development
 #: condition whose value it takes; unnamed groups come from "clean".
 CONDITIONS = {
     "clean": {},
@@ -200,10 +200,10 @@ def background_radius(config):
 
 def generate(book, config):
     """Observed scene plus float64 background truth and signal truth rounds."""
-    scene = generate_formed_scene(book, config=config)
-    background = generate_formed_scene(book, config=replace(config, brightness=ScalarDistribution(parameters=(0.0,)),
+    scene = generate_amplicon_scene(book, config=config)
+    background = generate_amplicon_scene(book, config=replace(config, brightness=ScalarDistribution(parameters=(0.0,)),
         noise=NoiseConfig(), dtype="float64", accumulation="float64"))
-    signal = generate_formed_scene(book, config=replace(config, background=BackgroundConfig(), noise=NoiseConfig(),
+    signal = generate_amplicon_scene(book, config=replace(config, background=BackgroundConfig(), noise=NoiseConfig(),
         dtype="float64", accumulation="float64"))
     ref = book.round_labels[0]
     truth = scene.round_truth[(scene.round_truth.round_label == ref) & scene.round_truth.emitting
@@ -1282,7 +1282,7 @@ def clipped_fraction(scene):
 
 def _saturation_fraction(dtype, seed, k):
     book, config = calibrated_scene_config("saturation", dtype=dtype, seed=seed, k=k)
-    return clipped_fraction(generate_formed_scene(book, config=config))
+    return clipped_fraction(generate_amplicon_scene(book, config=config))
 
 
 def saturation_k(dtype, *, fraction=_saturation_fraction, target=SATURATION_FRACTION, seeds=DEV_SEEDS,

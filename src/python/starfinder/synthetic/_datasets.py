@@ -1,4 +1,4 @@
-"""Multi-FOV datasets and registration pairs built from formed scenes."""
+"""Multi-FOV datasets and registration pairs built from amplicon scenes."""
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
@@ -11,7 +11,7 @@ from starfinder.readout import Codebook
 from starfinder.image import ImageMetadata
 
 from ._common import _json, _label
-from ._formed import FormedSceneConfig, _generate
+from ._formed import AmpliconSceneConfig, _generate
 from ._observation import NoiseConfig
 from ._geometry import _blocks, _forward
 from ._presets import PRESET_VERSION, _with_seed, registration_scene_preset
@@ -25,7 +25,7 @@ _HISTORICAL_NAMES = {"gene_id": "gene", "color_sequence": "color_seq"}
 
 @dataclass
 class SyntheticDataset:
-    """Formed scenes for several FOVs, their truth tables and provenance.
+    """Amplicon scenes for several FOVs, their truth tables and provenance.
 
     ``rounds[fov][round_label]`` holds ZYXC arrays in codebook order, or is
     empty for every FOV when images were handed to ``on_round``. ``metadata``
@@ -105,10 +105,10 @@ def _fov_truth(scene, reference):
     return record
 
 
-def generate_dataset(codebook: Codebook, config: FormedSceneConfig, *,
-                     fov_ids: tuple[str, ...] = ("FOV_001",), preset: str | None = None,
-                     on_round: Callable | None = None) -> SyntheticDataset:
-    """Generate one formed scene per FOV ID and derive historical truth.
+def generate_amplicon_dataset(codebook: Codebook, config: AmpliconSceneConfig, *,
+                              fov_ids: tuple[str, ...] = ("FOV_001",), preset: str | None = None,
+                              on_round: Callable | None = None) -> SyntheticDataset:
+    """Generate one amplicon scene per FOV ID and derive historical truth.
 
     Each FOV uses ``config`` with ``FOV_id`` set and its own stream namespace,
     scene key ``["<config.scene_key>", "<FOV ID>"]``; appending IDs never
@@ -120,8 +120,8 @@ def generate_dataset(codebook: Codebook, config: FormedSceneConfig, *,
     handed over as soon as it is generated and not retained, so at most one
     round is held in memory. ``preset`` is recorded in the historical truth.
     """
-    if not isinstance(config, FormedSceneConfig):
-        raise TypeError("config must be FormedSceneConfig")
+    if not isinstance(config, AmpliconSceneConfig):
+        raise TypeError("config must be AmpliconSceneConfig")
     fov_ids = tuple(fov_ids)
     if not fov_ids or len(set(fov_ids)) != len(fov_ids):
         raise ValueError("fov_ids must be a nonempty tuple of unique labels")
@@ -162,14 +162,14 @@ def generate_registration_pair(preset: str = "small", *, deformation: str = "shi
                                on_round: Callable | None = None) -> SyntheticDataset:
     """Generate one reference/moving pair of a benchmark preset.
 
-    Both rounds image the same formed scene; only the moving round (labelled
+    Both rounds image the same amplicon scene; only the moving round (labelled
     by the deformation name) is moved, by a translation (``shift``) or one of
     DEFORMATION_PRESETS. The forward map is recorded in the scene transforms
     and summarized in ``historical_truth['pairs']``; use forward_displacement
     for the voxel field. The FOV key is the preset name. Signal is in ch00.
     ``seed`` None keeps the preset seed; ``noise=False`` disables both
     residuals. ``on_round(preset, round_label, image, metadata)`` streams
-    rounds as in generate_dataset. Every pair of a preset shares the reference
+    rounds as in generate_amplicon_dataset. Every pair of a preset shares the reference
     image; ``include_reference=False`` skips rendering it again (its truth
     rows are kept).
     """

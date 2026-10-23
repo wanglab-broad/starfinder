@@ -17,8 +17,8 @@ import pytest
 
 import starfinder.synthetic as synthetic
 from starfinder.synthetic import (APPEARANCE_PRESET_VERSION, APPEARANCE_PRESETS, APPEARANCE_TRUTH_VERSION,
-                                  CONTEXT_PRESETS, AppearanceSceneConfig, AugmentationConfig, CompositionConfig,
-                                  LayoutConfig, appearance_scene_preset, context_scene_preset)
+                                  CELLULAR_PRESETS, AppearanceSceneConfig, AugmentationConfig, CompositionConfig,
+                                  LayoutConfig, appearance_scene_preset, cellular_scene_preset)
 from starfinder.synthetic._appearance_bank import BANK_DIRECTORY_VARIABLE
 from starfinder.synthetic._formed import _plain
 
@@ -33,7 +33,7 @@ ACCEPTED = {"appearance-dense3d-v1": "context-dense3d-v1", "appearance-tissue2d-
             "appearance-culture-v1": "context-culture-v1", "appearance-dense3d-slow-v1": "context-dense3d-slow-v1",
             "appearance-tissue2d-slow-v1": "context-tissue2d-slow-v1",
             "appearance-culture-slow-v1": "context-culture-slow-v1"}
-# SHA-256 of CONTEXT_PRESETS (json.dumps, sorted keys) at the batch's base revision 8bf9a5b, before any change.
+# SHA-256 of CELLULAR_PRESETS (json.dumps, sorted keys) at the batch's base revision 8bf9a5b, before any change.
 CONTEXT_PRESETS_SHA256 = "0921de9aa6a45b8cc9454d643eb30fdbf605614a014118c9ea61209dea3a8edc"
 GRID = ("columns", "rows", "fov_shape_zyx", "spacing_zyx", "overlap", "jitter_max_zyx")
 
@@ -64,13 +64,13 @@ def test_six_presets_with_their_version():
 @pytest.mark.parametrize("name", [*ROUTINE_PRESETS, *SLOW_PRESETS])
 def test_each_preset_takes_the_accepted_preset_of_its_context_and_tier(name):
     book, config = appearance_scene_preset(name)
-    accepted_book, accepted = context_scene_preset(ACCEPTED[name])
+    accepted_book, accepted = cellular_scene_preset(ACCEPTED[name])
     assert book.genes == accepted_book.genes and book.round_labels == accepted_book.round_labels
     context = config.context
     a, b = context.sample.acquisition, accepted.sample.acquisition
     for field in fields(a):
         assert close(getattr(a, field.name), getattr(b, field.name)), field.name
-    entry, registry = APPEARANCE_PRESETS[name], CONTEXT_PRESETS[ACCEPTED[name]]
+    entry, registry = APPEARANCE_PRESETS[name], CELLULAR_PRESETS[ACCEPTED[name]]
     for key in GRID:
         assert close(entry[key], registry[key]), key
         assert close(getattr(a, key), registry[key]), key
@@ -117,8 +117,8 @@ def test_slow_presets_name_their_real_bank_by_name_and_sha256(name):
 
 
 def test_the_accepted_presets_are_unchanged():
-    assert len(CONTEXT_PRESETS) == 6 and set(CONTEXT_PRESETS) == set(ACCEPTED.values())
-    digest = hashlib.sha256(json.dumps(CONTEXT_PRESETS, sort_keys=True).encode()).hexdigest()
+    assert len(CELLULAR_PRESETS) == 6 and set(CELLULAR_PRESETS) == set(ACCEPTED.values())
+    digest = hashlib.sha256(json.dumps(CELLULAR_PRESETS, sort_keys=True).encode()).hexdigest()
     assert digest == CONTEXT_PRESETS_SHA256
 
 

@@ -28,7 +28,7 @@ observed(x, c, r) ≈ gain(c, r) × [signal(x, c, r) + background(x, c, r)] + ba
 | Baseline | Camera offset, export offset, near-uniform nonspecific background | `baseline` |
 | Spatial background | Tissue autofluorescence, texture, out-of-focus light | `gradient`, `regions`, `texture` (each can vary along Z) |
 | Bright outliers | Aggregates, debris, hot pixels | No dedicated condition; a few bright `texture` blobs approximate it |
-| FOV content | Tissue density; near-empty fields at tissue edges | FOVs differing in `FormedSceneConfig.density` |
+| FOV content | Tissue density; near-empty fields at tissue edges | FOVs differing in `AmpliconSceneConfig.density` |
 
 The conditions are those of `starfinder.synthetic.development_scene_preset`.
 They isolate one effect each but are not calibrated. Catalog real data are
@@ -210,7 +210,7 @@ The mechanism is `extraction_source` in {doc}`preprocessing-contract`.
   detections; a dense FOV is compressed instead.
 * **Cause.** FOV content: tissue density and near-empty fields at tissue edges.
 * **Targeted condition.** At least three FOVs differing in
-  `FormedSceneConfig.density` (dense, sparse, near-empty), with between-FOV
+  `AmpliconSceneConfig.density` (dense, sparse, near-empty), with between-FOV
   gain drift as a secondary case.
 * **Why the benefit may be small.** When FOVs have similar content, per-FOV and
   sample-level statistics coincide.

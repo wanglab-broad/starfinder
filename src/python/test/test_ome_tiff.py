@@ -166,10 +166,10 @@ def test_checkpoint_saved_under_the_earlier_tif_name_reloads(tmp_path):
 
 
 def test_formed_scene_images_are_ome_tiff(tmp_path):
-    from starfinder.synthetic import development_scene_preset, generate_formed_scene, save_formed_scene
+    from starfinder.synthetic import development_scene_preset, generate_amplicon_scene, save_amplicon_scene
     book, config = development_scene_preset('clean', size='z1')
-    scene = generate_formed_scene(book, config=config)
-    save_formed_scene(scene, tmp_path / 'scene')
+    scene = generate_amplicon_scene(book, config=config)
+    save_amplicon_scene(scene, tmp_path / 'scene')
     for label in scene.round_labels:
         path = tmp_path / 'scene' / 'images' / f'{label}.ome.tif'
         image = scene.rounds[label]

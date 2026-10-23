@@ -64,11 +64,12 @@ being run remain the same. It uses the public
 
 The source is the repository's
 {py:func}`~starfinder.synthetic.benchmark_scene_preset` **tiny** preset,
-generated locally with a fixed seed of **42** through the same writer as
-`starfinder synthetic generate --mode e2e --preset tiny --seed 42`. The writer
-saves the requested configuration and provenance to `synthetic/generation.json`
-and generated truth to `synthetic/ground_truth.json` (historical truth keys,
-version 2.0).
+generated locally with a fixed seed of **42** by
+{py:func}`~starfinder.synthetic.generate_amplicon_dataset`, the data of
+`starfinder synthetic generate --mode e2e --preset tiny --seed 42`, and written
+by {py:func}`~starfinder.synthetic.save_amplicon_dataset`. The writer saves the
+requested configuration and provenance to `input/generation.json` and generated
+truth to `input/ground_truth.json` (historical truth keys, version 2.0).
 
 | Setting | Value |
 | --- | --- |
@@ -82,11 +83,10 @@ version 2.0).
 | Channel order | `ch00`, `ch01`, `ch02`, `ch03` maps to colors `1`, `2`, `3`, `4` |
 | Detection | `intensity_estimation="noise"`, `intensity_threshold=5.0`, `min_distance=1` |
 | Extraction | `voxel_size=(1, 2, 2)`: half-widths `(dz, dy, dx)`, a 3×5×5 voxel neighborhood |
-| Codebook/filtering | `EncodingConfig(reverse_bases=True)` matches the generator's reversed-barcode encoding; retain exact color-sequence matches |
+| Codebook/filtering | `input/codebook.csv` holds each entry's color sequence, from the generator's reversed-barcode encoding (`EncodingConfig(reverse_bases=True)`); retain exact color-sequence matches |
 
-The example persistence adapter writes `synthetic/FOV_001/round1/ch00.tif`; the dataset loader
-expects `input/round1/FOV_001/ch00.tif`. The script copies the small TIFFs into
-that second layout. Both layouts remain available for inspection. The direct
+The writer saves each channel as `input/round1/FOV_001/ch00.tif`, the round/FOV
+layout that the dataset loader reads, beside the codebook and the truth files. The direct
 constructor takes resolved sample input/output roots; this example does not use
 a Snakemake YAML or `from_workflow_config` path expansion.
 
@@ -117,11 +117,11 @@ All paths below are relative to `QUICKSTART_OUTPUT`:
 
 | Output | Schema and meaning |
 | --- | --- |
-| `synthetic/generation.json` | Generator and preset versions, seed, dtype, requested/effective configuration and per-FOV provenance |
-| `synthetic/codebook.csv` | `gene,barcode`, where barcode is a nucleotide string |
-| `synthetic/ground_truth.json` | Shape, seed, rounds, genes and FOV records; each spot has gene/barcode/color sequence and 0-based continuous `(z,y,x)` reference position; shifts are `(dz,dy,dx)` |
-| `synthetic/formed.csv`, `synthetic/round_truth.csv`, `synthetic/scene_truth.csv` | Formed amplicons (`gene_id`, `color_sequence`), their per-round positions and visibility, and the per-round view of the channel each color sequence selects (MATLAB-compatible `gene` and `color_seq` columns) |
-| `synthetic/ground_truth_annotation_FOV_*.png` | Generated reference projections with truth annotations, not detected results |
+| `input/<round>/FOV_*/ch*.tif` | Generated channel images, one ZYX `uint16` TIFF per round, FOV and channel |
+| `input/generation.json` | Generator and preset versions, seed, dtype, requested/effective configuration and per-FOV provenance |
+| `input/codebook.csv` | `entry_id,gene_id,color_sequence`; the entry ID is the nucleotide barcode, and the color sequence its four colors |
+| `input/ground_truth.json` | Shape, seed, rounds, genes and FOV records; each spot has gene/barcode/color sequence and 0-based continuous `(z,y,x)` reference position; shifts are `(dz,dy,dx)` |
+| `input/formed.csv`, `input/round_truth.csv`, `input/scene_truth.csv` | Formed amplicons (`gene_id`, `color_sequence`), their per-round positions and visibility, and the per-round view of the channel each color sequence selects (MATLAB-compatible `gene` and `color_seq` columns) |
 | `results/signal/FOV_*_allSpots.csv` | All detected candidates, including coordinates, reference `intensity`, 0-based `channel`, per-round colors/scores, and `color_seq` |
 | `results/signal/FOV_*_goodSpots.csv` | Filtered molecule candidates: exactly `x,y,z,gene`; one row per retained read, not per cell |
 | `results/log/gr_shifts/FOV_*.txt` | CSV despite `.txt` suffix: `fov_id,round,row,col,z`; row/col/z are detected `(dy,dx,dz)` displacements |
@@ -178,4 +178,4 @@ MATLAB, local-registration, and cell-level workflows require separate validation
 :language: python
 ```
 
-The persistence adapter writes each round as it is generated and returns a `SyntheticDataset` with the truth tables. See [synthetic contracts](api/synthetic.rst) for scene eligibility and truth/reproducibility limitations.
+`generate_amplicon_dataset` returns a `SyntheticDataset` with the images and the truth tables, and `save_amplicon_dataset` writes it; `starfinder synthetic generate` streams each round to disk instead. See [synthetic contracts](api/synthetic.rst) for scene eligibility and truth/reproducibility limitations.

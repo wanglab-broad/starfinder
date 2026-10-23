@@ -1,7 +1,7 @@
 """Composition, output, the morphology round and the truth of the real-appearance scene.
 
 See docs/synthetic-real-appearance.md ("Composition", "Truth", "The morphology round", "Random streams").
-``generate_appearance_scene`` places bank entries on the acquisition layout of an unchanged ``ContextSceneConfig``
+``generate_appearance_scene`` places bank entries on the acquisition layout of an unchanged ``CellularSceneConfig``
 (``_appearance_layout._place_appearance``), runs the sample scene's generation with the placed objects as its cells,
 one ordinary cell with one nucleus each (the accepted cell types and molecules of ``_context._Context``, placed by
 rejection with the labels of the placed masks), and composes every stain as a point function of the sample position:
@@ -14,7 +14,7 @@ is computed once per scene on the sample grid; ``B`` is the bank's real backgrou
 a lattice fixed in the sample frame (BG1), or for a closed-form bank its preset's background (BG2). No observation
 stage is added (OB1); an 8-bit stain is ``clip(rint(g · I), 0, 255)`` with ``g`` the median plateau of the bank's
 source images (O8), and a stain without an output is ``I`` cast to the template dtype. The truth is the
-``save_context_scene`` layout with the ellipsoid columns null, plus ``appearance.json``, ``placements.csv`` and
+``save_cellular_scene`` layout with the ellipsoid columns null, plus ``appearance.json``, ``placements.csv`` and
 ``background_patches.csv`` (AT2).
 """
 from __future__ import annotations
@@ -41,9 +41,9 @@ from ._appearance_layout import (_LAYOUT_COMPONENTS, _PAD, AugmentationConfig, L
                                  _bank_kind, _Labels, _labels_from_table, _place_appearance, _prefilter_sigma,
                                  _prefiltered)
 from ._common import _probabilities
-from ._context import (_CONTEXT_COMPONENTS, CONTEXT_PRESET_VERSION, CONTEXT_TRUTH_VERSION, ContextScene,
-                       ContextSceneConfig, _check_stain_names, _Context, _payload, _stain_table, _tables,
-                       save_context_scene)
+from ._context import (_CONTEXT_COMPONENTS, CELLULAR_PRESET_VERSION, CELLULAR_TRUTH_VERSION, CellularScene,
+                       CellularSceneConfig, _check_stain_names, _Context, _payload, _stain_table, _tables,
+                       save_cellular_scene)
 from ._formed import _STREAM_KEY, _STREAM_NAMESPACE, _plain
 from ._observation import evaluate_background
 from ._sample import _cast, _generate, _layout, _real, _streams
@@ -104,7 +104,7 @@ class CompositionConfig:
 class AppearanceSceneConfig:
     """A cellular scene with real appearance (docs/synthetic-real-appearance.md, E1).
 
-    ``context`` is an unchanged ``ContextSceneConfig``: its acquisition, seed, split and scene
+    ``context`` is an unchanged ``CellularSceneConfig``: its acquisition, seed, split and scene
     key, cell types, molecules, territory growth law and morphology round are used; its
     nuclei, packing and the stains' geometry, brightness, edge, texture, unevenness,
     background and noise are not. Each of its stains is the bank channel of its name, with
@@ -117,20 +117,20 @@ class AppearanceSceneConfig:
 
     __hash__ = None
 
-    context: ContextSceneConfig
+    context: CellularSceneConfig
     bank: BankReference
     augmentation: AugmentationConfig = field(default_factory=AugmentationConfig)
     layout: LayoutConfig = field(default_factory=LayoutConfig)
     composition: CompositionConfig = field(default_factory=CompositionConfig)
 
     def __post_init__(self):
-        for name, kind in (("context", ContextSceneConfig), ("bank", BankReference),
+        for name, kind in (("context", CellularSceneConfig), ("bank", BankReference),
                            ("augmentation", AugmentationConfig), ("layout", LayoutConfig),
                            ("composition", CompositionConfig)):
             if not isinstance(getattr(self, name), kind):
                 raise TypeError(f"{name} must be {kind.__name__}")
         if self.context.sample.cells is None:
-            raise ValueError("context.sample.cells must be CellularSceneConfig: the placed objects are its cells")
+            raise ValueError("context.sample.cells must be CellsConfig: the placed objects are its cells")
         if self.context.sample.stain is not None:
             raise ValueError("context.sample.stain must be None: the stains of an appearance scene are its stains, "
                              "each a channel of the bank")
@@ -140,9 +140,9 @@ class AppearanceSceneConfig:
 class AppearanceScene:
     """A generated appearance scene (docs/synthetic-real-appearance.md, "Truth").
 
-    ``context`` is a ``ContextScene`` whose tables and layout are those of the placed objects
+    ``context`` is a ``CellularScene`` whose tables and layout are those of the placed objects
     (one ordinary cell with one nucleus each, the shape columns null, the closed-form stain
-    tables empty) and whose stains are the composed ones; ``save_context_dataset(scene.context,
+    tables empty) and whose stains are the composed ones; ``save_cellular_dataset(scene.context,
     ...)`` writes its dataset. ``placements`` has one row per placed object (the columns of
     ``placements.csv``), ``background_patches`` one row per stain and lattice cell (BG1; empty
     with BG2). ``record`` holds the versions, the requested and effective configuration, the
@@ -150,7 +150,7 @@ class AppearanceScene:
     ``κ`` and ``g`` per stain and the streams.
     """
 
-    context: ContextScene
+    context: CellularScene
     placements: pd.DataFrame
     background_patches: pd.DataFrame
     record: dict
@@ -940,7 +940,7 @@ def generate_appearance_scene(codebook: Codebook, *, config: AppearanceSceneConf
                                     stains=[s.name for s in stains if s.round == "morphology"])
     territory = "CU1" if kind == "cell" else "CT1"
     effective = dict(
-        type="ContextSceneConfig", territory_rule=territory, planar=bool(placed.record["planar"]),
+        type="CellularSceneConfig", territory_rule=territory, planar=bool(placed.record["planar"]),
         z_mid=float(placed.record["z_mid"]), harmonic_terms=[], harmonic_bound=None, empty_radius=None, packing=None,
         types=None if context.types is None else dict(
             names=list(context.types.types),
@@ -949,15 +949,15 @@ def generate_appearance_scene(codebook: Codebook, *, config: AppearanceSceneConf
     streams = dict(placed.log)
     streams.update(log)
     context_record = dict(
-        generator="starfinder.synthetic.generate_appearance_scene", context_truth_version=CONTEXT_TRUTH_VERSION,
-        context_preset_version=CONTEXT_PRESET_VERSION, requested_config=_payload(context),
+        generator="starfinder.synthetic.generate_appearance_scene", context_truth_version=CELLULAR_TRUTH_VERSION,
+        context_preset_version=CELLULAR_PRESET_VERSION, requested_config=_payload(context),
         effective_config=_plain(effective), seed=template.seed,
         stream_scheme=dict(key=list(_STREAM_KEY), namespace=_STREAM_NAMESPACE, encoding="compact UTF-8 JSON array",
                            digest="SHA-256, big-endian integer", bit_generator="PCG64", numpy_version=np.__version__,
                            components={k: dict(entity=e, draws=d) for k, (e, d) in {
                                **_CONTEXT_COMPONENTS, **_LAYOUT_COMPONENTS, **_COMPOSITION_COMPONENTS}.items()},
                            streams=list(streams.values())))
-    context_scene = ContextScene(scene, images, rounds, **tables, record=context_record)
+    context_scene = CellularScene(scene, images, rounds, **tables, record=context_record)
 
     placement = placed.record
     density_record = dict(placement["density"], threshold=threshold if layout_config.density == "visible" else None,
@@ -1041,7 +1041,7 @@ def _point_evaluator(scene, bank):
 def save_appearance_scene(scene: AppearanceScene, directory: Path | str) -> Path:
     """Write an appearance scene to a new or empty directory and return its path.
 
-    Layout (docs/synthetic-real-appearance.md, AT2): the ``save_context_scene`` layout of
+    Layout (docs/synthetic-real-appearance.md, AT2): the ``save_cellular_scene`` layout of
     ``scene.context`` (``nuclei.csv`` and ``cells.csv`` with their columns, the shape columns
     null; ``lobes.csv``, ``harmonics.csv``, ``stain_objects.csv``, ``bright_regions.csv`` and
     ``unevenness.csv`` empty; ``fovs/<fov_id>/stains/<name>.ome.tif`` the composed stains;
@@ -1052,7 +1052,7 @@ def save_appearance_scene(scene: AppearanceScene, directory: Path | str) -> Path
     """
     if not isinstance(scene, AppearanceScene):
         raise TypeError("scene must be AppearanceScene")
-    directory = save_context_scene(scene.context, directory)
+    directory = save_cellular_scene(scene.context, directory)
     scene.placements.to_csv(directory / "placements.csv", index=False)
     scene.background_patches.to_csv(directory / "background_patches.csv", index=False)
     files = {path.relative_to(directory).as_posix(): file_sha256(path)

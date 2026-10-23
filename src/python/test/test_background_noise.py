@@ -10,15 +10,15 @@ import pandas as pd
 import pytest
 
 from starfinder.synthetic import (BackgroundConfig, NoiseConfig, TextureConfig, ScalarDistribution,
-                                  ReadoutEffectsConfig, formed_scene_preset, generate_formed_scene)
+                                  ReadoutEffectsConfig, amplicon_scene_preset, generate_amplicon_scene)
 from starfinder.synthetic._observation import _noise, _observe, evaluate_background
 
 pytestmark = pytest.mark.synthetic
 
 
 def generate(background=BackgroundConfig(), noise=NoiseConfig(), **kwargs):
-    book, config = formed_scene_preset()
-    return generate_formed_scene(book, config=replace(config, shape_zyx=(3, 7, 9), dtype='float64',
+    book, config = amplicon_scene_preset()
+    return generate_amplicon_scene(book, config=replace(config, shape_zyx=(3, 7, 9), dtype='float64',
                                                      background=background, noise=noise, **kwargs))
 
 
@@ -164,8 +164,8 @@ def test_invalid_noise_even_disabled_empty(kwargs):
 
 
 def test_noise_statistics_and_signed_output():
-    book, base = formed_scene_preset()
-    scene = generate_formed_scene(book, config=replace(base, count=0, shape_zyx=(8, 32, 32), dtype='float64',
+    book, base = amplicon_scene_preset()
+    scene = generate_amplicon_scene(book, config=replace(base, count=0, shape_zyx=(8, 32, 32), dtype='float64',
         background=BackgroundConfig(baseline_enabled=True, baseline=[[9]*4]*3),
         noise=NoiseConfig(True, 4, True, 2)))
     values = np.concatenate([a.ravel() for a in scene.rounds.values()])
@@ -201,18 +201,18 @@ def test_texture_placement_and_supplied_properties():
 
 
 def test_noise_cast_once_and_round_channel_streams():
-    book, base = formed_scene_preset()
+    book, base = amplicon_scene_preset()
     config = replace(base, count=0, shape_zyx=(1, 3, 3), dtype='float64',
         background=BackgroundConfig(baseline_enabled=True, baseline=[[0, .5, 1.5, 255.5]]*3))
     # 9 of 36 values (25%) clip in every round, above the 1% warning level.
     with pytest.warns(RuntimeWarning, match='9 of 36 voxel values'):
-        scene = generate_formed_scene(book, config=replace(config, dtype='uint8'))
+        scene = generate_amplicon_scene(book, config=replace(config, dtype='uint8'))
     np.testing.assert_array_equal(scene.rounds['round10'][0, 0, 0], [0, 0, 2, 255])
     assert payload(scene)['clipping_counts']['round10']['above'] == 9
     config = replace(config, noise=NoiseConfig(independent_enabled=True, sigma=10))
-    signed = generate_formed_scene(book, config=config)
+    signed = generate_amplicon_scene(book, config=config)
     with pytest.warns(RuntimeWarning, match='clipped to the uint8 range'):
-        cast = generate_formed_scene(book, config=replace(config, dtype='uint8'))
+        cast = generate_amplicon_scene(book, config=replace(config, dtype='uint8'))
     for label, image in signed.rounds.items():
         np.testing.assert_array_equal(cast.rounds[label], np.clip(np.rint(image), 0, 255).astype('uint8'))
     streams = payload(signed)['stream_scheme']['streams']
@@ -229,8 +229,8 @@ def test_observation_cross_process_repeatability():
 import hashlib,json
 from dataclasses import replace
 from starfinder.synthetic import *
-b,c=formed_scene_preset()
-s=generate_formed_scene(b,config=replace(c,shape_zyx=(1,7,9),
+b,c=amplicon_scene_preset()
+s=generate_amplicon_scene(b,config=replace(c,shape_zyx=(1,7,9),
     background=BackgroundConfig(texture_enabled=True,tissue_weights=[[1]*4]*3),
     noise=NoiseConfig(True,4,True,2)))
 h=hashlib.sha256()

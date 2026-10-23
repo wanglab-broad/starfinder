@@ -114,7 +114,7 @@ class TiffVolume:
 
 
 def synthetic_channel(scene, round_label, channel_label):
-    """ZYX view of one channel of a starfinder.synthetic FormedScene round."""
+    """ZYX view of one channel of a starfinder.synthetic AmpliconScene round."""
     return scene.rounds[round_label][..., scene.channel_labels.index(channel_label)]
 
 

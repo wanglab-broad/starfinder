@@ -1,4 +1,4 @@
-"""The example docs/examples/context_scene.py runs, as test_background_noise.py runs its example.
+"""The example docs/examples/cellular_scene.py runs, as test_background_noise.py runs its example.
 
 The example generates and saves ``context-tissue2d-v1`` and ``appearance-tissue2d-v1`` on its
 closed-form bank, so it reads no real data and needs no ``STARFINDER_APPEARANCE_BANKS``.
@@ -13,7 +13,7 @@ import pytest
 
 pytestmark = pytest.mark.synthetic
 
-EXAMPLE = Path(__file__).resolve().parents[3] / 'docs' / 'examples' / 'context_scene.py'
+EXAMPLE = Path(__file__).resolve().parents[3] / 'docs' / 'examples' / 'cellular_scene.py'
 
 
 @pytest.mark.slow

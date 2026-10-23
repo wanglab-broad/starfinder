@@ -13,7 +13,7 @@ import pandas as pd
 import pytest
 
 from starfinder.synthetic import (ReadoutEffectsConfig, ScalarDistribution,
-                                  formed_scene_preset, generate_formed_scene)
+                                  amplicon_scene_preset, generate_amplicon_scene)
 
 pytestmark = pytest.mark.synthetic
 
@@ -21,8 +21,8 @@ EXAMPLE = Path(__file__).resolve().parents[3] / 'docs/examples/readout_effects.p
 
 
 def generate(effects=ReadoutEffectsConfig(), **kwargs):
-    book, config = formed_scene_preset()
-    return generate_formed_scene(book, config=replace(config, readout=effects, **kwargs))
+    book, config = amplicon_scene_preset()
+    return generate_amplicon_scene(book, config=replace(config, readout=effects, **kwargs))
 
 
 @pytest.mark.parametrize('depth', [3, 1])
@@ -139,12 +139,12 @@ def test_cross_process_repeatability():
 import hashlib, json
 from starfinder.synthetic import *
 from dataclasses import replace
-b,c = formed_scene_preset()
+b,c = amplicon_scene_preset()
 e = ReadoutEffectsConfig(dropout_enabled=True, dropout_probability=(.2,.5,.8),
     weakening_enabled=True, weakening_probability=(.3,.7,.4), weak_factor=(.2,.4,.6),
     loss_enabled=True, loss_probability=.5, trend_enabled=True, trend_base=.9,
     mixing_enabled=True, mixing=[[[1,.1,0,0],[.2,1,0,0],[0,0,1,.3],[0,0,0,1]]]*3)
-s = generate_formed_scene(b, config=replace(c,readout=e))
+s = generate_amplicon_scene(b, config=replace(c,readout=e))
 h=hashlib.sha256()
 for a in [*s.rounds.values(),s.intended,s.pre_mix,s.realized]: h.update(a.tobytes())
 for t in [s.formed,s.round_truth]: h.update(t.to_json(orient='table').encode())
@@ -158,12 +158,12 @@ print(h.hexdigest())
 
 def test_acquisition_order_mapping_and_single_round_loss_default():
     from starfinder.readout import Codebook
-    book, config = formed_scene_preset()
+    book, config = amplicon_scene_preset()
     matrix = np.repeat(np.eye(4)[None], 3, axis=0)
     matrix[0, 2, 1] = .5
     matrix[1, 3, 0] = .25
     matrix[2, 0, 3] = 2
-    scene = generate_formed_scene(book, config=replace(config, count=1,
+    scene = generate_amplicon_scene(book, config=replace(config, count=1,
         gene_ids={'amplicon-0': 'gene-A'}, brightness=ScalarDistribution(parameters=(8,)),
         readout=ReadoutEffectsConfig(mixing_enabled=True, mixing=matrix,
             gain_enabled=True, gains=((1, .5, 1, 1), (.25, 1, 1, 1), (1, 1, 1, 2)))))
@@ -172,7 +172,7 @@ def test_acquisition_order_mapping_and_single_round_loss_default():
     np.testing.assert_array_equal(scene.realized[0], [[0, 2, 32], [4, 0, 0], [2, 0, 0], [0, .5, 16]])
     one = Codebook(pd.DataFrame({'gene_id': ['gene-A'], 'color_sequence': ['1']}),
                    ('only',), book.channel_labels, book.color_to_channel)
-    lost = generate_formed_scene(one, config=replace(config, count=1,
+    lost = generate_amplicon_scene(one, config=replace(config, count=1,
         readout=ReadoutEffectsConfig(loss_enabled=True, loss_probability=1)))
     assert lost.round_truth.first_loss_round.tolist() == [0]
     assert lost.round_truth.lost.tolist() == [True]

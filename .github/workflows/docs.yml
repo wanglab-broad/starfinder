@@ -118,7 +118,6 @@ jobs:
             ${{ runner.temp }}/docs-validation/*.log
             ${{ runner.temp }}/docs-validation/packages.txt
             ${{ runner.temp }}/docs-validation/quickstart/summary.json
-            ${{ runner.temp }}/docs-validation/quickstart/synthetic_config.json
             ${{ runner.temp }}/docs-validation/recipes/summary.json
             ${{ runner.temp }}/docs-validation/linkcheck/output.*
             ${{ runner.temp }}/docs-validation/html/build-info.json

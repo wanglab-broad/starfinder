@@ -1,4 +1,4 @@
-"""Analytic forward geometry for formed scenes, independent of registration."""
+"""Analytic forward geometry for amplicon scenes, independent of registration."""
 from dataclasses import dataclass
 
 import numpy as np

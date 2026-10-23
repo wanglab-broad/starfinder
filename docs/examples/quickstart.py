@@ -7,7 +7,7 @@ from starfinder.readout import NeighborhoodSumConfig, ReadFilterConfig
 from starfinder.spot_finding import LocalMaximaConfig
 import argparse
 import json
-import shutil
+from dataclasses import replace
 from pathlib import Path
 
 from starfinder.registration import TranslationConfig
@@ -16,26 +16,23 @@ import pandas as pd
 
 from starfinder.dataset import RoundState, Dataset
 from starfinder.registration import RegistrationRecipe, RegistrationStep
+from starfinder.synthetic import (BENCHMARK_PRESETS, benchmark_scene_preset, generate_amplicon_dataset,
+                                  save_amplicon_dataset)
 
 
 def main(output: Path) -> None:
     output = output.resolve()
     output.mkdir(parents=True, exist_ok=False)
-    from starfinder.benchmark._synthetic_io import _write_dataset
-    # Same writer as `starfinder synthetic generate --mode e2e --preset tiny --seed 42`.
-    generated = _write_dataset("tiny", output / "synthetic", seed=42, annotations=True)
+    # The tiny benchmark preset at seed 42, the data of `starfinder synthetic generate --mode e2e --preset tiny`.
+    codebook, config = benchmark_scene_preset("tiny")
+    fov_ids = tuple(f"FOV_{i + 1:03d}" for i in range(BENCHMARK_PRESETS["tiny"]["fovs"]))
+    generated = generate_amplicon_dataset(codebook, replace(config, seed=42), fov_ids=fov_ids, preset="tiny")
+    # Images in the round/FOV layout the dataset loader reads, the codebook and the truth files.
+    save_amplicon_dataset(generated, output / "input")
     truth = generated.historical_truth
-
     rounds = list(generated.codebook.round_labels)
     channels = list(generated.channel_labels)
-    # The generator writes FOV/round; the dataset loader expects round/FOV.
-    # Copy these small inputs so both layouts are inspectable and portable.
-    for fov_id in truth["fovs"]:
-        for round_name in rounds:
-            shutil.copytree(
-                output / "synthetic" / fov_id / round_name,
-                output / "input" / round_name / fov_id,
-            )
+    del generated  # The images are on disk; each FOV loads its own below.
 
     dataset = Dataset(
         input_root=output / "input",
@@ -48,7 +45,7 @@ def main(output: Path) -> None:
         fov_pattern="FOV_%03d",
     )
     dataset.rounds.validate()
-    dataset.load_codebook(output / "synthetic" / "codebook.csv", reverse_bases=True)
+    dataset.load_codebook(output / "input" / "codebook.csv")
     summary = {"preset": "tiny", "seed": truth["seed"], "fovs": {}}
     for fov_id in dataset.fov_ids(len(truth["fovs"]), start=1):
         fov = dataset.fov(fov_id)

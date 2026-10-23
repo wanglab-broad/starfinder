@@ -17,7 +17,7 @@ import pytest
 
 from starfinder.io import load_volume_zyxc
 from starfinder.segmentation import ReferenceGrid, import_labels
-from starfinder.synthetic import generate_sample_scene, save_context_scene
+from starfinder.synthetic import generate_sample_scene, save_cellular_scene
 from starfinder.synthetic._context import _context_band, _context_field, _context_labels, _context_stain
 from starfinder.synthetic._observation import evaluate_background_translated
 
@@ -635,7 +635,7 @@ def test_gn17_8bit_output_and_the_dtypes(pair, tmp_path):
     _, config, generated = scene(pair[0])
     _, reference_config, reference = scene(pair[1])
     clipped, voxels = check_8bit(generated, config, reference, reference_config)
-    check_round_trip(generated, save_context_scene(generated, tmp_path / "saved"))
+    check_round_trip(generated, save_cellular_scene(generated, tmp_path / "saved"))
     report = f"GN17 {pair[0]}: voxels clipped at 255 {clipped} of {voxels}"
     if pair[0] == "uint8":
         # ctx_uint8's no-cell copy: the same identity against its own float64 rendering, and its round trip.
@@ -643,7 +643,7 @@ def test_gn17_8bit_output_and_the_dtypes(pair, tmp_path):
         _, empty_reference_config, empty_reference = scene("uint8-empty-float")
         assert empty.sample.nuclei.empty and empty.stain_objects.empty
         empty_clipped, empty_voxels = check_8bit(empty, empty_config, empty_reference, empty_reference_config)
-        check_round_trip(empty, save_context_scene(empty, tmp_path / "empty"))
+        check_round_trip(empty, save_cellular_scene(empty, tmp_path / "empty"))
         report += f"; the no-cell copy: {empty_voxels} 8-bit voxels, {empty_clipped} clipped"
     print(report + "; the 8-bit images equal clip(rint(J · k), 0, 255) of the float64 rendering; float32 and uint8 "
           "images round trip unchanged")
@@ -777,7 +777,7 @@ def test_gn20_one_plane(name, tmp_path):
         assert all(owner[int(n)] == int(c) for n, c in zip(labels["nucleus"][inner], labels["cell"][inner]))
         boundary_total += int(near.sum())
     # The saved labels are read as plane label images.
-    root = save_context_scene(generated, tmp_path / "plane")
+    root = save_cellular_scene(generated, tmp_path / "plane")
     for fov in sample.positions.fov_id:
         grid = ReferenceGrid(shape, sample.fov_metadata[fov], "declared")
         for target, file in (("cell", "cells.tif"), ("nucleus", "nuclei.tif")):

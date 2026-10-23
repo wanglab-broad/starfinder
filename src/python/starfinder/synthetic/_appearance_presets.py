@@ -1,7 +1,7 @@
 """The six appearance presets of the real-appearance scene (docs/synthetic-real-appearance.md, "Presets", PR1).
 
-One routine and one ``slow`` preset per context, beside the six accepted context presets, which stay as they are.
-Each takes the accepted context preset of its context and tier unchanged (its grid, spacing, jitter, overlap, seed,
+One routine and one ``slow`` preset per context, beside the six accepted cellular presets, which stay as they are.
+Each takes the accepted cellular preset of its context and tier unchanged (its grid, spacing, jitter, overlap, seed,
 cell types, molecules, stains and morphology round) except for its own dataset version and scene key. The routine
 presets place the entries of their context's closed-form bank (CF1) by a fixed count (DN3), the count that DN1
 reached once on the same configuration. The ``slow`` presets place the entries of the real banks of SRC2, each named
@@ -61,9 +61,9 @@ _CLOSED_FORM_N = 4
 
 
 def _entry(name):
-    from ._context_presets import CONTEXT_PRESETS
+    from ._context_presets import CELLULAR_PRESETS
     spec = _PRESET_SPECS[name]
-    accepted = CONTEXT_PRESETS[spec["accepted"]]
+    accepted = CELLULAR_PRESETS[spec["accepted"]]
     stored = spec["bank"] is not None
     return dict(
         version=APPEARANCE_PRESET_VERSION, seed=accepted["seed"], split=accepted["split"], scene_key=name,
@@ -77,7 +77,7 @@ def _entry(name):
         max_refusals=spec.get("max_refusals", LayoutConfig().max_refusals))
 
 
-#: Appearance presets (appearance-presets-v1), separate from CONTEXT_PRESETS.
+#: Appearance presets (appearance-presets-v1), separate from CELLULAR_PRESETS.
 APPEARANCE_PRESETS = {name: _entry(name) for name in _PRESET_SPECS}
 
 
@@ -94,17 +94,17 @@ def appearance_scene_preset(name: str) -> tuple[Codebook, AppearanceSceneConfig]
     directory that ``STARFINDER_APPEARANCE_BANKS`` names, until the visible-stain share
     reaches its target (DN1) or placement stops by its refusals in a row (500 for the culture,
     whose cells saturate below its target; 4,000 otherwise). Each preset's context is the
-    accepted context preset of its context and tier (``context_scene_preset``) with the
+    accepted cellular preset of its context and tier (``cellular_scene_preset``) with the
     preset's name as its dataset version
     and scene key; augmentation and composition take their defaults (AU1; H2, BG1 for a real
     bank and BG2 for a closed-form bank, no noise, the bank's median plateau). Unknown names
     raise ValueError.
     """
-    from ._context_presets import context_scene_preset
+    from ._context_presets import cellular_scene_preset
     if name not in _PRESET_SPECS:
         raise ValueError(f"unknown appearance preset: {name}; choose from {list(_PRESET_SPECS)}")
     entry = APPEARANCE_PRESETS[name]
-    codebook, context = context_scene_preset(entry["accepted_preset"])
+    codebook, context = cellular_scene_preset(entry["accepted_preset"])
     fov = replace(context.sample.fov, dataset_version=name, scene_key=name)
     context = replace(context, sample=replace(context.sample, fov=fov))
     if entry["bank_sha256"] is None:

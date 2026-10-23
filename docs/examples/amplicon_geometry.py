@@ -5,14 +5,14 @@ import json
 import numpy as np
 
 from starfinder.synthetic import (BackgroundConfig, GeometryConfig,
-    ScalarDistribution, formed_scene_preset, generate_formed_scene)
+    ScalarDistribution, amplicon_scene_preset, generate_amplicon_scene)
 
 
 def run():
     records = []
     for depth in (3, 1):
         z = depth // 2
-        cb, cfg = formed_scene_preset()
+        cb, cfg = amplicon_scene_preset()
         center = (z, 2, 3)
         geometry = GeometryConfig(translation_enabled=True,
             translations_zyx=((0, 0, .5), (0, 0, 0), (0, 0, -3.5)),
@@ -26,7 +26,7 @@ def run():
             amplicon_ids=('gt-A',), gene_ids={'gt-A': 'gene-A'},
             brightness=ScalarDistribution(parameters=(8,)), geometry=geometry,
             background=background)
-        scene = generate_formed_scene(cb, config=cfg)
+        scene = generate_amplicon_scene(cb, config=cfg)
         np.testing.assert_array_equal(scene.round_truth[['z', 'y', 'x']],
                                       [[z, 2, 3.75], [z, 2, 3], [z, 2, -.5]])
         np.testing.assert_allclose(scene.rounds['round1'][z, 2, 0, 3],

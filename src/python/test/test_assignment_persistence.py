@@ -385,10 +385,10 @@ def test_fov_run_and_segmentation_files_are_untouched_by_assign(tmp_path):
     from starfinder.registration import RegistrationRecipe, RegistrationStep
     from starfinder.io import ImageLoadConfig
     from starfinder.registration import TranslationConfig
-    from starfinder.synthetic import generate_formed_scene
+    from starfinder.synthetic import generate_amplicon_scene
 
     book, config = development_scene_preset("clean", size="small")
-    scene = generate_formed_scene(book, config=config)
+    scene = generate_amplicon_scene(book, config=config)
     data = tmp_path / "data"
     for name, image in scene.rounds.items():
         metadata = replace(scene.round_metadata[name], spacing_zyx=(0.35, 0.1, 0.1), spatial_unit="micrometer")

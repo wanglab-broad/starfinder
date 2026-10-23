@@ -1,6 +1,5 @@
 """Synthetic persistence/reporting adapters: stream generated rounds to files."""
 from pathlib import Path
-import json
 import numpy as np
 
 def _generate_annotated_visualization(
@@ -81,47 +80,6 @@ def _generate_annotated_visualization(
     fig.savefig(output_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
 
-def _json_dump(path, payload):
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False, allow_nan=False) + "\n", encoding="utf-8")
-
-
-def _compact_streams(provenance):
-    """Scene provenance with the per-stream descriptor list replaced by counts.
-
-    Descriptors follow from the documented key scheme and are about 1 kB each;
-    a tissue-sized FOV draws ~10^5 streams, so files keep counts per component.
-    """
-    scheme = provenance.get('stream_scheme')
-    if not isinstance(scheme, dict) or 'streams' not in scheme:
-        return provenance
-    streams = scheme['streams']
-    components = {}
-    for descriptor in streams:
-        components[descriptor[4]] = components.get(descriptor[4], 0) + 1
-    scheme = {k: v for k, v in scheme.items() if k != 'streams'}
-    return dict(provenance, stream_scheme=dict(scheme, stream_count=len(streams),
-                                               streams_per_component=dict(sorted(components.items()))))
-
-
-def _write_truth(directory, result, generation):
-    """Truth tables shared by both modes; generation.json holds requested configs/provenance.
-
-    formed.csv and round_truth.csv keep the Python names. scene_truth.csv and
-    ground_truth.json are MATLAB-compatible and keep the historical ``gene``
-    and ``color_seq`` names (the synthetic ``_HISTORICAL_NAMES`` mapping).
-    """
-    from dataclasses import asdict
-    from starfinder.synthetic._datasets import _HISTORICAL_NAMES
-    result.formed.to_csv(directory / 'formed.csv', index=False)
-    result.round_truth.to_csv(directory / 'round_truth.csv', index=False)
-    result.spot_truth.rename(columns=_HISTORICAL_NAMES).to_csv(directory / 'scene_truth.csv', index=False)
-    _json_dump(directory / 'ground_truth.json', result.historical_truth)
-    provenance = {key: _compact_streams(value) for key, value in result.provenance.items()}
-    _json_dump(directory / 'generation.json', dict(generation, provenance=provenance,
-        metadata={f: {r: asdict(m) for r, m in rounds.items()} for f, rounds in result.metadata.items()},
-        molecular_truth=None))
-
-
 def _write_dataset(preset, output_dir, *, seed=None, dtype='uint16', noise=True, fov_ids=None,
                    annotations=False):
     """Generate an e2e preset round by round into the MATLAB-compatible layout.
@@ -133,10 +91,9 @@ def _write_dataset(preset, output_dir, *, seed=None, dtype='uint16', noise=True,
     SyntheticDataset without images.
     """
     from dataclasses import replace
-    import tifffile
-    from starfinder.synthetic import (BENCHMARK_PRESETS, NoiseConfig, PRESET_VERSION,
-                                      benchmark_scene_preset, generate_dataset)
-    from starfinder.synthetic._formed import _GENERATOR_VERSION
+    from starfinder.synthetic import (BENCHMARK_PRESETS, NoiseConfig, benchmark_scene_preset,
+                                      generate_amplicon_dataset)
+    from starfinder.synthetic._storage import _amplicon_generation, _write_channels, _write_truth
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     codebook, config = benchmark_scene_preset(preset, dtype=dtype)
@@ -146,20 +103,15 @@ def _write_dataset(preset, output_dir, *, seed=None, dtype='uint16', noise=True,
         fov_ids = tuple(f'FOV_{i + 1:03d}' for i in range(BENCHMARK_PRESETS[preset]['fovs']))
 
     def write(fov, label, image, metadata):
-        directory = output_dir / fov / label
-        directory.mkdir(parents=True, exist_ok=True)
-        for c, channel in enumerate(codebook.channel_labels):
-            tifffile.imwrite(directory / f'{channel}.tif', np.ascontiguousarray(image[..., c]),
-                             imagej=True, metadata={'axes': 'ZYX'})
+        _write_channels(output_dir / fov / label, image, codebook.channel_labels)
 
-    result = generate_dataset(codebook, config, fov_ids=fov_ids, preset=preset, on_round=write)
+    result = generate_amplicon_dataset(codebook, config, fov_ids=fov_ids, preset=preset, on_round=write)
     with (output_dir / 'codebook.csv').open('w') as stream:
         stream.write('gene,barcode\n')
         for gene, barcode in zip(codebook.table.gene_id, codebook.table.base_sequence):
             stream.write(f'{gene},{barcode}\n')
-    _write_truth(output_dir, result, dict(generator='starfinder.synthetic.generate_dataset',
-        generator_version=_GENERATOR_VERSION, mode='e2e', preset=preset, preset_version=PRESET_VERSION,
-        seed=config.seed, dtype=config.dtype, noise=noise, fov_ids=list(fov_ids)))
+    _write_truth(output_dir, result, _amplicon_generation(preset=preset, seed=config.seed, dtype=config.dtype,
+                                                          noise=noise, fov_ids=fov_ids))
     if annotations:
         for fov, data in result.historical_truth['fovs'].items():
             _generate_annotated_visualization(output_dir, fov, output_dir / fov, data['spots'],
@@ -191,6 +143,7 @@ def _write_registration_pairs(preset, output_dir, *, seed=None, dtype='uint16', 
     import pandas as pd
     from starfinder.synthetic import DEFORMATION_PRESETS, PRESET_VERSION, generate_registration_pair
     from starfinder.synthetic._formed import _GENERATOR_VERSION
+    from starfinder.synthetic._storage import _json_dump, _write_truth
     from ._reporting import generate_inspection_image
     directory = Path(output_dir) / 'synthetic' / preset
     directory.mkdir(parents=True, exist_ok=True)

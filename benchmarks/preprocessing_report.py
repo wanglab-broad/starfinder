@@ -935,7 +935,7 @@ and its low-benefit threshold is provisional.</p>
 </ul></section>
 <section id="conditions"><h2>Conditions</h2>
 <p>Each condition starts from <code>development_scene_preset("clean")</code> and takes the named groups of
-<code>FormedSceneConfig</code> fields from other development presets; scenes are
+<code>AmpliconSceneConfig</code> fields from other development presets; scenes are
 {code('×'.join(map(str, manifest['parameters']['shape_zyx'])))} voxels (ZYX) with
 {manifest['parameters']['amplicons_per_fov']} amplicons, in <code>uint8</code> and <code>uint16</code>, with
 development seeds {{0, 1, 2}} and held-out seeds {{100, 101, 102}}.</p>

@@ -71,7 +71,7 @@ This issue re-measured it on the current code.
 * **Commit and environment.** `42f652d`, source unchanged; the locked project
   environment (Python 3.12.12, NumPy 2.2.6, SciPy 1.17.0, scikit-image 0.26.0,
   pandas 3.0.0), one thread.
-* **Fixture.** `formed_scene_preset("small")`: one FOV, 16×256×256 voxels, four
+* **Fixture.** `amplicon_scene_preset("small")`: one FOV, 16×256×256 voxels, four
   rounds, four channels, 50 amplicons, seed 42, uint16, generated in memory
   (round 1 SHA-256 `5f2ec890…`). No volume was saved.
 * **Pipeline.** As in the foundation tour notebook: `FOV.run` with a translation

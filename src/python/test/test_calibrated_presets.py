@@ -17,7 +17,7 @@ import pytest
 
 from starfinder.synthetic import (BackgroundConfig, CALIBRATED_CONDITIONS, NoiseConfig, ScalarDistribution,
                                   TextureConfig, calibrated_scene_preset, development_codebook,
-                                  development_scene_preset, formed_scene_preset, generate_formed_scene)
+                                  development_scene_preset, amplicon_scene_preset, generate_amplicon_scene)
 
 pytestmark = pytest.mark.synthetic
 
@@ -53,9 +53,9 @@ def expected_field(round_label, channel, shape, lengths):
 
 
 def scene(noise, shape=(32, 64, 64), **kwargs):
-    book, config = formed_scene_preset()
-    return generate_formed_scene(book, config=replace(config, shape_zyx=shape, dtype='float64', noise=noise,
-                                                      **{'count': 0, **kwargs}))
+    book, config = amplicon_scene_preset()
+    return generate_amplicon_scene(book, config=replace(config, shape_zyx=shape, dtype='float64', noise=noise,
+                                                        **{'count': 0, **kwargs}))
 
 
 def test_correlated_disabled_by_default_and_draws_nothing():
@@ -247,7 +247,7 @@ def test_calibrated_generation_stays_within_bounds(condition):
     shape = config.shape_zyx
     assert shape[0] <= 32 and shape[1] <= 64 and shape[2] <= 64 and config.count <= 80
     with pytest.warns(RuntimeWarning, match='clipped'):
-        result = generate_formed_scene(book, config=config)
+        result = generate_amplicon_scene(book, config=config)
     assert len(result.rounds) == 4 and len(result.channel_labels) == 4
     for image in result.rounds.values():
         assert image.shape == (*shape, 4) and image.dtype == np.uint8

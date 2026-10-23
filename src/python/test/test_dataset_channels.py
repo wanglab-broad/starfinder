@@ -23,7 +23,7 @@ from starfinder.io import ImageLoadConfig, save_volume
 from starfinder.registration import RegistrationSignalConfig, TranslationConfig
 from starfinder.segmentation import (SEGMENTATION_METHODS, FlamingoEnhancementConfig, InputChannel, SegmentationPlan,
                                      SegmentationRun, SegmentationSpec)
-from starfinder.synthetic import development_scene_preset, generate_formed_scene
+from starfinder.synthetic import development_scene_preset, generate_amplicon_scene
 
 pytestmark = [pytest.mark.dataset, pytest.mark.contract]
 
@@ -281,7 +281,7 @@ def threshold(monkeypatch):
 def development(tmp_path_factory):
     """The development preset (small, clean) written as TIFFs, with spacing."""
     book, config = development_scene_preset("clean", size="small")
-    scene = generate_formed_scene(book, config=config)
+    scene = generate_amplicon_scene(book, config=config)
     root = tmp_path_factory.mktemp("development")
     for name, image in scene.rounds.items():
         metadata = replace(scene.round_metadata[name], **SPACING)

@@ -1,7 +1,8 @@
-# Formed-amplicon synthetic model
+# Amplicon scene: the formed-amplicon synthetic model
 
-This page defines the model behind `starfinder.synthetic.generate_formed_scene`:
-its stages, the order of the effects and the random streams. The
+This page defines the model behind the amplicon scene,
+`starfinder.synthetic.generate_amplicon_scene`: its stages, the order of the
+effects and the random streams. The
 {doc}`synthetic API page <api/synthetic>` documents the Python interface,
 including the multi-FOV datasets, registration pairs and benchmark presets
 built from these scenes.
@@ -191,7 +192,7 @@ sizes `z1` (1×32×32) and `small` (9×32×32). Four fixtures are packaged:
 `clean` and `combined` in each size. `combined` enables weakening (middle round
 0.25), trend (base 0.5), gains (0.5), mixing, baseline, gradient, regions,
 texture, both noise terms, translation and one local control, but not loss or
-dropout. Tests save these fixtures with `save_formed_scene` (ZYXC OME-TIFF images
+dropout. Tests save these fixtures with `save_amplicon_scene` (ZYXC OME-TIFF images
 `images/<round>.ome.tif`, CSV truth) and compare every reloaded voxel and truth value with an independent
 oracle. Single-factor conditions remain available on demand; they are
 comparisons against `clean`, not packaged or oracle-checked fixtures.

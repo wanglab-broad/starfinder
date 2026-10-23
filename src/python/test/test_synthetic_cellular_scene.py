@@ -15,8 +15,8 @@ import pytest
 from scipy import ndimage
 
 from starfinder.report._measurements import mecr
-from starfinder.synthetic import (ContextSceneConfig, NoiseConfig, generate_context_scene, generate_sample_scene,
-                                  sample_scene_preset, save_context_scene, save_sample_scene)
+from starfinder.synthetic import (CellularSceneConfig, NoiseConfig, generate_cellular_scene, generate_sample_scene,
+                                  sample_scene_preset, save_cellular_scene, save_sample_scene)
 from starfinder.synthetic._context import _context_labels
 
 from .cellular_checks import check_projection
@@ -80,12 +80,12 @@ def assert_same_sample_scene(expected, got):
 def test_gn1b_every_part_off_is_the_sample_scene(preset, tmp_path):
     book, config = sample_scene_preset(preset)
     expected = generate_sample_scene(book, config=config)
-    result = generate_context_scene(book, config=ContextSceneConfig(sample=config))
+    result = generate_cellular_scene(book, config=CellularSceneConfig(sample=config))
     assert_same_sample_scene(expected, result.sample)
     # With every part off no context. stream is drawn (GN21).
     assert result.record["stream_scheme"]["streams"] == []
     sample_root = save_sample_scene(expected, tmp_path / "sample")
-    context_root = save_context_scene(result, tmp_path / "context")
+    context_root = save_cellular_scene(result, tmp_path / "context")
     sample_files = sorted(p.relative_to(sample_root).as_posix() for p in sample_root.rglob("*") if p.is_file())
     assert sample_files and "sample.json" in sample_files
     for name in sample_files:
@@ -461,7 +461,7 @@ def test_gn11_molecules_per_cell_and_the_count_guard():
     assert context.molecule_mean.nunique() == len(context)  # one lognormal draw per cell (M2)
     guard = replace(config, sample=replace(config.sample, max_count=len(molecules) - 1))
     with pytest.raises(ValueError, match="max_count"):
-        generate_context_scene(book, config=guard)
+        generate_cellular_scene(book, config=guard)
     _, zero, flat = scene("spread-zero")
     # Spread 0 is M1: every mean is the median ("exact" for a non-integer: within 1e-9).
     assert np.all(np.abs(flat.cell_context.molecule_mean.to_numpy() - 20.0) <= 1e-9)
@@ -485,7 +485,7 @@ def test_gn11_molecules_reach_the_formed_generator_unchanged():
 def test_gn11_rendering_identity_of_the_reference_round():
     book, config, _ = scene("types")
     quiet = replace(config, sample=replace(config.sample, fov=replace(config.sample.fov, noise=NoiseConfig())))
-    generated = generate_context_scene(book, config=quiet)
+    generated = generate_cellular_scene(book, config=quiet)
     reference = config.sample.fov.geometry.reference_round
     r = book.round_labels.index(reference)
     shape = np.array(config.sample.acquisition.fov_shape_zyx)
@@ -568,7 +568,7 @@ def test_a_part_at_its_default_gives_the_sample_scene(part):
     book, config = sample_scene_preset("sample-tiny-v1")
     value = dict(territories=TerritoryConfig("reach"), molecules=MoleculeConfig(), types=CellTypeConfig())[part]
     expected = generate_sample_scene(book, config=config)
-    got = generate_context_scene(book, config=ContextSceneConfig(sample=config, **{part: value})).sample
+    got = generate_cellular_scene(book, config=CellularSceneConfig(sample=config, **{part: value})).sample
     pd.testing.assert_frame_equal(got.nuclei, expected.nuclei, check_exact=True)
     pd.testing.assert_frame_equal(got.cells, expected.cells, check_exact=True)
     for key, array in expected.sample_labels.items():
@@ -587,7 +587,7 @@ def test_a_part_at_its_default_gives_the_sample_scene(part):
 def test_the_point_evaluator_on_a_scene_with_every_part_off():
     """With every part off the labels are the sample scene's rule L1; the evaluator rebuilt from the tables agrees."""
     book, config = sample_scene_preset("sample-tiny-v1")
-    generated = generate_context_scene(book, config=ContextSceneConfig(sample=config))
+    generated = generate_cellular_scene(book, config=CellularSceneConfig(sample=config))
     for grid, points, labels in grids(generated):
         cell, nucleus = _context_labels(generated, points)
         assert np.array_equal(cell, labels["cell"]) and np.array_equal(nucleus, labels["nucleus"]), grid

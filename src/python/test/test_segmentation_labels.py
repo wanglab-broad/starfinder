@@ -23,7 +23,7 @@ from starfinder.io import ImageLoadConfig, save_volume
 from starfinder.registration import TranslationConfig
 from starfinder.segmentation import (LabelImportConfig, ReferenceGrid, SegmentationResult, ZExtensionConfig,
     extend_labels_through_z, import_labels, resample_labels, reference_grid_from_file, to_label_dtype)
-from starfinder.synthetic import development_scene_preset, generate_formed_scene
+from starfinder.synthetic import development_scene_preset, generate_amplicon_scene
 
 from .coordination_helpers import digest
 from .test_assignment_golden import label_fixture as assign_golden_labels
@@ -531,7 +531,7 @@ def test_l6_rejections(labels, target_shape, error):
 def development_fov_root(tmp_path_factory):
     """The development preset 'clean', size 'small' (9×32×32, four channels, three rounds), as TIFFs."""
     book, config = development_scene_preset("clean", size="small")
-    scene = generate_formed_scene(book, config=config)
+    scene = generate_amplicon_scene(book, config=config)
     root = tmp_path_factory.mktemp("development")
     for name, image in scene.rounds.items():
         for c, label in enumerate(scene.channel_labels):

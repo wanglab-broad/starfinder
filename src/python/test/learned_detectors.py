@@ -19,8 +19,8 @@ from starfinder.readout import Codebook
 from starfinder.evaluation.spot_finding import evaluate_spots, localization_errors
 from starfinder.image import ImageMetadata
 from starfinder.spot_finding import find_spots
-from starfinder.synthetic import (BackgroundConfig, FormedSceneConfig, NoiseConfig, ScalarDistribution,
-    generate_formed_scene)
+from starfinder.synthetic import (BackgroundConfig, AmpliconSceneConfig, NoiseConfig, ScalarDistribution,
+    generate_amplicon_scene)
 
 META = ImageMetadata("learned-detectors")
 NAMESPACE = "learned-detectors/test"
@@ -106,13 +106,13 @@ def seam_scene(case, seed):
     coords = seam_positions(case, seed)[keep]
     book = Codebook(pd.DataFrame(dict(gene_id=["iso"], color_sequence=["1"])), ("round1",),
                     ("ch00", "ch01", "ch02", "ch03"))
-    config = FormedSceneConfig(
+    config = AmpliconSceneConfig(
         dataset_version="w266-isolated-v1", sample_id="w266", scene_key=f"w266/{case}", seed=seed,
         shape_zyx=SEAM_SHAPES[case], dtype="uint16", coordinates=tuple(map(tuple, coords)),
         brightness=ScalarDistribution(parameters=(1500.0,)),
         axial_width=ScalarDistribution(parameters=(1.5,)), lateral_width=ScalarDistribution(parameters=(1.3,)),
         background=BackgroundConfig(baseline_enabled=True, baseline=((100.0, 100.0, 100.0, 100.0),)),
         noise=NoiseConfig(dependent_enabled=True, alpha=1.0, model="poisson", independent_enabled=True, sigma=3.0))
-    scene = generate_formed_scene(book, config=config)
+    scene = generate_amplicon_scene(book, config=config)
     layout = [seam_layout()[i][2:] for i in keep]
     return scene.rounds["round1"][..., 0], scene.round_truth[["z", "y", "x"]].to_numpy(float), layout

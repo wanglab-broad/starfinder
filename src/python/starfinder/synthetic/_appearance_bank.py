@@ -69,8 +69,8 @@ class BankReference:
     A stored bank is named by ``name`` and ``sha256``: the file ``<name>.npz`` in ``directory``,
     or with ``directory=None`` in the directory that the environment variable
     ``STARFINDER_APPEARANCE_BANKS`` names; ``load_appearance_bank`` refuses a file whose SHA-256
-    differs. A closed-form bank is named by ``preset`` (a ``CONTEXT_PRESETS`` name) and ``n``,
-    the scenes rendered for it (``closed_form_bank``). Give one of the two. Instances are not
+    differs. A closed-form bank is named by ``preset`` (a ``CELLULAR_PRESETS`` name) and ``n``,
+    the scenes rendered for it (``generate_closed_form_bank``). Give one of the two. Instances are not
     hashable.
     """
 
@@ -83,7 +83,7 @@ class BankReference:
     directory: str | None = None
 
     def __post_init__(self):
-        from ._context_presets import CONTEXT_PRESETS
+        from ._context_presets import CELLULAR_PRESETS
         if self.preset is None:
             if not isinstance(self.name, str) or not _NAME.fullmatch(self.name):
                 raise ValueError(f"name: a stored bank needs a plain file name without suffix; got {self.name!r}")
@@ -92,9 +92,9 @@ class BankReference:
         else:
             if self.name is not None or self.sha256 is not None:
                 raise ValueError("a closed-form bank (preset) takes no name and no sha256")
-            if self.preset not in CONTEXT_PRESETS:
+            if self.preset not in CELLULAR_PRESETS:
                 raise ValueError(f"preset: unknown context preset {self.preset!r}; choose from "
-                                 f"{list(CONTEXT_PRESETS)}")
+                                 f"{list(CELLULAR_PRESETS)}")
             if isinstance(self.n, bool) or not isinstance(self.n, int) or self.n < 2:
                 raise ValueError(f"n: a closed-form bank renders at least 2 scenes (one held out); got {self.n!r}")
         if self.directory is not None and not isinstance(self.directory, (str, os.PathLike)):
@@ -758,7 +758,7 @@ def build_appearance_bank(config: Mapping | str | Path, path: str | Path) -> dic
 
 
 def _closed_form_config(preset, seed):
-    """(codebook, config) of a context preset rendered for a closed-form bank: the preset at ``seed`` with noise off
+    """(codebook, config) of a cellular preset rendered for a closed-form bank: the preset at ``seed`` with noise off
     and without the stains' unevenness field, and without molecules.
 
     A source image is scaled by one number, its plateau (BR1), and BR4 refuses a source outside a factor 1.5; the
@@ -767,9 +767,9 @@ def _closed_form_config(preset, seed):
     (docs/synthetic-real-appearance.md, "The bank without real data", the amendment of 2026-10-17). The
     bank reads no molecule, and the molecule draws are streams of their own, so leaving them out changes neither its
     stains nor its labels."""
-    from ._context_presets import context_scene_preset
+    from ._context_presets import cellular_scene_preset
     from ._observation import NoiseConfig
-    book, config = context_scene_preset(preset)
+    book, config = cellular_scene_preset(preset)
     quiet = NoiseConfig()
     sample = replace(config.sample, molecules_per_cell=0.0, ambient_density=0.0,
                      fov=replace(config.sample.fov, seed=seed, noise=quiet))
@@ -781,13 +781,13 @@ def _closed_form_config(preset, seed):
 
 @lru_cache(maxsize=16)
 def _closed_form_scene(preset, seed):
-    from ._context import generate_context_scene
+    from ._context import generate_cellular_scene
     book, config = _closed_form_config(preset, seed)
-    return generate_context_scene(book, config=config)
+    return generate_cellular_scene(book, config=config)
 
 
 def _sample_grid_stain(scene, name):
-    """Stain ``name`` of a context scene on its sample grid, by the scene's own stain functions and background, scaled
+    """Stain ``name`` of a cellular scene on its sample grid, by the scene's own stain functions and background, scaled
     to its output and cast as its FOV images are, with no noise."""
     from ._context import _context_model
     from ._observation import _observe, evaluate_background_translated
@@ -821,9 +821,9 @@ def _context_of(preset):
 
 
 def _closed_form_channels(preset):
-    from ._context_presets import context_scene_preset
+    from ._context_presets import cellular_scene_preset
     names = []
-    for stain in context_scene_preset(preset)[1].stains:
+    for stain in cellular_scene_preset(preset)[1].stains:
         if stain.name not in names:
             names.append(stain.name)
     return names
@@ -844,15 +844,15 @@ def _closed_form_source(preset, seed):
 
 def _closed_form_configuration(preset):
     context = _context_of(preset)
-    from ._context_presets import context_scene_preset
-    spacing = context_scene_preset(preset)[1].sample.acquisition.spacing_zyx
+    from ._context_presets import cellular_scene_preset
+    spacing = cellular_scene_preset(preset)[1].sample.acquisition.spacing_zyx
     return dict(_CLOSED_FORM_BUILD[context], channels=_closed_form_channels(preset), spacing_zyx=list(spacing))
 
 
 @lru_cache(maxsize=8)
 def _closed_form_bank(preset, n):
-    from ._context_presets import CONTEXT_PRESETS
-    seed = int(CONTEXT_PRESETS[preset]["seed"])
+    from ._context_presets import CELLULAR_PRESETS
+    seed = int(CELLULAR_PRESETS[preset]["seed"])
     seeds = list(range(seed, seed + n))
     name = f"closed-form-{preset}-n{n}"
     cfg = _configuration(_closed_form_configuration(preset))
@@ -865,14 +865,14 @@ def _closed_form_bank(preset, n):
     held_out = [dict(image=f"{preset}/seed-{seeds[-1]}", inputs=[dict(role="held_out", preset=preset,
                                                                          seed=seeds[-1])])]
     arrays, record = _build(name, sources, held_out, cfg, inputs)
-    record.update(generator="starfinder.synthetic.closed_form_bank", preset=preset, n=n, seeds=seeds)
+    record.update(generator="starfinder.synthetic.generate_closed_form_bank", preset=preset, n=n, seeds=seeds)
     return AppearanceBank(arrays, record)
 
 
-def closed_form_bank(preset: str, n: int = 4) -> AppearanceBank:
+def generate_closed_form_bank(preset: str, n: int = 4) -> AppearanceBank:
     """A bank built in memory from scenes of the accepted closed-form generator (CF1); no file is read or written.
 
-    The context preset ``preset`` (``CONTEXT_PRESETS``) is rendered at ``n`` seeds, the
+    The cellular preset ``preset`` (``CELLULAR_PRESETS``) is rendered at ``n`` seeds, the
     preset's seed and the ``n − 1`` after it, with noise off and without the stains'
     unevenness field (one exposure per source image, as BR1 scales it), and, because the bank
     does not read them, without molecules. Each scene's sample
@@ -906,7 +906,7 @@ def load_appearance_bank(reference: BankReference) -> AppearanceBank:
     if not isinstance(reference, BankReference):
         raise TypeError("reference must be BankReference")
     if reference.preset is not None:
-        return closed_form_bank(reference.preset, reference.n)
+        return generate_closed_form_bank(reference.preset, reference.n)
     directory = reference.directory
     if directory is None:
         directory = os.environ.get(BANK_DIRECTORY_VARIABLE)

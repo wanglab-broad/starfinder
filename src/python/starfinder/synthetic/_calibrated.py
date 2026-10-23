@@ -12,7 +12,7 @@ import pandas as pd
 from starfinder.readout import Codebook
 
 from ._common import ScalarDistribution
-from ._formed import FormedSceneConfig, ReadoutEffectsConfig
+from ._formed import AmpliconSceneConfig, ReadoutEffectsConfig
 from ._geometry import GeometryConfig
 from ._observation import BackgroundConfig, NoiseConfig, TextureConfig
 
@@ -101,7 +101,7 @@ def development_codebook(variant: str = "balanced") -> Codebook:
 
 
 def calibrated_scene_preset(condition: str = "clean", dtype: str = "uint8", *, seed: int = 0,
-                            codebook: str = "balanced") -> tuple[Codebook, FormedSceneConfig]:
+                            codebook: str = "balanced") -> tuple[Codebook, AmpliconSceneConfig]:
     """Return (codebook, config) for one FOV of calibrated-development-v1.
 
     A development calibration against the development target table of
@@ -173,7 +173,7 @@ def calibrated_scene_preset(condition: str = "clean", dtype: str = "uint8", *, s
         translation_enabled="translation" in enabled, translation_max_zyx=a["translation_max_zyx"],
         local_enabled="local" in enabled, centers_zyx=(center,), scales=(a["local_scale"],),
         local_magnitude=a["local_magnitude"], reference_round=book.round_labels[0])
-    config = FormedSceneConfig(
+    config = AmpliconSceneConfig(
         dataset_version=f"{CALIBRATED_VERSION}-{condition}-{codebook}", sample_id="synthetic",
         scene_key=CALIBRATED_VERSION, seed=seed, split="development", shape_zyx=tuple(a["shape_zyx"]), dtype=dtype,
         count=a["count"], brightness=lognormal(a["brightness_median"] * scale, a["brightness_log_sd"]),

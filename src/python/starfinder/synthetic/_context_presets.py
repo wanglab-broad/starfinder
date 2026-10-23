@@ -1,4 +1,4 @@
-"""The six context presets of the cellular scene (docs/synthetic-cellular-scene.md, "Presets", option PS1).
+"""The six cellular presets of the cellular scene (docs/synthetic-cellular-scene.md, "Presets", option PS1).
 
 One routine and one ``slow`` preset per context of D2: dense 3D tissue, 2D tissue (projection samples) and the
 sparse culture. Each value is the page's table of its context; the routine and ``slow`` presets of a context differ
@@ -10,12 +10,12 @@ from __future__ import annotations
 from starfinder.readout import Codebook
 
 from ._common import ScalarDistribution
-from ._context import (CONTEXT_PRESET_VERSION, CellTypeConfig, ContextSceneConfig, MoleculeConfig, NucleusShapeConfig,
+from ._context import (CELLULAR_PRESET_VERSION, CellTypeConfig, CellularSceneConfig, MoleculeConfig, NucleusShapeConfig,
                        PackingConfig, TerritoryConfig)
-from ._formed import FormedSceneConfig
+from ._formed import AmpliconSceneConfig
 from ._geometry import GeometryConfig
 from ._observation import BackgroundConfig, NoiseConfig
-from ._sample import AcquisitionConfig, CellularSceneConfig, SampleSceneConfig, _layout, _lognormal
+from ._sample import AcquisitionConfig, CellsConfig, SampleSceneConfig, _layout, _lognormal
 from ._stains import BrightRegionConfig, MorphologyRoundConfig, OutputScaleConfig, StainChannelConfig, UnevennessConfig
 
 # The background region's σ in Y and X: 128 LN pixels of 0.194398 µm (24.9 µm), given in sample-grid voxels.
@@ -83,13 +83,13 @@ def _spec(name):
     return spec
 
 
-#: Context presets (context-presets-v1), separate from SAMPLE_PRESETS and SCENE_PRESETS.
-CONTEXT_PRESETS = {name: dict(version=CONTEXT_PRESET_VERSION, seed=42, split="development", scene_key=name,
-                              codebook="development_codebook('balanced')",
-                              **{k: v for k, v in _spec(name).items() if k not in ("morphology", "texture")},
-                              morphology=None if _spec(name)["morphology"] is None
-                              else _spec(name)["morphology"]["name"])
-                   for name in _PRESET_SPECS}
+#: Cellular presets (context-presets-v1), separate from SAMPLE_PRESETS and SCENE_PRESETS.
+CELLULAR_PRESETS = {name: dict(version=CELLULAR_PRESET_VERSION, seed=42, split="development", scene_key=name,
+                               codebook="development_codebook('balanced')",
+                               **{k: v for k, v in _spec(name).items() if k not in ("morphology", "texture")},
+                               morphology=None if _spec(name)["morphology"] is None
+                               else _spec(name)["morphology"]["name"])
+                    for name in _PRESET_SPECS}
 
 
 def _stains(spec, background):
@@ -123,8 +123,8 @@ def _stains(spec, background):
                                          translation_max_zyx=morphology["translation_max_zyx"])
 
 
-def context_scene_preset(name: str) -> tuple[Codebook, ContextSceneConfig]:
-    """Return (codebook, config) for a CONTEXT_PRESETS name: a ``ContextSceneConfig``.
+def cellular_scene_preset(name: str) -> tuple[Codebook, CellularSceneConfig]:
+    """Return (codebook, config) for a CELLULAR_PRESETS name: a ``CellularSceneConfig``.
 
     The six presets of docs/synthetic-cellular-scene.md ("Presets", option PS1):
     ``context-dense3d-v1`` and ``context-dense3d-slow-v1`` (dense 3D tissue, the LN grid),
@@ -152,16 +152,16 @@ def context_scene_preset(name: str) -> tuple[Codebook, ContextSceneConfig]:
     shape = tuple(int(v) for v in layout.shape)
     geometry = GeometryConfig(translation_enabled=True, translation_max_zyx=_COMMON["translation_max_zyx"],
                               reference_round=codebook.round_labels[0])
-    template = FormedSceneConfig(dataset_version=name, sample_id="sample", scene_key=name, seed=42,
-                                 split="development", shape_zyx=spec["fov_shape_zyx"], dtype="float32",
-                                 accumulation="float32", geometry=geometry,
-                                 **{k: v for k, v in _appearance(shape, len(codebook.round_labels), "float32").items()
-                                    if k != "dtype"})
-    cells = CellularSceneConfig(nucleus_axial_radius=_lognormal(*spec["axial"]),
-                                nucleus_lateral_radius=_lognormal(*spec["lateral"]),
-                                nucleus_elongation=ScalarDistribution("folded_lognormal", spec["elongation"]),
-                                empty_radius=_COMMON["empty_radius"], reach=_lognormal(*spec["reach"]),
-                                max_proposals=_COMMON["max_proposals"])
+    template = AmpliconSceneConfig(dataset_version=name, sample_id="sample", scene_key=name, seed=42,
+                                   split="development", shape_zyx=spec["fov_shape_zyx"], dtype="float32",
+                                   accumulation="float32", geometry=geometry,
+                                   **{k: v for k, v in _appearance(shape, len(codebook.round_labels), "float32").items()
+                                      if k != "dtype"})
+    cells = CellsConfig(nucleus_axial_radius=_lognormal(*spec["axial"]),
+                        nucleus_lateral_radius=_lognormal(*spec["lateral"]),
+                        nucleus_elongation=ScalarDistribution("folded_lognormal", spec["elongation"]),
+                        empty_radius=_COMMON["empty_radius"], reach=_lognormal(*spec["reach"]),
+                        max_proposals=_COMMON["max_proposals"])
     if spec["region_height"] is None:
         background = BackgroundConfig(baseline_enabled=True, baseline=((spec["baseline"],),))
     else:
@@ -177,7 +177,7 @@ def context_scene_preset(name: str) -> tuple[Codebook, ContextSceneConfig]:
                                ambient_density=_COMMON["ambient_density"])
     growth = (TerritoryConfig(rule=spec["territory"]) if spec["growth"] is None
               else TerritoryConfig(rule=spec["territory"], growth=_lognormal(*spec["growth"])))
-    config = ContextSceneConfig(
+    config = CellularSceneConfig(
         sample=sample, nuclei=NucleusShapeConfig(lobed_share=spec["lobed_share"]),
         packing=PackingConfig(density=spec["density"], kind_shares=_COMMON["kind_shares"], contact=spec["contact"],
                               overlap=_COMMON["overlap"], gap=_COMMON["gap"], monolayer=spec["monolayer"],

@@ -12,12 +12,12 @@ from ._common import (ScalarDistribution, _array, _distribution, _draw, _integer
 class TextureConfig:
     """Persistent Gaussian blobs, independent of formed molecules.
 
-    Count/density/coordinates and placement follow FormedSceneConfig. Default
+    Count/density/coordinates and placement follow AmpliconSceneConfig. Default
     enabled count is four. Width distributions are axial/lateral (YX shared),
     in voxel indices; brightness is peak intensity. Supplied values use blob-N
     IDs. Enable this component with BackgroundConfig.texture_enabled.
     max_count is a user-settable allocation guard, not a model parameter.
-    Instances are not hashable (see FormedSceneConfig).
+    Instances are not hashable (see AmpliconSceneConfig).
     """
 
     __hash__ = None
@@ -46,7 +46,7 @@ class BackgroundConfig:
     Tissue weights and baselines are nonnegative R×C arrays, default zero
     (C is the codebook channel count).
     Disabled parameters are validated and retained, but contribute zero.
-    Instances are not hashable (see FormedSceneConfig).
+    Instances are not hashable (see AmpliconSceneConfig).
     """
 
     __hash__ = None
@@ -85,7 +85,7 @@ class NoiseConfig:
     L/sqrt(2), truncated at radius ceil(4*L/sqrt(2)) and scaled to unit sum of
     squares (L=0 leaves that axis white). Its draws come from the separate
     ``noise.correlated`` stream on the grid padded by the kernel radius.
-    Instances are not hashable (see FormedSceneConfig).
+    Instances are not hashable (see AmpliconSceneConfig).
     """
 
     __hash__ = None

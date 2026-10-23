@@ -24,7 +24,7 @@ error and TPS no-fallback behavior. It does not install or execute optional demo
 
 ## A cellular scene and a real-appearance scene
 
-`context_scene.py` generates the routine 2D tissue presets of the cellular scene
+`cellular_scene.py` generates the routine 2D tissue presets of the cellular scene
 (`context-tissue2d-v1`, {doc}`../synthetic-cellular-scene`) and of the real-appearance
 scene (`appearance-tissue2d-v1`, {doc}`../synthetic-real-appearance`), saves each, and
 prints the truth answers of the two marker pairs (`marker_pairs.csv`) and the numbers of
@@ -36,9 +36,9 @@ about 10 s on one CPU, almost all of it the generation of the two presets. From
 temporary directory is used and removed):
 
 ```bash
-uv run python ../../docs/examples/context_scene.py /absolute/path/to/context-example
+uv run python ../../docs/examples/cellular_scene.py /absolute/path/to/cellular-example
 ```
 
-```{literalinclude} ../examples/context_scene.py
+```{literalinclude} ../examples/cellular_scene.py
 :language: python
 ```

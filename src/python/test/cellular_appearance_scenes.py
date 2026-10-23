@@ -2,7 +2,7 @@
 
 The bank's part (W-516): ``bank_cases`` and ``fall_off_cases`` are hand-made label and stain arrays with a known outcome;
 ``cf_banks`` are the closed-form banks of the three routine context presets (CF1, ``n`` = 4: the seeds 42 to 45, the
-seed 45 image held out); ``cf_bank_files`` are the same scenes written by ``save_context_scene`` and configured as file
+seed 45 image held out); ``cf_bank_files`` are the same scenes written by ``save_cellular_scene`` and configured as file
 sources of ``build_appearance_bank``. Nothing is read from a run directory or a real image: every array is built in
 the session and every file is written under the test's temporary directory.
 """
@@ -18,9 +18,9 @@ from scipy import ndimage as ndi
 import tifffile
 
 from starfinder.synthetic import (AppearanceSceneConfig, BankReference, CellTypeConfig, CompositionConfig,
-                                  ContextSceneConfig, MorphologyRoundConfig, NoiseConfig, OutputScaleConfig,
-                                  ScalarDistribution, StainChannelConfig, TerritoryConfig, closed_form_bank,
-                                  generate_appearance_scene, save_context_scene)
+                                  CellularSceneConfig, MorphologyRoundConfig, NoiseConfig, OutputScaleConfig,
+                                  ScalarDistribution, StainChannelConfig, TerritoryConfig, generate_closed_form_bank,
+                                  generate_appearance_scene, save_cellular_scene)
 from starfinder.synthetic._appearance_layout import AugmentationConfig, LayoutConfig, _place_appearance
 
 from .cellular_scenes import float64, plane, tiny
@@ -190,7 +190,7 @@ def write_case(case, directory):
 @cache
 def cf_bank(preset):
     """``cf_banks``: the closed-form bank of a routine context preset, ``n`` = 4 (CF1)."""
-    return closed_form_bank(preset, 4)
+    return generate_closed_form_bank(preset, 4)
 
 
 def cf_sources(preset):
@@ -201,9 +201,9 @@ def cf_sources(preset):
 
 
 def cf_bank_files(preset, directory):
-    """``cf_bank_files``: the four scenes of ``cf_bank(preset)`` written by ``save_context_scene`` under
+    """``cf_bank_files``: the four scenes of ``cf_bank(preset)`` written by ``save_cellular_scene`` under
     ``directory``, each with its stains on the sample grid (``sample_stains/<name>.tif``, the rendering the
-    closed-form bank reads, which ``save_context_scene`` writes only per FOV at the FOVs' offsets), and the build
+    closed-form bank reads, which ``save_cellular_scene`` writes only per FOV at the FOVs' offsets), and the build
     configuration that names each scene's stain files and truth label files (``labels/sample_nuclei.tif``,
     ``labels/sample_cells.tif``) as one source image, the seed 45 scene's files held out. The sources are the arrays
     of ``cf_sources(preset)`` under the same image IDs, so the file bank equals ``cf_bank(preset)``."""
@@ -220,7 +220,7 @@ def cf_bank_files(preset, directory):
             path = root / "sample_stains" / f"{name}.tif"
             if not root.exists() or not path.exists():
                 if not root.exists():
-                    save_context_scene(scene, root)
+                    save_cellular_scene(scene, root)
                 path.parent.mkdir(exist_ok=True)
                 tifffile.imwrite(path, _closed_form_stain(preset, seed, name).astype(np.uint8))
             stains[name] = str(path)
@@ -281,7 +281,7 @@ def _stains(copy, morphology):
 
 
 def app_context(copy, flat=False, morphology=None, planes=None, types=None):
-    """The ContextSceneConfig of an app_tiny copy: sample-tiny-v1 with float64 output and no sample-scene stain, on
+    """The CellularSceneConfig of an app_tiny copy: sample-tiny-v1 with float64 output and no sample-scene stain, on
     ``scene_plane`` when ``flat``, with ``planes`` planes per FOV when given (app_cu_offset), CT1's growth law in the
     dense contexts and the copy's stains."""
     _, sample = tiny()
@@ -293,8 +293,8 @@ def app_context(copy, flat=False, morphology=None, planes=None, types=None):
         sample = replace(sample, acquisition=replace(sample.acquisition, fov_shape_zyx=shape),
                          fov=replace(sample.fov, shape_zyx=shape))
     territories = None if copy == "culture" else TerritoryConfig("grown", growth=GROWTH[copy])
-    return ContextSceneConfig(sample=sample, territories=territories, types=types,
-                              stains=_stains(copy, morphology), morphology=morphology)
+    return CellularSceneConfig(sample=sample, territories=territories, types=types,
+                               stains=_stains(copy, morphology), morphology=morphology)
 
 
 def morphology_round(mode, flat=False):
@@ -498,8 +498,8 @@ def bg2_settings(preset, name):
     configuration): the preset's sample grid origin −(J + T) ⊙ s and spacing, its BackgroundConfig's baseline, tissue
     weight and regions (index units), and its output scale (the output plateau over the median of the brightness
     law)."""
-    from starfinder.synthetic import context_scene_preset
-    _, config = context_scene_preset(preset)
+    from starfinder.synthetic import cellular_scene_preset
+    _, config = cellular_scene_preset(preset)
     stain = next(s for s in config.stains if s.name == name)
     acquisition = config.sample.acquisition
     spacing = np.asarray(acquisition.spacing_zyx, dtype=np.float64)

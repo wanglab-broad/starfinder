@@ -86,7 +86,7 @@ assay identity, geometry and masks must be reconciled before qualification.
 
 ## Current synthetic presets
 
-The current generator is the formed-scene model in `starfinder.synthetic`
+The current generator is the amplicon-scene model in `starfinder.synthetic`
 (see the [synthetic API](api/synthetic.rst) and the
 [model definition](synthetic-specification.md)). Its benchmark presets are
 generated on demand with `starfinder synthetic generate`; no generated images

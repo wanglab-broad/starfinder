@@ -4,14 +4,14 @@ import numpy as np
 import pandas as pd
 import pytest
 from starfinder.synthetic import (DEVELOPMENT_FACTORS, DEVELOPMENT_FIXTURES, DEVELOPMENT_SIZES,
-    development_preset_factors, development_scene_preset, generate_formed_scene)
+    development_preset_factors, development_scene_preset, generate_amplicon_scene)
 
 pytestmark = pytest.mark.synthetic
 
 
 def scene(condition='clean', size='small'):
     book, config = development_scene_preset(condition, size=size)
-    return generate_formed_scene(book, config=config)
+    return generate_amplicon_scene(book, config=config)
 
 
 def ext(value):
@@ -61,7 +61,7 @@ def test_combined_order_and_shared_background(size):
     expected[1, 0, 1] = .125
     np.testing.assert_array_equal(combined.realized, expected)
     book, config = development_scene_preset('combined', size=size)
-    stationary = generate_formed_scene(book, config=replace(config,
+    stationary = generate_amplicon_scene(book, config=replace(config,
         geometry=replace(config.geometry, local_enabled=False, translation_enabled=False)))
     assert components(stationary) == components(combined)
     assert components(combined)
@@ -84,7 +84,7 @@ def test_loss_dropout_and_noise_isolation():
         for identity in value.amplicon_ids:
             assert value.round_truth[value.round_truth.amplicon_id == identity].emitting.tolist() == emitting
     book, config = development_scene_preset('combined')
-    changed = generate_formed_scene(book, config=replace(config, noise=replace(config.noise, sigma=2)))
+    changed = generate_amplicon_scene(book, config=replace(config, noise=replace(config.noise, sigma=2)))
     original = scene('combined')
     pd.testing.assert_frame_equal(original.round_truth, changed.round_truth)
     assert ext(original)['transforms'] == ext(changed)['transforms']

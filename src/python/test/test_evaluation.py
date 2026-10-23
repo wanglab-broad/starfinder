@@ -113,14 +113,14 @@ def test_decoding_result_evaluates_against_synthetic_spot_truth_without_renaming
                                     decode_reads, extract_intensities)
     from starfinder.io import ImageLoadResult
     from starfinder.spot_finding import LocalMaximaConfig, SpotFindingResult
-    from starfinder.synthetic import FormedSceneConfig, generate_dataset
+    from starfinder.synthetic import AmpliconSceneConfig, generate_amplicon_dataset
     genes = {"a0": "gene-A", "a1": "gene-B", "a2": "gene-C"}
     book = Codebook(pd.DataFrame(dict(gene_id=list(genes.values()), color_sequence=["123", "241", "314"])),
                     ("round1", "round2", "round3"), ("ch00", "ch01", "ch02", "ch03"),
                     {"1": 0, "2": 1, "3": 2, "4": 3})
-    config = FormedSceneConfig(shape_zyx=(3, 16, 32), coordinates=((1, 8, 5), (1, 8, 16), (1, 8, 27)),
-                               amplicon_ids=tuple(genes), gene_ids=genes)
-    data = generate_dataset(book, config, fov_ids=("FOV_001",))
+    config = AmpliconSceneConfig(shape_zyx=(3, 16, 32), coordinates=((1, 8, 5), (1, 8, 16), (1, 8, 27)),
+                                 amplicon_ids=tuple(genes), gene_ids=genes)
+    data = generate_amplicon_dataset(book, config, fov_ids=("FOV_001",))
     assert {"gene_id", "color_sequence"} <= set(data.formed) & set(data.spot_truth)
     assert not {"codeword", "gene", "color_seq"} & (set(data.formed) | set(data.spot_truth))
     truth = data.spot_truth[data.spot_truth.round_label == "round1"].reset_index(drop=True)

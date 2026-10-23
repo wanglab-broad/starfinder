@@ -4,7 +4,7 @@ from dataclasses import replace
 import numpy as np
 
 from ._common import ScalarDistribution
-from ._formed import ReadoutEffectsConfig, formed_scene_preset
+from ._formed import ReadoutEffectsConfig, amplicon_scene_preset
 from ._geometry import GeometryConfig
 from ._observation import BackgroundConfig, NoiseConfig, TextureConfig
 
@@ -36,7 +36,7 @@ def development_scene_preset(condition="clean", *, size="small"):
         raise ValueError(f"unknown development size: {size}")
     if condition not in ("clean", "combined", *DEVELOPMENT_FACTORS):
         raise ValueError(f"unknown development condition: {condition}")
-    book, base = formed_scene_preset()
+    book, base = amplicon_scene_preset()
     shape = DEVELOPMENT_SIZES[size]
     z = shape[0] // 2
     center = (z, 10, 10)

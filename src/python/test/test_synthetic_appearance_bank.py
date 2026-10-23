@@ -19,7 +19,7 @@ import pytest
 from scipy import ndimage as ndi
 import tifffile
 
-from starfinder.synthetic import BankReference, build_appearance_bank, context_scene_preset, load_appearance_bank
+from starfinder.synthetic import BankReference, build_appearance_bank, cellular_scene_preset, load_appearance_bank
 
 from . import cellular_appearance_oracle as oracle
 from .cellular_appearance_scenes import (HELD_OUT, ROUTINE, SEEDS, bank_cases, cf_bank, cf_bank_files, cf_sources,
@@ -28,7 +28,7 @@ from .cellular_appearance_scenes import (HELD_OUT, ROUTINE, SEEDS, bank_cases, c
 pytestmark = [pytest.mark.synthetic]
 
 # The file banks of the dense 3D and culture presets take 5 s or more to set up on one CPU (four scenes generated and
-# written by save_context_scene); the 2D tissue one stays below.
+# written by save_cellular_scene); the 2D tissue one stays below.
 FILE_PRESETS = ["context-tissue2d-v1", pytest.param("context-dense3d-v1", marks=pytest.mark.slow),
                 pytest.param("context-culture-v1", marks=pytest.mark.slow)]
 
@@ -215,7 +215,7 @@ def test_br4_refuses_both_copies_of_the_file_bank(file_banks, preset, tmp_path):
     root, config, _, _ = file_banks(preset)
     image = config["sources"][0]["image"]
     # Half a FOV in Y and X: the routine presets' FOVs are 64 voxels wide.
-    half = context_scene_preset(preset)[1].sample.acquisition.fov_shape_zyx[1] // 2
+    half = cellular_scene_preset(preset)[1].sample.acquisition.fov_shape_zyx[1] // 2
     brighter = _copy_with(config, tmp_path / "brighter",
                           lambda kind, a: (a.astype(np.float32) * 2) if kind == "stain" else None)
     rolled = _copy_with(config, tmp_path / "rolled",
@@ -498,14 +498,14 @@ _AUDIT = r"""
 import json, os, sys
 from pathlib import Path
 import starfinder.synthetic
-from starfinder.synthetic import closed_form_bank
+from starfinder.synthetic import generate_closed_form_bank
 import scipy.ndimage, skimage.filters, tifffile, pandas
 opened = []
 def audit(event, arguments):
     if event == "open" and isinstance(arguments[0], (str, bytes, os.PathLike)):
         opened.append(os.fsdecode(arguments[0]))
 sys.addaudithook(audit)
-bank = closed_form_bank(sys.argv[1], 4)
+bank = generate_closed_form_bank(sys.argv[1], 4)
 sys.stdout.write(json.dumps(dict(opened=opened, inputs=bank.record["inputs"], held_out=bank.record["held_out"],
                                  entries=len(bank))))
 """

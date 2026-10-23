@@ -91,16 +91,16 @@ def context_of(name):
 
 def acquired(name):
     """A context_slow_acquired variant: the preset with spacing_zyx replaced, every other value as the preset."""
-    from starfinder.synthetic import context_scene_preset
-    book, config = context_scene_preset(name)
+    from starfinder.synthetic import cellular_scene_preset
+    book, config = cellular_scene_preset(name)
     acquisition = replace(config.sample.acquisition, spacing_zyx=ACQUIRED[name])
     return book, replace(config, sample=replace(config.sample, acquisition=acquisition))
 
 
 def generate(name, variant=False):
-    from starfinder.synthetic import context_scene_preset, generate_context_scene
-    book, config = acquired(name) if variant else context_scene_preset(name)
-    return config, generate_context_scene(book, config=config)
+    from starfinder.synthetic import cellular_scene_preset, generate_cellular_scene
+    book, config = acquired(name) if variant else cellular_scene_preset(name)
+    return config, generate_cellular_scene(book, config=config)
 
 
 def cases(presets):
@@ -179,8 +179,8 @@ class Evidence:
 
 
 def identities(presets):
-    from starfinder.synthetic import CONTEXT_PRESETS
-    return {name: dict(seed=CONTEXT_PRESETS[name]["seed"], acquired_spacing_zyx=list(ACQUIRED.get(name, ())) or None)
+    from starfinder.synthetic import CELLULAR_PRESETS
+    return {name: dict(seed=CELLULAR_PRESETS[name]["seed"], acquired_spacing_zyx=list(ACQUIRED.get(name, ())) or None)
             for name in presets.SLOW}
 
 

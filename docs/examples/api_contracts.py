@@ -15,7 +15,7 @@ from starfinder.readout import (
     Codebook, NeighborhoodSumConfig, CodebookAwareDecoderConfig,
     decode_reads, extract_intensities, filter_reads,
 )
-from starfinder.synthetic import formed_scene_preset, generate_formed_scene
+from starfinder.synthetic import amplicon_scene_preset, generate_amplicon_scene
 from starfinder.dataset import RoundState, Dataset
 from starfinder.registration import RegistrationRecipe, RegistrationStep
 from starfinder.io import ImageLoadResult, load_volume, save_volume
@@ -101,8 +101,8 @@ def main(output: Path) -> None:
     else:
         raise AssertionError("Expected insufficient landmarks without fallback")
 
-    codebook, config = formed_scene_preset("formed-small-v1")
-    scene = generate_formed_scene(codebook, config=replace(
+    codebook, config = amplicon_scene_preset("formed-small-v1")
+    scene = generate_amplicon_scene(codebook, config=replace(
         config, shape_zyx=(12, 24, 24), count=3, seed=97, dtype="uint16"))
     synthetic = scene.rounds[codebook.round_labels[0]]
     assert synthetic.shape == fixed.shape + (4,) and synthetic.dtype == np.uint16

@@ -40,7 +40,7 @@ slow = pytest.mark.slow
 DOCS = Path(__file__).resolve().parents[3] / "docs"
 # GA2's new names ("Opt-in").
 NAMES = ("generate_appearance_scene", "AppearanceScene", "AppearanceSceneConfig", "BankReference", "AugmentationConfig",
-         "LayoutConfig", "CompositionConfig", "build_appearance_bank", "closed_form_bank", "load_appearance_bank",
+         "LayoutConfig", "CompositionConfig", "build_appearance_bank", "generate_closed_form_bank", "load_appearance_bank",
          "save_appearance_scene", "appearance_scene_preset", "APPEARANCE_PRESETS", "APPEARANCE_PRESET_VERSION",
          "APPEARANCE_TRUTH_VERSION")
 

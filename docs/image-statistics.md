@@ -31,10 +31,10 @@ from dataclasses import replace
 
 sys.path.insert(0, "../../benchmarks")
 from image_statistics import TiffVolume, measure_volume, synthetic_channel
-from starfinder.synthetic import development_scene_preset, generate_formed_scene
+from starfinder.synthetic import development_scene_preset, generate_amplicon_scene
 
 book, config = development_scene_preset("combined")
-scene = generate_formed_scene(book, config=replace(config, dtype="uint8"))
+scene = generate_amplicon_scene(book, config=replace(config, dtype="uint8"))
 synthetic = measure_volume(synthetic_channel(scene, "round1", "ch00"))
 with TiffVolume("/external/volume_ch00.tif") as volume:
     real = measure_volume(volume)

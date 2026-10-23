@@ -121,7 +121,7 @@ Required inputs depend on `--datasets`. `synthetic_medium` uses saved Postcode
 codebook, ground truth, intensity tensors and spot CSVs under
 `<postcode-root>/data/synthetic_medium/` and
 `<postcode-root>/results/synthetic_medium/`. `synthetic_large` reads saved
-formed-scene codebook, ground truth and per-round channel images under the
+amplicon-scene codebook, ground truth and per-round channel images under the
 benchmark `e2e/data/large/` tree, then prepares or reuses tensor and spot
 caches. `LN` and `aging` read backend `run_metadata.json`, zero-based spot CSVs
 and registered `ZYXC` TIFFs under

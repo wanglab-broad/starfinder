@@ -21,7 +21,7 @@ import sys
 import numpy as np
 import pytest
 
-from starfinder.synthetic import context_scene_preset, generate_context_scene, save_context_scene
+from starfinder.synthetic import cellular_scene_preset, generate_cellular_scene, save_cellular_scene
 
 from .cellular_checks import check_lobes
 from .cellular_oracle import Oracle
@@ -36,8 +36,8 @@ BOUND_S, BOUND_KIB, ROUTINE_KIB = 3600.0, 16 * 1024 * 1024, 4 * 1024 * 1024
 
 
 def generate(name):
-    book, config = context_scene_preset(name)
-    return config, generate_context_scene(book, config=config)
+    book, config = cellular_scene_preset(name)
+    return config, generate_cellular_scene(book, config=config)
 
 
 # ---------------------------------------------------------------- GN7: packing on the presets
@@ -91,7 +91,7 @@ def check_packing(name, config, scene, tmp_path):
     # F2: every preset reaches its floor (with on_crowded="stop" a stop below it would have raised).
     assert record["reached_density"] >= packing.floor * packing.density
     # The reached density and the placed seeds as context.json records them.
-    root = save_context_scene(scene, tmp_path / name)
+    root = save_cellular_scene(scene, tmp_path / name)
     try:
         saved = json.loads((root / "context.json").read_text(encoding="utf-8"))["effective_config"]["packing"]
     finally:
@@ -135,14 +135,14 @@ def test_gn5_lobes_on_the_slow_presets(slow_scene):
 GENERATE = """
 import json, sys, time
 from dataclasses import replace
-from starfinder.synthetic import context_scene_preset, generate_context_scene
+from starfinder.synthetic import cellular_scene_preset, generate_cellular_scene
 name, spacing = sys.argv[1], json.loads(sys.argv[2])
-book, config = context_scene_preset(name)
+book, config = cellular_scene_preset(name)
 if spacing is not None:
     acquisition = replace(config.sample.acquisition, spacing_zyx=tuple(spacing))
     config = replace(config, sample=replace(config.sample, acquisition=acquisition))
 start = time.perf_counter()
-scene = generate_context_scene(book, config=config)
+scene = generate_cellular_scene(book, config=config)
 seconds = time.perf_counter() - start
 print(json.dumps(dict(generation_s=seconds, nuclei=len(scene.sample.nuclei), cells=len(scene.sample.cells),
                       molecules=len(scene.sample.molecules), bright_regions=len(scene.bright_regions))))

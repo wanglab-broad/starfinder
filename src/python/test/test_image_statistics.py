@@ -9,7 +9,7 @@ import pandas as pd
 import pytest
 import tifffile
 
-from starfinder.synthetic import ScalarDistribution, development_scene_preset, generate_formed_scene
+from starfinder.synthetic import ScalarDistribution, development_scene_preset, generate_amplicon_scene
 
 pytestmark = pytest.mark.benchmark
 
@@ -187,7 +187,7 @@ def test_same_function_measures_synthetic_channel_and_tiff(tmp_path):
                      elongation=ScalarDistribution("uniform", (1.0, 1.5)),
                      angle=ScalarDistribution("uniform", (0.0, float(np.pi))),
                      brightness=ScalarDistribution(parameters=(96.0,)), dtype="uint8")
-    scene = generate_formed_scene(book, config=config)
+    scene = generate_amplicon_scene(book, config=config)
     round_label, channel_label = scene.round_labels[0], scene.channel_labels[1]
     channel = istat.synthetic_channel(scene, round_label, channel_label)
     assert channel.shape == (8, 48, 48) and channel.dtype == np.uint8

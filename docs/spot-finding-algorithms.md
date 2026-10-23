@@ -167,7 +167,7 @@ Fixtures:
 | `seams` | W-266 seam scenes `seam_z1` (1×64×64) and `seam3d` (32×64×64, spots at Z 16 ± 0.5), keeping only the spots 0.5, 1 and 2 px from the keep-boundaries 30.5 and 59.5 of 32-pixel tiles and the controls (`w266_common.seam_layout`) | 18 spots |
 | `multiround` | 3 rounds × 16×64×64 × 2 channels on one grid: 15 spots per round and channel, 5 of them at the same positions in every round | 2.3e-4 per round and channel |
 | `parity` | `src/python/test/data/starfish_blob_parity/fixtures.py` (W-266) | as W-266 |
-| `formed16` | §2.12 `formed_scene_preset("small")` appearance and codebook at 16×64×64 with 24 amplicons, four rounds; once as generated and once after the legacy recipe-1 uint8 min–max normalization | 3.7e-4 |
+| `formed16` | §2.12 `amplicon_scene_preset("small")` appearance and codebook at 16×64×64 with 24 amplicons, four rounds; once as generated and once after the legacy recipe-1 uint8 min–max normalization | 3.7e-4 |
 
 Checks:
 
@@ -344,7 +344,7 @@ named, or the test's own assertion where the module has no constant.
   the readout stage (§2.8). The within-channel merge does not remove them: on
   `formed16` with the merge, 5, 8 and 9 cross-channel duplicates remained at seeds
   100, 101 and 102, reported and not gated (W-274 notes, S16), and 23 remained on the
-  uint8 `small` formed scene of the tour notebook (section 4, printed in section 9). See
+  uint8 `small` amplicon scene of the tour notebook (section 4, printed in section 9). See
   [Local maxima](#local-maxima), "What it does not resolve".
 * **Starfish LoG.** `blob_log` holds the whole scale space: W-266 measured 10.0 to
   10.4 bytes × `num_sigma` × voxels of peak memory. The method does not tile, so the

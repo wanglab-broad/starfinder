@@ -1,6 +1,6 @@
-"""Validation, scalar laws and placement shared by formed scenes and backgrounds.
+"""Validation, scalar laws and placement shared by amplicon scenes and backgrounds.
 
-This module imports no other formed-scene module, so the formed, geometry and
+This module imports no other amplicon-scene module, so the formed, geometry and
 observation modules depend on it without an import cycle.
 """
 from __future__ import annotations

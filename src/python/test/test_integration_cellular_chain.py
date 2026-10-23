@@ -168,7 +168,7 @@ def _codebook(preset):
 
 
 def _raw_dataset(raw, root):
-    """A Dataset of the raw dataset ``save_context_dataset`` wrote, from the fields ``dataset.json`` records, with its
+    """A Dataset of the raw dataset ``save_cellular_dataset`` wrote, from the fields ``dataset.json`` records, with its
     output under ``root`` (as the appearance contract tests build it)."""
     from starfinder.readout import load_codebook
     from starfinder.dataset import ChannelInfo, Dataset, RoundState
@@ -212,13 +212,13 @@ def _write_zyx(path, image):
 
 
 def _step_generate(a):
-    """The scene of a preset at a seed: generated, saved (``save_appearance_scene``, ``save_context_dataset``) and
+    """The scene of a preset at a seed: generated, saved (``save_appearance_scene``, ``save_cellular_dataset``) and
     written as the chain's shared inputs: the reference image (the reference round's channel maximum, with the FOV's
     grid), each stain as a float32 ZYX file, the 2D tissue composite, and each FOV's truth-position molecules."""
     from starfinder.io import save_volume
     from starfinder.segmentation import composite_nuclei_amplicon
     from starfinder.synthetic import (appearance_scene_preset, generate_appearance_scene, save_appearance_scene,
-                                      save_context_dataset)
+                                      save_cellular_dataset)
     base = Path(a["base"])
     book, config = appearance_scene_preset(a["preset"])
     sample_config = config.context.sample
@@ -227,7 +227,7 @@ def _step_generate(a):
             sample_config, fov=replace(sample_config.fov, seed=a["seed"]))))
     scene = generate_appearance_scene(book, config=config)
     save_appearance_scene(scene, base / "scene")
-    save_context_dataset(scene.context, base / "raw")
+    save_cellular_dataset(scene.context, base / "raw")
     sample = scene.context.sample
     fov_ids = list(sample.positions.fov_id)
     summary = dict(preset=a["preset"], seed=a["seed"], context=a["context"], dataset_id=config.context.sample.fov.

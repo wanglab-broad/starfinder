@@ -967,10 +967,10 @@ def decoded_fov(tmp_path_factory):
     from starfinder.io import ImageLoadConfig, save_volume
     from starfinder.registration import TranslationConfig
     from starfinder.spot_finding import LocalMaximaConfig
-    from starfinder.synthetic import development_scene_preset, generate_formed_scene
+    from starfinder.synthetic import development_scene_preset, generate_amplicon_scene
 
     book, config = development_scene_preset("clean", size="small")
-    scene = generate_formed_scene(book, config=config)
+    scene = generate_amplicon_scene(book, config=config)
     root = tmp_path_factory.mktemp("assign_fov")
     for name, image in scene.rounds.items():
         metadata = replace(scene.round_metadata[name], spacing_zyx=(0.35, 0.1, 0.1), spatial_unit="micrometer")

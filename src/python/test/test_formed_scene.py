@@ -13,9 +13,9 @@ import pytest
 
 from starfinder.readout import Codebook
 from starfinder.image import ImageMetadata
-from starfinder.synthetic import (BackgroundConfig, FormedSceneConfig, GeometryConfig,
+from starfinder.synthetic import (BackgroundConfig, AmpliconSceneConfig, GeometryConfig,
                                   NoiseConfig, ReadoutEffectsConfig, ScalarDistribution,
-                                  TextureConfig, formed_scene_preset, generate_formed_scene)
+                                  TextureConfig, amplicon_scene_preset, generate_amplicon_scene)
 
 pytestmark = pytest.mark.synthetic
 
@@ -27,7 +27,7 @@ def book():
 
 
 def scene(**kwargs):
-    return generate_formed_scene(book(), config=FormedSceneConfig(**kwargs))
+    return generate_amplicon_scene(book(), config=AmpliconSceneConfig(**kwargs))
 
 
 def scalar(value):
@@ -123,17 +123,17 @@ def test_coincident_and_dark_population_stable_ids():
 
 
 def test_component_and_append_isolation():
-    cb, config = formed_scene_preset()
+    cb, config = amplicon_scene_preset()
     config = replace(config, brightness=ScalarDistribution('lognormal', (3, .2)),
                      lateral_width=ScalarDistribution('uniform', (.5, 2)))
-    original = generate_formed_scene(cb, config=config)
-    changed = generate_formed_scene(cb, config=replace(config, lateral_width=scalar(2), abundances=(1, 0)))
+    original = generate_amplicon_scene(cb, config=config)
+    changed = generate_amplicon_scene(cb, config=replace(config, lateral_width=scalar(2), abundances=(1, 0)))
     pd.testing.assert_frame_equal(original.formed[['amplicon_id', 'z', 'y', 'x', 'A', 'sz', 'e', 'theta']],
                                   changed.formed[['amplicon_id', 'z', 'y', 'x', 'A', 'sz', 'e', 'theta']])
     assert set(changed.formed.gene_id) == {'gene-A'}
-    more = generate_formed_scene(cb, config=replace(config, count=9))
+    more = generate_amplicon_scene(cb, config=replace(config, count=9))
     pd.testing.assert_frame_equal(original.formed, more.formed.iloc[:8].reset_index(drop=True))
-    reordered = generate_formed_scene(cb, config=replace(config, amplicon_ids=original.amplicon_ids[::-1]))
+    reordered = generate_amplicon_scene(cb, config=replace(config, amplicon_ids=original.amplicon_ids[::-1]))
     cols = [x for x in original.formed if x != 'formed_index']
     pd.testing.assert_frame_equal(original.formed[cols].sort_values('amplicon_id').reset_index(drop=True),
                                   reordered.formed[cols].sort_values('amplicon_id').reset_index(drop=True))
@@ -217,7 +217,7 @@ def test_invalid_codebook_metadata_and_overflow():
     cb = book()
     cb.table.loc[1, 'color_sequence'] = '123'
     with pytest.raises(ValueError, match='collision'):
-        generate_formed_scene(cb)
+        generate_amplicon_scene(cb)
     with pytest.raises(ValueError):
         ImageMetadata('ref', spacing_zyx=(1, 0, 1))
     with pytest.raises(ValueError, match='nonfinite generated'):
@@ -229,7 +229,7 @@ def test_invalid_codebook_metadata_and_overflow():
 def test_quantization_and_provenance_payload():
     metadata = ImageMetadata('ref', (2, 3, 4), (10, 20, 30), ((1, 0, 0), (0, 1, 0), (0, 0, 1)), 'um')
     for brightness, expected in [(.5, 0), (1.5, 2), (255.5, 255)]:
-        result = generate_formed_scene(book(), config=FormedSceneConfig(coordinates=((1, 2, 2),),
+        result = generate_amplicon_scene(book(), config=AmpliconSceneConfig(coordinates=((1, 2, 2),),
                                       brightness=scalar(brightness), dtype='uint8'), metadata=metadata)
         assert result.rounds['round10'].max() == expected
         assert result.metadata == metadata
@@ -251,14 +251,14 @@ def test_quantization_and_provenance_payload():
 
 
 def test_configs_are_not_hashable():
-    for config in (FormedSceneConfig(), ScalarDistribution(), ReadoutEffectsConfig(),
+    for config in (AmpliconSceneConfig(), ScalarDistribution(), ReadoutEffectsConfig(),
                    BackgroundConfig(), TextureConfig(), NoiseConfig(), GeometryConfig()):
         with pytest.raises(TypeError, match='unhashable'):
             hash(config)
     # Equality still compares values; frozen fields still reject assignment.
-    assert FormedSceneConfig(seed=1) == FormedSceneConfig(seed=1)
+    assert AmpliconSceneConfig(seed=1) == AmpliconSceneConfig(seed=1)
     with pytest.raises(AttributeError):
-        FormedSceneConfig().seed = 1
+        AmpliconSceneConfig().seed = 1
 
 
 def test_shapes_rounds_and_counts_above_former_limits():
@@ -266,13 +266,13 @@ def test_shapes_rounds_and_counts_above_former_limits():
     rounds = tuple(f'r{i}' for i in range(5))
     cb = Codebook(pd.DataFrame(dict(gene_id=['a', 'b'], color_sequence=['12341', '43214'])),
                   rounds, ('c0', 'c1', 'c2', 'c3'))
-    config = FormedSceneConfig(shape_zyx=(8, 128, 128), coordinates=((3, 100, 120), (4, 10, 5)),
-                               amplicon_ids=('far', 'near'), gene_ids={'far': 'a', 'near': 'b'},
-                               brightness=scalar(8), dtype='float64', split='any-label',
-                               readout=ReadoutEffectsConfig(trend_enabled=True, trend_base=.5),
-                               geometry=GeometryConfig(translation_enabled=True,
-                                                       translations_zyx=((0, 0, 0),)*4 + ((0, 1, -1),)))
-    result = generate_formed_scene(cb, config=config)
+    config = AmpliconSceneConfig(shape_zyx=(8, 128, 128), coordinates=((3, 100, 120), (4, 10, 5)),
+                                 amplicon_ids=('far', 'near'), gene_ids={'far': 'a', 'near': 'b'},
+                                 brightness=scalar(8), dtype='float64', split='any-label',
+                                 readout=ReadoutEffectsConfig(trend_enabled=True, trend_base=.5),
+                                 geometry=GeometryConfig(translation_enabled=True,
+                                                         translations_zyx=((0, 0, 0),)*4 + ((0, 1, -1),)))
+    result = generate_amplicon_scene(cb, config=config)
     assert result.round_labels == rounds
     assert all(image.shape == (8, 128, 128, 4) for image in result.rounds.values())
     assert result.intended.shape == result.realized.shape == (2, 4, 5)
@@ -283,29 +283,29 @@ def test_shapes_rounds_and_counts_above_former_limits():
     assert len(result.round_truth) == 10 and result.round_truth.center_in_bounds.all()
     assert result.provenance['effective_config']['split'] == 'any-label'
     # Counts above the former 1024 limit only require an explicit max_count.
-    many = generate_formed_scene(cb, config=FormedSceneConfig(shape_zyx=(1, 40, 40), count=1100,
-                                                              max_count=1100))
+    many = generate_amplicon_scene(cb, config=AmpliconSceneConfig(shape_zyx=(1, 40, 40), count=1100,
+                                                                  max_count=1100))
     assert len(many.formed) == 1100 and len(many.round_truth) == 5500
     with pytest.raises(ValueError, match='max_count'):
-        generate_formed_scene(cb, config=FormedSceneConfig(shape_zyx=(1, 4, 4), count=1100))
+        generate_amplicon_scene(cb, config=AmpliconSceneConfig(shape_zyx=(1, 4, 4), count=1100))
 
 
 def test_background_and_geometry_counts_above_former_limits():
-    cb, config = formed_scene_preset('formed-z1-v1')
+    cb, config = amplicon_scene_preset('formed-z1-v1')
     texture = TextureConfig(count=1100, max_count=1100)
-    result = generate_formed_scene(cb, config=replace(config, shape_zyx=(1, 4, 4), count=0,
+    result = generate_amplicon_scene(cb, config=replace(config, shape_zyx=(1, 4, 4), count=0,
         background=BackgroundConfig(texture_enabled=True, texture=texture, tissue_weights=np.ones((3, 4)))))
     assert len(result.provenance['effective_config']['background']['components']) == 1100
     controls = tuple((0, i % 4, i // 400) for i in range(1100))
-    result = generate_formed_scene(cb, config=replace(config, shape_zyx=(1, 4, 4), count=0,
+    result = generate_amplicon_scene(cb, config=replace(config, shape_zyx=(1, 4, 4), count=0,
         geometry=GeometryConfig(local_enabled=True, centers_zyx=controls)))
     assert len(next(iter(result.provenance['transforms'].values()))['centers_zyx']) == 1100
 
 
 def test_split_is_a_stream_label():
-    cb, config = formed_scene_preset()
-    base = generate_formed_scene(cb, config=config)
-    other = generate_formed_scene(cb, config=replace(config, split='evaluation'))
+    cb, config = amplicon_scene_preset()
+    base = generate_amplicon_scene(cb, config=config)
+    other = generate_amplicon_scene(cb, config=replace(config, split='evaluation'))
     assert not np.array_equal(base.formed[['z', 'y', 'x']], other.formed[['z', 'y', 'x']])
     descriptor = other.provenance['stream_scheme']['streams'][0]
     assert descriptor[:4] == ['starfinder.synthetic/1', 'evaluation', 42, 'formed-v1']
@@ -315,12 +315,12 @@ def test_actual_cross_process_repeats_and_no_files(tmp_path):
     code = '''
 import hashlib,json
 from starfinder.synthetic import (DEVELOPMENT_FIXTURES, development_scene_preset,
-                                  formed_scene_preset, generate_formed_scene)
+                                  amplicon_scene_preset, generate_amplicon_scene)
 output=[]
-configs=[formed_scene_preset(name) for name in ('formed-small-v1','formed-z1-v1')]
+configs=[amplicon_scene_preset(name) for name in ('formed-small-v1','formed-z1-v1')]
 configs+=[development_scene_preset(c,size=s) for c,s in DEVELOPMENT_FIXTURES.values()]
 for cb,cfg in configs:
-    s=generate_formed_scene(cb,config=cfg)
+    s=generate_amplicon_scene(cb,config=cfg)
     output.append(dict(provenance=s.provenance, formed=s.formed.to_json(), rounds=s.round_truth.to_json(),
                        images={k:hashlib.sha256(v.tobytes()).hexdigest() for k,v in s.rounds.items()},
                        signals=hashlib.sha256(s.realized.tobytes()).hexdigest()))
@@ -341,7 +341,7 @@ print(json.dumps(output,sort_keys=True))
 
 def test_bounded_downstream_example():
     import runpy
-    example = Path(__file__).resolve().parents[3] / 'docs/examples/formed_scene.py'
+    example = Path(__file__).resolve().parents[3] / 'docs/examples/amplicon_scene.py'
     check = runpy.run_path(str(example))['check_scene']
     for depth in (3, 1):
         check(depth)

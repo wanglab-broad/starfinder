@@ -2,14 +2,21 @@ starfinder.synthetic
 ====================
 
 One processed-image scene generator for oracle fixtures and benchmark data.
-Importing this package does not import benchmark orchestration.
-``generate_formed_scene`` implements the
-:doc:`formed-amplicon model <../synthetic-specification>`; ``generate_dataset``
+Importing this package does not import benchmark orchestration. It builds four
+scene kinds, each on top of the one before: **amplicon** scenes (amplicon
+molecules and readout effects in one FOV, with no cells), **sample** scenes
+(several FOVs of one sample with a minimal cellular scene), **cellular** scenes
+(a realistic synthetic cellular scene) and **appearance** scenes (nuclei and
+cells sampled from real images, placed on a synthetic layout).
+``generate_amplicon_scene`` implements the
+:doc:`formed-amplicon model <../synthetic-specification>`; ``generate_amplicon_dataset``
 and ``generate_registration_pair`` build multi-FOV datasets and registration
 pairs from the same scenes, and the benchmark presets below give them
 documented appearance defaults. Generation returns arrays in memory or hands
-each round to a callback; ``save_formed_scene`` writes formed-scene fixtures
-and ``starfinder synthetic generate`` writes the MATLAB-compatible layout.
+each round to a callback; ``save_amplicon_scene`` writes amplicon-scene fixtures,
+``save_amplicon_dataset`` writes an in-memory multi-FOV dataset in the round-first
+layout that ``Dataset`` reads, and ``starfinder synthetic generate`` streams the
+MATLAB-compatible layout.
 
 .. currentmodule:: starfinder.synthetic
 
@@ -17,6 +24,9 @@ and ``starfinder synthetic generate`` writes the MATLAB-compatible layout.
    :toctree: generated
 
    AcquisitionConfig
+   amplicon_scene_preset
+   AmpliconScene
+   AmpliconSceneConfig
    APPEARANCE_PRESET_VERSION
    APPEARANCE_PRESETS
    appearance_scene_preset
@@ -32,16 +42,15 @@ and ``starfinder synthetic generate`` writes the MATLAB-compatible layout.
    build_appearance_bank
    CALIBRATED_CONDITIONS
    calibrated_scene_preset
+   CellsConfig
    CellTypeConfig
+   CELLULAR_PRESET_VERSION
+   CELLULAR_PRESETS
+   cellular_scene_preset
+   CELLULAR_TRUTH_VERSION
+   CellularScene
    CellularSceneConfig
-   closed_form_bank
    CompositionConfig
-   CONTEXT_PRESET_VERSION
-   CONTEXT_PRESETS
-   context_scene_preset
-   CONTEXT_TRUTH_VERSION
-   ContextScene
-   ContextSceneConfig
    deformation_geometry
    DEFORMATION_PRESETS
    development_codebook
@@ -50,15 +59,13 @@ and ``starfinder synthetic generate`` writes the MATLAB-compatible layout.
    development_preset_factors
    development_scene_preset
    DEVELOPMENT_SIZES
-   formed_scene_preset
-   FormedScene
-   FormedSceneConfig
    forward_displacement
+   generate_amplicon_dataset
+   generate_amplicon_scene
    generate_appearance_scene
+   generate_cellular_scene
+   generate_closed_form_bank
    generate_codebook
-   generate_context_scene
-   generate_dataset
-   generate_formed_scene
    generate_registration_pair
    generate_sample_scene
    GeometryConfig
@@ -79,10 +86,11 @@ and ``starfinder synthetic generate`` writes the MATLAB-compatible layout.
    SAMPLE_TRUTH_VERSION
    SampleScene
    SampleSceneConfig
+   save_amplicon_dataset
+   save_amplicon_scene
    save_appearance_scene
-   save_context_dataset
-   save_context_scene
-   save_formed_scene
+   save_cellular_dataset
+   save_cellular_scene
    save_sample_scene
    ScalarDistribution
    SCENE_PRESETS
@@ -93,14 +101,14 @@ and ``starfinder synthetic generate`` writes the MATLAB-compatible layout.
    TextureConfig
    UnevennessConfig
 
-Formed scenes
--------------
+Amplicon scenes
+---------------
 
-``formed_scene_preset(name)`` returns a supplied ``Codebook`` and
-``FormedSceneConfig`` for any ``SCENE_PRESETS`` name: the fixture tier
+``amplicon_scene_preset(name)`` returns a supplied ``Codebook`` and
+``AmpliconSceneConfig`` for any ``SCENE_PRESETS`` name: the fixture tier
 ``formed-small-v1`` (8×32×32) or ``formed-z1-v1`` (1×32×32), the four
-development fixtures, or one FOV of a benchmark preset. ``generate_formed_scene(codebook, config=..., metadata=...)`` returns
-``FormedScene`` with ordered ZYXC images, typed formed/per-round tables and
+development fixtures, or one FOV of a benchmark preset. ``generate_amplicon_scene(codebook, config=..., metadata=...)`` returns
+``AmpliconScene`` with ordered ZYXC images, typed formed/per-round tables and
 float64 NCR intended/pre-mix/realized signal tensors. The tensor's N axis is
 explicitly labeled by ``amplicon_ids``. Tables join on namespace and amplicon ID;
 they are distinct from detected candidate identities. Zero-brightness,
@@ -136,8 +144,8 @@ float32 otherwise; the fixture and development presets request float64 so
 the independent oracle holds. Integers use nearest-even rounding and
 saturation with clipping counts; a ``RuntimeWarning`` names the round when more
 than 1% of its voxel values clip. Floats retain their values without
-normalization. Rounds are generated one at a time; ``generate_formed_scene``
-returns all of them, while ``generate_dataset`` can hand each round to a
+normalization. Rounds are generated one at a time; ``generate_amplicon_scene``
+returns all of them, while ``generate_amplicon_dataset`` can hand each round to a
 callback so only one round is held in memory.
 Readout effects, backgrounds, noise and geometry all default disabled. With
 readout effects disabled, intended, pre-mix and realized amplitudes are equal
@@ -158,19 +166,19 @@ Use ``provenance["requested_config"]`` when a stable identity is needed.
 
 Run the example from ``src/python``::
 
-   uv run python ../../docs/examples/formed_scene.py
+   uv run python ../../docs/examples/amplicon_scene.py
 
 It asserts independent 3D/Z=1 extraction and decoding values with distinct
 candidate identities, then prints both preset provenance payloads. It writes
 no files and makes no detection-accuracy claim.
 
-.. literalinclude:: ../examples/formed_scene.py
+.. literalinclude:: ../examples/amplicon_scene.py
    :language: python
 
 Controlled readout
 ------------------
 
-Pass ``readout=ReadoutEffectsConfig(...)`` in ``FormedSceneConfig``. Each effect
+Pass ``readout=ReadoutEffectsConfig(...)`` in ``AmpliconSceneConfig``. Each effect
 has an independent Boolean ``*_enabled`` switch, default false. The generator
 validates requested parameters even when disabled or N=0. It records both the
 requested values and effective identities; disabled controls draw no randomness.
@@ -216,7 +224,7 @@ Structured backgrounds and residual noise
 -----------------------------------------
 
 Pass ``background=BackgroundConfig(...)`` and ``noise=NoiseConfig(...)`` to
-``FormedSceneConfig``. The defaults contribute exactly zero. Each Boolean enable
+``AmpliconSceneConfig``. The defaults contribute exactly zero. Each Boolean enable
 flag is independent; retained disabled parameters are validated but neither
 rendered nor randomly sampled.
 
@@ -264,7 +272,7 @@ isolation in (3,7,9) and (1,7,9), with no saved images.
 Shared analytic geometry
 ------------------------
 
-Pass ``geometry=GeometryConfig(...)`` to ``FormedSceneConfig``. It uses
+Pass ``geometry=GeometryConfig(...)`` to ``AmpliconSceneConfig``. It uses
 ``F(q) = q + sum(v_k * exp(-||q-c_k||²/(2*l_k²))) + t`` in reference ZYX voxel
 indices. Local displacement is evaluated before translation, always at the
 reference point; rounds never accumulate motion. ``translations_zyx`` is R×3,
@@ -314,7 +322,7 @@ supplies each output's destination frame with the same physical calibration.
 
 From ``src/python``::
 
-   uv run python ../../docs/examples/formed_geometry.py
+   uv run python ../../docs/examples/amplicon_geometry.py
 
 The example keeps a shared molecular/background landmark, a nonconstant local
 map followed by translation, and an out-of-frame round in 3D and Z=1.
@@ -332,7 +340,7 @@ their condition and size. One fixture amplicon is elongated and rotated
 oracle. Other conditions in ``DEVELOPMENT_FACTORS`` produce on-demand
 single-factor comparisons; they are neither packaged nor oracle-checked.
 
-``save_formed_scene(scene, directory)`` writes ``images/<round>.tif`` with
+``save_amplicon_scene(scene, directory)`` writes ``images/<round>.tif`` with
 :py:func:`starfinder.io.save_volume` (ZYXC, round metadata), ``formed.csv``,
 ``round_truth.csv``, ``signals.csv`` and ``provenance.json`` into a new or
 empty directory. ``formed.csv`` names the color sequence ``color_sequence``;
@@ -366,8 +374,8 @@ histogram-matching harm test. Gene IDs carry the variant name.
 Benchmark datasets
 ------------------
 
-``generate_dataset(codebook, config, fov_ids=("FOV_001",), preset=None,
-on_round=None)`` generates one formed scene per FOV ID. Each FOV sets
+``generate_amplicon_dataset(codebook, config, fov_ids=("FOV_001",), preset=None,
+on_round=None)`` generates one amplicon scene per FOV ID. Each FOV sets
 ``FOV_id`` and its own stream namespace, scene key ``[config.scene_key, FOV]``,
 so appending IDs never changes earlier FOVs. With ``on_round(fov, round_label,
 image, metadata)`` each round image is handed over when generated and not
@@ -388,6 +396,20 @@ round's recorded transform. The reference round (``geometry.reference_round``,
 or the first round when unset) is held at identity: nothing is drawn for it and
 any supplied displacement rows for it are ignored.
 Positions and shifts are continuous voxel indices; no molecular truth is implied.
+
+``save_amplicon_dataset(dataset, directory)`` writes a ``SyntheticDataset`` from
+``generate_amplicon_dataset`` that holds its images (generated without
+``on_round``) and returns the directory. It writes the round-first layout that
+``Dataset`` reads, ``<round>/<fov>/<channel>.tif`` with one ZYX TIFF per codebook
+channel; ``codebook.csv`` with the columns ``entry_id``, ``gene_id`` and
+``color_sequence`` (the entry ID is the base sequence when the codebook has one,
+as a ``gene,barcode`` codebook names it); and the truth files ``formed.csv``,
+``round_truth.csv``, ``scene_truth.csv``, ``ground_truth.json`` and
+``generation.json``. Images and truth files are those that ``starfinder
+synthetic generate --mode e2e`` streams for the same dataset into its FOV-first
+layout. No ``dataset.json`` and no annotation images are written. A streamed
+dataset (a FOV without round images) raises ``ValueError`` and a nonempty
+directory ``FileExistsError``. The streaming writer stays private to the command.
 
 ``generate_registration_pair(preset, deformation="shift", seed=None,
 dtype="uint16", noise=True, include_reference=True, on_round=None)`` images
@@ -568,8 +590,8 @@ With two or more columns (rows) the overlap rule ``overlap · n ≥ 2 · jitter_
 + 1`` voxels must hold in X (Y), and ``jitter_max_z < n_z / 2`` (0 for a single
 plane); violations raise ``ValueError`` naming the axis or field.
 
-Every FOV is a ``FormedScene`` rendered by the unchanged formed generator from
-a per-FOV ``FormedSceneConfig``: the molecules at their FOV index positions
+Every FOV is a ``AmpliconScene`` rendered by the unchanged formed generator from
+a per-FOV ``AmpliconSceneConfig``: the molecules at their FOV index positions
 ``p = (σ − true_origin) ⊘ s`` with their sample IDs, genes and properties, the
 template's background components (given in the sample grid's index units)
 moved into the FOV frame, and the scene key ``[scene_key, fov_id]`` for the
@@ -581,14 +603,14 @@ and disable loss, dropout and weakening, which would otherwise be drawn per
 FOV; a background gradient is re-expressed per FOV only while its FOV
 intercept stays nonnegative.
 
-``CellularSceneConfig`` places ordinary, binucleate and empty cells by random
+``CellsConfig`` places ordinary, binucleate and empty cells by random
 sequential addition with a gap between site spheres; nuclei are rotated
 ellipsoids and cell territories are power-diagram cells limited by a reach, so
 every nucleus lies inside its cell. Cell and ambient molecules are drawn in the
 scene domain ``Ω``, which includes a halo around the covered region ``K``;
 ``in_sample`` marks content in ``K``. ``StainConfig`` renders a soft-edged
 ellipsoid per nucleus and then the observation stages (baseline, background and
-noise from ``stain.noise.*`` streams). ``SampleScene`` holds the formed scenes,
+noise from ``stain.noise.*`` streams). ``SampleScene`` holds the amplicon scenes,
 stains and uint32 label volumes per FOV (empty when each FOV was handed to
 ``on_fov`` and not retained), the sample label volumes on the sample grid
 (frame ``sample:<sample>``) and the truth tables ``placement``, ``positions``,
@@ -598,7 +620,7 @@ stains and uint32 label volumes per FOV (empty when each FOV was handed to
 ``SAMPLE_TRUTH_VERSION`` and ``SAMPLE_PRESET_VERSION``, requested and effective
 configuration, stream descriptors, sample grid, bounds of ``Ω`` and ``K`` and
 the SHA-256 of every other file), the CSV tables, the label TIFFs and per FOV
-the ``save_formed_scene`` layout with ``stain.ome.tif``, ``labels/nuclei.tif``,
+the ``save_amplicon_scene`` layout with ``stain.ome.tif``, ``labels/nuclei.tif``,
 ``labels/cells.tif`` and a legacy one-based ``molecules.csv`` (``x, y, z,
 gene``). The FOV labels carry the FOV's reference metadata, so
 ``segmentation.import_labels(..., relabel=False)`` and
@@ -619,9 +641,9 @@ makes no claim about the accuracy of any segmenter.
 Cellular scenes
 ---------------
 
-``generate_context_scene(codebook, config=ContextSceneConfig(), on_fov=None)``
+``generate_cellular_scene(codebook, config=CellularSceneConfig(), on_fov=None)``
 adds the richer cellular scene of :doc:`../synthetic-cellular-scene` beside the
-unchanged sample scene. ``ContextSceneConfig`` holds an unchanged
+unchanged sample scene. ``CellularSceneConfig`` holds an unchanged
 ``SampleSceneConfig`` and the parts, each off at its default: with every part
 off the result's ``sample`` equals ``generate_sample_scene`` of the same
 configuration, field for field. ``NucleusShapeConfig`` makes nuclei unions of
@@ -653,16 +675,16 @@ the voxel centres moved by a known translation per FOV (drawn within a bound,
 or supplied); the scene domain grows by that bound on each side, and the
 covered region does not change.
 
-``ContextScene`` holds the ``SampleScene``, the stain images of the reference
+``CellularScene`` holds the ``SampleScene``, the stain images of the reference
 round and of the morphology round, and the new truth tables;
-``save_context_scene(scene, directory)`` writes the ``save_sample_scene``
+``save_cellular_scene(scene, directory)`` writes the ``save_sample_scene``
 layout unchanged plus ``lobes.csv``, ``harmonics.csv``, ``cell_context.csv``,
 ``regions.csv``, ``type_abundances.csv``, ``cell_gene_counts.csv``,
 ``marker_pairs.csv``, ``stain_channels.csv``, ``stain_objects.csv``,
 ``bright_regions.csv``, ``unevenness.csv``, ``morphology_truth.csv``, the stain
-images per FOV and ``context.json`` (``CONTEXT_TRUTH_VERSION``, the requested
+images per FOV and ``context.json`` (``CELLULAR_TRUTH_VERSION``, the requested
 and effective configuration, the placement outcome, the ``context.`` streams
-drawn and the SHA-256 of every other file). ``save_context_dataset(scene,
+drawn and the SHA-256 of every other file). ``save_cellular_dataset(scene,
 directory)`` writes the scene as a raw dataset (``dataset.json``, the codebook
 and one TIFF per round, FOV and channel, the reference stains in the reference
 round's folder) that ``Dataset``, ``FOV.load_images`` and
@@ -671,8 +693,8 @@ reference stain that shares its name. The scene is a development fixture, not
 a calibrated tissue model, and makes no claim about the accuracy of any
 segmenter.
 
-``context_scene_preset(name)`` returns ``(Codebook, ContextSceneConfig)`` for a
-``CONTEXT_PRESETS`` name (version ``CONTEXT_PRESET_VERSION``,
+``cellular_scene_preset(name)`` returns ``(Codebook, CellularSceneConfig)`` for a
+``CELLULAR_PRESETS`` name (version ``CELLULAR_PRESET_VERSION``,
 ``context-presets-v1``), a registry separate from ``SAMPLE_PRESETS``: one
 routine and one ``slow`` preset per context of
 :doc:`../synthetic-cellular-scene` ("Presets"), with the values of its tables.
@@ -700,8 +722,8 @@ whose plateau lies outside a factor 1.5 of the bank's median (or of its median
 over the visible stain), and writes ``<bank>.npz`` with
 ``<bank>.record.json`` (the inputs with their SHA-256, the counts per rule, the
 plateaus and a digest of the arrays). The build configuration names the real
-source images and stays outside the repository. ``closed_form_bank(preset, n)``
-runs the same build in memory on ``n − 1`` scenes of an accepted context preset
+source images and stays outside the repository. ``generate_closed_form_bank(preset, n)``
+runs the same build in memory on ``n − 1`` scenes of an accepted cellular preset
 (the last of ``n`` seeds held out), so that tests read no real data.
 ``load_appearance_bank(reference)`` returns the bank a ``BankReference`` names:
 a closed-form bank, or ``<name>.npz`` from the directory that
@@ -710,7 +732,7 @@ reference's.
 
 ``generate_appearance_scene(codebook, config=AppearanceSceneConfig(...))``
 places the entries of that bank on the acquisition layout of an unchanged
-``ContextSceneConfig`` (``AugmentationConfig`` for the rotation, flips, scale
+``CellularSceneConfig`` (``AugmentationConfig`` for the rotation, flips, scale
 and gain; ``LayoutConfig`` for the placement, the visible-stain density or a
 fixed count, and the stop) and returns an ``AppearanceScene``. Its cells are
 the placed objects, one nucleus each, with the accepted cell types and
@@ -718,16 +740,16 @@ molecules; each stain is the bank channel of its name, composed as background
 plus out-of-focus light plus the placed signal (``CompositionConfig``: real
 background patches or a closed-form bank's background, no noise, an 8-bit
 stain scaled by the bank's median plateau). ``save_appearance_scene`` writes
-the ``save_context_scene`` layout with the shape columns empty, plus
+the ``save_cellular_scene`` layout with the shape columns empty, plus
 ``appearance.json`` (version ``APPEARANCE_TRUTH_VERSION``),
-``placements.csv`` and ``background_patches.csv``; ``save_context_dataset``
+``placements.csv`` and ``background_patches.csv``; ``save_cellular_dataset``
 of ``scene.context`` writes its dataset. See
 :doc:`../synthetic-real-appearance`.
 
 ``appearance_scene_preset(name)`` returns ``(codebook, AppearanceSceneConfig)``
 for the six ``APPEARANCE_PRESETS`` (version ``APPEARANCE_PRESET_VERSION``,
-``appearance-presets-v1``), which sit beside the six context presets and leave
-them unchanged. Each takes the accepted context preset of its context and tier
+``appearance-presets-v1``), which sit beside the six cellular presets and leave
+them unchanged. Each takes the accepted cellular preset of its context and tier
 (grid, spacing, jitter, overlap, seed 42, cell types, molecules, stains and
 morphology round) with its own name as dataset version and scene key. The
 routine presets ``appearance-dense3d-v1``, ``appearance-tissue2d-v1`` and
@@ -759,10 +781,10 @@ Example
 .. code-block:: python
 
    from dataclasses import replace
-   from starfinder.synthetic import benchmark_scene_preset, generate_dataset
+   from starfinder.synthetic import benchmark_scene_preset, generate_amplicon_dataset
 
    codebook, config = benchmark_scene_preset("tiny")
-   result = generate_dataset(codebook, replace(config, shape_zyx=(8, 64, 64)),
-                             fov_ids=("FOV_001", "FOV_002"), preset="tiny")
+   result = generate_amplicon_dataset(codebook, replace(config, shape_zyx=(8, 64, 64)),
+                                      fov_ids=("FOV_001", "FOV_002"), preset="tiny")
    image = result.rounds["FOV_001"]["round1"]          # ZYXC uint16
    visible = result.spot_truth.loc[result.spot_truth.rendered]

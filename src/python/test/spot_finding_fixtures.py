@@ -22,8 +22,8 @@ import pandas as pd
 from starfinder.readout import Codebook
 from starfinder.dataset import load_checkpoint
 from starfinder._checkpoint import write_candidates
-from starfinder.synthetic import (BackgroundConfig, FormedSceneConfig, NoiseConfig, ScalarDistribution,
-    generate_formed_scene)
+from starfinder.synthetic import (BackgroundConfig, AmpliconSceneConfig, NoiseConfig, ScalarDistribution,
+    generate_amplicon_scene)
 
 # The W-266 isolated-spot appearance: brightness (peak) 1500, sigma Z 1.5 and YX 1.3, baseline 100,
 # Poisson (alpha 1) plus read noise 3, uint16.
@@ -46,7 +46,7 @@ def render_w266(coords, shape, seed, key):
     generator exactly as ``w266_common.make_case`` renders iso3d and iso_z1; truth (N, 3) ZYX."""
     book = Codebook(pd.DataFrame(dict(gene_id=["iso"], color_sequence=["1"])), ("round1",),
                     ("ch00", "ch01", "ch02", "ch03"))
-    config = FormedSceneConfig(
+    config = AmpliconSceneConfig(
         dataset_version="w266-isolated-v1", sample_id="w266", scene_key=f"w274/{key}", seed=seed,
         shape_zyx=tuple(shape), dtype="uint16", coordinates=tuple(map(tuple, coords)),
         brightness=ScalarDistribution(parameters=(BRIGHTNESS,)),
@@ -55,7 +55,7 @@ def render_w266(coords, shape, seed, key):
         background=BackgroundConfig(baseline_enabled=True, baseline=((BASELINE,) * 4,)),
         noise=NoiseConfig(dependent_enabled=True, alpha=1.0, model="poisson", independent_enabled=True,
                           sigma=READ_NOISE))
-    scene = generate_formed_scene(book, config=config)
+    scene = generate_amplicon_scene(book, config=config)
     return scene.rounds["round1"][..., 0], scene.round_truth[["z", "y", "x"]].to_numpy(float)
 
 

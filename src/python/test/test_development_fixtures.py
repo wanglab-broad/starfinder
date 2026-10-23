@@ -14,8 +14,8 @@ import pytest
 
 from starfinder.io import ImageLoadConfig, load_volume
 from starfinder.synthetic import (DEVELOPMENT_FIXTURES, ReadoutEffectsConfig, ScalarDistribution,
-                                  development_scene_preset, formed_scene_preset,
-                                  generate_formed_scene, save_formed_scene)
+                                  development_scene_preset, amplicon_scene_preset,
+                                  generate_amplicon_scene, save_amplicon_scene)
 
 from .formed_oracle import CHANNELS, FIXTURES, ROUNDS, expected_case
 
@@ -27,7 +27,7 @@ def fixture_root(tmp_path_factory):
     root = tmp_path_factory.mktemp('development-fixtures')
     for name, (condition, size) in DEVELOPMENT_FIXTURES.items():
         book, config = development_scene_preset(condition, size=size)
-        save_formed_scene(generate_formed_scene(book, config=config), root / name)
+        save_amplicon_scene(generate_amplicon_scene(book, config=config), root / name)
     return root
 
 
@@ -88,7 +88,7 @@ def test_saved_fixture_matches_independent_oracle(fixture_root, name):
 @pytest.mark.parametrize('size', ['small', 'z1'])
 def test_combined_in_memory_float64_oracle(size):
     book, config = development_scene_preset('combined', size=size)
-    actual = generate_formed_scene(book, config=replace(config, dtype='float64'))
+    actual = generate_amplicon_scene(book, config=replace(config, dtype='float64'))
     expected = expected_case(size, 'combined')
     for label in actual.round_labels:
         # Covers every voxel/channel, background advection, both noise streams
@@ -99,26 +99,26 @@ def test_combined_in_memory_float64_oracle(size):
 
 
 def test_save_refuses_nonempty_directory_and_unsafe_labels(tmp_path):
-    book, config = formed_scene_preset('formed-z1-v1')
-    scene = generate_formed_scene(book, config=replace(config, count=0, shape_zyx=(1, 2, 2)))
+    book, config = amplicon_scene_preset('formed-z1-v1')
+    scene = generate_amplicon_scene(book, config=replace(config, count=0, shape_zyx=(1, 2, 2)))
     (tmp_path / 'used').mkdir()
     (tmp_path / 'used' / 'keep.txt').write_text('x')
     with pytest.raises(FileExistsError):
-        save_formed_scene(scene, tmp_path / 'used')
+        save_amplicon_scene(scene, tmp_path / 'used')
     assert (tmp_path / 'used' / 'keep.txt').read_text() == 'x'
-    saved = save_formed_scene(scene, tmp_path / 'empty')
+    saved = save_amplicon_scene(scene, tmp_path / 'empty')
     assert sorted(p.name for p in saved.rglob('*') if p.is_file()) == [
         'formed.csv', 'provenance.json', 'round1.ome.tif', 'round10.ome.tif', 'round2.ome.tif',
         'round_truth.csv', 'signals.csv']
     scene.round_labels = ('../escape', 'round2', 'round1')
     with pytest.raises(ValueError, match='file name'):
-        save_formed_scene(scene, tmp_path / 'unsafe')
+        save_amplicon_scene(scene, tmp_path / 'unsafe')
     assert not (tmp_path / 'unsafe').exists()
 
 
 @pytest.mark.parametrize('depth', [1, 3])
 def test_overlap_boundary_invisible_and_loss_keep_full_truth(depth):
-    book, base = formed_scene_preset()
+    book, base = amplicon_scene_preset()
     z = depth//2
     ids = ('edge', 'far', 'overlap-A', 'overlap-B')
     config = replace(base, shape_zyx=(depth, 7, 9), dtype='float64',
@@ -127,7 +127,7 @@ def test_overlap_boundary_invisible_and_loss_keep_full_truth(depth):
         brightness=ScalarDistribution(parameters=(8,)),
         readout=ReadoutEffectsConfig(dropout_enabled=True, dropout_probability=(0, 1, 0),
             loss_enabled=True, loss_probability=1, loss_start=2))
-    scene = generate_formed_scene(book, config=config)
+    scene = generate_amplicon_scene(book, config=config)
     assert len(scene.formed) == 4 and len(scene.round_truth) == 12
     assert scene.round_truth.groupby('amplicon_id').size().eq(3).all()
     edge = scene.round_truth[scene.round_truth.amplicon_id == 'edge']
@@ -142,7 +142,7 @@ def test_overlap_boundary_invisible_and_loss_keep_full_truth(depth):
     assert not scene.rounds['round2'].any() and not scene.rounds['round1'].any()
     assert scene.intended.sum() == 4*3*8
     # N=0 retains typed empty truth and NCR arrays with dropout and loss enabled.
-    empty = generate_formed_scene(book, config=replace(config, coordinates=(), amplicon_ids=(), gene_ids={}))
+    empty = generate_amplicon_scene(book, config=replace(config, coordinates=(), amplicon_ids=(), gene_ids={}))
     assert empty.intended.shape == (0, 4, 3)
     assert len(empty.formed) == len(empty.round_truth) == 0
     assert empty.round_truth.lost.dtype == bool

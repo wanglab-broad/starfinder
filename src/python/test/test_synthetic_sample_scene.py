@@ -23,7 +23,7 @@ from scipy.special import erfc
 
 from starfinder.image import ImageMetadata
 from starfinder.synthetic import (SAMPLE_PRESET_VERSION, SAMPLE_PRESETS, SAMPLE_TRUTH_VERSION,
-                                  BackgroundConfig, CellularSceneConfig, FormedSceneConfig, GeometryConfig,
+                                  BackgroundConfig, CellsConfig, AmpliconSceneConfig, GeometryConfig,
                                   NoiseConfig, ReadoutEffectsConfig, SampleSceneConfig, ScalarDistribution,
                                   StainConfig, TextureConfig, generate_sample_scene, sample_scene_preset,
                                   save_sample_scene)
@@ -360,10 +360,10 @@ def test_valid_config_constructs_and_generation_errors_name_the_seed_fov_or_fiel
     gradient = BackgroundConfig(gradient_enabled=True, gradient_intercept=0.0, gradient_slopes_zyx=(0, -1, 0))
     with pytest.raises(ValueError, match=r"^FOV_001: the background gradient intercept"):
         generate_sample_scene(book, config=with_(config, fov=dict(background=gradient)))
-    crowded = replace(config, cells=CellularSceneConfig(nuclei=40, max_proposals=1))
+    crowded = replace(config, cells=CellsConfig(nuclei=40, max_proposals=1))
     with pytest.raises(ValueError, match=r"^cell-\d+: no proposal accepted after max_proposals=1"):
         generate_sample_scene(book, config=crowded)
-    lonely = replace(config, cells=CellularSceneConfig(nuclei=1, binucleate=0, max_proposals=1),
+    lonely = replace(config, cells=CellsConfig(nuclei=1, binucleate=0, max_proposals=1),
                      molecules_per_cell=40.0)
     with pytest.raises(ValueError, match=r"^c1-m\d+: no proposal accepted in cell 1 after max_proposals=1"):
         generate_sample_scene(book, config=lonely)
@@ -371,9 +371,9 @@ def test_valid_config_constructs_and_generation_errors_name_the_seed_fov_or_fiel
         generate_sample_scene(book, config=replace(config, max_count=10))
     for name, value in (("nuclei", -1), ("max_proposals", 0), ("gap", 0.0), ("empty_radius", float("nan"))):
         with pytest.raises(ValueError, match=f"^{name}"):
-            CellularSceneConfig(**{name: value})
+            CellsConfig(**{name: value})
     with pytest.raises(ValueError, match="^reach"):
-        CellularSceneConfig(reach=ScalarDistribution("constant", (0.0,)))
+        CellsConfig(reach=ScalarDistribution("constant", (0.0,)))
     with pytest.raises(ValueError, match="^edge_width"):
         StainConfig(edge_width=0.0)
 
@@ -1010,7 +1010,7 @@ def test_presets_follow_the_page_table():
     assert fov.background.gradient_enabled and fov.background.regions_enabled and fov.noise.model == "poisson"
     with pytest.raises(ValueError, match="unknown sample preset"):
         sample_scene_preset("sample-medium-v1")
-    assert isinstance(FormedSceneConfig(), FormedSceneConfig) and isinstance(GeometryConfig(), GeometryConfig)
+    assert isinstance(AmpliconSceneConfig(), AmpliconSceneConfig) and isinstance(GeometryConfig(), GeometryConfig)
 
 
 SMALL = """

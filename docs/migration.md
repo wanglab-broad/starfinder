@@ -59,6 +59,23 @@ are not examples of the current API.
 | `segmentation.normalize_percentiles` (the function) | `segmentation.normalize_percentile_unclipped` (no alias) |
 | `assignment.molecule_table_from_csv` | `assignment.import_legacy_molecules_csv` (no alias) |
 | `assignment.sample_labels` (the function) | `assignment.labels_at_positions` (no alias) |
+| `synthetic.FormedSceneConfig` | `synthetic.AmpliconSceneConfig` (no alias) |
+| `synthetic.FormedScene` | `synthetic.AmpliconScene` (no alias; its field `formed`, written as `formed.csv`, keeps its name) |
+| `synthetic.generate_formed_scene` | `synthetic.generate_amplicon_scene` (no alias) |
+| `synthetic.formed_scene_preset` | `synthetic.amplicon_scene_preset` (no alias; the preset IDs `formed-small-v1` and `formed-z1-v1` stay) |
+| `synthetic.save_formed_scene` | `synthetic.save_amplicon_scene` (no alias) |
+| `synthetic.CellularSceneConfig` (the sample scene's cells, `SampleSceneConfig.cells`) | `synthetic.CellsConfig` (no alias). The name `CellularSceneConfig` now names the cellular scene's configuration (the former `ContextSceneConfig`), so a call written for the old class fails on its field names |
+| `synthetic.ContextSceneConfig` | `synthetic.CellularSceneConfig` (no alias) |
+| `synthetic.ContextScene` | `synthetic.CellularScene` (no alias) |
+| `synthetic.generate_context_scene` | `synthetic.generate_cellular_scene` (no alias) |
+| `synthetic.save_context_scene` | `synthetic.save_cellular_scene` (no alias) |
+| `synthetic.save_context_dataset` | `synthetic.save_cellular_dataset` (no alias; the `format` value of `dataset.json` stays `"starfinder.synthetic.save_context_dataset"`) |
+| `synthetic.context_scene_preset` | `synthetic.cellular_scene_preset` (no alias; the preset IDs `context-*-v1` stay) |
+| `synthetic.CONTEXT_PRESETS` | `synthetic.CELLULAR_PRESETS` (no alias) |
+| `synthetic.CONTEXT_PRESET_VERSION` | `synthetic.CELLULAR_PRESET_VERSION` (no alias; its value `"context-presets-v1"` stays) |
+| `synthetic.CONTEXT_TRUTH_VERSION` | `synthetic.CELLULAR_TRUTH_VERSION` (no alias; its value `"1"` stays) |
+| `synthetic.generate_dataset` | `synthetic.generate_amplicon_dataset` (no alias) |
+| `synthetic.closed_form_bank` | `synthetic.generate_closed_form_bank` (no alias) |
 
 These relocations do not make the old positional arguments or return values valid.
 Use typed operation configs and structured results. See the [API
@@ -124,6 +141,54 @@ the recorded `"coordinates": "one-based"` of the legacy CSV reader.
 `segmentation.normalize_percentile_unclipped` differs from
 `preprocessing.normalize_percentile`: it returns float32, does not clip, takes linear
 percentiles over the given axes and returns a record.
+
+The synthetic renames of W-559 (W-526, NC-06, NM-01, NM-15, NM-22 and SM-20) give the
+four synthetic scene kinds names a user can guess: the formed scene is the **amplicon**
+scene and the context scene the **cellular** scene; the sample and appearance scenes
+keep their names. **`CellularSceneConfig` changes meaning.** Before W-559 it named the
+sample scene's cell configuration (`SampleSceneConfig.cells`), which is now `CellsConfig`;
+it now names the cellular scene's configuration, the former `ContextSceneConfig`. A call
+written for the old class fails on its field names. The renames change these recorded
+labels, which no reader dispatches on:
+
+* the `"type"` of a recorded configuration: `"FormedSceneConfig"` is
+  `"AmpliconSceneConfig"` (the `requested_config` and `effective_config` of every amplicon
+  scene's provenance and the `fov` template of a sample scene's record) and
+  `"ContextSceneConfig"` is `"CellularSceneConfig"` (the cellular scene's record and
+  requested configuration, also inside an appearance scene's record); the nested
+  `type(x).__name__` values follow, so the sample scene's `cells` record `"CellsConfig"`;
+* the `generator` paths `starfinder.synthetic.generate_formed_scene`,
+  `generate_context_scene`, `generate_dataset` (the `generation.json` of
+  `starfinder synthetic generate --mode e2e`) and `closed_form_bank` (the record of a
+  closed-form appearance bank) are `generate_amplicon_scene`, `generate_cellular_scene`,
+  `generate_amplicon_dataset` and `generate_closed_form_bank`.
+
+These keep their values, because files and random draws carry them: the version values
+`"context-presets-v1"` and `"1"`; the preset IDs `formed-small-v1`, `formed-z1-v1` and
+`context-{dense3d,tissue2d,culture}[-slow]-v1`; the default `scene_key="formed-v1"` and
+the stream components `context.*` and `context.appearance.*`; the namespace `"formed"` and
+the column `formed_index`; the files `formed.csv`, `context.json` and `cell_context.csv`;
+the record keys `context_truth_version`, `context_preset_version` and
+`formed_generator_version`; the `context` key of each cellular preset entry; the `format`
+value `"starfinder.synthetic.save_context_dataset"` of `dataset.json`; and the fields
+`AmpliconScene.formed`, `SyntheticDataset.formed`, `AppearanceSceneConfig.context` and
+`AppearanceScene.context`. The private modules (`_formed.py`, `_context.py`,
+`_context_presets.py`) keep their names. The examples `docs/examples/formed_scene.py`,
+`formed_geometry.py` and `context_scene.py` are `amplicon_scene.py`,
+`amplicon_geometry.py` and `cellular_scene.py`.
+
+`synthetic.save_amplicon_dataset(dataset, directory)` is new: it writes an in-memory
+dataset from `generate_amplicon_dataset` in the round-first layout that `Dataset` reads
+(`<round>/<fov>/<channel>.tif`), with `codebook.csv` (`entry_id`, `gene_id`,
+`color_sequence`) and the truth files `formed.csv`, `round_truth.csv`, `scene_truth.csv`,
+`ground_truth.json` and `generation.json`, and no `dataset.json`. The streaming writer of
+`starfinder synthetic generate` stays private and unchanged apart from its `generator`
+path. **The quickstart's layout changes:** `docs/examples/quickstart.py` now builds its
+data with `benchmark_scene_preset("tiny")` and `generate_amplicon_dataset`, and writes it
+with `save_amplicon_dataset` into `input/`. The images, the codebook (as
+`entry_id,gene_id,color_sequence`) and the truth files are in `input/`; there is no
+`synthetic/` folder with FOV-first copies, no `gene,barcode` codebook and no annotation
+PNGs. Its results are unchanged.
 
 ## Before and after Python calls
 
@@ -301,9 +366,10 @@ default and earlier behavior) or `"channel"`; see
 
 ### Generate, evaluate and report
 
-`synthetic.generate_dataset(codebook, config, fov_ids=...)` returns arrays and
-truth records, or streams each round to a callback. The CLI persists generated
-inputs; benchmark cases explicitly select them.
+`synthetic.generate_amplicon_dataset(codebook, config, fov_ids=...)` returns arrays and
+truth records, or streams each round to a callback; `synthetic.save_amplicon_dataset`
+writes an in-memory dataset. The CLI persists generated inputs; benchmark cases
+explicitly select them.
 `evaluation` accepts supplied results/truth and explicit matching/units; it does
 not rerun algorithms. [Benchmark](benchmark.md) documents immutable processing
 runs, checksum validation, and separate saved-output evaluations/reports.
@@ -312,16 +378,16 @@ runs, checksum validation, and separate saved-output evaluations/reports.
 
 The historical generator (`SyntheticConfig`, integer-center `render_spots`,
 hash-seeded registration pairs) is removed. Benchmark data and test fixtures
-come from the formed-scene generator, with benchmark presets that keep the
+come from the amplicon-scene generator, with benchmark presets that keep the
 historical shapes, amplicon counts, seeds and shift ranges. There are no aliases.
 
 | Before | After |
 | --- | --- |
-| `SyntheticConfig`, `get_preset_config(name)` | `benchmark_scene_preset(name, dtype=...)` returns `(Codebook, FormedSceneConfig)`; adjust with `dataclasses.replace`; `SCENE_PRESETS` lists every preset |
-| `generate_dataset(config, preset=...)` | `generate_dataset(codebook, config, fov_ids=..., preset=..., on_round=...)` |
+| `SyntheticConfig`, `get_preset_config(name)` | `benchmark_scene_preset(name, dtype=...)` returns `(Codebook, AmpliconSceneConfig)`; adjust with `dataclasses.replace`; `SCENE_PRESETS` lists every preset |
+| `generate_dataset(config, preset=...)` | `generate_amplicon_dataset(codebook, config, fov_ids=..., preset=..., on_round=...)` |
 | `generate_registration_pairs([preset], seed=...)` | `generate_registration_pair(preset, deformation=..., seed=...)`, one call per pair |
 | `generate_displacement_field`, `DEFORMATION_CONFIGS` | `deformation_geometry(name, shape)` with `GeometryConfig` affine, polynomial and RBF terms; `forward_displacement(transform, shape)`. Magnitudes are reduced where needed for invertibility; notably `multi_point` uses 1.3–10.5 px instead of 5–20 px below `tissue` (see the synthetic API) |
-| `render_spots`, `generate_volume` | `generate_formed_scene` (single scenes) |
+| `render_spots`, `generate_volume` | `generate_amplicon_scene` (single scenes) |
 | `generate_codebook(n)` list of `(gene, barcode)` | `generate_codebook(n)` returns a `Codebook` with `base_sequence` |
 | `SyntheticDataset.spot_truth`, `perturbations`, `molecular_truth`, `config` | `formed`, `round_truth`, `spot_truth`, per-FOV `provenance`; `historical_truth` keeps the ground_truth.json keys |
 | `--dtype uint8` default; registration uint8 only | uint16 default in both modes; `--dtype uint8` scales intensities by 1/16 |
@@ -1324,12 +1390,12 @@ modified, so every existing preset, digest and saved file stays as it was.
 | Need | New name |
 | --- | --- |
 | One sample scene acquired as a grid of FOVs at true, fractional offsets, with placement, cell and per-FOV truth | `generate_sample_scene(codebook, config=SampleSceneConfig(), on_fov=None)` returns `SampleScene` |
-| The grid, jitter, cellular scene and nuclear stain | `AcquisitionConfig`, `CellularSceneConfig`, `StainConfig`, composed in `SampleSceneConfig` with a `FormedSceneConfig` template |
-| Files: `sample.json`, truth tables, label TIFFs, per-FOV formed scenes, stains, labels and legacy molecule CSVs | `save_sample_scene(scene, directory)` |
+| The grid, jitter, cellular scene and nuclear stain | `AcquisitionConfig`, `CellsConfig`, `StainConfig`, composed in `SampleSceneConfig` with an `AmpliconSceneConfig` template |
+| Files: `sample.json`, truth tables, label TIFFs, per-FOV amplicon scenes, stains, labels and legacy molecule CSVs | `save_sample_scene(scene, directory)` |
 | Presets, separate from `SCENE_PRESETS` | `sample_scene_preset(name)`, `SAMPLE_PRESETS` (`sample-tiny-v1`, `sample-small-v1`), `SAMPLE_PRESET_VERSION` (`sample-presets-v1`) |
 | Version of the sample-level truth files | `SAMPLE_TRUTH_VERSION` (`"1"`) |
 
-Every FOV is rendered by `generate_formed_scene` and records generator version 6;
+Every FOV is rendered by `generate_amplicon_scene` and records generator version 6;
 the sample-level draws use new `sample.*` and `stain.noise.*` stream components.
 The specification is {doc}`synthetic-sample-scene`.
 
@@ -1635,7 +1701,7 @@ run.json"):
 | Coordination | Rectangular subtiles cover both axes and remainders. Batch/streaming honor the same stage flags, unlike legacy forced/omitted stages. |
 | Registration signal | `merged` and `merged-image` mean the channel maximum, as in MATLAB, not the float64 channel sum; the default `RegistrationSignalConfig` is `mode="max"`, and the workflow's local `ref_img`/`mov_img` default is `merged-image`, not `single-channel`. Use `mode="sum"` for the earlier Python behavior. Different `ref_img` and `mov_img` in one block are rejected. |
 | Registration resampling | A multi-step recipe composes its steps into one pull map and resamples each image of a moving round once from its pre-registration array (linear SciPy by default). Results differ from the earlier per-step resampling at the boundary, where an intermediate image had been sampled outside its grid, and by integer rounding; an integer translation no longer rounds a later step. The registration golden test re-pins the translation → demons image for this reason. |
-| Synthetic | One formed-scene generator with keyed SHA-256/PCG64 streams: byte-repeatable across processes for a pinned NumPy build on the same CPU, but every image and truth record differs from the historical generator. Appearance defaults are uncalibrated and do not establish molecular truth. |
+| Synthetic | One amplicon-scene generator with keyed SHA-256/PCG64 streams: byte-repeatable across processes for a pinned NumPy build on the same CPU, but every image and truth record differs from the historical generator. Appearance defaults are uncalibrated and do not establish molecular truth. |
 | Evaluation | Centered NCC has no epsilon bias. Missing/failed shifts, zero denominators and constant images are undefined rather than zero/passing. Shift errors preserve floats; matching thresholds/policies are explicit. |
 | Benchmark / recipes | Failures retain requested/actual method identity. Evaluation/reporting reuse saved artifacts. Optional legacy experiments remain recipes with prerequisites, not validated research results. |
 | Segmentation / assignment workflow | The shared rules call the package under both backends: `uint32` labels, `rescale` on the input grid, no foreground gate, cells kept without molecules, `outside_grid` molecules, unknown genes and a double expansion raise, new `raw.h5ad` and `reads_assignment.csv` columns; MATLAB-backend runs need the package and its `stardist` and `anndata` extras. |

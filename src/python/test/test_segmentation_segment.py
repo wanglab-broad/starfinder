@@ -31,7 +31,7 @@ from starfinder.segmentation import (SEGMENTATION_METHODS, CompositeConfig, Flam
     SegmentationBackendUnavailableError, SegmentationInput, SegmentationPlan, SegmentationResult, SegmentationRun,
     SegmentationSpec, ZExtensionConfig, composite_nuclei_amplicon, enhance_with_flamingo, extend_labels_through_z,
     segment)
-from starfinder.synthetic import development_scene_preset, generate_formed_scene
+from starfinder.synthetic import development_scene_preset, generate_amplicon_scene
 
 from .coordination_helpers import digest
 from .segmentation_fixtures import (BOXES_METADATA, BOXES_SHAPE, CELL_BOXES, NUCLEUS_BOXES, boxes, paint,
@@ -521,7 +521,7 @@ def development_root(tmp_path_factory):
     The metadata gains a spacing of (0.35, 0.1, 0.1) µm, which the watershed needs.
     """
     book, config = development_scene_preset("clean", size="small")
-    scene = generate_formed_scene(book, config=config)
+    scene = generate_amplicon_scene(book, config=config)
     root = tmp_path_factory.mktemp("development")
     for name, image in scene.rounds.items():
         metadata = replace(scene.round_metadata[name], **SPACING)

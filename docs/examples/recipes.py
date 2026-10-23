@@ -68,7 +68,7 @@ def decode_fov(quickstart: Path, output: Path) -> FOV:
         channel_order=["ch00", "ch01", "ch02", "ch03"],
     )
     dataset.rounds.validate()
-    dataset.load_codebook(quickstart / "synthetic" / "codebook.csv", reverse_bases=True)
+    dataset.load_codebook(quickstart / "input" / "codebook.csv")
     fov = dataset.fov("FOV_001")
     fov.load_images()
     assert all(image.shape == (8, 128, 128, 4) for image in fov.images.values())

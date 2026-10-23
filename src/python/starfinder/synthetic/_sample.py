@@ -1,7 +1,7 @@
 """Multi-FOV sample scene: one continuous scene, FOVs at true offsets, cellular truth.
 
 See docs/synthetic-sample-scene.md. Every FOV is rendered by the unchanged formed
-generator from a per-FOV FormedSceneConfig composed from public fields (molecules
+generator from a per-FOV AmpliconSceneConfig composed from public fields (molecules
 at their FOV index positions, background components moved into the FOV frame).
 Labels and the nuclear stain are closed-form functions of the sample position,
 evaluated at voxel centres; no rendered image is interpolated.
@@ -27,12 +27,12 @@ from starfinder.io import save_volume
 
 from ._cellular import _labels
 from ._common import ScalarDistribution, _distribution, _draw, _integer, _json, _label, _probabilities
-from ._formed import (_GENERATOR_VERSION, _STREAM_KEY, _STREAM_NAMESPACE, FormedScene,
-                      FormedSceneConfig, _plain, generate_formed_scene)
+from ._formed import (_GENERATOR_VERSION, _STREAM_KEY, _STREAM_NAMESPACE, AmpliconScene,
+                      AmpliconSceneConfig, _plain, generate_amplicon_scene)
 from ._geometry import _TERM_AXES, GeometryConfig, _prepare_geometry
 from ._observation import (BackgroundConfig, NoiseConfig, TextureConfig, _noise, _observe,
                            _prepare_background, evaluate_background_translated)
-from ._storage import save_formed_scene
+from ._storage import save_amplicon_scene
 
 #: Version of the sample presets; changing any preset value bumps it.
 SAMPLE_PRESET_VERSION = "sample-presets-v1"
@@ -194,7 +194,7 @@ def _lognormal(median, sd):
 
 
 @dataclass(frozen=True)
-class CellularSceneConfig:
+class CellsConfig:
     """Seeds, nucleus laws and territories of the minimal cellular scene (µm, radians).
 
     Seeds are ordinary cells (one nucleus), binucleate cells (two) and empty
@@ -281,8 +281,8 @@ class StainConfig:
 
 
 def _template():
-    return FormedSceneConfig(dataset_version="sample-scene-v1", sample_id="sample", scene_key="sample-scene-v1",
-                             shape_zyx=(5, 36, 36), dtype="float32", accumulation="float64")
+    return AmpliconSceneConfig(dataset_version="sample-scene-v1", sample_id="sample", scene_key="sample-scene-v1",
+                               shape_zyx=(5, 36, 36), dtype="float32", accumulation="float64")
 
 
 _POPULATION_FIELDS = ("count", "density", "coordinates", "amplicon_ids", "gene_ids", "spatial_weights",
@@ -306,9 +306,9 @@ class SampleSceneConfig:
 
     __hash__ = None
 
-    fov: FormedSceneConfig = field(default_factory=_template)
+    fov: AmpliconSceneConfig = field(default_factory=_template)
     acquisition: AcquisitionConfig = field(default_factory=AcquisitionConfig)
-    cells: CellularSceneConfig | None = field(default_factory=CellularSceneConfig)
+    cells: CellsConfig | None = field(default_factory=CellsConfig)
     stain: StainConfig | None = field(default_factory=StainConfig)
     molecules_per_cell: float = 8.0
     ambient_density: float = 0.002
@@ -316,12 +316,12 @@ class SampleSceneConfig:
 
     def __post_init__(self):
         template, acquisition = self.fov, self.acquisition
-        if not isinstance(template, FormedSceneConfig):
-            raise TypeError("fov must be FormedSceneConfig")
+        if not isinstance(template, AmpliconSceneConfig):
+            raise TypeError("fov must be AmpliconSceneConfig")
         if not isinstance(acquisition, AcquisitionConfig):
             raise TypeError("acquisition must be AcquisitionConfig")
-        if self.cells is not None and not isinstance(self.cells, CellularSceneConfig):
-            raise TypeError("cells must be CellularSceneConfig or None")
+        if self.cells is not None and not isinstance(self.cells, CellsConfig):
+            raise TypeError("cells must be CellsConfig or None")
         if self.stain is not None and not isinstance(self.stain, StainConfig):
             raise TypeError("stain must be StainConfig or None")
         if tuple(template.shape_zyx) != tuple(acquisition.fov_shape_zyx):
@@ -343,7 +343,7 @@ class SampleSceneConfig:
 
 @dataclass
 class SampleScene:
-    """A generated sample scene: per-FOV formed scenes, stains, labels and sample truth.
+    """A generated sample scene: per-FOV amplicon scenes, stains, labels and sample truth.
 
     ``fovs``, ``stains`` and ``fov_labels`` are keyed by FOV ID in tile position
     table order and are empty when the FOVs were handed to ``on_fov``. The
@@ -354,7 +354,7 @@ class SampleScene:
     """
 
     sample: str
-    fovs: dict[str, FormedScene]
+    fovs: dict[str, AmpliconScene]
     stains: dict[str, np.ndarray]
     fov_metadata: dict[str, ImageMetadata]
     placement: pd.DataFrame
@@ -726,7 +726,7 @@ def _cast(plane, dtype):
 def _config_payload(config):
     payload = _plain(asdict(config))
     payload["type"] = "SampleSceneConfig"
-    payload["fov"]["type"] = "FormedSceneConfig"
+    payload["fov"]["type"] = "AmpliconSceneConfig"
     payload["acquisition"]["type"] = "AcquisitionConfig"
     if config.acquisition.jitter_zyx is not None:
         payload["acquisition"]["jitter_zyx"] = {k: [float(v) for v in value]
@@ -749,7 +749,7 @@ def generate_sample_scene(codebook: Codebook, *, config: SampleSceneConfig = Sam
 
     The scene (seeds, nuclei, cell territories, molecules, background) is
     generated once in continuous sample coordinates over the scene domain Ω;
-    each FOV is rendered by ``generate_formed_scene`` at its true origin, with
+    each FOV is rendered by ``generate_amplicon_scene`` at its true origin, with
     its own per-round geometry and noise streams (scene key ``[scene_key,
     fov_id]``), and receives every molecule within the rendering margin. Labels
     and the stain are evaluated at voxel centres. With ``on_fov(fov_id, scene,
@@ -851,7 +851,7 @@ def _generate(codebook, config, on_fov, cellular=_cellular_scene, molecules=_mol
         namespace = _json([template.dataset_version, sample, fov, "formed"])
         metadata = ImageMetadata(namespace + "/reference", tuple(s.tolist()), (0.0, 0.0, 0.0), _IDENTITY, "µm")
         fov_metadata[fov] = metadata
-        scene = generate_formed_scene(codebook, config=fov_config, metadata=metadata)
+        scene = generate_amplicon_scene(codebook, config=fov_config, metadata=metadata)
 
         labels = {} if cells is None else _fov_labels(true[k] + fov_points * s, sites, layout.omega)
         image = None
@@ -1046,7 +1046,7 @@ def save_sample_scene(scene: SampleScene, directory: Path | str) -> Path:
     ``placement_truth.csv``, ``nuclei.csv`` (with a cellular scene),
     ``cells.csv``, ``molecules.csv``, ``cell_fovs.csv``, ``molecule_fovs.csv``,
     ``labels/sample_nuclei.tif`` and ``labels/sample_cells.tif``, and per FOV the
-    ``save_formed_scene`` layout under ``fovs/<fov_id>/`` with ``stain.ome.tif``,
+    ``save_amplicon_scene`` layout under ``fovs/<fov_id>/`` with ``stain.ome.tif``,
     ``labels/nuclei.tif``, ``labels/cells.tif`` and the legacy one-based
     ``molecules.csv`` (x, y, z, gene). A scene generated with ``on_fov`` holds no
     FOV images and raises ValueError; an existing nonempty directory raises
@@ -1078,7 +1078,7 @@ def save_sample_scene(scene: SampleScene, directory: Path | str) -> Path:
             save_volume(scene.sample_labels[target], directory / "labels" / name, metadata=scene.sample_grid)
     genes = dict(zip(scene.molecules.amplicon_id, scene.molecules.gene_id))
     for fov in fov_ids:
-        root = save_formed_scene(scene.fovs[fov], directory / "fovs" / fov)
+        root = save_amplicon_scene(scene.fovs[fov], directory / "fovs" / fov)
         metadata = scene.fov_metadata[fov]
         if fov in scene.stains:
             # One channel of a ZYXC OME-TIFF keeps the grid metadata on a .ome.tif name.
@@ -1147,16 +1147,16 @@ def sample_scene_preset(name: str) -> tuple[Codebook, SampleSceneConfig]:
                 shape_zyx=spec["fov_shape_zyx"], dtype=spec["dtype"], accumulation=spec["accumulation"],
                 geometry=geometry)
     if name == "sample-tiny-v1":
-        template = FormedSceneConfig(**base, noise=NoiseConfig(independent_enabled=True, sigma=1.0))
+        template = AmpliconSceneConfig(**base, noise=NoiseConfig(independent_enabled=True, sigma=1.0))
     else:
         shape = tuple(int(v) for v in _layout(acquisition).shape)
-        template = FormedSceneConfig(**base, **{k: v for k, v in _appearance(shape, len(codebook.round_labels),
-                                                                             "float32").items() if k != "dtype"})
+        template = AmpliconSceneConfig(**base, **{k: v for k, v in _appearance(shape, len(codebook.round_labels),
+                                                                               "float32").items() if k != "dtype"})
     seeds, radius = spec["seeds"], spec["nucleus_radius_median"]
-    cells = CellularSceneConfig(nuclei=seeds["ordinary"], binucleate=seeds["binucleate"], empty=seeds["empty"],
-                                nucleus_axial_radius=_lognormal(radius["axial"], 0.1),
-                                nucleus_lateral_radius=_lognormal(radius["lateral"], 0.1),
-                                reach=_lognormal(spec["reach_median"], 0.15))
+    cells = CellsConfig(nuclei=seeds["ordinary"], binucleate=seeds["binucleate"], empty=seeds["empty"],
+                        nucleus_axial_radius=_lognormal(radius["axial"], 0.1),
+                        nucleus_lateral_radius=_lognormal(radius["lateral"], 0.1),
+                        reach=_lognormal(spec["reach_median"], 0.15))
     return codebook, SampleSceneConfig(fov=template, acquisition=acquisition, cells=cells, stain=StainConfig(),
                                        molecules_per_cell=spec["molecules_per_cell"],
                                        ambient_density=spec["ambient_density"])

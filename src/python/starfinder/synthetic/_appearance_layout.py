@@ -31,7 +31,7 @@ from scipy import ndimage as ndi
 
 from ._appearance_bank import AppearanceBank
 from ._common import _draw, _integer
-from ._context import ContextSceneConfig, TerritoryConfig, _direction, _unit
+from ._context import CellularSceneConfig, TerritoryConfig, _direction, _unit
 from ._formed import _STREAM_NAMESPACE
 from ._sample import _layout, _real, _streams
 
@@ -766,7 +766,7 @@ def _place_appearance(context, bank, augmentation=AugmentationConfig(), layout=L
                       target=None):
     """Place bank entries on the acquisition layout of ``context`` by PL2 and make the truth labels.
 
-    ``context`` is the unchanged ``ContextSceneConfig`` (its acquisition, seed, split, scene key, morphology round and,
+    ``context`` is the unchanged ``CellularSceneConfig`` (its acquisition, seed, split, scene key, morphology round and,
     for CT1's growth law, its territories; its nuclei, packing and stains are not used), ``bank`` an
     ``AppearanceBank``. ``visible(objects)`` is DN1's density check, the visible-stain share of the composed stain on
     the sample grid after the objects placed so far, and ``target`` DN1's target where ``layout.target`` is None (the
@@ -777,8 +777,8 @@ def _place_appearance(context, bank, augmentation=AugmentationConfig(), layout=L
     drawn). Raises ValueError for invalid input and for a stop below ``floor``.
     """
     layout_config = layout
-    if not isinstance(context, ContextSceneConfig):
-        raise TypeError("context must be ContextSceneConfig")
+    if not isinstance(context, CellularSceneConfig):
+        raise TypeError("context must be CellularSceneConfig")
     if not isinstance(bank, AppearanceBank):
         raise TypeError("bank must be AppearanceBank")
     if not isinstance(augmentation, AugmentationConfig):

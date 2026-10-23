@@ -1,8 +1,8 @@
 """Configuration, refusals and persistence of the cellular scene's stains and morphology round.
 
 docs/synthetic-cellular-scene-validation.md: GN2 (the names and fields of "Names" this issue adds), GN3 (the refusals
-of the stains and the morphology round) and GN22 (the truth tables, the stain images of ``save_context_scene``, and
-the dataset of ``save_context_dataset`` read by ``Dataset``, ``FOV.load_images`` and ``FOV.prepare_morphology``).
+of the stains and the morphology round) and GN22 (the truth tables, the stain images of ``save_cellular_scene``, and
+the dataset of ``save_cellular_dataset`` read by ``Dataset``, ``FOV.load_images`` and ``FOV.prepare_morphology``).
 """
 from dataclasses import FrozenInstanceError, fields, replace
 import hashlib
@@ -19,9 +19,9 @@ from starfinder.dataset import ChannelInfo, Dataset, MorphologyConfig, RoundStat
 from starfinder.registration import RegistrationRecipe, RegistrationStep
 from starfinder.io import load_volume, load_volume_zyxc
 from starfinder.registration import RegistrationSignalConfig, TranslationConfig
-from starfinder.synthetic import (BackgroundConfig, BrightRegionConfig, ContextSceneConfig, MorphologyRoundConfig,
+from starfinder.synthetic import (BackgroundConfig, BrightRegionConfig, CellularSceneConfig, MorphologyRoundConfig,
                                   NoiseConfig, OutputScaleConfig, ScalarDistribution, StainChannelConfig,
-                                  UnevennessConfig, generate_context_scene, save_context_dataset, save_context_scene)
+                                  UnevennessConfig, generate_cellular_scene, save_cellular_dataset, save_cellular_scene)
 
 from .cellular_scenes import FOVS, WHOLE, plane, scene, stain_config, tiny
 
@@ -47,7 +47,7 @@ def names(kind):
 
 def test_gn2_stain_names_and_fields():
     new = {"StainChannelConfig", "BrightRegionConfig", "UnevennessConfig", "OutputScaleConfig",
-           "MorphologyRoundConfig", "save_context_dataset"}
+           "MorphologyRoundConfig", "save_cellular_dataset"}
     assert new <= set(synthetic.__all__) and all(hasattr(synthetic, name) for name in new)
     assert names(StainChannelConfig) == ["name", "source", "round", "channel", "brightness", "edge_width",
                                          "band_width", "nuclear_ratio", "texture", "unevenness", "background", "noise",
@@ -107,20 +107,20 @@ def _refusals():
         ("translation_zyx with uniform", lambda: MorphologyRoundConfig(translation_zyx={"FOV_001": WHOLE}),
          "translation_zyx"),
         ("a name twice in a round",
-         lambda: ContextSceneConfig(sample=free, stains=(dapi, replace(dapi, channel="ch05"))),
+         lambda: CellularSceneConfig(sample=free, stains=(dapi, replace(dapi, channel="ch05"))),
          "name"),
-        ("a channel twice in a round", lambda: ContextSceneConfig(sample=free, stains=(
+        ("a channel twice in a round", lambda: CellularSceneConfig(sample=free, stains=(
             dapi, StainChannelConfig("PI"))), "channel"),
-        ("a shared name, another configuration", lambda: ContextSceneConfig(
+        ("a shared name, another configuration", lambda: CellularSceneConfig(
             sample=free, stains=(dapi, replace(held, edge_width=0.3)), morphology=MorphologyRoundConfig()), "differ"),
-        ("morphology stains without the round", lambda: ContextSceneConfig(sample=free, stains=(dapi, held)),
+        ("morphology stains without the round", lambda: CellularSceneConfig(sample=free, stains=(dapi, held)),
          "morphology"),
-        ("a morphology round without stains", lambda: ContextSceneConfig(sample=free, stains=(dapi,),
+        ("a morphology round without stains", lambda: CellularSceneConfig(sample=free, stains=(dapi,),
                                                                           morphology=MorphologyRoundConfig()),
          "morphology"),
-        ("T_z at Z=1", lambda: ContextSceneConfig(sample=one, stains=(dapi, held), morphology=MorphologyRoundConfig()),
+        ("T_z at Z=1", lambda: CellularSceneConfig(sample=one, stains=(dapi, held), morphology=MorphologyRoundConfig()),
          "translation_max_zyx"),
-        ("supplied FOVs", lambda: ContextSceneConfig(sample=free, stains=(dapi, held), morphology=MorphologyRoundConfig(
+        ("supplied FOVs", lambda: CellularSceneConfig(sample=free, stains=(dapi, held), morphology=MorphologyRoundConfig(
             translation="supplied", translation_zyx={"FOV_001": WHOLE})), "translation_zyx"),
     ]
 
@@ -137,14 +137,14 @@ def test_gn3_stain_generation_refusals():
     config = stain_config("stains-reach-whole")
     amplicon = replace(config, stains=(replace(config.stains[0], channel="ch01"),) + config.stains[1:])
     with pytest.raises(ValueError, match="amplicon channels"):
-        generate_context_scene(book, config=amplicon)
+        generate_cellular_scene(book, config=amplicon)
     with pytest.raises(ValueError, match="round name 'round2'"):
-        generate_context_scene(book, config=replace(config, morphology=replace(config.morphology, name="round2")))
+        generate_cellular_scene(book, config=replace(config, morphology=replace(config.morphology, name="round2")))
     with pytest.raises(TypeError, match="StainChannelConfig"):
-        ContextSceneConfig(sample=config.sample, stains=("DAPI",))
+        CellularSceneConfig(sample=config.sample, stains=("DAPI",))
     # A supplied translation for every FOV within the bound is accepted.
     supplied = MorphologyRoundConfig(translation="supplied", translation_zyx={fov: WHOLE for fov in FOVS})
-    assert ContextSceneConfig(sample=config.sample, stains=config.stains, morphology=supplied).morphology == supplied
+    assert CellularSceneConfig(sample=config.sample, stains=config.stains, morphology=supplied).morphology == supplied
 
 
 # ---------------------------------------------------------------- GN22: truth schema and persistence
@@ -168,7 +168,7 @@ def _equal_table(saved, table):
 @pytest.mark.parametrize("name", ["stains-grown-drawn", "plane-whole", "stains-empty", "stains-off"])
 def test_gn22_saved_stain_tables_and_images(name, tmp_path):
     _, config, generated = scene(name)
-    root = save_context_scene(generated, tmp_path / "context")
+    root = save_cellular_scene(generated, tmp_path / "context")
     record = json.loads((root / "context.json").read_text(encoding="utf-8"))
     for table, columns in STAIN_TABLES.items():
         assert list(getattr(generated, table).columns) == columns
@@ -220,11 +220,11 @@ def dataset_from(root, tmp_path):
 
 @pytest.mark.parametrize("name", ["mr1", "stains-reach-whole", "plane-whole"])
 def test_gn22_dataset_read_and_morphology_registered(name, tmp_path):
-    """save_context_dataset's layout read by Dataset, FOV.load_images and FOV.prepare_morphology, which registers
+    """save_cellular_dataset's layout read by Dataset, FOV.load_images and FOV.prepare_morphology, which registers
     the morphology round by one translation on DAPI: without a recipe on the culture layout (MR1, one reference
     stain), with a recipe naming the DAPI stain where the reference round holds several stains."""
     _, config, generated = scene(name)
-    root = save_context_dataset(generated, tmp_path / "raw")
+    root = save_cellular_dataset(generated, tmp_path / "raw")
     record, dataset = dataset_from(root, tmp_path)
     files = sorted(p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file())
     reference = [s for s in config.stains if s.round == "reference"]
@@ -290,8 +290,8 @@ def test_gn22_dataset_read_and_morphology_registered(name, tmp_path):
 
 def test_gn22_dataset_refusals(tmp_path):
     _, _, generated = scene("mr1")
-    root = save_context_dataset(generated, tmp_path / "first")
+    root = save_cellular_dataset(generated, tmp_path / "first")
     with pytest.raises(FileExistsError):
-        save_context_dataset(generated, root)
+        save_cellular_dataset(generated, root)
     with pytest.raises(TypeError):
-        save_context_dataset(generated.sample, tmp_path / "second")
+        save_cellular_dataset(generated.sample, tmp_path / "second")

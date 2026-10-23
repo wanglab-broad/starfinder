@@ -17,7 +17,7 @@ from starfinder.readout import (Codebook, CodebookAwareDecoderConfig, Neighborho
                                 decode_reads, extract_intensities, load_codebook, summarize_reads)
 from starfinder.io import ImageLoadResult
 from starfinder.spot_finding import LocalMaximaConfig, find_spots
-from starfinder.synthetic import calibrated_scene_preset, generate_formed_scene
+from starfinder.synthetic import calibrated_scene_preset, generate_amplicon_scene
 
 pytestmark = pytest.mark.readout
 
@@ -33,7 +33,7 @@ def cal_103():
     config = replace(config, readout=replace(config.readout, mixing_enabled=True))
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        scene = generate_formed_scene(book, config=config)
+        scene = generate_amplicon_scene(book, config=config)
         labels = list(scene.round_labels)
         spots = find_spots(scene.rounds[labels[0]], config=LocalMaximaConfig(), metadata=scene.metadata,
                            spot_namespace="cal-103")

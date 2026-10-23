@@ -3,10 +3,10 @@
 GA3 for the new entry).
 
 ``save_appearance_scene`` writes the AT2 layout of docs/synthetic-real-appearance.md ("Truth schema"): the
-``save_context_scene`` layout with the shape columns null and the closed-form tables empty, ``placements.csv``,
+``save_cellular_scene`` layout with the shape columns null and the closed-form tables empty, ``placements.csv``,
 ``background_patches.csv`` and ``appearance.json`` with its versions and the SHA-256 of every file. The tables reload
 equal, and the labels rebuilt by the test oracle from the saved files and the bank alone equal the saved label images.
-``save_context_dataset`` of ``scene.context`` writes a dataset that ``Dataset``, ``FOV.load_images`` and
+``save_cellular_dataset`` of ``scene.context`` writes a dataset that ``Dataset``, ``FOV.load_images`` and
 ``FOV.prepare_morphology`` read, registering the morphology round. Every bank is a closed-form bank or is built in
 the session from hand-made arrays; nothing is read from a run directory or a real image.
 """
@@ -25,7 +25,7 @@ from starfinder.io import load_volume, load_volume_zyxc
 from starfinder.synthetic import (APPEARANCE_TRUTH_VERSION, AppearanceScene, AppearanceSceneConfig, BankReference,
                                   CompositionConfig, LayoutConfig, StainChannelConfig, build_appearance_bank,
                                   generate_appearance_scene, load_appearance_bank, save_appearance_scene,
-                                  save_context_dataset)
+                                  save_cellular_dataset)
 from starfinder.synthetic._context import _payload
 
 from . import cellular_appearance_oracle as oracle
@@ -82,7 +82,7 @@ def read(path):
                                   "culture", pytest.param("dense3d", marks=slow),
                                   pytest.param("dense3d-plane", marks=slow)])
 def test_ga21_layout_versions_nulls_tables_and_hashes(name, tmp_path):
-    """The directory save_appearance_scene writes: the save_context_scene layout, nuclei.csv and cells.csv with their
+    """The directory save_appearance_scene writes: the save_cellular_scene layout, nuclei.csv and cells.csv with their
     columns, the shape columns null, the centre and anchor from placements.csv, site_radius the largest distance from
     c_k to a sample-grid voxel of the placed mask; the closed-form tables empty; appearance.json with its versions, the
     bank's name, SHA-256 and digest, κ, g and the SHA-256 of every file; the tables reloaded equal; each stain file
@@ -214,12 +214,12 @@ def dataset_from(root, tmp_path):
 
 @pytest.mark.parametrize("name", ["tissue2d-morph-supplied", "culture-morph-supplied"])
 def test_ga21_dataset_registers_the_morphology_round(name, tmp_path):
-    """save_context_dataset of scene.context read by Dataset, FOV.load_images and FOV.prepare_morphology, which
+    """save_cellular_dataset of scene.context read by Dataset, FOV.load_images and FOV.prepare_morphology, which
     registers the morphology round by one translation on the nuclear stain (MR1: the one reference stain shares its
     name with a channel of the round); the files hold the moving stain at p + d equal to the reference stain at p,
     d = (−1, 0, 0) voxels the pull displacement of morphology_truth, within 1e-9 of the maximum."""
     _, config, scene, _ = generated(name)
-    root = save_context_dataset(scene.context, tmp_path / "raw")
+    root = save_cellular_dataset(scene.context, tmp_path / "raw")
     record, dataset = dataset_from(root, tmp_path)
     reference = [s for s in config.context.stains if s.round == "reference"]
     held = [s for s in config.context.stains if s.round == "morphology"]

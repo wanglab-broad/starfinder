@@ -42,7 +42,7 @@ class ReadoutEffectsConfig:
     columns. None selects ones/identity. No broadcasting or normalization.
     All requested values are validated even when disabled; disabled values
     become algebraic identities and consume no random draws.
-    Instances are not hashable (see FormedSceneConfig).
+    Instances are not hashable (see AmpliconSceneConfig).
     """
 
     __hash__ = None
@@ -131,7 +131,7 @@ def _readout_effects(config, intended, ids, labels, stream):
 
 
 @dataclass(frozen=True)
-class FormedSceneConfig:
+class AmpliconSceneConfig:
     """Inputs for one formed-amplicon FOV; every effect defaults disabled.
 
     Select coordinates, count or density (all None defaults to count=8).
@@ -185,7 +185,7 @@ class FormedSceneConfig:
 
 
 @dataclass
-class FormedScene:
+class AmpliconScene:
     """Complete formed and per-round truth, images and reproducibility payload.
 
     rounds maps acquisition labels to ZYXC arrays in codebook order. Signal
@@ -194,7 +194,7 @@ class FormedScene:
     No eligibility or biological RNA truth is inferred. provenance records the
     generator version, requested/effective config, seed and stream scheme,
     codebook, per-round image SHA-256, clipping counts and transforms.
-    Generation performs no file writes; see save_formed_scene.
+    Generation performs no file writes; see save_amplicon_scene.
     """
 
     rounds: dict[str, np.ndarray]
@@ -265,8 +265,8 @@ def _prepare(codebook, config, metadata, stream_log):
 
     Returns the state shared by all rounds; images are rendered by _render_round.
     """
-    if not isinstance(config, FormedSceneConfig) or not isinstance(codebook, Codebook):
-        raise TypeError("expected FormedSceneConfig and Codebook")
+    if not isinstance(config, AmpliconSceneConfig) or not isinstance(codebook, Codebook):
+        raise TypeError("expected AmpliconSceneConfig and Codebook")
     # Revalidate/copy mutable payloads instead of trusting an old constructor.
     codebook = Codebook(codebook.table, codebook.round_labels, codebook.channel_labels,
                         codebook.color_to_channel, codebook.encoding)
@@ -490,7 +490,7 @@ def _render_round(plan, r, render=True):
 def _provenance(plan, stream_log, digests, clipping, transforms):
     config = plan.config
     config_payload = _plain(asdict(config))
-    config_payload["type"] = "FormedSceneConfig"
+    config_payload["type"] = "AmpliconSceneConfig"
     config_payload["readout"]["type"] = "ReadoutEffectsConfig"
     config_payload["background"]["type"] = "BackgroundConfig"
     config_payload["background"]["texture"]["type"] = "TextureConfig"
@@ -511,7 +511,7 @@ def _provenance(plan, stream_log, digests, clipping, transforms):
                      noise=plan.effective_noise, geometry=plan.effective_geometry,
                      effects_enabled=any(v for group in groups for k, v in group.items() if k.endswith("_enabled")))
     return dict(
-        generator="starfinder.synthetic.generate_formed_scene", generator_version=_GENERATOR_VERSION,
+        generator="starfinder.synthetic.generate_amplicon_scene", generator_version=_GENERATOR_VERSION,
         requested_config=config_payload, effective_config=effective, seed=config.seed,
         stream_scheme=dict(key=list(_STREAM_KEY), namespace=_STREAM_NAMESPACE,
                            encoding="compact UTF-8 JSON array", digest="SHA-256, big-endian integer",
@@ -546,13 +546,13 @@ def _generate(codebook, config, metadata, on_round=None, skip=()):
                                                         frame_id=transform['destination_frame'])))
         del image
     provenance = _provenance(plan, stream_log, digests, clipping, transforms)
-    return FormedScene(rounds, plan.metadata, plan.formed, pd.concat(tables, ignore_index=True),
-                       plan.intended, plan.pre_mix, plan.realized, plan.ids, plan.codebook.round_labels,
-                       plan.codebook.channel_labels, plan.codebook, provenance)
+    return AmpliconScene(rounds, plan.metadata, plan.formed, pd.concat(tables, ignore_index=True),
+                         plan.intended, plan.pre_mix, plan.realized, plan.ids, plan.codebook.round_labels,
+                         plan.codebook.channel_labels, plan.codebook, provenance)
 
 
-def generate_formed_scene(codebook: Codebook, *, config: FormedSceneConfig = FormedSceneConfig(),
-                          metadata: ImageMetadata | None = None) -> FormedScene:
+def generate_amplicon_scene(codebook: Codebook, *, config: AmpliconSceneConfig = AmpliconSceneConfig(),
+                            metadata: ImageMetadata | None = None) -> AmpliconScene:
     """Generate an in-memory formed population and controlled readout images.
 
     Stages and effect order follow docs/synthetic-specification.md. Readout,
@@ -562,14 +562,14 @@ def generate_formed_scene(codebook: Codebook, *, config: FormedSceneConfig = For
     TypeError). Density overflow/max_count errors never cap or retry N. Shape,
     round count and max_count have no library upper bound: callers own memory
     and time limits. Rounds are rendered one at a time into ZYXC arrays in the
-    accumulation dtype; all R output rounds are returned. Use generate_dataset
+    accumulation dtype; all R output rounds are returned. Use generate_amplicon_dataset
     to write rounds as they are generated. Integer outputs warn (RuntimeWarning)
     when more than 1% of a round's voxel values clip; counts stay in provenance.
     """
     return _generate(codebook, config, metadata)
 
 
-def formed_scene_preset(name: str = "formed-small-v1") -> tuple[Codebook, FormedSceneConfig]:
+def amplicon_scene_preset(name: str = "formed-small-v1") -> tuple[Codebook, AmpliconSceneConfig]:
     """Return a registered scene preset as (codebook, config).
 
     Every SCENE_PRESETS name is accepted. Fixture tier: the clean 3D
@@ -588,9 +588,9 @@ def formed_scene_preset(name: str = "formed-small-v1") -> tuple[Codebook, Formed
         if name in DEVELOPMENT_FIXTURES:
             condition, size = DEVELOPMENT_FIXTURES[name]
             return development_scene_preset(condition, size=size)
-        raise ValueError(f"unknown formed scene preset: {name}")
+        raise ValueError(f"unknown amplicon scene preset: {name}")
     codebook = Codebook(pd.DataFrame(dict(gene_id=["gene-A", "gene-B"], color_sequence=["123", "214"])),
                         ("round10", "round2", "round1"), ("ch02", "ch00", "ch03", "ch01"),
                         {"1": 1, "2": 0, "3": 3, "4": 2})
-    return codebook, FormedSceneConfig(dataset_version=name, accumulation="float64",
-                                       shape_zyx=(1 if name == "formed-z1-v1" else 8, 32, 32))
+    return codebook, AmpliconSceneConfig(dataset_version=name, accumulation="float64",
+                                         shape_zyx=(1 if name == "formed-z1-v1" else 8, 32, 32))

@@ -12,7 +12,7 @@ import pytest
 
 from starfinder.synthetic import (BackgroundConfig, GeometryConfig, NoiseConfig,
                                   ReadoutEffectsConfig, ScalarDistribution, TextureConfig,
-                                  formed_scene_preset, generate_formed_scene)
+                                  amplicon_scene_preset, generate_amplicon_scene)
 
 from .formed_oracle import COMPONENTS, generator, stream_descriptor, stream_digest
 
@@ -42,7 +42,7 @@ def test_namespace_separation():
 
 def every_effect(**changes):
     """A scene drawing from every registered component."""
-    book, config = formed_scene_preset()
+    book, config = amplicon_scene_preset()
     config = replace(config, shape_zyx=(3, 9, 11), density=.02, dtype='float64',
         brightness=ScalarDistribution('lognormal', (2, .2)),
         axial_width=ScalarDistribution('uniform', (.8, 1.2)),
@@ -60,7 +60,7 @@ def every_effect(**changes):
                                 local_enabled=True, centers_zyx=((1, 4, 5),), strength=.05,
                                 affine_enabled=True, affine_max_zyx=(.01, .05, .05),
                                 polynomial_enabled=True, polynomial_max_zyx=(.01, .05, .05)))
-    return generate_formed_scene(book, config=replace(config, **changes))
+    return generate_amplicon_scene(book, config=replace(config, **changes))
 
 
 def test_every_component_uses_its_documented_key():
@@ -133,7 +133,7 @@ import sys, tempfile
 import starfinder.synthetic as s
 book, config = s.development_scene_preset('combined', size='z1')
 with tempfile.TemporaryDirectory() as root:
-    s.save_formed_scene(s.generate_formed_scene(book, config=config), root + '/fixture')
+    s.save_amplicon_scene(s.generate_amplicon_scene(book, config=config), root + '/fixture')
 bad = sorted(m for m in sys.modules if m == 'starfinder.provenance' or m.startswith(
     ('starfinder.provenance.', 'starfinder.artifacts', 'starfinder.io.checkpoints',
      'starfinder.io.candidates', 'starfinder.io.molecules')))
@@ -146,7 +146,7 @@ def test_no_artifact_contract_or_issue_references():
     sources = list(PACKAGE.glob('*.py'))
     docs = [DOCS / 'synthetic-specification.md', DOCS / 'api/synthetic.rst',
             *(DOCS / 'examples' / f'{name}.py' for name in
-              ('formed_scene', 'readout_effects', 'background_noise', 'formed_geometry'))]
+              ('amplicon_scene', 'readout_effects', 'background_noise', 'amplicon_geometry'))]
     for path in sources + docs:
         text = path.read_text()
         assert 'starfinder.artifacts/1' not in text, path
