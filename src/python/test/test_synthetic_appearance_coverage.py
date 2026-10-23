@@ -50,13 +50,11 @@ NAMES = ("generate_appearance_scene", "AppearanceScene", "AppearanceSceneConfig"
 @pytest.mark.contract
 def test_ga2_every_new_name_is_exported_and_on_the_api_pages():
     pages = {page: (DOCS / "api" / page).read_text(encoding="utf-8")
-             for page in ("synthetic.rst", "inventory.rst", "python-index.rst")}
+             for page in ("synthetic.rst",)}
     assert len(NAMES) == 15
     for name in NAMES:
         assert name in synthetic.__all__ and hasattr(synthetic, name), name
         assert re.search(rf"^   {name}$", pages["synthetic.rst"], re.M), name
-        for page in ("inventory.rst", "python-index.rst"):
-            assert f":py:obj:`starfinder.synthetic.{name}`" in pages[page], (page, name)
     assert synthetic.APPEARANCE_PRESET_VERSION == "appearance-presets-v1" and synthetic.APPEARANCE_TRUTH_VERSION == "1"
 
 

@@ -2,15 +2,16 @@ Python API
 ==========
 
 The reference renders supported signatures, defaults, public members and source
-links. See :doc:`inventory` for exact namespace exports and :doc:`python-index`
-for functions/classes A–Z. :doc:`contracts` defines arrays and geometry;
+links. Each module page below lists its namespace's exports; :doc:`inventory`
+lists the root convenience exports, and the :ref:`general index <genindex>` lists every
+documented object A–Z. :doc:`contracts` defines arrays and geometry;
 :doc:`backends` covers dependencies and explicit failure behavior.
 
 .. toctree::
    :maxdepth: 1
 
    inventory
-   python-index
+   General index </genindex>
 
 Modules (alphabetical)
 ----------------------

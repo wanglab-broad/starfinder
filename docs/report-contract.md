@@ -176,8 +176,8 @@ All names are additions; no existing public name, module or format version chang
 | Template | `report.html` and `index.html` templates | package data | `starfinder/report/templates/` |
 | Records | `report.json` (`stage` `report`, `format_version` 1); in `run.json` the keys `transforms`, `codebook`, `workflow_config` and `counts.filtering.endpoint_valid` | JSON | — |
 
-`docs/api/` gains a page for `starfinder.report`, and `docs/api/inventory.rst` and
-`python-index.rst` list its exports, which `docs/check_reference.py` requires.
+`docs/api/` gains a page for `starfinder.report` whose autosummary list holds the
+exports of its `__all__`, which `docs/check_reference.py` requires.
 
 ### Options for the names
 

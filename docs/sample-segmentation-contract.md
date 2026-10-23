@@ -173,8 +173,8 @@ All new names are additions; no existing public name, module or format version c
 | Export settings | `ExportConfig.route`, `ExportConfig.segment`, `ExportConfig.segmentation` | fields | `starfinder.sample_output` |
 | Record | the `segmentation` section of `export.json`; the key `route` in the `assembly` section | JSON | — |
 
-`docs/api/sample_output.rst`, `docs/api/inventory.rst` and `docs/api/python-index.rst`
-gain the new exports when they are implemented, which `docs/check_reference.py` requires.
+The new exports go into `__all__` and the autosummary list of `docs/api/sample_output.rst`
+when they are implemented, which `docs/check_reference.py` requires.
 
 ## The entry
 

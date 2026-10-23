@@ -164,9 +164,8 @@ and spot-finding digests compare them with values pinned before this addition.
 
 ## Names
 
-All new, in `starfinder.synthetic`, with `docs/api/synthetic.rst`,
-`docs/api/inventory.rst` and `docs/api/python-index.rst` gaining the exports that
-`docs/check_reference.py` requires:
+All new, in `starfinder.synthetic`, with `__all__` and the autosummary list of
+`docs/api/synthetic.rst` gaining the exports that `docs/check_reference.py` requires:
 
 | Concept | Name | Kind |
 | --- | --- | --- |

@@ -124,12 +124,10 @@ def test_the_accepted_presets_are_unchanged():
 
 def test_preset_names_are_exported_and_on_the_api_pages():
     pages = {page: (DOCS / "api" / page).read_text(encoding="utf-8")
-             for page in ("synthetic.rst", "inventory.rst", "python-index.rst")}
+             for page in ("synthetic.rst",)}
     for name in NAMES:
         assert name in synthetic.__all__ and hasattr(synthetic, name), name
         assert re.search(rf"^   {name}$", pages["synthetic.rst"], re.M), name
-        for page in ("inventory.rst", "python-index.rst"):
-            assert f":py:obj:`starfinder.synthetic.{name}`" in pages[page], (page, name)
 
 
 def test_a_real_bank_test_skips_naming_the_variable_or_the_file(tmp_path, monkeypatch):

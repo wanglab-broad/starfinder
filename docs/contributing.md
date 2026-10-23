@@ -94,8 +94,11 @@ Keep documentation and behavior changes in the **same pull request**:
    shapes/axes, dtypes, units, coordinate origin and optional-backend behavior.
    Use Sphinx roles such as `{py:func}` in MyST guides and `:func:` in reST
    docstrings for references to documented Python objects.
-2. For a public export, update the relevant `docs/api/*.rst` autosummary list
-   and [public inventory](api/inventory.rst). Generated stubs are disposable.
+2. List a public export in two places: the `__all__` of its namespace and that
+   namespace's autosummary list in `docs/api/*.rst`. A root export (in
+   `starfinder.__all__`) is also listed in the root section of the
+   [public inventory](api/inventory.rst). `docs/check_reference.py` checks
+   these lists. Generated stubs are disposable.
    Update [contracts](api/contracts.md), [backend requirements](api/backends.md)
    and executable examples when their documented guarantees change. MATLAB
    help and inventory maintenance follow the source-parsing rules above.

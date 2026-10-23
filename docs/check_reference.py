@@ -1,4 +1,9 @@
-"""Check authored API inventory, alphabetical lists and five-section navigation.
+"""Check the public-name lists, alphabetical references and five-section navigation.
+
+Each public namespace's ``__all__`` equals the union of the sorted autosummary
+lists under ``docs/api``; the root bullets of ``api/inventory.rst`` equal the root
+``__all__``, and each arrow names an export of its owning namespace that is the
+root object. MATLAB references, the home toctree and member order are checked too.
 
 Run with the installed checkout: uv run python ../../docs/check_reference.py.
 No images, generated stubs or external services are needed.
@@ -12,7 +17,6 @@ DOCS = Path(__file__).resolve().parent
 
 def main():
     inventory = (DOCS / 'api/inventory.rst').read_text()
-    documented = set(re.findall(r':py:obj:`(starfinder\.[^`]+)`', inventory))
     expected = set()
     summaries = set()
     for path in sorted((DOCS / 'api').glob('*.rst')):
@@ -49,14 +53,14 @@ def main():
         module = import_module('starfinder.' + suffix)
         expected.update(f'{module.__name__}.{name}' for name in module.__all__)
     assert expected == summaries, {'missing_pages': expected - summaries, 'extra_pages': summaries - expected}
-    assert expected == documented, {'missing_inventory': expected - documented, 'extra_inventory': documented - expected}
     root = import_module('starfinder')
     root_names = set(re.findall(r'^\* ``starfinder\.([^`]+)``', inventory, re.M))
     assert root_names == set(root.__all__)
-    index = (DOCS / 'api/python-index.rst').read_text()
-    names = re.findall(r':py:obj:`([^`]+)`', index)
-    assert set(names) == expected
-    assert names == sorted(names, key=lambda n: (n.rsplit('.', 1)[-1].casefold(), n))
+    targets = re.findall(r'^\* ``starfinder\.([^`]+)`` → :py:obj:`(starfinder\.[^`]+)`', inventory, re.M)
+    for name, target in targets:
+        owner, _, attribute = target.rpartition('.')
+        assert target in expected, ('root target is not an export of its namespace', name, target)
+        assert getattr(root, name) is getattr(import_module(owner), attribute), ('root object differs', name, target)
     matlab = []
     for path in (DOCS / 'api/matlab').glob('*.rst'):
         names = re.findall(r'mat:autofunction:: (\w+)', path.read_text())
@@ -74,8 +78,8 @@ def main():
         ('Benchmark', 'benchmark'), ('API', 'api/index'), ('Wiki / Convention', 'wiki')]
     assert ':member-order: alphabetical' in (DOCS / '_templates/autosummary/class.rst').read_text()
     assert ':member-order: alphabetical' in (DOCS / 'api/matlab/dataset.rst').read_text()
-    print(f'PASS: {len(expected)} Python exports, {len(root_names)} root exports, '
-          f'{len(expected_matlab)} MATLAB interfaces; alphabetical references and five sections.')
+    print(f'PASS: {len(expected)} Python exports, {len(root_names)} root exports '
+          f'({len(targets)} owner targets), {len(expected_matlab)} MATLAB interfaces; alphabetical references and five sections.')
 
 
 if __name__ == '__main__':

@@ -29,8 +29,8 @@ are not examples of the current API.
 | `dataset.RegistrationRecipe`, `RegistrationStep`, `RecoveryConfig`, `ExternalReference` | `registration.RegistrationRecipe`, `RegistrationStep`, `RecoveryConfig`, `ExternalReference` (no alias) |
 
 These relocations do not make the old positional arguments or return values valid.
-Use typed operation configs and structured results. See the [full export
-inventory](api/inventory.rst) and [coordination member map](coordination.md).
+Use typed operation configs and structured results. See the [API
+reference](api/python.rst) and [coordination member map](coordination.md).
 Registration internals, benchmark helpers and barcode lookup constants are private.
 `io` holds image file I/O only: the checkpoint serializers are private to the package
 and `read_checkpoint` is public in `dataset`, beside `FOV.load_checkpoint`.
