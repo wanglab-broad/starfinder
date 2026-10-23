@@ -189,7 +189,7 @@ def test_export_reordered_subset_empty_and_bad_keys(tmp_path):
     empty = resident(dataset(tmp_path))
     empty.images = {k: np.zeros_like(v) for k, v in empty.images.items()}
     empty.run(complete())
-    assert empty.save_spots().read_text() == 'x,y,z,gene\n'
+    assert empty.export_spots().read_text() == 'x,y,z,gene\n'
     assert empty.filtering_result.fractions
 
 
@@ -207,7 +207,7 @@ def test_rectangular_subtiles_cover_remainder_and_restore_geometry(tmp_path, sha
     geometry = ImageMetadata('grid', spacing_zyx=(2, 3, 4), origin_zyx=(10, 20, 30),
         direction_zyx=((1, 0, 0), (0, 1, 0), (0, 0, 1)), spatial_unit='um')
     fov.metadata = dict.fromkeys(ds.rounds.all_rounds, geometry)
-    fov.create_subtiles()
+    fov.save_subtiles()
     loaded = FOV.from_subtile(fov.paths.subtile_dir/'subtile_data_9.npz', ds, 'FOV')
     w = ds.subtile.windows[-1]
     assert loaded.metadata['round1'].origin_zyx == (10, 20 + 3*w.y_start, 30 + 4*w.x_start)

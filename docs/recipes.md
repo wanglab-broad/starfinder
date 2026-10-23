@@ -262,7 +262,7 @@ alone, see {py:func}`~starfinder.readout.bases_to_colors` and
 
 ## Inspect molecule outputs
 
-{py:meth}`~starfinder.dataset.FOV.save_spots` adds one to coordinate columns
+{py:meth}`~starfinder.dataset.FOV.export_spots` adds one to coordinate columns
 without mutating the in-memory table. Save all diagnostic columns explicitly
 for candidates; the default filtered CSV contains `x,y,z,gene`.
 {py:meth}`~starfinder.dataset.FOV.save_processing_log` writes a processing summary.

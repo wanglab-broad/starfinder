@@ -118,7 +118,7 @@ class RegistrationRecipe:
 
 @dataclass(frozen=True, eq=False)
 class ExternalReference:
-    """A reference signal that is not a round of the dataset, for FOV.register_rounds.
+    """A reference signal that is not a round of the dataset, for FOV.register on other rounds.
 
     image is a finite ZYX array on the grid of the rounds it registers: the
     same shape, and metadata with the same spacing, origin, direction and

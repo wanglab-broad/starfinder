@@ -46,7 +46,7 @@ of 2026-09-27 on §2.10:
 
 * **Two sample-level entries** outside `PipelineConfig` and `FOV.run`: `Dataset.stitch`
   and `Dataset.export` (D3, as amended at the W-329 review of 2026-10-06);
-  `Dataset.export` calls `assemble`, `fuse`, `fuse_labels` and `export_spatialdata` in
+  `Dataset.export` calls `assemble`, `fuse_images`, `fuse_labels` and `export_spatialdata` in
   order ({doc}`sample-output-contract`, "The export entry"). **Ownership regions are
   computed in assemble from the placement**, not stored in it.
 * **Placement from either backend** enters as one `PlacementResult` (D1, D2).
@@ -107,7 +107,7 @@ assignment contracts.
 
 | Option | Names | Effect on the golden values | Effect on existing files and outputs |
 | --- | --- | --- | --- |
-| **A1. A `starfinder.assembly` module (recommended)** | Module `starfinder.assembly`; entry `assemble`; result `AssemblyResult`; input `AssemblyInput`; config `AssemblyConfig`; ownership `ownership_map`, `OwnershipMap`; vocabularies `ASSEMBLY_STATUSES`, `CELL_ASSEMBLY_REASONS`, `MOLECULE_ASSEMBLY_REASONS`, `CELL_ASSEMBLY_FLAGS`, `MOLECULE_ASSEMBLY_FLAGS`; persistence `save_assembly`, `load_assembly`; AnnData `sample_anndata`; coordination through the assemble part of `Dataset.export` ({doc}`sample-output-contract`) | None: `test_workflow_assembly_golden.py` pins the legacy scripts and the adapter through frozen helpers, which no option edits. | New files only; `Dataset.export` belongs to {doc}`sample-output-contract`; the exports go into `__all__` and the autosummary list of `docs/api/assembly.rst`, which `docs/check_reference.py` requires. `tile_config_{sample}.csv` and the legacy per-FOV and sample files stay as they are while the legacy rules run. |
+| **A1. A `starfinder.assembly` module (recommended)** | Module `starfinder.assembly`; entry `assemble`; result `AssemblyResult`; input `AssemblyInput`; config `AssemblyConfig`; ownership `ownership_map`, `OwnershipMap`; vocabularies `ASSEMBLY_STATUSES`, `CELL_ASSEMBLY_REASONS`, `MOLECULE_ASSEMBLY_REASONS`, `CELL_ASSEMBLY_FLAGS`, `MOLECULE_ASSEMBLY_FLAGS`; persistence `save_assembly`, `load_assembly`; AnnData `write_sample_h5ad`; coordination through the assemble part of `Dataset.export` ({doc}`sample-output-contract`) | None: `test_workflow_assembly_golden.py` pins the legacy scripts and the adapter through frozen helpers, which no option edits. | New files only; `Dataset.export` belongs to {doc}`sample-output-contract`; the exports go into `__all__` and the autosummary list of `docs/api/assembly.rst`, which `docs/check_reference.py` requires. `tile_config_{sample}.csv` and the legacy per-FOV and sample files stay as they are while the legacy rules run. |
 | A2. Inside `starfinder.stitching` | `starfinder.stitching.assemble` returning `SampleAssembly`; the same `Dataset.export` | None. | The same files; one module then holds placement and the observation populations, which D3 separates, and the stitching module gains a dependency on `starfinder.assignment`. |
 | A3. One `starfinder.sample` module for assemble and export | `starfinder.sample.assemble`, `AssembledSample`; W-328's export beside it | None. | The same files; the module grows a second responsibility when W-328 adds the fused image and SpatialData export. |
 
@@ -126,7 +126,7 @@ New names under A1:
 | Config | `AssemblyConfig` | frozen dataclass |
 | Ownership | `ownership_map(placement, grids, *, config, candidates=None)` returning `OwnershipMap` with `owner(points_zyx)` | function, frozen dataclass |
 | Vocabularies | `ASSEMBLY_STATUSES = ("retained", "excluded")`; `CELL_ASSEMBLY_REASONS = ("not_owner", "fov_not_placed", "duplicate_observation")`; `MOLECULE_ASSEMBLY_REASONS = ("cell_not_owner", "not_owner", "outside_grid", "fov_not_placed", "cell_duplicate_observation")`; `CELL_ASSEMBLY_FLAGS = ("fov_edge", "z_edge", "conflict", "unclaimed")`; `MOLECULE_ASSEMBLY_FLAGS = ("outside_owner_region", "cell_unclaimed")` | tuples |
-| AnnData | `sample_anndata(result, path, *, annotation=None)`, through `write_h5ad` of `starfinder.assignment` ("Sample-level AnnData") | functions |
+| AnnData | `write_sample_h5ad(result, path, *, annotation=None)`, through `write_h5ad` of `starfinder.assignment` ("Sample-level AnnData") | functions |
 | Persistence | `save_assembly(result, folder, *, table_format="csv")`, `load_assembly(folder)` | functions |
 | Coordination | The assemble part of `Dataset.export(sample, *, placement, assignment="default", config=ExportConfig(), output_dir)` ({doc}`sample-output-contract`, "The export entry") | method |
 
@@ -681,7 +681,7 @@ mismatch.
 
 ## Sample-level AnnData
 
-Every assembled sample has `sample.h5ad`, written by `sample_anndata(result, path, *,
+Every assembled sample has `sample.h5ad`, written by `write_sample_h5ad(result, path, *,
 annotation=None)` from the sample tables. It is not a second exporter: the AnnData is
 built and written by the §2.9 AnnData code, which the implementation factors out of the
 workflow adapter's `_write_raw_h5ad` (`src/python/starfinder/dataset/workflow.py:1395-1430`)
@@ -715,7 +715,7 @@ It has two callers, and each prepares its own `obs`:
   FOV result's counts, `layers` when the result has nuclei, and `uns["assignment"]`.
   `raw.h5ad` keeps the content it has today: the same rows, `obs` columns, `X`, layers and
   `uns`, which A18 of {doc}`assignment-algorithms` compares with the frozen helper.
-* **`sample_anndata`**, for `sample.h5ad`. It prepares the sample's `obs` from the sample
+* **`write_sample_h5ad`**, for `sample.h5ad`. It prepares the sample's `obs` from the sample
   cell table (the rows and columns below), and its `keys`, `obsm["spatial"]`, `uns` and,
   in `molecules_only` mode, `var["n_molecules_retained"]`, and calls `write_h5ad` with the
   sample `counts`. `save_assembly` calls it for `sample.h5ad`.
@@ -762,7 +762,7 @@ rows with `assembly_status == "retained"` and `status == "kept"`), in table orde
 `(0, n_genes)`), `var["n_molecules_retained"]` holds the retained molecules per gene, and
 `uns["assembly"]` the record. The molecule table holds the molecules themselves.
 
-**Dependency.** `sample_anndata` imports `anndata`, from the existing `anndata` extra
+**Dependency.** `write_sample_h5ad` imports `anndata`, from the existing `anndata` extra
 (`starfinder[anndata]`: `anndata==0.12.6`, its pin for Python 3.11 and later, which are
 the versions the package supports once the dependency plan of {doc}`stitching-contract` is
 applied), lazily; `write_h5ad` imports it the same way. Without it, either raises

@@ -877,10 +877,10 @@ def record_of(f):
 def test_ex1_the_label_part_runs_third(tmp_path, monkeypatch):
     folder = export_folder(tmp_path)
     calls = []
-    real_assemble, real_fuse, real_labels = starfinder.assembly.assemble, export_module.fuse, export_module.fuse_labels
+    real_assemble, real_fuse, real_labels = starfinder.assembly.assemble, export_module.fuse_images, export_module.fuse_labels
     monkeypatch.setattr(starfinder.assembly, "assemble", lambda *a, **k: calls.append("assemble") or
                         real_assemble(*a, **k))
-    monkeypatch.setattr(export_module, "fuse", lambda *a, **k: calls.append("fuse") or real_fuse(*a, **k))
+    monkeypatch.setattr(export_module, "fuse_images", lambda *a, **k: calls.append("fuse") or real_fuse(*a, **k))
     monkeypatch.setattr(export_module, "fuse_labels", lambda *a, **k: calls.append("fuse_labels") or
                         real_labels(*a, **k))
     record = export(folder, ExportConfig(route="per_fov", fuse_labels=True))

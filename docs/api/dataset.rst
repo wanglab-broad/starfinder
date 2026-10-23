@@ -14,7 +14,7 @@ summaries. See :ref:`inspecting-results`.
 
 ``PipelineConfig.registration`` is a :py:class:`~starfinder.registration.RegistrationRecipe` (or ``None``): global steps,
 at most one local step, one signal and one final resampling per moving round; see
-:doc:`../registration-contract`. ``FOV.register_rounds`` registers other rounds to a
+:doc:`../registration-contract`. ``FOV.register`` also registers other rounds to a
 reference round or a :py:class:`~starfinder.registration.ExternalReference` through a shared stain.
 
 ``FOV.run`` and ``FOV.register`` handle the reference round and the sequencing rounds

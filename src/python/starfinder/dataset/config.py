@@ -80,7 +80,7 @@ class MorphologyConfig:
     angle so the prepared images lie on its reference grid. recipe None
     registers each other round by one translation step on the shared stain:
     the single reference stain against the round's one channel with the same
-    name. A given recipe is used as FOV.register_rounds uses it, against the
+    name. A given recipe is used as FOV.register uses it, against the
     reference stain when its signal names a stain channel, else against the
     resident reference round. rounds None prepares every configured other
     round except the reference round; otherwise a tuple of other round names.

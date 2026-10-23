@@ -19,7 +19,7 @@ observations of one cell: the larger stays and the other is excluded
 With ``segmentation`` (the route after fusion), :func:`assemble` assigns the retained
 molecules of the ``molecules_only`` assembly to the cells of the sample segmentation, one
 row per cell (docs/sample-segmentation-contract.md).
-:func:`sample_anndata`
+:func:`write_sample_h5ad`
 writes ``sample.h5ad`` through :func:`starfinder.assignment.write_h5ad`, and
 :func:`save_assembly` and :func:`load_assembly` write and read the sample's export folder
 (``tables/`` and the ``assembly`` section of ``export.json``). :func:`fov_ownership`
@@ -30,7 +30,7 @@ selects the ownership rule, the centroid, the tie rule, the conflict flags and t
 duplicate rule. See
 docs/assembly-contract.md and docs/assembly-algorithms.md.
 """
-from ._anndata import sample_anndata
+from ._anndata import write_sample_h5ad
 from ._assemble import AssemblyResult, assemble
 from ._config import (ASSEMBLY_STATUSES, CELL_ASSEMBLY_FLAGS, CELL_ASSEMBLY_REASONS, MOLECULE_ASSEMBLY_FLAGS,
                       MOLECULE_ASSEMBLY_REASONS, AssemblyConfig, AssemblyInput)
@@ -40,4 +40,4 @@ from ._region import fov_ownership
 
 __all__ = ["assemble", "AssemblyResult", "AssemblyInput", "AssemblyConfig", "ownership_map", "OwnershipMap",
            "ASSEMBLY_STATUSES", "CELL_ASSEMBLY_REASONS", "MOLECULE_ASSEMBLY_REASONS", "CELL_ASSEMBLY_FLAGS",
-           "MOLECULE_ASSEMBLY_FLAGS", "sample_anndata", "save_assembly", "load_assembly", "fov_ownership"]
+           "MOLECULE_ASSEMBLY_FLAGS", "write_sample_h5ad", "save_assembly", "load_assembly", "fov_ownership"]

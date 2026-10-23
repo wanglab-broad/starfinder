@@ -35,7 +35,7 @@ from starfinder.export import (
     FusionConfig,
     FusionInput,
     check_export,
-    fuse,
+    fuse_images,
 )
 from starfinder.export._record import section_sha256
 from starfinder.io._ome import read_ome_layout
@@ -87,10 +87,10 @@ def temporaries(folder):
 @needs_library
 def test_default_export(folder, monkeypatch):
     calls = []
-    real_assemble, real_fuse = starfinder.assembly.assemble, export_module.fuse
+    real_assemble, real_fuse = starfinder.assembly.assemble, export_module.fuse_images
     monkeypatch.setattr(starfinder.assembly, "assemble", lambda *a, **k: calls.append("assemble") or
                         real_assemble(*a, **k))
-    monkeypatch.setattr(export_module, "fuse", lambda *a, **k: calls.append("fuse") or real_fuse(*a, **k))
+    monkeypatch.setattr(export_module, "fuse_images", lambda *a, **k: calls.append("fuse") or real_fuse(*a, **k))
     before = {p for p in listing(folder.root) if not p.startswith("export/")}
     record = export(folder)
     assert calls == ["assemble", "fuse"]
@@ -134,8 +134,8 @@ def test_parts_called_alone(folder):
     before = record_of(folder)
     placement = load_placement(folder.placement_dir)
     saved = load_assembly(folder.export_dir)
-    fuse(placement, fusion_inputs(folder.dataset, placement, ExportConfig()), assembly=saved,
-         config=FusionConfig(dimensionality="stack"), output_dir=folder.export_dir)
+    fuse_images(placement, fusion_inputs(folder.dataset, placement, ExportConfig()), assembly=saved,
+                config=FusionConfig(dimensionality="stack"), output_dir=folder.export_dir)
     after = record_of(folder)
     assert canonical(after["assembly"]) == canonical(before["assembly"])
     assert after["fusion"]["assembly_sha256"] == section_sha256(after["assembly"])
@@ -327,17 +327,17 @@ def test_check_saved_assembly_of_another_placement(folder):
                                      placement=folder.root / "other"), ValueError, "another placement")
     case = load_placement(folder.root / "other")
     saved = load_assembly(folder.export_dir)
-    unchanged(folder, lambda: fuse(case, fusion_inputs(folder.dataset, case, ExportConfig()), assembly=saved,
-                                   output_dir=folder.export_dir), ValueError, "another placement")
+    unchanged(folder, lambda: fuse_images(case, fusion_inputs(folder.dataset, case, ExportConfig()), assembly=saved,
+                                          output_dir=folder.export_dir), ValueError, "another placement")
 
 
 def test_check_fusion_inputs(folder):
     placement = load_placement(folder.placement_dir)
     inputs = fusion_inputs(folder.dataset, placement, ExportConfig())
-    unchanged(folder, lambda: fuse(placement, inputs[1:], output_dir=folder.export_dir), ValueError,
+    unchanged(folder, lambda: fuse_images(placement, inputs[1:], output_dir=folder.export_dir), ValueError,
               "FOVs without one: Position001")
     foreign = FusionInput("Position009", inputs[0].grid, inputs[0].images)
-    unchanged(folder, lambda: fuse(placement, inputs + [foreign], output_dir=folder.export_dir), ValueError,
+    unchanged(folder, lambda: fuse_images(placement, inputs + [foreign], output_dir=folder.export_dir), ValueError,
               "not included FOVs.*Position009")
     # A grid other than the placement's: through the entry (assemble meets it first), and with assemble off.
     grid = inputs[1].grid
@@ -366,11 +366,11 @@ def test_check_spacing_and_planes(tmp_path):
                     {"Q0": case.arrays["Q0"], "Q1": case.arrays["Q1"]},
                     grids={"Q0": grids["Q0"], "Q1": grid_of((4, 32, 32), (1.0, 0.5, 0.5))})
     with pytest.raises(ValueError, match="share one spacing"):
-        fuse(two.placement, two.inputs(), output_dir=tmp_path)
+        fuse_images(two.placement, two.inputs(), output_dir=tmp_path)
     mixed = make_case("mixed_planes", {"Q0": (0.0, 0.0, 0.0), "Q1": (0.0, 26.3, 0.4)},
                       {"Q0": case.arrays["Q0"], "Q1": case.arrays["Q1"][:1]})
     with pytest.raises(ValueError, match="one-plane FOVs cannot be fused beside multi-plane"):
-        fuse(mixed.placement, mixed.inputs(), output_dir=tmp_path)
+        fuse_images(mixed.placement, mixed.inputs(), output_dir=tmp_path)
     assert not any(tmp_path.iterdir())
 
 

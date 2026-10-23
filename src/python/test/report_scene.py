@@ -10,7 +10,7 @@ one translation step on the channel maximum, local maxima, extraction, WTA decod
 scoring, deduplication and a filter with ``end_bases``, with the checkpoint stages
 ``candidates`` and ``pre_qc``; then the rule outputs (reference image, goodSpots, score
 log, processing log), the truth labels imported with ``import_labels(…, relabel=False)``
-and ``FOV.assign`` with checkpoints, the stain saved as ``reference_stain``; the truth
+and ``FOV.assign_molecules`` with checkpoints, the stain saved as ``reference_stain``; the truth
 placement (``placement_from_table`` on ``positions.csv`` with the origins of
 ``placement_truth.csv``, approved) saved; ``Dataset.export`` on the route per FOV with
 ``dimensionality: both``. ``scene_chain_registered``: the same with the stage
@@ -171,7 +171,7 @@ def build_chain(base, *, plane=False, stages=STAGES, registration=None, preproce
         fov = dataset.fov(fov_id)
         fov.run(pipeline, checkpoints=checkpoints)
         fov.save_reference_image()
-        fov.save_spots()
+        fov.export_spots()
         fov.save_diagnostics()
         fov.save_processing_log("rsf")
         grid = grids[fov_id] = fov.reference_grid()
@@ -179,7 +179,7 @@ def build_chain(base, *, plane=False, stages=STAGES, registration=None, preproce
         labels = {target: import_labels(scene_dir / "fovs" / fov_id / "labels" / file, grid=grid, target=target,
                                         relabel=False, label_namespace=namespace)
                   for target, file in (("cell", "cells.tif"), ("nucleus", "nuclei.tif"))}
-        fov.assign(cells=labels["cell"], nuclei=labels["nucleus"], checkpoints=checkpoints)
+        fov.assign_molecules(cells=labels["cell"], nuclei=labels["nucleus"], checkpoints=checkpoints)
         stain = scene.stains[fov_id]
         save_volume(stain[..., None] if stain.ndim == 3 else stain, checkpoints.directory / fov_id / STAIN_FILE,
                     metadata=scene.fov_metadata[fov_id])

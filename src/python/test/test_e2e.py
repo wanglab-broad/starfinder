@@ -345,7 +345,7 @@ class TestE2ESubtileRoundTrip:
         h, w = fov.images["round1"].shape[1:3]
         ds.subtile.compute_windows(h, w)
 
-        coords_df = fov.create_subtiles()
+        coords_df = fov.save_subtiles()
 
         # Load first subtile and run spot finding
         npz_path = fov.paths.subtile_dir / "subtile_data_1.npz"

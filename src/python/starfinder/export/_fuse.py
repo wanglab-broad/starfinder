@@ -9,7 +9,7 @@ library's level 1 of each FOV for a scale factor (``level1``), passes the output
 ``output_stack_properties`` and calls ``multiview_stitcher.fusion.fuse`` once per file with
 ``weighted_average_fusion`` at interpolation order 1. It blends, interpolates and averages
 nothing itself; it writes the fused array as OME-TIFF (and the library's OME-Zarr on
-request). The library is imported only when ``fuse`` runs. Its own reading of a source file
+request). The library is imported only when ``fuse_images`` runs. Its own reading of a source file
 (``_Reader``) gives the library one task per page, or per file for the projection, and keeps
 each result from its first use until the last band of the file written that needs it, so
 that in one fusion each page is read and decoded at most once.
@@ -68,7 +68,7 @@ ZARR_CHUNKS = {"projection": {"t": 1, "c": 1, "y": 1024, "x": 1024},
 
 @dataclass(frozen=True)
 class FusionInput:
-    """One included FOV's input of :func:`fuse`: its reference grid and its source images.
+    """One included FOV's input of :func:`fuse_images`: its reference grid and its source images.
 
     ``images`` maps each source-image name of ``FusionConfig.images`` to the
     image on the FOV's reference grid: a ZYX (or YX for a one-plane grid)
@@ -102,7 +102,7 @@ class FusionInput:
 
 @dataclass(frozen=True)
 class FusionRecord:
-    """The ``fusion`` section ``fuse`` wrote to ``export.json`` and the files it wrote.
+    """The ``fusion`` section ``fuse_images`` wrote to ``export.json`` and the files it wrote.
 
     ``status`` is ``written``, ``empty``, ``not_run`` or ``failed``;
     ``section`` the section as written (JSON values); ``paths`` the written
@@ -212,7 +212,7 @@ def check_assembly(placement, assembly) -> None:
 
 
 def check_fusion(placement, inputs, *, config, assembly=None) -> _Plan:
-    """The checks of ``fuse`` before anything is written; returns what it reads.
+    """The checks of ``fuse_images`` before anything is written; returns what it reads.
 
     Check 5 of docs/sample-output-contract.md ("Checks before anything is
     written"), then the source images' shapes and dtypes, the sum bound and
@@ -262,7 +262,7 @@ def check_fusion(placement, inputs, *, config, assembly=None) -> _Plan:
             bad[what].append(fov)
     found = [f"{what}: {_names(fovs)}" for what, fovs in bad.items() if fovs]
     if found:
-        raise IncompatibleGeometryError("fuse needs known spacing, unit µm and identity direction on every grid; "
+        raise IncompatibleGeometryError("fuse_images needs known spacing, unit µm and identity direction on every grid; "
                                         f"FOVs with {'; '.join(found)}")
     grid = fused_grid(placement, {fov: by_fov[fov].grid for fov in ids}, config=config)
     sources, missing = {}, []
@@ -292,12 +292,12 @@ def check_fusion(placement, inputs, *, config, assembly=None) -> _Plan:
                 found.setdefault(source.dtype.name, []).append(fov)
         other = [d for d in found if d not in ALLOWED_DTYPES]
         if other:
-            raise ValueError(f"source image {name!r} has dtype {other[0]} (FOVs {_names(found[other[0]])}); fuse "
+            raise ValueError(f"source image {name!r} has dtype {other[0]} (FOVs {_names(found[other[0]])}); fuse_images "
                              f"accepts {list(ALLOWED_DTYPES)}")
         if len(found) > 1:
             raise ValueError(f"source image {name!r} mixes dtypes across FOVs (" +
                              "; ".join(f"{d}: {_names(f)}" for d, f in found.items()) +
-                             f"); fuse accepts one of {list(ALLOWED_DTYPES)} for every FOV, without conversion")
+                             f"); fuse_images accepts one of {list(ALLOWED_DTYPES)} for every FOV, without conversion")
         if found:
             dtypes[name] = np.dtype(next(iter(found)))
     if config.projection == "sum" and "projection" in config.dimensionalities:
@@ -384,7 +384,7 @@ def _section(status, placement, plan, config, assembly, outputs, timer, *, versi
 # --- Fusion ------------------------------------------------------------------------------------------------
 
 class _Reader:
-    """Starfinder's reading of the source files of one ``fuse`` call (docs/sample-output-contract.md, "Memory").
+    """Starfinder's reading of the source files of one ``fuse_images`` call (docs/sample-output-contract.md, "Memory").
 
     A file is one task per page (a page is a Z plane), as one chunk per page
     whatever strips the page is stored in, or one task for the whole file, in
@@ -729,8 +729,8 @@ def _codec(array):
     return repr([c.to_dict() if hasattr(c, "to_dict") else repr(c) for c in metadata.codecs])
 
 
-def fuse(placement: PlacementResult, inputs: Sequence[FusionInput], *, assembly=None,
-         config: FusionConfig = FusionConfig(), output_dir) -> FusionRecord:
+def fuse_images(placement: PlacementResult, inputs: Sequence[FusionInput], *, assembly=None,
+                config: FusionConfig = FusionConfig(), output_dir) -> FusionRecord:
     """Fuse a sample's source images with multiview-stitcher and write them to its export folder.
 
     Applies the checks of docs/sample-output-contract.md before anything is

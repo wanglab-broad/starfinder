@@ -63,7 +63,7 @@ the table and, optionally, the origins given separately: every FOV ``metadata_on
 the flag ``supplied``, no link, gauge ``none``.
 
 BigStitcher, the initial default, runs in Fiji as an engine task, and the package owns its
-two ends. :py:func:`~starfinder.stitching.bigstitcher_macro` writes ``tile_{j}.tif`` in
+two ends. :py:func:`~starfinder.stitching.export_bigstitcher` writes ``tile_{j}.tif`` in
 the column-major order of BigStitcher's ``Down & Right`` grid (a blank for each empty
 cell, a padding view, and with ``pad_missing=True`` for each acquired FOV without an
 image, a placeholder view) and returns the macro text, whose parameters are those of
@@ -110,8 +110,8 @@ mapping when given one, calls :py:func:`~starfinder.stitching.stitch` and, with
    :toctree: generated
 
    approve_placement
-   bigstitcher_macro
    BigStitcherConfig
+   export_bigstitcher
    GridSnap
    import_bigstitcher
    legacy_tile_config_view

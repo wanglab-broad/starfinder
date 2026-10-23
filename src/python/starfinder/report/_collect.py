@@ -742,7 +742,8 @@ class _Collection:
                 methods_of = [m.get("method") for m in (segmentation or {}).get("methods") or []
                               if isinstance(m, dict) and m.get("method")]
                 method = ";".join(methods_of) if methods_of else "imported"
-                for offset, (name, step_method) in enumerate((("segment", method), ("assign", cells.get("run") or NA))):
+                for offset, (name, step_method) in enumerate((("segment", method),
+                                                              ("assign_molecules", cells.get("run") or NA))):
                     rows.append({"scope": "fov", "fov_id": fov, "index": len(steps) + offset, "name": name,
                                  "round": NA, "method": step_method, "status": "succeeded",
                                  "seconds": Unavailable("not_recorded", f"no record holds the time of {name}")})

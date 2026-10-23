@@ -71,7 +71,7 @@ The terms are those of the two routes this page compares:
 
 * **The route per FOV** is the present one: each FOV is segmented and assigned on its own
   (W-382), and the assembly retains each cell by its ownership centroid (W-376).
-* **The route after fusion** fuses the block's stain images with the package's `fuse`,
+* **The route after fusion** fuses the block's stain images with the package's `fuse_images`,
   segments the fused image once, takes the block's molecules from a `molecules_only`
   assembly (so that each position comes from one FOV) and assigns them to the cells of the
   fused image with `assign_molecules` on the fused grid.
@@ -270,7 +270,7 @@ route after fusion is built for projection samples, specified by W-401
 * **(A) After fusion for every sample.** Each sample's stain images are fused, the fused
   image (projection or stack) is segmented once, the sample's molecules come from a
   `molecules_only` assembly and are assigned to the fused image's cells. Segmentation per
-  FOV stays as it exists (`FOV.segment`, `FOV.assign`) for work on single FOVs, and is not
+  FOV stays as it exists (`FOV.segment`, `FOV.assign_molecules`) for work on single FOVs, and is not
   a route to the sample's cells.
 * **(B) Per FOV for every sample**, with the duplicate rule of question 3.
 * **(C) Two routes:** after fusion for samples exported as projections, per FOV with the

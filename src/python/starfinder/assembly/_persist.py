@@ -17,7 +17,7 @@ import numpy as np
 
 from starfinder._layout import EXPORT_FILE
 
-from ._anndata import sample_anndata
+from ._anndata import write_sample_h5ad
 from ._assemble import AssemblyResult, fill_cell_namespace
 from ._fused import TERRITORIES_FILE, territories_of, with_territories
 
@@ -37,7 +37,7 @@ def _write_anndata(result, path):
     """Write sample.h5ad atomically."""
     from starfinder._records import atomic_file
     with atomic_file(path) as tmp:
-        sample_anndata(result, tmp)
+        write_sample_h5ad(result, tmp)
 
 
 def save_assembly(result: AssemblyResult, folder, *, table_format: str = "csv") -> AssemblyResult:
@@ -46,7 +46,7 @@ def save_assembly(result: AssemblyResult, folder, *, table_format: str = "csv") 
     Writes ``tables/fovs``, ``tables/cells``, ``tables/molecules`` and
     ``tables/counts`` in ``table_format`` (``csv``, float64 as ``%.17g``, or
     ``parquet``) through the checkpoint table writer, and ``sample.h5ad``
-    (:func:`sample_anndata`), each atomically; a table of the other format
+    (:func:`write_sample_h5ad`), each atomically; a table of the other format
     left by an earlier save is removed. Then it replaces only the ``assembly``
     section of ``folder/export.json`` (created when absent) with the record,
     whose ``files`` lists each file's path, SHA-256 and, for a table, its

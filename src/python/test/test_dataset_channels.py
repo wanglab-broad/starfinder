@@ -58,13 +58,13 @@ def test_channel_info_from_a_string_three_values_and_a_mapping_are_equal():
 def test_a_missing_wavelength_is_written_as_unavailable():
     assert ChannelInfo("ch00", "seq").record() == {"channel": "ch00", "name": "seq", "wavelength": "unavailable"}
     assert ChannelInfo("ch00", None, 488).record() == {"channel": "ch00", "name": None, "wavelength": 488.0}
-    record = dataset().channel_record()
+    record = dataset()._channel_record()
     assert list(record) == ["round1", "round2", "morph", "reference_stain"]
     assert record["morph"] == [{"channel": "ch00", "name": "Flamingo", "wavelength": 488.0},
                                {"channel": "ch01", "name": "RBD", "wavelength": 561.0},
                                {"channel": "ch02", "name": "DAPI", "wavelength": "unavailable"}]
     assert record["reference_stain"] == [{"channel": "ch04", "name": "DAPI", "wavelength": 405.0}]
-    assert "reference_stain" not in dataset(stains=()).channel_record()
+    assert "reference_stain" not in dataset(stains=())._channel_record()
 
 
 @pytest.mark.parametrize("form", ["string", "info", "mapping"])
@@ -252,7 +252,7 @@ def test_channel_index_refuses_an_unknown_round_and_a_key_of_another_type():
             ds.channel_index("morph", key)
 
 
-# --- Users of the rule: FOV.register_rounds and FOV.segment ----------------------------------------------
+# --- Users of the rule: FOV.register and FOV.segment ------------------------------------------------------
 
 @dataclass(frozen=True)
 class ThresholdConfig:
@@ -310,8 +310,8 @@ def registered(development, moving):
     fov = morphology_fov(development)
     signal = RegistrationSignalConfig("channel", reference_channel=fov.dataset.channel_labels(
         fov.rounds.reference_round)[2], moving_channel=moving)
-    return fov.register_rounds(RegistrationRecipe((RegistrationStep(TranslationConfig()),), signal=signal),
-                               rounds=["morph"])
+    return fov.register(RegistrationRecipe((RegistrationStep(TranslationConfig()),), signal=signal),
+                        rounds=["morph"])
 
 
 def test_registration_resolves_the_same_channel_by_name_and_by_pattern(development):

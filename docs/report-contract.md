@@ -392,8 +392,8 @@ Every place is fixed under the output root (D1); nothing is searched for.
 | Reference image | `images/ref_merged/<fov>.tif`, or the `reference_image` pattern | `dataset/fov.py`: `FOV.save_reference_image` | The background of the segmentation examples on the route per FOV; the Z size when no export exists |
 | Placement | `stitching/<sample>/placement.json`, `fovs.csv` | `stitching/_persist.py`: `save_placement` | The FOV maps, the correction from the stage position, the placement status, the owned area |
 | Export record | `export/<sample>/export.json` | `export/_record.py`: `write_export`, `update_section` (through `dataset/_export.py`: `export_sample`) | The route, the parts, the population accounting, the fused image and label files, the export's software |
-| Sample tables | `export/<sample>/tables/fovs.csv`, `cells.csv`, `molecules.csv`, `sample.h5ad` | `assembly/_persist.py`: `save_assembly`; `assembly/_anndata.py`: `sample_anndata` | Cells per FOV, reads in cells, per-cell distributions, MECR, marker patterns, reads along Z |
-| Fused image | the `fusion.outputs` of `export.json` (`<image>_projection.ome.tif`, `<image>_stack.ome.tif`) | `export/_fuse.py`: `fuse` | The marker patterns' image; the XZ zoom (a stack) |
+| Sample tables | `export/<sample>/tables/fovs.csv`, `cells.csv`, `molecules.csv`, `sample.h5ad` | `assembly/_persist.py`: `save_assembly`; `assembly/_anndata.py`: `write_sample_h5ad` | Cells per FOV, reads in cells, per-cell distributions, MECR, marker patterns, reads along Z |
+| Fused image | the `fusion.outputs` of `export.json` (`<image>_projection.ome.tif`, `<image>_stack.ome.tif`) | `export/_fuse.py`: `fuse_images` | The marker patterns' image; the XZ zoom (a stack) |
 | Sample label image | `export/<sample>/segmentation_<run>.ome.tif` | `export/_segment.py`: `segment_fused` | The segmentation examples on the route after fusion |
 
 Each file the report reads is checked against the SHA-256 a record holds for it, where one
@@ -824,7 +824,7 @@ order of `export.json` `parts`).
 | `scope` | string | — | `fov` or `sample`. | never |
 | `fov_id` | string | — | The FOV. | n/a: a sample step |
 | `index` | int64 | — | Zero-based position within its FOV or within the sample. | never |
-| `name` | string | — | `run.json` `steps[*].name` (`load_images`, `preprocess:<step>`, `register`, …), `segment`, `assign`, `stitch`, or an export part. | never |
+| `name` | string | — | `run.json` `steps[*].name` (`load_images`, `preprocess:<step>`, `register`, …), `segment`, `assign_molecules`, `stitch`, or an export part. | never |
 | `round` | string | — | `steps[*].round`. | n/a: not a per-round step |
 | `method` | string | — | The step's method: from `steps[*].methods` (detection), the preprocessing step name, the succeeded registration methods, the decoder, `segmentation.json` or `assignment.json` `inputs.cells`, `placement.json` `method.method`. | n/a: the step has none |
 | `status` | string | — | `succeeded`, `failed`, or the export part's status (`written`, `reused`, `off`, `not_run`, `failed`). | never |

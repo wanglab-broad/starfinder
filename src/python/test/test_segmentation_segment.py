@@ -3,7 +3,7 @@
 Rows L8 and L9 of the engineering validation design in docs/assignment-algorithms.md, the
 registry list of docs/segmentation-contract.md ("Method registry") and the coordination of
 ``FOV.segment`` ("Coordination per FOV", "Run record", "What the segment entry needs from
-FOV.run and FOV.register_rounds"). L8 uses a test-only method registered with monkeypatch on
+FOV.run and FOV.register"). L8 uses a test-only method registered with monkeypatch on
 the W-307 golden DAPI image; L9 uses the hand-built ``seeded`` fixture
 (``segmentation_fixtures.py``); the FOV tests use the development preset ``clean``, size
 ``small``. Every expected value comes from the geometry, a formula in the test or a pinned
@@ -576,7 +576,7 @@ def add_morphology_round(fov, *, register=True):
     fov.images["morph"] = np.ascontiguousarray(np.roll(fov.images[ref], (0, 2, -1), axis=(0, 1, 2)))
     fov.metadata["morph"] = replace(fov.metadata[ref], frame_id="morph")
     if register:
-        fov.register_rounds(MORPH_RECIPE, rounds=["morph"])
+        fov.register(MORPH_RECIPE, rounds=["morph"])
     return fov
 
 

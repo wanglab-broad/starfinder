@@ -3,7 +3,7 @@ levels and the configuration refusals, without multiview-stitcher.
 
 Fixtures: ``quad`` (seed 2102), ``zstack`` (equal Z, different Z, the one-plane pair),
 ``plane_pair``, ``checker_pair``, ``fuse_band``, ``quad``'s first FOV alone and
-``status_cases``' placement with every FOV excluded (``fuse`` called alone: status
+``status_cases``' placement with every FOV excluded (``fuse_images`` called alone: status
 ``empty``, F8). The expected ``n0`` is the formula evaluated here. ``import
 starfinder.export`` is checked in a subprocess.
 """
@@ -25,7 +25,7 @@ from starfinder.export import (
     LabelConfig,
     SpatialDataExportConfig,
     check_export,
-    fuse,
+    fuse_images,
     fused_grid,
 )
 from starfinder.export._fuse import sum_bound
@@ -142,7 +142,7 @@ def test_fuse_alone_without_an_included_fov(tmp_path):
     """F8 on status_cases' placement with every FOV excluded: no image, status empty, no_included_fov."""
     statuses = {fov: "failed" for fov in ("Position001", "Position003")} | {"Position002": "placeholder"}
     result = approved(golden_placement(statuses=statuses, review="required"))
-    record = fuse(result, [], output_dir=tmp_path / "export")
+    record = fuse_images(result, [], output_dir=tmp_path / "export")
     assert record.status == "empty" and record.paths == ()
     section = json.loads((tmp_path / "export" / "export.json").read_text())["fusion"]
     assert section["status"] == "empty" and section["reason"] == "no_included_fov" and section["outputs"] == []
@@ -195,32 +195,32 @@ def test_sum_bound(dtype, planes, ok):
 
 
 def test_refusals_of_fuse_before_any_file(tmp_path):
-    """Grid, dtype and pyramid refusals of fuse raise before anything is written (no library needed)."""
+    """Grid, dtype and pyramid refusals of fuse_images raise before anything is written (no library needed)."""
     case = quad()
     out = tmp_path / "export"
     for dtype in ("int8", "int16", "uint32", "int32", "float64", "uint64", "bool"):
         bad = quad(dtype)
         with pytest.raises(ValueError, match=f"dtype {dtype}.*\\['uint8', 'uint16', 'float32'\\]"):
-            fuse(bad.placement, bad.inputs(), output_dir=out)
+            fuse_images(bad.placement, bad.inputs(), output_dir=out)
     mixed = quad(dtypes={"Q1": "uint8"})
     with pytest.raises(ValueError, match="mixes dtypes"):
-        fuse(mixed.placement, mixed.inputs(), output_dir=out)
+        fuse_images(mixed.placement, mixed.inputs(), output_dir=out)
     with pytest.raises(ValueError, match="pyramid_levels 4 exceeds .* = 3"):
-        fuse(case.placement, case.inputs(), config=FusionConfig(scale_yx=0.25, pyramid_levels=4), output_dir=out)
+        fuse_images(case.placement, case.inputs(), config=FusionConfig(scale_yx=0.25, pyramid_levels=4), output_dir=out)
     with pytest.raises(ValueError, match="no FusionInput|FOVs without one"):
-        fuse(case.placement, case.inputs()[1:], output_dir=out)
+        fuse_images(case.placement, case.inputs()[1:], output_dir=out)
     other = FusionInput("Other", case.grids["Q0"], {"reference_stain": case.arrays["Q0"]})
     with pytest.raises(ValueError, match="not included FOVs"):
-        fuse(case.placement, case.inputs() + [other], output_dir=out)
+        fuse_images(case.placement, case.inputs() + [other], output_dir=out)
     assert not out.exists()
 
 
 def test_missing_extra_records_not_run(tmp_path, monkeypatch):
-    """With multiview_stitcher not importable fuse writes no image and records not_run, extra_missing."""
+    """With multiview_stitcher not importable fuse_images writes no image and records not_run, extra_missing."""
     monkeypatch.setitem(sys.modules, "multiview_stitcher", None)
     case = quad()
     with pytest.warns(ExportIncompleteWarning, match="extra_missing"):
-        record = fuse(case.placement, case.inputs(), output_dir=tmp_path)
+        record = fuse_images(case.placement, case.inputs(), output_dir=tmp_path)
     assert record.status == "not_run" and record.section["reason"] == "extra_missing"
     assert record.section["extra"] == "multiview-stitcher" and record.section["outputs"] == []
     assert sorted(p.name for p in tmp_path.iterdir()) == ["export.json"]

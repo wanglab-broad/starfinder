@@ -42,7 +42,7 @@ of its repair):
 1. **D1 Separate entries.** Segmentation and assignment are their own entries, not
    fields of `PipelineConfig` and not stages of `FOV.run`. Per FOV there are three calls:
    `FOV.run` (molecules), segment (label mask), assign (cell table and counts). The
-   coordination methods may live on `FOV`, as `FOV.register_rounds` does. Accepted costs:
+   coordination methods may live on `FOV`, as `FOV.register` does. Accepted costs:
    the segmentation input image becomes a specified, saved artifact, and assign checks
    the grid and records the hashes of the mask and the molecule table. The documentation
    gives a notebook example of the three calls.
@@ -213,10 +213,10 @@ the caller calls `fov.prepare_morphology(MorphologyConfig(rotation_degrees=…),
 between the first two calls ({doc}`coordination`, "Sequencing rounds and other rounds").
 It loads and rotates the reference stain as the image `reference_stain`, recorded as the
 same acquisition as the reference round, and loads, rotates and registers each other
-round with `FOV.register_rounds` through its shared stain; with checkpoints it saves each
+round with `FOV.register` through its shared stain; with checkpoints it saves each
 prepared image under `other_rounds/<name>/`, which `fov.load_registered_round(name)`
 restores on another `FOV` object. Loading the rounds and calling
-`fov.register_rounds(recipe, rounds=[…])` directly is the same step, done by hand. It is
+`fov.register(recipe, rounds=[…])` directly is the same step, done by hand. It is
 a coordination step that a plan needs, not one of the three calls. It is not needed when
 the plan's inputs use only the reference round's own channels or its merged image, or
 when every run imports an external mask.
@@ -227,7 +227,7 @@ by `segmentation_input_folder` and never load a sequencing round, the calls can 
 process or in separate ones:
 
 * *One process.* `fov.run(…)`, `fov.prepare_morphology(…)` when the plan needs it,
-  `fov.segment(plan)` and `fov.assign(…)` on one `FOV` object. The reference round stays
+  `fov.segment(plan)` and `fov.assign_molecules(…)` on one `FOV` object. The reference round stays
   resident after `FOV.run` (or comes back with `FOV.load_checkpoint("registered")`, which
   restores every sequencing round as well).
 * *Segmenting from saved images.* Process 1 calls `fov.run(pipeline, checkpoints=…)` and
@@ -243,13 +243,13 @@ process or in separate ones:
   `registered` checkpoint. Its reference grid is the grid of that file (source
   `file:<path>`), which is the reference round's grid by the grid rule
   ({doc}`assignment-contract`, "The grid rule"), so its labels and assignment tables equal
-  those of the same calls in one process. `fov.assign(…)` there takes the molecules of
+  those of the same calls in one process. `fov.assign_molecules(…)` there takes the molecules of
   process 1 from its `candidates` and `pre_qc` checkpoints, with the filter re-applied by
   `FOV.run`; `assign_molecules` with `import_legacy_molecules_csv` of the exported table is the
   other route. An input that reads a channel of the reference round other than its merged
   image still needs that round resident, and `FOV.segment` says so. A reference image saved
   with a projection (YX) gives a Z=1 grid, on which a run's inputs must also have Z=1, and
-  which `FOV.assign` refuses as the molecules' grid.
+  which `FOV.assign_molecules` refuses as the molecules' grid.
 
 **The reference grid.** Every label image of a FOV is on one grid. Because
 `ImageMetadata` carries no shape (`src/python/starfinder/image.py`), the grid is passed
@@ -301,9 +301,9 @@ hash).
 | `FOV.run` | `fov.metadata[reference_round]`: the reference `ImageMetadata` (frame, spacing, origin, direction) and the reference grid `images[reference_round].shape[:3]`, together `FOV.reference_grid()` | the grid and metadata every segmentation input and label image must have, and the grid of an import |
 | `FOV.run` | the reference round's current image (its detection image after `run`), whose channel maximum is the reference merged image, ZYX, exactly as `save_reference_image(reference_image="merged")` writes it; in a process without the reference round, that saved file restored by `FOV.load_reference_image` | the amplicon channel of the composite (`InputChannel(reference_merged=True)`; tissue-2D grows its cells by a seeded watershed on the PI–amplicon composite) and the stain of a seeded watershed on the amplicon signal alone |
 | `FOV.run` | `preprocessing_record` and `registration_record` | copied by reference (their hashes) into the segmentation record, so the input's processing is traceable |
-| `FOV.prepare_morphology` (`FOV.register_rounds`) | each registered morphology round's image (every channel resampled once into the reference frame) and its metadata, which equals the reference metadata | the `nuclear`, `cytoplasm` and Flamingo channels |
+| `FOV.prepare_morphology` (`FOV.register`) | each registered morphology round's image (every channel resampled once into the reference frame) and its metadata, which equals the reference metadata | the `nuclear`, `cytoplasm` and Flamingo channels |
 | `FOV.prepare_morphology` | the image `reference_stain` (the reference round's stain files, rotated as the reference round, with its metadata) | a nuclear stain stored as an extra file of the reference round |
-| `FOV.prepare_morphology` (`FOV.register_rounds`) | `registration_record["rounds"][name]`: the recipe summary, the reference label and `reference_sha256`, or for `reference_stain` the statement `same acquisition as the reference round`; after `FOV.load_registered_round`, also `saved` (the image file's path relative to the FOV checkpoint directory and its SHA-256) | the input-channel identity in the segmentation record: its `registration` entry names the reference and, when present, the relation and the saved file |
+| `FOV.prepare_morphology` (`FOV.register`) | `registration_record["rounds"][name]`: the recipe summary, the reference label and `reference_sha256`, or for `reference_stain` the statement `same acquisition as the reference round`; after `FOV.load_registered_round`, also `saved` (the image file's path relative to the FOV checkpoint directory and its SHA-256) | the input-channel identity in the segmentation record: its `registration` entry names the reference and, when present, the relation and the saved file |
 | `Dataset` | `channel_index(round, key)` and `channel_info(round)` ({doc}`coordination`, "Channels") | resolving `InputChannel.channel` and `prepare_channel` by pattern or by name, and the channel's `name` and `wavelength` in the record; an unknown key or a repeated name raises `ValueError` naming the round and its channels |
 
 Every image `FOV.segment` reads must be resident: the reference round (after `FOV.run`,
@@ -1101,7 +1101,7 @@ as declared.
 | `segmentation_input_folder` | The role of the input file's one channel: `overlay` (default; the file written by the `create_nuclei_amplicon_overlay` rule, which itself calls `composite_nuclei_amplicon`): `composite`; `DAPI`: `nuclear`; `flamingo/enhanced_DAPI` (written by the `enhance_dapi_with_flamingo` rule through `enhance_with_flamingo`): `nuclear`; any other folder: `nuclear`. |
 | (none) | `target`: a new Python-only key of the legacy block; without it, `cell` for `overlay` and `nucleus` otherwise, recorded as `"target_source": "legacy_default"`. |
 | `create_nuclei_amplicon_overlay.parameters.maximum_projection`, top-level `maximum_projection` | the run's `projection` (`ProjectionConfig()` when true). |
-| `rotate_angle`, `dapi_round` | not read by the segmentation adapter. In the legacy rules they still drive `rotate_nuclei`, whose file the composite rule reads; `get_dapi_input` raises unless exactly one file matches, naming the matches. In the `segmentation` block, inputs come from the FOV's rounds after `FOV.run`'s rotation and `FOV.register_rounds`. |
+| `rotate_angle`, `dapi_round` | not read by the segmentation adapter. In the legacy rules they still drive `rotate_nuclei`, whose file the composite rule reads; `get_dapi_input` raises unless exactly one file matches, naming the matches. In the `segmentation` block, inputs come from the FOV's rounds after `FOV.run`'s rotation and `FOV.register`. |
 
 `rules.reads_assignment.parameters.expand_labels` and `dilation_distance` are W-308's;
 this page only requires that a label image is expanded once.
@@ -1187,7 +1187,7 @@ output dtype of `images/stardist_segmentation/{fovID}.tif` (uint16 → uint32) a
 foreground gives an empty label image instead of an error; the `stardist` and
 `cellpose` extras; the `device` keyword of the segment entry. The documentation also gains
 the notebook example of the three calls per FOV that D1 asks for: `FOV.run`, then
-`FOV.register_rounds` where morphology rounds are used, then `FOV.segment`, then assign
+`FOV.register` where morphology rounds are used, then `FOV.segment`, then assign
 once W-308's entry exists.
 
 ## Exclusions

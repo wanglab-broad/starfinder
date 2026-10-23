@@ -188,7 +188,7 @@ How the route is called from Python and from the workflow, in the conventions of
 
 | Option | Python | Workflow | What it changes in the package | What it changes in the outputs |
 | --- | --- | --- | --- | --- |
-| **E1. One new part of `Dataset.export` (recommended)** | `Dataset.export(sample, *, placement, assignment, config, output_dir)` unchanged; `config.route` chooses the route. On the route after fusion it calls `fuse`, `segment_fused`, `assemble(..., segmentation=…)` with `save_assembly`, `fuse_labels` and `export_spatialdata`, in that order. Each is callable alone. | The one rule `export_sample`; its inputs follow the route. | One part, one function and one keyword of `assemble`; `PARTS` gains `segment` and its section `segmentation`. | The same folder; one more section in `export.json` and the label files of "The label images". |
+| **E1. One new part of `Dataset.export` (recommended)** | `Dataset.export(sample, *, placement, assignment, config, output_dir)` unchanged; `config.route` chooses the route. On the route after fusion it calls `fuse_images`, `segment_fused`, `assemble(..., segmentation=…)` with `save_assembly`, `fuse_labels` and `export_spatialdata`, in that order. Each is callable alone. | The one rule `export_sample`; its inputs follow the route. | One part, one function and one keyword of `assemble`; `PARTS` gains `segment` and its section `segmentation`. | The same folder; one more section in `export.json` and the label files of "The label images". |
 | E2. A second sample-level entry | `Dataset.segment_sample(sample, …)` writes `segmentation/<sample>/`; `Dataset.export` reads it. | A second rule before `export_sample`. | A method, a folder and a rule. | A second output folder per sample. It buys a separate rule for the GPU step, so that the export itself never needs a GPU node. |
 | E3. Segment and assign inside `fuse` | `fuse` segments the image it fuses and assigns. | No new key. | `fuse` gains segmentation, assignment and the sample tables. | The `fusion` section holds cells; a part that "fuses" also counts. |
 
@@ -587,7 +587,7 @@ cell equal its retained `assigned` molecules.
 | `obs` rows | The counted cells, the same rule (`retained` and §2.9 `kept`), in the cell table's order. |
 | `obs` columns | The same names, with the values of "The cells". |
 | `var`, `X` | The same. |
-| `layers` | `nucleus` and `cytoplasm` when the sample segmentation has a nucleus run. Today `sample_anndata` decides this from the FOV entries of the record (`fovs[*].nuclei`: call C20 gave no layer with every entry false and both with every entry true), which are false for molecule inputs, so it reads the `segmentation` record on this route. |
+| `layers` | `nucleus` and `cytoplasm` when the sample segmentation has a nucleus run. Today `write_sample_h5ad` decides this from the FOV entries of the record (`fovs[*].nuclei`: call C20 gave no layer with every entry false and both with every entry true), which are false for molecule inputs, so it reads the `segmentation` record on this route. |
 | `obsm["spatial"]` | The same (`sample_ownership_centroid_x/y`). |
 | `uns["assembly"]` | The record, with `route` and `segmentation_files`. |
 | `uns["spatial_unit"]`, `uns["frame_id"]`, `uns["spatial_centroid"]` | The same. |
@@ -633,7 +633,7 @@ Each reader the package has of these outputs, and what it does on the route afte
 | Reader | Today | Route after fusion |
 | --- | --- | --- |
 | `load_assembly`, `AssemblyResult.__post_init__` (`check_identities`) | Identities keyed by `(fov_id, cell_id)` (call C16; read from the source, `src/python/starfinder/assembly/_assemble.py:235` and `:275`) | Keyed by the cell key (CK1); identity 1 compares cells with the sample segmentation's labels instead of per-FOV inputs, and identity 3 lets molecules follow their own position only. |
-| `sample_anndata` | `layers` from the FOV entries (call C20) | From the `segmentation` record on this route. |
+| `write_sample_h5ad` | `layers` from the FOV entries (call C20) | From the `segmentation` record on this route. |
 | `cell_links` (SpatialData) | `(fov_id, cell_id)` | `(cell_namespace, cell_id)` (CK1). |
 | `equivalent_radii` (SpatialData shapes) | `size_voxels` with the cell's FOV spacing | With the segmentation grid's spacing: with a FOV's spacing a cell counted at 1/2 would get half its radius (call C10: 2.82 µm against 5.64 µm). |
 | `lookup_source(cell=…)` | The FOV's assignment folder and the row's position among the cells of its FOV (read from the source, `src/python/starfinder/export/_spatialdata.py:755–762`); `lookup_source(spot=…)` of a `molecules_only` export returns the FOV, no assignment folder and the row (call C11c) | `assignment_folder` null, `row` the cell's position in the sample cell table, and two added keys, `label_file` (the cell run's file) and `label_value` (`cell_id`). `lookup_source(spot=…)` is the same as for a `molecules_only` sample. |

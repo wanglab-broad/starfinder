@@ -20,7 +20,7 @@ import pytest
 from pandas.testing import assert_frame_equal
 
 import starfinder.assembly._persist as persist_module
-from starfinder.assembly import AssemblyConfig, AssemblyInput, assemble, load_assembly, sample_anndata, save_assembly
+from starfinder.assembly import AssemblyConfig, AssemblyInput, assemble, load_assembly, save_assembly, write_sample_h5ad
 from starfinder.assignment import AssignmentConfig, assign_molecules, write_h5ad
 from starfinder.assignment._persist import write_assignment
 from starfinder._snakemake import _cell_obs, _in_box, _write_raw_h5ad
@@ -96,7 +96,7 @@ def check_anndata(adata, result, *, annotation=None):
 def test_as11_golden_with_an_expanded_fov(tmp_path):
     anndata = pytest.importorskip("anndata")
     result = assemble(golden_placement(), inputs_of(golden_results(expand=("Position003",))))
-    path = sample_anndata(result, tmp_path / "out" / "sample.h5ad", annotation=ANNOTATION)
+    path = write_sample_h5ad(result, tmp_path / "out" / "sample.h5ad", annotation=ANNOTATION)
     assert path == tmp_path / "out" / "sample.h5ad" and path.is_file()
     adata = anndata.read_h5ad(path)
     check_anndata(adata, result, annotation=ANNOTATION)
@@ -108,21 +108,21 @@ def test_as11_golden_with_an_expanded_fov(tmp_path):
 def test_as11_own_cases_with_a_retained_excluded_no_nucleus_cell(tmp_path):
     anndata = pytest.importorskip("anndata")
     result = assemble(own_placement(), own_inputs())
-    adata = anndata.read_h5ad(sample_anndata(result, tmp_path / "sample.h5ad", annotation=pd.Series(ANNOTATION)))
+    adata = anndata.read_h5ad(write_sample_h5ad(result, tmp_path / "sample.h5ad", annotation=pd.Series(ANNOTATION)))
     check_anndata(adata, result, annotation=ANNOTATION)
     assert "s1_FOV1_4" in set(result.cells.obs_name) and "s1_FOV1_4" not in set(adata.obs_names)
     assert set(adata.layers) == {"nucleus", "cytoplasm"}
     fov2 = (adata.obs.fov_id.astype(str) == "FOV2").to_numpy()
     assert np.isnan(adata.layers["nucleus"][fov2]).all() and not np.isnan(adata.layers["nucleus"][~fov2]).any()
     with pytest.raises(ValueError, match="already an obs column"):
-        sample_anndata(result, tmp_path / "again.h5ad", annotation={"fov_id": "x"})
+        write_sample_h5ad(result, tmp_path / "again.h5ad", annotation={"fov_id": "x"})
 
 
 def test_as11_and_as13_without_anndata(monkeypatch, tmp_path):
     result = assemble(own_placement(), own_inputs())
     monkeypatch.setitem(sys.modules, "anndata", None)
     with pytest.raises(ModuleNotFoundError, match="'anndata' extra"):
-        sample_anndata(result, tmp_path / "sample.h5ad")
+        write_sample_h5ad(result, tmp_path / "sample.h5ad")
     with pytest.raises(ModuleNotFoundError, match="'anndata' extra"):
         write_h5ad(tmp_path / "x.h5ad", pd.DataFrame(index=pd.Index([], dtype=object)),
                    pd.DataFrame({"cell_id": []}), pd.DataFrame({"cell_id": [], "gene_id": [], "compartment": [],

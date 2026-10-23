@@ -19,7 +19,7 @@ the change of ``scene_plane`` applied to ``sample-small-v1``.
 
 :func:`write_scene` writes a scene as a dataset (the saved placement, ``images/<stain>/``
 ZYX TIFFs with their axes, ``images/ref_merged/`` with the grid, ``signal/`` goodSpots
-tables, the codebook); :func:`fuse_scene` calls ``fuse`` alone on it at a factor ``k``;
+tables, the codebook); :func:`fuse_scene` calls ``fuse_images`` alone on it at a factor ``k``;
 :func:`quad_grid_placement` (W-446) saves ``fused_quad``'s placement with grid cells.
 :func:`truth_import`, :func:`seeded_runs`, :func:`truth_runs`, :func:`length_configs` and
 :func:`route_config` follow the rows of the same names. Nothing is read from a run
@@ -38,7 +38,7 @@ from starfinder.dataset import Dataset
 from starfinder.image import ImageMetadata
 from starfinder.io import save_volume
 from starfinder.export import (ExportConfig, FusionConfig, FusionInput, SampleSegmentationConfig,
-                                      SampleSegmentationRun, fuse)
+                                      SampleSegmentationRun, fuse_images)
 from starfinder.segmentation import (CellposeConfig, LabelImportConfig, ReferenceGrid, SeededWatershedConfig,
                                      StarDistConfig)
 from starfinder.stitching import (approve_placement, placement_from_table, positions_from_grid, positions_from_table,
@@ -322,9 +322,9 @@ def fusion_config(k, **changes):
 
 
 def fuse_scene(folder, k=1, **changes):
-    """``fuse`` called alone on the scene's stains, as projections at ``scale_yx = 1/k``."""
+    """``fuse_images`` called alone on the scene's stains, as projections at ``scale_yx = 1/k``."""
     inputs = [FusionInput(f, folder.grids[f], {n: folder.image_path(n, f) for n in STAINS}) for f in folder.scene.ids]
-    return fuse(folder.placement, inputs, config=fusion_config(k, **changes), output_dir=folder.export_dir)
+    return fuse_images(folder.placement, inputs, config=fusion_config(k, **changes), output_dir=folder.export_dir)
 
 
 def segmentation_grid(export_dir, image="dapi") -> ReferenceGrid:

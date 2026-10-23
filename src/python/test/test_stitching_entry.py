@@ -292,7 +292,7 @@ POSITIONS = {"source": "regular_grid",
 def no_fov_stage(monkeypatch):
     def refuse(*args, **kwargs):
         raise AssertionError("Dataset.stitch must not call a per-FOV stage")
-    for name in ("run", "segment", "assign"):
+    for name in ("run", "segment", "assign_molecules"):
         monkeypatch.setattr(FOV, name, refuse)
 
 

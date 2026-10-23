@@ -819,7 +819,7 @@ _LEGACY_SEGMENTATION_RUN = 'stardist_segmentation'
 _SEGMENTATION_RUN_KEYS = ('name', 'target', 'inputs', 'seeds', 'projection', 'operations', 'method')
 # Keys of a run of the export block's segmentation besides its method's config fields.
 _SAMPLE_SEGMENTATION_RUN_KEYS = ('name', 'target', 'inputs', 'seeds', 'method')
-# Keys of the assignment block besides the AssignmentConfig fields: the FOV.assign arguments.
+# Keys of the assignment block besides the AssignmentConfig fields: the FOV.assign_molecules arguments.
 _ASSIGNMENT_CALL_KEYS = ('cells', 'nuclei', 'name', 'population', 'correspondence', 'checkpoints')
 
 
@@ -1049,14 +1049,14 @@ def _segmentation_block(config):
 
 
 def _assignment_block(config):
-    """(AssignmentConfig, FOV.assign keyword arguments) of the Python-only top-level assignment block.
+    """(AssignmentConfig, FOV.assign_molecules keyword arguments) of the Python-only top-level assignment block.
 
     Its keys are the AssignmentConfig fields (expansion and correspondence as
     mappings of ExpandLabelsConfig and CorrespondenceConfig fields) and the
-    FOV.assign arguments cells, nuclei, name, population and checkpoints (a
+    FOV.assign_molecules arguments cells, nuclei, name, population and checkpoints (a
     mapping of CheckpointConfig fields); a supplied correspondence table is not
     a YAML value, so correspondence configures the overlap rule. The block needs
-    backend: python; the §2.13 rule runs it with FOV.assign
+    backend: python; the §2.13 rule runs it with FOV.assign_molecules
     (docs/assignment-contract.md, "Workflow configuration").
     """
     from starfinder.assignment import AssignmentConfig, CorrespondenceConfig
@@ -1094,15 +1094,15 @@ def _reads_assignment(config):
     stardist_segmentation (its expand_labels true) keeps no original mask and
     raises ValueError naming that key, and the assignment key when both are
     true. The label file's target is the segmentation adapter's
-    (_legacy_target). The assignment block is run by FOV.assign, not by this
+    (_legacy_target). The assignment block is run by FOV.assign_molecules, not by this
     rule, so it raises here.
     """
     from starfinder.assignment import AssignmentConfig
     from starfinder.segmentation import ExpandLabelsConfig
     if 'assignment' in config:
         _python_only(config, ['assignment'])
-        raise ValueError('the assignment block is run by FOV.assign (the §2.13 rule); the reads_assignment rule '
-                         'translates rules.reads_assignment.parameters only: remove the block or the rule')
+        raise ValueError('the assignment block is run by FOV.assign_molecules (the §2.13 rule); the reads_assignment '
+                         'rule translates rules.reads_assignment.parameters only: remove the block or the rule')
     params = _rule_parameters(config, 'reads_assignment')
     _known(params, _READS_ASSIGNMENT_KEYS, 'reads_assignment parameter')
     expand = _flag(params, 'expand_labels', 'reads_assignment')

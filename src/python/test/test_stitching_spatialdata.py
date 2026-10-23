@@ -5,7 +5,7 @@ its ``spatialdata`` section and ``lookup_source``.
 Fixtures: ``export_cases``, one sample per row of the table "Empty populations" of
 docs/sample-output-contract.md, built from ``export_folder`` (``assembly_golden`` written as a
 dataset) with the §2.9 assignment folders replaced by the ``empty_cases`` and ``status_cases``
-variants; the row "No included FOV" through ``no_fov_assembly``, ``fuse`` called alone on its
+variants; the row "No included FOV" through ``no_fov_assembly``, ``fuse_images`` called alone on its
 all-failed placement and ``export_spatialdata`` called alone. ``label_quad`` (label export),
 ``position_grid`` (seed 354) and ``fuse_band`` (``slow``) with their store placements and
 ``molecules_only`` assemblies. Expected values are computed here from the sample tables, the
@@ -44,7 +44,7 @@ from starfinder.export import (
     SpatialDataExportConfig,
     check_export,
     export_spatialdata,
-    fuse,
+    fuse_images,
     fuse_labels,
     lookup_source,
 )
@@ -170,7 +170,7 @@ def _empty_variants():
 
 
 def _no_fov(tmp_path, zarr_format):
-    """No included FOV: no_fov_assembly saved, fuse alone on the all-failed placement, export_spatialdata alone."""
+    """No included FOV: no_fov_assembly saved, fuse_images alone on the all-failed placement, export_spatialdata alone."""
     from starfinder.assembly import AssemblyResult
     from starfinder.stitching._placement import table_sha256
 
@@ -182,7 +182,7 @@ def _no_fov(tmp_path, zarr_format):
                           dict(hand.record, placement=dict(hand.record["placement"], **hashes)))
     folder = tmp_path / "no_included_fov"
     saved = save_assembly(hand, folder)
-    record = fuse(failed, [], assembly=saved, output_dir=folder)
+    record = fuse_images(failed, [], assembly=saved, output_dir=folder)
     assert record.status == "empty" and record.section["reason"] == "no_included_fov"
     export_spatialdata(load_assembly(folder), config=SpatialDataExportConfig(zarr_format=zarr_format),
                        output_dir=folder)
@@ -742,8 +742,8 @@ def test_sd6_position_grid(tmp_path):
     result = _molecules_only(case, placement, {f: bright[f][0] for f in case.ids})
     folder = tmp_path / "position"
     saved = save_assembly(result, folder)
-    fuse(placement, case.inputs(), assembly=saved, config=FusionConfig(dimensionality="stack", scale_yx=1),
-         output_dir=folder)
+    fuse_images(placement, case.inputs(), assembly=saved, config=FusionConfig(dimensionality="stack", scale_yx=1),
+                output_dir=folder)
     export_spatialdata(load_assembly(folder), output_dir=folder)
     assert check_rasters(folder) == 9
     record = record_of(folder)
@@ -774,7 +774,7 @@ def test_sd7_fuse_band(tmp_path):
     result = _molecules_only(case, placement, {f: (8.0, 128.0, 128.0) for f in case.ids})
     folder = tmp_path / "band"
     saved = save_assembly(result, folder)
-    fuse(placement, case.inputs(), assembly=saved, config=FusionConfig(dimensionality="both"), output_dir=folder)
+    fuse_images(placement, case.inputs(), assembly=saved, config=FusionConfig(dimensionality="both"), output_dir=folder)
     export_spatialdata(load_assembly(folder), output_dir=folder)
     names = {e["name"]: e["status"] for e in record_of(folder)["spatialdata"]["elements"]}
     assert names[IMAGE] == names["reference_stain_stack"] == "written"
@@ -997,11 +997,11 @@ def test_ex1_the_part_runs_fourth(tmp_path, monkeypatch):
     import starfinder.assembly
     f = export_folder(tmp_path)
     calls = []
-    real_assemble, real_fuse = starfinder.assembly.assemble, export_module.fuse
+    real_assemble, real_fuse = starfinder.assembly.assemble, export_module.fuse_images
     real_labels, real_sd = export_module.fuse_labels, export_module._spatialdata_part
     monkeypatch.setattr(starfinder.assembly, "assemble", lambda *a, **k: calls.append("assemble") or
                         real_assemble(*a, **k))
-    monkeypatch.setattr(export_module, "fuse", lambda *a, **k: calls.append("fuse") or real_fuse(*a, **k))
+    monkeypatch.setattr(export_module, "fuse_images", lambda *a, **k: calls.append("fuse") or real_fuse(*a, **k))
     monkeypatch.setattr(export_module, "fuse_labels", lambda *a, **k: calls.append("fuse_labels") or
                         real_labels(*a, **k))
     monkeypatch.setattr(export_module, "_spatialdata_part", lambda *a, **k: calls.append("export_spatialdata") or

@@ -11,7 +11,7 @@ configs, the placement's review, the ``anndata`` extra, the assembly, the fusion
 the label IDs)
 it removes the files the previous ``export.json`` lists for each part that runs or is off
 and calls the parts in order, writing ``export.json`` after each: ``assemble`` (saved with
-:py:func:`~starfinder.assembly.save_assembly`), :py:func:`~starfinder.export.fuse`,
+:py:func:`~starfinder.assembly.save_assembly`), ``fuse`` (:py:func:`~starfinder.export.fuse_images`),
 :py:func:`~starfinder.export.fuse_labels` (off by default) and
 :py:func:`~starfinder.export.export_spatialdata` (off by default).
 :py:class:`~starfinder.export.ExportConfig` turns each part on or off and holds the
@@ -22,7 +22,7 @@ parts are still written and ``complete`` is false. The method returns an
 :py:class:`~starfinder.export.ExportRecord`, and
 :py:func:`~starfinder.export.check_export` checks a folder against its record.
 
-:py:func:`~starfinder.export.fuse` makes the fused image with
+:py:func:`~starfinder.export.fuse_images` makes the fused image with
 multiview-stitcher's ``fusion.fuse`` from a placement of either backend and one
 :py:class:`~starfinder.export.FusionInput` per included FOV
 (``image_supported`` or ``metadata_only``). :py:class:`~starfinder.export.FusionConfig`
@@ -40,7 +40,7 @@ calibration, plane positions and the ``ImageMetadata`` that
 and the metadata written, so the same content gives the same bytes); the input dtypes are
 uint8, uint16 and float32, written in the input dtype. :py:class:`~starfinder.export.FusionRecord`
 holds the ``fusion`` section and the written paths. Importing the module imports neither
-multiview-stitcher, zarr nor spatialdata; ``fuse`` needs the ``multiview-stitcher``
+multiview-stitcher, zarr nor spatialdata; ``fuse_images`` needs the ``multiview-stitcher``
 extra. :py:class:`~starfinder.export.SpatialDataExportConfig` configures the
 SpatialData part.
 
@@ -137,7 +137,7 @@ its tables only into a folder ``output`` outside both. See
    ExportConfig
    ExportIncompleteWarning
    ExportRecord
-   fuse
+   fuse_images
    fuse_labels
    fused_grid
    FusedGrid

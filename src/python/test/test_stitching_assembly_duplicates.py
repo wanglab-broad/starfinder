@@ -28,7 +28,7 @@ import pandas as pd
 import pytest
 
 import starfinder.assembly._assemble as assemble_module
-from starfinder.assembly import AssemblyConfig, AssemblyInput, assemble, sample_anndata
+from starfinder.assembly import AssemblyConfig, AssemblyInput, assemble, write_sample_h5ad
 from starfinder.assignment import assign_molecules
 from starfinder.stitching import approve_placement, placement_from_table, positions_from_grid
 
@@ -363,7 +363,7 @@ def test_the_molecules_and_the_accounting(tmp_path, dimensions):
     pd.testing.assert_frame_equal(kept.reset_index(drop=True), kept_off.reset_index(drop=True), check_exact=True)
     assert len(kept) and not result.counts[result.counts.fov_id.eq("P1") & result.counts.cell_id.eq(3)].shape[0]
     # sample.h5ad has one row for each pair at 0.5 and above, the kept observation's.
-    adata = anndata.read_h5ad(sample_anndata(result, tmp_path / "sample.h5ad"))
+    adata = anndata.read_h5ad(write_sample_h5ad(result, tmp_path / "sample.h5ad"))
     names = set(adata.obs_names)
     assert {"pairs_P2_3", "pairs_P1_4", "pairs_P2_5"} <= names
     assert not names & {"pairs_P1_3", "pairs_P2_4", "pairs_P1_5"}

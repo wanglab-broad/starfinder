@@ -1,6 +1,6 @@
 """FI3, FI5 to FI11 (their routine parts) and EX5 of docs/stitching-assembly-validation.md: the fused files.
 
-``fuse`` is called alone on ``quad`` (seed 2102), ``zstack``, ``plane_pair`` and
+``fuse_images`` is called alone on ``quad`` (seed 2102), ``zstack``, ``plane_pair`` and
 ``checker_pair``, built in ``fusion_fixtures``. The files are compared with a direct call of
 ``multiview_stitcher.fusion.fuse`` on the inputs and arguments the ``fusion`` section
 records (FI5, assumption A6), with the formulas of the output levels (FI6), with each
@@ -18,7 +18,7 @@ import tifffile
 
 from starfinder.io import load_volume
 from starfinder.preprocessing.projection import ProjectionConfig, project_image
-from starfinder.export import FusionConfig, check_export, fuse
+from starfinder.export import FusionConfig, check_export, fuse_images
 from starfinder.io._ome import ANNOTATION_NAMESPACE, read_ome_layout
 
 from .fusion_fixtures import checker_pair, make_case, plane_pair, quad, zstack
@@ -36,7 +36,7 @@ def synchronous():
 
 
 def run(case, folder, **fields):
-    record = fuse(case.placement, case.inputs(), config=FusionConfig(**fields), output_dir=folder)
+    record = fuse_images(case.placement, case.inputs(), config=FusionConfig(**fields), output_dir=folder)
     assert record.status == "written"
     return record.section
 

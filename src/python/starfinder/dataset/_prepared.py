@@ -1,7 +1,7 @@
 """The saved form of a prepared morphology image (docs/checkpoints.md, "Prepared morphology images").
 
 Each image prepared by ``FOV.prepare_morphology`` or registered by
-``FOV.register_rounds`` with checkpoints is a folder
+``FOV.register`` (other rounds) with checkpoints is a folder
 ``<checkpoint dir>/<fov_id>/other_rounds/<name>/`` holding ``image.ome.tif``
 (ZYXC, every channel, with its ``ImageMetadata``) and ``registration.json``
 (the record); a chain with a dense or B-spline transform also has

@@ -134,7 +134,7 @@ rules from the workflow side.
 | Identity | `(spot_namespace, spot_id)`; `spot_namespace` is the JSON list `[dataset_id, sample_id, fov_id, subtile_id]` (`FOV._detect_round`, `src/python/starfinder/dataset/fov.py:845-846`). Joins use the pair, never row position. |
 | Coordinates | `z, y, x` float64, zero-based voxel coordinates of the reference grid after `FOV.run`'s rotation, in the spot table (`SpotFindingResult.spots`, the `candidates` checkpoint). Local-maxima detectors give integer values; subpixel detectors (Spotiflow, Piscis) give fractions. |
 | Read table | `ReadDecodingResult`, then `ReadScoringResult` and `ReadDeduplicationResult` (`pre_qc`), then `ReadFilteringResult` with `accepted` and `rejection_reasons`. A read carries `gene_id` (nullable), `entry_id`, `call_status` (`assigned`, `ambiguous`, `no_signal`, `unmatched`), `call_type`, score columns and, after deduplication, `is_representative`. |
-| Final population | The accepted reads of `ReadFilteringResult`; the default filter keeps every `assigned` read with no score bound. `FOV.save_spots("goodSpots")` writes them through `export_spots` as `signal/{fovID}_goodSpots.csv`: exactly `x, y, z, gene`, one-based, MATLAB-compatible, with float coordinates (`8.0`). |
+| Final population | The accepted reads of `ReadFilteringResult`; the default filter keeps every `assigned` read with no score bound. `FOV.export_spots("goodSpots")` writes them through `export_spots` as `signal/{fovID}_goodSpots.csv`: exactly `x, y, z, gene`, one-based, MATLAB-compatible, with float coordinates (`8.0`). |
 
 So the package's own goodSpots CSV cannot be read by `reads_assignment.py` (float
 indices raise; golden test `test_float_coordinates_raise`), and the CSV drops the

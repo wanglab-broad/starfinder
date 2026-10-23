@@ -80,7 +80,7 @@ Validation (all in `__post_init__`, before any image is read):
   config')`, as today);
 * the sequence is allowed (next section);
 * `reference_round`, when set, must equal `RoundState.reference_round` in
-  `FOV.run`; `FOV.register_rounds` (below) accepts any loaded round.
+  `FOV.run`; `FOV.register` on other rounds (below) accepts any loaded round.
 
 ### Allowed step sequences
 
@@ -444,10 +444,25 @@ class ExternalReference:
     metadata: ImageMetadata
     label: str                   # recorded in the attempts, e.g. "ref_round:ch04"
 
-FOV.register_rounds(recipe: RegistrationRecipe, *, rounds: Sequence[str],
-                    reference: str | ExternalReference | None = None,
-                    checkpoints: CheckpointConfig | None = None) -> FOV
+FOV.register(recipe: RegistrationRecipe, *, rounds: Sequence[str] | None = None,
+             source: str | None = None,
+             reference: str | ExternalReference | None = None,
+             checkpoints: CheckpointConfig | None = None) -> FOV
 ```
+
+`FOV.register` is the one registration entry of a FOV (since W-560, which merged the
+other-round entry into it; {doc}`migration`). It routes by the rounds' category before any estimator
+runs, and each route keeps its own rules:
+
+| `rounds` | Route | Parameters | Record |
+| --- | --- | --- | --- |
+| `None` | sequencing: the sequencing rounds other than the reference round | `source` | one recipe per FOV, `registration_record["recipe"]` |
+| every name a sequencing round | sequencing, to the dataset reference round | `source`; `reference` and `checkpoints` must be `None` | the same |
+| no name a sequencing round (other rounds, loaded rounds the dataset does not configure) | other rounds, to a reference round or an `ExternalReference` | `reference`, `checkpoints`; `source` must be `None` | one recipe per round, `registration_record["rounds"][round]` |
+| both kinds, or an empty sequence | none: `ValueError` naming the rounds | | |
+
+A parameter of the other route raises `ValueError` naming it. The bullets below are the
+other-round route.
 
 * **Shared stain.** The recipe's signal is `mode="channel"` with
   `reference_channel` and `moving_channel` naming the shared stain in each
@@ -480,14 +495,14 @@ W-337 separates the two kinds of round, as the MATLAB workflow does ({doc}`coord
 
 * **Sequencing rounds.** `FOV.run` and `FOV.register` handle the reference round and
   the sequencing rounds only. `FOV.register` registers the sequencing rounds other
-  than the reference by default and raises `ValueError` for an other round, naming
-  `FOV.register_rounds`. `FOV.run` neither loads nor changes an other round.
+  than the reference by default, and registers named other rounds on its other-round
+  route (above). `FOV.run` neither loads nor changes an other round.
 * **The entry.** `FOV.prepare_morphology(MorphologyConfig(rotation_degrees, recipe,
   rounds), *, checkpoints=None)` loads the reference stain from the reference round's
   folder as the image `reference_stain` and rotates it, without registration:
   `registration_record["rounds"]["reference_stain"]` states `same acquisition as the
   reference round`, with no transform and no attempt. It then loads and rotates each
-  other round and registers it with `FOV.register_rounds`. With `recipe=None` the
+  other round and registers it with `FOV.register`. With `recipe=None` the
   recipe is one translation step with `RegistrationSignalConfig("channel",
   reference_channel=<stain pattern>, moving_channel=<the round's channel of the
   stain's name>)`, against an `ExternalReference` of the stain labelled
@@ -497,7 +512,7 @@ W-337 separates the two kinds of round, as the MATLAB workflow does ({doc}`coord
   stain channel (all of them, one stain), else against the resident reference round.
 * **Rotation.** `FOV.load_images(..., rotation_degrees=…)` rotates with the code of
   `PipelineConfig.rotation_degrees`; a round is rotated once.
-* **Saved form.** With `checkpoints`, `register_rounds` and the entry write
+* **Saved form.** With `checkpoints`, `register` on other rounds and the entry write
   `other_rounds/<name>/image.ome.tif`, `registration.json` (the chain, the attempts, the
   reference and the hashes) and, only for a chain with a dense or B-spline transform,
   `field.npz` (its arrays; {doc}`checkpoints`, "Prepared morphology images"), and
@@ -624,7 +639,7 @@ The implementation adds these entries:
    and exact-type lookup; `RegistrationRejectedError`.
 6. **Evaluation.** `registration_qc`, `evaluate_displacement_field` and the
    optional `mask` of `normalized_cross_correlation` and `structural_similarity`.
-7. **Other rounds.** `FOV.register_rounds` and `ExternalReference`; the Python
+7. **Other rounds.** `FOV.register` on other rounds and `ExternalReference`; the Python
    workflow rule for morphology rounds.
 8. **Preprocessing names** (registry move 1): `STEPS` → `PREPROCESSING_METHODS`,
    `StepSpec` → `PreprocessingSpec`, `RecipeStep` → `PreprocessingStep`.

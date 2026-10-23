@@ -64,7 +64,7 @@ def e2e_result(small_dataset: Path, small_ground_truth: dict, tmp_path_factory):
 
     Session-scoped: runs once, shared across all e2e tests.
     Pipeline: load → enhance → global_reg → spot_find →
-    reads_extract → reads_filter → save_spots.
+    reads_extract → reads_filter → export_spots.
     """
     from starfinder.dataset import Dataset
     from starfinder.dataset.types import RoundState
@@ -102,7 +102,7 @@ def e2e_result(small_dataset: Path, small_ground_truth: dict, tmp_path_factory):
         .extract_intensities()
         .decode_reads().filter_reads()
     )
-    fov.save_spots(slot="goodSpots")
+    fov.export_spots(slot="goodSpots")
     fov.save_processing_log()
 
     return fov, ds, small_ground_truth

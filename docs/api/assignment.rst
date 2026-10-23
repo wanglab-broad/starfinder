@@ -2,7 +2,7 @@ starfinder.assignment
 =====================
 
 Assignment (§2.9) places the molecules of one FOV in cells; it is the third of the three
-calls per FOV (``FOV.run``, ``FOV.segment``, ``FOV.assign``). See
+calls per FOV (``FOV.run``, ``FOV.segment``, ``FOV.assign_molecules``). See
 :doc:`../assignment-contract` and :doc:`../assignment-algorithms`.
 
 A :py:class:`~starfinder.assignment.MoleculeTable` holds the molecules: ``spot_namespace``,
@@ -76,7 +76,7 @@ and molecules grey (legend entries ``ownership region`` and ``excluded from samp
 state in each x-axis label how many of the cells or molecules drawn the assembly retained; a
 region of another Y, X or an identity the result does not have raises ``ValueError``.
 
-``FOV.assign(config, cells="cell", nuclei=None, name="default", population="final")``
+``FOV.assign_molecules(config, cells="cell", nuclei=None, name="default", population="final")``
 builds the molecule table from the FOV's spot and read results and the codebook's genes,
 calls the entry on ``FOV.reference_grid()`` (also the grid of the saved reference image
 in a process that segmented from saved images) and stores the result in
@@ -91,7 +91,7 @@ it: ``X`` the float64 whole-cell counts in ``genes`` order, optional ``nucleus``
 ``cytoplasm`` layers (NaN for a row whose ``compartments`` is not ``available``), strings
 as anndata expects; with no row, ``X`` has shape ``(0, len(genes))``. The workflow
 adapter writes ``expr/{fovID}/raw.h5ad`` with it, and
-:py:func:`~starfinder.assembly.sample_anndata` the sample-level ``sample.h5ad``. It needs
+:py:func:`~starfinder.assembly.write_sample_h5ad` the sample-level ``sample.h5ad``. It needs
 the ``anndata`` extra.
 
 .. currentmodule:: starfinder.assignment

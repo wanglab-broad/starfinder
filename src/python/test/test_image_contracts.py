@@ -204,7 +204,7 @@ def test_fov_subtile_rotation_and_projection_metadata(tmp_path):
     fov = FOV(dataset, "fov", images={"round1": np.arange(128, dtype=np.uint16).reshape(2, 8, 8, 1)}, metadata={"round1": geometry()})
     fov.rotate(angle=90)
     rotated_meta = fov.metadata["round1"]
-    fov.create_subtiles(out_dir=tmp_path / "tiles")
+    fov.save_subtiles(out_dir=tmp_path / "tiles")
     child = FOV.from_subtile(tmp_path / "tiles/subtile_data_4.npz", dataset, "fov")
     assert child.images["round1"].shape == (2, 4, 4, 1)
     np.testing.assert_allclose(child.metadata["round1"].index_to_world((0, 0, 0)), rotated_meta.index_to_world((0, 4, 4)))

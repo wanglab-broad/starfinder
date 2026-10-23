@@ -1004,7 +1004,7 @@ class OutputScaleConfig:
 `FOV.run`, (1) the reference stains, the files of `Dataset.reference_stains` in the
 reference round's folder, as the image `reference_stain`, recorded as the same
 acquisition as the reference round, and (2) every other round, loaded with its own
-channels (`Dataset.other_channel_order`) and registered with `FOV.register_rounds`; with
+channels (`Dataset.other_channel_order`) and registered with `FOV.register`; with
 no recipe, one translation on the shared stain, the single reference stain against the
 round's one channel of the same name (`dataset/fov.py::FOV.prepare_morphology`;
 {doc}`coordination`, "Sequencing rounds and other rounds"). A round is read from `<input_root>/<round>/<fov_id>/`,

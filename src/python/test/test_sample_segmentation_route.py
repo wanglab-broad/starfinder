@@ -27,7 +27,7 @@ from starfinder.export import (
     ExportIncompleteWarning,
     SampleSegmentationConfig,
     SampleSegmentationRun,
-    fuse,
+    fuse_images,
     fused_grid,
     segment_fused,
 )
@@ -514,13 +514,14 @@ def test_sg5_the_method_backend_cannot_run(tmp_path, monkeypatch):
 
 @needs_library
 def test_sg5_no_included_fov(tmp_path):
-    """Every FOV failed: fuse and segment record empty (no_included_fov) when called alone. Dataset.export refuses
-    such a placement before anything is written, by assemble's own check (no FOV owns a point)."""
+    """Every FOV failed: fuse_images and segment_fused record empty (no_included_fov) when called alone.
+    Dataset.export refuses such a placement before anything is written, by assemble's own check (no FOV owns a
+    point)."""
     folder = write_folder(tmp_path, "fused_pair")
     p = folder.placement
     fovs = p.fovs.assign(status="failed", origin_z=np.nan, origin_y=np.nan, origin_x=np.nan)
     failed = approve_placement(PlacementResult(SAMPLE, fovs, p.links, p.record), reviewer="test", note="failed")
-    record = fuse(failed, [], config=fusion_config(1), output_dir=folder.export_dir)
+    record = fuse_images(failed, [], config=fusion_config(1), output_dir=folder.export_dir)
     assert record.status == "empty"
     nuclei = tmp_path / "nuclei.tif"
     result = segment_fused(folder.export_dir, config=seeded_runs(nuclei), sample=SAMPLE, identity=(DS, SAMPLE))

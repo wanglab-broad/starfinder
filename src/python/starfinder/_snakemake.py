@@ -40,16 +40,16 @@ def _run_workflow(snakemake, rule):
     fov.run(adapted.pipeline, execution=adapted.execution, checkpoints=_rule_checkpoints(snakemake.config, rule))
     if resident:
         number = snakemake.wildcards.n_subtile
-        fov.save_spots(path=Path(snakemake.input[2]).parent / f'subtile_goodSpots_{number}.csv')
+        fov.export_spots(path=Path(snakemake.input[2]).parent / f'subtile_goodSpots_{number}.csv')
         fov.save_diagnostics(suffix=f'_{number}')
     else:
         fov.save_reference_image(projection=adapted.reference_projection, reference_image=adapted.reference_image,
                                  reference_channel=adapted.reference_channel)
         if rule == 'rsf_single_fov':
-            fov.save_spots()
+            fov.export_spots()
             fov.save_diagnostics()
         else:
-            fov.create_subtiles()
+            fov.save_subtiles()
         fov.save_processing_log('rsf' if rule == 'rsf_single_fov' else 'gr')
 
 
@@ -63,7 +63,7 @@ def _run_nuclei_registration(snakemake):
     as an ExternalReference labelled ``<ref_round>:ch04``, transferring the
     transform to all its channels. A round whose shared stain has another
     pattern than the rounds before it is registered after the entry by the
-    same public calls (load_images with the angle, register_rounds), in the
+    same public calls (load_images with the angle, register), in the
     configured order. Writes the MATLAB names: log/<fov>_nr.txt (the
     attempts), log/gr_shifts/<fov>_nr.txt and
     images/<round>/<channel name>/<fov>.tif (ZYX, or the Z maximum YX with
@@ -107,7 +107,7 @@ def _run_nuclei_registration(snakemake):
                                   fov.metadata[REFERENCE_STAIN], f'{ref}:{_NUCLEI_REFERENCE_CHANNEL}')
     for name in names[leading:]:
         fov.load_images(rounds=[name], rotation_degrees=angle)
-        fov.register_rounds(recipe(name), rounds=[name], reference=reference, checkpoints=checkpoints)
+        fov.register(recipe(name), rounds=[name], reference=reference, checkpoints=checkpoints)
     fov.save_processing_log('nr')
     projection = ProjectionConfig() if config.get('maximum_projection', False) else None
     for name in names:
@@ -626,12 +626,12 @@ def _run_stitching(snakemake):
 def _run_bigstitcher_macro(snakemake):
     """bigstitcher_macro_sample: the tiles, the macro (output 0) and the view map (output 1) of one sample.
 
-    bigstitcher_macro on the block's input images of the sample's FOVs (read
+    export_bigstitcher on the block's input images of the sample's FOVs (read
     as Dataset.stitch reads them) and its positions table, with the tiles in
     <bigstitcher_save_dir>/<sample>/tiles/ and that folder as BigStitcher's save
     folder.
     """
-    from starfinder.stitching import bigstitcher_macro
+    from starfinder.stitching import export_bigstitcher
     from .dataset._stitching import read_inputs
     config, sample = snakemake.config, snakemake.wildcards.sample
     block = _stitching_block(config)
@@ -640,8 +640,8 @@ def _run_bigstitcher_macro(snakemake):
     fov_ids = _sample_fovs(snakemake.input[0], config, sample)
     loaded = read_inputs(dataset.output_root, fov_ids, block.input, reference=reference_settings(config))
     table = _sample_table(block, dataset, sample, fov_ids, {fov: item.grid for fov, item in loaded.items()}, config)
-    text, view_map = bigstitcher_macro(table, [loaded[fov] for fov in table.fov_ids], config=block.config,
-                                       tile_dir=folder / 'tiles', save_dir=folder)
+    text, view_map = export_bigstitcher(table, [loaded[fov] for fov in table.fov_ids], config=block.config,
+                                        tile_dir=folder / 'tiles', save_dir=folder)
     Path(snakemake.output[0]).write_text(text)
     view_map.to_csv(snakemake.output[1], index=False)
 

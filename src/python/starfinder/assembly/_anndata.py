@@ -31,7 +31,7 @@ def _column(values):
     return values.to_numpy()
 
 
-def sample_anndata(result: AssemblyResult, path, *, annotation: Mapping | pd.Series | None = None) -> Path:
+def write_sample_h5ad(result: AssemblyResult, path, *, annotation: Mapping | pd.Series | None = None) -> Path:
     """Write ``sample.h5ad`` of an assembled sample from its sample tables; return the path.
 
     One row per counted cell (``assembly_status == "retained"`` and §2.9
@@ -75,7 +75,7 @@ def sample_anndata(result: AssemblyResult, path, *, annotation: Mapping | pd.Ser
     ValueError
         An annotation column that is already an ``obs`` column.
     """
-    _anndata("sample_anndata")
+    _anndata("write_sample_h5ad")
     if not isinstance(result, AssemblyResult):
         raise TypeError("result must be an AssemblyResult")
     if annotation is not None and not isinstance(annotation, (Mapping, pd.Series)):

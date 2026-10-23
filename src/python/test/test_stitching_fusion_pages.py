@@ -20,7 +20,7 @@ import pytest
 import tifffile
 
 from starfinder.io import _ome
-from starfinder.export import FusionConfig, FusionInput, _fuse, fuse
+from starfinder.export import FusionConfig, FusionInput, _fuse, fuse_images
 
 from . import reading_fixtures as rf
 
@@ -72,7 +72,7 @@ def zarr_views(monkeypatch):
 
 def lazy_graph(paths, placed, grid):
     """(chunks of each source's array, tasks of each source's graph, tasks of the fused array's graph), built as
-    ``fuse`` builds them."""
+    ``fuse_images`` builds them."""
     from dask.utils import ensure_dict
     plan = _fuse.check_fusion(placed, inputs(paths, grid), config=CONFIG)
     with ExitStack() as stack:
@@ -131,7 +131,7 @@ def test_a_file_in_strips_is_read_once_and_fuses_as_its_twin(tmp_path, monkeypat
     with rf.DecodeCounter(strips) as counter:
         monkeypatch.setattr(_ome, "write_ome_tiff", lambda *a, **k: started.append(len(counter.log)) or
                             real_write(*a, **k))
-        record = fuse(placed, inputs(strips, grid), config=CONFIG, output_dir=tmp_path / "out_strips")
+        record = fuse_images(placed, inputs(strips, grid), config=CONFIG, output_dir=tmp_path / "out_strips")
         assert record.status == "written"
         n_pages = len(rf.GRID_IDS) * SHAPE[0]
         # Every strip of every page decoded exactly once, none before the writer starts.
@@ -141,7 +141,7 @@ def test_a_file_in_strips_is_read_once_and_fuses_as_its_twin(tmp_path, monkeypat
     # Fewer than all nine tiles' worth of pages held at one time.
     assert peak["pages"] < n_pages, peak
     images["strips"] = tifffile.imread(tmp_path / "out_strips" / record.section["outputs"][0]["path"])
-    record = fuse(placed, inputs(twins, grid), config=CONFIG, output_dir=tmp_path / "out_twins")
+    record = fuse_images(placed, inputs(twins, grid), config=CONFIG, output_dir=tmp_path / "out_twins")
     images["twins"] = tifffile.imread(tmp_path / "out_twins" / record.section["outputs"][0]["path"])
     assert images["strips"].dtype == images["twins"].dtype and np.array_equal(images["strips"], images["twins"])
 

@@ -41,7 +41,7 @@ The recipe types are part of this package: a
 :py:class:`~starfinder.registration.RegistrationStep` entries, each with an optional
 :py:class:`~starfinder.registration.RecoveryConfig`, and an
 :py:class:`~starfinder.registration.ExternalReference` is a reference signal that is not a
-round of the dataset. ``FOV.register``, ``FOV.register_rounds`` and
+round of the dataset. ``FOV.register`` (on both of its routes) and
 ``PipelineConfig.registration`` take them; see :doc:`../registration-contract`.
 
 .. currentmodule:: starfinder.registration

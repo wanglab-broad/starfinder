@@ -83,8 +83,8 @@ def decode_fov(quickstart: Path, output: Path) -> FOV:
 
 
 def inspect_outputs(fov: FOV) -> dict:
-    all_path = fov.save_spots("allSpots", columns=["spot_namespace", "spot_id", "x", "y", "z", "gene", "color_seq", "call_status"])
-    good_path = fov.save_spots("goodSpots")
+    all_path = fov.export_spots("allSpots", columns=["spot_namespace", "spot_id", "x", "y", "z", "gene", "color_seq", "call_status"])
+    good_path = fov.export_spots("goodSpots")
     log_path = fov.save_processing_log()
     candidates = pd.read_csv(all_path, dtype={"color_seq": str})
     molecules = pd.read_csv(good_path)

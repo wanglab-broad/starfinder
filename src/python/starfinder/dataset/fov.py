@@ -546,34 +546,134 @@ class FOV:
         return image[..., channel].astype(np.float64)
 
     @_log_step
-    def register(self, recipe: RegistrationRecipe, *, rounds=None, source: str | None = None):
-        """Estimate the recipe's steps per moving round, then resample the round once.
+    def register(self, recipe: RegistrationRecipe, *, rounds: Sequence[str] | None = None, source: str | None = None,
+                 reference: str | ExternalReference | None = None,
+                 checkpoints: CheckpointConfig | None = None) -> FOV:
+        """Register moving rounds with a recipe: the sequencing rounds, or other rounds such as morphology rounds.
 
-        Signals are built with the recipe's (or a step's own) signal from
-        snapshot source of the reference and each moving round (None: their
-        images). Step k is estimated on the moving signal resampled in float64
-        through steps 1 to k-1; each successful estimate is checked by
+        The route follows the rounds' category, decided before any estimator
+        runs:
+
+        * ``rounds`` None: the sequencing rounds other than the reference
+          round, on the sequencing route.
+        * Every named round is a sequencing round: the sequencing route.
+          ``reference`` and ``checkpoints`` must be None.
+        * No named round is a sequencing round (other rounds and loaded rounds
+          the dataset does not configure): the other-round route. ``source``
+          must be None.
+        * Both categories in one call, an empty sequence, or a parameter of
+          the other route: ValueError.
+
+        On both routes each moving round is registered once by the same
+        estimation: step k is estimated on the moving signal resampled in
+        float64 through steps 1 to k-1; each successful estimate is checked by
         registration_qc against recipe.qc, and a failed criterion raises
         RegistrationRejectedError. Only opted-in estimation failures recover.
         The step transforms compose into one TransformChain, and the moving
-        round's image and every one of its snapshots are resampled once from
-        their pre-registration arrays with the recipe's warp (None: derived
-        from the chain), so they stay aligned; the reference round is not
-        transformed. registration_attempts gets one estimation entry per
-        attempt and one application entry per round; registration_results
-        the step results (application_config: the round's WarpConfig),
-        registration_chains the chain and registration_record the recipe and
-        the application policies. Apply errors propagate and are recorded
-        too, never recovered. A round is registered at most once. During a
-        preprocessing recipe run, preprocessing_record lists the composed
-        results per round and snapshot.
+        round's image (every channel) and every one of its snapshots are
+        resampled once from their pre-registration arrays with the recipe's
+        warp (None: derived from the chain), so they stay aligned; the
+        reference is not transformed. registration_attempts gets one
+        estimation entry per attempt and one application entry per round;
+        registration_results the step results (application_config: the
+        round's WarpConfig), registration_chains the chain and
+        registration_record the application policies. Apply errors propagate
+        and are recorded too, never recovered. During a preprocessing recipe
+        run, preprocessing_record lists the composed results per round and
+        snapshot.
 
-        rounds None registers the sequencing rounds other than the reference
-        round. An other round raises ValueError: it is registered by
-        FOV.register_rounds (or FOV.prepare_morphology) on its shared stain.
+        The sequencing route registers to the dataset reference round, with
+        signals built with the recipe's (or a step's own) signal from snapshot
+        ``source`` of the reference and each moving round (None: their
+        images). One recipe registers the sequencing rounds of a FOV:
+        registration_record["recipe"] keeps its summary. FOV.run calls this
+        route once per moving round.
+
+        The other-round route registers loaded rounds to a reference round or
+        an external reference. The typical recipe signal is
+        ``mode="channel"`` naming a shared stain in each round:
+        reference_channel in the reference round and moving_channel in every
+        moving round, by index or by the round's own channel labels
+        (dataset.channel_labels). MATLAB nuclei_registration corresponds to
+        one translation step. Label, grid and folder errors are raised before
+        any estimator runs. Every estimation attempt records the reference
+        (round name or external label) and reference_sha256 (None for a
+        round); registration_record["rounds"][round] keeps the recipe summary
+        and the reference.
+
+        Parameters
+        ----------
+        recipe : RegistrationRecipe
+            Steps, signal, warp and QC.
+        rounds : Sequence[str] | None
+            The moving rounds, each registered at most once; None: the
+            sequencing rounds other than the reference round.
+        source : str | None
+            Sequencing route only: the snapshot of the reference and the
+            moving rounds whose signal is registered (None: their images).
+        reference : str | ExternalReference | None
+            Other-round route only. None uses recipe.reference_round
+            (default: the dataset reference round). A round name may be any
+            loaded round, other rounds included. An ExternalReference supplies
+            the reference signal directly (its image, whatever the signal
+            mode) and must have the moving rounds' grid; the SHA-256 of its
+            image's C-order bytes is recorded.
+        checkpoints : CheckpointConfig | None
+            Other-round route only. None (default) writes nothing. Otherwise
+            each registered round is saved to
+            ``<checkpoint dir>/<fov_id>/other_rounds/<round>/``
+            (``image.ome.tif`` and ``registration.json``; see
+            :doc:`/checkpoints`, "Prepared morphology images"), which
+            :meth:`load_registered_round` reads. Only directory and overwrite
+            are used.
+
+        Returns
+        -------
+        FOV
+            This instance.
+
+        Raises
+        ------
+        ValueError
+            Sequencing and other rounds in one call, an empty sequence, a
+            parameter of the other route; a recipe reference round that
+            differs from the reference, a round that is already registered or
+            (other rounds) not loaded, an unknown channel label or a channel
+            index outside a round.
+        IncompatibleGeometryError
+            Other rounds: a moving round and the reference are not on one grid.
+        FileExistsError
+            With checkpoints, a round's folder exists and overwrite is False
+            (checked before any estimator runs).
         """
         if not isinstance(recipe, RegistrationRecipe):
             raise TypeError('register requires a RegistrationRecipe')
+        if rounds is None:
+            rounds, sequencing = self._sequencing_moving_rounds(), True
+        else:
+            if isinstance(rounds, str) or not isinstance(rounds, Sequence) or not rounds:
+                raise ValueError('rounds must be a nonempty sequence of round names')
+            rounds = list(rounds)
+            named = [name for name in rounds if name in self.rounds.sequencing_rounds]
+            others = [name for name in rounds if name not in self.rounds.sequencing_rounds]
+            if named and others:
+                raise ValueError(f'rounds {named} are sequencing rounds and rounds {others} are not; register the '
+                                 'sequencing rounds and the other rounds in separate calls')
+            sequencing = bool(named)
+        if sequencing:
+            given = [name for name, value in (('reference', reference), ('checkpoints', checkpoints))
+                     if value is not None]
+            if given:
+                raise ValueError(f'{" and ".join(given)} must be None for the sequencing rounds {rounds}: reference '
+                                 'and checkpoints are parameters of the other rounds')
+            return self._register_sequencing(recipe, rounds, source)
+        if source is not None:
+            raise ValueError(f'source must be None for the other rounds {rounds}: source is a parameter of the '
+                             'sequencing rounds')
+        return self._register_other_rounds(recipe, rounds, reference, checkpoints)
+
+    def _register_sequencing(self, recipe, rounds, source):
+        """The sequencing route of register: to the dataset reference round, one recipe per FOV."""
         recipe.__post_init__()
         ref = self.rounds.reference_round
         if recipe.reference_round is not None and recipe.reference_round != ref:
@@ -583,11 +683,6 @@ class FOV:
             raise ValueError('this FOV holds a sequential (version-1) registration; it cannot be extended by a recipe')
         if self.registration_record.get('recipe') not in (None, summary):
             raise ValueError('this FOV was registered with another registration recipe')
-        rounds = self._sequencing_moving_rounds() if rounds is None else rounds
-        others = [name for name in rounds if name in self.rounds.other_rounds and name != ref]
-        if others:
-            raise ValueError(f'rounds {others} are other rounds; FOV.register registers the sequencing rounds, so '
-                             'register an other round with FOV.register_rounds (or FOV.prepare_morphology)')
         registered = [name for name in rounds if self.registration_results.get(name) or name in self.registration_chains]
         if registered:
             raise ValueError(f'rounds {registered} are already registered; a round is registered once')
@@ -599,72 +694,12 @@ class FOV:
             self._register_round(recipe, name, source, references)
         return self
 
-    @_log_step
-    def register_rounds(self, recipe: RegistrationRecipe, *, rounds: Sequence[str],
-                        reference: str | ExternalReference | None = None,
-                        checkpoints: CheckpointConfig | None = None) -> FOV:
-        """Register loaded rounds, such as morphology rounds, to a reference round or an external reference.
-
-        The typical recipe signal is ``mode="channel"`` naming a shared stain
-        in each round: reference_channel in the reference round and
-        moving_channel in every moving round, by index or by the round's own
-        channel labels (dataset.channel_labels). Any allowed step sequence
-        works; MATLAB nuclei_registration corresponds to one translation step.
-        Label and grid errors are raised before any estimator runs.
-
-        Parameters
-        ----------
-        recipe : RegistrationRecipe
-            Steps, signal, warp and QC, as in register.
-        rounds : Sequence[str]
-            Loaded rounds to register, each at most once.
-        reference : str | ExternalReference | None
-            None uses recipe.reference_round (default: the dataset reference
-            round). A round name may be any loaded round, other rounds
-            included. An ExternalReference supplies the reference signal
-            directly (its image, whatever the signal mode) and must have the
-            moving rounds' grid; the SHA-256 of its image's C-order bytes is
-            recorded.
-        checkpoints : CheckpointConfig | None
-            None (default) writes nothing. Otherwise each registered round is
-            saved to ``<checkpoint dir>/<fov_id>/other_rounds/<round>/``
-            (``image.ome.tif`` and ``registration.json``; see
-            :doc:`/checkpoints`, "Prepared morphology images"), which
-            :meth:`load_registered_round` reads. Only directory and overwrite
-            are used.
-
-        Returns
-        -------
-        FOV
-            This instance. Each round is registered as in register: the steps
-            compose into one TransformChain estimated on the stain, and the
-            round's image (every channel) and each of its snapshots are
-            resampled once through it. Every estimation attempt records the
-            reference (round name or external label) and reference_sha256
-            (None for a round); registration_record["rounds"][round] keeps the
-            recipe summary and the reference.
-
-        Raises
-        ------
-        ValueError
-            An unknown channel label or a channel index outside a round, a
-            round that is not loaded or is already registered, or a reference
-            that differs from recipe.reference_round.
-        IncompatibleGeometryError
-            A moving round and the reference are not on one grid.
-        FileExistsError
-            With checkpoints, a round's folder exists and overwrite is False
-            (checked before any estimator runs).
-        """
+    def _register_other_rounds(self, recipe, rounds, reference, checkpoints):
+        """The other-round route of register: loaded rounds to a reference, one recipe per round."""
         from starfinder.registration._types import _geometry
-        if not isinstance(recipe, RegistrationRecipe):
-            raise TypeError('register_rounds requires a RegistrationRecipe')
         if checkpoints is not None and not isinstance(checkpoints, CheckpointConfig):
             raise TypeError('checkpoints must be a CheckpointConfig or None')
         recipe.__post_init__()
-        if isinstance(rounds, str) or not isinstance(rounds, Sequence) or not rounds:
-            raise ValueError('rounds must be a nonempty sequence of round names')
-        rounds = list(rounds)
         if len(set(rounds)) != len(rounds):
             raise ValueError('rounds must be unique')
         missing = [name for name in rounds if name not in self.images or name not in self.metadata]
@@ -1480,11 +1515,11 @@ class FOV:
            registration attempt is recorded;
         2. for each other round (config.rounds, default every configured other
            round except the reference round), load it with its own channels,
-           rotate it and register it with :meth:`register_rounds`. With
+           rotate it and register it with :meth:`register`. With
            config.recipe None the recipe is one translation step on the shared
            stain, against an ExternalReference of the reference stain labelled
            ``<reference round>:<stain pattern>`` (as the nuclei_registration
-           rule); a given recipe is used as register_rounds uses it, against
+           rule); a given recipe is used as register uses it, against
            the reference stain when its signal names a stain channel, else
            against the resident reference round (after FOV.run);
         3. with checkpoints, save each prepared image to
@@ -1492,8 +1527,8 @@ class FOV:
            and ``registration.json``; see :doc:`/checkpoints`), which
            :meth:`load_registered_round` reads.
 
-        The loading, the rotation and register_rounds are the public calls
-        (load_images with rotation_degrees, register_rounds), so calling them
+        The loading, the rotation and register are the public calls
+        (load_images with rotation_degrees, register), so calling them
         step by step gives the same images, chains and records. Without a
         recipe on the reference round, the entry needs the raw files and the
         angle only, not the results of FOV.run; pass FOV.run's
@@ -1521,7 +1556,7 @@ class FOV:
             prepared, no recipe with no reference stain, several reference
             stains or no single channel of the stain's name, a recipe on the
             reference round that is not resident, and the errors of
-            load_images and register_rounds.
+            load_images and register.
         TypeError
             config or checkpoints of another type.
         FileExistsError
@@ -1567,7 +1602,7 @@ class FOV:
                 pattern = self.dataset.reference_stains[stain].channel
                 reference = ExternalReference(np.ascontiguousarray(self.images[REFERENCE_STAIN][..., stain]),
                                               self.metadata[REFERENCE_STAIN], f'{ref}:{pattern}')
-            self.register_rounds(recipe, rounds=[name], reference=reference)
+            self.register(recipe, rounds=[name], reference=reference)
         if root is not None:
             for name in names:
                 self._save_prepared(root, name)
@@ -1575,7 +1610,7 @@ class FOV:
 
     @_log_step
     def load_registered_round(self, name: str, *, checkpoints: CheckpointConfig = CheckpointConfig()) -> FOV:
-        """Restore one image saved by :meth:`prepare_morphology` or :meth:`register_rounds` with checkpoints.
+        """Restore one image saved by :meth:`prepare_morphology` or :meth:`register` with checkpoints.
 
         Reads ``<checkpoint dir>/<fov_id>/other_rounds/<name>/`` and restores
         images[name], metadata[name], the rotation diagnostics and
@@ -1704,7 +1739,7 @@ class FOV:
             else:
                 files = []
             # The checkpoint holds the reference and sequencing rounds only; an other round is saved by
-            # prepare_morphology or register_rounds under other_rounds/.
+            # prepare_morphology or register (other rounds) under other_rounds/.
             kept = set(image_rounds)
             record = dict(self.registration_record)
             if 'application' in record:
@@ -1864,7 +1899,7 @@ class FOV:
         A :class:`~starfinder.segmentation.ReferenceGrid` with
         ``images[reference_round].shape[:3]``, ``metadata[reference_round]``, source
         ``"fov:<reference round>"`` and the SHA-256 of the reference image's C-order
-        bytes (as ``reference_sha256`` of register_rounds). It is available after run() (whose
+        bytes (as ``reference_sha256`` of register). It is available after run() (whose
         streaming mode keeps the reference round) or after
         ``load_checkpoint("registered")``. Without the reference round, after
         :meth:`load_reference_image`, it is the grid of the saved reference image
@@ -1979,7 +2014,7 @@ class FOV:
         restored by :meth:`load_reference_image`), a registered sequencing round,
         or ``reference_stain`` or
         an other round with an entry of ``registration_record["rounds"]`` (prepared by
-        :meth:`prepare_morphology` or :meth:`register_rounds` in this process, or
+        :meth:`prepare_morphology` or :meth:`register` in this process, or
         reloaded by :meth:`load_registered_round`), with its ``prepare`` function
         applied), calls :func:`~starfinder.segmentation.segment` with the
         run's seeds (or :func:`~starfinder.segmentation.import_labels` with that
@@ -2073,7 +2108,7 @@ class FOV:
         FOV identity against this FOV. The result (its record is the saved
         record; diagnostics are not saved) is stored in
         ``segmentation_results[name]``. Like each result :meth:`segment` saved, it
-        counts as saved under its run for :meth:`assign` with the same checkpoint
+        counts as saved under its run for :meth:`assign_molecules` with the same checkpoint
         root, on any FOV object of this FOV, also after the run is loaded again,
         as long as ``labels.tif`` still holds its labels.
 
@@ -2120,9 +2155,10 @@ class FOV:
                              f'(runs: {sorted(self.segmentation_results)})')
         return self.segmentation_results[value]
 
-    def assign(self, config: AssignmentConfig | None = None, *, cells: str | SegmentationResult = 'cell',
-               nuclei: str | SegmentationResult | None = None, name: str = 'default', population: str = 'final',
-               correspondence: pd.DataFrame | None = None, checkpoints: CheckpointConfig | None = None) -> FOV:
+    def assign_molecules(self, config: AssignmentConfig | None = None, *, cells: str | SegmentationResult = 'cell',
+                         nuclei: str | SegmentationResult | None = None, name: str = 'default',
+                         population: str = 'final', correspondence: pd.DataFrame | None = None,
+                         checkpoints: CheckpointConfig | None = None) -> FOV:
         """Assign this FOV's molecules to the cells of a segmentation run (the third call per FOV).
 
         ``cells`` and ``nuclei`` name runs of ``segmentation_results`` or are
@@ -2204,18 +2240,18 @@ class FOV:
         cell_run = self._label_run(cells, 'cells')
         nucleus_run = None if nuclei is None else self._label_run(nuclei, 'nuclei')
         if self.spot_result is None:
-            raise ValueError('FOV.assign needs spot_result; call run() or load_checkpoint() first')
+            raise ValueError('FOV.assign_molecules needs spot_result; call run() or load_checkpoint() first')
         reads = (self.filtering_result if population == 'final' or self.filtering_result is not None
                  else self.decoding_result)
         if reads is None:
-            raise ValueError(f'FOV.assign with population {population!r} needs '
+            raise ValueError(f'FOV.assign_molecules with population {population!r} needs '
                              + ('filtering_result' if population == 'final' else 'a decoding or filtering result'))
         if self.dataset.readout_mode == 'direct' and self.dataset.direct_panel is not None:
             genes = tuple(dict.fromkeys(self.dataset.direct_panel.genes))
         elif self.codebook is not None:
             genes = tuple(self.codebook.genes)
         else:
-            raise ValueError('FOV.assign needs the gene list: load the codebook (or the direct panel)')
+            raise ValueError('FOV.assign_molecules needs the gene list: load the codebook (or the direct panel)')
         grid = self.reference_grid()
         projected = grid.shape_zyx[0] == 1 and grid.metadata.frame_id.endswith(('/projection:max', '/projection:sum'))
         if projected and not self._reference_resident():
@@ -2239,7 +2275,7 @@ class FOV:
         return self
 
     def load_assignment(self, name: str, *, checkpoints: CheckpointConfig = CheckpointConfig()) -> AssignmentResult:
-        """Read an assignment saved by :meth:`assign` with checkpoints.
+        """Read an assignment saved by :meth:`assign_molecules` with checkpoints.
 
         Reads ``<checkpoint dir>/<fov_id>/assignment/<name>/`` and the linked
         ``segmentation/<run>/labels.tif`` files, checks every recorded SHA-256
@@ -2331,7 +2367,7 @@ class FOV:
                          metadata={'axes': 'YX', 'starfinder_metadata': asdict(metadata)})
         return path
 
-    def save_spots(self, slot='goodSpots', columns=None, *, path=None):
+    def export_spots(self, slot='goodSpots', columns=None, *, path=None):
         """Export identities and coordinates once; shared slot filenames retained."""
         from starfinder.readout import export_spots
         if slot not in ('goodSpots', 'allSpots'):
@@ -2347,7 +2383,7 @@ class FOV:
         ``log/gr_shifts/<fov>.txt`` for every registered round; ``nr`` (the
         nuclei_registration names) writes ``log/<fov>_nr.txt`` and
         ``log/gr_shifts/<fov>_nr.txt`` for the rounds registered by
-        register_rounds (prepare_morphology's other rounds; the reference
+        register on other rounds (prepare_morphology's; the reference
         stain has no registration), with their attempts.
         """
         if log_type not in ('rsf', 'gr', 'nr'):
@@ -2385,7 +2421,7 @@ class FOV:
 
     # --- Subtile operations ---
 
-    def create_subtiles(
+    def save_subtiles(
         self,
         *,
         out_dir: Path | None = None,
@@ -2481,7 +2517,7 @@ class FOV:
         Parameters
         ----------
         subtile_path : Path
-            Path to a trusted NPZ written by create_subtiles (loaded with allow_pickle=True).
+            Path to a trusted NPZ written by save_subtiles (loaded with allow_pickle=True).
         dataset : Dataset
             Dataset providing shared configuration, rounds and codebook.
         fov_id : str

@@ -124,7 +124,7 @@ def spy(monkeypatch):
 def test_a_shared_stain_registers_an_other_round_and_transfers_the_transform(tmp_path):
     fov, truth, _ = other_round_fov(tmp_path)
     before = {name: fov.images[name].copy() for name in ("round1", "round2")}
-    fov.register_rounds(TRANSLATION, rounds=["morph"])
+    fov.register(TRANSLATION, rounds=["morph"])
     assert fov.registration_results["morph"][0].transform.displacement_zyx == (0.0, 3.0, -2.0)
     registered = fov.images["morph"]
     assert registered.dtype == np.uint16 and registered.shape == SHAPE + (3,)
@@ -137,10 +137,10 @@ def test_a_shared_stain_registers_an_other_round_and_transfers_the_transform(tmp
 
 def test_an_external_reference_gives_the_same_result(tmp_path):
     by_round, _, _ = other_round_fov(tmp_path)
-    by_round.register_rounds(TRANSLATION, rounds=["morph"])
+    by_round.register(TRANSLATION, rounds=["morph"])
     fov, _, _ = other_round_fov(tmp_path)
     reference = external(fov)
-    fov.register_rounds(TRANSLATION, rounds=["morph"], reference=reference)
+    fov.register(TRANSLATION, rounds=["morph"], reference=reference)
     expected, actual = by_round.registration_chains["morph"], fov.registration_chains["morph"]
     assert [t.displacement_zyx for t in actual.transforms] == [t.displacement_zyx for t in expected.transforms]
     assert actual.transforms == expected.transforms
@@ -152,16 +152,18 @@ def test_an_external_reference_gives_the_same_result(tmp_path):
     assert fov.registration_record["rounds"]["morph"]["reference_sha256"] == digest
 
 
-@pytest.mark.parametrize("signal, names", [
-    (RegistrationSignalConfig("channel", "ch04", "ch09"), ["morph"]),      # unknown label in morph
-    (RegistrationSignalConfig("channel", "ch04", "ch00"), ["morph", "round2"]),  # ch00 is not a round2 label
-    (RegistrationSignalConfig("channel", "ch04", 3), ["morph"]),           # index outside morph's 3 channels
+@pytest.mark.parametrize("signal, names, match", [
+    (RegistrationSignalConfig("channel", "ch04", "ch09"), ["morph"], None),      # unknown label in morph
+    # W-560 (NC-05): the sequencing round round2 beside morph is refused by the routing of FOV.register.
+    (RegistrationSignalConfig("channel", "ch04", "ch00"), ["morph", "round2"],
+     r"rounds \['round2'\] are sequencing rounds and rounds \['morph'\] are not"),
+    (RegistrationSignalConfig("channel", "ch04", 3), ["morph"], None),           # index outside morph's 3 channels
 ])
-def test_label_errors_are_raised_before_estimation(tmp_path, spy, signal, names):
+def test_label_errors_are_raised_before_estimation(tmp_path, spy, signal, names, match):
     fov, _, _ = other_round_fov(tmp_path)
     moving = {name: fov.images[name].copy() for name in names}
-    with pytest.raises(ValueError) as error:
-        fov.register_rounds(RegistrationRecipe((RegistrationStep(TranslationConfig()),), signal=signal), rounds=names)
+    with pytest.raises(ValueError, match=match) as error:
+        fov.register(RegistrationRecipe((RegistrationStep(TranslationConfig()),), signal=signal), rounds=names)
     assert type(error.value) is ValueError
     assert spy == [] and fov.registration_attempts == {} and fov.registration_results == {}
     assert all(np.array_equal(fov.images[name], image) for name, image in moving.items())
@@ -176,7 +178,7 @@ def test_grid_errors_are_raised_before_estimation(tmp_path, spy, image, metadata
     reference = ExternalReference(fov.images["round1"][..., 3] if image is None else image,
                                   metadata or fov.metadata["round1"], "atlas")
     with pytest.raises(IncompatibleGeometryError):
-        fov.register_rounds(TRANSLATION, rounds=["morph"], reference=reference)
+        fov.register(TRANSLATION, rounds=["morph"], reference=reference)
     assert spy == [] and fov.registration_attempts == {}
 
 
@@ -184,7 +186,7 @@ def test_local_and_composed_recipes_work_for_other_rounds(tmp_path, spy):
     fov, _, truth = other_round_fov(tmp_path, local=True)
     original = fov.images["morph"].copy()
     recipe = RegistrationRecipe((RegistrationStep(TranslationConfig()), RegistrationStep(DemonsConfig())), signal=STAIN)
-    fov.register_rounds(recipe, rounds=["morph"])
+    fov.register(recipe, rounds=["morph"])
     assert [type(config) for config in spy] == [TranslationConfig, DemonsConfig]
     chain = fov.registration_chains["morph"]
     u = chain.pull_field().displacement_zyx
@@ -203,7 +205,7 @@ def test_local_and_composed_recipes_work_for_other_rounds(tmp_path, spy):
 def test_records_name_the_reference(tmp_path, use_external):
     fov, _, _ = other_round_fov(tmp_path)
     reference = external(fov) if use_external else None
-    fov.register_rounds(TRANSLATION, rounds=["morph"], reference=reference)
+    fov.register(TRANSLATION, rounds=["morph"], reference=reference)
     estimation, application = fov.registration_attempts["morph"]
     digest = hashlib.sha256(np.ascontiguousarray(fov.images["round1"][..., 3]).tobytes()).hexdigest()
     assert {k: estimation[k] for k in ("record", "step", "attempt", "requested_method", "actual_method", "fallback",

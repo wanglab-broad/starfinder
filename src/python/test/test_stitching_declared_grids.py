@@ -45,7 +45,7 @@ from starfinder.assignment._persist import assignment_directory, write_assignmen
 from starfinder.dataset import Dataset
 from starfinder.image import ImageMetadata, IncompatibleGeometryError
 from starfinder.io import load_volume, save_volume
-from starfinder.export import ExportConfig, FusionConfig, FusionInput, LabelConfig, check_export, fuse
+from starfinder.export import ExportConfig, FusionConfig, FusionInput, LabelConfig, check_export, fuse_images
 from starfinder.segmentation import ReferenceGrid, reference_grid_from_file
 from starfinder.stitching import approve_placement, placement_from_table, positions_from_table, save_placement
 
@@ -293,7 +293,7 @@ def merged(fov):
 
 
 def run_combination(root, metadata):
-    """placement_from_table, assemble, fuse and fuse_labels on own_cases with every grid given this metadata."""
+    """placement_from_table, assemble, fuse_images and fuse_labels on own_cases with every grid given this metadata."""
     from starfinder.assembly import save_assembly
     from starfinder.export import fuse_labels
     grid = own_grid(metadata)
@@ -308,8 +308,9 @@ def run_combination(root, metadata):
     folder = root / "export"
     assembly = save_assembly(assembly, folder)
     inputs = [FusionInput(fov, grid, {"reference_merged": merged(fov)}) for fov in OWN_IDS]
-    fuse(placed, inputs, assembly=assembly, config=FusionConfig(images=("reference_merged",), dimensionality="both",
-                                                                 scale_yx=1.0), output_dir=folder)
+    fuse_images(placed, inputs, assembly=assembly,
+                config=FusionConfig(images=("reference_merged",), dimensionality="both", scale_yx=1.0),
+                output_dir=folder)
     fuse_labels(placed, assembly, config=LabelConfig(scale_yx=1.0), output_dir=folder)
     images = {name: tifffile.imread(folder / name) for name in ("reference_merged_projection.ome.tif",
                                                                 "reference_merged_stack.ome.tif",
@@ -421,9 +422,9 @@ def test_another_unit_no_unit_or_another_direction_is_refused_as_before(tmp_path
     assert str(error.value) == ("assemble needs known spacing, unit µm and identity direction on every grid; FOVs "
                                 f"with {what}: FOV1, FOV2")
     with pytest.raises(IncompatibleGeometryError) as error:
-        fuse(constructed, [FusionInput(fov, grid, {"reference_merged": merged(fov)}) for fov in OWN_IDS],
-             config=FusionConfig(images=("reference_merged",)), output_dir=tmp_path / "fused")
-    assert str(error.value) == ("fuse needs known spacing, unit µm and identity direction on every grid; FOVs "
+        fuse_images(constructed, [FusionInput(fov, grid, {"reference_merged": merged(fov)}) for fov in OWN_IDS],
+                    config=FusionConfig(images=("reference_merged",)), output_dir=tmp_path / "fused")
+    assert str(error.value) == ("fuse_images needs known spacing, unit µm and identity direction on every grid; FOVs "
                                 f"with {what}: FOV1, FOV2")
     assert not (tmp_path / "fused").exists()
     # fuse_labels checks the grids the placement recorded when it fuses (_grids, inside the part).
@@ -493,8 +494,8 @@ def test_paged_tiles_fuse_as_their_zyx_twins(tmp_path, monkeypatch):
         paths = tile_files(tmp_path, form)
         assert all(_source_shape(p) == (TILE, np.dtype(np.uint16)) for p in paths.values())
         reads.clear()
-        record = fuse(placed, [FusionInput(fov, grid, {"reference_merged": paths[fov]}) for fov in OWN_IDS],
-                      config=config, output_dir=tmp_path / f"out_{form}")
+        record = fuse_images(placed, [FusionInput(fov, grid, {"reference_merged": paths[fov]}) for fov in OWN_IDS],
+                             config=config, output_dir=tmp_path / f"out_{form}")
         assert reads == [], (form, reads)
         assert record.status == "written"
         assert [e["images"]["reference_merged"]["path"] for e in record.section["fovs"]] == [

@@ -139,7 +139,7 @@ class TestFOVPipeline:
 
         # Only save if there are good spots
         if len(spot_table(fov, accepted=True)) > 0:
-            path = fov.save_spots(slot="goodSpots")
+            path = fov.export_spots(slot="goodSpots")
             assert path.exists()
 
             df = pd.read_csv(path)
@@ -197,7 +197,7 @@ class TestFOVSubtile:
         h, w = fov.images["round1"].shape[1:3]
         small_pipeline_dataset.subtile.compute_windows(h, w)
 
-        coords_df = fov.create_subtiles()
+        coords_df = fov.save_subtiles()
         assert len(coords_df) == 4
         assert set(coords_df.columns) == {
             "t", "scoords_x", "scoords_y", "ecoords_x", "ecoords_y",

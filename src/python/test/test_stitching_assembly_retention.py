@@ -289,9 +289,9 @@ def test_as7_molecules_only():
 
 def test_as7_molecules_only_anndata(tmp_path):
     anndata = pytest.importorskip("anndata")
-    from starfinder.assembly import sample_anndata
+    from starfinder.assembly import write_sample_h5ad
     result = assemble(golden_placement(), inputs_of(molecules_only(), kind="molecules"))
-    adata = anndata.read_h5ad(sample_anndata(result, tmp_path / "sample.h5ad"))
+    adata = anndata.read_h5ad(write_sample_h5ad(result, tmp_path / "sample.h5ad"))
     assert adata.shape == (0, len(GOLDEN_GENES)) and adata.var_names.tolist() == list(GOLDEN_GENES)
     retained = result.molecules[result.molecules.assembly_status == "retained"].gene_id.value_counts()
     assert adata.var["n_molecules_retained"].tolist() == [int(retained.get(g, 0)) for g in GOLDEN_GENES]
@@ -325,8 +325,8 @@ def test_as8_empty_inputs_go_through_the_same_rules(case, tmp_path):
     if case == "no_counted_cell":
         assert result.cells.status.eq("excluded_no_nucleus").all() and result.counts.empty
         anndata = pytest.importorskip("anndata")
-        from starfinder.assembly import sample_anndata
-        adata = anndata.read_h5ad(sample_anndata(result, tmp_path / "sample.h5ad"))
+        from starfinder.assembly import write_sample_h5ad
+        adata = anndata.read_h5ad(write_sample_h5ad(result, tmp_path / "sample.h5ad"))
         assert adata.shape == (0, len(GOLDEN_GENES))
     if case == "no_cell_row":
         assert result.cells.empty and result.counts.empty

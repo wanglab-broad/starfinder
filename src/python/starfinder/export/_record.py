@@ -31,7 +31,7 @@ NO_FILES = ("off", "not_run", "empty")
 PENDING_REASON = "export_not_finished"
 VIEWER_QUALIFICATION = "deferred"
 #: The SHA-256 of a section that another section records when it reads it: recording section →
-#: {field: the section it hashes}. Written by ``fuse`` (``_fuse.py``), ``fuse_labels`` (``_labels.py``) and
+#: {field: the section it hashes}. Written by ``fuse_images`` (``_fuse.py``), ``fuse_labels`` (``_labels.py``) and
 #: ``export_spatialdata`` (``_spatialdata.py``); a field holding None records nothing.
 RECORDED_SECTION_HASHES = {"fusion": {"assembly_sha256": "assembly"},
                            "labels": {"assembly_sha256": "assembly"},

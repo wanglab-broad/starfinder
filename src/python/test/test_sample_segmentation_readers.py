@@ -1,6 +1,6 @@
 """SO2 and SO4 of docs/sample-segmentation-validation.md: the readers and the label export on the route after fusion.
 
-SO2: ``load_assembly``, ``sample_anndata``, ``check_export`` (R1 to R3, F, L, S and T1 to T5), ``lookup_source``
+SO2: ``load_assembly``, ``write_sample_h5ad``, ``check_export`` (R1 to R3, F, L, S and T1 to T5), ``lookup_source``
 and ``export_spatialdata`` with its round trip, on ``fused_pair`` exported on both routes (``per_fov_routes``), the
 route after fusion at ``k = 1`` and at ``k = 2`` (where the segmentation grid's spacing differs from a FOV's, so the
 radii tell the two apart), each built once; ``check_export`` fails T1 on a folder whose fused input was fused
@@ -27,7 +27,7 @@ import pytest
 import tifffile
 
 from starfinder.assembly import AssemblyConfig, load_assembly, ownership_map
-from starfinder.assembly._anndata import sample_anndata
+from starfinder.assembly._anndata import write_sample_h5ad
 from starfinder.export import LabelConfig, check_export, lookup_source, segment_fused
 from starfinder.stitching import load_placement
 
@@ -123,11 +123,11 @@ def test_so2_readers(so2, case, tmp_path):
     assert record["labels"]["rule"] == ("segmentation" if after else "retained_cells")
     # check_export: R1 to R3, F, L, S and, on the route after fusion, T1 to T5.
     check_export(out)
-    # load_assembly and sample_anndata.
+    # load_assembly and write_sample_h5ad.
     result = load_assembly(out)
     cells, molecules = result.cells, result.molecules
     assert result.record["route"] == ("after_fusion" if after else "per_fov") and len(cells) > 0
-    written = sample_anndata(result, tmp_path / "sample.h5ad")
+    written = write_sample_h5ad(result, tmp_path / "sample.h5ad")
     adata = anndata.read_h5ad(written)
     assert sorted(adata.layers) == ["cytoplasm", "nucleus"]   # the nucleus run (after fusion) or the FOVs' nuclei
     # lookup_source of every cell and molecule.

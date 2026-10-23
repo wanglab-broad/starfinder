@@ -13,7 +13,7 @@ This module adds:
 * A15's last clause on the ``boxes`` FOV: the files ``FOV.run`` writes (``run.json`` and the
   ``registered`` checkpoint of a load-only run of the ``seeded`` stain, and the ``candidates``
   checkpoint of the ``boxes`` molecules) and the saved segmentation runs of the ``boxes``
-  masks are byte-identical before and after ``FOV.assign``.
+  masks are byte-identical before and after ``FOV.assign_molecules``.
 
 ``assign_golden`` and ``boxes`` use no random number; the ``seeded`` stain uses seed 101.
 """
@@ -83,7 +83,7 @@ def test_a15_fov_run_and_segmentation_files_of_boxes_are_untouched_by_assign(tmp
     assert {p.relative_to(folder).as_posix() for p in before if p not in run_files} == {
         f"segmentation/{run}/{name}" for run in ("cell", "nucleus") for name in ("labels.tif", "segmentation.json")}
 
-    fov.assign(AssignmentConfig(expansion=EXPANSION), nuclei="nucleus", checkpoints=checkpoints)
+    fov.assign_molecules(AssignmentConfig(expansion=EXPANSION), nuclei="nucleus", checkpoints=checkpoints)
     after = hashes(root)
     assert {p: h for p, h in after.items() if p in before} == before       # FOV.run and segmentation untouched
     assignment = folder / "assignment" / "default"

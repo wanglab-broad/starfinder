@@ -80,7 +80,7 @@ def test_an_interrupted_export_is_not_complete_and_the_next_run_completes_it(sce
     reference, folder = tmp_path / "reference", tmp_path / "export"
     export(scene, reference)
     with monkeypatch.context() as patch:
-        patch.setattr(_export, "fuse", interrupt)
+        patch.setattr(_export, "fuse_images", interrupt)
         with pytest.raises(KeyboardInterrupt):
             export(scene, folder)
     record = read_export(folder)

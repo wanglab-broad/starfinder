@@ -310,7 +310,7 @@ Cost: sorts and joins over the tables, `O(n log n)`; no copy beyond the key colu
 ## Sample-level AnnData
 
 From the cell table and `counts` ({doc}`assembly-contract`, "Sample-level AnnData"):
-`sample_anndata(result, path, *, annotation=None)` prepares the sample's `obs` and the
+`write_sample_h5ad(result, path, *, annotation=None)` prepares the sample's `obs` and the
 other parts (steps 1 and 3 to 4) and passes them to `write_h5ad(path, obs, keys, counts,
 genes, *, layers, uns, var, obsm)` of `starfinder.assignment`, which builds the AnnData
 (step 2) and writes it at `path`:
@@ -339,7 +339,7 @@ genes, *, layers, uns, var, obsm)` of `starfinder.assignment`, which builds the 
 | `annotation` | – | `None` | a mapping of extra `obs` columns for the sample (the workflow passes the annotation row) |
 
 Failure: without `anndata`, `ModuleNotFoundError` naming the `anndata` extra, from
-`write_h5ad` and `sample_anndata` alike; a non-unique `obs_name` cannot occur after the
+`write_h5ad` and `write_sample_h5ad` alike; a non-unique `obs_name` cannot occur after the
 entry's checks; a `keys` row count that differs from `obs`, or a key column missing from
 `counts`, raises `ValueError` in `write_h5ad`. The workflow adapter calls the same
 `write_h5ad` for `raw.h5ad`, with the `obs` that `_cell_obs` prepares after its tile-box

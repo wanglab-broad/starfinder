@@ -52,7 +52,7 @@ round inside the round loop, `candidates` after detection or extraction, and
     candidates.json
     pre_qc.csv | pre_qc.parquet
     pre_qc.json
-    other_rounds/<name>/                      # FOV.prepare_morphology / FOV.register_rounds(checkpoints=…)
+    other_rounds/<name>/                      # FOV.prepare_morphology / FOV.register(checkpoints=…)
         image.ome.tif                         # the prepared image, ZYXC, every channel, ImageMetadata
         registration.json
         field.npz                             # only for a chain with a dense or B-spline transform
@@ -60,7 +60,7 @@ round inside the round loop, `candidates` after detection or extraction, and
         labels.tif
         input.ome.tif                         # computed runs only
         segmentation.json
-    assignment/<name>/                        # FOV.assign(checkpoints=…), one folder per assignment
+    assignment/<name>/                        # FOV.assign_molecules(checkpoints=…), one folder per assignment
         molecules.csv | molecules.parquet
         cells.csv | cells.parquet
         counts.csv | counts.parquet
@@ -75,7 +75,7 @@ An FOV loaded from a subtile writes to `subtile_<n>/` inside its FOV directory,
 so subtiles of one FOV never share files. Round labels must be plain file names.
 
 The `other_rounds/`, `segmentation/` and `assignment/` folders are written by
-`FOV.prepare_morphology` (or `FOV.register_rounds`), `FOV.segment` and `FOV.assign`, not
+`FOV.prepare_morphology` (or `FOV.register`), `FOV.segment` and `FOV.assign_molecules`, not
 by `FOV.run`: they are not checkpoint stages, `CheckpointConfig.stages` does not name
 them, and they do not change the stage format version or `run.json` (see "Prepared
 morphology images", "Segmentation runs" and "Assignments" below). `FOV.run` with
@@ -279,7 +279,7 @@ All JSON files are strict JSON: a non-finite diagnostic or configuration value
 
 `fov.prepare_morphology(config, checkpoints=CheckpointConfig(…))` writes each prepared
 image (the reference stain `reference_stain` and each other round) to
-`other_rounds/<name>/`; `fov.register_rounds(recipe, rounds=…, checkpoints=…)` writes each
+`other_rounds/<name>/`; `fov.register(recipe, rounds=…, checkpoints=…)` writes each
 round it registers the same way ({doc}`coordination`, "Sequencing rounds and other
 rounds"). Only `directory` and `overwrite` are used. An existing folder raises
 `FileExistsError` before anything is loaded or estimated unless `overwrite=True`, which
@@ -308,7 +308,7 @@ run that reads the image. The Python `nuclei_registration` rule writes these fol
 are what a process that only segments reads: `fov.load_reference_image()`, then
 `fov.load_registered_round(name)` for each image its plan names, then
 `fov.segment(plan, checkpoints=…)`, with no sequencing round resident and no partial load
-of `registered` ({doc}`segmentation-contract`, "Coordination per FOV"). `fov.assign` there
+of `registered` ({doc}`segmentation-contract`, "Coordination per FOV"). `fov.assign_molecules` there
 takes the molecules from the `candidates` and `pre_qc` stages, which restore no image,
 and re-applies the filter with `FOV.run` ("Reload and continue").
 
@@ -335,7 +335,7 @@ the result `FOV.segment` stored.
 
 ## Assignments
 
-`fov.assign(…, name="default", checkpoints=CheckpointConfig(…))` writes
+`fov.assign_molecules(…, name="default", checkpoints=CheckpointConfig(…))` writes
 `assignment/<name>/` (option L1 of {doc}`assignment-contract`, "Persistence"). `directory`,
 `table_format` and `overwrite` are used, with the same `FileExistsError` and `ImportError`
 rules as `run`, checked before the assignment runs.

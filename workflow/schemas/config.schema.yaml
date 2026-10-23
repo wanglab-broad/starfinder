@@ -1641,8 +1641,8 @@ $defs:
 
   assignment_block:
     description: >-
-      Python only. The assign call of FOV.assign, run by the §2.13 rule: the AssignmentConfig
-      fields and the FOV.assign arguments (keys kept equal to them by a test); the
+      Python only. The call of FOV.assign_molecules, run by the §2.13 rule: the AssignmentConfig
+      fields and the FOV.assign_molecules arguments (keys kept equal to them by a test); the
       reads_assignment rule translates its own legacy keys instead and raises when this block
       is present.
     type: object

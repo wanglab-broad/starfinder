@@ -28,7 +28,7 @@ an inline rule body or a MATLAB example:
 | DAPI–amplicon composite | `workflow/scripts/create_nuclei_amplicon_overlay.py` (rule `create_nuclei_amplicon_overlay`, `segmentation.smk:39-48`) | workflow environment |
 | Flamingo enhancement of DAPI | `workflow/scripts/enhance_dapi_with_flamingo.py` (rule `enhance_dapi_with_flamingo`, `segmentation.smk:8-17`) | workflow environment |
 | DAPI rotation and projection | inline `run:` of rule `rotate_nuclei` (`workflow/rules/registration-py.smk:88-111`; the same lines in `registration.smk:80-103`) | workflow environment |
-| Morphology rounds into the sequencing frame | rule `nuclei_registration` (`registration-py.smk:74-84`, `registration.smk:62-76`): `workflow/scripts/nuclei_registration.py` → `starfinder.dataset.workflow._run_nuclei_registration` → `FOV.register_rounds`, or `nuclei_registration.m` | Python package or MATLAB |
+| Morphology rounds into the sequencing frame | rule `nuclei_registration` (`registration-py.smk:74-84`, `registration.smk:62-76`): `workflow/scripts/nuclei_registration.py` → `starfinder.dataset.workflow._run_nuclei_registration` → `FOV.register`, or `nuclei_registration.m` | Python package or MATLAB |
 | Label preview | `workflow/scripts/create_segmentation_preview.py`; no rule uses it | none |
 | Culture extension of 2D labels through z | `example/sequential_workflow/create_3d_segmentation.m` | MATLAB, by hand |
 | Second label expansion | `workflow/scripts/reads_assignment.py:52-57`, `:64-67` | workflow environment |
@@ -142,7 +142,7 @@ The golden test pins the enhancement on its fixture.
 With `backend: python`, `nuclei_registration.py` calls `_run_nuclei_registration`
 (`workflow.py:748-795`). It loads each `additional_round` with its `channel_order`,
 rotates it by `rotate_angle`, reads the reference round's `ch04` (rotated the same way)
-as an `ExternalReference`, and calls `FOV.register_rounds` (`fov.py:572-676`) with one
+as an `ExternalReference`, and calls `FOV.register` (`fov.py:572-676`) with one
 translation step on the round's shared stain, the one channel whose name contains the
 top-level `ref_channel`. Every channel of the round is resampled through that
 transform, and the round takes the reference metadata; `registration_record["rounds"]`
@@ -210,7 +210,7 @@ Every size is in pixels; no spacing is read. W-305 holds earlier results of this
 | 9 | No record of the model's identity. | Pretrained models from a known-models table with file SHA-256 values, user-trained models by explicit path with each file's SHA-256 recorded; both in the provenance entry's `artifacts` ({doc}`segmentation-contract`, "Models"). |
 | 10 | The thresholds come only from YAML; the model's stored `thresholds.json` is ignored. | The stored thresholds are the default; any other value is recorded as an override (the W-305 rule). |
 | 11 | Normalization (1–99.8 percent over the whole image) and tiling (`n_tiles` 1×4×4 or 2×2) are fixed and not recorded. | Explicit StarDist parameters with these values as defaults, recorded in the provenance entry. |
-| 12 | `rotate_nuclei` reads the raw `dapi_round` image and rotates with `reshape=True` and cubic interpolation, so for angles other than multiples of 90°, and when `dapi_round` is not the reference round, the DAPI image is not on the reference grid. | The nuclear stain comes from the reference round or from a round registered by `FOV.register_rounds`, both on the reference grid after `FOV.run`'s rotation. |
+| 12 | `rotate_nuclei` reads the raw `dapi_round` image and rotates with `reshape=True` and cubic interpolation, so for angles other than multiples of 90°, and when `dapi_round` is not the reference round, the DAPI image is not on the reference grid. | The nuclear stain comes from the reference round or from a round registered by `FOV.register`, both on the reference grid after `FOV.run`'s rotation. |
 | 13 | The registered morphology images of `nuclei_registration` are not declared rule outputs. | A §2.13 rule change ({doc}`segmentation-contract`, "Workflow configuration"). |
 | 14 | The Flamingo enhancement assumes 3D inputs (plane loop) and its inputs are not connected to a producing rule. | The function takes ZYX (Z=1 for a plane); the rule wiring is §2.13. |
 | 15 | The culture extension through z exists only as a MATLAB example on the stitched sample, in pixels, and its `Cyto` subtraction operates on label values. | A Python label function `extend_labels_through_z` per FOV with physical parameters and geometry `extended`; compartments belong to W-308. |

@@ -4,8 +4,8 @@ array is computed, the fused arrays of the base revision, and a bounded number o
 Fixture: ``reading_fixtures`` — a synthetic 3 × 3 grid of 3D uint16 tiles (3×192×192 in the default
 tier, 16×256×256 in the ``slow`` test), saved as zlib-compressed pages without axis metadata
 (``IYX``) and with ZYX axes, with sub-voxel jitter so that each output plane interpolates two pages
-of a tile. For each form, ``fuse`` runs four times: the stack and the projection, at scale 1 and at
-``scale_yx`` 0.5. The decodes are counted by wrapping tifffile's ``TiffPage.decode`` (every tifffile
+of a tile. For each form, ``fuse_images`` runs four times: the stack and the projection, at scale 1 and
+at ``scale_yx`` 0.5. The decodes are counted by wrapping tifffile's ``TiffPage.decode`` (every tifffile
 reader calls it on the compressed bytes of one segment) and attributed to a page by those bytes.
 The pinned SHA-256 of each fused array were computed with the base revision 75fa680 (its reader:
 tifffile's Zarr view, and an eager projection) by the W-397 run script ``measure_reads.py``, which
@@ -23,7 +23,7 @@ import pytest
 import tifffile
 
 from starfinder.io import _ome
-from starfinder.export import FusionConfig, FusionInput, _fuse, fuse
+from starfinder.export import FusionConfig, FusionInput, _fuse, fuse_images
 
 from . import reading_fixtures as rf
 
@@ -93,8 +93,8 @@ def run_fusions(tmp_path, monkeypatch, form, shape):
             held.update(inside=set(), peak_pages=0, peak_tiles=0)
             config = FusionConfig(images=("reference_merged",), dimensionality=dimensionality, scale_yx=scale)
             folder = tmp_path / f"{form}_{dimensionality}_{scale}"
-            record = fuse(placed, [FusionInput(fov, grid, {"reference_merged": paths[fov]}) for fov in rf.GRID_IDS],
-                          config=config, output_dir=folder)
+            record = fuse_images(placed, [FusionInput(fov, grid, {"reference_merged": paths[fov]}) for fov in rf.GRID_IDS],
+                                 config=config, output_dir=folder)
             assert record.status == "written"
             assert ("unknown", -1, -1) not in counter.counts
             per_page = counter.per_page()

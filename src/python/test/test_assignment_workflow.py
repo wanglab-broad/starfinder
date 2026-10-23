@@ -141,7 +141,7 @@ def test_a18_unknown_keys_and_the_block_raise(tmp_path):
     config["rules"]["reads_assignment"]["parameters"]["tile_filter"] = False
     with pytest.raises(ValueError, match="unknown reads_assignment parameter keys"):
         _reads_assignment(config)
-    with pytest.raises(ValueError, match="FOV.assign"):
+    with pytest.raises(ValueError, match="FOV.assign_molecules"):
         _reads_assignment(dict(workflow(tmp_path), assignment={"cells": "cell"}))
 
 
@@ -313,7 +313,7 @@ def test_invalid_assignment_blocks_raise(change, error, match):
 
 def test_schema_assignment_keys_equal_the_config_fields_and_the_assign_arguments():
     declared = set(SCHEMA["$defs"]["assignment_block"]["properties"])
-    arguments = set(inspect.signature(FOV.assign).parameters) - {"self", "config"}
+    arguments = set(inspect.signature(FOV.assign_molecules).parameters) - {"self", "config"}
     assert declared == {f.name for f in fields(AssignmentConfig) if f.init} | arguments
 
 

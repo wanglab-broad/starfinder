@@ -76,6 +76,14 @@ are not examples of the current API.
 | `synthetic.CONTEXT_TRUTH_VERSION` | `synthetic.CELLULAR_TRUTH_VERSION` (no alias; its value `"1"` stays) |
 | `synthetic.generate_dataset` | `synthetic.generate_amplicon_dataset` (no alias) |
 | `synthetic.closed_form_bank` | `synthetic.generate_closed_form_bank` (no alias) |
+| `assembly.sample_anndata` | `assembly.write_sample_h5ad` (no alias; the file `sample.h5ad` keeps its name) |
+| `stitching.bigstitcher_macro` | `stitching.export_bigstitcher` (no alias; the method ID `bigstitcher`, the macro text and the Snakemake rule `bigstitcher_macro_sample` stay) |
+| `export.fuse` | `export.fuse_images` (no alias; the export part `fuse` keeps its name: `ExportConfig.fuse`, the YAML key `export.fuse` and the `parts` of `export.json`) |
+| `FOV.assign` | `FOV.assign_molecules` (no alias) |
+| `FOV.save_spots` | `FOV.export_spots` (no alias; the slots `goodSpots` and `allSpots` and their file names stay) |
+| `FOV.create_subtiles` | `FOV.save_subtiles` (no alias; the workflow key `create_subtiles` stays) |
+| `Dataset.channel_record` | private `Dataset._channel_record`, which only the run record calls (no public replacement; the `channels` key of `run.json` stays, and `Dataset.channel_info` and `Dataset.channel_labels` stay public) |
+| `FOV.register_rounds(recipe, *, rounds, reference=None, checkpoints=None)` | `FOV.register(recipe, *, rounds, reference=None, checkpoints=None)`, which routes other rounds to the former `register_rounds` (no alias; see the routing below) |
 
 These relocations do not make the old positional arguments or return values valid.
 Use typed operation configs and structured results. See the [API
@@ -189,6 +197,58 @@ with `save_amplicon_dataset` into `input/`. The images, the codebook (as
 `entry_id,gene_id,color_sequence`) and the truth files are in `input/`; there is no
 `synthetic/` folder with FOV-first copies, no `gene,barcode` codebook and no annotation
 PNGs. Its results are unchanged.
+
+The renames of W-560 (W-526, SM-17, NM-04, NM-05, NM-08, NM-09, NM-21, NC-03, NC-04 and
+NC-05) name what a sample-level function or a FOV method writes or runs.
+**`FOV.register_rounds` is merged into `FOV.register`**, which now has the signature
+`register(recipe, *, rounds=None, source=None, reference=None, checkpoints=None)` and
+routes by the rounds' category before any estimator runs:
+
+* `rounds=None` registers the sequencing rounds other than the reference round, as before;
+* when every named round is a sequencing round, the **sequencing route** is the former
+  `register`: `source` selects the snapshot, one recipe is kept per FOV in
+  `registration_record["recipe"]`, and `reference` and `checkpoints` must be `None`;
+* when no named round is a sequencing round (other rounds, and loaded rounds the dataset
+  does not configure), the **other-round route** is the former `register_rounds`: its
+  reference rules, its checks of labels, grids and folders before estimation, the
+  per-round `registration_record["rounds"][round]` and the saved form `other_rounds/<round>/`
+  of `checkpoints`; `source` must be `None`;
+* sequencing and other rounds in one call, an empty sequence, or a parameter of the other
+  route raise `ValueError` naming the rounds or the parameter.
+
+Two behaviours change on purpose. `register(rounds=["morph"])` with the other round
+`morph` registers it on the other-round route, where it raised `ValueError` before. A
+sequencing round can no longer be registered on the other-round route:
+`register_rounds(rounds=["morph", "round2"])` accepted the sequencing round `round2`,
+while `register(rounds=["morph", "round2"])` raises the mixing error. `FOV.run` still
+calls `register(recipe, rounds=[name], source=…)`, so `run.json` and the report are
+unchanged; `FOV.prepare_morphology` and the `nuclei_registration` adapter call `register`.
+A registration of other rounds logs `register` as its step, where it logged
+`register_rounds`.
+
+The renames change these recorded strings and messages with the names:
+
+* the report's per-FOV step row of an assignment is named `assign_molecules`, where it was
+  `assign`, in `steps.csv` and the time figure (the producer in `report/_collect.py`), with
+  its reason "no record holds the time of assign_molecules"; the page's assignment card
+  reads that row (`report/_page.py`). A report of earlier records gets the new name, since
+  the row is made by the report, not read from a record;
+* the `ValueError` messages of `FOV.assign_molecules` name it, as do the error of the
+  workflow's `reads_assignment` rule when an `assignment` block is present and the
+  description of the schema's `assignment` block;
+* the error of a missing `anndata` names `write_sample_h5ad`; the geometry and dtype
+  errors of `fuse_images` name it ("fuse_images needs known spacing…", "fuse_images
+  accepts…"); the `TypeError` of a recipe of another type on the other-round route says
+  "register requires a RegistrationRecipe"; and the segmentation error for a morphology
+  round without a registration entry names `FOV.register`.
+
+These keep their names: the export part `fuse` (`ExportConfig.fuse`, `PARTS`, the
+`export.json` sections and parts, the YAML key `export.fuse` and the warning "export part
+fuse could not run"); the workflow key `create_subtiles` and the file names of the
+subtiles; the Snakemake rule `bigstitcher_macro_sample`, its script and its adapter; the
+method ID `bigstitcher` and the macro text; the file `sample.h5ad`;
+`assignment.write_h5ad`, `readout.export_spots`, `Dataset.channel_info` and
+`Dataset.channel_labels`; and the `run.json` step name `register`.
 
 ## Before and after Python calls
 
@@ -507,7 +567,7 @@ allow.
 
 ### Other rounds
 
-`FOV.register_rounds(recipe, *, rounds, reference=None)` and
+`FOV.register(recipe, *, rounds, reference=None)` on other rounds and
 {py:class}`~starfinder.registration.ExternalReference` are new: other rounds, such
 as morphology rounds, register to a reference round or an external reference
 image through a shared stain, and the transform is applied to every channel of
@@ -1062,7 +1122,7 @@ error, and a plane is accepted as 1×Y×X where the scripts raised on YX inputs.
 composite's `maximum_projection` is no longer part of the composite; it is the z
 maximum of the result (`project_image` with `ProjectionConfig()`), which gives the same
 image. The inputs come from the reference frame: a morphology round's DAPI after
-`FOV.register_rounds` and the reference round's channel maximum, the image
+`FOV.register` and the reference round's channel maximum, the image
 `FOV.save_reference_image` writes. The workflow scripts call these functions (see
 "Segmentation and assignment workflow rules" below).
 
@@ -1109,7 +1169,7 @@ Assignment is the third call per FOV, after `FOV.run` and `FOV.segment` (decisio
 {py:func}`~starfinder.assignment.import_legacy_molecules_csv`) in the territories of a cell
 {py:class}`~starfinder.segmentation.SegmentationResult` and returns an
 {py:class}`~starfinder.assignment.AssignmentResult` with the molecule, cell, count and
-nucleus tables. `FOV.assign(config, cells=…, nuclei=…)` runs it on the FOV's results and
+nucleus tables. `FOV.assign_molecules(config, cells=…, nuclei=…)` runs it on the FOV's results and
 keeps the result in `FOV.assignment_results`; `PipelineConfig` gains no field, and with
 `checkpoints` it also saves the assignment (see the next section). The workflow's `reads_assignment`
 rule calls it too (see "Segmentation and assignment workflow rules" below).
@@ -1147,7 +1207,7 @@ voxels; the legacy pixel distance has no such rounding.
 
 ### Saved segmentation runs and assignments
 
-`FOV.segment(plan, checkpoints=CheckpointConfig(…))` and `FOV.assign(…, checkpoints=…)`
+`FOV.segment(plan, checkpoints=CheckpointConfig(…))` and `FOV.assign_molecules(…, checkpoints=…)`
 save their results beside the `FOV.run` checkpoints, in two new folders of the per-FOV
 checkpoint directory ({doc}`checkpoints`, "Segmentation runs" and "Assignments"):
 `segmentation/<run>/` holds `labels.tif` (ZYX `uint32`, zlib, with the grid's
@@ -1162,10 +1222,10 @@ every recorded SHA-256. The workflow rules keep writing
 
 Nothing changes for `FOV.run`: its stages (`registered`, `candidates`, `pre_qc`), its
 checkpoint `FORMAT_VERSION` 2 and `run.json` (`format_version` 1) stay as they are, and
-`FOV.assign` never rewrites a file of `FOV.run` or of segmentation (a saved label image is
+`FOV.assign_molecules` never rewrites a file of `FOV.run` or of segmentation (a saved label image is
 linked by its relative path). The new records carry their own `format_version` 1.
 `checkpoints` other than `None` or a `CheckpointConfig` now raises `TypeError` in
-`FOV.segment` and `FOV.assign`, as in `FOV.run`, where these two calls raised
+`FOV.segment` and `FOV.assign_molecules`, as in `FOV.run`, where these two calls raised
 `ValueError` for any value other than `None` before. The checkpoint tables also accept
 `UInt32` columns (the cell and nucleus identifiers).
 
@@ -1190,7 +1250,7 @@ has the legacy target and the CPU.
 
 New configuration: the Python-only top-level `segmentation` and `assignment` blocks
 ({doc}`workflow-configuration`, "Segmentation and assignment"), which the §2.13 rule
-runs with `FOV.segment` and `FOV.assign` (the legacy rules raise when a block is
+runs with `FOV.segment` and `FOV.assign_molecules` (the legacy rules raise when a block is
 present), and the Python-only `target` and `device` keys of
 `rules.stardist_segmentation.parameters`. The `stardist` and `cellpose` extras supply
 the learned methods.
@@ -1250,7 +1310,7 @@ with `nucleus_outside_cell`, only when its share outside its cell is strictly gr
 0.1, so a nucleus with up to a tenth of its voxels outside its cell no longer withholds the
 nuclear and cytoplasmic counts of its cell. A part of a nucleus inside another cell still
 raises `foreign_nucleus` on that cell. The default applies to `assign_molecules`,
-`match_nuclei`, `FOV.assign` and the `assignment` block when `correspondence` or its
+`match_nuclei`, `FOV.assign_molecules` and the `assignment` block when `correspondence` or its
 `outside_tolerance` is omitted, and the record's `config.correspondence` shows it. The
 value is provisional, from one culture crop of W-320 (largest outside share of a matched
 nucleus 0.073). To keep exact containment, pass
@@ -1325,10 +1385,10 @@ rules:
   registered it with the sequencing recipe). A `SpotFindingPlan` whose rounds name an
   other round now raises `ValueError` in `run`. The `registered` checkpoint, also from
   `save_checkpoint`, holds the reference and sequencing rounds only.
-* **`FOV.register` no longer registers other rounds.** Its default rounds are the
-  sequencing rounds other than the reference (before: every moving round, other rounds
-  included), and an other round in `rounds` raises `ValueError` naming
-  `FOV.register_rounds`.
+* **`FOV.register` no longer registers other rounds by default.** Its default rounds are
+  the sequencing rounds other than the reference (before: every moving round, other rounds
+  included). An other round named in `rounds` raised `ValueError`; since W-560 it takes
+  the other-round route of `FOV.register` ("Mechanical names and ownership").
 
 Prepare other rounds and the reference stain with the new entry beside `run`:
 
@@ -1343,7 +1403,7 @@ fov.segment(plan)                                  # reads "reference_stain" and
 
 `FOV.load_images(..., rotation_degrees=…)` rotates as `run` does, and a round is now
 rotated once: a second rotation of a round (by `rotate`, `load_images` or `run`) raises
-`ValueError` where it rotated again before. `FOV.register_rounds` gains `checkpoints`,
+`ValueError` where it rotated again before. `FOV.register` on other rounds gains `checkpoints`,
 and `FOV.load_registered_round` reads a saved prepared image ({doc}`checkpoints`,
 "Prepared morphology images"). The `registered` header gains `channels` (additive;
 `FORMAT_VERSION` stays 2). Datasets without other rounds give the same images, tables
@@ -1372,7 +1432,7 @@ changes its result:
 * The grid rule is stated in {doc}`assignment-contract` ("The grid rule") and implemented
   once: labels and molecules are on one grid when shape and `ImageMetadata` are equal;
   `source` and `sha256` are recorded, not compared. This is the rule assign already
-  applied. `FOV.assign` refuses the Z=1 grid of a projected saved reference image without
+  applied. `FOV.assign_molecules` refuses the Z=1 grid of a projected saved reference image without
   the reference round, a case that did not exist before.
 * The Python `nuclei_registration` rule calls `FOV.prepare_morphology`; its declared files
   are byte-identical to before. A new Python-only key,
@@ -1431,7 +1491,7 @@ scripts stay as they are, and Fiji is still run only by the workflow.
 
 | Legacy step | New name |
 | --- | --- |
-| `create_BigStitcher_macro_1.py` writes the macro from `grid.csv`; `stitching_preparation.py` copies the tiles and blanks | `bigstitcher_macro(table, inputs, config=BigStitcherConfig(...), tile_dir=..., save_dir=...)` writes `tile_{j}.tif` and returns the macro text and the view map; `BigStitcherConfig` holds today's parameters as defaults, and `pad_missing=True` (off by default) turns an acquired FOV without an image into a placeholder view |
+| `create_BigStitcher_macro_1.py` writes the macro from `grid.csv`; `stitching_preparation.py` copies the tiles and blanks | `export_bigstitcher(table, inputs, config=BigStitcherConfig(...), tile_dir=..., save_dir=...)` writes `tile_{j}.tif` and returns the macro text and the view map; `BigStitcherConfig` holds today's parameters as defaults, and `pad_missing=True` (off by default) turns an acquired FOV without an image into a placeholder view |
 | `create_tile_config.py` reads `dataset.xml` (lines 19-58) | `import_bigstitcher(dataset_xml, table=..., view_map=..., grids=..., config=..., fallback=None)` returns a `PlacementResult` |
 | `create_tile_config.py` casts, shifts and draws the rectangles (lines 43-130) | `legacy_tile_config_view(result, img_col=..., img_row=...)`, whose `to_csv()` is today's `tile_config_{sample}.csv` |
 | `dataset.xml` beside the tiles | `save_placement` of an import also writes `view_map.csv` and records the SHA-256 of the macro and of `dataset.xml` |
@@ -1458,7 +1518,7 @@ workflow adapter, `create_sample_h5ad.py`, `create_sample_reads_assignment.py` a
 | `reads_assignment` adds integer `global_x/y/z` from `tile_config` offsets | `assemble(placement, inputs, config=AssemblyConfig())` with one `AssemblyInput(fov_id, grid, assignment=… or molecules=…)` per FOV returns an `AssemblyResult` whose `sample_*` columns are float64 µm in the sample frame |
 | The overlap filter keeps cells and background molecules inside the `start/end_*_norm` rectangles | Ownership from the placement, `ownership_map(placement, grids, config=…, candidates=None)` returning `OwnershipMap`: nearest footprint centre among the owning FOVs, ties by table order; placeholders own no point |
 | Dropped cells and molecules are not written | Every cell and molecule keeps a row with `assembly_status`, `assembly_reason` and `assembly_flags` (`ASSEMBLY_STATUSES`, `CELL_ASSEMBLY_REASONS`, `MOLECULE_ASSEMBLY_REASONS`, `CELL_ASSEMBLY_FLAGS`, `MOLECULE_ASSEMBLY_FLAGS`) |
-| `create_sample_h5ad.py` concatenates the per-FOV `raw.h5ad` | `sample_anndata(result, path, annotation=None)` writes `sample.h5ad` from the sample tables, one row per counted cell |
+| `create_sample_h5ad.py` concatenates the per-FOV `raw.h5ad` | `write_sample_h5ad(result, path, annotation=None)` writes `sample.h5ad` from the sample tables, one row per counted cell |
 | `create_sample_reads_assignment.py` concatenates the per-FOV CSVs | `save_assembly(result, folder, table_format="csv")` writes `tables/fovs`, `tables/cells`, `tables/molecules`, `tables/counts`, `sample.h5ad` and the `assembly` section of `export.json`; `load_assembly(folder)` reads it back |
 | The adapter's `_write_raw_h5ad` builds the AnnData itself | `write_h5ad(path, obs, keys, counts, genes, layers=…, uns=…, var=None, obsm=None)` in `starfinder.assignment`, which the adapter now calls; `raw.h5ad` has the same rows, columns, values and `uns` |
 
@@ -1503,15 +1563,15 @@ with the workflow issue. The label export (`fuse_labels`) and the SpatialData ex
 
 | Need | New name |
 | --- | --- |
-| One sample-level export: the sample tables, `sample.h5ad` and the fused image | `Dataset.export(sample, placement=…, assignment="default", config=ExportConfig(), output_dir=<OUTPUT>/export/<sample>/)` returns an `ExportRecord`; it calls `assemble` (saved with `save_assembly`) and `fuse` in order, each turned off by `ExportConfig(assemble=False)` or `ExportConfig(fuse=False)` |
+| One sample-level export: the sample tables, `sample.h5ad` and the fused image | `Dataset.export(sample, placement=…, assignment="default", config=ExportConfig(), output_dir=<OUTPUT>/export/<sample>/)` returns an `ExportRecord`; it calls `assemble` (saved with `save_assembly`) and `fuse_images` in order, each turned off by `ExportConfig(assemble=False)` or `ExportConfig(fuse=False)` |
 | The record of the folder | `export.json`: `parts` (`written`, `reused`, `off`, `empty`, `not_run`, `failed`), `complete`, one section per part (`assembly`, `fusion`, `labels`, `spatialdata`) with the SHA-256 of every file; `check_export(folder)` checks the folder against it |
 | A part that cannot run | `ExportIncompleteWarning`; the part is `not_run` with `extra_missing` (`multiview-stitcher` not installed) or `source_image_missing`, the earlier files are written and `complete` is false |
-| The fused image of a sample, from either backend's placement | `fuse(placement, inputs, assembly=None, config=FusionConfig(), output_dir)` with one `FusionInput(fov_id, grid, images)` per included FOV, returning a `FusionRecord`; multiview-stitcher's `fusion.fuse` with `weighted_average_fusion` at order 1 |
+| The fused image of a sample, from either backend's placement | `fuse_images(placement, inputs, assembly=None, config=FusionConfig(), output_dir)` with one `FusionInput(fov_id, grid, images)` per included FOV, returning a `FusionRecord`; multiview-stitcher's `fusion.fuse` with `weighted_average_fusion` at order 1 |
 | Today's `MAX_*_05.tif` overview | `<image>_projection.ome.tif`: the 2D maximum projection at `scale_yx` 0.5 (the default), OME-TIFF (BigTIFF, 512 × 512 zlib tiles, calibration and origin) in the input dtype |
 | A 3D fused stack, such as LN sample1's | `FusionConfig(dimensionality="stack")` (the stack alone) or `"both"`: `<image>_stack.ome.tif`, Y and X reduced by `scale_yx`, Z as acquired; the middle plane `n_z // 2` reads alone with `tifffile.imread(path, key=i)` |
 | Other options | `FusionConfig(images=(…), projection="sum", scale_yx=1/k, ome_zarr=True, ome_zarr_version="0.5", pyramid_levels=L)`; `fused_grid(placement, grids, config=…)` gives the output grid (`FusedGrid`) |
 
-`fuse` and `Dataset.export`'s fuse part need the optional extra
+`fuse_images` and `Dataset.export`'s fuse part need the optional extra
 `starfinder[multiview-stitcher]`; the assemble part needs `starfinder[anndata]`.
 Importing `starfinder.export` imports neither multiview-stitcher, zarr nor
 spatialdata. With `assemble` on, `assemble` now keeps at most two territory images in
@@ -1527,7 +1587,7 @@ off by default (`ExportConfig(fuse_labels=True)` turns it on).
 
 | Need | New name |
 | --- | --- |
-| A label image of the assembled sample, for inspection | `fuse_labels(placement, assembly, config=LabelConfig(), output_dir)` returns a `LabelRecord`; `Dataset.export` calls it third, after `assemble` and `fuse` |
+| A label image of the assembled sample, for inspection | `fuse_labels(placement, assembly, config=LabelConfig(), output_dir)` returns a `LabelRecord`; `Dataset.export` calls it third, after `assemble` and `fuse_images` |
 | What the image holds | The retained cells of the sample cell table (`assembly_status == "retained"`), each drawn whole as its FOV segmented it, with its `instance_id` (`1..N` in cell table order); 0 elsewhere. A cell retained by two FOVs shows two IDs, a cell retained by no FOV is absent; nothing is matched or merged across FOVs |
 | How it is placed | multiview-stitcher's `fusion.fuse` at interpolation order 0 with the first positive view in placement table order (`_first_positive`, a small function passed to the library); labels are never blended |
 | Its scale | `LabelConfig(scale_yx=1/k)`, 0.25 by default, requested with `output_spacing`; the grid starts at the smallest FOV origin, so it does not nest with the fused image's |
@@ -1550,7 +1610,7 @@ branch's `sample_export` API is not adopted, and no code is brought over from it
 
 | Need | New name |
 | --- | --- |
-| A SpatialData view of the assembled sample | `export_spatialdata(load_assembly(folder), fused=None, labels=None, config=SpatialDataExportConfig(), output_dir=folder)` returns the store path; `Dataset.export` calls it fourth, after `assemble`, `fuse` and `fuse_labels` |
+| A SpatialData view of the assembled sample | `export_spatialdata(load_assembly(folder), fused=None, labels=None, config=SpatialDataExportConfig(), output_dir=folder)` returns the store path; `Dataset.export` calls it fourth, after `assemble`, `fuse_images` and `fuse_labels` |
 | What the store holds | One coordinate system named after the sample, in µm. Points `molecules`, shapes `cell_centroids` (circles at the ownership centroid, equivalent radius), tables `cells` and `expression` (annotating `cell_centroids` by `region` and `instance_id`), `cells_unplaced` and `molecules_unplaced`; one image element per fused OME-TIFF (`<image>_projection`, `<image>_stack`) and `cell_labels`, each read from its file and written once with one level |
 | Values | Taken from `tables/`, `sample.h5ad` and the image files unchanged: nothing is filtered, reassigned or recounted; `instance_id` is `1..N` over the sample cell table, `cell_instance_id` links each molecule to its cell |
 | Empty populations | An element without a row, or whose image does not exist, is left out and recorded `omitted` with `empty`, `no_cells`, `no_included_fov`, `not_requested` or `part_not_run`; with every element omitted no store is written (`store: null`) |
@@ -1578,7 +1638,7 @@ unchanged; its outputs, including `images/fused/{sample}/`, do not change.
 
 | Legacy rule | With the blocks |
 | --- | --- |
-| `stitching_preparation`, `create_BigStitcher_macro`, `run_BigStitcher_macro` | With `method: bigstitcher` (the default): `bigstitcher_macro_sample` (`bigstitcher_macro`, the tiles in `<bigstitcher_save_dir>/<sample>/tiles/`) and `bigstitcher_engine` (Fiji on the macro; `fiji_path` read when it runs; fails unless `dataset.xml` holds a `Stitching Transform` for every view). With `method: multiview_stitcher`: none |
+| `stitching_preparation`, `create_BigStitcher_macro`, `run_BigStitcher_macro` | With `method: bigstitcher` (the default): `bigstitcher_macro_sample` (`export_bigstitcher`, the tiles in `<bigstitcher_save_dir>/<sample>/tiles/`) and `bigstitcher_engine` (Fiji on the macro; `fiji_path` read when it runs; fails unless `dataset.xml` holds a `Stitching Transform` for every view). With `method: multiview_stitcher`: none |
 | `create_tile_config` | `stitch_sample`: `Dataset.stitch`, or `import_bigstitcher` of the engine's `dataset.xml`, saved to `stitching/<sample>/`; with `bigstitcher` also `output/tile_config_{sample}.csv` from the record (`legacy_tile_config_view`), byte for byte today's file |
 | `reads_assignment` (with an `assembly` block) | The same rule without the tile filter and without `global_*`, on the grid of `images/ref_merged/{fovID}.tif`, also saving `checkpoints/{fovID}/assignment/<assignment>/` |
 | `create_sample_h5ad`, `create_sample_reads_assignment` | `export_sample`: `Dataset.export` with the `assembly` and `export` blocks into `export/<sample>/` (declared output `export.json`) |

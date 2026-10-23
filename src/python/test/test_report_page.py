@@ -605,7 +605,7 @@ def no_processing(monkeypatch):
         def run(*args, **kwargs):
             raise AssertionError(f"Dataset.report called {name}")
         return run
-    for owner, name in ((FOV, "run"), (FOV, "segment"), (FOV, "assign"), (Dataset, "stitch"),
+    for owner, name in ((FOV, "run"), (FOV, "segment"), (FOV, "assign_molecules"), (Dataset, "stitch"),
                         (Dataset, "export")):
         monkeypatch.setattr(owner, name, stage(f"{owner.__name__}.{name}"))
 

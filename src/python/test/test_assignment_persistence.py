@@ -1,10 +1,10 @@
-"""The saved layout of an assignment: ``FOV.assign(checkpoints=…)`` and ``FOV.load_assignment`` (W-315).
+"""The saved layout of an assignment: ``FOV.assign_molecules(checkpoints=…)`` and ``FOV.load_assignment`` (W-315).
 
 Row A15 of the engineering validation design in docs/assignment-algorithms.md over every
 case of the table "Label images of a checkpointed assignment" of
 docs/assignment-contract.md, in CSV and Parquet; another checkpoint root counts as
 unsaved; the excluded cells are preserved; and the files of ``FOV.run`` and of
-segmentation are untouched by ``FOV.assign``. The ``boxes`` FOV is synthetic: its
+segmentation are untouched by ``FOV.assign_molecules``. The ``boxes`` FOV is synthetic: its
 reference round, spot result, filtering result and codebook are set in memory. Row A15's
 check of the ``FOV.run`` files on ``boxes`` is in ``test_assignment_validation.py``; the
 last test here runs the same check on the development preset, as a W-315 integration test.
@@ -126,9 +126,9 @@ def test_a15_round_trip_in_each_case_of_the_label_table(tmp_path, genes, masks, 
                                  label_namespace=json.dumps(["data", "sample", "FOV_001", None, "nucleus"],
                                                             separators=(",", ":")))
     before = hashes(root) if root.exists() else {}
-    fov.assign(AssignmentConfig(expansion=EXPANSION if expansion else None), cells="cell", nuclei=argument,
+    fov.assign_molecules(AssignmentConfig(expansion=EXPANSION if expansion else None), cells="cell", nuclei=argument,
                checkpoints=checkpoints)
-    # The files of segmentation are byte-identical after FOV.assign (linked, never written).
+    # The files of segmentation are byte-identical after FOV.assign_molecules (linked, never written).
     assert {p: h for p, h in hashes(root).items() if p in before} == before
     assert all(segmentation in p.parents for p in before)
 
@@ -200,7 +200,7 @@ def test_a15_a_changed_or_removed_file_raises_naming_the_path(tmp_path, genes, m
     nuclei = import_labels(masks["nucleus"], grid=fov.reference_grid(), target="nucleus",
                            label_namespace=json.dumps(["data", "sample", "FOV_001", None, "nucleus"],
                                                       separators=(",", ":")))
-    fov.assign(AssignmentConfig(expansion=EXPANSION), nuclei=nuclei, checkpoints=checkpoints)
+    fov.assign_molecules(AssignmentConfig(expansion=EXPANSION), nuclei=nuclei, checkpoints=checkpoints)
     folder = root / "FOV_001" / "assignment" / "default"
     linked = root / "FOV_001" / "segmentation" / "cell" / "labels.tif"
     target = {"written_table": folder / "counts.csv", "written_labels": folder / "nucleus_labels.tif",
@@ -226,19 +226,19 @@ def test_a15_errors_and_overwrite(tmp_path, genes, masks):
     fov.segment(SegmentationPlan((import_run("cell", masks),)))
     with pytest.raises(FileNotFoundError, match="no saved assignment 'default'"):
         fov.load_assignment("default", checkpoints=checkpoints)
-    fov.assign(checkpoints=checkpoints)
+    fov.assign_molecules(checkpoints=checkpoints)
     before = hashes(root)
     with pytest.raises(FileExistsError, match="overwrite=True"):
-        fov.assign(AssignmentConfig(expansion=EXPANSION), checkpoints=checkpoints)
+        fov.assign_molecules(AssignmentConfig(expansion=EXPANSION), checkpoints=checkpoints)
     assert hashes(root) == before and fov.assignment_results["default"].territories is None
     # Overwriting removes the files of the earlier layout that the new one does not write.
-    fov.assign(AssignmentConfig(expansion=EXPANSION), checkpoints=replace(checkpoints, overwrite=True))
-    fov.assign(checkpoints=replace(checkpoints, overwrite=True))
+    fov.assign_molecules(AssignmentConfig(expansion=EXPANSION), checkpoints=replace(checkpoints, overwrite=True))
+    fov.assign_molecules(checkpoints=replace(checkpoints, overwrite=True))
     folder = root / "FOV_001" / "assignment" / "default"
     assert {p.name for p in folder.iterdir()} == {"assignment.json", "molecules.csv", "cells.csv", "counts.csv",
                                                   "cell_labels.tif"}
     with pytest.raises(TypeError, match="CheckpointConfig"):
-        fov.assign(checkpoints=str(root))
+        fov.assign_molecules(checkpoints=str(root))
 
 
 def test_another_checkpoint_root_counts_as_unsaved(tmp_path, genes, masks):
@@ -246,7 +246,7 @@ def test_another_checkpoint_root_counts_as_unsaved(tmp_path, genes, masks):
     fov = boxes_fov(tmp_path, genes)
     fov.segment(SegmentationPlan((import_run("cell", masks),)), checkpoints=CheckpointConfig(directory=first))
     before = hashes(first)
-    fov.assign(checkpoints=CheckpointConfig(directory=second))
+    fov.assign_molecules(checkpoints=CheckpointConfig(directory=second))
     folder = second / "FOV_001" / "assignment" / "default"
     assert (folder / "cell_labels.tif").is_file()
     assert not (second / "FOV_001" / "segmentation").exists()
@@ -290,7 +290,7 @@ def test_a15_a_saved_run_stays_saved_after_a_reload_or_on_another_fov_object(tmp
     assigning.segment(SegmentationPlan((import_run(other_run(run), masks),)))
     runs = {run: result, other_run(run): assigning.segmentation_results[other_run(run)]}
     before = hashes(root)
-    assigning.assign(cells=runs["cell"], nuclei=runs["nucleus"], checkpoints=checkpoints)
+    assigning.assign_molecules(cells=runs["cell"], nuclei=runs["nucleus"], checkpoints=checkpoints)
     assert {p: h for p, h in hashes(root).items() if p in before} == before
 
     folder = root / "FOV_001" / "assignment" / "default"
@@ -338,7 +338,7 @@ def test_a15_inputs_the_rule_calls_unsaved_are_written(tmp_path, genes, masks, c
         cells = import_labels(labels_tif, grid=fov.reference_grid(), target="cell",
                               label_namespace=json.dumps(["data", "sample", "FOV_001", None, "cell"],
                                                          separators=(",", ":")))
-    fov.assign(cells=cells, checkpoints=checkpoints)
+    fov.assign_molecules(cells=cells, checkpoints=checkpoints)
     folder = root / "FOV_001" / "assignment" / "default"
     entry = json.loads((folder / "assignment.json").read_text())["inputs"]["cells"]
     assert entry["saved_under_run"] is False
@@ -355,7 +355,7 @@ def test_excluded_cells_are_preserved(tmp_path, genes, masks, table_format):
     checkpoints = CheckpointConfig(directory=tmp_path / "checkpoints", table_format=table_format)
     fov = boxes_fov(tmp_path, genes)
     fov.segment(SegmentationPlan((import_run("nucleus", masks), import_run("cell", masks))), checkpoints=checkpoints)
-    fov.assign(nuclei="nucleus", checkpoints=checkpoints)
+    fov.assign_molecules(nuclei="nucleus", checkpoints=checkpoints)
     loaded = boxes_fov(tmp_path, genes).load_assignment("default", checkpoints=checkpoints)
     assert loaded.record["config"]["exclusion_source"] == "default"
     cells = loaded.cells.set_index(loaded.cells.cell_id.astype(int))
@@ -376,7 +376,7 @@ def test_excluded_cells_are_preserved(tmp_path, genes, masks, table_format):
     assert np.array_equal(labels, boxes()[0])
 
 
-# --- Untouched files: FOV.run, then FOV.segment and FOV.assign in one root ---------------------------
+# --- Untouched files: FOV.run, then FOV.segment and FOV.assign_molecules in one root ---------------------------
 
 @pytest.mark.dataset
 def test_fov_run_and_segmentation_files_are_untouched_by_assign(tmp_path):
@@ -418,7 +418,7 @@ def test_fov_run_and_segmentation_files_are_untouched_by_assign(tmp_path):
                         SeededWatershedConfig(sigma_um=0.1), seeds="nucleus"))), checkpoints=checkpoints)
     before = hashes(root)
     assert {p: h for p, h in before.items() if p in after_run} == after_run    # segment leaves FOV.run's files
-    fov.assign(AssignmentConfig(expansion=EXPANSION), nuclei="nucleus", checkpoints=checkpoints)
+    fov.assign_molecules(AssignmentConfig(expansion=EXPANSION), nuclei="nucleus", checkpoints=checkpoints)
     after = hashes(root)
     assert {p: h for p, h in after.items() if p in before} == before
     folder = root / "FOV_001" / "assignment" / "default"

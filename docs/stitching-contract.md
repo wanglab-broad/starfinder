@@ -50,7 +50,7 @@ Decided by Jiahao in the §2.10 planning session (W-152 comment "§2.10 planning
   one call (D3).
 * **Two sample-level entries** outside `PipelineConfig` and `FOV.run`: `Dataset.stitch`
   and `Dataset.export` (D3, as amended at the W-329 review of 2026-10-06);
-  `Dataset.export` calls `assemble`, `fuse`, `fuse_labels` and `export_spatialdata` in
+  `Dataset.export` calls `assemble`, `fuse_images`, `fuse_labels` and `export_spatialdata` in
   order ({doc}`sample-output-contract`, "The export entry"). Ownership regions are
   computed in assemble from the placement.
 * **One tile position table**, fed by three converters (Leica stage file, regular grid,
@@ -93,7 +93,7 @@ default change.
 | Option | Names | Effect on the golden values | Effect on existing files and outputs | Effect on the engines |
 | --- | --- | --- | --- | --- |
 | **N1. A `starfinder.stitching` module (recommended)** | Module `starfinder.stitching`; entry `stitch`; result `PlacementResult`; input `StitchingInput`; registry `STITCHING_METHODS` with `StitchingSpec`; table `TilePositionTable`; dataset coordination `Dataset.stitch` | None: the golden test pins the legacy scripts, which no option edits. | New files only, plus one method on `Dataset` (`dataset/dataset.py`); the exports go into `__all__` and the autosummary list of `docs/api/stitching.rst`, which `docs/check_reference.py` requires. `tile_config_{sample}.csv`, `grid.csv` and `dataset.xml` stay as they are. | The workflow adapter gains `_run_stitching`; the four legacy rules stay. |
-| N2. One `starfinder.sample` module for the three sample-level entries | Module `starfinder.sample`; entries `place_fovs`, `assemble`, `fuse`; result `SamplePlacement` | None. | The same files; W-326 and W-328 then add to one module, which grows a second responsibility per entry. | The same adapter function under another name. |
+| N2. One `starfinder.sample` module for the three sample-level entries | Module `starfinder.sample`; entries `place_fovs`, `assemble`, `fuse_images`; result `SamplePlacement` | None. | The same files; W-326 and W-328 then add to one module, which grows a second responsibility per entry. | The same adapter function under another name. |
 
 **Recommendation: N1.** The stage is called stitching in the chapter, registries are named
 after stages (`SEGMENTATION_METHODS`, `DECODING_METHODS`), and `stitch` reads as the verb
@@ -114,7 +114,7 @@ New names under N1:
 | Supplied placement | `placement_from_table(table, grids, *, sample, origins=None)` ("Supplied placement") | function |
 | Sample-frame metadata | `placed_metadata(result, fov_id)` | function |
 | Method | `MultiviewStitcherConfig` (`multiview_stitcher`) | config |
-| BigStitcher | `BigStitcherConfig`, `bigstitcher_macro`, `import_bigstitcher` | config, functions |
+| BigStitcher | `BigStitcherConfig`, `export_bigstitcher`, `import_bigstitcher` | config, functions |
 | Review | `ReviewPolicy`, `review_placement`, `approve_placement` | config, functions |
 | Persistence | `save_placement`, `load_placement` | functions |
 | Errors | `StitchingBackendUnavailableError`, `PlacementReviewRequiredError` | exceptions |
@@ -174,12 +174,12 @@ loaded tiles (W-324: LN 6.67 GiB of uint8 loaded, 7.0 GiB peak).
 ### Not the multi-FOV runner
 
 The §2.13 boundary excludes a multi-FOV runner: a package loop that runs `FOV.run`,
-`FOV.segment` or `FOV.assign` over many FOVs, with scheduling, parallelism and retries.
+`FOV.segment` or `FOV.assign_molecules` over many FOVs, with scheduling, parallelism and retries.
 Snakemake stays that runner. A sample-level computation is different in kind: its input
 is inherently a set of FOVs (images that overlap and the positions that relate them), and
 its output is one sample-level record that no single FOV owns. `stitch` and
 `Dataset.stitch` call no per-FOV stage, schedule no per-FOV work and read only saved
-per-FOV artifacts, as `FOV.assign` reads one FOV's saved artifacts. Snakemake runs one
+per-FOV artifacts, as `FOV.assign_molecules` reads one FOV's saved artifacts. Snakemake runs one
 stitch task per sample after the per-FOV tasks that write those artifacts.
 
 ## Tile position table
@@ -494,9 +494,9 @@ BigStitcher stays the initial default (D1) and runs as an engine task through Fi
 The package owns the two ends:
 
 ```python
-def bigstitcher_macro(table: TilePositionTable, inputs: Sequence[StitchingInput], *,
-                      config: BigStitcherConfig, tile_dir: str, save_dir: str
-                      ) -> tuple[str, pd.DataFrame]: ...      # macro text, view map
+def export_bigstitcher(table: TilePositionTable, inputs: Sequence[StitchingInput], *,
+                       config: BigStitcherConfig, tile_dir: str, save_dir: str
+                       ) -> tuple[str, pd.DataFrame]: ...     # macro text, view map
 def import_bigstitcher(dataset_xml, *, table: TilePositionTable, view_map: pd.DataFrame,
                        grids: Mapping[str, ReferenceGrid], config: BigStitcherConfig,
                        review: ReviewPolicy = ReviewPolicy(), fallback=None,

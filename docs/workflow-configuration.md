@@ -427,7 +427,7 @@ for `stardist_segmentation` and the `anndata` extra for `reads_assignment`; no r
 [downstream parameter blocks](#downstream-parameter-blocks) summarize them.
 
 Two Python-only top-level blocks (rejected unless `backend: python`) describe the same
-steps for the §2.13 rule that loads a FOV and runs `FOV.segment` and `FOV.assign`; the
+steps for the §2.13 rule that loads a FOV and runs `FOV.segment` and `FOV.assign_molecules`; the
 legacy rules translate their own keys and raise when a block is present. In
 `segmentation`, `device` is `cpu` (default) or `cuda`, and each run has a `name`, a
 `target`, `inputs` (`InputChannel` fields; `prepare` names `composite_nuclei_amplicon` or
@@ -436,7 +436,7 @@ or `ProjectionConfig` fields) and `operations` (`expand_labels` or
 `extend_labels_through_z` with their config fields), and a `method`: a
 `SEGMENTATION_METHODS` name whose config fields are the run's other keys, or `import`
 with the `LabelImportConfig` fields. The `assignment` block holds the `AssignmentConfig`
-fields and the `FOV.assign` arguments (`cells`, `nuclei`, `name`, `population`,
+fields and the `FOV.assign_molecules` arguments (`cells`, `nuclei`, `name`, `population`,
 `checkpoints`); `correspondence` holds the `CorrespondenceConfig` fields (by default
 `match_fraction` 0.5 and `outside_tolerance` 0.1, a provisional value). Default-tier
 tests keep the schema's method list equal to the registry and the assignment keys equal

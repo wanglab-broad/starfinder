@@ -1,12 +1,12 @@
 """Sample outputs (§2.10): the export entry, its record and the fused sample image.
 
 ``Dataset.export`` is the one sample-level export entry: it calls the parts ``assemble``
-(:mod:`starfinder.assembly`), :func:`fuse`, ``fuse_labels`` and ``export_spatialdata`` in
-order, each turned on or off by :class:`ExportConfig`, and writes everything to the
-sample's export folder ``<OUTPUT>/export/<sample>/`` with one record ``export.json`` (a
+(:mod:`starfinder.assembly`), ``fuse`` (:func:`fuse_images`), ``fuse_labels`` and
+``export_spatialdata`` in order, each turned on or off by :class:`ExportConfig`, and writes
+everything to the sample's export folder ``<OUTPUT>/export/<sample>/`` with one record ``export.json`` (a
 section per part, :class:`ExportRecord`). A part that cannot run (an extra not installed,
 an input file missing) is recorded ``not_run`` with :class:`ExportIncompleteWarning`, and
-the files of the earlier parts are still written. :func:`fuse` makes the fused image with
+the files of the earlier parts are still written. :func:`fuse_images` makes the fused image with
 multiview-stitcher's ``fuse`` from the placement of either backend (:class:`FusionInput`,
 :class:`FusionConfig`): a 2D maximum projection at scale 0.5 by default, or the 3D stack
 (``dimensionality``), on the library's union grid (:func:`fused_grid`,
@@ -34,7 +34,7 @@ from ._compare import RouteComparison, compare_routes
 from ._config import ROUTES as _ROUTES
 from ._config import (ExportConfig, FusionConfig, LabelConfig, SampleSegmentationConfig, SampleSegmentationRun,
                       SpatialDataExportConfig)
-from ._fuse import FusionInput, FusionRecord, fuse
+from ._fuse import FusionInput, FusionRecord, fuse_images
 from ._grid import FusedGrid, fused_grid
 from ._labels import LabelRecord, fuse_labels
 from ._record import ExportIncompleteWarning, ExportRecord
@@ -45,7 +45,7 @@ from ._spatialdata import export_spatialdata, lookup_source
 #: ``after_fusion`` (segmentation of the fused projection); None takes the default by ``dimensionality``.
 ROUTES = _ROUTES
 
-__all__ = ["ExportConfig", "FusionConfig", "LabelConfig", "SpatialDataExportConfig", "fuse", "fused_grid",
+__all__ = ["ExportConfig", "FusionConfig", "LabelConfig", "SpatialDataExportConfig", "fuse_images", "fused_grid",
            "FusionInput", "FusedGrid", "FusionRecord", "fuse_labels", "LabelRecord", "ExportRecord",
            "ExportIncompleteWarning", "export_spatialdata", "lookup_source", "check_export", "ROUTES",
            "SampleSegmentationConfig", "SampleSegmentationRun", "segment_fused",

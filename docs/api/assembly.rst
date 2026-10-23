@@ -42,7 +42,7 @@ origin are excluded. Every row keeps its §2.9 columns and gets one status of
 ``cells``, ``molecules`` and the long ``counts`` of the counted cells: retained and
 §2.9 ``kept``), the genes and the record; its construction checks the count identities.
 
-:py:func:`~starfinder.assembly.sample_anndata` writes ``sample.h5ad``, one row per
+:py:func:`~starfinder.assembly.write_sample_h5ad` writes ``sample.h5ad``, one row per
 counted cell with ``obsm["spatial"]`` the ownership centroid's X and Y in µm, through
 :py:func:`~starfinder.assignment.write_h5ad`; it needs the ``anndata`` extra.
 :py:func:`~starfinder.assembly.save_assembly` writes the sample's export folder
@@ -80,5 +80,5 @@ input, or another placement, raises ``ValueError``.
    MOLECULE_ASSEMBLY_REASONS
    ownership_map
    OwnershipMap
-   sample_anndata
    save_assembly
+   write_sample_h5ad

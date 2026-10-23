@@ -21,7 +21,7 @@ These are axis permutations, not coordinate-origin conversions. Confirm file
 metadata first; do not use `reshape` to exchange axes. For a single channel,
 the analogous permutations are `(1,2,0)` and `(2,0,1)`.
 
-{py:meth}`~starfinder.dataset.FOV.save_spots` adds one to selected x/y/z columns
+{py:meth}`~starfinder.dataset.FOV.export_spots` adds one to selected x/y/z columns
 in a copy. In-memory `(z,y,x)=(5,10,10)` becomes CSV `(x,y,z)=(11,11,6)`.
 To index a NumPy image from that CSV, select columns by name in ZYX order and
 subtract one **once**, as in the [output recipe](recipes.md#inspect-molecule-outputs).

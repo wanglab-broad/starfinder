@@ -148,7 +148,7 @@ resident images and stores each result in ``FOV.segmentation_results`` under the
 name, after every run has finished. A run imports a mask or names a method, its target,
 its input channels (:py:class:`~starfinder.segmentation.InputChannel`: a channel of the
 reference round, of a sequencing round registered by ``FOV.run`` or of a morphology round
-prepared by ``FOV.prepare_morphology`` (or ``FOV.register_rounds``) or reloaded by
+prepared by ``FOV.prepare_morphology`` (or ``FOV.register``) or reloaded by
 ``FOV.load_registered_round``, or the reference round's channel maximum (the saved
 reference image of ``FOV.load_reference_image`` when the round is not resident), each
 optionally through the composite or the Flamingo enhancement), an earlier run as its

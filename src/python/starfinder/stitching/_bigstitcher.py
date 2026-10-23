@@ -238,8 +238,8 @@ def _prepare_tile_dir(tile_dir, n_views):
     return folder
 
 
-def bigstitcher_macro(table: TilePositionTable, inputs: Sequence[StitchingInput], *, config: BigStitcherConfig,
-                      tile_dir, save_dir) -> tuple[str, pd.DataFrame]:
+def export_bigstitcher(table: TilePositionTable, inputs: Sequence[StitchingInput], *, config: BigStitcherConfig,
+                       tile_dir, save_dir) -> tuple[str, pd.DataFrame]:
     """Write the tiles BigStitcher reads and return the Fiji macro text and the view map.
 
     The grid is the table's cells: ``tiles_x`` the largest ``grid_column`` + 1,
@@ -592,7 +592,7 @@ def import_bigstitcher(dataset_xml, *, table: TilePositionTable, view_map: pd.Da
         The nominal positions; its rows are the result's rows.
     view_map : pandas.DataFrame
         ``view``, ``grid_column``, ``grid_row``, ``fov_id`` (empty or missing for
-        padding) and ``kind``, as :func:`bigstitcher_macro` returns it.
+        padding) and ``kind``, as :func:`export_bigstitcher` returns it.
     grids : Mapping[str, ReferenceGrid]
         One reference grid per ``fov_id`` of the table, and no other key.
     config : BigStitcherConfig

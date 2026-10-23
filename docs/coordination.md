@@ -21,7 +21,7 @@ config = PipelineConfig(
     filtering=ReadFilterConfig(),
 )
 fov = dataset.fov("FOV_001").run(config, execution=ExecutionConfig("streaming"))
-fov.save_spots()  # unchanged goodSpots filename, 1-based XYZ
+fov.export_spots()  # unchanged goodSpots filename, 1-based XYZ
 ```
 
 Load the dataset codebook before decoding. None disables a stage. The sequence is
@@ -87,7 +87,7 @@ sequencing colours are all `seq` in MATLAB's default).
 index; a string is first an exact pattern, otherwise an exact name that
 occurs once in the round. A repeated name, an unknown key and an index outside
 the round raise `ValueError` naming the round and its channels. The channel
-labels of a `RegistrationSignalConfig` (`FOV.register`, `FOV.register_rounds`)
+labels of a `RegistrationSignalConfig` (`FOV.register`, on both of its routes)
 and `InputChannel.channel` and `prepare_channel` of a segmentation plan use it,
 so a channel may be named by its pattern or by its name. The legacy
 `ref_channel` match of the `nuclei_registration` rule stays MATLAB's substring
@@ -123,8 +123,8 @@ separately:
   `ValueError`. A reference round that is an other round is still processed as
   the reference.
 * `FOV.register` registers the sequencing rounds other than the reference by
-  default and raises `ValueError` for an other round, naming
-  `FOV.register_rounds`.
+  default; named other rounds take its other-round route ("Other rounds and
+  external references" below).
 * `FOV.prepare_morphology(config=MorphologyConfig(), *, checkpoints=None)`, an
   entry beside `FOV.run` and not a stage of it, prepares the reference stain
   and the other rounds in the reference frame.
@@ -148,22 +148,22 @@ except the reference round). `prepare_morphology` does, in order:
    `registration_record["rounds"]["reference_stain"]` states `same acquisition
    as the reference round`, and no registration attempt is recorded;
 2. for each other round, it loads the round with its own channels, rotates it
-   and registers it with `FOV.register_rounds`. With `recipe=None` the recipe is
+   and registers it with `FOV.register`. With `recipe=None` the recipe is
    one translation step on the shared stain: the single reference stain against
    the round's one channel of the same name, given as an `ExternalReference`
    labelled `<reference round>:<stain pattern>` (for example `round1:ch04`, as
    the `nuclei_registration` rule). No reference stain, several reference
    stains or no single matching channel raise `ValueError` and ask for a
-   recipe. A given recipe is used as `register_rounds` uses it: against the
+   recipe. A given recipe is used as `register` uses it: against the
    reference stain when its signal names a stain channel (by pattern or name),
    else against the resident reference round (after `FOV.run`);
 3. with `checkpoints`, it saves each prepared image (below).
 
 The entry needs the raw files and the angle only, not the results of
-`FOV.run`. `load_images`, the rotation and `register_rounds` stay public, and
+`FOV.run`. `load_images`, the rotation and `register` stay public, and
 calling them step by step gives the same images, chains and records.
 
-With checkpoints, `prepare_morphology` and `FOV.register_rounds` write each
+With checkpoints, `prepare_morphology` and `FOV.register` on other rounds write each
 prepared image to `<checkpoint dir>/<fov_id>/other_rounds/<name>/`:
 `image.ome.tif` (ZYXC, every channel, with its `ImageMetadata`),
 `registration.json` and, only for a chain with a dense or B-spline transform,
@@ -233,11 +233,11 @@ fov.registration_chains["round2"].pull_field()  # composite pull displacement, f
 
 ### Other rounds and external references
 
-`FOV.register_rounds(recipe, *, rounds, reference=None, checkpoints=None)`
-registers loaded rounds, such as morphology rounds, through a shared stain, as
-specified in
+`FOV.register(recipe, *, rounds, reference=None, checkpoints=None)` with rounds
+that are not sequencing rounds takes its other-round route: it registers loaded
+rounds, such as morphology rounds, through a shared stain, as specified in
 {doc}`registration-contract` ("Other-round and external-reference
-registration"). The recipe's signal is usually `mode="channel"` with
+registration", which also gives the routing). The recipe's signal is usually `mode="channel"` with
 `reference_channel` naming the stain in the reference and `moving_channel` in
 each moving round, by index, pattern or name (`Dataset.channel_index`, see
 "Channels" above). Sequencing rounds use `Dataset.channel_order`; an other
@@ -249,7 +249,7 @@ signal directly; it must have the moving rounds' grid.
 
 Unknown or repeated channel names, channel indices outside a round and grid mismatches raise
 before any estimator runs (`ValueError`, `IncompatibleGeometryError`). Each
-round is then registered as by `register`: the chain estimated on the stain is
+round is then registered as on the sequencing route: the chain estimated on the stain is
 applied once to every channel and snapshot of the round. Each estimation
 attempt records `reference` (the round name or the external label) and
 `reference_sha256` (the SHA-256 of the external image's C-order bytes, `None`
@@ -257,16 +257,19 @@ for a round); `registration_record["rounds"][round]` keeps the recipe summary
 and the reference. `save_processing_log("nr")` writes `log/<fov>_nr.txt` and
 `log/gr_shifts/<fov>_nr.txt` for these rounds. With `checkpoints`, each round
 is also saved under `other_rounds/<round>/` (see "Sequencing rounds and other
-rounds" above). `FOV.prepare_morphology` calls it for each other round.
+rounds" above). `FOV.prepare_morphology` calls it for each other round. Sequencing
+and other rounds in one call, an empty `rounds`, `source` with other rounds, and
+`reference` or `checkpoints` with sequencing rounds raise `ValueError` before any
+estimator runs.
 
 ```python
 from starfinder.registration import ExternalReference
 
 stain = RegistrationSignalConfig("channel", reference_channel="ch04", moving_channel="ch00")
 recipe = RegistrationRecipe((RegistrationStep(TranslationConfig()),), signal=stain)
-fov.register_rounds(recipe, rounds=["morphology"])            # to the dataset reference round
+fov.register(recipe, rounds=["morphology"])            # to the dataset reference round
 atlas = ExternalReference(image, metadata, label="round1:ch04")
-fov.register_rounds(recipe, rounds=["morphology2"], reference=atlas)
+fov.register(recipe, rounds=["morphology2"], reference=atlas)
 ```
 
 (inspecting-results)=
@@ -323,7 +326,7 @@ list(fov.results)  # stages that have run, in pipeline order
 | `run_streaming(...)`, `run_streaming_gr(...)` | `run(config, execution=ExecutionConfig("streaming"))` |
 | `all_spots`, `good_spots` | `spot_result`, `intensity_result`, `decoding_result`, `filtering_result.accepted` |
 | `global_shifts`, `local_registered` | `registration_results`, `registration_chains`, `registration_attempts`, keyed by round |
-| `save_signal`, `save_ref_merged`, `save_log`, `save_score_log` | `save_spots`, `save_reference_image`, `save_processing_log`, `save_diagnostics` |
+| `save_signal`, `save_ref_merged`, `save_log`, `save_score_log` | `export_spots`, `save_reference_image`, `save_processing_log`, `save_diagnostics` |
 
 FOV remains FOV. Path construction and logging helpers are private. No replaced
 Python aliases remain. Rotation and output projection are explicit operation

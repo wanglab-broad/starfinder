@@ -459,7 +459,8 @@ class _Page:
             if c.assignment is None:
                 fov_cards += [card("Segmentation", off="not run"), card("Assignment", off="not run")]
             elif lead_fov is not None and "segment" in lead_names:
-                fov_cards += [card("Segmentation", method("segment") or ""), card("Assignment", method("assign") or "")]
+                fov_cards += [card("Segmentation", method("segment") or ""),
+                              card("Assignment", method("assign_molecules") or "")]
             else:
                 fov_cards += [card("Segmentation", off="not yet run"), card("Assignment", off="not yet run")]
         sample_cards = [card("Stitching", _get(c.placement, "method", "method") or "") if c.placement is not None

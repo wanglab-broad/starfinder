@@ -418,15 +418,15 @@ def test_so3_identity_4_counts_a_molecule_in_the_cell_of_its_key():
 @pytest.mark.parametrize("case", ["golden_3d", "big_ids", "own_cases", "status_placeholder_with_input",
                                   "empty_molecules_only"])
 def test_so3_readers_that_do_not_read_the_key_give_the_same_results(case, tmp_path):
-    """sample_anndata, export_counts and fov_ownership on the table with the column and on the table before it."""
+    """write_sample_h5ad, export_counts and fov_ownership on the table with the column and on the table before it."""
     anndata = pytest.importorskip("anndata", reason="the anndata extra (starfinder[anndata]) is not installed")
-    from starfinder.assembly import fov_ownership, sample_anndata
+    from starfinder.assembly import fov_ownership, write_sample_h5ad
     from starfinder.export._spatialdata import export_counts
     result, _ = build(case)
     before = without_key(result)
     assert export_counts(result) == export_counts(before)
-    now = anndata.read_h5ad(sample_anndata(result, tmp_path / "now.h5ad"))
-    then = anndata.read_h5ad(sample_anndata(before, tmp_path / "then.h5ad"))
+    now = anndata.read_h5ad(write_sample_h5ad(result, tmp_path / "now.h5ad"))
+    then = anndata.read_h5ad(write_sample_h5ad(before, tmp_path / "then.h5ad"))
     assert_frame_equal(now.obs, then.obs, check_exact=True)
     assert_frame_equal(now.var, then.var, check_exact=True)
     assert np.array_equal(now.X, then.X, equal_nan=True) and dict(now.uns) == dict(then.uns)

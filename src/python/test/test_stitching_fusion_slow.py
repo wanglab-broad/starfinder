@@ -15,7 +15,7 @@ import numpy as np
 import pytest
 import tifffile
 
-from starfinder.export import FusionConfig, check_export, fuse, fused_grid
+from starfinder.export import FusionConfig, check_export, fuse_images, fused_grid
 from starfinder.io._ome import read_ome_layout
 
 from .fusion_fixtures import OVERLAP_VALUES, fuse_band, overlap_pair, position_grid
@@ -33,7 +33,7 @@ def synchronous():
 
 
 def run(case, folder, **fields):
-    record = fuse(case.placement, case.inputs(), config=FusionConfig(**fields), output_dir=folder)
+    record = fuse_images(case.placement, case.inputs(), config=FusionConfig(**fields), output_dir=folder)
     assert record.status == "written"
     return record.section
 

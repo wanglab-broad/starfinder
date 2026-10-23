@@ -239,7 +239,7 @@ def _check_rounds(fov, plan, grid):
                                          f"reference round {ref!r}")
                 elif name not in registered:
                     raise ValueError(f"run {run.name!r}: morphology round {name!r} has no registration entry; "
-                                     "call FOV.prepare_morphology (or FOV.register_rounds) or "
+                                     "call FOV.prepare_morphology (or FOV.register on it) or "
                                      "FOV.load_registered_round first")
             shape = np.shape(fov.images[name])[:3]
             if shape != grid.shape_zyx:

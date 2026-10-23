@@ -13,7 +13,7 @@ units unless a function explicitly says otherwise. Unknown calibration stays unk
 | Spot coordinates | `(N, 3)` or DataFrame `z, y, x` | Zero-based voxel indices |
 | Raw extracted intensities | `(N, C, R)` | Float64 neighborhood sums, rounds in caller-supplied order |
 | Dense displacement field | `(Z, Y, X, 3)` | Last axis `(dz, dy, dx)`, backward sampling |
-| Signal CSV | `x, y, z[, gene]` by default | One-based coordinates, written by `FOV.save_spots` |
+| Signal CSV | `x, y, z[, gene]` by default | One-based coordinates, written by `FOV.export_spots` |
 
 ## Registration transforms
 
@@ -444,7 +444,7 @@ shared MATLAB-facing columns/filenames. Historical saved-tensor diagnostic
 scripts explicitly declare positional channel/round axes; missing historical
 physical geometry remains unverified. No historical notebook outputs are rerun.
 
-{meth}`starfinder.dataset.FOV.save_spots` copies selected columns, increments
+{meth}`starfinder.dataset.FOV.export_spots` copies selected columns, increments
 `x`, `y`, and `z` by one, and leaves the in-memory table unchanged. Subtile tables
 use one-based inclusive start/end coordinates and one-based tile IDs;
 {class}`starfinder.dataset.CropWindow` uses zero-based, end-exclusive slices.

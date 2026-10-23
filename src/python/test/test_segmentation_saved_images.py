@@ -145,7 +145,7 @@ def process_segment(root, output):
     # The molecules of process 1: two saved stages that restore no image, then the final filtering again.
     fov.load_checkpoint("candidates").load_checkpoint("pre_qc")
     fov.run(PipelineConfig(filtering=ReadFilterConfig()))
-    fov.assign(AssignmentConfig(), nuclei="nucleus", checkpoints=CheckpointConfig())
+    fov.assign_molecules(AssignmentConfig(), nuclei="nucleus", checkpoints=CheckpointConfig())
     return fov, dict(resident, after={"images": sorted(fov.images), "metadata": sorted(fov.metadata)})
 
 
@@ -185,7 +185,7 @@ def one_process(root, output):
     fov.save_reference_image()
     fov.prepare_morphology(MorphologyConfig(rotation_degrees=ANGLE))
     fov.segment(plan(fov))
-    fov.assign(AssignmentConfig(), nuclei="nucleus")
+    fov.assign_molecules(AssignmentConfig(), nuclei="nucleus")
     return fov
 
 
@@ -311,7 +311,7 @@ def test_assign_refuses_the_grid_of_a_projected_reference_image(raw, threshold):
                                                     ThresholdConfig(1000.0)),)))
     fresh.spot_result, fresh.filtering_result = ran.spot_result, ran.filtering_result
     with pytest.raises(ValueError, match="is a Z projection"):
-        fresh.assign()
+        fresh.assign_molecules()
 
 
 # --- Three processes -------------------------------------------------------------------------------------

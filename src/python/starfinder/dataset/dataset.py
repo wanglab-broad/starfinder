@@ -244,7 +244,7 @@ class Dataset:
 
     def _resident_channels(self, round_name):
         """channel_info of a resident image; an image under a name the dataset does not configure takes the
-        sequencing channels, as FOV.register_rounds and FOV.segment did before channel_index."""
+        sequencing channels, as FOV.register and FOV.segment did before channel_index."""
         configured = round_name == REFERENCE_STAIN or round_name in self.rounds.all_rounds
         return self.channel_info(round_name) if configured else self._channels_of(None, self.channel_order)
 
@@ -282,7 +282,7 @@ class Dataset:
                              f"channel name of the round; its channels are {listed}")
         return named[0]
 
-    def channel_record(self) -> dict[str, list[dict]]:
+    def _channel_record(self) -> dict[str, list[dict]]:
         """The written channel information: per configured round (and ``reference_stain`` when set) its channels.
 
         Returns
@@ -563,7 +563,7 @@ class Dataset:
         declare), saved with
         :func:`~starfinder.assembly.save_assembly` (with ``assemble`` off the
         saved assembly is ``reused``, or the part is ``off`` when there is none);
-        :func:`~starfinder.export.fuse` on one
+        :func:`~starfinder.export.fuse_images` on one
         :class:`~starfinder.export.FusionInput` per included FOV
         (``reference_stain``:
         ``checkpoints/{fovID}/other_rounds/reference_stain/image.ome.tif``;

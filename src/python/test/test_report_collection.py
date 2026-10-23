@@ -536,7 +536,7 @@ def _not_applicable(table, column, row, case, context):
         if row["scope"] == "sample":
             return {"fov_id": True, "round": True, "method": row["name"] != "stitch",
                     "seconds": row["status"] in ("off", "not_run")}.get(column, False)
-        if row["name"] in ("segment", "assign"):
+        if row["name"] in ("segment", "assign_molecules"):
             return column == "round"
         record = case.run_record(row["fov_id"])
         step = record["steps"][row["index"]]
@@ -663,9 +663,10 @@ def test_inputs_lists_every_file_read(inputs_base):
     assert kinds["export/s1/export.json"] == ("export_record", False)
     assert kinds["stitching/s1/placement.json"] == ("placement", False)
     steps = tables["steps"]
-    lane = steps[steps["scope"].eq("fov").to_numpy(bool) & steps["name"].isin(["segment", "assign"]).to_numpy(bool)]
+    lane = steps[steps["scope"].eq("fov").to_numpy(bool)
+                 & steps["name"].isin(["segment", "assign_molecules"]).to_numpy(bool)]
     assert lane[["fov_id", "name", "method"]].values.tolist() == [
-        [f, n, m] for f in FOVS for n, m in (("segment", "watershed"), ("assign", "cell"))]
+        [f, n, m] for f in FOVS for n, m in (("segment", "watershed"), ("assign_molecules", "cell"))]
 
 
 @pytest.mark.parametrize("reason,edit", [
@@ -778,13 +779,13 @@ def test_inputs_assignment_and_segmentation_records(tmp_path, inputs_base, path,
     changed = reason == "input_changed"
     assert [r for r in rows if r not in base_rows] == [("workflow.steps", None, None, "fov_id=F1", reason)] + (
         preview[1:] if changed else [])
-    # F1's segment and assign rows are not written, and with them the rows of their times.
+    # F1's segment and assign_molecules rows are not written, and with them the rows of their times.
     assert [r for r in base_rows if r not in rows] == [
         ("workflow.time", "steps", "seconds", f"scope=fov;fov_id=F1;index={i}", "not_recorded") for i in (17, 18)] + (
         preview[:1] if changed else [])
     steps, base_steps = tables["steps"], base_tables["steps"]
     lane = base_steps["fov_id"].eq("F1").fillna(False).to_numpy(bool) & \
-        base_steps["name"].isin(["segment", "assign"]).to_numpy(bool)
+        base_steps["name"].isin(["segment", "assign_molecules"]).to_numpy(bool)
     same(steps, base_steps[~lane].reset_index(drop=True))
     for table in ("fovs", "registration", "readout_totals", "population"):
         same(tables[table], base_tables[table])

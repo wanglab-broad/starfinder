@@ -55,7 +55,7 @@ def _transforms(fov, written):
     applications = fov.registration_record.get("application", {})
     transforms = {}
     for name, results in fov.registration_results.items():
-        # Other rounds (prepare_morphology, register_rounds) are not processed by FOV.run.
+        # Other rounds (prepare_morphology, register on other rounds) are not processed by FOV.run.
         if name not in rounds or not results:
             continue
         field_name = f"{name}_field.npz" if f"registered/{name}_field.npz" in written else None
@@ -90,7 +90,7 @@ class _RunRecord:
             # The workflow configuration file of a workflow rule (null outside the workflow).
             "workflow_config": _workflow_config_record(dataset),
             # Channel pattern, name and wavelength per round (docs/checkpoints.md, "run.json").
-            "channels": dataset.channel_record(),
+            "channels": dataset._channel_record(),
             "inputs": [], "codebook": _codebook_record(dataset), "steps": [], "preprocessing": None,
             "registration": {}, "transforms": {}, "counts": {},
             "checkpoint_directory": str(self.directory), "checkpoints": {},

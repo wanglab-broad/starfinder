@@ -75,7 +75,7 @@ The direct rule declares these outputs, relative to OUTPUT:
 - `images/ref_merged/{fovID}.tif`;
 - `signal/{fovID}_goodSpots.csv`, containing 1-based `x,y,z` and `gene`.
 
-The Python script writes them using `save_reference_image`, `save_spots`, `save_processing_log`
+The Python script writes them using `save_reference_image`, `export_spots`, `save_processing_log`
 and `save_diagnostics`. MATLAB also writes preview images. Benchmarked rules write
 `log/benchmark/{rule}/{fovID}[_{n_subtile}].txt`. A reference projection is not a
 segmentation label image, and a goodSpots CSV is not a cell-by-gene matrix.

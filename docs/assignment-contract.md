@@ -98,8 +98,8 @@ coordinates, overlap ownership and cross-FOV matching are §2.10's.
 
 | Option | Names | Effect on the golden digests | Effect on the existing outputs |
 | --- | --- | --- | --- |
-| **N1. A `starfinder.assignment` module (recommended)** | Module `starfinder.assignment`; function `assign_molecules`; result `AssignmentResult`; config `AssignmentConfig` with `CorrespondenceConfig`; input `MoleculeTable` built by `molecule_table`; coordination `FOV.assign(config, *, cells, nuclei, …)`, `FOV.assignment_results`, `FOV.load_assignment(name)`; status vocabularies `ASSIGNMENT_STATUSES`, `CELL_STATUSES`. | None: the names are new. `test_assignment_golden.py` keeps every digest; its named edits ("Tests the implementation changes") add package calls beside the frozen helper. | None from the names: the files keep the names of "Persistence". `docs/api/` gains an `assignment.rst` page whose autosummary list holds the exports of `__all__`, which `docs/check_reference.py` requires. |
-| N2. Inside `starfinder.segmentation` | `starfinder.segmentation.assign` returning `CellTable`; `FOV.assign`. | None. | The same files. One module would hold the label contract and the counts, which D7 split, and `assign` sits next to §2.8's `starfinder.readout.decode_direct` (direct readout), a different meaning of "assign". |
+| **N1. A `starfinder.assignment` module (recommended)** | Module `starfinder.assignment`; function `assign_molecules`; result `AssignmentResult`; config `AssignmentConfig` with `CorrespondenceConfig`; input `MoleculeTable` built by `molecule_table`; coordination `FOV.assign_molecules(config, *, cells, nuclei, …)`, `FOV.assignment_results`, `FOV.load_assignment(name)`; status vocabularies `ASSIGNMENT_STATUSES`, `CELL_STATUSES`. | None: the names are new. `test_assignment_golden.py` keeps every digest; its named edits ("Tests the implementation changes") add package calls beside the frozen helper. | None from the names: the files keep the names of "Persistence". `docs/api/` gains an `assignment.rst` page whose autosummary list holds the exports of `__all__`, which `docs/check_reference.py` requires. |
+| N2. Inside `starfinder.segmentation` | `starfinder.segmentation.assign` returning `CellTable`; `FOV.assign_molecules`. | None. | The same files. One module would hold the label contract and the counts, which D7 split, and `assign` sits next to §2.8's `starfinder.readout.decode_direct` (direct readout), a different meaning of "assign". |
 | N3. A `starfinder.cells` module | `count_molecules` returning `CellCounts`; `FOV.count_cells`. | None. | The same files. The D1 call is named "assign"; a different verb in the API breaks the three-call vocabulary of the notebook. |
 
 **Recommendation: N1.** It mirrors the D7 split (one module per specification), keeps
@@ -118,7 +118,7 @@ New names under N1:
 | Statuses | `ASSIGNMENT_STATUSES = ("assigned", "unassigned", "excluded_cell", "outside_grid")`; `CELL_STATUSES = ("kept", "excluded_no_nucleus")`; `CELL_CORRESPONDENCE = ("matched", "ambiguous", "no_nucleus", "unavailable")`; `NUCLEUS_STATUSES = ("matched", "ambiguous", "no_cell")`; `COMPARTMENT_STATES = ("available", "withheld", "no_nucleus", "unavailable")` | tuples |
 | Sampling | `labels_at_positions(labels, positions_zyx, *, geometry)` | function |
 | Correspondence | `match_nuclei(nuclei, cells, *, config)` | function |
-| Coordination | `FOV.assign(config=AssignmentConfig(), *, cells="cell", nuclei=None, name="default", population="final", correspondence=None, checkpoints=None)`, `FOV.assignment_results`, `FOV.load_assignment(name)` | method, attribute, method |
+| Coordination | `FOV.assign_molecules(config=AssignmentConfig(), *, cells="cell", nuclei=None, name="default", population="final", correspondence=None, checkpoints=None)`, `FOV.assignment_results`, `FOV.load_assignment(name)` | method, attribute, method |
 | Diagnostics | `summarize_assignment(result)`, `plot_assignment(result, *, image=None, view=None, z=None)` | functions |
 
 ## The assign entry
@@ -256,7 +256,7 @@ segment entry's check that the seeds are on the input's grid.
 
 ### Run record
 
-A `FOV.assign` call with checkpoints writes one `assignment.json`, and every call keeps
+A `FOV.assign_molecules` call with checkpoints writes one `assignment.json`, and every call keeps
 the same mapping in `AssignmentResult.record` (without checkpoints, the `file` entries name
 no path):
 
@@ -317,7 +317,7 @@ are an illustration of the layout, not results.
 
 ### Coordination per FOV
 
-`FOV.assign(config=AssignmentConfig(), *, cells="cell", nuclei=None, name="default",
+`FOV.assign_molecules(config=AssignmentConfig(), *, cells="cell", nuclei=None, name="default",
 population="final", correspondence=None, checkpoints=None)` is the third of D1's three
 calls. `cells` and `nuclei` name segmentation runs, taken from `FOV.segmentation_results`
 or loaded with `FOV.load_segmentation`, or are `SegmentationResult` objects the caller
@@ -328,9 +328,9 @@ re-applied) through `molecule_table`, the genes from the loaded codebook, and th
 from `FOV.reference_grid()`: the reference round's, or, in a process that segmented from
 the saved images ({doc}`segmentation-contract`, "Coordination per FOV"), the grid of the
 saved reference image, one grid by "The grid rule". A saved reference image that is a Z
-projection is not the molecules' grid, so `FOV.assign` refuses its grid without the
+projection is not the molecules' grid, so `FOV.assign_molecules` refuses its grid without the
 reference round (`ValueError`); call `assign_molecules` with the molecule run's grid
-there. `FOV.assign` calls `assign_molecules`; stores the result in
+there. `FOV.assign_molecules` calls `assign_molecules`; stores the result in
 `FOV.assignment_results[name]`; and, with `checkpoints`, writes the files of
 "Persistence", including every label image it used that is not already saved under its run
 there ("Label images of a checkpointed assignment"). Without `checkpoints` it writes
@@ -340,7 +340,7 @@ nothing. It never runs registration, detection, decoding or segmentation, and
 ```python
 fov.run(pipeline, checkpoints=checkpoints)                   # molecules
 fov.segment(plan, checkpoints=checkpoints)                   # label masks (W-307)
-fov.assign(AssignmentConfig(), cells="cell", nuclei="nucleus",
+fov.assign_molecules(AssignmentConfig(), cells="cell", nuclei="nucleus",
            checkpoints=checkpoints)                          # cell table and counts
 ```
 
@@ -724,12 +724,12 @@ already own them. `FOV.load_assignment(name)` reads the folder and the linked
 segmentation files, checks every recorded SHA-256 and returns the `AssignmentResult`.
 
 **Label images of a checkpointed assignment.** One rule: a checkpointed assignment
-(`FOV.assign(checkpoints=…)`) keeps every label image it used. A label image that is
+(`FOV.assign_molecules(checkpoints=…)`) keeps every label image it used. A label image that is
 **saved under its run** is linked, not copied; every other label image it used is written
 into the assignment folder. A `SegmentationResult` is saved under its run when it was
 written by `FOV.segment(checkpoints=…)` or loaded by `FOV.load_segmentation` from
 `<checkpoint dir>/<fov_id>/segmentation/<run>/labels.tif` in the same checkpoint root as the
-assignment, and that file's array SHA-256 equals the labels' SHA-256 when `FOV.assign` runs
+assignment, and that file's array SHA-256 equals the labels' SHA-256 when `FOV.assign_molecules` runs
 (it checks). Every other input is unsaved: a direct `segment` result, a `FOV.segment` run
 without checkpoints or under another root, a caller-made result, and an `import_labels`
 result (its source file lies outside the layout and may hold another dtype). Without
@@ -815,7 +815,7 @@ The workflow adapter applies them to the package result exactly as the script do
 
 ## Diagnostics
 
-On demand, never by `FOV.assign`:
+On demand, never by `FOV.assign_molecules`:
 
 * `summarize_assignment(result)`: molecules per status, cells per status, per flag and per
   compartment state, nuclei per status, quantiles of `size_voxels`, `size_physical`,
@@ -823,7 +823,7 @@ On demand, never by `FOV.assign`:
   the exclusion, each with the same five keys: `cells`, `molecules` in cells, and the
   `whole`, `nucleus` and `cytoplasm` totals. An excluded cell has no compartment counts,
   so the two compartment totals are equal before and after; without an excluded cell,
-  `before` equals `after`. `FOV.assign` stores it in `record["counts"]`.
+  `before` equals `after`. `FOV.assign_molecules` stores it in `record["counts"]`.
 * `plot_assignment(result, *, image=None, view=None, z=None)`: one row of four panels.
   1. `image` in grey scale with the territory outlines in green and one dot per cell
      centre. The outlines are lines 0.8 points wide around each territory, and each centre
@@ -880,7 +880,7 @@ assignment:
   exclude_cells_without_nucleus: null   # null: on when nuclei is set
 ```
 
-Its keys are the fields of `AssignmentConfig` and of the `FOV.assign` call; a
+Its keys are the fields of `AssignmentConfig` and of the `FOV.assign_molecules` call; a
 default-tier test keeps the schema equal to them. The block is rejected unless
 `backend: python`. It is executed by the §2.13 rule that runs the three calls; until then
 it serves the adapter.

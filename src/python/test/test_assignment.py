@@ -2,7 +2,7 @@
 
 Rows L4, A1, A2 (on ``boxes``), A4 to A14, A16, A17, A19 and A20 of the engineering
 validation design in docs/assignment-algorithms.md, the checks of docs/assignment-contract.md
-("Checks the entry applies") and ``FOV.assign``. Rows A2 and A3 on ``assign_golden`` are in
+("Checks the entry applies") and ``FOV.assign_molecules``. Rows A2 and A3 on ``assign_golden`` are in
 ``test_assignment_golden.py``. The fixtures are hand-built: ``boxes`` (cells and nuclei in
 ``segmentation_fixtures.py``, its molecules here), ``boxes_51_49``, ``boxes_nocal``,
 ``bounds``, ``plane`` and ``culture``. Every expected value is written out from the stated
@@ -950,7 +950,7 @@ def test_summary_and_plot():
         plot_assignment(result, z=9)
 
 
-# --- FOV.assign -------------------------------------------------------------------------------------------
+# --- FOV.assign_molecules -------------------------------------------------------------------------------------------
 
 @pytest.fixture(scope="module")
 def decoded_fov(tmp_path_factory):
@@ -1012,7 +1012,7 @@ def test_fov_assign_runs_the_entry_on_the_fov_results(decoded_fov, tmp_path):
         SegmentationRun("nucleus", "nucleus", (), LabelImportConfig(str(tmp_path / "nuclei.tif"), "nucleus")),
         SegmentationRun("cell", "cell", (), LabelImportConfig(str(tmp_path / "cells.tif"), "cell")))))
     files = sorted(p for p in root.rglob("*"))
-    assert fov.assign(nuclei="nucleus") is fov
+    assert fov.assign_molecules(nuclei="nucleus") is fov
     assert sorted(p for p in root.rglob("*")) == files     # nothing is written
     result = fov.assignment_results["default"]
     mols = molecule_table(fov.spot_result, fov.filtering_result, genes=fov.codebook.genes)
@@ -1026,7 +1026,7 @@ def test_fov_assign_runs_the_entry_on_the_fov_results(decoded_fov, tmp_path):
     assert result.record["grid"]["check"] == "checked" and result.record["grid"]["sha256"] == grid.sha256
     assert len(result.molecules) == fov.filtering_result.counts["accepted"]
     imported = fov.segmentation_results["cell"]
-    fov.assign(AssignmentConfig(exclude_cells_without_nucleus=False), cells=imported, name="all_cells",
+    fov.assign_molecules(AssignmentConfig(exclude_cells_without_nucleus=False), cells=imported, name="all_cells",
                population="called")
     assert set(fov.assignment_results) == {"default", "all_cells"}
     assert fov.assignment_results["all_cells"].record["inputs"]["molecules"]["population"] == "called"
@@ -1035,7 +1035,7 @@ def test_fov_assign_runs_the_entry_on_the_fov_results(decoded_fov, tmp_path):
               (dict(population="all"), ValueError, "population")]
     for kwargs, error, message in errors:
         with pytest.raises(error, match=message):
-            fov.assign(**kwargs)
+            fov.assign_molecules(**kwargs)
 
 
 @pytest.mark.dataset
@@ -1078,7 +1078,7 @@ def test_a_run_that_lists_expand_labels_is_refused_by_assign(decoded_fov, tmp_pa
                                                                                  "mode": "planar"}
     assert grown.record["labels"]["sha256"] == digest(grown.labels)
     with pytest.raises(ValueError, match="labels of run 'grown' were expanded by segmentation"):
-        fov.assign(cells="grown", nuclei="nucleus")
+        fov.assign_molecules(cells="grown", nuclei="nucleus")
     with pytest.raises(ValueError, match="takes no operations"):
         SegmentationRun("nucleus", "nucleus", (), LabelImportConfig("x.tif", "nucleus"), operations=(expansion,))
 

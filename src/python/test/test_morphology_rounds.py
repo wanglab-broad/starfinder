@@ -188,17 +188,18 @@ def test_run_refuses_a_detection_plan_with_an_other_round(raw):
 
 # --- FOV.register ----------------------------------------------------------------------------------------
 
-def test_register_defaults_to_the_sequencing_rounds_and_refuses_an_other_round(raw):
+def test_register_defaults_to_the_sequencing_rounds_and_routes_an_other_round(raw):
     fov = make_dataset(raw).fov("FOV").load_images(rounds=["round1", "round2"]).load_images(rounds=["morph"])
     morph = fov.images["morph"].copy()
-    with pytest.raises(ValueError, match=r"rounds \['morph'\] are other rounds.*FOV\.register_rounds"):
-        fov.register(REGISTRATION, rounds=["morph"])
-    assert fov.registration_results == {} and fov.registration_attempts == {}
     fov.register(REGISTRATION)
     assert list(fov.registration_results) == list(fov.registration_chains) == ["round2"]
     assert list(fov.registration_attempts) == ["round2"]
     assert np.array_equal(fov.images["morph"], morph) and fov.metadata["morph"] == ImageMetadata("FOV/morph")
-    with pytest.raises(ValueError, match="FOV.register_rounds"):
+    # W-560 (NC-05): an other round named to register takes the other-round route instead of raising.
+    fov.register(REGISTRATION, rounds=["morph"])
+    assert list(fov.registration_results) == list(fov.registration_chains) == ["round2", "morph"]
+    assert fov.registration_record["rounds"]["morph"]["reference"] == "round1"
+    with pytest.raises(ValueError, match=r"rounds \['round2'\] are sequencing rounds and rounds \['morph'\] are not"):
         fov.register(REGISTRATION, rounds=["round2", "morph"])
 
 
@@ -294,7 +295,7 @@ def test_the_entry_recovers_the_known_translation_and_equals_the_step_by_step_ca
     assert [a["record"] for a in fov.registration_attempts["morph"]] == ["estimation", "application"]
 
     steps = ds.fov("FOV").load_images(rounds=["reference_stain"]).load_images(rounds=["morph"])
-    steps.register_rounds(stain_recipe(), rounds=["morph"], reference=stain_reference(steps))
+    steps.register(stain_recipe(), rounds=["morph"], reference=stain_reference(steps))
     for name in ("reference_stain", "morph"):
         assert np.array_equal(steps.images[name], fov.images[name]) and steps.metadata[name] == fov.metadata[name]
     assert steps.registration_chains["morph"].transforms == chain.transforms
@@ -404,7 +405,7 @@ def test_the_saved_form_reloads_equal_values_and_checks_hashes_folders_and_ident
         again.prepare_morphology(checkpoints=checkpoints)
     assert again.images == {}
     with pytest.raises(FileExistsError):
-        again.load_images(rounds=["morph"]).register_rounds(stain_recipe(), rounds=["morph"], reference=ExternalReference(
+        again.load_images(rounds=["morph"]).register(stain_recipe(), rounds=["morph"], reference=ExternalReference(
             raw["stain"], ImageMetadata("FOV/round1"), "round1:ch04"), checkpoints=checkpoints)
     assert again.registration_attempts == {}
     written = files(directory)
@@ -435,7 +436,7 @@ def test_register_rounds_writes_the_same_saved_form(raw, tmp_path):
     ds = make_dataset(raw)
     checkpoints = CheckpointConfig(directory=tmp_path / "ck")
     fov = ds.fov("FOV").load_images(rounds=["reference_stain"]).load_images(rounds=["morph"])
-    fov.register_rounds(stain_recipe(), rounds=["morph"], reference=stain_reference(fov), checkpoints=checkpoints)
+    fov.register(stain_recipe(), rounds=["morph"], reference=stain_reference(fov), checkpoints=checkpoints)
     assert files(tmp_path / "ck" / "FOV") == ["other_rounds/morph/image.ome.tif",
                                               "other_rounds/morph/registration.json"]
     entry = ds.fov("FOV").prepare_morphology()

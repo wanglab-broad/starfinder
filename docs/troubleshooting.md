@@ -55,7 +55,7 @@ four-color gene calls. A codebook parser `KeyError` can indicate an unexpected
 header or unsupported nucleotide pair. Use the actual two-column `gene,barcode`
 format described by {py:func}`~starfinder.readout.load_codebook`.
 
-`save_spots` writes header-only CSVs for successful zero detections or all-rejected
+`export_spots` writes header-only CSVs for successful zero detections or all-rejected
 results. Missing processing results still raise. Export joins coordinates by
 namespace and ID, rejects duplicate/missing identities, and leaves source tables
 unchanged. Select diagnostic columns explicitly, as in the recipe. Extraction

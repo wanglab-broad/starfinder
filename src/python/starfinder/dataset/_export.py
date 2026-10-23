@@ -20,7 +20,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from starfinder.export._config import ExportConfig, image_name
-from starfinder.export._fuse import FusionInput, check_assembly, check_fusion, fuse
+from starfinder.export._fuse import FusionInput, check_assembly, check_fusion, fuse_images
 from starfinder.export._labels import check_label_count, check_label_ids, fuse_labels
 from starfinder.export._record import (
     PARTS,
@@ -232,7 +232,7 @@ def export_sample(dataset, sample: str, *, placement, assignment: str | None = "
         update_section(output_dir, sample, "assemble", {"status": "off"}, fill=False)
     # Part 2: fuse.
     if config.fuse:
-        fuse(placement, inputs, assembly=result, config=config.fusion, output_dir=output_dir)
+        fuse_images(placement, inputs, assembly=result, config=config.fusion, output_dir=output_dir)
     else:
         update_section(output_dir, sample, "fuse", {"status": "off"}, fill=False)
     # The part segment of the route after fusion: off on this route.
@@ -379,7 +379,7 @@ def _export_after_fusion(dataset, sample, placement, assignment, config, output_
 
     # Part fuse.
     if config.fuse:
-        fuse(placement, fusion, assembly=None, config=config.fusion, output_dir=output_dir)
+        fuse_images(placement, fusion, assembly=None, config=config.fusion, output_dir=output_dir)
     else:
         update_section(output_dir, sample, "fuse", {"status": "off"}, fill=False)
     # Part segment.

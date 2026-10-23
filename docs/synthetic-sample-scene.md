@@ -54,7 +54,7 @@ batch (W-331); this page states the identities a test can check, not the validat
   addition. W-93 keeps canonical responsibility for synthetic truth and reproducibility.
 * **Two sample-level entries** outside `PipelineConfig` and `FOV.run`: `Dataset.stitch`
   and `Dataset.export` (D3, as amended at the W-329 review of 2026-10-06);
-  `Dataset.export` calls `assemble`, `fuse`, `fuse_labels` and `export_spatialdata` in
+  `Dataset.export` calls `assemble`, `fuse_images`, `fuse_labels` and `export_spatialdata` in
   order ({doc}`sample-output-contract`, "The export entry"); ownership regions are
   computed in assemble. The scene feeds those entries; it adds no entry of its own to the
   pipeline.

@@ -369,9 +369,10 @@ def test_ch1_ch2_ch3_the_report_at_each_stage(stages, tmp_path):
         assert {r: (e or {}).get("fov_id") for r, e in record["examples"].items() if r in ROLES} == \
             (expected_roles(chain) if not stage["export"] else expected_roles(chain, cells=dict(
                 by_fov(export_table(chain, "fovs"))["n_cells_retained"].items()))), name
-        # The per-FOV lane: segment and assign rows once the assignment exists.
+        # The per-FOV lane: segment and assign_molecules rows once the assignment exists.
         steps = page.tables["steps"]
-        lane = steps[steps["scope"].eq("fov").to_numpy(bool) & steps["name"].isin(["segment", "assign"]).to_numpy(bool)]
+        lane = steps[steps["scope"].eq("fov").to_numpy(bool)
+                     & steps["name"].isin(["segment", "assign_molecules"]).to_numpy(bool)]
         assert len(lane) == (2 * len(chain.fov_ids) if stage["assignment"] else 0), name
         check_page(page, chain, tmp_path / name)
     # The Z size at every stage: without an export or a placement, the shape of the first FOV's reference image, read

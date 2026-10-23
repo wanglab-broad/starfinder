@@ -39,7 +39,7 @@ def array_sha256(array) -> str:
 def grid_sha256(image) -> str:
     """SHA-256 of an image's C-order bytes alone, the ``ReferenceGrid.sha256`` convention.
 
-    No dtype or shape prefix, as ``reference_sha256`` of ``FOV.register_rounds``
+    No dtype or shape prefix, as ``reference_sha256`` of ``FOV.register``
     (docs/segmentation-contract.md, "The reference grid").
     """
     return hashlib.sha256(np.ascontiguousarray(image).tobytes()).hexdigest()

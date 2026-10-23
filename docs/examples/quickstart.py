@@ -69,8 +69,8 @@ def main(output: Path) -> None:
             detected_shifts[round_name] = [float(value) for value in shift]
 
         # Keep diagnostic columns in allSpots; the standard goodSpots CSV is x,y,z,gene.
-        all_path = fov.save_spots("allSpots", columns=["spot_namespace", "spot_id", "x", "y", "z", "gene", "color_seq", "call_status"])
-        good_path = fov.save_spots("goodSpots")
+        all_path = fov.export_spots("allSpots", columns=["spot_namespace", "spot_id", "x", "y", "z", "gene", "color_seq", "call_status"])
+        good_path = fov.export_spots("goodSpots")
         fov.save_processing_log()
         all_saved = pd.read_csv(all_path, dtype={"color_seq": str})
         good_saved = pd.read_csv(good_path)

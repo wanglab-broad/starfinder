@@ -1,7 +1,7 @@
 """Assignment (§2.9): molecules to cells, nucleus–cell correspondence, compartments and counts.
 
 :func:`assign_molecules`, the third of the three calls per FOV (``FOV.run``,
-``FOV.segment``, ``FOV.assign``), places every molecule of a :class:`MoleculeTable`
+``FOV.segment``, ``FOV.assign_molecules``), places every molecule of a :class:`MoleculeTable`
 in the territory of a cell :class:`~starfinder.segmentation.SegmentationResult` that
 holds its sampled voxel (``floor(c + 0.5)`` per axis) and gives it one status of
 ``ASSIGNMENT_STATUSES``. An optional expansion is applied once, here, with

@@ -29,7 +29,7 @@ import pytest
 import tifffile
 
 from starfinder.stitching import (BigStitcherConfig, GridSnap, PlacementResult, StageAxisMapping, StitchingInput,
-                                  bigstitcher_macro, import_bigstitcher, legacy_tile_config_view, load_placement,
+                                  export_bigstitcher, import_bigstitcher, legacy_tile_config_view, load_placement,
                                   positions_from_grid, positions_from_leica, positions_from_table, save_placement)
 from starfinder.stitching._bigstitcher import view_map_of
 
@@ -530,8 +530,8 @@ def golden_inputs(table, spacing=GOLDEN_SPACING):
 def test_macro_text_view_map_and_tiles(tmp_path, pad_missing):
     table = golden_table(tmp_path)
     folder = tmp_path / "DAPI"
-    text, view_map = bigstitcher_macro(table, golden_inputs(table), config=BigStitcherConfig(pad_missing=pad_missing),
-                                       tile_dir=folder, save_dir=folder)
+    text, view_map = export_bigstitcher(table, golden_inputs(table), config=BigStitcherConfig(pad_missing=pad_missing),
+                                        tile_dir=folder, save_dir=folder)
     for parameter in PINNED:
         assert parameter.format(folder=folder) in text
     # With the legacy folder and voxel size the text is the legacy script's, byte for byte.
@@ -558,8 +558,8 @@ def test_macro_voxel_size_is_the_grids_spacing_and_paths_are_arguments(tmp_path)
     """The only differences from the legacy text: the two folders and the voxel size (LN calibration)."""
     table = golden_table(tmp_path)
     tiles, save = tmp_path / "tiles", tmp_path / "local save"
-    text, _ = bigstitcher_macro(table, golden_inputs(table, LN_SPACING), config=BigStitcherConfig(),
-                                tile_dir=tiles, save_dir=save)
+    text, _ = export_bigstitcher(table, golden_inputs(table, LN_SPACING), config=BigStitcherConfig(),
+                                 tile_dir=tiles, save_dir=save)
     legacy = render_macro(tmp_path)
     differing = [(a, b) for a, b in zip(legacy.splitlines(), text.splitlines()) if a != b]
     assert len(legacy.splitlines()) == len(text.splitlines())
@@ -577,13 +577,13 @@ def test_macro_refuses_a_table_without_cells_and_foreign_tiles(tmp_path):
     table = golden_table(tmp_path)
     supplied = positions_from_table(table.positions[["fov_id", "nominal_z", "nominal_y", "nominal_x"]])
     with pytest.raises(ValueError, match="needs the table's grid_column"):
-        bigstitcher_macro(supplied, golden_inputs(supplied), config=BigStitcherConfig(), tile_dir=tmp_path / "a",
-                          save_dir=tmp_path / "a")
+        export_bigstitcher(supplied, golden_inputs(supplied), config=BigStitcherConfig(), tile_dir=tmp_path / "a",
+                           save_dir=tmp_path / "a")
     folder = tmp_path / "b"
     folder.mkdir()
     (folder / "other.tif").write_bytes(b"")
     with pytest.raises(FileExistsError, match="other.tif"):
-        bigstitcher_macro(table, golden_inputs(table), config=BigStitcherConfig(), tile_dir=folder, save_dir=folder)
+        export_bigstitcher(table, golden_inputs(table), config=BigStitcherConfig(), tile_dir=folder, save_dir=folder)
     with pytest.raises(ValueError, match="overlap_percent_xyz"):
         BigStitcherConfig(overlap_percent_xyz=(10, 10, 100))
 
@@ -591,8 +591,8 @@ def test_macro_refuses_a_table_without_cells_and_foreign_tiles(tmp_path):
 @pytest.mark.parametrize("pad_missing", [False, True])
 def test_macro_view_map_imports_the_padded_case(tmp_path, golden_stitching_setups, pad_missing):
     setups, _, _, table, _, grids = golden_stitching_setups
-    _, view_map = bigstitcher_macro(table, golden_inputs(table), config=BigStitcherConfig(pad_missing=pad_missing),
-                                    tile_dir=tmp_path / "DAPI", save_dir=tmp_path / "DAPI")
+    _, view_map = export_bigstitcher(table, golden_inputs(table), config=BigStitcherConfig(pad_missing=pad_missing),
+                                     tile_dir=tmp_path / "DAPI", save_dir=tmp_path / "DAPI")
     result = import_bigstitcher(setups, table=table, view_map=view_map, grids=grids,
                                 config=BigStitcherConfig(pad_missing=pad_missing))
     row = result.fovs.set_index("fov_id").loc[WITHOUT_IMAGE]

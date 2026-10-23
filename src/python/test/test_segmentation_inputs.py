@@ -6,7 +6,7 @@ DAPI–amplicon composite and the Flamingo enhancement against W-307's pinned di
 here, and ``rescale_input``'s shape and metadata; then input preservation (D4), the shape
 rules and records of docs/segmentation-contract.md ("Input preparation and label
 functions"), and the reuse of the §2.6 registration outputs: a morphology round
-registered by ``FOV.register_rounds`` and the reference merged image, compared with the
+registered by ``FOV.register`` and the reference merged image, compared with the
 same arrays read back from the ``registered`` checkpoint and the round's saved form
 (``FOV.load_registered_round``). Every fixture is at most
 32×64×64 voxels.
@@ -306,7 +306,7 @@ def test_the_composite_reuses_the_registration_outputs(tmp_path):
                   "round2": np.stack([texture(s, p) for s in (6, 7, 8, 9)], axis=-1), "morph": acquired}
     fov.metadata = {name: ImageMetadata(f"FOV/{name}") for name in fov.images}
     checkpoints = CheckpointConfig(directory=tmp_path / "checkpoints")
-    fov.register_rounds(TRANSLATION, rounds=["morph"], checkpoints=checkpoints)
+    fov.register(TRANSLATION, rounds=["morph"], checkpoints=checkpoints)
     assert fov.registration_record["rounds"]["morph"]["reference"] == "round1"
     dapi = fov.images["morph"][..., 0]
     merged = project_image(fov.images["round1"], config=ProjectionConfig(axis="channel"))
